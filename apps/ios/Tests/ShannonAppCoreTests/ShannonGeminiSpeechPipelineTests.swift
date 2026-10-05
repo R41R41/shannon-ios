@@ -16,7 +16,8 @@ struct ShannonGeminiSpeechPipelineTests {
                 events.append("request:\(text):\(style ?? "")")
                 return Self.stream(named: text)
             },
-            consumeSpeech: { speech in
+            consumeSpeech: { speech, text in
+                #expect(segments.contains(text))
                 events.append("play-start:\(speech.voice)")
                 await gate.wait()
                 for try await _ in speech.chunks {}

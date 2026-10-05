@@ -28,7 +28,7 @@ describe('OpenAI Responses chat adapter', () => {
       const body = JSON.parse(String(init?.body));
       expect(body.text).toEqual({ verbosity: 'low' });
       expect(body.text.format).toBeUndefined();
-      expect(body.max_output_tokens).toBe(320);
+      expect(body.max_output_tokens).toBe(1_200);
       expect(body.tools).toBeUndefined();
       expect(body.reasoning).toEqual({ effort: 'none' });
       // The adapter adds delivery notes only; the persona arrives inside systemPrompt.
@@ -76,7 +76,7 @@ describe('OpenAI Responses chat adapter', () => {
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body));
       expect(body.reasoning).toEqual({ effort: 'low' });
-      expect(body.max_output_tokens).toBe(900);
+      expect(body.max_output_tokens).toBe(1_600);
       expect(body.tools).toEqual([{ type: 'web_search', search_context_size: 'medium' }]);
       expect(body.max_tool_calls).toBe(3);
       return new Response(JSON.stringify({ output_text: '確認した結果だよ。' }));

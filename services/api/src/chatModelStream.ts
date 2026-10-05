@@ -65,13 +65,24 @@ export async function streamedChatTurnEnvelope(
   return extractOutputText(envelope) ? envelope : { ...envelope, output_text: written };
 }
 
-export async function* responseSSEEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<unknown> {
+/**
+ * The events of a Responses stream. With `signal`, an abort ends a pending read at once and
+ * throws the signal's reason, also for a body that does not watch the request's signal itself.
+ */
+export async function* responseSSEEvents(
+  body: ReadableStream<Uint8Array>,
+  signal?: AbortSignal,
+): AsyncGenerator<unknown> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let pending = '';
+  const cancel = () => { reader.cancel(signal?.reason).catch(() => {}); };
+  signal?.addEventListener('abort', cancel, { once: true });
   try {
     while (true) {
+      signal?.throwIfAborted();
       const { value, done } = await reader.read();
+      signal?.throwIfAborted();
       pending += decoder.decode(value, { stream: !done });
       const blocks = pending.split(/\r?\n\r?\n/u);
       pending = blocks.pop() ?? '';
@@ -91,6 +102,7 @@ export async function* responseSSEEvents(body: ReadableStream<Uint8Array>): Asyn
       .join('\n');
     if (data && data !== '[DONE]') yield parseJson(data);
   } finally {
+    signal?.removeEventListener('abort', cancel);
     reader.releaseLock();
   }
 }

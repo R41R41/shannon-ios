@@ -47,6 +47,8 @@ public final class ShannonGeminiLiveSessionModel {
     var echoGuard = ShannonSpeechEchoGuard()
     /// Recognition lags speech, so Shannon's own last words can arrive as a transcript after playback ends.
     var echoWindow = ShannonVoiceEchoWindow()
+    /// Short sounds around her voice do not cut her off (`ShannonVoiceBargeInRule`).
+    var bargeInRule = ShannonVoiceBargeInRule()
     /// This call's 「友人も一緒」 turns. Memory only; dropped when the call ends.
     var guestCall = ShannonVoiceGuestCallState()
     /// The face of the emotion the voice is acting with now. Memory only; 「友人も一緒」 stores nothing.
@@ -170,6 +172,10 @@ public final class ShannonGeminiLiveSessionModel {
                 }
             )
             transport = next
+            next.playbackProgress = { [weak self] stillPlaying in
+                guard self?.sessionGenerationID == generation else { return }
+                self?.voicePlaybackProgressed(stillPlaying: stillPlaying)
+            }
             next.setInputMuted(isMicrophoneMuted)
             try next.setInputPreference(inputState.preference)
             try await next.start()
@@ -305,12 +311,13 @@ public final class ShannonGeminiLiveSessionModel {
         case .speechStarted:
             backgroundSilence.ownerSpeechStarted(at: Date())
             echoWindow.speechStarted(isSpeaking: responseTask != nil, now: ProcessInfo.processInfo.systemUptime)
+            bargeInRule.speechStarted(at: ProcessInfo.processInfo.systemUptime)
             duckForSpeech()
         case .speechStopped:
             backgroundSilence.ownerSpeechStopped(at: Date())
             if responseTask != nil { scheduleDuckRelease() }
         case let .inputTranscript(text):
-            if discardsAsEcho(text) { return }
+            if discardsNearHerVoice(text) { return }
             if !turnAssembler.hasFinalText {
                 heardRightAfterShannon = ShannonVoiceGuestCallState.follows(
                     shannonTurnEndedAt: echoWindow.playbackEndedAt, isSpeaking: responseTask != nil,
@@ -326,23 +333,6 @@ public final class ShannonGeminiLiveSessionModel {
             if reason == ShannonGeminiLiveTransport.audioFailure, reconnectAfterAudioFailure() { return }
             fail("音声会話の接続が終了しました。もう一度つないでください。", recovery: .reconnect)
         }
-    }
-
-    /// A transcript that repeats what Shannon just said is her own voice through the microphone,
-    /// not the owner. Only the character count is logged, never the text.
-    private func discardsAsEcho(_ text: String) -> Bool {
-        let now = ProcessInfo.processInfo.systemUptime
-        let speaking = responseTask != nil
-        guard echoWindow.shouldCompare(text, isSpeaking: speaking, now: now),
-              echoGuard.isEcho(text, now: now) else { return false }
-        ShannonVoiceDiagnostics.shared.record("gemini.input.echo.discarded",
-            metadata: ["characters": String(text.count), "during_playback": String(speaking)])
-        return true
-    }
-
-    func markPlaybackEnded() {
-        backgroundSilence.speech(at: Date())
-        echoWindow.playbackEnded(at: ProcessInfo.processInfo.systemUptime)
     }
 
     private func previewInput(_ current: String) -> String {
@@ -461,6 +451,7 @@ public final class ShannonGeminiLiveSessionModel {
         turnAssembler.reset()
         echoGuard.reset()
         echoWindow.reset()
+        bargeInRule.reset()
         inputAudioSeconds = 0
         outputAudioSeconds = 0
         ttsCostUsd = 0

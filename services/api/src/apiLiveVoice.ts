@@ -473,7 +473,7 @@ async function completeLiveVoiceDelegation(
       model: completion.model,
       reply: reply.trim(),
       webSources: combinedPlaceSources(placeSkill, withCapabilitySources(completion, capability).webSources),
-      ...(uiBlocks ? { uiBlocks } : {}), ...roomLook.ask(),
+      ...(uiBlocks ? { uiBlocks } : {}), ...roomLook.ask(), ...(completion.truncated ? { truncated: true } : {}),
       // Tells the iPhone to keep marking this call's owner turns as "someone else may be listening".
       ...(!temporaryGuest && !alone ? { companionPresent: true } : {}),
       voicePlan,

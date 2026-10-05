@@ -127,3 +127,17 @@ Unchanged. The whole request must arrive within 30 seconds. The model call has o
 - The streamed call sends the non-streaming request body with `"stream": true` appended and nothing else changed: the same model, instructions, schema, token limit and identifiers (`chatModelTurn.ts`; `chatModelGolden.test.ts` holds the non-streaming bytes to a fixture recorded before the split, and `chatModelStream.test.ts` holds the streamed body to those bytes plus the one field).
 - The completed response is read by the same code as the non-streaming response: parse and check the structured turn, then record usage in the `chat` lane, then build the result. A turn rejected by the checks records no usage, streamed or not. A stream the provider failed records usage only when the provider reported it.
 - `reply` is decoded from the JSON text as it grows (`chatReplyStreamDecoder.ts`). If `reply` is not the first field, or is not a string, nothing is sent early and the turn is sent after it is complete. Every other field of the structured output comes after `reply` (the feeling she decides for the reply, `feeling`, directly after it), so none delays the first sentence, and the decoder reads none of them.
+
+## The voice route
+
+`POST /v1/voice/gemini/cascade/delegations/stream` (the iPhone's voice conversation; `serverLiveVoiceStreamRoute.ts`) uses the same headers and writer, with its own lines. Unknown line types are not tolerated by apps up to Build 136, so new information is added as optional fields, never as a new line type.
+
+| Line | Fields | Meaning |
+| --- | --- | --- |
+| `plan` | `voicePlan` | The acting plan of the turn; it may be sent again, reconciled with the first sentence. |
+| `segment` | `text`, `voicePlan` | One complete spoken sentence (the waiting phrase is the first, with its own acting plan). |
+| `completed` | `response` | Terminal. `response` is the body of `POST /v1/voice/gemini/cascade/delegations` for this turn. |
+| `error` | `status` | Terminal. The reply failed; the input is not answered. |
+
+- **A reply cut at its length limit** (owner decision 2026-10-05). When the model stops at its output ceiling, the turn still ends with `completed`. The reply ends at its last complete sentence: the unfinished sentence is in no `segment` and not in `response.reply`, and `response.truncated` is `true` (absent otherwise). If not one sentence was finished, the words written are kept and sent as one `segment`. The non-streaming `/delegations` response is cut and marked the same way. A client that does not know the field treats the turn as an ordinary completed reply, which it is.
+- **Timeouts.** The model call of a streamed voice reply has no total limit: 20 seconds to its first word (30 seconds when the turn searches the web) and 30 seconds with nothing arriving afterwards. Text chat keeps the single 30-second budget above.

@@ -142,6 +142,23 @@ describe('Shannon local API kernel', () => {
     expect(model.streamingVoiceRequests).toHaveLength(1);
     expect(model.streamingVoiceRequests[0]?.systemPrompt).toContain('Current expressive emotion');
     expect(model.voiceRequests).toHaveLength(0);
+    expect(result.body).not.toHaveProperty('truncated');
+  });
+
+  it('marks a voice reply that reached its length limit in the response', async () => {
+    const model = new StreamingVoiceRecordingModel();
+    model.generateVoiceStreaming = async (request, onTextDelta) => {
+      model.streamingVoiceRequests.push(request);
+      await onTextDelta('長いお話です。続きは');
+      return { mode: model.mode, model: model.model, reply: '長いお話です。', truncated: true };
+    };
+    const api = createLocalApiKernel(() => '2026-10-05T00:00:00.000Z', { chatModel: model });
+    const result = await api.streamLiveVoiceDelegation({
+      method: 'POST', path: '/v1/voice/gemini/cascade/delegations', body: {
+        scopeKey: 'owner-a', transcript: '一分以上のセリフを言って',
+      },
+    }, { onPlan: () => {}, onTextDelta: () => {} });
+    expect(result).toMatchObject({ status: 200, body: { reply: '長いお話です。', truncated: true } });
   });
 
   it('returns one stable visible task proposal for an implementation request and its additions', async () => {

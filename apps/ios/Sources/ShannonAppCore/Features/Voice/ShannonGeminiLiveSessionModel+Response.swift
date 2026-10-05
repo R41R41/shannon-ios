@@ -31,9 +31,9 @@ extension ShannonGeminiLiveSessionModel {
                         : ShannonElevenCascadeSpeech.style(for: text, plan: plan)
                 },
                 streamSpeech: streamSpeech,
-                consumeSpeech: { [weak self] speech in
+                consumeSpeech: { [weak self] speech, text in
                     guard let self else { throw CancellationError() }
-                    try await self.consumeResponseSpeech(speech, generation: generation)
+                    try await self.consumeResponseSpeech(speech, text: text, generation: generation)
                 }
             )
             defer { coordinator.cancel() }
@@ -68,7 +68,7 @@ extension ShannonGeminiLiveSessionModel {
                                        "response_ms": String(milliseconds)])
                     }
                     self.shannonTranscript += segment
-                    self.echoGuard.recordSpoken(segment, at: ProcessInfo.processInfo.systemUptime)
+                    // The echo guard learns the sentence when it is played (`consumeResponseSpeech`).
                     await coordinator.enqueue(segment, plan: plan)
                 }
                 let response = if let localReply {
@@ -94,8 +94,10 @@ extension ShannonGeminiLiveSessionModel {
                 }
                 // She looks through this app's camera while the reply is spoken (owner turns only).
                 look = mode == .owner && localReply == nil ? ShannonAppLookSpeech.begin(response.appLook, with: performAppLook) : nil
+                // A reply cut at its length limit is a finished reply ending at a complete sentence.
                 ShannonVoiceDiagnostics.shared.record("gemini.response.completed", sessionID: generation.uuidString,
-                    metadata: ["acknowledged_input_count": String(batch.turns.count)])
+                    metadata: ["acknowledged_input_count": String(batch.turns.count),
+                               "truncated": String(response.truncated == true)])
                 if mode.allowsTranscriptPersistence, !response.reply.isEmpty, let commitTurn {
                     let task = Task { @MainActor in
                         do {
@@ -158,13 +160,23 @@ extension ShannonGeminiLiveSessionModel {
                 return
             } catch {
                 guard responseGenerationID == generation else { return }
+                let queued = ShannonVoiceResponseDelivery.queuedSpeech(afterFailureAt: failureStage)
                 ShannonVoiceDiagnostics.shared.record("gemini.response.failed", sessionID: generation.uuidString,
                     metadata: ["stage": failureStage,
                         "category": ShannonVoiceResponseDelivery.errorCategory(error),
                         "reply_complete": String(responseDelivery.response != nil),
                         "scheduled_audio_ms": String(Int(responseDelivery.scheduledAudioSeconds * 1_000)),
-                        "pending_input_count": String(pendingTurns.turns.count)])
-                transport?.discardPlayback()
+                        "pending_input_count": String(pendingTurns.turns.count),
+                        "queued_speech": queued.rawValue])
+                // Her voice already on its way is not cut by a failure; the owner speaking over it
+                // still cuts it (`interruptResponse` cancels this task and discards the audio).
+                if queued == .finishReceivedSentences { try? await coordinator.finish() }
+                if queued != .discard, (try? await transport?.waitForPlayback()) == nil {
+                    guard responseGenerationID == generation, !Task.isCancelled else { return }
+                    transport?.discardPlayback()
+                }
+                guard responseGenerationID == generation, !Task.isCancelled else { return }
+                if queued == .discard { transport?.discardPlayback() }
                 responseTask = nil
                 responseGenerationID = nil
                 markPlaybackEnded()
@@ -184,7 +196,9 @@ extension ShannonGeminiLiveSessionModel {
         guard responseGenerationID == generation else { throw CancellationError() }
     }
 
-    private func consumeResponseSpeech(_ speech: ShannonGeminiSpeechStream, generation: UUID) async throws {
+    private func consumeResponseSpeech(
+        _ speech: ShannonGeminiSpeechStream, text: String, generation: UUID
+    ) async throws {
         try requireCurrentResponse(generation)
         voice = speech.voice
         guard speech.sampleRate == 24_000, speech.channels == 1, speech.bitsPerSample == 16 else {
@@ -203,7 +217,9 @@ extension ShannonGeminiLiveSessionModel {
                         metadata: ["provider": speechProvider.rawValue, "request_ms": String(milliseconds)])
                 }
             }
-            let duration = try transport?.schedulePCM(chunk) ?? Double(chunk.count) / 48_000
+            let duration = try transport?.schedulePCM(chunk, onPlayed: segmentDuration == 0
+                ? rememberWhenPlayed(text) : nil) ?? Double(chunk.count) / 48_000
+            voiceScheduled()
             let firstAudio = latencyMeasurements.firstAudioMilliseconds == nil
             latencyMeasurements.recordFirstAudio()
             if firstAudio, let milliseconds = latencyMeasurements.firstAudioMilliseconds {

@@ -7,6 +7,11 @@ import Foundation
 /// just said, so a final transcript made up almost entirely of that text is echo.
 /// The check is content-based on purpose: it never discards speech that merely overlaps
 /// playback in time, and it needs no calibration of microphone levels.
+///
+/// What she said is remembered when it is actually played, in both the text shown and the
+/// form that was synthesized (product names in katakana, emoji removed), and is forgotten
+/// `memorySeconds` after her voice last sounded, so the start of a long talk is still known
+/// at its end (owner decision 2026-10-05, the same rule as her Windows body).
 struct ShannonSpeechEchoGuard {
     /// Transcripts shorter than this are never judged: "うん" or "はい" cannot be told apart.
     static let minimumCharacters = 5
@@ -16,51 +21,62 @@ struct ShannonSpeechEchoGuard {
     static let fuzzyMinimumCharacters = 10
     /// Share of the transcript's character pairs that must appear in Shannon's recent speech.
     static let coverageThreshold = 0.8
-    /// Long enough to cover a long reply and recognition lag, short enough to forget old topics.
+    /// Counted from the last moment her voice was sounding, not from when a sentence arrived.
     static let memorySeconds: TimeInterval = 90
-    private static let maximumRememberedCharacters = 1_600
+    /// A long talk of several minutes stays known as a whole.
+    static let maximumRememberedCharacters = 6_000
 
     private struct Entry {
-        let text: String
-        let at: TimeInterval
+        /// The display text and the synthesized form, normalized.
+        let shown: String
+        let spoken: String
     }
 
     private var entries: [Entry] = []
+    private(set) var lastSoundingAt: TimeInterval?
 
-    mutating func recordSpoken(_ text: String, at now: TimeInterval) {
-        let normalized = Self.normalized(text)
-        guard !normalized.isEmpty else { return }
-        entries.append(Entry(text: normalized, at: now))
-        prune(now: now)
+    /// One sentence of hers, at the moment its audio was played.
+    mutating func recordPlayed(_ text: String, at now: TimeInterval) {
+        let shown = Self.normalized(text)
+        let spoken = Self.normalized(ShannonGeminiCascadeSpeech.spokenText(for: text))
+        guard !shown.isEmpty || !spoken.isEmpty else { return }
+        markSounding(at: now)
+        entries.append(Entry(shown: shown, spoken: spoken))
+        var total = entries.reduce(0) { $0 + max($1.shown.count, $1.spoken.count) }
+        while total > Self.maximumRememberedCharacters, entries.count > 1 {
+            let first = entries.removeFirst()
+            total -= max(first.shown.count, first.spoken.count)
+        }
+    }
+
+    /// Her voice was sounding at `now`; what she said is kept for another `memorySeconds`.
+    mutating func markSounding(at now: TimeInterval) {
+        if let lastSoundingAt, now - lastSoundingAt > Self.memorySeconds { entries.removeAll() }
+        lastSoundingAt = max(lastSoundingAt ?? now, now)
     }
 
     mutating func reset() {
         entries.removeAll()
+        lastSoundingAt = nil
     }
 
     func isEcho(_ transcript: String, now: TimeInterval) -> Bool {
         let heard = Self.normalized(transcript)
-        guard heard.count >= Self.minimumCharacters else { return false }
-        let spoken = entries
-            .filter { now - $0.at <= Self.memorySeconds }
-            .map(\.text)
-            .joined()
-        guard !spoken.isEmpty else { return false }
-        if spoken.contains(heard) { return true }
-        guard heard.count >= Self.fuzzyMinimumCharacters else { return false }
-        let known = Self.pairs(of: spoken)
-        let heardPairs = Self.pairList(of: heard)
-        guard !heardPairs.isEmpty else { return false }
-        let covered = heardPairs.filter { known.contains($0) }.count
-        return Double(covered) / Double(heardPairs.count) >= Self.coverageThreshold
+        guard heard.count >= Self.minimumCharacters,
+              let lastSoundingAt, now - lastSoundingAt <= Self.memorySeconds else { return false }
+        return Self.matches(heard, entries.map(\.shown).joined())
+            || Self.matches(heard, entries.map(\.spoken).joined())
     }
 
-    private mutating func prune(now: TimeInterval) {
-        entries.removeAll { now - $0.at > Self.memorySeconds }
-        var total = entries.reduce(0) { $0 + $1.text.count }
-        while total > Self.maximumRememberedCharacters, entries.count > 1 {
-            total -= entries.removeFirst().text.count
-        }
+    private static func matches(_ heard: String, _ spoken: String) -> Bool {
+        guard !spoken.isEmpty else { return false }
+        if spoken.contains(heard) { return true }
+        guard heard.count >= fuzzyMinimumCharacters else { return false }
+        let known = pairs(of: spoken)
+        let heardPairs = pairList(of: heard)
+        guard !heardPairs.isEmpty else { return false }
+        let covered = heardPairs.filter { known.contains($0) }.count
+        return Double(covered) / Double(heardPairs.count) >= coverageThreshold
     }
 
     /// Folds width, case and kana script, and drops punctuation, symbols, emoji and spaces,

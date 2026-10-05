@@ -188,7 +188,7 @@ struct ShannonVoiceGuestCallTests {
     @Test("A greeting that begins after Shannon finished is kept; her own echo is still discarded")
     func greetingIsNotEcho() {
         var echo = ShannonSpeechEchoGuard()
-        echo.recordSpoken("はじめまして、シャノンです。", at: 0)
+        echo.recordPlayed("はじめまして、シャノンです。", at: 0)
         #expect(echo.isEcho("はじめまして", now: 3))
 
         // The friend answers after playback ended: speech started after her line.

@@ -168,13 +168,20 @@ final class ShannonGeminiLiveTransport {
         return speech.durationSeconds
     }
 
+    /// `onPlayed` runs once this chunk has actually been played (never for discarded audio).
     @discardableResult
-    func schedulePCM(_ pcm: Data) throws -> Double {
+    func schedulePCM(_ pcm: Data, onPlayed: (@MainActor () -> Void)? = nil) throws -> Double {
         guard !pcm.isEmpty, pcm.count % MemoryLayout<Int16>.size == 0 else {
             throw URLError(.cannotDecodeRawData)
         }
-        try play(pcm)
+        try play(pcm, onPlayed: onPlayed)
         return Double(pcm.count) / 48_000
+    }
+
+    /// Each played chunk, with whether more of her voice is still queued behind it.
+    var playbackProgress: (@MainActor (_ stillPlaying: Bool) -> Void)? {
+        get { playbackDrain.onProgress }
+        set { playbackDrain.onProgress = newValue }
     }
 
     func waitForPlayback() async throws {
@@ -377,7 +384,7 @@ final class ShannonGeminiLiveTransport {
         }
     }
 
-    private func play(_ pcm: Data) throws {
+    private func play(_ pcm: Data, onPlayed: (@MainActor () -> Void)? = nil) throws {
         guard pcm.count >= 2 else { throw URLError(.cannotDecodeRawData) }
         // Starting a player on a stopped engine raises an Objective-C exception; an interrupted call plays nothing.
         guard isAudioRunning else { throw URLError(.networkConnectionLost) }
@@ -397,7 +404,7 @@ final class ShannonGeminiLiveTransport {
         }
         buffer.frameLength = AVAudioFrameCount(frameCount)
         receivedAudioSeconds += Double(frameCount) / 24_000
-        let ticket = playbackDrain.schedule()
+        let ticket = playbackDrain.schedule(onPlayed: onPlayed)
         playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             Task { @MainActor in self?.playbackDrain.played(ticket) }
         }

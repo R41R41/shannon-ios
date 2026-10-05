@@ -2,6 +2,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ShannonApiKernel } from './apiKernel.js';
 import type { ShannonDevicePrincipal } from './deviceAuth.js';
 import { bindScope, readJson, sendJson } from './serverHttp.js';
+import { SpokenSentenceSegmenter } from './spokenSentences.js';
+
+export { SpokenSentenceSegmenter } from './spokenSentences.js';
 
 type ConsumeAllowance = (deviceId: string) => boolean;
 
@@ -45,6 +48,7 @@ export function createLiveVoiceStreamRoute(
     let voicePlan: Record<string, unknown> | undefined;
     let receivedPlan = false;
     let receivedDelta = false;
+    let spokenReplySegments = 0;
     try {
       const body = bindScope(await readJson(request, 64 * 1024), principal.scopeKey);
       const apiResponse = await kernel.streamLiveVoiceDelegation({
@@ -71,6 +75,7 @@ export function createLiveVoiceStreamRoute(
           receivedDelta = true;
           for (const segment of segmenter.append(delta)) {
             startStream(response);
+            spokenReplySegments += 1;
             await writeEvent(response, { type: 'segment', text: segment, voicePlan });
           }
         },
@@ -90,6 +95,13 @@ export function createLiveVoiceStreamRoute(
           startStream(response);
           await writeEvent(response, { type: 'segment', text: segment, voicePlan });
         }
+      }
+      // A reply cut at its length limit ends at its last complete sentence (`truncated`, the
+      // reply in the body is cut the same way); with no complete sentence yet, the words are kept.
+      const truncated = bodyRecord?.truncated === true;
+      if (truncated) {
+        console.info('Shannon live voice reply reached its length limit', { segments: spokenReplySegments });
+        if (spokenReplySegments > 0) segmenter.discard();
       }
       for (const segment of segmenter.flush()) {
         startStream(response);
@@ -126,44 +138,6 @@ function waitingSegmentPlan(plan: Record<string, unknown>): Record<string, unkno
     affectIntensity: direction.intensity ?? plan.affectIntensity,
     delivery: direction.delivery ?? plan.delivery,
   };
-}
-
-export class SpokenSentenceSegmenter {
-  private pending = '';
-
-  append(delta: string): string[] {
-    this.pending += delta.replace(/\r\n?/gu, '\n');
-    const segments: string[] = [];
-    while (this.pending) {
-      const boundary = this.boundaryIndex();
-      if (boundary < 0) break;
-      const segment = normalizedSegment(this.pending.slice(0, boundary));
-      this.pending = this.pending.slice(boundary);
-      if (segment) segments.push(segment);
-    }
-    return segments;
-  }
-
-  flush(): string[] {
-    const segment = normalizedSegment(this.pending);
-    this.pending = '';
-    return segment ? [segment] : [];
-  }
-
-  private boundaryIndex(): number {
-    for (let index = 0; index < this.pending.length; index += 1) {
-      const character = this.pending[index];
-      if (character === '\n') return index + 1;
-      if (!'。！？!?'.includes(character ?? '')) continue;
-      const suffix = this.pending[index + 1];
-      return index + (suffix && '」』）】”"'.includes(suffix) ? 2 : 1);
-    }
-    return -1;
-  }
-}
-
-function normalizedSegment(value: string): string {
-  return value.trim().replace(/\s*\n\s*/gu, ' ');
 }
 
 export function startStream(response: ServerResponse): void {

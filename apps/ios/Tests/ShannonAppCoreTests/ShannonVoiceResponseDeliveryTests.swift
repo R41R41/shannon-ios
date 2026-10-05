@@ -62,6 +62,70 @@ struct ShannonVoiceResponseDeliveryTests {
         #expect(answer.reply == "できました。")
     }
 
+    @Test func aReplyCutAtItsLengthLimitIsAFinishedReplyThatPlaysAndIsSaved() async throws {
+        let lines = AsyncThrowingStream<String, Error> { continuation in
+            continuation.yield(#"{"type":"plan"}"#)
+            continuation.yield(#"{"type":"segment","text":"むかしむかし。"}"#)
+            continuation.yield(#"{"type":"segment","text":"灯台がありました。"}"#)
+            continuation.yield(#"{"type":"completed","response":{"threadId":"thread","model":"test","reply":"むかしむかし。灯台がありました。","truncated":true}}"#)
+            continuation.finish()
+        }
+        var spoken: [String] = []
+        let answer = try await ShannonVoiceStreamReader.read(lines: lines) { text, _ in spoken.append(text) }
+        #expect(spoken == ["むかしむかし。", "灯台がありました。"])
+        #expect(answer.truncated == true)
+        // Completion acknowledges the input, so the reply is written to Talk and nothing is re-sent.
+        var ledger = ShannonPendingVoiceTurns()
+        ledger.append(rawText: "長いセリフを言って", text: "長いセリフを言って", source: .speech)
+        let batch = try #require(ledger.batch())
+        var delivery = ShannonVoiceResponseDelivery()
+        try delivery.complete(answer, batch: batch, ledger: &ledger)
+        #expect(ledger.turns.isEmpty)
+        // A reply without the flag (a server before it) decodes as before.
+        let plain = try JSONDecoder().decode(ShannonLiveVoiceDelegationResponseDTO.self,
+            from: Data(#"{"threadId":"thread","model":"test","reply":"はい。"}"#.utf8))
+        #expect(plain.truncated == nil)
+    }
+
+    @Test func aFailureLetsHerVoiceAlreadyOnItsWayFinishUnlessPlaybackStalled() {
+        #expect(ShannonVoiceResponseDelivery.queuedSpeech(afterFailureAt: "generation") == .finishReceivedSentences)
+        #expect(ShannonVoiceResponseDelivery.queuedSpeech(afterFailureAt: "synthesis_stream") == .finishScheduledAudio)
+        #expect(ShannonVoiceResponseDelivery.queuedSpeech(afterFailureAt: "playback") == .discard)
+    }
+
+    @Test func theWatchdogBoundsAStallNotTheLengthOfATalk() async throws {
+        let drain = ShannonVoicePlaybackDrain()
+        let tickets = (0..<6).map { _ in drain.schedule() }
+        let wait = Task { @MainActor in try await drain.wait(timeout: .milliseconds(150)) }
+        // Six buffers played 100 ms apart: 600 ms in all, never 150 ms without progress.
+        for ticket in tickets {
+            try await Task.sleep(for: .milliseconds(100))
+            drain.played(ticket)
+        }
+        try await wait.value
+    }
+
+    @Test func playedActionsRunOnlyForAudioThatActuallyPlayed() async {
+        let drain = ShannonVoicePlaybackDrain()
+        var played: [String] = []
+        var progress: [Bool] = []
+        drain.onProgress = { progress.append($0) }
+        let first = drain.schedule { played.append("first") }
+        let second = drain.schedule()
+        #expect(drain.isPlaying)
+        drain.played(first)
+        drain.played(first)
+        drain.played(second)
+        #expect(played == ["first"])
+        #expect(progress == [true, false])
+        #expect(!drain.isPlaying)
+        // Discarded audio (a barge-in) is never remembered as said.
+        let discarded = drain.schedule { played.append("discarded") }
+        drain.cancel()
+        drain.played(discarded)
+        #expect(played == ["first"])
+    }
+
     @Test func streamWithoutCompletionRetainsFailure() async {
         let lines = AsyncThrowingStream<String, Error> { continuation in
             continuation.yield(#"{"type":"segment","text":"最初の文。"}"#)

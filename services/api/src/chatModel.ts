@@ -5,7 +5,15 @@ import {
   responseUsage,
   type LlmUsageStore,
 } from './llmUsage.js';
-import { responseSSEEvents, streamedChatTurnEnvelope } from './chatModelStream.js';
+import { streamedChatTurnEnvelope } from './chatModelStream.js';
+import {
+  DEFAULT_VOICE_STREAM_BOUNDS,
+  VOICE_WEB_FIRST_OUTPUT_MILLISECONDS,
+  reachedVoiceLengthLimit,
+  streamedVoiceReply,
+  type VoiceStreamBounds,
+} from './chatModelVoiceStream.js';
+import { completeSpokenSentences } from './spokenSentences.js';
 import { chatTurnRequestBody, chatTurnResult, parsedChatTurn } from './chatModelTurn.js';
 import {
   WEB_SEARCH_INSTRUCTIONS,
@@ -87,6 +95,8 @@ export interface ShannonChatModelResult {
   taskProposal?: ShannonTaskProposal;
   taskDecision?: ShannonTaskDecision;
   intentPlan?: ShannonIntentPlan;
+  /** A voice reply that reached its output limit; `reply` ends at its last complete sentence. */
+  truncated?: boolean;
 }
 
 export interface ShannonIntentPlan {
@@ -150,7 +160,23 @@ export interface OpenAIResponsesModelOptions {
   usageStore?: LlmUsageStore;
   now?: () => string;
   agentHostHint?: string;
+  /** Streamed voice replies: the wait for the first word and for each later piece (no total limit). */
+  voiceStreamBounds?: Partial<VoiceStreamBounds>;
 }
+
+/**
+ * Output ceilings of a voice reply. Everyday brevity comes from the instructions; the ceiling
+ * only has to leave room for a long talk the owner asks for (about 1,200 tokens is several
+ * minutes of Japanese speech). A reply that still reaches it ends at its last complete sentence.
+ */
+export const VOICE_MAX_OUTPUT_TOKENS: Readonly<Record<ShannonVoiceModelRequest['conversationClass'], number>> = Object.freeze({
+  greeting: 180,
+  direct: 1_200,
+  skill_simple: 1_200,
+  skill_complex: 1_600,
+});
+
+export const VOICE_REPLY_INSTRUCTIONS = '[音声専用の返答]\n自然な日本語の話し言葉で、最初に答えを置く。挨拶と通常会話は1〜2文、複雑な回答でも原則3文に収める。ただし相手が長い話・物語・長めのセリフなどをはっきり求めたときは、求められた長さで最後まで話してよい。Markdown、URL一覧、内部処理の説明、JSONは使わない。聞き取りやすい短い文にし、必要がなければ末尾に質問を足さない。';
 
 export class OpenAIResponsesChatModel implements ShannonChatModel {
   readonly mode = 'openai' as const;
@@ -158,6 +184,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
   private readonly endpoint: string;
   private readonly timeoutMilliseconds: number;
   private readonly fetcher: typeof fetch;
+  private readonly voiceStreamBounds: VoiceStreamBounds;
 
   constructor(private readonly options: OpenAIResponsesModelOptions) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
@@ -165,6 +192,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 30_000;
     this.fetcher = options.fetcher ?? fetch;
+    this.voiceStreamBounds = { ...DEFAULT_VOICE_STREAM_BOUNDS, ...options.voiceStreamBounds };
   }
 
   async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
@@ -237,24 +265,12 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     const raw = await response.text();
     const json = parseJson(raw);
     if (!response.ok) throw new Error(`OPENAI_RESPONSE_${response.status}: ${errorDetail(json)}`);
-    const reply = extractOutputText(json).trim();
+    const written = extractOutputText(json).trim();
+    // A reply cut at its output limit ends at its last complete sentence, as in the stream.
+    const truncated = reachedVoiceLengthLimit(json);
+    const reply = truncated ? completeSpokenSentences(written) || written : written;
     if (!reply) throw new Error('OPENAI_RESPONSE_EMPTY');
-    const usage = responseUsage(json);
-    this.options.usageStore?.recordLlmUsage({
-      scopeKey: request.scopeKey,
-      lane: 'chat',
-      model: this.model,
-      ...usage,
-      estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage),
-      occurredAt: this.options.now?.() ?? new Date().toISOString(),
-    });
-    const webSources = request.useWebSearch ? extractWebSources(json) : [];
-    return {
-      mode: this.mode,
-      model: this.model,
-      reply,
-      ...(webSources.length ? { webSources } : {}),
-    };
+    return this.voiceResult(request, json, reply, truncated);
   }
 
   async generateVoiceStreaming(
@@ -262,42 +278,25 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     onTextDelta: (delta: string) => void | Promise<void>,
     signal?: AbortSignal,
   ): Promise<ShannonChatModelResult> {
-    const timeout = AbortSignal.timeout(this.timeoutMilliseconds);
-    const response = await this.fetcher(this.endpoint, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${this.options.apiKey}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({ ...this.voiceRequestPayload(request), stream: true }),
-      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-    });
-    if (!response.ok || !response.body) {
-      const raw = await response.text();
-      throw new Error(`OPENAI_RESPONSE_${response.status}: ${errorDetail(parseJson(raw))}`);
-    }
+    const bounds = request.useWebSearch ? {
+      ...this.voiceStreamBounds,
+      firstOutputMilliseconds: Math.max(this.voiceStreamBounds.firstOutputMilliseconds, VOICE_WEB_FIRST_OUTPUT_MILLISECONDS),
+    } : this.voiceStreamBounds;
+    const outcome = await streamedVoiceReply({
+      fetcher: this.fetcher, endpoint: this.endpoint, apiKey: this.options.apiKey,
+      body: this.voiceRequestPayload(request), bounds, ...(signal ? { signal } : {}),
+    }, onTextDelta);
+    return this.voiceResult(request, outcome.envelope, outcome.reply, outcome.truncated);
+  }
 
-    let reply = '';
-    let completedEnvelope: unknown;
-    for await (const event of responseSSEEvents(response.body)) {
-      const value = event && typeof event === 'object' && !Array.isArray(event)
-        ? event as Record<string, unknown>
-        : {};
-      if (value.type === 'response.output_text.delta' && typeof value.delta === 'string') {
-        reply += value.delta;
-        await onTextDelta(value.delta);
-      } else if (value.type === 'response.output_text.done' && !reply && typeof value.text === 'string') {
-        reply = value.text;
-        await onTextDelta(value.text);
-      } else if (value.type === 'response.completed') {
-        completedEnvelope = value.response;
-      } else if (value.type === 'error' || value.type === 'response.failed') {
-        throw new Error('OPENAI_RESPONSE_STREAM_FAILED');
-      }
-    }
-    reply = reply.trim();
-    if (!reply || !completedEnvelope) throw new Error('OPENAI_RESPONSE_STREAM_INCOMPLETE');
-    const usage = responseUsage(completedEnvelope);
+  /** Accounts a finished voice reply and builds its result. */
+  private voiceResult(
+    request: ShannonVoiceModelRequest,
+    envelope: unknown,
+    reply: string,
+    truncated: boolean,
+  ): ShannonChatModelResult {
+    const usage = responseUsage(envelope);
     this.options.usageStore?.recordLlmUsage({
       scopeKey: request.scopeKey,
       lane: 'chat',
@@ -306,25 +305,24 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage),
       occurredAt: this.options.now?.() ?? new Date().toISOString(),
     });
-    const webSources = request.useWebSearch ? extractWebSources(completedEnvelope) : [];
+    const webSources = request.useWebSearch ? extractWebSources(envelope) : [];
     return {
       mode: this.mode,
       model: this.model,
       reply,
       ...(webSources.length ? { webSources } : {}),
+      ...(truncated ? { truncated: true } : {}),
     };
   }
 
   private voiceRequestPayload(request: ShannonVoiceModelRequest): Record<string, unknown> {
     const complex = request.conversationClass === 'skill_complex';
-    const maximumOutputTokens = request.conversationClass === 'greeting' ? 180
-      : request.conversationClass === 'direct' ? 320
-        : complex ? 900 : 480;
+    const maximumOutputTokens = VOICE_MAX_OUTPUT_TOKENS[request.conversationClass];
     return {
       model: this.model,
       instructions: [
         request.systemPrompt,
-              '[音声専用の返答]\n自然な日本語の話し言葉で、最初に答えを置く。挨拶と通常会話は1〜2文、複雑な回答でも原則3文に収める。Markdown、URL一覧、内部処理の説明、JSONは使わない。聞き取りやすい短い文にし、必要がなければ末尾に質問を足さない。',
+        VOICE_REPLY_INSTRUCTIONS,
         ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
       ].join('\n\n'),
       input: [

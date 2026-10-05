@@ -6,7 +6,7 @@ final class ShannonSpeechEchoGuardTests: XCTestCase {
 
     private func guarded(_ spoken: String..., at time: TimeInterval = 0) -> ShannonSpeechEchoGuard {
         var guardState = ShannonSpeechEchoGuard()
-        for text in spoken { guardState.recordSpoken(text, at: time) }
+        for text in spoken { guardState.recordPlayed(text, at: time) }
         return guardState
     }
 
@@ -59,7 +59,7 @@ final class ShannonSpeechEchoGuardTests: XCTestCase {
     func testNothingIsEchoBeforeShannonHasSpokenOrAfterReset() {
         var state = ShannonSpeechEchoGuard()
         XCTAssertFalse(state.isEcho("うん、ちゃんと聞こえてるよ。", now: 0))
-        state.recordSpoken(reply, at: 0)
+        state.recordPlayed(reply, at: 0)
         XCTAssertTrue(state.isEcho("うん、ちゃんと聞こえてるよ。", now: 1))
         state.reset()
         XCTAssertFalse(state.isEcho("うん、ちゃんと聞こえてるよ。", now: 2))
@@ -67,18 +67,50 @@ final class ShannonSpeechEchoGuardTests: XCTestCase {
 
     func testBlankOrSymbolOnlySpeechIsNotRemembered() {
         var state = ShannonSpeechEchoGuard()
-        state.recordSpoken("😊…！", at: 0)
-        state.recordSpoken("   ", at: 0)
+        state.recordPlayed("😊…！", at: 0)
+        state.recordPlayed("   ", at: 0)
         XCTAssertFalse(state.isEcho("おはようございます", now: 1))
     }
 
     func testBoundsRememberedSpeechAndKeepsTheNewest() {
         var state = ShannonSpeechEchoGuard()
-        state.recordSpoken("最初に話した大切な内容です", at: 0)
-        for index in 0..<40 {
-            state.recordSpoken(String(repeating: "あいうえおかきくけこ", count: 4) + "\(index)", at: Double(index))
+        state.recordPlayed("最初に話した大切な内容です", at: 0)
+        // 150 sentences of 42 characters: more than the 6,000 characters remembered.
+        for index in 0..<150 {
+            state.recordPlayed(String(repeating: "あいうえおかきくけこ", count: 4) + "\(index)", at: Double(index) * 0.5)
         }
-        XCTAssertFalse(state.isEcho("最初に話した大切な内容です", now: 40))
-        XCTAssertTrue(state.isEcho(String(repeating: "あいうえおかきくけこ", count: 4) + "39", now: 40))
+        XCTAssertFalse(state.isEcho("最初に話した大切な内容です", now: 75))
+        XCTAssertTrue(state.isEcho(String(repeating: "あいうえおかきくけこ", count: 4) + "149", now: 75))
+    }
+
+    func testRemembersALongTalkOfSeveralThousandCharacters() {
+        var state = ShannonSpeechEchoGuard()
+        state.recordPlayed("むかしむかし、海の見える小さな町に灯台守の少女がいました。", at: 0)
+        // About four minutes of speech, 4,500 characters, played one sentence every two seconds.
+        for index in 0..<100 {
+            state.recordPlayed("その夜も波は静かに寄せては返し、町の明かりがひとつずつ消えていきました\(index)。", at: Double(index) * 2.4)
+        }
+        XCTAssertTrue(state.isEcho("海の見える小さな町に灯台守の少女がいました", now: 250))
+    }
+
+    func testMemoryIsCountedFromTheLastMomentHerVoiceWasSounding() {
+        var state = ShannonSpeechEchoGuard()
+        // The text of the first sentence was played at 0; her voice went on sounding until 80.
+        state.recordPlayed(reply, at: 0)
+        state.markSounding(at: 80)
+        XCTAssertTrue(state.isEcho("うん、ちゃんと聞こえてるよ。", now: 80 + ShannonSpeechEchoGuard.memorySeconds))
+        XCTAssertFalse(state.isEcho("うん、ちゃんと聞こえてるよ。", now: 81 + ShannonSpeechEchoGuard.memorySeconds))
+        // After a silence longer than the memory, a new sentence starts a new memory.
+        state.recordPlayed("新しい話を始めますね。", at: 300)
+        XCTAssertFalse(state.isEcho("うん、ちゃんと聞こえてるよ。", now: 301))
+        XCTAssertTrue(state.isEcho("新しい話を始めますね", now: 301))
+    }
+
+    func testRecognisesHerVoiceInTheFormThatWasSpoken() {
+        // The display text says Voyager; the voice said ボイジャー, which is what the recogniser hears.
+        let state = guarded("Voyagerのビルドは今朝出しましたよ。😊")
+        XCTAssertTrue(state.isEcho("ボイジャーのビルドは今朝出しましたよ", now: 1))
+        XCTAssertTrue(state.isEcho("Voyagerのビルドは今朝出しました", now: 1))
+        XCTAssertFalse(state.isEcho("ボイジャーのテストはまだ終わってないよ", now: 1))
     }
 }

@@ -291,6 +291,8 @@ public struct ShannonLiveVoiceDelegationResponseDTO: Codable, Equatable, Sendabl
     public var companionPresent: Bool? = nil
     /// She looks through this app's camera now: capture one frame and answer it.
     public var appLook: ShannonAppLookAskDTO? = nil
+    /// The reply reached its length limit and ends at its last complete sentence; still a finished reply.
+    public var truncated: Bool? = nil
 
     public init(
         threadId: String,

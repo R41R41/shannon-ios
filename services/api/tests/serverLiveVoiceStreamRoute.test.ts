@@ -55,6 +55,47 @@ describe('live voice sentence streaming', () => {
     });
   });
 
+  it('ends a reply cut at its length limit as completed, after its last complete sentence', async () => {
+    const run = async (deltas: string[], reply: string) => {
+      const kernel = {
+        streamLiveVoiceDelegation: async (_request: unknown, observer: {
+          onPlan(plan: Record<string, unknown>): Promise<void>;
+          onTextDelta(delta: string): Promise<void>;
+        }) => {
+          await observer.onPlan({ shouldRespond: true });
+          for (const delta of deltas) await observer.onTextDelta(delta);
+          return { status: 200, body: { threadId: 'thread', reply, truncated: true } };
+        },
+      } as unknown as ShannonApiKernel;
+      const request = Readable.from([JSON.stringify({ transcript: '長いセリフを言って' })]) as IncomingMessage;
+      request.method = 'POST';
+      let output = '';
+      const response = Object.assign(new EventEmitter(), {
+        headersSent: false,
+        writeHead() { this.headersSent = true; return this; },
+        write(value: string) { output += value; return true; },
+        end() {},
+      }) as unknown as ServerResponse;
+      await createLiveVoiceStreamRoute(kernel, () => true)(
+        request, response, { deviceId: 'device', scopeKey: 'owner' } as ShannonDevicePrincipal,
+      );
+      return output.trim().split('\n').map(line => JSON.parse(line) as {
+        type: string; text?: string; response?: Record<string, unknown>;
+      });
+    };
+
+    const events = await run(['むかしむかし。', '灯台がありました。そ', 'して'], 'むかしむかし。灯台がありました。');
+    expect(events.filter(event => event.type === 'segment').map(event => event.text))
+      .toEqual(['むかしむかし。', '灯台がありました。']);
+    // The same terminal event as always, so an app that predates the flag finishes the turn too.
+    expect(events.at(-1)).toMatchObject({ type: 'completed', response: { reply: 'むかしむかし。灯台がありました。', truncated: true } });
+    expect(events.some(event => event.type === 'error')).toBe(false);
+
+    // Not one sentence finished: what she wrote is still said rather than nothing.
+    const unfinished = await run(['とても長い一文が続いて'], 'とても長い一文が続いて');
+    expect(unfinished.filter(event => event.type === 'segment').map(event => event.text)).toEqual(['とても長い一文が続いて']);
+  });
+
   it('emits complete Japanese sentences across arbitrary model deltas', () => {
     const segmenter = new SpokenSentenceSegmenter();
 

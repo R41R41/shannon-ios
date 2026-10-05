@@ -125,7 +125,8 @@ enum ShannonGeminiCascadeSpeech {
 @MainActor
 final class ShannonGeminiStreamingSpeechCoordinator {
     typealias StreamSpeech = @MainActor (String, String?) async throws -> ShannonGeminiSpeechStream
-    typealias ConsumeSpeech = @MainActor (ShannonGeminiSpeechStream) async throws -> Void
+    /// The speech of one sentence and its display text, so the sentence is known when it plays.
+    typealias ConsumeSpeech = @MainActor (ShannonGeminiSpeechStream, String) async throws -> Void
 
     private let style: @MainActor (String, ShannonVoicePlanDTO?) -> String
     private let streamSpeech: StreamSpeech
@@ -167,7 +168,7 @@ final class ShannonGeminiStreamingSpeechCoordinator {
             defer { self?.complete(identifier) }
             if let previous { try await previous.value }
             let speech = try await speechTask.value
-            try await consumeSpeech(speech)
+            try await consumeSpeech(speech, text)
         }
         playbackTasks[identifier] = playbackTask
         tail = playbackTask
