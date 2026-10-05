@@ -29,9 +29,9 @@ function kernel(clock = { at }) {
     expect(response.status).toBe(200);
     return model.last;
   };
-  const voice = async (transcript: string, extra: { companionPresent?: boolean; participantMode?: 'guest' } = {}) => {
+  const voice = async (transcript: string, extra: { companionPresent?: boolean; participantMode?: 'guest'; threadId?: string } = {}) => {
     const response = await api.dispatch({ method: 'POST', path: delegations, body: {
-      scopeKey: 'owner', threadId: 'thread', transcript, ...(extra.participantMode ? { participantMode: extra.participantMode } : {}),
+      scopeKey: 'owner', threadId: extra.threadId ?? 'thread', transcript, ...(extra.participantMode ? { participantMode: extra.participantMode } : {}),
       deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null, ...(extra.companionPresent ? { companionPresent: true } : {}),
         userUtterance: { id: `u-${transcript.length}`, text: transcript, source: 'speech', rawText: transcript,
           ...(extra.participantMode ? { callContext: { callId: 'call-tools-0001', turns: [], introductionStart: true } } : {}) } },
@@ -62,8 +62,10 @@ describe('which conversation turns are offered her tools', () => {
 
   it('offers them in a voice turn only with the owner alone and words about her writing or her folder', async () => {
     const { voice } = kernel();
-    expect((await voice('書斎のメモを読んで')).tools?.definitions.length).toBe(9);
     expect((await voice('おはよう、今日は寒いね')).tools).toBeUndefined();
+    expect((await voice('書斎のメモを読んで')).tools?.definitions.length).toBe(9);
+    // An ordinary turn after such a talk is a follow-up (shannonToolFollowUps.test.ts); in another Talk it is not.
+    expect((await voice('おはよう、今日は寒いね', { threadId: 'other' })).tools).toBeUndefined();
     expect((await voice('書斎のメモを読んで', { companionPresent: true })).tools).toBeUndefined();
     expect((await voice('書斎のメモを読んで', { participantMode: 'guest' })).tools).toBeUndefined();
     expect(asksAboutOwnThings('君のフォルダのファイル見て')).toBe(true);

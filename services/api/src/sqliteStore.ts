@@ -32,6 +32,8 @@ import type { KnowledgeDraft } from '@shannon/cognition';
 import { SQLiteMemoryEmbeddingIndex, type MemoryEmbeddingIndex, type PendingEmbeddingSource } from './sqliteMemoryEmbeddings.js';
 import { ensureTurnCaptureSchema, type TurnCaptureRecord } from './turnCaptures.js';
 import { ensureReplaySummarySchema, selectRecentMessages, selectReplaySummary, selectThreadOfTurn, upsertReplaySummary } from './sqliteReplaySummary.js';
+import { ensureToolTraceSchema, insertToolTrace, selectToolTraces } from './sqliteToolTraces.js';
+import type { ToolTraceRecord } from './shannonToolTrace.js';
 import type { ReplaySummaryRecord } from './conversationStore.js';
 import { SQLiteImpressionStore } from './sqliteImpressions.js';
 import { ensureMoodHistorySchema, pruneMoodHistory, recordMoodPoint } from './moodHistory.js';
@@ -76,6 +78,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     ensureTurnCaptureSchema(this.context.database);
     ensureSummaryLineageSchema(this.context.database);
     ensureReplaySummarySchema(this.context.database);
+    ensureToolTraceSchema(this.context.database);
     if (!options.leavesMoodHistory) {
       ensureMoodHistorySchema(this.context.database);
       // Retention holds also while nothing is recorded (the switch is off, or no write for weeks): old points go at every start.
@@ -145,6 +148,8 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   replaySummary(scopeKey: string, threadId: string) { return selectReplaySummary(this.context.database, scopeKey, threadId); }
   saveReplaySummary(scopeKey: string, threadId: string, record: ReplaySummaryRecord) { this.context.transaction(() => upsertReplaySummary(this.context.database, scopeKey, threadId, record)); }
   threadOfTurn(scopeKey: string, experienceId: string) { return selectThreadOfTurn(this.context.database, scopeKey, experienceId); }
+  saveToolTrace(scopeKey: string, record: ToolTraceRecord) { this.context.transaction(() => insertToolTrace(this.context.database, scopeKey, record)); }
+  toolTraces(scopeKey: string, threadId: string, query: { turnIds?: readonly string[]; since?: string }) { return selectToolTraces(this.context.database, scopeKey, threadId, query); }
   impressionStore() { return this.personImpressions; }
   events(scopeKey: string): readonly PersistedExperienceEvent[] { return this.conversations.events(scopeKey); }
   activityTimeline(scopeKey: string): readonly ActivityItem[] { return this.conversations.activityTimeline(scopeKey); }

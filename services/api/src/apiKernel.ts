@@ -201,6 +201,7 @@ export class ShannonApiKernel {
     this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now);
     this.body = new ShannonBody({ ...options.body, stateStore: this.stateStore, autonomy: this.autonomy, conversationStore: this.conversationStore, now: this.now });
     this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now);
+    this.background = this.toolServer.turns.watching(this.background); // Each stored turn takes what her tools did with it.
   }
 
   realtimeVoiceSession(scopeKey: string, requestedThreadId?: string, options: {
@@ -418,7 +419,7 @@ export class ShannonApiKernel {
       const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
       const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, {
         scopeKey: body.scopeKey, // The history is a character budget; what fell out of it is covered by the replay summary.
-        ...conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present)
+        ...conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, this.toolServer.turns)
           .request(placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt),
         ...(priorThreadSummary ? { priorThreadSummary } : {}),
         message,

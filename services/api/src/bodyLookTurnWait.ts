@@ -18,13 +18,13 @@ export interface TurnWait {
 }
 
 /** His words as the delegation and the turn store both carry them, without spaces and punctuation. */
-const saidKey = (said: string) => said.normalize('NFKC').replace(/[\s\p{P}]/gu, '');
+export const saidKey = (said: string) => said.normalize('NFKC').replace(/[\s\p{P}]/gu, '');
 const characters = (text: string) => Array.from(text).length;
 /**
  * The two requests may carry the raw and the tidied transcript of the same utterance: equal, or one inside the other
  * when the shorter is at least six characters and 60% of the longer. Empty words are no turn.
  */
-function sameWords(left: string, right: string): boolean {
+export function sameWords(left: string, right: string): boolean {
   if (!left || !right) return false;
   if (left === right) return true;
   const [shorter, longer] = left.length <= right.length ? [left, right] : [right, left];
