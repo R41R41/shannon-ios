@@ -189,6 +189,6 @@ function documentText(document: AetherDocument): string {
  */
 export function withToolCapabilityLines<T extends { systemPrompt: string; tools?: { definitions: readonly { name: string }[] } }>(request: T): T {
   const withBody = withMinecraftToolLine(request);
-  return withBody.tools?.definitions.some(tool => tool.name.startsWith('aether'))
+  return withBody.tools?.definitions.some(tool => tool.name === 'aether.search')
     ? { ...withBody, systemPrompt: withAetherAccessCapability(withBody.systemPrompt) } : withBody;
 }

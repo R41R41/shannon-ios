@@ -2,7 +2,9 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AetherAccessError, HttpAetherAccess, aetherIdempotencyKey, configuredAetherAccess } from '../src/aetherAccess.js';
+import { AetherAccessError, HttpAetherAccess, aetherIdempotencyKey, configuredAetherAccess, configuredAetherPorts } from '../src/aetherAccess.js';
+import { shannonCapabilityPrompt } from '@shannon/cognition';
+import { withToolCapabilityLines } from '../src/shannonAetherTools.js';
 import { FileAetherProposalStore } from '../src/aetherProposal.js';
 import { configuredAutonomy } from '../src/autonomyBudget.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
@@ -136,6 +138,29 @@ describe('who may read what (owner decision 2026-10-06, enforced at the gate)', 
     const plain = await harness({ aether: false });
     expect(conversationTools(plain.service, scope, 'text', true, server, 'thread\nx', new TurnDeadline(TEXT_TURN_DEADLINE))).toEqual({ toolsWithheld: true });
     expect(plain.service.tools.offered('text', 'owner_alone').some(tool => tool.name.startsWith('aether'))).toBe(false);
+  });
+});
+
+describe('a server with only part of Aether configured', () => {
+  it('offers, says and describes exactly what main does with the inbox and the token set and the address unset', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'shannon-aether-inbox-'));
+    directories.push(directory);
+    const now = () => '2026-10-06T01:00:00.000Z';
+    const partial = configuredAetherPorts({ SHANNON_AETHER_PROPOSAL_DIR: directory, SHANNON_AETHER_SHANNON_TOKEN: TOKEN }, now);
+    expect(partial.access).toBeNull();
+    expect(partial.proposals?.configured).toBe(true);
+    const withInbox = new ShannonAutonomyService({ store: new SQLiteAutonomyStore(':memory:'), config: configuredAutonomy({}), now, aether: partial });
+    const plain = new ShannonAutonomyService({ store: new SQLiteAutonomyStore(':memory:'), config: configuredAutonomy({}), now });
+    for (const surface of ['text', 'voice', 'autonomy'] as const) {
+      for (const audience of ['owner_alone', 'others'] as const) expect(withInbox.tools.offered(surface, audience, scope)).toEqual(plain.tools.offered(surface, audience, scope));
+    }
+    const server: Partial<ConversationToolServer> = { audience: { othersKnown: () => false, noteOthers: () => undefined }, now };
+    const session = (service: ShannonAutonomyService) => conversationTools(service, scope, 'text', true, server, 'thread\nメモを作って', new TurnDeadline(TEXT_TURN_DEADLINE)).tools!;
+    expect(session(withInbox).definitions).toEqual(session(plain).definitions);
+    expect(toolInstructions(session(withInbox), false)).toBe(toolInstructions(session(plain), false));
+    const prompt = shannonCapabilityPrompt('owner');
+    expect(withToolCapabilityLines({ systemPrompt: prompt, tools: session(withInbox) }).systemPrompt).toBe(prompt);
+    expect(conversationTools(withInbox, scope, 'text', true, { ...server, audience: { othersKnown: () => true, noteOthers: () => undefined } }, 'thread\nx', new TurnDeadline(TEXT_TURN_DEADLINE))).toEqual({ toolsWithheld: true });
   });
 });
 

@@ -79,7 +79,8 @@ export function toolInstructions(session: ShannonModelToolSession, voice: boolea
   if (session.othersPresent) return TOOLS_OTHERS_INSTRUCTIONS;
   const base = voice ? VOICE_TOOL_INSTRUCTIONS : TOOL_INSTRUCTIONS;
   const minecraft = session.definitions.some(tool => tool.domain === 'minecraft_body') ? `\n${MINECRAFT_TOOL_INSTRUCTIONS}` : '';
-  const aether = session.definitions.some(tool => tool.name.startsWith('aether')) ? `\n${AETHER_TOOL_INSTRUCTIONS}` : '';
+  // Keyed to the Aether client being configured (`aether.search` is offered only then), never to the proposal inbox alone.
+  const aether = session.definitions.some(tool => tool.name === 'aether.search') ? `\n${AETHER_TOOL_INSTRUCTIONS}` : '';
   return session.writesWithheld ? `${base}${minecraft}${aether}\n${TOOLS_READ_ONLY_INSTRUCTIONS}` : `${base}${minecraft}${aether}`;
 }
 

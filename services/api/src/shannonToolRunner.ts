@@ -66,10 +66,11 @@ export class ShannonToolRunner {
    * Minecraft body's only in the scope that has one (`scopeKey`), and `minecraft.request` only while the body is present.
    */
   offered(surface: ToolSurface, audience: ToolAudience, scopeKey?: string): readonly ShannonToolDefinition[] {
-    // Her Aether tools only while Aether is configured, and a proposal only while the inbox is: without them every offer is what it was.
+    // Her Aether tools only while the Aether client is configured (URL and token), and a proposal only while the inbox is too:
+    // with the inbox alone (or the token alone) every offer is what it was before Aether access.
     const tools = offeredTools(surface, audience, tool => tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
       : tool.domain === 'minecraft_body' ? minecraftToolOffered(this.minecraft, tool, scopeKey)
-        : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true
+        : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true && Boolean(this.aether.access)
           : tool.name.startsWith('aether') ? Boolean(this.aether.access) : true);
     return this.aether.study ? tools.map(aetherStudyTool) : tools;
   }
