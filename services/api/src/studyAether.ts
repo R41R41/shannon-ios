@@ -237,11 +237,20 @@ export class StudyAether {
     if (options.maxAgeMilliseconds && finished !== undefined && Date.now() - finished < options.maxAgeMilliseconds) return Promise.resolve({ changed: 0, deleted: 0, adopted: 0 });
     let run = this.running.get(scopeKey);
     if (!run) {
-      run = this.syncOnce(scopeKey, AbortSignal.timeout(STUDY_AETHER_SYNC.runMilliseconds));
+      // The run leaves the map the moment it settles, before any caller resumes: a caller right after it starts a new run
+      // instead of being handed the finished one.
+      const started: Promise<StudyAetherSyncCounts> = this.syncOnce(scopeKey, AbortSignal.timeout(STUDY_AETHER_SYNC.runMilliseconds)).then(
+        counts => { this.settle(scopeKey, started, true); return counts; },
+        (error: unknown) => { this.settle(scopeKey, started, false); throw error; });
+      run = started;
       this.running.set(scopeKey, run);
-      run.then(() => this.finished.set(scopeKey, Date.now()), () => undefined).finally(() => this.running.delete(scopeKey));
     }
     return signal ? untilAborted(run, signal) : run;
+  }
+
+  private settle(scopeKey: string, run: Promise<StudyAetherSyncCounts>, succeeded: boolean): void {
+    if (this.running.get(scopeKey) === run) this.running.delete(scopeKey);
+    if (succeeded) this.finished.set(scopeKey, Date.now());
   }
 
   private async syncOnce(scopeKey: string, signal: AbortSignal): Promise<StudyAetherSyncCounts> {

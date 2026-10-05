@@ -417,11 +417,15 @@ describe('her study in Aether', () => {
     fake.delay = 50;
     await Promise.all([service.studyAether!.sync(scope), service.studyAether!.sync(scope), service.studyAether!.sync(scope)]);
     expect(lists() - before).toBe(1);
+    // A sync asked for right after one finished is a new run, not the finished one handed back.
+    await service.studyAether!.sync(scope);
+    fake.ownerEdit(document.id, { body: `${STORY}一と半。` });
+    expect((await service.studyAether!.sync(scope)).changed).toBe(1);
     fake.ownerEdit(document.id, { body: `${STORY}二。` });
     await Promise.all([service.studyAether!.refresh(scope, id), service.studyAether!.refresh(scope, id), service.studyAether!.sync(scope)]);
     fake.delay = 0;
-    expect(store.study.versions(scope, id).map(version => version.body)).toEqual([STORY, `${STORY}一。`, `${STORY}二。`]);
-    expect(store.study.aether.current(scope, id)).toMatchObject({ version: 3, aetherVersion: 3 });
+    expect(store.study.versions(scope, id).map(version => version.body)).toEqual([STORY, `${STORY}一。`, `${STORY}一と半。`, `${STORY}二。`]);
+    expect(store.study.aether.current(scope, id)).toMatchObject({ version: 4, aetherVersion: 4 });
   });
 
   it('lets app reads share a sync that just finished, while her tools still sync first', async () => {
