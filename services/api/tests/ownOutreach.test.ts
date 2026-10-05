@@ -8,6 +8,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { SQLiteIncomingCallStore } from '../src/incomingCallStore.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
+import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { SQLiteOwnOutreach, ownOutreachPrompt, saysSheActedOnHerOwn, type OwnOutreachFacts, type OwnOutreachReader } from '../src/ownOutreach.js';
 
 /**
@@ -18,7 +19,7 @@ import { SQLiteOwnOutreach, ownOutreachPrompt, saysSheActedOnHerOwn, type OwnOut
 const AT = '2026-10-05T10:36:00.000Z';
 const ASKED = 'いや、そっちからかけてきたじゃん。どうしたの？';
 const HEADER = '[ボクが自分からしたこと]（記録された事実';
-const NO_CALL = '- 電話: 直近24時間、ボクから電話はかけていない（記録がない）。';
+const NO_CALL = '- 電話: 直近24時間、ボクから電話をかけた記録はない。';
 const LAST_TEXT = 'ライ氏、お昼はもう食べましたか。';
 const delegations = '/v1/voice/gemini/cascade/delegations';
 const directories: string[] = [];
@@ -57,10 +58,14 @@ function harness(reader: OwnOutreachReader | null = incident()) {
 
 describe('what the owner says she did on her own', () => {
   it('recognises the owner saying or asking that she called, wrote or left something', () => {
-    for (const text of [ASKED, 'さっき電話くれた？', 'シャノンからメッセージ来てたよ', '着信あったけど何だった？', '書き置きを見たよ', 'きみが送ってきたやつ読んだ', '不在着信が入ってた']) {
+    for (const text of [ASKED, 'さっき電話くれた？', 'シャノンからメッセージ来てたよ', '着信あったけど何だった？', '書き置きを見たよ', 'きみが送ってきたやつ読んだ', '不在着信が入ってた',
+      // Bare questions (review of 2026-10-05).
+      '何か送った？', '電話かけた？', 'シャノン電話かけた？', '呼んだ？', 'さっき鳴った？', '何か書いた？', 'メモ置いてった？', 'さっきかけたの', '話しかけた?', 'シャノンから電話あった']) {
       expect(saysSheActedOnHerOwn(text), text).toBe(true);
     }
-    for (const text of ['お、シャノン、元気？', '今日は疲れた', 'この物語の続きを書いて', 'もういい、君とはもう話したくない', '明日の予定を教えて']) {
+    for (const text of ['お、シャノン、元気？', '今日は疲れた', 'この物語の続きを書いて', 'もういい、君とはもう話したくない', '明日の予定を教えて',
+      // Someone else as the sender, the owner's own act, a generic notification.
+      '母から電話があった', '上司から連絡が来て大変だった', '友達がメッセージくれた', '母に電話した', 'さっき上司に連絡したよ', '昨日はずっとメールしてた', 'アプリの通知が来た']) {
       expect(saysSheActedOnHerOwn(text), text).toBe(false);
     }
   });
@@ -93,10 +98,36 @@ describe('what the owner says she did on her own', () => {
     const { chat, model } = harness(new FakeReader({ messages: [], calls: [{ createdAt: '2026-10-05T10:30:00.000Z', state: 'unanswered' }] }));
     await chat(ASKED);
     expect(model.last.systemPrompt).toContain('- 電話: 6分前にボクからライ氏のiPhoneへ電話をかけた（出てもらえなかった）。');
-    expect(model.last.systemPrompt).toContain('- メッセージ: 直近24時間、ボクから送ったメッセージはない。');
+    expect(model.last.systemPrompt).toContain('- メッセージ: 直近24時間、ボクから送ったメッセージの記録はない。');
   });
 
-  it('with other people able to see or hear, keeps the times and leaves the words of her messages out', async () => {
+  it('tells a voice call her PC body started, so that the mix-up of the incident can be explained, and says what is not recorded', async () => {
+    const reader = new FakeReader({ messages: [{ createdAt: '2026-10-05T10:10:00.000Z', content: LAST_TEXT, read: true }], calls: [],
+      bodyCalls: [{ startedAt: '2026-10-05T10:34:34.431Z', endedAt: '2026-10-05T10:36:10.000Z', surface: 'windows' }] });
+    const { chat, model } = harness(reader);
+    await chat(ASKED);
+    const prompt = model.last.systemPrompt;
+    expect(prompt).toContain('- PCのボク: 19:34（1分前）にWindowsのデスクトップのボクが音声で聞き始めた（19:36に終了）。ボクの名前が聞こえたと思うと、自分から聞き始めることがある。');
+    expect(prompt).toContain('ここにないことは、この記録には残っていないということ');
+    expect(prompt).toContain('体に触れられた時のひとことや体の声かけは、記録に残らず話していることがある');
+    expect(prompt).not.toContain('していない）');
+  });
+
+  it('leaves out a row whose time cannot be read, never printing NaN', async () => {
+    const { chat, model } = harness(new FakeReader({ messages: [{ createdAt: 'garbage', content: '壊れた行', read: false }], calls: [{ createdAt: '', state: 'answered' }],
+      bodyCalls: [{ startedAt: 'x' }] }));
+    await chat(ASKED);
+    expect(model.last.systemPrompt).toContain(NO_CALL);
+    expect(model.last.systemPrompt).not.toContain('NaN');
+    expect(model.last.systemPrompt).not.toContain('壊れた行');
+    expect(model.last.systemPrompt).not.toContain('PCのボク');
+  });
+
+  it('with other people able to see or hear, keeps the times and leaves the words of her messages and what became of a call out', async () => {
+    const placed = harness(new FakeReader({ messages: [], calls: [{ createdAt: '2026-10-05T10:30:00.000Z', state: 'declined' }] }));
+    await placed.chat(ASKED, { audience: 'others' });
+    expect(placed.model.last.systemPrompt).toContain('- 電話: 6分前にボクからライ氏のiPhoneへ電話をかけた。');
+    expect(placed.model.last.systemPrompt).not.toContain('断られた');
     const { chat, voice, model } = harness();
     await chat(ASKED, { audience: 'others' });
     expect(model.last.systemPrompt).toContain(NO_CALL);
@@ -137,7 +168,7 @@ describe('SQLiteOwnOutreach', () => {
     VALUES (?, ?, 't', ?, 'シャノンから', '', ?, 'curious', ?, ?, ?)
   `).run(id, scope, `reach-out:wonder:${id}`, content, `day-${id}`, createdAt, readAt);
 
-  it('reads her latest messages and calls of the window, and tells a message she phoned with as the call', () => {
+  it('reads her latest messages and calls of the window, tells a message she phoned with as the call, and leaves look answers out', () => {
     const path = database();
     new SQLiteInitiativeStore(path).close();
     const calls = new SQLiteIncomingCallStore(path);
@@ -147,12 +178,18 @@ describe('SQLiteOwnOutreach', () => {
     message(db, 'm2', '2026-10-05T10:10:00.000Z', LAST_TEXT, null);
     message(db, 'phoned', '2026-10-05T10:20:00.000Z', '電話で言うこと', null);
     message(db, 'other-scope', '2026-10-05T10:25:00.000Z', 'よその', null, 'someone');
+    // An answer to a look he asked for in a conversation is not her own initiative.
+    db.prepare(`INSERT INTO initiative_messages (initiative_id, scope_key, thread_id, source_item_id, source_title, source_url, content, expression, day_key, created_at, read_at)
+      VALUES ('look', 'owner', 't', 'body-look:l1', '部屋を見た', '', '机が見えました', 'curious', 'body-look:l1', '2026-10-05T10:30:00.000Z', NULL)`).run();
     calls.begin('owner', { callId: 'c1', initiativeId: 'phoned', deviceId: 'iphone', threadId: 't', expiresAt: '2026-10-05T10:21:00.000Z' }, '2026-10-05T10:20:00.000Z');
     const reader = new SQLiteOwnOutreach(path);
     expect(reader.recent('owner', '2026-10-04T10:36:00.000Z', 2)).toEqual({
       messages: [{ createdAt: '2026-10-05T10:10:00.000Z', content: LAST_TEXT, read: false }, { createdAt: '2026-10-05T09:00:00.000Z', content: '一つ目', read: true }],
-      calls: [{ createdAt: '2026-10-05T10:20:00.000Z', state: 'pending' }],
+      calls: [{ createdAt: '2026-10-05T10:20:00.000Z', state: 'pending' }], bodyCalls: [],
     });
+    // A call that could not ring gave its message back: the message is told again.
+    calls.end('c1', ['pending'], 'failed', 'server', '2026-10-05T10:20:05.000Z');
+    expect(reader.recent('owner', '2026-10-04T10:36:00.000Z', 2)?.messages.map(item => item.content)).toEqual(['電話で言うこと', LAST_TEXT]);
     reader.close(); db.close(); calls.close();
   });
 
@@ -160,7 +197,23 @@ describe('SQLiteOwnOutreach', () => {
     const path = database();
     new DatabaseSync(path).close();
     const reader = new SQLiteOwnOutreach(path);
-    expect(reader.recent('owner', '2026-10-04T10:36:00.000Z', 2)).toEqual({ messages: [], calls: [] });
+    expect(reader.recent('owner', '2026-10-04T10:36:00.000Z', 2)).toEqual({ messages: [], calls: [], bodyCalls: [] });
     reader.close();
+  });
+
+  it('reads the latest call a full body started, with its end, and never a touch-only phone\'s', () => {
+    const path = database();
+    const body = new SQLiteBodyStore(path);
+    body.saveCapabilities('owner', 'pc', { expressions: [], gestures: [], flags: {}, surface: 'windows' }, AT);
+    body.saveCapabilities('owner', 'phone', { expressions: [], gestures: [], flags: { touchOnly: true }, surface: 'iphone' }, AT);
+    const event = (id: string, device: string, type: string, occurredAt: string) =>
+      body.record('owner', device, { id, type: type as 'callStarted', audience: 'owner', occurredAt }, AT, '2026-10-05');
+    event('p1', 'pc', 'callStarted', '2026-10-05T10:34:34.431Z');
+    event('p2', 'pc', 'callEnded', '2026-10-05T10:36:10.000Z');
+    event('f1', 'phone', 'callStarted', '2026-10-05T10:35:00.000Z');
+    const reader = new SQLiteOwnOutreach(path);
+    expect(reader.recent('owner', '2026-10-04T10:36:00.000Z', 2)?.bodyCalls)
+      .toEqual([{ startedAt: '2026-10-05T10:34:34.431Z', endedAt: '2026-10-05T10:36:10.000Z', surface: 'windows' }]);
+    reader.close(); body.close();
   });
 });

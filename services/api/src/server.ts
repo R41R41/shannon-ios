@@ -75,7 +75,7 @@ import { createMoodHistoryRoute } from './serverMoodHistoryRoute.js';
 import { createPrivateListeningRoute } from './serverPrivateListeningRoute.js';
 import { createIncomingCallRoute, type IncomingCallRoute } from './serverIncomingCallRoute.js';
 import { SQLiteOwnOutreach } from './ownOutreach.js';
-import { SQLiteDeviceSurfaces, ownerCallElsewhereEnabled } from './ownerCallElsewhere.js';
+import { SQLiteOwnerCallFacts, ownerCallElsewhereEnabled } from './ownerCallElsewhere.js';
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -126,7 +126,7 @@ const incomingCallRoute: IncomingCallRoute | null = createIncomingCallRoute(proc
 });
 // What she did on her own to reach the owner (ownOutreach.ts), and which app a device is (ownerCallElsewhere.ts): read-only connections.
 const ownOutreach = new SQLiteOwnOutreach(configuredDatabasePath());
-const deviceSurfaces = new SQLiteDeviceSurfaces(configuredDatabasePath());
+const ownerCallFacts = new SQLiteOwnerCallFacts(configuredDatabasePath());
 const chatModel = createConfiguredChatModel(process.env, persistentStore);
 const kernel = createLocalApiKernel(now, {
   ownOutreach,
@@ -165,7 +165,8 @@ const kernel = createLocalApiKernel(now, {
   // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
   body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), appLook: configuredAppLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: (scopeKey, deviceId) => privateListeningRoute.reachOuts.bodyPresence(scopeKey, deviceId, reachOuts.pending(scopeKey)), reachOutReports: privateListeningRoute.bodyReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env, configuredDatabasePath(), persistentStore),
     // The owner in a call on another of his apps: the presence field and the 409 for her body. SHANNON_OWNER_CALL_ELSEWHERE=off switches both off.
-    ownerCalls: { enabled: ownerCallElsewhereEnabled(process.env), surface: (scopeKey, deviceId) => { try { return deviceSurfaces.surface(scopeKey, deviceId); } catch { return undefined; } } } },
+    ownerCalls: { enabled: ownerCallElsewhereEnabled(process.env), surface: (scopeKey, deviceId) => { try { return ownerCallFacts.surface(scopeKey, deviceId); } catch { return undefined; } },
+      answered: (scopeKey, since) => { try { return ownerCallFacts.answered(scopeKey, since); } catch { return []; } } } },
   // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
   notion: configuredNotionSource(process.env, { log: line => console.log(line) }),
 });
@@ -415,7 +416,7 @@ function shutdown(): void {
     shannonNowReader.close();
     moodHistoryReader.close();
     ownOutreach.close();
-    deviceSurfaces.close();
+    ownerCallFacts.close();
     autonomyStore.close();
     persistentStore.close();
     process.exitCode = 0;

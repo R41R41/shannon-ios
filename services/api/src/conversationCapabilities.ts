@@ -97,6 +97,12 @@ export function conversationCapabilityPrompt(
   // The promise is stored after the reply, so the reply must not claim a clock alarm she cannot ring.
   const reminderBoundary = reminderCapabilityBoundary(message);
   if (reminderBoundary) sections.push(reminderBoundary);
+  // 「そっちからかけてきたじゃん」: what she actually did on her own, on the turn that says she did. Ahead of notes and
+  // upcoming items, so the 6,000-character cap below never cuts it; it follows the audience of upcoming items.
+  if (selection.upcoming !== false) {
+    const own = dependencies.ownOutreach?.promptFor(scopeKey, message, selection.upcoming === 'guarded' ? 'others' : 'owner');
+    if (own) sections.push(own);
+  }
   if (selection.aetherNotes !== false) {
     try {
       const notes = dependencies.aetherContext?.promptFor(scopeKey, message);
@@ -107,9 +113,6 @@ export function conversationCapabilityPrompt(
   if (selection.upcoming !== false) {
     const upcoming = dependencies.upcoming?.promptFor(scopeKey, message, selection.upcoming === 'guarded' ? 'others' : 'owner');
     if (upcoming) sections.push(upcoming);
-    // 「そっちからかけてきたじゃん」: what she actually did on her own, on the turn that says she did.
-    const own = dependencies.ownOutreach?.promptFor(scopeKey, message, selection.upcoming === 'guarded' ? 'others' : 'owner');
-    if (own) sections.push(own);
   }
   if (selection.voyagerTasks !== false && asksAboutTasks(message) && !asksOnlyProductRole(message)) {
     return readTaskContext(message, dependencies, sections);

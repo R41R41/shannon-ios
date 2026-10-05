@@ -158,13 +158,13 @@ export class SQLiteBodyStore {
   }
 
   /** `callStarted` / `callEnded` of the scope in `[since, until]`, any audience: a device, a type and a time (`ownerCallElsewhere.ts`). */
-  callEvents(scopeKey: string, since: string, until: string): Array<{ deviceId: string; type: 'callStarted' | 'callEnded'; occurredAt: string }> {
+  callEvents(scopeKey: string, since: string, until: string): Array<{ deviceId: string; type: 'callStarted' | 'callEnded'; occurredAt: string; receivedAt: string }> {
     const rows = this.database.prepare(`
-      SELECT device_id, event_type, occurred_at FROM body_events
+      SELECT device_id, event_type, occurred_at, received_at FROM body_events
       WHERE scope_key = ? AND audience IN ('owner', 'others') AND occurred_at >= ? AND occurred_at <= ? AND event_type IN ('callStarted', 'callEnded')
       ORDER BY occurred_at DESC LIMIT 200
-    `).all(scopeKey, since, until) as unknown as Array<{ device_id: string; event_type: string; occurred_at: string }>;
-    return rows.map(row => ({ deviceId: row.device_id, type: row.event_type === 'callEnded' ? 'callEnded' : 'callStarted', occurredAt: row.occurred_at }));
+    `).all(scopeKey, since, until) as unknown as Array<{ device_id: string; event_type: string; occurred_at: string; received_at: string }>;
+    return rows.map(row => ({ deviceId: row.device_id, type: row.event_type === 'callEnded' ? 'callEnded' : 'callStarted', occurredAt: row.occurred_at, receivedAt: row.received_at }));
   }
 
   /** Who can see or hear the body, as it said on a presence read. One row per device. */

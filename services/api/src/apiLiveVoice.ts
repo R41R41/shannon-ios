@@ -91,7 +91,7 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   reactions?: { link(scopeKey: string, reactionId: unknown): { text: string; threadId: string | null } | null };
   /** Others present as the server knows them, and what her writes must not repeat; absent, no tool is offered. */
   toolServer?: ConversationToolServer;
-  ownerCalls?: Pick<OwnerCalls, 'admit'>; // The owner in a call on another device (`ownerCallElsewhere.ts`); absent, nothing is refused.
+  ownerCalls?: Pick<OwnerCalls, 'admitTurn'>; // The owner in a call on another device (`ownerCallElsewhere.ts`); absent, nothing is refused.
 }
 
 export interface LiveVoiceStreamObserver {
@@ -121,7 +121,7 @@ export function dispatchLiveVoiceRequest(
   if (deviceContext === false) return badRequest('deviceContext is invalid');
 
   if (request.body.reactionId !== undefined && typeof request.body.reactionId !== 'string') return badRequest('reactionId is invalid');
-  if (dependencies.ownerCalls?.admit(scopeKey, request.deviceId, participantMode, dependencies.now()) === false) return OWNER_IN_CALL_ELSEWHERE_RESPONSE; // Her body, while he talks with her on one of his apps: refused before anything is read or written.
+  if (dependencies.ownerCalls?.admitTurn(scopeKey, request.deviceId, participantMode, dependencies.now()) === false) return OWNER_IN_CALL_ELSEWHERE_RESPONSE; // Her body, while he talks with her on one of his apps: refused before anything is read or written.
   // An unknown or expired reaction is not an error: the turn is then an ordinary one.
   const reaction = dependencies.reactions?.link(scopeKey, request.body.reactionId) ?? null;
   const requestedThreadId = typeof request.body.threadId === 'string' ? request.body.threadId.trim()

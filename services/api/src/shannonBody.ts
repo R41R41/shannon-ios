@@ -20,7 +20,7 @@ import { BodyTouches } from './bodyTouch.js';
 import { BODY_TOUCH_ONLY_FLAG, isFullBody, isTouchOnlyBody } from './bodyTouchOnly.js';
 import { bodyPlace, bodySurfaceMark, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
 import { ConversationLooks } from './conversationLooks.js';
-import { OWNER_CALL_LIMITS, OwnerCalls, type OwnerCallElsewhere, type OwnerCallSurface } from './ownerCallElsewhere.js';
+import { OWNER_CALL_LIMITS, OwnerCalls, type OwnerCallDependencies, type OwnerCallElsewhere, type OwnerCallSurface } from './ownerCallElsewhere.js';
 import type { TouchExperienceWriter } from './bodyTouchMemory.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './bodyStore.js';
 import { ownerDay, presentCompanionState } from './companionPresence.js';
@@ -57,7 +57,7 @@ export interface ShannonBodyOptions {
    * Whether the owner is in a call on another device (`ownerCallElsewhere.ts`): `enabled` is `SHANNON_OWNER_CALL_ELSEWHERE`
    * (unset means on); `surface` says which app a device is (default: her body's registration only).
    */
-  ownerCalls?: { enabled?: boolean; surface?: (scopeKey: string, deviceId: string) => OwnerCallSurface | undefined };
+  ownerCalls?: { enabled?: boolean; surface?: (scopeKey: string, deviceId: string) => OwnerCallSurface | undefined; answered?: OwnerCallDependencies['answered'] };
 }
 
 export interface ShannonBodyDependencies extends ShannonBodyOptions {
@@ -198,6 +198,7 @@ export class ShannonBody {
       events: (scopeKey, since, until) => this.store.callEvents(scopeKey, since, until),
       isFullBody: (scopeKey, deviceId) => isFullBody(this.store.capabilities(scopeKey, deviceId)),
       surface: dependencies.ownerCalls?.surface ?? bodySurface,
+      ...(dependencies.ownerCalls?.answered ? { answered: dependencies.ownerCalls.answered } : {}),
     });
   }
 

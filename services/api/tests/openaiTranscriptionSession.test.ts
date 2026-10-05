@@ -94,7 +94,7 @@ describe('session route transcription provider', () => {
 
   const kernel = {
     realtimeVoiceSession: () => ({ threadId: 'thread-a', instructions: 'あなたはシャノン。' }),
-    voiceSessionRefused: () => false,
+    voiceSessions: { refused: () => false, created: () => undefined },
   } as never;
   const principal = { deviceId: 'device-a', scopeKey: 'owner-a' } as never;
 

@@ -28,6 +28,33 @@ public struct ShannonBodyTouchEventDTO: Codable, Equatable, Sendable {
     }
 }
 
+/// The start or the end of a voice conversation on this device, as `POST /v1/body/events` takes it
+/// (`callStarted` / `callEnded`, `docs/body-contract.md`). Facts only: no text and no number. It tells her
+/// desktop body that the owner is in a call here, so that its wake listener stays quiet.
+public struct ShannonBodyCallEventDTO: Codable, Equatable, Sendable {
+    public enum Kind: String, Codable, Sendable {
+        case callStarted
+        case callEnded
+    }
+
+    public let id: String
+    public let type: Kind
+    public let audience: ShannonBodyAudience
+    public let occurredAt: String
+
+    public init(id: String, type: Kind, audience: ShannonBodyAudience, occurredAt: String) {
+        self.id = id
+        self.type = type
+        self.audience = audience
+        self.occurredAt = occurredAt
+    }
+}
+
+/// Reports the calls of this device. Every paired device may; no registration as a body is needed.
+public protocol ShannonBodyCallReporting: Sendable {
+    func sendBodyCallEvent(scopeKey: String, event: ShannonBodyCallEventDTO) async throws
+}
+
 /// `POST /v1/body/reactions`: the same touch id the finished event will carry.
 public struct ShannonBodyReactionRequestDTO: Codable, Equatable, Sendable {
     public struct Touch: Codable, Equatable, Sendable {
@@ -132,7 +159,7 @@ public enum ShannonBodyRegistration {
     }
 }
 
-extension ShannonAPIClient: ShannonBodyServing {
+extension ShannonAPIClient: ShannonBodyServing, ShannonBodyCallReporting {
     public func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws {
         let connection = currentConnection()
         var request = bodyRequest(path: "/v1/body/capabilities", method: "PUT", connection: connection)
@@ -150,6 +177,14 @@ extension ShannonAPIClient: ShannonBodyServing {
         let connection = currentConnection()
         var request = bodyRequest(path: "/v1/body/events", method: "POST", connection: connection)
         request.httpBody = try JSONEncoder().encode(TouchEventsDTO(scopeKey: connection?.scopeKey ?? scopeKey, events: events))
+        _ = try await bodyData(for: request)
+    }
+
+    /// Uses the route of the touch events, with an event of its own shape.
+    public func sendBodyCallEvent(scopeKey: String, event: ShannonBodyCallEventDTO) async throws {
+        let connection = currentConnection()
+        var request = bodyRequest(path: "/v1/body/events", method: "POST", connection: connection)
+        request.httpBody = try JSONEncoder().encode(BodyEventsDTO(scopeKey: connection?.scopeKey ?? scopeKey, events: [event]))
         _ = try await bodyData(for: request)
     }
 
@@ -193,6 +228,11 @@ private struct TouchBodyCapabilitiesDTO: Encodable {
 private struct TouchEventsDTO: Encodable {
     let scopeKey: String
     let events: [ShannonBodyTouchEventDTO]
+}
+
+private struct BodyEventsDTO<Event: Encodable>: Encodable {
+    let scopeKey: String
+    let events: [Event]
 }
 
 private struct BodyErrorDTO: Decodable {

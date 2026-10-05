@@ -654,7 +654,7 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
     // and on the own-actions branch (2026-10-05), whose capability text gains one answering rule (she does not go along with a
     // false premise about something she did on her own); without that line the trace is 73f9d624… (none of these four turns
     // says she reached out, so the `[ボクが自分からしたこと]` block is in none of them).
-    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('023bafd3074ce5091dc9dcca4f4a080bf65e8b1f48db765fefed9e4ad7377781');
+    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('b61f391ac62d86690bc11c5dd1a6c14de0c0e921aed12c108b2bd70705cac4cf');
     for (const request of off.seen.requests) expect(request).not.toHaveProperty('offerReplyFeeling');
     // What 7e227e6 does with these four turns: a cue is 0.52 and a mood, no cue is nothing, and nothing lingers for days.
     expect(off.h.state().lingering).toMatchObject([{ kind: 'sulky', span: 'mood', strength: 0.52 }]);
