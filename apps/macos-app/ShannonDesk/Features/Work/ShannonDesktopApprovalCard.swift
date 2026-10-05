@@ -32,11 +32,11 @@ extension ShannonDesktopRootView {
                         confirmationMessage: approval.title,
                         confirmActionTitle: ShannonGeneratedStrings.taskApprovalAllowOnce
                     ) {
-                        Task { await conversation.resolveAgentApproval(task.id, accepted: true) }
+                        Task { await conversation.resolveAgentApproval(task.id, accepted: true, requestID: approval.externalRequestID) }
                     }
                 } else {
                     Button {
-                        Task { await conversation.resolveAgentApproval(task.id, accepted: true) }
+                        Task { await conversation.resolveAgentApproval(task.id, accepted: true, requestID: approval.externalRequestID) }
                     } label: {
                         Text(ShannonGeneratedStrings.taskApprovalAllowOnce)
                             .frame(maxWidth: .infinity)
@@ -51,18 +51,18 @@ extension ShannonDesktopRootView {
                     confirmationMessage: ShannonGeneratedStrings.taskApprovalConfirmSessionMessage,
                     confirmActionTitle: ShannonGeneratedStrings.taskApprovalAllowSession
                 ) {
-                    Task { await conversation.resolveAgentApproval(task.id, accepted: true, forSession: true) }
+                    Task { await conversation.resolveAgentApproval(task.id, accepted: true, forSession: true, requestID: approval.externalRequestID) }
                 }
                 if approval.denyStopsTask {
                     Button(role: .destructive) {
-                        taskStopConfirmation = .denyAndStop(task.id)
+                        taskStopConfirmation = .denyAndStop(task.id, requestID: approval.externalRequestID)
                     } label: {
                         Text("許可せず作業を中止").frame(maxWidth: .infinity)
                     }
                     .controlSize(.large)
                 } else {
                     Button {
-                        Task { await conversation.resolveAgentApproval(task.id, accepted: false) }
+                        Task { await conversation.resolveAgentApproval(task.id, accepted: false, requestID: approval.externalRequestID) }
                     } label: {
                         Text(ShannonGeneratedStrings.taskApprovalDeny).frame(maxWidth: .infinity)
                     }

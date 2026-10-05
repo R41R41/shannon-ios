@@ -381,6 +381,24 @@ final class ShannonAgentTaskTests: XCTestCase {
         XCTAssertEqual(command?.payload["externalRequestID"], task.pendingApproval?.externalRequestID)
     }
 
+    func testApprovalDecidesOnlyTheRequestThatWasOnScreen() async {
+        let task = ShannonAgentTaskFixtures.waitingApproval()
+        let client = ApprovalCommandClient(task: task, shouldFail: false)
+        let model = ShannonConversationModel(client: client, usesDisplayCache: false)
+        await model.synchronizeAgentTasks()
+
+        // A press rendered for another (older) request sends nothing and reads the task again.
+        await model.resolveAgentApproval(task.id, accepted: true, requestID: "an-earlier-request")
+        let ignored = await client.command
+        XCTAssertNil(ignored)
+        XCTAssertEqual(model.agentTask(id: task.id)?.status, .waitingApproval)
+
+        // The request on screen is the pending one: it is decided.
+        await model.resolveAgentApproval(task.id, accepted: true, requestID: task.pendingApproval?.externalRequestID)
+        let command = await client.command
+        XCTAssertEqual(command?.payload["externalRequestID"], task.pendingApproval?.externalRequestID)
+    }
+
     func testStoppingRemoteTaskSendsADurableCancelCommand() async {
         let task = ShannonAgentTaskFixtures.running()
         let client = ApprovalCommandClient(task: task, shouldFail: false)

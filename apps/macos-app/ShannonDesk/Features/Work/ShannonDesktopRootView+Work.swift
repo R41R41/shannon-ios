@@ -342,7 +342,8 @@ extension ShannonDesktopRootView {
 /// A stop that cannot be undone is confirmed before it is sent.
 enum DesktopTaskStopConfirmation: Equatable {
     case cancel(UUID)
-    case denyAndStop(UUID)
+    /// The approval the owner saw is the one declined; if it is no longer pending, nothing is sent.
+    case denyAndStop(UUID, requestID: String)
 
     var title: String {
         switch self {
@@ -371,8 +372,8 @@ extension ShannonDesktopRootView {
         switch confirmation {
         case .cancel(let id):
             Task { await conversation.cancelAgentTask(id) }
-        case .denyAndStop(let id):
-            Task { await conversation.resolveAgentApproval(id, accepted: false) }
+        case .denyAndStop(let id, let requestID):
+            Task { await conversation.resolveAgentApproval(id, accepted: false, requestID: requestID) }
         }
     }
 }

@@ -46,7 +46,9 @@ extension ShannonDesktopRootView {
                     selectedTaskID = task.id
                     showAuxiliaryPanel(.task)
                 },
-                approveOnce: { Task { await conversation.resolveAgentApproval(task.id, accepted: true) } }
+                approveOnce: { [requestID = task.pendingApproval?.externalRequestID] in
+                    Task { await conversation.resolveAgentApproval(task.id, accepted: true, requestID: requestID) }
+                }
             )
             .frame(maxWidth: 820)
             .padding(.vertical, ShannonDesktopSpacing.small)

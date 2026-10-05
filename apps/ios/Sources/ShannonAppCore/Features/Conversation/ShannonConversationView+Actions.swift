@@ -151,9 +151,9 @@ extension ShannonConversationView {
                 steer: { instruction in Task { await model.steerAgentTask(task.id, instruction: instruction) } },
                 togglePause: { Task { await model.toggleAgentTaskPause(task.id) } },
                 cancel: { Task { await model.cancelAgentTask(task.id) } },
-                resolveApproval: { accepted, forSession in
+                resolveApproval: { [requestID = task.pendingApproval?.externalRequestID] accepted, forSession in
                     Task {
-                        await model.resolveAgentApproval(task.id, accepted: accepted, forSession: forSession)
+                        await model.resolveAgentApproval(task.id, accepted: accepted, forSession: forSession, requestID: requestID)
                     }
                 },
                 workspace: model.agentWorkspace,
