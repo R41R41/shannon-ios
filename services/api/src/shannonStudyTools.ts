@@ -25,10 +25,25 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
   const recent = new Map<string, { id: string; title: string; at: number }[]>();
   /** Parts appended for each owner message (in this process, 15 minutes), so a retry does not append them twice. */
   const appended = new Map<string, number>();
+  /**
+   * The piece she names by id or by title (2026-10-05, Build 138: she knew 『名脇役のハッチを叩いて』 only by its title and
+   * could not read it). An id first, then the exact title, then a title that matches once width, spacing, case and the
+   * quotes 『』「」 around it are set aside. Two pieces under one title are not guessed: she is given both with their ids.
+   */
   const piece = (context: ToolExecutionContext, input: ToolInput, includeDeleted = false): StudyPiece | ToolResult => {
-    const id = stringInput(input, 'id')?.trim() ?? '';
-    return store.study.find(context.scopeKey, id, includeDeleted)
-      ?? toolFailure('not_found', `id「${clip(id, 40)}」のものは書斎に${includeDeleted ? '' : '（ゴミ箱の外に）'}ない。study.list で確かめる。`, { retryable: false });
+    const named = stringInput(input, 'id')?.trim() ?? '';
+    const byId = named ? store.study.find(context.scopeKey, named, includeDeleted) : null;
+    if (byId) return byId;
+    const pieces = store.study.list(context.scopeKey, 500, includeDeleted ? 'include' : 'exclude');
+    const exact = pieces.filter(item => item.title.trim() === named);
+    const matches = exact.length ? exact : pieces.filter(item => titleKey(item.title) === titleKey(named) && titleKey(named) !== '');
+    if (matches.length === 1) return matches[0]!;
+    if (matches.length > 1) {
+      return toolFailure('conflict', [`題名「${clip(named, 60)}」のものが${matches.length}つある。どれかの id で呼び直す:`, ...matches.slice(0, 10).map(pieceLine)].join('\n'),
+        { retryable: false, refusal: { why: '同じ題名のものが複数ある', wouldWork: 'id を書いて呼び直す' } });
+    }
+    return toolFailure('not_found', `id か題名が「${clip(named, 40)}」のものは書斎に${includeDeleted ? '' : '（ゴミ箱の外に）'}ない。study.list で確かめる。`,
+      { retryable: false, refusal: { why: 'その id や題名のものがない', wouldWork: 'study.list で id と題名を確かめて呼び直す' } });
   };
   const immediate = (summary: string, run: () => ToolRun): PreparedToolCall => ({ summary, run: async () => run() });
   /** A write: `text` is what she reads, `record` what the owner's record says; `newId` adds the id the write made. */
@@ -254,7 +269,12 @@ export function similarBodies(left: string, right: string): boolean {
   return (2 * shared) / Math.max(1, a.length - 1 + b.length - 1) >= 0.6;
 }
 
-/** One line of a piece for her, with everything she needs to name it in the next call. */
+/** A title as she may say it: width, case, spacing and the quotes around a title set aside. */
+function titleKey(title: string): string {
+  return title.normalize('NFKC').toLowerCase().replace(/[\s『』「」【】〈〉《》“”‘’"']/gu, '');
+}
+
+/** One line of a piece for her, with everything she needs to name it in the next call (its id, or its title). */
 function pieceLine(item: StudyPiece): string {
   const status: StudyPieceStatus = item.status;
   return `- id: ${item.id}｜${STUDY_KIND_LABEL[item.kind]}「${clip(item.title, 60)}」｜${STUDY_STATUS_LABEL[status]}${item.deletedAt ? '・ゴミ箱' : ''}｜第${item.version}稿｜${item.body.length}字｜更新 ${item.updatedAt.slice(0, 10)}${item.pursuitId ? `｜棚 ${item.pursuitId}` : ''}`;

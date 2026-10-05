@@ -64,7 +64,7 @@ const ALL_SURFACES: readonly ToolSurface[] = Object.freeze(['text', 'voice', 'au
 /** Owner decision 2026-10-05: with anyone else present her study and her folder are not offered at all. */
 const OWNER_ALONE: readonly ToolAudience[] = Object.freeze(['owner_alone']);
 
-const id = { type: 'string', description: '書斎のものの id（study.list や study.search の結果にある）', maxLength: 80, minLength: 8 } as const;
+const id = { type: 'string', description: 'どれのことか。書斎のものの id（study.list や study.search の結果の「id: …」）か、その題名。題名でよいが、同じ題名が二つある時は id を書く', maxLength: 100, minLength: 1 } as const;
 const host = { type: 'string', description: 'どのPCのフォルダか。ふだんは書かない（1台だけならそれを使う）', maxLength: 40 } as const;
 const path = (description: string) => ({ type: 'string', description, maxLength: 240 } as const);
 
@@ -72,6 +72,8 @@ const path = (description: string) => ({ type: 'string', description, maxLength:
 export const FOLDER_WRITE_CHARACTERS = 6_000;
 
 const STUDY = '書斎（ボク自身の場所。ボクが書くメモと物語の下書きが、版ごとに残っている。正本はシャノンのデータベース）';
+/** Said by every study tool that takes `id`: a title works too (2026-10-05, Build 138: she could not read a piece she knew only by its title). */
+const BY_TITLE = 'id の代わりに題名でもよい。';
 const FOLDER = 'ライ氏のPCにあるボク専用のフォルダ';
 const SECRET_LINE = 'ライ氏に内緒と言われたこと、忘れてと頼まれたことは書かない。';
 
@@ -85,7 +87,7 @@ function schema(properties: Record<string, ToolInputProperty>, required: readonl
 
 export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
   tool({ name: 'study.list', domain: 'aether_study', effect: 'read',
-    description: `${STUDY}にあるものの一覧を見る。まだ見せていない下書きも、しまったものも、ゴミ箱のものも、自分のものなので全部見られる。`,
+    description: `${STUDY}にあるものの一覧を見る。まだ見せていない下書きも、しまったものも、ゴミ箱のものも、自分のものなので全部見られる。1つずつ id と題名がつき、ほかの道具にはそのどちらかを渡す。`,
     input: schema({
       kind: { type: 'string', description: 'story（物語）か note（メモ）。書かなければ両方', enum: ['story', 'note'] },
       status: { type: 'string', description: 'draft（下書き）、ready（見せてもいい）、shown（見せた）、put_away（しまった）、deleted（ゴミ箱）。書かなければゴミ箱以外の全部', enum: ['draft', 'ready', 'shown', 'put_away', 'deleted'] },
@@ -100,7 +102,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
       limit: { type: 'integer', description: '最大の件数（1〜20）', minimum: 1, maximum: 20 },
     }, ['query']) }),
   tool({ name: 'study.read', domain: 'aether_study', effect: 'read',
-    description: `${STUDY}のものを1つ、題名と本文まで読む。version を書けばその版を読む。版の一覧（何をなぜ直したか）もつく。`,
+    description: `${STUDY}のものを1つ、題名と本文まで読む。version を書けばその版を読む。版の一覧（何をなぜ直したか）もつく。${BY_TITLE}`,
     input: schema({ id, version: { type: 'integer', description: '読みたい版。書かなければいまの版', minimum: 1, maximum: 10_000 } }, ['id']) }),
   tool({ name: 'study.create', domain: 'aether_study', effect: 'write',
     description: `${STUDY}に新しいメモか物語を書く。メモはライ氏も読める。物語は下書きとして始まり、「見せてもいい」にするまでライ氏には題名も中身も見えない。長い物語は、最初の部分を書いてから study.update の append で続きを足していく。同じ題名と本文をもう一度書いても、二つにはならない。${SECRET_LINE}`,
@@ -112,7 +114,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
       changeNote: { type: 'string', description: 'どんな稿か、ひと言（400字まで）', maxLength: 400 },
     }, ['kind', 'title', 'body']) }),
   tool({ name: 'study.update', domain: 'aether_study', effect: 'write',
-    description: `${STUDY}のものを書き直すか、続きを足す。新しい版として足され、前の版はそのまま残る。物語は書き直すと下書きに戻る（見せた版はライ氏が読み続ける）。${SECRET_LINE}`,
+    description: `${STUDY}のものを書き直すか、続きを足す。新しい版として足され、前の版はそのまま残る。物語は書き直すと下書きに戻る（見せた版はライ氏が読み続ける）。${SECRET_LINE}${BY_TITLE}`,
     input: schema({
       id,
       mode: { type: 'string', description: 'replace（本文を全部書き直す。ふだんはこれ）か append（今の本文の直後に body を足す。段落を分けるなら先頭に改行を書く）', enum: ['replace', 'append'] },
@@ -121,20 +123,20 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
       changeNote: { type: 'string', description: '何をなぜ直したか（400字まで）', minLength: 1, maxLength: 400 },
     }, ['id', 'body', 'changeNote']) }),
   tool({ name: 'study.rename', domain: 'aether_study', effect: 'write',
-    description: `${STUDY}のものの題名を変える。新しい版として残る。`,
+    description: `${STUDY}のものの題名を変える。新しい版として残る。${BY_TITLE}`,
     input: schema({ id, title: { type: 'string', description: '新しい題名（80字まで）', minLength: 1, maxLength: 80 } }, ['id', 'title']) }),
   tool({ name: 'study.move', domain: 'aether_study', effect: 'write',
-    description: `${STUDY}のものの置き場所を変える。put_away でしまう、take_back でしまったものを戻す（物語は下書きに、メモは読める状態に戻る）、pursuit でどのやりたいことの棚に置くかを変える。「見せてもいい」にすることと見せることは、これではできない。`,
+    description: `${STUDY}のものの置き場所を変える。put_away でしまう、take_back でしまったものを戻す（物語は下書きに、メモは読める状態に戻る）、pursuit でどのやりたいことの棚に置くかを変える。「見せてもいい」にすることと見せることは、これではできない。${BY_TITLE}`,
     input: schema({
       id,
       to: { type: 'string', description: 'put_away、take_back、pursuit のどれか', enum: ['put_away', 'take_back', 'pursuit'] },
       pursuitId: { type: 'string', description: 'to が pursuit の時の、台帳の id。空にすると棚から外す', maxLength: 80 },
     }, ['id', 'to']) }),
   tool({ name: 'study.delete', domain: 'aether_study', effect: 'write',
-    description: `${STUDY}のものをゴミ箱に入れる。消えはせず、版も残り、study.restore で戻せる。`,
+    description: `${STUDY}のものをゴミ箱に入れる。消えはせず、版も残り、study.restore で戻せる。${BY_TITLE}`,
     input: schema({ id }, ['id']) }),
   tool({ name: 'study.restore', domain: 'aether_study', effect: 'write',
-    description: `${STUDY}のゴミ箱から1つ戻す。`,
+    description: `${STUDY}のゴミ箱から1つ戻す。${BY_TITLE}`,
     input: schema({ id }, ['id']) }),
   tool({ name: 'folder.list', domain: 'host_folder', effect: 'read',
     description: `${FOLDER}の中の一覧を見る。ライ氏が置いたファイルも見える。PCが起きていない時は見られない。`,

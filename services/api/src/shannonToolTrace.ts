@@ -41,6 +41,8 @@ export interface ToolTraceRecord {
 export const TRACE_CALLS = 6;
 export const TRACE_NAMES = 12;
 const NAME_CHARACTERS = 60;
+/** A study name is a short title, its stage and its whole id (a UUID is 36 characters). */
+const STUDY_NAME_CHARACTERS = 100;
 const TARGET_CHARACTERS = 80;
 /** The whole replayed block is at most this long, and it is counted inside the replay budget. */
 export const TRACE_PROMPT_CHARACTERS = 1_200;
@@ -67,8 +69,9 @@ function namesOf(tool: string, resultText: string): string[] {
       name = /^- (.+?)(?::\d+|（名前）) …/u.exec(line)?.[1];
     } else {
       // study.list / study.search: "- id: X｜メモ「題名」｜状態｜…"; the snippet lines of a search start with spaces.
+      // The id is kept whole, so that she can name the piece in a later turn; the title is shortened instead.
       const match = /^- id: ([^｜]+)｜([^｜]+)｜([^｜]+)/u.exec(line);
-      name = match ? `${match[2]}（${match[3]}、id: ${match[1]}）` : undefined;
+      name = match ? `${clip(match[2]!, 30)}（${clip(match[3]!, 12)}、id: ${match[1]}）` : undefined;
     }
     if (name) names.push(name);
   }
@@ -94,7 +97,7 @@ export function toolTraceCall(tool: string, argumentsJson: string, result: ToolR
   if (!result.ok) return call;
   if (/\.(?:list|search)$/u.test(tool)) {
     const found = namesOf(tool, result.text);
-    const names = found.slice(0, TRACE_NAMES).map(name => keep(name, NAME_CHARACTERS)!);
+    const names = found.slice(0, TRACE_NAMES).map(name => keep(name, tool.startsWith('study.') ? STUDY_NAME_CHARACTERS : NAME_CHARACTERS)!);
     return { ...call, names, ...(found.length > TRACE_NAMES || /（ほかにもある）|途中で打ち切った|新しい順に/u.test(result.text) ? { more: true as const } : {}) };
   }
   const size = /（全(\d+)バイト/u.exec(result.text)?.[1];
@@ -109,7 +112,7 @@ export function boundedTraceCalls(value: unknown): ToolTraceCall[] {
   return value.slice(0, TRACE_CALLS).flatMap(item => {
     const call = item && typeof item === 'object' ? item as Record<string, unknown> : null;
     if (!call || typeof call.tool !== 'string' || typeof call.ok !== 'boolean') return [];
-    const names = Array.isArray(call.names) ? call.names.filter((name): name is string => typeof name === 'string').slice(0, TRACE_NAMES).map(name => clip(name, NAME_CHARACTERS)) : undefined;
+    const names = Array.isArray(call.names) ? call.names.filter((name): name is string => typeof name === 'string').slice(0, TRACE_NAMES).map(name => clip(name, STUDY_NAME_CHARACTERS)) : undefined;
     return [{
       tool: clip(call.tool, 40), ok: call.ok,
       ...(typeof call.target === 'string' ? { target: clip(call.target, TARGET_CHARACTERS) } : {}),
@@ -144,7 +147,17 @@ export function toolTracePrompt(turns: readonly { record: ToolTraceRecord; repli
     const label = repliesAgo <= 1 ? '直前の返事' : `${repliesAgo}つ前の返事`;
     const turn = record.calls.map(call => `- ${label}: ${callLine(call)}`);
     const added = turn.reduce((sum, line) => sum + line.length + 1, 0);
-    if (length + added > Math.min(maximum, TRACE_PROMPT_CHARACTERS)) break;
+    const room = Math.min(maximum, TRACE_PROMPT_CHARACTERS);
+    if (length + added > room) {
+      // Her last turn alone is too long: it is shortened, never dropped; an older one is left out.
+      if (!lines.length) for (const line of turn) {
+        const left = room - length - 1;
+        if (left < 40) break;
+        lines.push(clip(line, left));
+        length += Math.min(line.length, left) + 1;
+      }
+      break;
+    }
     lines.unshift(...turn);
     length += added;
   }
