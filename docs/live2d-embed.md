@@ -73,8 +73,8 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
   app's last read of that record.
 - Touch, the part that was touched, and her voice: `docs/body-contract.md`, "A body that only feels touch".
 - Her desktop body on the Mac (A17, `Features/DesktopBody/`, `ShannonLive2DStage+Desktop.swift`) shows the page in a
-  transparent window of its own, `full` and fitted. While it is the place that shows her: the page is not paused when
-  the app is hidden (the window stays), the page's touches go to the desktop body's own coordinator (her full body,
+  transparent window of its own, `full` and fitted. While it is the place that shows her: the page draws only while that
+  window can be seen (on screen and not covered, the Mac not locked, the owner not away; hiding the app does not pause it), the page's touches go to the desktop body's own coordinator (her full body,
   `docs/body-contract.md`, "Her desktop body inside an app"), and below 60% of her size she is asked for her eyes alone
   (`setBody('eyes')`) while the owner's choice stays as it is. The page has no carry: the window tells a carry from the
   page's touches before the page sees the press (`ShannonDesktopBodyCarry`), so a carry is never a page message
