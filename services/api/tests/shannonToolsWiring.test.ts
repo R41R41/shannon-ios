@@ -3,7 +3,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS } from '../src/chatModelTools.js';
-import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/turnDeadline.js';
+import { TEXT_TURN_DEADLINE, TurnDeadline, VOICE_TURN_DEADLINE } from '../src/turnDeadline.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';
 import { OTHERS_HEARD_WINDOW_MILLISECONDS, ToolAudienceWatch } from '../src/shannonToolAudience.js';
 import { asksAboutOwnThings, conversationTools } from '../src/shannonToolSession.js';
@@ -85,7 +85,8 @@ describe('which conversation turns are offered her tools', () => {
   it('offers nothing while her body says someone else can see or hear it, or when that cannot be read', () => {
     const runner = { tools: createInMemoryAutonomyService(() => at).tools };
     const secrets = () => ({ carries: () => false });
-    const offer = (othersPresent: () => boolean) => conversationTools(runner, 'owner', 'text', true, { audience: new ToolAudienceWatch({ othersPresent }, () => at), secrets });
+    const deadline = new TurnDeadline(TEXT_TURN_DEADLINE);
+    const offer = (othersPresent: () => boolean) => conversationTools(runner, 'owner', 'text', true, { audience: new ToolAudienceWatch({ othersPresent }, () => at), secrets }, 'thread\nmessage', deadline);
     expect(offer(() => false).tools).toBeDefined();
     expect(offer(() => true)).toEqual({ toolsWithheld: true });
     expect(offer(() => { throw new Error('unreadable'); })).toEqual({ toolsWithheld: true });
@@ -94,12 +95,34 @@ describe('which conversation turns are offered her tools', () => {
     expect(String(withheld.instructions)).toContain(TOOLS_WITHHELD_INSTRUCTIONS);
     expect(String(chatTurnRequestBody('gpt-5.6-luna', { scopeKey: 'owner', systemPrompt: '', history: [], message: 'x' }, undefined).instructions)).not.toContain('[ボクの道具]');
     // Without what the server knows of the audience, nothing is offered, and nothing is said about it.
-    expect(conversationTools(runner, 'owner', 'text', true)).toEqual({});
+    expect(conversationTools(runner, 'owner', 'text', true, {}, 'thread\nmessage', deadline)).toEqual({});
     // The session carries the turn's deadline, not as part of what the model is asked.
-    const deadline = new TurnDeadline(TEXT_TURN_DEADLINE);
     const offered = conversationTools(runner, 'owner', 'text', true, { audience: new ToolAudienceWatch({ othersPresent: () => false }, () => at), secrets }, 'thread\nmessage', deadline);
     expect(offered.tools?.deadline).toBe(deadline);
     expect(Object.keys(offered.tools!)).toEqual(['definitions', 'maximumCalls']);
+  });
+
+  it('gives the turn one deadline from the request\'s arrival: time before the model is counted, and voice has its own', async () => {
+    let ticks = 0;
+    // Every reading of the kernel's clock is a second later: what happens before the model call takes time.
+    const clock = () => new Date(Date.parse(at) + 1_000 * ticks++).toISOString();
+    const model = new RecordingModel();
+    const api = createLocalApiKernel(clock, { chatModel: model });
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message: '書斎の下書き、どうなってる？' } });
+    const text = (model.last as ShannonChatModelRequest).tools!.deadline;
+    expect(text.plan).toBe(TEXT_TURN_DEADLINE);
+    expect(text.left()).toBeLessThan(TEXT_TURN_DEADLINE.totalMilliseconds - 1_000);
+    // A voice turn answered through generate() (as the provisional-intent path does) carries the voice deadline.
+    const voiceModel: ShannonChatModel & { last?: unknown } = {
+      mode: 'openai', model: 'test-model',
+      async generate(request) { voiceModel.last = request; return { mode: 'openai', model: 'test-model', reply: 'はい。' }; },
+    };
+    const voiceApi = createLocalApiKernel(() => at, { chatModel: voiceModel });
+    await voiceApi.dispatch({ method: 'POST', path: delegations, body: {
+      scopeKey: 'owner', threadId: 'thread', transcript: '書斎のメモを読んで',
+      deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null, userUtterance: { id: 'u-1', text: '書斎のメモを読んで', source: 'speech', rawText: '書斎のメモを読んで' } },
+    } });
+    expect((voiceModel.last as ShannonChatModelRequest).tools!.deadline.plan).toBe(VOICE_TURN_DEADLINE);
   });
 
   it('offers nothing anywhere with SHANNON_OWN_TOOLS=off', async () => {

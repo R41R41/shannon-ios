@@ -23,6 +23,8 @@ const DUPLICATE_MILLISECONDS = 15 * 60_000;
 export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): Readonly<Record<string, ToolExecutor>> {
   /** What each owner message's turns created, for a retry of the same message (in this process, 15 minutes). */
   const recent = new Map<string, { id: string; title: string; at: number }[]>();
+  /** Parts appended for each owner message (in this process, 15 minutes), so a retry does not append them twice. */
+  const appended = new Map<string, number>();
   const piece = (context: ToolExecutionContext, input: ToolInput, includeDeleted = false): StudyPiece | ToolResult => {
     const id = stringInput(input, 'id')?.trim() ?? '';
     return store.study.find(context.scopeKey, id, includeDeleted)
@@ -118,10 +120,28 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
       if (!('id' in found)) return found;
       const part = stringInput(input, 'body')!;
       const append = stringInput(input, 'mode') === 'append';
-      return revise(context, input, {
+      // The same part appended again for the same owner message (a retry of it) is not appended twice.
+      const appendKey = append && context.memory.turnKey ? `${context.memory.turnKey}\n${found.id}\n${part.replace(/\s+/gu, '')}` : null;
+      const appendedAt = appendKey ? appended.get(appendKey) : undefined;
+      if (appendedAt !== undefined && Date.parse(now()) - appendedAt < DUPLICATE_MILLISECONDS) {
+        return toolOk(`この続きはもう足してあった（二度は足さなかった）。\n${pieceLine(found)}`);
+      }
+      const revised = revise(context, input, {
         body: append ? `${found.body}${/^\s/u.test(part) ? '' : '\n\n'}${part}` : part,
         title: stringInput(input, 'title')?.trim() || undefined, changeNote: stringInput(input, 'changeNote')!,
       }, append ? '続きを足した' : '書き直した');
+      if (!appendKey || !('run' in revised)) return revised;
+      return { ...revised, run: async signal => {
+        const run = await revised.run(signal);
+        const apply = run.apply;
+        return apply ? { ...run, apply: () => {
+          const line = apply();
+          const at = Date.parse(now());
+          for (const [key, when] of appended) if (at - when >= DUPLICATE_MILLISECONDS) appended.delete(key);
+          appended.set(appendKey, at);
+          return line;
+        } } : run;
+      } };
     },
     'study.rename': (input, context) => {
       const found = piece(context, input);

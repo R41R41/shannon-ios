@@ -8,6 +8,8 @@ export interface ResponsesStreamCall {
   apiKey: string;
   /** The whole call, from the request to the last event: the budget of the non-streaming call. */
   timeoutMilliseconds: number;
+  /** Instead of `timeoutMilliseconds`: a round's own timer (`RoundTimer`), which an answer under way extends. */
+  signal?: AbortSignal;
   /** The non-streaming request body. `stream: true` is added here and nothing else is changed. */
   body: Record<string, unknown>;
 }
@@ -35,7 +37,7 @@ export async function streamedChatTurnEnvelope(
       'content-type': 'application/json',
     },
     body: JSON.stringify({ ...call.body, stream: true }),
-    signal: AbortSignal.timeout(call.timeoutMilliseconds),
+    signal: call.signal ?? AbortSignal.timeout(call.timeoutMilliseconds),
   });
   if (!response.ok || !response.body) {
     const raw = await response.text();
@@ -44,7 +46,7 @@ export async function streamedChatTurnEnvelope(
   const decoder = new ChatReplyStreamDecoder();
   let written = '';
   let envelope: unknown;
-  for await (const event of responseSSEEvents(response.body)) {
+  for await (const event of responseSSEEvents(response.body, call.signal)) {
     const value = event && typeof event === 'object' && !Array.isArray(event)
       ? event as Record<string, unknown>
       : {};

@@ -1,7 +1,7 @@
 import { providerToolName, type ShannonToolDefinition } from './shannonTools.js';
 import {
-  MINIMUM_ANSWER_MILLISECONDS, MINIMUM_CALL_MILLISECONDS, MINIMUM_ROUND_MILLISECONDS, TOOL_CALL_CAP_MILLISECONDS, TURN_OUT_OF_TIME_LINE, timedOut,
-  type TurnDeadline,
+  MINIMUM_ANSWER_MILLISECONDS, MINIMUM_CALL_MILLISECONDS, MINIMUM_ROUND_MILLISECONDS, PartialAnswerError, TOOL_CALL_CAP_MILLISECONDS, TURN_OUT_OF_TIME_LINE,
+  timedOut, type RoundTime, type TurnDeadline,
 } from './turnDeadline.js';
 
 /**
@@ -18,8 +18,8 @@ export interface ShannonModelToolSession {
   /** Runs one call within `timeMilliseconds`; returns the result as the model reads it. Never throws. */
   call(providerName: string, argumentsJson: string, signal?: AbortSignal, timeMilliseconds?: number): Promise<string>;
   readonly maximumCalls: number;
-  /** The turn's deadline, from the request's arrival; absent only where nobody waits (tests of the adapter alone). */
-  readonly deadline?: TurnDeadline;
+  /** The turn's one deadline, from the request's arrival: every round and call takes its time from it. */
+  readonly deadline: TurnDeadline;
 }
 
 /** A conversation turn uses at most this many tools. */
@@ -87,6 +87,8 @@ function refusedOffer(error: unknown): string | null {
 
 export interface ToolRoundOptions {
   isAnswer: (envelope: unknown) => boolean;
+  /** After a tool ran: whether the final envelope is a usable answer; one that is not becomes the fixed line. */
+  isUsable?: (envelope: unknown) => boolean;
   onSpent?: (envelope: unknown) => void;
   /** The caller's own cancellation (the owner hung up or spoke over her); a round's own timeout is not this. */
   signal?: AbortSignal;
@@ -94,12 +96,17 @@ export interface ToolRoundOptions {
   plainBody?: Record<string, unknown>;
   /** A content-free line for the service log. */
   log?: (line: string) => void;
-  /** The envelope of her fixed short line (`TURN_OUT_OF_TIME_LINE`), in the format the caller reads. */
-  outOfTime: () => unknown;
+  /**
+   * The envelope of her fixed short line (`TURN_OUT_OF_TIME_LINE`), in the format the caller reads. `sent`: the reply
+   * text an answer had already sent before it failed; it stands (cut at a sentence boundary) and the line follows it.
+   */
+  outOfTime: (sent?: string) => unknown;
 }
 
 /** Told when the provider refused a later round: the tools are gone, the results so far stay in front of her. */
 export const TOOLS_GONE_NOTE = 'ここから先は道具が使えなくなった。ここまでの道具の結果で答える。';
+/** Told when a round with tools ran out of its time: whatever it was about to call did not run. */
+export const TIMED_OUT_ROUND_NOTE = '書きかけの操作は時間切れで実行していない。いまは道具を使わずに答える。';
 
 /** Marks the envelope of the fixed line, so a voice caller speaks it. */
 export const OUT_OF_TIME = Symbol('out-of-time');
@@ -117,13 +124,16 @@ export { TURN_OUT_OF_TIME_LINE };
 /**
  * Sends `body`, and while the response asks for functions (and is not already a whole answer), runs them and
  * sends again with the calls and their results added to the input. Returns the last response. `onSpent` sees
- * every response before the last, for usage. `send` is given the time its round may take.
+ * every response before the last, for usage. `send` is given the time of its round (`RoundTime`): a step's time,
+ * which becomes the answer's time once the round sends reply text.
  *
  * Time: every round with tools and every call takes min(its cap, what is left minus the answer's reserve) of the
  * session's deadline. A round that would get too little is not started: the answer without tools comes instead.
  * A call that would get too little is not run, and the model is told 「時間が足りず実行しなかった」. The answer keeps
- * the reserve; when even that is gone, or the answer fails after a tool ran or by its time, she says the fixed line
- * (`outOfTime`) and the turn is saved. A round with tools that times out falls back to the answer.
+ * the reserve; when even that is gone, or the answer fails after a tool ran or by its time, or comes back unusable
+ * after a tool ran, she says the fixed line (`outOfTime`) and the turn is saved. A round with tools that times out
+ * falls back to the answer, which is told that nothing of it ran. A round that had sent reply text and then failed
+ * is never asked again: what it sent stands and the fixed line follows (`PartialAnswerError`).
  *
  * A response cut off at the output ceiling runs none of its calls: the model is told once and answers without
  * tools. A 4xx refusal of a request that offers tools is sent once more without them: as `plainBody` while no
@@ -132,7 +142,7 @@ export { TURN_OUT_OF_TIME_LINE };
 export async function withToolRounds(
   body: Record<string, unknown>,
   session: ShannonModelToolSession | undefined,
-  send: (body: Record<string, unknown>, timeoutMilliseconds?: number) => Promise<unknown>,
+  send: (body: Record<string, unknown>, time?: RoundTime) => Promise<unknown>,
   options: ToolRoundOptions,
 ): Promise<unknown> {
   if (!session) return send(body);
@@ -141,26 +151,33 @@ export async function withToolRounds(
   let used = 0;
   let toolsOff = false;
   const callerStopped = () => options.signal?.aborted === true;
+  const time = (milliseconds: number): RoundTime => ({ milliseconds, answer: () => deadline.forAnswer() });
+  /** What she ends with: after a tool ran, an answer that cannot be used is the fixed line. */
+  const finish = (envelope: unknown): unknown => (used > 0 && options.isUsable && !isOutOfTime(envelope) && !options.isUsable(envelope) ? options.outOfTime() : envelope);
   /** The last round, without tools; `plain` declares none at all. Never fails once a tool ran or by its time. */
   const answer = async (request: Record<string, unknown>, plain = false): Promise<unknown> => {
-    const left = deadline?.forAnswer();
-    if (left !== undefined && left < MINIMUM_ANSWER_MILLISECONDS) return options.outOfTime();
+    const left = deadline.forAnswer();
+    if (left < MINIMUM_ANSWER_MILLISECONDS) return options.outOfTime();
     try {
-      return await send(plain ? request : { ...request, tool_choice: 'none' }, left);
+      return finish(await send(plain ? request : { ...request, tool_choice: 'none' }, time(left)));
     } catch (error) {
-      if (callerStopped() || (used === 0 && !timedOut(error))) throw error;
+      if (callerStopped()) throw error;
+      if (error instanceof PartialAnswerError) return options.outOfTime(error.sent);
+      if (used === 0 && !timedOut(error)) throw error;
       return options.outOfTime();
     }
   };
   for (;;) {
-    const cap = used === 0 ? deadline?.plan.firstRoundMilliseconds : deadline?.plan.laterRoundMilliseconds;
-    const time = deadline && cap !== undefined ? deadline.forStep(cap) : undefined;
-    if (toolsOff || used >= session.maximumCalls || (time !== undefined && time < MINIMUM_ROUND_MILLISECONDS)) return answer({ ...body, input });
+    const cap = used === 0 ? deadline.plan.firstRoundMilliseconds : deadline.plan.laterRoundMilliseconds;
+    const step = deadline.forStep(cap);
+    if (toolsOff || used >= session.maximumCalls || step < MINIMUM_ROUND_MILLISECONDS) return answer({ ...body, input });
     let envelope: unknown;
     try {
-      envelope = await send({ ...body, input }, time);
+      envelope = await send({ ...body, input }, time(step));
     } catch (error) {
       if (callerStopped()) throw error;
+      // It was already answering: what it sent stands, and is never asked for again.
+      if (error instanceof PartialAnswerError) return options.outOfTime(error.sent);
       const code = refusedOffer(error);
       if (code && options.plainBody) {
         (options.log ?? (line => console.warn(line)))(`Shannon tools offer refused by provider: ${code}`);
@@ -169,11 +186,12 @@ export async function withToolRounds(
       }
       // A round with tools that ran out of time, or any failure after a tool ran: the answer without tools comes now.
       if (!timedOut(error) && used === 0) throw error;
+      input.push({ role: 'developer', content: TIMED_OUT_ROUND_NOTE });
       toolsOff = true;
       continue;
     }
     const calls = functionCallsOf(envelope);
-    if (!calls.length || options.isAnswer(envelope)) return envelope;
+    if (!calls.length || options.isAnswer(envelope)) return finish(envelope);
     options.onSpent?.(envelope);
     if (cutOffResponse(envelope)) {
       input.push({ role: 'developer', content: CUT_OFF_CALL_NOTE });
@@ -182,11 +200,11 @@ export async function withToolRounds(
     }
     for (const call of calls) {
       options.signal?.throwIfAborted();
-      const callTime = deadline?.forStep(TOOL_CALL_CAP_MILLISECONDS);
+      const callTime = deadline.forStep(TOOL_CALL_CAP_MILLISECONDS);
       let output: string;
       if (used >= session.maximumCalls) {
         output = JSON.stringify({ ok: false, text: 'この返事で使える道具の数を超えた。いまある結果で答える。', failure: 'limit', retryable: false });
-      } else if (toolsOff || (callTime !== undefined && callTime < MINIMUM_CALL_MILLISECONDS)) {
+      } else if (toolsOff || callTime < MINIMUM_CALL_MILLISECONDS) {
         // The answer's reserve is reached: the rest of this response's calls are not run.
         output = SKIPPED_FOR_TIME;
         toolsOff = true;

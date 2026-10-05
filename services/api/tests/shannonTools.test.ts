@@ -283,4 +283,19 @@ describe('long writing and repeated writes', () => {
     expect((await turn('message-3')('study.create', { kind: 'story', title: '雨の駅', body: STORY })).text).not.toContain(id);
     expect(store.study.list(scope)).toHaveLength(5);
   });
+
+  it('does not append the same part twice for the same owner message', async () => {
+    const { service, store } = harness();
+    const turn = (key: string) => (name: string, input: unknown) =>
+      service.tools.call(name, JSON.stringify(input), { scopeKey: scope, surface: 'text', audience: 'owner_alone', memory: toolSessionMemory(key) });
+    const id = idIn(await turn('message-1')('study.create', { kind: 'story', title: '続く話', body: STORY }));
+    const part = { id, mode: 'append', body: '二日目の朝、駅にはまた傘があった。', changeNote: '続き。' };
+    expect(await turn('message-2')('study.update', part)).toMatchObject({ ok: true, text: expect.stringContaining('続きを足した') });
+    // A retry of the same message: the same part is not appended again.
+    expect(await turn('message-2')('study.update', part)).toMatchObject({ ok: true, text: expect.stringContaining('二度は足さなかった') });
+    expect(store.study.get(scope, id)!.version).toBe(2);
+    // Another message may append it (she means it again).
+    expect(await turn('message-3')('study.update', part)).toMatchObject({ ok: true, text: expect.stringContaining('続きを足した') });
+    expect(store.study.get(scope, id)!.version).toBe(3);
+  });
 });

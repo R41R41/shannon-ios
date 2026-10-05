@@ -19,11 +19,11 @@ import type { TurnDeadline } from './turnDeadline.js';
  */
 export function conversationTools(
   autonomy: { tools?: ShannonToolRunner } | undefined, scopeKey: string, surface: 'text' | 'voice', ownerAlone: boolean,
-  server: Partial<ConversationToolServer> = {},
+  server: Partial<ConversationToolServer>,
   /** The owner's message this turn answers (thread and words): a retry of it does not write the same piece twice. */
-  turn?: string,
+  turn: string,
   /** The turn's one deadline, from the request's arrival (`turnDeadline.ts`): every round and call takes its time from it. */
-  deadline?: TurnDeadline,
+  deadline: TurnDeadline,
 ): { tools?: ShannonModelToolSession; toolsWithheld?: true } {
   const runner = autonomy?.tools;
   // Without what the server knows of the audience, nothing is offered (and nothing said about it).
@@ -32,7 +32,7 @@ export function conversationTools(
   if (server.audience.othersKnown(scopeKey)) return { toolsWithheld: true };
   const definitions = runner.offered(surface, 'owner_alone');
   if (!definitions.length) return {};
-  const memory = toolSessionMemory(turn ? createHash('sha256').update(`${scopeKey}\n${turn}`).digest('hex') : undefined);
+  const memory = toolSessionMemory(createHash('sha256').update(`${scopeKey}\n${turn}`).digest('hex'));
   let check: SecretCheck | null | undefined;
   const session = { definitions, maximumCalls: CONVERSATION_TOOL_CALLS } as ShannonModelToolSession;
   Object.defineProperty(session, 'deadline', { enumerable: false, value: deadline });

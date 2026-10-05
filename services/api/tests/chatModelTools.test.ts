@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { OpenAIResponsesChatModel } from '../src/chatModel.js';
 import {
-  CONVERSATION_TOOL_CALLS, CUT_OFF_CALL_NOTE, SKIPPED_FOR_TIME, TOOLS_GONE_NOTE, TURN_OUT_OF_TIME_LINE, VOICE_SECOND_PHRASE, VOICE_TOOL_OUTPUT_TOKENS,
+  CONVERSATION_TOOL_CALLS, CUT_OFF_CALL_NOTE, SKIPPED_FOR_TIME, TIMED_OUT_ROUND_NOTE, TOOLS_GONE_NOTE, TURN_OUT_OF_TIME_LINE, VOICE_SECOND_PHRASE, VOICE_TOOL_OUTPUT_TOKENS,
   functionCallsOf, withToolRounds, type ShannonModelToolSession,
 } from '../src/chatModelTools.js';
 import { streamedVoiceToolTurn } from '../src/chatModelVoiceTools.js';
+import { ChatSentenceSplitter, splitChatSentences } from '../src/chatSentenceSplitter.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline, VOICE_TURN_DEADLINE } from '../src/turnDeadline.js';
 import { CONVERSATION_WRITE_CHARACTERS, FOLDER_WRITE_CHARACTERS, offeredTools } from '../src/shannonTools.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';
@@ -19,7 +20,7 @@ const message = (text: string) => ({ type: 'message', role: 'assistant', content
 function session(maximumCalls = CONVERSATION_TOOL_CALLS) {
   const calls: Array<{ name: string; args: string }> = [];
   const value: ShannonModelToolSession = {
-    definitions: [shannonTool('study.list')!, shannonTool('study.read')!], maximumCalls,
+    definitions: [shannonTool('study.list')!, shannonTool('study.read')!], maximumCalls, deadline: new TurnDeadline(TEXT_TURN_DEADLINE),
     async call(name, args) { calls.push({ name, args }); return JSON.stringify({ ok: true, text: '- id: x｜メモ「雨」', retryable: false }); },
   };
   return { value, calls };
@@ -69,10 +70,12 @@ describe('her tools in a text turn', () => {
     expect(tools.calls).toHaveLength(1);
     expect(bodies[0]!.tool_choice).toBe('auto');
     expect(bodies[1]!.tool_choice).toBe('none');
-    // A provider that still answers the forced round with a call ends the turn like any unparsable one; nothing more runs.
+    // A provider that still answers the forced round with a call gives no usable answer: after a tool ran, that is her fixed
+    // line and the turn is saved; nothing more runs.
     const stubborn = scriptedFetch([{ output: [functionCall('study_list')] }, { output: [functionCall('study_read', '{}', 'call-2')] }]);
     const counted = session(1);
-    await expect(new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: stubborn.fetcher }).generate({ ...base, tools: counted.value })).rejects.toThrow();
+    const ended = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: stubborn.fetcher }).generate({ ...base, tools: counted.value });
+    expect(ended).toMatchObject({ reply: TURN_OUT_OF_TIME_LINE, outOfTime: true });
     expect(counted.calls).toHaveLength(1);
   });
 
@@ -168,8 +171,8 @@ describe('a write that does not fit one response', () => {
       async call(_name, _args, _signal, time) { callTimes.push(time); now += 9_000; return JSON.stringify({ ok: true, text: '読んだ', retryable: false }); },
     };
     const responses = [{ output: [functionCall('folder_read', '{"path":"a.md"}')] }, { output: [functionCall('folder_read', '{"path":"b.md"}', 'call-2')] }, { output: [message(TURN)] }];
-    const envelope = await withToolRounds({ input: [], max_output_tokens: 2_200 }, slow, async (body, timeout) => {
-      timeouts.push(timeout); choices.push(body.tool_choice);
+    const envelope = await withToolRounds({ input: [], max_output_tokens: 2_200 }, slow, async (body, time) => {
+      timeouts.push(time?.milliseconds); choices.push(body.tool_choice);
       expect(body.max_output_tokens).toBe(2_200);
       now += 8_000;
       return responses.shift();
@@ -231,13 +234,16 @@ describe('a write that does not fit one response', () => {
     let first = true;
     const choices: unknown[] = [];
     const tools = session();
+    const inputs: unknown[][] = [];
     const envelope = await withToolRounds({ input: [] }, { ...tools.value, deadline: new TurnDeadline(TEXT_TURN_DEADLINE) } as ShannonModelToolSession, async body => {
-      choices.push(body.tool_choice);
+      choices.push(body.tool_choice); inputs.push(body.input as unknown[]);
       if (first) { first = false; throw Object.assign(new Error('timed out'), { name: 'TimeoutError' }); }
       return { output: [message(TURN)] };
     }, { isAnswer: value => functionCallsOf(value).length === 0, outOfTime: () => 'out' });
     expect(envelope).toEqual({ output: [message(TURN)] });
     expect(choices).toEqual([undefined, 'none']);
+    // The answer is told that whatever the round was about to call did not run.
+    expect(inputs[1]).toContainEqual({ role: 'developer', content: TIMED_OUT_ROUND_NOTE });
   });
 
   it('in voice: the arguments of a call count as output for the first-word bound, and a cut-off call does not fail the turn', async () => {
@@ -411,5 +417,100 @@ describe('silence in a voice turn with tools', () => {
     });
     expect(heard).toEqual(['ちょっと書いてみますね。', TURN_OUT_OF_TIME_LINE]);
     expect(turn.reply).toBe(`ちょっと書いてみますね。${TURN_OUT_OF_TIME_LINE}`);
+  });
+});
+
+describe('an answer under way is never cut at a step\'s time and asked again', () => {
+  const encoder = new TextEncoder();
+  /** A stream of events, then either an end or a stall that only an abort ends. */
+  const stream = (events: unknown[], stall: boolean, before?: () => void) => new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      before?.();
+      for (const event of events) controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+      if (!stall) controller.close();
+    },
+  }), { status: 200 });
+
+  it('streamed text: a round that sent reply text and then ran out stands, cut where its sentences were sent, and the line follows', async () => {
+    let now = 0;
+    let round = 0;
+    const fetcher = (async () => {
+      round += 1;
+      if (round === 1) return stream([{ type: 'response.completed', response: { output: [functionCall('study_list')] } }], false);
+      // The answer starts; then the turn's clock is nearly spent, and the provider stalls.
+      return stream([{ type: 'response.output_text.delta', delta: '{"reply":"一文目です。二文目は途' }], true, () => { now = TEXT_TURN_DEADLINE.totalMilliseconds - 150; });
+    }) as unknown as typeof fetch;
+    const tools = session();
+    const sent: string[] = [];
+    const splitter = new ChatSentenceSplitter();
+    const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher }).generateStreaming(
+      { ...base, tools: { ...tools.value, deadline: new TurnDeadline(TEXT_TURN_DEADLINE, () => now) } as ShannonModelToolSession },
+      text => { sent.push(...splitter.append(text)); });
+    expect(round).toBe(2);
+    expect(sent).toEqual(['一文目です。']);
+    expect(result).toMatchObject({ reply: `一文目です。${TURN_OUT_OF_TIME_LINE}`, outOfTime: true });
+    // What the client was sent is the start of the finished reply, sentence for sentence (no EarlyLinesDiffer).
+    expect(splitChatSentences(result.reply).slice(0, sent.length)).toEqual(sent);
+  });
+
+  it('voice: words already spoken stand; the line follows; nothing is said twice', async () => {
+    let now = 0;
+    let round = 0;
+    const fetcher = (async () => {
+      round += 1;
+      if (round === 1) return stream([{ type: 'response.completed', response: { output: [functionCall('study_list')] } }], false);
+      return stream([{ type: 'response.output_text.delta', delta: 'メモは1つです。それは' }], true, () => { now = VOICE_TURN_DEADLINE.totalMilliseconds - 150; });
+    }) as unknown as typeof fetch;
+    const tools = session();
+    const heard: string[] = [];
+    const turn = await streamedVoiceToolTurn({
+      fetcher, endpoint: 'https://example.invalid', apiKey: 'test', body: { input: [] }, plainBody: { input: [] },
+      tools: { ...tools.value, deadline: new TurnDeadline(VOICE_TURN_DEADLINE, () => now) } as ShannonModelToolSession,
+      bounds: { firstOutputMilliseconds: 5_000, idleMilliseconds: 5_000 }, onTextDelta: text => { heard.push(text); },
+      onSpent: () => {}, onSpentWithoutReply: () => {}, clock: () => now, tickMilliseconds: 1_000,
+    });
+    expect(round).toBe(2);
+    // Round 1 called a tool without a word: the waiting phrase came first. Then her answer, and the line; nothing twice.
+    expect(heard).toEqual(['メモは1つです。それは', TURN_OUT_OF_TIME_LINE]);
+    expect(turn.reply).toBe(`メモは1つです。${TURN_OUT_OF_TIME_LINE}`);
+  });
+
+  it('non-streaming voice (the body\'s /delegations): after a tool ran, an empty answer is the fixed line, and the turn is saved', async () => {
+    const tools = session();
+    const { fetcher, bodies } = scriptedFetch([{ output: [functionCall('study_list')] }, { output: [] }]);
+    const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher }).generateVoice({ ...base, useWebSearch: false, conversationClass: 'direct', tools: tools.value });
+    expect(result.reply).toBe(TURN_OUT_OF_TIME_LINE);
+    expect(bodies).toHaveLength(2);
+    expect(tools.calls).toHaveLength(1);
+  });
+});
+
+describe('the second waiting phrase after her own lead-in', () => {
+  it('is said after 15 s of silence when a call began, also when she spoke her own lead-in first', async () => {
+    let now = 0;
+    const encoder = new TextEncoder();
+    let round = 0;
+    const fetcher = (async () => {
+      round += 1;
+      const events = round === 1
+        ? [{ type: 'response.output_text.delta', delta: '見てみますね。' }, { type: 'response.output_item.added', item: { type: 'function_call', name: 'study_list' } },
+          { type: 'response.completed', response: { output: [message('見てみますね。'), functionCall('study_list')] } }]
+        : [{ type: 'response.output_text.delta', delta: 'メモが1つあります。' }, { type: 'response.completed', response: { output: [message('メモが1つあります。')] } }];
+      return new Response(new ReadableStream<Uint8Array>({ start(controller) {
+        for (const event of events) controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        controller.close();
+      } }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const slowTool: ShannonModelToolSession = {
+      definitions: [shannonTool('study.list')!], maximumCalls: 6, deadline: new TurnDeadline(VOICE_TURN_DEADLINE, () => now),
+      async call() { now += 16_000; await new Promise(resolve => setTimeout(resolve, 30)); return JSON.stringify({ ok: true, text: 'x', retryable: false }); },
+    };
+    const heard: string[] = [];
+    await streamedVoiceToolTurn({
+      fetcher, endpoint: 'https://example.invalid', apiKey: 'test', body: { input: [] }, plainBody: { input: [] }, tools: slowTool,
+      bounds: { firstOutputMilliseconds: 1_000, idleMilliseconds: 1_000 }, onTextDelta: text => { heard.push(text); },
+      onSpent: () => {}, onSpentWithoutReply: () => {}, clock: () => now, tickMilliseconds: 5,
+    });
+    expect(heard).toEqual(['見てみますね。', VOICE_SECOND_PHRASE, 'メモが1つあります。']);
   });
 });

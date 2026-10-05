@@ -62,3 +62,48 @@ export function timedOut(error: unknown): boolean {
   const message = (error as { message?: unknown }).message;
   return name === 'TimeoutError' || name === 'AbortError' || (typeof message === 'string' && /TIMEOUT|aborted|timed out/iu.test(message));
 }
+
+/**
+ * The time of one model round. It starts at the round's step time; once the round emits reply text it is the
+ * answer, and may take all that is left of the turn (`answering`), so an answer already under way is never cut at
+ * a step's time and asked again.
+ */
+export interface RoundTime {
+  milliseconds: number;
+  /** What is left of the turn for an answer. */
+  answer(): number;
+}
+
+export class RoundTimer {
+  private readonly controller = new AbortController();
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  private extended = false;
+
+  constructor(private readonly time: RoundTime) {
+    this.arm(time.milliseconds);
+  }
+
+  get signal(): AbortSignal { return this.controller.signal; }
+
+  /** The round is writing the answer: from now it may take the answer's time. */
+  answering(): void {
+    if (this.extended) return;
+    this.extended = true;
+    this.arm(this.time.answer());
+  }
+
+  clear(): void { clearTimeout(this.timer); }
+
+  private arm(milliseconds: number): void {
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.controller.abort(new DOMException('The round ran out of its time.', 'TimeoutError')), Math.max(1, milliseconds));
+  }
+}
+
+/** A round that had already sent reply text failed: what was sent stands, and the turn ends with the fixed line. */
+export class PartialAnswerError extends Error {
+  constructor(readonly sent: string) {
+    super('PARTIAL_ANSWER');
+    this.name = 'PartialAnswerError';
+  }
+}

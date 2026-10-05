@@ -19,9 +19,11 @@ import {
 import { completeSpokenSentences } from './spokenSentences.js';
 import { chatTurnRequestBody, chatTurnResult, offersTools, parsedChatTurn } from './chatModelTurn.js';
 import { streamedVoiceToolTurn } from './chatModelVoiceTools.js';
+import { ChatSentenceSplitter } from './chatSentenceSplitter.js';
+import { PartialAnswerError, RoundTimer, type RoundTime } from './turnDeadline.js';
 import {
   TOOLS_WITHHELD_INSTRUCTIONS, TURN_OUT_OF_TIME_LINE, VOICE_TOOL_INSTRUCTIONS, VOICE_TOOL_OUTPUT_TOKENS,
-  outOfTimeEnvelope, providerFunctionTools, withToolRounds, type ShannonModelToolSession,
+  isOutOfTime, outOfTimeEnvelope, providerFunctionTools, withToolRounds, type ShannonModelToolSession,
 } from './chatModelTools.js';
 import {
   WEB_SEARCH_INSTRUCTIONS,
@@ -112,6 +114,8 @@ export interface ShannonChatModelResult {
   intentPlan?: ShannonIntentPlan;
   /** A voice reply that reached its output limit; `reply` ends at its last complete sentence. */
   truncated?: boolean;
+  /** A turn with her tools ran out of time: `reply` ends with her fixed line, and nothing may be added to it. */
+  outOfTime?: true;
 }
 
 export interface ShannonIntentPlan {
@@ -213,7 +217,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
   }
 
   async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
-    const send = async (body: Record<string, unknown>, timeoutMilliseconds?: number) => {
+    const send = async (body: Record<string, unknown>, time?: RoundTime) => {
       const response = await this.fetcher(this.endpoint, {
         method: 'POST',
         headers: {
@@ -221,7 +225,8 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
           'content-type': 'application/json',
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMilliseconds ?? this.timeoutMilliseconds),
+        // Nothing of a non-streaming round arrives before it is complete, so its step time is its whole time.
+        signal: AbortSignal.timeout(time?.milliseconds ?? this.timeoutMilliseconds),
       });
       const raw = await response.text();
       const json = parseJson(raw);
@@ -230,7 +235,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       }
       return json;
     };
-    const json = await withToolRounds(chatTurnRequestBody(this.model, request, this.options.agentHostHint), offersTools(request) ? request.tools : undefined, send, this.chatRounds(request));
+    const json = await withToolRounds(chatTurnRequestBody(this.model, request, this.options.agentHostHint), offersTools(request) ? request.tools : undefined, send, this.chatRounds(request, () => ''));
     return this.completedChatTurn(request, json);
   }
 
@@ -238,14 +243,16 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
    * How a text turn's tool rounds end and are accounted: a round whose text is the whole structured turn is the answer.
    * A provider that refuses the request offering her tools is asked once more without them.
    */
-  private chatRounds(request: ShannonChatModelRequest) {
+  private chatRounds(request: ShannonChatModelRequest, sentInLastRound: () => string) {
+    const usable = (envelope: unknown) => { try { parsedChatTurn(envelope); return true; } catch { return false; } };
     return {
-      isAnswer: (envelope: unknown) => { try { parsedChatTurn(envelope); return true; } catch { return false; } },
+      isAnswer: usable, isUsable: usable,
       onSpent: (envelope: unknown) => this.recordChatUsage(request.scopeKey, envelope),
       plainBody: chatTurnRequestBody(this.model, { ...request, tools: undefined }, this.options.agentHostHint),
       // When the turn's deadline leaves no time to answer: her fixed line, as a whole structured turn, so it is saved.
-      outOfTime: () => outOfTimeEnvelope(JSON.stringify({
-        reply: TURN_OUT_OF_TIME_LINE, threadSummary: null, taskDecision: { disposition: 'none', reason: '時間が足りなかった' },
+      // What a streamed answer already sent stands, cut where its sentences were sent, and the line follows.
+      outOfTime: (sent?: string) => outOfTimeEnvelope(JSON.stringify({
+        reply: `${new ChatSentenceSplitter().append(sent ?? sentInLastRound()).join('')}${TURN_OUT_OF_TIME_LINE}`, threadSummary: null, taskDecision: { disposition: 'none', reason: '時間が足りなかった' },
         taskProposal: null, intentPlan: null, artifacts: null,
       })),
     };
@@ -259,15 +266,26 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     request: ShannonChatModelRequest,
     onReplyText: (text: string) => void | Promise<void>,
   ): Promise<ShannonChatModelResult> {
-    // Each tool round streams on its own; a round that only calls tools writes no reply text.
+    // Each tool round streams on its own; a round that only calls tools writes no reply text. A round that writes reply
+    // text is the answer: it gets the answer's time, and if it fails after all, what it sent stands (`PartialAnswerError`).
+    let written = '';
     const envelope = await withToolRounds(chatTurnRequestBody(this.model, request, this.options.agentHostHint), offersTools(request) ? request.tools : undefined,
-      (body, timeoutMilliseconds) => streamedChatTurnEnvelope({
-        fetcher: this.fetcher, endpoint: this.endpoint, apiKey: this.options.apiKey,
-        timeoutMilliseconds: timeoutMilliseconds ?? this.timeoutMilliseconds, body,
-      }, onReplyText, failed => {
-        // A failed response is recorded only when the provider reported what it used.
-        if (responseUsage(failed).totalTokens > 0) this.recordChatUsage(request.scopeKey, failed);
-      }), this.chatRounds(request));
+      async (body, time) => {
+        const timer = time ? new RoundTimer(time) : undefined;
+        written = '';
+        try {
+          return await streamedChatTurnEnvelope({
+            fetcher: this.fetcher, endpoint: this.endpoint, apiKey: this.options.apiKey,
+            timeoutMilliseconds: this.timeoutMilliseconds, body, ...(timer ? { signal: timer.signal } : {}),
+          }, async text => { timer?.answering(); written += text; await onReplyText(text); }, failed => {
+            // A failed response is recorded only when the provider reported what it used.
+            if (responseUsage(failed).totalTokens > 0) this.recordChatUsage(request.scopeKey, failed);
+          });
+        } catch (error) {
+          if (timer && written) throw new PartialAnswerError(written);
+          throw error;
+        } finally { timer?.clear(); }
+      }, this.chatRounds(request, () => written));
     return this.completedChatTurn(request, envelope);
   }
 
@@ -275,7 +293,9 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
   private completedChatTurn(request: ShannonChatModelRequest, envelope: unknown): ShannonChatModelResult {
     const structured = parsedChatTurn(envelope);
     this.recordChatUsage(request.scopeKey, envelope);
-    return chatTurnResult(this.model, request, envelope, structured);
+    const result = chatTurnResult(this.model, request, envelope, structured);
+    // Her fixed out-of-time line stands alone: nothing (no list of sources) is added to it.
+    return isOutOfTime(envelope) ? { ...result, outOfTime: true } : result;
   }
 
   private recordChatUsage(scopeKey: string, envelope: unknown): void {
@@ -293,7 +313,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
   async generateVoice(request: ShannonVoiceModelRequest): Promise<ShannonChatModelResult> {
     // Words of a round that called tools (a short waiting phrase) come before the words of the answer.
     const said: string[] = [];
-    const json = await withToolRounds(this.voiceRequestPayload(request), this.voiceTools(request), async (body, timeoutMilliseconds) => {
+    const json = await withToolRounds(this.voiceRequestPayload(request), this.voiceTools(request), async (body, time) => {
       const response = await this.fetcher(this.endpoint, {
         method: 'POST',
         headers: {
@@ -302,7 +322,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
         },
         body: JSON.stringify(body),
         // With tools, every round's time comes from the turn's deadline; without, this is a total sized for the longest reply.
-        signal: AbortSignal.timeout(timeoutMilliseconds ?? this.options.voiceResponseTimeoutMilliseconds ?? VOICE_RESPONSE_TIMEOUT_MILLISECONDS),
+        signal: AbortSignal.timeout(time?.milliseconds ?? this.options.voiceResponseTimeoutMilliseconds ?? VOICE_RESPONSE_TIMEOUT_MILLISECONDS),
       });
       const raw = await response.text();
       const value = parseJson(raw);
@@ -310,6 +330,8 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       return value;
     }, {
       isAnswer: () => false, plainBody: this.voiceRequestPayload({ ...request, tools: undefined }), outOfTime: () => outOfTimeEnvelope(TURN_OUT_OF_TIME_LINE),
+      // After a tool ran, an empty answer is the fixed line, so the turn is still saved.
+      isUsable: envelope => extractOutputText(envelope).trim().length > 0,
       onSpent: envelope => { said.push(extractOutputText(envelope).trim()); this.recordChatUsage(request.scopeKey, envelope); },
     });
     if (voiceContentWithheld(json)) {

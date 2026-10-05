@@ -321,7 +321,7 @@ export class ShannonApiKernel {
     if (turnResponse) return await turnResponse;
 
     if (request.method === 'POST' && request.path === '/v1/chat') {
-      const deadline = new TurnDeadline(TEXT_TURN_DEADLINE); // From arrival: recall and context count too (turnDeadline.ts).
+      const deadline = new TurnDeadline(TEXT_TURN_DEADLINE, () => Date.parse(this.now())); // From arrival: recall and context count too.
       if (!objectBody(request.body)) return badRequest('JSON object body is required');
       const body = request.body as unknown as ChatRequest;
       if (!validScopeKey(body.scopeKey)) return badRequest('scopeKey is required');
@@ -426,7 +426,7 @@ export class ShannonApiKernel {
         ...(body.webSearch === true || placeSkill ? { useWebSearch: true } : {}),
         generateThreadTitle: this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
       });
-      const reply = placeSkillReply(withCapabilitySources(completion, capability), placeSkill);
+      const reply = completion.outOfTime ? completion.reply : placeSkillReply(withCapabilitySources(completion, capability), placeSkill);
       const suppressAgentTaskProposal = !audience.alone || isExplicitVoyagerUpdateRequest(message);
       // Her feeling for this reply, from state already in hand; it is stored after the response.
       const { messageEmotion, expressiveEmotion } = resolveTextReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt }, completion, audience.alone);

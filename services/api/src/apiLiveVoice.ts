@@ -138,7 +138,7 @@ async function completeLiveVoiceDelegation(
   observer?: LiveVoiceStreamObserver,
 ): Promise<ApiResponse> {
   const turnStartedAt = performance.now();
-  const deadline = new TurnDeadline(VOICE_TURN_DEADLINE); // One deadline for the turn with her tools, from arrival (turnDeadline.ts).
+  const deadline = new TurnDeadline(VOICE_TURN_DEADLINE, () => Date.parse(dependencies.now())); // One deadline for her tools, from arrival.
   const temporaryGuest = participantMode === 'guest';
   const threadId = temporaryGuest
     ? requestedThreadId || 'temporary-guest-session'
@@ -379,7 +379,7 @@ async function completeLiveVoiceDelegation(
     scopeKey, ...replayed,
     // What she said when she was touched is what he is answering: it precedes his words, in every mode, as context only.
     ...(reactionLine ? { history: [...replayed.history, { role: 'assistant' as const, content: reactionLine }] } : {}),
-    message: transcript, ...conversationTools(dependencies.autonomy, scopeKey, 'voice', alone && !temporaryGuest && asksAboutOwnThings(transcript), dependencies.toolServer, `${threadId}\n${transcript}`, deadline),
+    message: transcript, ...conversationTools(dependencies.autonomy, scopeKey, 'voice', alone && !temporaryGuest && asksAboutOwnThings(transcript), dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline),
     useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   };
