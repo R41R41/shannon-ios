@@ -294,6 +294,8 @@ export class StudyAether {
         throw error;
       }
       const created = hers(document.documentId);
+      // Read whole now: a note from an earlier sync that it was too long (no piece yet) is lifted.
+      this.store.study.aether.clearTooLong(scopeKey, document.documentId);
       const kind = created?.kind ?? (document.inStudy ? 'story' as const : null);
       if (!kind) continue;
       // Checked again inside the transaction: a write of hers may have linked it while it was being read.

@@ -370,6 +370,13 @@ describe('her study in Aether', () => {
     expect(counts.skipped?.map(item => item.documentId).sort()).toEqual([document.id, long.id].sort());
     expect(store.study.versions(scope, id)).toHaveLength(2);
     expect(store.study.aether.pieceFor(scope, long.id)).toBeNull();
+    expect(store.study.aether.tooLongVersion(scope, long.id)).toBe(1);
+    // The unknown long story is shortened in Aether: the next sync adopts it whole and lifts its note.
+    fake.ownerEdit(long.id, { body: `${STORY}短い長い話。` });
+    await service.studyAether!.sync(scope);
+    expect(store.study.aether.tooLongVersion(scope, long.id)).toBeNull();
+    const adoptedLong = store.study.aether.pieceFor(scope, long.id)!;
+    expect(store.study.get(scope, adoptedLong)!.body).toBe(`${STORY}短い長い話。`);
     // It is noted for every process, her write is refused and she is told why, and the longer document is never overwritten.
     expect(store.study.aether.tooLongPiece(scope, id)).toBe(true);
     const refused = await call('study.update', { id, body: '短い本文。', changeNote: '直しました。' });
