@@ -79,6 +79,8 @@ public final class ShannonGeminiLiveSessionModel {
     var lastAudioReconnectAt: Date?
     /// A reconnect of the same call is queued or running (`queueSameCallReconnect`).
     var sameCallReconnectQueued = false
+    /// Until when an utterance that finalises is still the owner's, after a switch into 「友人も一緒」 by the control.
+    var ownerWordsUntil: TimeInterval?
     /// Whether the app declares why it uses the microphone (the test host does not).
     var microphoneUsageIsDeclared: @MainActor () -> Bool = {
         ShannonVoiceUsageDescriptionPolicy.isPresent(Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription"))
@@ -339,7 +341,7 @@ public final class ShannonGeminiLiveSessionModel {
     }
 
     private func previewInput(_ current: String) -> String {
-[pendingTurns.displayText, current].filter { !$0.isEmpty }.joined(separator: "\n")
+[pendingTurns.displayText, finalisesAsOwnersWords ? "" : current].filter { !$0.isEmpty }.joined(separator: "\n")
     }
 
     private func handleCapture(rms: Float, seconds: Double, started: Bool, ended: Bool, chunks: Int) {
@@ -384,7 +386,7 @@ public final class ShannonGeminiLiveSessionModel {
         ShannonVoiceTurnDiagnostics.recordAssembled(envelope, turnComplete: turnComplete)
         appendUtterance(id: envelope.id, rawText: envelope.rawText, text: envelope.normalizedText,
             source: .speech, addressedByName: envelope.addressee == "shannon",
-            followsShannonTurn: heardRightAfterShannon)
+            followsShannonTurn: heardRightAfterShannon, ownersWords: finalisesAsOwnersWords)
         userTranscript = pendingTurns.displayText
         beginResponse()
     }
@@ -443,6 +445,7 @@ public final class ShannonGeminiLiveSessionModel {
         finalizeTask = nil
         turnAssembler.reset()
         heardRightAfterShannon = false
+        ownerWordsUntil = nil
     }
 
     func updateCost() {

@@ -33,6 +33,8 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         let model = liveModel()
         model.appendUtterance(rawText: "明日の歯医者は何時？", text: "明日の歯医者は何時？", source: .typed)
         model.switchParticipantMode(to: .guest, origin: .control)
+        // After the moments in which what is recognised is still his (`ownerWordsAfterSwitch`).
+        try? await Task.sleep(for: .seconds(ShannonGeminiLiveSessionModel.ownerWordsAfterSwitch + 0.1))
         model.handle(.inputTranscript("はじめまして、ミキです。"))
         XCTAssertEqual(model.userTranscript, "はじめまして、ミキです。", "the preview leaves out his pending question")
         await waitForFinalization(model, turns: 2)
@@ -176,5 +178,28 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         workspace.restoreFailedText("明日の歯医者は何時？", participantMode: .owner)
         workspace.participantModeChanged(to: .guest)
         XCTAssertEqual(workspace.typedMessage, "")
+    }
+
+    /// What he was saying at the tap (being assembled, or still being recognised) is his: shown nowhere, not the guests'.
+    func testOwnerSpeechInFlightAtTheControlSwitchStaysHis() async {
+        let model = liveModel()
+        model.handle(.inputTranscript("明日の予定は"))
+        model.switchParticipantMode(to: .guest, origin: .control)
+        XCTAssertEqual(model.userTranscript, "")
+        // Recognised just after the tap: still his.
+        model.handle(.inputTranscript("歯医者だっけ。"))
+        XCTAssertEqual(model.userTranscript, "", "the preview does not show it")
+        await waitForFinalization(model, turns: 1)
+        XCTAssertEqual(model.pendingTurns.turns.count, 1, "answered in the call")
+        XCTAssertEqual(model.userTranscript, "")
+        XCTAssertEqual(model.pendingTurns.displayText, "", "and never shown")
+
+        // Once the window has passed, the guests' words are theirs.
+        try? await Task.sleep(for: .seconds(ShannonGeminiLiveSessionModel.ownerWordsAfterSwitch + 0.1))
+        model.handle(.inputTranscript("はじめまして。"))
+        XCTAssertEqual(model.userTranscript, "はじめまして。")
+        await waitForFinalization(model, turns: 2)
+        XCTAssertEqual(model.pendingTurns.displayText, "はじめまして。")
+        model.stop()
     }
 }

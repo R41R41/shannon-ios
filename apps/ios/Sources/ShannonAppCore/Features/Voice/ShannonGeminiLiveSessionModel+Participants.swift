@@ -32,6 +32,8 @@ extension ShannonGeminiLiveSessionModel {
             // pending and is answered in the in-call context, but is never shown again; an owner reply still
             // streaming does not write onto the screen either (`mayShowReply`).
             pendingTurns.hideAll()
+            // Owner speech in flight at the tap (already being assembled, or still being recognised) is his too.
+            if origin == .control { ownerWordsUntil = ProcessInfo.processInfo.systemUptime + Self.ownerWordsAfterSwitch }
             userTranscript = ""
             shannonTranscript = ""
             textSendState = .idle
@@ -52,7 +54,7 @@ extension ShannonGeminiLiveSessionModel {
     /// Adds one finished utterance, first applying the owner's spoken cue that a friend has joined.
     func appendUtterance(
         id: UUID = UUID(), rawText: String, text: String, source: ShannonVoiceUtteranceSource,
-        addressedByName: Bool = false, followsShannonTurn: Bool = false
+        addressedByName: Bool = false, followsShannonTurn: Bool = false, ownersWords: Bool = false
     ) {
         var localReply: String?
         var switchedNow = false
@@ -74,7 +76,7 @@ extension ShannonGeminiLiveSessionModel {
         // The owner's words that switched the call are his own: answered, not shown to the others.
         pendingTurns.append(id: id, rawText: rawText, text: text, source: source,
             addressedByName: addressedByName, followsShannonTurn: followsShannonTurn, localReply: localReply,
-            hidden: switchedNow)
+            hidden: switchedNow || ownersWords)
     }
 
     public func shareCameraSnapshot(
@@ -98,6 +100,17 @@ extension ShannonGeminiLiveSessionModel {
     func finishGuestPeriod() {
         guard let period = guestCall.endGuestPeriod() else { return }
         guestPeriodEnded?(period)
+    }
+
+    /// How long after a switch into 「友人も一緒」 by the control an utterance that finalises is still the owner's: the
+    /// recogniser's lag behind the end of speech (about a second) and the longest pause the assembler waits (0.42 s).
+    /// What he said just before the tap is answered, but never shown or kept as the guests' words.
+    static let ownerWordsAfterSwitch: TimeInterval = 1.5
+
+    /// An utterance finalising now is the owner's from before the switch.
+    var finalisesAsOwnersWords: Bool {
+        guard participantMode == .guest, let until = ownerWordsUntil else { return false }
+        return ProcessInfo.processInfo.systemUptime <= until
     }
 
     /// Words of a reply asked in 本人だけ that arrive once the call is 「友人も一緒」 (what she says about a look, behind a
