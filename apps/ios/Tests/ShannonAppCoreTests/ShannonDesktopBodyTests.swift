@@ -202,6 +202,19 @@ final class ShannonDesktopBodyTests: XCTestCase {
         XCTAssertEqual(ShannonDesktopBodyReachOut.outcome(heard: false), "shown")
     }
 
+    func testHerTouchLineIsNeverSpokenNorAnsweredWhileTheOwnerIsInACallElsewhere() {
+        func answers(shown: Bool = true, mode: ShannonBodyReplyMode = .voice, reports: Bool = true,
+                     audience: ShannonBodyAudience = .owner, elsewhere: Bool = false) -> Bool {
+            ShannonDesktopBody.answersTouchInVoice(shown: shown, replyMode: mode, reportsTouch: reports, audience: audience, ownerInCallElsewhere: elsewhere)
+        }
+        XCTAssertTrue(answers())
+        XCTAssertFalse(answers(elsewhere: true))
+        XCTAssertFalse(answers(shown: false))
+        XCTAssertFalse(answers(mode: .text))
+        XCTAssertFalse(answers(reports: false))
+        XCTAssertFalse(answers(audience: .others))
+    }
+
     // MARK: One look at the room
 
     func testTheCameraOpensOnlyWithEveryConditionAndSaysWhyNotInTheContractsWords() {

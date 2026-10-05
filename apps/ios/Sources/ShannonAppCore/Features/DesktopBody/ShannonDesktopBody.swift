@@ -237,7 +237,8 @@ public final class ShannonDesktopBody {
                 guard let conversation else { throw CancellationError() }
                 return try await conversation.streamSpeech(text, style: style, provider: provider)
             },
-            callIsActive: { [weak voiceCall] in voiceCall?.holdsMicrophone ?? false }
+            // A call here or on another of his apps (`ownerCallElsewhere`): she says nothing aloud through her body.
+            callIsActive: { [weak self, weak voiceCall] in (voiceCall?.holdsMicrophone ?? false) || (self?.ownerInCallElsewhere ?? false) }
         )
         voice.mayAnswerInVoice = { [weak self] in self?.isShown ?? false }
         voice.listen = voiceCall.bodyListen { [weak self] in self?.answersTouchInVoice ?? false }
@@ -254,9 +255,18 @@ public final class ShannonDesktopBody {
         touch = ShannonBodyTouchCoordinator(scopeKey: conversation.scopeKey, client: client, environment: environment)
     }
 
-    /// Her words for a touch are said aloud: 声で返す, 伝える on, the owner alone, and her window up.
+    /// Her words for a touch are said aloud, and his answer listened for: 声で返す, 伝える on, the owner alone, her window
+    /// up, and no call of his on another app (a Mac call for her answer would talk over it).
     var answersTouchInVoice: Bool {
-        isShown && ShannonBodyReplyMode.current() == .voice && ShannonBodyPreference.reportsTouch() && audience == .owner
+        Self.answersTouchInVoice(
+            shown: isShown, replyMode: ShannonBodyReplyMode.current(), reportsTouch: ShannonBodyPreference.reportsTouch(),
+            audience: audience, ownerInCallElsewhere: ownerInCallElsewhere)
+    }
+
+    nonisolated static func answersTouchInVoice(
+        shown: Bool, replyMode: ShannonBodyReplyMode, reportsTouch: Bool, audience: ShannonBodyAudience, ownerInCallElsewhere: Bool
+    ) -> Bool {
+        shown && replyMode == .voice && reportsTouch && audience == .owner && !ownerInCallElsewhere
     }
 
     /// She was put down after being carried (`carry`, `docs/body-contract.md`): asked about once she is down, at most
