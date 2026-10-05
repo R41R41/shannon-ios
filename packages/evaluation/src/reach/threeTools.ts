@@ -29,6 +29,7 @@ export interface ReachToolbox {
   call(name: string, input: Readonly<Record<string, unknown>>): Promise<ReachToolResult>;
   /** Read from outside after the run: the study's notes as they are. */
   notes(): readonly ReachNoteView[];
+  close?(): void;
 }
 
 export interface ReachNoteView { id: string; title: string; body: string; version: number }
