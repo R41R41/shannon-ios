@@ -104,7 +104,7 @@ struct ShannonThreadListSheet: View {
                                 threadRow(thread, now: now, calendar: calendar, palette: palette)
                             }
                         } header: {
-                            Label("シャノンから", systemImage: "sparkles")
+                            Label(ShannonGeneratedStrings.talkFromShannon, systemImage: "sparkles")
                         }
                     }
 
@@ -130,13 +130,13 @@ struct ShannonThreadListSheet: View {
                 async let now: Void = yousu.now.reload()
                 _ = await (camera, ops, now)
             }
-            .navigationTitle("シャノン")
+            .navigationTitle(ShannonGeneratedStrings.appName)
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("閉じる", action: close)
+                    Button(ShannonGeneratedStrings.commonClose, action: close)
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -154,7 +154,7 @@ struct ShannonThreadListSheet: View {
                         }
                     }
                     .disabled(isCreating)
-                    .accessibilityLabel(isCreating ? "新しいトークを作成中" : "新しいトーク")
+                    .accessibilityLabel(isCreating ? "新しいトークを作成中" : ShannonGeneratedStrings.talkNewThread)
                 }
             }
         }

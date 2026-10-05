@@ -118,8 +118,8 @@ enum ShannonWorkspacePage: Int, CaseIterable, Identifiable {
     var id: Int { rawValue }
     var title: String {
         switch self {
-        case .talk: "トーク"
-        case .work: "作業"
+        case .talk: ShannonGeneratedStrings.navTalk
+        case .work: ShannonGeneratedStrings.navWork
         case .shannon: ShannonGeneratedStrings.navShannon
         }
     }

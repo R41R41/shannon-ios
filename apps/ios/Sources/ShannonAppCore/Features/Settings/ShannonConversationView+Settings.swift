@@ -51,7 +51,7 @@ extension ShannonConversationView {
                     } label: {
                         Label {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("声")
+                                Text(ShannonGeneratedStrings.settingsSectionVoice)
                                 Text("次の通話から反映")
                                     .font(.footnote)
                                     .foregroundStyle(palette.textSecondary)
@@ -92,7 +92,7 @@ extension ShannonConversationView {
                 Section {
                     if let connectionModel {
                         settingsValueButton(
-                            title: "接続",
+                            title: ShannonGeneratedStrings.settingsConnection,
                             value: ShannonSettingsSummary.connectionLabel(connectionModel.status),
                             symbol: "link",
                             palette: palette
@@ -109,13 +109,13 @@ extension ShannonConversationView {
             .navigationDestination(isPresented: $settingsShowsOps) { adminOpsPage }
             .scrollContentBackground(.hidden)
             .background(palette.canvas)
-            .navigationTitle("設定")
+            .navigationTitle(ShannonGeneratedStrings.navSettings)
 #if os(iOS)
             .navigationBarTitleDisplayMode(.large)
 #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("閉じる") { showsSettings = false }
+                    Button(ShannonGeneratedStrings.commonClose) { showsSettings = false }
                 }
             }
         }
@@ -187,7 +187,7 @@ extension ShannonConversationView {
             HStack(spacing: ShannonSpacing.medium) {
                 ShannonChatAvatarView(expression: model.presentFace.expression, size: 56)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("シャノン")
+                    Text(ShannonGeneratedStrings.appName)
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(palette.textPrimary)
                     Text(ShannonSettingsSummary.profileSubtitle(

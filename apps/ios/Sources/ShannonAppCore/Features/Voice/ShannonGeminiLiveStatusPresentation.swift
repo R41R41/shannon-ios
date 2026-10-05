@@ -41,7 +41,7 @@ struct ShannonGeminiLiveStatusPresentation: Equatable, Sendable {
         let error = errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines)
         let notice = error?.isEmpty == false ? error : nil
         title = switch phase {
-        case .idle: "音声会話を開始"
+        case .idle: ShannonGeneratedStrings.voiceStart
         case .requestingPermission: "マイクを準備中"
         case .connecting: "接続しています"
         case .listening: isMuted ? "ミュート中" : "聞いています"

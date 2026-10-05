@@ -106,7 +106,7 @@ struct ShannonGeminiLiveCallControls: View {
             .accessibilityAddTraits(showsTextComposer ? .isSelected : [])
         case .end:
             Button(role: .destructive, action: end) {
-                label("終了", systemImage: "phone.down.fill", fill: palette.danger, foreground: palette.onAction)
+                label(ShannonGeneratedStrings.voiceEnd, systemImage: "phone.down.fill", fill: palette.danger, foreground: palette.onAction)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("音声会話を終了する")

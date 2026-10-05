@@ -267,7 +267,7 @@ public struct ShannonAutonomySettingsSection: View {
                     Text(message).font(.footnote).foregroundStyle(Color.shannonDanger)
                 }
             } header: {
-                Text("自律活動")
+                Text(ShannonGeneratedStrings.navAutonomy)
             } footer: {
                 Text(model.overview?.stateDetail ?? "シャノンが自分から動く範囲・予算・記録を確認できます。")
             }

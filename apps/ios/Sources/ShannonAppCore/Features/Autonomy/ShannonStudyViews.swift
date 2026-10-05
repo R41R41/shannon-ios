@@ -8,7 +8,7 @@ struct ShannonStudyEntryLabel: View {
     var body: some View {
         HStack(spacing: ShannonSpacing.medium) {
             Image(systemName: "books.vertical").foregroundStyle(tint).accessibilityHidden(true)
-            Text("書斎")
+            Text(ShannonGeneratedStrings.navStudy)
             Spacer(minLength: 0)
             Text(study.summary).font(.callout).foregroundStyle(.secondary)
         }
@@ -41,7 +41,7 @@ public struct ShannonStudyPage: View {
             section("メモ", pieces: study.notes, footer: "読んだものについて、シャノンが自分の言葉で書いたメモです。")
             section("しまったもの", pieces: study.putAway, footer: nil)
         }
-        .navigationTitle("書斎")
+        .navigationTitle(ShannonGeneratedStrings.navStudy)
         .overlay {
             if study.pieces.isEmpty, !study.isLoading, study.errorMessage == nil {
                 ContentUnavailableView(
@@ -138,7 +138,7 @@ public struct ShannonStudyPiecePage: View {
                 if piece.canPutAway { putAwaySection(piece) }
             }
         }
-        .navigationTitle(study.details[pieceID]?.card.displayTitle ?? "書斎")
+        .navigationTitle(study.details[pieceID]?.card.displayTitle ?? ShannonGeneratedStrings.navStudy)
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif

@@ -7,7 +7,7 @@ import AppKit
 extension ShannonConversationView {
     var workspaceNavigationTitle: String {
         guard selectedPage == .talk else { return selectedPage.title }
-        return model.threads.first(where: { $0.threadId == model.selectedThreadId })?.title ?? "トーク"
+        return model.threads.first(where: { $0.threadId == model.selectedThreadId })?.title ?? ShannonGeneratedStrings.navTalk
     }
 
     @ToolbarContentBuilder
@@ -63,7 +63,7 @@ extension ShannonConversationView {
                 Button(action: createThreadFromHeader) {
                     Image(systemName: "square.and.pencil")
                 }
-                .accessibilityLabel("新しいトーク")
+                .accessibilityLabel(ShannonGeneratedStrings.talkNewThread)
             }
         }
     }
