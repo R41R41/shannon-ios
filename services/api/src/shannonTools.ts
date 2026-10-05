@@ -68,6 +68,9 @@ const id = { type: 'string', description: '書斎のものの id（study.list �
 const host = { type: 'string', description: 'どのPCのフォルダか。ふだんは書かない（1台だけならそれを使う）', maxLength: 40 } as const;
 const path = (description: string) => ({ type: 'string', description, maxLength: 240 } as const);
 
+/** What one call may write into a file: what one response of hers can carry whole (`TOOL_TURN_OUTPUT_TOKENS`). */
+export const FOLDER_WRITE_CHARACTERS = 6_000;
+
 const STUDY = '書斎（ボク自身の場所。ボクが書くメモと物語の下書きが、版ごとに残っている。正本はシャノンのデータベース）';
 const FOLDER = 'ライ氏のPCにあるボク専用のフォルダ';
 const SECRET_LINE = 'ライ氏に内緒と言われたこと、忘れてと頼まれたことは書かない。';
@@ -143,10 +146,10 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
     input: schema({ path: path('読むファイル'), offset: { type: 'integer', description: '続きを読む時の位置（前の結果にある）', minimum: 0, maximum: 1_048_576 }, host }, ['path']) }),
   tool({ name: 'folder.create', domain: 'host_folder', effect: 'write',
     description: `${FOLDER}に新しいテキストのファイルを作る（同じ名前があれば作らない）。ボクの書いた文章だけを置く。ボクの記憶や人格やコードを書き出さない。${SECRET_LINE}`,
-    input: schema({ path: path('作るファイル（.md .txt .json .csv .yaml .yml）'), content: { type: 'string', description: '中身（64,000字まで）', minLength: 1, maxLength: 64_000 }, host }, ['path', 'content']) }),
+    input: schema({ path: path('作るファイル（.md .txt .json .csv .yaml .yml）'), content: { type: 'string', description: `中身（1回に${FOLDER_WRITE_CHARACTERS.toLocaleString('en-US')}字まで。長いものはファイルを分ける）`, minLength: 1, maxLength: FOLDER_WRITE_CHARACTERS }, host }, ['path', 'content']) }),
   tool({ name: 'folder.update', domain: 'host_folder', effect: 'write',
     description: `${FOLDER}のテキストのファイルを書き換える。元の中身はフォルダの中のゴミ箱に移されてから書かれる（ライ氏のファイルでも同じ）。読んだあとでライ氏が変えていたら書き換えない。${SECRET_LINE}`,
-    input: schema({ path: path('書き換えるファイル'), content: { type: 'string', description: '新しい中身（全文、64,000字まで）', minLength: 1, maxLength: 64_000 }, host }, ['path', 'content']) }),
+    input: schema({ path: path('書き換えるファイル'), content: { type: 'string', description: `新しい中身（全文、1回に${FOLDER_WRITE_CHARACTERS.toLocaleString('en-US')}字まで）`, minLength: 1, maxLength: FOLDER_WRITE_CHARACTERS }, host }, ['path', 'content']) }),
   tool({ name: 'folder.rename', domain: 'host_folder', effect: 'write',
     description: `${FOLDER}のファイルかフォルダの名前を変える（同じ場所のまま）。同じ名前があれば変えない。`,
     input: schema({ path: path('名前を変えるもの'), newName: { type: 'string', description: '新しい名前（フォルダの区切りは書かない）', minLength: 1, maxLength: 120 }, host }, ['path', 'newName']) }),
@@ -157,6 +160,11 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
     description: `${FOLDER}のファイルかフォルダを消す。実際にはフォルダの中のゴミ箱に移り、ライ氏が戻せる。`,
     input: schema({ path: path('消すもの'), host }, ['path']) }),
 ]);
+
+/** `SHANNON_OWN_TOOLS=off` offers no tool on any surface; every request and prompt is then what it was before the tools. */
+export function ownToolsEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+  return !['off', 'false', '0', 'disabled', 'no', 'none'].includes(environment.SHANNON_OWN_TOOLS?.trim().toLowerCase() ?? '');
+}
 
 export type ShannonToolName = typeof SHANNON_TOOLS[number]['name'];
 

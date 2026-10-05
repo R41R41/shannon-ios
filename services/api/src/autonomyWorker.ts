@@ -1,5 +1,3 @@
-import { AutonomyToolResults } from './autonomyLoopToolStep.js';
-import { ownToolsEnabled } from './shannonToolSession.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { SQLiteAutonomyAnnouncer } from './autonomyAnnouncer.js';
 import { configuredAwakeClock } from './autonomyAwakeClock.js';
@@ -7,6 +5,7 @@ import { moodHistoryRecording } from './moodHistoryContract.js';
 import { autonomyDayKey, configuredAutonomy } from './autonomyBudget.js';
 import { ShannonAutonomyLoop } from './autonomyLoop.js';
 import { configuredAutonomyLoop } from './autonomyLoopConfig.js';
+import { AutonomyToolResults } from './autonomyLoopToolStep.js';
 import { configuredOwnerContext } from './autonomyOwnerContextWiring.js';
 import { BoundedPublicReader } from './autonomyReader.js';
 import { ShannonAutonomyService } from './autonomyService.js';
@@ -30,6 +29,7 @@ import { SQLiteIncomingCallStore } from './incomingCallStore.js';
 import { SQLitePrivateListeningStore } from './privateListeningStore.js';
 import { SQLiteReachOutClaims } from './reachOutClaims.js';
 import { SQLiteReachOutReports, reachOutBodyFacts } from './reachOutReports.js';
+import { ownToolsEnabled } from './shannonTools.js';
 import { configuredDatabasePath } from './sqliteStore.js';
 
 /**

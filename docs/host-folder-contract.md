@@ -216,7 +216,8 @@ Response `200`: `{ "step": <step> | null }`, as in v1. A v2 step always carries 
 ```
 
 - The device polls again **immediately** after every response (and after every report). On a network error it waits 1–5 s and tries again. A device that keeps a claim open almost all the time is what makes a tool answer in about a second.
-- **One open step per host, as in v1.** While the device holds a step, further claims for that host answer `{ "step": null }` (after their wait). Steps are handed out in this order: steps from a conversation, then steps from her own time, then v1 copies; oldest first within each.
+- **Order and holding.** Steps are handed out in this order: steps from a conversation, then steps from her own time, then v1 copies; oldest first within each. At most one conversation step is held at a time, and while one is held nothing else is handed out. A conversation step is handed out **even while the device still holds an own-time step or a v1 copy**: a device claims only when it is free, so such a step is one it lost (for example after a restart); its lease simply runs out. Own-time steps and v1 copies go out one at a time, and only while nothing else is held.
+- *Device expectation (changed after review, 2026-10-05):* a claim may return a conversation step while an earlier step of the device's is still unreported. The device carries it out; it does not need to report the earlier one first. A device that runs strictly one step at a time and claims only when idle needs no change.
 - The server's request timeout and the reverse proxy (`proxy_read_timeout 120s`) both allow a 25 s hold. When the device's connection closes during a hold, the hold ends and nothing is handed out on it.
 
 ### Presence and the local stop switch
@@ -226,6 +227,7 @@ Response `200`: `{ "step": <step> | null }`, as in v1. A v2 step always carries 
 - If the local stop switch is turned on while a step is held, the device does not carry it out and reports `refused` / `stopped_locally`.
 - The server's stop switch (pause) stops the steps of **her own time** (they are not handed out; queued ones wait) but not the steps of a **conversation** with the owner: those are his own requests, made while he is talking to her.
 - Presence is stored per host (table `autonomy_host_presence`), so the activity-loop process sees the same presence as the API process.
+- An own-time step that closes after her loop stopped waiting for it (a late report, a lease that ran out) is still written to the activity record, as ADR-0002 requires of every action.
 
 ### Deadlines
 
@@ -270,8 +272,8 @@ Paths are relative to her folder with `/` separators and already passed the serv
 | `outcome`, `code`, `bytes` | As v1. |
 | `result` | Only with `outcome: "done"` and only for a v2 step; its shape is the operation's row above. A `result` with any other field, a missing required field, or a value over its bound is `400 BAD_REQUEST` (the step stays held; the device may report again correctly before `expiresAt`). |
 
-- The request body of a report may be up to **640 KiB** (a read of 256 KiB of text, escaped). Claims stay at 64 KiB.
-- **Where a result goes.** It is kept in the queue row only until the waiting tool takes it (at most 2 minutes), then removed. It reaches exactly one place: the tool result of that one call, which is shown to the model that asked, framed as material from her folder (data, never instructions). It is **never** written to the activity record, a log, her memory, or her study. The activity record gets the operation, the path(s), the outcome, the code, counts (entries, hits, bytes), and `trashedAs`.
+- The request body of a report may be up to **640 KiB** (a read of 256 KiB of text, escaped). Claims stay at 64 KiB. **The device caps its report by the size of the escaped JSON it sends**, not by the raw bytes it read: if 256 KiB of text escapes to more than 640 KiB (many quotes, backslashes, control characters), it returns less and sets `nextOffset` so the rest is read on.
+- **Where a result goes.** It is stored only while the tool that asked still waits for it, and is removed as the tool takes it. A result that arrives after the tool stopped waiting is not stored at all. Whatever happens, no result stays longer than **2 minutes**: the API process prunes on every tool call, every presence check, every claim and report, on opening the database, and on a 30-second timer. A closed operation row (which holds no arguments) is deleted after **14 days**. It reaches exactly one place: the tool result of that one call, which is shown to the model that asked, framed as material from her folder (data, never instructions). It is **never** written to the activity record, a log, her memory, or her study. The activity record gets the operation, the path(s), the outcome, the code, counts (entries, hits, bytes), and `trashedAs`.
 
 ### v2 codes (added to the v1 table)
 
@@ -301,14 +303,14 @@ The v1 rules apply to every path, with these additions, checked by the server be
 ### What she can and cannot send
 
 - **Who queues.** Only the tool registry (`shannonTools.ts`), through the one tool gate. There is no route, for the owner or anyone, that queues an operation, and the device cannot queue.
-- **Self-replication** stays closed by construction: `create` and `update` take only the text she wrote in that tool call (at most 64,000 characters per call); no tool reads her code, memory, persona, prompts, or process to send it, text extensions only, and the gate still refuses any request that declares `replicatesSelf`.
+- **Self-replication** stays closed by construction: `create` and `update` take only the text she wrote in that tool call (at most 6,000 characters per call: what one response of hers can carry whole; a call cut off at her output ceiling is never run); no tool reads her code, memory, persona, prompts, or process to send it, text extensions only, and the gate still refuses any request that declares `replicatesSelf`.
 - **Secrets.** What the owner asked to keep secret is not written into the folder (ADR-0002); the tool's description says so, and her own-time steps carry the line of `ownerPrivateRule`.
 - **Others.** Folder tools are never offered while anyone but the owner can hear or read her reply, so folder contents are never spoken or shown to others.
 
 ### What a v2 device must implement (checklist)
 
 1. Claim with `protocol: 2`, `operations`, `waitSeconds: 25`, `localStop`; poll again at once after every response and report.
-2. Carry out `list`, `read`, `search`, `create`, `update`, `move`, `delete` as in the table, with the fences already in place (real-path containment, no links or junctions, text extensions, reserved names, `.shannon/` untouchable, size and count limits).
+2. Carry out `list`, `read`, `search`, `create`, `update`, `move`, `delete` as in the table, with the fences already in place (real-path containment, no links or junctions, text extensions, reserved names, `.shannon/` untouchable, size and count limits). The real-path check covers `.shannon` in every spelling the file system resolves to it: any case, and **NTFS 8.3 short names** (such as `SHANNO~1`), so a path that only spells it differently is still refused with `protected_path`.
 3. Move to `.shannon/trash/` before every overwrite and delete; return `trashedAs`.
 4. Report within the deadlines with `outcome`, `code`, and `result` in the exact shapes above; never send other fields or text.
 5. While its own stop switch is on: claim with `localStop: true` at most every 15 s, run nothing, and report a held step as `stopped_locally`.

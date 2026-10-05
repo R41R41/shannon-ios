@@ -153,6 +153,18 @@ export interface ShannonOwnWork {
   readonly reachOuts?: readonly string[];
 }
 
+const UNSHOWN_NOTE = '（まだ見せていない。題名や中身をいつ言うかは自分で決める）';
+const UNSHOWN_LINE = /^- 作っている物語「.*」: (下書き[^\n]*)（まだ見せていない。題名や中身をいつ言うかは自分で決める）$/gmu;
+
+/**
+ * The same prompt with the title of every unshown draft taken out, for anything that leaves the server: the system
+ * prompt a chat response carries, and the instructions of a model that runs on a device (owner decision 2026-10-05:
+ * the title is hers to know, and stays on the server).
+ */
+export function withoutUnshownTitles(prompt: string): string {
+  return prompt.replace(UNSHOWN_LINE, '- まだ見せていない下書き: $1（題名と中身は、見せる時まで言わなくてよい）');
+}
+
 /** Compact, bounded lines for an owner one-to-one prompt. Empty when there is nothing to say. */
 export function buildShannonOwnWorkPrompt(work: ShannonOwnWork | null | undefined, options: { maximumCharacters?: number } = {}): string {
   if (!work) return '';
@@ -163,7 +175,7 @@ export function buildShannonOwnWorkPrompt(work: ShannonOwnWork | null | undefine
     ...(work.today.length ? [`- 今日したこと: ${work.today.slice(0, 6).join('、')}`] : []),
     ...reachOuts.map(line => `- 自分から話しかけた時のこと（気になるなら自分から触れてよい）: ${line}`),
     ...work.pieces.slice(0, 3).map(piece => (piece.title && piece.unshown
-      ? `- 作っている物語「${piece.title.slice(0, 40)}」: ${piece.stage}（まだ見せていない。題名や中身をいつ言うかは自分で決める）`
+      ? `- 作っている物語「${piece.title.replace(/\s+/gu, ' ').slice(0, 40)}」: ${piece.stage}${UNSHOWN_NOTE}`
       : piece.title ? `- 物語「${piece.title.slice(0, 40)}」: ${piece.stage}`
         : `- 作っている物語: ${piece.stage}（まだ見せていない。題名と中身は、見せる時まで言わなくてよい）`)),
   ];

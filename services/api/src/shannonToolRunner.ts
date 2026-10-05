@@ -3,6 +3,7 @@ import type { HostFolderOperations } from './hostFolderOperations.js';
 import { folderExecutors } from './shannonFolderTools.js';
 import { studyExecutors } from './shannonStudyTools.js';
 import { authorizeToolCall } from './shannonToolGate.js';
+import { carriesSecret } from './autonomyLoopOwnerContext.js';
 import { validToolInput } from './shannonToolInput.js';
 import type { PreparedToolCall, ToolExecutionContext, ToolExecutor } from './shannonToolTypes.js';
 import {
@@ -34,10 +35,10 @@ export class ShannonToolRunner {
     store: SQLiteAutonomyStore,
     private readonly folder: HostFolderOperations,
     private readonly recorder: ToolRecorder,
-    private readonly now: () => string,
+    now: () => string,
     private readonly transaction: <T>(operation: () => T) => T = operation => store.transaction(operation),
   ) {
-    this.executors = Object.freeze({ ...studyExecutors(store, now), ...folderExecutors(folder) });
+    this.executors = Object.freeze({ ...studyExecutors(store, now), ...folderExecutors(folder, scopeKey => roomLookTexts(store, scopeKey)) });
   }
 
   /** The tools a surface offers to this audience now. Her folder's tools only while a device is registered for it. */
@@ -54,6 +55,8 @@ export class ShannonToolRunner {
     if (!executor) return { tool, result: toolFailure('not_offered', `${tool.name} はまだ使えない。`, { retryable: false }) };
     const checked = validToolInput(rawInput, tool.input);
     if ('problem' in checked) return { tool, result: toolFailure('invalid_input', `入力が正しくない（${checked.problem}）。`, { retryable: false }) };
+    const secret = secretRefusal(tool.name, checked.input, context.secrets);
+    if (secret) return { tool, result: secret };
     try {
       const prepared = executor(checked.input, context);
       return 'run' in prepared ? { tool, prepared } : { tool, result: prepared };
@@ -99,3 +102,25 @@ export class ShannonToolRunner {
 }
 
 export { STUDY_REJECTIONS };
+
+/** The tools whose words end up in her study or her folder. */
+const WRITING_TOOLS: ReadonlySet<string> = new Set(['study.create', 'study.update', 'study.rename', 'folder.create', 'folder.update', 'folder.rename', 'folder.move']);
+
+/** A write from a conversation that repeats what must reach nobody but the owner (the check her own time uses), or null. */
+function secretRefusal(name: string, input: Readonly<Record<string, unknown>>, secrets: readonly string[] | null | undefined): ToolResult | null {
+  if (secrets === undefined || !WRITING_TOOLS.has(name)) return null;
+  if (secrets === null) {
+    return toolFailure('unavailable', 'いまは書く前の確かめができないので、書かない。', { retryable: true, refusal: { why: '内緒のことの一覧が読めなかった', wouldWork: '少しあとでもう一度' } });
+  }
+  const words = Object.values(input).filter((value): value is string => typeof value === 'string');
+  if (!words.some(word => carriesSecret(word, secrets))) return null;
+  return toolFailure('refused', 'ライ氏に内緒と言われたこと、忘れてと頼まれたことが入っているので、書かない。', {
+    retryable: false, refusal: { why: '内緒のこと・忘れたことを書くことになる', wouldWork: 'そこを除いて書き直す' },
+  });
+}
+
+/** Her notes about a look at the room: their text never goes into a file (`shannonFolderTools.ts`). */
+function roomLookTexts(store: SQLiteAutonomyStore, scopeKey: string): readonly string[] {
+  return store.study.list(scopeKey, 500, 'include').filter(piece => piece.origin === 'room_look')
+    .flatMap(piece => [piece.body, ...store.study.versions(scopeKey, piece.id).map(version => version.body)]);
+}

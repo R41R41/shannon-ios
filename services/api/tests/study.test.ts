@@ -260,7 +260,7 @@ describe('what the owner\'s own prompts say about her activity', () => {
   const chat = async (harness: ReturnType<typeof loopHarness>) => {
     const chatModel = new PromptRecorder();
     const api = createLocalApiKernel(() => harness.clock.at, { autonomy: harness.service, chatModel });
-    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: scope, message: '何してた？' } });
+    const answered = await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: scope, message: '何してた？' } });
     const voice = api.realtimeVoiceSession(scope).instructions;
     const guest = api.realtimeVoiceSession(scope, undefined, { participantMode: 'guest' }).instructions;
     // Live voice turns: the owner alone, the owner with someone listening, and a friend.
@@ -272,7 +272,7 @@ describe('what the owner\'s own prompts say about her activity', () => {
     const voiceTurn = await turn({});
     const companionTurn = await turn({ deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null, companionPresent: true } });
     const guestTurn = await turn({ participantMode: 'guest' });
-    return { text: chatModel.prompts[0]!, voice, guest, voiceTurn, companionTurn, guestTurn };
+    return { text: chatModel.prompts[0]!, voice, guest, voiceTurn, companionTurn, guestTurn, returned: (answered.body as { systemPrompt: string }).systemPrompt };
   };
 
   it('keeps 「仕組みは準備中」 until the loop is enabled and running, and removes it only then', async () => {
@@ -312,12 +312,19 @@ describe('what the owner\'s own prompts say about her activity', () => {
     harness.model.plans = [FULL_PLAN];
     await runUntilIdle(harness.loop);
     const working = await chat(harness);
-    for (const prompt of [working.text, working.voice, working.voiceTurn]) {
+    for (const prompt of [working.text, working.voice, working.voiceTurn, working.returned]) {
       expect(prompt).toContain('[ボクがひとりの時間にしていること]（記録にある事実。何をしていたか聞かれたら自分の言葉で話す）');
       expect(prompt).toContain('- 今日したこと: 次にすることを考えた、公開ページを1つ読んだ、メモを1つ書いた、物語の下書きを1つ書いた');
-      // Owner decision 2026-10-05: she knows the title of her own unshown draft, marked unshown; its text stays out of the prompt.
-      expect(prompt).toContain('- 作っている物語「傘のある駅」: 下書き・第1稿（まだ見せていない。題名や中身をいつ言うかは自分で決める）');
       expect(prompt).not.toContain('駅のベンチ');
+    }
+    // Owner decision 2026-10-05: she knows the title of her own unshown draft, marked unshown, in the prompts the server sends.
+    for (const prompt of [working.text, working.voiceTurn]) {
+      expect(prompt).toContain('- 作っている物語「傘のある駅」: 下書き・第1稿（まだ見せていない。題名や中身をいつ言うかは自分で決める）');
+    }
+    // The title never leaves the server: not in the system prompt a chat response carries, not in a device-run model's instructions.
+    for (const prompt of [working.voice, working.returned]) {
+      expect(prompt).toContain('- まだ見せていない下書き: 下書き・第1稿（題名と中身は、見せる時まで言わなくてよい）');
+      expect(prompt).not.toContain('傘のある駅');
     }
     // Owner one-to-one only: not with someone listening, not with a friend.
     for (const prompt of [working.guest, working.guestTurn, working.companionTurn]) expect(prompt).not.toContain('ひとりの時間');

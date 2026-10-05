@@ -4,6 +4,7 @@ import {
   buildIntentPrompt,
   selectPrimaryIntent,
   shannonIdentityPrompt,
+  withoutUnshownTitles,
   type CompanionClock,
   type CompanionStateStore,
 } from '@shannon/cognition';
@@ -59,7 +60,7 @@ export function realtimeVoiceSessionProjection(
   const identity = dependencies.knowledgeStore?.promptProjection(scopeKey)
     ?? assembleShannonSystemPrompt(captured);
   const basePrompt = dependencies.autonomy?.identityProjection(scopeKey, identity) ?? identity;
-  const dailyMindPrompt = [dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '', dependencies.autonomy?.pursuitPrompt(scopeKey) ?? '']
+  const dailyMindPrompt = [dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '', withoutUnshownTitles(dependencies.autonomy?.pursuitPrompt(scopeKey) ?? '')]
     .filter(Boolean).join('\n\n');
   const history = voiceHistoryProjection(visibleConversationHistory(captured, dependencies.conversationStore, scopeKey, threadId, OWNER_AUDIENCE));
   const occurredAt = dependencies.now();

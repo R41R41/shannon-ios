@@ -55,7 +55,7 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
       const limit = numberInput(input, 'limit') ?? 10;
       const found = store.study.search(context.scopeKey, query, limit, input.includeDeleted === true ? 'include' : 'exclude');
       return immediate('書斎の中を探します。', () => ({
-        result: toolOk(found.length ? [`${found.length}件:`, ...found.map(item => `${pieceLine(item)}\n  …${snippet(`${item.title}\n${item.body}`, query)}…`)].join('\n') : `「${clip(query, 40)}」は見つからなかった。`),
+        result: toolOk(found.length ? [`${found.length}件:`, ...found.map(item => `${pieceLine(item)}\n  …${snippet(`${item.title}\n${item.body}`, query)}…${item.origin === 'room_look' ? ROOM_LOOK_MARK : ''}`)].join('\n') : `「${clip(query, 40)}」は見つからなかった。`),
         record: { summary: `書斎の中を探しました（${found.length}件）。`, outcome: 'done' },
       }));
     },
@@ -73,6 +73,7 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
           pieceLine(found),
           `読んでいる版: 第${version?.version ?? found.version}稿${found.readableVersion !== null ? `（ライ氏が読めるのは第${found.readableVersion}稿）` : '（ライ氏にはまだ見せていない）'}`,
           `題名: ${title}`, '本文:', body,
+          ...(found.origin === 'room_look' ? [ROOM_LOOK_MARK] : []),
           ...(found.sources.length ? ['出典:', ...found.sources.map(source => `- ${source.title} ${source.url}`)] : []),
           '版の一覧:', ...versions.map(item => `- 第${item.version}稿（${item.createdAt.slice(0, 10)}）: ${clip(item.changeNote, 120)}`),
         ].join('\n')),
@@ -162,6 +163,9 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
       () => store.study.revise(context.scopeKey, found.id, change, now()), { link: `shannon-study://${found.id}` });
   }
 }
+
+/** Her note about a look at the owner's room: hers to think with, never put into a file (coordinator decision 2026-10-05). */
+const ROOM_LOOK_MARK = '（部屋を見たメモ。考える材料で、フォルダのファイルには書かない）';
 
 /** One line of a piece for her, with everything she needs to name it in the next call. */
 function pieceLine(item: StudyPiece): string {

@@ -9,8 +9,10 @@ import type { HostStepCode } from './autonomyHostFolderPath.js';
  * An operation is `queued` by a tool call, `leased` to the bound device, and closed exactly once: `done`, `failed`
  * or `refused` by the device's report, `expired` when its lease ran out, `dropped` when the tool stopped waiting
  * before the device took it (so it never runs later by surprise). Closing removes the arguments (which may hold
- * text she wrote). A result is kept only until the waiting tool takes it.
+ * text she wrote). A result is stored only while a tool still waits for it, is removed as it is taken, and is
+ * removed after two minutes in any case (`prune`); a closed row is deleted after fourteen days.
  */
+export const HOST_OPERATION_RETENTION = Object.freeze({ resultMilliseconds: 120_000, rowMilliseconds: 14 * 24 * 60 * 60_000 });
 export const HOST_OPERATIONS = ['list', 'read', 'search', 'create', 'update', 'move', 'delete'] as const;
 export type HostOperation = typeof HOST_OPERATIONS[number];
 export type HostOperationOrigin = 'conversation' | 'autonomy';
@@ -29,6 +31,8 @@ export interface HostOperationRow {
   queuedAt: string;
   /** Not handed out after this: the tool has stopped waiting. */
   handOutBefore: string;
+  /** The tool stopped waiting while the device held it: whatever closes it later is recorded where it closes, and keeps no result. */
+  waiterGone: boolean;
   leaseSeconds: number;
   leaseUntil?: string;
   deviceId?: string;
@@ -48,6 +52,7 @@ interface OperationRow {
   op_id: string; host: string; origin: string; operation: string; tool: string; args_json: string; relative_path: string;
   to_relative_path: string | null; status: string; queued_at: string; hand_out_before: string; lease_seconds: number;
   lease_until: string | null; device_id: string | null; outcome_code: string | null; result_json: string | null; finished_at: string | null;
+  waiter_gone: number;
 }
 
 export class HostFolderOperationsStore {
@@ -71,7 +76,8 @@ export class HostFolderOperationsStore {
         device_id TEXT,
         outcome_code TEXT,
         result_json TEXT,
-        finished_at TEXT
+        finished_at TEXT,
+        waiter_gone INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS autonomy_host_operations_queue ON autonomy_host_operations (scope_key, host, status, queued_at);
       CREATE TABLE IF NOT EXISTS autonomy_host_presence (
@@ -84,6 +90,8 @@ export class HostFolderOperationsStore {
         PRIMARY KEY (scope_key, host)
       );
     `);
+    // Whatever a stopped process left: nothing older than the retention survives an open.
+    this.prune(new Date().toISOString());
   }
 
   enqueue(scopeKey: string, draft: {
@@ -106,21 +114,41 @@ export class HostFolderOperationsStore {
     return row ? operation(row) : null;
   }
 
-  /** The next operation to hand out: a conversation's first, then her own time's (only with `ownTime`), oldest first. */
-  nextQueued(scopeKey: string, host: string, operations: readonly string[], at: string, ownTime: boolean): HostOperationRow | null {
+  /** The oldest waiting operation of one origin that the device can carry out. */
+  nextQueued(scopeKey: string, host: string, operations: readonly string[], at: string, origin: HostOperationOrigin): HostOperationRow | null {
     const rows = this.database.prepare(`
-      SELECT * FROM autonomy_host_operations WHERE scope_key = ? AND host = ? AND status = 'queued' AND hand_out_before > ?
-      ORDER BY CASE origin WHEN 'conversation' THEN 0 ELSE 1 END, queued_at, rowid
-    `).all(scopeKey, host, at) as unknown as OperationRow[];
-    const found = rows.map(operation).find(item => operations.includes(item.operation) && (ownTime || item.origin === 'conversation'));
-    return found ?? null;
+      SELECT * FROM autonomy_host_operations WHERE scope_key = ? AND host = ? AND origin = ? AND status = 'queued' AND hand_out_before > ?
+      ORDER BY queued_at, rowid
+    `).all(scopeKey, host, origin, at) as unknown as OperationRow[];
+    return rows.map(operation).find(item => operations.includes(item.operation)) ?? null;
   }
 
-  leased(scopeKey: string, host: string): HostOperationRow | null {
+  /** An operation of that origin the device holds, if any. */
+  leased(scopeKey: string, host: string, origin?: HostOperationOrigin): HostOperationRow | null {
     const row = this.database.prepare(`
-      SELECT * FROM autonomy_host_operations WHERE scope_key = ? AND host = ? AND status = 'leased' ORDER BY queued_at LIMIT 1
-    `).get(scopeKey, host) as unknown as OperationRow | undefined;
+      SELECT * FROM autonomy_host_operations WHERE scope_key = ? AND host = ? AND status = 'leased' ${origin ? 'AND origin = ?' : ''} ORDER BY queued_at LIMIT 1
+    `).get(scopeKey, host, ...(origin ? [origin] : [])) as unknown as OperationRow | undefined;
     return row ? operation(row) : null;
+  }
+
+  /** The tool stopped waiting for a held operation. */
+  markWaiterGone(scopeKey: string, id: string): void {
+    this.database.prepare(`UPDATE autonomy_host_operations SET waiter_gone = 1 WHERE scope_key = ? AND op_id = ?`).run(scopeKey, id);
+  }
+
+  /** Scopes with an operation still open: the ones a sweep has to look at. */
+  openScopes(): readonly string[] {
+    return (this.database.prepare(`SELECT DISTINCT scope_key FROM autonomy_host_operations WHERE status IN ('queued', 'leased')`).all() as unknown as Array<{ scope_key: string }>)
+      .map(row => row.scope_key);
+  }
+
+  /** Results older than two minutes go, whoever waits; closed rows older than fourteen days go. */
+  prune(at: string): void {
+    const time = Date.parse(at);
+    this.database.prepare(`UPDATE autonomy_host_operations SET result_json = NULL WHERE result_json IS NOT NULL AND finished_at <= ?`)
+      .run(new Date(time - HOST_OPERATION_RETENTION.resultMilliseconds).toISOString());
+    this.database.prepare(`DELETE FROM autonomy_host_operations WHERE status NOT IN ('queued', 'leased') AND finished_at <= ?`)
+      .run(new Date(time - HOST_OPERATION_RETENTION.rowMilliseconds).toISOString());
   }
 
   /** Leases that ran out without a report, and queued operations nobody waits for any more. */
@@ -141,10 +169,11 @@ export class HostFolderOperationsStore {
     return Number(result.changes) > 0;
   }
 
-  /** Closes an open operation once. Its arguments go; its result stays only for the waiting tool. */
+  /** Closes an open operation once. Its arguments go; its result is kept only while the tool still waits for it. */
   close(scopeKey: string, id: string, status: Exclude<HostOperationStatus, 'queued' | 'leased'>, at: string, detail: { code?: HostStepCode; result?: unknown } = {}): boolean {
     const result = this.database.prepare(`
-      UPDATE autonomy_host_operations SET status = ?, finished_at = ?, args_json = '{}', outcome_code = ?, result_json = ?
+      UPDATE autonomy_host_operations SET status = ?, finished_at = ?, args_json = '{}', outcome_code = ?,
+        result_json = CASE WHEN waiter_gone = 1 THEN NULL ELSE ? END
       WHERE scope_key = ? AND op_id = ? AND status IN ('queued', 'leased')
     `).run(status, at, detail.code ?? null, detail.result === undefined ? null : JSON.stringify(detail.result), scopeKey, id);
     return Number(result.changes) > 0;
@@ -157,13 +186,6 @@ export class HostFolderOperationsStore {
     this.database.prepare(`UPDATE autonomy_host_operations SET result_json = NULL WHERE scope_key = ? AND op_id = ?`).run(scopeKey, id);
     if (!row?.result_json) return undefined;
     try { return JSON.parse(row.result_json); } catch { return undefined; }
-  }
-
-  /** Results nobody took within `before` are removed. */
-  forgetResults(scopeKey: string, before: string): void {
-    this.database.prepare(`
-      UPDATE autonomy_host_operations SET result_json = NULL WHERE scope_key = ? AND result_json IS NOT NULL AND finished_at <= ?
-    `).run(scopeKey, before);
   }
 
   presence(scopeKey: string, host: string): HostPresence | null {
@@ -195,6 +217,6 @@ function operation(row: OperationRow): HostOperationRow {
     status: row.status as HostOperationStatus, queuedAt: row.queued_at, handOutBefore: row.hand_out_before, leaseSeconds: Number(row.lease_seconds),
     ...(row.lease_until ? { leaseUntil: row.lease_until } : {}), ...(row.device_id ? { deviceId: row.device_id } : {}),
     ...(row.outcome_code ? { code: row.outcome_code as HostStepCode } : {}), ...(result !== undefined ? { result } : {}),
-    ...(row.finished_at ? { finishedAt: row.finished_at } : {}),
+    ...(row.finished_at ? { finishedAt: row.finished_at } : {}), waiterGone: Number(row.waiter_gone) === 1,
   });
 }

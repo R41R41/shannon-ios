@@ -118,6 +118,8 @@ export interface StepResult {
   observed?: ReachOutFacts;
   /** Writes of the step's product; runs inside the reporting transaction. */
   commit?: (remaining: readonly AutonomyPlannedStep[], at: string) => StepCommit | void;
+  /** After the reporting transaction: whether the product and its record were saved. */
+  settled?: (saved: boolean) => void;
 }
 
 export interface StepCommit {

@@ -1,6 +1,7 @@
 import {
   InMemoryCompanionStateStore,
   assembleShannonSystemPrompt,
+  withoutUnshownTitles,
   type CompanionClock,
   type CompanionStateEvent,
   type CompanionStateStore,
@@ -36,7 +37,7 @@ import { LocalVoiceDecisionGateway, type VoiceDecisionGateway } from './voiceDec
 import { InMemoryConversationStore, type ConversationStore } from './conversationStore.js';
 import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse, StateEventRequest } from './contracts.js';
 import { ShannonMemoryService, type MemoryAction, type ShannonMemoryStore } from './memoryService.js';
-import { conversationWithCaptures } from './turnCaptures.js';
+import { dispatchConversationRead } from './apiConversationRead.js';
 import type { KnowledgeStore } from './knowledgeStore.js';
 import type { InitiativeInbox } from './initiativeStore.js';
 import type { AetherContextReader } from './aetherContext.js';
@@ -55,7 +56,7 @@ import { optionalPlaceDiscoverySkill, placeSkillReply } from './placeDiscoverySk
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import { chatAudienceTurn } from './chatAudience.js';
 import { generateChatTurn, validChatStream, withSentenceStream } from './chatSentenceStream.js';
-import { conversationTools } from './shannonToolSession.js';
+import { conversationToolServer, conversationTools, type ConversationToolServer } from './shannonToolSession.js';
 import type { TurnMemoryRecall } from './turnMemoryRecall.js';
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type NotionTurnReader } from './conversationCapabilities.js';
 import { prepareConversationOrganize } from './conversationOrganize.js';
@@ -159,6 +160,8 @@ export class ShannonApiKernel {
   private readonly people: PeopleMemory;
   private readonly autonomy: ShannonAutonomyService;
   private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming;
+  /** What the server knows when it offers her tools: others present, and what her writes must not repeat (`shannonToolSession.ts`). */
+  private readonly toolServer: ConversationToolServer;
   constructor(
     private readonly stateStore: CompanionStateStore,
     private readonly now: CompanionClock,
@@ -196,6 +199,7 @@ export class ShannonApiKernel {
     this.autonomy = options.autonomy ?? createInMemoryAutonomyService(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) });
     this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now);
     this.body = new ShannonBody({ ...options.body, stateStore: this.stateStore, autonomy: this.autonomy, conversationStore: this.conversationStore, now: this.now });
+    this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now);
   }
 
   realtimeVoiceSession(scopeKey: string, requestedThreadId?: string, options: {
@@ -203,6 +207,7 @@ export class ShannonApiKernel {
     participantMode?: VoiceParticipantMode;
     brightVoice?: boolean;
   } = {}): { threadId: string; instructions: string; voice: string } {
+    if (options.participantMode === 'guest') this.toolServer.audience.noteOthers(scopeKey);
     return realtimeVoiceSessionProjection(scopeKey, requestedThreadId, options, {
       stateStore: this.stateStore,
       conversationStore: this.conversationStore,
@@ -233,20 +238,8 @@ export class ShannonApiKernel {
       return { status: 200, body: presentCompanionState(this.stateStore.snapshot(scopeKey), this.now()) };
     }
 
-    if (request.method === 'GET' && request.path === '/v1/conversation') {
-      const scopeKey = request.query?.get('scopeKey');
-      const threadId = request.query?.get('threadId')?.trim();
-      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
-      const resolvedThreadId = this.conversationStore.threadId(scopeKey, threadId);
-      return {
-        status: 200,
-        body: {
-          threadId: resolvedThreadId,
-          messages: conversationWithCaptures({ conversationStore: this.conversationStore, stateStore: this.stateStore, cognitiveIntents: this.cognitiveIntents }, scopeKey, resolvedThreadId),
-          state: presentCompanionState(this.stateStore.snapshot(scopeKey), this.now()),
-        },
-      };
-    }
+    const conversationRead = dispatchConversationRead(request, { conversationStore: this.conversationStore, stateStore: this.stateStore, cognitiveIntents: this.cognitiveIntents, now: this.now });
+    if (conversationRead) return conversationRead;
 
     if (request.method === 'GET' && request.path === '/v1/agent/tasks') {
       const scopeKey = request.query?.get('scopeKey');
@@ -341,6 +334,7 @@ export class ShannonApiKernel {
       // Who can see or hear the reply. Absent: the owner alone, as before the field existed.
       const audience = chatAudienceTurn(body.audience);
       if (!audience || !validChatStream(body.stream)) return badRequest(audience ? 'stream is invalid' : 'audience is invalid');
+      if (!audience.alone) this.toolServer.audience.noteOthers(body.scopeKey);
       const message = body.message.trim();
       const placeOptions = validatedPlaceSearchOptions(message, body.placeLocation, this.now());
       if (placeOptions === false) return badRequest('placeLocation is invalid');
@@ -412,7 +406,7 @@ export class ShannonApiKernel {
           status: 200,
           body: {
             mode: this.chatModel.mode, model: this.chatModel.model, reply, threadId, turnId: experience.id,
-            snapshotVersion: captured.version, messageEmotion, systemPrompt, state: presentCompanionState(captured, occurredAt),
+            snapshotVersion: captured.version, messageEmotion, systemPrompt: withoutUnshownTitles(systemPrompt), state: presentCompanionState(captured, occurredAt),
             thread: this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId), audience: audience.audience,
             ...(session ? { uiBlocks: [{ type: 'organize_session' as const, session }] } : {}),
           } satisfies ChatResponse,
@@ -426,7 +420,7 @@ export class ShannonApiKernel {
           .request(placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt),
         ...(priorThreadSummary ? { priorThreadSummary } : {}),
         message,
-        ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...conversationTools(this.autonomy, body.scopeKey, 'text', audience.alone),
+        ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...conversationTools(this.autonomy, body.scopeKey, 'text', audience.alone, this.toolServer),
         ...(body.webSearch === true || placeSkill ? { useWebSearch: true } : {}),
         generateThreadTitle: this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
       });
@@ -436,7 +430,7 @@ export class ShannonApiKernel {
       const { messageEmotion, expressiveEmotion } = resolveTextReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt }, completion, audience.alone);
       const response: ChatResponse = {
         mode: completion.mode, model: completion.model, reply, threadId, audience: audience.audience,
-        snapshotVersion: captured.version, messageEmotion, systemPrompt,
+        snapshotVersion: captured.version, messageEmotion, systemPrompt: withoutUnshownTitles(systemPrompt), // Her unshown titles stay on the server.
         state: presentCompanionState(captured, occurredAt, expressiveEmotion),
         ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
       };
@@ -491,6 +485,7 @@ export class ShannonApiKernel {
       aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
       conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people, reactions: this.body.reactions, looks: this.body.turnLooks,
+      toolServer: this.toolServer,
     };
   }
   waitForBackground(scopeKey: string): Promise<void> { return this.background.waitForIdle(scopeKey); }

@@ -108,6 +108,10 @@ export async function streamedVoiceReply(
       } else if (value.type === 'response.output_text.done' && !reply && typeof value.text === 'string') {
         reply = value.text;
         await deliver(value.text);
+      } else if (value.type === 'response.function_call_arguments.delta' && call.allowToolCalls) {
+        // The arguments of a call are output too: the wait for the first word ends, and the idle bound applies.
+        firstOutput = true;
+        arm(call.bounds.idleMilliseconds, 'OPENAI_RESPONSE_IDLE_TIMEOUT');
       } else if (value.type === 'response.completed') {
         envelope = value.response;
       } else if (value.type === 'response.incomplete') {
@@ -124,7 +128,8 @@ export async function streamedVoiceReply(
     }
     reply = reply.trim();
     if (truncated) reply = completeSpokenSentences(reply) || reply;
-    if (envelope && call.allowToolCalls && !truncated && functionCallsOf(envelope).length) return { reply, envelope, truncated };
+    // A round that called her tools is not a failure, also when it was cut off: the rounds decide what to do with it.
+    if (envelope && call.allowToolCalls && functionCallsOf(envelope).length) return { reply, envelope, truncated };
     if (!reply || !envelope) {
       // The output limit was spent before any word (for example on reasoning): accounted, then failed.
       if (truncated) call.onSpentWithoutReply?.(envelope);

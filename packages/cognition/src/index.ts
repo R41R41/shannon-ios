@@ -63,6 +63,7 @@ export {
   isSeedPursuitId,
   pursuitKindLabel,
   seedPursuits,
+  withoutUnshownTitles,
   type ShannonOwnWork,
   type ShannonPursuit,
   type ShannonPursuitKind,

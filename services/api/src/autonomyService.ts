@@ -19,7 +19,6 @@ import {
 } from './autonomyBudget.js';
 import {
   autonomyModel, autonomyModelAllowedFor, autonomyModelChoices, autonomyModelCostUsd, isAutonomyModelPurpose,
-  type AutonomyModelChoice,
 } from './autonomyModels.js';
 import { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import { HostFolderOperations } from './hostFolderOperations.js';
@@ -29,9 +28,10 @@ import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyD
 import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './autonomyProposals.js';
 import type { PursuitDraft, PursuitRejection } from './autonomyPursuits.js';
 import { autonomyPacing } from './autonomyLoopConfig.js';
-import { autonomySessionView, type AutonomySessionView } from './autonomySessionView.js';
+import { autonomySessionView } from './autonomySessionView.js';
 import { SQLiteAutonomyStore, type AutonomyBudgetRequest } from './autonomyStore.js';
 import { StudyDesk } from './studyDesk.js';
+import { clip, pursuitStatusPhrase, type AutonomyOverview } from './autonomyServiceParts.js';
 
 /**
  * The live side of bounded autonomy: it hands `authorizeAutonomousAction` the current
@@ -67,21 +67,7 @@ export interface RecordedDecision extends AutonomyDecision {
   activityId: string;
 }
 
-export type AutonomyControlLabel = 'disabled' | 'paused' | 'active';
-
-export interface AutonomyOverview {
-  control: { state: AutonomyControlLabel; enabled: boolean; paused: boolean; changedAt: string | null };
-  /** What the activity loop is doing, in the words the owner's screens show. */
-  loop: AutonomyLoopStatus;
-  /** Her session or her rest (`autonomySessionView.ts`); absent under the fixed cycles and before her first session. */
-  session?: AutonomySessionView;
-  budget: AutonomyBudgetStatus;
-  budgetRequest: AutonomyBudgetRequest | null;
-  maximumExtraYen: number;
-  pursuits: readonly ShannonPursuit[];
-  modelChoices: readonly AutonomyModelChoice[];
-  proposals: readonly ShannonAgentTaskProposal[];
-}
+export type { AutonomyControlLabel, AutonomyOverview } from './autonomyServiceParts.js';
 
 export type AutonomyOwnerError =
   | 'BUDGET_REQUEST_NOT_FOUND' | 'BUDGET_REQUEST_DECIDED' | 'BUDGET_REQUEST_EXPIRED' | 'BUDGET_AMOUNT_INVALID'
@@ -221,6 +207,14 @@ export class ShannonAutonomyService {
   recordConversationAction(scopeKey: string, report: { summary: string; tool: string; outcome: 'done' | 'failed'; reasonCode?: string }): AutonomyActivityEntry {
     return this.record(scopeKey, {
       kind: 'action', actor: 'shannon', summary: report.summary, domain: SHANNON_CONVERSATION_ACTION_DOMAIN.id, tool: report.tool,
+      outcome: report.outcome, approval: 'not_needed', ...(report.reasonCode ? { reasonCode: report.reasonCode } : {}),
+    });
+  }
+
+  /** An own-time folder operation that closed after its loop step stopped waiting (late report, lease ran out): what became of it. */
+  recordLateFolderAction(scopeKey: string, report: { summary: string; tool: string; outcome: 'done' | 'failed'; reasonCode?: string }): AutonomyActivityEntry {
+    return this.record(scopeKey, {
+      kind: 'action', actor: 'shannon', summary: report.summary, domain: 'host_folder', tool: report.tool,
       outcome: report.outcome, approval: 'not_needed', ...(report.reasonCode ? { reasonCode: report.reasonCode } : {}),
     });
   }
@@ -489,11 +483,3 @@ export function createInMemoryAutonomyService(now: () => string, overrides: Part
   });
 }
 
-function pursuitStatusPhrase(status: ShannonPursuitStatus): string {
-  return { active: '続けることにしました', resting: '休ませました', done: 'やり終えました', dropped: 'やめました' }[status];
-}
-
-function clip(value: unknown, maximum: number): string {
-  const text = typeof value === 'string' ? value.replace(/\s+/gu, ' ').trim() : '';
-  return text.length > maximum ? `${text.slice(0, maximum - 1)}…` : text;
-}

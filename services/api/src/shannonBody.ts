@@ -227,6 +227,11 @@ export class ShannonBody {
     }
   }
 
+  /** True while the body last told the server that someone other than the owner can see or hear it. Throws when it cannot be read. */
+  othersPresent(scopeKey: string, at: string): boolean {
+    return this.store.othersPresent(scopeKey, at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds);
+  }
+
   /**
    * The block for an owner conversation turn: what the owner recently did to her body, as
    * dated facts. Empty when there is nothing recent, when ingestion is switched off, or

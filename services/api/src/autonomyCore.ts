@@ -143,6 +143,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/autonomyPursuits.ts',
     'services/api/src/autonomyProposals.ts',
     'services/api/src/autonomyService.ts',
+    'services/api/src/autonomyServiceParts.ts',
     'services/api/src/autonomyAnnouncer.ts',
     'services/api/src/apiAutonomyRoutes.ts',
     // The activity loop: every step it takes passes the gate, the budget, and the record.
@@ -169,6 +170,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/shannonToolTypes.ts',
     'services/api/src/shannonToolRunner.ts',
     'services/api/src/shannonToolSession.ts',
+    'services/api/src/shannonToolAudience.ts',
+    'services/api/src/conversationSecrets.ts',
     'services/api/src/shannonStudyTools.ts',
     'services/api/src/shannonFolderTools.ts',
     'services/api/src/hostFolderOperations.ts',

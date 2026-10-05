@@ -35,8 +35,26 @@ export function toolSessionMemory(): ToolSessionMemory {
   return { readDigests: new Map() };
 }
 
+/** True when `text` repeats a run of at least `length` characters of `source`, ignoring whitespace. */
+export function sharesPassage(text: string, source: string, length: number): boolean {
+  const compact = (value: string) => value.normalize('NFKC').replace(/\s+/gu, '');
+  const candidate = compact(text);
+  const original = compact(source);
+  if (candidate.length < length || original.length < length) return false;
+  for (let index = 0; index + length <= original.length; index += Math.max(1, Math.floor(length / 4))) {
+    if (candidate.includes(original.slice(index, index + length))) return true;
+  }
+  return candidate.includes(original.slice(-length));
+}
+
 export interface ToolExecutionContext extends ToolCallContext {
   memory: ToolSessionMemory;
+  /**
+   * In a conversation: the words of what the owner asked to keep secret and what he asked her to forget
+   * (`conversationSecrets.ts`). A write that repeats them is refused; `null` means the list could not be read,
+   * and every write is refused. Absent in her own time, whose plan already drops such inputs.
+   */
+  secrets?: readonly string[] | null;
 }
 
 export type ToolExecutor = (input: ToolInput, context: ToolExecutionContext) => PreparedToolCall | ToolResult;
@@ -44,4 +62,9 @@ export type ToolExecutor = (input: ToolInput, context: ToolExecutionContext) => 
 export function clip(value: string, maximum: number): string {
   const line = value.replace(/\s+/gu, ' ').trim();
   return line.length > maximum ? `${line.slice(0, maximum - 1)}…` : line;
+}
+
+/** A file cannot close the frame around it, or open a section of her prompt: the markers inside it lose their shape. */
+export function neutralMarkers(text: string): string {
+  return text.replace(/-{3}(?=\s*ここ(?:から|まで))/gu, '－－－').replace(/\[(?=道具の結果|ボクの道具|ボクの|ひとりの時間)/gu, '［');
 }

@@ -2,7 +2,7 @@ import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState
 import type { PreparedStep, StepDependencies, StepResult } from './autonomyLoopSteps.js';
 import type { AutonomyDecision } from './autonomyPolicy.js';
 import { toolGateRequest, toolRefusal } from './shannonToolGate.js';
-import { toolSessionMemory, type ToolSessionMemory } from './shannonToolTypes.js';
+import { neutralMarkers, toolSessionMemory, type ToolSessionMemory } from './shannonToolTypes.js';
 import { providerToolName, type ShannonToolDefinition } from './shannonTools.js';
 
 /**
@@ -89,17 +89,16 @@ export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyL
     request: toolGateRequest(tool, prepared.summary, prepared.folder),
     async perform(_adapters, _at, signal): Promise<StepResult> {
       const run = await prepared.run(signal);
-      const line = (extra?: string) => `- ${tool.name}: ${run.result.ok ? '' : `できなかった（${run.result.failure}）。`}${run.result.text}${extra ? `\n${extra}` : ''}${run.result.refusal ? `（${run.result.refusal.why}。${run.result.refusal.wouldWork}）` : ''}`;
-      const base: StepResult = {
+      let added: string | undefined;
+      const line = () => neutralMarkers(`- ${tool.name}: ${run.result.ok ? '' : `できなかった（${run.result.failure}）。`}${run.result.text}${added ? `\n${added}` : ''}${run.result.refusal ? `（${run.result.refusal.why}。${run.result.refusal.wouldWork}）` : ''}`);
+      return {
         outcome: run.result.ok ? 'done' : 'failed', summary: run.record.summary, tool: tool.name,
         ...(run.record.link ? { link: run.record.link } : {}),
         ...(run.result.ok ? {} : { reasonCode: run.record.reasonCode ?? run.result.failure ?? 'failed' }),
+        ...(run.apply && run.result.ok ? { commit: () => { added = run.apply!() || undefined; } } : {}),
+        // She is told the result only once it and its record are saved; otherwise that it did not happen.
+        settled: saved => results.add(cycle.id, saved ? line() : `- ${tool.name}: できなかった（failed）。結果を保存できなかった。`),
       };
-      if (!run.apply || !run.result.ok) {
-        results.add(cycle.id, line());
-        return base;
-      }
-      return { ...base, commit: () => { results.add(cycle.id, line(run.apply!() || undefined)); } };
     },
   };
 }

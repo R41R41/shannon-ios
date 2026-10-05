@@ -53,7 +53,7 @@ export interface StudyPiece {
   /** Set while the piece is in her study's trash: restorable, with every version kept. */
   deletedAt?: string;
   /**
-   * `room_look`: her note about one look at the owner's room. She may use it in her own thinking and recall it with the owner; it is never copied to her folder, and never written into a story as it is.
+   * `room_look`: her note about one look at the owner's room. She may use it in her own thinking and recall it with the owner; its text never goes into a file in her folder (coordinator decision 2026-10-05, checked by the v1 copy step and her folder tools), and it is never written into a story as it is.
    * `reach_out`: what she wrote down after a message of hers got no answer. Hers to think with; it is not material for a story or for a message.
    */
   origin?: StudyPieceOrigin;

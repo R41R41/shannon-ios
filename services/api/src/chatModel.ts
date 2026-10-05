@@ -18,7 +18,9 @@ import {
 } from './chatModelVoiceStream.js';
 import { completeSpokenSentences } from './spokenSentences.js';
 import { chatTurnRequestBody, chatTurnResult, offersTools, parsedChatTurn } from './chatModelTurn.js';
-import { VOICE_TOOL_INSTRUCTIONS, providerFunctionTools, withToolRounds, type ShannonModelToolSession } from './chatModelTools.js';
+import {
+  TOOL_ROUND_TIMEOUT_MILLISECONDS, TOOL_TURN_OUTPUT_TOKENS, VOICE_TOOL_INSTRUCTIONS, providerFunctionTools, withToolRounds, type ShannonModelToolSession,
+} from './chatModelTools.js';
 import {
   WEB_SEARCH_INSTRUCTIONS,
   errorDetail,
@@ -214,7 +216,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
           'content-type': 'application/json',
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(this.timeoutMilliseconds),
+        signal: AbortSignal.timeout(this.chatTimeout(request)),
       });
       const raw = await response.text();
       const json = parseJson(raw);
@@ -227,12 +229,21 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     return this.completedChatTurn(request, json);
   }
 
-  /** How a text turn's tool rounds end and are accounted: a round whose text is the whole structured turn is the answer. */
+  /**
+   * How a text turn's tool rounds end and are accounted: a round whose text is the whole structured turn is the answer.
+   * A provider that refuses the request offering her tools is asked once more without them.
+   */
   private chatRounds(request: ShannonChatModelRequest) {
     return {
       isAnswer: (envelope: unknown) => { try { parsedChatTurn(envelope); return true; } catch { return false; } },
       onSpent: (envelope: unknown) => this.recordChatUsage(request.scopeKey, envelope),
+      plainBody: chatTurnRequestBody(this.model, { ...request, tools: undefined }, this.options.agentHostHint),
     };
+  }
+
+  /** A round that may write a whole story in one call is given longer than an ordinary turn. */
+  private chatTimeout(request: ShannonChatModelRequest): number {
+    return offersTools(request) ? Math.max(this.timeoutMilliseconds, TOOL_ROUND_TIMEOUT_MILLISECONDS) : this.timeoutMilliseconds;
   }
 
   /**
@@ -247,7 +258,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     const envelope = await withToolRounds(chatTurnRequestBody(this.model, request, this.options.agentHostHint), offersTools(request) ? request.tools : undefined,
       body => streamedChatTurnEnvelope({
         fetcher: this.fetcher, endpoint: this.endpoint, apiKey: this.options.apiKey,
-        timeoutMilliseconds: this.timeoutMilliseconds, body,
+        timeoutMilliseconds: this.chatTimeout(request), body,
       }, onReplyText, failed => {
         // A failed response is recorded only when the provider reported what it used.
         if (responseUsage(failed).totalTokens > 0) this.recordChatUsage(request.scopeKey, failed);
@@ -292,7 +303,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       const value = parseJson(raw);
       if (!response.ok) throw new Error(`OPENAI_RESPONSE_${response.status}: ${errorDetail(value)}`);
       return value;
-    }, { isAnswer: () => false, onSpent: envelope => { said.push(extractOutputText(envelope).trim()); this.recordChatUsage(request.scopeKey, envelope); } });
+    }, { isAnswer: () => false, plainBody: this.voiceRequestPayload({ ...request, tools: undefined }), onSpent: envelope => { said.push(extractOutputText(envelope).trim()); this.recordChatUsage(request.scopeKey, envelope); } });
     if (voiceContentWithheld(json)) {
       this.recordSpentVoiceUsage(request.scopeKey, json);
       throw new Error(VOICE_CONTENT_FILTERED);
@@ -328,7 +339,10 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
         onSpentWithoutReply: envelope => this.recordSpentVoiceUsage(request.scopeKey, envelope),
       }, onTextDelta);
       return last.envelope;
-    }, { isAnswer: () => false, ...(signal ? { signal } : {}), onSpent: envelope => { said.push(last?.reply ?? ''); this.recordChatUsage(request.scopeKey, envelope); } });
+    }, {
+      isAnswer: () => false, ...(signal ? { signal } : {}), plainBody: this.voiceRequestPayload({ ...request, tools: undefined }),
+      onSpent: envelope => { said.push(last?.reply ?? ''); this.recordChatUsage(request.scopeKey, envelope); },
+    });
     const outcome = last!;
     const reply = [...said, outcome.reply].filter(Boolean).join('');
     if (!reply) throw new Error('OPENAI_RESPONSE_STREAM_INCOMPLETE');
@@ -381,7 +395,8 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       ],
       reasoning: { effort: complex ? 'low' : 'none' },
       text: { verbosity: complex ? 'medium' : 'low' },
-      max_output_tokens: maximumOutputTokens,
+      // A turn with her tools may write a whole story in one call; how long she speaks is still the instructions'.
+      max_output_tokens: tools ? Math.max(maximumOutputTokens, TOOL_TURN_OUTPUT_TOKENS) : maximumOutputTokens,
       ...(request.useWebSearch ? {
         tools: [{ type: 'web_search', search_context_size: complex ? 'medium' : 'low' }],
         tool_choice: { type: 'web_search' },

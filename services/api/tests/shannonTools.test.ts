@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { createInitialCompanionState } from '@shannon/cognition';
+import { conversationSecrets } from '../src/conversationSecrets.js';
 import { configuredAutonomy } from '../src/autonomyBudget.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
@@ -164,5 +166,40 @@ describe('the study tools', () => {
     expect(recorded.map(entry => entry.tool)).toEqual(expect.arrayContaining(['study.create', 'study.read', 'study.update', 'study.list']));
     expect(recorded.filter(entry => entry.outcome === 'failed')).toHaveLength(2);
     expect(recorded.map(entry => entry.summary)).toContain('書斎のまだ見せていない物語を読みました。');
+  });
+});
+
+describe('what her writes from a conversation must not repeat', () => {
+  it('refuses a write that repeats what the owner asked to keep secret or to forget, and every write while the list cannot be read', async () => {
+    const { service, store } = harness();
+    const call = (name: string, input: unknown, secrets: readonly string[] | null) =>
+      service.tools.call(name, JSON.stringify(input), { scopeKey: scope, surface: 'text', audience: 'owner_alone', memory: toolSessionMemory(), secrets });
+    const secrets = ['ユーザーはウォンバット会に入っている'];
+    const refused = await call('study.create', { kind: 'note', title: '会のこと', body: 'ライ氏はウォンバット会に入っているらしい。' }, secrets);
+    expect(refused).toMatchObject({ ok: false, failure: 'refused', retryable: false, refusal: { why: expect.stringContaining('内緒'), wouldWork: expect.stringContaining('除いて') } });
+    expect(await call('study.create', { kind: 'note', title: 'ウォンバット会', body: '動物の話' }, secrets)).toMatchObject({ ok: false, failure: 'refused' });
+    expect(store.study.list(scope)).toEqual([]);
+    expect(await call('study.create', { kind: 'note', title: '散歩', body: '公園を歩いた。' }, null)).toMatchObject({ ok: false, failure: 'unavailable', retryable: true });
+    expect(await call('study.create', { kind: 'note', title: '散歩', body: '公園を歩いた。' }, secrets)).toMatchObject({ ok: true });
+    // Reading is not writing: it is never refused for this.
+    expect(await call('study.list', { query: 'ウォンバット' }, secrets)).toMatchObject({ ok: true });
+  });
+
+  it('lists the words of secret, hand-marked and forgotten items, and nothing else of his', () => {
+    const at = '2026-10-05T00:00:00.000Z';
+    const base = createInitialCompanionState('owner', at);
+    const state = {
+      ...base,
+      userFacts: [
+        { id: 'secret', statement: 'ユーザーはウォンバット会に入っている', confidence: 0.9, observedAt: at, disclosure: { category: 'secret' as const } },
+        { id: 'marked', statement: 'ユーザーはアルマジロを集めている', confidence: 0.9, observedAt: at, disclosure: { decidedBy: 'owner' as const, sensitivity: 'sensitive' as const } },
+        { id: 'forgotten', statement: 'ユーザーはカピバラ基金に寄付した', confidence: 0.9, observedAt: at },
+        { id: 'open', statement: 'ユーザーは紅茶が好き', confidence: 0.9, observedAt: at },
+      ],
+      memoryControls: [{ memoryId: 'forgotten', kind: 'user-fact' as const, status: 'forgotten' as const, pinned: false, updatedAt: at, changeReason: 'forget' }],
+    };
+    const words = conversationSecrets(state as typeof base, { experienceCandidates: () => [] }, scope);
+    expect(words).toEqual(expect.arrayContaining(['ユーザーはウォンバット会に入っている', 'ユーザーはアルマジロを集めている', 'ユーザーはカピバラ基金に寄付した']));
+    expect(words).not.toContain('ユーザーは紅茶が好き');
   });
 });

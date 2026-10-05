@@ -240,10 +240,12 @@ export class ShannonAutonomyLoop {
   ): void {
     const { store, service } = this.dependencies;
     const usage = result.usage && prepared.request.paid ? { ...result.usage, ...(prepared.purpose ? { purpose: prepared.purpose } : {}) } : undefined;
+    let saved = false;
     try {
       store.transaction(() => {
         // Already closed means another runner took the lease and abandoned it; it is not counted twice.
         if (!store.loop.finishStep(row.id, 'reported', at)) return;
+        saved = true;
         const committed = (result.commit?.(plan, at) || undefined) as StepCommit | undefined;
         const link = committed?.link ?? result.link;
         service.recordAction(this.scopeKey, {
@@ -259,6 +261,7 @@ export class ShannonAutonomyLoop {
         if (rethought ?? committed?.plan) store.loop.setPlan(cycle.id, rethought ?? committed!.plan!, false);
       });
     } catch {
+      saved = false;
       // The product could not be saved. The call was still made, so its cost is still reported.
       try {
         store.transaction(() => {
@@ -269,6 +272,7 @@ export class ShannonAutonomyLoop {
         });
       } catch { /* left `authorized`; the next tick closes it as abandoned */ }
     }
+    try { result.settled?.(saved); } catch { /* what she is told next is optional */ }
   }
 
   private refused(

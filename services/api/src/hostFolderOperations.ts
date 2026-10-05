@@ -16,12 +16,18 @@ import type { SQLiteAutonomyStore } from './autonomyStore.js';
  *
  * The record: an operation from a conversation is written to the activity record when it closes (whatever closes
  * it: report, lease running out, or the tool giving up), with counts and never content. An operation from her own
- * time is recorded by its loop step against the gate's decision.
+ * time is recorded by its loop step against the gate's decision; when it closes after the step stopped waiting for
+ * it (a late report, a lease that ran out), that close is recorded here too (ADR-0002: every action is recorded).
+ *
+ * Hand-out: one conversation operation at a time, and it is never held back by a step of her own time or a v1 copy
+ * the device still holds (a device claims only when it is free, so such a step is one it lost). Her own time's
+ * operations and v1 copies go one at a time, and only while no conversation operation is held.
  */
 export const HOST_PRESENCE_MILLISECONDS = 40_000;
 export const HOST_CLAIM_MAXIMUM_WAIT_SECONDS = 25;
 const LEASE_SECONDS: Readonly<Record<HostOperationOrigin, number>> = Object.freeze({ conversation: 15, autonomy: 60 });
-const RESULT_RETENTION_MILLISECONDS = 120_000;
+/** How often the API process closes stale operations and prunes results and old rows, also when no device calls. */
+const MAINTENANCE_MILLISECONDS = 30_000;
 const CLAIM_POLL_MILLISECONDS = 500;
 const RUN_POLL_MILLISECONDS = 200;
 
@@ -44,6 +50,8 @@ export interface HostOperationRequest {
 
 export interface HostOperationRecorder {
   recordConversationAction(scopeKey: string, report: { summary: string; tool: string; outcome: 'done' | 'failed'; reasonCode?: string }): unknown;
+  /** An own-time folder operation that closed after its step stopped waiting. */
+  recordLateFolderAction(scopeKey: string, report: { summary: string; tool: string; outcome: 'done' | 'failed'; reasonCode?: string }): unknown;
 }
 
 /** In-process wake-ups: a queued operation wakes a held claim, a report wakes the waiting tool. Other processes are polled. */
@@ -92,6 +100,7 @@ export class HostFolderOperations {
 
   /** Whether a tool call for this host could be handed to its device now. */
   presence(scopeKey: string, host: string, operation?: HostOperation): 'present' | 'not_bound' | 'offline' | 'stopped' | 'unsupported' {
+    this.maintain();
     const bound = (this.config.places.hostDevices ?? {})[host];
     if (!bound || !Object.hasOwn(this.config.places.hostDevices ?? {}, host)) return 'not_bound';
     const seen = this.store.hostOperations.presence(scopeKey, host);
@@ -122,6 +131,7 @@ export class HostFolderOperations {
     // Not taken in time: it is dropped so it never runs later. Taken: it may still finish, and is recorded when it does.
     const dropped = this.store.transaction(() => {
       const current = this.store.hostOperations.get(scopeKey, row.id);
+      if (current?.status === 'leased') this.store.hostOperations.markWaiterGone(scopeKey, row.id);
       if (current?.status !== 'queued') return current;
       this.close(scopeKey, current, 'dropped', this.now());
       return null;
@@ -181,9 +191,14 @@ export class HostFolderOperations {
     const fromV2 = this.store.transaction(() => {
       this.sweep(scopeKey, at);
       this.copies.closeOverdue(scopeKey, at);
-      if (this.store.hostOperations.leased(scopeKey, host) || this.store.hostSteps.leased(scopeKey, host)) return 'busy' as const;
+      const ops = this.store.hostOperations;
+      // A conversation's operation goes first and is not held back by anything else the device holds.
+      if (ops.leased(scopeKey, host, 'conversation')) return 'busy' as const;
+      const asked = ops.nextQueued(scopeKey, host, operations, at, 'conversation');
+      const otherHeld = ops.leased(scopeKey, host, 'autonomy') || this.store.hostSteps.leased(scopeKey, host);
+      if (!asked && otherHeld) return 'busy' as const;
       // Her own time's operations wait while she is switched off or paused; a conversation's are the owner's own requests.
-      const row = this.store.hostOperations.nextQueued(scopeKey, host, operations, at, this.config.enabled && !this.paused(scopeKey));
+      const row = asked ?? (this.config.enabled && !this.paused(scopeKey) ? ops.nextQueued(scopeKey, host, operations, at, 'autonomy') : null);
       if (!row) return null;
       const expiresAt = new Date(Date.parse(at) + row.leaseSeconds * 1_000).toISOString();
       if (!this.store.hostOperations.lease(scopeKey, row.id, deviceId, expiresAt)) return null;
@@ -196,25 +211,47 @@ export class HostFolderOperations {
     return copy === 'HOST_NOT_BOUND' ? null : copy.step;
   }
 
-  /** Closes leases that ran out and queued operations nobody waits for, and forgets untaken results. */
+  /** Closes leases that ran out and queued operations nobody waits for, and prunes results and old rows. */
   private sweep(scopeKey: string, at: string): void {
     for (const row of this.store.hostOperations.stale(scopeKey, at)) this.close(scopeKey, row, row.status === 'leased' ? 'expired' : 'dropped', at);
-    this.store.hostOperations.forgetResults(scopeKey, new Date(Date.parse(at) - RESULT_RETENTION_MILLISECONDS).toISOString());
+    this.store.hostOperations.prune(at);
+  }
+
+  /** The sweep of every scope with an open operation. Never throws. */
+  maintain(): void {
+    try {
+      const at = this.now();
+      this.store.transaction(() => {
+        for (const scopeKey of this.store.hostOperations.openScopes()) this.sweep(scopeKey, at);
+        this.store.hostOperations.prune(at);
+      });
+    } catch { /* the next call or tick tries again */ }
+  }
+
+  /** The API process sweeps on a timer too, so nothing is held past its retention when no device or tool calls. */
+  startMaintenance(intervalMilliseconds = MAINTENANCE_MILLISECONDS): () => void {
+    const timer = setInterval(() => this.maintain(), intervalMilliseconds);
+    timer.unref();
+    return () => clearInterval(timer);
   }
 
   private close(scopeKey: string, row: HostOperationRow, status: 'done' | 'failed' | 'refused' | 'expired' | 'dropped', at: string, detail: { code?: HostStepCode; result?: HostOperationResult } = {}): void {
     if (!this.store.hostOperations.close(scopeKey, row.id, status, at, detail)) return;
-    if (row.origin !== 'conversation') return;
+    // Her own time: the step records what it waited for; what closes after it stopped waiting is recorded here.
+    const late = row.origin === 'autonomy' && (status === 'expired' || this.store.hostOperations.get(scopeKey, row.id)?.waiterGone === true);
+    if (row.origin !== 'conversation' && !late) return;
     const place = `自分のフォルダ（${row.host}）`;
     const target = `「${row.relativePath || 'いちばん上'}」`;
     const name = `${place}での${NAMES[row.operation]}（${target}${row.toRelativePath !== undefined ? `→「${row.toRelativePath}」` : ''}）`;
-    this.recorder.recordConversationAction(scopeKey, {
-      tool: row.tool, outcome: status === 'done' ? 'done' : 'failed', ...(detail.code ? { reasonCode: detail.code } : status === 'done' ? {} : { reasonCode: status }),
-      summary: status === 'done' ? `${place}の${target}${DONE[row.operation](row.toRelativePath ?? '')}${resultFacts(row.operation, detail.result)}。`
+    const report = {
+      tool: row.tool, outcome: status === 'done' ? 'done' as const : 'failed' as const, ...(detail.code ? { reasonCode: detail.code } : status === 'done' ? {} : { reasonCode: status }),
+      summary: (late ? '（自分の時間に頼んだもの。待つのをやめたあとで閉じた）' : '') + (status === 'done' ? `${place}の${target}${DONE[row.operation](row.toRelativePath ?? '')}${resultFacts(row.operation, detail.result)}。`
         : status === 'expired' ? `${name}を端末に渡しましたが、時間内に結果が届きませんでした。どうなったかは分かりません。`
           : status === 'dropped' ? `${name}は、端末が受け取らなかったのでやめました。`
-            : `${name}はできませんでした（${HOST_STEP_CODES[detail.code ?? 'unknown']}）。`,
-    });
+            : `${name}はできませんでした（${HOST_STEP_CODES[detail.code ?? 'unknown']}）。`),
+    };
+    if (late) this.recorder.recordLateFolderAction(scopeKey, report);
+    else this.recorder.recordConversationAction(scopeKey, report);
   }
 
   private finished(scopeKey: string, row: HostOperationRow): HostRunOutcome {

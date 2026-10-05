@@ -54,7 +54,7 @@ import {
 export { voiceConversationInstructions } from './voiceConversationInstructions.js';
 import { temporaryGuestVoiceInstructions, voiceConversationInstructions } from './voiceConversationInstructions.js';
 import { guestSpeakerReminder, guestTurnPositionInstruction, ownerCompanionPresenceInstructions } from './voiceIntroductionInstructions.js';
-import { applyGuestAddressing, guestAddressDecision, guestCallHistory, GUEST_CALL_MODEL_TURNS } from './voiceGuestCall.js';
+import { applyGuestAddressing, boundedVoiceHistory, guestAddressDecision, guestCallHistory, GUEST_CALL_MODEL_TURNS } from './voiceGuestCall.js';
 export { realtimeVoiceSessionProjection, type VoiceParticipantMode } from './voiceSessionProjection.js';
 import type { VoiceParticipantMode } from './voiceSessionProjection.js';
 import { companionPresentInstructions, ownerSaysCompanionPresent, speakTimePrivacyCheck } from './voiceCompanionPresence.js';
@@ -64,7 +64,8 @@ import { DisclosureGate, sharedDailyFocus } from './memoryDisclosure.js';
 import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
 import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
-import { asksAboutOwnThings, conversationTools } from './shannonToolSession.js'; import type { ShannonToolRunner } from './shannonToolRunner.js';
+import type { ShannonToolRunner } from './shannonToolRunner.js';
+import { asksAboutOwnThings, conversationTools, type ConversationToolServer } from './shannonToolSession.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
   /** Looking through her body's camera or the app's (`voiceAppLook.ts`); absent, a voice turn never looks. */
@@ -86,6 +87,8 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   people?: PeopleMemory;
   /** Her line from a touch (`bodyReaction.ts`), named by the first voice turn that answers it. */
   reactions?: { link(scopeKey: string, reactionId: unknown): { text: string; threadId: string | null } | null };
+  /** Others present as the server knows them, and what her writes must not repeat; absent, no tool is offered. */
+  toolServer?: ConversationToolServer;
 }
 
 export interface LiveVoiceStreamObserver {
@@ -151,6 +154,7 @@ async function completeLiveVoiceDelegation(
   const present: MemoryAudience = temporaryGuest ? guestPresence?.present ?? UNKNOWN_GUEST_PRESENCE
     : deviceContext?.companionPresent === true || ownerSaysCompanionPresent(transcript) ? UNKNOWN_GUEST_PRESENCE : OWNER_AUDIENCE;
   const alone = isOwnerOnly(present);
+  if (!alone) dependencies.toolServer?.audience.noteOthers(scopeKey);
   // A client that predates people memory tells the friend that no owner memory is used; keep that promise for it.
   const legacyGuest = temporaryGuest && guestPresence?.recorded !== true;
   const routingHistory = temporaryGuest ? guestHistory
@@ -373,7 +377,7 @@ async function completeLiveVoiceDelegation(
     scopeKey, ...replayed,
     // What she said when she was touched is what he is answering: it precedes his words, in every mode, as context only.
     ...(reactionLine ? { history: [...replayed.history, { role: 'assistant' as const, content: reactionLine }] } : {}),
-    message: transcript, ...conversationTools(dependencies.autonomy, scopeKey, 'voice', alone && !temporaryGuest && asksAboutOwnThings(transcript)),
+    message: transcript, ...conversationTools(dependencies.autonomy, scopeKey, 'voice', alone && !temporaryGuest && asksAboutOwnThings(transcript), dependencies.toolServer),
     useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   };
@@ -487,14 +491,4 @@ async function completeLiveVoiceDelegation(
       },
     },
   };
-}
-
-function boundedVoiceHistory(
-  history: readonly { role: 'user' | 'assistant'; content: string }[],
-  limit: number,
-): Array<{ role: 'user' | 'assistant'; content: string }> {
-  return history.slice(-limit).map(item => ({
-    role: item.role,
-    content: Array.from(item.content.trim().replace(/\s+/gu, ' ')).slice(0, 600).join(''),
-  })).filter(item => item.content.length > 0);
 }

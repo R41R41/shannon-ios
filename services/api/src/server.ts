@@ -99,6 +99,8 @@ const autonomy = new ShannonAutonomyService({
   announcer: autonomyAnnouncer, agentTasks: agentTaskStore, defaultThread: scopeKey => persistentStore.threadId(scopeKey),
   defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST?.trim() || null,
 });
+// Her folder's operations (docs/host-folder-contract.md): stale ones are closed and results pruned also when no device or tool calls.
+const stopFolderMaintenance = autonomy.folderOperations.startMaintenance();
 const backgroundDispatcher = new DurableBackgroundDispatcher(persistentStore, persistentStore);
 const voyagerCatalog = createConfiguredVoyagerCatalog(process.env);
 // The owner's upcoming items (docs/calendar-contract.md): calendar snapshots from the apps, promises, dated Voyager tasks when configured.
@@ -387,6 +389,7 @@ function shutdown(): void {
     cognitiveIntentStore.close();
     conversationOrchestrationStore.close();
     peopleMemoryStore.close();
+    stopFolderMaintenance();
     autonomyAnnouncer.close();
     bodyStore.close();
     reachOuts.close();

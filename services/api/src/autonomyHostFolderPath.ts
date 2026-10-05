@@ -99,8 +99,9 @@ export function hasTextExtension(name: string): boolean {
 }
 
 /**
- * A note, or a story whose current version she has called 「見せてもいい」. Never a draft, never a piece put away,
- * and never her note about a look at the room: what she saw of the owner's room is not put into a file.
+ * What the v1 copy step queues: a note, or a story whose current version she has called 「見せてもいい」. Never a draft
+ * and never a piece put away. Her folder tools may write anything of hers (owner decision 2026-10-05), with one exception
+ * that holds here too (coordinator decision 2026-10-05): the text of a note about a look at the room never goes into a file.
  */
 export function copyableStudyPiece(piece: StudyPiece): boolean {
   if (piece.status === 'put_away' || piece.readableVersion !== piece.version || piece.origin === 'room_look') return false;

@@ -143,3 +143,14 @@ export function applyGuestAddressing(
   }
   return decision;
 }
+
+/** The last `limit` turns of a history, each one line of at most 600 characters (the voice router's and a guest call's window). */
+export function boundedVoiceHistory(
+  history: readonly { role: 'user' | 'assistant'; content: string }[],
+  limit: number,
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  return history.slice(-limit).map(item => ({
+    role: item.role,
+    content: Array.from(item.content.trim().replace(/\s+/gu, ' ')).slice(0, 600).join(''),
+  })).filter(item => item.content.length > 0);
+}

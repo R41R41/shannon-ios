@@ -18,6 +18,13 @@ export interface ShannonModelToolSession {
 /** A conversation turn uses at most this many tools. */
 export const CONVERSATION_TOOL_CALLS = 6;
 
+/**
+ * The output ceiling of a turn that offers her tools: room for the longest write in one call (a story of 4,000
+ * characters, a file of 6,000) with its reply. A round under it may take longer, so it gets its own time bound.
+ */
+export const TOOL_TURN_OUTPUT_TOKENS = 8_000;
+export const TOOL_ROUND_TIMEOUT_MILLISECONDS = 90_000;
+
 export const TOOL_INSTRUCTIONS = [
   '[ボクの道具]',
   '書斎（自分のメモと物語）と、ライ氏のPCにある自分のフォルダを扱う道具がある。必要な時だけ、自分で選んで使う。',
@@ -47,26 +54,68 @@ export function functionCallsOf(envelope: unknown): ProviderFunctionCall[] {
   });
 }
 
+/** A response the provider cut off at its output ceiling: a call in it may carry half its arguments. */
+export function cutOffResponse(envelope: unknown): boolean {
+  const value = envelope && typeof envelope === 'object' ? envelope as { status?: unknown; incomplete_details?: { reason?: unknown } | null } : null;
+  return value?.status === 'incomplete' && value.incomplete_details?.reason === 'max_output_tokens';
+}
+
+/** Told once to the model when a call was cut off: nothing ran, and the rounds end. */
+export const CUT_OFF_CALL_NOTE = 'さっきの道具の呼び出しは、書く中身が長すぎて途中で切れたので、実行しなかった。いまは道具を使わずに答える。書くなら、中身を短くするか分けて、あとで改めて書く。';
+
+/** A 4xx of the provider that may be about the tools offered (not authentication, rate or conflict). */
+function refusedOffer(error: unknown): string | null {
+  const code = error instanceof Error ? /^OPENAI_RESPONSE_(4\d\d)\b/u.exec(error.message)?.[1] : undefined;
+  return code && !['401', '403', '408', '409', '429'].includes(code) ? code : null;
+}
+
+export interface ToolRoundOptions {
+  isAnswer: (envelope: unknown) => boolean;
+  onSpent?: (envelope: unknown) => void;
+  signal?: AbortSignal;
+  /** The same request without her tools: sent once when the provider refuses the request that offers them. */
+  plainBody?: Record<string, unknown>;
+  /** A content-free line for the service log. */
+  log?: (line: string) => void;
+}
+
 /**
  * Sends `body`, and while the response asks for functions (and is not already a whole answer), runs them and
  * sends again with the calls and their results added to the input. Returns the last response. `onSpent` sees
  * every response before the last, for usage.
+ *
+ * A response cut off at the output ceiling runs none of its calls: the model is told so once and answers without
+ * tools. A 4xx refusal of a request that offers tools is sent once more as `plainBody`, and its code is logged.
  */
 export async function withToolRounds(
   body: Record<string, unknown>,
   session: ShannonModelToolSession | undefined,
   send: (body: Record<string, unknown>) => Promise<unknown>,
-  options: { isAnswer: (envelope: unknown) => boolean; onSpent?: (envelope: unknown) => void; signal?: AbortSignal },
+  options: ToolRoundOptions,
 ): Promise<unknown> {
   if (!session) return send(body);
   const input = Array.isArray(body.input) ? [...body.input as unknown[]] : [];
   let used = 0;
+  let toolsOff = false;
+  const attempt = async (request: Record<string, unknown>) => {
+    try { return { envelope: await send(request) }; } catch (error) {
+      const code = refusedOffer(error);
+      if (!code || !options.plainBody) throw error;
+      (options.log ?? (line => console.warn(line)))(`Shannon tools offer refused by provider: ${code}`);
+      return { envelope: await send(options.plainBody), plain: true };
+    }
+  };
   for (;;) {
-    const exhausted = used >= session.maximumCalls;
-    const envelope = await send({ ...body, input, ...(exhausted ? { tool_choice: 'none' } : {}) });
+    const exhausted = toolsOff || used >= session.maximumCalls;
+    const { envelope, plain } = await attempt({ ...body, input, ...(exhausted ? { tool_choice: 'none' } : {}) });
     const calls = functionCallsOf(envelope);
-    if (exhausted || !calls.length || options.isAnswer(envelope)) return envelope;
+    if (plain || exhausted || !calls.length || options.isAnswer(envelope)) return envelope;
     options.onSpent?.(envelope);
+    if (cutOffResponse(envelope)) {
+      input.push({ role: 'developer', content: CUT_OFF_CALL_NOTE });
+      toolsOff = true;
+      continue;
+    }
     for (const call of calls) {
       options.signal?.throwIfAborted();
       const output = used < session.maximumCalls

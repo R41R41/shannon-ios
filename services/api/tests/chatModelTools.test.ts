@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { OpenAIResponsesChatModel } from '../src/chatModel.js';
-import { CONVERSATION_TOOL_CALLS, functionCallsOf, withToolRounds, type ShannonModelToolSession } from '../src/chatModelTools.js';
+import { CONVERSATION_TOOL_CALLS, CUT_OFF_CALL_NOTE, TOOL_TURN_OUTPUT_TOKENS, functionCallsOf, withToolRounds, type ShannonModelToolSession } from '../src/chatModelTools.js';
+import { FOLDER_WRITE_CHARACTERS } from '../src/shannonTools.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';
 import { shannonTool } from '../src/shannonTools.js';
 
@@ -24,6 +25,9 @@ function scriptedFetch(responses: unknown[]) {
   const fetcher = (async (_url: string, init: { body: string }) => {
     bodies.push(JSON.parse(init.body));
     const next = responses.shift();
+    if (next && typeof next === 'object' && 'status' in next && typeof (next as { status: unknown }).status === 'number') {
+      return new Response(JSON.stringify({ error: { message: 'bad tools' } }), { status: (next as { status: number }).status });
+    }
     return typeof next === 'string' ? new Response(next, { status: 200 }) : new Response(JSON.stringify(next), { status: 200 });
   }) as unknown as typeof fetch;
   return { fetcher, bodies };
@@ -110,5 +114,114 @@ describe('her tools in a voice turn', () => {
     await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: searching.fetcher }).generateVoiceStreaming(
       { ...base, useWebSearch: true, conversationClass: 'direct', tools: tools.value }, () => {});
     expect((searching.bodies[0]!.tools as Array<{ type: string }>).map(tool => tool.type)).toEqual(['web_search']);
+  });
+});
+
+const sse = (events: unknown[]) => events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('');
+const cutOff = (output: unknown[]) => ({ status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' }, output });
+
+describe('a write that does not fit one response', () => {
+  it('never runs a call cut off at the output ceiling: the model is told once, and answers without tools', async () => {
+    const tools = session();
+    const { fetcher, bodies } = scriptedFetch([
+      cutOff([{ ...functionCall('study_create', '{"kind":"story","title":"長い話","body":"むかしむかし'), status: 'incomplete' }]),
+      { output: [message(TURN)] },
+    ]);
+    const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher }).generate({ ...base, tools: tools.value });
+    expect(tools.calls).toEqual([]);
+    expect(result.reply).toBe('書斎にメモが1つあります。');
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]!.tool_choice).toBe('none');
+    const input = bodies[1]!.input as Array<Record<string, unknown>>;
+    expect(input.filter(item => item.content === CUT_OFF_CALL_NOTE)).toHaveLength(1);
+    expect(input.some(item => item.type === 'function_call')).toBe(false);
+  });
+
+  it('gives a turn with tools room for the longest write, and keeps a file write inside what one response can carry', () => {
+    expect(chatTurnRequestBody('gpt-5.6-luna', { ...base, tools: session().value }, undefined).max_output_tokens).toBe(TOOL_TURN_OUTPUT_TOKENS);
+    expect(chatTurnRequestBody('gpt-5.6-luna', base, undefined).max_output_tokens).toBe(2_200);
+    expect(shannonTool('folder.create')!.input.properties.content).toMatchObject({ maxLength: FOLDER_WRITE_CHARACTERS });
+    expect(shannonTool('folder.update')!.input.properties.content).toMatchObject({ maxLength: FOLDER_WRITE_CHARACTERS });
+    expect(FOLDER_WRITE_CHARACTERS).toBeLessThanOrEqual(TOOL_TURN_OUTPUT_TOKENS);
+    expect(shannonTool('folder.create')!.input.properties.content!.description).toContain('6,000字まで');
+  });
+
+  it('in voice: the arguments of a call count as output for the first-word bound, and a cut-off call does not fail the turn', async () => {
+    const tools = session();
+    const { fetcher, bodies } = scriptedFetch([
+      sse([
+        { type: 'response.output_text.delta', delta: 'ちょっと書いてみるね。' },
+        { type: 'response.function_call_arguments.delta', delta: '{"kind":"story"' },
+        { type: 'response.incomplete', response: cutOff([message('ちょっと書いてみるね。'), functionCall('study_create', '{"kind":"story"')]) },
+      ]),
+      sse([
+        { type: 'response.output_text.delta', delta: '長すぎたので、分けて書きます。' },
+        { type: 'response.completed', response: { output: [message('長すぎたので、分けて書きます。')] } },
+      ]),
+    ]);
+    const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher }).generateVoiceStreaming(
+      { ...base, useWebSearch: false, conversationClass: 'direct', tools: tools.value }, () => {});
+    expect(result.reply).toBe('ちょっと書いてみるね。長すぎたので、分けて書きます。');
+    expect(tools.calls).toEqual([]);
+    expect(bodies[0]!.max_output_tokens).toBe(TOOL_TURN_OUTPUT_TOKENS);
+    expect(bodies[1]!.tool_choice).toBe('none');
+  });
+
+  it('in voice: a stream that sends only call arguments for longer than the first-word bound is not cut off', async () => {
+    const tools = session();
+    const encoder = new TextEncoder();
+    const slowFetch = (async (_url: string, init: { body: string }) => {
+      const body = JSON.parse(init.body) as { tool_choice?: unknown };
+      const events = body.tool_choice === 'none'
+        ? [{ type: 'response.output_text.delta', delta: 'メモが1つあります。' }, { type: 'response.completed', response: { output: [message('メモが1つあります。')] } }]
+        : [
+          { type: 'response.function_call_arguments.delta', delta: '{' },
+          { type: 'response.function_call_arguments.delta', delta: '}' },
+          { type: 'response.completed', response: { output: [functionCall('study_list')] } },
+        ];
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          for (const event of events) {
+            await new Promise(resolve => setTimeout(resolve, 40));
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          }
+          controller.close();
+        },
+      });
+      return new Response(stream, { status: 200 });
+    }) as unknown as typeof fetch;
+    const model = new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: slowFetch, voiceStreamBounds: { firstOutputMilliseconds: 60, idleMilliseconds: 1_000 } });
+    const tooled = { ...tools.value, maximumCalls: 1 };
+    const result = await model.generateVoiceStreaming({ ...base, useWebSearch: false, conversationClass: 'direct', tools: tooled }, () => {});
+    expect(tools.calls).toHaveLength(1);
+    expect(result.reply).toBe('メモが1つあります。');
+  });
+});
+
+describe('a provider that refuses the request offering her tools', () => {
+  it('is asked once more without them, in text and in voice, and the code is logged', async () => {
+    const lines: string[] = [];
+    const tools = session();
+    const text = scriptedFetch([{ status: 400 }, { output: [message(TURN)] }]);
+    const original = console.warn;
+    console.warn = (line: string) => { lines.push(line); };
+    try {
+      const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: text.fetcher }).generate({ ...base, tools: tools.value });
+      expect(result.reply).toBe('書斎にメモが1つあります。');
+      expect(text.bodies[0]).toHaveProperty('tools');
+      expect(text.bodies[1]).not.toHaveProperty('tools');
+      expect(String(text.bodies[1]!.instructions)).not.toContain('[ボクの道具]');
+      const voice = scriptedFetch([{ status: 422 }, sse([{ type: 'response.output_text.delta', delta: 'はい。' }, { type: 'response.completed', response: { output: [message('はい。')] } }])]);
+      const spoken = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: voice.fetcher }).generateVoiceStreaming(
+        { ...base, useWebSearch: false, conversationClass: 'direct', tools: tools.value }, () => {});
+      expect(spoken.reply).toBe('はい。');
+      expect(voice.bodies[1]).not.toHaveProperty('tools');
+      // Not for a rate limit: that is not about the tools.
+      const limited = scriptedFetch([{ status: 429 }]);
+      await expect(new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: limited.fetcher }).generate({ ...base, tools: tools.value })).rejects.toThrow('OPENAI_RESPONSE_429');
+      expect(limited.bodies).toHaveLength(1);
+    } finally { console.warn = original; }
+    expect(lines).toEqual(['Shannon tools offer refused by provider: 400', 'Shannon tools offer refused by provider: 422']);
+    expect(tools.calls).toEqual([]);
   });
 });
