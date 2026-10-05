@@ -28,15 +28,38 @@ public struct ShannonChatPhoto: Equatable, Sendable {
 
     public static func prepare(_ data: Data) throws -> ShannonChatPhoto {
         guard data.count <= maximumSourceBytes else { throw Failure.tooLarge }
+        // A thumbnail at the final size: the full image is never decoded, and the EXIF orientation is applied.
+        let options = [
+            kCGImageSourceThumbnailMaxPixelSize: maximumSide,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+        ] as CFDictionary
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary),
-              let scaled = ShannonAppLookEncoder.resized(image, maximumSide: maximumSide)
+              let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options),
+              let flattened = flattened(thumbnail)
         else { throw Failure.invalidImage }
         for quality in [0.78, 0.66, 0.54, 0.42] {
-            if let jpeg = ShannonAppLookEncoder.jpeg(scaled, quality: quality), jpeg.count <= maximumBytes {
-                return ShannonChatPhoto(jpegData: jpeg, width: scaled.width, height: scaled.height)
+            if let jpeg = ShannonAppLookEncoder.jpeg(flattened, quality: quality), jpeg.count <= maximumBytes {
+                return ShannonChatPhoto(jpegData: jpeg, width: flattened.width, height: flattened.height)
             }
         }
         throw Failure.invalidImage
+    }
+
+    /// Redraws the picture as a bare opaque bitmap: no metadata survives, and transparency becomes white.
+    static func flattened(_ image: CGImage) -> CGImage? {
+        guard image.width > 0, image.height > 0,
+              let context = CGContext(
+                data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+              ) else { return nil }
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(bounds)
+        context.interpolationQuality = .high
+        context.draw(image, in: bounds)
+        return context.makeImage()
     }
 }
