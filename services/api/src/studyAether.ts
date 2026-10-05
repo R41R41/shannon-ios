@@ -79,7 +79,7 @@ export class StudyAether {
       return written;
     } catch (error) {
       // Moved out of her folder by the owner: gone for her study, like a deleted document (her trash; nothing adopted, no retry).
-      if (aetherErrorCode(error) === 'OUTSIDE_SHANNON_FOLDER') this.gone(scopeKey, piece.id, link.documentId, link.aetherVersion);
+      if (aetherErrorCode(error) === 'OUTSIDE_SHANNON_FOLDER') this.gone(scopeKey, piece.id);
       // What changed in Aether since is brought in, so that her next try starts from it; one too long to read whole is said so plainly.
       if (['STALE_VERSION', 'NOT_FOUND'].includes(aetherErrorCode(error))) {
         if (await this.refresh(scopeKey, piece.id, signal).catch(() => 'unknown') === 'too_long') throw new AetherAccessError('TOO_LONG');
@@ -106,7 +106,17 @@ export class StudyAether {
     if (!pieceId) return;
     // Noted first: should the read below fail, a later sync still takes it in as hers.
     this.store.study.aether.notePending(scopeKey, { documentId: write.documentId, aetherVersion: write.version, operation: 'update', pieceId, changeNote }, this.now());
-    const document = await this.readWhole(write.documentId, signal);
+    let document: AetherDocument;
+    try { document = await this.readWhole(write.documentId, signal); } catch (error) {
+      // Too long to read whole: nothing is taken in, so nothing is left waiting; the document is noted as too long instead.
+      if (aetherErrorCode(error) === 'TOO_LONG') {
+        this.store.transaction(() => {
+          this.store.study.aether.clearPending(scopeKey, write.documentId, write.version);
+          this.store.study.aether.noteTooLong(scopeKey, write.documentId, (error as AetherAccessError).version ?? write.version, pieceId, this.now());
+        });
+      }
+      throw error;
+    }
     if (document.version !== write.version) return;
     this.store.transaction(() => {
       const linked = this.link(scopeKey, pieceId);
@@ -116,9 +126,9 @@ export class StudyAether {
   }
 
   /** A piece whose document is gone from her folder: into her trash, and not read again until Aether changes it. */
-  private gone(scopeKey: string, pieceId: string, documentId: string, version: number): void {
+  private gone(scopeKey: string, pieceId: string): void {
+    // No version memory is needed: a document outside her folder is not listed, so a sync never reads it again.
     this.store.transaction(() => this.store.study.aether.setDeleted(scopeKey, pieceId, true, this.now()));
-    this.seenDeleted.set(documentId, version);
   }
 
   /** Into Aether's Recently Deleted (the owner can restore it on his iPhone); null for a piece that has not moved. */

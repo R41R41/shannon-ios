@@ -375,6 +375,11 @@ describe('her study in Aether', () => {
     const refused = await call('study.update', { id, body: '短い本文。', changeNote: '直しました。' });
     expect(refused).toMatchObject({ ok: false, failure: 'limit', text: expect.stringContaining('長すぎて') });
     expect([...fake.documents.get(document.id)!.body]).toHaveLength(120_000);
+    // Her own folder-tool write that turns out too long leaves nothing pending; the document stays noted as too long.
+    await expect(service.studyAether!.adoptOwnWrite(scope, { documentId: document.id, version: fake.documents.get(document.id)!.revision }, 'シャノン用フォルダの道具で書き換えました。'))
+      .rejects.toMatchObject({ code: 'TOO_LONG' });
+    expect(store.study.aether.pending(scope, document.id, fake.documents.get(document.id)!.revision)).toBeNull();
+    expect(store.study.aether.tooLongPiece(scope, id)).toBe(true);
     // Shortened again in Aether: it reads whole, is taken in, and the note is gone.
     fake.ownerEdit(document.id, { body: `${STORY}短くした。` });
     await call('study.list', {});
