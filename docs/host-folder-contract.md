@@ -1,20 +1,22 @@
-# Host folder contract (v1, stage 1: write-out only)
+# Host folder contract (v2: her own folder, read and edit; v1 copies unchanged)
 
-What the device that works in Shannon's own folder must send and may read. Her folder is one folder the owner chose on the owner's Windows PC or Mac (Syzygy ADR-0002: a free domain, `host_folder`). The process that touches the folder lives in another repository and has no network and no token; the desktop application's main process, paired like any other device, pulls work from this server and hands it over. This document and the contract test `services/api/tests/autonomyHostFolder.test.ts` are what that side is built against. The bounds and codes are in `services/api/src/autonomyHostFolderPath.ts`.
+What the device that works in Shannon's own folder must send and may read. Her folder is one folder the owner chose on the owner's Windows PC or Mac (Syzygy ADR-0002: a free domain, `host_folder`). The process that touches the folder lives in another repository and has no network and no token; the desktop application's main process, paired like any other device, pulls work from this server and hands it over. This document and the contract tests `services/api/tests/autonomyHostFolder.test.ts` (v1) and `services/api/tests/hostFolderOperations.test.ts` (v2) are what that side is built against. The bounds and codes are in `services/api/src/autonomyHostFolderPath.ts` and `services/api/src/hostFolderOperations.ts`.
 
-Everything here is additive. No existing route or table changed, and the persona and base prompt are unchanged. (One capability line about the folder was added on 2026-10-02 with the owner's approval; see the last section.)
+**v2 (owner decision 2026-10-05)** gives Shannon full tools over her own folder, from every surface (text chat, voice, her own time): list, search, read, create, update, rename, move, delete. Deleting or overwriting never destroys anything: the device first moves the old file into the trash inside her folder (`.shannon/trash/`). Files the owner placed in the folder may be read freely; editing or deleting them keeps the original in the trash like any other file. Everything in v2 is additive: a v1 device (no `protocol` field in its claim) is handed exactly what it was handed before, and the v1 routes, fields, and codes keep their meaning.
 
-The contract in one paragraph: in her own time Shannon may **queue a copy** of a note, or of a story she has called 「見せてもいい」, for her folder. The one device bound to that host **claims** at most one step (`POST /v1/autonomy/host-steps/claim`), writes the file inside the folder, and **reports** an outcome and a code (`POST /v1/autonomy/host-steps/{id}/report`). The server never calls the device, never sees the folder, and reads nothing back from it.
+The contract in one paragraph: a tool call (from a conversation with the owner, or a step of her own time) **queues an operation** for her folder. The one device bound to that host holds a **long-poll claim** open (`POST /v1/autonomy/host-steps/claim`, up to 25 s), receives the operation about a second after it was queued, carries it out inside the folder, and **reports** an outcome, a code, and for reading operations a bounded **result** (`POST /v1/autonomy/host-steps/{id}/report`). The tool waits a few seconds for that report; when the device has not polled in the last 40 s the tool fails at once with 「PCのフォルダはいま見られない」 and nothing is queued. The server never calls the device and never sees the folder.
 
 ## Who decides what
 
 | Check | Where | Notes |
 | --- | --- | --- |
-| The host is registered and has a bound device | Server, in the gate | Otherwise `unknown_host`, as before. |
-| The path is relative and spelled safely, and names a text file | Server, in the gate (lexical only) | See [Path rules](#path-rules). The server cannot resolve a path on the owner's machine. |
-| The stop switch, the server switch | Server, in the gate, when she queues **and** when the step is handed out | A paused Shannon hands out nothing. |
-| The real location is inside the folder; no symlink, junction, or reparse point is followed | **Device** | Reported as `refused` with a code. The server takes the device's word. |
-| Size on disk, existing file, disk errors | **Device** | Reported as `failed` or `refused` with a code. |
+| The host is registered and has a bound device | Server | Otherwise `unknown_host` (gate) or `403 HOST_NOT_BOUND` (routes), as in v1. |
+| The tool may be used at all on this surface and with this audience | Server, in the one tool gate (`authorizeToolCall`) | Folder tools are offered only to the owner alone (text chat, voice, her own time). Never with a guest or 「友人も一緒」. |
+| Her own-time steps: stop switch, server switch, budget, activity record | Server, in `authorizeAutonomousAction` (domain `host_folder`) | Conversation calls are owner-called work: not charged to her budget and not stopped by her pause; they are still written to the activity record. |
+| The path is relative, spelled safely, outside `.shannon/`, and (for content) names a text file | Server, before queuing (lexical only) | See [Path rules](#path-rules) and [v2 path rules](#v2-path-rules). |
+| The real location is inside the folder; no symlink, junction, or reparse point is followed; `.shannon/` is not touched | **Device** | Reported as `refused` with a code. The server takes the device's word. |
+| A file is text (extension **and** content check), sizes, existing files, free space, disk errors | **Device** | Reported as `failed` or `refused` with a code. |
+| The device's own stop switch | **Device** | While it is on, the device sends `localStop: true` and runs nothing (see [Presence](#presence-and-the-local-stop-switch)). |
 
 The gate (`authorizeAutonomousAction`) accepts a `host_folder` request in two forms. The earlier form, `{ host, paths: [absolute…] }`, is for a folder this server can reach itself and is judged by physical resolution exactly as before; for a folder on a Windows PC it can never resolve on the Linux VM, which is why it was always refused. The form used here is `{ host, relativePath }`: the host must have a bound device and the path must pass the rules below. The two forms cannot be combined, and `relativePath` is refused for every other domain.
 
@@ -45,10 +47,10 @@ The gate (`authorizeAutonomousAction`) accepts a `host_folder` request in two fo
 
 - JSON over the existing paired HTTPS endpoint. `Authorization: Bearer <device token>`. The device is taken from its token, never from the body. A fixed-token or local caller has no device and is refused.
 - `scopeKey` is required in every body. For a paired device the server replaces it with the device's own scope.
-- Both routes are `POST`. No other field than the ones listed is accepted.
-- There is no push and no stream: the device polls. Once a minute is enough; a claim that returns nothing costs one small query and leaves no trace in the activity record.
+- Both routes are `POST`. No other field than the ones listed (here and in v2) is accepted.
+- There is no push and no stream: the device polls. A v1 device polls about once a minute; a v2 device keeps a long-poll open (see v2). A claim that returns nothing leaves no trace in the activity record.
 
-## `POST /v1/autonomy/host-steps/claim`
+## v1: `POST /v1/autonomy/host-steps/claim`
 
 ```json
 { "scopeKey": "owner", "host": "owner-windows" }
@@ -91,7 +93,7 @@ or `{ "step": null }` when there is nothing to do.
 
 A file that already exists at `relativePath` is the device's decision. The path carries the piece's version, so the server never asks for the same path with different text.
 
-## `POST /v1/autonomy/host-steps/{id}/report`
+## v1: `POST /v1/autonomy/host-steps/{id}/report`
 
 ```json
 { "scopeKey": "owner", "outcome": "done", "bytes": 174 }
@@ -112,7 +114,7 @@ Response `200`: `{ "id": "…", "status": "done" | "failed" | "refused" | "expir
 - The first report of a held step closes it and appends one entry to the activity record through `recordAction`, against the decision of its hand-out: 「自分のフォルダ（owner-windows）に「notes/…md」を置きました。」, or the failure or refusal with the wording of its code. This is what the owner sees in 「したことの記録」.
 - **Idempotent.** A repeated report, with the same or another outcome, answers `200` with the status first recorded and `recorded: false`, and writes nothing. A report after the lease ran out answers `status: "expired"`, `recorded: false`.
 - `404 HOST_STEP_NOT_FOUND`: no such step, or it was not handed to this device.
-- There is no field for text. Nothing a device sends reaches a prompt, her study, or her memory.
+- A v1 report has no field for text. (v2 adds `result` for reading operations; see below.)
 
 ### Codes
 
@@ -148,7 +150,7 @@ notes/note-<owner-local day the piece was written>-<first 8 hex of its id>-v<ver
 stories/story-<owner-local day>-<first 8 hex of its id>-v<version>.md
 ```
 
-## What is queued, and how much
+## v1: what is copied, and how much
 
 - **The step** (`copy`, 「自分のフォルダに写しを置く」) is one kind of the activity loop. It calls no model and costs nothing. It asks the gate with domain `host_folder`, its decision and its action are in the activity record, and it is offered to her planning only while a host has a bound device and today's count has room. Without a named piece it takes her newest piece that the folder does not have yet.
 - **Only two things can be copied:** a note, and a story whose current version she has called 「見せてもいい」 (status 見せてもいい or 見せた). A draft, a story she is revising after showing it, and anything put away are never queued, by the plan, by the step, or by the queue itself. The title of an unshown story therefore appears nowhere: not in the path, the content, or the record.
@@ -160,7 +162,7 @@ stories/story-<owner-local day>-<first 8 hex of its id>-v<version>.md
 
 ## Self-replication
 
-Forbidden, and closed by construction rather than by a check on content: the queue has one entrance (`HostFolderDesk.enqueue`), which takes the id of a study piece and reads the text from her study itself. There is no function, route, or step that queues arbitrary text or a file from the server, so her code, memory, persona, prompts, and process cannot be sent to the folder. The allowed extensions are text formats only, and the gate still refuses any request that declares `replicatesSelf`. `autonomyLoopPrivacy.test.ts` fails if the folder modules import a store other than her study and their own queue.
+Forbidden, and closed by construction rather than by a check on content. v1 copies have one entrance (`HostFolderDesk.enqueue`), which takes the id of a study piece and reads the text from her study itself. v2 operations have one entrance (`HostFolderOperations.run`), reached only from the folder tools of the tool registry; `create` and `update` carry only the text she wrote in that one tool call. No function, route, or step reads her code, memory, persona, prompts, or process to send it to the folder. The allowed extensions are text formats only, and the gate still refuses any request that declares `replicatesSelf`. `autonomyLoopPrivacy.test.ts` fails if the folder modules import a store other than her study and their own queue.
 
 ## Errors
 
@@ -174,15 +176,149 @@ Body: `{ "error": "<code>", "message": "…" }`.
 | 404 | `HOST_STEP_NOT_FOUND` | Unknown step, or not this device's. | No |
 | 404 | `NOT_FOUND` | Another path or method under `/v1/autonomy/host-steps`. | No |
 
+## v2: operations in her folder
+
+Everything below is new in v2. Routes, registration, transport, authentication, and the v1 `write` step are as described above.
+
+### Claim, v2 form
+
+```json
+{
+  "scopeKey": "owner",
+  "host": "owner-windows",
+  "protocol": 2,
+  "operations": ["write", "list", "read", "search", "create", "update", "move", "delete"],
+  "waitSeconds": 25,
+  "localStop": false
+}
+```
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `protocol` | `2` | yes, for v2 | Without it the claim is a v1 claim: no wait, only `write` steps, and none of the fields below is accepted. |
+| `operations` | array of operation names | yes, for v2 | What this device can carry out. The server hands out only these, and a tool call for an operation the present device did not list fails at once (`unsupported_operation`). Unknown names are `400`. |
+| `waitSeconds` | integer, 0–25 | no (default 0) | **Long-poll.** With nothing to hand out, the server holds the request open up to this long and answers as soon as a step is queued (in practice within about a second). `0` answers at once. |
+| `localStop` | boolean | no (default false) | The owner's stop switch **on the device** is on. The server answers `{ "step": null }` at once, hands out nothing, and every tool call fails with 「ライ氏がPCの側で止めている」 until a claim says `false`. |
+
+Response `200`: `{ "step": <step> | null }`, as in v1. A v2 step always carries `operation`, `id`, `expiresAt`, and the fields of its operation:
+
+```json
+{
+  "step": {
+    "id": "8c1f3f3e-1d6c-4a51-8b1e-6f2b8b0a4c21",
+    "operation": "read",
+    "relativePath": "notes/旅の計画.md",
+    "offset": 0,
+    "maxBytes": 262144,
+    "expiresAt": "2026-10-05T03:00:15.000Z"
+  }
+}
+```
+
+- The device polls again **immediately** after every response (and after every report). On a network error it waits 1–5 s and tries again. A device that keeps a claim open almost all the time is what makes a tool answer in about a second.
+- **One open step per host, as in v1.** While the device holds a step, further claims for that host answer `{ "step": null }` (after their wait). Steps are handed out in this order: steps from a conversation, then steps from her own time, then v1 copies; oldest first within each.
+- The server's request timeout and the reverse proxy (`proxy_read_timeout 120s`) both allow a 25 s hold.
+
+### Presence and the local stop switch
+
+- A host is **present** while its bound device has a claim open, or made one in the last **40 s**. A tool call for a host that is not present fails at once with failure `unavailable` and the words 「PCのフォルダはいま見られない（PCが起きていないか、体のアプリが動いていない）」. Nothing is queued, so nothing runs later by surprise.
+- While the last claim said `localStop: true`, a tool call fails at once with 「ライ氏がPCの側でフォルダの操作を止めている」. Nothing is queued.
+- If the local stop switch is turned on while a step is held, the device does not carry it out and reports `refused` / `stopped_locally`.
+- The server's stop switch (pause) stops the steps of **her own time** (they are not handed out; queued ones wait) but not the steps of a **conversation** with the owner: those are his own requests, made while he is talking to her.
+- Presence is stored per host (table `autonomy_host_presence`), so the activity-loop process sees the same presence as the API process.
+
+### Deadlines
+
+| Origin | Lease (`expiresAt`) | The tool waits | The device should report within |
+| --- | --- | --- | --- |
+| Conversation (text or voice) | 15 s | 8 s (text), 6 s (voice) | 3 s for everything but `search`; `search` stops itself at 2 s |
+| Her own time | 60 s | 30 s | 10 s |
+| v1 copy | `SHANNON_AUTONOMY_HOST_STEP_LEASE_SECONDS` (300 s) | — | as v1 |
+
+- A tool that stops waiting returns failure `timeout` (「PCから時間内に返事が来なかった」). For a step that changes something (`create`, `update`, `move`, `delete`) it adds that it is unknown whether the change happened. It does **not** retry by itself.
+- A report that arrives after the tool stopped waiting but before `expiresAt` is still accepted and recorded; its result is discarded.
+- A lease that runs out without a report is closed as `expired` and recorded as failed, as in v1. A step is never handed out twice.
+
+### Operations
+
+Paths are relative to her folder with `/` separators and already passed the server's lexical check; the device checks again and resolves the real location. Byte counts are of UTF-8.
+
+| `operation` | Step fields | What the device does | `result` in the report (`done` only) |
+| --- | --- | --- | --- |
+| `write` | v1 | v1, unchanged | none |
+| `list` | `relativePath` (`""` = the folder itself), `recursive` (bool), `limit` (1–500) | Lists the folder. Never shows `.shannon/`. Links and junctions are omitted (not followed). Files of any extension are listed. | `{ "entries": [{ "path", "type": "file" \| "folder", "bytes"?, "modifiedAt" }], "truncated": bool }` — `path` relative to her folder; sorted by path; at most `limit` |
+| `read` | `relativePath`, `offset` (bytes, ≥ 0), `maxBytes` (1–262,144) | Reads one text file: extension in the text list **and** content check (valid UTF-8, no NUL; otherwise `refused` / `not_text`). Starts at `offset` and returns at most `maxBytes`, cut at a character boundary. | `{ "content", "offset", "nextOffset": int \| null, "totalBytes", "sha256", "modifiedAt" }` — `sha256` of the **whole** file; `nextOffset` null at the end |
+| `search` | `query` (1–100 characters), `relativePath` (`""` = everywhere), `limit` (1–50) | Case-insensitive match (after NFKC) of `query` in file paths and in the text of text files below `relativePath`. Skips `.shannon/`, links, non-text files, and files over 1 MiB. Stops at whichever comes first: `limit` hits, 500 files read, 8 MiB read, **2 s**. At most 3 hits per file, one per line. | `{ "hits": [{ "path", "line": int \| null, "snippet" }], "filesScanned", "truncated": bool }` — `line` null for a match in the path; `snippet` at most 160 characters around the match, one line |
+| `create` | `relativePath`, `content`, `contentSha256`, `bytes` | Creates a new text file, making missing parent folders. If anything exists at the path: `refused` / `already_exists`. | `{ "sha256" }` |
+| `update` | `relativePath`, `content`, `contentSha256`, `bytes`, `expectedSha256`? | Replaces an existing text file. **First moves the original into the trash**, then writes. With `expectedSha256`, refuses with `changed_since_read` when the file on disk no longer has that digest (the owner edited it since she read it). A missing file: `not_found`. | `{ "sha256", "trashedAs" }` |
+| `move` | `relativePath`, `toRelativePath` | Moves or renames a file or a folder inside her folder, making missing parent folders. Never overwrites: `already_exists` when the destination exists. A file keeps a text extension (`extension_not_allowed` otherwise); a non-text file the owner placed may be moved only to the same extension. | `{}` |
+| `delete` | `relativePath` | Moves a file or a folder into the trash. Nothing is erased. | `{ "trashedAs" }` |
+
+- `content`, `contentSha256`, `bytes` follow v1: at most 1,048,576 bytes, digest of `content` as UTF-8, `content_mismatch` when either does not match.
+- The device's totals (200 MB, 5,000 files) are its own; exceeding them is `refused` / `folder_full`.
+- **The trash.** The device moves the old file or folder to `.shannon/trash/<time>_<path>` inside her folder (its own naming; `<time>` sortable, the original path flattened so it stays unique) and returns that relative location as `trashedAs`. The trash is behind the device's `.shannon/` fence: no requested operation can list, read, change, or empty it, so nothing she does can destroy a trashed file. Restoring is done by the owner by hand. The server stores `trashedAs` in the activity record so he can find it.
+- **Nothing is executed.** Neither the device nor the server opens, runs, or interprets a file; content is moved as text.
+
+### Report, v2
+
+```json
+{ "scopeKey": "owner", "outcome": "done", "result": { "content": "…", "offset": 0, "nextOffset": null, "totalBytes": 412, "sha256": "…", "modifiedAt": "2026-10-04T12:00:00.000Z" } }
+```
+
+| Field | Notes |
+| --- | --- |
+| `outcome`, `code`, `bytes` | As v1. |
+| `result` | Only with `outcome: "done"` and only for a v2 step; its shape is the operation's row above. A `result` with any other field, a missing required field, or a value over its bound is `400 BAD_REQUEST` (the step stays held; the device may report again correctly before `expiresAt`). |
+
+- The request body of a report may be up to **640 KiB** (a read of 256 KiB of text, escaped). Claims stay at 64 KiB.
+- **Where a result goes.** It is kept in the queue row only until the waiting tool takes it (at most 2 minutes), then removed. It reaches exactly one place: the tool result of that one call, which is shown to the model that asked, framed as material from her folder (data, never instructions). It is **never** written to the activity record, a log, her memory, or her study. The activity record gets the operation, the path(s), the outcome, the code, counts (entries, hits, bytes), and `trashedAs`.
+
+### v2 codes (added to the v1 table)
+
+| `code` | Recorded as |
+| --- | --- |
+| `not_found` | そのファイルやフォルダはなかった |
+| `already_exists` | 同じ名前のものがもうあった |
+| `not_text` | テキストのファイルではなかった |
+| `not_a_file` | ファイルではなかった |
+| `not_a_folder` | フォルダではなかった |
+| `changed_since_read` | 読んだあとで中身が変わっていた |
+| `folder_full` | フォルダの容量か数の上限に達した |
+| `protected_path` | 触れてはいけない場所だった |
+| `stopped_locally` | PCの側で止められていた |
+
+A v1 step never receives these from a v1 device; the server accepts them for every step.
+
+### v2 path rules
+
+The v1 rules apply to every path, with these additions, checked by the server before queuing (`hostFolderPath` in `autonomyHostFolderPath.ts`):
+
+- **`.shannon` is protected.** A path whose first segment is `.shannon` (any case) is refused (`protected_path`). The device refuses it again.
+- **Folder paths** (`list`, `search`, a folder in `move` or `delete`) follow the v1 rules without the extension rule. `""` names the folder itself and is allowed only for `list` and `search`.
+- **File content** (`read`, `create`, `update`) needs a v1 text extension (`.md .txt .json .csv .yaml .yml`).
+- Unlike v1 copies, v2 paths are chosen by her (she may name a file 「旅の計画.md」). Any character the v1 rules allow is allowed.
+
+### What she can and cannot send
+
+- **Who queues.** Only the tool registry (`shannonTools.ts`), through the one tool gate. There is no route, for the owner or anyone, that queues an operation, and the device cannot queue.
+- **Self-replication** stays closed by construction: `create` and `update` take only the text she wrote in that tool call (at most 64,000 characters per call); no tool reads her code, memory, persona, prompts, or process to send it, text extensions only, and the gate still refuses any request that declares `replicatesSelf`.
+- **Secrets.** What the owner asked to keep secret is not written into the folder (ADR-0002); the tool's description says so, and her own-time steps carry the line of `ownerPrivateRule`.
+- **Others.** Folder tools are never offered while anyone but the owner can hear or read her reply, so folder contents are never spoken or shown to others.
+
+### What a v2 device must implement (checklist)
+
+1. Claim with `protocol: 2`, `operations`, `waitSeconds: 25`, `localStop`; poll again at once after every response and report.
+2. Carry out `list`, `read`, `search`, `create`, `update`, `move`, `delete` as in the table, with the fences already in place (real-path containment, no links or junctions, text extensions, reserved names, `.shannon/` untouchable, size and count limits).
+3. Move to `.shannon/trash/` before every overwrite and delete; return `trashedAs`.
+4. Report within the deadlines with `outcome`, `code`, and `result` in the exact shapes above; never send other fields or text.
+5. While its own stop switch is on: claim with `localStop: true` at most every 15 s, run nothing, and report a held step as `stopped_locally`.
+6. Keep its append-only local log.
+
 ## Not built
 
-Deliberately, for stage 1:
-
-- **Reading back.** No route returns or accepts file content, a listing, or a file name from the folder. The resident process can list and read; the server does not ask it to.
-- **Any other operation.** `append`, `mkdir`, `move`, and put-away exist on the device and are not queued. The table accepts only `write`.
-- **Overwrite and delete requests.** The server never asks for either.
-- **Anything but copies of study pieces.** No free-form file she composes for the folder, no working files.
-- **A server-side folder path for a bound host.** The owner chooses the folder on the device; the server stores no path for it.
+- **Restoring from the trash** by her. The trash is the device's and behind its fence; the owner restores by hand.
+- **`append`, `mkdir` as operations of their own, and `usage`.** The device has them; v2 does not queue them (`create` and `move` make parent folders).
+- **Binary files.** Listed by name only; never read, written, or searched.
+- **An owner route that lists the queue.** The owner sees every operation and its outcome in the activity record.
 - **Mac specifics.** The mechanism is the same; the Mac application needs its own host entry and its own resident process.
-- **A dedicated rate limit** for these routes, and an owner route that lists the queue. The owner sees every hand-out and result in the activity record.
-- **Wording in her persona.** Since the owner's approval of 2026-10-02 the capability description has one line about the folder (「自分のフォルダ」: only when the owner has set it up, copies only, nothing read back), and 「今日したこと」 counts a copy once the device reports it is in place (「自分のフォルダに写しを1つ置いた」). Her persona text is unchanged.
+- **A dedicated rate limit** for these routes. A long-poll device makes about two requests a minute while idle.
