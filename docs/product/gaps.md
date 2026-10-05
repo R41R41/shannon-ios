@@ -20,6 +20,8 @@
 
 > **2026-10-05 追記（Mac の姿、A15）**: Mac のトークの右に、補助パネルの 3 つめ「すがた」（目次・現在地と切り替え、幅 320 から）を入れた。水の光の目と Live2D の姿、ポインターで触れる、触れたことを伝える、設定 › すがた は iPhone と同じ。「からだを開く」のシートは無くした。閉じた所: `talk.dialogue-mode`・`body.live2d`・`body.form-switch`・`body.choice`・`body.waterlight-eye`・`body.presence-on-body`・`body.layout`・`body.idle-gestures`・`touch.gestures`・`touch.tell-shannon`・`settings.figure` の Mac。`touch.reply-mode` の Mac は `partial`（声で言うところまで。聞くところは A16）。下の 4 の Mac の部分は済んだ。
 
+> **2026-10-06 追記（Mac の音声会話、A16）**: Mac のトークの入力欄から音声会話を始められるようにした。iPhone と同じ通話（共通のコード）を Mac の音声の仕組みで動かし、通話は入力欄の上の帯、姿は会話の横の「すがた」。ミュートと入力マイクの選択（名前で選ぶ）、通話中に文字でも送る、写真（Mac のカメラ・写真ライブラリ・ファイル）、友人も一緒と「今回は残さない」、作業の提案、診断、設定 › 声 の読み上げの選択、入力欄の音声入力、触れたあとに声で返したときの聞き取り。閉じた所: `voice.conversation`・`voice.mute-and-mic`・`voice.text-in-call`・`voice.photo-and-camera-in-call`・`voice.guest-mode`・`voice.call-summary`・`voice.emotion-in-call`・`voice.task-in-call`・`voice.diagnostics`・`settings.voice-provider`・`talk.dictation`・`touch.reply-mode` の Mac。`voice.background-continue` の Mac も「当てはまらない」から「ある」にした（ほかのアプリが前の間も続き、1 分無言で終わる）。`voice.minimised-call` の Mac は `no` のまま: 通話を小さくして見せる形が仕様に無く、所有者が比較ページで選ぶまで作らない（それまでは最後の窓を閉じると通話も終わる）。遅れている所は 76 か所。下の 5 の Mac の部分は済んだ。
+
 2026-10-03。Apple 側は `c40a65e`（main）のコード、Windows 側は同じ日に読んだ `shannon-desktop`（VM の `~/handoff/shannon-desktop-src.zip`）から。画面は動かしていない（ビルドもシミュレーターも使っていない）。コードと文書を読んだ結果。
 
 機能ごとの細かい状態は [`feature-matrix.md`](feature-matrix.md)（127 件）。ここは、そのうち所有者の目に入るずれを、目立つ順にまとめたもの。
@@ -44,7 +46,7 @@
 | 2 | **Windows に「頭の中」が無い** | 記憶の管理、約束、人、続けている目的、日記、気持ちと関係、使用量。9 件とも Windows に無い。 |
 | 3 | **「運用」は Windows にしか無い** | サービスの開始・停止、Minebot の起動、予定の今すぐ実行、操作の記録。iPhone は作業中のブランチ（`codex/shannon/ios-yousu`）にあり、文言は Windows と同じ。Mac には予定も無い。 |
 | 4 | **Live2D の体と「触る」は Windows にしか無い** | iPhone は作業中のブランチ（`codex/shannon/two-forms`）。Mac の SwiftUI のアプリには体が無く、デスクトップに立つ体は Electron 版だけ（Mac の実機では、まだ動かしていないと `shannon-desktop` の README にある）。二つの姿の切り替えは、Windows に無い（Live2D だけ）。 |
-| 5 | **声の会話が Mac に無い。Windows は体の窓だけ** | Windows の声の会話には、ミュート、マイクの選択、写真、通話の途中での「友人も一緒」の切り替え、通話のまとめが無い。無言で切れるまでが、iPhone は 1 分（アプリが後ろにある間だけ）、Windows は 5 分。 |
+| 5 | **声の会話が Mac に無い。Windows は体の窓だけ**（Mac は A16 で済み、2026-10-06。小さくした通話の形だけ、所有者の選択待ち） | Windows の声の会話には、ミュート、マイクの選択、写真、通話の途中での「友人も一緒」の切り替え、通話のまとめが無い。無言で切れるまでが、iPhone は 1 分（アプリが後ろにある間だけ）、Windows は 5 分。 |
 | 6 | **色の使い方が違う**（Windows は W1、Mac は A9 で済み、2026-10-05） | iPhone は、押せるもの = 青 `#0088FF`、シャノンがいること = 藍 `#5865F2`、うまくいった = 緑、判断が要る = 橙、危ない = 赤。Windows の管理画面は、1 つの青 `#3D8FE0` を「いることの印」「主なボタン」「許可待ちの状態」「動いているサービス」の全部に使い、緑と橙の役割が無い。体の窓は別の青 `#2F7FE0`。Mac は OS の強調色を使っている。下の 4 に値を並べた。 |
 | 7 | **Mac のアプリが、共通の色・余白・角丸を使っていない**（A9 で済み、2026-10-05） | `ShannonPalette`・`ShannonSpacing`・`ShannonShape` の利用が 0 か所。OS の強調色と、角丸 10、余白 10・14 など独自の値。同じ SwiftUI なのに、iPhone と別の見た目になっている。 |
 | 8 | **作業の状態の言葉が違う** | 提案／作業候補、許可待ち／判断待ち、準備中／待機中。「続きが必要」（持ち主の対応が要る一時停止）は Windows に無い。一覧のまとまりも、いま・これから・終了／進行中・作業候補・終了。[`copy-differences.md`](copy-differences.md) の 18〜22。 |

@@ -711,7 +711,13 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Listen.swift#dictationPrimaryAction",
+            "apps/ios/Sources/ShannonAppCore/ShannonVoiceConversation.swift"
+          ],
+          "note": "入力欄のマイク（音声入力）。押すと録り、もう一度押すと文字になって入力欄に入る。送るのは所有者。通話がマイクを使っている間は始めない。"
         },
         "windows": {
           "status": "no",
@@ -857,8 +863,13 @@
           ]
         },
         "macos": {
-          "status": "no",
-          "note": "Mac には音声会話が無い（ShannonGeminiLiveSessionModelUnavailable）。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveTransport+MacAudio.swift"
+          ],
+          "note": "A16（2026-10-06）。トークの入力欄の「音声会話を開始」（波の形）から始め、通話は入力欄の上の帯に出る。姿は会話の横の「すがた」（通話が始まると開く）。iPhone と同じ通話（Gemini のカスケード、割り込み、エコーの見分け）を、AVAudioEngine の Voice Processing I/O で動かす。Mac が眠らないようにする。"
         },
         "windows": {
           "status": "partial",
@@ -885,7 +896,13 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallControls.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveSessionModel+Input.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonMacAudioDevices.swift"
+          ],
+          "note": "「マイク」でミュート。「入力マイク」は Mac のマイクを名前で選ぶ（自動 = システムの入力）。選んだマイクが無い・使えないときは、システムの入力で続けてそう出す。通話中に選び直すと、同じ通話をつなぎ直す。"
         },
         "windows": {
           "status": "no",
@@ -906,7 +923,12 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall.swift#sendText"
+          ],
+          "note": "通話中は、トークの入力欄に書いた文が通話に届く（右下は「⌘↩︎で通話に送る」）。添付は通話の間は使わない。"
         },
         "windows": {
           "status": "no",
@@ -928,7 +950,12 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Photo.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCamera.swift"
+          ],
+          "note": "「写真」から、カメラで撮る（映像のシートで 1 枚。シャッター音は出さない）、写真ライブラリ、ファイル。共有する前に見せ、撮り直せる。「友人も一緒」では共有しない（iPhone と同じ説明）。"
         },
         "windows": {
           "status": "no",
@@ -950,7 +977,13 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceGuestCall.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceGuestModeNotice.swift"
+          ],
+          "note": "通話の途中で「本人だけ／友人も一緒」を切り替える（iPhone と同じ確認と、残し方の説明）。終わりのカードに「今回は残さない」。"
         },
         "windows": {
           "status": "partial",
@@ -977,8 +1010,12 @@
           ]
         },
         "macos": {
-          "status": "not_applicable",
-          "reason": "Mac には音声会話そのものが無い。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveSessionModel+Background.swift"
+          ],
+          "note": "ほかのアプリが前にある間も通話は続き、その間に 1 分お話が無いと、終了と同じ形で終わる（iPhone の 1 分。戻るとトークにそう出る）。最後の窓を閉じると終わる。"
         },
         "windows": {
           "status": "partial",
@@ -1004,7 +1041,8 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "no",
+          "note": "A16 で、通話は 作業・シャノン・設定 を見ている間も、アプリを隠す・窓をしまう間も続く（macOS のマイクの印が出る）。ただ、トークの外で通話を見せて止める小さな形が無い。形（窓の上の帯・サイドバーの行・メニューバー・浮かぶ小窓）は仕様に無いので、所有者が比較ページで選ぶまで作らない。それまでは、最後の窓を閉じると通話は終わる。"
         },
         "windows": {
           "status": "partial",
@@ -1030,7 +1068,12 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceCallSummaryPrompt.swift"
+          ],
+          "note": "本人だけの間の会話は、そのトークに残る。「友人も一緒」があった通話のあとは、入力欄の上に「この通話を覚えました」と「今回は残さない」のカード（iPhone と同じ）。"
         },
         "windows": {
           "status": "no"
@@ -1051,7 +1094,12 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyModel.swift"
+          ],
+          "note": "「すがた」の姿（水の光の目と Live2D）が、通話の番ごとの気持ちと、聞いている・考えている・話している を出す。"
         },
         "windows": {
           "status": "yes",
@@ -1077,7 +1125,12 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceWorkspaceState+Call.swift"
+          ],
+          "note": "通話で頼んだ作業の提案が帯に出て、押すと 現在地 で内容を見て始められる。"
         },
         "windows": {
           "status": "yes",
@@ -1125,7 +1178,12 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/ShannonVoiceDiagnosticsView.swift",
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+          ],
+          "note": "設定 › 管理 › 診断。Mac の通話も、iPhone と同じ処理の段階と時間を残す（中身は残さない）。"
         },
         "windows": {
           "status": "no"
@@ -2771,7 +2829,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#shannonBodyAttachment",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift#reportsTouch"
           ],
-          "note": "設定 › すがた の「体に起きたことをシャノンに伝える」（既定は切）。入のとき、触れた種類・長さ・強さ・時刻だけが届き、返事は姿の近くの吹き出し（A15）。 Mac では相手はいつも所有者ひとり（同席の切り替えはまだ無い）。説明にそう書いた（settings.figure.touchMac）。"
+          "note": "設定 › すがた の「体に起きたことをシャノンに伝える」（既定は切）。入のとき、触れた種類・長さ・強さ・時刻だけが届き、返事は姿の近くの吹き出し（A15）。 Mac ではふだん相手は所有者ひとりで、音声会話を「友人も一緒」にしている間とそのあと 5 分は、ほかの人もいるものとして届く（A16）。説明にそう書いた（settings.figure.touchMac）。"
         },
         "windows": {
           "status": "yes",
@@ -2847,12 +2905,13 @@
           "note": "設定 › すがた（A6）。声で返すのは、トークの向き合う表示の姿が見えている間だけ。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift#replyModeRawValue",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyVoice.swift#listen"
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Listen.swift#bodyListen",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift"
           ],
-          "note": "設定 › すがた の「触れたときの返事」（文字で返す／声で返す）。声で返すと、パネルの姿が出ていて覆うものが無い間、声で言う。そのあと聞く（答えると音声会話になる）ところは、Mac に音声会話が入る A16 で入る（A15）。"
+          "note": "設定 › すがた の「触れたときの返事」。声で返すと、パネルの姿が出ていて覆うものが無い間、声で言い、そのあと数秒聞く。答えると Mac の音声会話になり、トークで続く（A16）。"
         },
         "windows": {
           "status": "partial",
@@ -3309,11 +3368,12 @@
           ]
         },
         "macos": {
-          "status": "partial",
-          "note": "「Gemini（サーバー設定）」と出るだけで、選べない。",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
-          ]
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopSettingsForms.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall.swift#speechProvider"
+          ],
+          "note": "設定 › 声 の「読み上げ」で Gemini と ElevenLabs を選ぶ。次の通話から。イヤホンの声と触れたときの声も同じ設定。"
         },
         "windows": {
           "status": "yes",
