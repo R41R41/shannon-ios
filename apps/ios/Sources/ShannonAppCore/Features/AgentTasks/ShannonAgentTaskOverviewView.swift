@@ -14,7 +14,7 @@ enum ShannonAgentTaskOverviewFilter: String, CaseIterable, Identifiable {
         case .attention: "対応待ち"
         case .active: "進行中"
         case .proposed: "提案"
-        case .finished: "終了"
+        case .finished: ShannonGeneratedStrings.taskGroupFinished
         }
     }
 }
@@ -98,9 +98,9 @@ struct ShannonAgentTaskOverviewView: View {
             }
 
             taskSection("ピン留め", detail: "大切な作業", tasks: projection.pinned, palette: palette)
-            taskSection("いま", detail: "作業中・許可待ち・続きが必要・一時停止中", tasks: projection.active, palette: palette)
-            taskSection("これから", detail: "シャノンからの提案。開始するかはあなたが決めます", tasks: projection.proposed, palette: palette)
-            taskSection("終了", detail: "完了・失敗・中止の結果と変更内容", tasks: projection.finished, palette: palette)
+            taskSection(ShannonGeneratedStrings.taskGroupNow, detail: "作業中・許可待ち・続きが必要・一時停止中", tasks: projection.active, palette: palette)
+            taskSection(ShannonGeneratedStrings.taskGroupNext, detail: "シャノンからの提案。開始するかはあなたが決めます", tasks: projection.proposed, palette: palette)
+            taskSection(ShannonGeneratedStrings.taskGroupFinished, detail: "完了・失敗・中止の結果と変更内容", tasks: projection.finished, palette: palette)
         }
 #if os(iOS)
         .listStyle(.insetGrouped)

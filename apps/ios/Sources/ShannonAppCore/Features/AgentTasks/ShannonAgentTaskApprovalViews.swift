@@ -47,25 +47,25 @@ struct AgentTaskApprovalCard: View {
                     .frame(maxWidth: .infinity, minHeight: 50)
                 } else if approval.kind.requiresHoldToConfirm(.once) {
                     ShannonHoldToConfirmButton(
-                        title: "今回だけ許可",
+                        title: ShannonGeneratedStrings.taskApprovalAllowOnce,
                         prominence: .prominent,
-                        confirmationTitle: "今回だけ\(approval.kind.japaneseName)を許可しますか？",
+                        confirmationTitle: ShannonGeneratedStrings.taskApprovalConfirmOnce(kind: approval.kind.japaneseName),
                         confirmationMessage: approval.title,
-                        confirmActionTitle: "今回だけ許可",
+                        confirmActionTitle: ShannonGeneratedStrings.taskApprovalAllowOnce,
                         action: acceptOnce
                     )
                 } else {
-                    Button(action: acceptOnce) { ShannonButtonLabel("今回だけ許可") }
+                    Button(action: acceptOnce) { ShannonButtonLabel(ShannonGeneratedStrings.taskApprovalAllowOnce) }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
                 }
                 ShannonButtonRow {
                     ShannonHoldToConfirmButton(
-                        title: "この作業中",
+                        title: ShannonGeneratedStrings.taskApprovalSession,
                         prominence: .standard,
-                        confirmationTitle: "この作業が終わるまで\(approval.kind.japaneseName)を許可しますか？",
-                        confirmationMessage: "この作業が終わるまで有効です。",
-                        confirmActionTitle: "この作業中は許可",
+                        confirmationTitle: ShannonGeneratedStrings.taskApprovalConfirmSession(kind: approval.kind.japaneseName),
+                        confirmationMessage: ShannonGeneratedStrings.taskApprovalConfirmSessionMessage,
+                        confirmActionTitle: ShannonGeneratedStrings.taskApprovalAllowSession,
                         action: acceptForSession
                     )
                     if approval.denyStopsTask {
@@ -76,7 +76,7 @@ struct AgentTaskApprovalCard: View {
                         .buttonStyle(.bordered)
                         .controlSize(.large)
                     } else {
-                        Button(action: decline) { ShannonButtonLabel("許可しない") }
+                        Button(action: decline) { ShannonButtonLabel(ShannonGeneratedStrings.taskApprovalDeny) }
                             .buttonStyle(.bordered)
                             .controlSize(.large)
                             .accessibilityHint("この操作だけを断ります。作業は中止されません")
@@ -95,7 +95,7 @@ struct AgentTaskApprovalCard: View {
             titleVisibility: .visible
         ) {
             Button(Self.stoppingDeclineTitle, role: .destructive, action: decline)
-            Button("戻る", role: .cancel) {}
+            Button(ShannonGeneratedStrings.commonBack, role: .cancel) {}
         } message: {
             Text(Self.stoppingDeclineMessage)
         }
@@ -111,11 +111,11 @@ extension AgentTaskApprovalCard {
     static let stoppingDeclineMessage = "この実行先では、許可しないと作業全体が止まり、再開できません。完了した工程は残ります。"
 
     var holdHint: String {
-        let target = approval.kind.requiresHoldToConfirm(.once) ? "許可ボタン" : "「この作業中」"
+        let target = approval.kind.requiresHoldToConfirm(.once) ? ShannonGeneratedStrings.taskApprovalHoldTargetAllow : ShannonGeneratedStrings.taskApprovalHoldTargetSession
         let decline = approval.denyStopsTask
             ? "「\(Self.stoppingDeclineTitle)」は作業全体を止めます。"
             : "「許可しない」はこの操作だけを断り、シャノンは別の進め方を探すか、次の一手を残して止まります。"
-        return "\(target)は長押しで決定。タップすると確認してから決定します。\(decline)"
+        return ShannonGeneratedStrings.taskApprovalHoldHint(target: target) + decline
     }
 }
 

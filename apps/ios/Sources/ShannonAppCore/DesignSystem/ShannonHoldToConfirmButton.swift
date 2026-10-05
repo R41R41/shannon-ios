@@ -73,12 +73,12 @@ struct ShannonHoldToConfirmButton: View {
         .sensoryFeedback(.success, trigger: commitCount)
         .confirmationDialog(confirmationTitle, isPresented: $showsConfirmation, titleVisibility: .visible) {
             Button(confirmActionTitle, action: action)
-            Button("戻る", role: .cancel) {}
+            Button(ShannonGeneratedStrings.commonBack, role: .cancel) {}
         } message: {
             Text(confirmationMessage)
         }
         .accessibilityLabel(title)
-        .accessibilityHint("長押しで決定します。タップすると確認してから決定します")
+        .accessibilityHint(ShannonGeneratedStrings.holdHint)
     }
 
     private func label(_ palette: ShannonPalette, progress: Double) -> some View {
@@ -86,7 +86,7 @@ struct ShannonHoldToConfirmButton: View {
         let foreground = isProminent ? palette.onAction : palette.action
         let isHolding = pressStartedAt != nil
         let text = reduceMotion && isHolding
-            ? "押し続けています… \(Int(progress * 100))%"
+            ? ShannonGeneratedStrings.holdProgress(percent: String(Int(progress * 100)))
             : title
 
         return HStack(spacing: ShannonSpacing.small) {

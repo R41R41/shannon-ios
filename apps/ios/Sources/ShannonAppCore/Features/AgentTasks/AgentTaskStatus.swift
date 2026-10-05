@@ -85,14 +85,15 @@ public enum ShannonAgentTaskStatus: String, Codable, CaseIterable, Equatable, Se
     /// owner reads 「続きが必要」 through `ShannonAgentTask.stateName`.
     public var japaneseName: String {
         switch self {
-        case .proposed: "提案"
-        case .queued, .starting: "準備中"
-        case .running: "作業中"
-        case .waitingApproval: "許可待ち"
-        case .paused: "一時停止中"
-        case .completed: "完了"
-        case .failed: "失敗"
-        case .cancelled: "中止"
+        case .proposed: ShannonGeneratedStrings.taskStatusProposed
+        case .queued: ShannonGeneratedStrings.taskStatusQueued
+        case .starting: ShannonGeneratedStrings.taskStatusStarting
+        case .running: ShannonGeneratedStrings.taskStatusRunning
+        case .waitingApproval: ShannonGeneratedStrings.taskStatusWaitingApproval
+        case .paused: ShannonGeneratedStrings.taskStatusPaused
+        case .completed: ShannonGeneratedStrings.taskStatusCompleted
+        case .failed: ShannonGeneratedStrings.taskStatusFailed
+        case .cancelled: ShannonGeneratedStrings.taskStatusCancelled
         }
     }
 
@@ -126,7 +127,7 @@ public enum ShannonAgentTaskStatus: String, Codable, CaseIterable, Equatable, Se
 
 extension ShannonAgentTask {
     /// Word shown when the host stopped and is waiting for the owner.
-    public static let needsOwnerStateName = "続きが必要"
+    public static let needsOwnerStateName = ShannonGeneratedStrings.taskStatusNeedsOwner
 
     /// The state word for this task, telling an owner-requested pause from one that needs the owner.
     public var stateName: String {

@@ -14,7 +14,7 @@ public struct ShannonAgentTaskNoticePresentation: Equatable, Sendable {
     /// - Parameter showsDetail: false at accessibility text sizes, where the notice keeps one line.
     public init(task: ShannonAgentTask, showsDetail: Bool = true) {
         let card = ShannonAgentTaskCardPresentation(task: task)
-        headline = "\(card.statusText)：\(task.title)"
+        headline = ShannonGeneratedStrings.taskNoticeHeadline(state: card.statusText, title: task.title)
         if task.status == .waitingApproval, let approval = task.pendingApproval {
             detail = showsDetail ? (approval.target ?? approval.title) : nil
             detailIsTarget = approval.target != nil
