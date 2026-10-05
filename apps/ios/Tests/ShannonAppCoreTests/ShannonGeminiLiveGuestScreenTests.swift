@@ -356,12 +356,60 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         segments.stopped(itemID: nil, at: 5)
         XCTAssertEqual(segments.claimTranscript(itemID: nil, at: 6), .others, "the guests' segment, after it")
         XCTAssertTrue(segments.usedOrderFallback, "matched by order: logged")
-        // A segment of the guests that never brings words is forgotten after a while.
-        segments.started(itemID: nil, at: 10)
-        segments.stopped(itemID: nil, at: 10.5)
-        segments.started(itemID: nil, at: 30)
-        segments.stopped(itemID: nil, at: 31)
-        XCTAssertEqual(segments.claimTranscript(itemID: nil, at: 32), .others)
+    }
+
+    /// A segment of 本人だけ forgotten (by age) before its words came, then a switch: when its transcript arrives at
+    /// last it is the owner's, never the guests'; so is an id the call never saw begin.
+    func testAForgottenSegmentsLateWordsAreTheOwnersAfterASwitch() {
+        var segments = ShannonVoiceSpeechSegments()
+        segments.started(itemID: "owner-old", at: 0)
+        segments.stopped(itemID: "owner-old", at: 1)
+        // Long after: forgotten when the next segment begins.
+        segments.started(itemID: "owner-new", at: 1 + ShannonVoiceSpeechSegments.untranscribedMemory + 5)
+        XCTAssertFalse(segments.segments.contains { $0.itemID == "owner-old" }, "forgotten")
+        XCTAssertTrue(segments.prunedIDs.contains("owner-old"))
+        segments.switchedToGuest()
+        XCTAssertEqual(segments.claimTranscript(itemID: "owner-old", at: 20), .owners)
+        XCTAssertEqual(segments.claimTranscript(itemID: "never-began", at: 21), .unrecognised)
+        XCTAssertEqual(segments.claimTranscript(itemID: "owner-new", at: 22), .owners)
+    }
+
+    func testAnIdNeverSeenAfterTheWindowIsStillTheOwnersInAFriendsCall() async {
+        let model = liveModel()
+        model.handle(.speechStarted(itemID: "seen"))
+        model.switchParticipantMode(to: .guest, origin: .control)
+        try? await Task.sleep(for: .seconds(ShannonGeminiLiveSessionModel.recogniserLag + 0.1))
+        model.handle(.inputTranscript("あとで電話するね。", itemID: "never-began"))
+        XCTAssertEqual(model.userTranscript, "", "the privacy direction: his, not the guests'")
+        model.stop()
+    }
+
+    /// An ownership flip finishes the other side's words without starting a reply; the reply begins only once the
+    /// incoming words are finished, with both in its batch.
+    func testNoReplyStartsBetweenAnOwnershipFlipAndTheNextFinalization() async {
+        let model = liveModel()
+        var batches: [String] = []
+        model.streamSpeech = { _, _ in throw Refused() }
+        model.performStreamingDelegation = { text, _, _, _ in
+            batches.append(text)
+            throw Refused()
+        }
+        model.handle(.speechStarted(itemID: "owner-a"))
+        model.handle(.speechStopped(itemID: "owner-a"))
+        model.switchParticipantMode(to: .guest, origin: .control)
+        model.handle(.speechStarted(itemID: "guest-b"))
+        model.handle(.speechStopped(itemID: "guest-b"))
+        model.handle(.inputTranscript("はじめまして。", itemID: "guest-b"))
+        model.handle(.inputTranscript("明日の歯医者は何時だったか確認して。", itemID: "owner-a"))
+        XCTAssertEqual(model.pendingTurns.turns.count, 1, "the guests' words became their own turn")
+        XCTAssertNil(model.responseTask, "no reply started at the flip")
+        for _ in 0..<50 { await Task.yield() }
+        XCTAssertTrue(batches.isEmpty)
+        await waitForFinalization(model, turns: 2)
+        for _ in 0..<200 where batches.isEmpty { try? await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(batches.count, 1, "one reply, after the finalization")
+        XCTAssertEqual(batches.first, "はじめまして。\n明日の歯医者は何時だったか確認して。")
+        model.stop()
     }
 
     /// Completions of different turns can arrive out of order: the friend's short 「はじめまして」 overtakes the
@@ -432,8 +480,8 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
             segments.stopped(itemID: "guest-\(index)", at: Double(2 + index) + 0.5)
         }
         XCTAssertEqual(segments.claimTranscript(itemID: "owner-a", at: 40), .owners, "39 s late and after 12 others")
-        // With nothing known about a transcript, the arrival window decides, never 「the guests'」 by default.
-        XCTAssertEqual(segments.claimTranscript(itemID: "never-seen", at: 41), .unknown)
+        // An id never seen is not the guests' by default (in 「友人も一緒」 it counts as his).
+        XCTAssertEqual(segments.claimTranscript(itemID: "never-seen", at: 41), .unrecognised)
         var empty = ShannonVoiceSpeechSegments()
         empty.started(itemID: nil, at: 0)
         empty.stopped(itemID: nil, at: 0.5)

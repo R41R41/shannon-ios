@@ -131,6 +131,8 @@ public final class ShannonGeminiLiveSessionModel {
         handleDelegationResponse: @escaping @MainActor (ShannonLiveVoiceDelegationResponseDTO) -> Void
     ) async {
         let sameCall = preservePendingInput && self.participantMode == participantMode
+        // Words heard but not yet finished become a pending turn (his stay hidden), not lost with the old session.
+        if sameCall, turnAssembler.hasFinalText { finalizeTranscript(turnComplete: true, beginsResponse: false) }
         let retained = sameCall ? pendingTurns : ShannonPendingVoiceTurns()
         let retainedMute = sameCall && isMicrophoneMuted
         let retainedStart = sameCall ? callStartedAt : nil

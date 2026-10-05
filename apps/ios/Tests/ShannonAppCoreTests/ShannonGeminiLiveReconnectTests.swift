@@ -135,6 +135,38 @@ final class ShannonGeminiLiveReconnectTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(stamped ?? .distantPast, noted.addingTimeInterval(-0.001), "stamped after the session was noted")
     }
 
+    /// A same-call reconnect keeps the owner's hidden turns (and finishes words not yet finished, his staying his),
+    /// and the next reply still answers them.
+    func testHiddenOwnerTurnsSurviveASameCallReconnectAndAreStillAnswered() async {
+        let gate = Gate()
+        let model = await model(gate: gate) { _ in }
+        model.phase = .listening
+        model.callIsReported = true
+        model.lastAudioReconnectAt = nil
+        model.appendUtterance(rawText: "明日の歯医者は何時？", text: "明日の歯医者は何時？", source: .typed)
+        model.handle(.speechStarted(itemID: "owner-a"))
+        model.switchParticipantMode(to: .guest, origin: .spoken)
+        model.handle(.inputTranscript("それと保険証", itemID: "owner-a"))
+        XCTAssertTrue(model.bufferIsOwners)
+        model.audioFailed()
+        while gate.continuation == nil { await Task.yield() }
+        XCTAssertEqual(model.participantMode, .guest)
+        XCTAssertEqual(model.pendingTurns.turns.map(\.rawText), ["明日の歯医者は何時？", "それと保険証"],
+                       "kept, and the words being assembled were finished, not dropped")
+        XCTAssertEqual(model.pendingTurns.displayText, "", "both still hidden")
+        var answered: String?
+        model.performStreamingDelegation = { text, _, _, _ in
+            answered = text
+            throw Refused()
+        }
+        model.beginResponse()
+        for _ in 0..<200 where answered == nil { try? await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(answered, "明日の歯医者は何時？\nそれと保険証", "still answered in the call")
+        gate.continuation?.resume(throwing: Refused())
+        for _ in 0..<20 { await Task.yield() }
+        model.stop()
+    }
+
     func testATransportReportsItsAudioFailureOnce() {
         var events: [ShannonTranscriptionEvent] = []
         let transport = ShannonGeminiLiveTransport(

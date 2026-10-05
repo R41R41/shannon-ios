@@ -57,7 +57,7 @@ extension ShannonGeminiLiveSessionModel {
         }
         guard participantMode == .guest else { return }
         let owners = switch claim {
-        case .owners: true
+        case .owners, .unrecognised: true
         case .others: false
         case .unknown, .stale: isOwnersWords(startedAt: Date())
         }

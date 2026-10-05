@@ -19,8 +19,10 @@ struct ShannonVoiceSpeechSegments: Equatable, Sendable {
         case owners
         /// Speech of the 「友人も一緒」 period, or of 本人だけ.
         case others
-        /// Nothing tells: the arrival window after a switch decides (`recogniserLag`).
+        /// Nothing tells (no id, no onsets): the arrival window after a switch decides (`recogniserLag`).
         case unknown
+        /// An id this call never saw begin. In 「友人も一緒」 it counts as the owner's, never the guests'.
+        case unrecognised
         /// Its segment was discarded (a switch back to 本人だけ): heard in 「友人も一緒」, it is never answered now.
         case stale
     }
@@ -38,6 +40,9 @@ struct ShannonVoiceSpeechSegments: Equatable, Sendable {
     private(set) var knowsOnsets = false
     /// Ids of segments discarded by a switch back to 本人だけ.
     private(set) var discardedIDs: [String] = []
+    /// Ids of segments forgotten by age or count before their words came. A transcript of one of them is the
+    /// owner's (the privacy direction: it may have begun before a switch).
+    private(set) var prunedIDs: [String] = []
     /// A transcript without an id was matched by order (logged once).
     private(set) var usedOrderFallback = false
 
@@ -67,7 +72,8 @@ struct ShannonVoiceSpeechSegments: Equatable, Sendable {
         if let itemID {
             if let index = segments.firstIndex(where: { $0.itemID == itemID }) { return take(index) }
             if discardedIDs.contains(itemID) { return .stale }
-            return .unknown
+            if prunedIDs.contains(itemID) { return .owners }
+            return .unrecognised
         }
         guard knowsOnsets, !segments.isEmpty else { return .unknown }
         if !usedOrderFallback {
@@ -100,12 +106,22 @@ struct ShannonVoiceSpeechSegments: Equatable, Sendable {
     }
 
     private mutating func prune(at now: TimeInterval) {
+        let expired = segments.filter {
+            !$0.owners && !$0.open && !$0.transcribed && now - ($0.stoppedAt ?? now) > Self.untranscribedMemory
+        }
+        remember(pruned: expired)
         segments.removeAll {
             !$0.owners && !$0.open && !$0.transcribed && now - ($0.stoppedAt ?? now) > Self.untranscribedMemory
         }
         while segments.filter({ !$0.owners }).count > Self.retained,
               let oldest = segments.firstIndex(where: { !$0.owners }) {
+            remember(pruned: [segments[oldest]])
             segments.remove(at: oldest)
         }
+    }
+
+    private mutating func remember(pruned: [Segment]) {
+        prunedIDs.append(contentsOf: pruned.filter { !$0.transcribed }.compactMap(\.itemID))
+        if prunedIDs.count > Self.discardedMemory { prunedIDs.removeFirst(prunedIDs.count - Self.discardedMemory) }
     }
 }
