@@ -64,12 +64,15 @@ describe('what the owner says she did on her own', () => {
       // Re-review of e1f6790: the regressions from 848b818, endings without 「？」, polite and unpunctuated forms.
       '電話したよね', '電話したでしょ', '電話したじゃん', '俺に電話した', 'さっき俺に電話したでしょ', '僕に連絡したじゃん',
       '電話したよね？', '送ったよね？', '電話かけたっけ', '何か送ったかな', '電話かけたか', '呼んだかい', '電話しました？', '呼びました？',
-      '何か送った', '電話かけた', 'シャノン電話かけた', 'シャノン、さっき電話した', '通話きた？']) {
+      '何か送った', '電話かけた', 'シャノン電話かけた', 'シャノン、さっき電話した', '通話きた？',
+      // Focused review of 5b5c3c0: devices and times as the subject, and 残し.
+      'デスクトップが呼んだ？', 'スマホが鳴った？', 'パソコンが話しかけてきた？', 'iPhoneに電話した？', '俺のスマホに電話した？', 'さっきから電話してた？',
+      'ボクに電話した？', 'メモ残した？',
+      // Accepted false alarms: nothing is excluded any more.
+      '母から電話があった', '上司から連絡が来て大変だった', '友達がメッセージくれた', '母に電話した', 'さっき上司に連絡したよ', '昨日はずっとメールしてた', 'この物語の続きを書いて']) {
       expect(saysSheActedOnHerOwn(text), text).toBe(true);
     }
-    for (const text of ['お、シャノン、元気？', '今日は疲れた', 'もういい、君とはもう話したくない', '明日の予定を教えて',
-      // Someone else as the sender, the owner's own act toward someone else, a notification without an outreach word.
-      '母から電話があった', '上司から連絡が来て大変だった', '友達がメッセージくれた', '母に電話した', 'さっき上司に連絡したよ', 'アプリの通知が来た']) {
+    for (const text of ['お、シャノン、元気？', '今日は疲れた', 'もういい、君とはもう話したくない', '明日の予定を教えて', 'アプリの通知が来た']) {
       expect(saysSheActedOnHerOwn(text), text).toBe(false);
     }
   });
@@ -113,6 +116,7 @@ describe('what the owner says she did on her own', () => {
     const prompt = model.last.systemPrompt;
     expect(prompt).toContain('- PCのボク: 19:34（1分前）にWindowsのデスクトップのボクが音声で聞き始めた（19:36に終了）。ボクの名前が聞こえたと思うと、自分から聞き始めることがある。');
     expect(prompt).toContain('ここにないことは、この記録には残っていないということ');
+    expect(prompt).toContain('聞かれた時に確かめるための参考で、聞かれていなければ持ち出さない');
     expect(prompt).toContain('体に触れられた時のひとことや体の声かけは、記録に残らず話していることがある');
     expect(prompt).not.toContain('していない）');
   });

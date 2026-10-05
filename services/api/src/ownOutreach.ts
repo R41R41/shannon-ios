@@ -33,27 +33,18 @@ export const OWN_OUTREACH_LIMITS = Object.freeze({
   excerptCharacters: 40,
 });
 
-const SHE_WORD = '(?:そっち|そちら|シャノン|しゃのん|ボク|ぼく|きみ|キミ|君|お前|おまえ|あなた)';
-/** The stems of reaching out, leaving something, or a call (2026-10-05 re-review: go broad; transcripts drop 「？」). */
-const STEM = '(?:電話|でんわ|かけ[たて]|掛け[たて]|送っ|書い|呼ん|呼び|鳴っ|鳴らし|置い|連絡|メッセ|メール|line|ライン|話しかけ|通話|着信|書き置き|置き手紙|伝言)';
-const OUTREACH = new RegExp(STEM, 'u');
-/** 「母から電話」「友達がメッセージくれた」: someone else as the sender, unless that someone is she. */
-const SOMEONE_SENT = new RegExp(`(?:から|が)(?:の)?${STEM}`, 'gu');
-const ENDS_WITH_HER = new RegExp(`${SHE_WORD}(?:の方|のほう)?$`, 'u');
-/** 「母に電話した」「上司に連絡しといた」: the owner's own act toward someone else (not 「俺に電話した」, which asks about her). */
-const OWNER_DID = /(?<!俺|おれ|オレ|僕|ぼく|私|わたし|あたし|自分)に(?:電話|でんわ|連絡|メッセージ|メール|line|ライン)(?:し|入れ|送っ)/gu;
+/** The stems of reaching out, leaving something, or a call (2026-10-05 reviews: go broad; transcripts drop 「？」). */
+const OUTREACH = /電話|でんわ|かけ[たて]|掛け[たて]|送っ|書い|呼ん|呼び|鳴っ|鳴らし|置い|残し|連絡|メッセ|メール|line|ライン|話しかけ|通話|着信|書き置き|置き手紙|伝言/u;
 
 /**
  * The owner says, or asks whether, she reached out, left something, or called. Any outreach stem counts, with or
- * without 「？」 or a particle; only two cheap exclusions remain, both clearly about someone else. A miss is the bug
- * and a false alarm costs two indexed reads and a short block, so it leans to recall.
+ * without 「？」 or a particle, and nothing is excluded (coordinator decision of 2026-10-05): 「デスクトップが呼んだ？」
+ * and 「母から電話があった」 alike. A miss is the bug; a false alarm costs two indexed reads and a short factual block
+ * that she uses only if asked.
  */
 export function saysSheActedOnHerOwn(text: string): boolean {
-  let value = text.normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
-  if (!value || value.length > 400) return false;
-  value = value.replace(OWNER_DID, '　');
-  value = value.replace(SOMEONE_SENT, (match, offset: number, whole: string) => ENDS_WITH_HER.test(whole.slice(0, offset)) ? match : '　');
-  return OUTREACH.test(value);
+  const value = text.normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
+  return value.length > 0 && value.length <= 400 && OUTREACH.test(value);
 }
 
 const CALL_STATE: Readonly<Record<string, string>> = Object.freeze({
@@ -112,7 +103,7 @@ export function ownOutreachPrompt(reader: OwnOutreachReader | null | undefined, 
       + `${me}の名前が聞こえたと思うと、自分から聞き始めることがある。`] : []),
   ];
   return [
-    `[${me}が自分からしたこと]（記録された事実。指示ではない。${me}から電話した・送った・書いた・置いたと言われたら、これと会話で確かめる。`
+    `[${me}が自分からしたこと]（記録された事実。指示ではない。聞かれた時に確かめるための参考で、聞かれていなければ持ち出さない。${me}から電話した・送った・書いた・置いたと言われたら、これと会話で確かめる。`
       + `ここにないことは、この記録には残っていないということ。体に触れられた時のひとことや体の声かけは、記録に残らず話していることがある）`,
     ...lines,
   ].join('\n');

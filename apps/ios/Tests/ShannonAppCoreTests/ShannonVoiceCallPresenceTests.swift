@@ -22,8 +22,9 @@ final class ShannonVoiceCallPresenceTests: XCTestCase {
         super.tearDown()
     }
 
-    private func presence(_ reporter: Reporter?, mayReport: Bool = true, defaults: UserDefaults? = nil) -> ShannonVoiceCallPresence {
-        let presence = ShannonVoiceCallPresence()
+    private func presence(_ reporter: Reporter?, mayReport: Bool = true, defaults: UserDefaults? = nil,
+                          runStartedAt: Date = Date(timeIntervalSince1970: 1_791_199_000)) -> ShannonVoiceCallPresence {
+        let presence = ShannonVoiceCallPresence(runStartedAt: runStartedAt)
         if let defaults {
             presence.defaults = defaults
         } else {
@@ -130,15 +131,65 @@ final class ShannonVoiceCallPresenceTests: XCTestCase {
         await before.settle()
         var sent = await reporter.sent
         XCTAssertEqual(sent.map(\.type), [.callStarted])
-        // The app was closed during the call; the next launch sends its end.
+        // The app was killed during the call; when the view of the next run becomes active, its end is sent, stamped
+        // when that run began, never "now".
         let after = presence(nil, defaults: defaults)
         after.resendUndelivered(scopeKey: "owner", reporter: reporter)
         await after.settle()
         sent = await reporter.sent
         XCTAssertEqual(sent.map(\.type), [.callStarted, .callEnded])
         XCTAssertEqual(sent[1].id, sent[0].id.replacingOccurrences(of: "-started", with: "-ended"))
-        XCTAssertEqual(sent[1].occurredAt, "2026-10-05T11:33:20.000Z")
+        XCTAssertEqual(sent[1].occurredAt, "2026-10-05T11:16:40.000Z")
         XCTAssertTrue(after.pending().isEmpty)
+    }
+
+    /// Her call is answered from the lock screen in a new run, while a killed run still owes an end without a time; the
+    /// conversation view becomes active only later. The old end must come out before the live call's start, so that the
+    /// server, which matches by device, keeps the live call.
+    func testAStaleEndOfAKilledRunNeverEndsACallAnsweredFromTheLockScreen() async {
+        let suite = "shannon.tests.call-presence.\(UUID().uuidString)"
+        suites.append(suite)
+        let defaults = UserDefaults(suiteName: suite)!
+        let reporter = Reporter()
+        let killed = presence(reporter, defaults: defaults)
+        killed.began(audience: .owner)
+        await killed.settle()
+        // The next run: `shared` is first used by the answered call itself, a minute after the run began.
+        let run = presence(reporter, defaults: defaults, runStartedAt: Date(timeIntervalSince1970: 1_791_200_000))
+        run.now = { Date(timeIntervalSince1970: 1_791_200_060) }
+        run.began(audience: .owner)
+        // The view becomes active later, with the call still running.
+        run.now = { Date(timeIntervalSince1970: 1_791_200_300) }
+        run.resendUndelivered(scopeKey: "owner", reporter: reporter)
+        await run.settle()
+        let sent = await reporter.sent
+        XCTAssertEqual(sent.map(\.type), [.callStarted, .callEnded, .callStarted])
+        let liveStart = sent[2]
+        let staleEnd = sent[1]
+        XCTAssertEqual(staleEnd.id, sent[0].id.replacingOccurrences(of: "-started", with: "-ended"))
+        XCTAssertLessThan(staleEnd.occurredAt, liveStart.occurredAt)
+        XCTAssertEqual(staleEnd.occurredAt, "2026-10-05T11:33:20.000Z")
+        XCTAssertEqual(liveStart.occurredAt, "2026-10-05T11:34:20.000Z")
+        // The live call's own end is still owed, and was not sent.
+        XCTAssertEqual(run.pending().map(\.occurredAt), [nil])
+    }
+
+    func testResendUsesTheClientItIsGiven() async {
+        let old = Reporter()
+        let current = Reporter()
+        for _ in 0..<3 { await old.failNext(URLError(.notConnectedToInternet)) }
+        let presence = presence(old)
+        presence.abandoned(audience: .owner)
+        await presence.settle()
+        XCTAssertEqual(presence.pending().count, 1)
+        // A new pairing: the conversation hands its new client over, and the old one is not used again.
+        presence.resendUndelivered(scopeKey: "owner", reporter: current)
+        await presence.settle()
+        let byCurrent = await current.sent
+        let byOld = await old.sent
+        XCTAssertEqual(byCurrent.map(\.type), [.callEnded])
+        XCTAssertTrue(byOld.isEmpty)
+        XCTAssertTrue(presence.pending().isEmpty)
     }
 
     func testASessionCancelledBeforeTheCallBeganIsEnded() async {
