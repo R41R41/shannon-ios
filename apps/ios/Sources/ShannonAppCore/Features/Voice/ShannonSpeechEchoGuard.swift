@@ -25,11 +25,19 @@ struct ShannonSpeechEchoGuard {
     static let memorySeconds: TimeInterval = 90
     /// A long talk of several minutes stays known as a whole.
     static let maximumRememberedCharacters = 6_000
+    /// Echo is of her latest words. Approximate matching (recognition noise) and copies shorter
+    /// than `fuzzyMinimumCharacters` look only at what she said in the last `recentSeconds`, at
+    /// most `recentCharacters`: across thousands of characters nearly every pair of everyday
+    /// Japanese appears somewhere, and the owner's real interruption would be taken for echo.
+    static let recentSeconds: TimeInterval = 20
+    static let recentCharacters = 600
 
     private struct Entry {
         /// The display text and the synthesized form, normalized.
         let shown: String
         let spoken: String
+        /// When its first audio played.
+        let at: TimeInterval
     }
 
     private var entries: [Entry] = []
@@ -41,7 +49,7 @@ struct ShannonSpeechEchoGuard {
         let spoken = Self.normalized(ShannonGeminiCascadeSpeech.spokenText(for: text))
         guard !shown.isEmpty || !spoken.isEmpty else { return }
         markSounding(at: now)
-        entries.append(Entry(shown: shown, spoken: spoken))
+        entries.append(Entry(shown: shown, spoken: spoken, at: now))
         var total = entries.reduce(0) { $0 + max($1.shown.count, $1.spoken.count) }
         while total > Self.maximumRememberedCharacters, entries.count > 1 {
             let first = entries.removeFirst()
@@ -64,8 +72,21 @@ struct ShannonSpeechEchoGuard {
         let heard = Self.normalized(transcript)
         guard heard.count >= Self.minimumCharacters,
               let lastSoundingAt, now - lastSoundingAt <= Self.memorySeconds else { return false }
-        return Self.matches(heard, entries.map(\.shown).joined())
-            || Self.matches(heard, entries.map(\.spoken).joined())
+        // A long exact copy is hers wherever it was in what she said.
+        if heard.count >= Self.fuzzyMinimumCharacters,
+           entries.map(\.shown).joined().contains(heard) || entries.map(\.spoken).joined().contains(heard) {
+            return true
+        }
+        let firstRecent = (entries.lastIndex { $0.at < lastSoundingAt - Self.recentSeconds } ?? -1) + 1
+        let recent = entries[min(firstRecent, max(0, entries.count - 1))...]
+        return Self.matches(heard, String(recent.map(\.shown).joined().suffix(Self.recentCharacters)))
+            || Self.matches(heard, String(recent.map(\.spoken).joined().suffix(Self.recentCharacters)))
+    }
+
+    /// `isEcho`, except that a stop word always reaches her, also when the same words were in
+    /// what she just said (her story's 「ちょっと待って」 must not swallow the owner's).
+    func isOwnVoice(_ transcript: String, now: TimeInterval) -> Bool {
+        !ShannonVoiceBargeInRule.isStopWord(Self.normalized(transcript)) && isEcho(transcript, now: now)
     }
 
     private static func matches(_ heard: String, _ spoken: String) -> Bool {

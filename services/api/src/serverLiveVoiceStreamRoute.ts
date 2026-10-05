@@ -3,6 +3,7 @@ import type { ShannonApiKernel } from './apiKernel.js';
 import type { ShannonDevicePrincipal } from './deviceAuth.js';
 import { bindScope, readJson, sendJson } from './serverHttp.js';
 import { SpokenSentenceSegmenter } from './spokenSentences.js';
+import { VOICE_CONTENT_FILTERED } from './chatModelVoiceStream.js';
 
 export { SpokenSentenceSegmenter } from './spokenSentences.js';
 
@@ -115,10 +116,13 @@ export function createLiveVoiceStreamRoute(
       console.warn('Shannon live voice stream failed', {
         name: error instanceof Error ? error.name : 'UnknownError',
       });
+      // `code` (optional, additive) tells a client what to do with what she already said:
+      // `content_filter` means drop it; without a code, sentences already said may be kept.
+      const code = error instanceof Error && error.message === VOICE_CONTENT_FILTERED ? { code: 'content_filter' } : {};
       if (!response.headersSent) {
-        sendJson(response, 502, { error: 'MODEL_UNAVAILABLE', message: '返答を生成できませんでした。' });
+        sendJson(response, 502, { error: 'MODEL_UNAVAILABLE', message: '返答を生成できませんでした。', ...code });
       } else {
-        await writeEvent(response, { type: 'error', status: 502 }).catch(() => {});
+        await writeEvent(response, { type: 'error', status: 502, ...code }).catch(() => {});
         response.end();
       }
     } finally {

@@ -137,7 +137,7 @@ Unchanged. The whole request must arrive within 30 seconds. The model call has o
 | `plan` | `voicePlan` | The acting plan of the turn; it may be sent again, reconciled with the first sentence. |
 | `segment` | `text`, `voicePlan` | One complete spoken sentence (the waiting phrase is the first, with its own acting plan). |
 | `completed` | `response` | Terminal. `response` is the body of `POST /v1/voice/gemini/cascade/delegations` for this turn. |
-| `error` | `status` | Terminal. The reply failed; the input is not answered. |
+| `error` | `status`, optional `code` | Terminal. The reply failed. `code: "content_filter"`: the provider withheld it, and a client drops what it was saying. Without a code, sentences already said may be kept as a reply cut off (the iPhone does so from Build 137). A `502` before any line carries the same optional `code` in its JSON body. |
 
 - **A reply cut at its length limit** (owner decision 2026-10-05). When the model stops at its output ceiling, the turn still ends with `completed`. The reply ends at its last complete sentence: the unfinished sentence is in no `segment` and not in `response.reply`, and `response.truncated` is `true` (absent otherwise). If not one sentence was finished, the words written are kept and sent as one `segment`. The non-streaming `/delegations` response is cut and marked the same way. A client that does not know the field treats the turn as an ordinary completed reply, which it is.
 - **Timeouts.** The model call of a streamed voice reply has no total limit: 20 seconds to its first word (30 seconds when the turn searches the web) and 30 seconds with nothing arriving afterwards. Text chat keeps the single 30-second budget above.

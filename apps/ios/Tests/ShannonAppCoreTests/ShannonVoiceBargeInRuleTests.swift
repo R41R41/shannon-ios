@@ -77,6 +77,43 @@ struct ShannonVoiceBargeInRuleTests {
         #expect(admitted9)
     }
 
+    @Test func aStartWhoseTranscriptNeverCameDoesNotDecideALaterAnswer() {
+        var rule = speaking()
+        // Her echo started speech near her voice, but its transcript was empty and never arrived.
+        rule.speechStarted(at: 10.1)
+        rule.speechStopped(at: 10.6)
+        rule.voiceStopped(at: 11)
+        // Ten seconds after she finished, the owner answers briefly.
+        rule.speechStarted(at: 21)
+        rule.speechStopped(at: 21.4)
+        let answer = rule.admits("はい", now: 22)
+        #expect(answer)
+    }
+
+    @Test func aStaleOriginExpiresEvenWithoutANewStart() {
+        var rule = speaking()
+        rule.speechStarted(at: 10.1)
+        rule.speechStopped(at: 10.5)
+        rule.voiceStopped(at: 11)
+        // A transcript arriving long after that start is not judged by it.
+        let late = rule.admits("うん", now: 20)
+        #expect(late)
+        // Within the window the origin still counts.
+        rule.voiceSounding(at: 30)
+        rule.speechStarted(at: 30.2)
+        rule.speechStopped(at: 30.6)
+        rule.voiceStopped(at: 31)
+        let fresh = rule.admits("うん", now: 32)
+        #expect(!fresh)
+    }
+
+    @Test func theAddedStopWordsStopHer() {
+        for word in ["まて", "もういい", "うるさい"] {
+            #expect(ShannonVoiceBargeInRule.isStopWord(ShannonSpeechEchoGuard.normalized(word)), "\(word)")
+        }
+        #expect(!ShannonVoiceBargeInRule.isStopWord(ShannonSpeechEchoGuard.normalized("ちょっと")))
+    }
+
     @Test func stoppingWithoutHavingSoundedLeavesNoTail() {
         var rule = ShannonVoiceBargeInRule()
         rule.voiceStopped(at: 5)

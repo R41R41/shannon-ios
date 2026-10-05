@@ -334,6 +334,8 @@ public struct ShannonLiveVoiceStreamEventDTO: Codable, Equatable, Sendable {
     public let voicePlan: ShannonVoicePlanDTO?
     public let response: ShannonLiveVoiceDelegationResponseDTO?
     public let status: Int?
+    /// On `error`: `content_filter` when the provider withheld the reply (optional, newer servers).
+    public let code: String?
 }
 
 public typealias ShannonVoiceSegmentHandler = @MainActor @Sendable (

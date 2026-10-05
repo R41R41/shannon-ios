@@ -21,6 +21,15 @@ export const DEFAULT_VOICE_STREAM_BOUNDS: Readonly<VoiceStreamBounds> = Object.f
  */
 export const VOICE_WEB_FIRST_OUTPUT_MILLISECONDS = 30_000;
 
+/**
+ * A non-streaming voice reply sends nothing before it is complete, so it has one total: room
+ * for 1,600 output tokens with searches, inside the proxy's 120-second read timeout.
+ */
+export const VOICE_RESPONSE_TIMEOUT_MILLISECONDS = 90_000;
+
+/** The provider withheld the reply for its content; the client drops what it was saying. */
+export const VOICE_CONTENT_FILTERED = 'OPENAI_RESPONSE_CONTENT_FILTERED';
+
 export interface VoiceStreamCall {
   fetcher: typeof fetch;
   endpoint: string;
@@ -30,6 +39,8 @@ export interface VoiceStreamCall {
   bounds: VoiceStreamBounds;
   /** The caller's own cancellation (the owner hung up or spoke over her). */
   signal?: AbortSignal;
+  /** An incomplete response that is still a failure, with the usage it reported. */
+  onSpentWithoutReply?: (envelope: unknown) => void;
 }
 
 export interface VoiceStreamOutcome {
@@ -97,8 +108,10 @@ export async function streamedVoiceReply(
       } else if (value.type === 'response.completed') {
         envelope = value.response;
       } else if (value.type === 'response.incomplete') {
-        if (record(record(value.response)?.incomplete_details)?.reason !== 'max_output_tokens') {
-          throw new Error('OPENAI_RESPONSE_STREAM_INCOMPLETE');
+        const reason = record(record(value.response)?.incomplete_details)?.reason;
+        if (reason !== 'max_output_tokens') {
+          call.onSpentWithoutReply?.(value.response);
+          throw new Error(reason === 'content_filter' ? VOICE_CONTENT_FILTERED : 'OPENAI_RESPONSE_STREAM_INCOMPLETE');
         }
         envelope = value.response;
         truncated = true;
@@ -108,7 +121,11 @@ export async function streamedVoiceReply(
     }
     reply = reply.trim();
     if (truncated) reply = completeSpokenSentences(reply) || reply;
-    if (!reply || !envelope) throw new Error('OPENAI_RESPONSE_STREAM_INCOMPLETE');
+    if (!reply || !envelope) {
+      // The output limit was spent before any word (for example on reasoning): accounted, then failed.
+      if (truncated) call.onSpentWithoutReply?.(envelope);
+      throw new Error('OPENAI_RESPONSE_STREAM_INCOMPLETE');
+    }
     return { reply, envelope, truncated };
   } catch (error) {
     // A bound that ran out names itself; the caller's own cancellation stays what it was.

@@ -8,6 +8,7 @@ import {
 import { streamedChatTurnEnvelope } from './chatModelStream.js';
 import {
   DEFAULT_VOICE_STREAM_BOUNDS,
+  VOICE_RESPONSE_TIMEOUT_MILLISECONDS,
   VOICE_WEB_FIRST_OUTPUT_MILLISECONDS,
   reachedVoiceLengthLimit,
   streamedVoiceReply,
@@ -162,6 +163,8 @@ export interface OpenAIResponsesModelOptions {
   agentHostHint?: string;
   /** Streamed voice replies: the wait for the first word and for each later piece (no total limit). */
   voiceStreamBounds?: Partial<VoiceStreamBounds>;
+  /** A non-streaming voice reply (the body's `/delegations`): one total, room for the longest reply. */
+  voiceResponseTimeoutMilliseconds?: number;
 }
 
 /**
@@ -260,7 +263,8 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
         'content-type': 'application/json',
       },
       body: JSON.stringify(this.voiceRequestPayload(request)),
-      signal: AbortSignal.timeout(this.timeoutMilliseconds),
+      // Nothing arrives before the whole reply, so this bound is a total sized for the longest one.
+      signal: AbortSignal.timeout(this.options.voiceResponseTimeoutMilliseconds ?? VOICE_RESPONSE_TIMEOUT_MILLISECONDS),
     });
     const raw = await response.text();
     const json = parseJson(raw);
@@ -269,7 +273,10 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     // A reply cut at its output limit ends at its last complete sentence, as in the stream.
     const truncated = reachedVoiceLengthLimit(json);
     const reply = truncated ? completeSpokenSentences(written) || written : written;
-    if (!reply) throw new Error('OPENAI_RESPONSE_EMPTY');
+    if (!reply) {
+      this.recordSpentVoiceUsage(request.scopeKey, json);
+      throw new Error('OPENAI_RESPONSE_EMPTY');
+    }
     return this.voiceResult(request, json, reply, truncated);
   }
 
@@ -285,8 +292,14 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     const outcome = await streamedVoiceReply({
       fetcher: this.fetcher, endpoint: this.endpoint, apiKey: this.options.apiKey,
       body: this.voiceRequestPayload(request), bounds, ...(signal ? { signal } : {}),
+      onSpentWithoutReply: envelope => this.recordSpentVoiceUsage(request.scopeKey, envelope),
     }, onTextDelta);
     return this.voiceResult(request, outcome.envelope, outcome.reply, outcome.truncated);
+  }
+
+  /** A voice response that used tokens but gave no usable reply is still accounted. */
+  private recordSpentVoiceUsage(scopeKey: string, envelope: unknown): void {
+    if (responseUsage(envelope).totalTokens > 0) this.recordChatUsage(scopeKey, envelope);
   }
 
   /** Accounts a finished voice reply and builds its result. */
@@ -296,15 +309,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     reply: string,
     truncated: boolean,
   ): ShannonChatModelResult {
-    const usage = responseUsage(envelope);
-    this.options.usageStore?.recordLlmUsage({
-      scopeKey: request.scopeKey,
-      lane: 'chat',
-      model: this.model,
-      ...usage,
-      estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage),
-      occurredAt: this.options.now?.() ?? new Date().toISOString(),
-    });
+    this.recordChatUsage(request.scopeKey, envelope);
     const webSources = request.useWebSearch ? extractWebSources(envelope) : [];
     return {
       mode: this.mode,

@@ -78,6 +78,7 @@ enum ShannonVoiceStreamReader {
                 }
                 return completed
             case .error:
+                if event.code == "content_filter" { throw ShannonVoiceReplyWithheld() }
                 throw ShannonAPIError.rejected(status: event.status ?? 502)
             }
         }

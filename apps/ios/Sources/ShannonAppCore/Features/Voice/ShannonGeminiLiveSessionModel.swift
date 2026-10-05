@@ -315,6 +315,7 @@ public final class ShannonGeminiLiveSessionModel {
             duckForSpeech()
         case .speechStopped:
             backgroundSilence.ownerSpeechStopped(at: Date())
+            bargeInRule.speechStopped(at: ProcessInfo.processInfo.systemUptime)
             if responseTask != nil { scheduleDuckRelease() }
         case let .inputTranscript(text):
             if discardsNearHerVoice(text) { return }

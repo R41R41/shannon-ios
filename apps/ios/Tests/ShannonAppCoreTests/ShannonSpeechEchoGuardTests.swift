@@ -106,6 +106,33 @@ final class ShannonSpeechEchoGuardTests: XCTestCase {
         XCTAssertTrue(state.isEcho("新しい話を始めますね", now: 301))
     }
 
+    func testTheOwnersRealInterruptionDuringALongTalkIsNotTakenForEcho() {
+        var state = ShannonSpeechEchoGuard()
+        // Early in a long talk she used everyday words the owner will use again later.
+        state.recordPlayed("それって昨日の話と同じじゃないのって、町の人は言いました。", at: 0)
+        state.recordPlayed("でも少女は、本当にそう思うかなと首をかしげました。", at: 3)
+        for index in 0..<40 {
+            state.recordPlayed("灯台の光は海の上をゆっくり回り、船は港へ帰ってきます\(index)。", at: 6 + Double(index) * 3)
+        }
+        let now = 6 + 39 * 3 + 1.0
+        // Every pair of his sentence appears somewhere in the talk, but not in what she just said.
+        XCTAssertFalse(state.isEcho("それって本当に昨日の話と同じじゃないの", now: now))
+        // Her latest words coming back, with recognition noise, are still echo.
+        XCTAssertTrue(state.isEcho("灯台の光は海の上をゆっくり回り船は港へ帰ってきまし", now: now))
+        // A long exact copy of an early sentence is still hers.
+        XCTAssertTrue(state.isEcho("でも少女は本当にそう思うかなと首をかしげました", now: now))
+    }
+
+    func testAStopPhraseFromHerStoryNeverSwallowsTheOwnersStop() {
+        var state = ShannonSpeechEchoGuard()
+        state.recordPlayed("「ちょっと待って」と少女は言いました。", at: 0)
+        state.recordPlayed("ちょっと待ってそれ違うと思うよ、と船長は答えました。", at: 2)
+        XCTAssertTrue(state.isEcho("ちょっと待ってそれ違うと思う", now: 4))
+        XCTAssertFalse(state.isOwnVoice("ちょっと待ってそれ違うと思う", now: 4))
+        XCTAssertFalse(state.isOwnVoice("ちょっと待って", now: 4))
+        XCTAssertTrue(state.isOwnVoice("と船長は答えました", now: 4))
+    }
+
     func testRecognisesHerVoiceInTheFormThatWasSpoken() {
         // The display text says Voyager; the voice said ボイジャー, which is what the recogniser hears.
         let state = guarded("Voyagerのビルドは今朝出しましたよ。😊")

@@ -35,6 +35,17 @@ export class SpeechScopeConcurrencyLimiter {
   }
 }
 
+/**
+ * A sentence refused before synthesis. Each refusal leaves one line in the service log (the
+ * code and the provider, never the text or the device), so a client that went silent can be traced.
+ */
+export function refuseSpeech(response: ServerResponse, code: 'BUSY' | 'RATE_LIMITED', provider: 'gemini' | 'eleven'): void {
+  console.warn('Shannon speech refused', { code, provider });
+  sendJson(response, 429, code === 'BUSY'
+    ? { error: 'BUSY', message: 'いまの返答を音声にしています。' }
+    : { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
+}
+
 export function createGeminiSpeechRoute(
   environment: Readonly<Record<string, string | undefined>>,
   usageStore: LlmUsageStore,
@@ -74,13 +85,9 @@ export function createGeminiSpeechRoute(
         return sendJson(response, 400, { error: 'GEMINI_SPEECH_INVALID_STYLE' });
       }
       if (provider === 'eleven') validatedElevenTags(style);
-      if (!activeScopes.acquire(principal.scopeKey)) {
-        return sendJson(response, 429, { error: 'BUSY', message: 'いまの返答を音声にしています。' });
-      }
+      if (!activeScopes.acquire(principal.scopeKey)) return refuseSpeech(response, 'BUSY', provider);
       try {
-        if (!consumeAllowance(principal.deviceId)) {
-          return sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
-        }
+        if (!consumeAllowance(principal.deviceId)) return refuseSpeech(response, 'RATE_LIMITED', provider);
         if (mode === 'stream') {
           await streamSpeech(request, response, selectedGateway, { scopeKey: principal.scopeKey, text, style }, provider);
           return;

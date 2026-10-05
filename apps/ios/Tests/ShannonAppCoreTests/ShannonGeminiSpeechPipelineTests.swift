@@ -53,6 +53,79 @@ struct ShannonGeminiSpeechPipelineTests {
         #expect(events.filter { $0.hasPrefix("play-end:") } == segments.map { "play-end:\($0)" })
     }
 
+    @Test("a sentence refused as busy is asked again briefly instead of silencing the reply")
+    func retriesABusySentence() async throws {
+        var attempts: [String: Int] = [:]
+        var played: [String] = []
+        let coordinator = ShannonGeminiStreamingSpeechCoordinator(
+            style: { _, _ in "" },
+            streamSpeech: { text, _ in
+                attempts[text, default: 0] += 1
+                if text == "最初です。", attempts[text]! <= 2 { throw ShannonAPIError.rejected(status: 429) }
+                return Self.stream(named: text)
+            },
+            consumeSpeech: { speech, _ in
+                for try await _ in speech.chunks {}
+                played.append(speech.voice)
+            },
+            busyRetryDelays: [.milliseconds(1), .milliseconds(1), .milliseconds(1)]
+        )
+        await coordinator.enqueue("最初です。", plan: nil)
+        await coordinator.enqueue("次です。", plan: nil)
+        try await coordinator.finish()
+        #expect(attempts["最初です。"] == 3)
+        #expect(played == ["最初です。", "次です。"])
+    }
+
+    @Test("a sentence still refused after the pauses fails, and other errors are not retried")
+    func givesUpOnPersistentRefusal() async {
+        var attempts = 0
+        let coordinator = ShannonGeminiStreamingSpeechCoordinator(
+            style: { _, _ in "" },
+            streamSpeech: { _, _ in
+                attempts += 1
+                throw attempts == 1 ? ShannonAPIError.rejected(status: 429) : ShannonAPIError.rejected(status: 502)
+            },
+            consumeSpeech: { _, _ in },
+            busyRetryDelays: [.milliseconds(1), .milliseconds(1)]
+        )
+        await coordinator.enqueue("最初です。", plan: nil)
+        await #expect(throws: ShannonAPIError.rejected(status: 502)) { try await coordinator.finish() }
+        #expect(attempts == 2)
+    }
+
+    @Test("never more than two sentences are in flight, counting the one still streaming")
+    func neverExceedsTwoInFlight() async throws {
+        var inFlight = 0
+        var highest = 0
+        let gate = SpeechConsumptionGate()
+        let coordinator = ShannonGeminiStreamingSpeechCoordinator(
+            style: { _, _ in "" },
+            streamSpeech: { text, _ in
+                inFlight += 1
+                highest = max(highest, inFlight)
+                return Self.stream(named: text)
+            },
+            consumeSpeech: { speech, _ in
+                await gate.wait()
+                for try await _ in speech.chunks {}
+                inFlight -= 1
+            }
+        )
+        let sentences = (0..<5).map { "文\($0)です。" }
+        let feeding = Task { @MainActor in
+            for sentence in sentences { await coordinator.enqueue(sentence, plan: nil) }
+        }
+        for _ in sentences {
+            await waitUntil { await gate.waiterCount == 1 }
+            await gate.releaseOne()
+        }
+        await feeding.value
+        try await coordinator.finish()
+        #expect(highest == 2)
+        #expect(inFlight == 0)
+    }
+
     private func waitUntil(_ condition: @escaping @MainActor () async -> Bool) async {
         for _ in 0..<200 {
             if await condition() { return }

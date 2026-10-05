@@ -128,9 +128,15 @@ final class ShannonGeminiStreamingSpeechCoordinator {
     /// The speech of one sentence and its display text, so the sentence is known when it plays.
     typealias ConsumeSpeech = @MainActor (ShannonGeminiSpeechStream, String) async throws -> Void
 
+    /// A sentence refused with 429 (the server's per-owner speech slots are busy, for example while
+    /// another of her bodies speaks, or a slot of a cancelled sentence is not released yet) is asked
+    /// again after these pauses instead of failing the reply's audio.
+    static let busyRetryDelays: [Duration] = [.milliseconds(250), .milliseconds(500), .seconds(1), .seconds(2)]
+
     private let style: @MainActor (String, ShannonVoicePlanDTO?) -> String
     private let streamSpeech: StreamSpeech
     private let consumeSpeech: ConsumeSpeech
+    private let busyRetryDelays: [Duration]
     private var tail: Task<Void, Error>?
     private var speechTasks: [UUID: Task<ShannonGeminiSpeechStream, Error>] = [:]
     private var playbackTasks: [UUID: Task<Void, Error>] = [:]
@@ -141,11 +147,13 @@ final class ShannonGeminiStreamingSpeechCoordinator {
     init(
         style: @escaping @MainActor (String, ShannonVoicePlanDTO?) -> String,
         streamSpeech: @escaping StreamSpeech,
-        consumeSpeech: @escaping ConsumeSpeech
+        consumeSpeech: @escaping ConsumeSpeech,
+        busyRetryDelays: [Duration] = ShannonGeminiStreamingSpeechCoordinator.busyRetryDelays
     ) {
         self.style = style
         self.streamSpeech = streamSpeech
         self.consumeSpeech = consumeSpeech
+        self.busyRetryDelays = busyRetryDelays
     }
 
     func enqueue(_ text: String, plan: ShannonVoicePlanDTO?) async {
@@ -159,8 +167,15 @@ final class ShannonGeminiStreamingSpeechCoordinator {
 
         activeCount += 1
         let identifier = UUID()
-        let speechTask = Task { @MainActor [streamSpeech, style] in
-            try await streamSpeech(spokenText, style(text, plan))
+        let speechTask = Task { @MainActor [streamSpeech, style, busyRetryDelays] in
+            // At most two sentences are in flight here (the one still streaming and one prefetched),
+            // which is the server's limit; a 429 means someone else holds a slot for a moment.
+            for delay in busyRetryDelays {
+                do { return try await streamSpeech(spokenText, style(text, plan)) } catch ShannonAPIError.rejected(status: 429) {
+                    try await Task.sleep(for: delay)
+                }
+            }
+            return try await streamSpeech(spokenText, style(text, plan))
         }
         speechTasks[identifier] = speechTask
         let previous = tail

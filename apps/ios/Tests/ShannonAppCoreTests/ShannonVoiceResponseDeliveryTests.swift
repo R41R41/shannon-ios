@@ -87,10 +87,65 @@ struct ShannonVoiceResponseDeliveryTests {
         #expect(plain.truncated == nil)
     }
 
-    @Test func aFailureLetsHerVoiceAlreadyOnItsWayFinishUnlessPlaybackStalled() {
-        #expect(ShannonVoiceResponseDelivery.queuedSpeech(afterFailureAt: "generation") == .finishReceivedSentences)
-        #expect(ShannonVoiceResponseDelivery.queuedSpeech(afterFailureAt: "synthesis_stream") == .finishScheduledAudio)
-        #expect(ShannonVoiceResponseDelivery.queuedSpeech(afterFailureAt: "playback") == .discard)
+    @Test func aFailureLetsHerVoiceAlreadyOnItsWayFinishUnlessPlaybackStalledOrContentWasWithheld() {
+        let failure = ShannonAPIError.rejected(status: 502)
+        #expect(ShannonVoiceResponseDelivery.queuedSpeech(afterFailureAt: "generation", error: failure) == .finishReceivedSentences)
+        #expect(ShannonVoiceResponseDelivery.queuedSpeech(afterFailureAt: "synthesis_stream", error: failure) == .finishScheduledAudio)
+        #expect(ShannonVoiceResponseDelivery.queuedSpeech(afterFailureAt: "playback", error: failure) == .discard)
+        #expect(ShannonVoiceResponseDelivery.queuedSpeech(afterFailureAt: "generation", error: ShannonVoiceReplyWithheld()) == .discard)
+        #expect(ShannonVoiceResponseDelivery.errorCategory(ShannonVoiceReplyWithheld()) == "content_filter")
+    }
+
+    @Test func aWithheldReplyIsNamedByTheStreamAndOtherErrorsStayAsBefore() async {
+        let withheld = AsyncThrowingStream<String, Error> { continuation in
+            continuation.yield(#"{"type":"segment","text":"途中まで。"}"#)
+            continuation.yield(#"{"type":"error","status":502,"code":"content_filter"}"#)
+            continuation.finish()
+        }
+        await #expect(throws: ShannonVoiceReplyWithheld.self) {
+            try await ShannonVoiceStreamReader.read(lines: withheld) { _, _ in }
+        }
+        let failed = AsyncThrowingStream<String, Error> { continuation in
+            continuation.yield(#"{"type":"error","status":502}"#)
+            continuation.finish()
+        }
+        await #expect(throws: ShannonAPIError.rejected(status: 502)) {
+            try await ShannonVoiceStreamReader.read(lines: failed) { _, _ in }
+        }
+    }
+
+    @Test func whatSheSaidOfAnUnfinishedAnswerBecomesHerReplyAndTheInputIsNotAskedAgain() throws {
+        var ledger = ShannonPendingVoiceTurns()
+        ledger.append(rawText: "長い話をして", text: "長い話をして", source: .speech)
+        let batch = try #require(ledger.batch())
+        var delivery = ShannonVoiceResponseDelivery()
+        // The waiting phrase, then three answer sentences; only two of them were played.
+        delivery.spoken.queued("少し考えますね。", waitingPhrase: "少し考えますね。")
+        delivery.spoken.queued("むかしむかし。", waitingPhrase: "少し考えますね。")
+        delivery.spoken.queued("😊", waitingPhrase: "少し考えますね。")
+        delivery.spoken.queued("灯台がありました。", waitingPhrase: "少し考えますね。")
+        delivery.spoken.queued("まだ言っていない文。", waitingPhrase: "少し考えますね。")
+        delivery.spoken.played("少し考えますね。")
+        delivery.spoken.played("むかしむかし。")
+        delivery.spoken.played("灯台がありました。")
+        delivery.scheduledAudio(seconds: 3)
+        let kept = delivery.keepSpokenPart(batch: batch, ledger: &ledger)
+        #expect(kept == "むかしむかし。😊灯台がありました。…")
+        #expect(ledger.turns.isEmpty)
+        #expect(delivery.failureMessage.contains("話した部分までを会話に残し"))
+    }
+
+    @Test func nothingIsKeptWhenSheSaidOnlyTheWaitingPhrase() throws {
+        var ledger = ShannonPendingVoiceTurns()
+        ledger.append(rawText: "天気は？", text: "天気は？", source: .speech)
+        let batch = try #require(ledger.batch())
+        var delivery = ShannonVoiceResponseDelivery()
+        delivery.spoken.queued("空模様を確かめますね。", waitingPhrase: "空模様を確かめますね。")
+        delivery.spoken.played("空模様を確かめますね。")
+        delivery.scheduledAudio(seconds: 1)
+        #expect(delivery.keepSpokenPart(batch: batch, ledger: &ledger) == nil)
+        #expect(ledger.turns.count == 1)
+        #expect(delivery.failureMessage.contains("未完了の入力は保持"))
     }
 
     @Test func theWatchdogBoundsAStallNotTheLengthOfATalk() async throws {

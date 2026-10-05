@@ -68,7 +68,8 @@ extension ShannonGeminiLiveSessionModel {
                                        "response_ms": String(milliseconds)])
                     }
                     self.shannonTranscript += segment
-                    // The echo guard learns the sentence when it is played (`consumeResponseSpeech`).
+                    // The echo guard and the spoken part learn the sentence when it is played (`consumeResponseSpeech`).
+                    self.responseDelivery.spoken.queued(segment, waitingPhrase: plan?.waitingPhrase)
                     await coordinator.enqueue(segment, plan: plan)
                 }
                 let response = if let localReply {
@@ -160,7 +161,7 @@ extension ShannonGeminiLiveSessionModel {
                 return
             } catch {
                 guard responseGenerationID == generation else { return }
-                let queued = ShannonVoiceResponseDelivery.queuedSpeech(afterFailureAt: failureStage)
+                let queued = ShannonVoiceResponseDelivery.queuedSpeech(afterFailureAt: failureStage, error: error)
                 ShannonVoiceDiagnostics.shared.record("gemini.response.failed", sessionID: generation.uuidString,
                     metadata: ["stage": failureStage,
                         "category": ShannonVoiceResponseDelivery.errorCategory(error),
@@ -177,15 +178,35 @@ extension ShannonGeminiLiveSessionModel {
                 }
                 guard responseGenerationID == generation, !Task.isCancelled else { return }
                 if queued == .discard { transport?.discardPlayback() }
+                if queued == .finishReceivedSentences { keepSpokenPart(of: batch, mode: mode, generation: generation) }
                 responseTask = nil
                 responseGenerationID = nil
                 markPlaybackEnded()
                 playbackLevel = 0
                 phase = .listening
                 errorMessage = responseDelivery.failureMessage
-                if responseDelivery.response == nil,
+                if responseDelivery.response == nil, !responseDelivery.keptSpokenPart,
                    let text = batch.turns.last(where: { $0.source == .typed && !$0.isIntroductionCue })?.text {
                     textSendState = .failed(text: text, message: "入力を保持しています。次の発話にも引き継ぎます。")
+                }
+            }
+        }
+    }
+
+    /// Generation failed after she had said part of the answer: that part is her reply, marked as
+    /// cut off, written like a completed one, and the input it answered is not asked again.
+    private func keepSpokenPart(of batch: ShannonPendingVoiceTurns.Batch, mode: ShannonVoiceParticipantMode, generation: UUID) {
+        guard let reply = responseDelivery.keepSpokenPart(batch: batch, ledger: &pendingTurns) else { return }
+        shannonTranscript = reply
+        ShannonVoiceDiagnostics.shared.record("gemini.response.partial_kept", sessionID: generation.uuidString,
+            metadata: ["characters": String(reply.count)])
+        if mode == .guest {
+            guestCall.record(participant: batch.rawText, shannon: reply)
+        } else if mode.allowsTranscriptPersistence, let commitTurn {
+            responseCommitTask = Task { @MainActor in
+                do { try await commitTurn(batch.rawText, reply); return true } catch {
+                    ShannonVoiceDiagnostics.shared.record("gemini.response.history.failed", sessionID: generation.uuidString)
+                    return false
                 }
             }
         }
@@ -218,7 +239,7 @@ extension ShannonGeminiLiveSessionModel {
                 }
             }
             let duration = try transport?.schedulePCM(chunk, onPlayed: segmentDuration == 0
-                ? rememberWhenPlayed(text) : nil) ?? Double(chunk.count) / 48_000
+                ? rememberWhenPlayed(text, generation: generation) : nil) ?? Double(chunk.count) / 48_000
             voiceScheduled()
             let firstAudio = latencyMeasurements.firstAudioMilliseconds == nil
             latencyMeasurements.recordFirstAudio()

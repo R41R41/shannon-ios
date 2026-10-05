@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
+import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { SpeechScopeConcurrencyLimiter, streamSpeech } from '../src/serverGeminiSpeechRoute.js';
+import type { ShannonDevicePrincipal } from '../src/deviceAuth.js';
+import {
+  SpeechScopeConcurrencyLimiter, createGeminiSpeechRoute, refuseSpeech, streamSpeech,
+} from '../src/serverGeminiSpeechRoute.js';
 import { GeminiSpeechError } from '../src/geminiSpeech.js';
 
 describe('Gemini speech scope concurrency', () => {
@@ -25,6 +29,45 @@ describe('Gemini speech scope concurrency', () => {
     const limiter = new SpeechScopeConcurrencyLimiter(1);
     limiter.release('owner-a');
     expect(limiter.acquire('owner-a')).toBe(true);
+  });
+});
+
+describe('a refused sentence leaves a trace', () => {
+  function capture() {
+    let status = 0;
+    let body = '';
+    const response = Object.assign(new EventEmitter(), {
+      headersSent: false,
+      writeHead(code: number) { status = code; this.headersSent = true; return this; },
+      setHeader() {}, write(value: string) { body += value; return true; },
+      end(value?: string) { body += value ?? ''; },
+    }) as unknown as ServerResponse;
+    return { response, get status() { return status; }, get body() { return body; } };
+  }
+
+  it('logs each refusal once with its code and provider and nothing else', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const busy = capture();
+      refuseSpeech(busy.response, 'BUSY', 'eleven');
+      expect(busy.status).toBe(429);
+      expect(busy.body).toContain('BUSY');
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenLastCalledWith('Shannon speech refused', { code: 'BUSY', provider: 'eleven' });
+
+      // Through the route: the device's allowance is spent.
+      const limited = capture();
+      const request = Readable.from([JSON.stringify({ text: '秘密の文です。', provider: 'gemini' })]) as IncomingMessage;
+      request.method = 'POST';
+      const route = createGeminiSpeechRoute({ GEMINI_API_KEY: 'test-only' }, { recordLlmUsage() {} } as never, () => false);
+      await route(request, limited.response, { deviceId: 'device-secret', scopeKey: 'owner' } as ShannonDevicePrincipal, 'stream');
+      expect(limited.status).toBe(429);
+      expect(warn).toHaveBeenCalledTimes(2);
+      expect(warn).toHaveBeenLastCalledWith('Shannon speech refused', { code: 'RATE_LIMITED', provider: 'gemini' });
+      expect(JSON.stringify(warn.mock.calls)).not.toMatch(/秘密|device-secret/u);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

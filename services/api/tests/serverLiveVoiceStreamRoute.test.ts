@@ -96,6 +96,37 @@ describe('live voice sentence streaming', () => {
     expect(unfinished.filter(event => event.type === 'segment').map(event => event.text)).toEqual(['とても長い一文が続いて']);
   });
 
+  it('names a withheld reply in its error line, so the app drops what it was saying', async () => {
+    const run = async (failure: Error) => {
+      const kernel = {
+        streamLiveVoiceDelegation: async (_request: unknown, observer: {
+          onPlan(plan: Record<string, unknown>): Promise<void>;
+          onTextDelta(delta: string): Promise<void>;
+        }) => {
+          await observer.onPlan({ shouldRespond: true });
+          await observer.onTextDelta('途中まで話しました。');
+          throw failure;
+        },
+      } as unknown as ShannonApiKernel;
+      const request = Readable.from([JSON.stringify({ transcript: '話して' })]) as IncomingMessage;
+      request.method = 'POST';
+      let output = '';
+      const response = Object.assign(new EventEmitter(), {
+        headersSent: false,
+        writeHead() { this.headersSent = true; return this; },
+        write(value: string) { output += value; return true; },
+        end() {},
+      }) as unknown as ServerResponse;
+      await createLiveVoiceStreamRoute(kernel, () => true)(
+        request, response, { deviceId: 'device', scopeKey: 'owner' } as ShannonDevicePrincipal,
+      );
+      return JSON.parse(output.trim().split('\n').at(-1)!) as Record<string, unknown>;
+    };
+    expect(await run(new Error('OPENAI_RESPONSE_CONTENT_FILTERED'))).toEqual({ type: 'error', status: 502, code: 'content_filter' });
+    // Any other failure keeps the line exactly as before.
+    expect(await run(new Error('OPENAI_RESPONSE_IDLE_TIMEOUT'))).toEqual({ type: 'error', status: 502 });
+  });
+
   it('emits complete Japanese sentences across arbitrary model deltas', () => {
     const segmenter = new SpokenSentenceSegmenter();
 

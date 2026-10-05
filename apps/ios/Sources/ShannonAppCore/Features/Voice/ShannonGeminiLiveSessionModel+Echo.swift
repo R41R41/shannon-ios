@@ -21,7 +21,7 @@ extension ShannonGeminiLiveSessionModel {
         let now = ProcessInfo.processInfo.systemUptime
         let speaking = responseTask != nil
         guard echoWindow.shouldCompare(text, isSpeaking: speaking, now: now),
-              echoGuard.isEcho(text, now: now) else { return false }
+              echoGuard.isOwnVoice(text, now: now) else { return false }
         ShannonVoiceDiagnostics.shared.record("gemini.input.echo.discarded",
             metadata: ["characters": String(text.count), "during_playback": String(speaking)])
         return true
@@ -39,9 +39,14 @@ extension ShannonGeminiLiveSessionModel {
         bargeInRule.voiceSounding(at: ProcessInfo.processInfo.systemUptime)
     }
 
-    /// A sentence of hers is remembered for the echo guard when its first audio has played.
-    func rememberWhenPlayed(_ text: String) -> @MainActor () -> Void {
-        { [weak self] in self?.echoGuard.recordPlayed(text, at: ProcessInfo.processInfo.systemUptime) }
+    /// A sentence of hers is remembered when its first audio has played: by the echo guard, and
+    /// as said by the response it belongs to.
+    func rememberWhenPlayed(_ text: String, generation: UUID) -> @MainActor () -> Void {
+        { [weak self] in
+            guard let self else { return }
+            echoGuard.recordPlayed(text, at: ProcessInfo.processInfo.systemUptime)
+            if responseGenerationID == generation { responseDelivery.spoken.played(text) }
+        }
     }
 
     func markPlaybackEnded() {

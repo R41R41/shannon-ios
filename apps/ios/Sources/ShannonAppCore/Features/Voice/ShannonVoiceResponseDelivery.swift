@@ -1,10 +1,29 @@
 import Foundation
 
+/// The provider withheld the reply for its content (`error` line with `code: "content_filter"`).
+struct ShannonVoiceReplyWithheld: Error, Equatable {}
+
 /// A complete, visible answer handles input even if its optional audio fails.
-/// An incomplete generation never acknowledges the input, including after partial speech.
+/// An incomplete generation acknowledges the input only when she already said part of the
+/// answer: what she said is kept as her reply, so the retry does not say it again.
 struct ShannonVoiceResponseDelivery {
     private(set) var response: ShannonLiveVoiceDelegationResponseDTO?
     private(set) var scheduledAudioSeconds = 0.0
+    var spoken = ShannonVoiceSpokenReply()
+    /// The spoken part of an unfinished answer was kept as her reply.
+    private(set) var keptSpokenPart = false
+
+    /// After a generation failure that was not withheld content: her reply is the part she said
+    /// (marked as cut off), and the input it answered is acknowledged. Nil when she said nothing of it.
+    mutating func keepSpokenPart(
+        batch: ShannonPendingVoiceTurns.Batch,
+        ledger: inout ShannonPendingVoiceTurns
+    ) -> String? {
+        guard response == nil, let reply = spoken.cutOffReply else { return nil }
+        keptSpokenPart = true
+        ledger.acknowledge(batch)
+        return reply
+    }
 
     mutating func complete(
         _ response: ShannonLiveVoiceDelegationResponseDTO,
@@ -28,6 +47,9 @@ struct ShannonVoiceResponseDelivery {
         if response != nil {
             return "返答はできていますが、音声を最後まで再生できませんでした。画面の返答をご確認ください。"
         }
+        if keptSpokenPart {
+            return "返答が途中で途切れました。話した部分までを会話に残しています。"
+        }
         if scheduledAudioSeconds > 0 {
             return "返答が途中で止まりました。未完了の入力は保持しています。続けて話すか再送してください。"
         }
@@ -41,12 +63,13 @@ struct ShannonVoiceResponseDelivery {
         case finishReceivedSentences = "finish_sentences"
         /// Synthesis failed: audio already scheduled plays out; nothing more is synthesized.
         case finishScheduledAudio = "finish_scheduled"
-        /// Playback itself stalled: the queue is dropped.
+        /// Playback itself stalled, or the provider withheld the reply: the queue is dropped.
         case discard
     }
 
-    static func queuedSpeech(afterFailureAt stage: String) -> QueuedSpeech {
-        switch stage {
+    static func queuedSpeech(afterFailureAt stage: String, error: Error) -> QueuedSpeech {
+        if error is ShannonVoiceReplyWithheld { return .discard }
+        return switch stage {
         case "generation": .finishReceivedSentences
         case "playback": .discard
         default: .finishScheduledAudio
@@ -63,7 +86,40 @@ struct ShannonVoiceResponseDelivery {
             }
         }
         if error is ShannonVoicePlaybackDrain.Failure { return "playback_timeout" }
+        if error is ShannonVoiceReplyWithheld { return "content_filter" }
         return "other_failure"
+    }
+}
+
+/// Which sentences of the answer she actually said, in order. Playback is FIFO, so the sentences
+/// played are a prefix of those queued; the waiting phrase before the answer is not part of it.
+struct ShannonVoiceSpokenReply: Equatable, Sendable {
+    private var pending: [(text: String, answer: Bool)] = []
+    private(set) var said: [String] = []
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.said == rhs.said && lhs.pending.map(\.text) == rhs.pending.map(\.text)
+    }
+
+    /// One sentence handed to speech. The waiting phrase is the first sentence when it equals the plan's.
+    mutating func queued(_ text: String, waitingPhrase: String?) {
+        let waiting = pending.allSatisfy { !$0.answer } && said.isEmpty
+            && text == waitingPhrase?.trimmingCharacters(in: .whitespacesAndNewlines)
+        pending.append((text, !waiting))
+    }
+
+    /// The first audio of `text` played. Sentences queued before it with no audio of their own
+    /// (only emoji) were passed over and count as said.
+    mutating func played(_ text: String) {
+        guard let index = pending.firstIndex(where: { $0.text == text }) else { return }
+        said += pending[...index].filter(\.answer).map(\.text)
+        pending.removeFirst(index + 1)
+    }
+
+    /// What she said of an answer that did not finish, with a mark that it was cut off.
+    var cutOffReply: String? {
+        let text = said.joined()
+        return text.isEmpty ? nil : text + "…"
     }
 }
 
@@ -108,7 +164,7 @@ final class ShannonVoicePlaybackDrain {
         for id in Array(waiters.keys) { finish(id, result: .failure(CancellationError())) }
     }
 
-    func wait(timeout: Duration = .seconds(180)) async throws {
+    func wait(timeout: Duration = .seconds(20)) async throws {
         try Task.checkCancellation()
         guard !pending.isEmpty else { return }
         let id = UUID()

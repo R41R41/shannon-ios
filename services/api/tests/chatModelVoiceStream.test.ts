@@ -5,7 +5,7 @@ import {
   VOICE_REPLY_INSTRUCTIONS,
   type ShannonVoiceModelRequest,
 } from '../src/chatModel.js';
-import type { VoiceStreamBounds } from '../src/chatModelVoiceStream.js';
+import { VOICE_RESPONSE_TIMEOUT_MILLISECONDS, type VoiceStreamBounds } from '../src/chatModelVoiceStream.js';
 import type { LlmUsageEvent } from '../src/llmUsage.js';
 import { completeSpokenSentences } from '../src/spokenSentences.js';
 
@@ -108,11 +108,21 @@ describe('a streamed voice reply that reaches its output limit', () => {
     expect(result).toMatchObject({ reply: 'とても長い一文がまだ続いていて', truncated: true });
   });
 
-  it('stays a failure for any other reason, or with no words at all', async () => {
+  it('stays a failure for any other reason, or with no words at all, and still accounts what was used', async () => {
     const filtered = voiceModel(() => new Response(timedStream([[0, delta('途中まで。')], [0, incomplete('content_filter')]])));
-    await expect(filtered.model.generateVoiceStreaming(request, () => {})).rejects.toThrow('OPENAI_RESPONSE_STREAM_INCOMPLETE');
+    await expect(filtered.model.generateVoiceStreaming(request, () => {})).rejects.toThrow('OPENAI_RESPONSE_CONTENT_FILTERED');
+    expect(filtered.recorded).toHaveLength(1);
+    const other = voiceModel(() => new Response(timedStream([[0, delta('途中まで。')], [0, incomplete('something_else')]])));
+    await expect(other.model.generateVoiceStreaming(request, () => {})).rejects.toThrow('OPENAI_RESPONSE_STREAM_INCOMPLETE');
+    // The whole output limit spent on reasoning: no words, but the tokens are counted before the failure.
     const empty = voiceModel(() => new Response(timedStream([[0, incomplete('max_output_tokens')]])));
     await expect(empty.model.generateVoiceStreaming(request, () => {})).rejects.toThrow('OPENAI_RESPONSE_STREAM_INCOMPLETE');
+    expect(empty.recorded).toMatchObject([{ lane: 'chat', outputTokens: 1_200 }]);
+    const emptyWhole = voiceModel(() => new Response(JSON.stringify({
+      status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' }, usage, output: [],
+    })));
+    await expect(emptyWhole.model.generateVoice(request)).rejects.toThrow('OPENAI_RESPONSE_EMPTY');
+    expect(emptyWhole.recorded).toHaveLength(1);
     const failed = voiceModel(() => new Response(timedStream([[0, delta('途中まで。')], [0, sse({ type: 'response.failed', response: {} })]])));
     await expect(failed.model.generateVoiceStreaming(request, () => {})).rejects.toThrow('OPENAI_RESPONSE_STREAM_FAILED');
   });
@@ -176,6 +186,21 @@ describe('voice stream time bounds', () => {
       { firstOutputMilliseconds: 20, idleMilliseconds: 1_000 });
     const result = await model.generateVoiceStreaming({ ...request, useWebSearch: true }, () => {});
     expect(result.reply).toBe('調べました。');
+  });
+
+  it('gives a non-streaming voice reply one total long enough for the longest reply', async () => {
+    let signal: AbortSignal | undefined;
+    const { model } = voiceModel(init => { signal = init.signal ?? undefined; return new Response(JSON.stringify({ output_text: 'はい。' })); });
+    await model.generateVoice(request);
+    expect(VOICE_RESPONSE_TIMEOUT_MILLISECONDS).toBe(90_000);
+    expect(signal?.aborted).toBe(false);
+    const slow = new OpenAIResponsesChatModel({
+      apiKey: 'test-only', voiceResponseTimeoutMilliseconds: 30,
+      fetcher: (async (_url: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason));
+      })) as typeof fetch,
+    });
+    await expect(slow.generateVoice(request)).rejects.toMatchObject({ name: 'TimeoutError' });
   });
 
   it("reports the caller's own cancellation, not a timeout", async () => {
