@@ -5,7 +5,7 @@ import SwiftUI
 /// What the window loads at start, polls while connected, and keeps restorable as it changes.
 extension ShannonDesktopRootView {
     func observingWindowState<Content: View>(_ content: Content) -> some View {
-        content
+        restoringWindowState(content)
             .task {
                 restoreWindowChromeIfAvailable()
                 if connection.isConnected && !conversation.isDesignPreview {
@@ -18,6 +18,9 @@ extension ShannonDesktopRootView {
                     await conversation.refreshAgentWorkspace(projectHint: selectedAgentProject)
                     await conversation.refreshAgentProjectProvisioning()
                     await conversation.refreshInitiatives()
+                    await ShannonDesktopNotifier.shared.start()
+                    ShannonDesktopNotifier.shared.update(desktopNotices)
+                    openNotificationTarget()
                 }
                 restoreSelectedTaskIfAvailable()
             }
@@ -28,11 +31,35 @@ extension ShannonDesktopRootView {
                     guard !Task.isCancelled else { return }
                     await conversation.refreshInitiatives()
                     await conversation.refreshCaptures()
+                    // A permission asked for, or a result, reaches the notifications within a minute (A13).
+                    await conversation.synchronizeAgentTasks()
                 }
+            }
+            // Running work is read more often, so its approval or result is not a minute late.
+            .task(id: conversation.agentTaskPollingKey) {
+                guard connection.isConnected, !conversation.isDesignPreview,
+                      !conversation.agentTaskPollingKey.isEmpty else { return }
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: .seconds(10)) } catch { return }
+                    await conversation.synchronizeAgentTasks()
+                }
+            }
+            .onChange(of: desktopNoticeKeys) {
+                // Only after the first full read, so a first launch remembers what is there without showing it.
+                guard ShannonDesktopNotifier.shared.isWatching, connection.isConnected else { return }
+                ShannonDesktopNotifier.shared.update(desktopNotices)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .shannonDesktopNotificationOpened)) { _ in
+                openNotificationTarget()
             }
             .onReceive(NotificationCenter.default.publisher(for: .shannonYousuLinkOpened)) { _ in
                 openPendingYousuLink()
             }
+    }
+
+    /// Keeps what a window restores current as the selection changes.
+    func restoringWindowState<Content: View>(_ content: Content) -> some View {
+        content
             .onChange(of: conversation.agentTasks.map(\.id)) {
                 restoreSelectedTaskIfAvailable()
             }

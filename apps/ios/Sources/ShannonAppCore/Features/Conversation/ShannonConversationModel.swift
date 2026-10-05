@@ -21,6 +21,8 @@ public final class ShannonConversationModel {
     public internal(set) var aetherSubmittedMessageIDs: Set<UUID> = []
     public internal(set) var unreadInitiativeCount = 0
     public internal(set) var initiativeThreadIDs: Set<String> = []
+    /// The unread messages she started, as the last read of the inbox returned them (the Mac notifies of new ones).
+    public internal(set) var unreadInitiativeMessages: [ShannonInitiativeMessageDTO] = []
     public internal(set) var talkPresentationRevision = 0
     public internal(set) var agentTaskPresentationRevision = 0
     public internal(set) var requestedAgentTaskPresentationID: UUID?

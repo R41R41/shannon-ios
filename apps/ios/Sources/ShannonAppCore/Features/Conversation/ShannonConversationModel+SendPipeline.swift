@@ -139,6 +139,7 @@ extension ShannonConversationModel {
             guard markedRead > 0 else { return }
             unreadInitiativeCount = max(0, unreadInitiativeCount - markedRead)
             initiativeThreadIDs.remove(threadId)
+            unreadInitiativeMessages.removeAll { $0.threadId == threadId }
         } catch {
             // It is safe to retry acknowledgement on the next foreground refresh.
         }

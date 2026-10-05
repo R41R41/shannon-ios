@@ -9,6 +9,19 @@ public struct ShannonInitiativeMessageDTO: Codable, Equatable, Identifiable, Sen
     public let sourceURL: String
     public let createdAt: String
     public let readAt: String?
+    /// Set when the message is her words about one look at the room.
+    public var bodyLookId: String? = nil
+    /// `reach_out` when she started the message from her own activity, with its `reason`.
+    public var kind: String? = nil
+    public var reason: String? = nil
+    /// True when the message is about what she saw of the room (servers since 2026-10-05).
+    public var roomLook: Bool? = nil
+
+    /// A notice outside the Talk must not quote a message about the room (as the iPhone's push does not).
+    /// An older server without `roomLook` is judged by the look id and the reason.
+    public var isAboutTheRoom: Bool {
+        roomLook == true || bodyLookId != nil || (kind == "reach_out" && reason == "saw")
+    }
 }
 
 public struct ShannonInitiativeInboxDTO: Codable, Equatable, Sendable {

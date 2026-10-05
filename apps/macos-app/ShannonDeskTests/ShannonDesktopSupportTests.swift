@@ -241,6 +241,45 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         XCTAssertEqual(DesktopShannonPage.restoring("unknown"), .now)
     }
 
+    func testNotificationsFollowTheIPhonePushRules() throws {
+        let approval = ShannonAgentApproval(externalRequestID: "req-1", kind: .network, title: "外部接続の許可", reason: "取得")
+        let waiting = ShannonAgentTask(
+            conversationThreadID: "t1", title: "資料を集める", goal: "g", status: .waitingApproval,
+            summary: "s", pendingApproval: approval
+        )
+        let done = ShannonAgentTask(conversationThreadID: "t1", title: "要約", goal: "g", status: .completed, summary: "s")
+        let cancelled = ShannonAgentTask(conversationThreadID: "t1", title: "やめた", goal: "g", status: .cancelled, summary: "s")
+        let seen = ShannonAgentTask(conversationThreadID: "t1", title: "見た", goal: "g", status: .failed, summary: "s")
+        let room = try JSONDecoder().decode(ShannonInitiativeMessageDTO.self, from: Data("""
+        {"id":"i1","threadId":"t2","content":"机の上にマグカップ","expression":"curious","sourceTitle":"部屋を見た",
+         "sourceURL":"","createdAt":"2026-10-05T00:00:00Z","readAt":null,"roomLook":true}
+        """.utf8))
+        let plain = try JSONDecoder().decode(ShannonInitiativeMessageDTO.self, from: Data("""
+        {"id":"i2","threadId":"t3","content":"面白い記事がありました","expression":"excited","sourceTitle":"HN",
+         "sourceURL":"","createdAt":"2026-10-05T00:00:00Z","readAt":null}
+        """.utf8))
+
+        let notices = DesktopNotificationPlan.notices(
+            tasks: [waiting, done, cancelled, seen],
+            needsNotice: { $0.id != seen.id },
+            initiatives: [room, plain]
+        )
+        XCTAssertEqual(notices.map(\.title), ["シャノン · 許可待ち", "シャノン · 完了", "シャノン", "シャノン"])
+        XCTAssertEqual(notices[0].body, "「資料を集める」を続けるには、外部接続の許可が必要です。")
+        XCTAssertEqual(notices[0].target, .task(waiting.id))
+        XCTAssertEqual(notices[1].body, "ライ氏、「要約」の作業が終わりました。")
+        XCTAssertEqual(notices[2].body, "ライ氏、部屋のことでひとことあります。")
+        XCTAssertEqual(notices[3].body, "面白い記事がありました")
+        XCTAssertEqual(notices[3].target, .thread("t3"))
+
+        let first = DesktopNotificationPlan.toPost(notices, delivered: nil)
+        XCTAssertTrue(first.post.isEmpty)
+        XCTAssertEqual(first.delivered.count, 4)
+        XCTAssertTrue(DesktopNotificationPlan.toPost(notices, delivered: first.delivered).post.isEmpty)
+        let later = DesktopNotificationPlan.toPost(notices, delivered: Array(first.delivered.dropFirst()))
+        XCTAssertEqual(later.post.map(\.key), [notices[0].key])
+    }
+
     func testSettingsOpenWithAdminFirstAndFallBackWithoutOps() {
         XCTAssertEqual(DesktopSettingsPage.admin, [.ops, .devices, .delivery, .diagnostics])
         XCTAssertEqual(DesktopSettingsPage.admin + DesktopSettingsPage.others, DesktopSettingsPage.allCases)

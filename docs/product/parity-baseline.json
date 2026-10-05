@@ -31,7 +31,6 @@
     "memory.people windows no",
     "memory.state-sheet windows no",
     "memory.usage-activity windows no",
-    "notifications.push macos no",
     "notifications.push windows partial",
     "reach.body-speaking ios partial",
     "reach.body-speaking macos planned",

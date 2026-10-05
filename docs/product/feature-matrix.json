@@ -3607,8 +3607,12 @@
           ]
         },
         "macos": {
-          "status": "no",
-          "note": "Mac のアプリには通知のコードが無い。"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift#DesktopNotificationPlan",
+            "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotifier.swift#UNNotificationRequest"
+          ],
+          "note": "Mac が自分で出す通知（A13）: 新しい許可待ち、続きが必要、完了、失敗、シャノンからの話。文は iPhone の push と同じ。部屋を見た話は「ライ氏、部屋のことでひとことあります。」だけ。窓が開いている間、作業は 1 分おき（動いている作業は 10 秒おき）、シャノンからの話は 1 分おきに読む。はじめて動いたときは、すでにあるものを覚えるだけで出さない。"
         },
         "windows": {
           "status": "partial",
@@ -3662,8 +3666,11 @@
           ]
         },
         "macos": {
-          "status": "not_applicable",
-          "reason": "通知そのものが無い（notifications.push）。"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotifier.swift#openNotificationTarget"
+          ],
+          "note": "押すと、作業は 作業 の現在地、シャノンからの話はそのトークが開く（A13）。"
         },
         "windows": {
           "status": "yes",

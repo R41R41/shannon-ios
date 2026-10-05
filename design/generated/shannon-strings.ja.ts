@@ -350,6 +350,17 @@ export const shannonStrings = {
   "emotion.kind.helpless": "お手上げ",
   "emotion.kind.deadpan": "真顔",
   "emotion.kind.giggle": "くすくす",
+  "notification.title.initiative": "シャノン",
+  "notification.title.approval": "シャノン · 許可待ち",
+  "notification.title.needsOwner": "シャノン · 続きが必要",
+  "notification.title.completed": "シャノン · 完了",
+  "notification.title.failed": "シャノン · 失敗",
+  "notification.body.approval": "「{title}」を続けるには、{approval}が必要です。",
+  "notification.body.needsOwner": "ライ氏、「{title}」は続きが必要です。次：{next}",
+  "notification.body.needsOwnerNoNext": "ライ氏、「{title}」は続きが必要です。作業画面で次の一手を確認してください。",
+  "notification.body.completed": "ライ氏、「{title}」の作業が終わりました。",
+  "notification.body.failed": "ライ氏、「{title}」の作業を最後まで進められませんでした。作業画面で状況を確認できます。",
+  "notification.body.roomLook": "ライ氏、部屋のことでひとことあります。",
 } as const;
 
 export type ShannonStringKey = keyof typeof shannonStrings;

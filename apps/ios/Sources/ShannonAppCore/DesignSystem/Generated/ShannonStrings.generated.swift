@@ -157,4 +157,26 @@ public enum ShannonGeneratedStrings {
     public static func autonomyProposalConfirmQuestion(title: String) -> String { "「\(title)」を作業として始めますか？" }
     /// `autonomy.proposal.confirmStart`
     public static let autonomyProposalConfirmStart = "作業として始める"
+    /// `notification.title.initiative`
+    public static let notificationTitleInitiative = "シャノン"
+    /// `notification.title.approval`
+    public static let notificationTitleApproval = "シャノン · 許可待ち"
+    /// `notification.title.needsOwner`
+    public static let notificationTitleNeedsOwner = "シャノン · 続きが必要"
+    /// `notification.title.completed`
+    public static let notificationTitleCompleted = "シャノン · 完了"
+    /// `notification.title.failed`
+    public static let notificationTitleFailed = "シャノン · 失敗"
+    /// `notification.body.approval`
+    public static func notificationBodyApproval(title: String, approval: String) -> String { "「\(title)」を続けるには、\(approval)が必要です。" }
+    /// `notification.body.needsOwner`
+    public static func notificationBodyNeedsOwner(title: String, next: String) -> String { "ライ氏、「\(title)」は続きが必要です。次：\(next)" }
+    /// `notification.body.needsOwnerNoNext`
+    public static func notificationBodyNeedsOwnerNoNext(title: String) -> String { "ライ氏、「\(title)」は続きが必要です。作業画面で次の一手を確認してください。" }
+    /// `notification.body.completed`
+    public static func notificationBodyCompleted(title: String) -> String { "ライ氏、「\(title)」の作業が終わりました。" }
+    /// `notification.body.failed`
+    public static func notificationBodyFailed(title: String) -> String { "ライ氏、「\(title)」の作業を最後まで進められませんでした。作業画面で状況を確認できます。" }
+    /// `notification.body.roomLook`
+    public static let notificationBodyRoomLook = "ライ氏、部屋のことでひとことあります。"
 }

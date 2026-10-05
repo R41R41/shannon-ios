@@ -601,7 +601,7 @@ describe('her message about a look', () => {
     expect(inbox.unreadCount).toBe(1);
     expect(inbox.messages[0]).toEqual({
       id: result.message.initiativeId, threadId, content: SEEN_TEXT, expression: 'curious',
-      sourceTitle: '部屋を見た', sourceURL: '', createdAt: START, bodyLookId: id,
+      sourceTitle: '部屋を見た', sourceURL: '', createdAt: START, bodyLookId: id, roomLook: true,
     });
     // It does not use the day's one spontaneous message.
     h.clock.at = '2026-10-02T04:00:00.000Z';

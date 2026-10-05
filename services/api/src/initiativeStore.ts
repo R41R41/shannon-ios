@@ -5,6 +5,7 @@ import { restoreCompanionState } from '@shannon/cognition';
 import type { DailyMindFocus } from './dailyMind.js';
 import { commitmentAwaitingTodaySlot, dueCommitmentCandidate } from './commitmentInitiative.js';
 import { bodyLookIdOfSource } from './bodyLookDelivery.js';
+import { isRoomLookSource } from './roomLookSource.js';
 import { reachOutOfSource } from './reachOutDelivery.js';
 import { groundedWorldOpening, topicMatchesSource, worldVisibleInterests } from './worldInterestRelevance.js';
 import {
@@ -50,6 +51,8 @@ export interface InitiativeMessage {
   readAt?: string;
   /** Set when the message is what she says about one look at the room (`bodyLook.ts`). */
   bodyLookId?: string;
+  /** True when the message is about what she saw of the room (`roomLookSource.ts`): a notice outside the Talk must not quote it. */
+  roomLook?: true;
   /** `reach_out` with its `reason` when she started the message on her own from her own activity (`reachOutDelivery.ts`). */
   kind?: 'reach_out'; reason?: string;
 }
@@ -275,6 +278,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       createdAt: String(row.created_at),
       ...(row.read_at ? { readAt: String(row.read_at) } : {}),
       ...(bodyLookIdOfSource(row.source_item_id) ? { bodyLookId: bodyLookIdOfSource(row.source_item_id)! } : {}), ...reachOutOfSource(row.source_item_id),
+      ...(isRoomLookSource(row.source_item_id) ? { roomLook: true as const } : {}),
     })));
   }
 

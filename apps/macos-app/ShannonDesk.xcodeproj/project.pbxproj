@@ -20,6 +20,7 @@
 		5821F4893B924A72B308F34E /* ShannonDesktopRootView+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 423BD3D4DD73027FADB819BE /* ShannonDesktopRootView+Lifecycle.swift */; };
 		5B1E2C3D4A5F60718293A4B2 /* ShannonDesktopCodeBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B1E2C3D4A5F60718293A4B1 /* ShannonDesktopCodeBlock.swift */; };
 		5B1E2C3D4A5F60718293A4B4 /* ShannonDesktopPlanTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B1E2C3D4A5F60718293A4B3 /* ShannonDesktopPlanTimeline.swift */; };
+		708C19EEBD77B37A4CB7C84F /* ShannonDesktopNotificationPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33E41F48D1C5B8BE6468C146 /* ShannonDesktopNotificationPlan.swift */; };
 		717A9E6F1DFB85609D58E6A5 /* ShannonDesktopSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED138C1D86162EB5236B0F6B /* ShannonDesktopSupport.swift */; };
 		745025F044B02F6FFA05DA9B /* ShannonDesktopRootView+Work.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C8367D77846D952AA2DDCD /* ShannonDesktopRootView+Work.swift */; };
 		75CF76A3CB2229BFEF49972C /* ShannonDesktopRootView+Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D351662EBD90DD0C060EB46 /* ShannonDesktopRootView+Settings.swift */; };
@@ -42,7 +43,9 @@
 		C0D3C0010000000000000015 /* ShannonDesktopDevelopmentExecutionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3C0010000000000000004 /* ShannonDesktopDevelopmentExecutionViews.swift */; };
 		C0D3C0010000000000000016 /* ShannonDesktopRootView+DevelopmentResources.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3C0010000000000000005 /* ShannonDesktopRootView+DevelopmentResources.swift */; };
 		C0D3C0010000000000000017 /* ShannonDesktopRootView+DevelopmentState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3C0010000000000000006 /* ShannonDesktopRootView+DevelopmentState.swift */; };
+		C38E8360389862D0CD9F906C /* ShannonDesktopNotificationPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33E41F48D1C5B8BE6468C146 /* ShannonDesktopNotificationPlan.swift */; };
 		D166573296293401302198D7 /* ShannonAppCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9F0437F3D7E201CDA5082E14 /* ShannonAppCore */; };
+		D7ED4528EC574F3C517F524C /* ShannonDesktopNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A401D92A2CB5BF37ACCE0B4 /* ShannonDesktopNotifier.swift */; };
 		E4432533E3AF6B533CF3BAC2 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFFCA8EC3B0679EC4C9C7D2E /* Cocoa.framework */; };
 		EB77BEE168AC44E6338A42C3 /* ShannonDesktopSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED138C1D86162EB5236B0F6B /* ShannonDesktopSupport.swift */; };
 		EF9B220BB2C216BDAEDF0589 /* ShannonDesktopNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76FD64993A41CFC50A310B5 /* ShannonDesktopNavigation.swift */; };
@@ -57,6 +60,8 @@
 		1D351662EBD90DD0C060EB46 /* ShannonDesktopRootView+Settings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Settings.swift"; path = "Features/Settings/ShannonDesktopRootView+Settings.swift"; sourceTree = "<group>"; };
 		1EFFCB1663D217B936089C46 /* ShannonDeskApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDeskApp.swift; sourceTree = "<group>"; };
 		2E31EA42B1CBB9DA5B051279 /* ShannonDesktopDevelopmentComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopDevelopmentComponents.swift; path = Features/Development/ShannonDesktopDevelopmentComponents.swift; sourceTree = "<group>"; };
+		33E41F48D1C5B8BE6468C146 /* ShannonDesktopNotificationPlan.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopNotificationPlan.swift; path = Features/Notifications/ShannonDesktopNotificationPlan.swift; sourceTree = "<group>"; };
+		3A401D92A2CB5BF37ACCE0B4 /* ShannonDesktopNotifier.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopNotifier.swift; path = Features/Notifications/ShannonDesktopNotifier.swift; sourceTree = "<group>"; };
 		3DEE1A9FE30AD8095D6B33ED /* ShannonDeskTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShannonDeskTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		423BD3D4DD73027FADB819BE /* ShannonDesktopRootView+Lifecycle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Lifecycle.swift"; path = "Features/Shell/ShannonDesktopRootView+Lifecycle.swift"; sourceTree = "<group>"; };
 		45A167CAD846A4163546BC87 /* ShannonDesktopComposer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopComposer.swift; path = Features/Talk/ShannonDesktopComposer.swift; sourceTree = "<group>"; };
@@ -159,6 +164,8 @@
 				866C93F06E517E3E54F991D4 /* ShannonDesktopApprovalCard.swift */,
 				56EDDB10BBA0585DDE9124DE /* ShannonDesktopSettingsForms.swift */,
 				423BD3D4DD73027FADB819BE /* ShannonDesktopRootView+Lifecycle.swift */,
+				3A401D92A2CB5BF37ACCE0B4 /* ShannonDesktopNotifier.swift */,
+				33E41F48D1C5B8BE6468C146 /* ShannonDesktopNotificationPlan.swift */,
 			);
 			path = ShannonDesk;
 			sourceTree = "<group>";
@@ -300,6 +307,7 @@
 				EB77BEE168AC44E6338A42C3 /* ShannonDesktopSupport.swift in Sources */,
 				C0D3C0010000000000000012 /* ShannonDesktopDevelopmentModels.swift in Sources */,
 				A8D403008F0E8FE507710903 /* ShannonDesktopNavigation.swift in Sources */,
+				708C19EEBD77B37A4CB7C84F /* ShannonDesktopNotificationPlan.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -338,6 +346,8 @@
 				34E9061E110C0BA97EB3C237 /* ShannonDesktopApprovalCard.swift in Sources */,
 				22E0F286019DF5DEB75C85E0 /* ShannonDesktopSettingsForms.swift in Sources */,
 				5821F4893B924A72B308F34E /* ShannonDesktopRootView+Lifecycle.swift in Sources */,
+				D7ED4528EC574F3C517F524C /* ShannonDesktopNotifier.swift in Sources */,
+				C38E8360389862D0CD9F906C /* ShannonDesktopNotificationPlan.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

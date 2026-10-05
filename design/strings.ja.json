@@ -2533,6 +2533,83 @@
       "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
       "decided": "2026-10-05",
       "windowsNow": "（無い）"
+    },
+    {
+      "key": "notification.title.initiative",
+      "text": "シャノン",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.title.approval",
+      "text": "シャノン · 許可待ち",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.title.needsOwner",
+      "text": "シャノン · 続きが必要",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.title.completed",
+      "text": "シャノン · 完了",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.title.failed",
+      "text": "シャノン · 失敗",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.body.approval",
+      "text": "「{title}」を続けるには、{approval}が必要です。",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.body.needsOwner",
+      "text": "ライ氏、「{title}」は続きが必要です。次：{next}",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.body.needsOwnerNoNext",
+      "text": "ライ氏、「{title}」は続きが必要です。作業画面で次の一手を確認してください。",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.body.completed",
+      "text": "ライ氏、「{title}」の作業が終わりました。",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.body.failed",
+      "text": "ライ氏、「{title}」の作業を最後まで進められませんでした。作業画面で状況を確認できます。",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.body.roomLook",
+      "text": "ライ氏、部屋のことでひとことあります。",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
     }
   ]
 }

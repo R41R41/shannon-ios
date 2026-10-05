@@ -14,7 +14,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | 画面 | ○ ある | △ 一部 | × ない | — 当てはまらない | 予定 | ？ 不明 |
 |---|---:|---:|---:|---:|---:|---:|
 | iOS | 119 | 3 | 9 | 12 | 2 | 0 |
-| macOS | 83 | 17 | 29 | 4 | 12 | 0 |
+| macOS | 85 | 17 | 28 | 3 | 12 | 0 |
 | Windows | 71 | 21 | 41 | 6 | 5 | 1 |
 
 ## 構成（入口）（`structure`）
@@ -418,14 +418,14 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
-| `notifications.push` | **通知** 新しい許可待ちの作業、シャノンからの話、結果を、通知で知らせる。 | ○ | × | △ |
+| `notifications.push` | **通知** 新しい許可待ちの作業、シャノンからの話、結果を、通知で知らせる。 | ○ | ○ | △ |
 | `notifications.badge` | **未確認の数** 未確認の作業と未読の話の数を、アイコンと入口に出す。 | ○ | ○ | ○ |
-| `notifications.open-target` | **通知から、その作業やトークを開く** 通知を押すと、そのものが開く。 | ○ | — | ○ |
+| `notifications.open-target` | **通知から、その作業やトークを開く** 通知を押すと、そのものが開く。 | ○ | ○ | ○ |
 
-- `notifications.push` macOS（×）: Mac のアプリには通知のコードが無い。
+- `notifications.push` macOS（○）: Mac が自分で出す通知（A13）: 新しい許可待ち、続きが必要、完了、失敗、シャノンからの話。文は iPhone の push と同じ。部屋を見た話は「ライ氏、部屋のことでひとことあります。」だけ。窓が開いている間、作業は 1 分おき（動いている作業は 10 秒おき）、シャノンからの話は 1 分おきに読む。はじめて動いたときは、すでにあるものを覚えるだけで出さない。
 - `notifications.push` Windows（△）: 新しい判断待ちの作業、続きが必要な作業（題「続きが必要な作業があります」、本文「〈題名〉：〈次の一手〉」。作業 id × pauseSequence ごとに 1 回、押すとその作業を開く）、身体を隠している間の「シャノンから」。作業の結果の通知は無い。Windows body thread report 2026-10-05。
 - `notifications.badge` Windows（○）: サイドバーの「作業」の数 = 許可待ち＋続きが必要（読み上げ「あなたを待っている作業 N 件」）と、「シャノンから」の印。体の吹き出しは許可待ちだけ。Windows body thread report 2026-10-05。
-- `notifications.open-target` macOS（—）: 通知そのものが無い（notifications.push）。
+- `notifications.open-target` macOS（○）: 押すと、作業は 作業 の現在地、シャノンからの話はそのトークが開く（A13）。
 
 ## 配信（TestFlight）（`delivery`）
 
