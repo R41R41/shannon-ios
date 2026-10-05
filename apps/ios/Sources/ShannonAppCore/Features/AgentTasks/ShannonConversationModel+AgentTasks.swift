@@ -339,6 +339,7 @@ extension ShannonConversationModel {
             agentTasks = (remoteTasks + localOnly).sorted { $0.updatedAt > $1.updatedAt }
             persistAgentTasks()
             agentTaskAcknowledgements.prune(keeping: Set(agentTasks.map(\.id)))
+            agentTasksReadAt = Date()
         } catch {
             // The on-device projection remains usable while the API is offline.
         }

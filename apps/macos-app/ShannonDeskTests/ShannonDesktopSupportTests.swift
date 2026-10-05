@@ -281,10 +281,31 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
 
         let first = DesktopNotificationPlan.toPost(notices, delivered: nil)
         XCTAssertTrue(first.post.isEmpty)
-        XCTAssertEqual(first.delivered.count, 4)
-        XCTAssertTrue(DesktopNotificationPlan.toPost(notices, delivered: first.delivered).post.isEmpty)
-        let later = DesktopNotificationPlan.toPost(notices, delivered: Array(first.delivered.dropFirst()))
+        let remembered = try XCTUnwrap(first.delivered)
+        XCTAssertEqual(remembered.count, 4)
+        XCTAssertTrue(DesktopNotificationPlan.toPost(notices, delivered: remembered).post.isEmpty)
+        let later = DesktopNotificationPlan.toPost(notices, delivered: Array(remembered.dropFirst()))
         XCTAssertEqual(later.post.map(\.key), [notices[0].key])
+    }
+
+    func testNotificationBaselineWaitsForARealReadAndPermission() {
+        let notice = DesktopNotice(key: "initiative:a", title: "シャノン", body: "b", target: .thread("t"))
+        let newer = DesktopNotice(key: "initiative:b", title: "シャノン", body: "c", target: .thread("t"))
+        // Offline or not yet read: no baseline is taken, so an empty list cannot become the baseline.
+        let offline = DesktopNotificationPlan.toPost([], delivered: nil, readSucceeded: false)
+        XCTAssertNil(offline.delivered)
+        XCTAssertTrue(offline.post.isEmpty)
+        // The first read that reached the server remembers what is there without showing it.
+        let baseline = DesktopNotificationPlan.toPost([notice], delivered: nil, readSucceeded: true)
+        XCTAssertEqual(baseline.delivered, ["initiative:a"])
+        XCTAssertTrue(baseline.post.isEmpty)
+        // Not allowed: nothing shown and nothing new remembered, so it shows once allowed.
+        let denied = DesktopNotificationPlan.toPost([notice, newer], delivered: ["initiative:a"], authorized: false)
+        XCTAssertTrue(denied.post.isEmpty)
+        XCTAssertEqual(denied.delivered, ["initiative:a"])
+        let allowed = DesktopNotificationPlan.toPost([notice, newer], delivered: denied.delivered, authorized: true)
+        XCTAssertEqual(allowed.post.map(\.key), ["initiative:b"])
+        XCTAssertEqual(allowed.delivered, ["initiative:a", "initiative:b"])
     }
 
     func testSettingsOpenWithAdminFirstAndFallBackWithoutOps() {

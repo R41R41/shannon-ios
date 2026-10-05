@@ -76,12 +76,20 @@ enum DesktopNotificationPlan {
         return work + said
     }
 
-    /// What to show now, and the keys to remember. Before anything was ever remembered (the first
-    /// launch with notifications), what is already there is remembered without being shown.
-    static func toPost(_ notices: [DesktopNotice], delivered: [String]?) -> (post: [DesktopNotice], delivered: [String]) {
+    /// What to show now, and the keys to remember (nil: remember nothing yet).
+    /// - Before anything was ever remembered (the first launch with notifications), what is there is
+    ///   remembered without being shown, and only from a read that reached the server
+    ///   (`readSucceeded`): a baseline taken from an empty or offline list would later show old things.
+    /// - While notifications are not allowed nothing is shown and nothing new is remembered, so that
+    ///   what arrives meanwhile is shown once they are allowed.
+    static func toPost(
+        _ notices: [DesktopNotice], delivered: [String]?, readSucceeded: Bool = true, authorized: Bool = true
+    ) -> (post: [DesktopNotice], delivered: [String]?) {
         guard let delivered else {
+            guard readSucceeded else { return ([], nil) }
             return ([], Array(notices.map(\.key).suffix(rememberedKeys)))
         }
+        guard authorized else { return ([], delivered) }
         let known = Set(delivered)
         var seen = Set<String>()
         let post = notices.filter { !known.contains($0.key) && seen.insert($0.key).inserted }

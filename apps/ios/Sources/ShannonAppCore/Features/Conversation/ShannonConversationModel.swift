@@ -23,6 +23,9 @@ public final class ShannonConversationModel {
     public internal(set) var initiativeThreadIDs: Set<String> = []
     /// The unread messages she started, as the last read of the inbox returned them (the Mac notifies of new ones).
     public internal(set) var unreadInitiativeMessages: [ShannonInitiativeMessageDTO] = []
+    /// When the inbox and the work tasks were last read from the server in this launch (nil until one succeeded).
+    public internal(set) var initiativesReadAt: Date?
+    public internal(set) var agentTasksReadAt: Date?
     public internal(set) var talkPresentationRevision = 0
     public internal(set) var agentTaskPresentationRevision = 0
     public internal(set) var requestedAgentTaskPresentationID: UUID?

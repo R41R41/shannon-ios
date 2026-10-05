@@ -27,7 +27,7 @@ extension ShannonDesktopRootView {
                     await conversation.refreshAgentProjectProvisioning()
                     await conversation.refreshInitiatives()
                     await ShannonDesktopNotifier.shared.start()
-                    ShannonDesktopNotifier.shared.update(desktopNotices)
+                    ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: noticesReadSucceeded)
                     openNotificationTarget()
                 }
                 restoreSelectedTaskIfAvailable()
@@ -53,9 +53,13 @@ extension ShannonDesktopRootView {
                 }
             }
             .onChange(of: desktopNoticeKeys) {
-                // Only after the first full read, so a first launch remembers what is there without showing it.
-                guard ShannonDesktopNotifier.shared.isWatching, connection.isConnected else { return }
-                ShannonDesktopNotifier.shared.update(desktopNotices)
+                guard connection.isConnected, !conversation.isDesignPreview else { return }
+                ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: noticesReadSucceeded)
+            }
+            // The first successful read after a failed one may be what takes the baseline.
+            .onChange(of: noticesReadSucceeded) {
+                guard noticesReadSucceeded, !conversation.isDesignPreview else { return }
+                ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: true)
             }
             .onReceive(NotificationCenter.default.publisher(for: .shannonDesktopNotificationOpened)) { _ in
                 openNotificationTarget()

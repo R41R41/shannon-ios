@@ -12,32 +12,50 @@ final class ShannonDesktopNotifier: NSObject, UNUserNotificationCenterDelegate {
 
     /// The place of a notification pressed before a window could open it.
     private(set) var pendingTarget: DesktopNotice.Target?
-    private var didStart = false
-    /// Set once the window has read the tasks and her messages a first time.
-    private(set) var isWatching = false
+    private var didInstall = false
+    private var didAsk = false
     private var isAuthorized = false
     private let defaults = UserDefaults.standard
 
-    /// Asks once for permission and starts receiving presses.
-    func start() async {
-        guard !didStart else { return }
-        didStart = true
-        let center = UNUserNotificationCenter.current()
-        center.delegate = self
-        let settings = await center.notificationSettings()
-        if settings.authorizationStatus == .notDetermined {
-            isAuthorized = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
-        } else {
-            isAuthorized = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
+    /// At launch, before any window: a notification pressed while the app was not running is
+    /// delivered to the delegate as the app starts, and must find it. Also reads the permission
+    /// again whenever the app becomes active (it can be changed in System Settings).
+    func install() {
+        guard !didInstall else { return }
+        didInstall = true
+        UNUserNotificationCenter.current().delegate = self
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor in await ShannonDesktopNotifier.shared.readAuthorization() }
         }
     }
 
-    /// Notifies of what is new since the last look. The first look only remembers.
-    func update(_ notices: [DesktopNotice]) {
-        isWatching = true
-        let plan = DesktopNotificationPlan.toPost(notices, delivered: defaults.stringArray(forKey: Self.deliveredKey))
-        defaults.set(plan.delivered, forKey: Self.deliveredKey)
-        guard isAuthorized else { return }
+    /// Asks once for permission (from the window, once it has read what there is to tell).
+    func start() async {
+        install()
+        guard !didAsk else { return await readAuthorization() }
+        didAsk = true
+        let center = UNUserNotificationCenter.current()
+        if await center.notificationSettings().authorizationStatus == .notDetermined {
+            _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+        }
+        await readAuthorization()
+    }
+
+    func readAuthorization() async {
+        let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        isAuthorized = status == .authorized || status == .provisional
+    }
+
+    /// Notifies of what is new since the last look (`DesktopNotificationPlan.toPost`).
+    func update(_ notices: [DesktopNotice], readSucceeded: Bool) {
+        guard didAsk else { return }
+        let plan = DesktopNotificationPlan.toPost(
+            notices, delivered: defaults.stringArray(forKey: Self.deliveredKey),
+            readSucceeded: readSucceeded, authorized: isAuthorized
+        )
+        if let delivered = plan.delivered { defaults.set(delivered, forKey: Self.deliveredKey) }
         for notice in plan.post {
             let content = UNMutableNotificationContent()
             content.title = notice.title
@@ -103,6 +121,11 @@ extension ShannonDesktopRootView {
     }
 
     var desktopNoticeKeys: [String] { desktopNotices.map(\.key) }
+
+    /// The tasks and her messages were read from the server while connected, in this launch.
+    var noticesReadSucceeded: Bool {
+        connection.isConnected && conversation.agentTasksReadAt != nil && conversation.initiativesReadAt != nil
+    }
 
     func openNotificationTarget() {
         switch ShannonDesktopNotifier.shared.takePendingTarget() {
