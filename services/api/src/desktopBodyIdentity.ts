@@ -26,11 +26,26 @@ export const DESKTOP_BODY_SUFFIX = '.desktop-body';
 export const desktopBodyDeviceId = (deviceId: string): string => `${deviceId}${DESKTOP_BODY_SUFFIX}`;
 export const isDesktopBodyDeviceId = (deviceId: string): boolean => deviceId.endsWith(DESKTOP_BODY_SUFFIX);
 
+/** What the server knows of a paired device when it asks whether it has a desktop body. */
+export interface DesktopBodyCandidate {
+  /** Her Minecraft body's token: never another body. */
+  isGame: boolean;
+  /** The device's own body registration (its figure), or null. */
+  registration: { surface?: string } | null;
+  /** Which of the owner's apps the device has said it is (`ownerCallElsewhere.ts`, `SQLiteOwnerCallFacts.surface`). */
+  appSurface: () => string | undefined;
+}
+
 /**
- * Only the Mac app has a desktop body. A device whose own registration names another place (the phone's figure,
- * `iphone`; a Windows body) is never given one; a device with no registration, or one on the Mac, may be.
+ * Only the Mac app has a desktop body: a device that has said it is the Mac app (`appSurface` is `mac`), whose own
+ * registration, if it has one, is the Mac's. A device that has not said which app it is is refused, and so is one
+ * registered anywhere else (the phone's figure, a Windows body, a registration without a surface). Fails closed.
  */
-export const mayHaveDesktopBody = (ownSurface: string | undefined): boolean => ownSurface === undefined || ownSurface === 'mac';
+export function mayHaveDesktopBody(device: DesktopBodyCandidate): boolean {
+  if (device.isGame) return false;
+  if (device.registration && device.registration.surface !== 'mac') return false;
+  try { return device.appSurface() === 'mac'; } catch { return false; }
+}
 
 /** Whether the header names the desktop body. Any other value, or none, is the app. */
 export function namesDesktopBody(header: string | readonly string[] | undefined): boolean {
@@ -48,7 +63,7 @@ export function desktopBodyMaySpeakOn(method: string | undefined, path: string):
 /**
  * The device a paired request speaks for: its own, or its desktop body's on the routes above. `mayDerive` is asked only
  * then, and says no for a device that may never be another body (her Minecraft body, which `serverMinecraftBodyWiring.ts`
- * refuses with the header; a device registered somewhere other than the Mac, `mayHaveDesktopBody`).
+ * refuses with the header; any device that is not the Mac app, `mayHaveDesktopBody`).
  */
 export function requestDeviceId(
   deviceId: string, header: string | readonly string[] | undefined, method: string | undefined, path: string,

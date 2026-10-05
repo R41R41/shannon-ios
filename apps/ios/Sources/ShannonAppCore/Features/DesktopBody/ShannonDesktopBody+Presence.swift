@@ -27,6 +27,12 @@ extension ShannonDesktopBody {
         do {
             // Until the server has said that it hears the body as a body, the read says nothing of who is present.
             let probing = support != .supported
+            // Only a device that has said it is the Mac app is given a desktop body (body-contract.md): the app's own figure
+            // registers as the Mac's (`touchOnly`, `surface: "mac"`), which sends nothing of a touch by itself.
+            if probing, let app {
+                let stage = ShannonLive2DStage.shared
+                try? await app.registerTouchBody(scopeKey: conversation.scopeKey, expressions: stage.expressions, gestures: stage.gestures)
+            }
             let (presence, heard) = try await client.bodyPresence(
                 scopeKey: conversation.scopeKey, etag: probing ? nil : etag, audience: probing ? nil : audience)
             guard heard else {

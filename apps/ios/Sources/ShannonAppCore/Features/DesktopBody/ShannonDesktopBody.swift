@@ -62,6 +62,8 @@ public final class ShannonDesktopBody {
     @ObservationIgnored weak var conversation: ShannonConversationModel?
     @ObservationIgnored weak var voiceCall: ShannonDesktopVoiceCall?
     @ObservationIgnored var client: (any ShannonDesktopBodyServing)?
+    /// The app itself (no header): it says the server that this device is the Mac app before its body is asked for.
+    @ObservationIgnored var app: (any ShannonBodyServing)?
     @ObservationIgnored var window: ShannonDesktopBodyWindowController?
     @ObservationIgnored public private(set) var touch = ShannonBodyTouchCoordinator()
     @ObservationIgnored var voice: ShannonBodyVoice?
@@ -94,6 +96,7 @@ public final class ShannonDesktopBody {
         self.voiceCall = voiceCall
         if let api = conversation.client as? ShannonAPIClient {
             client = ShannonDesktopBodyClient(api: api, camera: { ShannonDesktopBody.shared.registersCamera })
+            app = api
         }
         makeTouchAndVoice(conversation: conversation, voiceCall: voiceCall)
     }

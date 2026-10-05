@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
@@ -5,6 +8,7 @@ import { BODY_LIMITS } from '../src/bodyContract.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { isFullBody } from '../src/bodyTouchOnly.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
+import { SQLiteOwnerCallFacts } from '../src/ownerCallElsewhere.js';
 import {
   DESKTOP_BODY_HEADER, DESKTOP_BODY_HEADER_VALUE, desktopBodyDeviceId, desktopBodyMaySpeakOn, mayHaveDesktopBody, namesDesktopBody, requestDeviceId,
 } from '../src/desktopBodyIdentity.js';
@@ -108,11 +112,38 @@ describe('the Mac app and its desktop body', () => {
     expect((await put({ surface: 'mac', flags: { touchOnly: true } })).status).toBe(400);
     expect(h.store.capabilities(scope, MAC_BODY)).toBeNull();
     expect((await put({ surface: 'mac', flags: { camera: true } })).status).toBe(200);
-    // The phone's figure and a Windows body never derive one (server.ts asks this of the device's own registration).
-    expect(mayHaveDesktopBody(undefined)).toBe(true);
-    expect(mayHaveDesktopBody('mac')).toBe(true);
-    expect(mayHaveDesktopBody('iphone')).toBe(false);
-    expect(mayHaveDesktopBody('windows')).toBe(false);
+  });
+
+  it('is derived only for a device that has said it is the Mac app (review SF1), as server.ts asks the database', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'shannon-desktop-body-'));
+    try {
+      const path = join(directory, 'shannon.sqlite');
+      const store = new SQLiteBodyStore(path);
+      const at = START;
+      store.saveCapabilities(scope, 'mac-app', { expressions: [], gestures: [], flags: { touchOnly: true }, surface: 'mac' }, at);
+      store.saveCapabilities(scope, 'windows-no-surface', { expressions: [], gestures: [], flags: { camera: true } }, at);
+      store.saveCapabilities(scope, 'windows-body', { expressions: [], gestures: [], flags: {}, surface: 'windows' }, at);
+      store.saveCapabilities(scope, 'iphone-figure', { expressions: [], gestures: [], flags: { touchOnly: true }, surface: 'iphone' }, at);
+      const facts = new SQLiteOwnerCallFacts(path);
+      const may = (deviceId: string, isGame = false) => mayHaveDesktopBody({
+        isGame, registration: store.capabilities(scope, deviceId), appSurface: () => facts.surface(scope, deviceId),
+      });
+      expect(may('mac-app')).toBe(true);
+      // An iPhone that registered nothing and said nothing of itself: unknown is refused.
+      expect(may('unregistered-iphone')).toBe(false);
+      // A Windows body without a surface, one with one, and the phone's figure.
+      expect(may('windows-no-surface')).toBe(false);
+      expect(may('windows-body')).toBe(false);
+      expect(may('iphone-figure')).toBe(false);
+      expect(may('mac-app', true)).toBe(false);
+      expect(mayHaveDesktopBody({ isGame: false, registration: null, appSurface: () => { throw new Error('database'); } })).toBe(false);
+      expect(mayHaveDesktopBody({ isGame: false, registration: null, appSurface: () => 'mac' })).toBe(true);
+      expect(mayHaveDesktopBody({ isGame: false, registration: { surface: 'mac' }, appSurface: () => 'ios' })).toBe(false);
+      facts.close();
+      store.close();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('(a) a Mac voice call quiets the Windows desktop, and the Mac body sees it as the owner in a call', async () => {
