@@ -2,7 +2,7 @@
 
 What Shannon expected and what happened, kept by the server for the prediction layer of Syzygy ADR-0006 (accepted by the owner on 2026-10-05). This is stage 1 (影, shadow): the record is written beside the current emotion code and read by nothing that acts. No route serves it yet, no prompt, state, reply, face, body answer, step of her own or model request reads it.
 
-The vocabulary and checks are in `services/api/src/predictionStore.ts`; the taps, retention and forgetting are in `predictionShadow.ts`; the fold is `predictionShadowFold.ts` over the pure `packages/cognition/src/prediction.ts`, `predictionDomains.ts` and `affectDynamics.ts`; the readings and the log line are `predictionShadowReadings.ts`. The tests are `services/api/tests/predictionShadow.test.ts`, `packages/cognition/tests/prediction.test.ts` and `packages/cognition/tests/affectDynamics.test.ts`.
+The vocabulary and checks are in `services/api/src/predictionStore.ts`; the taps, retention and forgetting are in `predictionShadow.ts`; the fold is `predictionShadowFold.ts` over the pure `packages/cognition/src/prediction.ts`, `predictionDomains.ts` and `affectDynamics.ts`; the readings and the log line are `predictionShadowReadings.ts`. The tests are `services/api/tests/predictionShadow.test.ts`, `services/api/tests/predictionShadowMaintenance.test.ts` (the write lock, retention, the daily reconciliation, the awake clock), `packages/cognition/tests/prediction.test.ts` and `packages/cognition/tests/affectDynamics.test.ts`.
 
 Everything here is additive: two new tables, no new route, and no existing table, route, prompt or computation changed.
 
@@ -38,7 +38,7 @@ The current and the new dynamics at one instant, as numbers: `tap` (`touch`, `re
 
 ## Recompute, forgetting and retention
 
-- **The write lock is never held through a fold.** A writer brings its mind up to the table first, outside any transaction (a cold fold of 6,000 rows takes about 0.3 s); under `BEGIN IMMEDIATE` it folds only the rows another process added meanwhile, then inserts. If rows were deleted meanwhile, it lets the lock go and folds again outside (the third attempt may fold under the lock, so that it always ends). A recompute is three steps: delete under the lock, fold outside, then under the lock fold on what arrived and rewrite the derived values that differ.
+- **The write lock is never held through a fold.** A writer brings its mind up to the table first, outside any transaction (a cold fold of 6,000 rows takes about 0.3 s); under `BEGIN IMMEDIATE` it folds only the rows another process added meanwhile, then inserts. If rows were deleted meanwhile, it lets the lock go and folds again outside (the third attempt may fold under the lock, so that it always ends). A recompute is three steps: delete under the lock, fold outside, then under the lock fold on what arrived and rewrite the derived values that differ; if rows were deleted meanwhile it folds again, and the third time it reads and folds the table under the lock, so a fold made before the table changed is never written back.
 
 - **Recomputable.** Folding the rows in `seq` order from an empty mind gives the same mind and the same derived values. Noise for the new dynamics comes from each row's own identity (domain, key, source id, instant), never from its place in the table or from `Math.random`.
 - **Forgetting** (owner answer 7). When the owner has her forget something (`memory-control-upserted` or `memory-transaction` with a status other than `active`), every row whose `source_id` is that memory is deleted, everything is folded again, derived values that changed are rewritten, and comparisons from the earliest deleted instant on are deleted. The same reconciliation runs once a day per scope in the API's processes, against the state's memory controls, so a lost deferred task or a time with the switch off is caught up. Restoring the memory does not bring the rows back. Today only a touch's burst can be forgotten this way: no forgetting path names a message of hers (an initiative id) or a reply's feeling, so those rows go by retention.
@@ -49,9 +49,9 @@ The current and the new dynamics at one instant, as numbers: `tap` (`touch`, `re
 One line per recorded outcome, symbols and numbers only (anything else is replaced by `_`):
 
 ```text
-Shannon prediction shadow: tap=touch key=pet.head.owner n=2 e=+0.25 sd=0.41 y=+0.50 d=+0.25 k=0.88 c=0 i=+0.25 | old v=+0.16 a=0.33 p=+0.88 | new v=+1.00 a=1.00 m=+0.28 p=+0.34 epi=19m
-Shannon prediction shadow: tap=touch key=pet.head.owner n=6 e=+0.53 sd=0.07 y=+0.60 d=+0.07 k=0.20 c=0 i=+0.07 | old v=+0.36 a=0.38 p=+0.88 | new v=+1.00 a=1.00 m=+0.11 p=+0.33 epi=16m
-Shannon prediction shadow: tap=reply_feeling key=owner n=5 e=+0.57 sd=0.12 y=-0.90 d=-1.47 k=0.80 c=1+ i=-1.47 | old v=+0.13 a=0.42 p=-0.90 | new v=-1.00 a=1.00 m=-0.52 p=-1.00 epi=15m
+Shannon prediction shadow: tap=touch key=pet.head.owner n=2 e=+0.25 sd=0.41 y=+0.50 d=+0.25 k=0.33 c=0 i=+0.25 | old v=+0.16 a=0.33 p=+0.88 | new v=+1.00 a=1.00 m=+0.28 p=+0.41 epi=19m
+Shannon prediction shadow: tap=touch key=pet.head.owner n=6 e=+0.52 sd=0.12 y=+0.60 d=+0.08 k=0.39 c=0 i=+0.08 | old v=+0.36 a=0.38 p=+0.88 | new v=+1.00 a=1.00 m=+0.14 p=+0.28 epi=16m
+Shannon prediction shadow: tap=reply_feeling key=owner n=5 e=+0.58 sd=0.20 y=-0.90 d=-1.48 k=0.72 c=1+ i=-1.48 | old v=+0.13 a=0.42 p=-0.90 | new v=-1.00 a=1.00 m=-0.52 p=-1.00 epi=15m
 Shannon prediction shadow: tap=reply key=wonder.evening.body n=1 e=+0.50 sd=0.29 y=+1.00 d=+0.50 k=0.33 c=0+
 Shannon prediction shadow: tap=reply_time key=wonder.evening.body n=1 e=+5.68 sd=3.28 y=+4.55 d=-1.13 k=0.50 c=0+
 Shannon prediction shadow: forgot sources=1 rows=2 recomputed=4 changed=2

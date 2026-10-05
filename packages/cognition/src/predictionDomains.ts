@@ -7,8 +7,9 @@ import { SHARED_DAY_WINDOW } from './temperament.js';
  * This half holds what a key starts from and how sure it may be:
  * - Empirical-Bayes priors. A new key, and a new cause, start from the other keys of their domain: a Bayesian linear
  *   regression of their outcomes on [1, features − ½] (owner answer 8: closeness and how often they talk may seed the
- *   prior; with no features it is the other keys' mean), with the spread of the other keys' expectations plus the
- *   regression's own uncertainty. A domain with no other key starts from the uniform distribution over the outcome
+ *   prior; with no features it is the other keys' mean). Its variance is the law of total variance over the other
+ *   keys (the spread of their expectations plus their mean uncertainty) and the regression's own uncertainty, never
+ *   below the noise floor; with fewer than three other keys, and with none, the uniform distribution over the outcome
  *   scale (Beta(1,1) for yes/no).
  * - Noise and volatility per key from its own innovations: E[δ²] − uncertainty = noise + volatility × elapsed days,
  *   a constrained least-squares analogue of Piray & Daw's (2021) joint estimate, held toward the domain's average by
@@ -157,7 +158,7 @@ export function domainPrior(
   const x = featureVector(domain, features);
   const n = (state?.regression.n ?? 0) - (own?.regression.n ?? 0);
   if (!state || n <= 0) return { expectation: middle, uncertainty: boundedVariance(domain, middle, scale) };
-  const noise = domain.family === 'bernoulli' ? 0.25 : domainNoiseVolatility(state, domain).noise;
+  const noise = domain.family === 'bernoulli' ? 0.25 : domainNoiseVolatility(state, domain, own).noise;
   const xx = state.regression.xx.map((row, i) => row.map((value, j) => value - (own?.regression.xx[i]![j] ?? 0)));
   const xy = state.regression.xy.map((value, i) => value - (own?.regression.xy[i] ?? 0));
   const precision = xx.map((row, i) => row.map((value, j) => value / noise + (i === j ? 1 / scale : 0)));
@@ -169,12 +170,17 @@ export function domainPrior(
   for (let i = 0; i < x.length; i += 1) { mean += beta[i]! * x[i]!; parameterVariance += x[i]! * spreadOfX[i]!; }
   mean = clamp(mean, domain.lower, domain.upper);
   if (domain.family === 'bernoulli') mean = clamp(mean, 1 / (n + 2), (n + 1) / (n + 2));
-  const means = [...state.keys.values()].filter(key => key !== own && key.causes.length > 0).map(dominantMean);
-  const spread = means.length >= 2 ? sampleVariance(means) : scale;
-  return { expectation: mean, uncertainty: boundedVariance(domain, mean, Math.min(scale, spread + Math.max(0, parameterVariance))) };
+  // Law of total variance: how far the other keys' expectations lie apart, plus how unsure each of them still is. With
+  // fewer than three other keys that spread is not known, and a new key starts from the unbiased spread of the scale;
+  // with more it is never below the noise floor, so that a new key, and a new cause, can still move.
+  const others = [...state.keys.values()].filter(key => key !== own && key.causes.length > 0).map(dominant);
+  if (others.length < 3) return { expectation: mean, uncertainty: boundedVariance(domain, mean, scale) };
+  const between = sampleVariance(others.map(cause => cause.mean));
+  const within = others.reduce((sum, cause) => sum + cause.variance, 0) / others.length;
+  return { expectation: mean, uncertainty: boundedVariance(domain, mean, Math.max(noiseFloor(domain), between + within + Math.max(0, parameterVariance))) };
 }
 
-const dominantMean = (key: KeyState): number => key.causes.reduce((best, cause) => (cause.count > best.count ? cause : best)).mean;
+const dominant = (key: KeyState): Cause => key.causes.reduce((best, cause) => (cause.count > best.count ? cause : best));
 
 /**
  * Never less sure than the unbiased spread: the scale's variance for valence and time, and for yes/no what the uniform
@@ -190,10 +196,13 @@ export function betaStrength(mean: number, variance: number): number {
   return Math.max(2, Math.max(1e-6, mean * (1 - mean)) / Math.max(1e-12, variance) - 1);
 }
 
-/** The domain's average noise and volatility over keys that have outcomes; for an empty domain, the unbiased ones. */
-export function domainNoiseVolatility(state: DomainState | undefined, domain: PredictionDomainSpec): { noise: number; volatility: number } {
+/**
+ * The average noise and volatility of the domain's other keys that have outcomes (`own` is left out); with none, the
+ * unbiased ones.
+ */
+export function domainNoiseVolatility(state: DomainState | undefined, domain: PredictionDomainSpec, own?: KeyState): { noise: number; volatility: number } {
   const empty = { noise: domain.family === 'bernoulli' ? 0.25 : scaleVariance(domain), volatility: scaleVariance(domain) / SHANNON_PREDICTION_COEFFICIENTS.emptyVolatilityDays };
-  const keys = state ? [...state.keys.values()].filter(key => key.count > 0) : [];
+  const keys = state ? [...state.keys.values()].filter(key => key !== own && key.count > 0) : [];
   if (!keys.length) return empty;
   const estimates = keys.map(key => keyNoiseVolatility(key, domain, empty));
   return {
@@ -236,8 +245,13 @@ function noiseFloor(domain: PredictionDomainSpec): number {
   return domain.valence ? SHANNON_EMOTION_CONTINUITY.settledBelow ** 2 : scaleVariance(domain) * 1e-4;
 }
 
+/**
+ * Adds one innovation to the key's moments. The first outcome of a fresh cause is left out: its error measures how
+ * well the other keys' prior fitted this key, not this key's own noise or volatility.
+ */
 export function noteInnovation(key: KeyState, domain: PredictionDomainSpec, cause: Cause, y: number, at: number): void {
-  const dt = cause.count > 0 ? Math.max(0, at - cause.lastAt) / DAY : 0;
+  if (cause.count === 0) return;
+  const dt = Math.max(0, at - cause.lastAt) / DAY;
   const bernoulliVariance = domain.family === 'bernoulli' ? cause.mean * (1 - cause.mean) : 0;
   const z = (y - cause.mean) ** 2 - cause.variance - bernoulliVariance;
   const moments = key.moments;

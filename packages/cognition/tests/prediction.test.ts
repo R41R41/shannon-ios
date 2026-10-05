@@ -83,20 +83,27 @@ describe('the prediction layer', () => {
   });
 
   it('learns faster where outcomes keep changing (volatility), and grows unsure with wall-clock time', () => {
-    const DRIFT = [0, 0.15, 0.3, 0.15, 0, -0.15, -0.3, -0.45, -0.3, -0.15];
+    // A random walk whose steps grow with the time between outcomes (gaps of an hour and of three days, so that noise and
+    // volatility can be told apart), beside a key that never changes.
+    const SIGNS = [1, 1, -1, 1, -1, -1, 1, -1, -1, 1, 1, -1];
     const model = createPredictionModel();
-    for (let day = 0; day < 40; day += 1) {
-      observeOutcome(model, { domain: 'touch', key: 'stable', at: day * DAY, outcome: 0.3 });
-      // A slow drift: small steps that one cause follows (large jumps would be new causes, not volatility).
-      observeOutcome(model, { domain: 'touch', key: 'volatile', at: day * DAY + 1, outcome: DRIFT[day % DRIFT.length]! });
+    let at = 0;
+    let walk = 0;
+    for (let index = 0; index < 60; index += 1) {
+      const gap = index % 2 ? 3 : 0.05;
+      at += gap * DAY;
+      walk = Math.max(-0.9, Math.min(0.9, walk + SIGNS[index % SIGNS.length]! * 0.15 * Math.sqrt(gap)));
+      observeOutcome(model, { domain: 'touch', key: 'stable', at, outcome: 0.3 });
+      observeOutcome(model, { domain: 'touch', key: 'volatile', at: at + 1, outcome: walk });
     }
-    const stable = predictOutcome(model, { domain: 'touch', key: 'stable', at: 40 * DAY });
-    const volatile = predictOutcome(model, { domain: 'touch', key: 'volatile', at: 40 * DAY });
+    const stable = predictOutcome(model, { domain: 'touch', key: 'stable', at: at + DAY });
+    const volatile = predictOutcome(model, { domain: 'touch', key: 'volatile', at: at + DAY });
     expect(volatile.volatility).toBeGreaterThan(stable.volatility * 1_000);
-    const rate = (key: string) => observeOutcome(model, { domain: 'touch', key, at: 40 * DAY + 2, outcome: 0 }).learningRate;
+    expect(volatile.causes).toBe(1);
+    const rate = (key: string) => observeOutcome(model, { domain: 'touch', key, at: at + 2 * DAY, outcome: 0 }).learningRate;
     expect(rate('volatile')).toBeGreaterThan(rate('stable'));
-    expect(predictOutcome(model, { domain: 'touch', key: 'stable', at: 100 * DAY }).uncertainty)
-      .toBeGreaterThan(predictOutcome(model, { domain: 'touch', key: 'stable', at: 41 * DAY }).uncertainty);
+    expect(predictOutcome(model, { domain: 'touch', key: 'stable', at: at + 300 * DAY }).uncertainty)
+      .toBeGreaterThan(predictOutcome(model, { domain: 'touch', key: 'stable', at: at + 3 * DAY }).uncertainty);
   });
 
   it('starts a new key from its domain (empirical Bayes), and an empty domain from the unbiased spread of the scale', () => {
@@ -192,6 +199,25 @@ describe('the prediction layer', () => {
     for (let index = 0; index < 20; index += 1) observeOutcome(lone, { domain: 'touch', key: 'only', at: index * MINUTE, outcome: 0.8 });
     const only = lone.domains.get('touch')!;
     expect(domainPrior(only, spec, undefined, only.keys.get('only'))).toEqual({ expectation: 0, uncertainty: scaleVariance(spec) });
+  });
+
+  it('lets a new key that differs from the others reach its own truth in a few outcomes', () => {
+    for (const others of [['pet.head.owner', 'pet.cheek.owner'], ['pet.head.owner', 'pet.cheek.owner', 'pet.hand.owner']]) {
+      const model = createPredictionModel();
+      let at = 0;
+      for (let index = 0; index < 30; index += 1) {
+        for (const [order, key] of others.entries()) observeOutcome(model, { domain: 'touch', key, at: at + order, outcome: 0.5 + (order - 1) * 0.02 });
+        at += MINUTE;
+      }
+      const updates = Array.from({ length: 8 }, (_, index) => observeOutcome(model, { domain: 'touch', key: 'poke.face.owner', at: at + index * MINUTE, outcome: -0.1 }));
+      const after = (count: number) => Math.abs(updates[count]!.expectation + 0.1);
+      // The first outcome is a surprise against the others' +0.5. Five outcomes later she is within 0.15 of −0.1 and
+      // eight later within 0.1 (before the prior took the others' own uncertainty and a floor, it was not there after a hundred).
+      expect(updates[0]!.expectation).toBeGreaterThan(0.3);
+      expect(updates[1]!.learningRate).toBeGreaterThan(0.2);
+      expect(after(5), `${others.length} other keys`).toBeLessThan(0.15);
+      expect(Math.abs(predictOutcome(model, { domain: 'touch', key: 'poke.face.owner', at: at + 8 * MINUTE }).expectation + 0.1), `${others.length} other keys`).toBeLessThan(0.1);
+    }
   });
 
   it('names where each of its coefficients comes from', () => {

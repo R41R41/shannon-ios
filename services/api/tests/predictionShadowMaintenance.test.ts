@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resolveShannonEmotionState } from '@shannon/cognition';
+import { predictOutcome, resolveShannonEmotionState } from '@shannon/cognition';
 import { configuredAwakeClock } from '../src/autonomyAwakeClock.js';
 import { PredictionShadow } from '../src/predictionShadow.js';
 import { foldOutcomes } from '../src/predictionShadowFold.js';
@@ -92,6 +92,42 @@ describe('the write lock', () => {
     expect(rows.at(-1)!.domain).toBe('awake');
     // What we hold is what a fold of the table gives.
     expect(JSON.stringify(ours.mind(scope).dynamics)).toBe(JSON.stringify(foldOutcomes(rows).mind.dynamics));
+    first.close();
+    second.close();
+  });
+  it('folds the table under the lock on its third try when deletions keep arriving during a recompute, never using a stale fold', () => {
+    const path = databasePath();
+    const first = new DatabaseSync(path);
+    const second = new DatabaseSync(path);
+    ensurePredictionSchema(first);
+    const store = new SQLitePredictionStore(first, { createSchema: false });
+    for (let index = 0; index < 200; index += 1) store.insert(scope, touchRow(index), derived);
+    const ours = new PredictionShadow({ database: first, createsSchema: false, log: () => {} });
+    const theirs = new PredictionShadow({ database: second, createsSchema: false, log: () => {} });
+    ours.mind(scope);
+    theirs.mind(scope);
+    // Our forget takes the lock once to delete, then the recompute takes it again per try: before each of those three
+    // tries, the other process forgets another burst.
+    const exec = first.exec.bind(first);
+    let begins = 0;
+    vi.spyOn(first, 'exec').mockImplementation((sql: string) => {
+      if (sql === 'BEGIN IMMEDIATE') {
+        begins += 1;
+        if (begins >= 2 && begins <= 4) theirs.forget(scope, [`burst-${begins}`]);
+      }
+      exec(sql);
+    });
+    expect(ours.forget(scope, ['burst-0'])).toBe(10);
+    expect(begins).toBe(4);
+    vi.restoreAllMocks();
+    const rows = store.rows(scope);
+    expect(rows).toHaveLength(200 - 4 * 10);
+    const fresh = foldOutcomes(rows);
+    // The cached mind is a fold of the table as it ended, and so is every stored derived value.
+    expect(JSON.stringify(ours.mind(scope).dynamics)).toBe(JSON.stringify(fresh.mind.dynamics));
+    expect(predictOutcome(ours.mind(scope).model, { domain: 'touch', key: 'pet.head.owner', at: Date.parse('2026-10-06T00:00:00.000Z') }))
+      .toEqual(predictOutcome(fresh.mind.model, { domain: 'touch', key: 'pet.head.owner', at: Date.parse('2026-10-06T00:00:00.000Z') }));
+    rows.forEach((row, index) => expect(row.expectation, `${row.seq}`).toBeCloseTo(fresh.folded[index]!.expectation!, 5));
     first.close();
     second.close();
   });

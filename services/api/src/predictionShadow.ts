@@ -1,6 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
 import {
-  memoryControlFor,
   restoreCompanionState,
   touchFeeling,
   type CompanionStateEvent,
@@ -273,8 +272,9 @@ export class PredictionShadow implements AutonomyPredictionTap {
   /** Rows whose source the owner had her forget (any status but active) are deleted, and the rest recomputed. */
   private reconcile(scopeKey: string, state: CompanionStateSnapshot): void {
     if (!this.ready()) return;
+    const controls = new Map(state.memoryControls.map(control => [control.memoryId, control]));
     const forgotten = this.store.sourceIds(scopeKey).filter(id => {
-      const control = memoryControlFor(state, id);
+      const control = controls.get(id);
       return control !== undefined && control.status !== 'active';
     });
     if (forgotten.length) this.forgetSources(scopeKey, forgotten);
@@ -296,7 +296,8 @@ export class PredictionShadow implements AutonomyPredictionTap {
 
   /**
    * Folds every row again outside the lock, then under it folds on what arrived meanwhile and rewrites the derived values
-   * that differ. If rows were deleted meanwhile, it folds again.
+   * that differ. If rows were deleted meanwhile, it folds again; the third time it reads and folds the table under the
+   * lock, so that a fold made outside it is never used once the table has changed under it.
    */
   private refresh(scopeKey: string): { rows: number; changed: number } {
     for (let attempt = 0; ; attempt += 1) {
@@ -305,13 +306,18 @@ export class PredictionShadow implements AutonomyPredictionTap {
       const done: { result: { rows: number; changed: number } | null } = { result: null };
       this.within(scopeKey, () => {
         const shape = this.store.shape(scopeKey);
-        const last = rows.at(-1)?.seq ?? 0;
-        const later = this.store.rows(scopeKey, last);
-        if (rows.length + later.length !== shape.count && attempt < 2) return;
-        for (const row of later) foldOutcome(mind, row);
+        let current = { rows, mind, folded, later: this.store.rows(scopeKey, rows.at(-1)?.seq ?? 0) };
+        if (rows.length + current.later.length !== shape.count) {
+          if (attempt < 2) return;
+          const table = this.store.rows(scopeKey);
+          current = { rows: table, ...foldOutcomes(table), later: [] };
+        }
+        const last = current.rows.at(-1)?.seq ?? 0;
+        const later = current.later;
+        for (const row of later) foldOutcome(current.mind, row);
         let changed = 0;
-        rows.forEach((row, index) => {
-          const derived = folded[index]!;
+        current.rows.forEach((row, index) => {
+          const derived = current.folded[index]!;
           const same = (left: number | null, right: number | null) => (left === null ? right === null : right !== null && Math.abs(left - right) < 5e-7);
           if (!same(row.expectation, derived.expectation) || !same(row.uncertainty, derived.uncertainty) || !same(row.error, derived.error)
             || !same(row.learningRate, derived.learningRate) || !same(row.cause, derived.cause)) {
@@ -319,8 +325,8 @@ export class PredictionShadow implements AutonomyPredictionTap {
             changed += 1;
           }
         });
-        this.cache.set(scopeKey, { mind, count: shape.count, maxSeq: Math.max(last, later.at(-1)?.seq ?? 0) });
-        done.result = { rows: rows.length + later.length, changed };
+        this.cache.set(scopeKey, { mind: current.mind, count: shape.count, maxSeq: Math.max(last, later.at(-1)?.seq ?? 0) });
+        done.result = { rows: current.rows.length + later.length, changed };
       }, { catchUp: false });
       if (done.result) return done.result;
     }
@@ -335,7 +341,6 @@ export class PredictionShadow implements AutonomyPredictionTap {
     if (!this.options.createsSchema || !this.ready()) return;
     const day = ownerDay(at);
     if (this.maintained.get(scopeKey) === day) return;
-    this.maintained.set(scopeKey, day);
     const time = Date.parse(at);
     let deleted = 0;
     this.within(scopeKey, () => {
@@ -344,6 +349,8 @@ export class PredictionShadow implements AutonomyPredictionTap {
     }, { catchUp: false });
     if (deleted) this.refresh(scopeKey);
     this.reconcile(scopeKey, state);
+    // Only once all of it went through: a failure is tried again at the next write.
+    this.maintained.set(scopeKey, day);
   }
 
   /** The stored state of a scope, read only, for the activity loop's process (which holds no state store). */

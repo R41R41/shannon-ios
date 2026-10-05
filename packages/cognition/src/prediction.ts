@@ -6,6 +6,7 @@ import {
   boundedVariance,
   clamp,
   domainNoiseVolatility,
+  finite,
   domainPrior,
   emptyRegression,
   keyNoiseVolatility,
@@ -129,7 +130,7 @@ export function predictOutcome(model: PredictionModel, query: PredictionQuery): 
   const domain = SHANNON_PREDICTION_DOMAINS[query.domain];
   const state = model.domains.get(query.domain);
   const key = state?.keys.get(query.key);
-  const noiseVolatility = keyNoiseVolatility(key, domain, domainNoiseVolatility(state, domain));
+  const noiseVolatility = keyNoiseVolatility(key, domain, domainNoiseVolatility(state, domain, key));
   if (!state || !key || key.causes.length === 0) {
     const prior = domainPrior(state, domain, query.features, key);
     return { ...prior, noise: noiseVolatility.noise, volatility: noiseVolatility.volatility, count: 0, causes: 0 };
@@ -148,7 +149,7 @@ export function observeOutcome(model: PredictionModel, observation: PredictionOb
   const at = observation.at;
   const context = observation.context ?? '';
   const prior = domainPrior(state, domain, observation.features, key);
-  const { noise, volatility } = keyNoiseVolatility(key, domain, domainNoiseVolatility(state, domain));
+  const { noise, volatility } = keyNoiseVolatility(key, domain, domainNoiseVolatility(state, domain, key));
   const before = key.causes.length ? causeMixture(key, domain, at, context, volatility) : { expectation: prior.expectation, uncertainty: prior.uncertainty };
   const learn = { noise, volatility, arousal: observation.arousal ?? 0, context, domain, at };
   const coefficients = SHANNON_PREDICTION_COEFFICIENTS;
@@ -244,7 +245,7 @@ function updateCause(
   learn: { noise: number; volatility: number; arousal: number; context: string; domain: PredictionDomainSpec; at: number },
 ): number {
   const uncertainty = predictiveVariance(cause, learn.domain, learn.at, learn.volatility);
-  const gain = 1 + SHANNON_PREDICTION_COEFFICIENTS.arousalGain * Math.max(0, learn.arousal);
+  const gain = 1 + SHANNON_PREDICTION_COEFFICIENTS.arousalGain * Math.max(0, finite(learn.arousal, 0));
   let rate: number;
   if (learn.domain.family === 'bernoulli') {
     const effective = betaStrength(cause.mean, uncertainty);
