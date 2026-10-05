@@ -39,9 +39,9 @@ public final class ShannonGeminiLiveSessionModel {
     var transport: ShannonGeminiLiveTransport?
     var pendingTurns = ShannonPendingVoiceTurns()
     var responseGenerationID: UUID?
-    private var turnAssembler = ShannonVoiceTurnAssembler()
+    var turnAssembler = ShannonVoiceTurnAssembler()
     var responseTask: Task<Void, Never>?
-    private var finalizeTask: Task<Void, Never>?
+    var finalizeTask: Task<Void, Never>?
     private var duckRestoreTask: Task<Void, Never>?
     var echoGuard = ShannonSpeechEchoGuard()
     /// Recognition lags speech, so Shannon's own last words can arrive as a transcript after playback ends.
@@ -79,8 +79,8 @@ public final class ShannonGeminiLiveSessionModel {
     var lastAudioReconnectAt: Date?
     /// A reconnect of the same call is queued or running (`queueSameCallReconnect`).
     var sameCallReconnectQueued = false
-    /// Until when an utterance that finalises is still the owner's, after a switch into 「友人も一緒」 by the control.
-    var ownerWordsUntil: TimeInterval?
+    /// Until when the first words of a transcript are still the owner's, after a switch into 「友人も一緒」 by the control.
+    var ownerWordsReceivedUntil: Date?
     /// Told after every switch between 本人だけ and 「友人も一緒」, spoken or by the control. Set by the owner of the call.
     var participantModeDidChange: (@MainActor (ShannonVoiceParticipantMode) -> Void)?
     /// Whether the app declares why it uses the microphone (the test host does not).
@@ -343,7 +343,7 @@ public final class ShannonGeminiLiveSessionModel {
     }
 
     private func previewInput(_ current: String) -> String {
-[pendingTurns.displayText, finalisesAsOwnersWords ? "" : current].filter { !$0.isEmpty }.joined(separator: "\n")
+[pendingTurns.displayText, assemblingOwnersWords ? "" : current].filter { !$0.isEmpty }.joined(separator: "\n")
     }
 
     private func handleCapture(rms: Float, seconds: Double, started: Bool, ended: Bool, chunks: Int) {
@@ -388,7 +388,7 @@ public final class ShannonGeminiLiveSessionModel {
         ShannonVoiceTurnDiagnostics.recordAssembled(envelope, turnComplete: turnComplete)
         appendUtterance(id: envelope.id, rawText: envelope.rawText, text: envelope.normalizedText,
             source: .speech, addressedByName: envelope.addressee == "shannon",
-            followsShannonTurn: heardRightAfterShannon, ownersWords: finalisesAsOwnersWords)
+            followsShannonTurn: heardRightAfterShannon, ownersWords: isOwnersWords(startedAt: envelope.startedAt))
         userTranscript = pendingTurns.displayText
         beginResponse()
     }
@@ -447,7 +447,7 @@ public final class ShannonGeminiLiveSessionModel {
         finalizeTask = nil
         turnAssembler.reset()
         heardRightAfterShannon = false
-        ownerWordsUntil = nil
+        ownerWordsReceivedUntil = nil
     }
 
     func updateCost() {

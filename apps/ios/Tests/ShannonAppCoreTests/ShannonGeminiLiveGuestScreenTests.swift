@@ -33,8 +33,8 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         let model = liveModel()
         model.appendUtterance(rawText: "明日の歯医者は何時？", text: "明日の歯医者は何時？", source: .typed)
         model.switchParticipantMode(to: .guest, origin: .control)
-        // After the moments in which what is recognised is still his (`ownerWordsAfterSwitch`).
-        try? await Task.sleep(for: .seconds(ShannonGeminiLiveSessionModel.ownerWordsAfterSwitch + 0.1))
+        // After the moments in which what arrives is still his (`recogniserLag`).
+        try? await Task.sleep(for: .seconds(ShannonGeminiLiveSessionModel.recogniserLag + 0.1))
         model.handle(.inputTranscript("はじめまして、ミキです。"))
         XCTAssertEqual(model.userTranscript, "はじめまして、ミキです。", "the preview leaves out his pending question")
         await waitForFinalization(model, turns: 2)
@@ -179,21 +179,23 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         let model = liveModel()
         model.handle(.inputTranscript("明日の予定は"))
         model.switchParticipantMode(to: .guest, origin: .control)
+        // What the assembler held is finished at the tap, as his: a guest's first words are never merged into it.
+        XCTAssertEqual(model.pendingTurns.turns.map(\.rawText), ["明日の予定は"])
         XCTAssertEqual(model.userTranscript, "")
-        // Recognised just after the tap: still his.
+        // First words that arrive within the recogniser's lag were spoken before the tap: still his, shown nowhere.
         model.handle(.inputTranscript("歯医者だっけ。"))
         XCTAssertEqual(model.userTranscript, "", "the preview does not show it")
-        await waitForFinalization(model, turns: 1)
-        XCTAssertEqual(model.pendingTurns.turns.count, 1, "answered in the call")
-        XCTAssertEqual(model.userTranscript, "")
+        await waitForFinalization(model, turns: 2)
+        XCTAssertEqual(model.pendingTurns.turns.count, 2, "answered in the call")
         XCTAssertEqual(model.pendingTurns.displayText, "", "and never shown")
 
-        // Once the window has passed, the guests' words are theirs.
-        try? await Task.sleep(for: .seconds(ShannonGeminiLiveSessionModel.ownerWordsAfterSwitch + 0.1))
+        // Once the lag has passed, the guests' words are theirs.
+        try? await Task.sleep(for: .seconds(ShannonGeminiLiveSessionModel.recogniserLag + 0.1))
         model.handle(.inputTranscript("はじめまして。"))
         XCTAssertEqual(model.userTranscript, "はじめまして。")
-        await waitForFinalization(model, turns: 2)
+        await waitForFinalization(model, turns: 3)
         XCTAssertEqual(model.pendingTurns.displayText, "はじめまして。")
+        XCTAssertEqual(model.pendingTurns.turns.last?.rawText, "はじめまして。", "not merged into his words")
         model.stop()
     }
 

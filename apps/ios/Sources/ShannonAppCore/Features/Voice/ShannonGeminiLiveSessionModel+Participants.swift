@@ -32,8 +32,13 @@ extension ShannonGeminiLiveSessionModel {
             // pending and is answered in the in-call context, but is never shown again; an owner reply still
             // streaming does not write onto the screen either (`mayShowReply`).
             pendingTurns.hideAll()
-            // Owner speech in flight at the tap (already being assembled, or still being recognised) is his too.
-            if origin == .control { ownerWordsUntil = ProcessInfo.processInfo.systemUptime + Self.ownerWordsAfterSwitch }
+            // Owner speech in flight at the tap is his too: what the assembler holds is finished now as his (so a
+            // guest's first words are never merged into it), and a transcript whose first words arrive within the
+            // recogniser's lag after the tap was spoken before it.
+            if origin == .control {
+                finishOwnerBufferAtSwitch()
+                ownerWordsReceivedUntil = Date().addingTimeInterval(Self.recogniserLag)
+            }
             userTranscript = ""
             shannonTranscript = ""
             textSendState = .idle
@@ -104,15 +109,29 @@ extension ShannonGeminiLiveSessionModel {
         guestPeriodEnded?(period)
     }
 
-    /// How long after a switch into 「友人も一緒」 by the control an utterance that finalises is still the owner's: the
-    /// recogniser's lag behind the end of speech (about a second) and the longest pause the assembler waits (0.42 s).
-    /// What he said just before the tap is answered, but never shown or kept as the guests' words.
-    static let ownerWordsAfterSwitch: TimeInterval = 1.5
+    /// How long the first words of a transcript may arrive after the speech they belong to began. An assumption,
+    /// not a measurement: nothing in the repository or its diagnostics records the transcription service's delay,
+    /// and one second is chosen to cover an ordinary delay of the streamed transcription. Owner speech whose first
+    /// words arrive this long after a switch by the control is still his. Measure it from the content-free
+    /// `voice.turn.*` diagnostics on a device before relying on a finer value.
+    static let recogniserLag: TimeInterval = 1.0
 
-    /// An utterance finalising now is the owner's from before the switch.
-    var finalisesAsOwnersWords: Bool {
-        guard participantMode == .guest, let until = ownerWordsUntil else { return false }
-        return ProcessInfo.processInfo.systemUptime <= until
+    /// An utterance whose first words arrived at `startedAt` is the owner's from before the switch.
+    func isOwnersWords(startedAt: Date?) -> Bool {
+        guard participantMode == .guest, let until = ownerWordsReceivedUntil, let startedAt else { return false }
+        return startedAt <= until
+    }
+
+    /// What the assembler holds now is the owner's (shown nowhere).
+    var assemblingOwnersWords: Bool { isOwnersWords(startedAt: turnAssembler.startedAt) }
+
+    /// The owner's words still being assembled at the tap become a turn of his now, hidden and answered in the call.
+    private func finishOwnerBufferAtSwitch() {
+        finalizeTask?.cancel()
+        finalizeTask = nil
+        guard let envelope = turnAssembler.finish() else { return }
+        pendingTurns.append(id: envelope.id, rawText: envelope.rawText, text: envelope.normalizedText,
+            source: .speech, addressedByName: envelope.addressee == "shannon", hidden: true)
     }
 
     /// Words of a reply asked in 本人だけ that arrive once the call is 「友人も一緒」 (what she says about a look, behind a
