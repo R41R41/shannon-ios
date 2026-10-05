@@ -28,6 +28,21 @@ Values are rounded to 0.01. There is no field for why she felt something, for wh
 - **Kept 14 days.** Points older than 14 days are deleted when a point is written and whenever a store of the API or its workers opens (a restart of the API or a worker), also while the switch is off (on an index of the time). The activity loop's process never prunes: its awake clock opens no store, and the store it reads the owner's context through is opened with `leavesMoodHistory`, which neither creates, prunes nor records.
 - **The owner's scope only** (`SHANNON_OWNER_SCOPE_KEY`, default `owner`).
 
+## Retention: proposal for Syzygy ADR-0006 (owner answer 7, not applied)
+
+The owner decided (ADR-0006, answer 7) that the 14 days are to be lengthened to what fitting the new dynamics needs, the length to be shown in the shadow stage from the uncertainty of the estimate. **Retention is unchanged (14 days) until that is approved**; this section is the proposal.
+
+What the mood history is needed for is θ, σ and the attractor of the core affect (`affectDynamics.ts`), fitted from stretches without events (ADR-0006 §2.6). θ needs the most data. From consecutive points 10 minutes apart with no event between them, the autocorrelation is ρ = e^(−θ·10 min) ≈ 0.926 at the initial θ (0.4 over two hours), its sampling error is √((1 − ρ²)/N), and the relative error of θ̂ is that divided by ρ·θ·10 min (≈ 0.071):
+
+| Relative error of θ | Pairs needed | 3 quiet awake hours a day (18 pairs) | 4 hours (24) | 6 hours (36) |
+| --- | --- | --- | --- | --- |
+| 20% | ≈ 710 | 39 days | 29 days | 20 days |
+| 15% | ≈ 1,260 | 70 days | 52 days | 35 days |
+
+15% is about what it takes to tell whether her θ lies inside the literature range (an autocorrelation of 0.2–0.5 over two hours is θ within roughly ±40% of the initial value), which decides whether a fitted value is applied automatically or needs approval (owner answer 4). The attractor needs far less (its standard error falls below the 0.05 the history resolves within about ten days of four quiet hours), and σ is estimated from the same pairs as θ.
+
+**Proposal: keep 60 days.** That reaches about 15% for θ at four quiet awake hours a day and about 20% at three. The real number of usable pairs a day can be counted once the shadow has run for 14 days: consecutive points of this history with no outcome row of `shannon_prediction_outcomes` between them (the outcome rows say when something happened to her). If that rate is below three hours' worth, the proposal is revised before it is applied. A point holds numbers and a kind only (see above), so the change is a length, not a new kind of data. The shadow's own `awake` rows and comparisons follow whatever length is decided.
+
 ## Privacy rule
 
 The rule of 「シャノンのいま」 applies: only the owner's own paired device reads it. A turn with other people present stores nothing of her state today (`audience: "others"` in text, a voice turn not alone, a guest call), so it writes no point either. Should any write of her state happen during such a turn (her activity loop's clock, say), the point is taken from what that write stored, never from the face shown to the people present.
