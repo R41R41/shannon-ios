@@ -274,6 +274,21 @@ describe('her study in Aether', () => {
     expect((await get(`/v1/autonomy/study/pieces/${id}`)).status).toBe(200);
   });
 
+  it('stops writing to a document the owner moved out of her folder: the piece goes to her trash and nothing is adopted', async () => {
+    const { fake, call, store, service } = await harness();
+    const first = /id: ([0-9a-f-]{36})/u.exec((await call('study.create', { kind: 'story', title: '一つめ', body: STORY })).text)![1]!;
+    const second = /id: ([0-9a-f-]{36})/u.exec((await call('study.create', { kind: 'story', title: '二つめ', body: STORY })).text)![1]!;
+    const [one, two] = fake.inFolder();
+    fake.ownerEdit(one!.id, { projectIds: ['project_owner'] });
+    fake.ownerEdit(two!.id, { projectIds: ['project_owner'] });
+    await expect(service.studyAether!.update(scope, store.study.get(scope, first)!, { body: 'ボクの直し' }, aetherIdempotencyKey('outside-1'))).rejects.toMatchObject({ code: 'OUTSIDE_SHANNON_FOLDER' });
+    expect(store.study.find(scope, first, true)!.deletedAt).toBeDefined();
+    expect(store.study.versions(scope, first)).toHaveLength(1);
+    // A delete of hers is done in Shannon, and Aether (his now) is left as it is.
+    expect(await service.studyAether!.remove(scope, store.study.get(scope, second)!, aetherIdempotencyKey('outside-2'))).toMatchObject({ documentId: two!.id });
+    expect(fake.documents.get(two!.id)!.status).toBe('growing');
+  });
+
   it('links a write of hers whose local half was lost as hers: her kind, her change note, within the open-story limit', async () => {
     const { fake, call, store, service, clock } = await harness();
     const aether = service.studyAether!;

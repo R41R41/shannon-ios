@@ -59,10 +59,18 @@ export class StudyAether {
       this.store.study.aether.notePending(scopeKey, { documentId: written.documentId, aetherVersion: written.version, operation: 'update', pieceId: piece.id, changeNote: change.changeNote || '書き直しました。' }, this.now());
       return written;
     } catch (error) {
+      // Moved out of her folder by the owner: gone for her study, like a deleted document (her trash; nothing adopted, no retry).
+      if (aetherErrorCode(error) === 'OUTSIDE_SHANNON_FOLDER') this.gone(scopeKey, piece.id, link.documentId, link.aetherVersion);
       // What changed in Aether since is brought in, so that her next try starts from it.
       if (['STALE_VERSION', 'NOT_FOUND'].includes(aetherErrorCode(error))) await this.refresh(scopeKey, piece.id, signal).catch(() => 'unknown');
       throw error;
     }
+  }
+
+  /** A piece whose document is gone from her folder: into her trash, and not read again until Aether changes it. */
+  private gone(scopeKey: string, pieceId: string, documentId: string, version: number): void {
+    this.store.transaction(() => this.store.study.aether.setDeleted(scopeKey, pieceId, true, this.now()));
+    this.seenDeleted.set(documentId, version);
   }
 
   /** Into Aether's Recently Deleted (the owner can restore it on his iPhone); null for a piece that has not moved. */
@@ -74,8 +82,8 @@ export class StudyAether {
       this.seenDeleted.set(link.documentId, deleted.version);
       return deleted;
     } catch (error) {
-      // Gone already: her trash says so too.
-      if (aetherErrorCode(error) === 'NOT_FOUND') return { documentId: link.documentId, version: link.aetherVersion };
+      // Gone already, or moved out of her folder by the owner: her trash says so too, and Aether is left as it is.
+      if (aetherErrorCode(error) === 'NOT_FOUND' || aetherErrorCode(error) === 'OUTSIDE_SHANNON_FOLDER') return { documentId: link.documentId, version: link.aetherVersion };
       if (aetherErrorCode(error) === 'STALE_VERSION') await this.refresh(scopeKey, piece.id, signal).catch(() => 'unknown');
       throw error;
     }
