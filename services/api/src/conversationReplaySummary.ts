@@ -1,7 +1,7 @@
 import { OWNER_AUDIENCE, type CompanionStateStore } from '@shannon/cognition';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from './chatModelSupport.js';
 import type { ConversationStore, ReplaySummaryRecord } from './conversationStore.js';
-import { REPLAY_SUMMARY_CHARACTERS, replayRule, replayWindow } from './conversationWindow.js';
+import { REPLAY_SUMMARY_CHARACTERS, nextWindowStart, replayRule, replayWindow, type ReplayRule, type ReplayWindow } from './conversationWindow.js';
 import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from './llmUsage.js';
 import { MemoryWithholding, visibleReplayMessages } from './memoryVisibility.js';
 
@@ -59,15 +59,20 @@ export class ConversationReplaySummarizer {
     const visible = visibleReplayMessages(state, this.store, scopeKey, threadId, OWNER_AUDIENCE, text.maximumMessages + 1).messages;
     const items = visible.map(entry => entry.item);
     // The window that drops the most decides what the summary has to account for.
-    const dropped = Math.max(replayWindow(items, text).start, replayWindow(items, voice).start);
-    if (dropped === 0) return 'current';
+    const windows = [replayWindow(items, text), replayWindow(items, voice)] as const;
+    const dropped = Math.max(...windows.map(window => window.start));
+    if (!windows.some((window, index) => window.start > 0 || nearlyFull(window, index ? voice : text))) return 'current';
+    // A full window drops to its next boundary in one turn (`StableHead`), its first drop included: what it will leave out
+    // then is covered now, before that turn, as sliding by a message or two was covered by the lookahead. The model is
+    // given the summary only once the window leaves something out.
+    const next = Math.max(nextWindowStart(items, text, windows[0].start), nextWindowStart(items, voice, windows[1].start));
 
     const stored = this.store.replaySummary(scopeKey, threadId);
     const previous = stored && !new MemoryWithholding(state, this.store, scopeKey).withholdsReplaySummary(threadId, stored) ? stored : null;
     const covered = previous ? visible.findIndex(entry => entry.message.id === previous.coveredThroughMessageId) : -1;
-    if (previous && covered >= dropped - 1) return 'current';
+    if (previous && covered >= Math.min(visible.length, next) - 1) return 'current';
 
-    const end = Math.min(visible.length, dropped + LOOKAHEAD_MESSAGES);
+    const end = Math.min(visible.length, Math.max(dropped + LOOKAHEAD_MESSAGES, next));
     const batches = batchesOf(visible.slice(covered + 1, end).map(entry => ({
       id: entry.message.id,
       line: `${entry.message.role === 'user' ? 'ユーザー' : 'シャノン'}: ${Array.from(entry.message.content.trim().replace(/\s+/gu, ' ')).slice(0, LINE_CHARACTERS).join('')}`,
@@ -88,6 +93,12 @@ export class ConversationReplaySummarizer {
     }
     return outcome;
   }
+}
+
+/** A window that leaves nothing out yet, but is within one stretch between boundaries of its budget (`StableHead`). */
+function nearlyFull(window: ReplayWindow, rule: ReplayRule): boolean {
+  return Boolean(rule.stableHead) && (window.characters > rule.budgetCharacters - rule.stableHead!.characters
+    || window.history.length > rule.maximumMessages - rule.stableHead!.messages);
 }
 
 /** Oldest first, at most `MAXIMUM_CALLS` batches of `CALL_CHARACTERS`; an older remainder is left out. */

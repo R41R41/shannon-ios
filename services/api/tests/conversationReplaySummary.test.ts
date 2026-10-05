@@ -13,7 +13,7 @@ import {
   type ReplaySummaryWriter,
 } from '../src/conversationReplaySummary.js';
 import { InMemoryConversationStore, type ConversationStore } from '../src/conversationStore.js';
-import { conversationReplay } from '../src/conversationWindow.js';
+import { conversationReplay, nextWindowStart, replayRule } from '../src/conversationWindow.js';
 import type { LlmUsageEvent } from '../src/llmUsage.js';
 import { LocalRuleSleepMemoryAnalyzer } from '../src/sleepConsolidation.js';
 import { ShannonMemoryService } from '../src/memoryService.js';
@@ -58,37 +58,87 @@ describe('the replay summary is incremental, bounded, and given only when the wi
     const h = setup();
     thread(h.store, 15);
     // The budget alone would start both windows at the tenth message; a full window starts at the first boundary from there
-    // (`StableHead`), and the summary accounts for what the window that drops the most left out.
-    const dropped = () => Math.max(h.replay('voice').start, h.replay('text').start);
+    // (`StableHead`), and the summary accounts for what the window that drops the most left out, and in advance for what
+    // the next drop to a boundary will leave out (`nextWindowStart`).
+    const rules = [replayRule('text', environment), replayRule('voice', environment)] as const;
+    const items = () => h.store.conversationHistory('owner', 'thread').map(message => ({ role: message.role, content: message.content }));
+    const starts = () => [h.replay('text').start, h.replay('voice').start] as const;
+    const dropped = () => Math.max(...starts());
+    const next = () => Math.max(...starts().map((start, index) => nextWindowStart(items(), rules[index]!, start)));
+    const speaker = (index: number) => `${index % 2 ? 'シャノン' : 'ユーザー'}: ${line(index)}`;
     const first = dropped();
     expect(first).toBeGreaterThanOrEqual(10);
     expect(first).toBeLessThan(30 - 8);
+    const firstEnd = Math.max(first + 12, next());
     expect(await h.summarizer.refresh('owner', 'thread')).toBe('updated');
     expect(h.calls).toHaveLength(1);
     expect(h.calls[0]!.previousSummary).toBeNull();
-    // The messages that left the window and the twelve oldest still inside it.
-    expect(h.calls[0]!.lines).toHaveLength(first + 12);
+    // The messages that left the window, and the twelve oldest still inside it or all up to the next boundary.
+    expect(h.calls[0]!.lines).toHaveLength(firstEnd);
     expect(h.calls[0]!.lines[0]).toBe(`ユーザー: ${line(0)}`);
-    expect(h.calls[0]!.lines[first + 11]).toBe(`${(first + 11) % 2 ? 'シャノン' : 'ユーザー'}: ${line(first + 11)}`);
+    expect(h.calls[0]!.lines[firstEnd - 1]).toBe(speaker(firstEnd - 1));
     const messages = h.store.conversationHistory('owner', 'thread');
-    expect(h.store.replaySummary('owner', 'thread')).toEqual({ summary: '要約1', coveredThroughMessageId: messages[first + 11]!.id, chainStartedAt: minute(400), updatedAt: minute(400) });
+    expect(h.store.replaySummary('owner', 'thread')).toEqual({ summary: '要約1', coveredThroughMessageId: messages[firstEnd - 1]!.id, chainStartedAt: minute(400), updatedAt: minute(400) });
 
-    // Nothing new left the window: no model call, turn after turn, until a message leaves it uncovered.
+    // Nothing new can leave the window at its next drop uncovered: no model call, turn after turn, until something can.
     expect(await h.summarizer.refresh('owner', 'thread')).toBe('current');
     let turns = 15;
-    while (dropped() <= first + 12) {
+    while (next() <= firstEnd) {
       expect(await h.summarizer.refresh('owner', 'thread')).toBe('current');
       thread(h.store, 1, turns);
       turns += 1;
     }
     expect(h.calls).toHaveLength(1);
-    const second = dropped();
+    const secondEnd = Math.min(items().length, Math.max(dropped() + 12, next()));
     expect(await h.summarizer.refresh('owner', 'thread')).toBe('updated');
     expect(h.calls).toHaveLength(2);
     expect(h.calls[1]!.previousSummary).toBe('要約1');
-    expect(h.calls[1]!.lines[0]).toBe(`${(first + 12) % 2 ? 'シャノン' : 'ユーザー'}: ${line(first + 12)}`);
-    expect(h.calls[1]!.lines).toHaveLength(second - first);
+    expect(h.calls[1]!.lines[0]).toBe(speaker(firstEnd));
+    expect(h.calls[1]!.lines).toHaveLength(secondEnd - firstEnd);
     expect(h.store.replaySummary('owner', 'thread')).toMatchObject({ summary: '要約2', chainStartedAt: minute(400) });
+  });
+
+  it('leaves no message out of both the summary and the window on any turn, the turns of a drop to a boundary included', async () => {
+    // Default budgets over the server's store; the summary is refreshed once after each stored turn, as the background worker
+    // does it (`refreshForTurn` after the turn's refinement job), not after each message.
+    // Measured on the window before this check (the summary covered only the lookahead past the current start): 44 turns of
+    // this Talk had messages in neither, when the refresh ends after the next request.
+    for (const lagged of [false, true]) {
+      const directory = mkdtempSync(join(tmpdir(), 'shannon-replay-gap-'));
+      directories.push(directory);
+      const store = new SQLiteShannonStore({ path: join(directory, 'shannon.sqlite'), now: () => minute(0) });
+      const { writer } = recordingWriter();
+      const summarizer = new ConversationReplaySummarizer(store, store, writer, { backgroundLlmCostUsd: () => 0 }, { environment: {}, backgroundBudgetUsd: 0.5, now: () => minute(400) });
+      let seed = 7;
+      const random = () => { seed = (seed * 1_103_515_245 + 12_345) & 0x7fff_ffff; return seed / 0x7fff_ffff; };
+      let gaps = 0;
+      let drops = 0;
+      let previousStart = 0;
+      for (let turn = 0; turn < 300; turn += 1) {
+        // The request of this turn: the window over what is stored, beside the summary written so far. Positions of the
+        // newest 401 messages the replay reads; `offset` counts them from the Talk's first message.
+        const offset = 2 * turn - Math.min(2 * turn, 401);
+        const fetched = store.recentMessages!('owner', 'thread', 401);
+        for (const channel of ['text', 'voice'] as const) {
+          const replay = conversationReplay(channel, store.snapshot('owner'), store, 'owner', 'thread', OWNER_AUDIENCE, {});
+          if (replay.start === 0) continue;
+          const covered = fetched.findIndex(message => message.id === store.replaySummary?.('owner', 'thread')?.coveredThroughMessageId);
+          if (covered < replay.start - 1) gaps += 1;
+          if (channel === 'text' && replay.start + offset > previousStart + 2) drops += 1;
+          if (channel === 'text') previousStart = replay.start + offset;
+        }
+        // Lagged: the refresh after the turn before runs in the background and ends only now, after a quick answer of the
+        // owner's was sent, so the request saw the summary as it stood one turn earlier.
+        if (lagged) await summarizer.refresh('owner', 'thread');
+        store.appendTurn('owner', 'thread', `u${turn} ${'あ'.repeat(20 + Math.floor(random() * 120))}`, `a${turn} ${'い'.repeat(40 + Math.floor(random() * 400))}`, minute(turn + 1));
+        if (!lagged) await summarizer.refresh('owner', 'thread');
+      }
+      // The window did drop to boundaries (more than two messages in one turn), its first drop included, and never past
+      // what the summary covers.
+      expect(drops, `lagged: ${lagged}`).toBeGreaterThan(5);
+      expect(gaps, `lagged: ${lagged}`).toBe(0);
+      store.close();
+    }
   });
 
   it('is passed to voice and text only when earlier messages are not replayed', async () => {
@@ -147,10 +197,16 @@ describe('the replay summary is incremental, bounded, and given only when the wi
     thread(failing.store, 15);
     expect(await failing.summarizer.refresh('owner', 'thread')).toBe('failed');
     expect(failing.store.replaySummary('owner', 'thread')).toBeUndefined();
+    // A thread far from its budget needs nothing. One within a quarter of it (twenty messages of 100 characters fill the
+    // 2,000) is summarized ahead of its first drop to a boundary, though the model is given that summary only after it.
     const short = setup();
-    thread(short.store, 10);
+    thread(short.store, 7);
     expect(await short.summarizer.refresh('owner', 'thread')).toBe('current');
     expect(short.calls).toHaveLength(0);
+    thread(short.store, 3, 7);
+    expect(short.replay('text').truncated).toBe(false);
+    expect(await short.summarizer.refresh('owner', 'thread')).toBe('updated');
+    expect(short.replay('text').summary).toBeUndefined();
   });
 });
 
