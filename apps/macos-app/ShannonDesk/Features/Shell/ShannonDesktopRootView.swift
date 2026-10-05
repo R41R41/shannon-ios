@@ -118,7 +118,7 @@ public struct ShannonDesktopRootView: View {
         .shannonOpensStudyPieces(with: memory.autonomy.study)
         // 「いま見ました」 when she looks through this Mac's camera in a conversation.
         .shannonAppLook(conversation)
-        .inspector(isPresented: $showsInspector) {
+        .inspector(isPresented: inspectorIsPresented) {
             auxiliaryInspector
                 .inspectorColumnWidth(
                     min: auxiliaryPanel.minimumWidth, ideal: auxiliaryPanel.idealWidth, max: auxiliaryPanel.maximumWidth

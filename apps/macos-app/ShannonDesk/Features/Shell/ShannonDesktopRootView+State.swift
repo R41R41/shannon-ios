@@ -75,6 +75,18 @@ extension ShannonDesktopRootView {
         )
     }
 
+    /// 「すがた」 belongs beside Talk (decision 2026-10-03): elsewhere (シャノン, 作業, 設定) her panel
+    /// is not shown, so the page keeps its width; it comes back with Talk. Closing it closes the panel.
+    var inspectorIsPresented: Binding<Bool> {
+        Binding(
+            get: { showsInspector && DesktopAuxiliaryPanel.isShown(auxiliaryPanel, on: destination) },
+            // Hidden only for this page: a close that the hiding itself reports must not turn the panel off.
+            set: { shown in
+                if DesktopAuxiliaryPanel.isShown(auxiliaryPanel, on: destination) { showsInspector = shown }
+            }
+        )
+    }
+
     var auxiliaryInspector: some View {
         VStack(spacing: 0) {
             Picker("補助パネル", selection: $auxiliaryPanel) {
@@ -85,7 +97,9 @@ extension ShannonDesktopRootView {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .padding(ShannonDesktopSpacing.medium)
+            .padding(.horizontal, ShannonDesktopSpacing.medium)
+            .padding(.top, ShannonDesktopSpacing.large)
+            .padding(.bottom, ShannonDesktopSpacing.medium)
 
             Divider()
 

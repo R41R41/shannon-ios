@@ -99,6 +99,11 @@ enum DesktopAuxiliaryPanel: String, CaseIterable, Hashable {
         case .figure: "person.crop.rectangle"
         }
     }
+    /// Whether this panel is shown on a page: her figure only beside Talk; 目次 and 現在地 wherever they were.
+    static func isShown(_ panel: DesktopAuxiliaryPanel, on destination: DesktopDestination) -> Bool {
+        panel != .figure || destination == .talk
+    }
+
     /// Her figure needs room: the panel is at least 320 wide while it shows her.
     var minimumWidth: CGFloat { self == .figure ? 320 : 230 }
     var idealWidth: CGFloat { self == .figure ? 360 : 286 }

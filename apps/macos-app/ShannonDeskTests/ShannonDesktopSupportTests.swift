@@ -217,6 +217,12 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         XCTAssertEqual(DesktopAuxiliaryPanel.allCases, [.outline, .task, .figure])
         XCTAssertEqual(DesktopAuxiliaryPanel.figure.minimumWidth, 320)
         XCTAssertEqual(DesktopAuxiliaryPanel.figure.title, "すがた")
+        // Her figure stands beside Talk only: on シャノン, 作業 and 設定 the page keeps its width.
+        XCTAssertTrue(DesktopAuxiliaryPanel.isShown(.figure, on: .talk))
+        for page in [DesktopDestination.shannon, .work, .development, .release, .settings] {
+            XCTAssertFalse(DesktopAuxiliaryPanel.isShown(.figure, on: page))
+            XCTAssertTrue(DesktopAuxiliaryPanel.isShown(.task, on: page))
+        }
 
         let initialChrome = ShannonDesktopWindowRestoration.windowChrome(
             sceneInspectorRawValue: nil,
