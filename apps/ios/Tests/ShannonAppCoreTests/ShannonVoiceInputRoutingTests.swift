@@ -105,11 +105,14 @@ final class ShannonMacVoiceInputRoutingTests: XCTestCase {
     }
 
 #if os(macOS)
-    /// Whatever this Mac has: the list and the 自動 label never show voice processing's hidden aggregate.
+    /// Whatever this Mac has (an aggregate the owner made in Audio MIDI Setup included): the list and the 自動 label
+    /// never show voice processing's hidden aggregate, and every listed microphone, aggregate or not, stands for itself.
     func testTheMicrophonesListedAreNeverTheVoiceProcessingAggregate() {
         for device in ShannonMacAudioDevices.inputs() {
             XCTAssertFalse(device.id.hasPrefix("VPAUAggregateAudioDevice"))
-            XCTAssertEqual(ShannonMacAudioDevices.deviceID(forUID: device.id).flatMap(ShannonMacAudioDevices.inputBehind)?.uid, device.id)
+            let id = ShannonMacAudioDevices.deviceID(forUID: device.id)
+            XCTAssertEqual(id.map(ShannonMacAudioDevices.isAggregateOfVoiceProcessing), false, "a listed device is not voice processing's")
+            XCTAssertEqual(id.flatMap { ShannonMacAudioDevices.inputBehind($0, preferring: nil) }?.uid, device.id)
         }
         XCTAssertFalse(ShannonMacAudioDevices.defaultInputName()?.hasPrefix("VPAUAggregateAudioDevice") ?? false)
     }

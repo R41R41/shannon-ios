@@ -9,43 +9,57 @@ enum ShannonMacAudioDevices {
     /// that voice processing builds for a call is left out.
     static func inputs() -> [ShannonVoiceInputDevice] {
         deviceIDs().compactMap { id in
-            guard hasInput(id), !isHidden(id), let uid = string(id, kAudioDevicePropertyDeviceUID),
-                  !uid.hasPrefix("VPAUAggregateAudioDevice") else { return nil }
+            guard hasInput(id), !isHidden(id), !isAggregateOfVoiceProcessing(id),
+                  let uid = string(id, kAudioDevicePropertyDeviceUID) else { return nil }
             let name = string(id, kAudioObjectPropertyName) ?? uid
             return ShannonVoiceInputDevice(id: uid, name: name, isBuiltIn: transport(id) == kAudioDeviceTransportTypeBuiltIn)
         }
     }
 
-    /// The microphone a device stands for: the device itself, or, for an aggregate (the one voice processing
-    /// builds), its active input sub-device. Nil when that cannot be told.
-    static func inputBehind(_ id: AudioDeviceID) -> (uid: String, name: String)? {
-        var candidates = [id]
-        if transport(id) == kAudioDeviceTransportTypeAggregate {
-            candidates = objectList(id, kAudioAggregateDevicePropertyActiveSubDeviceList)
+    /// The microphone a device stands for. Voice processing's own aggregate stands for one of its active input
+    /// sub-devices: the one that was set (`applied`, a unique id) if it is among them, else the system's input,
+    /// else the first with input streams. Any other device stands for itself, an aggregate the owner made too.
+    /// Nil when that cannot be told.
+    static func inputBehind(_ id: AudioDeviceID, preferring applied: String? = nil) -> (uid: String, name: String)? {
+        guard isAggregateOfVoiceProcessing(id) else { return hasInput(id) ? identity(id) : nil }
+        let inputs = objectList(id, kAudioAggregateDevicePropertyActiveSubDeviceList)
+            .filter { hasInput($0) && !isAggregateOfVoiceProcessing($0) }
+            .compactMap(identity)
+        if let applied, let chosen = inputs.first(where: { $0.uid == applied }) { return chosen }
+        if let system = defaultInputID().flatMap(identity), let match = inputs.first(where: { $0.uid == system.uid }) {
+            return match
         }
-        for candidate in candidates where hasInput(candidate) && !isAggregateOfVoiceProcessing(candidate) {
-            guard transport(candidate) != kAudioDeviceTransportTypeAggregate,
-                  let uid = string(candidate, kAudioDevicePropertyDeviceUID) else { continue }
-            return (uid, string(candidate, kAudioObjectPropertyName) ?? uid)
-        }
-        return nil
+        return inputs.first
     }
 
     static func uid(of id: AudioDeviceID) -> String? { string(id, kAudioDevicePropertyDeviceUID) }
 
-    private static func isAggregateOfVoiceProcessing(_ id: AudioDeviceID) -> Bool {
-        string(id, kAudioDevicePropertyDeviceUID)?.hasPrefix("VPAUAggregateAudioDevice") ?? false
+    private static func identity(_ id: AudioDeviceID) -> (uid: String, name: String)? {
+        guard let uid = string(id, kAudioDevicePropertyDeviceUID) else { return nil }
+        return (uid, string(id, kAudioObjectPropertyName) ?? uid)
     }
 
-    /// The system's input device now (System Settings › Sound › Input), unless it is a hidden device.
-    static func defaultInputName() -> String? {
+    /// Voice processing's own aggregate: its unique id says so, or it is a private aggregate that the system's
+    /// list of devices does not show. An aggregate the owner made in Audio MIDI Setup is listed, so it is not one.
+    static func isAggregateOfVoiceProcessing(_ id: AudioDeviceID) -> Bool {
+        if string(id, kAudioDevicePropertyDeviceUID)?.hasPrefix("VPAUAggregateAudioDevice") == true { return true }
+        return transport(id) == kAudioDeviceTransportTypeAggregate && !deviceIDs().contains(id)
+    }
+
+    private static func defaultInputID() -> AudioDeviceID? {
         var id = AudioDeviceID(0)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultInputDevice,
             mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
         guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &id) == noErr,
-              id != 0, !isHidden(id), !isAggregateOfVoiceProcessing(id) else { return nil }
+              id != 0 else { return nil }
+        return id
+    }
+
+    /// The system's input device now (System Settings › Sound › Input), unless it is a hidden device.
+    static func defaultInputName() -> String? {
+        guard let id = defaultInputID(), !isHidden(id), !isAggregateOfVoiceProcessing(id) else { return nil }
         return string(id, kAudioObjectPropertyName)
     }
 

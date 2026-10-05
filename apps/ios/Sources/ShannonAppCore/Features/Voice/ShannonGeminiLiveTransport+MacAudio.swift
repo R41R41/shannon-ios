@@ -51,7 +51,7 @@ extension ShannonGeminiLiveTransport {
     func confirmInputDevice() {
         let heard = audioEngine.inputNode.audioUnit
             .flatMap(ShannonMacAudioDevices.currentDevice(of:))
-            .flatMap(ShannonMacAudioDevices.inputBehind)
+            .flatMap { ShannonMacAudioDevices.inputBehind($0, preferring: appliedInputUID) }
         if let applied = appliedInputDevice, let heard, heard.uid != ShannonMacAudioDevices.uid(of: applied) {
             // Voice processing kept another microphone: the call goes on with it and says so.
             ShannonVoiceDiagnostics.shared.record("gemini.audio.input.device.ignored")
