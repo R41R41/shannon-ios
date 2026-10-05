@@ -1386,9 +1386,9 @@
     {
       "key": "task.approval.holdHintClick",
       "text": "{target}は長押しで決定。クリックすると確認してから決定します。",
+      "apple": "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopApprovalCard.swift",
       "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
-      "only": "windows",
-      "note": "task.approval.holdHint のポインターの形（同じ文で「タップ」を「クリック」に）。Windows の担当の知らせ（2026-10-05、W5）。Mac は A11 で同じ文にする。"
+      "note": "task.approval.holdHint のポインターの形（同じ文で「タップ」を「クリック」に）。Windows の担当の知らせ（2026-10-05、W5）。Mac も A11（2026-10-05）で同じ文にした。"
     },
     {
       "key": "hold.progress",
@@ -1403,6 +1403,13 @@
       "apple": "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonHoldToConfirmButton.swift",
       "only": "apple",
       "note": "長押しのボタンの手がかり（読み上げ）。"
+    },
+    {
+      "key": "hold.hintClick",
+      "text": "長押しで決定します。クリックすると確認してから決定します",
+      "apple": "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonHoldToConfirmButton.swift",
+      "only": "apple",
+      "note": "hold.hint のポインターの形（Mac の長押しのボタンの読み上げ、A11）。"
     },
     {
       "key": "common.back",

@@ -159,4 +159,15 @@ final class ShannonHoldToConfirmPolicyTests: XCTestCase {
         XCTAssertEqual(ShannonHoldToConfirm.progress(startedAt: start, now: start.addingTimeInterval(5)), 1)
         XCTAssertEqual(ShannonHoldToConfirm.progress(startedAt: start, now: start.addingTimeInterval(-1)), 0)
     }
+
+    /// The Mac holds with the pointer, so its hint says a click asks first (A11); the iPhone says a tap does.
+    @MainActor
+    func testHintUsesThePlatformsPointerWord() {
+#if os(macOS)
+        XCTAssertEqual(ShannonHoldToConfirmButton.hint, ShannonGeneratedStrings.holdHintClick)
+        XCTAssertTrue(ShannonHoldToConfirmButton.hint.contains("クリック"))
+#else
+        XCTAssertEqual(ShannonHoldToConfirmButton.hint, ShannonGeneratedStrings.holdHint)
+#endif
+    }
 }

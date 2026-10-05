@@ -205,6 +205,7 @@ export const shannonStrings = {
   "task.approval.holdHintClick": "{target}は長押しで決定。クリックすると確認してから決定します。",
   "hold.progress": "押し続けています… {percent}%",
   "hold.hint": "長押しで決定します。タップすると確認してから決定します",
+  "hold.hintClick": "長押しで決定します。クリックすると確認してから決定します",
   "common.back": "戻る",
   "ops.confirm.hold": "長押しで{command}",
   "ops.confirm.holdShortPress": "ボタンを押し続けると決まります。",

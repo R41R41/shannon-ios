@@ -1238,11 +1238,11 @@
           ]
         },
         "macos": {
-          "status": "partial",
-          "note": "「今回だけ許可」と「許可しない」だけ。「この作業中は許可」が無い。",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopRootView+Work.swift"
-          ]
+            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopApprovalCard.swift#taskApprovalCard"
+          ],
+          "note": "今回だけ許可／この作業中／許可しない（A11）。古い実行先では「許可せず作業を中止」と確認。"
         },
         "windows": {
           "status": "yes",
@@ -1411,8 +1411,12 @@
           ]
         },
         "macos": {
-          "status": "no",
-          "note": "ボタンを 1 回押すだけ。決定（2026-10-03）で、Mac も長押しにする。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonHoldToConfirmButton.swift#public struct ShannonHoldToConfirmButton",
+            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopApprovalCard.swift#ShannonHoldToConfirmButton"
+          ],
+          "note": "ポインターで 0.6 秒押し続けて決める: 「この作業中」のすべてと、外部接続・権限の「今回だけ許可」。クリック・キーボード・VoiceOver では同じ文の確認。添える文は「…クリックすると確認してから決定します。」（task.approval.holdHintClick、A11）。動きを減らす設定では「押し続けています… N%」。"
         },
         "windows": {
           "status": "yes",

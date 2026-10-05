@@ -149,6 +149,8 @@ public enum ShannonGeneratedStrings {
     public static func holdProgress(percent: String) -> String { "押し続けています… \(percent)%" }
     /// `hold.hint`
     public static let holdHint = "長押しで決定します。タップすると確認してから決定します"
+    /// `hold.hintClick`
+    public static let holdHintClick = "長押しで決定します。クリックすると確認してから決定します"
     /// `common.back`
     public static let commonBack = "戻る"
     /// `autonomy.proposal.confirmQuestion`

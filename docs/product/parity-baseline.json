@@ -88,8 +88,6 @@
     "talk.sentence-stream windows partial",
     "talk.thread-rename-archive windows no",
     "talk.thread-search windows no",
-    "tasks.approval macos partial",
-    "tasks.hold-to-confirm macos no",
     "tasks.needs-owner macos partial",
     "tasks.notice-in-talk macos partial",
     "tasks.notice-in-talk windows partial",
