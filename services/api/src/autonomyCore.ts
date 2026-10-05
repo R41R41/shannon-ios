@@ -63,10 +63,12 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/bodyTouch.ts',
     // Syzygy ADR-0006: the prediction layer and the new dynamics of her feeling, their record, and the shadow taps of stage 1.
     'packages/cognition/src/prediction.ts',
+    'packages/cognition/src/predictionDomains.ts',
     'packages/cognition/src/affectDynamics.ts',
     'services/api/src/predictionStore.ts',
     'services/api/src/predictionShadow.ts',
     'services/api/src/predictionShadowFold.ts',
+    'services/api/src/predictionShadowReadings.ts',
   ]),
   authentication: Object.freeze([
     'services/api/src/apiAuth.ts',

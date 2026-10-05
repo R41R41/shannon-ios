@@ -118,8 +118,8 @@ describe('the prediction shadow changes nothing', () => {
   });
 
   it('is listed among the core paths of emotion', () => {
-    for (const path of ['packages/cognition/src/prediction.ts', 'packages/cognition/src/affectDynamics.ts', 'services/api/src/predictionStore.ts',
-      'services/api/src/predictionShadow.ts', 'services/api/src/predictionShadowFold.ts']) expect(SHANNON_CORE_PATHS.emotion).toContain(path);
+    for (const path of ['packages/cognition/src/prediction.ts', 'packages/cognition/src/predictionDomains.ts', 'packages/cognition/src/affectDynamics.ts',
+      'services/api/src/predictionStore.ts', 'services/api/src/predictionShadow.ts', 'services/api/src/predictionShadowFold.ts', 'services/api/src/predictionShadowReadings.ts']) expect(SHANNON_CORE_PATHS.emotion).toContain(path);
   });
 });
 

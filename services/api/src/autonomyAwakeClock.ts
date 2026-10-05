@@ -21,6 +21,10 @@ import type { MoodHistoryRecording } from './moodHistoryContract.js';
  * After a write has committed, the mood history (`moodHistory.ts`) may add a point of her mood from
  * the state as written, under the same coalescing rule as the API's writes; it creates no table and
  * skips while the API has not created it, and it hands the loop nothing either.
+ *
+ * Syzygy ADR-0006 stage 1: after such a write the prediction shadow is told the instant (`awake`), and
+ * nothing else: no state, no value. This write does not go through the API's state store, so without
+ * the tap the new clock would count her time on her own as sleep.
  */
 const MINIMUM_INTERVAL_MILLISECONDS = 60_000;
 
@@ -31,7 +35,10 @@ export interface AutonomyAwakeClock {
 }
 
 export function configuredAwakeClock(
-  databasePath: string, options: { now: () => string; /** Absent or `null`: no mood history from this process. */ moodHistory?: MoodHistoryRecording | null },
+  databasePath: string, options: {
+    now: () => string; /** Absent or `null`: no mood history from this process. */ moodHistory?: MoodHistoryRecording | null;
+    /** The prediction shadow's tap: handed the instant the clock advanced, and nothing else. */ awake?: (scopeKey: string, at: string) => void;
+  },
 ): AutonomyAwakeClock {
   let database: DatabaseSync | null = null;
   const last = new Map<string, number>();
@@ -84,6 +91,7 @@ export function configuredAwakeClock(
         }
         last.set(scopeKey, time);
         if (written) recordMoodPoint(connection, options.moodHistory ?? null, scopeKey, written, at, timing);
+        if (written) { try { options.awake?.(scopeKey, at); } catch { /* the shadow never stops the clock */ } }
       } catch (error) {
         // The name and the code only: a parse error's message can quote the stored snapshot.
         const code = (error as { code?: unknown } | null)?.code;

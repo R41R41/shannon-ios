@@ -103,10 +103,14 @@ const ownerContext = loopConfig.ownerContext
   ? configuredOwnerContext(databasePath, { now, characters: loopConfig.ownerContextCharacters, timeZone: config.timeZone }) : null;
 // A step of her own is time she is awake: her emotional clock runs through it, and through nothing else of the loop.
 // What that write stores may add a point to her mood history (SHANNON_MOOD_HISTORY); the loop is handed nothing of it.
-const awakeClock = configuredAwakeClock(databasePath, { now, moodHistory: moodHistoryRecording(process.env) });
-// Syzygy ADR-0006 stage 1 (影): what followed a message of hers is handed to the prediction shadow, which writes only its own
-// table (once the API has created it) and hands the loop nothing. SHANNON_PREDICTION_SHADOW=off opens nothing.
+// Syzygy ADR-0006 stage 1 (影): what followed a message of hers, and each advance of the awake clock, is handed to the prediction
+// shadow. It reads `companion_states` for closeness and the days they talked, writes only its own tables (once the API has created
+// them), and hands the loop nothing; the loop and the clock get one function each, never the shadow. SHANNON_PREDICTION_SHADOW=off opens nothing.
 const prediction = configuredPredictionShadow(process.env, databasePath);
+const shadow = prediction?.shadow;
+const awakeClock = configuredAwakeClock(databasePath, {
+  now, moodHistory: moodHistoryRecording(process.env), ...(shadow ? { awake: (scopeKey: string, at: string) => shadow.awake(scopeKey, at) } : {}),
+});
 const loop = new ShannonAutonomyLoop({
   store, service, config, loop: loopConfig, model: configuredAutonomyTextModel(process.env, undefined, line => console.log(line)),
   reader: new BoundedPublicReader({
@@ -118,7 +122,7 @@ const loop = new ShannonAutonomyLoop({
   ...(ownerContext ? { ownerContext: ownerContext.context } : {}),
   // Her tools over her study and her folder (owner decision 2026-10-05); SHANNON_OWN_TOOLS=off offers none and every prompt is what it was.
   ...(ownToolsEnabled() ? { toolResults: new AutonomyToolResults() } : {}),
-  ...(prediction ? { prediction: prediction.shadow } : {}),
+  ...(shadow ? { prediction: { reachOut: (...args: Parameters<typeof shadow.reachOut>) => shadow.reachOut(...args) } } : {}),
   // Content-free: a step kind and a closed reason code.
   log: line => console.log(`Shannon autonomy step: ${line.replace(/[^a-z0-9_:., -]/giu, '_').slice(0, 300)}`),
 });
