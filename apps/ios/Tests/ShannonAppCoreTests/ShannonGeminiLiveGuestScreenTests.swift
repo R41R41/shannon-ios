@@ -254,4 +254,19 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         XCTAssertEqual(model.pendingTurns.displayText, "はじめまして。")
         model.stop()
     }
+
+    /// While a call is in 「友人も一緒」 (also failed or reconnecting) the owner's screens are covered; never otherwise.
+    func testTheOwnersScreensAreCoveredExactlyWhileAFriendIsInTheCall() {
+        let model = ShannonGeminiLiveSessionModel()
+        XCTAssertFalse(model.hidesOwnerScreens)
+        model.phase = .listening
+        XCTAssertFalse(model.hidesOwnerScreens, "本人だけ")
+        model.switchParticipantMode(to: .guest, origin: .spoken)
+        XCTAssertTrue(model.hidesOwnerScreens)
+        model.phase = .failed
+        XCTAssertTrue(model.hidesOwnerScreens, "a failed call on screen is still the friend's call")
+        model.stop()
+        XCTAssertFalse(model.hidesOwnerScreens, "the call ended")
+        XCTAssertEqual(ShannonGeneratedStrings.voiceGuestHidesTalk, "友人も一緒の通話中は、トークを隠しています")
+    }
 }

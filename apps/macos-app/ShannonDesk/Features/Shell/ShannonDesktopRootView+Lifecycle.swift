@@ -34,7 +34,9 @@ extension ShannonDesktopRootView {
                     await conversation.refreshAgentProjectProvisioning()
                     await conversation.refreshInitiatives()
                     await ShannonDesktopNotifier.shared.start()
-                    ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: noticesReadSucceeded)
+                    if !voiceCall.session.hidesOwnerScreens {
+                        ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: noticesReadSucceeded)
+                    }
                     openNotificationTarget()
                 }
                 restoreSelectedTaskIfAvailable()
@@ -64,13 +66,18 @@ extension ShannonDesktopRootView {
                 }
             }
             .onChange(of: desktopNoticeKeys) {
-                guard connection.isConnected, !conversation.isDesignPreview else { return }
+                // 「友人も一緒」: what she or the work says is held until the period ends (and posted then).
+                guard connection.isConnected, !conversation.isDesignPreview, !voiceCall.session.hidesOwnerScreens else { return }
                 ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: noticesReadSucceeded)
             }
             // The first successful read after a failed one may be what takes the baseline.
             .onChange(of: noticesReadSucceeded) {
-                guard noticesReadSucceeded, !conversation.isDesignPreview else { return }
+                guard noticesReadSucceeded, !conversation.isDesignPreview, !voiceCall.session.hidesOwnerScreens else { return }
                 ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: true)
+            }
+            .onChange(of: voiceCall.session.hidesOwnerScreens) {
+                guard !voiceCall.session.hidesOwnerScreens, connection.isConnected, !conversation.isDesignPreview else { return }
+                ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: noticesReadSucceeded)
             }
             .onReceive(NotificationCenter.default.publisher(for: .shannonDesktopNotificationOpened)) { _ in
                 openNotificationTarget()

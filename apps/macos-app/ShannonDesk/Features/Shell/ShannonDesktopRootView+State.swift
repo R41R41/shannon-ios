@@ -103,6 +103,10 @@ extension ShannonDesktopRootView {
 
             Divider()
 
+            // 「友人も一緒」: the outline and the work in hand are the owner's; her figure stays.
+            if voiceCall.session.hidesOwnerScreens, auxiliaryPanel != .figure {
+                ShannonVoiceGuestCover()
+            } else {
             switch auxiliaryPanel {
             case .outline:
                 DesktopConversationOutlineView(
@@ -116,6 +120,7 @@ extension ShannonDesktopRootView {
                 taskInspector
             case .figure:
                 ShannonTalkFigurePanel(conversation: conversation, memory: memory, voice: voiceCall.session)
+            }
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))

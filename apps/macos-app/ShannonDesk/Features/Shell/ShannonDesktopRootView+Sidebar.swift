@@ -53,6 +53,16 @@ extension ShannonDesktopRootView {
                     )
                 }
 
+                if voiceCall.session.hidesOwnerScreens {
+                    // 「友人も一緒」: the list of talks (titles, her messages, search matches) is not shown.
+                    Section(ShannonGeneratedStrings.navTalk) {
+                        Text(ShannonGeneratedStrings.voiceGuestHidesTalk)
+                            .font(.shannonDesktop(.callout))
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, ShannonDesktopSpacing.small)
+                            .accessibilityIdentifier("sidebar-talks-hidden")
+                    }
+                } else {
                 if !threadProjection.initiative.isEmpty {
                     Section {
                         ForEach(threadProjection.initiative, id: \.threadId) { thread in
@@ -74,6 +84,7 @@ extension ShannonDesktopRootView {
                             .foregroundStyle(.secondary)
                             .padding(.vertical, ShannonDesktopSpacing.small)
                     }
+                }
                 }
             }
             .listStyle(.sidebar)

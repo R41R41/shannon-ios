@@ -35,7 +35,13 @@ struct ShannonVoicePresentationModifier: ViewModifier {
                     discard: { workspace.discardCallMemory(using: conversationModel) },
                     close: { workspace.callMemory = nil })
             }
+            // 「友人も一緒」 with the call minimised: the owner's screen under the pill (Talk, or a sheet's page) is
+            // covered, and VoiceOver does not read it either (coordinator decision 2026-10-06).
             content
+                .accessibilityHidden(geminiVoiceModel.hidesOwnerScreens)
+                .overlay {
+                    if geminiVoiceModel.hidesOwnerScreens { ShannonVoiceGuestCover() }
+                }
         }
         .background { ShannonPalette.resolve(colorScheme).canvas.ignoresSafeArea() }
         .shannonAppLook(conversationModel)

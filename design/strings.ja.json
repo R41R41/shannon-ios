@@ -1293,6 +1293,13 @@
       "note": "Mac の「音声会話を開始」が使えないときの手がかり（読み上げ）。音声入力が録っている間と、録り終えた声が文字になるのを待っている間。録った声を通話が黙って捨てないため（2026-10-06 の見直し）。"
     },
     {
+      "key": "voice.guestHidesTalk",
+      "text": "友人も一緒の通話中は、トークを隠しています",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceGuestCover.swift",
+      "only": "apple",
+      "note": "調整役の決定（2026-10-06）。「友人も一緒」の通話の間、所有者のトークの代わりに出す中立の札。Mac はトークの会話・サイドバーのトークの一覧・目次・現在地、iPhone は通話を小さくした時の下の画面。"
+    },
+    {
       "key": "nav.delivery",
       "text": "配信",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
