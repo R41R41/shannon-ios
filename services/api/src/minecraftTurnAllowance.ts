@@ -4,7 +4,9 @@
  * The owner and everyone else count apart, so people who write a lot never use up the owner's turns; each other person
  * has his own share, all others together a smaller one, and both a cap a day. Counted right before the model is called,
  * after the device or token, the turn, a repeated requestId and its age were checked: a refused or replayed turn costs
- * nothing. In memory: a restart begins the counts again.
+ * nothing. In memory: a restart begins the counts again. Fixed windows (a minute, a day) from the first turn counted in
+ * them: across a window's boundary up to twice a limit can pass in a short time, and a clock that goes back starts a
+ * window afresh (review nit N-b, 2026-10-06). They bound cost and fairness, not an exact rate.
  */
 export const MINECRAFT_TURN_ALLOWANCE = Object.freeze({
   ownerPerMinute: 20,

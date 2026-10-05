@@ -644,6 +644,23 @@ describe('review of 2026-10-06: what other players\' turns are given', () => {
     await close();
   });
 
+  it('B-1: one player\'s whisper reaches no one else\'s turn, nor the owner\'s chat turn; it reaches that player\'s own whisper', async () => {
+    const { turn, model, peopleStore, close } = harness();
+    const taro = { uuid: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d', name: 'Taro_02' };
+    await turn({ requestId: 'b1-taro', speaker: taro, conversation: { kind: 'dm' }, message: 'ぼくの拠点の座標はX1200 Z-340だよ' });
+    expect(peopleStore.listPeople('owner').map(person => person.displayName)).toContain('Taro_02');
+    const asked = 'Taro_02の拠点の座標ってどこ？';
+    await turn({ requestId: 'b1-miki-chat', speaker: friend, message: asked });
+    await turn({ requestId: 'b1-miki-dm', speaker: friend, conversation: { kind: 'dm' }, message: asked });
+    await turn({ requestId: 'b1-owner-chat', message: asked });
+    for (const request of model.requests.slice(-3)) {
+      expect(JSON.stringify([request.systemPrompt, request.history])).not.toContain('X1200');
+    }
+    await turn({ requestId: 'b1-taro-again', speaker: taro, conversation: { kind: 'dm' }, message: 'ぼくの拠点の座標、覚えてる？' });
+    expect(model.requests.at(-1)!.systemPrompt).toContain('X1200');
+    await close();
+  });
+
   it('S4: a finished request is the owner\'s matter: in full in his whisper, marked in his chat turn, absent from anyone else\'s', async () => {
     const { turn, model, path: databasePath, close } = harness();
     const experiences = new SQLiteGameExperiences(databasePath);

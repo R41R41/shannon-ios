@@ -5,7 +5,9 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { disclosureDecision, groupAudience } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { conversationReplay } from '../src/conversationWindow.js';
+import { conversationReplay, openItems } from '../src/conversationWindow.js';
+import { ShannonTurnMemoryRecall } from '../src/turnMemoryRecall.js';
+import type { SemanticMemoryRecall } from '../src/semanticMemoryRecall.js';
 import { extractExplicitUserIntent } from '../src/cognitiveIntent.js';
 import { prepareTurnCognitiveContext } from '../src/turnCognitiveContext.js';
 import { minecraftBodyRoute } from '../src/serverMinecraftBodyRoute.js';
@@ -203,6 +205,7 @@ describe('the replay of a turn that may show only open items (second review, 202
     // The reply to a marked message is left out with it.
     for (const index of [3, 7, 11, 55, 59]) expect(open.history.some(item => item.content.startsWith(`ボクの返事${index}。`)), String(index)).toBe(false);
     expect(open.history.some(item => item.content.startsWith('ボクの返事58。'))).toBe(true);
+    await api.waitForBackground('owner');
     store.close();
   });
 });
@@ -250,6 +253,31 @@ describe('his intentions in a turn that may show only open items (second review,
     expect(open.prompt).not.toMatch(/【機微:(?!…】)/u);
     expect(open.frame.primaryIntent).toBeUndefined();
     expect(open.openOnly).toBe(true);
+    store.close();
+  });
+});
+
+describe('nits of the third review (2026-10-06)', () => {
+  it('N-c: drops every reply that answered a marked message, also a second one in a row', () => {
+    const items = [
+      { role: 'user' as const, content: '【機微:健康・ライ氏だけが知っている】通院の話' },
+      { role: 'assistant' as const, content: '返事1' }, { role: 'assistant' as const, content: '返事2' },
+      { role: 'user' as const, content: '天気の話' }, { role: 'assistant' as const, content: '返事3' }, { role: 'assistant' as const, content: '返事4' },
+    ];
+    expect(openItems(items).map(item => item.content)).toEqual(['天気の話', '返事3', '返事4']);
+  });
+
+  it('N-a: a turn someone else wrote gets no frame saying the owner asks what she remembers', async () => {
+    const semantic = { available: false, maximumModelCallsPerTurn: 0, timeoutMilliseconds: 0, modelGateway: null,
+      recall: async () => ({ status: 'skipped', hits: [], modelCalls: 0, elapsedMilliseconds: 0 }) } as unknown as SemanticMemoryRecall;
+    const recall = new ShannonTurnMemoryRecall(semantic, null);
+    const at = '2026-10-06T12:00:00.000Z';
+    const store = new SQLiteShannonStore({ path: databasePath(), now: () => at });
+    const context = (openOnly: boolean) => prepareTurnCognitiveContext(store.snapshot('owner'), store, {
+      scopeKey: 'owner', message: '何を覚えてる？', occurredAt: at, channel: 'text', present: groupAudience('platform:minecraft:lab'), ...(openOnly ? { openOnly } : {}) });
+    const input = { scopeKey: 'owner', message: '何を覚えてる？', snapshot: store.snapshot('owner') };
+    expect((await recall.enrich(context(false), input)).prompt).toContain('[Memory inquiry]');
+    expect((await recall.enrich(context(true), input)).prompt).not.toContain('[Memory inquiry]');
     store.close();
   });
 });

@@ -89,7 +89,8 @@ export class ShannonTurnMemoryRecall implements TurnMemoryRecall {
     }) : { ids: [], prompt: '', modelCalls: 0, documents: [] };
     // Shannon's notes are built from one-to-one talk and have no label of their own.
     if (!ownerOnly && knowledge.prompt) knowledge.prompt = `${UNLABELLED_DISCLOSURE_MARKER}\n${knowledge.prompt}`;
-    const inquiry = isMemoryInquiry(input.message) ? inquiryPrompt(memories, knowledge.documents) : '';
+    // The inquiry frame says the owner is asking what she remembers: not for a turn someone else wrote (`openOnly`).
+    const inquiry = isMemoryInquiry(input.message) && !context.openOnly ? inquiryPrompt(memories, knowledge.documents) : '';
     const supplemental = [memories.length > context.memories.length ? semanticGuidance : '', knowledge.prompt, inquiry]
       .filter(Boolean).join('\n\n');
     const enriched = supplemental || knowledge.ids.length

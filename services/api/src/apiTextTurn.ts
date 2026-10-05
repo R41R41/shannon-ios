@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { assembleShannonSystemPrompt, withoutUnshownTitles, type CompanionClock, type CompanionStateStore } from '@shannon/cognition';
+import { assembleShannonSystemPrompt, audienceCovers, withoutUnshownTitles, type CompanionClock, type CompanionStateStore } from '@shannon/cognition';
 import { agentTaskPromptProjection } from './apiPromptProjection.js';
 import type { AetherContextReader } from './aetherContext.js';
 import type { AetherProposalStore } from './aetherProposal.js';
@@ -169,8 +169,12 @@ export function beginTextTurn(dependencies: TextTurnDependencies, input: TextTur
   }
   const captured = dependencies.stateStore.snapshot(body.scopeKey);
   const provisionalIntent = audience.alone ? extractExplicitUserIntent(message, threadId, occurredAt) : null;
-  // What she talked about with other people is recalled here too; alone with the owner all of it may be used.
-  const peopleRecall = dependencies.people.recall(body.scopeKey, captured, message, audience.present);
+  // What she talked about with other people is recalled here too; alone with the owner all of it may be used. On a surface
+  // with others (anyone's turn in a shared chat, someone's whisper, the owner's shared-chat turn) only what everyone here
+  // already heard (`audienceCovers`), as the platform context gives it: one person's whisper never reaches another's turn.
+  const recalledPeople = dependencies.people.recall(body.scopeKey, captured, message, audience.present);
+  const peopleRecall = surface && !audience.alone ? { ...recalledPeople,
+    candidates: recalledPeople.candidates.filter(candidate => audienceCovers(candidate.disclosure?.audience, audience.present)) } : recalledPeople;
   const deterministicContext = prepareTurnCognitiveContext(captured, dependencies.conversationStore, {
     scopeKey: body.scopeKey, message, occurredAt, channel: 'text', present: audience.present,
     threadId, additionalCandidates: peopleRecall.candidates,

@@ -194,14 +194,13 @@ function replayedToolTraces(
   return toolTracePrompt(turns.map(turn => ({ record: { ...turn.record, calls: maskedTraceCalls(turn.record.calls, secrets) }, label: turn.label })));
 }
 
-/** The replayed messages without a marked one, and without the reply that answered a marked message. */
-function openItems(items: readonly ShannonConversationItem[]): ShannonConversationItem[] {
+/** The replayed messages without a marked one, and without any reply (one or several) that answered a marked message. */
+export function openItems(items: readonly ShannonConversationItem[]): ShannonConversationItem[] {
   const open: ShannonConversationItem[] = [];
-  let skipReply = false;
+  let skipReplies = false;
   for (const item of items) {
-    if (item.role === 'user') { skipReply = item.content.includes('【機微:'); if (!skipReply) open.push(item); continue; }
-    if (!skipReply && !item.content.includes('【機微:')) open.push(item);
-    skipReply = false;
+    if (item.role === 'user') { skipReplies = item.content.includes('【機微:'); if (!skipReplies) open.push(item); continue; }
+    if (!skipReplies && !item.content.includes('【機微:')) open.push(item);
   }
   return open;
 }

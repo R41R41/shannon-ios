@@ -360,6 +360,23 @@ describe('model calls of /v1/platform/reply per speaker (second review, 2026-10-
   });
 });
 
+describe('B-1: a Discord friend\'s DM (second review follow-up, 2026-10-06)', () => {
+  it('reaches no other friend\'s turn and not the owner\'s channel turn; it reaches that friend\'s own DM', async () => {
+    const { reply, model, close } = harness();
+    const taroDm = 'discord:111:777';
+    const taro = { conversationId: taroDm, conversationKind: 'dm', sourceUserId: '900000000000000007', sourceDisplayName: 'タロウ' };
+    await reply({ requestId: 'b1-taro', ...taro, userMessage: 'ぼくの拠点の座標はX1200 Z-340だよ' });
+    const asked = 'タロウの拠点の座標ってどこ？';
+    await reply({ requestId: 'b1-miki', conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: asked });
+    await reply({ requestId: 'b1-miki-dm', conversationId: 'discord:111:888', conversationKind: 'dm', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: asked });
+    await reply({ requestId: 'b1-owner', conversationId: CHANNEL, conversationKind: 'channel', userMessage: asked });
+    for (const request of model.requests.slice(-3)) expect(JSON.stringify([request.systemPrompt, request.history])).not.toContain('X1200');
+    await reply({ requestId: 'b1-taro-2', ...taro, userMessage: 'ぼくの拠点の座標、覚えてる？' });
+    expect(model.requests.at(-1)!.systemPrompt).toContain('X1200');
+    await close();
+  });
+});
+
 describe('the route', () => {
   it('takes the bridge token only, and answers 503 unless SHANNON_PLATFORM_REPLY is on', async () => {
     expect(platformReplyEnabled({})).toBe(false);
