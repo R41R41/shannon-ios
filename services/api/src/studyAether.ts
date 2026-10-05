@@ -117,6 +117,8 @@ export class StudyAether {
       }
       throw error;
     }
+    // Read whole: a document her write made short enough again is no longer too long.
+    this.store.study.aether.clearTooLong(scopeKey, write.documentId);
     if (document.version !== write.version) return;
     this.store.transaction(() => {
       const linked = this.link(scopeKey, pieceId);

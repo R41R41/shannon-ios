@@ -380,7 +380,15 @@ describe('her study in Aether', () => {
       .rejects.toMatchObject({ code: 'TOO_LONG' });
     expect(store.study.aether.pending(scope, document.id, fake.documents.get(document.id)!.revision)).toBeNull();
     expect(store.study.aether.tooLongPiece(scope, id)).toBe(true);
-    // Shortened again in Aether: it reads whole, is taken in, and the note is gone.
+    // She shortens it herself with her folder tool: it reads whole again, is taken in as hers, and the note is gone at once.
+    expect(await call('aetherFolder.update', { documentId: document.id, baseVersion: fake.documents.get(document.id)!.revision, body: `${STORY}ボクが短くした。` })).toMatchObject({ ok: true });
+    expect(store.study.aether.tooLongPiece(scope, id)).toBe(false);
+    expect(store.study.get(scope, id)).toMatchObject({ body: `${STORY}ボクが短くした。` });
+    expect(store.study.versions(scope, id).at(-1)!.changeNote).toBe('シャノン用フォルダの道具で書き換えました。');
+    // Too long again, then shortened in Aether by the owner: the next sync reads it whole, takes it in, and clears the note.
+    fake.ownerEdit(document.id, { body: 'う'.repeat(120_000) });
+    await call('study.list', {});
+    expect(store.study.aether.tooLongPiece(scope, id)).toBe(true);
     fake.ownerEdit(document.id, { body: `${STORY}短くした。` });
     await call('study.list', {});
     expect(store.study.aether.tooLongPiece(scope, id)).toBe(false);
