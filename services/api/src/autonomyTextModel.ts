@@ -38,8 +38,8 @@ export interface AutonomyTextResult {
   text: string;
   /**
    * What the provider reported for this call. Output includes the model's own reasoning tokens. `cachedInputTokens`, the
-   * part of the input the provider read from its prompt cache, is recorded only (absent when none): every charge still
-   * prices the whole input at the full rate.
+   * part of the input the provider read from its prompt cache, is reported here only (absent when none) and is not
+   * persisted: `autonomy_spend` has no column for it, and every charge still prices the whole input at the full rate.
    */
   usage: { inputTokens: number; outputTokens: number; cachedInputTokens?: number };
   /** The provider stopped at the output ceiling: the text is cut off. Reasoning tokens count against that ceiling. */
