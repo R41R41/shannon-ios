@@ -16,7 +16,7 @@ public final class ShannonMoodTrendModel {
         /// Shown, reading (after the switch changed).
         case loading
         case loaded
-        /// Shown, but the last read failed.
+        /// Shown, but the last read failed. The last good answer of the same window, if any, is kept.
         case unreadable
     }
 
@@ -64,7 +64,7 @@ public final class ShannonMoodTrendModel {
             if error is DecodingError {
                 Self.logger.error("Mood history could not be decoded: \(String(describing: error), privacy: .public)")
             }
-            history = nil
+            // The last good chart of this window stays; a note under it says this read failed.
             phase = .unreadable
         }
     }
@@ -100,7 +100,15 @@ struct ShannonMoodTrendPanel: View {
                     quietLine(ShannonGeneratedStrings.yousuMoodTrendEmpty)
                 }
             case .unreadable:
-                quietLine(ShannonGeneratedStrings.yousuMoodTrendUnreadable)
+                if let history = model.history, history.hasMood {
+                    chart(history)
+                    legend
+                    Text(ShannonGeneratedStrings.yousuMoodTrendUnreadable)
+                        .font(.shannon(.caption))
+                        .foregroundStyle(palette.textSecondary)
+                } else {
+                    quietLine(ShannonGeneratedStrings.yousuMoodTrendUnreadable)
+                }
             case .loading, .hidden:
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 60)
@@ -158,7 +166,8 @@ struct ShannonMoodTrendPanel: View {
                         .interpolationMethod(.stepEnd)
                         .foregroundStyle(color(line))
                         .lineStyle(stroke(line))
-                    PointMark(x: .value("時刻", max(last.start, start)), y: .value(line.title, last.value))
+                    // The newest point; with only the value carried in from before the window, its value now, at the right edge.
+                    PointMark(x: .value("時刻", history.points.isEmpty ? now : max(last.start, start)), y: .value(line.title, last.value))
                         .foregroundStyle(color(line))
                         .symbolSize(36)
                 }

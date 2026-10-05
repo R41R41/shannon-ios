@@ -2248,7 +2248,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift",
       "decided": "2026-10-05",
       "windowsNow": "まだ記録がありません",
-      "note": "記録が空のとき。403・404・届かないときは区画ごと出さない（iPhone・Mac）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+      "note": "記録が空のとき。403・404 のときは区画ごと出さない（iPhone・Mac）。ほかの失敗（500・429・届かない・読み取れない）は「読めませんでした」（yousu.moodTrend.unreadable）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
     },
     {
       "key": "yousu.moodTrend.unreadable",

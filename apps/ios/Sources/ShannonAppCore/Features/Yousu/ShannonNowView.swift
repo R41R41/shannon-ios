@@ -61,7 +61,11 @@ public struct ShannonNowView: View {
                 ProgressView(ShannonGeneratedStrings.yousuLoading)
             }
         }
-        .refreshable { await model.reload() }
+        .refreshable {
+            async let trend: Void = model.moodTrend.reload()
+            await model.reload()
+            await trend
+        }
         // Read when the page appears and when the app comes back to the front; never in the background.
         .task(id: scenePhase == .active) {
             guard scenePhase == .active else { return }

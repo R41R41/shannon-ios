@@ -247,5 +247,5 @@ struct FlowLikeChips: View {
 }
 
 extension Font {
-    static var labelStyle: Font { .callout.weight(.semibold) }
+    static var labelStyle: Font { .shannon(.callout).weight(.semibold) }
 }

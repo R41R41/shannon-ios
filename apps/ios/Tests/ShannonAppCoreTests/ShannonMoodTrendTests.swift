@@ -153,6 +153,24 @@ final class ShannonMoodTrendTests: XCTestCase {
     }
 
     @MainActor
+    func testALaterFailureKeepsTheLastGoodChart() async {
+        let client = FakeMoodClient()
+        let model = ShannonMoodTrendModel(client: client)
+        let good = ShannonMoodHistoryDTO(schemaVersion: 1, generatedAt: nil, hours: 24, points: [point("2026-10-05T01:00:00Z", 0.3)], downsampled: false)
+        client.history = .success(good)
+        await model.reload()
+        client.history = .failure(ShannonAPIError.rejected(status: 500))
+        await model.reload()
+        XCTAssertEqual(model.phase, .unreadable)
+        XCTAssertEqual(model.history, good)
+        // 403/404 still hide it, and drop what was read.
+        client.history = .failure(ShannonAPIError.rejected(status: 404))
+        await model.reload()
+        XCTAssertEqual(model.phase, .hidden)
+        XCTAssertNil(model.history)
+    }
+
+    @MainActor
     func testTheTrendDoesNotHoldThePage() async {
         // ShannonNowModel.reload reads the page's own parts only; the trend has its own read.
         let client = FakeMoodClient()

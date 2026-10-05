@@ -2083,7 +2083,7 @@
             "apps/ios/Sources/ShannonAppCore/API/ShannonAPIClient+Yousu.swift#loadShannonMoodHistory",
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift#ShannonMoodTrendModel"
           ],
-          "note": "24 時間と 7 日を読む。403・404・届かないときは「気分の推移」を出さない（端末の中には記録しない）。"
+          "note": "24 時間と 7 日を読む。403・404 のときは「気分の推移」を出さない。ほかの失敗（500・429・届かない・読み取れない）は区画を残して「読めませんでした」（前に読めた線は残す）。端末の中には記録しない。"
         },
         "macos": {
           "status": "partial",

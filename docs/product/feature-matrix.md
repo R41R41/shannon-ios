@@ -217,7 +217,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `yousu.now` Windows（△）: 身体が「いま」を読んで顔としぐさに出す。一覧で読む画面は無い。
 - `yousu.waiting` Windows（△）: 身体が、判断待ちの作業と見せたい物語をしぐさで知らせる。一覧は無い。
 - `yousu.recent-events` Windows（△）: カメラで見た・断った記録だけが設定にある（この PC の中の記録）。触れ合いと話しかけの記録は無い。
-- `yousu.mood-history` iOS（○）: 24 時間と 7 日を読む。403・404・届かないときは「気分の推移」を出さない（端末の中には記録しない）。
+- `yousu.mood-history` iOS（○）: 24 時間と 7 日を読む。403・404 のときは「気分の推移」を出さない。ほかの失敗（500・429・届かない・読み取れない）は区画を残して「読めませんでした」（前に読めた線は残す）。端末の中には記録しない。
 - `yousu.mood-history` macOS（△）: 共通の ようす の画面で読む。Mac のサイドバーに ようす の入口が入るのは A10。
 - `yousu.mood-history` Windows（○）: 本体の記録を読み、読めないときは PC の中の記録に戻ってその旨を出す（Windows だけ）。evidence のファイルは 2026-10-03 に読んだ presence を読む所で、読む所のファイル名は知らせに無い。Windows body thread report 2026-10-05。
 - `yousu.mood-trend` iOS（○）: シャノン › ようす の、気持ちのカードのすぐ下。
