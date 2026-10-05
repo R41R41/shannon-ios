@@ -17,7 +17,7 @@ struct DevelopmentTerminalPane: View {
                     .disabled(!canSend || instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             Label("コマンドはCodexが内容と権限を確認し、必要な操作だけを実行します。", systemImage: "checkmark.shield")
-                .font(.caption)
+                .font(.shannonDesktop(.caption))
                 .foregroundStyle(.secondary)
             commandHistory
             DevelopmentCommandOutput(task: task, title: "実行出力")
@@ -37,11 +37,11 @@ struct DevelopmentTerminalPane: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(event.title)
                         if let detail = event.detail {
-                            Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                            Text(detail).font(.shannonDesktop(.caption)).foregroundStyle(.secondary).lineLimit(3)
                         }
                     }
                     Spacer()
-                    Text(event.occurredAt, style: .time).font(.caption).foregroundStyle(.tertiary)
+                    Text(event.occurredAt, style: .time).font(.shannonDesktop(.caption)).foregroundStyle(.tertiary)
                 }
             }
         }
@@ -71,33 +71,33 @@ struct DevelopmentCommandOutput: View {
     let title: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: ShannonDesktopSpacing.small) {
             HStack {
                 Label(title, systemImage: "text.alignleft")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.shannonDesktop(.subheadline).weight(.semibold))
                 Spacer()
                 if let status = latestStatus {
                     Label(statusTitle(status), systemImage: statusSymbol(status))
-                        .font(.caption)
+                        .font(.shannonDesktop(.caption))
                         .foregroundStyle(status == .failed ? Color.shannonDanger : .secondary)
                 }
             }
             if output.isEmpty {
                 Text("出力は実行中にここへ表示されます。")
-                    .font(.callout)
+                    .font(.shannonDesktop(.callout))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 90, alignment: .center)
-                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.small))
             } else {
                 ScrollView([.horizontal, .vertical]) {
                     Text(output)
-                        .font(.system(.caption, design: .monospaced))
+                        .font(.shannonDesktop(.caption).monospaced())
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
+                        .padding(ShannonDesktopSpacing.medium)
                 }
                 .frame(minHeight: 140, maxHeight: 360)
-                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.small))
                 .accessibilityLabel(title)
                 .accessibilityValue(output)
             }

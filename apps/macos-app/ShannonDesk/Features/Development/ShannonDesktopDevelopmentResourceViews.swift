@@ -60,7 +60,7 @@ struct DevelopmentFilesPane: View {
             ForEach(paths, id: \.self) { Text($0).tag(Optional($0)) }
         }
         .labelsHidden()
-        .padding(10)
+        .padding(ShannonDesktopSpacing.medium)
         .frame(maxWidth: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
     }
@@ -136,7 +136,7 @@ struct DevelopmentChangesPane: View {
             Spacer()
             if let selectedChange { DevelopmentChangeCount(change: selectedChange) }
         }
-        .padding(10)
+        .padding(ShannonDesktopSpacing.medium)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
@@ -216,9 +216,9 @@ private struct DevelopmentWorkspaceResourceDetail: View {
         VStack(spacing: 0) {
             if truncated {
                 Label("安全な表示上限まで表示しています", systemImage: "scissors")
-                    .font(.caption)
+                    .font(.shannonDesktop(.caption))
                     .foregroundStyle(.secondary)
-                    .padding(8)
+                    .padding(ShannonDesktopSpacing.small)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             GeometryReader { proxy in
@@ -227,15 +227,15 @@ private struct DevelopmentWorkspaceResourceDetail: View {
                         if content.isEmpty {
                             Text(kind == .diff ? "このファイルには行単位の差分がありません。" : "空のファイルです。")
                                 .foregroundStyle(.secondary)
-                                .padding(16)
+                                .padding(ShannonDesktopSpacing.large)
                         } else if kind == .diff {
                             DevelopmentDiffText(diff: content)
-                                .padding(.vertical, 8)
+                                .padding(.vertical, ShannonDesktopSpacing.small)
                         } else {
                             Text(content)
-                                .font(.system(.caption, design: .monospaced))
+                                .font(.shannonDesktop(.caption).monospaced())
                                 .textSelection(.enabled)
-                                .padding(12)
+                                .padding(ShannonDesktopSpacing.medium)
                         }
                     }
                     .frame(
@@ -264,10 +264,10 @@ private struct DevelopmentReviewHeader: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(change.displayName).font(.headline)
+            VStack(alignment: .leading, spacing: ShannonDesktopSpacing.extraSmall) {
+                Text(change.displayName).font(.shannonDesktop(.headline))
                 Text(change.path)
-                    .font(.caption.monospaced())
+                    .font(.shannonDesktop(.caption).monospaced())
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                     .lineLimit(1)
@@ -276,7 +276,7 @@ private struct DevelopmentReviewHeader: View {
             Spacer()
             DevelopmentChangeCount(change: change)
         }
-        .padding(12)
+        .padding(ShannonDesktopSpacing.medium)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 }
@@ -285,15 +285,15 @@ private struct DevelopmentReviewChangeRow: View {
     let change: ShannonDesktopReviewChange
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: ShannonDesktopSpacing.extraSmall) {
             Text(change.displayName).fontWeight(.medium).lineLimit(1)
             HStack(spacing: 6) {
-                if let status = change.status { Text(status).font(.caption.monospaced()) }
+                if let status = change.status { Text(status).font(.shannonDesktop(.caption).monospaced()) }
                 DevelopmentChangeCount(change: change)
             }
             .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, ShannonDesktopSpacing.extraSmall)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(change.displayName)、追加\(change.additions)行、削除\(change.deletions)行")
     }
@@ -303,7 +303,7 @@ private struct DevelopmentChangeCount: View {
     let change: ShannonDesktopReviewChange
     var body: some View {
         Text("+\(change.additions)  −\(change.deletions)")
-            .font(.caption.monospacedDigit())
+            .font(.shannonDesktop(.caption).monospacedDigit())
             .foregroundStyle(.secondary)
     }
 }
@@ -320,10 +320,10 @@ private struct DevelopmentDiffText: View {
         LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(lines) { line in
                 Text(line.text.isEmpty ? " " : line.text)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.shannonDesktop(.caption).monospaced())
                     .foregroundStyle(foreground(for: line.text))
                     .textSelection(.enabled)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, ShannonDesktopSpacing.medium)
                     .padding(.vertical, 1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(background(for: line.text))

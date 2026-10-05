@@ -5,7 +5,7 @@ import SwiftUI
 extension ShannonDesktopRootView {
     var developmentStatusBar: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) {
+            HStack(spacing: ShannonDesktopSpacing.medium) {
                 DevelopmentRouteBadge(host: selectedDevelopmentHost)
                 Text(developmentRoutingExplanation)
                     .lineLimit(1)
@@ -26,10 +26,10 @@ extension ShannonDesktopRootView {
                     .lineLimit(2)
             }
         }
-        .font(.caption)
+        .font(.shannonDesktop(.caption))
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, ShannonDesktopSpacing.medium)
+        .padding(.vertical, ShannonDesktopSpacing.small)
         .background(.bar)
         .accessibilityElement(children: .combine)
     }
