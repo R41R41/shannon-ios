@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AetherAccessError, HttpAetherAccess, type AetherAccess, aetherIdempotencyKey, configuredAetherAccess, configuredAetherPorts } from '../src/aetherAccess.js';
-import { shannonCapabilityPrompt } from '@shannon/cognition';
+import { SHANNON_AETHER_ACCESS_CAPABILITY, shannonCapabilityPrompt } from '@shannon/cognition';
 import { withToolCapabilityLines } from '../src/shannonAetherTools.js';
 import { FileAetherProposalStore } from '../src/aetherProposal.js';
 import { configuredAutonomy } from '../src/autonomyBudget.js';
@@ -12,7 +12,9 @@ import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { dispatchStudyRequest } from '../src/apiStudyRoutes.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { toolInstructions } from '../src/chatModelTools.js';
+import { chatTurnRequestBody } from '../src/chatModelTurn.js';
 import { conversationTools, type ConversationToolServer } from '../src/shannonToolSession.js';
 import { gatedAether } from '../src/shannonToolGate.js';
 import { toolSessionMemory } from '../src/shannonToolTypes.js';
@@ -670,4 +672,61 @@ describe('moving her study to Aether', () => {
     expect(await call('study.update', { id: story.id, body: `${STORY}続き。`, changeNote: '続き。' })).toMatchObject({ ok: true });
     expect(fake.documents.get(store.study.aether.current(scope, story.id)!.documentId)!.body).toBe(`${STORY}続き。`);
   });
+});
+
+describe('the Aether capability line in the layered request (merge of prompt-cache and aether-study, 2026-10-06)', () => {
+  class CapturingModel implements ShannonChatModel {
+    readonly mode = 'openai' as const;
+    readonly model = 'test-model';
+    readonly requests: Array<ShannonChatModelRequest | ShannonVoiceModelRequest> = [];
+    async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
+      this.requests.push(request);
+      return { mode: this.mode, model: this.model, reply: 'うん。' };
+    }
+    async generateVoice(request: ShannonVoiceModelRequest): Promise<ShannonChatModelResult> {
+      this.requests.push(request);
+      return { mode: this.mode, model: this.model, reply: 'うん。' };
+    }
+  }
+  const line = SHANNON_AETHER_ACCESS_CAPABILITY.text;
+
+  it('is in her identity (systemPrompt), never in the turn context, and keeps the text instructions the same turn to turn', async () => {
+    const { service, clock } = await harness();
+    const model = new CapturingModel();
+    const api = createLocalApiKernel(() => clock.at, { autonomy: service, chatModel: model });
+    const chat = (message: string, extra: Record<string, unknown> = {}) =>
+      api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: scope, threadId: 'aether-layers', message, ...extra } });
+
+    await chat('おはよう');
+    clock.at = '2026-10-06T01:00:20.000Z';
+    await chat('灯台の話の続きをしよう');
+    const [first, second] = model.requests.slice(-2) as ShannonChatModelRequest[];
+    for (const request of [first!, second!]) {
+      expect(request.tools?.definitions.map(tool => tool.name)).toContain('aether.search');
+      expect(request.systemPrompt).toContain(line);
+      expect(request.turnContext ?? '').not.toContain(line);
+      expect(request.profilePrompt ?? '').not.toContain(line);
+    }
+    // Two consecutive owner-alone text turns: the instructions, the cached prefix's start, are the same bytes.
+    const instructions = (request: ShannonChatModelRequest) => (chatTurnRequestBody('gpt-5.6-luna', request, 'shannon-mac') as { instructions: string }).instructions;
+    expect(instructions(second!)).toBe(instructions(first!));
+    expect(instructions(first!)).toContain(line);
+
+    // A voice turn whose words name Aether is offered her Aether tools, and the line goes to her identity only.
+    clock.at = '2026-10-06T01:00:40.000Z';
+    const transcript = 'Aetherの灯台の文書を読んで';
+    const spoken = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations', body: {
+      scopeKey: scope, threadId: 'aether-voice', transcript,
+      deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null,
+        userUtterance: { id: 'u-aether-voice', text: transcript, source: 'speech', rawText: transcript } },
+    } });
+    expect(spoken.status).toBe(200);
+    const voice = model.requests.at(-1) as ShannonVoiceModelRequest;
+    expect(voice.tools?.definitions.map(tool => tool.name)).toContain('aether.search');
+    expect(voice.systemPrompt).toContain(line);
+    expect(voice.turnContext ?? '').not.toContain(line);
+    expect(voice.profilePrompt ?? '').not.toContain(line);
+    expect(voice.history.map(item => item.content).join('\n')).not.toContain(line);
+  });
+
 });
