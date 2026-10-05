@@ -79,7 +79,7 @@ extension ShannonDesktopRootView {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .padding(10)
+            .padding(ShannonDesktopSpacing.medium)
 
             Divider()
 

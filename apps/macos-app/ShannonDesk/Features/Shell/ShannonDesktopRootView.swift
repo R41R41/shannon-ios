@@ -197,6 +197,8 @@ public struct ShannonDesktopRootView: View {
         .toolbarBackground(Color(nsColor: .textBackgroundColor), for: .windowToolbar)
         .toolbarBackground(.visible, for: .windowToolbar)
         .tint(shannonActionColor)
+        // Wide screens use the fixed desktop scale, body 15 (owner decision 2026-10-03).
+        .font(.shannonDesktop(.body))
         .frame(minWidth: 860, minHeight: 600)
     }
 }
