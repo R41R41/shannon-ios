@@ -4,14 +4,16 @@
  * deployed, and which integrations are configured. The owner reads it in `GET /v1/ops` (`server`,
  * `docs/ops-contract.md`) and the service log has it once at startup.
  *
- * Names, counts, a hash and booleans only. Nothing here reads or returns a credential, an endpoint, a path, or
- * any other value of the environment: an integration is `true` or `false`, and a model is the name its gateway
- * resolved (the same `createConfigured…` function the route uses, or the live instance the server holds).
+ * Names, counts, a hash and booleans only: no credential, endpoint, path or token, and model names only after
+ * validation. An integration is `true` or `false`; a model is the name its gateway resolved (the same
+ * `createConfigured…` function the route uses, or the live instance the server holds), reported only when it passes
+ * `reportableModelName` and otherwise `null`. Some names are not validated where they are configured
+ * (`SHANNON_JEV_MODEL`), so this check is the one that holds for every name here.
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { SHANNON_ONE_LINE_VOICE, shannonCapabilityPrompt, shannonPersonaPrompt, shannonSuitePrompt } from '@shannon/cognition';
+import { SHANNON_ONE_LINE_VOICE, looksSecret, shannonCapabilityPrompt, shannonPersonaPrompt, shannonSuitePrompt } from '@shannon/cognition';
 import { AUTONOMY_MODEL_PURPOSES, AUTONOMY_ROOM_LOOK_MODEL, autonomyModel, type AutonomyModelPurpose } from './autonomyModels.js';
 import { dedicatedAutonomyCredential, resolveAutonomyModel } from './autonomyTextModel.js';
 import { createConfiguredElevenSpeechGateway } from './elevenSpeech.js';
@@ -29,6 +31,9 @@ export const SELF_DIAGNOSIS_SCHEMA_VERSION = 1 as const;
 export const DEPLOYED_REVISION_FILE = 'DEPLOYED_REVISION';
 const PERSONA_HASH_LENGTH = 12;
 const REVISION = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$/u;
+/** The rule the chat model's name is held to (`validModel` in `chatModelSupport.ts`). */
+const MODEL_NAME = /^[A-Za-z0-9._:-]{1,100}$/u;
+const LONG_RUN = /[A-Za-z0-9_]{32,}/gu;
 const SURFACES: readonly ToolSurface[] = ['text', 'voice', 'autonomy'];
 const AUDIENCES: readonly ToolAudience[] = ['owner_alone', 'others'];
 
@@ -38,12 +43,12 @@ export interface ServerSelfDiagnosis {
   build: { revision: string | null };
   models: {
     /** Text chat replies. `local-stub` without a model key. */
-    text: string;
+    text: string | null;
     voice: {
       /** Spoken replies: the same chat model as text. */
-      reply: string;
+      reply: string | null;
       /** The voice turn router (`local-rules` without a key). */
-      routing: string;
+      routing: string | null;
       /** Live transcription of a voice call, per provider the app may ask for; null when not configured. */
       transcription: { gemini: string | null; openai: string | null };
       /** Speech synthesis, per provider; null when not configured. */
@@ -112,9 +117,18 @@ export function deployedRevision(path = resolve(process.cwd(), DEPLOYED_REVISION
   }
 }
 
+/**
+ * A model name as it may be shown: it matches the chat model's name rule and is not credential-shaped (the
+ * `looksSecret` guard, or an unbroken run of 32 or more letters, digits and `_` holding both a letter and a digit).
+ * Anything else, such as a URL or a key pasted into a model variable, is null.
+ */
+export function reportableModelName(value: unknown): string | null {
+  if (typeof value !== 'string' || !MODEL_NAME.test(value) || looksSecret(value)) return null;
+  return (value.match(LONG_RUN) ?? []).some(run => /[A-Za-z]/u.test(run) && /[0-9]/u.test(run)) ? null : value;
+}
+
 function modelOf(gateway: unknown): string | null {
-  const model = gateway && typeof gateway === 'object' ? (gateway as { model?: unknown }).model : undefined;
-  return typeof model === 'string' && model ? model : null;
+  return reportableModelName(gateway && typeof gateway === 'object' ? (gateway as { model?: unknown }).model : undefined);
 }
 
 function present(environment: Environment, name: string): boolean {
@@ -144,8 +158,8 @@ export function createServerSelfDiagnosis(sources: SelfDiagnosisSources) {
     startedAt: sources.startedAt,
     build: { revision: (sources.revision ?? (() => deployedRevision()))() },
     voice: {
-      reply: sources.chatModel.model,
-      routing: sources.voiceDecision.model,
+      reply: modelOf(sources.chatModel),
+      routing: modelOf(sources.voiceDecision),
       transcription: { gemini: modelOf(createConfiguredGeminiLiveGateway(environment)), openai: modelOf(createConfiguredOpenAITranscriptionGateway(environment)) },
       speech: { gemini: modelOf(createConfiguredGeminiSpeechGateway(environment)), eleven: modelOf(createConfiguredElevenSpeechGateway(environment)) },
       vision: modelOf(sources.vision),
@@ -178,7 +192,7 @@ export function createServerSelfDiagnosis(sources: SelfDiagnosisSources) {
       startedAt: fixed.startedAt,
       build: { ...fixed.build },
       models: {
-        text: sources.chatModel.model,
+        text: modelOf(sources.chatModel),
         voice: {
           ...fixed.voice,
           transcription: { ...fixed.voice.transcription },

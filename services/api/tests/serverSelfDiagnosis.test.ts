@@ -12,7 +12,7 @@ import { createConfiguredVoyagerCatalog } from '../src/organize.js';
 import { configuredPlatformBridge } from '../src/platformBridge.js';
 import { createOpsRoute, OPS_READ_PATH } from '../src/serverOpsRoutes.js';
 import {
-  createServerSelfDiagnosis, deployedRevision, personaHash, personaHashSource, type SelfDiagnosisSources,
+  createServerSelfDiagnosis, deployedRevision, personaHash, personaHashSource, reportableModelName, type SelfDiagnosisSources,
 } from '../src/serverSelfDiagnosis.js';
 import { SHANNON_TOOLS, offeredTools } from '../src/shannonTools.js';
 import { createConfiguredVoiceDecisionGateway } from '../src/voiceDecision.js';
@@ -132,8 +132,7 @@ describe('the self-diagnosis', () => {
     expect(diagnosis.integrations).toEqual({ voyager: false, notion: false, aetherContext: false, aetherProposals: false, discordBridge: false });
   });
 
-  it('never carries a credential, an endpoint, a path or any other value of the environment', () => {
-    const environment = configured();
+  function expectNoEnvironmentValue(environment: Record<string, string>) {
     const reader = createServerSelfDiagnosis(sources(environment));
     const outputs = [JSON.stringify(reader.read()), reader.startupLine(), JSON.stringify(reader.forScope('owner'))];
     const modelNames = new Set<string>(Object.values(MODELS));
@@ -147,6 +146,32 @@ describe('the self-diagnosis', () => {
       expect(output).not.toMatch(/fake|example\.invalid|PRIVATE KEY|sk-|ntn_/u);
     }
     expect(reader.startupLine().split('\n')).toHaveLength(1);
+    return reader.read();
+  }
+
+  it('never carries a credential, an endpoint, a path or a token', () => {
+    expectNoEnvironmentValue(configured());
+  });
+
+  // SHANNON_JEV_MODEL is not validated where it is configured (`JevVoiceDecisionGateway`).
+  it.each([
+    ['a URL', 'https://jev.example.invalid/fake0026?key=x'],
+    ['an API key', 'sk-fakeJevRouterToken0027abcdefghij'],
+    ['a long token', 'fakeJevToken0028AbCdEfGhIjKlMnOpQrStUvWx'],
+    ['a dotted bot token', 'fakeA0029bcdefghijklmnopqrstu.fakeB0030cd.fakeC0031efghijklmnopqrstuvwxyz0123'],
+  ])('reports no routing model when SHANNON_JEV_MODEL holds %s', (_kind, value) => {
+    const diagnosis = expectNoEnvironmentValue({ ...configured(), SHANNON_JEV_MODEL: value });
+    expect(diagnosis.models.voice.routing).toBeNull();
+  });
+
+  it('shows a model name only when it passes the chat model name rule and is not credential-shaped', () => {
+    for (const name of ['gpt-5.6-luna', 'jev-latest', 'local-rules', 'gemini-3.5-transcribe-live', 'eleven_v4_turbo', 'models:x.1']) {
+      expect(reportableModelName(name)).toBe(name);
+    }
+    for (const value of [undefined, null, 7, '', 'a b', 'https://x.invalid/y', '/path/to/model', 'x'.repeat(101),
+      'sk-abcdefghijklmnop0123', 'AKIA0123456789ABCDEF', 'abc0123456789abcdefghijklmnopqrstuv']) {
+      expect(reportableModelName(value), String(value)).toBeNull();
+    }
   });
 
   it('counts exactly the tools of the registry, per surface and audience, and none when they are switched off', () => {
@@ -283,6 +308,16 @@ describe('docs/ops-contract.md', () => {
   it('states the field, who reads it, the revision file, the hash and the startup line', () => {
     const document = readFileSync(resolve(import.meta.dirname, '../../../docs/ops-contract.md'), 'utf8');
     for (const word of ["## The server's self-diagnosis", '| `server` |', 'SHANNON_OWNER_SCOPE_KEY', 'DEPLOYED_REVISION', 'personaHashSource()',
-      'Shannon self-diagnosis ', '`GET /health` is unchanged', 'tools.offered', 'integrations.discordBridge']) expect(document, word).toContain(word);
+      'Shannon self-diagnosis ', '`GET /health` is unchanged', 'tools.offered', 'integrations.discordBridge',
+      'No credential, endpoint, path or token; model names only after validation', 'SHANNON_JEV_MODEL', 'read once when the process starts']) expect(document, word).toContain(word);
+    expect(document).not.toContain('value of the environment');
+  });
+
+  it('is matched by the deploy runbook: the revision is written atomically after the sync and before the restart', () => {
+    const runbook = readFileSync(resolve(import.meta.dirname, '../../../docs/self-improvement-runbook.md'), 'utf8');
+    const write = runbook.indexOf('mv -f DEPLOYED_REVISION.tmp DEPLOYED_REVISION');
+    expect(write).toBeGreaterThan(runbook.indexOf('Deploy only reviewed files'));
+    expect(write).toBeLessThan(runbook.indexOf('Restart only affected services'));
+    expect(runbook).toContain('after the source sync and before any restart');
   });
 });

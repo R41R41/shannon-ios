@@ -159,7 +159,7 @@ Added 2026-10-05 (coordinator task taken over from Voyager, approved by the owne
 
 The same summary is written once to the service log at startup, as one line that begins with `Shannon self-diagnosis `.
 
-**Names, counts, a hash and booleans only.** No credential, endpoint, file path, token or other value of the environment is ever in it: an integration is `true` or `false`, and a model is the name its gateway resolved. The code is `services/api/src/serverSelfDiagnosis.ts`; the contract test, which seeds fake secrets into every credential and endpoint variable and asserts that none of them comes back, is `services/api/tests/serverSelfDiagnosis.test.ts`.
+**Names, counts, a hash and booleans only.** No credential, endpoint, path or token; model names only after validation. An integration is `true` or `false`. A model is the name its gateway resolved, reported only when it matches the model-name rule of the chat model (`[A-Za-z0-9._:-]{1,100}`) and is not credential-shaped (the `looksSecret` guard, or an unbroken run of 32 or more letters, digits and `_` that holds both a letter and a digit); otherwise it is `null`. This matters for names the server does not itself validate, such as `SHANNON_JEV_MODEL`. The code is `services/api/src/serverSelfDiagnosis.ts`; the contract test, which seeds fake secrets into every credential and endpoint variable and asserts that none of them comes back, is `services/api/tests/serverSelfDiagnosis.test.ts`.
 
 ```json
 {
@@ -198,10 +198,10 @@ The same summary is written once to the service log at startup, as one line that
 | --- | --- | --- |
 | `schemaVersion` | `1` | |
 | `startedAt` | ISO 8601 | When this API process started. |
-| `build.revision` | string \| `null` | The first word of the file `DEPLOYED_REVISION` in the service's working directory (the deployed source, `/home/azureuser/shannon-ios`), which the deployment writes. `null` when the file is missing or does not hold a revision-like word (`[A-Za-z0-9][A-Za-z0-9._+-]{0,79}`). Read once at startup. |
-| `models.text` | string | The chat model of text replies (`SHANNON_LLM_MODEL` as resolved). `local-stub` when no model key is configured. |
+| `build.revision` | string \| `null` | The revision this process loaded: the first word of the file `DEPLOYED_REVISION` in the service's working directory (the deployed source, `/home/azureuser/shannon-ios`), **read once when the process starts** and not again. The deployment writes that file after the source sync and before the restart, atomically (a temporary file in the same directory, then `mv`; `docs/self-improvement-runbook.md`, Azure delivery), so after a restart it names the source the process loaded. A file changed while the process runs is not seen until the next restart. `null` when the file is missing or its first word is not revision-like (`[A-Za-z0-9][A-Za-z0-9._+-]{0,79}`). |
+| `models.text` | string \| `null` | The chat model of text replies (`SHANNON_LLM_MODEL` as resolved). `local-stub` when no model key is configured. |
 | `models.voice.reply` | string | Spoken replies use the same chat model. |
-| `models.voice.routing` | string | The voice turn router: the JEV model, the OpenAI router model, or `local-rules`. |
+| `models.voice.routing` | string \| `null` | The voice turn router: the JEV model, the OpenAI router model, or `local-rules`. `null` when the configured name fails the model-name rule above. |
 | `models.voice.transcription.gemini`, `.openai` | string \| `null` | Live transcription of a voice call, per provider the app may ask for. `null`: that provider is not configured. |
 | `models.voice.speech.gemini`, `.eleven` | string \| `null` | Speech synthesis, per provider. |
 | `models.voice.vision` | string \| `null` | A look through the camera during a voice turn. |
