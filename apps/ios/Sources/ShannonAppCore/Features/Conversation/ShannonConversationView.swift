@@ -192,7 +192,7 @@ public struct ShannonConversationView: View {
             settingsSheet
                 .onAppear { settingsLinkRequest = nil }
                 .modifier(ShannonVoiceAccessoryModifier(workspace: voiceWorkspace,
-                    conversationModel: model, geminiVoiceModel: geminiLiveVoiceModel))
+                    conversationModel: model, geminiVoiceModel: geminiLiveVoiceModel, coversOwnerScreen: false))
         }
 #else
         .sheet(isPresented: $showsSettings) {
@@ -227,12 +227,14 @@ public struct ShannonConversationView: View {
             conversationModel: model,
             geminiVoiceModel: geminiLiveVoiceModel,
             expression: model.currentExpression,
-            openTask: openAgentTask
+            openTask: openAgentTask,
+            // Talk is covered during 「友人も一緒」; the 作業 and シャノン pages, which he opens himself, are not.
+            coversOwnerScreen: selectedPage == .talk
         ))
         .fullScreenCover(isPresented: agentTaskRoomIsPresented) {
             agentTaskRoom
                 .modifier(ShannonVoiceAccessoryModifier(workspace: voiceWorkspace,
-                    conversationModel: model, geminiVoiceModel: geminiLiveVoiceModel))
+                    conversationModel: model, geminiVoiceModel: geminiLiveVoiceModel, coversOwnerScreen: false))
         }
 #else
         .sheet(isPresented: agentTaskRoomIsPresented) {

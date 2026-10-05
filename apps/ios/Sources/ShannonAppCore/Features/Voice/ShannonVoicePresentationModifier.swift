@@ -10,6 +10,9 @@ struct ShannonVoicePresentationModifier: ViewModifier {
     let expression: ShannonExpressionDTO
     var allowsTaskNavigation = true
     var openTask: (UUID) -> Void = { _ in }
+    /// This screen is Talk or the list of talks: covered under the pill during 「友人も一緒」. Pages the owner opens
+    /// himself (作業, シャノン, 設定, a work task) are not (owner decision 2026-10-06, information-architecture 8 #28).
+    var coversOwnerScreen = true
     @State private var taskToOpen: UUID?
     @State private var presenterID = UUID()
     @Environment(\.colorScheme) private var colorScheme
@@ -38,9 +41,9 @@ struct ShannonVoicePresentationModifier: ViewModifier {
             // 「友人も一緒」 with the call minimised: the owner's screen under the pill (Talk, or a sheet's page) is
             // covered, and VoiceOver does not read it either (coordinator decision 2026-10-06).
             content
-                .accessibilityHidden(geminiVoiceModel.hidesOwnerScreens)
+                .accessibilityHidden(coversOwnerScreen && geminiVoiceModel.hidesOwnerScreens)
                 .overlay {
-                    if geminiVoiceModel.hidesOwnerScreens { ShannonVoiceGuestCover() }
+                    if coversOwnerScreen, geminiVoiceModel.hidesOwnerScreens { ShannonVoiceGuestCover() }
                 }
         }
         .background { ShannonPalette.resolve(colorScheme).canvas.ignoresSafeArea() }
@@ -114,12 +117,15 @@ struct ShannonVoiceAccessoryModifier: ViewModifier {
     let workspace: ShannonVoiceWorkspaceState
     let conversationModel: ShannonConversationModel
     let geminiVoiceModel: ShannonGeminiLiveSessionModel
+    /// The list of talks is covered during 「友人も一緒」; Settings and a work task, which he opens himself, are not.
+    var coversOwnerScreen = true
 
     func body(content: Content) -> some View {
         content.modifier(ShannonVoicePresentationModifier(
             isPresented: $showsDetails, speechProvider: geminiVoiceModel.speechProvider, workspace: workspace,
             conversationModel: conversationModel, geminiVoiceModel: geminiVoiceModel,
-            expression: conversationModel.currentExpression, allowsTaskNavigation: false
+            expression: conversationModel.currentExpression, allowsTaskNavigation: false,
+            coversOwnerScreen: coversOwnerScreen
         ))
     }
 }
