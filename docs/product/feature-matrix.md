@@ -13,9 +13,9 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 
 | 画面 | ○ ある | △ 一部 | × ない | — 当てはまらない | 予定 | ？ 不明 |
 |---|---:|---:|---:|---:|---:|---:|
-| iOS | 115 | 3 | 10 | 10 | 3 | 0 |
-| macOS | 64 | 18 | 42 | 4 | 13 | 0 |
-| Windows | 66 | 22 | 41 | 6 | 5 | 1 |
+| iOS | 117 | 3 | 9 | 10 | 2 | 0 |
+| macOS | 64 | 20 | 41 | 4 | 12 | 0 |
+| Windows | 68 | 21 | 41 | 6 | 4 | 1 |
 
 ## 構成（入口）（`structure`）
 
@@ -209,18 +209,20 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `yousu.now` | **シャノンのいま** 気分、残っている気持ち、自分の時間にしていること、体のようす、最近のできごと（見た・触れられた・話しかけた）を 1 画面で見る。 | ○ | × | △ |
 | `yousu.waiting` | **待っていること** 感想待ち・判断待ち・許可待ちを、1 か所に集める。 | ○ | × | △ |
 | `yousu.recent-events` | **最近のできごとの記録** 部屋を見た・断った、触れられた、話しかけてどう届いたか、を時刻順に読む。 | ○ | × | △ |
-| `yousu.mood-history` | **気分の記録** シャノンの気分の記録（14 日分）を本体から読む（GET /v1/shannon/mood-history。所有者の端末だけ）。 | 予定 | 予定 | △ |
-| `yousu.mood-trend` | **気分の推移**【デスクトップの追加】 気分の記録を、快・不快／活発さ／ひらき の 3 本の線で見る（Windows だけの追加。線の名前は所有者が見て確かめる、未決）。 | × | × | 予定 |
+| `yousu.mood-history` | **気分の記録** シャノンの気分の記録（14 日分）を本体から読む（GET /v1/shannon/mood-history。所有者の端末だけ）。 | ○ | △ | ○ |
+| `yousu.mood-trend` | **気分の推移** 気分の記録を、気分の明るさ（実線・青）／元気さ（長い破線・橙）／心の開き（点線・緑）の 3 本の段の線で見る。24時間／7日 の切り替えと凡例。画面に数字は出さない。読み上げは 明るめ／ふつう／低め（所有者の決定、2026-10-05）。 | ○ | △ | ○ |
 
 - `yousu.now` iOS（○）: 「シャノン」の先頭のカードから開く。シャノンのいまだけ（運用の切り替えは無くした。A4・A5）。
 - `yousu.now` macOS（×）: ブランチは iPhone の入口だけを足している。Mac のサイドバーには入口が無い。
 - `yousu.now` Windows（△）: 身体が「いま」を読んで顔としぐさに出す。一覧で読む画面は無い。
 - `yousu.waiting` Windows（△）: 身体が、判断待ちの作業と見せたい物語をしぐさで知らせる。一覧は無い。
 - `yousu.recent-events` Windows（△）: カメラで見た・断った記録だけが設定にある（この PC の中の記録）。触れ合いと話しかけの記録は無い。
-- `yousu.mood-history` iOS（予定）: ブランチ `未定`。サーバーの口は main にある（2026-10-05）。iPhone の画面はまだ無い。
-- `yousu.mood-history` macOS（予定）: ブランチ `未定`。サーバーの口は main にある（2026-10-05）。Mac の画面はまだ無い。
-- `yousu.mood-history` Windows（△）: 本体の口へ移るまで、この PC の中に気分を記録している（presence の mood・primary・intensity・doing。14 日、文なし、送らない）。evidence は presence を読む所（2026-10-03 に読んだ）で、記録のファイルは知らせに名前が無い。Windows body thread report 2026-10-05。
-- `yousu.mood-trend` Windows（予定）: ブランチ `shannon-desktop（体のスレッド、W6）`。線の名前「快・不快／活発さ／ひらき」は、所有者に見せて決める（まだ決まっていない）。Windows body thread report 2026-10-05。
+- `yousu.mood-history` iOS（○）: 24 時間と 7 日を読む。403・404・届かないときは「気分の推移」を出さない（端末の中には記録しない）。
+- `yousu.mood-history` macOS（△）: 共通の ようす の画面で読む。Mac のサイドバーに ようす の入口が入るのは A10。
+- `yousu.mood-history` Windows（○）: 本体の記録を読み、読めないときは PC の中の記録に戻ってその旨を出す（Windows だけ）。evidence のファイルは 2026-10-03 に読んだ presence を読む所で、読む所のファイル名は知らせに無い。Windows body thread report 2026-10-05。
+- `yousu.mood-trend` iOS（○）: シャノン › ようす の、気持ちのカードのすぐ下。
+- `yousu.mood-trend` macOS（△）: 共通の ようす の画面で、気持ちのカードの横に広く出す。Mac の ようす の入口は A10。
+- `yousu.mood-trend` Windows（○）: 13:06 に入った（同じ段の線・線の形・言葉）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。Windows body thread report 2026-10-05。
 
 ## 運用（`ops`）
 

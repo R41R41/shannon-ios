@@ -184,4 +184,26 @@ extension ShannonGeneratedStrings {
     public static let yousuDeliveryCall = "電話"
     /// `yousu.delivery.other`
     public static let yousuDeliveryOther = "ほかの方法"
+    /// `yousu.moodTrend.title`
+    public static let yousuMoodTrendTitle = "気分の推移"
+    /// `yousu.moodTrend.range.day`
+    public static let yousuMoodTrendRangeDay = "24時間"
+    /// `yousu.moodTrend.range.week`
+    public static let yousuMoodTrendRangeWeek = "7日"
+    /// `yousu.moodTrend.line.valence`
+    public static let yousuMoodTrendLineValence = "気分の明るさ"
+    /// `yousu.moodTrend.line.arousal`
+    public static let yousuMoodTrendLineArousal = "元気さ"
+    /// `yousu.moodTrend.line.openness`
+    public static let yousuMoodTrendLineOpenness = "心の開き"
+    /// `yousu.moodTrend.level.high`
+    public static let yousuMoodTrendLevelHigh = "明るめ"
+    /// `yousu.moodTrend.level.normal`
+    public static let yousuMoodTrendLevelNormal = "ふつう"
+    /// `yousu.moodTrend.level.low`
+    public static let yousuMoodTrendLevelLow = "低め"
+    /// `yousu.moodTrend.summary`
+    public static func yousuMoodTrendSummary(valence: String, arousal: String, openness: String) -> String { "気分の明るさは\(valence)、元気さは\(arousal)、心の開きは\(openness)" }
+    /// `yousu.moodTrend.empty`
+    public static let yousuMoodTrendEmpty = "まだ記録がありません"
 }

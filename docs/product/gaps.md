@@ -2,7 +2,7 @@
 
 > **2026-10-03 追記**: このずれを見たうえで、所有者が構成・色・文字・承認・言葉を選んだ（[`information-architecture.md`](information-architecture.md)）。直す順番は [`roadmap.md`](roadmap.md) に移した（下の 7 は、選ぶ前の案）。決定で新しく行が 7 つ増え（`structure.four-entries`、`structure.shannon-hub`、`tasks.hold-to-confirm`、`settings.figure`、`touch.reply-mode`、`settings.admin`、`ops.attention-mark`）、機能は 134 件、遅れている所は 148 か所になった。下の件数と本文は、選ぶ前（127 件・129 か所）のまま残してある。いまの件数は [`feature-matrix.md`](feature-matrix.md)。
 
-> **2026-10-05 追記**: W5 とそのあとの決定で、行が 7 つ増えた（`tasks.needs-owner`、`voice.wake-name`、`yousu.mood-history`、`yousu.mood-trend`、`body.touch-parts`、`study.tools`、`folder.tools`）。機能は 141 件、遅れている所は 126 か所。Windows の `tasks.hold-to-confirm` と `notifications.badge` が閉じた。作らないもの（「同調率」「判断の内訳」）は `feature-matrix.json` の `notBuilding`。
+> **2026-10-05 追記**: W5 とそのあとの決定で、行が 7 つ増えた（`tasks.needs-owner`、`voice.wake-name`、`yousu.mood-history`、`yousu.mood-trend`、`body.touch-parts`、`study.tools`、`folder.tools`）。機能は 141 件、遅れている所は 126 か所（同じ日に気分の推移を iPhone に入れて 125）。Windows の `tasks.hold-to-confirm` と `notifications.badge` が閉じた。作らないもの（「同調率」「判断の内訳」）は `feature-matrix.json` の `notBuilding`。
 
 2026-10-03。Apple 側は `c40a65e`（main）のコード、Windows 側は同じ日に読んだ `shannon-desktop`（VM の `~/handoff/shannon-desktop-src.zip`）から。画面は動かしていない（ビルドもシミュレーターも使っていない）。コードと文書を読んだ結果。
 

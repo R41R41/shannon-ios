@@ -2078,21 +2078,26 @@
       "description": "シャノンの気分の記録（14 日分）を本体から読む（GET /v1/shannon/mood-history。所有者の端末だけ）。",
       "surfaces": {
         "ios": {
-          "status": "planned",
-          "branch": "未定",
-          "note": "サーバーの口は main にある（2026-10-05）。iPhone の画面はまだ無い。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/API/ShannonAPIClient+Yousu.swift#loadShannonMoodHistory",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift#ShannonMoodTrendModel"
+          ],
+          "note": "24 時間と 7 日を読む。403・404・届かないときは「気分の推移」を出さない（端末の中には記録しない）。"
         },
         "macos": {
-          "status": "planned",
-          "branch": "未定",
-          "note": "サーバーの口は main にある（2026-10-05）。Mac の画面はまだ無い。"
+          "status": "partial",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift#ShannonMoodTrendModel"
+          ],
+          "note": "共通の ようす の画面で読む。Mac のサイドバーに ようす の入口が入るのは A10。"
         },
         "windows": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
             "shannon-desktop:src/bridge.ts"
           ],
-          "note": "本体の口へ移るまで、この PC の中に気分を記録している（presence の mood・primary・intensity・doing。14 日、文なし、送らない）。evidence は presence を読む所（2026-10-03 に読んだ）で、記録のファイルは知らせに名前が無い。Windows body thread report 2026-10-05。",
+          "note": "本体の記録を読み、読めないときは PC の中の記録に戻ってその旨を出す（Windows だけ）。evidence のファイルは 2026-10-03 に読んだ presence を読む所で、読む所のファイル名は知らせに無い。Windows body thread report 2026-10-05。",
           "read": "2026-10-05"
         }
       }
@@ -2101,19 +2106,30 @@
       "id": "yousu.mood-trend",
       "area": "yousu",
       "title": "気分の推移",
-      "description": "気分の記録を、快・不快／活発さ／ひらき の 3 本の線で見る（Windows だけの追加。線の名前は所有者が見て確かめる、未決）。",
-      "scope": "desktop",
+      "description": "気分の記録を、気分の明るさ（実線・青）／元気さ（長い破線・橙）／心の開き（点線・緑）の 3 本の段の線で見る。24時間／7日 の切り替えと凡例。画面に数字は出さない。読み上げは 明るめ／ふつう／低め（所有者の決定、2026-10-05）。",
       "surfaces": {
         "ios": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift#ShannonMoodTrendPanel",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift#steps"
+          ],
+          "note": "シャノン › ようす の、気持ちのカードのすぐ下。"
         },
         "macos": {
-          "status": "no"
+          "status": "partial",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift#ShannonMoodTrendPanel"
+          ],
+          "note": "共通の ようす の画面で、気持ちのカードの横に広く出す。Mac の ようす の入口は A10。"
         },
         "windows": {
-          "status": "planned",
-          "branch": "shannon-desktop（体のスレッド、W6）",
-          "note": "線の名前「快・不快／活発さ／ひらき」は、所有者に見せて決める（まだ決まっていない）。Windows body thread report 2026-10-05。"
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/App.tsx"
+          ],
+          "note": "13:06 に入った（同じ段の線・線の形・言葉）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。Windows body thread report 2026-10-05。",
+          "read": "2026-10-05"
         }
       }
     },

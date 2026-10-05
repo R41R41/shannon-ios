@@ -113,6 +113,21 @@ struct ShannonYousuFixtureClient: ShannonYousuServing {
 
     func opsReportScope(scopeKey: String) -> String? { nil }
 
+    func loadShannonMoodHistory(scopeKey: String, hours: Int) async throws -> ShannonMoodHistoryDTO {
+        // A quiet night, a bright afternoon, a sulky moment, and the evening settling down.
+        let shape: [(Double, Double, Double, Double)] = [
+            (Double(hours) * 60 - 5, 0, 0.3, 0.35), (Double(hours) * 45, 0.05, 0.28, 0.35), (Double(hours) * 30, 0.32, 0.55, 0.5),
+            (Double(hours) * 20, -0.26, 0.4, 0.2), (Double(hours) * 8, 0.1, 0.35, 0.4), (30, 0.28, 0.3, 0.45),
+        ]
+        let points = shape.map { minutesAgo, valence, arousal, openness in
+            ShannonMoodHistoryDTO.Point(
+                at: Self.iso(minutesAgo: minutesAgo), valence: valence, arousal: arousal, openness: openness,
+                mood: .init(expression: "calm", feeling: nil), present: nil
+            )
+        }
+        return ShannonMoodHistoryDTO(schemaVersion: 1, generatedAt: Self.iso(minutesAgo: 0), hours: hours, points: points, downsampled: false)
+    }
+
     func loadShannonRecentActivity(scopeKey: String) async throws -> ShannonAutonomyActivityDTO {
         ShannonAutonomyActivityDTO(control: .init(state: "active", enabled: true, paused: false), days: [])
     }

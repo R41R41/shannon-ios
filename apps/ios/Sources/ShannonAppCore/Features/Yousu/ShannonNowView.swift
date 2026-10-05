@@ -45,6 +45,11 @@ public struct ShannonNowView: View {
             }
             waitingSection(palette: palette)
             feelingSection(palette: palette)
+#if !os(macOS)
+            if model.moodTrend.isAvailable {
+                Section { ShannonMoodTrendPanel(model: model.moodTrend, palette: palette) }
+            }
+#endif
             if model.ownTime != nil { ownTimeSection(palette: palette) }
             if let now = model.now {
                 bodySection(now.body, palette: palette)
@@ -111,32 +116,48 @@ public struct ShannonNowView: View {
         let presentFace = feeling?.present?.face
         let lingering = (feeling?.lingering ?? []).compactMap { ShannonNowText.lingeringLabel($0) }
         Section {
-            HStack(alignment: .center, spacing: ShannonSpacing.large) {
-                ShannonAvatarView(expression: (presentFace ?? moodFace)?.expression ?? .neutral, size: 64)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
-                    Text(moodFace?.japaneseName ?? ShannonGeneratedStrings.yousuMoodUnknown)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(palette.textPrimary)
-                    if let presentFace {
-                        Text(ShannonGeneratedStrings.yousuFeelingPresent(name: presentFace.japaneseName))
-                            .font(.callout)
-                            .foregroundStyle(palette.textPrimary)
-                    }
-                    ForEach(lingering, id: \.self) { label in
-                        Text(ShannonGeneratedStrings.yousuFeelingLingering(label: label))
-                            .font(.footnote)
-                            .foregroundStyle(palette.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+#if os(macOS)
+            // Wide: the trend stands next to the feeling card (owner's pick, 2026-10-05).
+            HStack(alignment: .top, spacing: ShannonSpacing.extraLarge) {
+                feelingCard(palette: palette, moodFace: moodFace, presentFace: presentFace, lingering: lingering)
+                    .frame(minWidth: 220, maxWidth: 320, alignment: .leading)
+                if model.moodTrend.isAvailable {
+                    ShannonMoodTrendPanel(model: model.moodTrend, palette: palette)
                 }
-                Spacer(minLength: 0)
             }
-            .padding(.vertical, ShannonSpacing.extraSmall)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(feelingAccessibilityLabel(mood: moodFace, present: presentFace, lingering: lingering))
             .listRowBackground(palette.intelligenceSoft)
+#else
+            feelingCard(palette: palette, moodFace: moodFace, presentFace: presentFace, lingering: lingering)
+                .listRowBackground(palette.intelligenceSoft)
+#endif
         }
+    }
+
+    private func feelingCard(palette: ShannonPalette, moodFace: ShannonFace?, presentFace: ShannonFace?, lingering: [String]) -> some View {
+        HStack(alignment: .center, spacing: ShannonSpacing.large) {
+            ShannonAvatarView(expression: (presentFace ?? moodFace)?.expression ?? .neutral, size: 64)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+                Text(moodFace?.japaneseName ?? ShannonGeneratedStrings.yousuMoodUnknown)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(palette.textPrimary)
+                if let presentFace {
+                    Text(ShannonGeneratedStrings.yousuFeelingPresent(name: presentFace.japaneseName))
+                        .font(.callout)
+                        .foregroundStyle(palette.textPrimary)
+                }
+                ForEach(lingering, id: \.self) { label in
+                    Text(ShannonGeneratedStrings.yousuFeelingLingering(label: label))
+                        .font(.footnote)
+                        .foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, ShannonSpacing.extraSmall)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(feelingAccessibilityLabel(mood: moodFace, present: presentFace, lingering: lingering))
     }
 
     private func feelingAccessibilityLabel(mood: ShannonFace?, present: ShannonFace?, lingering: [String]) -> String {

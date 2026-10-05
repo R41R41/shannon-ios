@@ -163,3 +163,4 @@
 - `only: "windows"` は Windows にだけある文（Swift には出ない）。Mac にも要るようになったら、こちらで外す。
 - 一覧表: `tasks.needs-owner`、`voice.wake-name`、`yousu.mood-history`、`yousu.mood-trend`（線の名前は未決）、`body.touch-parts`、`study.tools`、`folder.tools`（Windows のフォルダの仕組みを取り決めの v2 に）。読み上げは前からある `talk.reply-read-aloud` に書いた（既定は全部）。Windows の列の場所（ファイル）は、知らせに名前が無いものは、2026-10-03 に読んだ同じ画面のファイルにしてある。違っていたら知らせてほしい。
 - 作らないもの: 「同調率」「判断の内訳」（`feature-matrix.json` の `notBuilding`）。
+- 気分の推移（2026-10-05、所有者が選んだ）: 文 `yousu.moodTrend.*`（見出し、24時間／7日、3 本の線の名前、明るめ／ふつう／低め、読み上げの文の形、「まだ記録がありません」）。iPhone と Mac も、同じ段の線・同じ線の形（実線・長い破線・点線）で描く。ふつうの線（真ん中）は、各値のふだんの値（気分の明るさ 0、元気さ 0.30、心の開き 0.35）に置いた。Windows の描き方と違っていたら知らせてほしい。

@@ -2153,6 +2153,94 @@
       "decided": "2026-10-03",
       "windowsNow": "ほかの方法",
       "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.moodTrend.title",
+      "text": "気分の推移",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "気分の推移",
+      "note": "シャノン › ようす の、気持ちのカードのすぐ下の区画の見出し。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.range.day",
+      "text": "24時間",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "24時間",
+      "note": "区画の右上の切り替え。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.range.week",
+      "text": "7日",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "7日",
+      "note": "所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.line.valence",
+      "text": "気分の明るさ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "気分の明るさ",
+      "note": "線の名前（valence）。実線、押せるものの青（action）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.line.arousal",
+      "text": "元気さ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "元気さ",
+      "note": "線の名前（arousal）。長い破線、橙（attention）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.line.openness",
+      "text": "心の開き",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "心の開き",
+      "note": "線の名前（openness）。点線、緑（success）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.level.high",
+      "text": "明るめ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "明るめ",
+      "note": "読み上げの言葉。3 本とも同じ 3 語。ふだんの値（気分の明るさ 0、元気さ 0.30、心の開き 0.35）より 0.2 以上高い。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.level.normal",
+      "text": "ふつう",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "ふつう",
+      "note": "ふだんの値から ±0.2 の内。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.level.low",
+      "text": "低め",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "低め",
+      "note": "ふだんの値より 0.2 以上低い。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.summary",
+      "text": "気分の明るさは{valence}、元気さは{arousal}、心の開きは{openness}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "気分の明るさは{valence}、元気さは{arousal}、心の開きは{openness}",
+      "note": "読み上げ（VoiceOver・スクリーンリーダー）。いちばん新しい点の言葉。画面に数字は出さない。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.empty",
+      "text": "まだ記録がありません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "まだ記録がありません",
+      "note": "記録が空のとき。403・404・届かないときは区画ごと出さない（iPhone・Mac）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
     }
   ]
 }

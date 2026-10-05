@@ -299,6 +299,17 @@ export const shannonStrings = {
   "yousu.delivery.callRinging": "電話を鳴らしているところ",
   "yousu.delivery.call": "電話",
   "yousu.delivery.other": "ほかの方法",
+  "yousu.moodTrend.title": "気分の推移",
+  "yousu.moodTrend.range.day": "24時間",
+  "yousu.moodTrend.range.week": "7日",
+  "yousu.moodTrend.line.valence": "気分の明るさ",
+  "yousu.moodTrend.line.arousal": "元気さ",
+  "yousu.moodTrend.line.openness": "心の開き",
+  "yousu.moodTrend.level.high": "明るめ",
+  "yousu.moodTrend.level.normal": "ふつう",
+  "yousu.moodTrend.level.low": "低め",
+  "yousu.moodTrend.summary": "気分の明るさは{valence}、元気さは{arousal}、心の開きは{openness}",
+  "yousu.moodTrend.empty": "まだ記録がありません",
 } as const;
 
 export type ShannonStringKey = keyof typeof shannonStrings;
@@ -898,6 +909,50 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   "yousu.delivery.other": {
     "decided": "2026-10-03",
     "windowsBefore": "ほかの方法"
+  },
+  "yousu.moodTrend.title": {
+    "decided": "2026-10-05",
+    "windowsBefore": "気分の推移"
+  },
+  "yousu.moodTrend.range.day": {
+    "decided": "2026-10-05",
+    "windowsBefore": "24時間"
+  },
+  "yousu.moodTrend.range.week": {
+    "decided": "2026-10-05",
+    "windowsBefore": "7日"
+  },
+  "yousu.moodTrend.line.valence": {
+    "decided": "2026-10-05",
+    "windowsBefore": "気分の明るさ"
+  },
+  "yousu.moodTrend.line.arousal": {
+    "decided": "2026-10-05",
+    "windowsBefore": "元気さ"
+  },
+  "yousu.moodTrend.line.openness": {
+    "decided": "2026-10-05",
+    "windowsBefore": "心の開き"
+  },
+  "yousu.moodTrend.level.high": {
+    "decided": "2026-10-05",
+    "windowsBefore": "明るめ"
+  },
+  "yousu.moodTrend.level.normal": {
+    "decided": "2026-10-05",
+    "windowsBefore": "ふつう"
+  },
+  "yousu.moodTrend.level.low": {
+    "decided": "2026-10-05",
+    "windowsBefore": "低め"
+  },
+  "yousu.moodTrend.summary": {
+    "decided": "2026-10-05",
+    "windowsBefore": "気分の明るさは{valence}、元気さは{arousal}、心の開きは{openness}"
+  },
+  "yousu.moodTrend.empty": {
+    "decided": "2026-10-05",
+    "windowsBefore": "まだ記録がありません"
   }
 };
 
