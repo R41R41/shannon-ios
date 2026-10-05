@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
-  autonomyDayScenario, runReachScenario, shiritoriScenario, threeToolsScenario,
+  autonomyDayScenario, buildReachReport, reachReportMarkdown, runReachScenario, shiritoriScenario, threeToolsScenario,
   type ReachDriver, type ReachScenarioDefinition,
 } from '../../../packages/evaluation/src/reach/index.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import { FakeModel } from './autonomyLoopHarness.js';
 import { ThinkingWatch, autonomyDayDriver, scriptedAutonomyDayDriver, scriptedAutonomyModel } from './reach/reachAutonomy.js';
-import { ScriptedShiritoriModel, scriptedShiritoriDriver, shiritoriDriver } from './reach/reachConversation.js';
+import { estimatedOpenAICostUsd } from '../src/llmUsage.js';
+import { ReachUsage, ScriptedShiritoriModel, scriptedShiritoriDriver, shiritoriDriver } from './reach/reachConversation.js';
 import { ScriptedThreeToolModel, StubStudyToolbox, pendingRegistryDriver, scriptedThreeToolsDriver, threeToolsDriver } from './reach/reachTools.js';
 
 /**
@@ -41,6 +42,20 @@ describe('reach (a): the long game through the conversation path', () => {
     expect(causes['context.history_complete']).toBeUndefined();
     expect(causes['recall.q1_item']).toBe('model_judgment');
     expect(record.stop?.cause).toBe('model_judgment');
+  });
+
+  it('reports the cached input a live model reported, and the cost with and without the cache discount', async () => {
+    const usage = new ReachUsage();
+    const scripted = new ScriptedShiritoriModel();
+    const record = await runReachScenario(shiritoriScenario, shiritoriDriver({ mode: 'openai', model: 'gpt-5.6-luna', generate: async request => {
+      const spent = { inputTokens: 1_000, cachedInputTokens: 800, outputTokens: 100, totalTokens: 1_100 };
+      usage.recordLlmUsage({ scopeKey: 's', lane: 'chat', model: 'gpt-5.6-luna', ...spent, estimatedCostUsd: estimatedOpenAICostUsd('gpt-5.6-luna', spent, {}), occurredAt: 'now' });
+      return scripted.generate(request);
+    } }, { usage }), { mode: 'live', startedAt: '2026-10-05T00:00:00.000Z', clock: () => performance.now() });
+    // 64 calls: 1,000 input at 0.2 and 100 output at 1.2 USD per million; of the input, 800 at a tenth of 0.2.
+    expect(record.cost).toMatchObject({ calls: 64, measured: true, inputTokens: 64_000, cachedInputTokens: 51_200, outputTokens: 6_400, yen: 3.28, yenWithCacheDiscount: 1.8 });
+    expect(reachReportMarkdown(buildReachReport([record], { revision: 'r', mode: 'live', generatedAt: 'now' })))
+      .toContain('| 3.28 (1.8 with cache discount) | 64000 (51200 cached)/6400 |');
   });
 
   it('names the provider as the tool when the chat model fails', async () => {

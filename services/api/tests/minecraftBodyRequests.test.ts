@@ -21,6 +21,7 @@ import { minecraftBodyRoute } from '../src/serverMinecraftBodyRoute.js';
 import { asksAboutMinecraftBody } from '../src/shannonToolSession.js';
 import { toolSessionMemory } from '../src/shannonToolTypes.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { promptOf } from './modelPrompt.js';
 
 const DEVICE = 'minebot-dev';
 const OWNER_UUID = 'b9191317-c52d-4d67-85fe-ab831e6db146';
@@ -348,11 +349,11 @@ describe('one mind: the phone, the game chat and the result', () => {
     requests.progress('owner', DEVICE, queued.request.id, { phase: 'started' });
     requests.report('owner', DEVICE, queued.request.id, { outcome: 'done', gained: [{ item: 'oak_log', count: 16 }] });
     const asked = await chat('木材集まった？');
-    expect(asked.systemPrompt).toContain('[マイクラの体で起きたこと]');
-    expect(asked.systemPrompt).toContain('やり終えた（手に入れたもの: オークの原木 16個）');
+    expect(promptOf(asked)).toContain('[マイクラの体で起きたこと]');
+    expect(promptOf(asked)).toContain('やり終えた（手に入れたもの: オークの原木 16個）');
     // With anyone else present it is not given, and no tool is.
     const shared = await chat('木材集まった？', { audience: 'others' });
-    expect(shared.systemPrompt).not.toContain('[マイクラの体で起きたこと]');
+    expect(promptOf(shared)).not.toContain('[マイクラの体で起きたこと]');
     expect(shared.tools).toBeUndefined();
     await done();
   });

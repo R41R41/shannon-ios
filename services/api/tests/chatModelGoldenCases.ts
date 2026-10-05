@@ -11,6 +11,10 @@ export const GOLDEN_REQUESTS: Record<string, { request: ShannonChatModelRequest;
   placeSearch: { request: { ...GOLDEN_BASE, useWebSearch: true, placeSearch: { latitude: 34.7, longitude: 137.7 } } },
   placeWithoutLocation: { request: { ...GOLDEN_BASE, placeSearch: {} } },
   host: { request: GOLDEN_BASE, agentHostHint: 'shannon-vm', model: 'gpt-test-1' },
+  // Her identity, what she knows of the owner, and the turn's context (`ShannonPromptLayers`), with every block of one turn.
+  layered: { request: { ...GOLDEN_BASE, profilePrompt: 'profile prompt', turnContext: 'turn context',
+    history: [{ role: 'user', content: 'おはよう' }, { role: 'assistant', content: 'おはようございます。' }], priorThreadSummary: '朝の挨拶をした',
+    generateThreadTitle: true, attachments: [{ name: 'notes.md', mimeType: 'text/markdown', text: '本文' }] } },
 };
 
 const turn = (extra: Record<string, unknown> = {}) => ({

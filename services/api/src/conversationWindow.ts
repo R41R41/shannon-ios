@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { isOwnerOnly, type CompanionStateSnapshot, type MemoryAudience } from '@shannon/cognition';
 import type { ShannonConversationItem } from './chatModel.js';
 import { earlierConversationSummaryInstructions } from './chatModelSupport.js';
@@ -26,6 +27,30 @@ export interface ReplayRule {
   olderCharacters: number;
   /** Spoken text: whitespace runs become one space and an empty message is dropped. */
   spoken: boolean;
+  /** Keeps the oldest replayed message still from turn to turn (`stableWindowStart`); absent, the window slides by one. */
+  stableHead?: StableHead;
+}
+
+/**
+ * Where a full window may start (Syzygy ADR-0003 principle 4, owner decision 2026-10-06). When the budget is exceeded the
+ * window does not drop one message per turn: it starts at a boundary, a message chosen by its own text (a digest of its
+ * role and words, so a message is a boundary or not whatever comes after it), with a chance of its length over
+ * `characters` plus one over `messages`. Boundaries are therefore about `characters` characters, and at most `messages`
+ * messages, apart on average, and the start stays where it is until the budget passes it; then the window drops to the next
+ * boundary. That is the lower-water mark: a full window holds the budget less about one stretch between boundaries, never
+ * more than the budget, and the provider's cache keeps the history from its start for the turns in between.
+ */
+export interface StableHead {
+  characters: number;
+  messages: number;
+}
+
+/**
+ * A quarter of the budget, and a quarter of the message limit: a full window holds about three quarters of the budget, and
+ * its start stays put while about a quarter of the budget of new messages arrives (some ten text turns at the default 12,000).
+ */
+export function stableHeadFor(budgetCharacters: number): StableHead {
+  return { characters: Math.max(1, Math.floor(budgetCharacters / 4)), messages: Math.max(1, Math.floor(REPLAY_MAXIMUM_MESSAGES / 4)) };
 }
 
 export const REPLAY_BUDGET_DEFAULT = 12_000;
@@ -41,12 +66,12 @@ export const REPLAY_SUMMARY_CHARACTERS = 600;
  * budget lasts.
  */
 export function textReplayRule(budgetCharacters = REPLAY_BUDGET_DEFAULT): ReplayRule {
-  return { budgetCharacters, maximumMessages: REPLAY_MAXIMUM_MESSAGES, minimumMessages: 20, olderCharacters: 1_500, spoken: false };
+  return { budgetCharacters, maximumMessages: REPLAY_MAXIMUM_MESSAGES, minimumMessages: 20, olderCharacters: 1_500, spoken: false, stableHead: stableHeadFor(budgetCharacters) };
 }
 
 /** Voice: every message clipped to 600 characters as before; the newest 8 (the old maximum) always. */
 export function voiceReplayRule(budgetCharacters = REPLAY_BUDGET_DEFAULT): ReplayRule {
-  return { budgetCharacters, maximumMessages: REPLAY_MAXIMUM_MESSAGES, minimumMessages: 8, recentCharacters: 600, olderCharacters: 600, spoken: true };
+  return { budgetCharacters, maximumMessages: REPLAY_MAXIMUM_MESSAGES, minimumMessages: 8, recentCharacters: 600, olderCharacters: 600, spoken: true, stableHead: stableHeadFor(budgetCharacters) };
 }
 
 /** `SHANNON_CONVERSATION_REPLAY_CHARACTERS` and `SHANNON_VOICE_REPLAY_CHARACTERS`, each held to 2,000…60,000. */
@@ -78,20 +103,67 @@ export interface ReplayWindow {
 
 /** The newest contiguous run of `messages` (oldest first) that the rule replays. */
 export function replayWindow(messages: readonly ShannonConversationItem[], rule: ReplayRule): ReplayWindow {
-  const history: ShannonConversationItem[] = [];
+  const kept: Array<{ index: number; item: ShannonConversationItem }> = [];
   let characters = 0;
   let start = messages.length;
-  for (let index = messages.length - 1; index >= 0 && history.length < rule.maximumMessages; index -= 1) {
+  for (let index = messages.length - 1; index >= 0 && kept.length < rule.maximumMessages; index -= 1) {
     const message = messages[index]!;
-    const recent = history.length < rule.minimumMessages;
+    const recent = kept.length < rule.minimumMessages;
     const content = bounded(message.content, recent ? rule.recentCharacters : rule.olderCharacters, rule.spoken);
     if (!content) { start = index; continue; }
     if (!recent && characters + content.length > rule.budgetCharacters) break;
-    history.push({ role: message.role, content });
+    kept.push({ index, item: { role: message.role, content } });
     characters += content.length;
     start = index;
   }
-  return { history: history.reverse(), start, characters };
+  kept.reverse();
+  // Nothing left out: the whole thread is replayed and its start is the thread's.
+  const from = start > 0 && rule.stableHead ? stableWindowStart(messages, kept, rule.minimumMessages, rule.stableHead) : 0;
+  const history = kept.slice(from).map(entry => entry.item);
+  return {
+    history, start: from ? kept[from]!.index : start,
+    characters: from ? history.reduce((sum, item) => sum + item.content.length, 0) : characters,
+  };
+}
+
+/**
+ * Of a window that left messages out (`kept`, oldest first), how many of its oldest messages to leave out too, so that it
+ * starts at a boundary (`StableHead`). The newest `minimumMessages` always stay. When the next boundary is further than two
+ * stretches away, nothing more is left out and the window slides as before until a boundary comes near.
+ */
+function stableWindowStart(
+  messages: readonly ShannonConversationItem[], kept: readonly { index: number; item: ShannonConversationItem }[], minimumMessages: number, head: StableHead,
+): number {
+  let skipped = 0;
+  for (let position = 0; position < kept.length - minimumMessages; position += 1) {
+    if (skipped > 2 * head.characters || position > 2 * head.messages) return 0;
+    const message = messages[kept[position]!.index]!;
+    if (isWindowBoundary(message, head)) return position;
+    skipped += kept[position]!.item.content.length;
+  }
+  return 0;
+}
+
+/**
+ * The furthest the window that now starts at `start` can start after its next drop: the next boundary after it (a full
+ * window drops to a boundary, `stableWindowStart`), or the next message when there is none or the rule has no stable head.
+ * The replay summary covers in advance everything before the boundary after that one (`conversationReplaySummary.ts`),
+ * which is what it takes for an ordinary turn not to miss a message in both; see there for what can still slip.
+ */
+export function nextWindowStart(messages: readonly ShannonConversationItem[], rule: ReplayRule, start: number): number {
+  if (!rule.stableHead) return start + 1;
+  for (let index = start + 1; index < messages.length; index += 1) {
+    const message = messages[index]!;
+    if (bounded(message.content, rule.olderCharacters, rule.spoken) && isWindowBoundary(message, rule.stableHead)) return index;
+  }
+  return start + 1;
+}
+
+/** Whether a message may begin a full window: decided by its role and words alone (`StableHead`). */
+export function isWindowBoundary(message: ShannonConversationItem, head: StableHead): boolean {
+  const chance = Math.min(1, message.content.length / head.characters + 1 / head.messages);
+  const draw = createHash('sha256').update(`${message.role}\n${message.content}`).digest().readUInt32BE(0) / 0x1_0000_0000;
+  return draw < chance;
 }
 
 function bounded(content: string, limit: number | undefined, spoken: boolean): string {
@@ -107,8 +179,8 @@ export interface ConversationReplay extends ReplayWindow {
   truncated: boolean;
   /** The replay summary, present only when the window is truncated and the summary may be used here. */
   summary?: string;
-  /** The model request fields: the history, and the system prompt with the summary block when there is one. */
-  request(systemPrompt: string): { systemPrompt: string; history: ShannonConversationItem[] };
+  /** The model request fields: the history, and the turn's context with the summary block and the trace block when there are. */
+  request(turnContext: string): { turnContext?: string; history: ShannonConversationItem[] };
 }
 
 /** Where the replay reads what her tools did in the replayed turns (`shannonToolTurns.ts`). */
@@ -121,7 +193,7 @@ export interface ToolTraceReader {
  * (`visibleReplayMessages`), the budget second, so a forgotten or withheld turn is never replayed
  * and never counted.
  *
- * With `tools` and the owner alone, what her tools did in the replayed turns follows the system prompt as a block of
+ * With `tools` and the owner alone, what her tools did in the replayed turns follows the turn's context as a block of
  * its own (`toolTracePrompt`), inside the budget: when it does not fit beside the window, older messages make room.
  * The caller passes `tools` only while the server itself knows nobody else is there (`toolTraceReader`). A trace goes
  * with its stored turn, and only while both his words and her reply of that turn are replayed, so a turn that is
@@ -151,10 +223,10 @@ export function conversationReplay(
   const history = window.history;
   return {
     ...window, truncated, ...(summary ? { summary } : {}),
-    request: systemPrompt => ({
-      systemPrompt: [summary ? `${systemPrompt}\n\n${earlierConversationSummaryInstructions(summary)}` : systemPrompt, toolBlock].filter(Boolean).join('\n\n'),
-      history,
-    }),
+    request: turnContext => {
+      const context = [turnContext, summary ? earlierConversationSummaryInstructions(summary) : '', toolBlock].filter(Boolean).join('\n\n');
+      return { ...(context ? { turnContext: context } : {}), history };
+    },
   };
 }
 

@@ -7,13 +7,14 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import { OpenAIResponsesChatModel, type ShannonChatModelRequest, type ShannonVoiceModelRequest } from '../src/chatModel.js';
 import {
   REPLAY_BUDGET_DEFAULT, REPLAY_BUDGET_MAXIMUM, REPLAY_BUDGET_MINIMUM, REPLAY_MAXIMUM_MESSAGES, REPLAY_SUMMARY_CHARACTERS,
-  conversationReplay, replayBudgets, replayWindow, textReplayRule, voiceReplayRule,
+  conversationReplay, isWindowBoundary, replayBudgets, replayWindow, stableHeadFor, textReplayRule, voiceReplayRule, type ReplayRule,
 } from '../src/conversationWindow.js';
 import { earlierConversationSummaryInstructions } from '../src/chatModelSupport.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
 import { visibleConversationHistory } from '../src/memoryVisibility.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { LocalVoiceDecisionGateway, type VoiceDecisionInput } from '../src/voiceDecision.js';
+import { promptOf } from './modelPrompt.js';
 
 const at = '2026-10-02T03:00:00.000Z';
 const delegations = '/v1/voice/live/delegations';
@@ -81,7 +82,7 @@ describe('the production voice transcript of 2026-10-02', () => {
     expect(said(request)).toHaveLength(10);
     // The rule it replaces (the newest four messages) had already lost the date.
     expect(said({ history: request.history.slice(-4) }).join('')).not.toContain('デート');
-    expect(request.systemPrompt).not.toContain(SUMMARY_HEADER);
+    expect(promptOf(request)).not.toContain(SUMMARY_HEADER);
   });
 });
 
@@ -122,11 +123,47 @@ describe('a long game of shiritori', () => {
 describe('the budget rule', () => {
   const message = (index: number, length: number) => ({ role: index % 2 ? 'assistant' as const : 'user' as const, content: `${String(index).padStart(4, '0')}${'あ'.repeat(length - 4)}` });
 
+  /** The rule without its stable head: the window slides by one message as the budget fills. */
+  const sliding = (rule: ReplayRule): ReplayRule => ({ ...rule, stableHead: undefined });
+
   it('drops the oldest messages first and keeps the newest in order', () => {
     const messages = Array.from({ length: 100 }, (_, index) => message(index, 300));
-    const window = replayWindow(messages, textReplayRule(12_000));
+    const window = replayWindow(messages, sliding(textReplayRule(12_000)));
     expect(window.history).toEqual(messages.slice(60));
     expect(window).toMatchObject({ start: 60, characters: 12_000 });
+    // With the stable head it starts at the first boundary from there, inside the budget.
+    const stable = replayWindow(messages, textReplayRule(12_000));
+    const head = stableHeadFor(12_000);
+    expect(stable.start).toBeGreaterThanOrEqual(60);
+    expect(isWindowBoundary(messages[stable.start]!, head)).toBe(true);
+    expect(messages.slice(60, stable.start).some(item => isWindowBoundary(item, head))).toBe(false);
+    expect(stable.history).toEqual(messages.slice(stable.start));
+    expect(stable.characters).toBe(300 * (100 - stable.start));
+  });
+
+  it('keeps its start for many turns of a long Talk, inside the budget, and drops to a boundary only when the budget passes it', () => {
+    for (const [rule, length] of [[textReplayRule(12_000), 120], [textReplayRule(2_000), 15], [voiceReplayRule(12_000), 80]] as const) {
+      const messages = Array.from({ length: 1_200 }, (_, index) => message(index, length + (index * 7) % 40));
+      const starts: number[] = [];
+      let held = 0;
+      let full = 0;
+      let moved = 0;
+      for (let count = 2; count <= messages.length; count += 2) {
+        const window = replayWindow(messages.slice(0, count), rule);
+        expect(window.characters).toBeLessThanOrEqual(rule.budgetCharacters);
+        const tight = replayWindow(messages.slice(0, count), sliding(rule));
+        expect(window.start).toBeGreaterThanOrEqual(tight.start);
+        if (tight.start > 0) { full += 1; held += window.characters / tight.characters; }
+        if (tight.start > 0 && starts.at(-1) !== window.start) moved += 1;
+        starts.push(window.start);
+      }
+      // The start only moves forward. Once the window is full, sliding moves it on every turn; with the stable head it stays
+      // on most turns (measured: about 73 to 94 in 100 for these Talks), so the provider's cache keeps the history.
+      expect([...starts].sort((left, right) => left - right)).toEqual(starts);
+      expect(1 - moved / full).toBeGreaterThan(0.65);
+      // A full window still holds most of what the budget allows (measured: about 85 in 100).
+      expect(held / full).toBeGreaterThan(0.8);
+    }
   });
 
   it('always replays the newest messages even when they alone exceed the budget', () => {
@@ -152,7 +189,10 @@ describe('the budget rule', () => {
   it('never replays more than 400 messages', () => {
     const messages = Array.from({ length: 900 }, (_, index) => message(index, 4));
     for (const rule of [textReplayRule(REPLAY_BUDGET_MAXIMUM), voiceReplayRule(REPLAY_BUDGET_MAXIMUM)]) {
-      expect(replayWindow(messages, rule).history).toEqual(messages.slice(500));
+      expect(replayWindow(messages, sliding(rule)).history).toEqual(messages.slice(500));
+      const stable = replayWindow(messages, rule);
+      expect(stable.start).toBeGreaterThanOrEqual(500);
+      expect(stable.history).toEqual(messages.slice(stable.start));
     }
   });
 
@@ -172,7 +212,9 @@ describe('the budget rule', () => {
     expect((await h.voice('続けて')).history).toHaveLength(80);
     vi.stubEnv('SHANNON_VOICE_REPLAY_CHARACTERS', '2000');
     const smaller = await h.voice('続けて');
-    expect(smaller.history).toHaveLength(20);
+    // 20 messages fill 2,000 characters; the window starts at a boundary among them (`StableHead`), the newest 8 always kept.
+    expect(smaller.history.length).toBeLessThanOrEqual(20);
+    expect(smaller.history.length).toBeGreaterThanOrEqual(8);
     expect(said(smaller).at(-1)).toContain(word(79));
   });
 });
@@ -215,7 +257,7 @@ describe('a short thread sends what it sent before', () => {
     const request = await h.chat('次の質問', '次の答え');
     expect(before).toHaveLength(18);
     expect(request.history).toEqual(before);
-    expect(request.systemPrompt).not.toContain(SUMMARY_HEADER);
+    expect(promptOf(request)).not.toContain(SUMMARY_HEADER);
     const body = async (history: ShannonChatModelRequest['history']) => {
       let sent = '';
       const fetcher = async (_url: unknown, init?: RequestInit) => {
@@ -260,7 +302,7 @@ describe('helpers keep their small windows', () => {
     h.store.saveReplaySummary('owner', 'thread', { summary: 'ゼブラ要約', coveredThroughMessageId: 'none', chainStartedAt: at, updatedAt: at });
     const request = await h.voice('シャノン、こんにちは', { participantMode: 'guest' });
     expect(request.history).toEqual([]);
-    expect(request.systemPrompt).not.toContain(SUMMARY_HEADER);
-    expect(request.systemPrompt).not.toContain('ゼブラ要約');
+    expect(promptOf(request)).not.toContain(SUMMARY_HEADER);
+    expect(promptOf(request)).not.toContain('ゼブラ要約');
   });
 });

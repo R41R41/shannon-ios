@@ -4,7 +4,7 @@ import { sharesLongPassage } from '../src/autonomyLoopSteps.js';
 import { planFromThought } from '../src/autonomyLoopPlan.js';
 import { BoundedPublicReader, htmlToText, parseRobots, robotsAllows } from '../src/autonomyReader.js';
 import {
-  AUTONOMY_CREDENTIAL_VARIABLES, AutonomyModelError, configuredAutonomyTextModel, dedicatedAutonomyCredential, resolveAutonomyModel,
+  AUTONOMY_CREDENTIAL_VARIABLES, AutonomyModelError, autonomyPromptCacheKey, configuredAutonomyTextModel, dedicatedAutonomyCredential, resolveAutonomyModel,
 } from '../src/autonomyTextModel.js';
 
 type FetchCall = { url: string; init: RequestInit };
@@ -166,7 +166,26 @@ describe('model adapters for her own activity', () => {
     expect(calls[0]!.init.headers).toEqual({ authorization: 'Bearer dedicated-openai-credential', 'content-type': 'application/json' });
     expect(JSON.parse(calls[0]!.init.body as string)).toEqual({
       model: 'gpt-5.6-luna', instructions: '規則', input: '材料', text: { format: { type: 'json_object' } }, max_output_tokens: 500, store: false,
+      // Routed by a digest of the system text, as the conversation routes by a digest of its scope.
+      prompt_cache_key: autonomyPromptCacheKey('規則'),
     });
+    expect(autonomyPromptCacheKey('規則')).toMatch(/^shannon_autonomy_[0-9a-f]{32}$/u);
+    expect(autonomyPromptCacheKey('規則')).not.toBe(autonomyPromptCacheKey('別の規則'));
+  });
+
+  it('records what each provider read from its prompt cache, and charges nothing less for it', async () => {
+    const openai = fakeFetch(() => Response.json({
+      output: [{ type: 'message', content: [{ type: 'output_text', text: '{"steps":[]}' }] }],
+      usage: { input_tokens: 800, output_tokens: 90, input_tokens_details: { cached_tokens: 512 } },
+    }));
+    expect(await configuredAutonomyTextModel(environment, openai.fetcher).generate({ model: 'gpt-5.6-luna', system: '規則', prompt: '材料', maximumOutputTokens: 500 }))
+      .toEqual({ text: '{"steps":[]}', usage: { inputTokens: 800, outputTokens: 90, cachedInputTokens: 512 } });
+    const gemini = fakeFetch(() => Response.json({
+      candidates: [{ content: { parts: [{ text: '{"steps":[]}' }] } }],
+      usageMetadata: { promptTokenCount: 1_200, cachedContentTokenCount: 1_024, candidatesTokenCount: 30 },
+    }));
+    expect(await configuredAutonomyTextModel(environment, gemini.fetcher).generate({ model: 'gemini-3.8-flash', system: '規則', prompt: '材料', maximumOutputTokens: 500 }))
+      .toEqual({ text: '{"steps":[]}', usage: { inputTokens: 1_200, outputTokens: 30, cachedInputTokens: 1_024 } });
   });
 
   it('says when the provider cut the reply off at the output ceiling, also when reasoning used all of it', async () => {
@@ -249,7 +268,7 @@ describe('model adapters for her own activity', () => {
     const openai = fakeFetch(() => Response.json({ output: [{ type: 'message', content: [{ type: 'output_text', text: '{"steps":[]}' }] }], usage: { input_tokens: 8, output_tokens: 2 } }));
     await configuredAutonomyTextModel(environment, openai.fetcher).generate({ model: 'gpt-5.6-luna', system: '規則', prompt: '材料', maximumOutputTokens: 500, reasoning: 'low' });
     expect(JSON.parse(openai.calls[0]!.init.body as string)).toEqual({
-      model: 'gpt-5.6-luna', instructions: '規則', input: '材料', text: { format: { type: 'json_object' } }, max_output_tokens: 500, reasoning: { effort: 'low' }, store: false,
+      model: 'gpt-5.6-luna', instructions: '規則', input: '材料', text: { format: { type: 'json_object' } }, max_output_tokens: 500, reasoning: { effort: 'low' }, store: false, prompt_cache_key: autonomyPromptCacheKey('規則'),
     });
   });
 

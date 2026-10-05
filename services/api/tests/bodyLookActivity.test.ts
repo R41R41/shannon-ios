@@ -29,6 +29,7 @@ import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import type { BodyPresence } from '../src/shannonBody.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
+import { promptOf } from './modelPrompt.js';
 
 /**
  * Stage 2 of looking at the room: a look she takes in her own time. The activity loop and the
@@ -68,7 +69,7 @@ class FakeChat implements ShannonChatModel {
     return { mode: this.mode, model: this.model, reply: 'はい。' };
   }
   async generateVoice(request: ShannonVoiceModelRequest) {
-    this.voicePrompts.push(request.systemPrompt);
+    this.voicePrompts.push(promptOf(request));
     return { mode: this.mode, model: this.model, reply: 'はい。' };
   }
 }
@@ -389,7 +390,7 @@ describe('one look in her own time, across two processes', () => {
     };
     const companion = { deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null, companionPresent: true } };
     // Nothing seen yet: no block anywhere.
-    expect((await h.chat('おはよう')).request.systemPrompt).not.toContain('体のカメラで見たこと');
+    expect(promptOf((await h.chat('おはよう')).request)).not.toContain('体のカメラで見たこと');
 
     await h.bodyShowing();
     h.model.plans = [LOOK_PLAN];
@@ -397,8 +398,8 @@ describe('one look in her own time, across two processes', () => {
 
     // The owner alone, text and voice: the note, when, and that it is her own look.
     const alone = await h.chat('今日は何をしていましたか');
-    expect(alone.request.systemPrompt).toContain(`${HEADER}\n- 10月2日 10時: ${LOOK_TEXT}`);
-    expect(alone.request.systemPrompt).not.toContain('【機微');
+    expect(promptOf(alone.request)).toContain(`${HEADER}\n- 10月2日 10時: ${LOOK_TEXT}`);
+    expect(promptOf(alone.request)).not.toContain('【機微');
     expect(await voice({})).toContain(`${HEADER}\n- 10月2日 10時: ${LOOK_TEXT}`);
     expect(h.api.realtimeVoiceSession(scope).instructions).toContain(`- 10月2日 10時: ${LOOK_TEXT}`);
 
@@ -406,7 +407,7 @@ describe('one look in her own time, across two processes', () => {
     // the same gate as the rest of memory. The note reaches the model marked, with the speak-time check; nothing else of her own time does.
     const shared = await h.chat('みんな来ました', { audience: 'others', threadId: alone.body.threadId });
     const companionTurn = await voice(companion);
-    for (const prompt of [shared.request.systemPrompt, companionTurn]) {
+    for (const prompt of [promptOf(shared.request), companionTurn]) {
       expect(prompt).toContain(`${GUARDED}\n${MARKED}`);
       expect(prompt).not.toContain(`- 10月2日 10時: ${LOOK_TEXT}`);
       expect(prompt).not.toContain(HEADER);

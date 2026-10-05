@@ -20,6 +20,7 @@ import {
 import {
   VOICE_ROOM_LOOK_READY_PROMPT, asksForLookAloud, lookRequest, voiceRoomLookPrompt, voiceRoomLookTurn, voiceRoomLookUnavailablePrompt,
 } from '../src/voiceRoomLook.js';
+import { promptOf } from './modelPrompt.js';
 
 const scope = 'owner';
 const START = '2026-10-02T09:00:00.000Z';
@@ -103,7 +104,7 @@ function harness(options: { config?: Partial<BodyLookConfig>; ingestEnabled?: bo
     });
     expect(response.status).toBe(200);
     const body = response.body as { reply: string; threadId: string; voicePlan: { shouldRespond: boolean } };
-    return { body, prompt: model.voiceRequests.length > before ? model.voiceRequests.at(-1)!.systemPrompt : '' };
+    return { body, prompt: model.voiceRequests.length > before ? promptOf(model.voiceRequests.at(-1)!) : '' };
   };
   const ready = async () => { await camera(); await presence(); };
   const openLook = async () => (await presence()).look ?? null;

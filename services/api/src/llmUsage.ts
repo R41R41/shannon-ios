@@ -73,6 +73,27 @@ export function estimatedOpenAICostUsd(
   return roundUsd((usage.inputTokens * prices.input + usage.outputTokens * prices.output) / 1_000_000);
 }
 
+/**
+ * Assumed share of the input price that the provider charges for input read from its prompt cache, when
+ * `SHANNON_LLM_CACHED_INPUT_USD_PER_MILLION` does not set the price itself (the GPT-5 family charges a tenth).
+ */
+export const CACHED_INPUT_PRICE_SHARE = 0.1;
+
+/**
+ * The cost of a call with the provider's discount for cached input applied, for reports that compare the two
+ * (`reachConversation.ts`). Nothing that guards a budget uses it: `estimatedOpenAICostUsd` stays at the full price.
+ */
+export function estimatedOpenAICostWithCacheUsd(
+  model: string,
+  usage: ResponseUsage,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): number {
+  const full = estimatedOpenAICostUsd(model, { ...usage, inputTokens: 1_000_000, outputTokens: 0 }, environment);
+  const cachedPrice = positiveNumber(environment.SHANNON_LLM_CACHED_INPUT_USD_PER_MILLION) ?? full * CACHED_INPUT_PRICE_SHARE;
+  const cached = Math.min(usage.inputTokens, usage.cachedInputTokens);
+  return roundUsd(estimatedOpenAICostUsd(model, { ...usage, inputTokens: usage.inputTokens - cached }, environment) + cached * cachedPrice / 1_000_000);
+}
+
 export function utcMonthKey(date = new Date()): string {
   return date.toISOString().slice(0, 7);
 }

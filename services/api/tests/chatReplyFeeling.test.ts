@@ -21,6 +21,7 @@ import { emotionTiming } from '../src/emotionTiming.js';
 import { storedVoiceFace } from '../src/voiceEmotionPlan.js';
 import { AFFECT_INTENSITY_STEPS, affectIntensityOf, affectIntensityValue } from '../src/voiceDecisionValues.js';
 import { GOLDEN_BASE } from './chatModelGoldenCases.js';
+import { promptOf } from './modelPrompt.js';
 
 // Whole conversations through the kernel on a loaded machine: a short timeout says nothing about the code.
 vi.setConfig({ testTimeout: 120_000 });
@@ -84,7 +85,7 @@ function harness(start = NIGHT) {
   };
   const advance = (milliseconds: number) => { clock.at = at(clock.at, milliseconds); };
   const state = () => stateStore.snapshot(scope);
-  const prompt = () => model.requests.at(-1)!.systemPrompt;
+  const prompt = () => promptOf(model.requests.at(-1)!);
   const underneath = (kind: string) => livingLingering(state(), now(), emotionTiming()).find(item => item.feeling.kind === kind);
   const present = () => presentShannonFeeling(state(), now(), emotionTiming());
   return { clock, now, api, model, stateStore, chat, advance, state, prompt, underneath, present, settle };
@@ -570,7 +571,7 @@ describe('guests and other people present never move her feeling toward the owne
     control.advance(MINUTE);
     expect(shared.messageEmotion).toEqual((await control.chat('友達と一緒にいるよ', QUIET, undefined, { audience: 'others' })).messageEmotion);
     expect(shared.state.lingering).toBeUndefined();
-    expect(shared.systemPrompt).toBe('');
+    expect(promptOf(shared)).toBe('');
   });
 
   it('gives a decided feeling to no caller but the text turn of the owner alone', () => {
@@ -653,8 +654,11 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
     // and on the emotion-kind branch (2026-10-05), whose `messageEmotion` carries `kind` (with every `kind` left out the trace is 3fe2ff59…);
     // and on the own-actions branch (2026-10-05), whose capability text gains one answering rule (she does not go along with a
     // false premise about something she did on her own); without that line the trace is 73f9d624… (none of these four turns
-    // says she reached out, so the `[ボクが自分からしたこと]` block is in none of them).
-    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('b61f391ac62d86690bc11c5dd1a6c14de0c0e921aed12c108b2bd70705cac4cf');
+    // says she reached out, so the `[ボクが自分からしたこと]` block is in none of them); and on the prompt-cache branch
+    // (2026-10-06, Syzygy ADR-0003 principle 4), whose model requests carry her prompt in layers (`ShannonPromptLayers`):
+    // `systemPrompt` is her identity alone, and the shared state and everything after it are `turnContext`. With each
+    // request's layers joined back into `systemPrompt` (`promptOf`) the trace is b61f391a… again: no text changed.
+    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('0cb946e1f22c2d75712fdbdf9d63e9daa90aa2597c07d21e9097504c311a352c');
     for (const request of off.seen.requests) expect(request).not.toHaveProperty('offerReplyFeeling');
     // What 7e227e6 does with these four turns: a cue is 0.52 and a mood, no cue is nothing, and nothing lingers for days.
     expect(off.h.state().lingering).toMatchObject([{ kind: 'sulky', span: 'mood', strength: 0.52 }]);

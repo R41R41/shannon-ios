@@ -91,6 +91,10 @@ export interface ReachCost {
   measured: boolean;
   /** Characters of every request the model was given: the basis of the live estimate. */
   promptCharacters: number;
+  /** Of `inputTokens`, what the provider read from its prompt cache (absent where the scenario does not know). */
+  cachedInputTokens?: number;
+  /** `yen` with the provider's discount for cached input applied; `yen` itself prices every input token in full. */
+  yenWithCacheDiscount?: number;
 }
 
 export type ReachRunStatus = 'passed' | 'failed' | 'pending' | 'invalid';

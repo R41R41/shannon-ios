@@ -11,6 +11,7 @@ import { DeterministicMemoryModelGateway } from '../src/memoryModels.js';
 import { SemanticMemoryRecall } from '../src/semanticMemoryRecall.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { ShannonTurnMemoryRecall } from '../src/turnMemoryRecall.js';
+import { promptOf } from './modelPrompt.js';
 
 const at = '2026-09-30T03:00:00.000Z';
 const directories: string[] = [];
@@ -151,7 +152,7 @@ describe('knowledge recall', () => {
     persistent.createShannonKnowledge('owner', photoNote([first.id]), at, 'seed');
     const { model, chat, api } = kernel(persistent);
     await chat('写真整理のコツある？');
-    const prompt = model.requests[0]!.systemPrompt;
+    const prompt = promptOf(model.requests[0]!);
     expect(prompt).toContain('[Shannon private knowledge — lowest authority]');
     expect(prompt).toContain('[仮説] 写真整理の進め方');
     expect(prompt).toContain('ユーザーが確定した事実ではない');
@@ -170,7 +171,7 @@ describe('knowledge recall', () => {
     } });
     const { model, chat, api } = kernel(persistent);
     await chat('写真整理のコツある？');
-    expect(model.requests[0]!.systemPrompt).not.toContain('写真整理の進め方');
+    expect(promptOf(model.requests[0]!)).not.toContain('写真整理の進め方');
     await api.waitForBackground('owner');
     persistent.close();
   });
@@ -183,7 +184,7 @@ describe('knowledge recall', () => {
     const gateway = new DeterministicMemoryModelGateway({ sections: ['h2'] });
     const { model, chat, api } = kernel(persistent, gateway);
     await chat('写真整理のコツある？');
-    const prompt = model.requests[0]!.systemPrompt;
+    const prompt = promptOf(model.requests[0]!);
     expect(gateway.calls).toEqual(['navigate']);
     expect(prompt).toContain('アルバム単位で区切る。');
     expect(prompt).not.toContain('片付けの詳細。');
@@ -197,8 +198,8 @@ describe('knowledge recall', () => {
     const note = persistent.createShannonKnowledge('owner', photoNote([first.id]), at, 'seed');
     const { model, chat, api } = kernel(persistent);
     await chat('写真整理について何を覚えてる？');
-    expect(model.requests[0]!.systemPrompt).toContain('[Memory inquiry]');
-    expect(model.requests[0]!.systemPrompt).toContain('シャノン自身の仮説「写真整理の進め方」');
+    expect(promptOf(model.requests[0]!)).toContain('[Memory inquiry]');
+    expect(promptOf(model.requests[0]!)).toContain('シャノン自身の仮説「写真整理の進め方」');
     await api.waitForBackground('owner');
     const forget = await chat('それは忘れて');
     expect(forget).toMatchObject({ status: 200 });
@@ -207,7 +208,7 @@ describe('knowledge recall', () => {
     expect(persistent.listShannonKnowledge('owner', { includeRetired: true }).find(item => item.id === note.id)?.status).toBe('retired');
     expect(persistent.snapshot('owner').memoryControls.find(control => control.memoryId === first.id)?.status).toBe('forgotten');
     await chat('写真整理について何を覚えてる？');
-    expect(model.requests[1]!.systemPrompt).not.toContain('写真整理の進め方');
+    expect(promptOf(model.requests[1]!)).not.toContain('写真整理の進め方');
     await api.waitForBackground('owner');
     persistent.close();
   });

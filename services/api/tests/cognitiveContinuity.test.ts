@@ -14,6 +14,7 @@ import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLiteWorldStore } from '../src/worldStore.js';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModelRequest } from '../src/chatModel.js';
+import { promptOf } from './modelPrompt.js';
 
 const at = '2026-09-24T12:00:00.000Z';
 const directories: string[] = [];
@@ -110,13 +111,13 @@ describe('cognitive continuity regressions', () => {
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', message: 'ノートと「写真整理」のタスクを見て' } });
     await api.dispatch({ method: 'POST', path: '/v1/voice/live/delegations', body: { scopeKey: 'owner', transcript: 'ノートと「写真整理」のタスクを見て' } });
     for (const request of requests) {
-      expect(request.systemPrompt).toContain('PRIVATE_NOTE_MARKER');
-      expect(request.systemPrompt).toContain('PRIVATE_TASK_MARKER');
+      expect(promptOf(request)).toContain('PRIVATE_NOTE_MARKER');
+      expect(promptOf(request)).toContain('PRIVATE_TASK_MARKER');
     }
     await api.dispatch({ method: 'POST', path: '/v1/voice/live/delegations', body: { scopeKey: 'owner', participantMode: 'guest', transcript: 'ノートと「写真整理」のタスクを見て' } });
     expect(noteReads).toBe(2);
     expect(taskReads).toBe(2);
-    expect(requests.at(-1)?.systemPrompt).not.toContain('PRIVATE_');
+    expect(promptOf(requests.at(-1))).not.toContain('PRIVATE_');
   });
 
   it('survives restart, proposes a due promise once, and never re-notifies a completed promise', () => {

@@ -6,6 +6,7 @@ import { ShannonAutonomyService, type AutonomyOverview } from '../src/autonomySe
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import type { AutonomyActivityDay } from '../src/autonomyActivity.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
+import { promptOf } from './modelPrompt.js';
 
 const scopeKey = 'owner';
 const now = () => '2026-10-02T01:00:00.000Z';
@@ -14,8 +15,8 @@ class PromptRecorder implements ShannonChatModel {
   readonly mode = 'openai' as const;
   readonly model = 'test-model';
   readonly prompts: string[] = [];
-  async generate(request: ShannonChatModelRequest) { this.prompts.push(request.systemPrompt); return { mode: this.mode, model: this.model, reply: '返答です。' }; }
-  async generateVoice(request: ShannonVoiceModelRequest) { this.prompts.push(request.systemPrompt); return { mode: this.mode, model: this.model, reply: '音声の返答です。' }; }
+  async generate(request: ShannonChatModelRequest) { this.prompts.push(promptOf(request)); return { mode: this.mode, model: this.model, reply: '返答です。' }; }
+  async generateVoice(request: ShannonVoiceModelRequest) { this.prompts.push(promptOf(request)); return { mode: this.mode, model: this.model, reply: '音声の返答です。' }; }
 }
 
 function harness(enabled = true) {

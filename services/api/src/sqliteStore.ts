@@ -20,7 +20,7 @@ import type {
   RealtimeVoiceSessionReservation,
   RealtimeVoiceSessionReservationRequest,
 } from './realtimeVoice.js';
-import type { KnowledgeAnswer, KnowledgeRevision, KnowledgeSource, KnowledgeStore, PersonalityProfile } from './knowledgeStore.js';
+import type { KnowledgeAnswer, KnowledgeRevision, KnowledgeSource, KnowledgeStore, LayeredIdentityPrompt, PersonalityProfile } from './knowledgeStore.js';
 import { SQLiteBackgroundJobRepository } from './sqliteBackgroundJobRepository.js';
 import { SQLiteCompanionRepository } from './sqliteCompanionRepository.js';
 import { ensureSummaryLineageSchema, SQLiteConversationRepository } from './sqliteConversationRepository.js';
@@ -117,6 +117,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   knowledgeRevisions(scopeKey: string, answerId?: string): readonly KnowledgeRevision[] { return this.companion.knowledgeRevisions(scopeKey, answerId); }
   personalityProfile(scopeKey: string): PersonalityProfile | null { return this.companion.personalityProfile(scopeKey); }
   promptProjection(scopeKey: string): string | null { return this.companion.promptProjection(scopeKey); }
+  promptProjectionParts(scopeKey: string): LayeredIdentityPrompt | null { return this.companion.promptProjectionParts(scopeKey); }
   recordLlmUsage(event: LlmUsageEvent) { return this.companion.recordLlmUsage(event); }
   backgroundLlmCostUsd(monthKey: string) { return this.companion.backgroundLlmCostUsd(monthKey); }
   backgroundLlmCostUsdForDay(dayKey: string) { return this.companion.backgroundLlmCostUsdForDay(dayKey); }

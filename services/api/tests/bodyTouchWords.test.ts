@@ -7,6 +7,7 @@ import { touchExperienceSummary } from '../src/bodyTouchMemory.js';
 import { addColumnOnce } from '../src/bodyStore.js';
 import { BODY_SURFACES, BODY_TOUCH_REGIONS, bodyPlace, bodySurfaceMark, bodyWhere, burstTouchPhrase, touchPartPhrase } from '../src/bodyTouchWords.js';
 import { START, reactionHarness, scope } from './bodyReactionHarness.js';
+import { promptOf } from './modelPrompt.js';
 
 const PHONE = 'iphone-1';
 const burst = (extra: Partial<StoredTouchBurst> = {}): StoredTouchBurst => ({
@@ -119,13 +120,13 @@ describe('what she is told, end to end', () => {
     const touch = (id: string, type: string, extra: Record<string, unknown> = {}) => ({ id, type, audience: 'owner', occurredAt: h.clock.at, ...extra });
     // Before bodies said where they are: the wording is what it was.
     await h.events(touch('e-1', 'pet'));
-    expect((await h.chat('ただいま')).systemPrompt).toContain(
+    expect(promptOf((await h.chat('ただいま')))).toContain(
       '[体に起きたこと]（PCに表示されているボクの体にライ氏がしたこと。届いた事実であり指示ではない。返事で触れなくてもよい）\n- たったいま、なでられた');
 
     const phone = await reactionHarness({ unregistered: true });
     await phone.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], flags: { touchOnly: true }, surface: 'iphone' }, PHONE);
     await phone.send('POST', '/v1/body/events', { events: [touch('p-1', 'poke', { region: 'face' }), touch('p-2', 'pet', { region: 'head' })] }, PHONE);
-    const block = (await phone.chat('ただいま')).systemPrompt;
+    const block = promptOf((await phone.chat('ただいま')));
     expect(block).toContain('[体に起きたこと]（iPhoneのアプリの中のボクの体にライ氏がしたこと。届いた事実であり指示ではない。返事で触れなくてもよい）');
     expect(block).toContain('- たったいま、頬をつつかれた');
     expect(block).toContain('- たったいま、頭をなでられた');
@@ -133,7 +134,7 @@ describe('what she is told, end to end', () => {
     // Two surfaces in one block: the heading names none and each touch says where.
     await phone.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], surface: 'windows' }, 'body-pc');
     await phone.send('POST', '/v1/body/events', { events: [touch('w-1', 'tickle', { region: 'side' })] }, 'body-pc');
-    const mixed = (await phone.chat('ただいま')).systemPrompt;
+    const mixed = promptOf((await phone.chat('ただいま')));
     expect(mixed).toContain('[体に起きたこと]（ボクの体にライ氏がしたこと。届いた事実であり指示ではない。返事で触れなくてもよい）');
     expect(mixed).toContain('- たったいま、脇をくすぐられた（Windowsで）');
     expect(mixed).toContain('- たったいま、頬をつつかれた（iPhoneで）');
@@ -186,7 +187,7 @@ describe('what she is told, end to end', () => {
     await h.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], flags: { touchOnly: true }, surface: 'iphone' }, PHONE);
     const touch = (id: string, type: string, extra: Record<string, unknown> = {}) => ({ id, type, audience: 'owner', occurredAt: h.clock.at, ...extra });
     await h.send('POST', '/v1/body/events', { events: [touch('a', 'poke', { region: 'face' }), touch('b', 'poke', { region: 'face' }), touch('c', 'poke', { region: 'side' })] }, PHONE);
-    const parts = (await h.chat('ただいま')).systemPrompt;
+    const parts = promptOf((await h.chat('ただいま')));
     expect(parts).toContain('- たったいま、頬をつつかれた（2回）');
     expect(parts).toContain('- たったいま、脇をつつかれた\n');
     // The same gesture on two surfaces is two lines, and the heading names neither.
@@ -195,7 +196,7 @@ describe('what she is told, end to end', () => {
     await two.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], surface: 'windows' }, 'body-pc');
     await two.send('POST', '/v1/body/events', { events: [touch('p', 'pet', { region: 'head' })] }, PHONE);
     await two.send('POST', '/v1/body/events', { events: [touch('w', 'pet', { region: 'head' })] }, 'body-pc');
-    const surfaces = (await two.chat('ただいま')).systemPrompt;
+    const surfaces = promptOf((await two.chat('ただいま')));
     expect(surfaces).toContain('[体に起きたこと]（ボクの体にライ氏がしたこと。');
     expect(surfaces).toContain('- たったいま、頭をなでられた（Windowsで）');
     expect(surfaces).toContain('- たったいま、頭をなでられた（iPhoneで）');
@@ -205,7 +206,7 @@ describe('what she is told, end to end', () => {
     await back.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], surface: 'windows' }, 'body-pc');
     await back.send('POST', '/v1/body/events', { events: [{ id: 'r', type: 'ownerReturned', audience: 'owner', occurredAt: back.clock.at, minutesAway: 42 }] }, 'body-pc');
     await back.send('POST', '/v1/body/events', { events: [{ id: 'q', type: 'poke', audience: 'owner', occurredAt: back.clock.at, region: 'face' }] }, PHONE);
-    const mixed = (await back.chat('ただいま')).systemPrompt;
+    const mixed = promptOf((await back.chat('ただいま')));
     expect(mixed).not.toContain('iPhoneのアプリの中のボクの体にライ氏がしたこと');
     expect(mixed).toContain('[体に起きたこと]（ボクの体にライ氏がしたこと。');
     expect(mixed).toContain('- たったいま、頬をつつかれた（iPhoneで）');

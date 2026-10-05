@@ -13,6 +13,7 @@ import { visibleConversationHistory } from '../src/memoryVisibility.js';
 import { SQLitePeopleMemoryStore } from '../src/peopleMemoryStore.js';
 import { SQLitePersonIdentityStore } from '../src/personIdentity.js';
 import { establishedGuestName, personNameKey } from '../src/voiceGuestNames.js';
+import { promptOf } from './modelPrompt.js';
 
 const delegations = '/v1/voice/gemini/cascade/delegations';
 const calls = '/v1/voice/gemini/cascade/calls';
@@ -32,7 +33,7 @@ class RecordingModel implements ShannonChatModel {
   }
   async generateVoice(request: ShannonVoiceModelRequest) {
     this.all.push(request);
-    if (request.systemPrompt.startsWith('You write Shannon\'s own short memory')) {
+    if (promptOf(request).startsWith('You write Shannon\'s own short memory')) {
       if (this.summary instanceof Error) throw this.summary;
       return { mode: this.mode, model: this.model, reply: this.summary };
     }
@@ -64,7 +65,7 @@ function harness() {
         userUtterance: { id: `${callId}-${index}`, text: transcript, source: 'speech', rawText: transcript,
           callContext: { callId, turns: [...turns], introductionStart: index === 0, addressedByName: true } } } });
       expect(response.status).toBe(200);
-      prompts.push(model.last.systemPrompt);
+      prompts.push(promptOf(model.last));
       turns.push({ role: 'participant', text: transcript }, { role: 'shannon', text: (response.body as { reply: string }).reply });
     }
     const remembered = options.remember === false ? null : await post(calls, { callId, threadId: 'thread', turns, timeZone: 'Asia/Tokyo' });
@@ -75,7 +76,7 @@ function harness() {
     const response = await post('/v1/chat', { threadId, message });
     expect(response.status).toBe(200);
     await api.waitForBackground('owner');
-    return model.last.systemPrompt;
+    return promptOf(model.last);
   };
   const overview = async () => (await api.dispatch({ method: 'GET', path: '/v1/people/memory',
     query: new URLSearchParams({ scopeKey: 'owner' }) })).body as PeopleMemoryOverview;
@@ -205,10 +206,10 @@ describe('remembering a friend from a 「友人も一緒」 call', () => {
     await post(delegations, { threadId: 'thread', transcript: 'はじめまして、ミキと言います', participantMode: 'guest', deviceContext: {
       timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null,
       userUtterance: { id: 'old-1', text: 'はじめまして、ミキと言います', source: 'speech', callContext: { turns: [], introductionStart: true } } } });
-    expect(model.last.systemPrompt).toContain('This call is not being recorded in memory');
+    expect(promptOf(model.last)).toContain('This call is not being recorded in memory');
     // That client's own notice says no owner memory is used, so none is given to it.
-    expect(model.last.systemPrompt).not.toContain('[この場で使ってよいライ氏についての記憶]');
-    expect(model.last.systemPrompt).not.toContain('[Current cognitive context');
+    expect(promptOf(model.last)).not.toContain('[この場で使ってよいライ氏についての記憶]');
+    expect(promptOf(model.last)).not.toContain('[Current cognitive context');
     expect(await overview()).toEqual({ people: [], unnamed: [] });
     expect((await post(calls, { turns: [{ role: 'participant', text: 'こんにちは' }] })).status).toBe(400);
     peopleStore.close();
@@ -314,7 +315,7 @@ describe('review regressions', () => {
     const { turns } = await guestCall('call-0001', mikiCall, { remember: false });
     const original = model.generateVoice.bind(model);
     model.generateVoice = async request => {
-      if (request.systemPrompt.startsWith('You write Shannon\'s own short memory')) {
+      if (promptOf(request).startsWith('You write Shannon\'s own short memory')) {
         await post('/v1/voice/gemini/cascade/calls/discard', { callId: 'call-0001' });
       }
       return original(request);

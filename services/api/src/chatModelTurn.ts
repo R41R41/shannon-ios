@@ -24,9 +24,16 @@ import { TOOLS_WITHHELD_INSTRUCTIONS, providerFunctionTools, toolInstructions } 
 
 /**
  * The text-chat turn of the OpenAI Responses adapter: the request body and the reading of
- * the completed response. Moved out of `chatModel.ts` unchanged so the streaming call can
- * send the same body and read the same way (`chatModelGolden.test.ts` holds both to the
- * bytes recorded before the move). Key order is part of the request; do not reorder.
+ * the completed response. Moved out of `chatModel.ts` so the streaming call can send the same
+ * body and read the same way (`chatModelGolden.test.ts` holds both to recorded bytes). Key
+ * order is part of the request; do not reorder.
+ *
+ * The request runs from what never changes to what changes every turn, so the provider's prompt
+ * cache holds as much of its start as it can (Syzygy ADR-0003 principle 4). The instructions are
+ * her identity, the fixed blocks of this adapter, the blocks fixed for a Talk (her reply's
+ * feeling, her tools) and what she knows of the owner. The turn's own blocks
+ * (`chatTurnContextBlocks`) are one developer message after the history and just before the
+ * owner's words, so the replayed history is part of the prefix the next turn repeats.
  */
 export function chatTurnRequestBody(
   model: string, request: ShannonChatModelRequest, agentHostHint: string | undefined,
@@ -34,20 +41,18 @@ export function chatTurnRequestBody(
   return {
     model,
     instructions: [request.systemPrompt, SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
-      ...(request.attachments?.length ? [ATTACHMENT_SAFETY_INSTRUCTIONS] : []),
-      ...(request.useWebSearch || request.placeSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
-      ...(request.placeSearch ? [placeSearchInstructions(request.placeSearch)] : []),
       GENERATED_ARTIFACT_INSTRUCTIONS,
       INTENT_PLAN_INSTRUCTIONS,
       agentTaskInstructions(agentHostHint),
-      ...(request.priorThreadSummary ? [priorThreadSummaryInstructions(request.priorThreadSummary)] : []),
       THREAD_SUMMARY_INSTRUCTIONS,
-      ...(request.generateThreadTitle ? [THREAD_TITLE_INSTRUCTIONS] : []),
       ...(request.offerReplyFeeling ? [REPLY_FEELING_INSTRUCTIONS] : []),
       ...(offersTools(request) ? [toolInstructions(request.tools!, false)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
+      ...(request.profilePrompt ? [request.profilePrompt] : []),
     ].join('\n\n'),
     input: [
       ...request.history.map(item => ({ role: item.role, content: item.content })),
+      ...turnContextMessage(chatTurnContextBlocks(request)),
+      ...precedingReplyMessage(request),
       {
         role: 'user',
         content: request.attachments?.length
@@ -76,9 +81,9 @@ export function chatTurnRequestBody(
               type: ['string', 'null'],
               description: 'この返答までのトークの目的、決定、現在地、未決事項を短く表すナビゲーション要約',
             },
-            ...(request.generateThreadTitle ? {
-              threadTitle: { type: ['string', 'null'], description: '最初のユーザー発言とシャノン側のreplyの話題を表す短いトークタイトル' },
-            } : {}),
+            // Always in the schema, so the schema (part of the cached prefix) is the same on the turn that asks for a title
+            // and on every other; only that turn's `[トークタイトル]` block asks for one, and only then is it read.
+            threadTitle: { type: ['string', 'null'], description: '最初のユーザー発言とシャノン側のreplyの話題を表す短いトークタイトル。[トークタイトル]で求められた時だけ書き、それ以外はnull' },
             taskDecision: {
               type: 'object',
               additionalProperties: false,
@@ -148,7 +153,7 @@ export function chatTurnRequestBody(
             ...(request.placeSearch ? { places: placeSearchSchema } : {}), ...(request.offerRoomLook ? { roomLook: ROOM_LOOK_SCHEMA } : {}), ...(request.offerAppLook ? { appLook: APP_LOOK_SCHEMA } : {}),
             ...(request.offerMinecraftIntent ? { minecraftIntent: MINECRAFT_INTENT_SCHEMA } : {}),
           },
-          required: ['reply', ...(request.offerReplyFeeling ? ['feeling'] : []), 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.offerRoomLook ? ['roomLook'] : []), ...(request.offerAppLook ? ['appLook'] : []), ...(request.offerMinecraftIntent ? ['minecraftIntent'] : []), ...(request.generateThreadTitle ? ['threadTitle'] : [])],
+          required: ['reply', ...(request.offerReplyFeeling ? ['feeling'] : []), 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.offerRoomLook ? ['roomLook'] : []), ...(request.offerAppLook ? ['appLook'] : []), ...(request.offerMinecraftIntent ? ['minecraftIntent'] : []), 'threadTitle'],
         },
       },
     },
@@ -165,6 +170,31 @@ export function chatTurnRequestBody(
     prompt_cache_key: stableScopeIdentifier(request.scopeKey),
     safety_identifier: stableScopeIdentifier(request.scopeKey),
   };
+}
+
+/**
+ * The blocks of one turn, in this order: its context (the shared state and everything else that changes, `turnContext`),
+ * then what this turn alone asks for (attachments, a web or place search, the saved summary of the Talk, a title).
+ */
+export function chatTurnContextBlocks(request: ShannonChatModelRequest): string[] {
+  return [
+    ...(request.turnContext ? [request.turnContext] : []),
+    ...(request.attachments?.length ? [ATTACHMENT_SAFETY_INSTRUCTIONS] : []),
+    ...(request.useWebSearch || request.placeSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
+    ...(request.placeSearch ? [placeSearchInstructions(request.placeSearch)] : []),
+    ...(request.priorThreadSummary ? [priorThreadSummaryInstructions(request.priorThreadSummary)] : []),
+    ...(request.generateThreadTitle ? [THREAD_TITLE_INSTRUCTIONS] : []),
+  ];
+}
+
+/** The turn's blocks as the one developer message that follows the history; nothing when there are none. */
+export function turnContextMessage(blocks: readonly string[]): Array<{ role: 'developer'; content: string }> {
+  return blocks.length ? [{ role: 'developer', content: blocks.join('\n\n') }] : [];
+}
+
+/** Her words just before the owner's (`ShannonPrecedingReply`), directly before his message; nothing without them. */
+export function precedingReplyMessage(request: { precedingReply?: string }): Array<{ role: 'assistant'; content: string }> {
+  return request.precedingReply ? [{ role: 'assistant', content: request.precedingReply }] : [];
 }
 
 export type ParsedChatTurn = ReturnType<typeof parseStructuredTurn>;

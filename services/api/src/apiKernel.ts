@@ -373,7 +373,8 @@ export class ShannonApiKernel {
     const capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
     // A surface has no look at the room or through the app.
     const roomLook = surface ? NO_LOOK : this.body.turnLooks.turn(body.scopeKey, message, occurredAt, audience.audience, request);
-    const systemPrompt = textTurnSystemPrompt(deps, input, begun, { basePrompt, cognitiveContext, capability, roomLook });
+    const layered = textTurnSystemPrompt(deps, input, begun, { basePrompt, cognitiveContext, capability, roomLook });
+    const systemPrompt = layered.prompt;
     if (begun.explicitCommand || begun.organizeTurn) return answerTextCommand(deps, input, begun, cognitiveContext, systemPrompt);
     let { orchestrationState } = begun;
     // A summary has no label of its own: none where only open items may be given (a turn someone other than the owner wrote).
@@ -381,9 +382,11 @@ export class ShannonApiKernel {
     const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
     // Her Minecraft body's capability line exactly when this turn's tools include `minecraft.request` (`withMinecraftToolLine`).
     const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withMinecraftToolLine({
-      scopeKey: body.scopeKey, // The history is a character budget; what fell out of it is covered by the replay summary.
+      // Her fixed identity first, what she knows of the owner next, and the turn's context with the replay (`chatModelTurn.ts`).
+      scopeKey: body.scopeKey, systemPrompt: layered.systemPrompt, ...(layered.profilePrompt ? { profilePrompt: layered.profilePrompt } : {}),
+      // The history is a character budget; what fell out of it is covered by the replay summary.
       ...conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey), surface?.openOnly)
-        .request(placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt),
+        .request([layered.turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n')),
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message,
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...conversationTools(this.autonomy, body.scopeKey, 'text', audience.alone, this.toolServer, `${threadId}\n${message}`, deadline, undefined,

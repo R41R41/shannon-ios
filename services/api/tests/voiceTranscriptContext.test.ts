@@ -5,6 +5,7 @@ import type { VoiceDecisionInput } from '../src/voiceDecision.js';
 import type { ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { InMemoryOrganizeStore } from '../src/organize.js';
 import { transcriptNeedsInterpretation } from '../src/voiceTranscriptContext.js';
+import { promptOf } from './modelPrompt.js';
 
 const at = '2026-09-28T12:00:00.000Z';
 const input: VoiceDecisionInput = { scopeKey: 'owner', transcript: '写真整理をタスクにして',
@@ -58,11 +59,11 @@ describe('contextual ASR reliability and authority', () => {
     expect(h.decisions[0]?.context?.some(item => item.content.includes('エーテル'))).toBe(true);
     expect(h.decisions[0]?.rawTranscript).toContain('写真せいり');
     expect(h.requests).toHaveLength(1);
-    expect(h.requests[0]?.systemPrompt).toContain('[Contextual transcript interpretation required]');
-    expect(h.requests[0]?.systemPrompt).toContain('can propose a Codex implementation task');
-    expect(h.requests[0]?.systemPrompt).not.toContain('Aetherのノートのことですね');
-    expect(h.requests[0]?.systemPrompt).toContain('写真せいり');
-    expect(h.requests[0]?.systemPrompt).toContain('Output was interrupted, NOT their input');
+    expect(promptOf(h.requests[0])).toContain('[Contextual transcript interpretation required]');
+    expect(promptOf(h.requests[0])).toContain('can propose a Codex implementation task');
+    expect(promptOf(h.requests[0])).not.toContain('Aetherのノートのことですね');
+    expect(promptOf(h.requests[0])).toContain('写真せいり');
+    expect(promptOf(h.requests[0])).toContain('Output was interrupted, NOT their input');
     expect(h.store.list('owner', 'thread')).toEqual([]);
     expect(result.body).not.toHaveProperty('receipt');
     expect(result.body).not.toHaveProperty('uiBlocks');
@@ -100,7 +101,7 @@ describe('contextual ASR reliability and authority', () => {
     await h.turn('speech', 'guest');
     expect(h.decisions[0]?.context).toEqual([]);
     expect(h.requests[0]?.history).toEqual([]);
-    expect(h.requests[0]?.systemPrompt).not.toContain('ミズクラゲ');
+    expect(promptOf(h.requests[0])).not.toContain('ミズクラゲ');
     expect(h.store.list('owner', 'thread')).toEqual([]);
   });
 

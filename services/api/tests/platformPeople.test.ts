@@ -12,6 +12,7 @@ import { configuredPlatformBridge, PlatformBridgeError, PlatformBridgeService, p
 import { DEFAULT_PLATFORM_PEOPLE_LIMITS, PlatformPeople, platformPeopleEnabled } from '../src/platformPeople.js';
 import { PlatformConversationSummarizer, acceptedPlatformSummary } from '../src/platformPeopleSummaries.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { promptOf } from './modelPrompt.js';
 
 const fixtures = join(import.meta.dirname, 'fixtures/platform-people-v1');
 const fixture = <T extends object = Record<string, unknown>>(name: string): T => JSON.parse(readFileSync(join(fixtures, name), 'utf8')) as T;
@@ -51,7 +52,7 @@ function harness(options: { enabled?: boolean; limits?: Partial<typeof DEFAULT_P
     clock += 1_000;
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId, message } });
     await api.waitForBackground('owner');
-    return model.last.systemPrompt;
+    return promptOf(model.last);
   };
   const errorCode = (operation: () => unknown) => { try { operation(); return 'none'; } catch (error) {
     return error instanceof PlatformBridgeError ? `${error.status} ${error.code}` : String(error); } };

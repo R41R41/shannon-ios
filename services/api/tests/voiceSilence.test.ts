@@ -11,6 +11,7 @@ import type { VoiceTurnFacts } from '../src/voiceDecisionContract.js';
 import {
   VOICE_REPLY_DECISION_LINES, notHisWordsToHer, ownerTurnVerdict, ownerVoiceTurnFacts, settleOwnerVoiceTurn, voiceSilenceRules,
 } from '../src/voiceSilence.js';
+import { promptOf } from './modelPrompt.js';
 
 const START = '2026-10-02T09:00:00.000Z';
 const alone: VoiceTurnFacts = { sheAsked: false, followsShannon: false, othersPresent: false, source: 'speech' };
@@ -445,8 +446,8 @@ describe('an owner call, end to end', () => {
       expect(body.voicePlan.silenceCategory, transcript).toBeUndefined();
     }
     // Her name with words the router could not trust: she was addressed, so the interpretation block (which may ask once) is used.
-    expect(h.model.voiceRequests[0]!.systemPrompt).toContain('[Contextual transcript interpretation required]');
-    expect(h.model.voiceRequests.at(-1)!.systemPrompt).not.toContain('[Contextual transcript interpretation required]');
+    expect(promptOf(h.model.voiceRequests[0]!)).toContain('[Contextual transcript interpretation required]');
+    expect(promptOf(h.model.voiceRequests.at(-1)!)).not.toContain('[Contextual transcript interpretation required]');
   });
 
   it('takes a short 「うん」 as the answer to her question, and as nothing otherwise', async () => {

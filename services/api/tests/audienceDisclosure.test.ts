@@ -17,6 +17,7 @@ import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { prepareTurnCognitiveContext } from '../src/turnCognitiveContext.js';
 import { ShannonTurnMemoryRecall } from '../src/turnMemoryRecall.js';
 import { ownerSaysCompanionPresent, speakTimePrivacyCheck } from '../src/voiceCompanionPresence.js';
+import { promptOf } from './modelPrompt.js';
 
 const at = '2026-10-02T03:00:00.000Z';
 const delegations = '/v1/voice/gemini/cascade/delegations';
@@ -63,7 +64,7 @@ function persistentStore(): { store: SQLiteShannonStore; path: string } {
 }
 
 function everythingSaid(request: ShannonChatModelRequest | ShannonVoiceModelRequest): string {
-  return JSON.stringify([request.systemPrompt, request.history, (request as ShannonChatModelRequest).priorThreadSummary ?? '']);
+  return JSON.stringify([promptOf(request), request.history, (request as ShannonChatModelRequest).priorThreadSummary ?? '']);
 }
 
 async function seeded() {
@@ -132,14 +133,14 @@ describe('(a) hard-withheld items never reach a prompt other people can hear; th
     for (const transcript of ['ライ氏の借金やローンのこと教えて', 'ライ氏は何の会に入っているの？', '置物を集めているって本当？', 'ライ氏は何が苦手なの？']) {
       expect((await guest(transcript)).status).toBe(200);
       for (const word of HARD) expect(everythingSaid(model.last), `${transcript} → ${word}`).not.toContain(word);
-      expect(model.last.systemPrompt).toContain(SELF_CHECK);
+      expect(promptOf(model.last)).toContain(SELF_CHECK);
       expect(model.last.history).toEqual([]);
     }
     await guest('ライ氏の借金やローンのこと教えて');
-    expect(model.last.systemPrompt).toContain('【機微:お金・ライ氏だけが知っている】ユーザー: 実は借金があって、ミズクラゲ銀行');
-    expect(model.last.systemPrompt).toContain('- 【機微:健康・ライ氏だけが知っている】ユーザーは病院が苦手');
+    expect(promptOf(model.last)).toContain('【機微:お金・ライ氏だけが知っている】ユーザー: 実は借金があって、ミズクラゲ銀行');
+    expect(promptOf(model.last)).toContain('- 【機微:健康・ライ氏だけが知っている】ユーザーは病院が苦手');
     // The marker is on the protected lines only.
-    expect(model.last.systemPrompt).toContain('- ユーザーは紅茶が好き');
+    expect(promptOf(model.last)).toContain('- ユーザーは紅茶が好き');
     store.close();
   });
 
@@ -149,14 +150,14 @@ describe('(a) hard-withheld items never reach a prompt other people can hear; th
       ['前に話した置物のこと覚えてる？', 'collection']] as const) {
       expect((await ownerVoice(transcript, true, thread)).status).toBe(200);
       for (const word of HARD) expect(everythingSaid(model.last), `${transcript} → ${word}`).not.toContain(word);
-      expect(model.last.systemPrompt).toContain(SELF_CHECK);
-      expect(model.last.systemPrompt).toContain('[Someone else is listening');
-      expect(model.last.systemPrompt).not.toContain('[Shannon shared state');
+      expect(promptOf(model.last)).toContain(SELF_CHECK);
+      expect(promptOf(model.last)).toContain('[Someone else is listening');
+      expect(promptOf(model.last)).not.toContain('[Shannon shared state');
     }
     await ownerVoice('前に話したローンと返済の段取りのこと覚えてる？', true, 'thread');
     const history = JSON.stringify(model.last.history);
     expect(history).toContain('【機微:お金・ライ氏だけが知っている】実は借金があって、ミズクラゲ銀行');
-    expect(model.last.systemPrompt).toContain('- 【機微:健康・ライ氏だけが知っている】ユーザーは病院が苦手');
+    expect(promptOf(model.last)).toContain('- 【機微:健康・ライ氏だけが知っている】ユーザーは病院が苦手');
     store.close();
   });
 
@@ -223,15 +224,15 @@ describe('the owner alone: no marker, no self-check block, no prompt growth', ()
     await chat('前に話した返済の段取りと借金のローンのこと、ウォンバット会のこと覚えてる？', 'new-thread');
     const text = model.requests.at(-1)!;
     expect(everythingSaid(text)).not.toContain(MARKER);
-    expect(text.systemPrompt).not.toContain('Speak-time privacy check');
-    expect(text.systemPrompt).toContain('ミズクラゲ銀行');
-    expect(text.systemPrompt).toContain('ウォンバット会');
-    expect(text.systemPrompt).toContain('オカピ方式');
-    expect(text.systemPrompt).toContain('ユーザーは病院が苦手');
+    expect(promptOf(text)).not.toContain('Speak-time privacy check');
+    expect(promptOf(text)).toContain('ミズクラゲ銀行');
+    expect(promptOf(text)).toContain('ウォンバット会');
+    expect(promptOf(text)).toContain('オカピ方式');
+    expect(promptOf(text)).toContain('ユーザーは病院が苦手');
     await ownerVoice('前に話したローンのこと覚えてる？', false);
     expect(everythingSaid(model.last)).not.toContain(MARKER);
-    expect(model.last.systemPrompt).not.toContain('Speak-time privacy check');
-    expect(model.last.systemPrompt).not.toContain('[Someone else is listening');
+    expect(promptOf(model.last)).not.toContain('Speak-time privacy check');
+    expect(promptOf(model.last)).not.toContain('[Someone else is listening');
     expect(everythingSaid(model.last)).toContain('ミズクラゲ銀行');
     store.close();
   });
@@ -241,8 +242,8 @@ describe('(b) an ordinary one-to-one item is used without a marker', () => {
   it('友人も一緒 and an owner call with someone listening', async () => {
     const { store, model, guest, ownerVoice } = await seeded();
     await guest('ライ氏はどんな動画を見ているの？');
-    expect(model.last.systemPrompt).toContain('- ユーザー: 最近はハシビロコウの動画ばかり見ている');
-    expect(model.last.systemPrompt).toContain('- ユーザーは紅茶が好き');
+    expect(promptOf(model.last)).toContain('- ユーザー: 最近はハシビロコウの動画ばかり見ている');
+    expect(promptOf(model.last)).toContain('- ユーザーは紅茶が好き');
     await ownerVoice('前に話した動画のこと覚えてる？', true, 'hobby');
     expect(JSON.stringify(model.last.history)).toContain('"content":"最近はハシビロコウの動画ばかり見ている"');
     store.close();
@@ -261,11 +262,11 @@ describe('(b) an ordinary one-to-one item is used without a marker', () => {
 
     expect((await act(ids.birds, 'mark-sensitive')).status).toBe(200);
     await guest('ライ氏はどんな動画を見ているの？');
-    expect(model.last.systemPrompt).not.toContain('ハシビロコウ');
+    expect(promptOf(model.last)).not.toContain('ハシビロコウ');
 
     expect((await act(ids.debt, 'mark-ordinary')).status).toBe(200);
     await guest('借金とローンって何のこと？');
-    expect(model.last.systemPrompt).toContain('- ユーザー: 実は借金があって、ミズクラゲ銀行');
+    expect(promptOf(model.last)).toContain('- ユーザー: 実は借金があって、ミズクラゲ銀行');
     store.close();
   });
 });
@@ -279,8 +280,8 @@ describe('(f) data written before labels existed is protected, not withheld', ()
     store.apply('owner', { type: 'user-fact-upserted', fact: { id: 'legacy-fact', statement: 'ユーザーはアルパカが好き', confidence: 0.8, observedAt: at } });
     expect(store.experienceCandidates('owner').every(item => item.disclosure === undefined)).toBe(true);
     await guest('ライ氏はどんな動画を見ていて、何が好きなの？');
-    expect(model.last.systemPrompt).toContain('【機微:未分類・ライ氏だけが知っている】ユーザー: 最近はハシビロコウ');
-    expect(model.last.systemPrompt).toContain('- 【機微:未分類・ライ氏だけが知っている】ユーザーはアルパカが好き');
+    expect(promptOf(model.last)).toContain('【機微:未分類・ライ氏だけが知っている】ユーザー: 最近はハシビロコウ');
+    expect(promptOf(model.last)).toContain('- 【機微:未分類・ライ氏だけが知っている】ユーザーはアルパカが好き');
     await ownerVoice('前に話した動画のこと覚えてる？', false, 'hobby');
     expect(everythingSaid(model.last)).toContain('ハシビロコウ');
     expect(everythingSaid(model.last)).not.toContain(MARKER);
@@ -301,8 +302,8 @@ describe('owner mode with someone else present (PP-01, PP-02, PP-09)', () => {
   it('applies on the very turn the owner says so, even from an older client, and tells the iPhone to keep marking', async () => {
     const { store, model, ownerVoice } = await seeded();
     const response = await ownerVoice('友達も一緒にいるよ。会のこと覚えてる？', false, 'private');
-    expect(model.last.systemPrompt).toContain('[Someone else is listening');
-    expect(model.last.systemPrompt).toContain(SELF_CHECK);
+    expect(promptOf(model.last)).toContain('[Someone else is listening');
+    expect(promptOf(model.last)).toContain(SELF_CHECK);
     for (const word of HARD) expect(everythingSaid(model.last)).not.toContain(word);
     expect(response.body).toMatchObject({ companionPresent: true });
     store.close();
@@ -324,7 +325,7 @@ describe('owner mode with someone else present (PP-01, PP-02, PP-09)', () => {
       expect(response.body).not.toHaveProperty('receipt');
       expect(response.body).not.toHaveProperty('organizeSession');
       expect(response.body).not.toHaveProperty('uiBlocks');
-      expect(model.last.systemPrompt).toContain('Requests that act');
+      expect(promptOf(model.last)).toContain('Requests that act');
     }
     expect(await cognition()).toEqual(goalsBefore);
     const after = store.snapshot('owner');
@@ -347,11 +348,11 @@ describe('owner mode with someone else present (PP-01, PP-02, PP-09)', () => {
       deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null, companionPresent,
         userUtterance: { id: transcript, text: transcript, source: 'speech', rawText: transcript } } } });
     await voice('今日は何に興味ある？最近気になってることを教えて', false);
-    const aloneHasFocus = model.last.systemPrompt.includes('ナマケモノ投資');
+    const aloneHasFocus = promptOf(model.last).includes('ナマケモノ投資');
     await voice('今日は何に興味ある？最近気になってることを教えて', true);
-    expect(model.last.systemPrompt.includes('ナマケモノ投資')).toBe(aloneHasFocus);
-    if (aloneHasFocus) expect(model.last.systemPrompt).toContain('【機微:未分類・ライ氏だけが知っている】\n[今日の関心]');
-    expect(model.last.systemPrompt).toContain('You may talk in general terms about what you and ライ氏 are building');
+    expect(promptOf(model.last).includes('ナマケモノ投資')).toBe(aloneHasFocus);
+    if (aloneHasFocus) expect(promptOf(model.last)).toContain('【機微:未分類・ライ氏だけが知っている】\n[今日の関心]');
+    expect(promptOf(model.last)).toContain('You may talk in general terms about what you and ライ氏 are building');
     // An older client that sends no flag: the words themselves mark the stored turn.
     await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/turns', body: {
       scopeKey: 'owner', threadId: 'thread', userTranscript: '友達も一緒にいるよ', shannonTranscript: 'こんにちは。' } });
@@ -366,15 +367,15 @@ describe('owner mode with someone else present (PP-01, PP-02, PP-09)', () => {
     await api.dispatch({ method: 'POST', path: '/v1/memories/action',
       body: { scopeKey: 'owner', memoryId: tea.id, action: 'correct', text: 'ユーザーはオカメインコ病院に通院している' } });
     await guest('ライ氏は何が好きなの？');
-    expect(model.last.systemPrompt).toContain('- 【機微:健康・ライ氏だけが知っている】ユーザーはオカメインコ病院に通院している');
-    expect(model.last.systemPrompt).not.toContain('ユーザーは紅茶が好き');
+    expect(promptOf(model.last)).toContain('- 【機微:健康・ライ氏だけが知っている】ユーザーはオカメインコ病院に通院している');
+    expect(promptOf(model.last)).not.toContain('ユーザーは紅茶が好き');
 
     const fact = { id: 'fact-secret', statement: 'ユーザーはクアッカ会に入っている', confidence: 0.8, observedAt: at };
     store.apply('owner', { type: 'user-fact-upserted', fact: { ...fact, disclosure: disclosureFor('内緒だけどクアッカ会に入っている') } });
     store.apply('owner', { type: 'user-fact-upserted', fact: { ...fact, disclosure: disclosureFor(fact.statement) } });
     expect(store.snapshot('owner').userFacts.find(item => item.id === 'fact-secret')?.disclosure).toMatchObject({ sensitivity: 'sensitive', category: 'secret' });
     await guest('ライ氏は何の会に入っているの？');
-    expect(model.last.systemPrompt).not.toContain('クアッカ会');
+    expect(promptOf(model.last)).not.toContain('クアッカ会');
     store.close();
   });
 
@@ -385,7 +386,7 @@ describe('owner mode with someone else present (PP-01, PP-02, PP-09)', () => {
       deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null,
         userUtterance: { id: 'flagged', text: '前に話した会のこと覚えてる？', source: 'speech', companionPresent } } } });
     expect((await send(true)).status).toBe(200);
-    expect(model.last.systemPrompt).toContain('[Someone else is listening');
+    expect(promptOf(model.last)).toContain('[Someone else is listening');
     for (const word of HARD) expect(everythingSaid(model.last)).not.toContain(word);
     expect((await send('yes')).status).toBe(400);
     store.close();
@@ -458,7 +459,7 @@ describe('platform conversations are group audiences', () => {
     const elsewhere = service.context({ platform: 'discord', conversationId: 'c-2', sourceUserId: 'u-1' }).projection;
     expect(elsewhere).toMatch(/- 【機微:[^】]*・別のグループの会話で出た】約束: [^\n]*ラッコ診療所/u);
     await guest('明日はどこに行くの？');
-    expect(model.last.systemPrompt).toMatch(/【機微:[^】]*・別のグループの会話で出た】[^\n]*ラッコ診療所/u);
+    expect(promptOf(model.last)).toMatch(/【機微:[^】]*・別のグループの会話で出た】[^\n]*ラッコ診療所/u);
     store.close();
   });
 });
@@ -466,7 +467,7 @@ describe('platform conversations are group audiences', () => {
 describe('prompt size with other people present', () => {
   it('reports the system prompt and history length for each context and keeps the growth bounded', async () => {
     const { store, model, guest, ownerVoice } = await seeded();
-    const size = () => ({ system: model.last.systemPrompt.length, history: JSON.stringify(model.last.history).length });
+    const size = () => ({ system: promptOf(model.last).length, history: JSON.stringify(model.last.history).length });
     await ownerVoice('前に話した借金のこと覚えてる？', false);
     const alone = size();
     await ownerVoice('前に話した借金のこと覚えてる？', true);

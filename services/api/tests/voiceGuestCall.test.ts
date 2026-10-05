@@ -11,6 +11,7 @@ import {
 import {
   guestAddressDecision, guestCallHistory, validatedGuestCallContext, type GuestCallTurn,
 } from '../src/voiceGuestCall.js';
+import { promptOf } from './modelPrompt.js';
 
 const at = '2026-10-01T03:00:00.000Z';
 const delegations = '/v1/voice/gemini/cascade/delegations';
@@ -63,7 +64,7 @@ describe('友人も一緒: in-call context', () => {
       { role: 'user', content: 'こんにちは。声、可愛いね。' },
       { role: 'assistant', content: 'えへへ、ありがとうございます。' },
     ]);
-    expect(model.voiceRequests[0]?.systemPrompt).toContain('The first-meeting greeting already happened');
+    expect(promptOf(model.voiceRequests[0])).toContain('The first-meeting greeting already happened');
     expect(store.conversationHistory('owner', 'thread')).toEqual([]);
     expect(store.experienceCandidates('owner')).toEqual([]);
   });
@@ -96,8 +97,8 @@ describe('友人も一緒: in-call context', () => {
     const body = { ...guestBody('thread', '今日は何しようか', { turns: callTurns }), participantMode: 'owner' };
     await api.dispatch({ method: 'POST', path: delegations, body });
     expect(model.voiceRequests[0]?.history).toEqual([]);
-    expect(model.voiceRequests[0]?.systemPrompt).not.toContain('[Introduction mode');
-    expect(model.voiceRequests[0]?.systemPrompt).toContain('[Someone else may be present]');
+    expect(promptOf(model.voiceRequests[0])).not.toContain('[Introduction mode');
+    expect(promptOf(model.voiceRequests[0])).toContain('[Someone else may be present]');
   });
 });
 
@@ -122,7 +123,7 @@ describe('友人も一緒: switching inside a running call', () => {
     await api.dispatch({ method: 'POST', path: delegations,
       body: { scopeKey: 'owner', threadId: 'thread', transcript: 'ノートを踏まえて、前に話した合言葉を覚えてる？' } });
     const ownerRequest = model.voiceRequests.at(-1)!;
-    expect(ownerRequest.systemPrompt).toContain('ハシビロコウ');
+    expect(promptOf(ownerRequest)).toContain('ハシビロコウ');
     expect(JSON.stringify(ownerRequest.history)).toContain('ミズクラゲ');
     const ownerVoiceCalls = model.voiceRequests.length;
     const ownerChatCalls = model.requests.length;
@@ -150,13 +151,13 @@ describe('友人も一緒: switching inside a running call', () => {
     expect(guestRequests).toHaveLength(utterances.length);
     for (const request of guestRequests) {
       expect(request.history).toEqual([]);
-      expect(request.systemPrompt).toContain('[Introduction mode — 友人も一緒]');
-      expect(request.systemPrompt).not.toContain('ミズクラゲ');
-      expect(request.systemPrompt).not.toContain('ハシビロコウ');
-      expect(request.systemPrompt).not.toContain('シャノンを一貫した人格');
-      expect(request.systemPrompt).not.toContain('[Current intention frame');
-      expect(request.systemPrompt).not.toContain('[Shannon shared state v1]');
-      expect(request.systemPrompt).not.toContain('[Someone else may be present]');
+      expect(promptOf(request)).toContain('[Introduction mode — 友人も一緒]');
+      expect(promptOf(request)).not.toContain('ミズクラゲ');
+      expect(promptOf(request)).not.toContain('ハシビロコウ');
+      expect(promptOf(request)).not.toContain('シャノンを一貫した人格');
+      expect(promptOf(request)).not.toContain('[Current intention frame');
+      expect(promptOf(request)).not.toContain('[Shannon shared state v1]');
+      expect(promptOf(request)).not.toContain('[Someone else may be present]');
     }
     expect(aetherCalls).toEqual([]);
     expect(organize.list('owner', 'thread')).toHaveLength(0);
@@ -169,7 +170,7 @@ describe('友人も一緒: switching inside a running call', () => {
     const after = model.voiceRequests.at(-1)!;
     expect(JSON.stringify(after.history)).toContain('ミズクラゲ');
     expect(JSON.stringify(after.history)).not.toContain('辛いもの');
-    expect(after.systemPrompt).not.toContain('映画');
+    expect(promptOf(after)).not.toContain('映画');
   });
 });
 
@@ -238,7 +239,7 @@ describe('友人も一緒: answering only when addressed', () => {
         userUtterance: { id: 'cue', text: cue, source: 'typed', callContext: { turns: [], introductionStart: true } } },
     } });
     expect(response).toMatchObject({ status: 200, body: { voicePlan: { shouldRespond: true } } });
-    expect(model.voiceRequests[0]?.systemPrompt).toContain('Greet the friend now');
+    expect(promptOf(model.voiceRequests[0])).toContain('Greet the friend now');
     expect(store.conversationHistory('owner', 'thread')).toEqual([]);
   });
 
@@ -248,7 +249,7 @@ describe('友人も一緒: answering only when addressed', () => {
     const response = await api.dispatch({ method: 'POST', path: delegations,
       body: guestBody('thread', 'うん', { turns: [], introductionStart: true }) });
     expect(response).toMatchObject({ status: 200, body: { voicePlan: { shouldRespond: true } } });
-    expect(model.voiceRequests[0]?.systemPrompt).toContain('Greet the friend now');
+    expect(promptOf(model.voiceRequests[0])).toContain('Greet the friend now');
   });
 });
 

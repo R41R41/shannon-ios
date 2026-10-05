@@ -208,10 +208,10 @@ describe('the replay of a turn that may show only open items (second review, 202
     store.saveReplaySummary('owner', 'thread', { summary: 'ゼブラ要約', coveredThroughMessageId: 'none', chainStartedAt: at, updatedAt: at });
     const present = groupAudience('platform:minecraft:lab');
     const marked = conversationReplay('text', state.snapshot('owner'), store, 'owner', 'thread', present).request('system');
-    expect(marked.systemPrompt).toContain('ゼブラ要約');
+    expect(marked.turnContext).toContain('ゼブラ要約');
     expect(JSON.stringify(marked.history)).toContain('【機微:');
     const open = conversationReplay('text', state.snapshot('owner'), store, 'owner', 'thread', present, undefined, undefined, true).request('system');
-    expect(open.systemPrompt).toBe('system');
+    expect(open.turnContext).toBe('system');
     expect(JSON.stringify(open.history)).not.toContain('【機微:');
     expect(open.history.some(item => item.content.includes('今日の天気の話'))).toBe(true);
     expect(open.history.some(item => item.content.includes('通院'))).toBe(false);

@@ -4,13 +4,14 @@ import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelReques
 import { asksAboutNotes, asksAboutTasks, asksOnlyProductRole, voyagerTaskQuery } from '../src/conversationCapabilities.js';
 import { LocalVoiceDecisionGateway, type VoiceSkill } from '../src/voiceDecision.js';
 import { asksInternalSuiteStatus } from '../src/voiceDecisionValues.js';
+import { promptOf } from './modelPrompt.js';
 
 interface Probe { prompt: string; useWebSearch: boolean; notes: number; taskQueries: string[]; status: number }
 
 async function probe(channel: 'text' | 'voice', utterance: string): Promise<Probe> {
   const result: Probe = { prompt: '', useWebSearch: false, notes: 0, taskQueries: [], status: 0 };
   const record = async (request: ShannonChatModelRequest | ShannonVoiceModelRequest) => {
-    result.prompt = request.systemPrompt;
+    result.prompt = promptOf(request);
     result.useWebSearch = request.useWebSearch === true;
     return { mode: 'local-stub' as const, model: 'synthetic', reply: '合成の返答です。' };
   };

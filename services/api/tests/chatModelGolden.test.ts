@@ -9,6 +9,15 @@ import type { LlmUsageEvent } from '../src/llmUsage.js';
  * before `generate` was split into `chatModelTurn.ts` (commit 6228e12). The non-streaming
  * path must keep sending these bytes and returning these objects. Regenerate only for a
  * deliberate change of the provider request: `SHANNON_WRITE_GOLDEN=1 vitest run chatModelGolden`.
+ *
+ * Re-recorded on the prompt-cache branch (2026-10-06, Syzygy ADR-0003 principle 4): the instructions now run from what
+ * never changes to what changes every turn. The blocks of one turn (attachments, web and place search, the saved summary
+ * of the Talk, the title) moved after the fixed blocks, and the `layered` case was added for the profile and the turn's
+ * context. Every block is the same text as before; only its position changed. Re-recorded again on the same branch when
+ * the turn's blocks left the instructions for one developer message after the history, just before the owner's words,
+ * so that the history joins the prefix the next turn repeats; again the same blocks, moved. And once more when the
+ * nullable `threadTitle` field was kept in every schema, so the schema is the same on the turn that asks for a title and
+ * on every other (its description now says to write a title only when asked); only that turn reads it.
  */
 const fixture = new URL('./fixtures/chat-model-turn-v1.json', import.meta.url);
 const at = '2026-10-02T03:00:00.000Z';

@@ -18,6 +18,7 @@ import { toolTraceCall, toolTracePrompt, traceLabel } from '../src/shannonToolTr
 import { TOOL_FOLLOW_UP_MILLISECONDS } from '../src/shannonToolTurns.js';
 import { toolFailure, toolOk } from '../src/shannonTools.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { promptOf } from './modelPrompt.js';
 
 /**
  * Follow-ups keep her tools, and what her tools did stays with her (production, 2026-10-05 15:22–15:24 JST, the
@@ -138,19 +139,19 @@ describe('her tools in the follow-ups of a talk about her things', () => {
     const { model, operations, say, chat, conversationStore } = harness({ persistent, replies: { '何があるか': 'stories というフォルダがあります。' } });
     const first = await say('自分のフォルダの中に何があるか見れる？');
     expect(first.request.tools?.definitions.some(tool => tool.name === 'folder.list')).toBe(true);
-    expect(first.request.systemPrompt).not.toContain(TRACE);
+    expect(promptOf(first.request)).not.toContain(TRACE);
 
     const second = await say('もっとよく見て。何があってどんなファイルがあるの？');
     expect(second.request.tools).toBeDefined();
     // What she saw in the turn before is in front of her, labelled as what she did and saw.
-    expect(second.request.systemPrompt).toContain(TRACE);
-    expect(second.request.systemPrompt).toContain('- 直前の返事: folder.list → できた。あったもの: stories/');
+    expect(promptOf(second.request)).toContain(TRACE);
+    expect(promptOf(second.request)).toContain('- 直前の返事: folder.list → できた。あったもの: stories/');
     expect(JSON.stringify(second.body)).not.toContain(TRACE);
 
     const third = await say('試しにメモを一つ作って、その後消してみて');
     expect(third.request.tools?.definitions.filter(tool => tool.name.startsWith('folder.')).map(tool => tool.name)).toEqual(['folder.list', 'folder.search', 'folder.read']);
     expect(third.request.tools?.definitions.every(tool => tool.effect === 'read')).toBe(true);
-    expect(third.request.systemPrompt).toContain('あったもの: stories/、stories/灯台守の夜.md');
+    expect(promptOf(third.request)).toContain('あったもの: stories/、stories/灯台守の夜.md');
     expect((third.body as { reply?: string }).reply).toBe('メモの test-memo.md を作って、そのあと消しますね。いいですか？');
     const fourth = await say('はい、お願いします');
     expect(fourth.request.tools?.definitions.some(tool => tool.name === 'folder.create')).toBe(true);
@@ -159,12 +160,12 @@ describe('her tools in the follow-ups of a talk about her things', () => {
     expect(model.calls).toEqual(['folder_list', 'folder_list', 'folder_create', 'folder_delete']);
     expect(operations.map(operation => operation.operation)).toEqual(['list', 'list', 'create', 'delete']);
     // What she wrote is not in the trace, only that she wrote it.
-    expect(fourth.request.systemPrompt).not.toContain('試しのメモです');
+    expect(promptOf(fourth.request)).not.toContain('試しのメモです');
 
     // Text in the same Talk has the same memory; the response's systemPrompt carries none of it.
     const text = await chat('さっきフォルダに何があった？');
-    expect(text.request.systemPrompt).toContain('- 直前の返事: folder.create「test-memo.md」 → できた');
-    expect(text.request.systemPrompt).toContain('folder.delete「test-memo.md」 → できた');
+    expect(promptOf(text.request)).toContain('- 直前の返事: folder.create「test-memo.md」 → できた');
+    expect(promptOf(text.request)).toContain('folder.delete「test-memo.md」 → できた');
     expect(JSON.stringify(text.body)).not.toContain(TRACE);
     if (conversationStore) {
       const listed = JSON.stringify(conversationStore.conversationHistory('owner', 'talk'));
@@ -179,12 +180,12 @@ describe('her tools in the follow-ups of a talk about her things', () => {
     const companion = await say('もっとよく見て。', { companionPresent: true });
     expect(companion.request.tools).toBeUndefined();
     expect(companion.request.toolsWithheld).toBe(true);
-    expect(companion.request.systemPrompt).not.toContain(TRACE);
+    expect(promptOf(companion.request)).not.toContain(TRACE);
     expect(JSON.stringify(companion.request.history)).not.toContain('stories/');
     const guest = await say('シャノンのフォルダに何があるの？', { participantMode: 'guest' });
     expect(guest.request.tools).toBeUndefined();
     expect(guest.request.toolsWithheld).toBeUndefined();
-    expect(guest.request.systemPrompt).not.toContain(TRACE);
+    expect(promptOf(guest.request)).not.toContain(TRACE);
     expect(JSON.stringify(model.requests.at(-1))).not.toContain('stories/');
   });
 
@@ -246,15 +247,15 @@ describe('the review of 2026-10-05', () => {
   it('replays nothing of her tools while her body says someone else is there, whatever the client says (BLOCKER 1)', async () => {
     const { say, chat } = harness();
     await say('自分のフォルダの中に何があるか見れる？');
-    expect((await say('もっとよく見て。')).request.systemPrompt).toContain(TRACE);
+    expect(promptOf((await say('もっとよく見て。')).request)).toContain(TRACE);
     vi.spyOn(ShannonBody.prototype, 'othersPresent').mockReturnValue(true);
     const spoken = await say('もっとよく見て。');
     expect(spoken.request.toolsWithheld).toBe(true);
-    expect(spoken.request.systemPrompt).not.toContain(TRACE);
+    expect(promptOf(spoken.request)).not.toContain(TRACE);
     expect(JSON.stringify(spoken.request)).not.toContain('stories/');
     const typed = await chat('さっきフォルダに何があった？');
     expect(typed.request.toolsWithheld).toBe(true);
-    expect(typed.request.systemPrompt).not.toContain(TRACE);
+    expect(promptOf(typed.request)).not.toContain(TRACE);
   });
 
   it('offers only reading tools to words whose reliability score is low, and writes after a reliable yes (2)', async () => {
@@ -304,11 +305,11 @@ describe('the review of 2026-10-05', () => {
     // The stored words differ from the delegation's (a tidied transcript): the id still links them.
     await say('自分のフォルダの中に何があるか見れる？', { utteranceId: 'utt-0001', store: '全然ちがう言葉として保存された' });
     const next = await say('もっとよく見て。');
-    expect(next.request.systemPrompt).toContain('- 直前の返事: folder.list → できた。');
+    expect(promptOf(next.request)).toContain('- 直前の返事: folder.list → できた。');
     // Her reply was cut off and never stored: what she wrote and deleted is still known, linked to the Talk.
     await say('試しにメモを一つ作って、その後消してみて', { store: false });
     const after = await say('今のどうなった？');
-    expect(after.request.systemPrompt).toContain('会話の記録に残っていない返事（途中で切れたなど）: folder.create「test-memo.md」 → できた');
-    expect(after.request.systemPrompt).toContain('folder.delete「test-memo.md」 → できた');
+    expect(promptOf(after.request)).toContain('会話の記録に残っていない返事（途中で切れたなど）: folder.create「test-memo.md」 → できた');
+    expect(promptOf(after.request)).toContain('folder.delete「test-memo.md」 → できた');
   });
 });

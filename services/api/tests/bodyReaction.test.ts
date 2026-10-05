@@ -437,6 +437,8 @@ describe('the deadline', () => {
     // A voice turn that happens to follow and names the id gets no line: it is an ordinary turn.
     expect((await delegate('なんでもないよ', { reactionId: 'touch-1' })).status).toBe(200);
     expect(chatModel.voiceRequests[0]!.history).toEqual([]);
+    // Her line goes before his words as its own field (`precedingReply`), not in the history: there is none here either.
+    expect(chatModel.voiceRequests[0]!.precedingReply).toBeUndefined();
     await persist('なんでもないよ', 'そうですか。', { reactionId: 'touch-1' });
     expect(messages()).toEqual([{ role: 'user', content: 'なんでもないよ' }, { role: 'assistant', content: 'そうですか。' }]);
     // The same id again: still the quiet answer.

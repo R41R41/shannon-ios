@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { AUTONOMY_DEFAULT_MODEL, AUTONOMY_MODELS, autonomyModel, autonomyModelAllowedFor, type AutonomyModel, type AutonomyModelPurpose } from './autonomyModels.js';
 import { responseUsage } from './llmUsage.js';
 
@@ -35,8 +36,12 @@ export interface AutonomyTextRequest {
 
 export interface AutonomyTextResult {
   text: string;
-  /** What the provider reported for this call. Output includes the model's own reasoning tokens. */
-  usage: { inputTokens: number; outputTokens: number };
+  /**
+   * What the provider reported for this call. Output includes the model's own reasoning tokens. `cachedInputTokens`, the
+   * part of the input the provider read from its prompt cache, is reported here only (absent when none) and is not
+   * persisted: `autonomy_spend` has no column for it, and every charge still prices the whole input at the full rate.
+   */
+  usage: { inputTokens: number; outputTokens: number; cachedInputTokens?: number };
   /** The provider stopped at the output ceiling: the text is cut off. Reasoning tokens count against that ceiling. */
   truncated?: true;
 }
@@ -122,9 +127,12 @@ export class GeminiAutonomyTextModel {
     if (!response.ok) throw new AutonomyModelError(`AUTONOMY_MODEL_HTTP_${response.status}`);
     const metadata = object(object(json)?.usageMetadata);
     // Reasoning tokens are billed as output.
+    const inputTokens = count(metadata?.promptTokenCount);
+    const cachedInputTokens = Math.min(inputTokens, count(metadata?.cachedContentTokenCount));
     const usage = {
-      inputTokens: count(metadata?.promptTokenCount),
+      inputTokens,
       outputTokens: count(metadata?.candidatesTokenCount) + count(metadata?.thoughtsTokenCount),
+      ...(cachedInputTokens ? { cachedInputTokens } : {}),
     };
     const candidates = object(json)?.candidates;
     const parts = Array.isArray(candidates) ? object(object(candidates[0])?.content)?.parts : undefined;
@@ -164,18 +172,28 @@ export class OpenAIAutonomyTextModel {
         // As the conversation's own calls to these models set it (`chatModel.ts`).
         ...(reasoning ? { reasoning: { effort: 'low' } } : {}),
         store: false,
+        prompt_cache_key: autonomyPromptCacheKey(request.system),
       }),
       signal: signalFor(request.signal, this.timeoutMilliseconds),
     }));
     const json = await jsonBody(response);
     if (!response.ok) throw new AutonomyModelError(`AUTONOMY_MODEL_HTTP_${response.status}`);
     const reported = responseUsage(json);
-    const usage = { inputTokens: reported.inputTokens, outputTokens: reported.outputTokens };
+    const usage = { inputTokens: reported.inputTokens, outputTokens: reported.outputTokens, ...(reported.cachedInputTokens ? { cachedInputTokens: reported.cachedInputTokens } : {}) };
     const text = openAIOutputText(json);
     const truncated = object(json)?.status === 'incomplete' && object(object(json)?.incomplete_details)?.reason === 'max_output_tokens';
     if (!text.trim()) throw new AutonomyModelError(truncated ? 'AUTONOMY_MODEL_TRUNCATED' : 'AUTONOMY_MODEL_EMPTY', usage);
     return { text, usage, ...(truncated ? { truncated: true as const } : {}) };
   }
+}
+
+/**
+ * The provider's cache routing key of one of her calls. The conversation keys it by scope (`stableScopeIdentifier`); her
+ * calls carry no scope, so it is keyed by what makes a prefix shareable, the system text: calls of one kind of step share
+ * it and go to the same cache. Only a digest is sent, never the text.
+ */
+export function autonomyPromptCacheKey(system: string): string {
+  return `shannon_autonomy_${createHash('sha256').update(system).digest('hex').slice(0, 32)}`;
 }
 
 /** Routes a registry model to the adapter of its provider. A model whose provider has no dedicated credential cannot be used. */

@@ -9,6 +9,7 @@ import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { BODY_TOUCH_ONLY_FLAG, isFullBody, isTouchOnlyBody } from '../src/bodyTouchOnly.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
 import type { BodyPresence } from '../src/shannonBody.js';
+import { promptOf } from './modelPrompt.js';
 
 const scope = 'owner';
 const START = '2026-10-03T01:00:00.000Z';
@@ -35,7 +36,7 @@ function harness() {
   const touch = (id: string, audience: 'owner' | 'others', deviceId: string) =>
     send('POST', '/v1/body/events', { events: [{ id, type: 'pet', audience, occurredAt: clock.at, durationMs: 900, strength: 0.4 }] }, deviceId);
   const prompt = async (message: string) =>
-    ((await send('POST', '/v1/chat', { message }, PHONE)).body as { systemPrompt: string }).systemPrompt;
+    promptOf(((await send('POST', '/v1/chat', { message }, PHONE)).body as { systemPrompt: string }));
   const othersPresent = () => store.othersPresent(scope, clock.at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds);
   return { clock, store, send, presence, register, touch, prompt, othersPresent };
 }

@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import {
-  assembleShannonSystemPrompt,
   createInitialCompanionState,
   normalizeShannonExpressiveEmotion,
   reduceCompanionState,
@@ -14,10 +13,13 @@ import {
 import type { LlmUsageEvent, LlmUsageStore } from './llmUsage.js';
 import {
   classifyQuestion,
+  companionIdentityPrompt,
+  joinedIdentityPrompt,
   type KnowledgeAnswer,
   type KnowledgeRevision,
   type KnowledgeSource,
   type KnowledgeStore,
+  type LayeredIdentityPrompt,
   type PersonalityProfile,
 } from './knowledgeStore.js';
 import { parseSnapshot } from './sqliteStoreCodecs.js';
@@ -241,11 +243,16 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
   }
 
   promptProjection(scopeKey: string): string | null {
+    const parts = this.promptProjectionParts(scopeKey);
+    return parts ? joinedIdentityPrompt(parts) : null;
+  }
+
+  promptProjectionParts(scopeKey: string): LayeredIdentityPrompt | null {
     const row = this.context.database.prepare(`
       SELECT content FROM prompt_projections WHERE scope_key = ?
     `).get(scopeKey) as unknown as { content: string } | undefined;
     // Cached/profile text can predate a privacy-policy upgrade or a correction.
-    return row ? this.promptContent(scopeKey, this.snapshot(scopeKey)) : null;
+    return row ? this.promptParts(scopeKey, this.snapshot(scopeKey)) : null;
   }
 
   recordLlmUsage(event: LlmUsageEvent): void {
@@ -324,6 +331,10 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
   }
 
   private promptContent(scopeKey: string, state: CompanionStateSnapshot): string {
+    return joinedIdentityPrompt(this.promptParts(scopeKey, state));
+  }
+
+  private promptParts(scopeKey: string, state: CompanionStateSnapshot): LayeredIdentityPrompt {
     const personality = this.personalityProfile(scopeKey);
     const knowledge = this.knowledgeAnswers(scopeKey).flatMap(item => {
       const answer = visibleMemoryText(state, item.answerId, item.answer);
@@ -332,12 +343,12 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
         || (item.source !== 'user' && !isOwnerMemoryEvidence(evidence.quote)))
         ? [{ ...item, answer, question: corrected ? '本人が訂正した情報' : item.question }] : [];
     }).slice(0, 80);
-    const sections = [assembleShannonSystemPrompt(state)];
+    const sections: string[] = [];
     if (knowledge.length) {
       sections.push(`[User knowledge]\n${knowledge.map(item => `- ${item.question}: ${item.answer} (confidence ${item.confidence.toFixed(2)}, source ${item.source})`).join('\n')}`);
     }
     if (personality) sections.push(`[Personality analysis v${personality.version}]\n${safePersonalityAnalysis(state)}`);
-    return sections.join('\n\n');
+    return { ...companionIdentityPrompt(state), profile: sections.join('\n\n') };
   }
 
   writePersonalityProfile(scopeKey: string, state: CompanionStateSnapshot, createdAt: string): void {

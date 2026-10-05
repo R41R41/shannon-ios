@@ -16,6 +16,7 @@ import { dispatchWithChatSentences } from '../src/serverChatSentenceStream.js';
 import { readJson, sendJson } from '../src/serverHttp.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { fixtureNotionSource } from './notionFixture.js';
+import { promptOf } from './modelPrompt.js';
 
 const at = '2026-10-02T03:00:00.000Z';
 const REPLY = 'はい、聞こえています。\n\n「元気？うん！」と言いましたね。続きは https://example.com/a?b=1 です🎉！最後';
@@ -35,7 +36,7 @@ class ScriptedModel implements ShannonChatModel {
   echo = false;
   async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
     this.requests.push(request);
-    const reply = this.echo ? JSON.stringify([request.systemPrompt, request.history, request.priorThreadSummary ?? '']) : REPLY;
+    const reply = this.echo ? JSON.stringify([promptOf(request), request.history, request.priorThreadSummary ?? '']) : REPLY;
     return { mode: this.mode, model: this.model, reply, ...this.extra };
   }
 }
@@ -259,7 +260,7 @@ describe('stream: sentences with other people watching', () => {
         expect(allowed, `${word} in a streamed line`).not.toContain(word);
       }
       // What an `others` response withholds stays withheld in `done`.
-      expect(done.response.systemPrompt).toBe('');
+      expect(promptOf(done.response)).toBe('');
       expect(done.response).not.toHaveProperty('thread');
       expect(done.response.audience).toBe('others');
       expect(lines.every(line => line.type === 'done' || !('systemPrompt' in line))).toBe(true);

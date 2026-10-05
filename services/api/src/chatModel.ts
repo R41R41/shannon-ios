@@ -18,7 +18,7 @@ import {
   type VoiceStreamBounds,
 } from './chatModelVoiceStream.js';
 import { completeSpokenSentences } from './spokenSentences.js';
-import { chatTurnRequestBody, chatTurnResult, offersTools, parsedChatTurn } from './chatModelTurn.js';
+import { chatTurnRequestBody, chatTurnResult, offersTools, parsedChatTurn, precedingReplyMessage, turnContextMessage } from './chatModelTurn.js';
 import { streamedVoiceToolTurn } from './chatModelVoiceTools.js';
 import { ChatSentenceSplitter } from './chatSentenceSplitter.js';
 import { PartialAnswerError, RoundTimer, type RoundTime } from './turnDeadline.js';
@@ -50,11 +50,31 @@ export interface ShannonChatAttachment {
   text: string;
 }
 
-export interface ShannonChatModelRequest {
+/**
+ * The prompt layers of a conversation request, by how often each changes (Syzygy ADR-0003 principle 4). `systemPrompt`
+ * comes first and should not change within a Talk (her identity); `profilePrompt`, what she knows of the owner, follows
+ * the fixed instructions of the adapter; `turnContext`, everything that changes from turn to turn (the shared state, time,
+ * recall, people, focus, capabilities, work, audience, replay summary, tool trace), comes last. A caller with one fixed
+ * prompt passes only `systemPrompt`.
+ */
+export interface ShannonPromptLayers {
+  systemPrompt: string;
+  profilePrompt?: string;
+  turnContext?: string;
+}
+
+/**
+ * What she said just before the owner's words, which he is answering (her reaction to a touch, `apiLiveVoice.ts`): sent
+ * as her message directly before his, after the turn's context, never in the replayed history.
+ */
+export interface ShannonPrecedingReply {
+  precedingReply?: string;
+}
+
+export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPrecedingReply {
   generateThreadTitle?: boolean;
   priorThreadSummary?: string;
   scopeKey: string;
-  systemPrompt: string;
   history: readonly ShannonConversationItem[];
   message: string;
   attachments?: readonly ShannonChatAttachment[];
@@ -74,9 +94,8 @@ export interface ShannonChatModelRequest {
   toolsWithheld?: true;
 }
 
-export interface ShannonVoiceModelRequest {
+export interface ShannonVoiceModelRequest extends ShannonPromptLayers, ShannonPrecedingReply {
   scopeKey: string;
-  systemPrompt: string;
   history: readonly ShannonConversationItem[];
   message: string;
   useWebSearch: boolean;
@@ -416,14 +435,17 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     const tools = this.voiceTools(request);
     return {
       model: this.model,
+      // Fixed first, what changes last (`ShannonPromptLayers`): the turn's blocks follow the history, as in text chat.
       instructions: [
         request.systemPrompt,
         VOICE_REPLY_INSTRUCTIONS,
-        ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
         ...(tools ? [toolInstructions(tools, true)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
+        ...(request.profilePrompt ? [request.profilePrompt] : []),
       ].join('\n\n'),
       input: [
         ...request.history.map(item => ({ role: item.role, content: item.content })),
+        ...turnContextMessage([...(request.turnContext ? [request.turnContext] : []), ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : [])]),
+        ...precedingReplyMessage(request),
         { role: 'user', content: request.message },
       ],
       reasoning: { effort: complex ? 'low' : 'none' },

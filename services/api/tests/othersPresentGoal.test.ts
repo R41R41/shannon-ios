@@ -8,6 +8,7 @@ import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { InMemoryCognitiveIntentStore } from '../src/cognitiveIntent.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { promptOf } from './modelPrompt.js';
 
 const at = '2026-10-06T03:00:00.000Z';
 const delegations = '/v1/voice/gemini/cascade/delegations';
@@ -47,7 +48,7 @@ async function ownerStatedGoal() {
     const response = await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message, ...extra } });
     expect(response.status, JSON.stringify(response.body)).toBe(200);
     await api.waitForBackground('owner');
-    return model.last.systemPrompt;
+    return promptOf(model.last);
   };
   const voice = async (transcript: string, companionPresent: boolean) => {
     const response = await api.dispatch({ method: 'POST', path: delegations, body: {
@@ -57,7 +58,7 @@ async function ownerStatedGoal() {
     } });
     expect(response.status, JSON.stringify(response.body)).toBe(200);
     await api.waitForBackground('owner');
-    return model.last.systemPrompt;
+    return promptOf(model.last);
   };
   const guest = async (transcript: string) => {
     const response = await api.dispatch({ method: 'POST', path: delegations, body: {
@@ -67,7 +68,7 @@ async function ownerStatedGoal() {
           callContext: { callId: 'call-goal-0001', turns: [], introductionStart: true } } },
     } });
     expect(response.status, JSON.stringify(response.body)).toBe(200);
-    return model.last.systemPrompt;
+    return promptOf(model.last);
   };
   await chat(GOAL);
   const [intent] = cognitiveIntents.list('owner', 'active');
@@ -104,7 +105,10 @@ describe('the owner\'s current goal with other people present', () => {
     const alone = await voice('前に話した人格の改善のこと覚えてる？', false);
     expect(alone).toContain(`current_goal=${goal}`);
     expect(alone).not.toContain('【機微:');
-    expect(fingerprint(alone)).toBe('9abf82a6f2f2e74f');
+    // Re-recorded on the prompt-cache branch (2026-10-06): the shared state now opens the turn's context, after the fixed
+    // voice instructions (Syzygy ADR-0003 principle 4). Put back between her identity and those instructions, the same
+    // text gives the fingerprint recorded before (9abf82a6f2f2e74f); nothing was added or left out.
+    expect(fingerprint(alone)).toBe('1732f2014cc3eeb7');
 
     const companion = await voice('前に話した人格の改善のこと覚えてる？', true);
     expect(companion).toContain('[Current cognitive context');

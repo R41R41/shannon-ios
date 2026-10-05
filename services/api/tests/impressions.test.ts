@@ -28,6 +28,7 @@ import { PlatformPeople } from '../src/platformPeople.js';
 import { LocalRuleSleepMemoryAnalyzer } from '../src/sleepConsolidation.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { prepareTurnCognitiveContext } from '../src/turnCognitiveContext.js';
+import { promptOf } from './modelPrompt.js';
 
 const DAY = 86_400_000;
 const START = Date.parse('2026-09-20T03:00:00.000Z'); // noon in Tokyo
@@ -93,7 +94,7 @@ function harness(options: { script?: Parameters<typeof cuteAnalyzer>[0]; environ
     const response = await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message, ...extra } });
     expect(response.status).toBe(200);
     await api.waitForBackground('owner');
-    return { turnId: (response.body as { turnId: string }).turnId, prompt: model.last.systemPrompt };
+    return { turnId: (response.body as { turnId: string }).turnId, prompt: promptOf(model.last) };
   };
   /** One owner turn and its background update, as the worker runs it after the turn's refinement. */
   const say = async (message: string) => {
@@ -107,7 +108,7 @@ function harness(options: { script?: Parameters<typeof cuteAnalyzer>[0]; environ
         userUtterance: { id: `o-${model.voice.length}`, text: transcript, source: 'speech', rawText: transcript } } } });
     expect(response.status).toBe(200);
     await api.waitForBackground('owner');
-    return model.voice.at(-1)!.systemPrompt;
+    return promptOf(model.voice.at(-1)!);
   };
   const memory = async (memoryId: string, action: string, text?: string) => {
     clock += 1_000;

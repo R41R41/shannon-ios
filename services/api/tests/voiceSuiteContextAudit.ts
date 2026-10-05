@@ -8,6 +8,7 @@ import { createConfiguredChatModel, type ShannonChatModel, type ShannonChatModel
 import { createConfiguredVoiceDecisionGateway, LocalVoiceDecisionGateway,
   type VoiceSkill } from '../src/voiceDecision.js';
 import { VoiceRequestAllowances } from '../src/serverHttp.js';
+import { promptOf } from './modelPrompt.js';
 
 const cases: Array<{ id: string; transcript: string; skills: VoiceSkill[]; forbidden?: VoiceSkill[] }> = [
   // Product definitions should not require reading private notes/tasks.
@@ -35,7 +36,7 @@ for (const item of cases) {
   const generateAnswer = live && ['latin-both', 'kana-both'].includes(item.id);
   let prompt = '';
   const inspect = async (request: ShannonChatModelRequest | ShannonVoiceModelRequest) => {
-    prompt = request.systemPrompt;
+    prompt = promptOf(request);
     if (generateAnswer && model?.generateVoice) {
       return model.generateVoice({ ...request, useWebSearch: false, conversationClass: 'direct' });
     }

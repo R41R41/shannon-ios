@@ -18,6 +18,7 @@ import { aetherNoteRequest, answersWithPlace, asksForMemo, asksWhichPlace, memoN
 import { ShannonToolRunner } from '../src/shannonToolRunner.js';
 import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
 import type { VoiceDecisionInput } from '../src/voiceDecisionContract.js';
+import { promptOf } from './modelPrompt.js';
 
 /**
  * Owner report (2026-10-05): 「メモを作って」 in a voice conversation went to Aether first. A memo has three places (her
@@ -213,8 +214,8 @@ describe('the place of a memo, in a conversation', () => {
     expect(asked.body.reply).toBe(QUESTION);
     expect(asked.request.tools?.definitions.map(tool => tool.name)).toEqual(expect.arrayContaining(['study.create', 'folder.create']));
     expect(toolInstructions(asked.request.tools!, true)).toContain(SHANNON_MEMO_PLACE_RULE);
-    expect(asked.request.systemPrompt).toContain(SHANNON_MEMO_PLACE_RULE);
-    expect(asked.request.systemPrompt).toContain('Selected capabilities: none.');
+    expect(promptOf(asked.request)).toContain(SHANNON_MEMO_PLACE_RULE);
+    expect(promptOf(asked.request)).toContain('Selected capabilities: none.');
     expect(sent).toHaveLength(0);
   });
 
@@ -280,14 +281,14 @@ describe('the place of a memo, in a conversation', () => {
     const { say, chat, sent } = harness(0.95);
     await say('自分のフォルダに何があるか見て');
     const next = await say('メモを作って');
-    expect(next.request.systemPrompt).toContain(TRACE);
-    expect(next.request.systemPrompt).toContain('folder.list → できた');
+    expect(promptOf(next.request)).toContain(TRACE);
+    expect(promptOf(next.request)).toContain('folder.list → できた');
     expect(next.request.tools?.definitions.some(tool => tool.name === 'folder.create')).toBe(true);
-    expect(next.request.systemPrompt).not.toContain('[Notes]');
+    expect(promptOf(next.request)).not.toContain('[Notes]');
     // Typed, the same: no command, the rule and the trace in front of her.
     const typed = await chat('メモを作って');
     expect(typed.body.receipt).toBeUndefined();
-    expect(typed.request.systemPrompt).toContain('folder.list → できた');
+    expect(promptOf(typed.request)).toContain('folder.list → できた');
     expect(toolInstructions(typed.request.tools!, false)).toContain(SHANNON_MEMO_PLACE_RULE);
     expect(sent).toHaveLength(0);
   });

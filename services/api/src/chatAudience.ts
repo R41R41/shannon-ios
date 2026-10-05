@@ -11,6 +11,7 @@ import type { PresentedCompanionState } from './companionPresence.js';
 import type { ChatResponse } from './contracts.js';
 import type { ConversationCapabilitySelection } from './conversationCapabilities.js';
 import type { ConversationStore } from './conversationStore.js';
+import { identityOnly, type LayeredIdentityPrompt } from './knowledgeStore.js';
 import { DisclosureGate, sharedDailyFocus } from './memoryDisclosure.js';
 import { speakTimePrivacyCheck } from './voiceCompanionPresence.js';
 
@@ -49,7 +50,7 @@ export interface ChatAudienceTurn {
   /** `speaker: 'owner'` only where the server verified him (her Minecraft body's shared chat, `platformSurface.ts`). */
   readonly turnLabel: { audience?: MemoryAudience; speaker?: 'owner' | 'unknown' };
   /** The full owner profile is for the owner alone; otherwise the identity block without it. */
-  identity(ownerProfile: () => string): string;
+  identity(ownerProfile: () => LayeredIdentityPrompt): LayeredIdentityPrompt;
   /** Today's focus and her own pursuits, as the owner voice path gives them to this audience. */
   ownFocus(focus: string, pursuits: string, state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string): string;
   /** The response body as this audience may receive it. The owner's is returned untouched. */
@@ -80,7 +81,7 @@ function sharedChatResponse(response: ChatResponse): ChatResponse {
 const OWNER_TURN: ChatAudienceTurn = Object.freeze({
   audience: 'owner', present: OWNER_AUDIENCE, alone: true, participantMode: 'owner', capabilities: undefined,
   instructions: '', turnLabel: Object.freeze({}),
-  identity: (ownerProfile: () => string) => ownerProfile(),
+  identity: (ownerProfile: () => LayeredIdentityPrompt) => ownerProfile(),
   ownFocus: (focus: string, pursuits: string) => [focus, pursuits].filter(Boolean).join('\n\n'),
   visible: (response: ChatResponse) => response,
 });
@@ -91,7 +92,7 @@ const OTHERS_TURN: ChatAudienceTurn = Object.freeze({
   capabilities: Object.freeze({ aetherNotes: false, voyagerTasks: false, notion: false, upcoming: 'guarded' as const }),
   instructions: [chatOthersPresentInstructions, speakTimePrivacyCheck].join('\n\n'),
   turnLabel: Object.freeze({ audience: UNKNOWN_GUEST_PRESENCE, speaker: 'unknown' as const }),
-  identity: () => shannonIdentityPrompt('owner'),
+  identity: () => identityOnly(shannonIdentityPrompt('owner')),
   // What she does in her own time is told to the owner alone. What she saw of his room stays, guarded: each
   // line carries the marker of unlabelled personal information, and the speak-time check decides what is said.
   ownFocus: (focus: string, pursuits: string, state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string) => {

@@ -4,7 +4,6 @@ import { combinedPlaceSources, runPlaceDiscoverySkill, spokenPlaceReply } from '
 import {
   OWNER_AUDIENCE,
   UNKNOWN_GUEST_PRESENCE,
-  assembleShannonSystemPrompt,
   buildExpressiveEmotionPrompt,
   guardedShannonSeenPrompt,
   isOwnerOnly,
@@ -21,7 +20,7 @@ import type { AgentTaskStore } from './agentTaskStore.js';
 import type { ApiRequest, ApiResponse } from './contracts.js';
 import type { ConversationStore } from './conversationStore.js';
 import type { DailyMindReader } from './dailyMind.js';
-import type { KnowledgeStore } from './knowledgeStore.js';
+import { companionIdentityPrompt, identityOnly, type KnowledgeStore } from './knowledgeStore.js';
 import type { ShannonChatModel } from './chatModel.js';
 import { LocalVoiceDecisionGateway, type VoiceDecisionGateway, type VoiceTurnDecision } from './voiceDecision.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
@@ -303,18 +302,14 @@ async function completeLiveVoiceDelegation(
     ? await dependencies.memoryRecall.enrich(deterministicContext, { scopeKey, message: transcript, snapshot: captured, threadId,
       memoryTurn: semanticMemoryTurn, complexTurn, ...(observer?.signal ? { signal: observer.signal } : {}) }) : null;
   const cognitiveContext = recalled ?? deterministicContext;
-  const ownerIdentity = (prompt: string) => dependencies.autonomy?.identityProjection(scopeKey, prompt) ?? prompt;
+  // Fixed first, what changes last (`ShannonPromptLayers`): her profile follows the fixed blocks, the state opens the turn's context.
+  // The slim path drops owner state, never the identity: persona, suite roles and capabilities stay.
+  // The full profile block is for the owner alone; otherwise the disclosed block in the turn context stands in.
+  const identity = temporaryGuest ? identityOnly(shannonIdentityPrompt('guest')) : selectedSkills.has('conversation_memory') && alone
+    ? dependencies.knowledgeStore?.promptProjectionParts(scopeKey) ?? companionIdentityPrompt(captured) : identityOnly(shannonIdentityPrompt('owner'));
   const basePrompt = temporaryGuest
-    ? [shannonIdentityPrompt('guest'), voiceConversationInstructions(true, false, false), temporaryGuestVoiceInstructions,
-      guestTurnPositionInstruction(guestCall?.introductionStart === true || guestHistory.length === 0)].join('\n\n')
-    : [
-      // The slim path drops owner state, never the identity: persona, suite roles and capabilities stay.
-      // The full profile block is for the owner alone; otherwise the disclosed block in the turn context stands in.
-      ownerIdentity(selectedSkills.has('conversation_memory') && alone
-        ? dependencies.knowledgeStore?.promptProjection(scopeKey) ?? assembleShannonSystemPrompt(captured)
-        : shannonIdentityPrompt('owner')),
-      voiceConversationInstructions(true),
-    ].join('\n\n');
+    ? [identity.identity, voiceConversationInstructions(true, false, false), temporaryGuestVoiceInstructions].join('\n\n')
+    : [dependencies.autonomy?.identityProjection(scopeKey, identity.identity) ?? identity.identity, voiceConversationInstructions(true)].join('\n\n');
   // Today's focus is built from the owner's interests, which carry no label: it is marked when others can hear.
   const focus = legacyGuest || !selectedSkills.has('daily_mind') ? '' : dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
   const focusGate = new DisclosureGate(present, captured, dependencies.conversationStore, scopeKey);
@@ -334,8 +329,8 @@ async function completeLiveVoiceDelegation(
   observer?.signal?.throwIfAborted();
   // A client that predates people memory tells the friend that no owner memory is used; keep that promise for it.
   const includeCognitiveContext = temporaryGuest ? !legacyGuest : selectedSkills.has('conversation_memory');
-  const systemPrompt = [
-    basePrompt,
+  const turnContext = [
+    temporaryGuest ? guestTurnPositionInstruction(guestCall?.introductionStart === true || guestHistory.length === 0) : '', identity.state,
     includeCognitiveContext ? cognitiveContext.prompt : [complexTurn ? recalled?.knowledgePrompt : '', legacyGuest ? '' : cognitiveContext.impressionPrompt].filter(Boolean).join('\n\n'),
     // Alone: 「誰と何を話した？」 with provenance. 友人も一緒: who is here and what she remembers of them.
     guestPresence ? guestPeoplePrompt({ ...guestPresence, items: peopleRecall?.items ?? [] }) : peopleRecall?.prompt,
@@ -376,12 +371,12 @@ async function completeLiveVoiceDelegation(
       } : {}), spoken: true,
     } }) : null;
   observer?.signal?.throwIfAborted();
-  const turnPrompt = placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt;
-  const replayed = replay?.request(turnPrompt) ?? { systemPrompt: turnPrompt, history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) };
+  const turnPrompt = [turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n');
+  const replayed = replay?.request(turnPrompt) ?? { ...(turnPrompt ? { turnContext: turnPrompt } : {}), history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) };
   const modelRequest = withMinecraftToolLine({ // Her Minecraft body's line exactly when its request tool is offered.
-    scopeKey, ...replayed,
-    // What she said when she was touched is what he is answering: it precedes his words, in every mode, as context only.
-    ...(reactionLine ? { history: [...replayed.history, { role: 'assistant' as const, content: reactionLine }] } : {}),
+    scopeKey, systemPrompt: basePrompt, ...(identity.profile ? { profilePrompt: identity.profile } : {}), ...replayed,
+    // What she said when she was touched is what he is answering: it directly precedes his words, in every mode, as context only.
+    ...(reactionLine ? { precedingReply: reactionLine } : {}),
     message: transcript, ...conversationTools(dependencies.autonomy, scopeKey, 'voice', temporaryGuest ? false : alone || 'others', dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline,
       { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }),
     useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
