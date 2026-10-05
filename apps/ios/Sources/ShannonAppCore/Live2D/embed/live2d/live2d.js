@@ -14627,13 +14627,19 @@
       this.indices = /* @__PURE__ */ new Map();
       this.drawables = /* @__PURE__ */ new Map();
       this.pixel = new Uint8Array(4);
+      /** モーションの名前（ファイル名から .motion3.json を除いたもの）→ モーション。 */
+      this.motionsByName = /* @__PURE__ */ new Map();
+      this.playing = null;
       this.aspect = 1;
       this.margin = SIDE_MARGIN;
       this.canvas = canvas;
       this.gl = gl;
       this.shaderUrl = shaderUrl;
     }
-    async setup(modelUrl) {
+    get motions() {
+      return [...this.motionsByName.keys()];
+    }
+    async setup(modelUrl, withMotions) {
       const directory = modelUrl.slice(0, modelUrl.lastIndexOf("/") + 1);
       const settingData = await buffer(modelUrl);
       const setting = new CubismModelSettingJson(settingData, settingData.byteLength);
@@ -14652,6 +14658,18 @@
         const data = await buffer(directory + physics);
         this.loadPhysics(data, data.byteLength);
       }
+      for (let group = 0; withMotions && group < setting.getMotionGroupCount(); group += 1) {
+        const groupName = setting.getMotionGroupName(group);
+        for (let index = 0; index < setting.getMotionCount(groupName); index += 1) {
+          const file = setting.getMotionFileName(groupName, index);
+          const data = await buffer(directory + file);
+          const name = file.slice(file.lastIndexOf("/") + 1).replace(/\.motion3\.json$/, "");
+          const motion = this.loadMotion(data, data.byteLength, name, void 0, void 0, setting, groupName, index);
+          if (!motion) continue;
+          motion.setEffectIds([], []);
+          this.motionsByName.set(name, motion);
+        }
+      }
       this.createRenderer(this.canvas.width, this.canvas.height);
       const renderer = this.getRenderer();
       renderer.setIsPremultipliedAlpha(true);
@@ -14669,6 +14687,11 @@
     draw(frame, dt) {
       const { gl, canvas } = this;
       if (gl.isContextLost()) return;
+      if (this.playing) {
+        this._model.loadParameters();
+        this._motionManager.updateMotion(this._model, Math.max(0, Math.min(dt, 0.1)));
+        this._model.saveParameters();
+      }
       for (const [id, value] of Object.entries(frame)) {
         const index = this.indices.get(id);
         if (index !== void 0) this._model.setParameterValueByIndex(index, value);
@@ -14687,6 +14710,18 @@
       renderer.setMvpMatrix(projection);
       renderer.setRenderState(gl.getParameter(gl.FRAMEBUFFER_BINDING), [0, 0, canvas.width, canvas.height]);
       renderer.drawModel(this.shaderUrl);
+    }
+    play(name, loop) {
+      const motion = this.motionsByName.get(name);
+      if (!motion) return false;
+      motion.setLoop(loop);
+      motion.setLoopFadeIn(false);
+      this._motionManager.startMotionPriority(motion, false, 2);
+      this.playing = name;
+      return true;
+    }
+    get motionFinished() {
+      return this._motionManager.isFinished();
     }
     resize(height) {
       const next = Math.max(1, Math.round(height));
@@ -14731,12 +14766,12 @@
     }
   };
   var api = {
-    async load(canvas, modelUrl, shaderUrl) {
+    async load(canvas, modelUrl, shaderUrl, options = {}) {
       startFramework();
       const gl = canvas.getContext("webgl2", { alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: true });
       if (!gl) throw new Error("\u3053\u306E\u74B0\u5883\u3067\u306F WebGL2 \u304C\u4F7F\u3048\u307E\u305B\u3093\u3002");
       const model = new ShannonModel(canvas, gl, shaderUrl);
-      await model.setup(modelUrl);
+      await model.setup(modelUrl, options.motions === true);
       return model;
     }
   };

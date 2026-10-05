@@ -14,7 +14,7 @@
 | `embed.html` | これを開く。 |
 | `embed.js` | 演技・しぐさ・触る・口パク・表情の一覧（`poses.json` `rig.json` `regions.json` を含む）。 |
 | `embed.css` | 置き方。 |
-| `assets.js` | モデル一式（moc3・テクスチャ 2 枚 = 4096×4096 と 2048×2048・物理・model3.json）と、SDK のシェーダー。base64。約 18MB。 |
+| `assets.js` | モデル一式（人の姿: moc3・テクスチャ 2 枚 = 4096×4096 と 2048×2048・物理・model3.json。目だけ: moc3・テクスチャ 2048×2048・モーション 34 本）と、SDK のシェーダー。base64。約 26MB。 |
 | `live2d/live2d.js` | 描画部分（Cubism SDK for Web の Framework を取り込んだもの）。 |
 | `live2d/live2dcubismcore.min.js` | Cubism Core（Live2D Proprietary Software License）。 |
 | `version.json` | 版、作った時刻、モデルを取り込んだ時刻。 |
@@ -51,7 +51,16 @@ webView.loadFileURL(folder.appendingPathComponent("embed.html"), allowingReadAcc
 | `setFrameRate(fps)` | 1 秒あたりに描くコマ数の上限（15〜60）。0 か省略で、画面のコマ数どおり。省電力のときは 30 にすると、描く量が半分になる。 |
 | `setTouchEnabled(true / false)` | 触れるようにするか。 |
 | `setFrameStats(true / false)` | 1 秒あたりのコマ数を、5 秒おきに知らせるか（既定は切）。 |
+| `setBody('human' / 'eyes')` | 体を選ぶ。`human` = 人の姿、`eyes` = 目だけ（水色の目が 2 つだけのシャノン。iOS の Waterlight Eye と同じ動き）。初めての体は読み終えるまで前の体のまま、切り替わると `body` が届く。表情・気分・会話の様子は引き継ぐ。最初から目だけで始めるときは `embed.html?body=eyes` を開く（`loading` もその体の分で進む）。 |
 | `version` | `{ version, builtAt, modelUpdatedAt }`。 |
+
+### 目だけの体（`eyes`）のとき
+
+- 表情は `express` などの同じ口で渡す。人の姿にしか無い顔（`smug` `proud` `crying` など）は、近い目の表情になる（目の表情は本体の 22 種）。
+- `setPhase` の `listening` `thinking` `speaking` は、それぞれの会話中の動きになる（表情は出ない。`idle` に戻すと表情の動きに戻る）。
+- `setMouthLevel`・`play(gesture)`・`setIdle` は効かない（口・腕が無い。まばたきと揺れは、目の動きに入っている）。
+- `setLayout` は `scale` と `offsetX` / `offsetY` だけ効く（絵は正方形で、画面の高さか幅に収まる大きさで中央に置く。`mode` と `fit` は効かない）。
+- 触る: 目の上とそのすぐそばを短く叩くと `touch`（`type: 'poke'`、`region: 'face'`）と `askReaction` が届き、目が少し横に広がって頬が赤くなる。撫でる・くすぐる・手をつなぐ・`tap` は無い。
 
 ## 出す側
 
@@ -60,7 +69,8 @@ webView.loadFileURL(folder.appendingPathComponent("embed.html"), allowingReadAcc
 | `type` | 中身 |
 |---|---|
 | `loading` | `progress`（0〜0.9）。読み込みの進み具合。最初の `ready` までの間だけ届く。 |
-| `ready` | `version` `builtAt` `modelUpdatedAt` `expressions`（表情の名前）`gestures`（しぐさの名前）`layouts`。 |
+| `ready` | `version` `builtAt` `modelUpdatedAt` `expressions`（表情の名前）`gestures`（しぐさの名前）`layouts` `bodies`（`['human', 'eyes']`）`body`（いまの体）。 |
+| `body` | `body`（`human` / `eyes`）。`setBody` で体が切り替わった。 |
 | `error` | `message`。描けなかった理由（WebGL2 が使えない、など）。`code: 'contextLost'` なら、描く面が失われて作り直せなかった（ページを読み込み直す）。 |
 | `contextLost` / `contextRestored` | 描く面（WebGL）が失われた（裏へ回ったあとなどに起きる）／ページの中で作り直せた（`attempts` = 何回目で作れたか）。作り直す間（0.5 秒ほど）は、絵が消える。表情・気分・映し方は、そのまま。3 回試して駄目なら、`error`（`code: 'contextLost'`）。 |
 | `touch` | 触れ合いが 1 つ終わった。`id`、`occurredAt`、`touch: { type, durationMs, strength, ongoing: false, region }`。`type` は `pet`（撫でる）`tickle`（くすぐる）`poke`（つつく）`holdHand`（手をつなぐ）。`region` は触られた部位（`head` 頭・`face` 顔・`side` 脇・`hand` 手・`body` ほかの体。撫でるのは頭、くすぐるのは脇、つつくのは顔か脇、つなぐのは手）。`/v1/body/events` には `{ id, type: touch.type, durationMs: touch.durationMs, strength: touch.strength, audience, occurredAt }` として送れる（`region` を足す欄の名前は、本体の取り決めに従う）。 |
