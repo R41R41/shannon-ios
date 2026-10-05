@@ -80,9 +80,9 @@ export function chatTurnRequestBody(
               type: ['string', 'null'],
               description: 'この返答までのトークの目的、決定、現在地、未決事項を短く表すナビゲーション要約',
             },
-            ...(request.generateThreadTitle ? {
-              threadTitle: { type: ['string', 'null'], description: '最初のユーザー発言とシャノン側のreplyの話題を表す短いトークタイトル' },
-            } : {}),
+            // Always in the schema, so the schema (part of the cached prefix) is the same on the turn that asks for a title
+            // and on every other; only that turn's `[トークタイトル]` block asks for one, and only then is it read.
+            threadTitle: { type: ['string', 'null'], description: '最初のユーザー発言とシャノン側のreplyの話題を表す短いトークタイトル。[トークタイトル]で求められた時だけ書き、それ以外はnull' },
             taskDecision: {
               type: 'object',
               additionalProperties: false,
@@ -152,7 +152,7 @@ export function chatTurnRequestBody(
             ...(request.placeSearch ? { places: placeSearchSchema } : {}), ...(request.offerRoomLook ? { roomLook: ROOM_LOOK_SCHEMA } : {}), ...(request.offerAppLook ? { appLook: APP_LOOK_SCHEMA } : {}),
             ...(request.offerMinecraftIntent ? { minecraftIntent: MINECRAFT_INTENT_SCHEMA } : {}),
           },
-          required: ['reply', ...(request.offerReplyFeeling ? ['feeling'] : []), 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.offerRoomLook ? ['roomLook'] : []), ...(request.offerAppLook ? ['appLook'] : []), ...(request.offerMinecraftIntent ? ['minecraftIntent'] : []), ...(request.generateThreadTitle ? ['threadTitle'] : [])],
+          required: ['reply', ...(request.offerReplyFeeling ? ['feeling'] : []), 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.offerRoomLook ? ['roomLook'] : []), ...(request.offerAppLook ? ['appLook'] : []), ...(request.offerMinecraftIntent ? ['minecraftIntent'] : []), 'threadTitle'],
         },
       },
     },

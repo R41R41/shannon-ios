@@ -97,8 +97,8 @@ describe('the provider prompt cache (Syzygy ADR-0003 principle 4)', () => {
       expect(body.input.at(-1)?.role).toBe('user');
     }
     for (const order of Object.values(ORDERS)) {
-      // The first turn asks for a title, which adds a field to the schema; from the second turn on nothing before the history changes.
-      for (let index = 2; index < requests.length; index += 1) {
+      // From the first turn on, the turn that asks for a title included: its schema is every turn's schema.
+      for (let index = 1; index < requests.length; index += 1) {
         const [before, after] = [requests[index - 1]!, requests[index]!];
         // Nothing fell out of the window: the next history begins with the whole history before it.
         expect(after.history.slice(0, before.history.length)).toEqual(before.history);
@@ -106,7 +106,7 @@ describe('the provider prompt cache (Syzygy ADR-0003 principle 4)', () => {
       }
     }
     // Measured on the base of this change (54cec9a): 0.647 with the tools and schema rendered first, 0.187 with the
-    // instructions first, because the shared state followed her identity at the top of the instructions.
+    // instructions first, because the shared state followed her identity at the top of the instructions. Now 0.881 both ways.
     expect(prefixShare(requests, ORDERS.toolsFirst)).toBeGreaterThan(0.85);
     expect(prefixShare(requests, ORDERS.instructionsFirst)).toBeGreaterThan(0.85);
   });
@@ -117,7 +117,7 @@ describe('the provider prompt cache (Syzygy ADR-0003 principle 4)', () => {
     const requests = await shiritoriThread(3);
     let full = 0;
     let kept = 0;
-    for (let index = 2; index < requests.length; index += 1) {
+    for (let index = 1; index < requests.length; index += 1) {
       const [before, after] = [requests[index - 1]!, requests[index]!];
       expect(after.history.reduce((sum, item) => sum + item.content.length, 0)).toBeLessThanOrEqual(2_000);
       if (before.history.length < 40) continue;
@@ -131,7 +131,7 @@ describe('the provider prompt cache (Syzygy ADR-0003 principle 4)', () => {
     }
     // Sliding by one message, no turn of a full window kept its start, and 0.594 / 0.171 of each request repeated the one
     // before (54cec9a; 0.785 / 0.787 with the turn's context after the history). With the stable head 155 of 159 turns kept
-    // it, and 0.864 / 0.866 of each request repeats the one before.
+    // it, and 0.867 of each request repeats the one before, either way.
     expect(kept / full).toBeGreaterThan(0.6);
     expect(prefixShare(requests, ORDERS.toolsFirst)).toBeGreaterThan(0.8);
     expect(prefixShare(requests, ORDERS.instructionsFirst)).toBeGreaterThan(0.8);

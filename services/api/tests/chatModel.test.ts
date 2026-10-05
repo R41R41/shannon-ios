@@ -362,7 +362,10 @@ describe('OpenAI Responses chat adapter', () => {
         { role: 'assistant', content: '覚えてる' },
         { role: 'user', content: '続き' },
       ]);
-      expect(JSON.stringify(body.text)).not.toContain('threadTitle');
+      // The title field is always in the schema (the same schema every turn), but no title is asked for on this turn.
+      expect((body.text as { format: { schema: { properties: Record<string, unknown> } } }).format.schema.properties.threadTitle).toEqual({ type: ['string', 'null'], description: expect.stringContaining('求められた時だけ') });
+      expect(JSON.stringify(body.input)).not.toContain('[トークタイトル]');
+      expect(String(body.instructions)).not.toContain('[トークタイトル]');
       expect(String(body.safety_identifier)).not.toContain('owner-private');
       return new Response(JSON.stringify({
         output_text: JSON.stringify({
