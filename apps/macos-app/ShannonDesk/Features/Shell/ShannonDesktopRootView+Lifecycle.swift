@@ -51,7 +51,8 @@ extension ShannonDesktopRootView {
                 }
             }
             // Running work is read more often, so its approval or result is not a minute late.
-            .task(id: conversation.agentTaskPollingKey) {
+            // Keyed on the connection too, so disconnecting stops the loop at once.
+            .task(id: "\(connection.isConnected)|\(conversation.agentTaskPollingKey)") {
                 guard connection.isConnected, !conversation.isDesignPreview,
                       !conversation.agentTaskPollingKey.isEmpty else { return }
                 while !Task.isCancelled {
