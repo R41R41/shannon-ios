@@ -30,10 +30,10 @@ public enum ShannonOpsText {
 
     public static func statusLabel(_ status: ShannonOpsStatus) -> String {
         switch status {
-        case .running: "動いている"
-        case .stopped: "止まっている"
-        case .degraded: "不調"
-        case .unknown: "不明"
+        case .running: ShannonGeneratedStrings.opsStatusRunning
+        case .stopped: ShannonGeneratedStrings.opsStatusStopped
+        case .degraded: ShannonGeneratedStrings.opsStatusDegraded
+        case .unknown: ShannonGeneratedStrings.opsStatusUnknown
         }
     }
 
@@ -43,19 +43,19 @@ public enum ShannonOpsText {
         case .running: "動いていた"
         case .stopped: "止まっていた"
         case .degraded: "不調だった"
-        case .unknown: "不明"
+        case .unknown: ShannonGeneratedStrings.opsStatusUnknown
         }
     }
 
     private static let serviceNames: [String: String] = [
-        "discord": "Discord", "minebot": "Minebot（管理側）", "minebot:bot": "Minebot の体", "minecraft": "Minecraft",
-        "notion": "Notion", "youtube": "YouTube", "youtube:live_chat": "YouTube ライブチャット",
-        "twitter": "X（Twitter）", "x": "X（Twitter）", "line": "LINE", "web": "Web",
+        "discord": "Discord", "minebot": ShannonGeneratedStrings.opsServiceMinebot, "minebot:bot": ShannonGeneratedStrings.opsServiceMinebotBody, "minecraft": "Minecraft",
+        "notion": "Notion", "youtube": "YouTube", "youtube:live_chat": ShannonGeneratedStrings.opsServiceYoutubeLiveChat,
+        "twitter": ShannonGeneratedStrings.opsServiceTwitter, "x": ShannonGeneratedStrings.opsServiceTwitter, "line": "LINE", "web": "Web",
     ]
 
     public static func serviceName(id: String, label: String) -> String {
         if let known = serviceNames[id] { return known }
-        if id.hasPrefix(minecraftPrefix) { return "Minecraft サーバー \(id.dropFirst(minecraftPrefix.count))" }
+        if id.hasPrefix(minecraftPrefix) { return ShannonGeneratedStrings.opsServiceMinecraftServer(name: String(id.dropFirst(minecraftPrefix.count))) }
         return !label.isEmpty && label != id ? label : id
     }
 
@@ -65,44 +65,44 @@ public enum ShannonOpsText {
 
     public static func commandLabel(_ type: ShannonOpsCommandType) -> String {
         switch type {
-        case .serviceStart, .minecraftStart: "開始"
-        case .serviceStop, .minecraftStop: "停止"
-        case .scheduleRun: "今すぐ実行"
-        case .minebotStart: "起動"
+        case .serviceStart, .minecraftStart: ShannonGeneratedStrings.opsCommandStart
+        case .serviceStop, .minecraftStop: ShannonGeneratedStrings.opsCommandStop
+        case .scheduleRun: ShannonGeneratedStrings.opsCommandRunNow
+        case .minebotStart: ShannonGeneratedStrings.opsCommandLaunch
         }
     }
 
     public static func commandStatusLabel(_ status: ShannonOpsCommandStatus) -> String {
         switch status {
-        case .pending: "実行待ち"
-        case .claimed: "実行中"
-        case .done: "完了"
-        case .failed: "失敗"
-        case .refused: "断られました"
-        case .expired: "期限切れ"
-        case .unknown: "不明"
+        case .pending: ShannonGeneratedStrings.opsCommandStatusPending
+        case .claimed: ShannonGeneratedStrings.opsCommandStatusClaimed
+        case .done: ShannonGeneratedStrings.opsCommandStatusDone
+        case .failed: ShannonGeneratedStrings.opsCommandStatusFailed
+        case .refused: ShannonGeneratedStrings.opsCommandStatusRefused
+        case .expired: ShannonGeneratedStrings.opsCommandStatusExpired
+        case .unknown: ShannonGeneratedStrings.opsStatusUnknown
         }
     }
 
     private static let codeLabels: [String: String] = [
-        "not_registered": "旧ランタイムに、その対象がありませんでした",
-        "already_running": "すでに動いていました",
-        "already_stopped": "すでに止まっていました",
-        "busy": "同じ対象の、ほかの操作が進行中でした",
-        "lab_running": "ラボの実走中のため、Minecraft サーバーを起動しませんでした",
-        "timeout": "時間内に終わりませんでした",
-        "error": "失敗しました（理由は、旧ランタイムのログにあります）",
-        "unsupported": "旧ランタイムが、この操作に対応していません",
-        "not_allowed": "旧ランタイムの側で、許可されていない対象でした",
-        "no_report": "結果が届きませんでした（実行されたかどうかは、状態を見て確かめてください）",
+        "not_registered": ShannonGeneratedStrings.opsCodeNotRegistered,
+        "already_running": ShannonGeneratedStrings.opsCodeAlreadyRunning,
+        "already_stopped": ShannonGeneratedStrings.opsCodeAlreadyStopped,
+        "busy": ShannonGeneratedStrings.opsCodeBusy,
+        "lab_running": ShannonGeneratedStrings.opsCodeLabRunning,
+        "timeout": ShannonGeneratedStrings.opsCodeTimeout,
+        "error": ShannonGeneratedStrings.opsCodeError,
+        "unsupported": ShannonGeneratedStrings.opsCodeUnsupported,
+        "not_allowed": ShannonGeneratedStrings.opsCodeNotAllowed,
+        "no_report": ShannonGeneratedStrings.opsCodeNoReport,
     ]
 
     /// For starting the Minebot body the same words mean something else (server contract).
     private static let minebotStartCodeLabels: [String: String] = [
-        "already_stopped": "選んだ Minecraft サーバーが止まっていたので、起動しませんでした",
-        "already_running": "Minebot の体は、すでに動いていました",
-        "lab_running": "ラボの実走中のため、Minebot の体を起動しませんでした",
-        "not_registered": "サーバーか、Minebot の体の状態を取れませんでした",
+        "already_stopped": ShannonGeneratedStrings.opsCodeMinebotStartAlreadyStopped,
+        "already_running": ShannonGeneratedStrings.opsCodeMinebotStartAlreadyRunning,
+        "lab_running": ShannonGeneratedStrings.opsCodeMinebotStartLabRunning,
+        "not_registered": ShannonGeneratedStrings.opsCodeMinebotStartNotRegistered,
     ]
 
     /// The reason of a result. A word this app does not know is shown as it arrived.
@@ -113,13 +113,13 @@ public enum ShannonOpsText {
     /// The reason shown beside a finished command: its code, or what an expiry means.
     public static func commandReason(_ command: ShannonOpsCommandDTO) -> String? {
         if let code = command.code { return commandCodeLabel(code, type: command.type) }
-        return command.status == .expired ? "5 分以内に受け取られなかったので、実行していません" : nil
+        return command.status == .expired ? ShannonGeneratedStrings.opsCodeExpired : nil
     }
 
     public static func commandTargetName(type: ShannonOpsCommandType, target: String) -> String {
-        if type == .scheduleRun { return "予定「\(target)」" }
+        if type == .scheduleRun { return ShannonGeneratedStrings.opsTargetSchedule(name: target) }
         let name = serviceName(id: target, label: target)
-        return type == .minebotStart ? "Minebot の体（\(name) に入る）" : name
+        return type == .minebotStart ? ShannonGeneratedStrings.opsTargetMinebotBody(name: name) : name
     }
 
     /// 「YouTube を停止」: one line of the record of operations.
@@ -168,25 +168,25 @@ public enum ShannonOpsText {
         switch type {
         case .scheduleRun:
             return [
-                "予定「\(name)」を、いますぐ実行しますか？",
+                ShannonGeneratedStrings.opsConfirmScheduleRunQuestion(name: name),
                 "",
-                "実行すると、この予定の処理がいま動き、実際に公開の場（X（Twitter）や YouTube など）へ投稿・返信されます。取り消せません。",
+                ShannonGeneratedStrings.opsConfirmScheduleRunConsequence,
                 postedToday == true
-                    ? "今日は、すでに投稿済みです。実行すると、もう一度投稿されます。"
-                    : "今日すでに投稿済みの場合でも、もう一度投稿されます。",
+                    ? ShannonGeneratedStrings.opsConfirmScheduleRunPostedToday
+                    : ShannonGeneratedStrings.opsConfirmScheduleRunMaybePosted,
             ].joined(separator: "\n")
         case .minebotStart:
             // These two sentences are a promise to the owner (2026-10-02). The wording does not change.
             return [
-                "Minebot の体を、\(name) に入らせて起動しますか？",
+                ShannonGeneratedStrings.opsConfirmMinebotStartQuestion(name: name),
                 "",
-                "起動すると、課金つきの計画機能が動き始めます。止めるまで費用がかかります。この画面には費用は表示されません。",
-                "いま動くのは、ラボでネザーに到達した版より古い版です。",
+                ShannonGeneratedStrings.opsConfirmMinebotStartCost,
+                ShannonGeneratedStrings.opsConfirmMinebotStartVersion,
             ].joined(separator: "\n")
         case .serviceStop, .minecraftStop:
-            return "\(name) を停止しますか？\n\n止めている間、この機能は動きません（もう一度動かすには、ここから開始します）。"
+            return ShannonGeneratedStrings.opsConfirmStop(name: name)
         case .serviceStart, .minecraftStart:
-            return "\(name) を開始しますか？"
+            return ShannonGeneratedStrings.opsConfirmStart(name: name)
         }
     }
 
@@ -206,7 +206,7 @@ public enum ShannonOpsText {
 
     /// The label of the hold-to-confirm control.
     public static func holdTitle(_ type: ShannonOpsCommandType) -> String {
-        type == .scheduleRun ? "長押しで実行" : "長押しで\(commandLabel(type))"
+        ShannonGeneratedStrings.opsConfirmHold(command: type == .scheduleRun ? "実行" : commandLabel(type))
     }
 
     /// Reads the common cron shapes (daily at a time, hourly, every n hours); anything else is shown as it arrived.
@@ -218,13 +218,13 @@ public enum ShannonOpsText {
               minuteField.count <= 2, minuteField.allSatisfy(\.isASCIIDigit),
               let minute = Int(minuteField), minute <= 59 else { return time }
         if hourField.count <= 2, hourField.allSatisfy(\.isASCIIDigit), let hour = Int(hourField), hour <= 23 {
-            return "毎日 \(hour):\(minute < 10 ? "0" : "")\(minute)"
+            return ShannonGeneratedStrings.opsScheduleDaily(time: "\(hour):\(minute < 10 ? "0" : "")\(minute)")
         }
-        if hourField == "*" { return "毎時 \(minute) 分" }
+        if hourField == "*" { return ShannonGeneratedStrings.opsScheduleHourly(minute: String(minute)) }
         if hourField.hasPrefix("*/") {
             let every = hourField.dropFirst(2)
             if every.count <= 2, every.allSatisfy(\.isASCIIDigit), let hours = Int(every), (2...23).contains(hours) {
-                return "\(hours) 時間ごと（\(minute) 分）"
+                return ShannonGeneratedStrings.opsScheduleEveryHours(hours: String(hours), minute: String(minute))
             }
         }
         return time
@@ -232,7 +232,7 @@ public enum ShannonOpsText {
 
     /// What a schedule row says about today, only when the report says it.
     public static func postedTodayLabel(_ postedToday: Bool?) -> String? {
-        postedToday.map { $0 ? "今日は投稿済み" : "今日はまだ" }
+        postedToday.map { $0 ? ShannonGeneratedStrings.opsSchedulePostedToday : ShannonGeneratedStrings.opsScheduleNotYetToday }
     }
 
     private static let refusals: [String: String] = [
@@ -249,7 +249,7 @@ public enum ShannonOpsText {
     /// Why the server did not take a command. Its own `message` is English and is not shown.
     public static func refusal(status: Int, code: String?) -> String {
         if let code, let known = refusals[code] { return known }
-        if status == 401 { return "接続が無効になりました。もう一度接続してください。" }
+        if status == 401 { return ShannonGeneratedStrings.opsConnectionInvalid }
         return "操作が受け付けられませんでした（\(status)）。"
     }
 

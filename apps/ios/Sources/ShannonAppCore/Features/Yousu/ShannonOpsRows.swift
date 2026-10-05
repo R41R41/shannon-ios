@@ -92,7 +92,7 @@ struct ShannonOpsRow: View {
     @ViewBuilder
     private var controls: some View {
         if isWaiting {
-            Text("結果待ち…")
+            Text(ShannonGeneratedStrings.opsWaitingResult)
                 .font(.footnote)
                 .foregroundStyle(palette.textSecondary)
         }
@@ -108,7 +108,7 @@ struct ShannonOpsRow: View {
                 .buttonBorderShape(.capsule)
                 .tint(action.type == .serviceStop || action.type == .minecraftStop ? palette.textSecondary : palette.action)
                 .fixedSize()
-                .accessibilityLabel("\(action.type == .scheduleRun ? "予定「\(title)」" : title) を\(label)")
+                .accessibilityLabel("\(action.type == .scheduleRun ? ShannonGeneratedStrings.opsTargetSchedule(name: title) : title) を\(label)")
                 .accessibilityHint("確認の画面を開きます")
         }
     }
