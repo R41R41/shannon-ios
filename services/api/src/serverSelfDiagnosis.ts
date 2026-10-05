@@ -22,6 +22,7 @@ import { createConfiguredGeminiSpeechGateway } from './geminiSpeech.js';
 import { createConfiguredOpenAITranscriptionGateway } from './openaiTranscriptionSession.js';
 import { DisabledVoyagerCatalog, type VoyagerCatalog } from './organizeIntegrations.js';
 import { shannonNowOwnerScope } from './shannonNowContract.js';
+import { configuredAetherAccess } from './aetherAccess.js';
 import { SHANNON_TOOLS, offeredTools, ownToolsEnabled, type ToolAudience, type ToolSurface } from './shannonTools.js';
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -140,10 +141,14 @@ function present(environment: Environment, name: string): boolean {
 
 function toolSummary(environment: Environment): ServerSelfDiagnosis['tools'] {
   const enabled = ownToolsEnabled(environment);
+  // Her Aether tools exist on this server only while its Aether client is configured (address and token); without it the
+  // summary is what it was before Aether access.
+  const aether = configuredAetherAccess(environment) !== null;
+  const here = (tool: { name: string }) => aether || !tool.name.startsWith('aether');
   const offered = Object.fromEntries(SURFACES.map(surface => [surface, Object.fromEntries(AUDIENCES.map(audience => [
-    audience, enabled ? offeredTools(surface, audience).length : 0,
+    audience, enabled ? offeredTools(surface, audience, here).length : 0,
   ]))])) as ServerSelfDiagnosis['tools']['offered'];
-  const names = enabled ? SHANNON_TOOLS.map(tool => tool.name) : [];
+  const names = enabled ? SHANNON_TOOLS.filter(here).map(tool => tool.name) : [];
   return { enabled, count: names.length, names, offered };
 }
 

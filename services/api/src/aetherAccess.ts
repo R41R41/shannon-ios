@@ -89,7 +89,9 @@ export function configuredAetherAccess(environment: Environment = process.env, f
   if (!address || !token) return null;
   let base: URL;
   try { base = new URL(address.endsWith('/') ? address : `${address}/`); } catch { return null; }
-  if (base.protocol !== 'https:' && base.protocol !== 'http:') return null;
+  // https, except to this machine (the VM's 127.0.0.1:3007): the token never crosses a network in the clear.
+  const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname);
+  if (base.protocol !== 'https:' && !(base.protocol === 'http:' && loopback)) return null;
   const timeout = Number(environment.SHANNON_AETHER_TIMEOUT_MS ?? '');
   return new HttpAetherAccess(base, token, Number.isInteger(timeout) && timeout >= 500 && timeout <= 60_000 ? timeout : 8_000, fetcher);
 }

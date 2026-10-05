@@ -57,6 +57,10 @@ describe('the Aether client (syzygy.aether-shannon-access.v1)', () => {
     expect(configuredAetherAccess({ SHANNON_AETHER_API_URL: 'http://127.0.0.1:3007' })).toBeNull();
     expect(configuredAetherAccess({ SHANNON_AETHER_SHANNON_TOKEN: TOKEN })).toBeNull();
     expect(configuredAetherAccess({ SHANNON_AETHER_API_URL: 'ftp://example.org', SHANNON_AETHER_SHANNON_TOKEN: TOKEN })).toBeNull();
+    // https, except to this machine.
+    expect(configuredAetherAccess({ SHANNON_AETHER_API_URL: 'http://aether.example.org/aether', SHANNON_AETHER_SHANNON_TOKEN: TOKEN })).toBeNull();
+    expect(configuredAetherAccess({ SHANNON_AETHER_API_URL: 'https://aether.example.org/aether', SHANNON_AETHER_SHANNON_TOKEN: TOKEN })).toBeInstanceOf(HttpAetherAccess);
+    expect(configuredAetherAccess({ SHANNON_AETHER_API_URL: 'http://localhost:3007', SHANNON_AETHER_SHANNON_TOKEN: TOKEN })).toBeInstanceOf(HttpAetherAccess);
     expect(configuredAetherAccess({ SHANNON_AETHER_API_URL: 'http://127.0.0.1:3007', SHANNON_AETHER_SHANNON_TOKEN: TOKEN })).toBeInstanceOf(HttpAetherAccess);
   });
 

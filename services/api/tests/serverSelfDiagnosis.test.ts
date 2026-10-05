@@ -83,6 +83,7 @@ function sources(environment: Record<string, string>, overrides: Partial<SelfDia
   };
 }
 
+const BEFORE_AETHER = SHANNON_TOOLS.filter(tool => !tool.name.startsWith('aether'));
 const configured = () => ({ ...SECRETS, ...MODELS, SHANNON_AUTONOMY_ENABLED: 'true' });
 
 describe('the self-diagnosis', () => {
@@ -108,18 +109,26 @@ describe('the self-diagnosis', () => {
         },
       },
       persona: { hash: personaHash(), algorithm: 'sha256' },
+      // Without the Aether client (no address) the summary is what it was before Aether access: no Aether tool, none with others.
       tools: {
-        enabled: true, count: SHANNON_TOOLS.length, names: SHANNON_TOOLS.map(tool => tool.name),
+        enabled: true, count: BEFORE_AETHER.length, names: BEFORE_AETHER.map(tool => tool.name),
         offered: {
-          // With anyone else present: her Aether reading tools only (Syzygy ADR-0007 revised), counted from the registry.
-          text: { owner_alone: SHANNON_TOOLS.length, others: 3 },
-          voice: { owner_alone: SHANNON_TOOLS.length, others: 3 },
-          // Her Minecraft body's tools and a proposal to Aether exist only in conversations (`shannonTools.ts`, `conversationTool`), never in her own time.
-          autonomy: { owner_alone: SHANNON_TOOLS.filter(tool => tool.surfaces.includes('autonomy')).length, others: 3 },
+          text: { owner_alone: BEFORE_AETHER.length, others: 0 },
+          voice: { owner_alone: BEFORE_AETHER.length, others: 0 },
+          // Her Minecraft body's tools exist only in conversations (`shannonTools.ts`, `conversationTool`), never in her own time.
+          autonomy: { owner_alone: BEFORE_AETHER.filter(tool => tool.surfaces.includes('autonomy')).length, others: 0 },
         },
       },
       integrations: { voyager: true, notion: true, aetherContext: true, aetherProposals: true, discordBridge: true },
     });
+  });
+
+  it('counts her Aether tools only while the Aether client is configured', () => {
+    const tools = createServerSelfDiagnosis(sources({ ...configured(), SHANNON_AETHER_API_URL: 'http://127.0.0.1:3007', SHANNON_AETHER_SHANNON_TOKEN: 'fake-token-0015' })).read().tools;
+    expect(tools.names).toEqual(SHANNON_TOOLS.map(tool => tool.name));
+    expect(tools.offered.text).toEqual({ owner_alone: SHANNON_TOOLS.length, others: 3 });
+    // An address without TLS to another machine is not a client.
+    expect(createServerSelfDiagnosis(sources({ ...configured(), SHANNON_AETHER_API_URL: 'http://aether.example.org', SHANNON_AETHER_SHANNON_TOKEN: 'fake-token-0015' })).read().tools.offered.text.others).toBe(0);
   });
 
   it('says what is not configured as null and false, never as a default model', () => {
@@ -178,12 +187,13 @@ describe('the self-diagnosis', () => {
 
   it('counts exactly the tools of the registry, per surface and audience, and none when they are switched off', () => {
     const diagnosis = createServerSelfDiagnosis(sources(configured())).read();
-    expect(diagnosis.tools.count).toBe(SHANNON_TOOLS.length);
-    expect(diagnosis.tools.names).toEqual(SHANNON_TOOLS.map(tool => tool.name));
+    // Without the Aether client, the registry less her Aether tools.
+    expect(diagnosis.tools.count).toBe(BEFORE_AETHER.length);
+    expect(diagnosis.tools.names).toEqual(BEFORE_AETHER.map(tool => tool.name));
     expect(new Set(diagnosis.tools.names).size).toBe(diagnosis.tools.count);
     for (const surface of ['text', 'voice', 'autonomy'] as const) {
       for (const audience of ['owner_alone', 'others'] as const) {
-        expect(diagnosis.tools.offered[surface][audience]).toBe(offeredTools(surface, audience).length);
+        expect(diagnosis.tools.offered[surface][audience]).toBe(offeredTools(surface, audience, tool => !tool.name.startsWith('aether')).length);
       }
     }
     const off = createServerSelfDiagnosis(sources({ ...configured(), SHANNON_OWN_TOOLS: 'off' })).read().tools;
@@ -283,7 +293,7 @@ describe('GET /v1/ops', () => {
     const owner = await read(DEVICE_TOKEN);
     expect(owner.status).toBe(200);
     const body = JSON.parse(owner.text) as Record<string, any>;
-    expect(body.server).toMatchObject({ schemaVersion: 1, tools: { count: SHANNON_TOOLS.length }, integrations: { voyager: true } });
+    expect(body.server).toMatchObject({ schemaVersion: 1, tools: { count: BEFORE_AETHER.length }, integrations: { voyager: true } });
     for (const value of Object.values(SECRETS)) expect(owner.text).not.toContain(value);
     expect(JSON.parse((await read(OTHER_TOKEN)).text)).not.toHaveProperty('server');
     expect(await read(null)).toMatchObject({ status: 401 });

@@ -13,7 +13,7 @@ State: implemented on the server behind configuration; the apps' screens are unc
 
 | Variable | Meaning |
 | --- | --- |
-| `SHANNON_AETHER_API_URL` | The Aether authenticated API (`http://127.0.0.1:3007` on the VM, or the public `/aether` path). |
+| `SHANNON_AETHER_API_URL` | The Aether authenticated API (`http://127.0.0.1:3007` on the VM, or the public `/aether` path). `https` is required except to this machine (`127.0.0.1`, `localhost`, `[::1]`); any other `http` address leaves the client off. |
 | `SHANNON_AETHER_SHANNON_TOKEN` | The Shannon-scoped token (`node scripts/mobile-auth.cjs issue-shannon-token` on the VM, owner-approved). Never logged, never in an error. |
 | `SHANNON_AETHER_TIMEOUT_MS` | One request's timeout, 500–60,000 ms (default 8,000). |
 | `SHANNON_AETHER_PROPOSAL_DIR` | The proposal inbox (unchanged; v2 adds `update` and `delete`). |
