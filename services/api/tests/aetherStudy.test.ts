@@ -449,6 +449,13 @@ describe('her study in Aether', () => {
     expect(fake.requests).toEqual([]);
     expect(store.study.aether.current(other, id)).toBeNull();
     expect(service.tools.offered('text', 'owner_alone', other).find(tool => tool.name === 'study.list')!.description).toContain('正本はシャノンのデータベース');
+    // Nor any Aether tool, on any surface, offered or called; the owner's scope has them.
+    for (const surface of ['text', 'voice', 'autonomy'] as const) {
+      for (const audience of ['owner_alone', 'others'] as const) expect(service.tools.offered(surface, audience, other).some(tool => tool.name.startsWith('aether'))).toBe(false);
+    }
+    expect(service.tools.offered('text', 'owner_alone', scope).some(tool => tool.name === 'aether.search')).toBe(true);
+    expect(await service.tools.call('aether.search', JSON.stringify({ query: '灯台' }), { scopeKey: other, surface: 'text', audience: 'owner_alone', memory })).toMatchObject({ ok: false, failure: 'not_offered' });
+    expect(conversationTools(service, other, 'text', true, { audience: { othersKnown: () => true, noteOthers: () => undefined }, now: () => '2026-10-06T01:00:00.000Z' }, 'thread\nx', new TurnDeadline(TEXT_TURN_DEADLINE))).toEqual({ toolsWithheld: true });
     await service.studyAether!.sync(other);
     expect(fake.requests).toEqual([]);
     const response = dispatchStudyRequest({ method: 'GET', path: '/v1/autonomy/study', query: new URLSearchParams({ scopeKey: other }) }, service.study);

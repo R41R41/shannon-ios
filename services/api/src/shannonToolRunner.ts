@@ -68,12 +68,20 @@ export class ShannonToolRunner {
    */
   offered(surface: ToolSurface, audience: ToolAudience, scopeKey?: string): readonly ShannonToolDefinition[] {
     // Her Aether tools only while the Aether client is configured (URL and token), and a proposal only while the inbox is too:
-    // with the inbox alone (or the token alone) every offer is what it was before Aether access.
+    // with the inbox alone (or the token alone) every offer is what it was before Aether access. Only to the owner's scope.
     const tools = offeredTools(surface, audience, tool => tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
       : tool.domain === 'minecraft_body' ? minecraftToolOffered(this.minecraft, tool, scopeKey)
-        : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true && Boolean(this.aether.access)
-          : tool.name.startsWith('aether') ? Boolean(this.aether.access) : true);
+        : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true && this.aetherFor(scopeKey)
+          : tool.name.startsWith('aether') ? this.aetherFor(scopeKey) : true);
     return this.aether.study && (scopeKey === undefined || this.aether.study.covers(scopeKey)) ? tools.map(aetherStudyTool) : tools;
+  }
+
+  /**
+   * Whether her Aether tools exist for this scope: the client is configured and the scope is the owner's (`aetherStudyScope`,
+   * the one scope whose study lives in Aether). A call that names no scope gets none.
+   */
+  private aetherFor(scopeKey: string | undefined): boolean {
+    return Boolean(this.aether.access) && scopeKey !== undefined && (this.aether.study?.covers(scopeKey) ?? false);
   }
 
   /** The gate, the input check, and the executor's preparation. A result here is the call's answer: nothing ran. */
@@ -82,6 +90,9 @@ export class ShannonToolRunner {
     const refused = authorizeToolCall(tool, context);
     if (refused || !tool) return { tool, result: refused ?? toolFailure('not_offered', 'そういう道具はない。', { retryable: false }) };
     const executor = this.executors[tool.name];
+    if ((tool.name.startsWith('aether') || tool.domain === 'aether_proposal') && !this.aetherFor(context.scopeKey)) {
+      return { tool, result: toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'Aetherの道具はライ氏のscopeだけ', wouldWork: 'ライ氏との会話か、ボクの時間で使う' } }) };
+    }
     if (!executor) return { tool, result: toolFailure('not_offered', `${tool.name} はまだ使えない。`, { retryable: false }) };
     // The schema of this surface: in a conversation a write is shorter (`toolForSurface`).
     const checked = validToolInput(rawInput, toolForSurface(tool, context.surface).input);
@@ -92,7 +103,7 @@ export class ShannonToolRunner {
     if (secret) return { tool, result: secret };
     try {
       // Aether as this call may reach it: the gate narrows it with anyone else present and in her own time.
-      const prepared = executor(checked.input, this.aether.access ? { ...context, aether: gatedAether(this.aether.access, context) } : context);
+      const prepared = executor(checked.input, this.aether.access && this.aetherFor(context.scopeKey) ? { ...context, aether: gatedAether(this.aether.access, context) } : context);
       return 'run' in prepared ? { tool, prepared } : { tool, result: prepared };
     } catch {
       return { tool, result: toolFailure('failed', 'うまく準備できなかった。', { retryable: true }) };

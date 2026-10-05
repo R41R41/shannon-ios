@@ -202,7 +202,7 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
         call: phone?.offered ? { upcoming: Boolean(materials.reachOut) && (materials.upcoming?.length ?? 0) > 0 } : null,
         ...(again ? { followUp: rethink.followUp, chainLook: rethink.chainLook, jot: rethink.jot } : {}),
         ...(session ? { session: true } : {}), ...(owned ? { secrets: owned.secrets } : {}),
-        ...(tooling ? { tools: offeredOwnTools(dependencies).map(tool => tool.name) } : {}),
+        ...(tooling ? { tools: offeredOwnTools(dependencies, cycle.scopeKey).map(tool => tool.name) } : {}),
       });
       const words = again ? 'さっき起きたことを見て、考え直しました。' : '次に何をするか考えました。';
       // A thought with no step at all: nothing she named could be done, or she named nothing.
