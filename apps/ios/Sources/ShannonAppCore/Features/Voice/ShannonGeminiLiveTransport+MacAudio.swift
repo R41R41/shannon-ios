@@ -11,7 +11,8 @@ import Foundation
 extension ShannonGeminiLiveTransport {
     func configureAudioSession() throws {
         installMacAudioObservers()
-        publishInputState(activeDevice: nil)
+        heardInputName = nil
+        publishInputState()
     }
 
     func activateAudioSession() throws {}
@@ -22,41 +23,45 @@ extension ShannonGeminiLiveTransport {
         stopObservingDevices = nil
     }
 
-    /// Before voice processing: point the input unit at the chosen microphone.
+    /// Before voice processing: point the engine's input unit (still a plain HAL unit then) at the chosen
+    /// microphone, on its global scope as Core Audio documents for an output unit's current device. Voice
+    /// processing then builds its aggregate from that input. Nothing is set on the voice-processing unit itself.
     func prepareInputDevice() {
-        _ = applyChosenDevice()
-    }
-
-    /// After voice processing took the unit over: point it again, then report what it really uses.
-    func confirmInputDevice() {
-        let chosen = applyChosenDevice()
-        let active = audioEngine.inputNode.audioUnit.flatMap(ShannonMacAudioDevices.currentDevice(of:))
-        if let chosen, let active, chosen != active {
-            ShannonVoiceDiagnostics.shared.record("gemini.audio.input.device.ignored")
-            preferenceUnavailable = true
-        }
-        publishInputState(activeDevice: active)
-    }
-
-    /// The device is chosen when the audio starts; a later change of choice reconnects the call (the model).
-    func applyInputPreference() throws {
-        let active = audioStarted ? audioEngine.inputNode.audioUnit.flatMap(ShannonMacAudioDevices.currentDevice(of:)) : nil
-        publishInputState(activeDevice: active)
-    }
-
-    /// Sets the chosen microphone on the input unit and returns its Core Audio id, or nil for the system's input.
-    private func applyChosenDevice() -> AudioDeviceID? {
+        appliedInputDevice = nil
         let resolution = ShannonMacVoiceInputRouting.resolve(selectedID: inputDeviceID, devices: ShannonMacAudioDevices.inputs())
         if resolution.isPreferenceUnavailable, !preferenceUnavailable {
             ShannonVoiceDiagnostics.shared.record("gemini.audio.input.fallback", metadata: ["preference": "device"])
         }
         preferenceUnavailable = resolution.isPreferenceUnavailable
         guard let uid = resolution.deviceID, let device = ShannonMacAudioDevices.deviceID(forUID: uid),
-              let unit = audioEngine.inputNode.audioUnit else { return nil }
-        if !ShannonMacAudioDevices.setCurrentDevice(device, on: unit) {
+              let unit = audioEngine.inputNode.audioUnit else { return }
+        if ShannonMacAudioDevices.setCurrentDevice(device, on: unit) {
+            appliedInputDevice = device
+        } else {
             ShannonVoiceDiagnostics.shared.record("gemini.audio.input.device.refused")
+            preferenceUnavailable = true
         }
-        return device
+    }
+
+    /// After voice processing took the unit over: say which microphone the call really hears. The unit's own
+    /// device is the hidden aggregate voice processing made; its input sub-device is the microphone. When that
+    /// cannot be read, the device that was set (or the system's input) is reported.
+    func confirmInputDevice() {
+        let heard = audioEngine.inputNode.audioUnit
+            .flatMap(ShannonMacAudioDevices.currentDevice(of:))
+            .flatMap(ShannonMacAudioDevices.inputBehind)
+        if let applied = appliedInputDevice, let heard, heard.uid != ShannonMacAudioDevices.uid(of: applied) {
+            // Voice processing kept another microphone: the call goes on with it and says so.
+            ShannonVoiceDiagnostics.shared.record("gemini.audio.input.device.ignored")
+            preferenceUnavailable = true
+        }
+        heardInputName = heard?.name
+        publishInputState()
+    }
+
+    /// The device is chosen when the audio starts; a later change of choice reconnects the call (the model).
+    func applyInputPreference() throws {
+        publishInputState()
     }
 
     private func installMacAudioObservers() {
@@ -73,9 +78,12 @@ extension ShannonGeminiLiveTransport {
         }
     }
 
-    private func publishInputState(activeDevice: AudioDeviceID?) {
+    private func publishInputState() {
         let devices = ShannonMacAudioDevices.inputs()
-        let activeName = activeDevice.flatMap(ShannonMacAudioDevices.name(of:)) ?? ShannonMacAudioDevices.defaultInputName()
+        // Never the aggregate's name: what the call hears, else what was set, else the system's input.
+        let activeName = heardInputName
+            ?? appliedInputDevice.flatMap(ShannonMacAudioDevices.name(of:))
+            ?? ShannonMacAudioDevices.defaultInputName()
         inputStateHandler(ShannonVoiceInputState(
             preference: .automatic,
             activeInputName: activeName,

@@ -16,7 +16,28 @@ enum ShannonMacAudioDevices {
         }
     }
 
-    /// The system's input device now (System Settings › Sound › Input).
+    /// The microphone a device stands for: the device itself, or, for an aggregate (the one voice processing
+    /// builds), its active input sub-device. Nil when that cannot be told.
+    static func inputBehind(_ id: AudioDeviceID) -> (uid: String, name: String)? {
+        var candidates = [id]
+        if transport(id) == kAudioDeviceTransportTypeAggregate {
+            candidates = objectList(id, kAudioAggregateDevicePropertyActiveSubDeviceList)
+        }
+        for candidate in candidates where hasInput(candidate) && !isAggregateOfVoiceProcessing(candidate) {
+            guard transport(candidate) != kAudioDeviceTransportTypeAggregate,
+                  let uid = string(candidate, kAudioDevicePropertyDeviceUID) else { continue }
+            return (uid, string(candidate, kAudioObjectPropertyName) ?? uid)
+        }
+        return nil
+    }
+
+    static func uid(of id: AudioDeviceID) -> String? { string(id, kAudioDevicePropertyDeviceUID) }
+
+    private static func isAggregateOfVoiceProcessing(_ id: AudioDeviceID) -> Bool {
+        string(id, kAudioDevicePropertyDeviceUID)?.hasPrefix("VPAUAggregateAudioDevice") ?? false
+    }
+
+    /// The system's input device now (System Settings › Sound › Input), unless it is a hidden device.
     static func defaultInputName() -> String? {
         var id = AudioDeviceID(0)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
@@ -24,7 +45,7 @@ enum ShannonMacAudioDevices {
             mSelector: kAudioHardwarePropertyDefaultInputDevice,
             mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
         guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &id) == noErr,
-              id != 0 else { return nil }
+              id != 0, !isHidden(id), !isAggregateOfVoiceProcessing(id) else { return nil }
         return string(id, kAudioObjectPropertyName)
     }
 
@@ -74,14 +95,16 @@ enum ShannonMacAudioDevices {
     }
 
     private static func deviceIDs() -> [AudioDeviceID] {
+        objectList(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDevices)
+    }
+
+    private static func objectList(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> [AudioObjectID] {
         var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDevices,
-            mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+            mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
         var size: UInt32 = 0
-        let system = AudioObjectID(kAudioObjectSystemObject)
-        guard AudioObjectGetPropertyDataSize(system, &address, 0, nil, &size) == noErr, size > 0 else { return [] }
-        var ids = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
-        guard AudioObjectGetPropertyData(system, &address, 0, nil, &size, &ids) == noErr else { return [] }
+        guard AudioObjectGetPropertyDataSize(object, &address, 0, nil, &size) == noErr, size > 0 else { return [] }
+        var ids = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(object, &address, 0, nil, &size, &ids) == noErr else { return [] }
         return ids
     }
 

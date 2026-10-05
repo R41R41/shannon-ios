@@ -65,6 +65,15 @@ final class ShannonMacVoiceInputRoutingTests: XCTestCase {
     }
 
 #if os(macOS)
+    /// Whatever this Mac has: the list and the 自動 label never show voice processing's hidden aggregate.
+    func testTheMicrophonesListedAreNeverTheVoiceProcessingAggregate() {
+        for device in ShannonMacAudioDevices.inputs() {
+            XCTAssertFalse(device.id.hasPrefix("VPAUAggregateAudioDevice"))
+            XCTAssertEqual(ShannonMacAudioDevices.deviceID(forUID: device.id).flatMap(ShannonMacAudioDevices.inputBehind)?.uid, device.id)
+        }
+        XCTAssertFalse(ShannonMacAudioDevices.defaultInputName()?.hasPrefix("VPAUAggregateAudioDevice") ?? false)
+    }
+
     @MainActor
     func testAChoiceIsKeptForLaterCallsAndAMissingOneIsRefused() {
         let key = ShannonGeminiLiveSessionModel.macInputDeviceDefaultsKey
