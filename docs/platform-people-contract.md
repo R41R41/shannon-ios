@@ -6,7 +6,7 @@ Everything here is additive. A runtime that sends only today's requests keeps wo
 
 ## Transport
 
-- `POST /v1/platform/turns` (body at most 64 KiB) and `POST /v1/platform/context` (body at most 16 KiB), JSON.
+- `POST /v1/platform/turns` (body at most 64 KiB) and `POST /v1/platform/context` (body at most 16 KiB), JSON. `POST /v1/platform/reply` (64 KiB, off by default) is in [Replies](#replies-post-v1platformreply).
 - `Authorization: Bearer <SHANNON_PLATFORM_BRIDGE_TOKEN>` — the existing service credential. Nothing else authenticates.
 - The conversation must be bound in `SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON` (exact `conversationId`, or `conversationIdPrefix`). Unbound conversations are refused. The owner is the binding's `ownerUserId`; every other `sourceUserId` is another person.
 
@@ -108,6 +108,42 @@ Response, unchanged in shape: `{ "schemaVersion": 1, "stateVersion": number, "up
 - A DM with someone else (`conversationKind: "dm"`, `sourceUserId` not the owner) is that person alone: only what they said in that DM and the owner's unprotected content. Nothing marked is returned, because the owner is not there to release it.
 - A conversation bound `owner-private` answers only the owner.
 
+## Replies: `POST /v1/platform/reply`
+
+Added 2026-10-06 (Minecraft body phase 5a). Instead of answering with a model of its own and mirroring the turn, a runtime may ask Shannon's one mind for the reply. Off unless the API's `SHANNON_PLATFORM_REPLY` is `on` (also `true`, `1`, `enabled`): every new message is one call of the conversation model. Off, the route answers `503 PLATFORM_REPLY_DISABLED`. `/v1/platform/turns` and `/v1/platform/context` are unchanged and keep working.
+
+Same transport, token and bindings as above; body at most 64 KiB.
+
+| Field | Type | Owner | Other person | Notes |
+| --- | --- | --- | --- | --- |
+| `platform` | `discord` \| `line` \| `x` \| `youtube` | required | required | Not `minecraft`: her Minecraft body has its own route. |
+| `requestId` | string, 1–160 | required | required | The same id the runtime would mirror the turn with (the platform message id). |
+| `conversationId` | string, 1–240 | required | required | Must be bound. |
+| `conversationKind` | `dm` \| `group` \| `channel` | optional | **required** | |
+| `sourceUserId` | string, 1–160 | required | required | Who actually wrote the message. |
+| `sourceDisplayName` | string, 1–80 | optional | **required** | |
+| `participants` | up to 50 platform user ids | optional | optional | As for `/v1/platform/context`. |
+| `userMessage` | string, 1–8,000 | required | required | Plain text. |
+| `observedAt` | ISO 8601 | required | required | A new message more than 30 minutes old or more than 5 minutes ahead is `400`. |
+
+No other field is accepted (`400 BAD_REQUEST`): no reply, attachments, `scopeKey` or audience.
+
+The turn is a turn of the app's conversation kernel (`ShannonApiKernel.textTurn`) through the platform surface (`platformSurface.ts`) that her Minecraft body's game chat uses too, so who is present is decided by the same policy as `/v1/platform/context`:
+
+| Speaker and conversation | Present | Tools | Kept as |
+| --- | --- | --- | --- |
+| Owner, conversation bound `owner-private` | the owner alone: the app's owner turn (his profile, memory, today's focus, `[マイクラの体で起きたこと]`, his feeling moves) | by the app's owner-alone rule, including `minecraft.request` while her Minecraft body is present (`docs/minecraft-body-contract.md`, phase 4) | his turn in the conversation's platform thread, owner-private |
+| Owner, shared conversation | everyone in it: shared header, people lines, speak-time check, memory through the disclosure gate; no notes, tasks, Notion or calendar | none | his turn in the platform thread, audience the conversation, speaker verified owner |
+| Anyone else | that conversation (or that person alone in a DM, without the owner's protected lines): her guest identity | none | person memory, as `/v1/platform/turns` keeps it |
+
+A platform reply is never told what she did on her own to reach the owner (the `[ボクが自分からしたこと]` block of `/v1/chat`): the surface switch `TextTurnSurface.ownOutreach` is off for it (core owner recommendation, 2026-10-06). Her Minecraft body's game chat has it on, on the owner's own turns (`docs/minecraft-body-contract.md`). The `minecraft_body` capability line is in the owner's description of an `owner-private` conversation only while her Minecraft body is present.
+
+Anyone else in an `owner-private` conversation, or without `conversationKind` / `sourceDisplayName`, is `403 PLATFORM_ACTOR_DENIED`, before any model call. The surface adds a short delivery note (which platform, who reads it, short replies, that nothing is promised there that she cannot do).
+
+Response `201` (new) or `200` (repeated): `{ "reply": string ≤ 4,000, "threadId": string, "duplicate": boolean, "ignored"?: string }`. `ignored` as for `/v1/platform/turns`, plus `people_disabled` and `rate_limited`. A repeated `requestId` with the same content answers the stored reply (30 days) without a second model call; with other content it is `409 PLATFORM_TURN_CONFLICT`. Retry on a network failure or `5xx` with the same `requestId`. At most 20 new replies a minute (`429 RATE_LIMITED`); `502 MODEL_UNAVAILABLE` when the model could not answer.
+
+The owner's turn is stored under the receipt `platform` + `requestId`, the one a mirror would use: a runtime that got its reply here must not mirror the turn as well (it would be `409`). A runtime that falls back to its own model after a failure here mirrors as before; if the reply here was stored but never delivered, that mirror is refused with `409` and the thread keeps her undelivered reply (known limit).
+
 ## Errors
 
 Body: `{ "error": "<code>", "message": "…" }`.
@@ -122,6 +158,7 @@ Body: `{ "error": "<code>", "message": "…" }`.
 | 409 | `PLATFORM_TURN_CONFLICT` | The `requestId` was used for different content. | No |
 | 429 | `RATE_LIMITED` | More than 120 turns of other people in a minute. | After a minute, same `requestId` |
 | 503 | `PLATFORM_BRIDGE_NOT_CONFIGURED` | The bridge is not configured. | Later |
+| 503 | `PLATFORM_REPLY_DISABLED` | `/v1/platform/reply` only: `SHANNON_PLATFORM_REPLY` is not on. | Answer with the runtime's own path |
 
 A refused or dropped turn must never stop the runtime from replying on the platform.
 
@@ -139,6 +176,6 @@ A refused or dropped turn must never stop the runtime from replying on the platf
 ## Server bounds
 
 - Stored turns of other people: 200 per conversation and day, 1,000 per day over all conversations (day in `Asia/Tokyo`). Beyond that the answer is `ignored: conversation_cap` / `daily_cap`.
-- One summary per conversation and day, rewritten by the background worker inside the shared background budget, with a deterministic fallback. No model call happens on these routes.
+- One summary per conversation and day, rewritten by the background worker inside the shared background budget, with a deterministic fallback. No model call happens on `/v1/platform/turns` or `/v1/platform/context`; `/v1/platform/reply` is one model call per new message.
 - `SHANNON_PLATFORM_PEOPLE_INGEST=off` (also `false`, `0`, `disabled`) on the API stops accepting other people's turns and friend-authored context requests. It is an app setting: changing it needs a restart, not a deployment. Unset means on.
 - A person the owner forgot in 人 is not stored again: `ignored: forgotten_person`.

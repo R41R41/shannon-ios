@@ -38,23 +38,25 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
     expect(new Set(SHANNON_TOOLS.map(tool => tool.name)).size).toBe(SHANNON_TOOLS.length);
     expect(SHANNON_TOOLS.map(tool => tool.name).sort()).toEqual([
       'folder.create', 'folder.delete', 'folder.list', 'folder.move', 'folder.read', 'folder.rename', 'folder.search', 'folder.update',
+      'minecraft.cancel', 'minecraft.request', 'minecraft.status',
       'study.create', 'study.delete', 'study.list', 'study.move', 'study.read', 'study.rename', 'study.restore', 'study.search', 'study.update',
     ]);
     for (const tool of SHANNON_TOOLS) {
       expect(tool.description, tool.name).toMatch(/[ぁ-んァ-ヶ一-龠]/u);
       expect(tool.input).toMatchObject({ type: 'object', additionalProperties: false });
       for (const required of tool.input.required) expect(Object.keys(tool.input.properties), tool.name).toContain(required);
-      expect(tool.domain).toBe(tool.name.startsWith('study.') ? 'aether_study' : 'host_folder');
+      expect(tool.domain).toBe(tool.name.startsWith('study.') ? 'aether_study' : tool.name.startsWith('minecraft.') ? 'minecraft_body' : 'host_folder');
       expect(tool.cost).toBe('none');
       expect(tool.audiences).toEqual(['owner_alone']);
-      expect(tool.surfaces).toEqual(['text', 'voice', 'autonomy']);
+      // Her Minecraft body is asked from a conversation only, never from her own time (phase 4).
+      expect(tool.surfaces).toEqual(tool.domain === 'minecraft_body' ? ['text', 'voice'] : ['text', 'voice', 'autonomy']);
       expect(toolFromProviderName(providerToolName(tool.name))).toBe(tool);
       expect(providerToolName(tool.name)).toMatch(/^[a-z_]+$/u);
     }
     // Text, voice and her own time are given the same tools (a conversation's writes shorter); with anyone else present there are none.
-    expect(offeredTools('autonomy', 'owner_alone')).toEqual(SHANNON_TOOLS);
+    expect(offeredTools('autonomy', 'owner_alone')).toEqual(SHANNON_TOOLS.filter(tool => tool.domain !== 'minecraft_body'));
     for (const surface of ['text', 'voice', 'autonomy'] as const) {
-      expect(offeredTools(surface, 'owner_alone').map(tool => tool.name)).toEqual(SHANNON_TOOLS.map(tool => tool.name));
+      expect(offeredTools(surface, 'owner_alone').map(tool => tool.name)).toEqual(SHANNON_TOOLS.filter(tool => surface !== 'autonomy' || tool.domain !== 'minecraft_body').map(tool => tool.name));
       expect(offeredTools(surface, 'others')).toEqual([]);
     }
     // No tool shows a story to the owner, marks it 「見せてもいい」, or reaches anyone else.

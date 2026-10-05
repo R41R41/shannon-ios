@@ -31,10 +31,13 @@ export {
 } from './persona.js';
 export {
   SHANNON_CAPABILITIES,
+  SHANNON_CONDITIONAL_CAPABILITIES,
   SHANNON_LIMITATIONS,
+  SHANNON_MINECRAFT_BODY_CAPABILITY,
   SHANNON_MEMO_PLACE_RULE,
   SHANNON_ROOM_LOOK_RULES,
   shannonCapabilityPrompt,
+  withMinecraftBodyCapability,
   type ShannonCapability,
   type ShannonCapabilityId,
 } from './capabilities.js';

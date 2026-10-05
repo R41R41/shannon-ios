@@ -1,0 +1,352 @@
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { SHANNON_MINECRAFT_BODY_CAPABILITY, groupAudience } from '@shannon/cognition';
+import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createInMemoryAutonomyService } from '../src/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
+import { MinecraftBodyRequests } from '../src/minecraftBodyRequests.js';
+import { OwnOutreach, type OwnOutreachReader } from '../src/ownOutreach.js';
+import { conversationCapabilityContext } from '../src/conversationCapabilities.js';
+import { SQLiteSurfaceTurnLog } from '../src/minecraftTurnStore.js';
+import { SQLitePeopleMemoryStore } from '../src/peopleMemoryStore.js';
+import { PlatformBridgeError, PlatformBridgeService, configuredPlatformBridge, platformBridgeThreadId } from '../src/platformBridge.js';
+import { PlatformPeople } from '../src/platformPeople.js';
+import { PLATFORM_REPLY_LIMITS, PlatformReplyService, SHANNON_PLATFORM_REPLY_PATH, platformReplyEnabled } from '../src/platformReply.js';
+import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeReply, isPlatformBridgePath } from '../src/serverPlatformBridgeRoute.js';
+import { SQLiteShannonStore } from '../src/sqliteStore.js';
+
+const OWNER = '900000000000000001';
+const FRIEND = '900000000000000002';
+const DM = 'discord::555';
+const CHANNEL = 'discord:111:222';
+const START = '2026-10-05T12:00:00.000Z';
+const TOKEN = 'b'.repeat(40);
+const BINDINGS = [
+  { platform: 'discord', conversationId: DM, ownerUserId: OWNER, title: 'ライ氏とのDM', audience: 'owner-private' },
+  { platform: 'discord', conversationIdPrefix: 'discord:111:', ownerUserId: OWNER, title: 'テストサーバー' },
+];
+const ENVIRONMENT = { SHANNON_PLATFORM_BRIDGE_TOKEN: TOKEN, SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: 'owner', SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify(BINDINGS) };
+const directories: string[] = [];
+const servers: Array<ReturnType<typeof createServer>> = [];
+afterEach(async () => {
+  await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve()))));
+  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
+
+/** A model that may call one tool, as the real one does through its tool session. */
+class Model implements ShannonChatModel {
+  readonly mode = 'openai' as const;
+  readonly model = 'test-model';
+  readonly requests: ShannonChatModelRequest[] = [];
+  readonly toolResults: string[] = [];
+  callTool: { name: string; input: Record<string, unknown> } | null = null;
+  async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
+    this.requests.push(request);
+    if (this.callTool && request.tools) this.toolResults.push(await request.tools.call(this.callTool.name, JSON.stringify(this.callTool.input)));
+    return { mode: this.mode, model: this.model, reply: `はい、${this.requests.length}回目です。` };
+  }
+  /** Voice turns are recorded beside text turns (the review test of /v1/chat and voice). */
+  async generateVoice(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
+    this.requests.push(request);
+    return { mode: this.mode, model: this.model, reply: 'はい。' };
+  }
+}
+
+function harness(options: { minecraft?: boolean; ownOutreach?: OwnOutreachReader } = {}) {
+  const directory = mkdtempSync(join(tmpdir(), 'shannon-platform-reply-'));
+  directories.push(directory);
+  const path = join(directory, 'shannon.sqlite');
+  let clock = Date.parse(START);
+  const now = () => new Date(clock).toISOString();
+  const store = new SQLiteShannonStore({ path, now });
+  const peopleStore = new SQLitePeopleMemoryStore(path);
+  const background = new BackgroundUpdateCoordinator(store, store);
+  const requests = options.minecraft ? new MinecraftBodyRequests(path, { deviceId: 'minebot-dev', ownerScopeKey: 'owner' }, now, null) : null;
+  const autonomyStore = new SQLiteAutonomyStore(':memory:');
+  const autonomy = createInMemoryAutonomyService(now, { store: autonomyStore, ...(requests ? { minecraftBody: requests } : {}) });
+  const model = new Model();
+  const api = createLocalApiKernel(now, { chatModel: model, stateStore: store, conversationStore: store, knowledgeStore: store, background,
+    peopleMemory: peopleStore, autonomy, ...(requests ? { minecraftRequests: requests } : {}), ...(options.ownOutreach ? { ownOutreach: options.ownOutreach } : {}) });
+  const bridge = new PlatformBridgeService(configuredPlatformBridge(ENVIRONMENT)!, store, store, background, now, new PlatformPeople(peopleStore, store), () => true);
+  const turns = new SQLiteSurfaceTurnLog(path, 'platform_reply_turns');
+  const service = new PlatformReplyService({ scopeKey: 'owner', bridge, conversationStore: store, conversation: api, turns, now });
+  const reply = (fields: Record<string, unknown> = {}) => service.reply({
+    platform: 'discord', requestId: `m-${Math.random().toString(36).slice(2)}`, conversationId: DM, sourceUserId: OWNER,
+    userMessage: 'こんばんは', observedAt: now(), ...fields,
+  });
+  const refusal = async (operation: Promise<unknown>) => {
+    try { await operation; return 'none'; } catch (error) { return error instanceof PlatformBridgeError ? `${error.status} ${error.code}` : String(error); }
+  };
+  const claim = async () => { const answer = await requests!.claim('owner', 'minebot-dev', { waitSeconds: 0, holding: [] }); if (typeof answer === 'string') throw new Error(answer); return answer; };
+  const close = async () => {
+    await background.waitForIdle('owner');
+    await new Promise(resolve => setImmediate(resolve));
+    await background.waitForIdle('owner');
+    turns.close(); requests?.close(); autonomyStore.close(); peopleStore.close(); store.close();
+  };
+  return { store, peopleStore, background, bridge, api, model, reply, refusal, claim, requests, close, now, advance: (milliseconds: number) => { clock += milliseconds; } };
+}
+
+const dmThread = platformBridgeThreadId('discord', DM);
+const channelThread = platformBridgeThreadId('discord', CHANNEL);
+
+describe('POST /v1/platform/reply', () => {
+  it('answers the owner in his private DM as the owner alone, and keeps the turn in his platform thread', async () => {
+    const { reply, model, store, background, close } = harness();
+    const answer = await reply({ requestId: 'dm-1', userMessage: '今日は寒いね' });
+    expect(answer).toEqual({ reply: 'はい、1回目です。', threadId: dmThread, duplicate: false });
+    const request = model.requests[0]!;
+    expect(request.message).toBe('今日は寒いね');
+    expect(request.systemPrompt).toContain('[シャノンの人格]');
+    expect(request.systemPrompt).toContain('[Discordでの会話]');
+    expect(request.systemPrompt).not.toContain('[Shannon shared audience]');
+    expect(request.offerMinecraftIntent).toBeUndefined();
+    await background.waitForIdle('owner');
+    expect(store.conversationHistory('owner', dmThread).map(message => message.content)).toEqual(['今日は寒いね', 'はい、1回目です。']);
+    expect(store.experienceCandidates('owner')[0]?.disclosure?.audience).toEqual({ kind: 'owner' });
+    // The next turn replays the same DM, as the app replays a Talk.
+    await reply({ requestId: 'dm-2', userMessage: 'さっき何の話をした？' });
+    expect(JSON.stringify(model.requests[1]!.history)).toContain('今日は寒いね');
+    await close();
+  });
+
+  it('answers the owner in a shared channel with the shared header and no tools, and never with what he said was secret', async () => {
+    const { reply, api, model, store, background, close, advance } = harness({ minecraft: true });
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'app-talk', message: 'これは内緒だけど、来月転職するつもり' } });
+    await api.waitForBackground('owner');
+    advance(10_000);
+    await reply({ requestId: 'dm-secret', userMessage: 'ここだけの話、誕生日プレゼントはカメラにする' });
+    await background.waitForIdle('owner');
+    advance(10_000);
+    const answer = await reply({ requestId: 'ch-1', conversationId: CHANNEL, conversationKind: 'channel', userMessage: '転職とカメラの話をして' });
+    expect(answer.threadId).toBe(channelThread);
+    const request = model.requests.at(-1)!;
+    const sent = JSON.stringify([request.systemPrompt, request.history]);
+    expect(sent).not.toContain('来月転職する');
+    expect(sent).not.toContain('誕生日プレゼントはカメラ');
+    expect(request.systemPrompt).toContain('[Shannon shared audience]');
+    expect(request.systemPrompt).toContain('[Speak-time privacy check');
+    expect(request.systemPrompt).toContain('「テストサーバー」');
+    expect(request.tools).toBeUndefined();
+    expect(request.systemPrompt).not.toContain('[マイクラの体で起きたこと]');
+    await background.waitForIdle('owner');
+    const kept = store.experienceCandidates('owner').find(item => item.userMessage === '転職とカメラの話をして');
+    expect(kept?.disclosure?.audience).toEqual(groupAudience(channelThread));
+    await close();
+  });
+
+  it('answers a friend as a guest, keeps the turn as person memory, and never in the owner\'s threads or his private DM', async () => {
+    const { reply, refusal, model, store, peopleStore, close } = harness();
+    const answer = await reply({ requestId: 'f-1', conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: '私は辛いものが苦手' });
+    expect(Object.keys(answer).sort()).toEqual(['duplicate', 'reply', 'threadId']);
+    expect(model.requests[0]!.message).toBe('ミキ: 私は辛いものが苦手');
+    expect(model.requests[0]!.tools).toBeUndefined();
+    expect(model.requests[0]!.systemPrompt).toContain('話している相手は「ミキ」');
+    expect(store.conversationHistory('owner', channelThread)).toEqual([]);
+    expect(peopleStore.listPeople('owner').map(person => person.displayName)).toEqual(['ミキ']);
+    // The owner's private DM is never answered for anyone else, and a friend must say who they are.
+    expect(await refusal(reply({ conversationId: DM, conversationKind: 'dm', sourceUserId: FRIEND, sourceDisplayName: 'ミキ' }))).toBe('403 PLATFORM_ACTOR_DENIED');
+    expect(await refusal(reply({ conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND }))).toBe('403 PLATFORM_ACTOR_DENIED');
+    expect(await refusal(reply({ conversationId: CHANNEL, sourceUserId: FRIEND, sourceDisplayName: 'ミキ' }))).toBe('403 PLATFORM_ACTOR_DENIED');
+    expect(model.requests).toHaveLength(1);
+    await close();
+  });
+
+  it('answers a repeated requestId with the stored reply, without a second model call, and refuses changed content', async () => {
+    const { reply, refusal, model, bridge, now, close } = harness();
+    const first = await reply({ requestId: 'r-1', userMessage: 'ただいま', observedAt: now() });
+    const again = await reply({ requestId: 'r-1', userMessage: 'ただいま', observedAt: now() });
+    expect(again).toEqual({ ...first, duplicate: true });
+    expect(model.requests).toHaveLength(1);
+    expect(await refusal(reply({ requestId: 'r-1', userMessage: 'おやすみ' }))).toBe('409 PLATFORM_TURN_CONFLICT');
+    // A mirrored turn of the same message is the same receipt: it cannot store the turn a second time.
+    expect(() => bridge.ingest({ platform: 'discord', requestId: 'r-1', conversationId: DM, sourceUserId: OWNER, userMessage: 'ただいま', shannonReply: '別の返事', observedAt: now() }))
+      .toThrow(PlatformBridgeError);
+    await close();
+  });
+
+  it('refuses an unbound conversation, an unknown field, Minecraft, and a stale message, before any model call', async () => {
+    const { reply, refusal, model, now, close } = harness();
+    expect(await refusal(reply({ conversationId: 'discord:999:1' }))).toBe('403 PLATFORM_CONVERSATION_DENIED');
+    expect(await refusal(reply({ attachments: [] }))).toBe('400 BAD_REQUEST');
+    expect(await refusal(reply({ shannonReply: 'x' }))).toBe('400 BAD_REQUEST');
+    expect(await refusal(reply({ scopeKey: 'owner' }))).toBe('400 BAD_REQUEST');
+    expect(await refusal(reply({ platform: 'minecraft' }))).toBe('400 BAD_REQUEST');
+    expect(await refusal(reply({ observedAt: new Date(Date.parse(now()) - 31 * 60_000).toISOString() }))).toBe('400 BAD_REQUEST');
+    expect(await refusal(reply({ userMessage: 'x'.repeat(PLATFORM_REPLY_LIMITS.messageCharacters + 1) }))).toBe('400 BAD_REQUEST');
+    expect(model.requests).toHaveLength(0);
+    await close();
+  });
+});
+
+describe('one mind on Discord: requests to her Minecraft body', () => {
+  it('offers minecraft.request in the owner\'s private DM only while the body is present, and queues the request there', async () => {
+    const { reply, model, requests, claim, close } = harness({ minecraft: true });
+    model.callTool = { name: 'minecraft_request', input: { goal: 'オークの原木を16個集める' } };
+    await reply({ requestId: 'mc-absent', userMessage: 'マイクラで木材集めといて' });
+    expect(model.requests.at(-1)!.tools?.definitions.map(tool => tool.name) ?? []).not.toContain('minecraft.request');
+    expect(requests!.recent('owner')).toEqual([]);
+    await claim();
+    await reply({ requestId: 'mc-1', userMessage: 'マイクラで木材集めといて' });
+    expect(model.requests.at(-1)!.tools?.definitions.map(tool => tool.name)).toContain('minecraft.request');
+    expect(requests!.recent('owner')).toHaveLength(1);
+    expect(requests!.recent('owner')[0]).toMatchObject({ goal: 'オークの原木を16個集める', state: 'queued', origin: { surface: 'text', threadId: dmThread } });
+    // The next turn with him alone knows what it asked.
+    model.callTool = null;
+    await reply({ requestId: 'mc-2', userMessage: '何頼んだっけ？' });
+    expect(model.requests.at(-1)!.systemPrompt).toContain('[マイクラの体で起きたこと]');
+    expect(model.requests.at(-1)!.systemPrompt).toContain('オークの原木を16個集める');
+    // Never in a shared channel, nor for a friend.
+    model.callTool = { name: 'minecraft_request', input: { goal: 'ダイヤを掘る' } };
+    await reply({ requestId: 'mc-3', conversationId: CHANNEL, conversationKind: 'channel', userMessage: 'マイクラで木材集めといて' });
+    expect(model.requests.at(-1)!.tools).toBeUndefined();
+    await reply({ requestId: 'mc-4', conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: 'マイクラでダイヤ掘って' });
+    expect(model.requests.at(-1)!.tools).toBeUndefined();
+    expect(model.requests.at(-1)!.systemPrompt).not.toContain('[マイクラの体で起きたこと]');
+    expect(requests!.recent('owner')).toHaveLength(1);
+    await close();
+  });
+});
+
+describe('what a platform reply is not told', () => {
+  it('is never told what she did on her own, in the owner\'s DM or a channel, while the app\'s chat is', async () => {
+    const TEXT = 'ライ氏、お昼はもう食べましたか。';
+    const ownOutreach: OwnOutreachReader = { recent: () => ({ messages: [{ createdAt: '2026-10-05T11:30:00.000Z', content: TEXT, read: true }], calls: [] }) };
+    const { reply, api, model, close } = harness({ ownOutreach });
+    await reply({ requestId: 'own-dm', userMessage: 'さっき電話した？' });
+    await reply({ requestId: 'own-ch', conversationId: CHANNEL, userMessage: 'さっき電話した？' });
+    for (const request of model.requests) expect(request.systemPrompt).not.toContain('[ボクが自分からしたこと]');
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'app-talk', message: 'さっき電話した？' } });
+    expect(model.requests.at(-1)!.systemPrompt).toContain(`ボクから送った「${TEXT}」（既読）`);
+    await close();
+  });
+
+  it('says what her Minecraft body can do only in the owner\'s DM, where her tools are, and only while the body is in the game', async () => {
+    const { reply, model, claim, close } = harness({ minecraft: true });
+    const line = SHANNON_MINECRAFT_BODY_CAPABILITY.text;
+    await reply({ requestId: 'cap-1' });
+    expect(model.requests.at(-1)!.systemPrompt).not.toContain(line);
+    await claim();
+    await reply({ requestId: 'cap-2' });
+    expect(model.requests.at(-1)!.systemPrompt).toContain(line);
+    await reply({ requestId: 'cap-3', conversationId: CHANNEL });
+    expect(model.requests.at(-1)!.systemPrompt).not.toContain(line);
+    await close();
+  });
+});
+
+describe('the ownOutreach selection of the capability context (review of 2026-10-06)', () => {
+  const TEXT = 'ライ氏、お昼はもう食べましたか。';
+  const own = new OwnOutreach({ recent: () => ({ messages: [{ createdAt: '2026-10-05T11:30:00.000Z', content: TEXT, read: true }], calls: [] }) }, () => START);
+  const prompt = async (selection: Parameters<typeof conversationCapabilityContext>[3]) =>
+    (await conversationCapabilityContext('owner', 'さっき電話した？', { ownOutreach: own }, selection)).prompt;
+  const FULL = `ボクから送った「${TEXT}」（既読）`;
+  const TIMES = 'ボクから送った（中身はこの場では話さない）';
+
+  it('(1) without it, follows upcoming exactly as before: in full, by times, or not at all', async () => {
+    expect(await prompt({ upcoming: true })).toContain(FULL);
+    expect(await prompt(undefined)).toContain(FULL);
+    expect(await prompt({})).toContain(FULL);
+    const guarded = await prompt({ upcoming: 'guarded' });
+    expect(guarded).toContain(TIMES);
+    expect(guarded).not.toContain(TEXT);
+    expect(await prompt({ upcoming: false })).not.toContain('[ボクが自分からしたこと]');
+    // Set, it decides on its own: by times where no upcoming item is read (game chat), or nothing where upcoming would give all.
+    expect(await prompt({ upcoming: false, ownOutreach: 'guarded' })).toContain(TIMES);
+    expect(await prompt({ upcoming: true, ownOutreach: false })).not.toContain('[ボクが自分からしたこと]');
+  });
+
+  it('(2) is set only for a surface turn, by the surface\'s switch, which only game chat turns on', () => {
+    const source = (name: string) => readFileSync(join(import.meta.dirname, '../src', name), 'utf8');
+    const kernel = source('apiKernel.ts');
+    // The app's chat passes its audience's selection untouched; only a surface (game chat, a platform reply) sets ownOutreach.
+    expect(kernel).toContain('surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities');
+    for (const name of ['apiLiveVoice.ts', 'chatAudience.ts', 'platformSurface.ts', 'platformReply.ts', 'minecraftBody.ts']) {
+      expect(source(name), name).not.toMatch(/ownOutreach:\s*(?:'guarded'|surfaceOwnOutreach)/u);
+    }
+    expect(source('minecraftBody.ts')).toMatch(/\n\s+ownOutreach: true,\n/u);
+    expect(source('platformReply.ts')).toMatch(/\n\s+ownOutreach: false,\n/u);
+  });
+
+  it('(3) leaves /v1/chat and voice as they were: in full alone, by times with others, nothing for a guest call', async () => {
+    const ownOutreach: OwnOutreachReader = { recent: () => ({ messages: [{ createdAt: '2026-10-05T11:30:00.000Z', content: TEXT, read: true }], calls: [] }) };
+    const { api, model, close } = harness({ ownOutreach });
+    const chat = (extra: Record<string, unknown> = {}) => api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'app-talk', message: 'さっき電話した？', ...extra } });
+    const voice = (extra: { companionPresent?: boolean; participantMode?: 'guest' } = {}) => api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations', body: {
+      scopeKey: 'owner', threadId: 'desktop', transcript: 'さっき電話した？', ...(extra.participantMode ? { participantMode: extra.participantMode } : {}),
+      deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null, ...(extra.companionPresent ? { companionPresent: true } : {}),
+        userUtterance: { id: `u-${model.requests.length}-${Math.random()}`, text: 'さっき電話した？', source: 'speech', rawText: 'さっき電話した？',
+          ...(extra.participantMode ? { callContext: { callId: 'call-guest-0001', turns: [], introductionStart: true } } : {}) } } } });
+    await chat();
+    expect(model.requests.at(-1)!.systemPrompt).toContain(FULL);
+    await chat({ audience: 'others' });
+    expect(model.requests.at(-1)!.systemPrompt).toContain(TIMES);
+    expect(model.requests.at(-1)!.systemPrompt).not.toContain(TEXT);
+    const before = model.requests.length;
+    await voice();
+    await voice({ companionPresent: true });
+    await voice({ participantMode: 'guest' });
+    const prompts = model.requests.slice(before).map(request => request.systemPrompt);
+    expect(prompts).toHaveLength(3);
+    expect(prompts[0]).toContain(FULL);
+    expect(prompts[1]).toContain(TIMES);
+    expect(prompts[1]).not.toContain(TEXT);
+    expect(prompts[2]).not.toContain('[ボクが自分からしたこと]');
+    await close();
+  });
+});
+
+describe('the route', () => {
+  it('takes the bridge token only, and answers 503 unless SHANNON_PLATFORM_REPLY is on', async () => {
+    expect(platformReplyEnabled({})).toBe(false);
+    expect(platformReplyEnabled({ SHANNON_PLATFORM_REPLY: 'on' })).toBe(true);
+    expect(isPlatformBridgePath(SHANNON_PLATFORM_REPLY_PATH)).toBe(true);
+    const directory = mkdtempSync(join(tmpdir(), 'shannon-platform-reply-route-'));
+    directories.push(directory);
+    const path = join(directory, 'shannon.sqlite');
+    const now = () => new Date().toISOString();
+    const store = new SQLiteShannonStore({ path, now });
+    const background = new BackgroundUpdateCoordinator(store, store);
+    const model = new Model();
+    const api = createLocalApiKernel(now, { chatModel: model, stateStore: store, conversationStore: store, background });
+    const replies = { conversation: api, databasePath: path };
+    const off = createConfiguredPlatformBridgeRoute(ENVIRONMENT, store, store, background, now, model, null, replies)!;
+    const on = createConfiguredPlatformBridgeRoute({ ...ENVIRONMENT, SHANNON_PLATFORM_REPLY: 'on' }, store, store, background, now, model, null, replies)!;
+    const listen = async (dependencies: typeof on) => {
+      const server = createServer((request, response) => { void handlePlatformBridgeReply(request, response, dependencies); });
+      servers.push(server);
+      await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('missing test port');
+      return `http://127.0.0.1:${address.port}${SHANNON_PLATFORM_REPLY_PATH}`;
+    };
+    const body = JSON.stringify({ platform: 'discord', requestId: 'route-1', conversationId: DM, sourceUserId: OWNER, userMessage: 'やあ', observedAt: now() });
+    const post = (url: string, token?: string) => fetch(url, { method: 'POST', body, headers: token ? { authorization: `Bearer ${token}` } : {} });
+    const offUrl = await listen(off);
+    expect((await post(offUrl, TOKEN)).status).toBe(503);
+    const onUrl = await listen(on);
+    expect((await post(onUrl)).status).toBe(401);
+    expect((await post(onUrl, 'x'.repeat(40))).status).toBe(401);
+    const created = await post(onUrl, TOKEN);
+    expect(created.status).toBe(201);
+    expect(await created.json()).toMatchObject({ reply: 'はい、1回目です。', threadId: dmThread, duplicate: false });
+    expect((await post(onUrl, TOKEN)).status).toBe(200);
+    expect(model.requests).toHaveLength(1);
+    await background.waitForIdle('owner');
+    off.close?.(); on.close?.(); store.close();
+  });
+});
+
+describe('docs/platform-people-contract.md (replies)', () => {
+  it('names the reply route, its switch, fields and codes', () => {
+    const contract = readFileSync(new URL('../../../docs/platform-people-contract.md', import.meta.url), 'utf8');
+    for (const name of [SHANNON_PLATFORM_REPLY_PATH, 'SHANNON_PLATFORM_REPLY', 'PLATFORM_REPLY_DISABLED', 'userMessage', 'sourceDisplayName', 'participants', 'duplicate', 'ignored', 'minecraft.request']) {
+      expect(contract).toContain(name);
+    }
+  });
+});

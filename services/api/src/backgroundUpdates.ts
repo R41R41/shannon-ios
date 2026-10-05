@@ -48,7 +48,7 @@ export interface CompletedTurn {
   utteranceId?: string;
 }
 
-function turnPersistenceContext(turn: CompletedTurn): TurnPersistenceContext {
+export function turnPersistenceContext(turn: CompletedTurn): TurnPersistenceContext {
   return {
     messageEmotion: turn.messageEmotion,
     capturedStateVersion: turn.capturedState.version,

@@ -3,6 +3,7 @@ import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import type { SecretCheck } from './conversationSecrets.js';
 import type { HostFolderOperations } from './hostFolderOperations.js';
 import { folderExecutors } from './shannonFolderTools.js';
+import { minecraftExecutors, minecraftToolOffered, type MinecraftRequestPort } from './shannonMinecraftTools.js';
 import { studyExecutors } from './shannonStudyTools.js';
 import { authorizeToolCall } from './shannonToolGate.js';
 import { validToolInput } from './shannonToolInput.js';
@@ -38,13 +39,20 @@ export class ShannonToolRunner {
     private readonly recorder: ToolRecorder,
     now: () => string,
     private readonly transaction: <T>(operation: () => T) => T = operation => store.transaction(operation),
+    /** Her Minecraft body's request queue (`minecraftBodyRequests.ts`); absent, its tools are never offered. */
+    private readonly minecraft: MinecraftRequestPort | null = null,
   ) {
-    this.executors = Object.freeze({ ...studyExecutors(store, now), ...folderExecutors(folder, scopeKey => roomLookGuard(store.study.roomLookTexts(scopeKey, ROOM_LOOK_GUARD.notes))) });
+    this.executors = Object.freeze({ ...studyExecutors(store, now), ...folderExecutors(folder, scopeKey => roomLookGuard(store.study.roomLookTexts(scopeKey, ROOM_LOOK_GUARD.notes))),
+      ...minecraftExecutors(minecraft) });
   }
 
-  /** The tools a surface offers to this audience now. Her folder's tools only while a device is registered for it. */
-  offered(surface: ToolSurface, audience: ToolAudience): readonly ShannonToolDefinition[] {
-    return offeredTools(surface, audience, tool => tool.domain !== 'host_folder' || this.folder.boundHosts().length > 0);
+  /**
+   * The tools a surface offers to this audience now. Her folder's tools only while a device is registered for it; her
+   * Minecraft body's only in the scope that has one (`scopeKey`), and `minecraft.request` only while the body is present.
+   */
+  offered(surface: ToolSurface, audience: ToolAudience, scopeKey?: string): readonly ShannonToolDefinition[] {
+    return offeredTools(surface, audience, tool => tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
+      : tool.domain === 'minecraft_body' ? minecraftToolOffered(this.minecraft, tool, scopeKey) : true);
   }
 
   /** The gate, the input check, and the executor's preparation. A result here is the call's answer: nothing ran. */

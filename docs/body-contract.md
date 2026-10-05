@@ -46,6 +46,7 @@ Things that happened to the body, in a batch.
 | Touch | `pet`, `tickle`, `poke`, `carry`, `holdHand` | `durationMs`, `strength`, `region` |
 | Owner at the PC | `ownerAway`, `ownerReturned` | `minutesAway` |
 | Plain | `callStarted`, `callEnded`, `windowHidden`, `windowShown`, `appStarted` | none |
+| Game (her Minecraft body only, added 2026-10-05) | `game.died` | `cause` (required, a namespaced id such as `minecraft:lava`) |
 
 There is no text field. A field that is not listed for the event's type — `note`, `text`, `message`, or a number that belongs to another type — refuses the request. Events are facts with a closed vocabulary; nothing the body sends can be read as an instruction.
 
@@ -73,6 +74,8 @@ A malformed request is refused as a whole with `400` and stores nothing. A well-
 | `ignored` + `reason: future` | `occurredAt` is more than 5 minutes ahead of the server. | No; fix the clock |
 | `ignored` + `reason: daily_cap` | 2,000 events are already stored for this day (`Asia/Tokyo`). | No; drop it |
 | `ignored` + `reason: touch_only` | The device registered as a body that only feels touch and the event is not a touch. | No |
+| `ignored` + `reason: not_game_body` | A game event from a device that is not her Minecraft body (`docs/minecraft-body-contract.md`). | No |
+| `ignored` + `reason: game_only` | Her Minecraft body sent an event that is not a game event. | No |
 
 Retry the same batch with the same `id`s on a network failure or `5xx`. An `id` that was stored answers `duplicate` however late the retry arrives, within the retention period.
 
@@ -89,6 +92,8 @@ Retry the same batch with the same `id`s on a network failure or `5xx`. An `id` 
 
   Only the touch types and `ownerReturned` appear. An event appears for 30 minutes after `occurredAt`, at most three lines (one per type, the newest first, with a count), and the wording is fixed on the server from the type and the numbers. The block is read at the turn and nothing is written: it is in every owner text turn inside the window, and gone after it.
 - `ownerAway` and `ownerReturned` are also read by her activity loop after a message of hers, as "he is away" / "he is back" (the newest of the last hour, whatever its `audience`). `callStarted` and `callEnded` tell another body that the owner is in a call on this device (added 2026-10-05; see [When the owner is in a call elsewhere](#when-the-owner-is-in-a-call-elsewhere)); a body's own call never counts for that. `windowHidden`, `windowShown` and `appStarted` are stored and used for nothing else yet.
+- `game.died` is taken only from the device configured as her Minecraft body, in the owner's scope, and becomes one experience in fixed words (「ゲームの記憶: …マイクラで死んだ（溶岩）。」, source `body.game`). It moves no feeling, never enters the `[体に起きたこと]` block, and never stands in for who is at the PC. See `docs/minecraft-body-contract.md`.
+- **「ゲームの体」** (her Minecraft body, core owner decision 2026-10-06) is identified by the `deviceId` of `SHANNON_MINECRAFT_BODY_JSON`, never by `PUT /v1/body/capabilities` (refused from that device with `403 GAME_BODY_CAPABILITIES_DENIED`). Only `game.*` events are taken from it; any other event answers `ignored` with `reason: game_only`. It is never counted in `othersPresent` (including the event fallback; its presence reads note no `audience`), in `ownerCallElsewhere`, among the full bodies a `409 OWNER_IN_CALL_ELSEWHERE` is for, or for a touch and its feeling, even with a registration stored before this rule. More games or bodies that need registering are decided later by adding a `kind`.
 - **A touch event moves her feeling and is remembered** (owner decision 2026-10-02), exactly as a touch that arrives through `POST /v1/body/reactions` does, and each touch `id` counts once across the two routes: see [When she is touched](#when-she-is-touched). The other event types change nothing of her state.
 - **No reply is produced by an event.** No model is called, no message is added to a conversation, and no notification is sent. She is free not to mention it in her next reply. Her words for a touch come only from `POST /v1/body/reactions`.
 - Voice calls and the platform bridge do not receive the block.
@@ -253,6 +258,8 @@ The body registers what it can express. One registration per device and scope; a
 | `surface` | `windows` \| `mac` \| `iphone` | no | Where this body is (added 2026-10-03). A value outside the list is left out, not refused; a later registration without it removes it. |
 
 An id is 1–40 characters of `[A-Za-z0-9_.-]`, starting with a letter or digit, without repeats in a list. No names in Japanese, no descriptions, no other field. The answer is `200` with the stored registration and `updatedAt`.
+
+Her Minecraft body never registers: from the device of `SHANNON_MINECRAFT_BODY_JSON` this route answers `403 GAME_BODY_CAPABILITIES_DENIED` (see [What the server does with an event](#what-the-server-does-with-an-event)).
 
 The registration is stored and returned in `presence`. Two flags are read by the server: `camera`, and `touchOnly` (see [A body that only feels touch](#a-body-that-only-feels-touch)). Nothing else of the registration is in any prompt, so Shannon does not yet know which expressions and gestures her body has.
 
@@ -720,6 +727,7 @@ Body: `{ "error": "<code>", "message": "…" }`.
 | 400 | `BAD_REQUEST` | A field is missing, out of bounds, or not allowed. `message` names it (`events[2].strength must be 0..1`). | No |
 | 400 | `INVALID_REQUEST` | The body is not JSON. | No |
 | 401 | `PAIRING_REQUIRED` | Missing or revoked device token. | After pairing |
+| 403 | `GAME_BODY_CAPABILITIES_DENIED` | `PUT /v1/body/capabilities` from her Minecraft body (`SHANNON_MINECRAFT_BODY_JSON`), which never registers. | No |
 | 403 | `BODY_INGEST_DISABLED` | Body events are switched off on the server (`POST /v1/body/events`, and `POST /v1/body/reactions`). | No; drop the events and keep polling |
 | 403 / 409 | `BODY_REACTION…` | See [When she is touched](#when-she-is-touched). | No |
 | 404 | `NOT_FOUND` | Unknown path under `/v1/body/`, including `/v1/body/presence/stream`. | No |

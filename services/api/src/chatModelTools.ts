@@ -63,10 +63,14 @@ export const VOICE_TOOL_INSTRUCTIONS = `${TOOL_INSTRUCTIONS}\n声の会話なの
 /** Said with the tools of a spoken turn whose words could not be trusted (`transcriptTrust`): reading only, and how a write still happens. */
 export const TOOLS_READ_ONLY_INSTRUCTIONS = '[ボクの道具・この返事] 聞き取りが確かでないので、この返事で使えるのは見る・読む・探す道具だけ。作る・書き換える・消す・移す・しまうなどを頼まれたら、何をするかを短く言って「いいですか？」と確かめる。ライ氏がはっきり「はい」と言った次の返事でする（道具が壊れているのではない）。Aetherへの保存案もこの返事では送っていないので、送ったと言わない。';
 
+/** Said only while her Minecraft body's tools are offered (phase 4 of `docs/minecraft-body-contract.md`). */
+export const MINECRAFT_TOOL_INSTRUCTIONS = 'マイクラの体の道具もある。ライ氏にマイクラの中でのこと（集める・作る・掘るなど）を頼まれたら、聞き返さずに minecraft_request で体に頼み、引き受けたと短く言う。頼んだだけでは終わっていないので、終わった・集めたとは言わない。進み具合や結果を聞かれたら、[マイクラの体で起きたこと] か minecraft_status の結果だけをもとに答える。';
+
 /** The instructions that go with the tools a request offers. */
 export function toolInstructions(session: ShannonModelToolSession, voice: boolean): string {
   const base = voice ? VOICE_TOOL_INSTRUCTIONS : TOOL_INSTRUCTIONS;
-  return session.writesWithheld ? `${base}\n${TOOLS_READ_ONLY_INSTRUCTIONS}` : base;
+  const minecraft = session.definitions.some(tool => tool.domain === 'minecraft_body') ? `\n${MINECRAFT_TOOL_INSTRUCTIONS}` : '';
+  return session.writesWithheld ? `${base}${minecraft}\n${TOOLS_READ_ONLY_INSTRUCTIONS}` : `${base}${minecraft}`;
 }
 
 /** The function tools of a request body. */

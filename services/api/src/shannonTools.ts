@@ -51,8 +51,11 @@ export interface ShannonToolDefinition {
   name: string;
   description: string;
   input: ToolInputSchema;
-  /** The gate domain of `authorizeAutonomousAction` a call from her own time is decided under. */
-  domain: 'aether_study' | 'host_folder';
+  /**
+   * The gate domain of `authorizeAutonomousAction` a call from her own time is decided under. `minecraft_body`
+   * (phase 4 of `docs/minecraft-body-contract.md`) exists only in conversations, so the autonomy gate never sees it.
+   */
+  domain: 'aether_study' | 'host_folder' | 'minecraft_body';
   effect: 'read' | 'write';
   /** `none`: no model or paid API is called by the tool itself. */
   cost: 'none';
@@ -80,6 +83,16 @@ const SECRET_LINE = 'ライ氏に内緒と言われたこと、忘れてと頼�
 function tool(definition: Omit<ShannonToolDefinition, 'cost' | 'audiences' | 'surfaces'>): ShannonToolDefinition {
   return Object.freeze({ ...definition, cost: 'none' as const, audiences: OWNER_ALONE, surfaces: ALL_SURFACES });
 }
+
+/** Her Minecraft body's tools: the owner alone, in a conversation (text and voice), never in her own time. */
+const CONVERSATION_SURFACES: readonly ToolSurface[] = Object.freeze(['text', 'voice']);
+function conversationTool(definition: Omit<ShannonToolDefinition, 'cost' | 'audiences' | 'surfaces'>): ShannonToolDefinition {
+  return Object.freeze({ ...definition, cost: 'none' as const, audiences: OWNER_ALONE, surfaces: CONVERSATION_SURFACES });
+}
+
+const MINECRAFT = 'マイクラの体（ライ氏のマイクラのワールドに入っている、ボクのもう一つの体）';
+/** The length of a goal (`MINECRAFT_INTENT_GOAL_CHARACTERS`), repeated here so the registry imports nothing of the body. */
+export const MINECRAFT_GOAL_CHARACTERS = 120;
 
 function schema(properties: Record<string, ToolInputProperty>, required: readonly string[] = []): ToolInputSchema {
   return Object.freeze({ type: 'object' as const, properties: Object.freeze(properties), required: Object.freeze([...required]), additionalProperties: false as const });
@@ -162,6 +175,17 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
   tool({ name: 'folder.delete', domain: 'host_folder', effect: 'write',
     description: `${FOLDER}のファイルかフォルダを消す。実際にはフォルダの中のゴミ箱に移り、ライ氏が戻せる。`,
     input: schema({ path: path('消すもの'), host }, ['path']) }),
+  conversationTool({ name: 'minecraft.request', domain: 'minecraft_body', effect: 'write',
+    description: `${MINECRAFT}に、ゲームの中でしてほしいことを頼む（木材を集める、パンを作る、鉄を掘る、など）。ライ氏にマイクラのことを頼まれた時に、聞き返さずに使う。頼むと体の順番待ちに入り、体が受け取って動き、進み具合と結果があとで届く。頼んだ時点ではまだ何もしていないので、終わった・集めたとは言わない。現実の用事には使わない。`,
+    input: schema({
+      goal: { type: 'string', description: `何をどれだけするか、具体的に${MINECRAFT_GOAL_CHARACTERS}字以内（例: オークの原木を16個集める）。数が言われていなければ、ほどよい数を自分で決める`, minLength: 1, maxLength: MINECRAFT_GOAL_CHARACTERS },
+    }, ['goal']) }),
+  conversationTool({ name: 'minecraft.status', domain: 'minecraft_body', effect: 'read',
+    description: `${MINECRAFT}に頼んだことの、いまの様子と結果を見る（新しいものから5件）。体がいまゲームに入っているかも分かる。`,
+    input: schema({}) }),
+  conversationTool({ name: 'minecraft.cancel', domain: 'minecraft_body', effect: 'write',
+    description: `${MINECRAFT}に頼んだことを、やめてもらう。id を書かなければ、いちばん新しい進行中のもの。体が受け取る前ならすぐ取り消し、受け取ったあとなら体に止めるよう伝える。`,
+    input: schema({ id: { type: 'string', description: 'やめる頼みごとの id（minecraft.status の結果の「id: …」）。書かなければいちばん新しいもの', maxLength: 40 } }) }),
 ]);
 
 /** `SHANNON_OWN_TOOLS=off` offers no tool on any surface; every request and prompt is then what it was before the tools. */

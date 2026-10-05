@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { normalizedThreadTitle } from './threadTitle.js';
 import { validatedPlaces, type ShannonPlace } from './placeDiscovery.js';
 import { parsedReplyFeeling, type ChatReplyFeeling } from './chatReplyFeeling.js';
+import { parsedMinecraftIntent, type MinecraftIntent } from './minecraftIntent.js';
 import type {
   ShannonChatAttachment,
   ShannonGeneratedArtifact,
@@ -78,6 +79,7 @@ export function parseStructuredTurn(raw: string): {
   roomLook?: 'asked' | 'curious';
   replyFeeling?: ChatReplyFeeling;
   appLook?: string;
+  minecraftIntent?: MinecraftIntent;
 } {
   if (!raw) throw new Error('OPENAI_RESPONSE_EMPTY');
   const value = parseJson(raw);
@@ -101,8 +103,11 @@ export function parseStructuredTurn(raw: string): {
   const intentPlan = validatedIntentPlan(object.intentPlan);
   const threadTitle = normalizedThreadTitle(object.threadTitle);
   const threadSummary = normalizedThreadSummary(object.threadSummary);
+  // Absent or unreadable is no request to her Minecraft body.
+  const minecraftIntent = parsedMinecraftIntent(object.minecraftIntent);
   const roomLook = { ...(object.roomLook === 'asked' || object.roomLook === 'curious' ? { roomLook: object.roomLook } as const : {}),
-    ...(typeof object.appLook === 'string' && object.appLook !== 'none' ? { appLook: object.appLook.slice(0, 40) } : {}) };
+    ...(typeof object.appLook === 'string' && object.appLook !== 'none' ? { appLook: object.appLook.slice(0, 40) } : {}),
+    ...(minecraftIntent ? { minecraftIntent } : {}) };
   // Absent, null or unreadable is no decided feeling: the turn is read as it always was.
   const feeling = parsedReplyFeeling(object.feeling);
   const replyFeeling = feeling ? { replyFeeling: feeling } : {};

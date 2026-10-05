@@ -68,6 +68,7 @@ import type { ShannonToolRunner } from './shannonToolRunner.js';
 import { conversationTools, toolTraceReader, type ConversationToolServer } from './shannonToolSession.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from './turnDeadline.js';
 import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from './ownerCallElsewhere.js';
+import { withMinecraftBodyLine } from './shannonMinecraftTools.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
   /** Looking through her body's camera or the app's (`voiceAppLook.ts`); absent, a voice turn never looks. */
@@ -91,6 +92,8 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   reactions?: { link(scopeKey: string, reactionId: unknown): { text: string; threadId: string | null } | null };
   /** Others present as the server knows them, and what her writes must not repeat; absent, no tool is offered. */
   toolServer?: ConversationToolServer;
+  /** Her Minecraft body's request queue: while the body is in the game, the owner's identity says what it can do. */
+  minecraftBody?: { present?(scopeKey: string): boolean } | null;
   ownerCalls?: Pick<OwnerCalls, 'admitTurn'>; // The owner in a call on another device (`ownerCallElsewhere.ts`); absent, nothing is refused.
 }
 
@@ -303,7 +306,8 @@ async function completeLiveVoiceDelegation(
     ? await dependencies.memoryRecall.enrich(deterministicContext, { scopeKey, message: transcript, snapshot: captured, threadId,
       memoryTurn: semanticMemoryTurn, complexTurn, ...(observer?.signal ? { signal: observer.signal } : {}) }) : null;
   const cognitiveContext = recalled ?? deterministicContext;
-  const ownerIdentity = (prompt: string) => dependencies.autonomy?.identityProjection(scopeKey, prompt) ?? prompt;
+  // Her Minecraft body's capability line only while the body is in the game (`withMinecraftBodyLine`).
+  const ownerIdentity = (prompt: string) => withMinecraftBodyLine(dependencies.minecraftBody, scopeKey, dependencies.autonomy?.identityProjection(scopeKey, prompt) ?? prompt);
   const basePrompt = temporaryGuest
     ? [shannonIdentityPrompt('guest'), voiceConversationInstructions(true, false, false), temporaryGuestVoiceInstructions,
       guestTurnPositionInstruction(guestCall?.introductionStart === true || guestHistory.length === 0)].join('\n\n')

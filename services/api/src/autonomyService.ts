@@ -23,6 +23,7 @@ import {
 import { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import { HostFolderOperations } from './hostFolderOperations.js';
 import { ShannonToolRunner } from './shannonToolRunner.js';
+import type { MinecraftRequestPort } from './shannonMinecraftTools.js';
 import { resolvePhysicalPath, type AutonomyPathResolver } from './autonomyPaths.js';
 import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
 import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './autonomyProposals.js';
@@ -60,6 +61,8 @@ export interface AutonomyServiceDependencies {
   calls?: (scopeKey: string, at: string) => { available: boolean } | null;
   /** When the owner first wrote or spoke after an instant, or null: a timestamp, for what followed a message of hers. */
   ownerFirstActiveAfter?: (scopeKey: string, after: string) => string | null;
+  /** Her Minecraft body's request queue (phase 4, `docs/minecraft-body-contract.md`). Only the API process has it; her own time never asks her body. */
+  minecraftBody?: MinecraftRequestPort | null;
 }
 
 export interface RecordedDecision extends AutonomyDecision {
@@ -111,7 +114,7 @@ export class ShannonAutonomyService {
       this.config.maximumReachOutFollowUpsPerDay > 0 ? { timeZone: this.config.timeZone, ...(dependencies.ownerFirstActiveAfter ? { ownerFirstActiveAfter: dependencies.ownerFirstActiveAfter } : {}) } : null);
     this.folder = new HostFolderDesk(this.store, this.config, this.now, this);
     this.folderOperations = new HostFolderOperations(this.store, this.config, this.now, this, this.folder);
-    this.tools = new ShannonToolRunner(this.store, this.folderOperations, this, this.now);
+    this.tools = new ShannonToolRunner(this.store, this.folderOperations, this, this.now, undefined, dependencies.minecraftBody ?? null);
   }
 
   // MARK: The gate

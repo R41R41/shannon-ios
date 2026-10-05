@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { AutonomyActivityDay, AutonomyActivityEntry } from '../src/autonomyActivity.js';
-import { BODY_DOING, BODY_EVENT_TYPES, BODY_LIMITS, BODY_NUDGE_SCENES, bodyIngestEnabled, type BodyNudge } from '../src/bodyContract.js';
+import { BODY_DOING, BODY_EVENT_TYPES, BODY_LIMITS, BODY_NUDGE_SCENES, bodyIngestEnabled, isBodyGameEvent, type BodyNudge } from '../src/bodyContract.js';
 import { BODY_LOOK_LIMITS, BODY_LOOK_REFUSAL_CODES, BODY_LOOK_REQUEST_BYTES } from '../src/bodyLookContract.js';
 import { bodyNudgeCandidates } from '../src/bodyNudges.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
@@ -39,17 +39,19 @@ const pet = (id: string, occurredAt: string, extra: Record<string, unknown> = {}
 describe('POST /v1/body/events', () => {
   it('accepts every event type of the contract and stores each once', async () => {
     const { events, store } = harness();
-    const batch = BODY_EVENT_TYPES.map((type, index) => ({ id: `e-${index}`, type, audience: index % 2 ? 'others' : 'owner', occurredAt: START }));
+    // Game events are her Minecraft body's alone (minecraftBody.test.ts).
+    const types = BODY_EVENT_TYPES.filter(type => !isBodyGameEvent(type));
+    const batch = types.map((type, index) => ({ id: `e-${index}`, type, audience: index % 2 ? 'others' : 'owner', occurredAt: START }));
     const first = await events(...batch);
     expect(first.status).toBe(200);
-    expect(first.body).toMatchObject({ schemaVersion: 1, stored: BODY_EVENT_TYPES.length, duplicates: 0 });
+    expect(first.body).toMatchObject({ schemaVersion: 1, stored: types.length, duplicates: 0 });
     expect((first.body as BodyIngestReceipt).results.every(result => result.status === 'stored')).toBe(true);
-    expect(store.countForDay(scope, '2026-10-02')).toBe(BODY_EVENT_TYPES.length);
+    expect(store.countForDay(scope, '2026-10-02')).toBe(types.length);
 
     // The same batch again stores nothing.
     const again = (await events(...batch)).body as BodyIngestReceipt;
-    expect(again).toMatchObject({ stored: 0, duplicates: BODY_EVENT_TYPES.length });
-    expect(store.countForDay(scope, '2026-10-02')).toBe(BODY_EVENT_TYPES.length);
+    expect(again).toMatchObject({ stored: 0, duplicates: types.length });
+    expect(store.countForDay(scope, '2026-10-02')).toBe(types.length);
   });
 
   it('keeps the numbers of a touch and of a return, and answers a reused key with different content as a conflict', async () => {

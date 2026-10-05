@@ -9,6 +9,9 @@ import type { ShannonTaskDecision } from './chatModel.js';
 import { DEFAULT_THREAD_TITLE, initialThreadTitle } from './threadTitle.js';
 import type { ReminderReference, ReminderView, TurnCaptureRecord, TurnCaptureView } from './turnCaptures.js';
 
+/** Threads of the platform bridge (`platformBridgeThreadId`): `platform:<platform>:<32 hex>`. Never the default Talk. */
+export const isPlatformThreadId = (threadId: string): boolean => /^platform:[a-z]+:[0-9a-f]{32}$/u.test(threadId);
+
 export interface ShannonExperience extends RecallCandidate {
   timeZone?: string;
   userMessage: string;
@@ -212,14 +215,16 @@ export class InMemoryConversationStore implements ConversationStore {
   }
 
   threadId(scopeKey: string, threadId?: string): string {
+    // A platform conversation is never the default Talk (as in `SQLiteConversationRepository.threadId`).
+    if (threadId && isPlatformThreadId(threadId)) return threadId;
     const cache = this.defaultThreadCache.get(scopeKey);
     if (threadId && cache !== threadId) {
       this.defaultThreadCache.set(scopeKey, threadId);
       return threadId;
     }
     if (cache) return cache;
-    const threads = this.listThreads(scopeKey);
-    const selected = threads.at(0)?.threadId ?? `thread-${randomUUID()}`;
+    // The newest Talk of the app's own; a platform thread (game chat, Discord) that was written last is not one.
+    const selected = this.listThreads(scopeKey).find(thread => !isPlatformThreadId(thread.threadId))?.threadId ?? `thread-${randomUUID()}`;
     this.defaultThreadCache.set(scopeKey, selected);
     return selected;
   }
@@ -366,7 +371,7 @@ export class InMemoryConversationStore implements ConversationStore {
     );
     threads.set(resolvedThreadId, conversation.slice(-this.maximumConversationItems));
     this.conversations.set(scopeKey, threads);
-    this.defaultThreadCache.set(scopeKey, resolvedThreadId);
+    if (!isPlatformThreadId(resolvedThreadId)) this.defaultThreadCache.set(scopeKey, resolvedThreadId);
 
     const experiences = this.experiences.get(scopeKey) ?? [];
     const experience: ShannonExperience = Object.freeze({

@@ -3,7 +3,7 @@ import { SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME, presentShannonFeeling, type C
 import type { AutonomyActivityDay } from './autonomyActivity.js';
 import type { AutonomyControlLabel, ShannonAutonomyService } from './autonomyService.js';
 import {
-  BODY_LIMITS, BODY_SCHEMA_VERSION, BODY_TOUCH_EVENT_TYPES,
+  BODY_LIMITS, BODY_SCHEMA_VERSION, BODY_TOUCH_EVENT_TYPES, isBodyGameEvent,
   type BodyAudience, type BodyCapabilities, type BodyDoing, type BodyEvent, type BodyEventType, type BodyNudge, type BodyReachOutDeliveryOutcome,
 } from './bodyContract.js';
 import { AppLooks, type AppLookOptions } from './appLook.js';
@@ -22,6 +22,7 @@ import { bodyPlace, bodySurfaceMark, touchPartPhrase, type BodySurface } from '.
 import { ConversationLooks } from './conversationLooks.js';
 import { OWNER_CALL_LIMITS, OwnerCalls, type OwnerCallDependencies, type OwnerCallElsewhere, type OwnerCallSurface } from './ownerCallElsewhere.js';
 import type { TouchExperienceWriter } from './bodyTouchMemory.js';
+import { gameDeathExperience, type GameExperienceWriter } from './gameBodyMemory.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './bodyStore.js';
 import { ownerDay, presentCompanionState } from './companionPresence.js';
 import { emotionTiming } from './emotionTiming.js';
@@ -58,6 +59,11 @@ export interface ShannonBodyOptions {
    * (unset means on); `surface` says which app a device is (default: her body's registration only).
    */
   ownerCalls?: { enabled?: boolean; surface?: (scopeKey: string, deviceId: string) => OwnerCallSurface | undefined; answered?: OwnerCallDependencies['answered'] };
+  /**
+   * Her Minecraft body (`docs/minecraft-body-contract.md`): the one device whose game events are taken, in the owner's
+   * scope only, and where they become experiences. Absent, every game event is ignored. That device reports nothing else.
+   */
+  game?: { deviceId: string; ownerScopeKey: string; experiences?: GameExperienceWriter | null } | null;
 }
 
 export interface ShannonBodyDependencies extends ShannonBodyOptions {
@@ -69,7 +75,7 @@ export interface ShannonBodyDependencies extends ShannonBodyOptions {
 
 export type BodyEventResult =
   | { id: string; status: 'stored' | 'duplicate' | 'conflict' }
-  | { id: string; status: 'ignored'; reason: 'stale' | 'future' | 'daily_cap' | 'touch_only' };
+  | { id: string; status: 'ignored'; reason: 'stale' | 'future' | 'daily_cap' | 'touch_only' | 'not_game_body' | 'game_only' };
 
 export interface BodyIngestReceipt {
   schemaVersion: number;
@@ -185,7 +191,8 @@ export class ShannonBody {
     this.reactions = new BodyReactions({
       store: reactionStore, touches: this.touches, stateStore: dependencies.stateStore, conversationStore: dependencies.conversationStore,
       speaker: dependencies.reactions?.speaker ?? null, config, ingestEnabled: this.ingestEnabled, now: dependencies.now,
-      isBody: (scopeKey, deviceId) => this.store.capabilities(scopeKey, deviceId) !== null,
+      // Her Minecraft body is never a body that is touched (`docs/minecraft-body-contract.md`).
+      isBody: (scopeKey, deviceId) => !this.isGameBody(deviceId) && this.store.capabilities(scopeKey, deviceId) !== null,
       surface: (scopeKey, deviceId) => this.store.surface(scopeKey, deviceId),
       record: (scopeKey, entry) => { dependencies.autonomy.recordConversationAction(scopeKey, { ...entry, tool: BODY_REACTION_TOOL }); },
     });
@@ -195,8 +202,9 @@ export class ShannonBody {
     };
     this.ownerCalls = new OwnerCalls({
       ...(dependencies.ownerCalls?.enabled !== undefined ? { enabled: dependencies.ownerCalls.enabled } : {}),
-      events: (scopeKey, since, until) => this.store.callEvents(scopeKey, since, until),
-      isFullBody: (scopeKey, deviceId) => isFullBody(this.store.capabilities(scopeKey, deviceId)),
+      // Her Minecraft body is never "the call elsewhere" nor a full body a 409 is for (it can report no call: `game_only`).
+      events: (scopeKey, since, until) => this.store.callEvents(scopeKey, since, until).filter(event => !this.isGameBody(event.deviceId)),
+      isFullBody: (scopeKey, deviceId) => this.isFullBodyDevice(scopeKey, deviceId),
       surface: dependencies.ownerCalls?.surface ?? bodySurface,
       ...(dependencies.ownerCalls?.answered ? { answered: dependencies.ownerCalls.answered } : {}),
     });
@@ -211,12 +219,18 @@ export class ShannonBody {
     // A body that only feels touch has nothing else to report of the PC: its other events (away, returned, window…) are not taken.
     // Its own calls are facts about the phone, and tell another body that he is in a call there (`ownerCallElsewhere.ts`).
     const touchOnly = isTouchOnlyBody(this.store.capabilities(scopeKey, deviceId));
+    // Game events come from her Minecraft body alone, and that body reports nothing else.
+    const game = this.dependencies.game;
+    const gameBody = Boolean(game && game.deviceId === deviceId);
+    const gameAllowed = gameBody && game!.ownerScopeKey === scopeKey;
     const results = this.store.transaction(() => {
       this.store.prune(scopeKey, new Date(time - BODY_LIMITS.retentionDays * 24 * 60 * 60_000).toISOString());
       let storedToday = this.store.countForDay(scopeKey, dayKey);
       return events.map((event): BodyEventResult => {
         // A repeated key answers the same way however late the retry arrives.
         if (touchOnly && !BODY_TOUCH_EVENT_TYPES.some(type => type === event.type) && !TOUCH_ONLY_ALSO.has(event.type)) return { id: event.id, status: 'ignored', reason: 'touch_only' };
+        if (isBodyGameEvent(event.type) && !gameAllowed) return { id: event.id, status: 'ignored', reason: 'not_game_body' };
+        if (!isBodyGameEvent(event.type) && gameBody) return { id: event.id, status: 'ignored', reason: 'game_only' };
         const known = this.store.known(scopeKey, event);
         if (known) return { id: event.id, status: known };
         const age = time - Date.parse(event.occurredAt);
@@ -229,6 +243,7 @@ export class ShannonBody {
       });
     });
     this.feel(scopeKey, events, results, this.store.surface(scopeKey, deviceId));
+    if (gameAllowed) this.rememberGame(scopeKey, deviceId, events, results);
     return {
       schemaVersion: BODY_SCHEMA_VERSION, results,
       stored: results.filter(result => result.status === 'stored').length,
@@ -251,8 +266,25 @@ export class ShannonBody {
     }
   }
 
+  /**
+   * A stored game event becomes an experience in the server's words (phase 1: dying). After the store's own
+   * transaction, as a touch; a failure loses the memory of one event, never the receipt. No feeling moves yet.
+   */
+  private rememberGame(scopeKey: string, deviceId: string, events: readonly BodyEvent[], results: readonly BodyEventResult[]): void {
+    const writer = this.dependencies.game?.experiences;
+    if (!writer) return;
+    for (const [index, event] of events.entries()) {
+      if (event.type !== 'game.died' || !event.cause || results[index]?.status !== 'stored') continue;
+      try { writer.write(scopeKey, gameDeathExperience(scopeKey, deviceId, { ...event, cause: event.cause })); } catch (error) {
+        console.error('Shannon game memory failed', error instanceof Error ? error.message : 'unknown');
+      }
+    }
+  }
+
   /** True while the body last told the server that someone other than the owner can see or hear it. Throws when it cannot be read. */
   othersPresent(scopeKey: string, at: string): boolean {
+    // Her Minecraft body adds nothing here: its game events are left out (`bodyStore.ts`), it may report no other event
+    // (`game_only`), its presence reads note no audience, and it can register no capabilities to stand in as a body.
     return this.store.othersPresent(scopeKey, at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds);
   }
 
@@ -296,15 +328,32 @@ export class ShannonBody {
     } catch { return ''; }
   }
 
-  saveCapabilities(scopeKey: string, deviceId: string, capabilities: BodyCapabilities): StoredBodyCapabilities {
+  /**
+   * Registers what a body can express. Her Minecraft body (the device of `SHANNON_MINECRAFT_BODY_JSON`) never registers:
+   * it is identified by that device id alone, so it can never become a full or a touch-only body (`game_body`).
+   */
+  saveCapabilities(scopeKey: string, deviceId: string, capabilities: BodyCapabilities): StoredBodyCapabilities | 'game_body' {
+    if (this.isGameBody(deviceId)) return 'game_body';
     return this.store.saveCapabilities(scopeKey, deviceId, capabilities, this.dependencies.now());
+  }
+
+  /** The configured Minecraft body (`docs/minecraft-body-contract.md`): a game body, never one that shows her or is touched. */
+  isGameBody(deviceId: string): boolean {
+    return this.dependencies.game?.deviceId === deviceId;
+  }
+
+  /** A body that shows her: registered, not touch-only, and never her Minecraft body whatever was registered for it. */
+  private isFullBodyDevice(scopeKey: string, deviceId: string): boolean {
+    return !this.isGameBody(deviceId) && isFullBody(this.store.capabilities(scopeKey, deviceId));
   }
 
   presence(scopeKey: string, deviceId: string, knownEtag?: string, audience?: BodyAudience): BodyPresence | BodyPresenceUnchanged {
     const at = this.dependencies.now();
     // What a touch-only body says about its audience is not who can see or hear her body.
-    if (audience && this.ingestEnabled && !isTouchOnlyBody(this.store.capabilities(scopeKey, deviceId))) this.noteAudience(scopeKey, deviceId, audience, at);
-    if (this.ingestEnabled) this.notePresence(scopeKey, deviceId, at);
+    // Nor is who is in the game: her Minecraft body never says who can see her, and is never a body that shows her.
+    const gameBody = this.isGameBody(deviceId);
+    if (audience && this.ingestEnabled && !gameBody && !isTouchOnlyBody(this.store.capabilities(scopeKey, deviceId))) this.noteAudience(scopeKey, deviceId, audience, at);
+    if (this.ingestEnabled && !gameBody) this.notePresence(scopeKey, deviceId, at);
     const snapshot = this.dependencies.stateStore.snapshot(scopeKey);
     // 「いま」 as the state sheet shows it. Its cause is between her and the owner and stays out: the body may be on a stream.
     const mood = presentCompanionState(snapshot, at).presence.mood;
@@ -370,7 +419,7 @@ export class ShannonBody {
     if (!reports) return 'unavailable';
     if (this.dependencies.reachOutReportsEnabled === false) return 'reports_disabled';
     if (!this.ingestEnabled) return 'disabled';
-    if (!isFullBody(this.store.capabilities(scopeKey, deviceId))) return 'not_a_body';
+    if (!this.isFullBodyDevice(scopeKey, deviceId)) return 'not_a_body';
     return reports.report(scopeKey, deviceId, initiativeId, outcome, this.dependencies.now());
   }
 
@@ -386,7 +435,7 @@ export class ShannonBody {
     if (this.presenceMarks.size >= 256) this.presenceMarks.clear();
     this.presenceMarks.set(key, time);
     try {
-      if (!isFullBody(this.store.capabilities(scopeKey, deviceId))) return;
+      if (!this.isFullBodyDevice(scopeKey, deviceId)) return;
       reports.markPresence(scopeKey, deviceId, at);
     } catch { /* presence is still answered */ }
   }
@@ -394,7 +443,7 @@ export class ShannonBody {
   /** Bodies that show her: every registration except one that only feels touch (`bodyTouchOnly.ts`). */
   private fullBodies(scopeKey: string): readonly string[] {
     const touchOnly = new Set(this.store.devicesWithFlag(scopeKey, BODY_TOUCH_ONLY_FLAG));
-    return this.store.devices(scopeKey).filter(deviceId => !touchOnly.has(deviceId));
+    return this.store.devices(scopeKey).filter(deviceId => !touchOnly.has(deviceId) && !this.isGameBody(deviceId));
   }
 
   private reachOut(scopeKey: string, deviceId: string): { reachOut?: { pending: number; latestId?: string } } {

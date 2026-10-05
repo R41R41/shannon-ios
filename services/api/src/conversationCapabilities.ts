@@ -32,6 +32,12 @@ export interface ConversationCapabilitySelection {
    * The same audience decides what she is told of her own outreach (`ownOutreach.ts`): `guarded` keeps times, not words.
    */
   upcoming?: boolean | 'guarded';
+  /**
+   * What she is told of her own outreach, when it is not `upcoming`'s audience (absent: it follows `upcoming`, as in the
+   * app and voice). A platform surface reads no upcoming items for a shared conversation, yet her Minecraft body's game
+   * chat is told her outreach by times (owner decision 2026-10-06): that surface sets this (`TextTurnSurface.ownOutreach`).
+   */
+  ownOutreach?: boolean | 'guarded';
 }
 
 export interface ConversationCapabilityContext {
@@ -99,8 +105,9 @@ export function conversationCapabilityPrompt(
   if (reminderBoundary) sections.push(reminderBoundary);
   // 「そっちからかけてきたじゃん」: what she actually did on her own, on the turn that says she did. Ahead of notes and
   // upcoming items, so the 6,000-character cap below never cuts it; it follows the audience of upcoming items.
-  if (selection.upcoming !== false) {
-    const own = dependencies.ownOutreach?.promptFor(scopeKey, message, selection.upcoming === 'guarded' ? 'others' : 'owner');
+  const ownSelection = selection.ownOutreach ?? selection.upcoming;
+  if (ownSelection !== false) {
+    const own = dependencies.ownOutreach?.promptFor(scopeKey, message, ownSelection === 'guarded' ? 'others' : 'owner');
     if (own) sections.push(own);
   }
   if (selection.aetherNotes !== false) {

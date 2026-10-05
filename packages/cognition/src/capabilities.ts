@@ -79,6 +79,34 @@ export const SHANNON_CAPABILITIES = Object.freeze([
 
 export type ShannonCapabilityId = typeof SHANNON_CAPABILITIES[number]['id'];
 
+/**
+ * A capability that exists only while the server has it, and is therefore not in the fixed description above:
+ * her Minecraft body (`docs/minecraft-body-contract.md`). The default prompt, and so every cached prefix and
+ * recorded hash, stays as it is; the API adds this line (`withMinecraftBodyCapability`) only while the configured
+ * body is in the game, which is also when `minecraft.request` is offered. Its code path is checked by the same
+ * capability evidence test as the fixed list.
+ */
+export const SHANNON_MINECRAFT_BODY_CAPABILITY = Object.freeze({
+  id: 'minecraft_body', audience: 'owner',
+  text: 'マイクラの体: ボクのもう一つの体がワールドに入っている時、ゲームの中のこと（木材集めなど）を道具で頼み、結果を体の報告で知る。',
+} as const satisfies ShannonCapability);
+
+/** Capabilities the API may add to the description while it has them. */
+export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_MINECRAFT_BODY_CAPABILITY] as const);
+
+/**
+ * The owner's description with her Minecraft body's line, in its place after her folder's line. A prompt without
+ * the owner's description (a guest's, or any other text) is returned unchanged, and so is one that has it already.
+ */
+export function withMinecraftBodyCapability(prompt: string): string {
+  const line = `- ${SHANNON_MINECRAFT_BODY_CAPABILITY.text}\n`;
+  if (prompt.includes(line)) return prompt;
+  const folder = SHANNON_CAPABILITIES.find(item => item.id === 'own_folder');
+  const anchor = folder ? `- ${folder.text}\n` : '';
+  const at = anchor ? prompt.indexOf(anchor) : -1;
+  return at < 0 ? prompt : `${prompt.slice(0, at + anchor.length)}${line}${prompt.slice(at + anchor.length)}`;
+}
+
 /** Things the code has no path for. Keep in sync with the capability evidence test. */
 export const SHANNON_LIMITATIONS = Object.freeze([
   { id: 'calendar_mail', text: 'カレンダーへの登録・変更、メールやメッセージの送信、ほかの人への電話、予約、購入。' },

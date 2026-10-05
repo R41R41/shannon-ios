@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  SHANNON_CAPABILITIES, SHANNON_LIMITATIONS, SHANNON_ROOM_LOOK_RULES, SHANNON_TOUCH_FEELINGS, SHANNON_TOUCH_KINDS, isForgetCitedMemoriesCommand, shannonCapabilityPrompt, withAutonomyRunning,
+  SHANNON_CAPABILITIES, SHANNON_CONDITIONAL_CAPABILITIES, SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_LIMITATIONS, SHANNON_ROOM_LOOK_RULES, SHANNON_TOUCH_FEELINGS, SHANNON_TOUCH_KINDS, isForgetCitedMemoriesCommand, shannonCapabilityPrompt, withAutonomyRunning,
   type ShannonCapabilityId,
   autonomyDomain,
 } from '@shannon/cognition';
@@ -26,7 +26,7 @@ import { SQLiteReachOutSpeaker } from '../src/reachOutDelivery.js';
 import { SQLiteUpcomingStore } from '../src/upcomingStore.js';
 import { roomLookNotePrompt } from '../src/autonomyLoopPrompts.js';
 import { BoundedPublicReader } from '../src/autonomyReader.js';
-import { ShannonAutonomyService } from '../src/autonomyService.js';
+import { ShannonAutonomyService, createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { SQLiteStudyShowing } from '../src/autonomyShowing.js';
 import { StudyStore } from '../src/studyStore.js';
 import { HostFolderOperations } from '../src/hostFolderOperations.js';
@@ -34,6 +34,8 @@ import { prepareToolStep } from '../src/autonomyLoopToolStep.js';
 import { ShannonToolRunner } from '../src/shannonToolRunner.js';
 import { asksAboutOwnThings, conversationTools } from '../src/shannonToolSession.js';
 import { offeredTools } from '../src/shannonTools.js';
+import { MinecraftBodyRequests } from '../src/minecraftBodyRequests.js';
+import { minecraftExecutors, withMinecraftBodyLine } from '../src/shannonMinecraftTools.js';
 import { FileAetherProposalStore } from '../src/aetherProposal.js';
 import { BodyLooks } from '../src/bodyLook.js';
 import { BodyReactions } from '../src/bodyReaction.js';
@@ -76,7 +78,9 @@ const exists = (...values: unknown[]) => values.every(value => typeof value === 
  * type error, and a flag that stops being true fails here. A flag proves the path exists
  * in this build; it does not prove the production integration is configured.
  */
-const capabilityEvidence: Record<ShannonCapabilityId, () => boolean> = {
+type ConditionalCapabilityId = typeof SHANNON_CONDITIONAL_CAPABILITIES[number]['id'];
+// The fixed description and the lines the API adds while it has them (`SHANNON_CONDITIONAL_CAPABILITIES`) need the same evidence.
+const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, () => boolean> = {
   conversation: () => exists(OpenAIResponsesChatModel.prototype.generate,
     OpenAIResponsesChatModel.prototype.generateVoiceStreaming),
   memory_and_promises: () => voiceSkill('conversation_memory') && exists(executeConversationCommand)
@@ -126,6 +130,15 @@ const capabilityEvidence: Record<ShannonCapabilityId, () => boolean> = {
     HostFolderOperations.prototype.run, HostFolderOperations.prototype.claim, HostFolderOperations.prototype.report)
     && ['list', 'search', 'read', 'create', 'update', 'rename', 'move', 'delete'].every(verb => offeredTools('text', 'owner_alone').some(tool => tool.name === `folder.${verb}`))
     && Object.keys(configuredAutonomy({}).places.hostDevices ?? {}).length === 0,
+  // Phase 4 of her Minecraft body: the tool queues a request, the body claims it, reports progress and a result, and the
+  // result reaches her turns with the owner. Only in a conversation with the owner alone (never in her own time, never with others),
+  // and the runner offers it only while the configured body is claiming (the line says 「入っている時」). The line itself is
+  // conditional: it is in the owner's description only while the configured body is in the game (`withMinecraftBodyLine`).
+  minecraft_body: () => exists(MinecraftBodyRequests.prototype.enqueue, MinecraftBodyRequests.prototype.claim, MinecraftBodyRequests.prototype.report,
+    MinecraftBodyRequests.prototype.promptBlock, minecraftExecutors)
+    && offeredTools('text', 'owner_alone').some(tool => tool.name === 'minecraft.request')
+    && !offeredTools('autonomy', 'owner_alone').some(tool => tool.domain === 'minecraft_body') && offeredTools('text', 'others').length === 0
+    && createInMemoryAutonomyService(() => '2026-10-05T00:00:00.000Z').tools.offered('text', 'owner_alone', 'owner').every(tool => tool.domain !== 'minecraft_body'),
   voyager_tasks: () => voiceSkill('voyager_tasks') && isOrganizeCommand('整理して') && exists(prepareConversationOrganize),
   agent_tasks: () => voiceSkill('agent_status') && agentTaskInstructions().includes('TestFlight')
     && exists(distributeLatestInternalBuild),
@@ -146,10 +159,29 @@ const capabilityEvidence: Record<ShannonCapabilityId, () => boolean> = {
 
 describe('Shannon capability description', () => {
   it('names only capabilities that have a code path in this build', () => {
-    expect(Object.keys(capabilityEvidence).sort()).toEqual(SHANNON_CAPABILITIES.map(item => item.id).sort());
-    for (const capability of SHANNON_CAPABILITIES) {
+    expect(Object.keys(capabilityEvidence).sort()).toEqual([...SHANNON_CAPABILITIES, ...SHANNON_CONDITIONAL_CAPABILITIES].map(item => item.id).sort());
+    for (const capability of [...SHANNON_CAPABILITIES, ...SHANNON_CONDITIONAL_CAPABILITIES]) {
       expect(capabilityEvidence[capability.id](), `no code path for capability "${capability.id}"`).toBe(true);
     }
+  });
+
+  it('says what her Minecraft body can do only while the configured body is in the game, and nowhere else', () => {
+    const line = `- ${SHANNON_MINECRAFT_BODY_CAPABILITY.text}`;
+    const owner = shannonCapabilityPrompt('owner');
+    // The fixed description (and so every recorded prompt hash and length limit) never has it.
+    expect(owner).not.toContain(SHANNON_MINECRAFT_BODY_CAPABILITY.text);
+    expect((SHANNON_CAPABILITIES as readonly { id: string }[]).some(item => item.id === SHANNON_MINECRAFT_BODY_CAPABILITY.id)).toBe(false);
+    // No body, a body that is away, or a reader that fails: the prompt is exactly what it is without one.
+    expect(withMinecraftBodyLine(null, 'owner', owner)).toBe(owner);
+    expect(withMinecraftBodyLine({ present: () => false }, 'owner', owner)).toBe(owner);
+    expect(withMinecraftBodyLine({ present: () => { throw new Error('locked'); } }, 'owner', owner)).toBe(owner);
+    // In the game: one line, right after her folder's, and adding it twice changes nothing.
+    const present = withMinecraftBodyLine({ present: scopeKey => scopeKey === 'owner' }, 'owner', owner);
+    expect(present.split('\n').filter(item => item === line)).toHaveLength(1);
+    expect(present.replace(`${line}\n`, '')).toBe(owner);
+    expect(withMinecraftBodyLine({ present: () => true }, 'owner', present)).toBe(present);
+    // A guest's description has no owner capabilities, and gets no Minecraft line either.
+    expect(withMinecraftBodyLine({ present: () => true }, 'owner', shannonCapabilityPrompt('guest'))).toBe(shannonCapabilityPrompt('guest'));
   });
 
   it('keeps the stated limitations true', () => {

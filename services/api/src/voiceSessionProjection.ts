@@ -15,6 +15,7 @@ import type { DailyMindReader } from './dailyMind.js';
 import type { KnowledgeStore } from './knowledgeStore.js';
 import { visibleConversationHistory } from './memoryVisibility.js';
 import { temporaryGuestVoiceInstructions, voiceConversationInstructions } from './voiceConversationInstructions.js';
+import { withMinecraftBodyLine } from './shannonMinecraftTools.js';
 
 export type VoiceParticipantMode = 'owner' | 'guest';
 
@@ -25,6 +26,8 @@ export interface VoiceSessionDependencies {
   dailyMind: DailyMindReader | null;
   /** Her own pursuits and work, and the autonomy wording of the identity block. Owner sessions only. */
   autonomy?: { pursuitPrompt(scopeKey: string): string; identityProjection(scopeKey: string, prompt: string): string };
+  /** Her Minecraft body's request queue: while the body is in the game, the owner's identity says what it can do. */
+  minecraftBody?: { present?(scopeKey: string): boolean } | null;
   now: CompanionClock;
   voice: string;
   cognitiveIntents: CognitiveIntentStore;
@@ -59,7 +62,7 @@ export function realtimeVoiceSessionProjection(
   const captured = dependencies.stateStore.snapshot(scopeKey);
   const identity = dependencies.knowledgeStore?.promptProjection(scopeKey)
     ?? assembleShannonSystemPrompt(captured);
-  const basePrompt = dependencies.autonomy?.identityProjection(scopeKey, identity) ?? identity;
+  const basePrompt = withMinecraftBodyLine(dependencies.minecraftBody, scopeKey, dependencies.autonomy?.identityProjection(scopeKey, identity) ?? identity);
   const dailyMindPrompt = [dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '', withoutUnshownTitles(dependencies.autonomy?.pursuitPrompt(scopeKey) ?? '')]
     .filter(Boolean).join('\n\n');
   const history = voiceHistoryProjection(visibleConversationHistory(captured, dependencies.conversationStore, scopeKey, threadId, OWNER_AUDIENCE));

@@ -140,6 +140,9 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // A touch as an experience she recalls, and her line while it waits outside the conversation.
     'services/api/src/bodyTouchMemory.ts',
     'services/api/src/bodyReactionStore.ts',
+    // What happened to her Minecraft body as an experience, and the replay of her game-chat answers.
+    'services/api/src/gameBodyMemory.ts',
+    'services/api/src/minecraftTurnStore.ts',
   ]),
   approval_and_budget: Object.freeze([
     'services/api/src/autonomyCore.ts',
@@ -255,6 +258,16 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // The reflex from a touch to her answer, and its one model call.
     'services/api/src/bodyReaction.ts',
     'services/api/src/bodyReactionModel.ts',
+    // Her Minecraft body's game chat: who may speak as it, the gate and people it goes through, and its delivery note.
+    'services/api/src/minecraftBody.ts',
+    'services/api/src/minecraftBodyContract.ts',
+    'services/api/src/minecraftIntent.ts',
+    'services/api/src/minecraftBodyState.ts',
+    'services/api/src/serverMinecraftBodyRoute.ts',
+    // The platform surface both her Minecraft body and the platform reply route answer through, and that route.
+    'services/api/src/platformSurface.ts',
+    'services/api/src/platformReply.ts',
+    'services/api/src/serverPlatformBridgeRoute.ts',
   ]),
   deployment: Object.freeze([
     'deploy/',

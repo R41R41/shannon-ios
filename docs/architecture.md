@@ -185,6 +185,15 @@ accepts `participants` and returns what Shannon remembers of them from that audi
 someone else is that person alone and receives no protected owner line. The exact fields, errors and
 what the runtime must not send are in `docs/platform-people-contract.md`.
 
+Response generation moves onto the shared core with `POST /v1/platform/reply` (2026-10-06, off unless
+`SHANNON_PLATFORM_REPLY=on`): the runtime sends the message and gets her reply from the app's own
+conversation kernel through the platform surface (`platformSurface.ts`) that her Minecraft body's game
+chat uses, so the owner in a conversation bound `owner-private` is the owner alone (his memory, tools by
+the owner-alone rule, `minecraft.request` while the Minecraft body is present), the owner in a shared
+conversation and everyone else get the shared or guest prompt without tools, and the turn is stored as the
+mirror would store it. The runtime keeps its own path as the fallback. Details in
+`docs/platform-people-contract.md` (Replies).
+
 Phase 3 begins with an owner-managed person identity registry, not automatic
 relationship learning. Paired owner clients may create a Discord identity as an
 unconfirmed candidate, explicitly confirm it, correct it, revoke it, or delete the
@@ -559,7 +568,7 @@ All autonomy tables are created with `CREATE TABLE IF NOT EXISTS` outside the nu
 
 ## Body
 
-Shannon's body is the Live2D desktop application on the owner's Windows PC; her mind is this server. The contract is `docs/body-contract.md` (`bodyContract.ts`, `bodyStore.ts`, `shannonBody.ts`, `apiBodyRoutes.ts`), and it is one-directional: the body calls, the server never does.
+Shannon's body is the Live2D desktop application on the owner's Windows PC; her mind is this server. A Minecraft bot is a second body: its game chat is a surface of the same text-turn kernel (`ShannonApiKernel.textTurn`), with who is present decided by the platform bridge's policy (`docs/minecraft-body-contract.md`). Requests to that body (phase 4) are one server-side queue (`minecraftBodyRequests.ts`): her `minecraft.request` tool in a turn the owner alone reads and the owner's game-chat intent fill it, the body device long-polls a claim, reports progress and a closed result, and the result reaches her as the `[マイクラの体で起きたこと]` block of the owner's turns and as a `body.game` experience. The contract is `docs/body-contract.md` (`bodyContract.ts`, `bodyStore.ts`, `shannonBody.ts`, `apiBodyRoutes.ts`), and it is one-directional: the body calls, the server never does.
 
 - **Events** (`POST /v1/body/events`): touches, the owner leaving and returning, calls, window and application state, each with an idempotency key, a time, and `audience: owner | others`. The vocabulary is closed and there is no text field, so an event cannot carry an instruction. Events are stored in `body_events` (30 days, 2,000 a day). Touches and returns the owner caused in the last 30 minutes become at most three fixed-wording lines under `[体に起きたこと]` in an owner text turn; the block is read, never written, and voice and the platform bridge do not receive it. An event with `audience: others` is stored and never reaches that block. An event produces no reply and no notification; a touch event moves her feeling and is remembered (next item).
 - **When she is touched** (`bodyReaction*.ts`, `bodyTouch.ts`, `bodyTouchMemory.ts`; owner decision 2026-10-02; the first instance of the reflex layer of Syzygy ADR-0003: fast, outside the turn pipeline, reading and writing the shared emotion state through its own entry points, with the same record conventions).

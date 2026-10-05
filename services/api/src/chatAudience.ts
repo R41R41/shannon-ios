@@ -46,7 +46,8 @@ export interface ChatAudienceTurn {
   /** The speak-time rule text, empty when the owner is alone. */
   readonly instructions: string;
   /** How the completed turn is stored. With others present it teaches nothing about the owner. */
-  readonly turnLabel: { audience?: MemoryAudience; speaker?: 'unknown' };
+  /** `speaker: 'owner'` only where the server verified him (her Minecraft body's shared chat, `platformSurface.ts`). */
+  readonly turnLabel: { audience?: MemoryAudience; speaker?: 'owner' | 'unknown' };
   /** The full owner profile is for the owner alone; otherwise the identity block without it. */
   identity(ownerProfile: () => string): string;
   /** Today's focus and her own pursuits, as the owner voice path gives them to this audience. */

@@ -23,12 +23,15 @@ export type BodyEventOutcome = 'stored' | 'duplicate' | 'conflict';
 interface EventRow {
   event_key: string; device_id: string; event_type: string; audience: string; occurred_at: string; received_at: string;
   duration_ms: number | null; strength: number | null; minutes_away: number | null; content_hash: string; region: string | null;
+  cause: string | null;
 }
 
 // The part is in the hash only when it was sent, so an event stored before parts existed still answers `duplicate`.
 const contentHash = (event: BodyEvent) => createHash('sha256').update(JSON.stringify([
   event.type, event.audience, event.occurredAt, event.durationMs ?? null, event.strength ?? null, event.minutesAway ?? null,
   ...(event.region !== undefined ? [event.region] : []),
+  // Only game events have a cause: every other event hashes as it always did.
+  ...(event.cause !== undefined ? [`cause:${event.cause}`] : []),
 ])).digest('hex').slice(0, 32);
 
 /**
@@ -89,6 +92,8 @@ export class SQLiteBodyStore {
     // Added 2026-10-03: the touched part of an event, and where a registered body is.
     addColumnOnce(this.database, 'body_events', 'region', 'TEXT');
     addColumnOnce(this.database, 'body_capabilities', 'surface', 'TEXT');
+    // Added 2026-10-05: what killed her Minecraft body (`game.died`).
+    addColumnOnce(this.database, 'body_events', 'cause', 'TEXT');
     secureDatabaseFiles(path);
   }
 
@@ -110,10 +115,10 @@ export class SQLiteBodyStore {
     const result = this.database.prepare(`
       INSERT OR IGNORE INTO body_events (
         scope_key, event_key, device_id, event_type, audience, occurred_at, received_at, day_key,
-        duration_ms, strength, minutes_away, content_hash, region
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        duration_ms, strength, minutes_away, content_hash, region, cause
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(scopeKey, event.id, deviceId, event.type, event.audience, event.occurredAt, receivedAt, dayKey,
-      event.durationMs ?? null, event.strength ?? null, event.minutesAway ?? null, hash, event.region ?? null);
+      event.durationMs ?? null, event.strength ?? null, event.minutesAway ?? null, hash, event.region ?? null, event.cause ?? null);
     return Number(result.changes) > 0 ? 'stored' : this.known(scopeKey, event) ?? 'conflict';
   }
 
@@ -143,6 +148,7 @@ export class SQLiteBodyStore {
       ...(row.strength !== null ? { strength: Number(row.strength) } : {}),
       ...(row.minutes_away !== null ? { minutesAway: Number(row.minutes_away) } : {}),
       ...(isBodyTouchRegion(row.region) ? { region: row.region } : {}),
+      ...(row.cause ? { cause: row.cause } : {}),
     }));
   }
 
@@ -187,12 +193,13 @@ export class SQLiteBodyStore {
     if (reports.length) return reports.some(report => report.audience === 'others');
     // Only her full bodies stand in: a touch-only body (the phone) or an unregistered app says who was around it, not who can
     // see her window. Call events stand in for nothing: the phone reports its calls whatever its registration (2026-10-05).
+    // Nor do the events of her Minecraft body: who is in the game is not who is at the PC.
     const touchOnly = new Set(this.devicesWithFlag(scopeKey, BODY_TOUCH_ONLY_FLAG));
     const bodies = this.devices(scopeKey).filter(device => !touchOnly.has(device));
     if (!bodies.length) return false;
     const latest = this.database.prepare(`
       SELECT audience FROM body_events WHERE scope_key = ? AND occurred_at >= ? AND occurred_at <= ?
-        AND device_id IN (${bodies.map(() => '?').join(', ')}) AND event_type NOT IN ('callStarted', 'callEnded')
+        AND device_id IN (${bodies.map(() => '?').join(', ')}) AND event_type NOT IN ('callStarted', 'callEnded') AND event_type NOT LIKE 'game.%'
       ORDER BY occurred_at DESC, received_at DESC LIMIT 1
     `).get(scopeKey, new Date(time - eventWindowMilliseconds).toISOString(), at, ...bodies) as unknown as { audience: string } | undefined;
     return latest?.audience === 'others';
