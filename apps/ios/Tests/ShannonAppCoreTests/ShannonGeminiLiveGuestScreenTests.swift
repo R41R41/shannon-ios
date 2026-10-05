@@ -311,8 +311,8 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
     /// fallback window): the decision follows the onset the recogniser reported.
     func testALateTranscriptOfSpeechThatBeganBeforeTheTapIsHis() async {
         let model = liveModel()
-        model.handle(.speechStarted)
-        model.handle(.speechStopped)
+        model.handle(.speechStarted())
+        model.handle(.speechStopped())
         model.switchParticipantMode(to: .guest, origin: .control)
         try? await Task.sleep(for: .seconds(1.2))
         model.handle(.inputTranscript("明日の歯医者は何時だっけ。"))
@@ -327,15 +327,15 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
     /// next segment is theirs and is not merged into it.
     func testAPreTapSentenceDeliveredInChunksStaysHis() async {
         let model = liveModel()
-        model.handle(.speechStarted)
+        model.handle(.speechStarted())
         model.switchParticipantMode(to: .guest, origin: .control)
         try? await Task.sleep(for: .seconds(ShannonGeminiLiveSessionModel.recogniserLag + 0.1))
         model.handle(.inputTranscript("明日の予定は、"))
         model.handle(.inputTranscript("歯医者だっけ。"))
         XCTAssertEqual(model.userTranscript, "")
-        model.handle(.speechStopped)
-        model.handle(.speechStarted)
-        model.handle(.speechStopped)
+        model.handle(.speechStopped())
+        model.handle(.speechStarted())
+        model.handle(.speechStopped())
         model.handle(.inputTranscript("はじめまして。"))
         XCTAssertEqual(model.userTranscript, "はじめまして。", "the guests' words, and only theirs")
         await waitForFinalization(model, turns: 2)
@@ -346,21 +346,78 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
 
     func testSpeechSegmentsFollowOnsetsAndForgetSegmentsThatNeverBroughtWords() {
         var segments = ShannonVoiceSpeechSegments()
-        XCTAssertNil(segments.claimTranscript(at: 0), "no onsets reported: the arrival window decides")
-        segments.started(at: 0)
+        XCTAssertEqual(segments.claimTranscript(itemID: nil, at: 0), .unknown, "no onsets reported: the arrival window decides")
+        segments.started(itemID: nil, at: 0)
         segments.switchedToGuest()
-        XCTAssertEqual(segments.claimTranscript(at: 1), true, "a chunk of the open pre-tap segment")
-        XCTAssertEqual(segments.claimTranscript(at: 2), true, "another chunk")
-        segments.stopped(at: 3)
-        segments.started(at: 4)
-        segments.stopped(at: 5)
-        XCTAssertEqual(segments.claimTranscript(at: 6), false, "the guests' segment, after it")
-        // A segment that never brings words (a cough before the tap) is forgotten after a while.
-        segments.started(at: 10)
-        segments.stopped(at: 10.5)
-        segments.switchedToGuest()
-        segments.started(at: 30)
-        segments.stopped(at: 31)
-        XCTAssertEqual(segments.claimTranscript(at: 32), false, "not taken for the forgotten pre-tap noise")
+        XCTAssertEqual(segments.claimTranscript(itemID: nil, at: 1), .owners, "a chunk of the open pre-tap segment")
+        XCTAssertEqual(segments.claimTranscript(itemID: nil, at: 2), .owners, "another chunk")
+        segments.stopped(itemID: nil, at: 3)
+        segments.started(itemID: nil, at: 4)
+        segments.stopped(itemID: nil, at: 5)
+        XCTAssertEqual(segments.claimTranscript(itemID: nil, at: 6), .others, "the guests' segment, after it")
+        XCTAssertTrue(segments.usedOrderFallback, "matched by order: logged")
+        // A segment of the guests that never brings words is forgotten after a while.
+        segments.started(itemID: nil, at: 10)
+        segments.stopped(itemID: nil, at: 10.5)
+        segments.started(itemID: nil, at: 30)
+        segments.stopped(itemID: nil, at: 31)
+        XCTAssertEqual(segments.claimTranscript(itemID: nil, at: 32), .others)
+    }
+
+    /// Completions of different turns can arrive out of order: the friend's short 「はじめまして」 overtakes the
+    /// owner's long sentence. Matched by item id, his stays his and hers stays hers.
+    func testTranscriptsThatArriveOutOfOrderAreMatchedByTheirItem() async {
+        let model = liveModel()
+        model.handle(.speechStarted(itemID: "owner-a"))
+        model.handle(.speechStopped(itemID: "owner-a"))
+        model.switchParticipantMode(to: .guest, origin: .control)
+        try? await Task.sleep(for: .seconds(ShannonGeminiLiveSessionModel.recogniserLag + 0.1))
+        model.handle(.speechStarted(itemID: "guest-b"))
+        model.handle(.speechStopped(itemID: "guest-b"))
+        model.handle(.inputTranscript("はじめまして。", itemID: "guest-b"))
+        XCTAssertEqual(model.userTranscript, "はじめまして。")
+        model.handle(.inputTranscript("明日の歯医者は何時だったか、確認しておいてくれる？", itemID: "owner-a"))
+        XCTAssertEqual(model.userTranscript, "はじめまして。", "his sentence is not shown")
+        await waitForFinalization(model, turns: 2)
+        XCTAssertEqual(model.pendingTurns.displayText, "はじめまして。")
+        let hidden = model.pendingTurns.turns.filter { model.pendingTurns.hiddenIDs.contains($0.id) }.map(\.rawText)
+        XCTAssertEqual(hidden, ["明日の歯医者は何時だったか、確認しておいてくれる？"], "his, answered but hidden")
+        model.stop()
+    }
+
+    /// Her own voice comes back as a transcript before the owner's pre-tap sentence: it is dropped as echo and takes
+    /// its own segment, never his.
+    func testAnEchoThatOvertakesTakesItsOwnSegment() async {
+        let model = liveModel()
+        model.handle(.speechStarted(itemID: "owner-a"))
+        model.handle(.speechStopped(itemID: "owner-a"))
+        model.switchParticipantMode(to: .guest, origin: .control)
+        let line = "こちらこそ、よろしくお願いします。"
+        let now = ProcessInfo.processInfo.systemUptime
+        model.echoGuard.recordPlayed(line, at: now)
+        model.echoWindow.playbackEnded(at: now)
+        model.handle(.speechStarted(itemID: "echo"))
+        model.handle(.speechStopped(itemID: "echo"))
+        model.handle(.inputTranscript(line, itemID: "echo"))
+        XCTAssertTrue(model.pendingTurns.turns.isEmpty, "her echo is dropped")
+        model.handle(.inputTranscript("明日の予定を教えて。", itemID: "owner-a"))
+        XCTAssertEqual(model.userTranscript, "")
+        await waitForFinalization(model, turns: 1)
+        XCTAssertEqual(model.pendingTurns.displayText, "", "his words stay his")
+        model.stop()
+    }
+
+    /// After the call returns to 本人だけ, a late transcript of speech heard in 「友人も一緒」 is never answered.
+    func testALateTranscriptFromTheEndedFriendsPeriodIsIgnored() async {
+        let model = liveModel()
+        model.switchParticipantMode(to: .guest, origin: .spoken)
+        model.handle(.speechStarted(itemID: "guest-g"))
+        model.handle(.speechStopped(itemID: "guest-g"))
+        model.switchParticipantMode(to: .owner)
+        model.handle(.inputTranscript("ミキの個人的な話", itemID: "guest-g"))
+        XCTAssertEqual(model.userTranscript, "")
+        try? await Task.sleep(for: .milliseconds(300))
+        XCTAssertTrue(model.pendingTurns.turns.isEmpty)
+        model.stop()
     }
 }

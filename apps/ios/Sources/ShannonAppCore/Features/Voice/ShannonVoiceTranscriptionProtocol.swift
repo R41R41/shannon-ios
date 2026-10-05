@@ -3,11 +3,14 @@ import Foundation
 /// Events from the OpenAI Realtime transcription session, reduced to what the
 /// voice session needs. Transcript deltas are intentionally not surfaced: Shannon
 /// shows no live caption, and a final transcript is the only text that reaches the model.
+///
+/// Speech boundaries and transcripts carry the recogniser's `item_id` when it sends one: completions of different
+/// turns can arrive out of order, so the session matches them by id, not by order.
 public enum ShannonTranscriptionEvent: Equatable, Sendable {
     case sessionReady
-    case speechStarted
-    case speechStopped
-    case inputTranscript(String)
+    case speechStarted(itemID: String? = nil)
+    case speechStopped(itemID: String? = nil)
+    case inputTranscript(String, itemID: String? = nil)
     case goAway(String?)
 }
 
@@ -52,6 +55,11 @@ public enum ShannonOpenAITranscriptionProtocol {
         ])
     }
 
+    private static func itemID(_ root: [String: Any]) -> String? {
+        guard let value = root["item_id"] as? String, !value.isEmpty, value.count <= 128 else { return nil }
+        return value
+    }
+
     public static func events(from data: Data) throws -> [ShannonTranscriptionEvent] {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = root["type"] as? String else { return [] }
@@ -59,12 +67,12 @@ public enum ShannonOpenAITranscriptionProtocol {
         case "session.created":
             return [.sessionReady]
         case "input_audio_buffer.speech_started":
-            return [.speechStarted]
+            return [.speechStarted(itemID: itemID(root))]
         case "input_audio_buffer.speech_stopped":
-            return [.speechStopped]
+            return [.speechStopped(itemID: itemID(root))]
         case "conversation.item.input_audio_transcription.completed":
             let transcript = removingLeakedPrompt(from: (root["transcript"] as? String) ?? "")
-            return transcript.isEmpty ? [] : [.inputTranscript(transcript)]
+            return transcript.isEmpty ? [] : [.inputTranscript(transcript, itemID: itemID(root))]
         default:
             return []
         }

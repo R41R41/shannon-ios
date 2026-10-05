@@ -321,20 +321,22 @@ public final class ShannonGeminiLiveSessionModel {
             watchCapture()
             if callStartedAt == nil { callStartedAt = Date() }
             backgroundSilence.speech(at: Date())
-        case .speechStarted:
-            speechSegments.started(at: ProcessInfo.processInfo.systemUptime)
+        case let .speechStarted(itemID):
+            speechSegments.started(itemID: itemID, at: ProcessInfo.processInfo.systemUptime)
             backgroundSilence.ownerSpeechStarted(at: Date())
             echoWindow.speechStarted(isSpeaking: responseTask != nil, now: ProcessInfo.processInfo.systemUptime)
             bargeInRule.speechStarted(at: ProcessInfo.processInfo.systemUptime)
             duckForSpeech()
-        case .speechStopped:
-            speechSegments.stopped(at: ProcessInfo.processInfo.systemUptime)
+        case let .speechStopped(itemID):
+            speechSegments.stopped(itemID: itemID, at: ProcessInfo.processInfo.systemUptime)
             backgroundSilence.ownerSpeechStopped(at: Date())
             bargeInRule.speechStopped(at: ProcessInfo.processInfo.systemUptime)
             if responseTask != nil { scheduleDuckRelease() }
-        case let .inputTranscript(text):
-            // Every transcript takes its speech segment, also one dropped as her echo, so the next lines up.
-            let segmentIsOwners = speechSegments.claimTranscript(at: ProcessInfo.processInfo.systemUptime)
+        case let .inputTranscript(text, itemID):
+            // Every transcript takes its speech segment (by id), also one dropped as her echo.
+            let claim = speechSegments.claimTranscript(itemID: itemID, at: ProcessInfo.processInfo.systemUptime)
+            // Heard in a 「友人も一緒」 period that has ended: never answered with the owner's context.
+            if claim == .stale { return }
             if discardsNearHerVoice(text) { return }
             if !turnAssembler.hasFinalText {
                 heardRightAfterShannon = ShannonVoiceGuestCallState.follows(
@@ -343,7 +345,7 @@ public final class ShannonGeminiLiveSessionModel {
             }
             backgroundSilence.ownerSpoke(at: Date())
             // Whose words these are follows when their speech began; the buffer never mixes the two.
-            takeOwnership(segmentIsOwners: segmentIsOwners, at: ProcessInfo.processInfo.systemUptime)
+            takeOwnership(of: claim, at: ProcessInfo.processInfo.systemUptime)
             turnAssembler.appendFinal(text)
             userTranscript = previewInput(turnAssembler.finalText)
             // Only a completed transcript that is not Shannon's own voice interrupts her reply.
@@ -434,7 +436,8 @@ public final class ShannonGeminiLiveSessionModel {
         turnAssembler.reset()
         heardRightAfterShannon = false
         ownerWordsReceivedUntil = nil
-        speechSegments.reset()
+        // What was heard until now belongs to the period that ended; a late transcript of it is ignored.
+        speechSegments.discardAll()
         bufferIsOwners = false
     }
 
