@@ -39,6 +39,10 @@ public final class ShannonLive2DStage {
     public private(set) var calmsInPage = false
     /// Seconds from starting the page to its `ready`, for the body screen's diagnostics.
     public private(set) var lastLoadSeconds: Double?
+    /// The body the page shows (the character or her eyes alone), as the page last said it.
+    public internal(set) var body: ShannonLive2DBody = .human
+    /// The bodies the page has; empty for a page that has only the character.
+    public private(set) var bodies: [ShannonLive2DBody] = []
 
     /// Touches and reaction moments from the page. One listener: the touch coordinator.
     @ObservationIgnored public var onTouchMessage: (@MainActor (ShannonLive2DMessage) -> Void)?
@@ -72,6 +76,8 @@ public final class ShannonLive2DStage {
     @ObservationIgnored private var failuresWithoutReady = 0
     @ObservationIgnored private var fingerDown = false
     @ObservationIgnored private var lastHeardAt = Date()
+    /// The body the owner chose (設定 › すがた › 体). The page is started in it and switched to it when they differ.
+    @ObservationIgnored var desiredBody = ShannonLive2DBody.current()
 
     private init() {}
 
@@ -157,7 +163,7 @@ public final class ShannonLive2DStage {
         refreshPaused()
     }
 
-    private func applyHost() {
+    func applyHost() {
         guard let host = hosts.last else { return }
         send(.setLayout(host.layout))
         send(.setTouchEnabled(host.touchEnabled))
@@ -209,7 +215,7 @@ public final class ShannonLive2DStage {
 
     /// Reduce Motion: no gestures of her own and no sway, while breathing, blinking, faces and touch go on.
     /// Low Power Mode: half the frames. Sent again whenever either setting changes.
-    private func applyCalm() {
+    func applyCalm() {
         guard calmsInPage else { return }
         send(.setIdle(gestures: !reduceMotion, sway: reduceMotion ? 0 : 1))
         send(.setFrameRate(ShannonLive2DStagePolicy.frameRate(lowPower: lowPower)))
@@ -233,17 +239,17 @@ public final class ShannonLive2DStage {
         restTask?.cancel()
         restTask = nil
         // A page that calms itself is paused to rest only in Low Power Mode, and after a longer idle.
-        guard ShannonLive2DStagePolicy.mayRest(reduceMotion: reduceMotion, lowPower: lowPower, calmsInPage: calmsInPage),
+        guard ShannonLive2DStagePolicy.mayRest(reduceMotion: reduceMotion, lowPower: lowPower, calmsInPage: pageCalms),
               status == .ready, activeHost != nil else { return }
         restTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled, let self else { return }
-                guard ShannonLive2DStagePolicy.mayRest(reduceMotion: self.reduceMotion, lowPower: self.lowPower, calmsInPage: self.calmsInPage),
+                guard ShannonLive2DStagePolicy.mayRest(reduceMotion: self.reduceMotion, lowPower: self.lowPower, calmsInPage: self.pageCalms),
                       self.status == .ready, self.activeHost != nil else { return }
                 if ShannonLive2DStagePolicy.rests(
                     calm: true, phase: self.phase, idleSeconds: Date().timeIntervalSince(self.lastActivityAt), fingerDown: self.fingerDown,
-                    calmsInPage: self.calmsInPage) {
+                    calmsInPage: self.pageCalms) {
                     self.isResting = true
                     self.refreshPaused()
                     return
@@ -267,6 +273,8 @@ public final class ShannonLive2DStage {
         sentPaused = nil
         lastMouthLevel = 0
         loadStartedAt = Date()
+        // The setting is the authority: it may have changed while no screen showed her.
+        desiredBody = ShannonLive2DBody.current()
 
         let bridge = ShannonLive2DBridge(stage: self, generation: generation, folder: folder)
         let configuration = WKWebViewConfiguration()
@@ -311,7 +319,8 @@ public final class ShannonLive2DStage {
                 return
             }
             webView.configuration.userContentController.add(rules)
-            webView.loadFileURL(folder.appendingPathComponent("embed.html"), allowingReadAccessTo: folder)
+            // Started in the chosen body, so that her eyes alone never load the character first.
+            webView.loadFileURL(ShannonLive2DStagePolicy.pageURL(in: folder, body: self.desiredBody), allowingReadAccessTo: folder)
         }
 
         timeoutTask?.cancel()
@@ -357,6 +366,8 @@ public final class ShannonLive2DStage {
         webView = nil
         bridge = nil
         calmsInPage = false
+        body = .human
+        bodies = []
         loadProgress = 0
         sentPaused = nil
         isResting = false
@@ -396,13 +407,15 @@ public final class ShannonLive2DStage {
         probe(message)
 #endif
         switch message {
-        case let .ready(version, modelUpdatedAt, expressions, gestures):
+        case let .ready(version, modelUpdatedAt, expressions, gestures, bodies, body):
             timeoutTask?.cancel()
             timeoutTask = nil
             self.version = version
             self.modelUpdatedAt = modelUpdatedAt
             self.expressions = expressions
             self.gestures = gestures
+            self.bodies = bodies
+            self.body = body ?? .human // an older page has only the character
             lastLoadSeconds = loadStartedAt.map { Date().timeIntervalSince($0) }
             failuresWithoutReady = 0
             loadProgress = 1
@@ -416,6 +429,10 @@ public final class ShannonLive2DStage {
             refreshPaused()
             lastActivityAt = Date()
             scheduleRest()
+            // The owner chose another body while the page loaded (or the page did not take the start parameter).
+            if self.body != desiredBody { send(.setBody(desiredBody)) }
+        case let .body(body):
+            bodyChanged(to: body)
         case let .loading(progress):
             if status == .loading { loadProgress = max(loadProgress, progress) }
         case .error:

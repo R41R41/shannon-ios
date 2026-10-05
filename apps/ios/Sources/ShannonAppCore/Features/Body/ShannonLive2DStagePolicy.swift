@@ -59,6 +59,14 @@ enum ShannonLive2DStagePolicy {
     /// With no screen showing her, the model (about 85 MB of GPU memory) is let go after this long.
     static let releaseAfterSeconds: TimeInterval = 90
 
+    /// The page to open: `embed.html`, with `?body=eyes` when she starts with her eyes alone.
+    static func pageURL(in folder: URL, body: ShannonLive2DBody) -> URL {
+        let page = folder.appendingPathComponent("embed.html")
+        guard body != .human, var components = URLComponents(url: page, resolvingAgainstBaseURL: false) else { return page }
+        components.queryItems = [URLQueryItem(name: "body", value: body.rawValue)]
+        return components.url ?? page
+    }
+
     /// A mouth level worth a call: any change of note, and always the return to zero.
     static func sendsMouthLevel(_ level: Double, last: Double) -> Bool {
         level <= 0 ? last > 0 : abs(level - last) >= 0.03

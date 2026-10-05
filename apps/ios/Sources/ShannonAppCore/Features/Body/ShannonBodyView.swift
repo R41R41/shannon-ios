@@ -96,8 +96,17 @@ struct ShannonLive2DFigure: View {
     var directTouch = false
     var onAdjust: ((_ larger: Bool) -> Void)?
 
+    /// 設定 › すがた › 体. Every place that wants her figure says the chosen body to the one page.
+    @AppStorage(ShannonLive2DBody.storageKey) private var bodyRawValue = ShannonLive2DBody.human.rawValue
+
+    private func applyBody() {
+        ShannonLive2DStage.shared.setBody(ShannonLive2DBody(rawValue: bodyRawValue) ?? .human)
+    }
+
     var body: some View {
         let figure = ShannonLive2DHostView(hostID: hostID, priority: priority, layout: layout, touchEnabled: touchEnabled, onLayoutChange: onLayoutChange)
+            .onAppear(perform: applyBody)
+            .onChange(of: bodyRawValue) { applyBody() }
             .opacity(isShowing ? 1 : 0)
             .allowsHitTesting(isShowing && touchEnabled)
             .accessibilityElement(children: .ignore)

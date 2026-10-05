@@ -34,18 +34,19 @@ extension ShannonLive2DStage {
         if value != .speaking { lastMouthLevel = 0 }
     }
 
-    /// The level of the audio being played, 0–1. Zero when speech ends.
+    /// The level of the audio being played, 0–1. Zero when speech ends. Her eyes alone have no mouth: nothing is sent.
     public func setMouthLevel(_ level: Double) {
         let clamped = min(1, max(0, level.isFinite ? level : 0))
-        guard status == .ready, sentPaused == false || clamped <= 0,
+        guard status == .ready, body.hasCharacterRig, sentPaused == false || clamped <= 0,
               ShannonLive2DStagePolicy.sendsMouthLevel(clamped, last: lastMouthLevel) else { return }
         lastMouthLevel = clamped
         if clamped > 0 { lastActivityAt = Date() }
         send(.setMouthLevel(clamped))
     }
 
+    /// A gesture of the character. Her eyes alone have no arms: nothing is sent.
     public func play(_ gesture: String) {
-        guard gestures.contains(gesture) else { return }
+        guard body.hasCharacterRig, gestures.contains(gesture) else { return }
         noteActivity()
         send(.play(gesture))
     }

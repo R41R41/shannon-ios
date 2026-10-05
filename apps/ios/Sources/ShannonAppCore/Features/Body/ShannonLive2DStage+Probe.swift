@@ -28,19 +28,22 @@ extension ShannonLive2DStage {
             try? await Task.sleep(for: .seconds(2))
             self?.express("joyful", seconds: 20)
             try? await Task.sleep(for: .seconds(3))
-            _ = try? await self?.webView?.evaluateJavaScript(Self.pressOnFaceScript)
+            guard let self else { return }
+            _ = try? await self.webView?.evaluateJavaScript(Self.pressOnFaceScript(body: self.body))
         }
     }
 
-    /// The page listens to the mouse as well as to fingers; a press on the face is a poke.
-    private static let pressOnFaceScript = """
+    /// The page listens to the mouse as well as to fingers; a press on the face is a poke. Her eyes alone stand in the middle.
+    private static func pressOnFaceScript(body: ShannonLive2DBody) -> String {
+        """
     (function () {
       var stage = document.getElementById('stage').getBoundingClientRect();
-      var x = stage.left + stage.width / 2, y = stage.top + stage.height * 0.17;
+      var x = stage.left + stage.width / 2, y = stage.top + stage.height * \(body == .eyes ? "0.5" : "0.17");
       window.dispatchEvent(new MouseEvent('mousedown', { clientX: x, clientY: y, button: 0 }));
       setTimeout(function () { window.dispatchEvent(new MouseEvent('mouseup', { clientX: x, clientY: y, button: 0 })); }, 90);
       return 'pressed';
     })();
     """
+    }
 }
 #endif

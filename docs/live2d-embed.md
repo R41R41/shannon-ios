@@ -1,7 +1,8 @@
 # The Live2D embed page in the apps
 
 Shannon has two forms in the iPhone and Mac apps: the Waterlight Eye (drawn natively, the default) and the
-Live2D character. The Live2D form is drawn by a self-contained page built by the desktop-body project
+Live2D form. The Live2D form has two bodies (owner decision 2026-10-05, the desktop's 設定 › すがた › 体): the
+character (「人の姿」, the default) and her eyes alone (「目だけ」, two light-blue eyes that move as the Waterlight Eye does). The Live2D form is drawn by a self-contained page built by the desktop-body project
 (`shannon-desktop`, `npm run build` → `dist/embed/`). The apps bundle that folder unchanged and show it in
 one shared `WKWebView`.
 
@@ -10,14 +11,15 @@ one shared `WKWebView`.
 | | |
 | --- | --- |
 | Location | `apps/ios/Sources/ShannonAppCore/Live2D/embed/` (copied as a folder: `.copy("Live2D")` in `apps/ios/Package.swift`) |
-| `version` | `0.1.0+202610050701` |
-| `builtAt` | `2026-10-05T07:01:55.203Z` |
-| `modelUpdatedAt` | `2026-10-05T06:58:16.654Z` (bundled 2026-10-05 by the owner's decision to carry the newest page. Against the build of 2026-10-04: the model and textures in `assets.js`, and the eye-open parameters `ParamEyeLOpen` / `ParamEyeROpen` gain the keys 0.5 and 0.7 in `embed.js`; `README.md`, `embed.html`, `embed.css` and `live2d/` are byte-identical. Same `window.shannonBody` API and messages as the build of 2026-10-02) |
-| Size | about 20.5 MB, of which `assets.js` is 19.6 MB (it holds the model and its two textures, 4096×4096 and 2048×2048, as base64); about 14.6 MB zipped |
+| `version` | `0.1.0+202610050955` |
+| `builtAt` | `2026-10-05T09:55:22.225Z` |
+| `modelUpdatedAt` | `2026-10-05T06:58:16.654Z` (the character is the model of the build of 07:01. Bundled 2026-10-05 by the owner's decision to take her eyes alone. Against the build of 07:01: `assets.js` gains the eyes model (`model-eyes/`: moc3, one 2048×2048 texture, 34 motions), `embed.js` and `live2d/live2d.js` gain `setBody`, and `README.md` documents it; `embed.html`, `embed.css` and the Cubism Core are byte-identical) |
+| Size | about 27.9 MB, of which `assets.js` is 27.1 MB (the character's model and its two textures, 4096×4096 and 2048×2048, and the eyes' model, texture and motions, as base64); about 16.2 MB zipped. The build of 07:01 was 20.5 MB (14.6 MB zipped): the app grows by about 7.4 MB installed and 1.5 MB to download |
+| sha256 | `assets.js` `da4fdd2e…5bd0bc`, `embed.js` `c3c07c8a…405aff`, `live2d/live2d.js` `2276bc44…405694`, `version.json` `6b6c3eb3…932b5f`, `README.md` `ef9d522d…e0cb3b` (every file was checked against the delivered folder when it was copied) |
 | Licence note | `apps/ios/Sources/ShannonAppCore/Live2D/NOTICE.txt` |
 
 `ShannonBodyTests.testTheEmbedPageIsBundledAsAFolderWithItsFilesInPlace` checks that the files are in the
-bundle with their relative paths and pins `modelUpdatedAt`; her figure in Talk's dialogue display (「向き合う」; and the
+bundle with their relative paths and pins `modelUpdatedAt` and `version`; her figure in Talk's dialogue display (「向き合う」; and the
 Mac's body sheet) shows the loaded page's `modelUpdatedAt` in a debug build started with `-ShannonPreviewBodyStats`.
 
 ## Updating the page
@@ -27,7 +29,7 @@ model) and `embed.js` (poses, hit regions, timing) belong together.
 
 1. Build the page in `shannon-desktop` (`npm run sync-model` when the model changed, then `npm run build`).
 2. Delete `apps/ios/Sources/ShannonAppCore/Live2D/embed/` and copy the whole new `dist/embed/` in its place.
-3. Update the table above and the pinned `modelUpdatedAt` in `ShannonBodyTests` from the new `version.json`.
+3. Update the table above and the pinned `modelUpdatedAt` and `version` in `ShannonBodyTests` from the new `version.json`.
 4. Read the new `README.md` of the folder for changes to `window.shannonBody` or the posted messages, and
    follow them in `ShannonLive2DProtocol.swift`.
 5. `swift test --package-path apps/ios`, then look at her figure in Talk's dialogue display on a device in both layouts.
@@ -70,3 +72,26 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
   owner's activity record: it is refreshed every 30 seconds while her Live2D figure is in Talk's dialogue display and otherwise as old as the
   app's last read of that record.
 - Touch, the part that was touched, and her voice: `docs/body-contract.md`, "A body that only feels touch".
+
+## Her eyes alone (`setBody`)
+
+- The owner chooses the body in 設定 › すがた › 体 (iPhone and the Mac's settings), in Talk's display options
+  (the long press of the display button) and in the Mac's body sheet. It is a per-device setting
+  (`ShannonLive2DBody`, key `shannon.body.live2d-body`) with a meaning only in the Live2D form; the default is 人の姿.
+- The page is started in the chosen body (`embed.html?body=eyes`, `ShannonLive2DStagePolicy.pageURL`), so that her
+  eyes alone never load the character first. Every figure that wants her says the chosen body to the one page
+  (`ShannonLive2DStage.setBody`); a body the page has not shown yet is loaded while the other stays, and the page
+  says `body` when it switched. `ready` carries `bodies` and `body`. If the shown body and the chosen one differ (a
+  choice made while the page loaded or switched), the stage asks again. Faces, mood and phase carry over in the page;
+  the app says the layout and the calm again after a switch, and closes the character's mouth.
+- With her eyes alone the page ignores `setMouthLevel`, `play` and `setIdle`, and `setLayout` uses only `scale` and the
+  offsets. The app sends no mouth level and no gesture then. Because the page's own calm does not reach the eyes, an
+  idle figure is paused into a still picture under Reduce Motion (after five seconds) as a page without that calm
+  would be; Low Power Mode is as before.
+- 映し方 (全身／上半身) is disabled in 設定 › すがた and the Mac's sheet, and not offered in Talk's display options, while
+  her eyes alone are chosen; 位置を戻す and two-finger size and place still work.
+- Touch: a short tap on or near the eyes is `touch` and `askReaction` with `type: 'poke'`, `region: 'face'`, and goes
+  the way of any poke on her face. There is no stroking, tickling, holding hands or `tap`; the explanation in
+  設定 › すがた says so for her eyes alone.
+- The desktop's 「小さくしたときは、目だけにする」 (below 60% of her size) is a feature of the desktop's window. The apps have
+  no window for her whose size the owner sets, so it is not offered there (`body.small-eyes` in the feature matrix).

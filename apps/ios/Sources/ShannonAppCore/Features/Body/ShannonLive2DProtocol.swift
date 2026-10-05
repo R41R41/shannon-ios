@@ -114,6 +114,8 @@ public enum ShannonLive2DCommand: Equatable, Sendable {
     case setIdle(gestures: Bool, sway: Double)
     /// At most this many frames a second (15–60); 0 follows the display.
     case setFrameRate(Int)
+    /// The character or her eyes alone. A body shown for the first time is loaded first; the page says `body` when it switched.
+    case setBody(ShannonLive2DBody)
 
     /// One guarded statement. Names and numbers are encoded as JSON, so nothing the server
     /// sent (an expression name, a feeling) can become script.
@@ -149,6 +151,8 @@ public enum ShannonLive2DCommand: Equatable, Sendable {
             return "window.shannonBody&&typeof window.shannonBody.setIdle==='function'&&window.shannonBody.setIdle({gestures:\(gestures),sway:\(Self.number(min(1, max(0, sway))))});"
         case let .setFrameRate(framesPerSecond):
             return "window.shannonBody&&typeof window.shannonBody.setFrameRate==='function'&&window.shannonBody.setFrameRate(\(max(0, min(60, framesPerSecond))));"
+        case let .setBody(body):
+            return "window.shannonBody&&typeof window.shannonBody.setBody==='function'&&window.shannonBody.setBody(\(Self.json(body.rawValue)));"
         }
         return "window.shannonBody&&window.shannonBody.\(call);"
     }
@@ -212,7 +216,12 @@ public struct ShannonLive2DTouch: Equatable, Sendable {
 }
 
 public enum ShannonLive2DMessage: Equatable, Sendable {
-    case ready(version: String, modelUpdatedAt: String, expressions: [String], gestures: [String])
+    /// `bodies` and `body`: the bodies the page has and the one it shows. An older page has only the character and says neither.
+    case ready(
+        version: String, modelUpdatedAt: String, expressions: [String], gestures: [String],
+        bodies: [ShannonLive2DBody] = [], body: ShannonLive2DBody? = nil)
+    /// The page switched to this body (after `setBody`).
+    case body(ShannonLive2DBody)
     /// How far the page is with loading (0–0.9). It arrives only before the first `ready`, and means the page is alive.
     case loading(progress: Double)
     /// The page could not draw. `contextLost`: the drawing surface was lost and the page could not make it again.
@@ -238,8 +247,14 @@ public enum ShannonLive2DMessage: Equatable, Sendable {
                 version: String((object["version"] as? String ?? "").prefix(40)),
                 modelUpdatedAt: String((object["modelUpdatedAt"] as? String ?? "").prefix(40)),
                 expressions: Self.names(object["expressions"]),
-                gestures: Self.names(object["gestures"])
+                gestures: Self.names(object["gestures"]),
+                // A body this app does not know (a newer page) is left out, not the message.
+                bodies: Self.names(object["bodies"]).compactMap(ShannonLive2DBody.init(rawValue:)),
+                body: (object["body"] as? String).flatMap(ShannonLive2DBody.init(rawValue:))
             )
+        case "body":
+            guard let body = (object["body"] as? String).flatMap(ShannonLive2DBody.init(rawValue:)) else { return nil }
+            self = .body(body)
         case "loading":
             let progress = (object["progress"] as? NSNumber)?.doubleValue ?? 0
             self = .loading(progress: progress.isFinite ? min(1, max(0, progress)) : 0)

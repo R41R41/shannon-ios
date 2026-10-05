@@ -1,8 +1,8 @@
 import SwiftUI
 
 #if os(macOS)
-/// The Mac's body sheet 「からだ」 (opened from Settings): her figure large and the switch between her
-/// two forms. On the iPhone her figure lives in Talk's dialogue display and its options in 設定 › すがた
+/// The Mac's body sheet 「からだ」 (opened from Settings): her figure large, the switch between her
+/// two forms, and her body in the Live2D form (人の姿／目だけ, owner decision 2026-10-05). On the iPhone her figure lives in Talk's dialogue display and its options in 設定 › すがた
 /// (decision 2026-10-03, roadmap A6); the Mac gets the same when her figure stands beside the
 /// conversation (A15), and this sheet goes then.
 public struct ShannonBodyScreen: View {
@@ -10,6 +10,7 @@ public struct ShannonBodyScreen: View {
     let showsCloseButton: Bool
 
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
+    @AppStorage(ShannonLive2DBody.storageKey) private var bodyRawValue = ShannonLive2DBody.human.rawValue
     @AppStorage(ShannonBodyPreference.reportsTouchKey) private var reportsTouch = false
     @AppStorage(ShannonBodyPreference.layoutModeKey) private var layoutModeRawValue = ShannonLive2DLayout.Mode.full.rawValue
     @AppStorage(ShannonBodyReplyMode.storageKey) private var replyModeRawValue = ShannonBodyReplyMode.text.rawValue
@@ -33,6 +34,7 @@ public struct ShannonBodyScreen: View {
     private var stage: ShannonLive2DStage { .shared }
     private var form: ShannonForm { ShannonForm(rawValue: formRawValue) ?? .waterlight }
     private var usesLive2D: Bool { form == .live2d && ShannonLive2DStage.isAvailable }
+    private var chosenBody: ShannonLive2DBody { ShannonLive2DBody(rawValue: bodyRawValue) ?? .human }
     private var showsLive2D: Bool { usesLive2D && stage.status == .ready && stage.activeHost == hostID }
     private var face: ShannonFace { bodyModel?.face ?? ShannonFace(expression: .calm) }
 
@@ -188,12 +190,33 @@ public struct ShannonBodyScreen: View {
             .accessibilityIdentifier("body-form")
 
             // Kept in place for both forms so that switching never moves the screen.
+            VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+                Picker(ShannonBodyCopy.bodyTitle, selection: $bodyRawValue) {
+                    ForEach(ShannonLive2DBody.allCases) { body in
+                        Text(body.japaneseName).tag(body.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("body-kind")
+                if let explanation = chosenBody.explanation {
+                    Text(explanation)
+                        .font(.shannon(.footnote))
+                        .foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .disabled(!usesLive2D)
+            .opacity(usesLive2D ? 1 : 0.45)
+
             HStack(spacing: ShannonSpacing.medium) {
                 Picker(ShannonBodyCopy.layoutTitle, selection: $layoutModeRawValue) {
                     Text(ShannonBodyCopy.layoutFull).tag(ShannonLive2DLayout.Mode.full.rawValue)
                     Text(ShannonBodyCopy.layoutBust).tag(ShannonLive2DLayout.Mode.bust.rawValue)
                 }
                 .pickerStyle(.segmented)
+                // Her eyes alone are not framed; only their size counts.
+                .disabled(!chosenBody.hasCharacterRig)
+                .help(chosenBody.hasCharacterRig ? "" : ShannonBodyCopy.layoutOnlyHuman)
                 .accessibilityIdentifier("body-layout")
                 Button(ShannonBodyCopy.resetLayout) { adjustment = ShannonLive2DLayout() }
                     .font(.shannon(.footnote).weight(.semibold))
@@ -258,8 +281,12 @@ public struct ShannonFormSettingsSection: View {
     let showsTouchSwitch: Bool
 
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
+    @AppStorage(ShannonLive2DBody.storageKey) private var bodyRawValue = ShannonLive2DBody.human.rawValue
     @AppStorage(ShannonBodyPreference.reportsTouchKey) private var reportsTouch = false
     @Environment(\.colorScheme) private var colorScheme
+
+    private var usesLive2D: Bool { formRawValue == ShannonForm.live2d.rawValue && ShannonLive2DStage.isAvailable }
+    private var chosenBody: ShannonLive2DBody { ShannonLive2DBody(rawValue: bodyRawValue) ?? .human }
 
     public init(openBody: (() -> Void)? = nil, showsTouchSwitch: Bool = true) {
         self.openBody = openBody
@@ -277,6 +304,20 @@ public struct ShannonFormSettingsSection: View {
             }
             .accessibilityHint(ShannonBodyCopy.formHint)
             .accessibilityIdentifier("settings-body-form")
+            // 設定 › すがた › 体, as on the desktop and the iPhone. Kept in place for both forms.
+            Picker(selection: $bodyRawValue) {
+                ForEach(ShannonLive2DBody.allCases) { body in
+                    Text(body.japaneseName).tag(body.rawValue)
+                }
+            } label: {
+                Label(ShannonBodyCopy.bodyTitle, systemImage: chosenBody == .eyes ? "eyes" : "person")
+                if usesLive2D, let explanation = chosenBody.explanation {
+                    Text(explanation)
+                }
+            }
+            .disabled(!usesLive2D)
+            .help(usesLive2D ? "" : ShannonBodyCopy.bodyOnlyLive2D)
+            .accessibilityIdentifier("settings-body-kind")
             if let openBody {
                 Button(action: openBody) {
                     Label(ShannonBodyCopy.openScreenTitle, systemImage: "arrow.up.forward.square")
@@ -295,7 +336,7 @@ public struct ShannonFormSettingsSection: View {
         } header: {
             Text(ShannonBodyCopy.sectionTitle)
         } footer: {
-            Text(showsTouchSwitch ? ShannonBodyCopy.settingsExplanation : ShannonBodyCopy.macExplanation)
+            Text(showsTouchSwitch ? ShannonBodyCopy.settingsExplanation(body: usesLive2D ? chosenBody : .human) : ShannonBodyCopy.macExplanation)
         }
     }
 }

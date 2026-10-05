@@ -178,6 +178,16 @@ export const shannonStrings = {
   "settings.figure.formHint": "会話と音声会話でのシャノンの姿を切り替えます",
   "settings.figure.layoutOnlyLive2D": "映し方と位置は、Live2Dの姿のときに使えます",
   "settings.figure.replyModeExplanation": "「声で返す」では、トークの向き合う表示で触れたときのひとことをシャノンが声に出して言い、そのあと数秒だけマイクを開いて返事を聞きます。ほかの人がいる時と、通話や読み上げの最中は、文字だけで返します。",
+  "settings.figure.body": "体",
+  "settings.figure.bodyHuman": "人の姿",
+  "settings.figure.bodyEyes": "目だけ",
+  "settings.figure.bodyEyesHint": "水色の目が 2 つだけのシャノンです（水の光の目と同じ動き）。表情と、聞いている・考えている・話しているは、目の形と動きで伝えます。",
+  "settings.figure.bodyEyesHintDesktop": "水色の目が 2 つだけのシャノンです（iPhone の目と同じ動き）。表情と、聞いている・考えている・話しているは、目の形と動きで伝えます。",
+  "settings.figure.bodyOnlyLive2D": "体は、Live2Dの姿のときに選べます",
+  "settings.figure.layoutOnlyHuman": "映し方は、人の姿のときに使えます。目だけのときは、大きさと位置だけを変えられます",
+  "settings.figure.touchEyes": "目だけのときは、目のあたりを軽くつつけます（なでる・くすぐる・手をつなぐは、ありません）。",
+  "settings.figure.smallEyes": "小さくしたときは、目だけにする",
+  "settings.figure.smallEyesNote": "いまは小さいので、目だけで出ています。",
   "talk.display.menuHint": "長押しで、姿と映し方を選べます",
   "talk.figure.heroHint": "向き合う表示にします。そこで姿に触れられます",
   "look.state.line": "カメラ：{state}",
@@ -555,6 +565,27 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   "task.approvalNeeded": {
     "decided": "2026-10-05",
     "windowsBefore": "許可が必要です"
+  },
+  "settings.figure.body": {
+    "decided": "2026-10-05",
+    "windowsBefore": "体"
+  },
+  "settings.figure.bodyHuman": {
+    "decided": "2026-10-05",
+    "windowsBefore": "人の姿"
+  },
+  "settings.figure.bodyEyes": {
+    "decided": "2026-10-05",
+    "windowsBefore": "目だけ"
+  },
+  "settings.figure.bodyEyesHintDesktop": {
+    "decided": "2026-10-05"
+  },
+  "settings.figure.smallEyes": {
+    "decided": "2026-10-05"
+  },
+  "settings.figure.smallEyesNote": {
+    "decided": "2026-10-05"
   },
   "autonomy.proposal.confirmQuestion": {
     "decided": "2026-10-05",

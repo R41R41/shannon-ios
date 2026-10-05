@@ -18,6 +18,30 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(ShannonBodyCopy.nowLine(face: ShannonFace(expression: .calm, feeling: .proud), doing: nil), "いま：得意げ")
     }
 
+    func testTheBodyDefaultsToTheCharacterAndHerEyesAloneAreChosenPerDevice() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "shannon-body-tests-\(UUID().uuidString)"))
+        XCTAssertEqual(ShannonLive2DBody.current(defaults: defaults), .human)
+        defaults.set(ShannonLive2DBody.eyes.rawValue, forKey: ShannonLive2DBody.storageKey)
+        XCTAssertEqual(ShannonLive2DBody.current(defaults: defaults), .eyes)
+        defaults.set("tail", forKey: ShannonLive2DBody.storageKey)
+        XCTAssertEqual(ShannonLive2DBody.current(defaults: defaults), .human)
+        // The desktop's words (設定 › すがた › 体); on the iPhone the eyes are said to move as the Waterlight Eye does.
+        XCTAssertEqual(ShannonBodyCopy.bodyTitle, "体")
+        XCTAssertEqual(ShannonLive2DBody.allCases.map(\.japaneseName), ["人の姿", "目だけ"])
+        XCTAssertNil(ShannonLive2DBody.human.explanation)
+        XCTAssertEqual(
+            ShannonLive2DBody.eyes.explanation,
+            "水色の目が 2 つだけのシャノンです（水の光の目と同じ動き）。表情と、聞いている・考えている・話しているは、目の形と動きで伝えます。")
+        XCTAssertTrue(ShannonLive2DBody.human.hasCharacterRig)
+        XCTAssertFalse(ShannonLive2DBody.eyes.hasCharacterRig)
+        // Her eyes alone are only poked: the settings do not offer stroking, tickling or holding hands there.
+        XCTAssertEqual(ShannonBodyCopy.settingsExplanation(body: .human), ShannonBodyCopy.settingsExplanation)
+        let eyes = ShannonBodyCopy.settingsExplanation(body: .eyes)
+        XCTAssertTrue(eyes.hasPrefix("目だけのときは、目のあたりを軽くつつけます"))
+        XCTAssertFalse(eyes.contains("頭をなでる"))
+        XCTAssertTrue(eyes.hasSuffix("カメラは使いません。"))
+    }
+
     // MARK: The embed page
 
     func testTheEmbedPageIsBundledAsAFolderWithItsFilesInPlace() throws {
@@ -28,6 +52,20 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.deletingLastPathComponent().appendingPathComponent("NOTICE.txt").path))
         let version = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("version.json"))) as? [String: Any]
         XCTAssertEqual(version?["modelUpdatedAt"] as? String, "2026-10-05T06:58:16.654Z")
+        // The build of 2026-10-05 09:55 that carries her eyes alone (`setBody`, `embed.html?body=eyes`).
+        XCTAssertEqual(version?["version"] as? String, "0.1.0+202610050955")
+        let files = version?["files"] as? [String] ?? []
+        XCTAssertTrue(files.contains("model-eyes/Shannon_Eyes_v2.moc3"))
+        XCTAssertTrue(files.contains("model/Shannon.moc3"))
+    }
+
+    func testThePageStartsInTheChosenBody() throws {
+        let folder = URL(fileURLWithPath: "/bundle/Live2D/embed", isDirectory: true)
+        XCTAssertEqual(ShannonLive2DStagePolicy.pageURL(in: folder, body: .human).absoluteString, "file:///bundle/Live2D/embed/embed.html")
+        let eyes = ShannonLive2DStagePolicy.pageURL(in: folder, body: .eyes)
+        XCTAssertTrue(eyes.isFileURL)
+        XCTAssertEqual(eyes.path, "/bundle/Live2D/embed/embed.html")
+        XCTAssertEqual(eyes.query, "body=eyes")
     }
 
     func testCommandsAreGuardedCallsWithEncodedArguments() {
@@ -64,6 +102,13 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(
             ShannonLive2DCommand.expressEmotion(name: "cuteAngry", intensity: 2).javaScript,
             #"window.shannonBody&&window.shannonBody.expressEmotion("cuteAngry",1.000);"#)
+        // An older page has one body: the switch is asked for only when the page has it.
+        XCTAssertEqual(
+            ShannonLive2DCommand.setBody(.eyes).javaScript,
+            #"window.shannonBody&&typeof window.shannonBody.setBody==='function'&&window.shannonBody.setBody("eyes");"#)
+        XCTAssertEqual(
+            ShannonLive2DCommand.setBody(.human).javaScript,
+            #"window.shannonBody&&typeof window.shannonBody.setBody==='function'&&window.shannonBody.setBody("human");"#)
     }
 
     func testMessagesOfThePageAreReadStrictly() {
@@ -95,6 +140,17 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(
             ShannonLive2DMessage(body: ["type": "ready", "version": "0.1.0", "modelUpdatedAt": "m", "expressions": ["joyful", 3], "gestures": ["wave"]]),
             .ready(version: "0.1.0", modelUpdatedAt: "m", expressions: ["joyful"], gestures: ["wave"]))
+        // The page of 2026-10-05 09:55: the bodies it has and the one it shows, and a switch it made.
+        XCTAssertEqual(
+            ShannonLive2DMessage(body: [
+                "type": "ready", "version": "v", "modelUpdatedAt": "m", "expressions": [], "gestures": [],
+                "bodies": ["human", "eyes", "tail"], "body": "eyes",
+            ]),
+            .ready(version: "v", modelUpdatedAt: "m", expressions: [], gestures: [], bodies: [.human, .eyes], body: .eyes))
+        XCTAssertEqual(ShannonLive2DMessage(body: ["type": "body", "body": "eyes"]), .body(.eyes))
+        XCTAssertEqual(ShannonLive2DMessage(body: ["type": "body", "body": "human"]), .body(.human))
+        XCTAssertNil(ShannonLive2DMessage(body: ["type": "body", "body": "tail"]))
+        XCTAssertNil(ShannonLive2DMessage(body: ["type": "body"]))
         // Not in the contract's vocabulary, an id the server would refuse, or not an object at all: dropped.
         XCTAssertNil(ShannonLive2DMessage(body: ["type": "touch", "id": "x", "occurredAt": "t", "touch": ["type": "carry", "durationMs": 1]]))
         XCTAssertNil(ShannonLive2DMessage(body: ["type": "touch", "id": "bad id!", "occurredAt": "t", "touch": touch]))
@@ -399,6 +455,25 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertNil(coordinator.handle(.askReaction(Self.touch("t1", ongoing: true))))
         let calls = await client.calls
         XCTAssertEqual(calls, [])
+    }
+
+    func testAPokeOnHerEyesGoesTheWayOfAnyPokeOnHerFace() async {
+        // Her eyes alone: a short tap on them is `touch` and `askReaction` with type poke and region face.
+        let eyesPoke: [String: Any] = ["type": "poke", "durationMs": 120, "strength": 0.3, "ongoing": false, "region": "face"]
+        guard case let .touch(touch)? = ShannonLive2DMessage(body: ["type": "touch", "id": "e1", "occurredAt": "t", "touch": eyesPoke]) else {
+            return XCTFail("a poke on her eyes is a touch")
+        }
+        XCTAssertEqual(touch.kind, .poke)
+        XCTAssertEqual(touch.sentRegion, .face)
+        XCTAssertEqual(ShannonBodyTouchEventDTO(touch: touch, audience: .owner).region, "face")
+        XCTAssertEqual(ShannonBodyReactionRequestDTO(scopeKey: "owner", touch: touch, audience: .owner).touch.region, "face")
+        let client = FakeBodyClient()
+        let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: .init(
+            reportsTouch: { true }, audience: { .owner }, capabilities: { (["joyful"], ["wave"]) }, express: { _, _ in }))
+        await coordinator.handle(.askReaction(touch))?.value
+        await coordinator.handle(.touch(touch))?.value
+        let calls = await client.calls
+        XCTAssertEqual(calls, ["register", "ask:e1:owner:ended", "events:e1:owner:120"])
     }
 
     func testWithReportingOnItRegistersTouchOnlyAsksAndShowsHerLine() async {

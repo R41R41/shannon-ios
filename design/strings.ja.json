@@ -1207,6 +1207,85 @@
       "note": "設定 › すがた の「触れたときの返事」の説明。"
     },
     {
+      "key": "settings.figure.body",
+      "text": "体",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
+      "decided": "2026-10-05",
+      "windowsNow": "体",
+      "note": "設定 › すがた の中の選択。Live2Dの姿のとき、人の姿か目だけかを選ぶ。所有者の決定（2026-10-05）。体のスレッドの知らせ（2026-10-05）。Windows の置き場所のファイル名は知らせに無い（設定の入口のファイルを書いた）。"
+    },
+    {
+      "key": "settings.figure.bodyHuman",
+      "text": "人の姿",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
+      "decided": "2026-10-05",
+      "windowsNow": "人の姿",
+      "note": "体の選択肢。既定。"
+    },
+    {
+      "key": "settings.figure.bodyEyes",
+      "text": "目だけ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
+      "decided": "2026-10-05",
+      "windowsNow": "目だけ",
+      "note": "体の選択肢。体のページの setBody('eyes')。"
+    },
+    {
+      "key": "settings.figure.bodyEyesHint",
+      "text": "水色の目が 2 つだけのシャノンです（水の光の目と同じ動き）。表情と、聞いている・考えている・話しているは、目の形と動きで伝えます。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "目だけの説明（iPhone と Mac）。Windows の文（settings.figure.bodyEyesHintDesktop）の「（iPhone の目と同じ動き）」は iPhone の上では自分を指して読みにくいので、同じ区画の姿の選択肢の名前「水の光の目」にした（調整役の判断、2026-10-05）。"
+    },
+    {
+      "key": "settings.figure.bodyEyesHintDesktop",
+      "text": "水色の目が 2 つだけのシャノンです（iPhone の目と同じ動き）。表情と、聞いている・考えている・話しているは、目の形と動きで伝えます。",
+      "only": "windows",
+      "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
+      "decided": "2026-10-05",
+      "note": "Windows の 設定 › すがた › 体 の、目だけの説明。体のスレッドの知らせ（2026-10-05）。Windows の置き場所のファイル名は知らせに無い（設定の入口のファイルを書いた）。"
+    },
+    {
+      "key": "settings.figure.bodyOnlyLive2D",
+      "text": "体は、Live2Dの姿のときに選べます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "水の光の目のとき、体の選択の手がかり（読み上げ）。"
+    },
+    {
+      "key": "settings.figure.layoutOnlyHuman",
+      "text": "映し方は、人の姿のときに使えます。目だけのときは、大きさと位置だけを変えられます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "目だけのとき、映し方の手がかり（読み上げ）。体のページは目だけのとき setLayout の scale と offset だけを使う。"
+    },
+    {
+      "key": "settings.figure.touchEyes",
+      "text": "目だけのときは、目のあたりを軽くつつけます（なでる・くすぐる・手をつなぐは、ありません）。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "設定 › すがた の説明の最初の文（目だけのとき）。人の姿のときは「Live2Dの姿は指で触れられます（…）」。"
+    },
+    {
+      "key": "settings.figure.smallEyes",
+      "text": "小さくしたときは、目だけにする",
+      "only": "windows",
+      "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
+      "decided": "2026-10-05",
+      "note": "Windows の 設定 › すがた の切り替え。既定で入。体の大きさが 60% 未満のとき、目だけで出す（窓の大きさの機能。iPhone と Mac には無い）。体のスレッドの知らせ（2026-10-05）。Windows の置き場所のファイル名は知らせに無い（設定の入口のファイルを書いた）。"
+    },
+    {
+      "key": "settings.figure.smallEyesNote",
+      "text": "いまは小さいので、目だけで出ています。",
+      "only": "windows",
+      "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
+      "decided": "2026-10-05",
+      "note": "Windows で、小さいため目だけで出ているときの 1 行。体のスレッドの知らせ（2026-10-05）。Windows の置き場所のファイル名は知らせに無い（設定の入口のファイルを書いた）。"
+    },
+    {
       "key": "talk.display.menuHint",
       "text": "長押しで、姿と映し方を選べます",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",

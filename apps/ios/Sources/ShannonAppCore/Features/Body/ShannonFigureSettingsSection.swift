@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 「設定 › すがた」 on the iPhone (docs/product/information-architecture.md, 3): her form, 映し方 and
-/// 位置を戻す, 「体に起きたことをシャノンに伝える」 with what became of the last touch, and
+/// 「設定 › すがた」 on the iPhone (docs/product/information-architecture.md, 3): her form, her body in the
+/// Live2D form (人の姿／目だけ, as 設定 › すがた › 体 on the desktop; 8, 2026-10-05), 映し方 and 位置を戻す, 「体に起きたことをシャノンに伝える」 with what became of the last touch, and
 /// 「触れたときの返事」. The switches that change what leaves the device are here only, not in Talk,
 /// so that they are not changed by mistake mid-conversation. 「トークで姿を見る」 opens Talk's
 /// dialogue display, where her figure is and where she is touched.
@@ -10,12 +10,16 @@ struct ShannonFigureSettingsSection: View {
 
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
     @AppStorage(ShannonBodyPreference.reportsTouchKey) private var reportsTouch = false
+    @AppStorage(ShannonLive2DBody.storageKey) private var bodyRawValue = ShannonLive2DBody.human.rawValue
     @AppStorage(ShannonBodyPreference.layoutModeKey) private var layoutModeRawValue = ShannonLive2DLayout.Mode.full.rawValue
     @AppStorage(ShannonBodyReplyMode.storageKey) private var replyModeRawValue = ShannonBodyReplyMode.text.rawValue
     @Environment(ShannonBodyModel.self) private var bodyModel: ShannonBodyModel?
     @Environment(\.colorScheme) private var colorScheme
 
     private var usesLive2D: Bool { formRawValue == ShannonForm.live2d.rawValue && ShannonLive2DStage.isAvailable }
+    private var chosenBody: ShannonLive2DBody { ShannonLive2DBody(rawValue: bodyRawValue) ?? .human }
+    /// 映し方 frames the character; her eyes alone are only sized and moved.
+    private var offersLayoutMode: Bool { usesLive2D && chosenBody.hasCharacterRig }
 
     var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
@@ -31,14 +35,37 @@ struct ShannonFigureSettingsSection: View {
             .accessibilityIdentifier("settings-body-form")
 
             // Kept in place for both forms so that switching never moves the list.
+            Picker(selection: $bodyRawValue) {
+                ForEach(ShannonLive2DBody.allCases) { body in
+                    Text(body.japaneseName).tag(body.rawValue)
+                }
+            } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ShannonBodyCopy.bodyTitle)
+                        if usesLive2D, let explanation = chosenBody.explanation {
+                            Text(explanation)
+                                .font(.shannon(.footnote))
+                                .foregroundStyle(palette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                } icon: {
+                    Image(systemName: chosenBody == .eyes ? "eyes" : "person")
+                }
+            }
+            .disabled(!usesLive2D)
+            .accessibilityHint(usesLive2D ? "" : ShannonBodyCopy.bodyOnlyLive2D)
+            .accessibilityIdentifier("settings-body-kind")
+
             Picker(selection: $layoutModeRawValue) {
                 Text(ShannonBodyCopy.layoutFull).tag(ShannonLive2DLayout.Mode.full.rawValue)
                 Text(ShannonBodyCopy.layoutBust).tag(ShannonLive2DLayout.Mode.bust.rawValue)
             } label: {
                 Label(ShannonBodyCopy.layoutTitle, systemImage: "rectangle.portrait.and.arrow.right")
             }
-            .disabled(!usesLive2D)
-            .accessibilityHint(usesLive2D ? "" : ShannonBodyCopy.layoutOnlyLive2D)
+            .disabled(!offersLayoutMode)
+            .accessibilityHint(!usesLive2D ? ShannonBodyCopy.layoutOnlyLive2D : offersLayoutMode ? "" : ShannonBodyCopy.layoutOnlyHuman)
             .accessibilityIdentifier("settings-body-layout")
 
             Button {
@@ -91,7 +118,7 @@ struct ShannonFigureSettingsSection: View {
             Text(ShannonBodyCopy.sectionTitle)
         } footer: {
             VStack(alignment: .leading, spacing: ShannonSpacing.small) {
-                Text(ShannonBodyCopy.settingsExplanation)
+                Text(ShannonBodyCopy.settingsExplanation(body: usesLive2D ? chosenBody : .human))
                 if bodyModel?.voice != nil { Text(ShannonBodyCopy.replyModeExplanation) }
             }
         }

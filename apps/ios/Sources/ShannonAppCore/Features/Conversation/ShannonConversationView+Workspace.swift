@@ -68,7 +68,8 @@ extension ShannonConversationView {
         }
     }
 
-    /// Her form, and in the Live2D form 映し方 and 位置を戻す: Talk's display options (the long press of the display button).
+    /// Her form, and in the Live2D form her body (人の姿／目だけ), 映し方 (the character only) and 位置を戻す:
+    /// Talk's display options (the long press of the display button).
     @ViewBuilder
     var figureDisplayOptions: some View {
         Picker(ShannonBodyCopy.formTitle, selection: $formRawValue) {
@@ -78,11 +79,20 @@ extension ShannonConversationView {
         }
         .pickerStyle(.menu)
         if formRawValue == ShannonForm.live2d.rawValue, ShannonLive2DStage.isAvailable {
-            Picker(ShannonBodyCopy.layoutTitle, selection: $figureLayoutRawValue) {
-                Text(ShannonBodyCopy.layoutFull).tag(ShannonLive2DLayout.Mode.full.rawValue)
-                Text(ShannonBodyCopy.layoutBust).tag(ShannonLive2DLayout.Mode.bust.rawValue)
+            Picker(ShannonBodyCopy.bodyTitle, selection: $figureBodyRawValue) {
+                ForEach(ShannonLive2DBody.allCases) { body in
+                    Text(body.japaneseName).tag(body.rawValue)
+                }
             }
             .pickerStyle(.menu)
+            // Her eyes alone are not framed: the page sizes and places them only.
+            if figureBodyRawValue != ShannonLive2DBody.eyes.rawValue {
+                Picker(ShannonBodyCopy.layoutTitle, selection: $figureLayoutRawValue) {
+                    Text(ShannonBodyCopy.layoutFull).tag(ShannonLive2DLayout.Mode.full.rawValue)
+                    Text(ShannonBodyCopy.layoutBust).tag(ShannonLive2DLayout.Mode.bust.rawValue)
+                }
+                .pickerStyle(.menu)
+            }
             Button {
                 bodyModel.figureAdjustment = ShannonLive2DLayout()
             } label: {

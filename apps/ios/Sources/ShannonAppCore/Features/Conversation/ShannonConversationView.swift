@@ -65,6 +65,7 @@ public struct ShannonConversationView: View {
     @AppStorage(ShannonSpeechProvider.storageKey) var speechProviderRawValue = ShannonSpeechProvider.gemini.rawValue
     @AppStorage(ShannonForm.storageKey) var formRawValue = ShannonForm.waterlight.rawValue
     @AppStorage(ShannonBodyPreference.layoutModeKey) var figureLayoutRawValue = ShannonLive2DLayout.Mode.full.rawValue
+    @AppStorage(ShannonLive2DBody.storageKey) var figureBodyRawValue = ShannonLive2DBody.human.rawValue
     @FocusState var composerIsFocused: Bool
 
     @Environment(\.colorScheme) var colorScheme
