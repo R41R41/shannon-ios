@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  BODY_TOUCH_GESTURES, BODY_TOUCH_INPUTS, BODY_TOUCH_REFLEXES, BODY_TOUCH_SIDES, BODY_TOUCH_VOCABULARY, isImpossibleTouch, validatedBodyEvents,
+  BODY_TOUCH_GESTURES, BODY_TOUCH_INPUTS, BODY_TOUCH_REFLEXES, BODY_TOUCH_SIDES, BODY_TOUCH_VOCABULARY, isImpossibleTouch, validatedBodyEvents, type BodyEvent,
 } from '../src/bodyContract.js';
 import { bodyReactionContentHash, validatedBodyReactionRequest, type BodyReactionAnswer, type BodyReactionRequest } from '../src/bodyReactionContract.js';
 import { BODY_TOUCH_PARTS } from '../src/bodyTouchWords.js';
@@ -123,24 +123,54 @@ describe('touch vocabulary 2: the fields', () => {
     expect(((await events(touch('tail-1'))).body as BodyIngestReceipt).results).toEqual([{ id: 'tail-1', status: 'duplicate' }]);
   });
 
-  it('refuses a side, gesture, input or reflex outside its list, and any of them on an event that is not a touch', async () => {
+  it('drops a side, gesture, input or reflex outside its list, and refuses any of them only on an event that is not a touch', async () => {
     for (const [field, value] of [['side', 'up'], ['gesture', 'kiss'], ['input', 'tap'], ['reflex', 'scream'], ['gesture', 3]] as const) {
-      expect(validatedBodyEvents([touch('x', { [field]: value })]), field).toContain(`${field} must be one of`);
+      expect(validatedBodyEvents([touch('x', { region: 'face', part: 'cheek', [field]: value })]), field).toEqual([{ ...touch('x'), region: 'face', part: 'cheek' }]);
       expect(validatedBodyReactionRequest({ id: 'r', touch: { type: 'pet', durationMs: 1, ongoing: true, [field]: value }, audience: 'owner', occurredAt: START }), field)
-        .toContain(`touch.${field} must be one of`);
+        .toEqual({ id: 'r', audience: 'owner', occurredAt: START, touch: { type: 'pet', durationMs: 1, ongoing: true } });
     }
     for (const field of ['part', 'side', 'gesture', 'input', 'reflex']) {
       expect(validatedBodyEvents([{ id: 'x', type: 'ownerReturned', audience: 'owner', occurredAt: START, [field]: 'left' }]), field).toContain('is not allowed for ownerReturned');
     }
-    const { events, state } = await reactionHarness();
-    expect((await events(touch('ok'), touch('bad', { gesture: 'kiss' }))).status).toBe(400);
-    expect(state().version).toBe(0);
+    // A body of a later vocabulary never loses its batch, and a call event beside such a touch still arrives.
+    const { events, state, reactionStore } = await reactionHarness();
+    const receipt = (await events(touch('later', { gesture: 'hug', reflex: 'blush' }), { id: 'call', type: 'callStarted', audience: 'owner', occurredAt: START })).body as BodyIngestReceipt;
+    expect(receipt.results).toEqual([{ id: 'later', status: 'stored' }, { id: 'call', status: 'stored' }]);
+    expect(state().version).toBeGreaterThan(0);
+    expect(reactionStore.touchDetail(scope, 'later')).toEqual({});
+    // A dropped word is not part of the content.
+    expect(((await events(touch('later'))).body as BodyIngestReceipt).results).toEqual([{ id: 'later', status: 'duplicate' }]);
+  });
+
+  it('lets the old fields win: a part whose parent is not the region sent, or a gesture not sent with this type, is left out', async () => {
+    expect(validatedBodyEvents([touch('m', { region: 'head', part: 'chest' })])).toEqual([{ ...touch('m'), region: 'head' }]);
+    expect(validatedBodyEvents([touch('m', { region: 'body', part: 'chest' })])).toEqual([{ ...touch('m'), region: 'body', part: 'chest' }]);
+    // Without a region sent, the part stands.
+    expect(validatedBodyEvents([touch('m', { part: 'chest' })])).toEqual([{ ...touch('m'), part: 'chest' }]);
+    expect(validatedBodyReactionRequest({ id: 'r', touch: { type: 'poke', durationMs: 1, ongoing: false, region: 'face', part: 'hand' }, audience: 'owner', occurredAt: START }))
+      .toMatchObject({ touch: { type: 'poke', region: 'face' } });
+    expect(validatedBodyReactionRequest({ id: 'r', touch: { type: 'poke', durationMs: 1, ongoing: false, region: 'face', part: 'hand' }, audience: 'owner', occurredAt: START }))
+      .not.toHaveProperty('touch.part');
+    const pairs: [string, string, boolean][] = [
+      ['stroke', 'pet', true], ['stroke', 'poke', false], ['poke', 'poke', true], ['poke', 'pet', false], ['tickle', 'tickle', true], ['tickle', 'pet', false],
+      ['rest', 'pet', true], ['rest', 'holdHand', true], ['rest', 'carry', false], ['hold', 'holdHand', true], ['hold', 'pet', false], ['carry', 'carry', true], ['carry', 'holdHand', false],
+    ];
+    for (const [gesture, type, kept] of pairs) {
+      const [event] = validatedBodyEvents([touch('g', { type, gesture })]) as readonly BodyEvent[];
+      expect(event!.gesture, `${gesture} with ${type}`).toBe(kept ? gesture : undefined);
+      const request = validatedBodyReactionRequest({ id: 'r', touch: { type, durationMs: 1, ongoing: false, gesture }, audience: 'owner', occurredAt: START }) as BodyReactionRequest;
+      expect(request.touch.gesture, `${gesture} with ${type} (reaction)`).toBe(kept ? gesture : undefined);
+    }
+    // A hold on the chest sent as a pet is a pet on the chest: the gesture is left out, so it is no impossible touch.
+    const { events, reactionStore } = await reactionHarness();
+    expect(((await events(touch('pet-chest', { region: 'body', part: 'chest', gesture: 'hold' }))).body as BodyIngestReceipt).results).toEqual([{ id: 'pet-chest', status: 'stored' }]);
+    expect(reactionStore.touchDetail(scope, 'pet-chest')).toEqual({ part: 'chest' });
   });
 
   it('is part of the content only when sent: the same id with another part, side, gesture, input or reflex is a conflict', async () => {
     const { events, send } = await reactionHarness();
     expect(((await events(touch('d-1', { region: 'face', ...detail }))).body as BodyIngestReceipt).results).toEqual([{ id: 'd-1', status: 'stored' }]);
-    const changes = [{ part: 'face' }, { side: 'right' }, { gesture: 'poke' }, { input: 'hover', part: 'head', region: 'head' }, { reflex: 'flinch' }];
+    const changes = [{ part: 'face' }, { side: 'right' }, { gesture: 'rest' }, { input: 'hover', part: 'head', region: 'head' }, { reflex: 'flinch' }];
     for (const change of changes) {
       expect(((await events(touch('d-1', { region: 'face', ...detail, ...change }))).body as BodyIngestReceipt).results, JSON.stringify(change)).toEqual([{ id: 'd-1', status: 'conflict' }]);
     }
@@ -195,7 +225,7 @@ describe('touch vocabulary 2: what cannot be a touch', () => {
     expect(state().version).toBe(version);
   });
 
-  it('answers such a reaction quiet with ignored: not_a_touch, with no feeling, memory or model call, and the same again on a retry', async () => {
+  it('answers such a reaction quiet with ignored: not_a_touch, with no feeling, memory, model call, request counted or row written', async () => {
     const { send, speaker, state, reactionStore } = await reactionHarness();
     const request = { id: 'r-hold', touch: { type: 'holdHand', durationMs: 2_000, ongoing: true, region: 'body', part: 'skirt', gesture: 'hold' }, audience: 'owner', occurredAt: START };
     const answer = await send('POST', '/v1/body/reactions', request);
@@ -204,8 +234,34 @@ describe('touch vocabulary 2: what cannot be a touch', () => {
     expect(speaker.calls).toHaveLength(0);
     expect(state().version).toBe(0);
     expect(reactionStore.touchDetail(scope, 'r-hold')).toBeNull();
-    expect((await send('POST', '/v1/body/reactions', request)).body).toEqual(answer.body);
-    expect(await send('POST', '/v1/body/reactions', { ...request, touch: { ...request.touch, part: 'hand', region: 'hand' } })).toMatchObject({ status: 409 });
+    expect(reactionStore.reaction(scope, 'r-hold')).toBeNull();
+    // Answered the same way every time, and never counted against the twelve requests a minute.
+    for (let attempt = 0; attempt < 20; attempt += 1) expect((await send('POST', '/v1/body/reactions', request)).body).toEqual(answer.body);
+    // Nothing was kept under the id, so the id is free for a real touch.
+    const real = await send('POST', '/v1/body/reactions', { ...request, touch: { ...request.touch, part: 'hand', region: 'hand' } });
+    expect(real).toMatchObject({ status: 200, body: { status: 'said' } });
+    expect(real.body).not.toHaveProperty('ignored');
+  });
+
+  it('answers a known id resent in an impossible shape not_a_touch on both routes, and changes nothing stored', async () => {
+    const { send, events, state, reactionStore } = await reactionHarness();
+    const good = { type: 'holdHand', durationMs: 2_000, region: 'hand', part: 'hand', gesture: 'hold' };
+    const impossible = { ...good, region: 'body', part: 'skirt' };
+    // Known through a reaction, resent as a reaction and as an event.
+    expect((await send('POST', '/v1/body/reactions', { id: 'k-1', touch: { ...good, ongoing: true }, audience: 'owner', occurredAt: START })).status).toBe(200);
+    const version = state().version;
+    expect((await send('POST', '/v1/body/reactions', { id: 'k-1', touch: { ...impossible, ongoing: true }, audience: 'owner', occurredAt: START })).body).toMatchObject({ ignored: 'not_a_touch' });
+    expect(((await events({ id: 'k-1', audience: 'owner', occurredAt: START, ...impossible })).body as BodyIngestReceipt).results).toEqual([{ id: 'k-1', status: 'ignored', reason: 'not_a_touch' }]);
+    // Known through an event, resent as an event and as a reaction.
+    expect(((await events({ id: 'k-2', audience: 'owner', occurredAt: START, ...good })).body as BodyIngestReceipt).results).toEqual([{ id: 'k-2', status: 'stored' }]);
+    expect(((await events({ id: 'k-2', audience: 'owner', occurredAt: START, ...impossible })).body as BodyIngestReceipt).results).toEqual([{ id: 'k-2', status: 'ignored', reason: 'not_a_touch' }]);
+    expect((await send('POST', '/v1/body/reactions', { id: 'k-2', touch: { ...impossible, ongoing: false }, audience: 'owner', occurredAt: START })).body).toMatchObject({ ignored: 'not_a_touch' });
+    expect(state().version).toBeGreaterThan(version);
+    const after = state().version;
+    expect(((await events({ id: 'k-2', audience: 'owner', occurredAt: START, ...impossible })).body as BodyIngestReceipt).results[0]).toMatchObject({ reason: 'not_a_touch' });
+    expect(state().version).toBe(after);
+    expect(reactionStore.touchDetail(scope, 'k-1')).toEqual({ part: 'hand', gesture: 'hold' });
+    expect(reactionStore.touchDetail(scope, 'k-2')).toEqual({ part: 'hand', gesture: 'hold' });
   });
 });
 
@@ -228,8 +284,9 @@ describe('touch vocabulary 2: stored, and read by nothing else yet', () => {
       for (const [index, type] of (['pet', 'poke', 'tickle', 'holdHand'] as const).entries()) {
         harness.advance(10_000);
         const region = type === 'holdHand' ? 'hand' : type === 'tickle' ? 'side' : 'face';
-        // In the new shape a held hand names the hand (a hold elsewhere is not a touch).
-        const sent = { region, ...extra, ...(type === 'holdHand' && Object.keys(extra).length ? { part: 'hand', gesture: 'hold' } : {}) };
+        // In the new shape each touch names a part and a gesture that agree with its type and region.
+        const shaped = { pet: { part: 'cheek', gesture: 'stroke' }, poke: { part: 'cheek', gesture: 'poke' }, tickle: { part: 'side', gesture: 'tickle' }, holdHand: { part: 'hand', gesture: 'hold' } }[type];
+        const sent = { region, ...(Object.keys(extra).length ? { ...extra, ...shaped } : {}) };
         answers.push(await harness.said({ type, ...sent }, { id: `same-${index}` }));
         await harness.events({ id: `same-${index}`, type, audience: 'owner', occurredAt: harness.clock.at, durationMs: 2_400, ...sent });
       }
@@ -237,10 +294,17 @@ describe('touch vocabulary 2: stored, and read by nothing else yet', () => {
       return {
         answers: answers.map(answer => ({ ...answer, ...(answer.message ? { message: { ...answer.message, id: 'x' } } : {}) })),
         prompts: harness.speaker.prompts, snapshot, chat: (await harness.chat('こんにちは')).systemPrompt,
+        stored: ['same-0', 'same-1', 'same-2', 'same-3'].map(id => harness.reactionStore.touchDetail(scope, id)),
       };
     };
-    const old = await run({});
-    const newer = await run({ part: 'cheek', side: 'left', gesture: 'stroke', input: 'press', reflex: 'flinch' });
+    const { stored: oldStored, ...old } = await run({});
+    const { stored, ...newer } = await run({ side: 'left', input: 'press', reflex: 'flinch' });
+    // The new shape was taken in whole, and the old one left nothing.
+    expect(stored).toEqual([
+      { part: 'cheek', side: 'left', gesture: 'stroke', reflex: 'flinch' }, { part: 'cheek', side: 'left', gesture: 'poke', reflex: 'flinch' },
+      { part: 'side', side: 'left', gesture: 'tickle', reflex: 'flinch' }, { part: 'hand', side: 'left', gesture: 'hold', reflex: 'flinch' },
+    ]);
+    expect(oldStored).toEqual([{}, {}, {}, {}]);
     expect(newer.prompts).toEqual(old.prompts);
     expect(newer.answers).toEqual(old.answers);
     expect(newer.snapshot).toEqual(old.snapshot);

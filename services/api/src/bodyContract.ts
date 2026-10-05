@@ -1,6 +1,6 @@
 import type { ShannonEmotionKind, ShannonExpression, ShannonFeeling } from '@shannon/cognition';
 import {
-  BODY_TOUCH_PART_WORDS, isBodySurface, isBodyTouchPart, isBodyTouchRegion, type BodySurface, type BodyTouchPart, type BodyTouchRegion,
+  BODY_TOUCH_PARTS, BODY_TOUCH_PART_WORDS, isBodySurface, isBodyTouchRegion, type BodySurface, type BodyTouchPart, type BodyTouchRegion,
 } from './bodyTouchWords.js';
 
 /**
@@ -44,20 +44,33 @@ export interface BodyTouchDetail {
   reflex?: BodyTouchReflex;
 }
 
+type BodyTouchType = typeof BODY_TOUCH_EVENT_TYPES[number];
+
+/** The old `type` each gesture is sent with (`docs/body-contract.md`, "What the body must send"). */
+const GESTURE_TYPES: Readonly<Record<BodyTouchGesture, readonly BodyTouchType[]>> = Object.freeze({
+  stroke: ['pet'], poke: ['poke'], tickle: ['tickle'], rest: ['pet', 'holdHand'], hold: ['holdHand'], carry: ['carry'],
+});
+const known = <T extends string>(list: readonly T[], value: unknown): T | undefined => list.find(word => word === value);
+
 /**
- * The detail of one touch as sent, or why it is refused. An unknown `part` is left out, as an unknown `region` is
- * (the touch still counts); `side`, `gesture`, `input` and `reflex` outside their lists refuse the request.
+ * The detail of one touch as it is kept. Nothing here refuses a request, so that a body of a later vocabulary, or a
+ * server rolled back to an earlier one, never loses a batch: a word outside its list is left out, as an unknown
+ * `region` is, and the touch still counts. Where the new fields disagree with the old ones the old ones win, so that
+ * no reader ever meets a contradiction: a `part` whose parent is not the `region` sent is left out, and so is a
+ * `gesture` that is not sent with this `type`.
  */
-export function validatedTouchDetail(item: Record<string, unknown>, at: string): BodyTouchDetail | string {
-  for (const [field, list] of [['side', BODY_TOUCH_SIDES], ['gesture', BODY_TOUCH_GESTURES], ['input', BODY_TOUCH_INPUTS], ['reflex', BODY_TOUCH_REFLEXES]] as const) {
-    if (item[field] !== undefined && !(list as readonly unknown[]).includes(item[field])) return `${at}.${field} must be one of ${list.join(', ')}`;
-  }
+export function validatedTouchDetail(item: Record<string, unknown>, type: BodyTouchType, region: BodyTouchRegion | undefined): BodyTouchDetail {
+  const part = known(BODY_TOUCH_PARTS, item.part);
+  const gesture = known(BODY_TOUCH_GESTURES, item.gesture);
+  const side = known(BODY_TOUCH_SIDES, item.side);
+  const input = known(BODY_TOUCH_INPUTS, item.input);
+  const reflex = known(BODY_TOUCH_REFLEXES, item.reflex);
   return {
-    ...(isBodyTouchPart(item.part) ? { part: item.part } : {}),
-    ...(item.side !== undefined ? { side: item.side as BodyTouchSide } : {}),
-    ...(item.gesture !== undefined ? { gesture: item.gesture as BodyTouchGesture } : {}),
-    ...(item.input !== undefined ? { input: item.input as BodyTouchInput } : {}),
-    ...(item.reflex !== undefined ? { reflex: item.reflex as BodyTouchReflex } : {}),
+    ...(part && (region === undefined || BODY_TOUCH_PART_WORDS[part].region === region) ? { part } : {}),
+    ...(side ? { side } : {}),
+    ...(gesture && GESTURE_TYPES[gesture].includes(type) ? { gesture } : {}),
+    ...(input ? { input } : {}),
+    ...(reflex ? { reflex } : {}),
   };
 }
 
@@ -240,15 +253,16 @@ export function validatedBodyEvents(value: unknown): readonly BodyEvent[] | stri
     if (item.strength !== undefined && !(typeof item.strength === 'number' && item.strength >= 0 && item.strength <= 1)) return `${at}.strength must be 0..1`;
     if (item.minutesAway !== undefined && !integerWithin(item.minutesAway, BODY_LIMITS.minutesAway)) return `${at}.minutesAway is invalid`;
     if (item.type === 'game.died' && (typeof item.cause !== 'string' || !GAME_ID.test(item.cause))) return `${at}.cause must be a namespaced id such as minecraft:lava`;
-    const detail = validatedTouchDetail(item, at);
-    if (typeof detail === 'string') return detail;
+    const region = isBodyTouchRegion(item.region) ? item.region : undefined;
+    // Touch vocabulary 2 on a touch type only (on any other type the fields were refused above).
+    const detail = includes(BODY_TOUCH_EVENT_TYPES, item.type) ? validatedTouchDetail(item, item.type, region) : {};
     events.push({
       id: item.id, type: item.type, audience: item.audience, occurredAt: new Date(time).toISOString(),
       ...(item.durationMs !== undefined ? { durationMs: item.durationMs } : {}),
       ...(item.strength !== undefined ? { strength: Math.round(item.strength * 100) / 100 } : {}),
       ...(item.minutesAway !== undefined ? { minutesAway: item.minutesAway } : {}),
       // A part outside the vocabulary (a newer body) is left out, not refused: the touch itself still counts.
-      ...(isBodyTouchRegion(item.region) ? { region: item.region } : {}),
+      ...(region ? { region } : {}),
       ...detail,
       ...(typeof item.cause === 'string' ? { cause: item.cause } : {}),
     });

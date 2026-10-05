@@ -128,8 +128,7 @@ export function validatedBodyReactionRequest(body: Record<string, unknown>): Bod
   }
   if (touch.strength !== undefined && !(typeof touch.strength === 'number' && touch.strength >= 0 && touch.strength <= 1)) return 'touch.strength must be 0..1';
   if (typeof touch.ongoing !== 'boolean') return 'touch.ongoing must be a boolean';
-  const detail = validatedTouchDetail(touch, 'touch');
-  if (typeof detail === 'string') return detail;
+  const region = isBodyTouchRegion(touch.region) ? touch.region : undefined;
   if (body.audience !== 'owner' && body.audience !== 'others') return 'audience must be owner or others';
   const time = typeof body.occurredAt === 'string' && body.occurredAt.length <= 40 ? Date.parse(body.occurredAt) : Number.NaN;
   if (!Number.isFinite(time)) return 'occurredAt must be an ISO 8601 timestamp';
@@ -138,8 +137,9 @@ export function validatedBodyReactionRequest(body: Record<string, unknown>): Bod
     touch: {
       type, durationMs: touch.durationMs, ongoing: touch.ongoing, ...(touch.strength !== undefined ? { strength: Math.round(touch.strength * 100) / 100 } : {}),
       // A part outside the vocabulary (a newer body) is left out, not refused.
-      ...(isBodyTouchRegion(touch.region) ? { region: touch.region } : {}),
-      ...detail,
+      ...(region ? { region } : {}),
+      // Touch vocabulary 2: unknown words and pairs that disagree with `type` / `region` are left out, never refused.
+      ...validatedTouchDetail(touch, type, region),
     },
   };
 }

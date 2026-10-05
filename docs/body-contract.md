@@ -77,7 +77,7 @@ A malformed request is refused as a whole with `400` and stores nothing. A well-
 | `ignored` + `reason: touch_only` | The device registered as a body that only feels touch and the event is not a touch. | No |
 | `ignored` + `reason: not_game_body` | A game event from a device that is not her Minecraft body (`docs/minecraft-body-contract.md`). | No |
 | `ignored` + `reason: game_only` | Her Minecraft body sent an event that is not a game event. | No |
-| `ignored` + `reason: not_a_touch` | Its [touch vocabulary 2](#touch-vocabulary-2) fields name something that cannot be a touch: `gesture: hold` anywhere but the hand, or `input: hover` anywhere but the head and the hair (or with a gesture other than `stroke`). Added 2026-10-06. Only that event; the rest of the batch is taken. | No; it is a bug in the sender |
+| `ignored` + `reason: not_a_touch` | Its [touch vocabulary 2](#touch-vocabulary-2) fields name something that cannot be a touch: `gesture: hold` anywhere but the hand, or `input: hover` anywhere but the head and the hair (or with a gesture other than `stroke`). Added 2026-10-06. Only that event; the rest of the batch is taken. Answered so whatever its `id` was used for before. | No; it is a bug in the sender |
 
 Retry the same batch with the same `id`s on a network failure or `5xx`. An `id` that was stored answers `duplicate` however late the retry arrives, within the retention period.
 
@@ -167,10 +167,10 @@ The emotion source has one input from the body: a touch (a touch event, or a rea
 
 There is no stream and no push (see [Not built](#not-built)). Poll every `pollAfterSeconds`: 10, or 3 for a minute after a text turn and while a look is open, or 5 while `ownerCallElsewhere.active` is true (the smaller wins).
 
-- `etag` identifies the content (everything except `changedAt`). Send the last one back as `?etag=<etag>`; when nothing changed the answer is short:
+- `etag` identifies the snapshot: everything except `schemaVersion`, `etag`, `changedAt`, `pollAfterSeconds` and `touchVocabulary`, which describe the answer and the server rather than what to show. Send the last one back as `?etag=<etag>`; when nothing changed the answer is short:
 
   ```json
-  { "schemaVersion": 1, "etag": "3f9a1c0b7d2e4a68", "changedAt": "2026-10-02T03:00:00.000Z", "pollAfterSeconds": 10, "unchanged": true }
+  { "schemaVersion": 1, "etag": "3f9a1c0b7d2e4a68", "changedAt": "2026-10-02T03:00:00.000Z", "pollAfterSeconds": 10, "touchVocabulary": 2, "unchanged": true }
   ```
 
   It is a `200` with `unchanged: true`, not an HTTP `304`, and the value travels in the query and the body, not in `ETag` / `If-None-Match` headers.
@@ -548,7 +548,7 @@ The answer is `200`:
 | `message.threadId` | string \| `null` | The Talk a spoken answer would continue (the most recent one); `null` when she has no Talk yet. |
 | `message.listenSeconds` | integer, 0–30 (default 6) | How long the body keeps its microphone open for his answer. |
 | `mood.expression`, `mood.feeling` | the `presence` vocabulary | Her face **after** the touch (and after her line). Present for both statuses, so the body can show the feeling at once instead of waiting for the next presence poll. No cause is returned. |
-| `ignored` | `not_a_touch`, absent otherwise | Added 2026-10-06. The request named something that cannot be a touch (see [Touch vocabulary 2](#touch-vocabulary-2)): the answer is `quiet`, and the touch moved no feeling, left no memory and called no model. The answer is kept under the `id` like any other. |
+| `ignored` | `not_a_touch`, absent otherwise | Added 2026-10-06. The request named something that cannot be a touch (see [Touch vocabulary 2](#touch-vocabulary-2)): the answer is `quiet`, and the touch moved no feeling, left no memory and called no model. Nothing is kept under the `id` and the request is not counted against the 12 a minute; the same request is answered the same way every time, whatever its `id` was used for before. |
 
 What the body does:
 
@@ -661,7 +661,14 @@ Added 2026-10-06 (Syzygy ADR-0005 and its owner answers of 2026-10-05; phase 1a 
 | `input` | `press` \| `hover` | Pressed and moved (dragged), or only passed over with the pointer, without a press. |
 | `reflex` | `none` \| `flinch` \| `avoid` | What her body did by itself on the spot, as a fact: nothing, flinched a little, or turned away. The body does not judge a touch; it reports what it did. |
 
-`side`, `gesture`, `input` and `reflex` outside their lists refuse the request with `400`, like any malformed field. Any of the five on an event that is not a touch refuses it too.
+**Nothing in these fields refuses a request.** A word outside its list is left out, as an unknown `region` is, and the touch still counts, so that a body of a later vocabulary (or one talking to a server that was rolled back) never loses a batch, which may carry a `callStarted`. Only one thing is a `400`: any of the five on an event that is not a touch.
+
+**The old fields win.** Where the new fields disagree with `type` and `region`, the new one is left out, so nothing that later reads them meets a contradiction:
+
+- a `part` whose parent (the table below) is not the `region` sent is left out; without a `region`, the `part` stands;
+- a `gesture` that is not sent with this `type` (see [What the body must send](#what-the-body-must-send)) is left out: `stroke` goes with `pet`, `poke` with `poke`, `tickle` with `tickle`, `rest` with `pet` or `holdHand`, `hold` with `holdHand`, `carry` with `carry`.
+
+What is left out is not part of the content (see [Idempotency](#idempotency)).
 
 Parts. The parts she may not want touched are sent **one by one** (owner answer 1 of 2026-10-05), so that she can be told the part itself.
 
@@ -698,15 +705,21 @@ Parts. The parts she may not want touched are sent **one by one** (owner answer 
 - `gesture: hold` on anything but the hand (`part: hand`, or, without a `part`, `region: hand`);
 - `input: hover` on anything but the head or the hair (`part: head` / `hair`, or, without a `part`, `region: head`), or with a `gesture` other than `stroke`.
 
-Such an event answers `ignored` with `reason: not_a_touch` and is not stored; the other events of the batch are taken as usual. Such a reaction request answers `200`, `status: quiet`, with `ignored: "not_a_touch"`, and moves nothing. Without a part or a region nothing is ruled out. A touch in the old shape can never be one of these.
+The check runs on the fields as kept, after unknown words and disagreeing pairs were left out (a `hold` sent with `type: pet` is a pet, not an impossible touch). Without a `part` or a `region` the place rules out nothing, but a hover with a gesture other than `stroke` is still impossible.
+
+Such an event answers `ignored` with `reason: not_a_touch` and is not stored; the other events of the batch are taken as usual. Such a reaction request answers `200`, `status: quiet`, with `ignored: "not_a_touch"`; it moves nothing, writes nothing and is not counted against the reaction limit. Both routes answer so every time, also for an `id` that is already known (it is never a `conflict`), and what is stored for that `id` is unchanged. A touch in the old shape can never be one of these.
 
 ### Stored
 
-`body_touches` (the one row of each touch id) has four more columns, added only: `part`, `side`, `gesture`, `reflex`, each the word as sent or empty. `input` is not stored. The event table (`body_events`) and the bursts (`body_touch_bursts`) are unchanged. All of it is closed words; nothing from a microphone.
+`body_touches` (the one row of each touch id) has four more columns, added only: `part`, `side`, `gesture`, `reflex`, each the word as kept or empty. `input` is not stored. The event table (`body_events`) and the bursts (`body_touch_bursts`) are unchanged. All of it is closed words; nothing from a microphone.
 
 ### Idempotency
 
-Each of the five is part of an event's and a reaction's content **only when it is sent** (and `part` only when it is known), so a retry of a request in the old shape gets exactly the answer it always got, and an event stored before this change still answers `duplicate`. The same `id` sent again with another `part`, `side`, `gesture`, `input` or `reflex`, or without them, is a `conflict` (`409` for a reaction).
+Each of the five is part of an event's and a reaction's content **only when it is kept** (sent, known, and in agreement with `type` and `region`), so a retry of a request in the old shape gets exactly the answer it always got, and an event stored before this change still answers `duplicate`. The same `id` sent again with another `part`, `side`, `gesture`, `input` or `reflex`, or without them, is a `conflict` (`409` for a reaction).
+
+### Not in this phase
+
+`presence.boundaries` (the parts she has decided to keep away from, for the body's reflex) is deliberately not part of phase 1a: it comes with her boundary memory in a later stage of ADR-0005. Presence has no `boundaries` field yet, and a body must not expect one.
 
 ### Next, outside this server
 

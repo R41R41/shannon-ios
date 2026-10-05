@@ -72,6 +72,12 @@ export class BodyReactions {
     // A touch reaction is for the owner's own body only: no other scope may ask for one.
     if (config.ownerScopeKey !== scopeKey) return { kind: 'not_owner' };
     if (!this.dependencies.isBody(scopeKey, deviceId)) return { kind: 'not_a_body' };
+    // Holding anything but the hand, or a hover anywhere but the head and the hair, is not a touch: no feeling, no memory,
+    // no model, no request counted against the limit and no row written. As for an event, it is answered so every time,
+    // whatever its id was used for before (a known id resent in such a shape is `not_a_touch`, not a conflict).
+    if (isImpossibleTouch(request.touch)) {
+      return { kind: 'done', answer: { ...this.quiet(request.id, this.dependencies.stateStore.snapshot(scopeKey), this.dependencies.now()), ignored: 'not_a_touch' } };
+    }
 
     const hash = bodyReactionContentHash(request);
     const key = `${scopeKey}\u0000${request.id}`;
@@ -95,12 +101,6 @@ export class BodyReactions {
     if (!begun.started) {
       return begun.existing.contentHash !== hash ? { kind: 'conflict' }
         : { kind: 'done', answer: begun.existing.answer ?? this.quiet(request.id, this.dependencies.stateStore.snapshot(scopeKey), at) };
-    }
-    // Holding anything but the hand, or a hover anywhere but the head and the hair, is not a touch: no feeling, no memory,
-    // no model. The answer is stored under the id like any other, so a retry gets it again.
-    if (isImpossibleTouch(request.touch)) {
-      const ignored: BodyReactionAnswer = { ...this.quiet(request.id, this.dependencies.stateStore.snapshot(scopeKey), at), ignored: 'not_a_touch' };
-      return { kind: 'done', answer: this.finished(scopeKey, ignored, at, null) };
     }
     const answer = this.answer(scopeKey, request, at, this.surfaceOf(scopeKey, deviceId));
     this.inflight.set(key, { hash, answer });
