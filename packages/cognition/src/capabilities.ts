@@ -91,8 +91,28 @@ export const SHANNON_MINECRAFT_BODY_CAPABILITY = Object.freeze({
   text: 'マイクラの体: ボクのもう一つの体がワールドに入っている時、ゲームの中のこと（木材集めなど）を道具で頼み、結果を体の報告で知る。',
 } as const satisfies ShannonCapability);
 
+/**
+ * Aether as her place and the owner's documents as reading (Syzygy ADR-0007 revised, 2026-10-06). Added by the API
+ * (`withAetherAccessCapability`) only while Aether is configured and a turn offers her Aether tools, so a server without
+ * Aether sends exactly the description it sent before.
+ */
+export const SHANNON_AETHER_ACCESS_CAPABILITY = Object.freeze({
+  id: 'aether_access', audience: 'owner',
+  text: 'Aetherの文書: ライ氏と二人だけの時、Aetherの文書を道具で探して全文まで読む。Aetherのシャノン用フォルダにはボクの文書を自由に作る・書き換える・消す（書斎の物語の正本もそこにある）。ほかの人がいる時は、シャノン用フォルダの中だけを読む。ライ氏の文書を変えたい時は提案（新しいノート・追記・書き換え・削除）を送り、決めるのはライ氏。',
+} as const satisfies ShannonCapability);
+
 /** Capabilities the API may add to the description while it has them. */
-export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_MINECRAFT_BODY_CAPABILITY] as const);
+export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_AETHER_ACCESS_CAPABILITY] as const);
+
+/** The owner's description with the Aether line, after the line of Aether's shared notes; any other prompt unchanged. */
+export function withAetherAccessCapability(prompt: string): string {
+  const line = `- ${SHANNON_AETHER_ACCESS_CAPABILITY.text}\n`;
+  if (prompt.includes(line)) return prompt;
+  const notes = SHANNON_CAPABILITIES.find(item => item.id === 'aether_read');
+  const anchor = notes ? `- ${notes.text}\n` : '';
+  const at = anchor ? prompt.indexOf(anchor) : -1;
+  return at < 0 ? prompt : `${prompt.slice(0, at + anchor.length)}${line}${prompt.slice(at + anchor.length)}`;
+}
 
 /**
  * The owner's description with her Minecraft body's line, in its place after her folder's line. A prompt without

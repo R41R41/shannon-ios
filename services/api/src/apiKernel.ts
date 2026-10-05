@@ -98,7 +98,7 @@ import { randomUUID } from 'node:crypto';
 import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from './companionPresence.js';
 import { generateChatTurn, withSentenceStream } from './chatSentenceStream.js';
 import { conversationTools, toolTraceReader } from './shannonToolSession.js';
-import { withMinecraftToolLine } from './shannonMinecraftTools.js';
+import { withToolCapabilityLines } from './shannonAetherTools.js';
 import { withCapabilitySources } from './conversationCapabilities.js';
 import { usableThreadSummary } from './memoryVisibility.js';
 import { conversationReplay } from './conversationWindow.js';
@@ -380,8 +380,8 @@ export class ShannonApiKernel {
     // A summary has no label of its own: none where only open items may be given (a turn someone other than the owner wrote).
     const priorThreadSummary = surface?.openOnly ? undefined : usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId, audience.present);
     const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
-    // Her Minecraft body's capability line exactly when this turn's tools include `minecraft.request` (`withMinecraftToolLine`).
-    const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withMinecraftToolLine({
+    // Her Minecraft body's and Aether's capability lines, in her identity, exactly when this turn's tools include them (`withToolCapabilityLines`).
+    const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withToolCapabilityLines({
       // Her fixed identity first, what she knows of the owner next, and the turn's context with the replay (`chatModelTurn.ts`).
       scopeKey: body.scopeKey, systemPrompt: layered.systemPrompt, ...(layered.profilePrompt ? { profilePrompt: layered.profilePrompt } : {}),
       // The history is a character budget; what fell out of it is covered by the replay summary.

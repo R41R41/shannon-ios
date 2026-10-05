@@ -2,8 +2,8 @@ import { mentionsSuiteProduct, suiteProductPattern } from '@shannon/cognition';
 
 /**
  * Where a memo or a note goes (owner decision 2026-10-05). She has three places: her study (`study.*`, in Shannon's
- * database), her own folder on the owner's PC (`folder.*`), and Aether, where she only sends a proposal to its inbox
- * (`conversationCommands.ts`). No fixed rule sends an unqualified 「メモを作って」 or 「ノートに残して」 to one of them:
+ * database, or with Aether configured in Aether's シャノン用フォルダ, Syzygy ADR-0007 revised), her own folder on the owner's
+ * PC (`folder.*`), and the owner's Aether, where she only sends a proposal to its inbox (`conversationCommands.ts`). No fixed rule sends an unqualified 「メモを作って」 or 「ノートに残して」 to one of them:
  * the Aether command needs Aether named, and otherwise the model chooses from his words and the recent talk, or asks
  * (`SHANNON_MEMO_PLACE_RULE`), and his answer is acted on.
  */

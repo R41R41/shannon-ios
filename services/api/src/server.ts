@@ -21,7 +21,7 @@ import { SQLiteWorldStore } from './worldStore.js';
 import { SQLiteInitiativeStore } from './initiativeStore.js';
 import { FileAetherContextReader } from './aetherContext.js';
 import { configuredNotionSource } from './notionSource.js';
-import { FileAetherProposalStore } from './aetherProposal.js';
+import { configuredAetherPorts } from './aetherAccess.js';
 import { SQLitePushNotificationStore, type APNsEnvironment } from './pushNotifications.js';
 import { SQLiteAgentTaskStore } from './agentTaskStore.js';
 import { SQLiteTestFlightDeliveryStore } from './testflightDeliveryStore.js';
@@ -101,10 +101,11 @@ const bodyStore = new SQLiteBodyStore(configuredDatabasePath());
 const autonomyConfig = configuredAutonomy(process.env, { databasePath: configuredDatabasePath() });
 const ownerTurns = new SQLiteStudyShowing(configuredDatabasePath());
 const minecraft = createMinecraftBodyWiring(process.env, configuredDatabasePath(), now); // Her Minecraft body (docs/minecraft-body-contract.md); unset SHANNON_MINECRAFT_BODY_JSON: none of it.
+const aetherPorts = configuredAetherPorts(process.env, now); // Aether (Syzygy ADR-0007): unset SHANNON_AETHER_API_URL/_SHANNON_TOKEN, none of it.
 const autonomy = new ShannonAutonomyService({
   store: autonomyStore, config: autonomyConfig, now, ownerFirstActiveAfter: (scopeKey, after) => ownerTurns.ownerFirstActiveAfter(scopeKey, after),
   announcer: autonomyAnnouncer, agentTasks: agentTaskStore, defaultThread: scopeKey => persistentStore.threadId(scopeKey),
-  defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST?.trim() || null, minecraftBody: minecraft.requests,
+  defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST?.trim() || null, minecraftBody: minecraft.requests, aether: aetherPorts,
 });
 // Her folder's operations (docs/host-folder-contract.md): stale ones are closed and results pruned also when no device or tool calls.
 const stopFolderMaintenance = autonomy.folderOperations.startMaintenance();
@@ -152,9 +153,7 @@ const kernel = createLocalApiKernel(now, {
   aetherContext: process.env.SHANNON_AETHER_CONTEXT_FILE?.trim()
     ? new FileAetherContextReader(process.env.SHANNON_AETHER_CONTEXT_FILE.trim())
     : undefined,
-  aetherProposals: process.env.SHANNON_AETHER_PROPOSAL_DIR?.trim()
-    ? new FileAetherProposalStore(process.env.SHANNON_AETHER_PROPOSAL_DIR.trim(), now)
-    : undefined,
+  aetherProposals: aetherPorts.proposals ?? undefined,
   agentTasks: agentTaskStore,
   testFlightDelivery: testFlightDeliveryStore,
   defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST,

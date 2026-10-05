@@ -22,7 +22,8 @@ import {
 } from './autonomyModels.js';
 import { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import { HostFolderOperations } from './hostFolderOperations.js';
-import { ShannonToolRunner } from './shannonToolRunner.js';
+import { ShannonToolRunner, type ToolAetherPorts } from './shannonToolRunner.js';
+import { StudyAether } from './studyAether.js';
 import type { MinecraftRequestPort } from './shannonMinecraftTools.js';
 import { resolvePhysicalPath, type AutonomyPathResolver } from './autonomyPaths.js';
 import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
@@ -63,6 +64,8 @@ export interface AutonomyServiceDependencies {
   ownerFirstActiveAfter?: (scopeKey: string, after: string) => string | null;
   /** Her Minecraft body's request queue (phase 4, `docs/minecraft-body-contract.md`). Only the API process has it; her own time never asks her body. */
   minecraftBody?: MinecraftRequestPort | null;
+  /** Aether (Syzygy ADR-0007 revised): her study's text and her Aether folder, and the owner's proposal inbox; absent, none of it. */
+  aether?: Pick<ToolAetherPorts, 'access' | 'proposals'> & { studyScopeKey?: string };
 }
 
 export interface RecordedDecision extends AutonomyDecision {
@@ -103,6 +106,8 @@ export class ShannonAutonomyService {
   readonly folderOperations: HostFolderOperations;
   /** Her tools over her study and her folder (`shannonTools.ts`), for every surface. */
   readonly tools: ShannonToolRunner;
+  /** Her study in Aether while Aether is configured (`studyAether.ts`); null, the SQLite study is the whole study. */
+  readonly studyAether: StudyAether | null;
 
   constructor(private readonly dependencies: AutonomyServiceDependencies) {
     this.store = dependencies.store;
@@ -110,11 +115,13 @@ export class ShannonAutonomyService {
     this.now = dependencies.now;
     this.announcer = dependencies.announcer ?? new DisabledAutonomyAnnouncer();
     this.resolvePath = dependencies.resolvePath ?? resolvePhysicalPath;
+    this.studyAether = dependencies.aether?.access ? new StudyAether(this.store, dependencies.aether.access, this.now, dependencies.aether.studyScopeKey) : null;
     this.study = new StudyDesk(this.store, at => autonomyDayKey(at, this.config), this.now,
-      this.config.maximumReachOutFollowUpsPerDay > 0 ? { timeZone: this.config.timeZone, ...(dependencies.ownerFirstActiveAfter ? { ownerFirstActiveAfter: dependencies.ownerFirstActiveAfter } : {}) } : null);
+      this.config.maximumReachOutFollowUpsPerDay > 0 ? { timeZone: this.config.timeZone, ...(dependencies.ownerFirstActiveAfter ? { ownerFirstActiveAfter: dependencies.ownerFirstActiveAfter } : {}) } : null, this.studyAether);
     this.folder = new HostFolderDesk(this.store, this.config, this.now, this);
     this.folderOperations = new HostFolderOperations(this.store, this.config, this.now, this, this.folder);
-    this.tools = new ShannonToolRunner(this.store, this.folderOperations, this, this.now, undefined, dependencies.minecraftBody ?? null);
+    this.tools = new ShannonToolRunner(this.store, this.folderOperations, this, this.now, undefined, dependencies.minecraftBody ?? null,
+      { access: dependencies.aether?.access ?? null, study: this.studyAether, proposals: dependencies.aether?.proposals ?? null });
   }
 
   // MARK: The gate

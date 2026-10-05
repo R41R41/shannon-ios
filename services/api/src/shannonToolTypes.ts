@@ -1,3 +1,4 @@
+import type { AetherAccess } from './aetherAccess.js';
 import type { AutonomousActionRequest } from './autonomyPolicy.js';
 import type { SecretCheck } from './conversationSecrets.js';
 import type { ToolCallContext } from './shannonToolGate.js';
@@ -50,6 +51,8 @@ export interface ToolExecutionContext extends ToolCallContext {
   timeMilliseconds?: number;
   /** In a conversation: the Talk the call was made in (a request to her Minecraft body remembers where it was asked). */
   threadId?: string;
+  /** Aether as this call may reach it, set by the runner from the gate (`gatedAether`); absent while Aether is not configured. */
+  aether?: AetherAccess;
 }
 
 export type ToolExecutor = (input: ToolInput, context: ToolExecutionContext) => PreparedToolCall | ToolResult;

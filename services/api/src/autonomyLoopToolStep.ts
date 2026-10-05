@@ -53,13 +53,13 @@ export class AutonomyToolResults {
 }
 
 /** The tools her thinking may choose now, or none. */
-export function offeredOwnTools(dependencies: StepDependencies): readonly ShannonToolDefinition[] {
-  return dependencies.toolResults ? dependencies.service.tools.offered('autonomy', 'owner_alone') : [];
+export function offeredOwnTools(dependencies: StepDependencies, scopeKey: string): readonly ShannonToolDefinition[] {
+  return dependencies.toolResults ? dependencies.service.tools.offered('autonomy', 'owner_alone', scopeKey) : [];
 }
 
 /** The action, its example and the list of tools for the thinking prompt; and what her last calls returned. */
 export function toolThinking(dependencies: StepDependencies, cycle: AutonomyLoopCycle): { actions: string; examples: string; sections: string[]; ownTools: true } | null {
-  const tools = offeredOwnTools(dependencies);
+  const tools = offeredOwnTools(dependencies, cycle.scopeKey);
   if (!tools.length) return null;
   const results = dependencies.toolResults!.peek(cycle.id);
   return {

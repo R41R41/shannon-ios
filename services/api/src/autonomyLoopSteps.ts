@@ -2,8 +2,8 @@ import type { ShannonAutonomyDomainId } from '@shannon/cognition';
 import type { AutonomyConfig } from './autonomyBudget.js';
 import type { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import { callModel, paidCall } from './autonomyLoopCalls.js';
-import type { AutonomyLoopConfig } from './autonomyLoopConfig.js';
 import { prepareFolderCopy } from './autonomyLoopFolderStep.js';
+import type { AutonomyLoopConfig } from './autonomyLoopConfig.js';
 import { ROOM_LOOK_DOMAIN, prepareRoomLook, type AutonomyRoomLooks } from './autonomyLoopLookStep.js';
 import { prepareFollowUp, prepareJot } from './autonomyLoopFollowUpStep.js';
 import type { AutonomyPredictionTap, ReachOutFacts } from './autonomyLoopObservations.js';
@@ -24,6 +24,7 @@ import type { ShannonAutonomyService } from './autonomyService.js';
 import type { ShowingOutcome, StudyShowing } from './autonomyShowing.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import type { AutonomyTextModel } from './autonomyTextModel.js';
+import { aetherStep, studyWriteKey, type StudyAether } from './studyAether.js';
 import { STUDY_LIMITS, STUDY_REACTION_LABEL } from './studyStore.js';
 
 /**
@@ -88,12 +89,15 @@ export interface BoundAdapters {
   looks?: AutonomyRoomLooks;
   reachOuts?: AutonomyReachOuts;
   phone?: AutonomyPhone;
+  /** Her study in Aether (Syzygy ADR-0007), for a note, a draft or a revision; absent, her study is Shannon's alone. */
+  aether?: StudyAether;
 }
 
 export function adaptersFor(decision: Pick<AutonomyDecision, 'decision' | 'domain'>, dependencies: StepDependencies): BoundAdapters {
   if (decision.decision !== 'allow') return {};
   switch (decision.domain as ShannonAutonomyDomainId | typeof NOTION_READ_DOMAIN) {
-    case 'thinking': case 'aether_study': return { model: dependencies.model };
+    case 'thinking': return { model: dependencies.model };
+    case 'aether_study': return { model: dependencies.model, ...(dependencies.service.studyAether ? { aether: dependencies.service.studyAether } : {}) };
     case 'public_read': return { reader: dependencies.reader };
     // Telling him a story is ready, or one message of her own: the latter also needs the model that words it.
     case 'owner_message': return { showing: dependencies.showing, ...(dependencies.reachOuts ? { reachOuts: dependencies.reachOuts, model: dependencies.model } : {}) };
@@ -156,7 +160,8 @@ export function prepareStep(dependencies: StepDependencies, cycle: AutonomyLoopC
     case 'revise': return prepareRevision(dependencies, cycle, step, at);
     case 'show': return prepareShowing(dependencies, cycle, step);
     case 'put_away': return preparePutAway(dependencies, cycle, step);
-    case 'copy': return prepareFolderCopy(dependencies, cycle, step, at);
+    // With her study in Aether there are no copies to the folder on the owner's PC (Syzygy ADR-0007 revised: stories live in Aether only).
+    case 'copy': return dependencies.service.studyAether?.covers(cycle.scopeKey) ? null : prepareFolderCopy(dependencies, cycle, step, at);
     case 'look': return prepareRoomLook(dependencies, cycle, at);
     case 'reach_out': return step.call ? preparePhoneCall(dependencies, cycle, step, at)
       : step.reason === 'follow_up' ? prepareFollowUp(dependencies, cycle, step, at) : prepareReachOut(dependencies, cycle, step, at);
@@ -243,6 +248,9 @@ function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, s
       if (sharesLongPassage(body, reading.text, 60)) return { outcome: 'failed', summary: '読んだ文をそのまま写しすぎていたので、メモにしませんでした。', usage };
       const question = text(reply?.question, 120);
       const questionWhy = text(reply?.questionWhy, 400);
+      // With Aether her note goes to 「シャノン用フォルダ」 first; what Aether refused is not kept here either.
+      const pushed = adapters.aether?.covers(cycle.scopeKey) ? await aetherStep(() => adapters.aether!.create(cycle.scopeKey, { kind: 'note', title: clip(title, 80), body: body.slice(0, STUDY_LIMITS.noteBody).trim() }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'note', reading.id), signal)) : null;
+      if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: 'メモを書きましたが、Aetherのシャノン用フォルダに置けませんでした。', reasonCode: pushed.reasonCode };
       return {
         outcome: 'done', usage, summary: `メモ「${clip(title, 60)}」を書斎に書きました。`,
         commit: (_remaining, commitAt) => {
@@ -251,6 +259,7 @@ function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, s
             ...(reading.pursuitId ? { pursuitId: reading.pursuitId } : {}), model: call.model,
           }, commitAt);
           if (typeof piece === 'string') throw new Error(piece);
+          if (pushed) adapters.aether!.commit(cycle.scopeKey, piece, pushed.value);
           store.loop.markReadingNoted(cycle.scopeKey, reading.id, commitAt);
           if (question && questionWhy) service.addPursuit(cycle.scopeKey, { kind: 'question', title: question, why: questionWhy, origin: 'self' });
           return { link: `shannon-study://${piece.id}` };
@@ -277,6 +286,9 @@ function prepareDraft(dependencies: StepDependencies, cycle: AutonomyLoopCycle, 
       const title = text(reply?.title, 60);
       const body = story(reply?.body);
       if (!title || !body) return { outcome: 'failed', summary: '物語を書こうとしましたが、下書きになりませんでした。', usage };
+      // With Aether the story goes to 「シャノンの書斎」 first (`inStudy: true`), the canonical copy.
+      const pushed = adapters.aether?.covers(cycle.scopeKey) ? await aetherStep(() => adapters.aether!.create(cycle.scopeKey, { kind: 'story', title: clip(title, 80), body, changeNote: text(reply?.note, STUDY_LIMITS.changeNote) ?? '最初の稿です。' }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'draft', title), signal)) : null;
+      if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: '物語の下書きを書きましたが、Aetherの書斎に置けませんでした。', reasonCode: pushed.reasonCode };
       return {
         // The title stays hers until she calls the piece 「見せてもいい」.
         outcome: 'done', usage, summary: '書斎に、短い物語の下書きを1つ書きました。まだ見せていません。',
@@ -286,6 +298,7 @@ function prepareDraft(dependencies: StepDependencies, cycle: AutonomyLoopCycle, 
             ...(pursuit ? { pursuitId: pursuit.id } : {}), model: call.model,
           }, commitAt);
           if (typeof piece === 'string') throw new Error(piece);
+          if (pushed) adapters.aether!.commit(cycle.scopeKey, piece, pushed.value);
           return { link: `shannon-study://${piece.id}` };
         },
       };
@@ -297,6 +310,8 @@ function prepareRevision(dependencies: StepDependencies, cycle: AutonomyLoopCycl
   const { store } = dependencies;
   const piece = step.pieceId ? store.study.get(cycle.scopeKey, step.pieceId) : null;
   if (!piece || piece.kind !== 'story' || piece.status === 'put_away') return null;
+  // Its Aether document is longer than she reads whole: no paid revision that could not be written anyway.
+  if (store.study.aether.tooLongPiece(cycle.scopeKey, piece.id)) return null;
   // Reader feedback goes to this revising step, and is marked used only when the revision is saved.
   const feedback = store.study.pendingFeedback(cycle.scopeKey, piece.id);
   const call = paidCall(dependencies, cycle.scopeKey, 'prose', revisePrompt({
@@ -314,12 +329,17 @@ function prepareRevision(dependencies: StepDependencies, cycle: AutonomyLoopCycl
       const body = story(reply?.body);
       const change = text(reply?.change, STUDY_LIMITS.changeNote);
       if (!body || !change) return { outcome: 'failed', summary: '物語を直そうとしましたが、次の稿になりませんでした。', usage };
+      const title = text(reply?.title, 60) ?? piece.title;
+      // A story that lives in Aether is revised there first, from the version she read (`baseVersion`); a stale one brings the newer text in.
+      const pushed = adapters.aether?.covers(cycle.scopeKey) ? await aetherStep(() => adapters.aether!.update(cycle.scopeKey, piece, { title: clip(title, 80), body, changeNote: change }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'revise', piece.id, String(piece.version)), signal)) : null;
+      if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: '物語を直しましたが、Aetherの書斎に書けませんでした。', reasonCode: pushed.reasonCode };
       return {
         outcome: 'done', usage, link: `shannon-study://${piece.id}`,
         summary: seen ? `物語「${clip(piece.title, 60)}」を直しました（第${piece.version + 1}稿）。` : `物語の下書きを直しました（第${piece.version + 1}稿）。まだ見せていません。`,
         commit: (_remaining, commitAt) => {
-          const revised = store.study.revise(cycle.scopeKey, piece.id, { title: text(reply?.title, 60) ?? piece.title, body, changeNote: change, model: call.model }, commitAt);
+          const revised = store.study.revise(cycle.scopeKey, piece.id, { title, body, changeNote: change, model: call.model }, commitAt);
           if (typeof revised === 'string') throw new Error(revised);
+          if (pushed?.value) adapters.aether!.commit(cycle.scopeKey, revised, pushed.value);
           store.study.markFeedbackUsed(cycle.scopeKey, feedback.map(item => item.id), commitAt);
         },
       };

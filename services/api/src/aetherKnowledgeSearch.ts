@@ -3,8 +3,9 @@ import type { AetherDecisionReference } from '@shannon/cognition';
 /**
  * Consumer adapter for Syzygy contract `syzygy.aether-knowledge-search.v1`
  * (Syzygy hub `contracts/knowledge/`). Read-only, section-level, versioned.
- * Aether's provider is not implemented yet, so only the fixture-backed fake
- * exists; nothing in the response path calls this adapter.
+ * Her tool `aether.search` sends this envelope through `aetherAccess.ts` (Syzygy
+ * `syzygy.aether-shannon-access.v1`), with the optional `scope` and the optional
+ * placement of each hit (`inShannonFolder`, `inStudy`) added on 2026-10-06.
  */
 export const AETHER_KNOWLEDGE_SEARCH_CONTRACT = 'syzygy.aether-knowledge-search.v1';
 
@@ -16,7 +17,11 @@ export interface AetherKnowledgeSearchRequest {
   limit: number;
   documentIds?: readonly string[];
   resourceTypes?: readonly ('document' | 'decision')[];
+  /** Optional (2026-10-06): `shannonFolder` limits hits to シャノン用フォルダ, `study` to her stories in it. Default `all`. */
+  scope?: AetherSearchScope;
 }
+
+export type AetherSearchScope = 'all' | 'shannonFolder' | 'study';
 
 export interface AetherSectionHit {
   documentId: string;
@@ -30,6 +35,10 @@ export interface AetherSectionHit {
   decisionId?: string;
   title?: string;
   score?: number;
+  /** Optional (2026-10-06): the document is in シャノン用フォルダ. Absent counts as outside it. */
+  inShannonFolder?: boolean;
+  /** Optional (2026-10-06): the document is in シャノンの書斎 (tag 書斎 inside シャノン用フォルダ). */
+  inStudy?: boolean;
 }
 
 export interface AetherKnowledgeSearch {
@@ -37,12 +46,13 @@ export interface AetherKnowledgeSearch {
 }
 
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u;
-const HIT_KEYS = new Set(['documentId', 'version', 'sectionId', 'headingPath', 'excerpt', 'updatedAt', 'href', 'resourceType', 'decisionId', 'title', 'score']);
+const HIT_KEYS = new Set(['documentId', 'version', 'sectionId', 'headingPath', 'excerpt', 'updatedAt', 'href', 'resourceType', 'decisionId', 'title', 'score', 'inShannonFolder', 'inStudy']);
 
-export function aetherKnowledgeSearchRequest(query: string, limit = 5): AetherKnowledgeSearchRequest {
+export function aetherKnowledgeSearchRequest(query: string, limit = 5, scope?: AetherSearchScope): AetherKnowledgeSearchRequest {
   return Object.freeze({
     contract: AETHER_KNOWLEDGE_SEARCH_CONTRACT, kind: 'request', access: 'read-only',
     query: query.trim().slice(0, 500), limit: Math.max(1, Math.min(20, Math.floor(limit))),
+    ...(scope && scope !== 'all' ? { scope } : {}),
   });
 }
 
@@ -64,7 +74,9 @@ export function parseAetherKnowledgeSearchResponse(value: unknown): readonly Aet
       || !Array.isArray(hit.headingPath) || hit.headingPath.length < 1 || hit.headingPath.length > 8
       || !hit.headingPath.every(item => typeof item === 'string' && item.length >= 1 && item.length <= 200)
       || typeof hit.excerpt !== 'string' || hit.excerpt.length < 1 || hit.excerpt.length > 1_200
-      || typeof hit.updatedAt !== 'string' || typeof hit.href !== 'string' || !hit.href.startsWith('aether://')) return null;
+      || typeof hit.updatedAt !== 'string' || typeof hit.href !== 'string' || !hit.href.startsWith('aether://')
+      || (hit.inShannonFolder !== undefined && typeof hit.inShannonFolder !== 'boolean')
+      || (hit.inStudy !== undefined && typeof hit.inStudy !== 'boolean')) return null;
     hits.push(Object.freeze({ ...hit, headingPath: Object.freeze([...hit.headingPath as string[]]) }) as unknown as AetherSectionHit);
   }
   return Object.freeze(hits);

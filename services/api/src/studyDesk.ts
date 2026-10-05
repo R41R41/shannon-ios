@@ -2,6 +2,7 @@ import { SHANNON_AUTONOMY_SYSTEM_DOMAIN, SHANNON_SEEN_LIMITS, type ShannonOwnWor
 import { autonomyDayPhrases } from './autonomyDayLog.js';
 import { AUTONOMY_REACH_OUT_MEMORY_MAXIMUM, reachOutMemories, reachOutMemoryLine } from './autonomyLoopObservePrompts.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
+import { syncedWithin, type StudyAether } from './studyAether.js';
 import {
   STUDY_KIND_LABEL, STUDY_REACTION_LABEL, STUDY_STATUS_LABEL,
   type StudyPiece, type StudyPieceKind, type StudyPieceStatus, type StudyReaction, type StudyRejection, type StudySource,
@@ -14,6 +15,10 @@ import {
  * A story she has not called 「見せてもいい」 appears only as a card without title or text
  * (「作っているものがあります」). Once a version is readable the owner keeps reading that
  * version while she revises; the newer draft stays hers until she shows it.
+ *
+ * With Aether configured (Syzygy ADR-0007 revised) the text of a piece that moved is Aether's: the routes first bring in
+ * what Aether has (`overviewFresh`, `pieceFresh`), and a card and a reaction name the Aether document and version
+ * (`aetherDocumentId`, `aetherVersion`; additive, the apps may ignore them). A piece may be named by its id or its document.
  */
 export interface StudyPieceCard {
   id: string;
@@ -32,6 +37,9 @@ export interface StudyPieceCard {
   /** A story the owner can read whose readable version they have not reacted to yet. */
   awaitingReaction: boolean;
   updatedAt: string;
+  /** While the piece lives in Aether and is readable: its document, and the Aether version of the version the owner reads. */
+  aetherDocumentId?: string;
+  aetherVersion?: number;
 }
 
 export interface StudyPieceDetail extends StudyPieceCard {
@@ -39,7 +47,7 @@ export interface StudyPieceDetail extends StudyPieceCard {
   sources: readonly StudySource[];
   /** What changed and why, for the versions up to the readable one. */
   versions: readonly { version: number; changeNote: string; createdAt: string }[];
-  feedback: readonly { id: string; version: number; reaction: StudyReaction; reactionLabel: string; comment: string; createdAt: string; used: boolean }[];
+  feedback: readonly { id: string; version: number; reaction: StudyReaction; reactionLabel: string; comment: string; createdAt: string; used: boolean; aetherDocumentId?: string; aetherVersion?: number }[];
   canReact: boolean;
   canPutAway: boolean;
 }
@@ -47,7 +55,14 @@ export interface StudyPieceDetail extends StudyPieceCard {
 export interface StudyOverview {
   pieces: readonly StudyPieceCard[];
   reactions: readonly { id: StudyReaction; label: string }[];
+  /** With Aether configured: where the text came from, and whether Aether could be reached just now (additive). */
+  source?: { kind: 'aether'; reached: boolean };
 }
+
+/** How long a route waits for Aether before it answers from what Shannon has. */
+const ROUTE_SYNC_MILLISECONDS = 4_000;
+/** A sync that finished this recently serves an app read as it is. */
+const ROUTE_FRESH_MILLISECONDS = 2_000;
 
 export class StudyDesk {
   constructor(
@@ -56,7 +71,34 @@ export class StudyDesk {
     private readonly now: () => string,
     /** Set while she observes what follows her messages: the owner-local zone for the times in those sentences. */
     private readonly reachOutMemory: { timeZone: string; ownerFirstActiveAfter?: (scopeKey: string, after: string) => string | null } | null = null,
+    /** Her study in Aether; null, the SQLite study is the whole study and every answer is what it was. */
+    private readonly aether: StudyAether | null = null,
   ) {}
+
+  /** Whether this scope's study lives in Aether (one scope only, the owner's). */
+  aetherCovers(scopeKey: string): boolean { return this.aether?.covers(scopeKey) ?? false; }
+
+  /** The overview after bringing in what Aether has (or, when it cannot be reached, from what Shannon has, saying so). */
+  async overviewFresh(scopeKey: string): Promise<StudyOverview> {
+    if (!this.aether?.covers(scopeKey)) return this.overview(scopeKey);
+    // An app read accepts a sync that finished a moment ago (several screens open at once share one).
+    const reached = await syncedWithin(this.aether, scopeKey, ROUTE_SYNC_MILLISECONDS, undefined, ROUTE_FRESH_MILLISECONDS);
+    return Object.freeze({ ...this.overview(scopeKey), source: { kind: 'aether' as const, reached } });
+  }
+
+  /** One piece, by its id or its Aether document, after bringing in what Aether has of it. */
+  async pieceFresh(scopeKey: string, id: string): Promise<StudyPieceDetail | StudyRejection> {
+    const pieceId = this.resolve(scopeKey, id);
+    if (this.aether && this.aether.link(scopeKey, pieceId)) {
+      try { await this.aether.refresh(scopeKey, pieceId, AbortSignal.timeout(ROUTE_SYNC_MILLISECONDS)); } catch { /* answered from what Shannon has */ }
+    }
+    return this.piece(scopeKey, pieceId);
+  }
+
+  /** A piece's id from its id or its Aether document id. */
+  resolve(scopeKey: string, id: string): string {
+    return this.store.study.find(scopeKey, id, true) ? id : this.store.study.aether.pieceFor(scopeKey, id) ?? id;
+  }
 
   overview(scopeKey: string): StudyOverview {
     return Object.freeze({
@@ -79,6 +121,7 @@ export class StudyDesk {
       feedback: this.store.study.feedback(scopeKey, id).map(item => ({
         id: item.id, version: item.version, reaction: item.reaction, reactionLabel: STUDY_REACTION_LABEL[item.reaction],
         comment: item.comment, createdAt: item.createdAt, used: Boolean(item.usedAt),
+        ...(item.aetherDocumentId ? { aetherDocumentId: item.aetherDocumentId } : {}), ...(item.aetherVersion ? { aetherVersion: item.aetherVersion } : {}),
       })),
       canReact: !card.hidden && piece.kind === 'story' && piece.status !== 'put_away',
       canPutAway: piece.status !== 'put_away',
@@ -172,6 +215,9 @@ export class StudyDesk {
   private card(scopeKey: string, piece: StudyPiece): StudyPieceCard {
     const readable = this.readable(scopeKey, piece);
     const revising = readable !== null && piece.readableVersion !== piece.version && piece.status === 'draft';
+    // Named only while he can read it: a hidden card stays without anything that names what she is writing.
+    const linked = readable && piece.readableVersion !== null ? this.store.study.aether.current(scopeKey, piece.id) : null;
+    const readableLink = linked && piece.readableVersion !== null ? this.store.study.aether.forVersion(scopeKey, piece.id, piece.readableVersion) : null;
     return Object.freeze({
       id: piece.id, kind: piece.kind, kindLabel: STUDY_KIND_LABEL[piece.kind], status: piece.status,
       // While she revises, the owner still reads the version she showed.
@@ -184,6 +230,7 @@ export class StudyDesk {
       awaitingReaction: readable !== null && piece.kind === 'story' && piece.status !== 'put_away'
         && !this.store.study.feedback(scopeKey, piece.id).some(item => item.version === piece.readableVersion),
       updatedAt: piece.updatedAt,
+      ...(linked ? { aetherDocumentId: linked.documentId, ...(readableLink ? { aetherVersion: readableLink.aetherVersion } : {}) } : {}),
     });
   }
 

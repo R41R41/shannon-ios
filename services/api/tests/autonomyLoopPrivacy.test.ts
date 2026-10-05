@@ -542,6 +542,9 @@ describe('what reaches the prompts of her own activity', () => {
       'node:crypto', 'node:sqlite', '@shannon/cognition',
       // Her folder on the owner's machines: checked below to reach nothing but her study and its own queue.
       './autonomyHostFolderDesk.js', './autonomyHostFolderPath.js', './autonomyLoopFolderStep.js',
+      // Her study in Aether (Syzygy ADR-0007 revised): a note, a draft or a revision is written there first, through the adapter
+      // the aether_study domain is handed; nothing of the owner's is read through it.
+      './studyAether.js',
       // One look at the room: the step names an interface and imports no module of the body; it is handed text and token counts.
       './autonomyLoopLookStep.js',
       // One message of her own: the step names two interfaces (the way her words leave, the owner's upcoming items as lines) and imports neither store.

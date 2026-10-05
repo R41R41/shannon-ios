@@ -113,7 +113,8 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
     at, localTime: ownerLocalTime(at, config.timeZone), remainingYen: overview.budget.remainingYen,
     remainingReads: Math.max(0, config.maximumPublicReadsPerDay - readsToday), maximumSteps,
     readingSeeds: loop.readingSeeds, notionAvailable: dependencies.notion !== undefined,
-    folderAvailable: service.folder.available(cycle.scopeKey, at),
+    // The v1 copy step only while her study is Shannon's (Syzygy ADR-0007 revised: with Aether, stories are never put in the PC folder).
+    folderAvailable: !service.studyAether?.covers(cycle.scopeKey) && service.folder.available(cycle.scopeKey, at),
     lookAvailable: lookNow && !rethink.looked, ownNotes: agentic,
     reachOut: reachOuts > 0 ? { remaining: reachOuts, upcoming: upcomingLines(dependencies, cycle.scopeKey, at) } : null,
   });
@@ -201,7 +202,7 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
         call: phone?.offered ? { upcoming: Boolean(materials.reachOut) && (materials.upcoming?.length ?? 0) > 0 } : null,
         ...(again ? { followUp: rethink.followUp, chainLook: rethink.chainLook, jot: rethink.jot } : {}),
         ...(session ? { session: true } : {}), ...(owned ? { secrets: owned.secrets } : {}),
-        ...(tooling ? { tools: offeredOwnTools(dependencies).map(tool => tool.name) } : {}),
+        ...(tooling ? { tools: offeredOwnTools(dependencies, cycle.scopeKey).map(tool => tool.name) } : {}),
       });
       const words = again ? 'さっき起きたことを見て、考え直しました。' : '次に何をするか考えました。';
       // A thought with no step at all: nothing she named could be done, or she named nothing.

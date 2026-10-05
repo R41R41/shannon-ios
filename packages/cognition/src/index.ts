@@ -30,6 +30,7 @@ export {
   type ShannonSuiteProductId,
 } from './persona.js';
 export {
+  SHANNON_AETHER_ACCESS_CAPABILITY,
   SHANNON_CAPABILITIES,
   SHANNON_CONDITIONAL_CAPABILITIES,
   SHANNON_LIMITATIONS,
@@ -37,6 +38,7 @@ export {
   SHANNON_MEMO_PLACE_RULE,
   SHANNON_ROOM_LOOK_RULES,
   shannonCapabilityPrompt,
+  withAetherAccessCapability,
   withMinecraftBodyCapability,
   type ShannonCapability,
   type ShannonCapabilityId,

@@ -260,14 +260,16 @@ export class ShannonAutonomyLoop {
         }, committed?.plan ?? plan, at);
         if (rethought ?? committed?.plan) store.loop.setPlan(cycle.id, rethought ?? committed!.plan!, false);
       });
-    } catch {
+    } catch (error) {
       if (state.saved !== 'unknown') state.saved = false;
-      // The product could not be saved. The call was still made, so its cost is still reported.
+      // The product could not be saved. The call was still made, so its cost is still reported. A sync of her study that had
+      // already taken the same Aether write in keeps its closed code (`studyAether.ts`, `commit`).
+      const reasonCode = error instanceof Error && error.message === 'STUDY_AETHER_LINKED' ? 'study_aether_linked' : undefined;
       try {
         store.transaction(() => {
           if (!store.loop.finishStep(row.id, 'reported', at)) return;
           service.recordAction(this.scopeKey, {
-            decisionId: decision.activityId, summary: 'したことの結果を保存できませんでした。', outcome: 'failed', ...(usage ? { usage } : {}),
+            decisionId: decision.activityId, summary: 'したことの結果を保存できませんでした。', outcome: 'failed', ...(usage ? { usage } : {}), ...(reasonCode ? { reasonCode } : {}),
           });
         });
       } catch { /* left `authorized`; the next tick closes it as abandoned */ }

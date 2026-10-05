@@ -8,15 +8,19 @@ import type { ShannonToolRunner } from './shannonToolRunner.js';
 import { toolTraceCall } from './shannonToolTrace.js';
 import { InMemoryToolTraces, TOOL_FOLLOW_UP_MILLISECONDS, ToolTurnLog, type ToolTraceStore } from './shannonToolTurns.js';
 import { toolSessionMemory } from './shannonToolTypes.js';
-import { ownToolsEnabled, providerToolName, shannonTool, toolFailure, toolFromProviderName, toolResultForModel } from './shannonTools.js';
+import { ownToolsEnabled, providerToolName, toolFailure, toolFromProviderName, toolResultForModel } from './shannonTools.js';
 import type { TurnDeadline } from './turnDeadline.js';
 import { answersWithPlace, asksForMemo, asksWhichPlace, namesAether } from './memoPlace.js';
 export { withMinecraftToolLine } from './shannonMinecraftTools.js';
+export { withToolCapabilityLines } from './shannonAetherTools.js';
 
 /**
  * The tools of one conversation turn, for the model adapter (`chatModelTools.ts`). Owner decision 2026-10-05: her
  * study and her folder are offered only while the owner alone can see or hear the reply, so with a guest, with
  * 「友人も一緒」, or with anyone else present the turn has no tools at all and nothing of them can be said to others.
+ *
+ * With anyone else present only her Aether reading tools are offered (when Aether is configured), with the audience
+ * `others`, so the gate holds them to 「シャノン用フォルダ」 (owner decision 2026-10-06); without them nothing is offered.
  *
  * Text offers them in every turn the owner alone reads (unless it forces a web search). Voice offers them when the
  * words are about her writing or her folder (`asksAboutOwnThings`) or ask for a memo without naming Aether, and to the follow-ups of such a talk
@@ -43,18 +47,22 @@ export function conversationTools(
   if (!runner || ownerAlone === false || !ownToolsEnabled() || !server.audience) return {};
   const threadId = turn.slice(0, Math.max(0, turn.indexOf('\n')));
   const words = turn.slice(turn.indexOf('\n') + 1);
-  // Words about Minecraft count only while her Minecraft body's request tool is offered here (review B2, 2026-10-06).
-  const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface)) : 'text';
+  // Words about Minecraft count only while her Minecraft body's request tool is offered here (review B2, 2026-10-06); words
+  // that name Aether only while her Aether tools are.
+  const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface), offersAether(runner, scopeKey, surface)) : 'text';
   if (!offer) return {};
-  // What the client said is not enough: what the server knows of others present vetoes the offer, and she is told so.
-  if (ownerAlone === 'others' || server.audience.othersKnown(scopeKey)) return { toolsWithheld: true };
+  // What the client said is not enough: what the server knows of others present vetoes the offer, and she is told so. Only
+  // her Aether reading tools stay, held by the gate to 「シャノン用フォルダ」 (owner decision 2026-10-06, Syzygy ADR-0007).
+  const othersPresent = ownerAlone === 'others' || server.audience.othersKnown(scopeKey);
+  const audience = othersPresent ? 'others' as const : 'owner_alone' as const;
+  if (othersPresent && !runner.offered(surface, 'others', scopeKey).some(tool => !options.withoutDomains?.includes(tool.domain))) return { toolsWithheld: true };
   // Words that could not be trusted write nothing: an uncertain turn reads only. With no score at all (the router fell
   // back), a write waits for his explicit yes to a reply of hers that asked for it (「はい、お願いします」).
   // His answer to her question where a memo goes (「書斎に」) is such a yes too.
   const writes = surface === 'text' || voice.trust === 'reliable'
     || (voice.trust === 'unknown' && ((confirms(words) && lastReplyAsksToConfirm(server, scopeKey, threadId))
       || (answersWithPlace(words) && lastReplyAsks(server, scopeKey, threadId, asksWhichPlace))));
-  const definitions = runner.offered(surface, 'owner_alone', scopeKey)
+  const definitions = runner.offered(surface, audience, scopeKey)
     .filter(tool => (writes || tool.effect === 'read') && !options.withoutDomains?.includes(tool.domain));
   if (!definitions.length) return {};
   const trace = server.turns?.open(scopeKey, threadId, words, offer === 'asked', voice.utteranceId);
@@ -63,9 +71,11 @@ export function conversationTools(
   const session = { definitions, maximumCalls: CONVERSATION_TOOL_CALLS } as unknown as ShannonModelToolSession;
   Object.defineProperty(session, 'deadline', { enumerable: false, value: deadline });
   if (!writes) Object.defineProperty(session, 'writesWithheld', { enumerable: false, value: true });
+  if (othersPresent) Object.defineProperty(session, 'othersPresent', { enumerable: false, value: true });
   /** A call of a name this turn does not offer, with the reason that is true for it. */
   const refuse = (providerName: string): string => {
-    const tool = toolFromProviderName(providerName) ?? shannonTool(providerName);
+    // As this server has it: without the Aether client an Aether name is a name that does not exist (as before Aether).
+    const tool = runner.knownTool(providerName);
     const refusal = !tool ? { why: 'そういう名前の道具はない', wouldWork: '出してある道具の名前（folder_list のような形）で呼ぶ' }
       : !toolFromProviderName(providerName) ? { why: '道具の名前の形が違う', wouldWork: `${providerToolName(tool.name)} という名前で呼ぶ` }
         : !writes && tool.effect === 'write' ? { why: '聞き取りが確かでないので、書く・消す道具は出していない', wouldWork: 'ライ氏がはっきり確かめた次の返事で' }
@@ -85,7 +95,7 @@ export function conversationTools(
       if (!check) { try { check = server.secrets?.(scopeKey); } catch { check = null; } }
       const secrets = check;
       const result = await runner.call(tool?.name ?? providerName.slice(0, 80), argumentsJson, {
-        scopeKey, surface, audience: 'owner_alone', memory, threadId, ...(secrets !== undefined ? { secrets } : {}), ...(timeMilliseconds !== undefined ? { timeMilliseconds } : {}),
+        scopeKey, surface, audience, memory, threadId, ...(secrets !== undefined ? { secrets } : {}), ...(timeMilliseconds !== undefined ? { timeMilliseconds } : {}),
       }, signal);
       trace?.called(toolTraceCall(tool?.name ?? providerName.slice(0, 80), argumentsJson, result, secrets));
       return toolResultForModel(result);
@@ -111,6 +121,11 @@ export function asksAboutMinecraftBody(transcript: string): boolean {
   return /マイクラ|マインクラフト|minecraft/iu.test(transcript);
 }
 
+/** Whether the runner offers her Aether tools on this surface now (Aether configured). */
+function offersAether(runner: ShannonToolRunner | undefined, scopeKey: string, surface: 'text' | 'voice'): boolean {
+  try { return runner?.offered(surface, 'owner_alone', scopeKey).some(tool => tool.name === 'aether.search') ?? false; } catch { return false; }
+}
+
 /** Whether the runner offers `minecraft.request` on this surface now: her Minecraft body configured for the scope and in the game. */
 function offersMinecraftRequest(runner: ShannonToolRunner | undefined, scopeKey: string, surface: 'text' | 'voice'): boolean {
   try { return runner?.offered(surface, 'owner_alone', scopeKey).some(tool => tool.name === 'minecraft.request') ?? false; } catch { return false; }
@@ -133,9 +148,11 @@ export function asksToConfirmToolAction(reply: string): boolean {
  * something she would do with them. Otherwise null: the turn keeps the plain path's speed.
  */
 export function voiceToolOffer(words: string, server: Partial<ConversationToolServer>, scopeKey: string, threadId: string,
-  minecraftBodyPresent = false): 'asked' | 'follow_up' | null {
+  minecraftBodyPresent = false, aetherOffered = false): 'asked' | 'follow_up' | null {
   // A memo he asks for may go to her study or her folder (or she asks where): not only Aether (owner decision 2026-10-05).
-  if (asksAboutOwnThings(words) || (minecraftBodyPresent && asksAboutMinecraftBody(words)) || (asksForMemo(words) && !namesAether(words))) return 'asked';
+  // Words that name Aether ask about its documents while her Aether tools are offered; 「Aetherにメモして」 stays the note command.
+  if (asksAboutOwnThings(words) || (minecraftBodyPresent && asksAboutMinecraftBody(words)) || (asksForMemo(words) && !namesAether(words))
+    || (aetherOffered && namesAether(words) && !asksForMemo(words))) return 'asked';
   if (server.turns?.recent(scopeKey, threadId)) return 'follow_up';
   return lastReplyAsks(server, scopeKey, threadId, reply => asksToConfirmToolAction(reply) || asksWhichPlace(reply)) ? 'follow_up' : null;
 }

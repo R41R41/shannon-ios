@@ -64,7 +64,7 @@ import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
 import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
 import type { ShannonToolRunner } from './shannonToolRunner.js';
-import { conversationTools, toolTraceReader, withMinecraftToolLine, type ConversationToolServer } from './shannonToolSession.js';
+import { conversationTools, toolTraceReader, withToolCapabilityLines, type ConversationToolServer } from './shannonToolSession.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from './turnDeadline.js';
 import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from './ownerCallElsewhere.js';
 
@@ -373,7 +373,7 @@ async function completeLiveVoiceDelegation(
   observer?.signal?.throwIfAborted();
   const turnPrompt = [turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n');
   const replayed = replay?.request(turnPrompt) ?? { ...(turnPrompt ? { turnContext: turnPrompt } : {}), history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) };
-  const modelRequest = withMinecraftToolLine({ // Her Minecraft body's line exactly when its request tool is offered.
+  const modelRequest = withToolCapabilityLines({ // Her Minecraft body's and Aether's lines, in her identity, exactly when their tools are offered.
     scopeKey, systemPrompt: basePrompt, ...(identity.profile ? { profilePrompt: identity.profile } : {}), ...replayed,
     // What she said when she was touched is what he is answering: it directly precedes his words, in every mode, as context only.
     ...(reactionLine ? { precedingReply: reactionLine } : {}),

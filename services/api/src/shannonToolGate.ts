@@ -1,4 +1,6 @@
+import { AetherAccessError, type AetherAccess } from './aetherAccess.js';
 import type { AutonomousActionRequest, AutonomyDecision } from './autonomyPolicy.js';
+import type { ToolInput } from './shannonToolInput.js';
 import { toolFailure, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface } from './shannonTools.js';
 
 /**
@@ -14,6 +16,10 @@ import { toolFailure, type ShannonToolDefinition, type ToolAudience, type ToolRe
  *    her in the tool result shape (`toolRefusal`).
  * 3. A call from a conversation is work the owner called her for: it is not charged to her budget and not
  *    stopped by her pause (ADR-0002), and it is still written to the activity record by the runner.
+ * 4. Aether (Syzygy ADR-0007 revised, owner decision 2026-10-06): the owner's documents, outside 「シャノン用フォルダ」, are
+ *    searched and read only while the owner alone can see or hear the reply. With anyone else present, and in her own time
+ *    (whose gate domain is her study, not his documents), a search must name her folder or her study (`authorizeToolInput`)
+ *    and the executor is handed a client that refuses everything outside her folder (`gatedAether`), whatever it asks.
  */
 export interface ToolCallContext {
   scopeKey: string;
@@ -34,6 +40,43 @@ export function authorizeToolCall(tool: ShannonToolDefinition | null, context: T
     });
   }
   return null;
+}
+
+/** How far her Aether tools reach in this call: the owner's documents too, or only her folder (her study is inside it). */
+export function aetherReach(context: Pick<ToolCallContext, 'surface' | 'audience'>): 'everything' | 'shannon_folder' {
+  return context.audience === 'owner_alone' && context.surface !== 'autonomy' ? 'everything' : 'shannon_folder';
+}
+
+/** The input of a call, after its schema: with anyone else present, or in her own time, a search names her folder or her study. */
+export function authorizeToolInput(tool: ShannonToolDefinition, input: ToolInput, context: ToolCallContext): ToolResult | null {
+  if (tool.name !== 'aether.search' || aetherReach(context) === 'everything' || input.scope === 'shannonFolder' || input.scope === 'study') return null;
+  const why = context.surface === 'autonomy' ? '自分の時間には、ライ氏の文書は探さない' : 'ライ氏以外の人がこの返事を見聞きできるので、ライ氏の文書は探さない';
+  return toolFailure('refused', 'ここでは、シャノン用フォルダの外は探さない。', { retryable: false, refusal: { why, wouldWork: 'scope を shannonFolder か study にして呼び直す（ライ氏の文書は二人だけの会話で）' } });
+}
+
+/**
+ * The Aether client an executor of this call is handed. While the reach is her folder only, a search is held to her folder
+ * or her study and keeps only hits placed there, and a read first asks for one character to see where the document is,
+ * so that nothing of a document outside her folder is returned.
+ */
+export function gatedAether(access: AetherAccess, context: Pick<ToolCallContext, 'surface' | 'audience'>): AetherAccess {
+  if (aetherReach(context) === 'everything') return access;
+  const placed = (inShannonFolder: boolean) => { if (!inShannonFolder) throw new AetherAccessError('OUTSIDE_AUDIENCE'); };
+  return Object.freeze({
+    search: async (input, signal) => (await access.search({ ...input, scope: input.scope === 'study' ? 'study' as const : 'shannonFolder' as const }, signal))
+      // Placed in her folder, and for her study also tagged 書斎 there: a hit missing either is dropped.
+      .filter(hit => hit.inShannonFolder === true && (input.scope !== 'study' || hit.inStudy === true)),
+    read: async (input, signal) => {
+      placed((await access.read({ documentId: input.documentId, offset: 0, maxChars: 1 }, signal)).inShannonFolder);
+      const document = await access.read(input, signal);
+      placed(document.inShannonFolder);
+      return document;
+    },
+    list: signal => access.list(signal),
+    create: (input, signal) => access.create(input, signal),
+    update: (input, signal) => access.update(input, signal),
+    delete: (input, signal) => access.delete(input, signal),
+  } satisfies AetherAccess);
 }
 
 /** What `authorizeAutonomousAction` is asked for one call in her own time. */
