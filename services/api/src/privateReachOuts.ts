@@ -1,4 +1,5 @@
 import type { BodyReachOutDeliveryOutcome } from './bodyContract.js';
+import { isDesktopBodyDeviceId } from './desktopBodyIdentity.js';
 import { PRIVATE_REACH_OUT_LIMITS, type PrivateReachOutOutcome } from './privateListeningContract.js';
 import type { PrivateListener, SQLitePrivateListeningStore } from './privateListeningStore.js';
 import type { ClaimedReachOut, ReachOutClaim, SQLiteReachOutClaims, UnreadReachOut } from './reachOutClaims.js';
@@ -154,6 +155,11 @@ export class PrivateReachOuts {
     return claim.spokenAt === null && Date.parse(at) - Date.parse(claim.claimedAt) > PRIVATE_REACH_OUT_LIMITS.abandonedMilliseconds;
   }
 
+  /** A desktop-body identity (`desktopBodyIdentity.ts`) without its registration as her full body. */
+  private unregisteredDesktopBody(scopeKey: string, deviceId: string): boolean {
+    return isDesktopBodyDeviceId(deviceId) && !this.safeIsBody(scopeKey, deviceId);
+  }
+
   /** Her unread messages, newest first, each with whether her body is told about it. */
   private forBody(scopeKey: string, deviceId: string, at: string): Array<{ message: UnreadReachOut; visible: boolean }> {
     return this.dependencies.claims.unread(scopeKey).map(message => ({ message, visible: this.visibleToBody(scopeKey, deviceId, message, at) }));
@@ -161,6 +167,7 @@ export class PrivateReachOuts {
 
   /** `presence.reachOut` for one device: unchanged for a device that is not her body, and while the mechanism is off. */
   bodyPresence(scopeKey: string, deviceId: string, unchanged: { pending: number; latestId?: string }): { pending: number; latestId?: string } {
+    if (this.unregisteredDesktopBody(scopeKey, deviceId)) return { pending: 0 };
     if (!this.dependencies.enabled || !this.safeIsBody(scopeKey, deviceId)) return unchanged;
     try {
       const visible = this.forBody(scopeKey, deviceId, this.dependencies.now()).filter(item => item.visible);
@@ -170,6 +177,13 @@ export class PrivateReachOuts {
 
   /** `GET /v1/initiatives` for one device: her body does not receive a message of hers that is an app's to speak. */
   bodyInitiatives(scopeKey: string, deviceId: string, body: unknown): unknown {
+    // An app's desktop body that has not registered yet is neither an app nor a body here: it is told of no message of
+    // hers (never the app's unfiltered inbox) and claims nothing, whether or not the mechanism is on.
+    if (this.unregisteredDesktopBody(scopeKey, deviceId)) {
+      if (!isInbox(body)) return body;
+      const messages = body.messages.filter(message => message.kind !== 'reach_out');
+      return { ...body, unreadCount: messages.length, messages };
+    }
     if (!this.dependencies.enabled || !this.safeIsBody(scopeKey, deviceId) || !isInbox(body)) return body;
     try {
       const at = this.dependencies.now();

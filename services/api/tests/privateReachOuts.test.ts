@@ -1,3 +1,4 @@
+import { desktopBodyDeviceId } from '../src/desktopBodyIdentity.js';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -519,6 +520,24 @@ describe('her body and the apps', () => {
     w.beat(MAC, 'mac');
     expect(offerOf(w.beat(MAC, 'mac'))).toBeNull();
     w.close();
+  });
+
+  it('an app\'s desktop body that has not registered is told of no message of hers and claims nothing (re-review SF2)', async () => {
+    const w = world();
+    const unregistered = desktopBodyDeviceId('mac-app');
+    const id = w.say();
+    expect((await w.bodyInitiatives(unregistered)).messages.map(message => message.id)).not.toContain(id);
+    expect(await w.bodyPresence(unregistered)).toEqual({ pending: 0 });
+    expect(w.claims.holder(scope, id)).toBeNull();
+    // Also with the mechanism switched off: never the app's unfiltered inbox.
+    const off = world({ enabled: false });
+    const offId = off.say();
+    expect((await off.bodyInitiatives(unregistered)).messages.map(message => message.id)).not.toContain(offId);
+    // Registered as her full body, it reads as any body does.
+    await w.api.dispatch({ method: 'PUT', path: '/v1/body/capabilities', body: { scopeKey: scope, expressions: [], gestures: [], surface: 'mac' }, deviceId: unregistered });
+    expect((await w.bodyInitiatives(unregistered)).messages.map(message => message.id)).toContain(id);
+    w.close();
+    off.close();
   });
 
   it('a device that is not her body reads presence unchanged and claims nothing', async () => {

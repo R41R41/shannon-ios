@@ -699,7 +699,7 @@ What follows, with no other rule changed:
 | `audience` on presence reads | Not read (it reads no presence) | **Kept**, and says whether others are present |
 | `ownerCallElsewhere` in its presence | — | Active while the Mac app (or the iPhone) is in a call |
 | Looks at the room, delivery reports, `ownerAway` / `ownerReturned` | Not a body | As any full body |
-| `GET /v1/initiatives` | An app's read (its Talk and its earphones) | Her body's read (with the header) |
+| `GET /v1/initiatives` | An app's read (its Talk and its earphones) | Her body's read (with the header). Before it has registered as her full body it is told of none of her messages (`presence.reachOut` is `{ pending: 0 }`) and claims nothing, never the app's unfiltered inbox |
 
 The body counts on the per-device budget of 120 body requests a minute under its own identity. When the server took a request as the body's, its answer carries the response header `X-Shannon-Body: desktop`. A server without this rule ignores the header and answers without it: the window's requests would be the app's, and registering them would make the app a full body whose calls no longer count for the Windows desktop. So the Mac reads presence first and, without that header in the answer, never registers the window, sends nothing for it, and shows her there as a figure only (設定 › すがた says why).
 
