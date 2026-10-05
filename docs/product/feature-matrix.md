@@ -127,7 +127,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `voice.diagnostics` macOS（○）: 設定 › 管理 › 診断。Mac の通話も、iPhone と同じ処理の段階と時間を残す（中身は残さない）。
 - `voice.wake-name` iOS（×）: iPhone と Mac は、Windows で測ってから決める（所有者の決定、2026-10-05。名前への誤反応の 1 日の回数と、名前から返事までの遅れ）。iPhone は、するとしてもアプリが前に出ている間か充電中に限り、省電力モード中は待たない。
 - `voice.wake-name` macOS（×）: iPhone と Mac は、Windows で測ってから決める（所有者の決定、2026-10-05。名前への誤反応の 1 日の回数と、名前から返事までの遅れ）。iPhone は、するとしてもアプリが前に出ている間か充電中に限り、省電力モード中は待たない。
-- `voice.wake-name` Windows（○）: 既定は切。設定 › 声 の「名前で呼ぶ」で入れる（試しに呼ぶボタンと、聞き取れた時刻）。待っている間は体の足もとの印で状態を出す（待っています／話し中は休み／準備中／待てません／呼ばれました。文は design/strings.ja.json の voice.wakeName.*）。「話し中は休み」は、所有者がほかのアプリでシャノンと通話している間（presence の ownerCallElsewhere.active、docs/body-contract.md）の足もとの印でもある。方法 A（Silero VAD と ReazonSpeech の hotword）。所有者の決定（Syzygy ADR-0002 の追記、2026-10-05）。evidence のファイル名は知らせに無い（設定の入口のファイルを書いた）。
+- `voice.wake-name` Windows（○）: 既定は切。設定 › 声 の「名前で呼ぶ」で入れる（試しに呼ぶボタンと、聞き取れた時刻）。待っている間は体の足もとの印で状態を出す（待っています／話し中は休み／準備中／待てません／呼ばれました。文は design/strings.ja.json の voice.wakeName.*）。「話し中は休み」は、所有者がほかのアプリでシャノンと通話している間（presence の ownerCallElsewhere.active、docs/body-contract.md）の足もとの印でもある。方法 A（Silero VAD と ReazonSpeech の hotword）。所有者の決定（Syzygy ADR-0002 の追記、2026-10-05）。場所は設定が WakeSection.tsx、足もとの印が wakeUi.ts（体のスレッドの知らせ、2026-10-06）。足もとの印は Windows では「呼びかけ: 」を前に付けて出す（呼ばれました を除く）。
 
 ## 作業（`tasks`）
 
@@ -297,10 +297,10 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `body.form-switch` Windows（×）: Live2D の姿だけ。水の光の目は無い（確認用の静止画はある）。決定（2026-10-03）: Windows にも水の光の目を作る（順番は後ろ。roadmap の W11）。
 - `body.choice` iOS（○）: 設定 › すがた の「体」と、トークの表示の切り替えボタンの長押し。体のページを ?body=eyes で始め、setBody で切り替える。目だけのときは映し方を出さない。説明の「（iPhone の目と同じ動き）」は「（水の光の目と同じ動き）」にした。
 - `body.choice` macOS（○）: 設定 › すがた › 体 と、パネルのメニュー。パネルの姿に効く（A15）。
-- `body.choice` Windows（○）: 設定 › すがた › 体（人の姿／目だけ）。体のスレッドの知らせ（2026-10-05）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。
+- `body.choice` Windows（○）: 設定 › すがた › 体（人の姿／目だけ）。体のスレッドの知らせ（2026-10-05）。設定の文の場所が SettingsView.tsx であることは、体のスレッドが確かめた（2026-10-06）。
 - `body.small-eyes` iOS（—）: iPhone の姿は画面の中にあり、所有者が大きさを決める窓が無い（2 本の指の拡大は、向き合う表示の中の映し方）。目だけにしたいときは 設定 › すがた › 体 で選ぶ。
 - `body.small-eyes` macOS（×）: Mac には、窓で立つ体がまだ無い（デスクトップに立つ体を SwiftUI で作るとき、ADR-0004）。トークの横の「すがた」のパネルは、幅で体を変えない。
-- `body.small-eyes` Windows（○）: 既定は入、しきい値 60%。体のスレッドの知らせ（2026-10-05）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。
+- `body.small-eyes` Windows（○）: 既定は入、しきい値 60%。体のスレッドの知らせ（2026-10-05）。設定の文の場所が SettingsView.tsx であることは、体のスレッドが確かめた（2026-10-06）。
 - `body.waterlight-eye` macOS（○）: 水の光の目の姿のとき、パネルに大きく立つ。押すと表情が変わる（A15）。
 - `body.presence-on-body` macOS（○）: 窓に ShannonBodyAttachment をつなぎ、気分・いま・話している様子を体のページへ送る。姿の下に「いま：〈気持ち〉・〈していること〉」（A15）。
 - `body.layout` iOS（○）: 映し方と位置を戻すは、トークの表示の切り替えボタンの長押しと 設定 › すがた（A6）。2 本の指で大きさと位置。 目だけのときは映し方を出さない（体のページが大きさと位置だけを使う）。

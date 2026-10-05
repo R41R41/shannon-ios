@@ -1310,16 +1310,16 @@
       "key": "voice.wakeName.setting",
       "text": "名前で呼ぶ",
       "only": "windows",
-      "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
+      "windows": "shannon-desktop:src/desk/views/WakeSection.tsx",
       "decided": "2026-10-05",
       "windowsNow": "名前で呼ぶ",
-      "note": "設定 › 声 の、名前で呼ばれたら聞く（voice.wake-name）の切り替え。既定は切。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。Windows の置き場所のファイル名は知らせに無い（設定の入口のファイルを書いた）。"
+      "note": "設定 › 声 の、名前で呼ばれたら聞く（voice.wake-name）の切り替え。既定は切。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
     },
     {
       "key": "voice.wakeName.description",
       "text": "「シャノン」と呼んで話しかける",
       "only": "windows",
-      "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
+      "windows": "shannon-desktop:src/desk/views/WakeSection.tsx",
       "decided": "2026-10-05",
       "windowsNow": "「シャノン」と呼んで話しかける",
       "note": "「名前で呼ぶ」の説明の 1 行。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
@@ -1328,61 +1328,70 @@
       "key": "voice.wakeName.tryCall",
       "text": "試しに呼んでみる",
       "only": "windows",
-      "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
+      "windows": "shannon-desktop:src/desk/views/WakeSection.tsx",
       "decided": "2026-10-05",
       "windowsNow": "試しに呼んでみる",
       "note": "設定 › 声 のボタン。名前を聞き取れるかを確かめる。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
     },
     {
+      "key": "voice.wakeName.tryCallListening",
+      "text": "呼んでください…",
+      "only": "windows",
+      "windows": "shannon-desktop:src/desk/views/WakeSection.tsx",
+      "decided": "2026-10-05",
+      "windowsNow": "呼んでください…",
+      "note": "「試しに呼んでみる」を押したあと、15 秒の試しの間、ボタンに出す文。体のスレッドの知らせ（2026-10-06）。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
+    },
+    {
       "key": "voice.wakeName.heardAt",
       "text": "聞き取れました（{time}）",
       "only": "windows",
-      "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
+      "windows": "shannon-desktop:src/desk/views/WakeSection.tsx",
       "decided": "2026-10-05",
       "windowsNow": "聞き取れました（{time}）",
-      "note": "「試しに呼んでみる」で名前を聞き取れたときの確かめの文。time は聞き取れた時刻。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
+      "note": "「試しに呼んでみる」で名前を聞き取れたときの確かめの文。time は聞き取れた時刻（ja-JP の時と分、例 21:46）。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
     },
     {
       "key": "voice.wakeName.state.waiting",
       "text": "待っています",
       "only": "windows",
-      "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
+      "windows": "shannon-desktop:src/renderer/wakeUi.ts",
       "decided": "2026-10-05",
-      "windowsNow": "待っています",
-      "note": "体の足もとの印。名前を待っている（マイクを開いている）。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
+      "windowsNow": "呼びかけ: 待っています",
+      "note": "体の足もとの印。名前を待っている（マイクを開いている）。Windows はいま「呼びかけ: 」を前に付けて出している（copy-differences.md）。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
     },
     {
       "key": "voice.wakeName.state.restingWhileTalking",
       "text": "話し中は休み",
       "only": "windows",
-      "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
+      "windows": "shannon-desktop:src/renderer/wakeUi.ts",
       "decided": "2026-10-05",
-      "windowsNow": "話し中は休み",
-      "note": "体の足もとの印。話している間は名前を待たない。所有者がほかのアプリでシャノンと通話している間（presence の ownerCallElsewhere.active、docs/body-contract.md）の印もこの文。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
+      "windowsNow": "呼びかけ: 話し中は休み",
+      "note": "体の足もとの印。話している間は名前を待たない。所有者がほかのアプリでシャノンと通話している間（presence の ownerCallElsewhere.active、docs/body-contract.md）の印もこの文。Windows はいま「呼びかけ: 」を前に付けて出している（copy-differences.md）。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
     },
     {
       "key": "voice.wakeName.state.preparing",
       "text": "準備中",
       "only": "windows",
-      "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
+      "windows": "shannon-desktop:src/renderer/wakeUi.ts",
       "decided": "2026-10-05",
-      "windowsNow": "準備中",
-      "note": "体の足もとの印。名前の聞き取りを用意している。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
+      "windowsNow": "呼びかけ: 準備中",
+      "note": "体の足もとの印。名前の聞き取りを用意している。Windows はいま「呼びかけ: 」を前に付けて出している（copy-differences.md）。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
     },
     {
       "key": "voice.wakeName.state.unavailable",
       "text": "待てません",
       "only": "windows",
-      "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
+      "windows": "shannon-desktop:src/renderer/wakeUi.ts",
       "decided": "2026-10-05",
-      "windowsNow": "待てません",
-      "note": "体の足もとの印。マイクや聞き取りが使えず、名前を待てない。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
+      "windowsNow": "呼びかけ: 待てません",
+      "note": "体の足もとの印。マイクや聞き取りが使えず、名前を待てない。Windows はいま「呼びかけ: 」を前に付けて出している（copy-differences.md）。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
     },
     {
       "key": "voice.wakeName.state.called",
       "text": "呼ばれました",
       "only": "windows",
-      "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
+      "windows": "shannon-desktop:src/renderer/wakeUi.ts",
       "decided": "2026-10-05",
       "windowsNow": "呼ばれました",
       "note": "体の足もとの印。名前が聞こえて、続く話を聞いている。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
@@ -1651,7 +1660,7 @@
       "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
       "decided": "2026-10-05",
       "windowsNow": "体",
-      "note": "設定 › すがた の中の選択。Live2Dの姿のとき、人の姿か目だけかを選ぶ。所有者の決定（2026-10-05）。体のスレッドの知らせ（2026-10-05）。Windows の置き場所のファイル名は知らせに無い（設定の入口のファイルを書いた）。"
+      "note": "設定 › すがた の中の選択。Live2Dの姿のとき、人の姿か目だけかを選ぶ。所有者の決定（2026-10-05）。体のスレッドの知らせ（2026-10-05）。Windows の置き場所は SettingsView.tsx（体のスレッドが確かめた、2026-10-06）。"
     },
     {
       "key": "settings.figure.bodyHuman",
@@ -1727,7 +1736,7 @@
       "only": "windows",
       "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
       "decided": "2026-10-05",
-      "note": "Windows の 設定 › すがた の切り替え。既定で入。体の大きさが 60% 未満のとき、目だけで出す（窓の大きさの機能。iPhone と Mac には無い）。体のスレッドの知らせ（2026-10-05）。Windows の置き場所のファイル名は知らせに無い（設定の入口のファイルを書いた）。"
+      "note": "Windows の 設定 › すがた の切り替え。既定で入。体の大きさが 60% 未満のとき、目だけで出す（窓の大きさの機能。iPhone と Mac には無い）。体のスレッドの知らせ（2026-10-05）。Windows の置き場所は SettingsView.tsx（体のスレッドが確かめた、2026-10-06）。"
     },
     {
       "key": "settings.figure.smallEyesNote",
@@ -1735,7 +1744,7 @@
       "only": "windows",
       "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
       "decided": "2026-10-05",
-      "note": "Windows で、小さいため目だけで出ているときの 1 行。体のスレッドの知らせ（2026-10-05）。Windows の置き場所のファイル名は知らせに無い（設定の入口のファイルを書いた）。"
+      "note": "Windows で、小さいため目だけで出ているときの 1 行。体のスレッドの知らせ（2026-10-05）。Windows の置き場所は SettingsView.tsx（体のスレッドが確かめた、2026-10-06）。"
     },
     {
       "key": "talk.display.menuHint",

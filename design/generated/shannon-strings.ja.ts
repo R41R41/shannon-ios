@@ -197,6 +197,7 @@ export const shannonStrings = {
   "voice.wakeName.setting": "名前で呼ぶ",
   "voice.wakeName.description": "「シャノン」と呼んで話しかける",
   "voice.wakeName.tryCall": "試しに呼んでみる",
+  "voice.wakeName.tryCallListening": "呼んでください…",
   "voice.wakeName.heardAt": "聞き取れました（{time}）",
   "voice.wakeName.state.waiting": "待っています",
   "voice.wakeName.state.restingWhileTalking": "話し中は休み",
@@ -580,25 +581,29 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
     "decided": "2026-10-05",
     "windowsBefore": "試しに呼んでみる"
   },
+  "voice.wakeName.tryCallListening": {
+    "decided": "2026-10-05",
+    "windowsBefore": "呼んでください…"
+  },
   "voice.wakeName.heardAt": {
     "decided": "2026-10-05",
     "windowsBefore": "聞き取れました（{time}）"
   },
   "voice.wakeName.state.waiting": {
     "decided": "2026-10-05",
-    "windowsBefore": "待っています"
+    "windowsBefore": "呼びかけ: 待っています"
   },
   "voice.wakeName.state.restingWhileTalking": {
     "decided": "2026-10-05",
-    "windowsBefore": "話し中は休み"
+    "windowsBefore": "呼びかけ: 話し中は休み"
   },
   "voice.wakeName.state.preparing": {
     "decided": "2026-10-05",
-    "windowsBefore": "準備中"
+    "windowsBefore": "呼びかけ: 準備中"
   },
   "voice.wakeName.state.unavailable": {
     "decided": "2026-10-05",
-    "windowsBefore": "待てません"
+    "windowsBefore": "呼びかけ: 待てません"
   },
   "voice.wakeName.state.called": {
     "decided": "2026-10-05",
