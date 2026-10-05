@@ -69,7 +69,6 @@
     "voice.conversation windows partial",
     "voice.diagnostics windows no",
     "voice.guest-mode windows partial",
-    "voice.minimised-call macos no",
     "voice.minimised-call windows partial",
     "voice.mute-and-mic windows no",
     "voice.photo-and-camera-in-call windows no",

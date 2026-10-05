@@ -1251,6 +1251,41 @@
       "note": "Mac の 設定 › 声 の説明。前の文は iPhone の注記と同じ。後の文は、Mac のイヤホンの声と触れたときの声も同じ設定を読むこと。"
     },
     {
+      "key": "voice.mac.rowTitle",
+      "text": "音声会話・{phase}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Elsewhere.swift",
+      "only": "apple",
+      "note": "Mac のサイドバーのいちばん下、カメラの状態の隣の通話の行（voice.minimised-call、所有者の決定 2026-10-06 の B）。{phase} は通話の状態の行と同じ言葉（聞いています・ミュート中…）。メニューバーの見出しも同じ。"
+    },
+    {
+      "key": "voice.mac.rowHint",
+      "text": "クリックするとトークに戻ります。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Elsewhere.swift",
+      "only": "apple",
+      "note": "同じ行の手がかり。"
+    },
+    {
+      "key": "voice.mac.returnToTalk",
+      "text": "トークに戻る",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Elsewhere.swift",
+      "only": "apple",
+      "note": "通話中で窓が画面に無い間のメニューバーの項目。アプリを前に出し、トークを開く。"
+    },
+    {
+      "key": "voice.mac.mute",
+      "text": "ミュート",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Elsewhere.swift",
+      "only": "apple",
+      "note": "サイドバーの通話の行とメニューバーのミュート。"
+    },
+    {
+      "key": "voice.mac.unmute",
+      "text": "ミュートを解除",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Elsewhere.swift",
+      "only": "apple",
+      "note": "同じ、ミュート中。"
+    },
+    {
       "key": "nav.delivery",
       "text": "配信",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",

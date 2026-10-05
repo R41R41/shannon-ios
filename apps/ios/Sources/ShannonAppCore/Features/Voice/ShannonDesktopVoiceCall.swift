@@ -11,9 +11,10 @@ import Observation
 /// - *Background.* The app counts as in the background while another app is in front: after one minute
 ///   without speech from either side the call ends as 終了 does (`ShannonVoiceBackgroundSilence`), and Talk
 ///   says so when the owner comes back.
-/// - *Leaving.* Closing the last window ends the call (there is no compact presence of the call yet, so
-///   a microphone is never left open without a window to stop it). Hiding the app or minimising the
-///   window keeps the call; macOS shows its microphone indicator meanwhile.
+/// - *Elsewhere* (owner decision 2026-10-06, option B). On every page a row at the bottom of the sidebar
+///   shows the call (`ShannonDesktopVoiceCallRow`); while no window is on screen (hidden, minimised, covered)
+///   the call is in the menu bar (`ShannonDesktopVoiceCallMenuSection`). Closing the last window still ends
+///   the call, so a microphone is never left open with nothing of the app to stop it.
 /// - *Who holds the sound.* Her messages through the earphones and her spoken line for a touch wait while
 ///   a call or dictation holds the microphone (`ShannonSpeechArbiter`).
 /// - *The other devices.* The call is reported as `callStarted` / `callEnded` (`ShannonVoiceCallPresence`) so
@@ -27,6 +28,13 @@ public final class ShannonDesktopVoiceCall {
     public internal(set) var notice: String?
     /// Dictation in Talk's composer (音声入力): the iPhone's recorder, transcribed by the server into the draft.
     public let dictation = ShannonVoiceConversationModel()
+
+    /// A window of the app is on screen (not hidden, not minimised, not covered or on another Space). While a
+    /// call is on and none is, the call is in the menu bar (owner decision 2026-10-06, option B).
+    public internal(set) var windowsOnScreen = true
+    @ObservationIgnored var windowsOnScreenProbe: @MainActor () -> Bool = ShannonDesktopVoiceCall.anyWindowOnScreen
+    @ObservationIgnored var menuSection: ShannonDesktopVoiceCallMenuSection?
+    @ObservationIgnored var windowObservers: [NSObjectProtocol] = []
 
     @ObservationIgnored private(set) weak var conversation: ShannonConversationModel?
     @ObservationIgnored private var windows: Set<UUID> = []
@@ -50,9 +58,11 @@ public final class ShannonDesktopVoiceCall {
     public var threadID: String? { workspace.threadContext?.threadID }
 
     /// Connects the call to the app's conversation, once, and follows the app in and out of the foreground.
-    public func attach(conversation: ShannonConversationModel) {
+    /// `menuBar` is where the call shows itself while no window is on screen (nil in tests).
+    public func attach(conversation: ShannonConversationModel, menuBar: ShannonDesktopMenuBar? = .shared) {
         guard self.conversation == nil else { return }
         self.conversation = conversation
+        followWindows(menuBar: menuBar)
         let arbiter = ShannonSpeechArbiter.shared
         arbiter.sessionInUse = { [weak self] in
             guard let self else { return false }

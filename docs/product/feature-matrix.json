@@ -1015,7 +1015,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveSessionModel+Background.swift"
           ],
-          "note": "ほかのアプリが前にある間も通話は続き、その間に 1 分お話が無いと、終了と同じ形で終わる（iPhone の 1 分。戻るとトークにそう出る）。最後の窓を閉じると終わる。"
+          "note": "ほかのアプリが前にある間も、窓を隠した・しまった間も通話は続き（メニューバーに出る）、アプリが後ろにある間に 1 分お話が無いと、終了と同じ形で終わる（iPhone の 1 分。戻るとトークにそう出る）。最後の窓を閉じると終わる。"
         },
         "windows": {
           "status": "partial",
@@ -1041,8 +1041,13 @@
           ]
         },
         "macos": {
-          "status": "no",
-          "note": "A16 で、通話は 作業・シャノン・設定 を見ている間も、アプリを隠す・窓をしまう間も続く（macOS のマイクの印が出る）。ただ、トークの外で通話を見せて止める小さな形が無い。形（窓の上の帯・サイドバーの行・メニューバー・浮かぶ小窓）は仕様に無いので、所有者が比較ページで選ぶまで作らない。それまでは、最後の窓を閉じると通話は終わる。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Elsewhere.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Desktop/ShannonDesktopMenuBar.swift",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift"
+          ],
+          "note": "所有者の決定（2026-10-06、比較の B）。通話中は、どのページでもサイドバーのいちばん下、カメラの状態の隣に「音声会話・〈いまの段階〉」と通話の時間、ミュート、終了の行（押すとトーク）。窓が画面に無い間（隠した・しまった・ほかのアプリの後ろ）は、メニューバーに段階と時間、メニューに「トークに戻る」「ミュート」「音声会話を終了する」。最後の窓を閉じると通話は終わる。メニューバーの項目はアプリに 1 つで、A17 のメニューバーのメニューは同じ項目に区画を足す。"
         },
         "windows": {
           "status": "partial",

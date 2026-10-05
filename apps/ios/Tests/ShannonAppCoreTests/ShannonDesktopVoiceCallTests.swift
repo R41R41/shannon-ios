@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import XCTest
 @testable import ShannonAppCore
 
@@ -51,7 +52,7 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
 
     func testWhileACallOrDictationHoldsTheMicrophoneNothingElseOfHersSpeaks() {
         let call = ShannonDesktopVoiceCall()
-        call.attach(conversation: ShannonConversationModel.designPreview())
+        call.attach(conversation: ShannonConversationModel.designPreview(), menuBar: nil)
         let arbiter = ShannonSpeechArbiter.shared
         XCTAssertEqual(arbiter.sessionInUse?(), false)
         XCTAssertFalse(arbiter.isBusyForTouchLine)
@@ -89,12 +90,84 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
 
     func testATouchLineIsNotListenedForInADesignPreviewOrWhenTheBodyNoLongerAnswersInVoice() async {
         let call = ShannonDesktopVoiceCall()
-        call.attach(conversation: ShannonConversationModel.designPreview())
+        call.attach(conversation: ShannonConversationModel.designPreview(), menuBar: nil)
         var line = ShannonBodyTouchCoordinator.Line(id: "l", text: "えへへ", face: nil)
         line.listenSeconds = 6
         await call.bodyListen(answersInVoice: { true })(line, 6)
         XCTAssertNil(call.workspace.connectionRequestID)
         XCTAssertEqual(call.session.phase, .idle)
+    }
+
+    // MARK: Elsewhere (owner decision 2026-10-06, option B)
+
+    func testTheRowSaysTheCallAndItsPhase() {
+        let call = ShannonDesktopVoiceCall()
+        call.session.phase = .listening
+        XCTAssertEqual(call.rowTitle, "音声会話・聞いています")
+        call.session.toggleMicrophoneMute()
+        XCTAssertEqual(call.rowTitle, "音声会話・ミュート中")
+        XCTAssertNil(call.durationText())
+        call.session.callStartedAt = Date(timeIntervalSinceNow: -192)
+        XCTAssertEqual(call.durationText(), "3:12")
+        XCTAssertEqual(call.spokenSummary(), "音声会話・ミュート中、通話時間 3分12秒")
+    }
+
+    func testTheCallIsInTheMenuBarOnlyWhileItIsOnAndNoWindowIsOnScreen() async {
+        let menuBar = ShannonDesktopMenuBar()
+        menuBar.makesStatusItem = false
+        let call = ShannonDesktopVoiceCall()
+        var onScreen = true
+        call.windowsOnScreenProbe = { onScreen }
+        call.attach(conversation: ShannonConversationModel.designPreview(), menuBar: menuBar)
+        XCTAssertFalse(menuBar.isShown, "no call")
+
+        onScreen = false
+        call.updateWindowsOnScreen()
+        XCTAssertFalse(call.showsInMenuBar, "a hidden window without a call shows nothing")
+        XCTAssertFalse(menuBar.isShown)
+
+        call.session.phase = .speaking
+        await settle()
+        XCTAssertTrue(call.showsInMenuBar)
+        XCTAssertEqual(menuBar.shownButton?.title, "シャノンが話しています")
+        XCTAssertEqual(menuBar.shownButton?.accessibilityLabel, "音声会話・シャノンが話しています")
+        XCTAssertEqual(menuBar.currentItems().map(\.title),
+                       ["音声会話・シャノンが話しています", "トークに戻る", "ミュート", "音声会話を終了する"])
+
+        // A window back on screen takes it away; the call stays.
+        onScreen = true
+        call.updateWindowsOnScreen()
+        XCTAssertFalse(menuBar.isShown)
+        XCTAssertEqual(call.session.phase, .speaking)
+
+        // The call ending takes it away too.
+        onScreen = false
+        call.updateWindowsOnScreen()
+        XCTAssertTrue(menuBar.isShown)
+        call.end()
+        await settle()
+        XCTAssertFalse(menuBar.isShown)
+    }
+
+    func testTheMenusEndItemEndsTheCall() async {
+        let menuBar = ShannonDesktopMenuBar()
+        menuBar.makesStatusItem = false
+        let call = ShannonDesktopVoiceCall()
+        call.windowsOnScreenProbe = { false }
+        call.attach(conversation: ShannonConversationModel.designPreview(), menuBar: menuBar)
+        call.session.phase = .listening
+        await settle()
+        let items = menuBar.currentItems()
+        let mute = items.first { $0.title == "ミュート" }
+        XCTAssertEqual(mute?.isEnabled, true)
+        _ = mute.map { NSApplication.shared.sendAction($0.action!, to: $0.target, from: $0) }
+        XCTAssertTrue(call.session.isMicrophoneMuted)
+        XCTAssertEqual(menuBar.currentItems().map(\.title)[2], "ミュートを解除")
+        let end = menuBar.currentItems().first { $0.title == "音声会話を終了する" }
+        _ = end.map { NSApplication.shared.sendAction($0.action!, to: $0.target, from: $0) }
+        await settle()
+        XCTAssertEqual(call.session.phase, .idle)
+        XCTAssertFalse(menuBar.isShown)
     }
 
     private func settle() async {

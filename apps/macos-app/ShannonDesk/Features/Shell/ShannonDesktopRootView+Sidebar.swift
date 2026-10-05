@@ -93,7 +93,8 @@ extension ShannonDesktopRootView {
     }
 
     /// The bottom of the sidebar: the 設定 row, then the lines that must always be visible:
-    /// the 運用 mark's reason (roadmap A12) and, while not connected, the connection.
+    /// the 運用 mark's reason (roadmap A12), a voice conversation that is on (A16), the camera's state and,
+    /// while not connected, the connection.
     var sidebarFooter: some View {
         let opsReason = yousu.ops.attentionReason()
         return VStack(alignment: .leading, spacing: 2) {
@@ -115,6 +116,9 @@ extension ShannonDesktopRootView {
                     openSettings(.ops)
                 }
             }
+            // A call is visible on every page beside the camera's state (owner decision 2026-10-06, option B):
+            // 「音声会話・〈いまの段階〉」, its time, mute and 終了; the row shows Talk.
+            ShannonDesktopVoiceCallRow(call: voiceCall) { selectDestination(.talk) }
             // The camera's state is always visible (A14): 切／見てよい／いま見ています. It opens 設定 › カメラ.
             ShannonAppLookStateReader(conversation: conversation) { state in
                 sidebarFooterLine(state.line, hint: "設定のカメラを開きます") {

@@ -94,4 +94,14 @@ extension ShannonGeneratedStrings {
     public static let voiceMacProviderHint = "Geminiで作った声とElevenLabsのShannonクローンを切り替えます。次に開始する音声会話から適用します"
     /// `voice.mac.providerNote`
     public static let voiceMacProviderNote = "声と読み上げの変更は、通話中の会話を変えず次の通話から反映されます。イヤホンで話しかける声と、触れたときに声で返す声も同じです。"
+    /// `voice.mac.rowTitle`
+    public static func voiceMacRowTitle(phase: String) -> String { "音声会話・\(phase)" }
+    /// `voice.mac.rowHint`
+    public static let voiceMacRowHint = "クリックするとトークに戻ります。"
+    /// `voice.mac.returnToTalk`
+    public static let voiceMacReturnToTalk = "トークに戻る"
+    /// `voice.mac.mute`
+    public static let voiceMacMute = "ミュート"
+    /// `voice.mac.unmute`
+    public static let voiceMacUnmute = "ミュートを解除"
 }

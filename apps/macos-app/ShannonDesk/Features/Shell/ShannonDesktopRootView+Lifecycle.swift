@@ -78,6 +78,10 @@ extension ShannonDesktopRootView {
             .onReceive(NotificationCenter.default.publisher(for: .shannonYousuLinkOpened)) { _ in
                 openPendingYousuLink()
             }
+            // トークに戻る from the call in the menu bar (A16, option B).
+            .onReceive(NotificationCenter.default.publisher(for: .shannonDesktopReturnToTalk)) { _ in
+                selectDestination(.talk)
+            }
     }
 
     /// Keeps what a window restores current as the selection changes.
