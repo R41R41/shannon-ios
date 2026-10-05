@@ -1,5 +1,3 @@
-import { APP_LOOK_ROUTE_PREFIX } from './appLookContract.js';
-
 /**
  * Her desktop body inside one of the owner's apps (roadmap A17: the Mac app shows her standing on the desktop).
  *
@@ -10,7 +8,7 @@ import { APP_LOOK_ROUTE_PREFIX } from './appLookContract.js';
  * is neither; an app's read of `/v1/initiatives` is an ordinary read, a body's read leaves out what an app says.
  * One device cannot be both at once, so the body part speaks for a device of its own, derived from the app's:
  *
- * - A request that carries `X-Shannon-Body: desktop` on a body route (`/v1/body/*`, not the app look) or on
+ * - A request that carries `X-Shannon-Body: desktop` on a body route (`/v1/body/*`) or on
  *   `GET /v1/initiatives` is taken as coming from `<deviceId>.desktop-body` of the same paired device.
  * - Every other request, and every request without the header, is the app's, exactly as before.
  *
@@ -53,9 +51,11 @@ export function namesDesktopBody(header: string | readonly string[] | undefined)
   return typeof value === 'string' && value.trim().toLowerCase() === DESKTOP_BODY_HEADER_VALUE;
 }
 
-/** The routes the body part may speak on: her body's routes (not the app's look answer), and reading her messages. */
+/**
+ * The routes the body part may speak on: her body's routes, and reading her messages. The app's look answer
+ * (`/v1/app/looks/{id}`) is not under `/v1/body/` and stays the app's.
+ */
 export function desktopBodyMaySpeakOn(method: string | undefined, path: string): boolean {
-  if (path.startsWith(APP_LOOK_ROUTE_PREFIX)) return false;
   if (path.startsWith('/v1/body/')) return true;
   return method === 'GET' && path === '/v1/initiatives';
 }
