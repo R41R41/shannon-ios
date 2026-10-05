@@ -1284,6 +1284,13 @@
       "note": "設定 › すがた の説明の最初の文（目だけのとき）。人の姿のときは「Live2Dの姿は指で触れられます（…）」。"
     },
     {
+      "key": "settings.figure.touchMac",
+      "text": "このMacでは、触れたことが届くのは「体に起きたことをシャノンに伝える」を入にしたときだけで、あなたひとりがいるものとして届きます。ほかの人がそばにいることを伝える切り替えは、Macにはまだありません。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "Mac の 設定 › すがた の説明に足す一文（A15 の見直し、2026-10-05）。Mac の触れ方は、所有者が入にしたときだけ、相手は所有者として届く。iPhone の「友人も一緒」のような同席の切り替えは Mac に無い。"
+    },
+    {
       "key": "settings.figure.smallEyes",
       "text": "小さくしたときは、目だけにする",
       "only": "windows",

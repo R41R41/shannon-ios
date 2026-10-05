@@ -188,6 +188,7 @@ export const shannonStrings = {
   "settings.figure.bodyEyesUnavailable": "この版には目だけの体が入っていません",
   "settings.figure.layoutOnlyHuman": "映し方は、人の姿のときに使えます。目だけのときは、大きさと位置だけを変えられます",
   "settings.figure.touchEyes": "目だけのときは、目のあたりを軽くつつけます（なでる・くすぐる・手をつなぐは、ありません）。",
+  "settings.figure.touchMac": "このMacでは、触れたことが届くのは「体に起きたことをシャノンに伝える」を入にしたときだけで、あなたひとりがいるものとして届きます。ほかの人がそばにいることを伝える切り替えは、Macにはまだありません。",
   "settings.figure.smallEyes": "小さくしたときは、目だけにする",
   "settings.figure.smallEyesNote": "いまは小さいので、目だけで出ています。",
   "talk.display.menuHint": "長押しで、姿を選べます。Live2Dの姿では体も、人の姿では映し方も選べます",

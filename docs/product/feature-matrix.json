@@ -2771,7 +2771,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#shannonBodyAttachment",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift#reportsTouch"
           ],
-          "note": "設定 › すがた の「体に起きたことをシャノンに伝える」（既定は切）。入のとき、触れた種類・長さ・強さ・時刻だけが届き、返事は姿の近くの吹き出し（A15）。"
+          "note": "設定 › すがた の「体に起きたことをシャノンに伝える」（既定は切）。入のとき、触れた種類・長さ・強さ・時刻だけが届き、返事は姿の近くの吹き出し（A15）。 Mac では相手はいつも所有者ひとり（同席の切り替えはまだ無い）。説明にそう書いた（settings.figure.touchMac）。"
         },
         "windows": {
           "status": "yes",

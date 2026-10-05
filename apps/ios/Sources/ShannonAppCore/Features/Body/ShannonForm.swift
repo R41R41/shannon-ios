@@ -90,7 +90,16 @@ public enum ShannonBodyCopy {
     static let touchWaysHuman = "Live2Dの姿は指で触れられます（頭をなでる、つつく、くすぐる、手をつなぐ）。"
     static let touchPrivacy = "「体に起きたことをシャノンに伝える」がオフの間は、この端末の中で動くだけで、何も送りません。オンにすると、触れた種類・長さ・強さ・時刻だけがシャノンに届き、気持ちが動いて、ひとこと返すことがあります。カメラは使いません。"
     public static func settingsExplanation(body: ShannonLive2DBody) -> String {
-        (body == .eyes ? ShannonGeneratedStrings.settingsFigureTouchEyes : touchWaysHuman) + touchPrivacy
+        (body == .eyes ? ShannonGeneratedStrings.settingsFigureTouchEyes : touchWaysHuman) + touchPrivacy + touchOnThisDevice
+    }
+    /// The Mac says who a touch reaches as: only when he switched it on, and as from him alone, since the Mac
+    /// has no switch yet for other people being near (A15).
+    static var touchOnThisDevice: String {
+#if os(macOS)
+        ShannonGeneratedStrings.settingsFigureTouchMac
+#else
+        ""
+#endif
     }
     /// 体 (人の姿／目だけ): in 設定 › すがた, Talk's display options and the Mac's body sheet.
     public static let bodyTitle = ShannonGeneratedStrings.settingsFigureBody

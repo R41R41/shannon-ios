@@ -44,4 +44,6 @@ extension ShannonGeneratedStrings {
     public static let settingsFigureLayoutOnlyHuman = "映し方は、人の姿のときに使えます。目だけのときは、大きさと位置だけを変えられます"
     /// `settings.figure.touchEyes`
     public static let settingsFigureTouchEyes = "目だけのときは、目のあたりを軽くつつけます（なでる・くすぐる・手をつなぐは、ありません）。"
+    /// `settings.figure.touchMac`
+    public static let settingsFigureTouchMac = "このMacでは、触れたことが届くのは「体に起きたことをシャノンに伝える」を入にしたときだけで、あなたひとりがいるものとして届きます。ほかの人がそばにいることを伝える切り替えは、Macにはまだありません。"
 }
