@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore, SHANNON_EMOTION_KINDS, createShannonMessageEmotion, type ReplyEmotion, type ShannonExpressiveEmotion } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
@@ -162,8 +162,10 @@ describe('stored rows', () => {
 });
 
 describe('the apps\' kind icons', () => {
-  it('name only kinds this server sends: every case of ShannonEmotionKindIcon is in SHANNON_EMOTION_KINDS', () => {
-    const swift = readFileSync(new URL('../../../apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift', import.meta.url), 'utf8');
+  // The server deploy ships without apps/, so the check runs only where the app source is present.
+  const kindIconSource = new URL('../../../apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift', import.meta.url);
+  it.skipIf(!existsSync(kindIconSource))('name only kinds this server sends: every case of ShannonEmotionKindIcon is in SHANNON_EMOTION_KINDS', () => {
+    const swift = readFileSync(kindIconSource, 'utf8');
     const body = swift.slice(swift.indexOf('enum ShannonEmotionKindIcon'), swift.indexOf('public var japaneseName'));
     const cases = [...body.matchAll(/^\s*case (\w+)\s*$/gm)].map(match => match[1]);
     expect(cases).toHaveLength(26);
