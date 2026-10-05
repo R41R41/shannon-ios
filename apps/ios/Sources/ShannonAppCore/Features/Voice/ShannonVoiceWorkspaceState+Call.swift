@@ -20,7 +20,9 @@ extension ShannonVoiceWorkspaceState {
         // A call from Shannon that still rings gives way to a conversation the owner starts himself.
         ShannonVoiceCallHost.shared.calls?.appConversationWillBegin()
 #endif
-        // A call that failed without being ended may still hold a period; it is remembered like any other.
+        // A call that failed without being ended may still hold a period; it is remembered like any other, and what
+        // the owner had typed before a friend joined comes back first.
+        restoreOwnerMessage()
         geminiVoiceModel.finishGuestPeriod()
         geminiVoiceModel.stop()
         let context = ShannonVoiceThreadContext(threadID: threadID)

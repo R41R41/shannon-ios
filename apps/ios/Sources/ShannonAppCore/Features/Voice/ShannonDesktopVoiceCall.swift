@@ -102,6 +102,8 @@ public final class ShannonDesktopVoiceCall {
         // dropped: the call waits for it, above), and her message through the earphones gives way too.
         dictation.cancel()
         ShannonSpeechArbiter.shared.microphoneWillBeTaken?()
+        // A failed 「友人も一緒」 call this replaces gives his draft back first.
+        restoreOwnerDraft()
         workspace.beginCall(
             mode: .owner, speechProvider: Self.speechProvider, threadID: threadID,
             conversationModel: conversation, geminiVoiceModel: session
@@ -158,6 +160,17 @@ public final class ShannonDesktopVoiceCall {
     }
 
     private func setOwnerDraftAside() {
+        // Japanese being composed in the field is committed now, by ending its editing, and set aside with the rest;
+        // whatever the input method still commits on its way out is set aside on the next turn of the main loop.
+        NSApplication.shared.keyWindow?.makeFirstResponder(nil)
+        moveDraftAside()
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.session.participantMode == .guest else { return }
+            self.moveDraftAside()
+        }
+    }
+
+    private func moveDraftAside() {
         guard let conversation, !conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         ownerDraftAside = [ownerDraftAside, conversation.draft].compactMap { $0 }.joined(separator: "\n")
         conversation.draft = ""

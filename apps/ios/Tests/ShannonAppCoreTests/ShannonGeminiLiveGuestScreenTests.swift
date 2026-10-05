@@ -236,7 +236,7 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
 
         // A failed text he typed and the end of the call.
         workspace.typedMessage = ""
-        workspace.restoreFailedText("保険証は？", participantMode: .owner)
+        workspace.restoreFailedText("保険証は？")
         model.switchParticipantMode(to: .guest, origin: .spoken)
         XCTAssertEqual(workspace.typedMessage, "")
         workspace.endCall(model)
@@ -251,22 +251,47 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         XCTAssertEqual(ShannonGuestCallNotifications.foregroundPresentation(hidesOwnerScreens: false), [.banner, .list, .sound, .badge])
     }
 
+    /// A new call that replaces a failed 「友人も一緒」 call gives the owner's set-aside text back first.
+    func testANewCallGivesBackTheTextSetAsideInAFailedFriendsCall() {
+        let workspace = ShannonVoiceWorkspaceState()
+        let model = ShannonGeminiLiveSessionModel()
+        let conversation = ShannonConversationModel.designPreview()
+        _ = workspace.beginCall(mode: .owner, speechProvider: .gemini, threadID: nil,
+            conversationModel: conversation, geminiVoiceModel: model)
+        workspace.connectionRequestID = nil
+        model.phase = .listening
+        workspace.typedMessage = "明日の歯医者は何時？"
+        model.switchParticipantMode(to: .guest, origin: .spoken)
+        model.fail("x")
+        XCTAssertEqual(workspace.typedMessage, "")
+        _ = workspace.beginCall(mode: .owner, speechProvider: .gemini, threadID: nil,
+            conversationModel: conversation, geminiVoiceModel: model)
+        workspace.connectionRequestID = nil
+        XCTAssertEqual(workspace.typedMessage, "明日の歯医者は何時？")
+        model.stop()
+    }
+
     /// View level: the cover both apps use (the iPhone's overlay under the pill, the Mac's replacement of Talk) is
     /// drawn exactly while it is on. A red stand-in for the owner's Talk is rendered and its middle pixel read.
     func testTheCoverIsDrawnOverTheOwnersTalkExactlyWhileOn() {
         for style in [ShannonVoiceGuestCoverStyle.overlay, .replace] {
-            XCTAssertTrue(middleIsRed(Color.red.frame(width: 80, height: 80).shannonGuestCover(false, style: style)))
-            XCTAssertFalse(middleIsRed(Color.red.frame(width: 80, height: 80).shannonGuestCover(true, style: style)),
-                           "the owner's Talk is not visible under the cover (\(style))")
+            for spot in [Spot.middle, .corner] {
+                XCTAssertTrue(isRed(Color.red.frame(width: 80, height: 80).shannonGuestCover(false, style: style), at: spot))
+                XCTAssertFalse(isRed(Color.red.frame(width: 80, height: 80).shannonGuestCover(true, style: style), at: spot),
+                               "the owner's Talk is not visible under the cover (\(style), \(spot))")
+            }
         }
     }
 
-    private func middleIsRed(_ view: some View) -> Bool {
+    private enum Spot { case middle, corner }
+
+    private func isRed(_ view: some View, at spot: Spot) -> Bool {
         let renderer = ImageRenderer(content: view)
         renderer.scale = 1
         guard let image = renderer.cgImage,
               let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return false }
-        let offset = (image.height / 2) * image.bytesPerRow + (image.width / 2) * (image.bitsPerPixel / 8)
+        let (x, y) = spot == .middle ? (image.width / 2, image.height / 2) : (1, image.height - 2)
+        let offset = y * image.bytesPerRow + x * (image.bitsPerPixel / 8)
         let info = image.bitmapInfo.rawValue & CGBitmapInfo.alphaInfoMask.rawValue
         let alphaFirst = info == CGImageAlphaInfo.premultipliedFirst.rawValue || info == CGImageAlphaInfo.first.rawValue
             || info == CGImageAlphaInfo.noneSkipFirst.rawValue

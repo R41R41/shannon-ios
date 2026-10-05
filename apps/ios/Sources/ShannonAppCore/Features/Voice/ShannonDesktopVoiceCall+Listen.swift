@@ -48,6 +48,7 @@ extension ShannonDesktopVoiceCall {
                   ShannonMediaPermission.currentMicrophone() == .granted,
                   !self.holdsMicrophone, !self.dictationBlocksCall else { return }
             ShannonSpeechArbiter.shared.microphoneWillBeTaken?()
+            restoreOwnerDraft()
             // The card of the last call's 「友人も一緒」 periods is put back if this call comes to nothing.
             let callMemory = workspace.callMemory
             let starting = workspace.beginCall(

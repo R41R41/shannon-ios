@@ -51,7 +51,7 @@ final class ShannonVoiceWorkspaceState {
     }
 
     /// Text that failed to send goes back into the empty composer.
-    func restoreFailedText(_ text: String, participantMode: ShannonVoiceParticipantMode) {
+    func restoreFailedText(_ text: String) {
         guard typedMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             showsTextComposer = true
             return
