@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { dispatchHostStepRequest } from '../src/apiAutonomyHostStepRoutes.js';
+import { EventEmitter } from 'node:events';
+import { closedSignal, dispatchHostStepRequest } from '../src/apiAutonomyHostStepRoutes.js';
 import { configuredAutonomy } from '../src/autonomyBudget.js';
 import { hostFolderPath, hostStepContentDigest } from '../src/autonomyHostFolderPath.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
@@ -177,6 +178,19 @@ describe('her folder through her tools (contract v2)', () => {
     expect(validHostOperationResult('search', { hits: [{ path: 'a.md', line: 1, snippet: 'x'.repeat(161) }], filesScanned: 1, truncated: false })).toMatchObject({ problem: expect.any(String) });
     expect(validHostOperationResult('delete', { trashedAs: 'notes/a.md' })).toMatchObject({ problem: expect.any(String) });
     expect(validHostOperationResult('delete', { trashedAs: '.shannon/trash/1_a.md' })).toEqual({ result: { trashedAs: '.shannon/trash/1_a.md' } });
+  });
+
+  it('ends a held claim when the device goes away, and hands nothing to it', async () => {
+    const { service, store } = harness();
+    const response = new EventEmitter() as EventEmitter & { writableFinished: boolean };
+    response.writableFinished = false;
+    const signal = closedSignal(response);
+    const held = service.folderOperations.claim(scope, HOST, DEVICE, { operations: ALL, waitSeconds: 5, localStop: false }, signal);
+    response.emit('close');
+    expect(await held).toEqual({ step: null });
+    const asked = service.folderOperations.run(scope, { host: HOST, origin: 'conversation', operation: 'list', tool: 'folder.list', args: { relativePath: '' }, relativePath: '', waitMilliseconds: 300 });
+    expect(await asked).toEqual({ kind: 'timeout', handedOut: false });
+    expect(store.hostOperations.leased(scope, HOST)).toBeNull();
   });
 
   it('refuses a result that does not fit its operation, and keeps the step held for a correct report', async () => {

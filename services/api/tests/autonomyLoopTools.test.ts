@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { reasonedPlan } from '../src/autonomyLoopPlan.js';
-import { AutonomyToolResults, plannedToolStep } from '../src/autonomyLoopToolStep.js';
+import { AutonomyToolResults, plannedToolStep, toolRefusalLine } from '../src/autonomyLoopToolStep.js';
 import { STORY_BODY, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
 
 /**
@@ -62,6 +62,17 @@ describe('her tools as steps of her own time', () => {
     for (const name of ['folder.list', 'folder.read', 'folder.update', 'folder.delete']) expect(thought).toContain(`- ${name}: `);
     expect(thought).toContain('置くだけ。フォルダの中を見る・直すのは道具でする');
     expect(thought).not.toContain('置くだけで、フォルダの中は読めない');
+  });
+
+  it('asks the gate with the folder domain and the path, and tells her when the PC is not there', async () => {
+    const harness = sessions({ toolResults: new AutonomyToolResults(), environment: { SHANNON_AUTONOMY_HOST_FOLDERS_JSON: '{"owner-windows":{"deviceId":"0123456789abcdef"}}' } });
+    harness.model.plans = [{ thought: 'フォルダを見ます。', steps: [{ action: 'tool', name: 'folder.list', input: { path: 'notes' } }] }, { thought: '休みます。', steps: [rest] }];
+    await runUntilIdle(harness.loop);
+    expect(harness.model.prompts('think')[1]).toContain('PCのフォルダはいま見られない');
+    const decision = harness.entries().find(entry => entry.kind === 'decision' && entry.tool === 'folder.list')!;
+    expect(decision).toMatchObject({ domain: 'host_folder', outcome: 'allowed' });
+    expect(harness.entries().find(entry => entry.kind === 'action' && entry.relatedId === decision.id)).toMatchObject({ outcome: 'failed', reasonCode: 'device_offline' });
+    expect(toolRefusalLine('folder.list', { reason: 'paused', explanation: '所有者が一時停止しているため、実行しません。' })).toContain('ライ氏が再開したあと');
   });
 
   it('offers no tool and leaves the thinking prompt as it was without the tool memory (SHANNON_OWN_TOOLS=off)', async () => {

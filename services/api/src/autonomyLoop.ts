@@ -5,6 +5,7 @@ import { closeSession, fitsSession, idleBefore, mayRetryThought, nothingDone, ow
 import { REACH_OUT_REASON_LABEL } from './autonomyLoopPrompts.js';
 import type { AutonomySession, SessionEndCode } from './autonomyLoopSessions.js';
 import type { AutonomyLoopCycle, AutonomyLoopReadiness, AutonomyLoopStep, AutonomyPlannedStep } from './autonomyLoopState.js';
+import { toolRefusalLine } from './autonomyLoopToolStep.js';
 import { adaptersFor, prepareStep, unpreparedCode, type PreparedStep, type StepCommit, type StepDependencies, type StepResult } from './autonomyLoopSteps.js';
 import type { RecordedDecision } from './autonomyService.js';
 import { resolveAutonomyModel } from './autonomyTextModel.js';
@@ -290,7 +291,8 @@ export class ShannonAutonomyLoop {
       return 'budget';
     }
     // Needs approval, forbidden, or over a limit: never performed. The rest of the plan may still go on,
-    // after she has seen that it was not allowed, when she may think again.
+    // after she has seen that it was not allowed, when she may think again. A tool's refusal says why and what would work.
+    if (step.kind === 'tool' && step.tool) this.dependencies.toolResults?.add(cycle.id, toolRefusalLine(step.tool, decision));
     try {
       store.transaction(() => {
         const rethought = this.observed(cycle, row, { outcome: 'refused', code: decision.reason }, plan, at);

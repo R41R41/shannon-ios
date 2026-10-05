@@ -1,6 +1,7 @@
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import type { PreparedStep, StepDependencies, StepResult } from './autonomyLoopSteps.js';
-import { toolGateRequest } from './shannonToolGate.js';
+import type { AutonomyDecision } from './autonomyPolicy.js';
+import { toolGateRequest, toolRefusal } from './shannonToolGate.js';
 import { toolSessionMemory, type ToolSessionMemory } from './shannonToolTypes.js';
 import { providerToolName, type ShannonToolDefinition } from './shannonTools.js';
 
@@ -116,4 +117,10 @@ export function plannedToolStep(item: Record<string, unknown> | null, offered: r
   const words = Object.values(input as Record<string, unknown>).filter((value): value is string => typeof value === 'string');
   if (words.some(value => !own(value))) return 'secret';
   return { kind: 'tool', tool: name, input: input as Record<string, string | number | boolean> };
+}
+
+/** A call the gate did not allow, as her next thought reads it: why, and what would make it work. */
+export function toolRefusalLine(name: string, decision: Pick<AutonomyDecision, 'reason' | 'explanation'>): string {
+  const result = toolRefusal(decision);
+  return `- ${name.slice(0, 40)}: できなかった（${result.failure}）。${result.text}${result.refusal ? `（${result.refusal.why}。${result.refusal.wouldWork}）` : ''}`;
 }

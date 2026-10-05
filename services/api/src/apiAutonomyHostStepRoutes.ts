@@ -7,6 +7,7 @@ import { HOST_CLAIM_MAXIMUM_WAIT_SECONDS, type HostFolderOperations } from './ho
 import { HOST_OPERATIONS } from './hostFolderOperationsStore.js';
 
 export const HOST_STEP_ROUTE_PREFIX = '/v1/autonomy/host-steps';
+export const HOST_STEP_CLAIM_PATH = `${HOST_STEP_ROUTE_PREFIX}/claim`;
 export const HOST_STEP_REPORT_PATH = /^\/v1\/autonomy\/host-steps\/([0-9a-f-]{36})\/report$/u;
 /** A v2 report may carry a read of 256 KiB of text (escaped); every other body keeps the server's 64 KiB. */
 export function hostStepRequestBytes(path: string): number | undefined {
@@ -30,7 +31,7 @@ export function dispatchHostStepRequest(request: ApiRequest, folder: HostFolderD
   const scopeKey = request.body.scopeKey;
   if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
 
-  if (request.path === `${HOST_STEP_ROUTE_PREFIX}/claim`) {
+  if (request.path === HOST_STEP_CLAIM_PATH) {
     const v2 = request.body.protocol !== undefined;
     const fields = v2 ? ['scopeKey', 'host', 'protocol', 'operations', 'waitSeconds', 'localStop'] : ['scopeKey', 'host'];
     const unknown = Object.keys(request.body).find(key => !fields.includes(key));
@@ -46,7 +47,7 @@ export function dispatchHostStepRequest(request: ApiRequest, folder: HostFolderD
     if (!Array.isArray(listed) || listed.length > DEVICE_OPERATIONS.length || listed.some(item => typeof item !== 'string' || !DEVICE_OPERATIONS.includes(item))) return badRequest('operations is invalid');
     if (waitSeconds !== undefined && (typeof waitSeconds !== 'number' || !Number.isInteger(waitSeconds) || waitSeconds < 0 || waitSeconds > HOST_CLAIM_MAXIMUM_WAIT_SECONDS)) return badRequest('waitSeconds is invalid');
     if (localStop !== undefined && typeof localStop !== 'boolean') return badRequest('localStop is invalid');
-    return operations.claim(scopeKey, host, request.deviceId, { operations: listed as string[], waitSeconds: waitSeconds ?? 0, localStop: localStop === true })
+    return operations.claim(scopeKey, host, request.deviceId, { operations: listed as string[], waitSeconds: waitSeconds ?? 0, localStop: localStop === true }, request.signal)
       .then(claimed => (claimed === 'HOST_NOT_BOUND' ? notBound() : { status: 200, body: claimed }));
   }
 
@@ -78,6 +79,13 @@ export function dispatchHostStepRequest(request: ApiRequest, folder: HostFolderD
     return receipt === 'HOST_STEP_NOT_FOUND' ? { status: 404, body: { error: receipt } } : { status: 200, body: receipt };
   }
   return { status: 404, body: { error: 'NOT_FOUND' } };
+}
+
+/** A signal aborted when the response closes before it was sent: the device went away. */
+export function closedSignal(response: { once(event: 'close', listener: () => void): unknown; writableFinished?: boolean }): AbortSignal {
+  const controller = new AbortController();
+  response.once('close', () => { if (!response.writableFinished) controller.abort(); });
+  return controller.signal;
 }
 
 function notBound(): ApiResponse {

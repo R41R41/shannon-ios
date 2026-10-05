@@ -141,6 +141,7 @@ export class HostFolderOperations {
     const deadline = Date.parse(this.now()) + Math.min(HOST_CLAIM_MAXIMUM_WAIT_SECONDS, Math.max(0, request.waitSeconds)) * 1_000;
     try {
       for (;;) {
+        if (signal?.aborted) return { step: null };
         const step = this.handOut(scopeKey, host, deviceId, request.operations);
         if (step) return { step };
         const left = deadline - Date.parse(this.now());

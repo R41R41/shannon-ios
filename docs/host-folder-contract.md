@@ -217,7 +217,7 @@ Response `200`: `{ "step": <step> | null }`, as in v1. A v2 step always carries 
 
 - The device polls again **immediately** after every response (and after every report). On a network error it waits 1–5 s and tries again. A device that keeps a claim open almost all the time is what makes a tool answer in about a second.
 - **One open step per host, as in v1.** While the device holds a step, further claims for that host answer `{ "step": null }` (after their wait). Steps are handed out in this order: steps from a conversation, then steps from her own time, then v1 copies; oldest first within each.
-- The server's request timeout and the reverse proxy (`proxy_read_timeout 120s`) both allow a 25 s hold.
+- The server's request timeout and the reverse proxy (`proxy_read_timeout 120s`) both allow a 25 s hold. When the device's connection closes during a hold, the hold ends and nothing is handed out on it.
 
 ### Presence and the local stop switch
 

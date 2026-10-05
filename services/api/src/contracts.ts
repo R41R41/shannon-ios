@@ -13,6 +13,8 @@ export interface ApiRequest {
   deviceId?: string;
   /** Given by the HTTP layer to an opted-in `/v1/chat` turn that may send sentences while the model writes. */
   chatSentences?: ChatSentenceSink;
+  /** Aborted when the caller went away; given by the HTTP layer to a long-poll (`/v1/autonomy/host-steps/claim`). */
+  signal?: AbortSignal;
 }
 
 /** One NDJSON line of `stream: "sentences"` (docs/chat-stream-contract.md). */

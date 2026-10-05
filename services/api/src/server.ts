@@ -61,7 +61,7 @@ import { SQLiteOpsStore } from './opsStore.js';
 import { createOpsRoute, isOpsPath } from './serverOpsRoutes.js';
 import { dispatchWithChatSentences } from './serverChatSentenceStream.js';
 import { CALENDAR_UPCOMING_PATH, calendarRequestBytes } from './calendarContract.js';
-import { hostStepRequestBytes } from './apiAutonomyHostStepRoutes.js';
+import { HOST_STEP_CLAIM_PATH, closedSignal, hostStepRequestBytes } from './apiAutonomyHostStepRoutes.js';
 import { configuredOwnerUpcoming } from './ownerUpcomingWiring.js';
 import { SQLiteReachOutSpeaker } from './reachOutDelivery.js';
 import { SQLiteReachOutReports } from './reachOutReports.js';
@@ -334,6 +334,8 @@ const server = createServer(async (request, response) => {
         query,
         body: principal ? bindScope(body, principal.scopeKey) : body,
         ...(principal ? { deviceId: principal.deviceId } : {}),
+        // A held long-poll claim of her folder's device ends when the device goes away, so no step is handed to nobody.
+        ...(url.pathname === HOST_STEP_CLAIM_PATH ? { signal: closedSignal(response) } : {}),
       });
       // Her body is not handed a message of hers that one of the owner's apps says through his earphones.
       const forBody = result && principal && request.method === 'GET' && url.pathname === '/v1/initiatives';
