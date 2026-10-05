@@ -31,20 +31,20 @@ struct ShannonRichMarkdownText: View {
         case .bullet(let text):
             HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
                 Text("•")
-                    .font(.body.weight(.semibold))
+                    .font(.shannon(.body).weight(.semibold))
                     .foregroundStyle(palette.brandPresence)
                 Text(ShannonMessageMarkdown.render(text))
-                    .font(.body)
+                    .font(.shannon(.body))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
         case .numbered(let marker, let text):
             HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
                 Text(marker)
-                    .font(.body.monospacedDigit())
+                    .font(.shannon(.body).monospacedDigit())
                     .foregroundStyle(palette.textSecondary)
                 Text(ShannonMessageMarkdown.render(text))
-                    .font(.body)
+                    .font(.shannon(.body))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
@@ -54,7 +54,7 @@ struct ShannonRichMarkdownText: View {
                     .fill(palette.brandPresence)
                     .frame(width: 3)
                 Text(ShannonMessageMarkdown.render(text))
-                    .font(.body)
+                    .font(.shannon(.body))
                     .foregroundStyle(palette.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -69,7 +69,7 @@ struct ShannonRichMarkdownText: View {
 
         case .paragraph(let text):
             Text(ShannonMessageMarkdown.render(text))
-                .font(.body)
+                .font(.shannon(.body))
                 .lineSpacing(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -77,9 +77,9 @@ struct ShannonRichMarkdownText: View {
 
     func headingFont(_ level: Int) -> Font {
         switch level {
-        case 1: .title2.weight(.bold)
-        case 2: .title3.weight(.bold)
-        default: .headline
+        case 1: .shannon(.title2).weight(.bold)
+        case 2: .shannon(.title3).weight(.bold)
+        default: .shannon(.headline)
         }
     }
 }

@@ -305,11 +305,13 @@ export const shannonStrings = {
   "yousu.moodTrend.line.valence": "気分の明るさ",
   "yousu.moodTrend.line.arousal": "元気さ",
   "yousu.moodTrend.line.openness": "心の開き",
-  "yousu.moodTrend.level.high": "明るめ",
+  "yousu.moodTrend.level.bright": "明るめ",
+  "yousu.moodTrend.level.high": "高め",
   "yousu.moodTrend.level.normal": "ふつう",
   "yousu.moodTrend.level.low": "低め",
   "yousu.moodTrend.summary": "気分の明るさは{valence}、元気さは{arousal}、心の開きは{openness}",
   "yousu.moodTrend.empty": "まだ記録がありません",
+  "yousu.moodTrend.unreadable": "読めませんでした",
 } as const;
 
 export type ShannonStringKey = keyof typeof shannonStrings;
@@ -934,9 +936,13 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
     "decided": "2026-10-05",
     "windowsBefore": "心の開き"
   },
-  "yousu.moodTrend.level.high": {
+  "yousu.moodTrend.level.bright": {
     "decided": "2026-10-05",
     "windowsBefore": "明るめ"
+  },
+  "yousu.moodTrend.level.high": {
+    "decided": "2026-10-05",
+    "windowsBefore": "高め"
   },
   "yousu.moodTrend.level.normal": {
     "decided": "2026-10-05",
@@ -953,6 +959,10 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   "yousu.moodTrend.empty": {
     "decided": "2026-10-05",
     "windowsBefore": "まだ記録がありません"
+  },
+  "yousu.moodTrend.unreadable": {
+    "decided": "2026-10-05",
+    "windowsBefore": "読めませんでした"
   }
 };
 

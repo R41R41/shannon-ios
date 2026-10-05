@@ -10,7 +10,7 @@ struct ShannonStudyEntryLabel: View {
             Image(systemName: "books.vertical").foregroundStyle(tint).accessibilityHidden(true)
             Text(ShannonGeneratedStrings.navStudy)
             Spacer(minLength: 0)
-            Text(study.summary).font(.callout).foregroundStyle(.secondary)
+            Text(study.summary).font(.shannon(.callout)).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum, alignment: .leading)
         .contentShape(Rectangle())
@@ -33,7 +33,7 @@ public struct ShannonStudyPage: View {
             if let message = study.errorMessage {
                 Section {
                     Label(message, systemImage: "exclamationmark.triangle")
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(Color.shannonDanger)
                 }
             }
@@ -88,17 +88,17 @@ struct ShannonStudyPieceRow: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(piece.displayTitle)
-                    .font(.body.weight(.medium))
+                    .font(.shannon(.body).weight(.medium))
                     .foregroundStyle(piece.hidden ? .secondary : .primary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let excerpt = piece.excerpt, !piece.hidden {
                     Text(excerpt)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
                 Text(piece.hidden ? "\(piece.kindLabel) ・ まだ見せてもらっていません" : piece.statusLine)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(.secondary)
             }
         }
@@ -126,7 +126,7 @@ public struct ShannonStudyPiecePage: View {
             if let message = study.errorMessage {
                 Section {
                     Label(message, systemImage: "exclamationmark.triangle")
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(Color.shannonDanger)
                 }
             }
@@ -166,18 +166,18 @@ public struct ShannonStudyPiecePage: View {
         Section {
             VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                 Text(piece.card.displayTitle)
-                    .font(.title2.weight(.semibold))
+                    .font(.shannon(.title2).weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
                 Text(piece.card.hidden ? "\(piece.kindLabel) ・ \(piece.statusLabel)" : piece.card.statusLine)
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(.secondary)
             }
             .padding(.vertical, ShannonSpacing.extraSmall)
             .accessibilityElement(children: .combine)
             if let body = piece.body, !piece.hidden {
                 Text(body)
-                    .font(.body)
+                    .font(.shannon(.body))
                     .lineSpacing(6)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -227,9 +227,9 @@ public struct ShannonStudyPiecePage: View {
             ForEach(piece.versions.reversed()) { version in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(ShannonGeneratedStrings.studyVersion(version: String(version.version)))
-                        .font(.subheadline.weight(.semibold))
+                        .font(.shannon(.subheadline).weight(.semibold))
                     Text(version.changeNote)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.vertical, ShannonSpacing.extraSmall)
@@ -256,7 +256,7 @@ public struct ShannonStudyPiecePage: View {
                             sentReaction = false
                         } label: {
                             Label(choice.label, systemImage: isSelected ? "\(choice.symbolName).fill" : choice.symbolName)
-                                .font(.callout)
+                                .font(.shannon(.callout))
                                 .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum)
                         }
                         .buttonStyle(.bordered)
@@ -272,13 +272,13 @@ public struct ShannonStudyPiecePage: View {
                     .accessibilityHint("\(ShannonStudyLimits.comment)文字まで。書かなくても送れます")
                 if comment.count > ShannonStudyLimits.comment {
                     Text("\(ShannonStudyLimits.comment)文字までです（いま\(comment.count)文字）。")
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(Color.shannonAttention)
                 }
                 HStack {
                     if sentReaction {
                         Label("感想を送りました", systemImage: "checkmark.circle")
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -304,14 +304,14 @@ public struct ShannonStudyPiecePage: View {
             ForEach(piece.feedback.reversed()) { feedback in
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(feedback.reactionLabel)（\(ShannonGeneratedStrings.studyVersion(version: String(feedback.version)))に）")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.shannon(.subheadline).weight(.semibold))
                     if !feedback.comment.isEmpty {
                         Text(feedback.comment)
-                            .font(.callout)
+                            .font(.shannon(.callout))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Text(feedback.statusLabel)
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, ShannonSpacing.extraSmall)

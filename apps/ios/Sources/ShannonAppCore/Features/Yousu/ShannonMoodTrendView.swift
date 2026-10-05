@@ -1,21 +1,35 @@
 import Charts
 import Observation
+import OSLog
 import SwiftUI
 
 /// 「気分の推移」: her mood over the last 24 hours or 7 days, read from the server's record.
-/// When the server does not offer it to this device (403, 404) or cannot be reached, the
-/// section is not shown: the iPhone and the Mac keep no record of their own.
+/// Hidden until the first answer, and when the server does not offer it to this device (403,
+/// 404): the iPhone and the Mac keep no record of their own. Any other failure keeps the
+/// section with a quiet 「読めませんでした」, and the next appearance reads again.
 @MainActor
 @Observable
 public final class ShannonMoodTrendModel {
+    public enum Phase: Equatable, Sendable {
+        /// Not answered yet, or not offered to this device: the section is not shown.
+        case hidden
+        /// Shown, reading (after the switch changed).
+        case loading
+        case loaded
+        /// Shown, but the last read failed.
+        case unreadable
+    }
+
+    public private(set) var phase: Phase = .hidden
     public private(set) var history: ShannonMoodHistoryDTO?
-    /// False after a read that was refused or failed: the section is left out.
-    public private(set) var isAvailable = true
     public private(set) var hours = 24
     public private(set) var readAt = Date()
 
+    public var isAvailable: Bool { phase != .hidden }
+
     private let scopeKey: String
     private let client: (any ShannonYousuServing)?
+    private static let logger = Logger(subsystem: "com.r41r41.shannon", category: "MoodTrend")
 
     public init(scopeKey: String = "local-owner", client: (any ShannonYousuServing)?) {
         self.scopeKey = scopeKey
@@ -26,24 +40,32 @@ public final class ShannonMoodTrendModel {
         guard hours != self.hours else { return }
         self.hours = hours
         history = nil
+        if phase != .hidden { phase = .loading }
         await reload()
     }
 
     public func reload() async {
-        guard let client else { isAvailable = false; return }
+        guard let client else { phase = .hidden; return }
         let (scopeKey, hours) = (scopeKey, hours)
         do {
             let answer = try await client.loadShannonMoodHistory(scopeKey: scopeKey, hours: hours)
             guard hours == self.hours else { return }
             history = answer
             readAt = Date()
-            isAvailable = true
+            phase = .loaded
         } catch where ShannonOpsModel.isCancellation(error) {
             return
-        } catch {
+        } catch let error as ShannonAPIError where error == .rejected(status: 403) || error == .rejected(status: 404) {
             guard hours == self.hours else { return }
             history = nil
-            isAvailable = false
+            phase = .hidden
+        } catch {
+            guard hours == self.hours else { return }
+            if error is DecodingError {
+                Self.logger.error("Mood history could not be decoded: \(String(describing: error), privacy: .public)")
+            }
+            history = nil
+            phase = .unreadable
         }
     }
 }
@@ -54,34 +76,32 @@ struct ShannonMoodTrendPanel: View {
     @Bindable var model: ShannonMoodTrendModel
     let palette: ShannonPalette
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.small) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(ShannonGeneratedStrings.yousuMoodTrendTitle)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(palette.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: ShannonSpacing.small)
-                Picker(ShannonGeneratedStrings.yousuMoodTrendTitle, selection: Binding(
-                    get: { model.hours },
-                    set: { hours in Task { await model.choose(hours: hours) } }
-                )) {
-                    Text(ShannonGeneratedStrings.yousuMoodTrendRangeDay).tag(24)
-                    Text(ShannonGeneratedStrings.yousuMoodTrendRangeWeek).tag(168)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline) {
+                    title
+                    Spacer(minLength: ShannonSpacing.small)
+                    rangePicker
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+                VStack(alignment: .leading, spacing: ShannonSpacing.small) {
+                    title
+                    rangePicker
+                }
             }
-            if let points = model.history?.points, !points.isEmpty {
-                chart(points)
-                legend
-            } else if model.history != nil {
-                Text(ShannonGeneratedStrings.yousuMoodTrendEmpty)
-                    .font(.footnote)
-                    .foregroundStyle(palette.textSecondary)
-                    .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
-            } else {
+            switch model.phase {
+            case .loaded:
+                if let history = model.history, history.hasMood {
+                    chart(history)
+                    legend
+                } else {
+                    quietLine(ShannonGeneratedStrings.yousuMoodTrendEmpty)
+                }
+            case .unreadable:
+                quietLine(ShannonGeneratedStrings.yousuMoodTrendUnreadable)
+            case .loading, .hidden:
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 60)
             }
@@ -89,15 +109,43 @@ struct ShannonMoodTrendPanel: View {
         .padding(.vertical, ShannonSpacing.extraSmall)
     }
 
-    private func chart(_ points: [ShannonMoodHistoryDTO.Point]) -> some View {
-        let now = model.readAt
+    private var title: some View {
+        Text(ShannonGeneratedStrings.yousuMoodTrendTitle)
+            .font(.shannon(.subheadline).weight(.semibold))
+            .foregroundStyle(palette.textPrimary)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private var rangePicker: some View {
+        Picker(ShannonGeneratedStrings.yousuMoodTrendTitle, selection: Binding(
+            get: { model.hours },
+            set: { hours in Task { await model.choose(hours: hours) } }
+        )) {
+            Text(ShannonGeneratedStrings.yousuMoodTrendRangeDay).tag(24)
+            Text(ShannonGeneratedStrings.yousuMoodTrendRangeWeek).tag(168)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+    }
+
+    private func quietLine(_ text: String) -> some View {
+        Text(text)
+            .font(.shannon(.footnote))
+            .foregroundStyle(palette.textSecondary)
+            .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+    }
+
+    private func chart(_ history: ShannonMoodHistoryDTO) -> some View {
+        // The window ends at the server's own time, so a phone whose clock is off draws it right.
+        let now = ShannonMoodTrend.windowEnd(history, readAt: model.readAt)
         let start = now.addingTimeInterval(-Double(model.hours) * 3600)
         return Chart {
             RuleMark(y: .value("ふつう", 0))
                 .foregroundStyle(palette.divider)
                 .lineStyle(StrokeStyle(lineWidth: 1))
             ForEach(ShannonMoodLine.allCases) { line in
-                let steps = ShannonMoodTrend.steps(line, points: points, until: now)
+                let steps = ShannonMoodTrend.steps(line, points: history.points, carryIn: history.carryIn, windowStart: start, until: now)
                 ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
                     LineMark(x: .value("時刻", max(step.start, start)), y: .value(line.title, step.value), series: .value("線", line.rawValue))
                         .interpolationMethod(.stepEnd)
@@ -133,29 +181,37 @@ struct ShannonMoodTrendPanel: View {
             }
         }
         .chartLegend(.hidden)
-        .frame(height: 100)
+        .frame(height: dynamicTypeSize.isAccessibilitySize ? 140 : 100)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(ShannonGeneratedStrings.yousuMoodTrendTitle)
-        .accessibilityValue(ShannonMoodTrend.summary(points) ?? ShannonGeneratedStrings.yousuMoodTrendEmpty)
+        .accessibilityValue(ShannonMoodTrend.summary(history.points, carryIn: history.carryIn) ?? ShannonGeneratedStrings.yousuMoodTrendEmpty)
     }
 
+    /// One row of three; one line each at the larger text sizes.
     private var legend: some View {
-        HStack(spacing: ShannonSpacing.medium) {
-            ForEach(ShannonMoodLine.allCases) { line in
-                HStack(spacing: ShannonSpacing.extraSmall) {
-                    Path { path in
-                        path.move(to: CGPoint(x: 0, y: 4))
-                        path.addLine(to: CGPoint(x: 20, y: 4))
-                    }
-                    .stroke(color(line), style: stroke(line))
-                    .frame(width: 20, height: 8)
-                    Text(line.title)
-                        .font(.caption)
-                        .foregroundStyle(palette.textSecondary)
-                }
-            }
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: ShannonSpacing.medium) { legendItems }
+            VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) { legendItems }
         }
         .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var legendItems: some View {
+        ForEach(ShannonMoodLine.allCases) { line in
+            HStack(spacing: ShannonSpacing.extraSmall) {
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: 4))
+                    path.addLine(to: CGPoint(x: 20, y: 4))
+                }
+                .stroke(color(line), style: stroke(line))
+                .frame(width: 20, height: 8)
+                Text(line.title)
+                    .font(.shannon(.caption))
+                    .foregroundStyle(palette.textSecondary)
+                    .fixedSize()
+            }
+        }
     }
 
     private func color(_ line: ShannonMoodLine) -> Color {

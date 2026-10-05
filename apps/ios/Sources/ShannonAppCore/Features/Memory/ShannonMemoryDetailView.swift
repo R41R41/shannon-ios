@@ -53,24 +53,24 @@ struct ShannonMemoryDetailView: View {
     func detailHeader(_ item: ShannonMemoryItemDTO, _ palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             Label(item.kind.japaneseName, systemImage: item.kind.symbolName)
-                .font(.callout.weight(.semibold))
+                .font(.shannon(.callout).weight(.semibold))
                 .foregroundStyle(palette.action)
             Text(item.text)
-                .font(.title2.weight(.semibold))
+                .font(.shannon(.title2).weight(.semibold))
                 .textSelection(.enabled)
             if let commitment = item.commitment {
                 Label(commitment.statusLabel, systemImage: "calendar.badge.clock")
-                    .font(.callout.weight(.medium))
+                    .font(.shannon(.callout).weight(.medium))
                 Text("期限：\(commitment.dueAt.map(displayDate) ?? commitment.dueDate ?? commitment.dueHint ?? "未定")")
-                    .font(.callout).foregroundStyle(palette.textSecondary)
+                    .font(.shannon(.callout)).foregroundStyle(palette.textSecondary)
             }
             if item.status != .active {
                 Label(item.status == .rejected ? "事実ではないと指定済み" : "忘れるよう指定済み",
                       systemImage: item.status == .rejected ? "xmark.seal.fill" : "eye.slash.fill")
-                    .font(.callout.weight(.medium))
+                    .font(.shannon(.callout).weight(.medium))
                     .foregroundStyle(palette.danger)
                 Text(ShannonMemoryWithholdingCopy.restore)
-                    .font(.footnote).foregroundStyle(palette.textSecondary)
+                    .font(.shannon(.footnote)).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -82,14 +82,14 @@ struct ShannonMemoryDetailView: View {
     func confidenceCard(_ value: Double, _ palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.small) {
             HStack {
-                Text("確信度").font(.headline)
+                Text("確信度").font(.shannon(.headline))
                 Spacer()
                 Text(value.formatted(.percent.precision(.fractionLength(0))))
-                    .font(.headline.monospacedDigit())
+                    .font(.shannon(.headline).monospacedDigit())
             }
             ProgressView(value: value).tint(palette.action)
             Text("同じ内容が会話で再確認されると上がります。矛盾した時は自動で上書きしません。")
-                .font(.caption).foregroundStyle(palette.textSecondary)
+                .font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
         }
         .padding(ShannonSpacing.large)
         .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.large))
@@ -97,7 +97,7 @@ struct ShannonMemoryDetailView: View {
 
     func evidenceSection(_ item: ShannonMemoryItemDTO, _ palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
-            Text("そう思った根拠").font(.title3.weight(.semibold))
+            Text("そう思った根拠").font(.shannon(.title3).weight(.semibold))
             if item.evidence.isEmpty {
                 Text("直接の引用は残っていません。")
                     .foregroundStyle(palette.textSecondary)
@@ -105,9 +105,9 @@ struct ShannonMemoryDetailView: View {
                 ForEach(Array(item.evidence.enumerated()), id: \.offset) { _, evidence in
                     VStack(alignment: .leading, spacing: 7) {
                         Text("“\(evidence.quote)”")
-                            .font(.body).italic().textSelection(.enabled)
+                            .font(.shannon(.body)).italic().textSelection(.enabled)
                         Text("\(sourceName(evidence.source))・\(displayDate(evidence.observedAt))")
-                            .font(.caption).foregroundStyle(palette.textSecondary)
+                            .font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
                     }
                     .padding(ShannonSpacing.large)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -119,12 +119,12 @@ struct ShannonMemoryDetailView: View {
 
     func historySection(_ item: ShannonMemoryItemDTO, _ palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
-            Text("この記憶の履歴").font(.title3.weight(.semibold))
+            Text("この記憶の履歴").font(.shannon(.title3).weight(.semibold))
             LabeledContent("覚えた日", value: displayDate(item.createdAt))
             LabeledContent("最後の変化", value: displayDate(item.updatedAt))
             LabeledContent("変わった理由", value: item.changeReason)
         }
-        .font(.body)
+        .font(.shannon(.body))
         .padding(ShannonSpacing.large)
         .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.large))
     }
@@ -165,7 +165,7 @@ struct ShannonMemoryDetailView: View {
         Button(action: action) {
             HStack {
                 Image(systemName: symbol).frame(width: 28)
-                Text(title).font(.body.weight(.medium))
+                Text(title).font(.shannon(.body).weight(.medium))
                 Spacer()
                 if model.mutatingMemoryID == memoryID { ProgressView().controlSize(.small) }
             }
@@ -181,7 +181,7 @@ struct ShannonMemoryDetailView: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: ShannonSpacing.large) {
                 Text(ShannonMemoryWithholdingCopy.correct)
-                    .font(.body).foregroundStyle(palette.textSecondary)
+                    .font(.shannon(.body)).foregroundStyle(palette.textSecondary)
                 TextEditor(text: $correction)
                     .padding(ShannonSpacing.medium)
                     .frame(minHeight: 150)

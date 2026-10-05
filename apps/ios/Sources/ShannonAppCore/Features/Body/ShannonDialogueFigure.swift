@@ -74,12 +74,12 @@ struct ShannonDialogueFigure: View {
         if let text = statusText {
             VStack(spacing: ShannonSpacing.extraSmall) {
                 Text(text)
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(palette.textSecondary)
                     .multilineTextAlignment(.center)
                 if stage.status == .failed {
                     Button(ShannonBodyCopy.retry) { stage.retry() }
-                        .font(.footnote.weight(.semibold))
+                        .font(.shannon(.footnote).weight(.semibold))
                         .frame(minHeight: ShannonTouchTarget.minimum)
                 }
             }

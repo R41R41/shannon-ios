@@ -27,11 +27,11 @@ struct ShannonThreadListDestinationTile: View {
     var body: some View {
         VStack(spacing: ShannonSpacing.small) {
             Image(systemName: destination.symbol)
-                .font(.title3.weight(.medium))
+                .font(.shannon(.title3).weight(.medium))
                 .foregroundStyle(palette.action)
                 .frame(height: 28)
             Text(destination.title)
-                .font(.subheadline.weight(.medium))
+                .font(.shannon(.subheadline).weight(.medium))
                 .foregroundStyle(palette.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -46,7 +46,7 @@ struct ShannonThreadListDestinationTile: View {
         .overlay(alignment: .topTrailing) {
             if let badge = destination.badge, badge > 0 {
                 Text(badge > 9 ? "9+" : "\(badge)")
-                    .font(.caption2.weight(.bold))
+                    .font(.shannon(.caption2).weight(.bold))
                     .foregroundStyle(palette.onAction)
                     .padding(.horizontal, 6)
                     .frame(minWidth: 20, minHeight: 20)
@@ -54,7 +54,7 @@ struct ShannonThreadListDestinationTile: View {
                     .padding(ShannonSpacing.small)
             } else if destination.attention {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.caption.weight(.bold))
+                    .font(.shannon(.caption).weight(.bold))
                     .foregroundStyle(palette.attention)
                     .padding(ShannonSpacing.small)
             }
@@ -87,18 +87,18 @@ struct ShannonThreadListRow: View {
             }
             HStack(alignment: .top, spacing: ShannonSpacing.small) {
                 Text(detail)
-                    .font(.subheadline)
+                    .font(.shannon(.subheadline))
                     .foregroundStyle(palette.textSecondary)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if isInitiative {
                     Image(systemName: "sparkles")
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.brandPresence)
                 }
                 if isCurrent {
                     Image(systemName: "checkmark")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.shannon(.subheadline).weight(.semibold))
                         .foregroundStyle(palette.action)
                 }
             }
@@ -112,14 +112,14 @@ struct ShannonThreadListRow: View {
 
     var titleText: some View {
         Text(title)
-            .font(.body.weight(isCurrent ? .semibold : .regular))
+            .font(.shannon(.body).weight(isCurrent ? .semibold : .regular))
             .foregroundStyle(palette.textPrimary)
             .lineLimit(2)
     }
 
     var timeText: some View {
         Text(timeLabel)
-            .font(.subheadline)
+            .font(.shannon(.subheadline))
             .foregroundStyle(palette.textSecondary)
             .lineLimit(1)
     }
@@ -151,11 +151,11 @@ struct ShannonDrawerDestinationRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.body.weight(.medium))
+                    .font(.shannon(.body).weight(.medium))
                     .foregroundStyle(palette.textPrimary)
                 if let detail {
                     Text(detail)
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
                         .lineLimit(1)
                 }
@@ -165,19 +165,19 @@ struct ShannonDrawerDestinationRow: View {
 
             if let badge, badge > 0 {
                 Text(badge > 9 ? "9+" : "\(badge)")
-                    .font(.caption2.weight(.bold))
+                    .font(.shannon(.caption2).weight(.bold))
                     .foregroundStyle(palette.onAction)
                     .padding(.horizontal, 6)
                     .frame(minWidth: 20, minHeight: 20)
                     .background(palette.action, in: Capsule())
             } else if attention {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.footnote.weight(.bold))
+                    .font(.shannon(.footnote).weight(.bold))
                     .foregroundStyle(palette.attention)
             }
 
             Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
+                .font(.shannon(.caption).weight(.semibold))
                 .foregroundStyle(palette.textSecondary)
         }
         .padding(.horizontal, ShannonSpacing.medium)

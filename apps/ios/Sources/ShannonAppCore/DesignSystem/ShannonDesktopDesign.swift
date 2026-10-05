@@ -26,7 +26,63 @@ public enum ShannonDesktopTextStyle: CaseIterable, Sendable {
     }
 }
 
+extension ShannonDesktopTextStyle {
+    /// The phone's font of the same name, exactly as `Font.headline` and so on.
+    public var dynamicTypeFont: Font {
+        switch self {
+        case .largeTitle: .largeTitle
+        case .title: .title
+        case .title2: .title2
+        case .title3: .title3
+        case .headline: .headline
+        case .body: .body
+        case .callout: .callout
+        case .subheadline: .subheadline
+        case .footnote: .footnote
+        case .caption: .caption
+        case .caption2: .caption2
+        }
+    }
+
+    /// The Dynamic Type style of the same name (the phone's scale).
+    public var textStyle: Font.TextStyle {
+        switch self {
+        case .largeTitle: .largeTitle
+        case .title: .title
+        case .title2: .title2
+        case .title3: .title3
+        case .headline: .headline
+        case .body: .body
+        case .callout: .callout
+        case .subheadline: .subheadline
+        case .footnote: .footnote
+        case .caption: .caption
+        case .caption2: .caption2
+        }
+    }
+}
+
 extension Font {
+    /// A text style of the shared views: on the phone exactly the Dynamic Type style
+    /// (`.headline` and so on), on the Mac the same step of the fixed desktop scale, so that
+    /// headings stay above the body text of 15 there (owner decision 2026-10-03).
+    public static func shannon(_ style: ShannonDesktopTextStyle) -> Font {
+#if os(macOS)
+        shannonDesktop(style)
+#else
+        style.dynamicTypeFont
+#endif
+    }
+
+    /// The same with a design (for example monospaced code).
+    public static func shannon(_ style: ShannonDesktopTextStyle, design: Font.Design) -> Font {
+#if os(macOS)
+        .system(size: style.token.size, weight: Font.Weight(shannonTokenWeight: style.token.weight), design: design)
+#else
+        .system(style.textStyle, design: design)
+#endif
+    }
+
     /// A wide-screen text style at its fixed size and weight (`typography.desktop`).
     public static func shannonDesktop(_ style: ShannonDesktopTextStyle) -> Font {
         let token = style.token

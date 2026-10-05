@@ -275,18 +275,18 @@ public struct ShannonWorldSubscriptionView: View {
 
                 Section {
                     Text("標準の公開情報源と、あなたが承認した候補だけを読みます。候補は承認後に7日間だけ試読し、役立たなければ自動で停止します。非公開・認証が必要な情報源は対象外です。")
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(.secondary)
                     if let noticeURL = URL(string: "https://www.ncbi.nlm.nih.gov/home/about/policies/") {
                         Link("PubMed／NCBIの免責・著作権", destination: noticeURL)
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                     }
                 }
 
                 if let errorMessage = model.errorMessage {
                     Section {
                         Text(errorMessage)
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(Color.shannonDanger)
                     }
                 }
@@ -311,20 +311,20 @@ public struct ShannonWorldSubscriptionView: View {
         VStack(alignment: .leading, spacing: 7) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(source.title)
-                    .font(.headline)
+                    .font(.shannon(.headline))
                 if source.origin == .approvedSubscription {
                     Label("承認済み", systemImage: "checkmark.circle")
-                        .font(.caption2.weight(.semibold))
+                        .font(.shannon(.caption2).weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
                 if let url = URL(string: source.url) {
                     Link(url.host() ?? source.url, destination: url)
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .lineLimit(1)
                 }
             }
             Label(sourceStatus(source), systemImage: sourceSymbol(source))
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(source.enabled && source.hasError ? Color.shannonAttention : .secondary)
             if source.fetchedItemCount > 0 || source.enabled {
                 HStack(spacing: 8) {
@@ -335,7 +335,7 @@ public struct ShannonWorldSubscriptionView: View {
                         Text(intervalLabel(source.intervalMinutes))
                     }
                 }
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(.secondary)
             }
             if let lastRunAt = source.lastRunAt,
@@ -347,7 +347,7 @@ public struct ShannonWorldSubscriptionView: View {
                     Text("最終取得")
                     Text(lastRunDate, style: .relative)
                 }
-                .font(.caption2)
+                .font(.shannon(.caption2))
                 .foregroundStyle(.secondary)
             }
         }
@@ -378,7 +378,7 @@ public struct ShannonWorldSubscriptionView: View {
         VStack(alignment: .leading, spacing: 10) {
             sourceHeader(subscription)
             Text(subscription.reason)
-                .font(.callout)
+                .font(.shannon(.callout))
                 .foregroundStyle(.secondary)
             HStack {
                 Button("今回は見送る", role: .destructive) {
@@ -409,7 +409,7 @@ public struct ShannonWorldSubscriptionView: View {
                     Text("取得 \(subscription.fetchedItemCount)件")
                 }
             }
-            .font(.caption)
+            .font(.shannon(.caption))
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 3)
@@ -418,14 +418,14 @@ public struct ShannonWorldSubscriptionView: View {
     private func sourceHeader(_ subscription: ShannonWorldSubscriptionDTO) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(subscription.title)
-                .font(.headline)
+                .font(.shannon(.headline))
             if let url = URL(string: subscription.feedURL) {
                 Link(url.host() ?? subscription.feedURL, destination: url)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .lineLimit(1)
             } else {
                 Text(subscription.feedURL)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }

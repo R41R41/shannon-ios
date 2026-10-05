@@ -54,7 +54,7 @@ public struct ShannonBodyScreen: View {
                 // Only where something keeps it true (the conversation's driver); the Mac window has none.
                 if let bodyModel {
                     Text(ShannonBodyCopy.nowLine(face: face, doing: bodyModel.doingLine))
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.textSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, ShannonSpacing.large)
@@ -141,12 +141,12 @@ public struct ShannonBodyScreen: View {
         if let text = statusText {
             VStack(spacing: ShannonSpacing.extraSmall) {
                 Text(text)
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(palette.textSecondary)
                     .multilineTextAlignment(.center)
                 if form == .live2d, stage.status == .failed {
                     Button(ShannonBodyCopy.retry) { stage.retry() }
-                        .font(.footnote.weight(.semibold))
+                        .font(.shannon(.footnote).weight(.semibold))
                         .frame(minHeight: ShannonTouchTarget.minimum)
                 }
             }
@@ -196,7 +196,7 @@ public struct ShannonBodyScreen: View {
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("body-layout")
                 Button(ShannonBodyCopy.resetLayout) { adjustment = ShannonLive2DLayout() }
-                    .font(.footnote.weight(.semibold))
+                    .font(.shannon(.footnote).weight(.semibold))
                     .frame(minHeight: ShannonTouchTarget.minimum)
                     .disabled(!adjustment.isMoved)
             }
@@ -209,7 +209,7 @@ public struct ShannonBodyScreen: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(ShannonBodyCopy.reportsTouchTitle)
                         Text(touchStatus)
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(palette.textSecondary)
                             .accessibilityIdentifier("body-touch-status")
                     }
@@ -229,7 +229,7 @@ public struct ShannonBodyScreen: View {
                     .opacity(reportsTouch && usesLive2D ? 1 : 0.45)
                     .accessibilityIdentifier("body-reply-mode")
                     Text(ShannonBodyCopy.replyModeExplanation)
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .opacity(reportsTouch && usesLive2D ? 1 : 0.45)

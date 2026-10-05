@@ -778,7 +778,7 @@
     {
       "key": "nav.memory",
       "text": "頭の中",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
       "decided": "2026-10-03",
       "windowsNow": "（無い）"
     },
@@ -852,7 +852,7 @@
     {
       "key": "voice.name",
       "text": "音声会話",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveStatusPresentation.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLivePhase+Workspace.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
       "windowsNow": "音声会話"
@@ -2203,12 +2203,20 @@
       "note": "線の名前（openness）。点線、緑（success）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
     },
     {
-      "key": "yousu.moodTrend.level.high",
+      "key": "yousu.moodTrend.level.bright",
       "text": "明るめ",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
       "decided": "2026-10-05",
       "windowsNow": "明るめ",
-      "note": "読み上げの言葉。3 本とも同じ 3 語。ふだんの値（気分の明るさ 0、元気さ 0.30、心の開き 0.35）より 0.2 以上高い。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+      "note": "気分の明るさの読み上げの言葉。ふだんの値（0）より 0.2 以上高い。所有者が比較ページで選んだ（2026-10-05）。"
+    },
+    {
+      "key": "yousu.moodTrend.level.high",
+      "text": "高め",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "高め",
+      "note": "元気さ・心の開きの読み上げの言葉。ふだんの値（元気さ 0.30、心の開き 0.35）より 0.2 以上高い。気分の明るさは「明るめ」（yousu.moodTrend.level.bright）。言葉の分け方は調整役の決定（2026-10-05、「元気さは明るめ」は読みにくいため）。所有者が比較ページで選んだ（2026-10-05）。"
     },
     {
       "key": "yousu.moodTrend.level.normal",
@@ -2216,7 +2224,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
       "decided": "2026-10-05",
       "windowsNow": "ふつう",
-      "note": "ふだんの値から ±0.2 の内。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+      "note": "3 本とも同じ。ふだんの値から ±0.2 の内。所有者が比較ページで選んだ（2026-10-05）。"
     },
     {
       "key": "yousu.moodTrend.level.low",
@@ -2224,7 +2232,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
       "decided": "2026-10-05",
       "windowsNow": "低め",
-      "note": "ふだんの値より 0.2 以上低い。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+      "note": "3 本とも同じ。ふだんの値より 0.2 以上低い。所有者が比較ページで選んだ（2026-10-05）。"
     },
     {
       "key": "yousu.moodTrend.summary",
@@ -2241,6 +2249,14 @@
       "decided": "2026-10-05",
       "windowsNow": "まだ記録がありません",
       "note": "記録が空のとき。403・404・届かないときは区画ごと出さない（iPhone・Mac）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.unreadable",
+      "text": "読めませんでした",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "読めませんでした",
+      "note": "記録が読めなかったとき（500・429・届かない・読み取れない）。区画と切り替えは残し、次に開いたときに読み直す。403・404 のときは区画を出さない。"
     }
   ]
 }

@@ -125,11 +125,11 @@ struct ShannonAgentTaskOverviewView: View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                 Text(ShannonGeneratedStrings.navWork)
-                    .font(.largeTitle.bold())
+                    .font(.shannon(.largeTitle).bold())
                     .foregroundStyle(palette.textPrimary)
                     .textCase(nil)
                 Text("目指していること、現在地、次の一手をまとめて確認できます。")
-                    .font(.callout)
+                    .font(.shannon(.callout))
                     .foregroundStyle(palette.textSecondary)
                     .textCase(nil)
             }
@@ -191,25 +191,25 @@ struct ShannonAgentTaskOverviewView: View {
                     HStack(alignment: .firstTextBaseline) {
                         if task.isPinned {
                             Image(systemName: "pin.fill")
-                                .font(.caption2)
+                                .font(.shannon(.caption2))
                                 .foregroundStyle(palette.textSecondary)
                         }
                         Text(task.title)
-                            .font(.headline)
+                            .font(.shannon(.headline))
                             .foregroundStyle(palette.textPrimary)
                             .lineLimit(2)
                         Spacer(minLength: ShannonSpacing.small)
                         Text(task.stateName)
-                            .font(.caption2.weight(.semibold))
+                            .font(.shannon(.caption2).weight(.semibold))
                             .foregroundStyle(palette.textSecondary)
                     }
                     Text(task.nextAction.map { "次：\($0)" } ?? task.currentAction ?? task.summary)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.textSecondary)
                         .lineLimit(2)
                     if let project = task.projectHint {
                         Label(project, systemImage: "folder")
-                            .font(.caption)
+                            .font(.shannon(.caption))
                             .foregroundStyle(palette.textSecondary)
                     }
                     if let progress = task.progressFraction {
@@ -246,8 +246,8 @@ struct ShannonAgentTaskOverviewView: View {
                     ForEach(projection.archived) { task in
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(task.title).font(.headline)
-                                Text(task.summary).font(.callout).foregroundStyle(palette.textSecondary).lineLimit(2)
+                                Text(task.title).font(.shannon(.headline))
+                                Text(task.summary).font(.shannon(.callout)).foregroundStyle(palette.textSecondary).lineLimit(2)
                             }
                             Spacer()
                             Button("戻す") {

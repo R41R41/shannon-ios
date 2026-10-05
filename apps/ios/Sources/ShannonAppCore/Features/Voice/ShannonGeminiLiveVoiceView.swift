@@ -216,11 +216,11 @@ public struct ShannonGeminiLiveVoiceView: View {
             VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                 Label(task.status == .proposed ? "実装案ができました" : task.stateName,
                       systemImage: task.status.symbolName)
-                    .font(.subheadline.weight(.semibold))
-                Text(task.title).font(.body).multilineTextAlignment(.leading)
+                    .font(.shannon(.subheadline).weight(.semibold))
+                Text(task.title).font(.shannon(.body)).multilineTextAlignment(.leading)
                 Label(task.status == .proposed ? "内容を確認して開始" : "作業を見る",
                       systemImage: "arrow.right")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.shannon(.subheadline).weight(.semibold))
             }
             .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum, alignment: .leading)
             .padding(ShannonSpacing.medium)
@@ -242,14 +242,14 @@ public struct ShannonGeminiLiveVoiceView: View {
             VStack(spacing: ShannonSpacing.extraSmall) {
                 if let user = lines.user {
                     Text(user)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.textSecondary)
                         .lineLimit(lineLimit)
                         .truncationMode(.head)
                 }
                 if let shannon = lines.shannon {
                     Text(shannon)
-                        .font(.body)
+                        .font(.shannon(.body))
                         .lineLimit(lineLimit)
                         .truncationMode(.head)
                 }
@@ -339,12 +339,12 @@ public struct ShannonGeminiLiveVoiceView: View {
 
     private func voiceTitle(_ palette: ShannonPalette) -> some View {
         VStack(spacing: 2) {
-            Text("シャノン").font(.headline)
+            Text("シャノン").font(.shannon(.headline))
             if let callStartedAt = model.callStartedAt {
                 TimelineView(.periodic(from: callStartedAt, by: 1)) { context in
                     let seconds = Int(context.date.timeIntervalSince(callStartedAt))
                     Text(ShannonVoiceCallDuration.text(seconds: seconds))
-                        .font(.caption.monospacedDigit())
+                        .font(.shannon(.caption).monospacedDigit())
                         .foregroundStyle(palette.textSecondary)
                         .accessibilityLabel(ShannonVoiceCallDuration.accessibilityText(seconds: seconds))
                 }
@@ -361,7 +361,7 @@ public struct ShannonGeminiLiveVoiceView: View {
         Button { composerIsFocused = false; minimize() } label: {
             Label("小さく", systemImage: "chevron.down")
                 .labelStyle(.titleAndIcon)
-                .font(.subheadline.weight(.medium))
+                .font(.shannon(.subheadline).weight(.medium))
                 .frame(minHeight: ShannonTouchTarget.minimum)
                 .fixedSize()
         }
@@ -379,7 +379,7 @@ public struct ShannonGeminiLiveVoiceView: View {
                 .padding(.horizontal, ShannonSpacing.small)
                 .focused($composerIsFocused)
             Button(action: submitText) {
-                Image(systemName: "arrow.up").font(.body.weight(.semibold))
+                Image(systemName: "arrow.up").font(.shannon(.body).weight(.semibold))
                     .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
             }
                 .buttonStyle(.borderedProminent)
@@ -421,7 +421,7 @@ public struct ShannonGeminiLiveVoiceView: View {
                 background: palette.attentionTint
             )
             Text(text)
-                .font(.callout)
+                .font(.shannon(.callout))
                 .foregroundStyle(palette.textPrimary)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -441,7 +441,7 @@ public struct ShannonGeminiLiveVoiceView: View {
         background: Color
     ) -> some View {
         Label(message, systemImage: symbol)
-            .font(.callout)
+            .font(.shannon(.callout))
             .foregroundStyle(foreground)
             .multilineTextAlignment(.leading)
             .padding(ShannonSpacing.medium)

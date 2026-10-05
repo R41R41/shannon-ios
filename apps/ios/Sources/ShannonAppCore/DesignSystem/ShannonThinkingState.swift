@@ -30,11 +30,11 @@ struct ShannonTypingIndicator: View {
                 VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                     HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
                         Text(isSearchingMemory ? ShannonGeneratedStrings.talkSearchingMemory : ShannonGeneratedStrings.talkThinking)
-                            .font(.callout)
+                            .font(.shannon(.callout))
                             .foregroundStyle(palette.textSecondary)
                         if let label = ShannonThinkingElapsed.label(seconds: elapsed) {
                             Text(label)
-                                .font(.caption.monospacedDigit())
+                                .font(.shannon(.caption).monospacedDigit())
                                 .foregroundStyle(palette.textSecondary)
                                 .contentTransition(reduceMotion ? .identity : .numericText(value: Double(elapsed)))
                         }

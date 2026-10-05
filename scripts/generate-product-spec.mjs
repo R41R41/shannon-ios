@@ -300,7 +300,7 @@ export function renderMatrixMarkdown(matrix) {
   }
   if (matrix.notBuilding?.items?.length) {
     lines.push('## 作らないもの', '', matrix.notBuilding.about, '');
-    for (const item of matrix.notBuilding.items) lines.push(`- **${tableText(item.name)}**（${item.decided}）: ${tableText(item.note ?? '')}`);
+    for (const item of matrix.notBuilding.items) lines.push(`- **${tableText(item.name)}**（${item.decided}${item.aliases?.length ? `。別の呼び方: ${item.aliases.map(tableText).join('、')}` : ''}）: ${tableText(item.note ?? '')}`);
     lines.push('');
   }
   return lines.join('\n');

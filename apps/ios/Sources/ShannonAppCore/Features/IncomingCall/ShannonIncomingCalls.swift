@@ -102,7 +102,7 @@ public struct ShannonIncomingCallSettingsSection: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(ShannonIncomingCallCopy.toggleTitle)
                             Text(ShannonIncomingCallCopy.statusText(settings.status))
-                                .font(.footnote)
+                                .font(.shannon(.footnote))
                                 .foregroundStyle(.secondary)
                                 .accessibilityIdentifier("incoming-call-status")
                         }
@@ -115,7 +115,7 @@ public struct ShannonIncomingCallSettingsSection: View {
                 .accessibilityIdentifier("settings-incoming-call")
                 if settings.isEnabled, microphone == .denied {
                     Text(ShannonIncomingCallCopy.microphoneDenied)
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(.secondary)
                 }
             } header: {

@@ -196,8 +196,10 @@ extension ShannonGeneratedStrings {
     public static let yousuMoodTrendLineArousal = "元気さ"
     /// `yousu.moodTrend.line.openness`
     public static let yousuMoodTrendLineOpenness = "心の開き"
+    /// `yousu.moodTrend.level.bright`
+    public static let yousuMoodTrendLevelBright = "明るめ"
     /// `yousu.moodTrend.level.high`
-    public static let yousuMoodTrendLevelHigh = "明るめ"
+    public static let yousuMoodTrendLevelHigh = "高め"
     /// `yousu.moodTrend.level.normal`
     public static let yousuMoodTrendLevelNormal = "ふつう"
     /// `yousu.moodTrend.level.low`
@@ -206,4 +208,6 @@ extension ShannonGeneratedStrings {
     public static func yousuMoodTrendSummary(valence: String, arousal: String, openness: String) -> String { "気分の明るさは\(valence)、元気さは\(arousal)、心の開きは\(openness)" }
     /// `yousu.moodTrend.empty`
     public static let yousuMoodTrendEmpty = "まだ記録がありません"
+    /// `yousu.moodTrend.unreadable`
+    public static let yousuMoodTrendUnreadable = "読めませんでした"
 }

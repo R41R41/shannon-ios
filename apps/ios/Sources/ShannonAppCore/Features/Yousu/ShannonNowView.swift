@@ -38,7 +38,7 @@ public struct ShannonNowView: View {
             if let message = model.errorMessage {
                 Section {
                     Label(message, systemImage: "exclamationmark.triangle")
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(palette.onAttentionTint)
                         .listRowBackground(palette.attentionTint)
                 }
@@ -65,7 +65,10 @@ public struct ShannonNowView: View {
         // Read when the page appears and when the app comes back to the front; never in the background.
         .task(id: scenePhase == .active) {
             guard scenePhase == .active else { return }
+            // The trend is read beside the page, not as part of it: the page shows as soon as its own reads answer.
+            async let trend: Void = model.moodTrend.reload()
             await model.reload()
+            await trend
         }
     }
 
@@ -77,7 +80,7 @@ public struct ShannonNowView: View {
         Section {
             if items.isEmpty {
                 Label(ShannonGeneratedStrings.shannonCardNothingWaiting, systemImage: "checkmark.circle")
-                    .font(.callout)
+                    .font(.shannon(.callout))
                     .foregroundStyle(palette.textSecondary)
             } else {
                 NavigationLink {
@@ -85,7 +88,7 @@ public struct ShannonNowView: View {
                 } label: {
                     HStack(spacing: ShannonSpacing.medium) {
                         Text("\(items.count)")
-                            .font(.footnote.weight(.bold))
+                            .font(.shannon(.footnote).weight(.bold))
                             .monospacedDigit()
                             .foregroundStyle(palette.onAction)
                             .padding(.horizontal, 7)
@@ -94,9 +97,9 @@ public struct ShannonNowView: View {
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(ShannonGeneratedStrings.yousuWaitingTitle)
-                                .font(.body.weight(.semibold))
+                                .font(.shannon(.body).weight(.semibold))
                             Text(ShannonNowText.waitingSummary(items))
-                                .font(.footnote)
+                                .font(.shannon(.footnote))
                                 .foregroundStyle(palette.textSecondary)
                         }
                     }
@@ -139,16 +142,16 @@ public struct ShannonNowView: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                 Text(moodFace?.japaneseName ?? ShannonGeneratedStrings.yousuMoodUnknown)
-                    .font(.title3.weight(.semibold))
+                    .font(.shannon(.title3).weight(.semibold))
                     .foregroundStyle(palette.textPrimary)
                 if let presentFace {
                     Text(ShannonGeneratedStrings.yousuFeelingPresent(name: presentFace.japaneseName))
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.textPrimary)
                 }
                 ForEach(lingering, id: \.self) { label in
                     Text(ShannonGeneratedStrings.yousuFeelingLingering(label: label))
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -176,19 +179,19 @@ public struct ShannonNowView: View {
                 VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                     if let line = model.ownTimeLine {
                         Text(line)
-                            .font(.body.weight(.medium))
+                            .font(.shannon(.body).weight(.medium))
                             .foregroundStyle(palette.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if let reason = model.restReason {
                         Text(ShannonGeneratedStrings.yousuOwnTimeHerWords(reason: reason))
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if let latest = model.latestActivity {
                         Text("\(ShannonYousuTime.clock(latest.occurredAt)) \(latest.summary)")
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityLabel(ShannonGeneratedStrings.yousuOwnTimeLatestAccessibility(time: ShannonYousuTime.clock(latest.occurredAt), summary: latest.summary))
@@ -199,7 +202,7 @@ public struct ShannonNowView: View {
                         .tint(palette.action)
                         .accessibilityHidden(true)
                     Text(ShannonGeneratedStrings.yousuOwnTimeBudget(used: ownTime.budget.usedLabel))
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .monospacedDigit()
                         .foregroundStyle(palette.textSecondary)
                 }
@@ -220,12 +223,12 @@ public struct ShannonNowView: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(ShannonNowText.bodyLine(body))
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                     if let camera = ShannonNowText.cameraLine(body) {
                         Text(camera)
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(palette.textSecondary)
                     }
                 }
@@ -242,7 +245,7 @@ public struct ShannonNowView: View {
         Section(ShannonGeneratedStrings.yousuRecentTitle) {
             if events.isEmpty {
                 Text(ShannonGeneratedStrings.yousuRecentEmpty)
-                    .font(.callout)
+                    .font(.shannon(.callout))
                     .foregroundStyle(palette.textSecondary)
             } else {
                 ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
@@ -267,27 +270,27 @@ struct ShannonNowEventRow: View {
         VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
             if let day {
                 Text(day)
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(palette.textSecondary)
                     .accessibilityAddTraits(.isHeader)
             }
             HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
                 Text(ShannonNowText.timeOfDay(event.at))
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .monospacedDigit()
                     .foregroundStyle(palette.textSecondary)
                 Image(systemName: event.symbolName)
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(palette.textSecondary)
                     .frame(width: 20)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(event.title)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.textPrimary.opacity(0.85))
                     if let detail = event.detail {
                         Text(detail)
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -348,20 +351,20 @@ struct ShannonNowWaitingPage: View {
         HStack(spacing: ShannonSpacing.medium) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.kind.label)
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text(item.title)
-                    .font(.body)
+                    .font(.shannon(.body))
                     .fixedSize(horizontal: false, vertical: true)
                 Text(item.detail)
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
             if opens {
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
             }

@@ -23,12 +23,12 @@ struct ShannonVoiceGuestModeNotice: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Label(ShannonVoiceGuestModeCopy.name, systemImage: "person.2.fill")
-                .font(.callout.weight(.semibold))
+                .font(.shannon(.callout).weight(.semibold))
                 .foregroundStyle(palette.textPrimary)
                 .labelStyle(.titleAndIcon)
             ForEach(ShannonVoiceGuestModeCopy.lines, id: \.self) { line in
                 Text(line)
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

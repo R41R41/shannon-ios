@@ -14,16 +14,16 @@ struct ShannonCostCard: View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             HStack {
                 Label("今月のAI使用量", systemImage: "gauge.with.dots.needle.50percent")
-                    .font(.title3.weight(.semibold))
+                    .font(.shannon(.title3).weight(.semibold))
                 Spacer()
-                Text(usage.monthKey).font(.caption.monospacedDigit()).foregroundStyle(palette.textSecondary)
+                Text(usage.monthKey).font(.shannon(.caption).monospacedDigit()).foregroundStyle(palette.textSecondary)
             }
             HStack(alignment: .firstTextBaseline) {
                 Text(usage.estimatedCostUsd, format: .currency(code: "USD"))
-                    .font(.title2.bold()).foregroundStyle(palette.action)
+                    .font(.shannon(.title2).bold()).foregroundStyle(palette.action)
                 Spacer()
                 Text("バックグラウンド残り \(usage.backgroundRemainingUsd, format: .currency(code: "USD"))")
-                    .font(.caption).foregroundStyle(palette.textSecondary)
+                    .font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
             }
             if let today = usage.todayBackgroundCostUsd {
                 HStack {
@@ -32,7 +32,7 @@ struct ShannonCostCard: View {
                     Text(today, format: .currency(code: "USD"))
                         .monospacedDigit()
                 }
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
             }
             ProgressView(
@@ -48,7 +48,7 @@ struct ShannonCostCard: View {
                 Spacer()
                 Text("バックグラウンド \(calls(for: "sleep"))回")
             }
-            .font(.caption)
+            .font(.shannon(.caption))
             .foregroundStyle(palette.textSecondary)
         }
         .padding(ShannonSpacing.large)
@@ -72,22 +72,22 @@ struct ShannonInitiativeEvaluationCard: View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             HStack {
                 Label("最近の自発性", systemImage: "bubble.left.and.sparkles")
-                    .font(.title3.weight(.semibold))
+                    .font(.shannon(.title3).weight(.semibold))
                 Spacer()
                 Text("\(evaluation.windowDays)日")
-                    .font(.caption.monospacedDigit())
+                    .font(.shannon(.caption).monospacedDigit())
                     .foregroundStyle(palette.textSecondary)
             }
             HStack(alignment: .firstTextBaseline) {
                 Text(evaluation.deliveryRate, format: .percent.precision(.fractionLength(0)))
-                    .font(.title2.bold())
+                    .font(.shannon(.title2).bold())
                     .foregroundStyle(palette.action)
                 Text("話しかけた割合")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                 Spacer()
                 Text("\(evaluation.delivered)件")
-                    .font(.body.weight(.semibold))
+                    .font(.shannon(.body).weight(.semibold))
             }
             ProgressView(value: min(1, evaluation.deliveryRate))
                 .tint(palette.action)
@@ -96,16 +96,16 @@ struct ShannonInitiativeEvaluationCard: View {
                 Spacer()
                 Text("静かにした \(silentRuns)回")
             }
-            .font(.caption)
+            .font(.shannon(.caption))
             .foregroundStyle(palette.textSecondary)
             if let suppressed = evaluation.repeatedCandidatesSuppressed, suppressed > 0 {
                 Label("重複候補を\(suppressed)件、静かに除外", systemImage: "line.3.horizontal.decrease.circle")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
             }
             if !sourceSummary.isEmpty {
                 Text("配信元: \(sourceSummary)")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                     .lineLimit(2)
             }
@@ -140,16 +140,16 @@ struct WorldItemCard: View {
                 .frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
-                    .font(.body.weight(.medium))
+                    .font(.shannon(.body).weight(.medium))
                     .foregroundStyle(palette.textPrimary)
                     .lineLimit(3)
                 Text(item.sourceTitle)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
             }
             Spacer(minLength: 0)
             Image(systemName: "arrow.up.right")
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
         }
         .padding(ShannonSpacing.medium)

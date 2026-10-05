@@ -36,7 +36,7 @@ struct ShannonOpsConfirmationSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: ShannonSpacing.large) {
                 Text(ShannonOpsText.confirmationTitle(action))
-                    .font(.title3.weight(.semibold))
+                    .font(.shannon(.title3).weight(.semibold))
                     .foregroundStyle(palette.textPrimary)
                     .accessibilityAddTraits(.isHeader)
 
@@ -47,7 +47,7 @@ struct ShannonOpsConfirmationSheet: View {
                 VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
                     ForEach(Array(paragraphs(action).enumerated()), id: \.offset) { _, paragraph in
                         Text(paragraph)
-                            .font(.body)
+                            .font(.shannon(.body))
                             .foregroundStyle(palette.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -58,7 +58,7 @@ struct ShannonOpsConfirmationSheet: View {
                         model.isCurrent() ? "いまは、この操作を受け付けていません。" : "報告が届いていません。報告が届くまで、操作はできません。",
                         systemImage: "exclamationmark.triangle"
                     )
-                    .font(.callout)
+                    .font(.shannon(.callout))
                     .foregroundStyle(palette.onAttentionTint)
                     .padding(ShannonSpacing.medium)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -86,7 +86,7 @@ struct ShannonOpsConfirmationSheet: View {
 
                 Button(action: close) {
                     Text("やめる")
-                        .font(.body.weight(.semibold))
+                        .font(.shannon(.body).weight(.semibold))
                         .frame(maxWidth: .infinity, minHeight: 50)
                 }
                 .buttonStyle(.plain)
@@ -112,7 +112,7 @@ struct ShannonOpsConfirmationSheet: View {
     private func serverPicker(palette: ShannonPalette) -> some View {
         HStack(spacing: ShannonSpacing.small) {
             Text("入るサーバー")
-                .font(.callout)
+                .font(.shannon(.callout))
                 .foregroundStyle(palette.textSecondary)
             Spacer(minLength: ShannonSpacing.small)
             Picker("入るサーバー", selection: Binding(

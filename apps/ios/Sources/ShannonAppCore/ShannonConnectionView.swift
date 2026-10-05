@@ -39,15 +39,15 @@ public struct ShannonConnectionView: View {
                     if !model.isConnected, showsConnection {
                         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
                             Label("最初の一度だけ", systemImage: "link.badge.plus")
-                                .font(.title3.weight(.semibold))
+                                .font(.shannon(.title3).weight(.semibold))
                             Text("シャノン専用の接続リンクを開くと、この\(deviceNoun)は自動で結ばれます。コード入力や毎回の設定は必要ありません。")
-                                .font(.callout)
+                                .font(.shannon(.callout))
                                 .foregroundStyle(palette.textSecondary)
                             if case .connecting = model.status {
                                 HStack(spacing: ShannonSpacing.small) {
                                     ProgressView().tint(palette.action)
                                     Text("安全に接続しています…")
-                                        .font(.callout.weight(.medium))
+                                        .font(.shannon(.callout).weight(.medium))
                                 }
                             }
                         }
@@ -109,9 +109,9 @@ public struct ShannonConnectionView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("認証された通信")
-                        .font(.headline)
+                        .font(.shannon(.headline))
                     Text(model.verificationLabel)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(verificationColor(palette))
                 }
                 Spacer()
@@ -125,7 +125,7 @@ public struct ShannonConnectionView: View {
             }
             if case .failed(let message) = model.verificationStatus {
                 Text(message)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.danger)
             }
             Divider()
@@ -145,7 +145,7 @@ public struct ShannonConnectionView: View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             HStack {
                 Label("接続端末", systemImage: "laptopcomputer.and.iphone")
-                    .font(.title3.weight(.semibold))
+                    .font(.shannon(.title3).weight(.semibold))
                 Spacer()
                 if model.isLoadingDevices {
                     ProgressView().controlSize(.small)
@@ -156,7 +156,7 @@ public struct ShannonConnectionView: View {
             }
             if model.connectedDevices.isEmpty && !model.isLoadingDevices {
                 Text(model.deviceManagementError ?? "接続中の端末を読み込んでいます。")
-                    .font(.callout)
+                    .font(.shannon(.callout))
                     .foregroundStyle(model.deviceManagementError == nil ? palette.textSecondary : palette.danger)
             } else {
                 ForEach(model.connectedDevices) { device in
@@ -164,7 +164,7 @@ public struct ShannonConnectionView: View {
                     connectedDeviceRow(device, palette: palette)
                 }
                 if let error = model.deviceManagementError {
-                    Text(error).font(.caption).foregroundStyle(palette.danger)
+                    Text(error).font(.shannon(.caption)).foregroundStyle(palette.danger)
                 }
             }
         }
@@ -175,12 +175,12 @@ public struct ShannonConnectionView: View {
     private func secretCard(_ palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             Label("秘密は\(deviceNoun)の中に", systemImage: "lock.shield")
-                .font(.title3.weight(.semibold))
+                .font(.shannon(.title3).weight(.semibold))
             Text("端末トークンは、この\(deviceNoun)のKeychainへ保存します。OpenAI APIキーや接続コードは保存しません。")
-                .font(.callout)
+                .font(.shannon(.callout))
                 .foregroundStyle(palette.textSecondary)
             Text(model.baseURL.host ?? model.baseURL.absoluteString)
-                .font(.caption.monospaced())
+                .font(.shannon(.caption).monospaced())
                 .foregroundStyle(palette.action)
         }
         .padding(ShannonSpacing.large)
@@ -193,9 +193,9 @@ public struct ShannonConnectionView: View {
             Image(systemName: device.isCurrent ? "checkmark.circle.fill" : "desktopcomputer")
                 .foregroundStyle(device.isCurrent ? palette.success : palette.textSecondary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(device.displayName).font(.body.weight(.medium))
+                Text(device.displayName).font(.shannon(.body).weight(.medium))
                 Text(device.isCurrent ? "この端末" : lastUsedLabel(device.lastUsedAt))
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
             }
             Spacer()
@@ -229,14 +229,14 @@ public struct ShannonConnectionView: View {
                 .background(statusColor(palette).opacity(0.12), in: Circle())
             VStack(alignment: .leading, spacing: 4) {
                 Text(model.statusLabel)
-                    .font(.title2.weight(.semibold))
+                    .font(.shannon(.title2).weight(.semibold))
                 if case .failed(let message) = model.status {
                     Text(message)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.danger)
                 } else {
                     Text(model.isConnected ? "会話と記憶を安全に同期できます" : disconnectedDescription)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.textSecondary)
                 }
             }

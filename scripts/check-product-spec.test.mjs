@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  openCells, repository, run, validateBaseline, validateMatrix, validateStrings, validateTokens,
+  notBuildingMatch, openCells, repository, run, validateBaseline, validateMatrix, validateStrings, validateTokens,
 } from './check-product-spec.mjs';
 import {
   outputs, readSources, renderStringsSwift, renderStringsSwiftFiles, renderStringsTs, renderTokensCss, renderTokensSwift, staleOutputs, stringParams, swiftAreaFileThreshold, swiftIdentifier, swiftLiteral,
@@ -116,9 +116,28 @@ test('ids are unique and each status carries what it requires', () => {
   assert.match(text, /unknown needs a note/u);
 });
 
-test('a feature the owner decided not to build fails', () => {
-  const decided = { ...matrix([feature({ title: '同調率を見る' })]), notBuilding: { about: 'x', items: [{ name: '同調率', decided: '2026-10-05' }] } };
-  assert.match(validateMatrix(decided, fakeRepository(files)).failures.join('\n'), /talk\.text-chat: the owner decided not to build 「同調率」/u);
+test('a feature the owner decided not to build fails, by any name, width or spacing, in notes and ids too', () => {
+  const items = [{ name: '同調率', aliases: ['同調度', 'シンクロ率', 'sync rate'], decided: '2026-10-05' }, { name: '判断の内訳', aliases: ['判断内訳', 'decision breakdown'], decided: '2026-10-05' }];
+  const check = (overrides) => validateMatrix({ ...matrix([feature(overrides)]), notBuilding: { about: 'x', items } }, fakeRepository(files)).failures.join('\n');
+  assert.match(check({ title: '同調率を見る' }), /talk\.text-chat: the owner decided not to build 「同調率」/u);
+  assert.match(check({ description: '同 調 度 を出す' }), /not to build 「同調率」/u);
+  assert.match(check({ description: 'ｼﾝｸﾛ率の表示' }), /not to build 「同調率」/u);
+  assert.match(check({ description: 'Shows the Sync-Rate.' }), /not to build 「同調率」/u);
+  assert.match(check({ id: 'talk.decision-breakdown' }), /not to build 「判断の内訳」/u);
+  const noted = feature();
+  noted.surfaces.windows = { ...noted.surfaces.windows, note: '判断内訳のパネルも出す' };
+  assert.match(validateMatrix({ ...matrix([noted]), notBuilding: { about: 'x', items } }, fakeRepository(files)).failures.join('\n'), /not to build 「判断の内訳」/u);
+  assert.equal(check({}), '');
+  assert.equal(notBuildingMatch(items[0], ['同調して返す']), false);
+});
+
+test('a string is adopted only when that very key is read from the generated strings', () => {
+  const entry = { key: 'ops.status.running', text: '動いている', apple: 'Ops.swift', windows: 'shannon-desktop:src/desk/opsText.ts' };
+  const strings = { windowsRead: '2026-10-03', strings: [entry] };
+  assert.deepEqual(validateStrings(strings, fakeRepository({ 'Ops.swift': 'Text(ShannonGeneratedStrings.opsStatusRunning)' })), []);
+  // Another key of the same file does not stand for this one.
+  assert.match(validateStrings(strings, fakeRepository({ 'Ops.swift': 'Text(ShannonGeneratedStrings.opsStatusRunningLate)' })).join('\n'), /no longer contains/u);
+  assert.deepEqual(validateStrings(strings, fakeRepository({ 'Ops.swift': 'Text(ShannonGeneratedStrings.opsTitle); "動いている"' })), []);
 });
 
 test('a feature folder that no cell names fails: a feature went in without the spec', () => {

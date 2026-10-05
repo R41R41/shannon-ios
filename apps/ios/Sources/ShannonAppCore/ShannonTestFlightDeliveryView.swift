@@ -35,7 +35,7 @@ public struct ShannonTestFlightDeliveryView: View {
                             emptyHistory(palette)
                         } else {
                             Text("履歴")
-                                .font(.headline)
+                                .font(.shannon(.headline))
                                 .padding(.top, ShannonSpacing.small)
                             LazyVStack(spacing: ShannonSpacing.small) {
                                 ForEach(dashboard.history) { item in
@@ -54,11 +54,11 @@ public struct ShannonTestFlightDeliveryView: View {
                     if let errorMessage = model.errorMessage {
                         HStack(spacing: ShannonSpacing.medium) {
                             Text(errorMessage)
-                                .font(.subheadline)
+                                .font(.shannon(.subheadline))
                                 .foregroundStyle(palette.onDangerTint)
                             Spacer(minLength: 0)
                             Button("再試行") { Task { await model.reload() } }
-                                .font(.subheadline.weight(.semibold))
+                                .font(.shannon(.subheadline).weight(.semibold))
                             Button(action: model.dismissError) {
                                 Image(systemName: "xmark")
                             }
@@ -90,9 +90,9 @@ public struct ShannonTestFlightDeliveryView: View {
     private func releaseRequestCard(palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             Label("新しい配信", systemImage: "paperplane.fill")
-                .font(.headline)
+                .font(.shannon(.headline))
             Text("Shannonに配信作業を依頼し、承認・結果・実機確認まで作業画面で追跡します。")
-                .font(.subheadline)
+                .font(.shannon(.subheadline))
                 .foregroundStyle(palette.textSecondary)
             Menu {
                 ForEach(ShannonAppleReleaseTarget.allCases, id: \.self) { target in
@@ -117,19 +117,19 @@ public struct ShannonTestFlightDeliveryView: View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             HStack {
                 Label("配信", systemImage: "shippingbox")
-                    .font(.headline)
+                    .font(.shannon(.headline))
                 Spacer()
                 if let version = release.buildVersion {
                     Text("Build \(version)")
-                        .font(.caption.monospacedDigit())
+                        .font(.shannon(.caption).monospacedDigit())
                         .foregroundStyle(palette.textSecondary)
                 }
             }
             Text("配信の7段階を、確認できた事実だけで表示します。")
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
             Text("自動取得はiOS Internal。Mac版は作業画面の結果で確認します。")
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
 
             VStack(spacing: 0) {
@@ -140,9 +140,9 @@ public struct ShannonTestFlightDeliveryView: View {
                             .frame(width: 22)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(index + 1). \(gate.key.title)")
-                                .font(.callout.weight(.semibold))
+                                .font(.shannon(.callout).weight(.semibold))
                             Text(gateDetail(gate))
-                                .font(.caption)
+                                .font(.shannon(.caption))
                                 .foregroundStyle(palette.textSecondary)
                         }
                         Spacer()
@@ -215,14 +215,14 @@ public struct ShannonTestFlightDeliveryView: View {
                 .background(conditionColor(dashboard.condition, palette: palette).opacity(0.14), in: Circle())
             VStack(alignment: .leading, spacing: 5) {
                 Text(conditionTitle(dashboard.condition))
-                    .font(.title3.bold())
+                    .font(.shannon(.title3).bold())
                     .foregroundStyle(palette.textPrimary)
                 Text(conditionDetail(dashboard))
-                    .font(.subheadline)
+                    .font(.shannon(.subheadline))
                     .foregroundStyle(palette.textSecondary)
                 if let checkedAt = dashboard.lastCheckedAt {
                     Text("最終確認  \(formattedDate(checkedAt))")
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
                         .padding(.top, 2)
                 }
@@ -250,14 +250,14 @@ public struct ShannonTestFlightDeliveryView: View {
                 )
             VStack(alignment: .leading, spacing: 3) {
                 Text(historyTitle(item))
-                    .font(.body.weight(.semibold))
+                    .font(.shannon(.body).weight(.semibold))
                     .foregroundStyle(palette.textPrimary)
                 Text(formattedDate(item.checkedAt))
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                 if item.status == .failed, item.notificationStatus == .sent {
                     Text("通知済み")
-                        .font(.caption2.weight(.semibold))
+                        .font(.shannon(.caption2).weight(.semibold))
                         .foregroundStyle(palette.action)
                 }
             }
@@ -270,7 +270,7 @@ public struct ShannonTestFlightDeliveryView: View {
 
     private func emptyHistory(_ palette: ShannonPalette) -> some View {
         Text("まだ配信履歴はありません。")
-            .font(.body)
+            .font(.shannon(.body))
             .foregroundStyle(palette.textSecondary)
             .frame(maxWidth: .infinity, minHeight: 120)
     }

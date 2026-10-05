@@ -31,6 +31,23 @@ export class SQLiteMoodHistoryReader {
     }
   }
 
+  /**
+   * The newest stored point before `since`: the state that holds when a window starts (a point stands
+   * until the next one). `null` when there is none, or the table is absent or of an unknown shape.
+   */
+  carryIn(scopeKey: string, since: string): StoredMoodPoint | null {
+    try {
+      if (!this.database.prepare(`SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'shannon_mood_history'`).get()) return null;
+      const row = this.database.prepare(`
+        SELECT recorded_at, valence, arousal, openness, expression, feeling, present_kind, present_intensity
+        FROM shannon_mood_history WHERE scope_key = ? AND recorded_at < ? ORDER BY recorded_at DESC, point_id DESC LIMIT 1
+      `).get(scopeKey, since) as unknown as MoodHistoryRow | undefined;
+      return row ? storedPoint(row) : null;
+    } catch {
+      return null;
+    }
+  }
+
   close(): void {
     if (this.database.isOpen) this.database.close();
   }

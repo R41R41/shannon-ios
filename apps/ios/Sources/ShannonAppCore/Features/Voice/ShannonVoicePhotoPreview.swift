@@ -51,9 +51,9 @@ struct ShannonVoicePhotoPreview: View {
     private var actions: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("この1枚だけを共有します")
-                .font(.callout.weight(.semibold))
+                .font(.shannon(.callout).weight(.semibold))
             Text("シャノンが見た内容を音声会話へ戻します")
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
             HStack(spacing: ShannonSpacing.small) {
                 Button(fromLibrary ? "選び直す" : "撮り直す", action: chooseAgain)

@@ -513,6 +513,27 @@ describe('GET /v1/shannon/mood-history', () => {
     expect((await short.read('?hours=1')).body.points).toEqual([]);
   });
 
+  it('carries the newest point before the window in, so that a quiet window still has her mood', async () => {
+    const path = databasePath();
+    const generatedAt = fixtureDay(path);
+    // The whole day is inside the window: nothing to carry in, and the answer is as before.
+    const { read } = await route({ path, now: generatedAt });
+    const day = (await read('?hours=24')).body;
+    expect(day).not.toHaveProperty('carryIn');
+    // A window after a dormant stretch: no point in it, the last one of the day holds at its start.
+    const later = await route({ path, now: at(30 * HOUR) });
+    const quiet = (await later.read('?hours=1')).body;
+    expect(quiet.points).toEqual([]);
+    expect(quiet.carryIn).toEqual(day.points.at(-1));
+    // A window that begins inside the day carries in the point that held at its start, and keeps the rest as points.
+    const inside = await route({ path, now: at(6 * HOUR) });
+    const twoHours = (await inside.read('?hours=2')).body;
+    expect(twoHours.carryIn?.at).toBe(day.points.filter(point => point.at < at(4 * HOUR)).at(-1)?.at);
+    expect(twoHours.points.every(point => point.at >= at(4 * HOUR))).toBe(true);
+    // A reader without the read (an older shape) answers without it.
+    expect(moodHistoryResponse({ reader: { points: () => [] }, now: () => at(30 * HOUR) }, OWNER, 1)).not.toHaveProperty('carryIn');
+  });
+
   it('thins a long history to at most 300 points and says so', async () => {
     const path = databasePath();
     const { store: shannon, clock } = store({ path });

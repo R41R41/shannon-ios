@@ -19,7 +19,7 @@ public final class ShannonNowModel {
     public private(set) var isLoading = false
     public private(set) var didLoad = false
     public private(set) var errorMessage: String?
-    /// 「気分の推移」: read with the page, and again when its switch changes.
+    /// 「気分の推移」: read on its own when the page appears (a slow record never holds the page), and again when its switch changes.
     public let moodTrend: ShannonMoodTrendModel
 
     private let scopeKey: String
@@ -90,8 +90,7 @@ public final class ShannonNowModel {
         async let ownTimeRead = Self.read { try await client.loadShannonOwnTime(scopeKey: scopeKey) }
         async let studyRead = Self.read { try await client.loadShannonStudyWaiting(scopeKey: scopeKey) }
         async let activityRead = Self.read { try await client.loadShannonRecentActivity(scopeKey: scopeKey) }
-        async let trendRead: Void = moodTrend.reload()
-        let (nowResult, ownTimeResult, studyResult, activityResult, _) = await (nowRead, ownTimeRead, studyRead, activityRead, trendRead)
+        let (nowResult, ownTimeResult, studyResult, activityResult) = await (nowRead, ownTimeRead, studyRead, activityRead)
 
         // The page went away mid-request: nothing was learned, nothing is claimed, and the next appearance reads again.
         if case .cancelled = nowResult { return }

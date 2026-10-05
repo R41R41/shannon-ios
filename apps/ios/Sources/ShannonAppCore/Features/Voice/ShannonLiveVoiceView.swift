@@ -110,7 +110,7 @@ public struct ShannonLiveVoiceView: View {
 
                         if let error = model.errorMessage {
                             Text(error)
-                                .font(.callout)
+                                .font(.shannon(.callout))
                                 .foregroundStyle(palette.danger)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, ShannonSpacing.large)
@@ -126,7 +126,7 @@ public struct ShannonLiveVoiceView: View {
                                         sessionMetricLabels(startedAt: startedAt, now: context.date)
                                     }
                                 }
-                                .font(.caption.monospacedDigit())
+                                .font(.shannon(.caption).monospacedDigit())
                                 .foregroundStyle(palette.textSecondary)
                                 .accessibilityElement(children: .combine)
                             }
@@ -159,7 +159,7 @@ public struct ShannonLiveVoiceView: View {
 
                         if let cameraErrorMessage {
                             Text(cameraErrorMessage)
-                                .font(.callout)
+                                .font(.shannon(.callout))
                                 .foregroundStyle(palette.danger)
                                 .multilineTextAlignment(.center)
                         }
@@ -260,10 +260,10 @@ public struct ShannonLiveVoiceView: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("シャノン")
-                    .font(.headline)
+                    .font(.shannon(.headline))
                 if !dynamicTypeSize.isAccessibilitySize {
                     Text(embodiment.statusLabel)
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
                 }
             }
@@ -271,7 +271,7 @@ public struct ShannonLiveVoiceView: View {
             ShannonVoiceInputMenu(model: model)
             Button { showsParticipantModePicker = true } label: {
                 Image(systemName: model.participantMode == .owner ? "person.fill" : "person.2.fill")
-                    .font(.body.weight(.semibold))
+                    .font(.shannon(.body).weight(.semibold))
                     .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
             }
             .buttonStyle(.bordered)
@@ -282,7 +282,7 @@ public struct ShannonLiveVoiceView: View {
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.body.weight(.semibold))
+                    .font(.shannon(.body).weight(.semibold))
                     .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
                     .background(.thinMaterial, in: Circle())
             }
@@ -301,10 +301,10 @@ public struct ShannonLiveVoiceView: View {
     ) -> some View {
         VStack(alignment: alignment == .leading ? .leading : .trailing, spacing: 4) {
             Text(speaker)
-                .font(.caption2.weight(.semibold))
+                .font(.shannon(.caption2).weight(.semibold))
                 .foregroundStyle(palette.textSecondary)
             Text(text)
-                .font(.body)
+                .font(.shannon(.body))
                 .lineSpacing(2)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: alignment)
@@ -332,7 +332,7 @@ public struct ShannonLiveVoiceView: View {
                     }
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                        .font(.title3)
+                        .font(.shannon(.title3))
                         .frame(width: 52, height: 52)
                         .background(.thinMaterial, in: Circle())
                 }
@@ -341,7 +341,7 @@ public struct ShannonLiveVoiceView: View {
             } else {
                 Button { model.toggleMute() } label: {
                     Image(systemName: model.isMuted ? "mic.slash.fill" : "mic.fill")
-                        .font(.title3)
+                        .font(.shannon(.title3))
                         .frame(width: 52, height: 52)
                         .background(.thinMaterial, in: Circle())
                 }
@@ -354,7 +354,7 @@ public struct ShannonLiveVoiceView: View {
                 dismiss()
             } label: {
                 Image(systemName: "phone.down.fill")
-                    .font(.title3)
+                    .font(.shannon(.title3))
                     .foregroundStyle(.white)
                     .frame(width: 64, height: 64)
                     .background(Color.shannonDanger.opacity(0.88), in: Circle())
@@ -368,7 +368,7 @@ public struct ShannonLiveVoiceView: View {
                     showsPhotoSource = true
                 } label: {
                     Image(systemName: "camera.fill")
-                        .font(.title3)
+                        .font(.shannon(.title3))
                         .frame(width: 52, height: 52)
                         .background(.thinMaterial, in: Circle())
                 }
@@ -383,7 +383,7 @@ public struct ShannonLiveVoiceView: View {
                 showsTextComposer.toggle()
             } label: {
                 Image(systemName: showsTextComposer ? "keyboard.chevron.compact.down" : "keyboard")
-                    .font(.title3)
+                    .font(.shannon(.title3))
                     .frame(width: 52, height: 52)
                     .background(.thinMaterial, in: Circle())
             }

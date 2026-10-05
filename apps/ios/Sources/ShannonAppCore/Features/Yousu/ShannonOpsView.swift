@@ -64,7 +64,7 @@ public struct ShannonOpsView: View {
         Section {
             if let message = model.unreachableMessage {
                 Label(message, systemImage: "wifi.exclamationmark")
-                    .font(.callout)
+                    .font(.shannon(.callout))
             } else if !model.didLoad {
                 HStack(spacing: ShannonSpacing.medium) {
                     ProgressView()
@@ -73,7 +73,7 @@ public struct ShannonOpsView: View {
                 .accessibilityElement(children: .combine)
             } else {
                 Text(ShannonGeneratedStrings.opsNotReported)
-                    .font(.callout)
+                    .font(.shannon(.callout))
                     .foregroundStyle(.secondary)
             }
         }
@@ -104,7 +104,7 @@ public struct ShannonOpsView: View {
             notice(palette: palette)
             if !model.openCommands.isEmpty {
                 Label("結果を待っている操作が \(model.openCommands.count) 件あります", systemImage: "hourglass")
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(.secondary)
             }
         }
@@ -128,7 +128,7 @@ public struct ShannonOpsView: View {
         if snapshot.services.isEmpty {
             Section(ShannonGeneratedStrings.opsSectionServices) {
                 Text(ShannonGeneratedStrings.opsServicesEmpty)
-                    .font(.callout)
+                    .font(.shannon(.callout))
                     .foregroundStyle(.secondary)
             }
         }
@@ -168,9 +168,9 @@ public struct ShannonOpsView: View {
                 DisclosureGroup(ShannonGeneratedStrings.opsSkills(count: String(snapshot.skills.count)), isExpanded: $showsSkills) {
                     ForEach(snapshot.skills) { skill in
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(skill.name).font(.callout.weight(.medium))
+                            Text(skill.name).font(.shannon(.callout).weight(.medium))
                             if !skill.description.isEmpty {
-                                Text(skill.description).font(.footnote).foregroundStyle(.secondary)
+                                Text(skill.description).font(.shannon(.footnote)).foregroundStyle(.secondary)
                             }
                         }
                         .accessibilityElement(children: .combine)
@@ -183,7 +183,7 @@ public struct ShannonOpsView: View {
             Section {
                 if model.commands.isEmpty {
                     Text(ShannonGeneratedStrings.opsCommandsEmpty)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(model.commands) { ShannonOpsCommandRow(command: $0, palette: palette) }
@@ -196,7 +196,7 @@ public struct ShannonOpsView: View {
         } else {
             Section {
                 Text(ShannonGeneratedStrings.opsReadOnly)
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(.secondary)
             }
         }
@@ -204,7 +204,7 @@ public struct ShannonOpsView: View {
         if !current, model.commandsSupported {
             Section {
                 Text("報告が届くまで、操作はできません")
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .listRowBackground(Color.clear)

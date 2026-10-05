@@ -17,7 +17,7 @@ struct ShannonAppLookCueView: View {
                 .frame(width: 44, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: ShannonShape.small, style: .continuous))
             Label(ShannonAppLookCopy.cueTitle, systemImage: "eye")
-                .font(.callout.weight(.semibold))
+                .font(.shannon(.callout).weight(.semibold))
                 .foregroundStyle(palette.textPrimary)
         }
         .padding(.leading, ShannonSpacing.small)

@@ -34,7 +34,7 @@ extension ShannonConversationView {
             .overlay(alignment: .bottomTrailing) {
                 if yousu.needsAttention {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption2.weight(.bold))
+                        .font(.shannon(.caption2).weight(.bold))
                         .foregroundStyle(ShannonPalette.resolve(resolvedColorScheme).attention)
                         .offset(x: 4, y: 3)
                         .accessibilityHidden(true)

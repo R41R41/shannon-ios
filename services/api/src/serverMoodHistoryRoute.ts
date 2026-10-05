@@ -4,7 +4,7 @@ import { MOOD_HISTORY_LIMITS, MOOD_HISTORY_SCHEMA_VERSION, type MoodHistoryRespo
 import { consumeDeviceAllowance, sendJson } from './serverHttp.js';
 
 export interface MoodHistoryRouteDependencies {
-  reader: Pick<SQLiteMoodHistoryReader, 'points'>;
+  reader: Pick<SQLiteMoodHistoryReader, 'points'> & Partial<Pick<SQLiteMoodHistoryReader, 'carryIn'>>;
   /** `SHANNON_MOOD_HISTORY`. */
   enabled: () => boolean;
   /** The owner's scope; a device paired into another scope is a guest here. */
@@ -55,12 +55,14 @@ export function moodHistoryResponse(dependencies: Pick<MoodHistoryRouteDependenc
   const since = new Date(Date.parse(at) - hours * 60 * 60_000).toISOString();
   const stored = dependencies.reader.points(scopeKey, since).filter(point => point.at <= at);
   const points = downsampleMoodPoints(stored);
+  const carryIn = dependencies.reader.carryIn?.(scopeKey, since) ?? null;
   const { defaultHours, maxHours, maxPoints, keepDays, everyMinutes, moodStep } = MOOD_HISTORY_LIMITS;
   return {
     schemaVersion: MOOD_HISTORY_SCHEMA_VERSION,
     generatedAt: at,
     hours,
     points: points.map(moodHistoryPoint),
+    ...(carryIn ? { carryIn: moodHistoryPoint(carryIn) } : {}),
     downsampled: points.length < stored.length,
     limits: { defaultHours, maxHours, maxPoints, keepDays, everyMinutes, moodStep },
   };

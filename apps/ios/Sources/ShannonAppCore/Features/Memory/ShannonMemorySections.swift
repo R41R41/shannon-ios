@@ -9,14 +9,14 @@ struct ShannonPersonalityProfileCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.small) {
             HStack {
-                Text("性格分析").font(.title3.weight(.semibold))
+                Text("性格分析").font(.shannon(.title3).weight(.semibold))
                 Spacer()
                 Text("v\(profile.version)")
-                    .font(.caption.monospacedDigit())
+                    .font(.shannon(.caption).monospacedDigit())
                     .foregroundStyle(palette.action)
             }
             Text(profile.analysis)
-                .font(.body)
+                .font(.shannon(.body))
                 .lineSpacing(4)
                 .foregroundStyle(palette.textSecondary)
         }
@@ -34,7 +34,7 @@ struct ShannonKnowledgeAnswerGroups: View {
     var body: some View {
         ForEach(ShannonMemoryOverview.knowledgeCategories(answers), id: \.category) { group in
             VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
-                Text(group.category).font(.title3.weight(.semibold))
+                Text(group.category).font(.shannon(.title3).weight(.semibold))
                 ForEach(group.answers) { answer in
                     HStack(alignment: .center, spacing: ShannonSpacing.small) {
                         KnowledgeAnswerCard(answer: answer, palette: palette)
@@ -62,7 +62,7 @@ struct ShannonWorldItemSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             if let title {
-                Text(title).font(.title3.weight(.semibold))
+                Text(title).font(.shannon(.title3).weight(.semibold))
             }
             ForEach(items) { item in
                 if let url = URL(string: item.url) {
@@ -87,7 +87,7 @@ struct ShannonActivityTimelineSection: View {
         ForEach(ShannonMemoryOverview.activityGroups(items)) { group in
             VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
                 Text(group.title)
-                    .font(.title3.weight(.semibold))
+                    .font(.shannon(.title3).weight(.semibold))
                 ForEach(group.items) { item in
                     ActivityTimelineRow(item: item, palette: palette)
                 }
@@ -106,7 +106,7 @@ struct ShannonMemoryCardList: View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             if let title {
                 Text(title)
-                    .font(.title3.weight(.semibold))
+                    .font(.shannon(.title3).weight(.semibold))
                     .padding(.horizontal, ShannonSpacing.extraSmall)
             }
             ForEach(items) { item in
@@ -163,7 +163,7 @@ struct ShannonKnowledgeCorrectionModifier: ViewModifier {
                     if let error = model.errorMessage {
                         Section {
                             Text(error)
-                                .font(.footnote)
+                                .font(.shannon(.footnote))
                                 .foregroundStyle(Color.shannonDanger)
                         }
                     }

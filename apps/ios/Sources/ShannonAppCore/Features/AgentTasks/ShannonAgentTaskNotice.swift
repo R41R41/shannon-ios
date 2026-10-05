@@ -81,18 +81,18 @@ struct ShannonAgentTaskCapsule: View {
             Button(action: open) {
                 HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
                     Image(systemName: actionError != nil ? "exclamationmark.triangle.fill" : card.symbolName)
-                        .font(.caption.weight(.bold))
+                        .font(.shannon(.caption).weight(.bold))
                         .foregroundStyle(tint)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(actionError != nil ? "判断を送信できませんでした：\(task.title)" : notice.headline)
-                            .font(.footnote.weight(.semibold))
+                            .font(.shannon(.footnote).weight(.semibold))
                             .foregroundStyle(text)
                             .lineLimit(1)
                         if let detail {
                             // The target of an in-place approval is never cut off: what is granted is what is read.
                             Text(detail)
-                                .font(notice.detailIsTarget ? .caption.monospaced() : .caption)
+                                .font(notice.detailIsTarget ? .shannon(.caption).monospaced() : .shannon(.caption))
                                 .foregroundStyle(text.opacity(0.86))
                                 .lineLimit(approval == nil ? 2 : nil)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -102,7 +102,7 @@ struct ShannonAgentTaskCapsule: View {
                     Spacer(minLength: 0)
                     if approval == nil {
                         Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.bold))
+                            .font(.shannon(.caption2).weight(.bold))
                             .foregroundStyle(text.opacity(0.7))
                             .accessibilityHidden(true)
                     }
@@ -124,7 +124,7 @@ struct ShannonAgentTaskCapsule: View {
                     approveOnce()
                 } label: {
                     Text("許可")
-                        .font(.footnote.weight(.bold))
+                        .font(.shannon(.footnote).weight(.bold))
                         .foregroundStyle(tintBackground)
                         .padding(.horizontal, ShannonSpacing.medium)
                         .frame(minHeight: 30)

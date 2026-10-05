@@ -15,7 +15,7 @@ struct ShannonVoiceInputMenu: View {
             }
         } label: {
             Image(systemName: "mic.badge.plus")
-                .font(.body.weight(.semibold))
+                .font(.shannon(.body).weight(.semibold))
                 .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
         }
         .buttonStyle(.bordered)

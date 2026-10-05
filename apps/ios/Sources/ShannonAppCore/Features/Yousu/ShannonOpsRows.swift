@@ -9,7 +9,7 @@ struct ShannonOpsStatusGlyph: View {
 
     var body: some View {
         Image(systemName: symbol)
-            .font(.body.weight(.semibold))
+            .font(.shannon(.body).weight(.semibold))
             .foregroundStyle(color)
             .frame(width: 24)
             .accessibilityHidden(true)
@@ -72,11 +72,11 @@ struct ShannonOpsRow: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.body)
+                    .font(.shannon(.body))
                     .foregroundStyle(palette.textPrimary)
                 if !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(palette.textSecondary)
                 }
             }
@@ -93,7 +93,7 @@ struct ShannonOpsRow: View {
     private var controls: some View {
         if isWaiting {
             Text(ShannonGeneratedStrings.opsWaitingResult)
-                .font(.footnote)
+                .font(.shannon(.footnote))
                 .foregroundStyle(palette.textSecondary)
         }
         ForEach(actions) { action in
@@ -125,10 +125,10 @@ struct ShannonOpsMinebotTaskRow: View {
             HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
                 ShannonOpsStatusGlyph(status: bot.status, isCurrent: current, palette: palette)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(bot.id).font(.body)
+                    Text(bot.id).font(.shannon(.body))
                     Text([current ? ShannonOpsText.statusLabel(bot.status) : ShannonOpsText.staleStatusLabel(bot.status), bot.server]
                         .filter { !$0.isEmpty }.joined(separator: "・"))
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(palette.textSecondary)
                 }
             }
@@ -136,17 +136,17 @@ struct ShannonOpsMinebotTaskRow: View {
 
             if let task = bot.task {
                 Text(task.title)
-                    .font(.callout.weight(.medium))
+                    .font(.shannon(.callout).weight(.medium))
                     .accessibilityLabel("いまの作業、\(task.title)")
                 ForEach(Array(task.steps.enumerated()), id: \.offset) { _, step in
                     HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
                         Image(systemName: Self.symbol(step.status))
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(step.status == .failed ? palette.danger : palette.textSecondary)
                             .frame(width: 20)
                             .accessibilityHidden(true)
                         Text(step.title)
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(step.status == .running ? palette.textPrimary : palette.textSecondary)
                     }
                     .accessibilityElement(children: .ignore)
@@ -154,7 +154,7 @@ struct ShannonOpsMinebotTaskRow: View {
                 }
             } else {
                 Text("いまの作業はありません")
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(palette.textSecondary)
             }
         }
@@ -190,17 +190,17 @@ struct ShannonOpsCommandRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
             Image(systemName: Self.symbol(command.status))
-                .font(.footnote)
+                .font(.shannon(.footnote))
                 .foregroundStyle(Self.tint(command.status, palette: palette))
                 .frame(width: 20)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(ShannonOpsText.commandSummary(command))
-                    .font(.callout)
+                    .font(.shannon(.callout))
                     .foregroundStyle(command.status.isOpen ? palette.textPrimary : palette.textSecondary)
                 Text(([ShannonYousuTime.clock(command.createdAt), ShannonOpsText.commandStatusLabel(command.status)]
                     + [ShannonOpsText.commandReason(command)].compactMap { $0 }).joined(separator: "・"))
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(palette.textSecondary)
             }
         }
@@ -237,10 +237,10 @@ struct ShannonOpsBanner: View {
     var body: some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
             Label(title, systemImage: "exclamationmark.triangle.fill")
-                .font(.headline)
+                .font(.shannon(.headline))
                 .foregroundStyle(palette.onAttentionTint)
             Text(message)
-                .font(.footnote)
+                .font(.shannon(.footnote))
                 .foregroundStyle(palette.onAttentionTint)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -259,9 +259,9 @@ struct ShannonOpsReportLine: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(received)
-                .font(.callout)
+                .font(.shannon(.callout))
             Text([release.isEmpty ? nil : "版 \(release)", started.map { "起動 \($0)" }].compactMap { $0 }.joined(separator: "・"))
-                .font(.footnote)
+                .font(.shannon(.footnote))
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
@@ -283,10 +283,10 @@ struct ShannonOpsNoticeLine: View {
                 .frame(width: 24)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.callout.weight(.medium))
+                Text(title).font(.shannon(.callout).weight(.medium))
                 if let message {
                     Text(message)
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -295,7 +295,7 @@ struct ShannonOpsNoticeLine: View {
             Spacer(minLength: 0)
             Button(action: dismiss) {
                 Image(systemName: "xmark")
-                    .font(.footnote.weight(.semibold))
+                    .font(.shannon(.footnote).weight(.semibold))
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }

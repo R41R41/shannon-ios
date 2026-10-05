@@ -70,6 +70,8 @@ export interface MoodHistoryResponse {
   hours: number;
   /** Oldest first. */
   points: MoodHistoryPoint[];
+  /** The newest point before the window, which still holds at its start. Absent when there is none. */
+  carryIn?: MoodHistoryPoint;
   /** More points were stored in the window than `limits.maxPoints`; the answer was thinned. */
   downsampled: boolean;
   limits: {

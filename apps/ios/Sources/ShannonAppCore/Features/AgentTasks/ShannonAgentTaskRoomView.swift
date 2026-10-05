@@ -239,7 +239,7 @@ struct ShannonAgentTaskRoomView: View {
                     .padding(.top, ShannonSpacing.medium)
                 } label: {
                     Label("全作業記録を表示", systemImage: "list.bullet")
-                        .font(.callout.weight(.semibold))
+                        .font(.shannon(.callout).weight(.semibold))
                         .foregroundStyle(palette.textSecondary)
                 }
                 .tint(palette.action)
@@ -433,7 +433,7 @@ struct AgentTaskSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             Label(title, systemImage: symbol)
-                .font(.headline)
+                .font(.shannon(.headline))
                 .foregroundStyle(palette.textPrimary)
             content
         }

@@ -203,7 +203,7 @@ public struct ShannonMemoryView: View {
         if !reports.isEmpty {
             VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
                 Label("シャノンの日記", systemImage: "book.closed.fill")
-                    .font(.title3.weight(.semibold))
+                    .font(.shannon(.title3).weight(.semibold))
                 ScrollView(.horizontal) {
                     LazyHStack(spacing: ShannonSpacing.medium) {
                         ForEach(reports.prefix(14)) { report in

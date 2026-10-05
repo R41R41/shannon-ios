@@ -227,7 +227,7 @@ struct ShannonThreadListSheet: View {
         // Read here, not in a reader view: a List makes no row, and runs nothing, for a view that shows nothing.
         if state == .off {
             Label(state.line, systemImage: "eye.slash")
-                .font(.footnote)
+                .font(.shannon(.footnote))
                 .foregroundStyle(palette.textSecondary)
                 .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
                 .accessibilityElement(children: .ignore)
@@ -367,7 +367,7 @@ struct ShannonThreadTitleEditor: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
                 Text("トーク一覧に表示する名前を入力してください。")
-                    .font(.body)
+                    .font(.shannon(.body))
                     .foregroundStyle(palette.textSecondary)
 
                 TextField("タイトル", text: $title, axis: .vertical)
@@ -378,7 +378,7 @@ struct ShannonThreadTitleEditor: View {
                     .accessibilityLabel("トークのタイトル")
 
                 Text("\(title.count)/80文字")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(title.count > 80 ? palette.danger : palette.textSecondary)
 
                 Spacer()

@@ -15,7 +15,7 @@ struct AgentTaskApprovalCard: View {
             HStack(alignment: .center, spacing: ShannonSpacing.small) {
                 ShannonAvatarView(expression: ShannonAgentTaskStatus.waitingApproval.expression, size: 28)
                 Text(ShannonAgentTaskRoomPresentation.approvalHeader)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.shannon(.subheadline).weight(.semibold))
                     .foregroundStyle(palette.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -23,15 +23,15 @@ struct AgentTaskApprovalCard: View {
             .accessibilityAddTraits(.isHeader)
 
             Label(ShannonAgentTaskStatus.waitingApproval.japaneseName, systemImage: approval.kind.symbolName)
-                .font(.caption.weight(.bold))
+                .font(.shannon(.caption).weight(.bold))
                 .foregroundStyle(palette.attention)
-            Text(approval.title).font(.headline)
+            Text(approval.title).font(.shannon(.headline))
             Text(approval.reason)
-                .font(.callout)
+                .font(.shannon(.callout))
                 .foregroundStyle(palette.textSecondary)
             if let target = approval.target {
                 Label(target, systemImage: "lock.fill")
-                    .font(.caption.monospaced())
+                    .font(.shannon(.caption).monospaced())
                     .foregroundStyle(palette.textSecondary)
                     .textSelection(.enabled)
                     .accessibilityLabel("許可する対象、\(target)")
@@ -42,7 +42,7 @@ struct AgentTaskApprovalCard: View {
                         ProgressView().controlSize(.small)
                         Text("送信中…").lineLimit(1)
                     }
-                    .font(.body.weight(.semibold))
+                    .font(.shannon(.body).weight(.semibold))
                     .foregroundStyle(palette.textSecondary)
                     .frame(maxWidth: .infinity, minHeight: 50)
                 } else if approval.kind.requiresHoldToConfirm(.once) {
@@ -83,7 +83,7 @@ struct AgentTaskApprovalCard: View {
                     }
                 }
                 Text(holdHint)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -129,12 +129,12 @@ struct AgentTaskActionErrorCard: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(palette.danger)
             Text(message)
-                .font(.callout)
+                .font(.shannon(.callout))
                 .foregroundStyle(palette.onDangerTint)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button(action: dismiss) {
                 Image(systemName: "xmark")
-                    .font(.caption.weight(.bold))
+                    .font(.shannon(.caption).weight(.bold))
                     .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)

@@ -53,7 +53,7 @@ extension ShannonConversationView {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(ShannonGeneratedStrings.settingsSectionVoice)
                                 Text("次の通話から反映")
-                                    .font(.footnote)
+                                    .font(.shannon(.footnote))
                                     .foregroundStyle(palette.textSecondary)
                             }
                         } icon: {
@@ -188,21 +188,21 @@ extension ShannonConversationView {
                 ShannonChatAvatarView(expression: model.presentFace.expression, size: 56)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(ShannonGeneratedStrings.appName)
-                        .font(.title3.weight(.semibold))
+                        .font(.shannon(.title3).weight(.semibold))
                         .foregroundStyle(palette.textPrimary)
                     Text(ShannonSettingsSummary.profileSubtitle(
                         voice: settingsVoiceLabel,
                         provider: settingsSpeechProvider
                     ))
-                    .font(.subheadline)
+                    .font(.shannon(.subheadline))
                     .foregroundStyle(palette.textSecondary)
                     Text("いま：\(model.presentFace.japaneseName)")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                 }
                 Spacer(minLength: ShannonSpacing.small)
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(palette.textSecondary)
                     .accessibilityHidden(true)
             }
@@ -230,7 +230,7 @@ extension ShannonConversationView {
                         .foregroundStyle(palette.textSecondary)
                         .multilineTextAlignment(.trailing)
                     Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
+                        .font(.shannon(.caption).weight(.semibold))
                         .foregroundStyle(palette.textSecondary)
                         .accessibilityHidden(true)
                 }

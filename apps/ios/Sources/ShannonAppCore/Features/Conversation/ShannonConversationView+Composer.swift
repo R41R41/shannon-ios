@@ -48,7 +48,7 @@ extension ShannonConversationView {
 
     var composerTextField: some View {
         TextField("シャノンに話す", text: $model.draft, axis: .vertical)
-            .font(.body)
+            .font(.shannon(.body))
             .lineLimit(1...6)
             .frame(minHeight: 40)
             .padding(.horizontal, 10)
@@ -71,7 +71,7 @@ extension ShannonConversationView {
                     .clipShape(RoundedRectangle(cornerRadius: ShannonShape.small))
                     .accessibilityLabel("送信前の写真")
                 Text("写真を添付")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                 Button {
                     self.composerPhoto = nil
@@ -87,7 +87,7 @@ extension ShannonConversationView {
         }
         if composerIsLoadingPhoto {
             ProgressView("写真を準備中")
-                .font(.caption)
+                .font(.shannon(.caption))
                 .padding(.horizontal, 10)
         }
 #endif
@@ -107,7 +107,7 @@ extension ShannonConversationView {
                             .buttonStyle(.plain)
                             .accessibilityLabel("\(attachment.name)を外す")
                         }
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
                         .padding(.horizontal, 10)
                         .frame(height: 32)
@@ -130,7 +130,7 @@ extension ShannonConversationView {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Web検索を外す")
             }
-            .font(.caption.weight(.medium))
+            .font(.shannon(.caption).weight(.medium))
             .foregroundStyle(palette.action)
             .padding(.horizontal, 10)
             .frame(height: 32)
@@ -140,7 +140,7 @@ extension ShannonConversationView {
 
         if let composerAttachmentError {
             Label(composerAttachmentError, systemImage: "exclamationmark.triangle")
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.attention)
                 .padding(.horizontal, 10)
         }

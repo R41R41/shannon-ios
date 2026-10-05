@@ -22,7 +22,7 @@ struct ShannonSnackbar: View {
             Image(systemName: symbolName)
                 .accessibilityHidden(true)
             Text(message)
-                .font(.callout)
+                .font(.shannon(.callout))
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: ShannonSpacing.small)
@@ -63,20 +63,20 @@ struct ShannonVoiceStatusBar: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.phase.japaneseLabel)
-                    .font(.callout.weight(.semibold))
+                    .font(.shannon(.callout).weight(.semibold))
                     .foregroundStyle(palette.textPrimary)
                 if model.phase == .listening {
                     Text(String(format: "%.1f 秒 · 最大60秒", model.recordingDuration))
-                        .font(.caption.monospacedDigit())
+                        .font(.shannon(.caption).monospacedDigit())
                         .foregroundStyle(palette.textSecondary)
                 } else if !model.transcript.isEmpty {
                     Text(model.transcript)
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
                         .lineLimit(2)
                 } else if let errorMessage = model.errorMessage {
                     Text(errorMessage)
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.danger)
                         .lineLimit(2)
                 }
@@ -132,13 +132,13 @@ struct ShannonStateSheet: View {
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(face.japaneseName)
-                                .font(.title2.weight(.semibold))
+                                .font(.shannon(.title2).weight(.semibold))
                             Text("シャノンのいま")
-                                .font(.body)
+                                .font(.shannon(.body))
                                 .foregroundStyle(palette.textSecondary)
                             if let cause = state?.presence?.mood.cause, !cause.isEmpty {
                                 Text(cause)
-                                    .font(.callout)
+                                    .font(.shannon(.callout))
                                     .foregroundStyle(palette.textSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -166,13 +166,13 @@ struct ShannonStateSheet: View {
                         if !state.interests.isEmpty {
                             VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
                                 Text("いま興味があること")
-                                    .font(.title3.weight(.semibold))
+                                    .font(.shannon(.title3).weight(.semibold))
                                 FlowLikeChips(values: state.interests, palette: palette)
                             }
                         }
                     } else {
                         Text("最初の会話のあとに、シャノンの状態がここに現れます。")
-                            .font(.body)
+                            .font(.shannon(.body))
                             .foregroundStyle(palette.textSecondary)
                             .padding(ShannonSpacing.large)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -203,17 +203,17 @@ struct StateMeter: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(label).font(.callout.weight(.medium))
+                Text(label).font(.shannon(.callout).weight(.medium))
                 Spacer()
                 Text(value.formatted(.percent.precision(.fractionLength(0))))
-                    .font(.caption.monospacedDigit())
+                    .font(.shannon(.caption).monospacedDigit())
                     .foregroundStyle(palette.textSecondary)
             }
             ProgressView(value: min(1, max(0, value)))
                 .tint(palette.action)
             if let reason, !reason.isEmpty {
                 Text(reason)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

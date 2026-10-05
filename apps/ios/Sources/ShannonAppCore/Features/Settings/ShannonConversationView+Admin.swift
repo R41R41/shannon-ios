@@ -69,7 +69,7 @@ extension ShannonConversationView {
                     Text(ShannonGeneratedStrings.opsTitle).foregroundStyle(palette.textPrimary)
                     if let detail {
                         Text(detail)
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(reason == nil ? palette.textSecondary : palette.onAttentionTint)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -85,7 +85,7 @@ extension ShannonConversationView {
                     .accessibilityLabel("確かめたいことがあります")
             }
             Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
+                .font(.shannon(.caption).weight(.semibold))
                 .foregroundStyle(palette.textSecondary)
                 .accessibilityHidden(true)
         }

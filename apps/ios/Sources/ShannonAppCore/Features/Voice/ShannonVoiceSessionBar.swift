@@ -67,27 +67,27 @@ struct ShannonVoiceSessionBar: View {
                 HStack(spacing: ShannonSpacing.small) {
                     indicator(palette)
                     Text(status.title)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.shannon(.subheadline).weight(.semibold))
                         .lineLimit(1)
                     if let callStartedAt = model.callStartedAt {
                         TimelineView(.periodic(from: callStartedAt, by: 1)) { context in
                             let seconds = Int(context.date.timeIntervalSince(callStartedAt))
                             Text(ShannonVoiceCallDuration.text(seconds: seconds))
-                                .font(.subheadline.monospacedDigit())
+                                .font(.shannon(.subheadline).monospacedDigit())
                                 .foregroundStyle(palette.textSecondary)
                                 .accessibilityLabel(ShannonVoiceCallDuration.accessibilityText(seconds: seconds))
                         }
                     }
                     if model.participantMode == .guest, !showsDetails {
                         Label(ShannonVoiceGuestModeCopy.name, systemImage: "person.2.fill")
-                            .font(.caption.weight(.medium))
+                            .font(.shannon(.caption).weight(.medium))
                             .labelStyle(.titleAndIcon)
                             .foregroundStyle(palette.action)
                             .lineLimit(1)
                     }
                     if task != nil, !showsDetails {
                         Image(systemName: "hammer.fill")
-                            .font(.caption2)
+                            .font(.shannon(.caption2))
                             .foregroundStyle(palette.action)
                             .accessibilityLabel("作業あり")
                     }
@@ -106,7 +106,7 @@ struct ShannonVoiceSessionBar: View {
                 confirmsEnd = true
             } label: {
                 Image(systemName: "phone.down.fill")
-                    .font(.caption.weight(.bold))
+                    .font(.shannon(.caption).weight(.bold))
                     .foregroundStyle(palette.onAction)
                     .frame(width: 32, height: 32)
                     .background(palette.danger, in: Circle())
@@ -124,7 +124,7 @@ struct ShannonVoiceSessionBar: View {
         if model.phase == .failed {
             Image(systemName: "wifi.exclamationmark").foregroundStyle(palette.danger)
         } else if model.isMicrophoneMuted {
-            Image(systemName: "mic.slash.fill").font(.caption).foregroundStyle(palette.attention)
+            Image(systemName: "mic.slash.fill").font(.shannon(.caption)).foregroundStyle(palette.attention)
         } else {
             ShannonGeminiLiveLevelBar(level: model.audioLevel, phase: model.phase, palette: palette)
         }
@@ -133,7 +133,7 @@ struct ShannonVoiceSessionBar: View {
     private func details(_ palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.small) {
             Text(detailSubtitle)
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
             ShannonButtonRow {
                 Button(action: showDetails) { ShannonButtonLabel("詳細を開く") }
@@ -153,13 +153,13 @@ struct ShannonVoiceSessionBar: View {
                     HStack(spacing: ShannonSpacing.small) {
                         Image(systemName: task.status.symbolName).foregroundStyle(palette.action)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(task.title).font(.subheadline.weight(.medium))
+                            Text(task.title).font(.shannon(.subheadline).weight(.medium))
                                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                             Text(task.status == .proposed ? "実装案 · 内容を確認して開始" : "\(task.stateName) · 作業を見る")
-                                .font(.caption).foregroundStyle(palette.textSecondary)
+                                .font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
                         }
                         Spacer(minLength: 0)
-                        Image(systemName: "chevron.right").font(.caption)
+                        Image(systemName: "chevron.right").font(.shannon(.caption))
                     }
                     .frame(minHeight: ShannonTouchTarget.minimum)
                     .contentShape(Rectangle())

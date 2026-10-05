@@ -43,16 +43,16 @@ public struct ShannonOrganizeSessionCard: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
                 Label("Voyager Task案", systemImage: "checklist")
-                    .font(.headline)
+                    .font(.shannon(.headline))
                 Spacer()
                 Text(statusLabel)
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(.secondary)
             }
 
             if session.items.isEmpty {
                 Text("この範囲にはTask案がありませんでした。")
-                    .font(.subheadline)
+                    .font(.shannon(.subheadline))
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(session.items) { item in
@@ -75,7 +75,7 @@ public struct ShannonOrganizeSessionCard: View {
 
             if let error {
                 Label(error, systemImage: "exclamationmark.triangle")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(Color.shannonAttention)
             }
 
@@ -174,23 +174,23 @@ private struct ShannonOrganizeItemRow: View {
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(item.operation == .update ? "既存Taskを更新" : "新規Task")
-                        .font(.caption2.weight(.semibold))
+                        .font(.shannon(.caption2).weight(.semibold))
                         .foregroundStyle(.secondary)
-                    Text(item.title).font(.subheadline.weight(.semibold))
-                    if !item.details.isEmpty { Text(item.details).font(.caption).foregroundStyle(.secondary) }
+                    Text(item.title).font(.shannon(.subheadline).weight(.semibold))
+                    if !item.details.isEmpty { Text(item.details).font(.shannon(.caption)).foregroundStyle(.secondary) }
                     if let target = item.target {
                         Label("変更元：\(target.title) · rev \(target.revision)", systemImage: "arrow.triangle.2.circlepath")
-                            .font(.caption2)
+                            .font(.shannon(.caption2))
                             .foregroundStyle(.secondary)
                     }
                     if item.operation == .update {
                         Label("変更項目：\(updateFieldSummary)", systemImage: "slider.horizontal.3")
-                            .font(.caption2)
+                            .font(.shannon(.caption2))
                             .foregroundStyle(.secondary)
                     }
                     if let names = selectedProjectNames(for: item.projectIds ?? []) {
                         Label(names, systemImage: "folder")
-                            .font(.caption2)
+                            .font(.shannon(.caption2))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -200,14 +200,14 @@ private struct ShannonOrganizeItemRow: View {
 
             if let result = item.result {
                 Label("Voyagerに\(item.operation == .update ? "更新" : "作成")：\(result.title)", systemImage: "checkmark.circle.fill")
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(Color.shannonSuccess)
                 Text("Task Reference: \(result.resourceId)")
-                    .font(.caption2.monospaced())
+                    .font(.shannon(.caption2).monospaced())
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             } else if item.destinationStatus == .failed {
-                Text(failureMessage).font(.caption).foregroundStyle(Color.shannonAttention)
+                Text(failureMessage).font(.shannon(.caption)).foregroundStyle(Color.shannonAttention)
             }
 
             if item.destinationStatus == .pending && !isConfiguring {
@@ -222,7 +222,7 @@ private struct ShannonOrganizeItemRow: View {
                         Button("除外") { decide(.rejected, nil, nil, nil, nil, nil) }
                     } label: { Image(systemName: "ellipsis") }
                 }
-                .font(.caption)
+                .font(.shannon(.caption))
                 .disabled(disabled)
             }
         }
@@ -250,7 +250,7 @@ private struct ShannonOrganizeItemRow: View {
                     .disabled(taskQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoadingCatalog)
                 }
 
-                if let catalogError { Text(catalogError).font(.caption2).foregroundStyle(Color.shannonAttention) }
+                if let catalogError { Text(catalogError).font(.shannon(.caption2)).foregroundStyle(Color.shannonAttention) }
 
                 ForEach(candidates) { candidate in
                     Button {
@@ -262,9 +262,9 @@ private struct ShannonOrganizeItemRow: View {
                         HStack(alignment: .top) {
                             Image(systemName: target?.id == candidate.id ? "checkmark.circle.fill" : "circle")
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(candidate.title).font(.caption.weight(.semibold))
+                                Text(candidate.title).font(.shannon(.caption).weight(.semibold))
                                 Text("\(candidate.status) · rev \(candidate.revision)")
-                                    .font(.caption2).foregroundStyle(.secondary)
+                                    .font(.shannon(.caption2)).foregroundStyle(.secondary)
                             }
                             Spacer()
                         }
@@ -275,15 +275,15 @@ private struct ShannonOrganizeItemRow: View {
 
                 if let target {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("変更前").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                        Text(target.title).font(.caption)
-                        if !target.details.isEmpty { Text(target.details).font(.caption2).foregroundStyle(.secondary) }
+                        Text("変更前").font(.shannon(.caption2).weight(.semibold)).foregroundStyle(.secondary)
+                        Text(target.title).font(.shannon(.caption))
+                        if !target.details.isEmpty { Text(target.details).font(.shannon(.caption2)).foregroundStyle(.secondary) }
                         Text("変更後：\(updateFieldSummary)のみ")
-                            .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                            .font(.shannon(.caption2).weight(.semibold)).foregroundStyle(.secondary)
                     }
                 } else {
                     Text("更新するTaskを1件選んでください。推測では反映しません。")
-                        .font(.caption2).foregroundStyle(.secondary)
+                        .font(.shannon(.caption2)).foregroundStyle(.secondary)
                 }
             }
 
@@ -291,7 +291,7 @@ private struct ShannonOrganizeItemRow: View {
                 TextField("Task名", text: $title).textFieldStyle(.roundedBorder)
             } else if let target {
                 Label("タイトルは変更しません：\(target.title)", systemImage: "lock")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.shannon(.caption)).foregroundStyle(.secondary)
             }
 
             if operation == .create || changesDetails {
@@ -300,7 +300,7 @@ private struct ShannonOrganizeItemRow: View {
                     .textFieldStyle(.roundedBorder)
             } else if target != nil {
                 Label("詳細は変更しません", systemImage: "lock")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.shannon(.caption)).foregroundStyle(.secondary)
             }
 
             if operation == .create || changesProjects {
@@ -320,15 +320,15 @@ private struct ShannonOrganizeItemRow: View {
                     }
                 } label: {
                     Label(selectedProjectSummary, systemImage: "folder")
-                        .font(.caption)
+                        .font(.shannon(.caption))
                 }
                 if projectSelectionRequired && selectedProjectIDs.isEmpty {
                     Text("この依頼ではProjectを1件以上選んでください。未選択では反映できません。")
-                        .font(.caption2).foregroundStyle(Color.shannonAttention)
+                        .font(.shannon(.caption2)).foregroundStyle(Color.shannonAttention)
                 }
             } else if let target {
                 Label(selectedProjectNames(for: target.projectIds) ?? "Projectなし（変更しません）", systemImage: "lock")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.shannon(.caption)).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 8) {
@@ -342,7 +342,7 @@ private struct ShannonOrganizeItemRow: View {
                     || (projectSelectionRequired && selectedProjectIDs.isEmpty))
                 Button("戻る") { resetDraft(); isConfiguring = false }
             }
-            .font(.caption)
+            .font(.shannon(.caption))
         }
         .padding(10)
         .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))

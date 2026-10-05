@@ -71,11 +71,11 @@ struct ShannonPermissionPrimerSheet: View {
 
                 VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                     Text(isDenied ? content.deniedTitle : content.title)
-                        .font(.title2.weight(.bold))
+                        .font(.shannon(.title2).weight(.bold))
                         .foregroundStyle(palette.textPrimary)
                         .accessibilityAddTraits(.isHeader)
                     Text(isDenied ? content.deniedMessage : content.message)
-                        .font(.body)
+                        .font(.shannon(.body))
                         .foregroundStyle(palette.textSecondary)
                 }
                 .fixedSize(horizontal: false, vertical: true)
@@ -128,7 +128,7 @@ struct ShannonPermissionPrimerSheet: View {
             .disabled(phase == .requesting)
 
             Button(isDenied ? "閉じる" : "今はしない", action: notNow)
-                .font(.body.weight(.medium))
+                .font(.shannon(.body).weight(.medium))
                 .foregroundStyle(palette.textSecondary)
                 .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum)
                 .disabled(phase == .requesting)
@@ -142,13 +142,13 @@ struct ShannonPermissionPrimerSheet: View {
     private func benefitRow(_ benefit: ShannonPermissionPrimerContent.Benefit, palette: ShannonPalette) -> some View {
         HStack(alignment: .top, spacing: ShannonSpacing.medium) {
             Image(systemName: benefit.symbol)
-                .font(.body.weight(.semibold))
+                .font(.shannon(.body).weight(.semibold))
                 .foregroundStyle(palette.action)
                 .frame(width: 40, height: 40)
                 .background(palette.action.opacity(0.12), in: RoundedRectangle(cornerRadius: ShannonShape.medium, style: .continuous))
                 .accessibilityHidden(true)
             Text(benefit.text)
-                .font(.body)
+                .font(.shannon(.body))
                 .foregroundStyle(palette.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)

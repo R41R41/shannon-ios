@@ -45,7 +45,7 @@ struct ShannonPeopleListPage: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(ShannonPeopleMemoryCopy.unnamedTitle).foregroundStyle(palette.textPrimary)
                                     Text("覚えていること \(presentation.unnamed.filter { !$0.isForgotten }.count)件")
-                                        .font(.caption).foregroundStyle(palette.textSecondary)
+                                        .font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
                                 }
                             } icon: {
                                 Image(systemName: "person.crop.circle.badge.questionmark").foregroundStyle(palette.textSecondary)
@@ -75,12 +75,12 @@ struct ShannonPeopleEntryLabel: View {
         HStack(spacing: ShannonSpacing.medium) {
             Image(systemName: "person.2").foregroundStyle(palette.action)
             VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
-                Text(ShannonPeopleMemoryCopy.title).font(.headline).foregroundStyle(palette.textPrimary)
+                Text(ShannonPeopleMemoryCopy.title).font(.shannon(.headline)).foregroundStyle(palette.textPrimary)
                 Text(ShannonPeopleMemoryPresentation(people: people).summary)
-                    .font(.caption).foregroundStyle(palette.textSecondary)
+                    .font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right").font(.caption).foregroundStyle(palette.textSecondary)
+            Image(systemName: "chevron.right").font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
         }
         .padding(ShannonSpacing.large)
         .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum, alignment: .leading)
@@ -98,7 +98,7 @@ private struct ShannonPersonRow: View {
             Text(person.title)
                 .foregroundStyle(person.forgotten ? palette.textSecondary : palette.textPrimary)
             Text(ShannonPeopleMemoryPresentation.subtitle(for: person))
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -244,7 +244,7 @@ struct ShannonPersonDetailPage: View {
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                 Label(ShannonPeopleMemoryPresentation.caption(for: item), systemImage: item.isForgotten ? "eye.slash" : item.sensitivity.symbolName)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)

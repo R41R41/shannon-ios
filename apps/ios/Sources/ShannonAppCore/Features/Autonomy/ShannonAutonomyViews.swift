@@ -9,7 +9,7 @@ struct ShannonAutonomyOverviewCard: View {
         if model.isSupported {
             VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
                 Text("シャノンのやりたいこと")
-                    .font(.headline)
+                    .font(.shannon(.headline))
                     .foregroundStyle(palette.textPrimary)
                     .accessibilityAddTraits(.isHeader)
                 NavigationLink {
@@ -26,7 +26,7 @@ struct ShannonAutonomyOverviewCard: View {
                             }
                         }
                         Spacer(minLength: 0)
-                        Image(systemName: "chevron.right").font(.caption).foregroundStyle(palette.textSecondary).accessibilityHidden(true)
+                        Image(systemName: "chevron.right").font(.shannon(.caption)).foregroundStyle(palette.textSecondary).accessibilityHidden(true)
                     }
                     .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum, alignment: .leading)
                     .contentShape(Rectangle())
@@ -42,7 +42,7 @@ struct ShannonAutonomyOverviewCard: View {
                         HStack(spacing: ShannonSpacing.small) {
                             ShannonStudyEntryLabel(study: model.study, tint: palette.action)
                                 .foregroundStyle(palette.textPrimary)
-                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(palette.textSecondary).accessibilityHidden(true)
+                            Image(systemName: "chevron.right").font(.shannon(.caption)).foregroundStyle(palette.textSecondary).accessibilityHidden(true)
                         }
                     }
                     .buttonStyle(.plain)
@@ -56,8 +56,8 @@ struct ShannonAutonomyOverviewCard: View {
                         Image(systemName: "list.bullet.clipboard").foregroundStyle(palette.action).accessibilityHidden(true)
                         Text(ShannonGeneratedStrings.autonomyActivityTitle).foregroundStyle(palette.textPrimary)
                         Spacer(minLength: 0)
-                        Text(model.summary).font(.callout).foregroundStyle(palette.textSecondary)
-                        Image(systemName: "chevron.right").font(.caption).foregroundStyle(palette.textSecondary).accessibilityHidden(true)
+                        Text(model.summary).font(.shannon(.callout)).foregroundStyle(palette.textSecondary)
+                        Image(systemName: "chevron.right").font(.shannon(.caption)).foregroundStyle(palette.textSecondary).accessibilityHidden(true)
                     }
                     .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum, alignment: .leading)
                     .contentShape(Rectangle())
@@ -67,7 +67,7 @@ struct ShannonAutonomyOverviewCard: View {
                 .accessibilityHint("シャノンが自分からしたこと、今日の予算、一時停止を開きます")
                 .accessibilityIdentifier("autonomy-activity-entry")
                 Text("あなたの目的とは別に、シャノン自身が持っている目標と問いです。")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
             }
             .padding(ShannonSpacing.large)
@@ -89,11 +89,11 @@ struct ShannonPursuitLine: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(pursuit.title)
-                    .font(.body.weight(.medium))
+                    .font(.shannon(.body).weight(.medium))
                     .foregroundStyle(palette.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("\(pursuit.kindLabel) ・ \(pursuit.statusLabel)")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
             }
         }
@@ -113,7 +113,7 @@ struct ShannonAutonomyPursuitsPage: View {
         List {
             if let message = model.errorMessage {
                 Section {
-                    Text(message).font(.footnote).foregroundStyle(palette.danger)
+                    Text(message).font(.shannon(.footnote)).foregroundStyle(palette.danger)
                 }
             }
             let open = model.pursuits.filter(\.isOpen)
@@ -134,7 +134,7 @@ struct ShannonAutonomyPursuitsPage: View {
                         VStack(alignment: .leading, spacing: 2) {
                             LabeledContent(choice.purposeLabel, value: choice.modelLabel)
                             Text([choice.chosenByLabel, choice.reason, choice.recommendation].compactMap { $0 }.joined(separator: " ・ "))
-                                .font(.caption)
+                                .font(.shannon(.caption))
                                 .foregroundStyle(palette.textSecondary)
                         }
                         .frame(minHeight: ShannonTouchTarget.minimum)
@@ -178,21 +178,21 @@ struct ShannonAutonomyPursuitsPage: View {
         VStack(alignment: .leading, spacing: ShannonSpacing.small) {
             ShannonPursuitLine(pursuit: pursuit, palette: palette)
             Text(pursuit.why)
-                .font(.callout)
+                .font(.shannon(.callout))
                 .foregroundStyle(palette.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel("理由、\(pursuit.why)")
             Text(pursuit.originLabel)
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
             ForEach(pursuit.links, id: \.url) { link in
                 if let url = URL(string: link.url), url.scheme == "https" {
                     Link(link.label, destination: url)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .frame(minHeight: ShannonTouchTarget.minimum, alignment: .leading)
                 } else {
                     Label(link.label, systemImage: "doc.text")
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.textSecondary)
                 }
             }
@@ -264,7 +264,7 @@ public struct ShannonAutonomySettingsSection: View {
 #endif
                 }
                 if let message = model.errorMessage {
-                    Text(message).font(.footnote).foregroundStyle(Color.shannonDanger)
+                    Text(message).font(.shannon(.footnote)).foregroundStyle(Color.shannonDanger)
                 }
             } header: {
                 Text(ShannonGeneratedStrings.navAutonomy)
@@ -288,7 +288,7 @@ struct ShannonAutonomyPauseToggle: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("自律活動を一時停止")
                     Text(model.stateLabel)
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("autonomy-loop-state")
                 }

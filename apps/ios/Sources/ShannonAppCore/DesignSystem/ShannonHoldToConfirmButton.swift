@@ -91,14 +91,14 @@ struct ShannonHoldToConfirmButton: View {
 
         return HStack(spacing: ShannonSpacing.small) {
             Image(systemName: "hand.tap")
-                .font(.callout.weight(.semibold))
+                .font(.shannon(.callout).weight(.semibold))
                 .accessibilityHidden(true)
             Text(text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .monospacedDigit()
         }
-        .font(.body.weight(.semibold))
+        .font(.shannon(.body).weight(.semibold))
         .foregroundStyle(foreground)
         .padding(.horizontal, ShannonSpacing.large)
         .frame(maxWidth: .infinity, minHeight: 50)

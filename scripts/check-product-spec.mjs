@@ -29,6 +29,18 @@ const hexPattern = /^#[0-9A-Fa-f]{6}$/u;
 const stringKeyPattern = /^[a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9]*)+$/u;
 
 function isText(value) { return typeof value === 'string' && value.trim().length > 0; }
+
+/** Text as it is compared with the not-built list: full and half width alike, case and spacing and separators ignored. */
+export function normalisedForSearch(text) {
+  return String(text ?? '').normalize('NFKC').toLowerCase().replace(/[\s\-_.・･]/gu, '');
+}
+
+/** Whether any of the texts names an item the owner decided not to build, by its name or one of its aliases. */
+export function notBuildingMatch(item, texts) {
+  const terms = [item?.name, ...(item?.aliases ?? [])].filter(isText).map(normalisedForSearch);
+  const haystack = texts.filter(isText).map(normalisedForSearch);
+  return terms.some((term) => haystack.some((text) => text.includes(term)));
+}
 function repositoryPath(value) { return isText(value) && !value.startsWith('/') && !value.split('/').includes('..'); }
 
 /** A file reader over the repository: `exists(path)` and `text(path)` (null when absent). */
@@ -126,8 +138,10 @@ export function validateMatrix(matrix, repo) {
   // What the owner decided not to build stays out of the matrix.
   for (const item of matrix.notBuilding?.items ?? []) {
     if (!isText(item.name) || !datePattern.test(item.decided ?? '')) { failures.push(`feature matrix: notBuilding needs a name and the date decided (${JSON.stringify(item)})`); continue; }
+    if (item.aliases !== undefined && (!Array.isArray(item.aliases) || !item.aliases.every(isText))) failures.push(`feature matrix: notBuilding ${item.name} aliases must be a list of words`);
     for (const feature of matrix.features) {
-      if (`${feature.title} ${feature.description}`.includes(item.name)) failures.push(`${feature.id}: the owner decided not to build 「${item.name}」 (${item.decided})`);
+      const cells = Object.values(feature.surfaces ?? {}).flatMap((cell) => [cell?.note, cell?.reason]);
+      if (notBuildingMatch(item, [feature.id, feature.title, feature.description, ...cells])) failures.push(`${feature.id}: the owner decided not to build 「${item.name}」 (${item.decided})`);
     }
   }
   // A feature folder nobody names is a feature that went into one implementation without the spec.
@@ -283,7 +297,8 @@ export function validateStrings(strings, repo) {
     }
     const source = repo.text(entry.apple);
     if (source === null) { failures.push(`strings: ${key} names ${entry.apple}, which does not exist`); continue; }
-    if (source.includes('ShannonGeneratedStrings')) continue; // adopted: the app reads the generated value
+    // Adopted: this very key is read from the generated strings in that file (not merely some other key).
+    if (new RegExp(`\\bShannonGeneratedStrings\\.${identifier}\\b`, 'u').test(source)) continue;
     // Every literal piece of the sentence must still be written in the Apple source it was taken from.
     const params = stringParams(entry.text);
     const pieces = entry.text.split(/\{[A-Za-z][A-Za-z0-9]*\}|\n/u).map((piece) => piece.trim()).filter((piece) => piece.length > 0);
@@ -317,7 +332,9 @@ export function run(root = defaultRoot, { acceptGaps = false } = {}) {
   failures.push(...validateTokens(sources.tokens, repo));
   failures.push(...validateStrings(sources.strings, repo));
   for (const item of sources.matrix.notBuilding?.items ?? []) {
-    for (const entry of sources.strings.strings ?? []) if (isText(item.name) && entry.text?.includes(item.name)) failures.push(`strings: ${entry.key} shows 「${item.name}」, which the owner decided not to build (${item.decided})`);
+    for (const entry of sources.strings.strings ?? []) {
+      if (notBuildingMatch(item, [entry.key, entry.text, entry.note])) failures.push(`strings: ${entry.key} brings back 「${item.name}」, which the owner decided not to build (${item.decided})`);
+    }
   }
   for (const path of staleOutputs(root)) failures.push(`${path} is stale (run: node scripts/generate-product-spec.mjs)`);
   const summary = `${sources.matrix.features?.length ?? 0} features, ${openCells(sources.matrix).length} accepted gaps, ${Object.keys(sources.tokens.color?.roles ?? {}).length} colour roles, ${sources.strings.strings?.length ?? 0} shared strings`;
