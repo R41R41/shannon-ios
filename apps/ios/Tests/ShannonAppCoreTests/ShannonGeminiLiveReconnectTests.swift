@@ -85,7 +85,7 @@ final class ShannonGeminiLiveReconnectTests: XCTestCase {
         XCTAssertEqual(reports, [false])
     }
 
-    func testEndingTheCallWhileItsReconnectWaitsForASessionSendsOneEnd() async {
+    func testEndingTheCallWhileItsReconnectWaitsForASessionAlsoEndsThatSession() async {
         let gate = Gate()
         var reports: [Bool] = []
         var abandoned = 0
@@ -99,12 +99,13 @@ final class ShannonGeminiLiveReconnectTests: XCTestCase {
         // 終了 while the reconnect's session is being made: stop() reports the end.
         model.stop()
         XCTAssertEqual(reports, [false])
-        // The session arrives after all: no second, orphan end.
+        // The session arrives after all: the server noted it, so it hears an end of its own (`abandoned`), or it would
+        // count it as a new call for a while. The call's own end is not sent twice.
         gate.continuation?.resume(returning: ShannonGeminiLiveSessionDTO(
             token: "t", model: "m", voice: "v", threadId: "th", instructions: "", expiresAt: "",
             inputUsdPerMinute: 0, outputUsdPerMinute: 0))
         for _ in 0..<20 { await Task.yield() }
-        XCTAssertEqual(abandoned, 0)
+        XCTAssertEqual(abandoned, 1)
         XCTAssertEqual(reports, [false])
     }
 
