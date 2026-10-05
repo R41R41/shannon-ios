@@ -164,8 +164,10 @@ public final class ShannonDesktopBody {
 
     /// Who could see or hear her: 「友人も一緒」 on the Mac's call, and the minutes after it, are others.
     var audience: ShannonBodyAudience {
+        let held = audienceRule.othersUntil
         audienceRule.observe(othersMayBeListening: voiceCall?.session.othersMayBeListening ?? false, at: Date())
-        audienceRule.save(to: .standard)
+        // Written only when the hold moved (it is kept across a relaunch); every read of presence asks for it.
+        if audienceRule.othersUntil != held { audienceRule.save(to: .standard) }
         return audienceRule.audience(at: Date())
     }
 
