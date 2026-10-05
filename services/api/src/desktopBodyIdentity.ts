@@ -28,8 +28,8 @@ export const isDesktopBodyDeviceId = (deviceId: string): boolean => deviceId.end
 export interface DesktopBodyCandidate {
   /** Her Minecraft body's token: never another body. */
   isGame: boolean;
-  /** The device's own body registration (its figure), or null. */
-  registration: { surface?: string } | null;
+  /** The device's own body registration (its figure), or null. Read only when asked. */
+  registration: () => { surface?: string } | null;
   /** Which of the owner's apps the device has said it is (`ownerCallElsewhere.ts`, `SQLiteOwnerCallFacts.surface`). */
   appSurface: () => string | undefined;
 }
@@ -41,8 +41,12 @@ export interface DesktopBodyCandidate {
  */
 export function mayHaveDesktopBody(device: DesktopBodyCandidate): boolean {
   if (device.isGame) return false;
-  if (device.registration && device.registration.surface !== 'mac') return false;
-  try { return device.appSurface() === 'mac'; } catch { return false; }
+  // A store that cannot be read (a corrupt row, a closed database) says no: the request goes on as the app's own.
+  try {
+    const registration = device.registration();
+    if (registration && registration.surface !== 'mac') return false;
+    return device.appSurface() === 'mac';
+  } catch { return false; }
 }
 
 /** Whether the header names the desktop body. Any other value, or none, is the app. */

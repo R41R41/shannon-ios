@@ -328,7 +328,7 @@ const server = createServer(async (request, response) => {
     const body = request.method !== 'GET' && !calendarDelete ? await readJson(request, url.pathname === VOICE_CALL_MEMORY_PATH ? 192 * 1024 : bodyLookRequestBytes(url.pathname) ?? calendarRequestBytes(url.pathname) ?? hostStepRequestBytes(url.pathname) ?? 64 * 1024) : undefined;
     const query = new URLSearchParams(url.searchParams);
     if (principal) query.set('scopeKey', principal.scopeKey);
-    const deviceId = principal ? requestDeviceId(principal.deviceId, request.headers['x-shannon-body'], request.method, url.pathname, () => mayHaveDesktopBody({ isGame: minecraft.isGameDevice(principal), registration: bodyStore.capabilities(principal.scopeKey, principal.deviceId), appSurface: () => ownerCallFacts.surface(principal.scopeKey, principal.deviceId) })) : undefined; // Her desktop body in an app speaks for a device of its own (desktopBodyIdentity.ts).
+    const deviceId = principal ? requestDeviceId(principal.deviceId, request.headers['x-shannon-body'], request.method, url.pathname, () => mayHaveDesktopBody({ isGame: minecraft.isGameDevice(principal), registration: () => bodyStore.capabilities(principal.scopeKey, principal.deviceId), appSurface: () => ownerCallFacts.surface(principal.scopeKey, principal.deviceId) })) : undefined; // Her desktop body in an app speaks for a device of its own (desktopBodyIdentity.ts).
     if (principal && deviceId !== principal.deviceId) response.setHeader('x-shannon-body', 'desktop'); // Says to the app that its body was heard as one.
     if (url.pathname === '/v1/devices') {
       handleDeviceManagement(request, response, body, principal, { deviceAuth, pushStore, revoked: deviceId => incomingCallRoute?.invalidateDevice(deviceId) });

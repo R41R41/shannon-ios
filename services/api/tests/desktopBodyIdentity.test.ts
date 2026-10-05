@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -126,7 +127,7 @@ describe('the Mac app and its desktop body', () => {
       store.saveCapabilities(scope, 'iphone-figure', { expressions: [], gestures: [], flags: { touchOnly: true }, surface: 'iphone' }, at);
       const facts = new SQLiteOwnerCallFacts(path);
       const may = (deviceId: string, isGame = false) => mayHaveDesktopBody({
-        isGame, registration: store.capabilities(scope, deviceId), appSurface: () => facts.surface(scope, deviceId),
+        isGame, registration: () => store.capabilities(scope, deviceId), appSurface: () => facts.surface(scope, deviceId),
       });
       expect(may('mac-app')).toBe(true);
       // An iPhone that registered nothing and said nothing of itself: unknown is refused.
@@ -136,9 +137,16 @@ describe('the Mac app and its desktop body', () => {
       expect(may('windows-body')).toBe(false);
       expect(may('iphone-figure')).toBe(false);
       expect(may('mac-app', true)).toBe(false);
-      expect(mayHaveDesktopBody({ isGame: false, registration: null, appSurface: () => { throw new Error('database'); } })).toBe(false);
-      expect(mayHaveDesktopBody({ isGame: false, registration: null, appSurface: () => 'mac' })).toBe(true);
-      expect(mayHaveDesktopBody({ isGame: false, registration: { surface: 'mac' }, appSurface: () => 'ios' })).toBe(false);
+      expect(mayHaveDesktopBody({ isGame: false, registration: () => null, appSurface: () => { throw new Error('database'); } })).toBe(false);
+      expect(mayHaveDesktopBody({ isGame: false, registration: () => null, appSurface: () => 'mac' })).toBe(true);
+      expect(mayHaveDesktopBody({ isGame: false, registration: () => ({ surface: 'mac' }), appSurface: () => 'ios' })).toBe(false);
+      // A corrupt registration row fails closed (no derived id, the request is the app's) instead of throwing a 500.
+      const corrupt = new DatabaseSync(path);
+      corrupt.prepare("UPDATE body_capabilities SET flags_json = '{not json' WHERE device_id = 'mac-app'").run();
+      corrupt.close();
+      expect(() => store.capabilities(scope, 'mac-app')).toThrow();
+      expect(may('mac-app')).toBe(false);
+      expect(requestDeviceId('mac-app', 'desktop', 'GET', '/v1/body/presence', () => may('mac-app'))).toBe('mac-app');
       facts.close();
       store.close();
     } finally {
