@@ -111,6 +111,11 @@
       "place": "設定 › 管理 › 配信。Mac は作業の中にも（デスクトップの追加）"
     },
     {
+      "id": "folder",
+      "title": "専用フォルダ",
+      "place": "設定 › 専用フォルダ（デスクトップ）。したことは シャノン › 自律活動 の記録"
+    },
+    {
       "id": "desktop",
       "title": "デスクトップだけのもの",
       "place": "同じ領域の中に付ける（体とトレイだけは窓の外）"
@@ -730,8 +735,8 @@
     {
       "id": "talk.reply-read-aloud",
       "area": "talk",
-      "title": "文字の返事を声で読み上げる",
-      "description": "文字で話したときの返事を、声でも読む。",
+      "title": "文字の返事を声で読み上げる（既定は全部）",
+      "description": "文字で話したときの返事を、声でも読む。既定は全部を読む（長さの上限なし）。",
       "surfaces": {
         "ios": {
           "status": "no",
@@ -746,7 +751,8 @@
             "shannon-desktop:src/voice/speechPipeline.ts",
             "shannon-desktop:electron/main.ts"
           ],
-          "read": "2026-10-03"
+          "note": "2026-10-05 12:00 に 350 字の上限を外し、既定で全部を読むようにした（体のスレッドで所有者が決めた）。Windows body thread report 2026-10-05。",
+          "read": "2026-10-05"
         }
       }
     },
@@ -1083,6 +1089,28 @@
       }
     },
     {
+      "id": "voice.wake-name",
+      "area": "voice",
+      "title": "「シャノン」と呼んで話しかける",
+      "description": "名前を呼ばれたら聞き始める（ADR-0002 の追記。カメラは常に取らない）。置き場所は 設定 › 声 と、待っている間の体の足もとの印。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "no",
+          "note": "iPhone と Mac は、Windows で測ってから決める（2026-10-05）。"
+        },
+        "macos": {
+          "status": "no",
+          "note": "iPhone と Mac は、Windows で測ってから決める（2026-10-05）。"
+        },
+        "windows": {
+          "status": "planned",
+          "branch": "shannon-desktop（体のスレッド）",
+          "note": "方法 A（Silero VAD と ReazonSpeech の hotword）を所有者が採った（2026-10-05）。常駐に入れる前に、体が話している最中と音楽での誤反応を測り、見た目を所有者が確かめる。Windows body thread report 2026-10-05。"
+        }
+      }
+    },
+    {
       "id": "tasks.overview",
       "area": "tasks",
       "title": "作業の一覧",
@@ -1188,7 +1216,8 @@
           "evidence": [
             "shannon-desktop:src/desk/views/WorkView.tsx"
           ],
-          "read": "2026-10-03"
+          "note": "今回だけ許可／この作業中／許可しない（W5）。Windows body thread report 2026-10-05。",
+          "read": "2026-10-05"
         }
       }
     },
@@ -1353,8 +1382,46 @@
           "note": "ボタンを 1 回押すだけ。決定（2026-10-03）で、Mac も長押しにする。"
         },
         "windows": {
-          "status": "no",
-          "note": "ボタンを 1 回押すだけ。決定（2026-10-03）で、Windows も長押しにする。"
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/WorkView.tsx",
+            "shannon-desktop:src/desk/views/OpsView.tsx"
+          ],
+          "note": "0.6 秒押し続けて決める: 「この作業中」のすべてと、外部接続・権限の「今回だけ許可」（知らない種類も）。クリック・キーボード・スクリーンリーダーでは、iPhone と同じ文の確認。動きを減らす設定では「押し続けています… N%」。運用の操作も、窓の中の確認で同じ形（W5。ソースに入り、所有者が見た目を確かめてから常駐アプリへ。04:15 に起動し直した）。Windows body thread report 2026-10-05。",
+          "read": "2026-10-05"
+        }
+      }
+    },
+    {
+      "id": "tasks.needs-owner",
+      "area": "tasks",
+      "title": "続きが必要",
+      "description": "実行先が持ち主の対応を待って止まった作業を「続きが必要」と見分け（pauseReason、無ければ currentAction）、橙の印と次の一手を出す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/AgentTaskAttention.swift#needsOwnerToContinue",
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskOutcomeViews.swift#AgentTaskNextActionCard"
+          ],
+          "note": "作業の現在地に「次にあなたがすること」の枠。トークの上の知らせ「続きが必要：〈題名〉」。"
+        },
+        "macos": {
+          "status": "partial",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/ShannonDesktopSupport.swift#needsOwnerToContinue",
+            "apps/macos-app/ShannonDesk/Features/Development/ShannonDesktopRootView+Development.swift#stateName"
+          ],
+          "note": "「続きが必要」の作業を、注意の要る作業として数え、状態の名前を出す。次の一手の枠と通知は無い（通知は A13）。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/WorkView.tsx",
+            "shannon-desktop:electron/main.ts"
+          ],
+          "note": "「続きが必要です」の枠と次の一手、橙の印、OS の通知（W5）。Windows body thread report 2026-10-05。",
+          "read": "2026-10-05"
         }
       }
     },
@@ -1451,20 +1518,23 @@
           "status": "yes",
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyActivityPage.swift"
-          ]
+          ],
+          "note": "確認の言葉は、決まった「「〈題名〉」を作業として始めますか？」／「作業として始める」（2026-10-05）にまだなっていない（いまは「この提案を開始しますか？」／「開始する」）。"
         },
         "macos": {
           "status": "yes",
           "evidence": [
             "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
-          ]
+          ],
+          "note": "確認の言葉は、決まった「「〈題名〉」を作業として始めますか？」／「作業として始める」（2026-10-05）にまだなっていない（いまは「この提案を開始しますか？」／「開始する」）。"
         },
         "windows": {
           "status": "yes",
           "evidence": [
             "shannon-desktop:src/desk/views/AutonomyView.tsx"
           ],
-          "read": "2026-10-03"
+          "read": "2026-10-05",
+          "note": "始める前に確認する（W5。「「〈題名〉」を作業として始めますか？」と目的・触れる所、「作業として始める」）。Windows body thread report 2026-10-05。"
         }
       }
     },
@@ -1679,6 +1749,29 @@
         },
         "windows": {
           "status": "no"
+        }
+      }
+    },
+    {
+      "id": "study.tools",
+      "area": "study",
+      "title": "書斎を道具で使う",
+      "description": "シャノンが会話と自分の時間の中で、自分の書斎の作品を読み・書き足す（道具。自分のものなので承認は要らない）。",
+      "surfaces": {
+        "ios": {
+          "status": "planned",
+          "branch": "codex/shannon/own-study-and-folder-tools",
+          "note": "サーバーで作業中。アプリで見るのは、いまの書斎の画面。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "codex/shannon/own-study-and-folder-tools",
+          "note": "サーバーで作業中。"
+        },
+        "windows": {
+          "status": "planned",
+          "branch": "codex/shannon/own-study-and-folder-tools",
+          "note": "サーバーで作業中。管理画面の書斎で読む。"
         }
       }
     },
@@ -1979,6 +2072,52 @@
       }
     },
     {
+      "id": "yousu.mood-history",
+      "area": "yousu",
+      "title": "気分の記録",
+      "description": "シャノンの気分の記録（14 日分）を本体から読む（GET /v1/shannon/mood-history。所有者の端末だけ）。",
+      "surfaces": {
+        "ios": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "サーバーの口は main にある（2026-10-05）。iPhone の画面はまだ無い。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "サーバーの口は main にある（2026-10-05）。Mac の画面はまだ無い。"
+        },
+        "windows": {
+          "status": "partial",
+          "evidence": [
+            "shannon-desktop:src/bridge.ts"
+          ],
+          "note": "本体の口へ移るまで、この PC の中に気分を記録している（presence の mood・primary・intensity・doing。14 日、文なし、送らない）。evidence は presence を読む所（2026-10-03 に読んだ）で、記録のファイルは知らせに名前が無い。Windows body thread report 2026-10-05。",
+          "read": "2026-10-05"
+        }
+      }
+    },
+    {
+      "id": "yousu.mood-trend",
+      "area": "yousu",
+      "title": "気分の推移",
+      "description": "気分の記録を、快・不快／活発さ／ひらき の 3 本の線で見る（Windows だけの追加。線の名前は所有者が見て確かめる、未決）。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "no"
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "planned",
+          "branch": "shannon-desktop（体のスレッド、W6）",
+          "note": "線の名前「快・不快／活発さ／ひらき」は、所有者に見せて決める（まだ決まっていない）。Windows body thread report 2026-10-05。"
+        }
+      }
+    },
+    {
       "id": "ops.status",
       "area": "ops",
       "title": "運用の状態",
@@ -2028,7 +2167,8 @@
             "shannon-desktop:src/desk/views/OpsView.tsx",
             "shannon-desktop:electron/deskApi.ts"
           ],
-          "read": "2026-10-03"
+          "read": "2026-10-05",
+          "note": "窓の中の確認（iPhone と同じ文）で、決定ボタン「長押しで開始／停止／起動／実行」を押し続けて決める。短く押すと「ボタンを押し続けると決まります。」（W5）。Windows body thread report 2026-10-05。"
         }
       }
     },
@@ -2055,7 +2195,8 @@
             "shannon-desktop:src/desk/views/OpsView.tsx",
             "shannon-desktop:src/desk/opsText.ts"
           ],
-          "read": "2026-10-03"
+          "read": "2026-10-05",
+          "note": "窓の中の確認（iPhone と同じ文）で、決定ボタン「長押しで開始／停止／起動／実行」を押し続けて決める。短く押すと「ボタンを押し続けると決まります。」（W5）。Windows body thread report 2026-10-05。"
         }
       }
     },
@@ -2082,7 +2223,8 @@
             "shannon-desktop:src/desk/views/OpsView.tsx",
             "shannon-desktop:src/desk/opsText.ts"
           ],
-          "read": "2026-10-03"
+          "read": "2026-10-05",
+          "note": "窓の中の確認（iPhone と同じ文）で、決定ボタン「長押しで開始／停止／起動／実行」を押し続けて決める。短く押すと「ボタンを押し続けると決まります。」（W5）。Windows body thread report 2026-10-05。"
         }
       }
     },
@@ -2365,6 +2507,29 @@
             "shannon-desktop:src/acting/idle.ts"
           ],
           "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "body.touch-parts",
+      "area": "body",
+      "title": "触れた部位を見分ける",
+      "description": "体のページの当たり判定で、どこに・どう触れたか（頭・髪・頬・肩・手・触れられたくない所など）を見分け、受け取り方はシャノンが決める（ADR-0005）。",
+      "surfaces": {
+        "ios": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "体のページを当たり判定の入った版に替え、触れたことの取り決めに部位・触り方・親を足すとき（受け取るのは所有者の許可を取ってから）。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "iPhone と同じ体のページ。トークの横に姿が立つ A15 のあと。"
+        },
+        "windows": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "当たり判定のメッシュは、体のページ（modelUpdatedAt 2026-10-05T03:26:23Z）に入り、常駐に入った（12:31）。まだ使っていない。Windows body thread report 2026-10-05。"
         }
       }
     },
@@ -3272,11 +3437,11 @@
         },
         "windows": {
           "status": "partial",
-          "note": "新しい判断待ちの作業と、身体を隠している間の「シャノンから」。作業の結果の通知は無い。",
           "evidence": [
             "shannon-desktop:electron/main.ts"
           ],
-          "read": "2026-10-03"
+          "note": "新しい判断待ちの作業、続きが必要な作業（題「続きが必要な作業があります」、本文「〈題名〉：〈次の一手〉」。作業 id × pauseSequence ごとに 1 回、押すとその作業を開く）、身体を隠している間の「シャノンから」。作業の結果の通知は無い。Windows body thread report 2026-10-05。",
+          "read": "2026-10-05"
         }
       }
     },
@@ -3300,12 +3465,12 @@
           ]
         },
         "windows": {
-          "status": "partial",
-          "note": "「シャノンから」の印だけ。作業の件数は出ない。",
+          "status": "yes",
           "evidence": [
             "shannon-desktop:src/desk/App.tsx"
           ],
-          "read": "2026-10-03"
+          "note": "サイドバーの「作業」の数 = 許可待ち＋続きが必要（読み上げ「あなたを待っている作業 N 件」）と、「シャノンから」の印。体の吹き出しは許可待ちだけ。Windows body thread report 2026-10-05。",
+          "read": "2026-10-05"
         }
       }
     },
@@ -3514,6 +3679,29 @@
       }
     },
     {
+      "id": "folder.tools",
+      "area": "folder",
+      "title": "専用フォルダを道具で使う",
+      "description": "シャノンが自分の専用フォルダ（Windows の PC と Mac）を読み・直す（道具。上書きの前に屑かごへ。取り決めは docs/host-folder-contract.md の v2）。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "not_applicable",
+          "reason": "フォルダは PC の中。iPhone では、したことの記録で読む。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "codex/shannon/own-study-and-folder-tools",
+          "note": "サーバーで作業中。Mac の SwiftUI のアプリには専用フォルダがまだ無い（desktop.folder-host）。"
+        },
+        "windows": {
+          "status": "planned",
+          "branch": "codex/shannon/own-study-and-folder-tools",
+          "note": "サーバーで作業中。Windows のフォルダの仕組みを取り決めの v2（読む・直す・待ち受け）にする必要がある（体のスレッド）。"
+        }
+      }
+    },
+    {
       "id": "desktop.pc-presence",
       "area": "desktop",
       "title": "PC の様子への反応",
@@ -3639,5 +3827,20 @@
     "source": "Syzygy work/shannon-unified-structure-comparison（所有者が比較ページで選んだ）",
     "structure": "トーク／作業／シャノン／設定。シャノンは、先頭のカード（押すと ようす）と 頭の中・自律活動・書斎。からだはトークの表示の 1 つ（広い画面は会話の右の補助パネル）。設定 › 管理 に 運用・接続中の端末・配信・診断。",
     "details": "docs/product/information-architecture.md"
+  },
+  "notBuilding": {
+    "about": "作らないと所有者が決めたもの。行を足さない。どの画面にも出さない。",
+    "items": [
+      {
+        "name": "同調率",
+        "decided": "2026-10-05",
+        "note": "所有者の決定。UI にも出さない（体のスレッドへ伝えた）。"
+      },
+      {
+        "name": "判断の内訳",
+        "decided": "2026-10-05",
+        "note": "所有者の決定。UI にも出さない（体のスレッドへ伝えた）。"
+      }
+    ]
   }
 }

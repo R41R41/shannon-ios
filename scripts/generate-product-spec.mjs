@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // Generates what the two implementations of Shannon consume from the one product spec:
 //   design/tokens.json      -> design/generated/ShannonDesignTokens.generated.swift, shannon-tokens.css, shannon-tokens.ts
-//   design/strings.ja.json  -> design/generated/ShannonStrings.generated.swift, shannon-strings.ja.ts
+//   design/strings.ja.json  -> design/generated/ShannonStrings*.generated.swift, shannon-strings.ja.ts
 //   docs/product/feature-matrix.json -> docs/product/feature-matrix.md
 // Run without arguments to write the files, with --check to fail when any of them is stale.
 // No dependencies beyond Node.js. See docs/product/README.md.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -176,18 +176,55 @@ export function swiftLiteral(text) {
   return `"${escaped.replace(/\{([A-Za-z][A-Za-z0-9]*)\}/gu, '\\($1)')}"`;
 }
 
-export function renderStringsSwift(strings) {
-  const lines = [`// ${header(sourcePaths.strings)}`, ''];
-  lines.push('/// The shared user-facing copy of Shannon (iOS, macOS and Windows show the same words).');
-  lines.push('public enum ShannonGeneratedStrings {');
-  for (const entry of strings.strings) {
+/** An area (the first part of a key) with at least this many Apple strings gets a Swift file of its own (500-line ceiling). */
+export const swiftAreaFileThreshold = 20;
+export const swiftStringsFile = 'ShannonStrings.generated.swift';
+
+function swiftStringLines(entries) {
+  const lines = [];
+  for (const entry of entries) {
     const params = stringParams(entry.text);
     lines.push(`    /// \`${entry.key}\`${entry.verbatim ? ' (verbatim: a promise to the owner, do not reword)' : ''}`);
     if (params.length === 0) lines.push(`    public static let ${swiftIdentifier(entry.key)} = ${swiftLiteral(entry.text)}`);
     else lines.push(`    public static func ${swiftIdentifier(entry.key)}(${params.map((name) => `${name}: String`).join(', ')}) -> String { ${swiftLiteral(entry.text)} }`);
   }
-  lines.push('}', '');
-  return lines.join('\n');
+  return lines;
+}
+
+/**
+ * The Swift files of the shared copy, by file name. Windows-only sentences are left out (no Apple code shows them).
+ * Large areas go to `ShannonStrings+<Area>.generated.swift` as an extension of the same enum.
+ */
+export function renderStringsSwiftFiles(strings) {
+  const apple = strings.strings.filter((entry) => entry.only !== 'windows');
+  const area = (entry) => entry.key.split('.')[0];
+  const counts = new Map();
+  for (const entry of apple) counts.set(area(entry), (counts.get(area(entry)) ?? 0) + 1);
+  const ownFile = [...counts].filter(([, count]) => count >= swiftAreaFileThreshold).map(([name]) => name);
+  const files = {};
+  files[swiftStringsFile] = [
+    `// ${header(sourcePaths.strings)}`, '',
+    '/// The shared user-facing copy of Shannon (iOS, macOS and Windows show the same words).',
+    ...(ownFile.length ? [`/// The areas ${ownFile.join(', ')} are in ShannonStrings+<Area>.generated.swift.`] : []),
+    'public enum ShannonGeneratedStrings {',
+    ...swiftStringLines(apple.filter((entry) => !ownFile.includes(area(entry)))),
+    '}', '',
+  ].join('\n');
+  for (const name of ownFile) {
+    files[`ShannonStrings+${name[0].toUpperCase()}${name.slice(1)}.generated.swift`] = [
+      `// ${header(sourcePaths.strings)}`, '',
+      `/// The shared copy of the area \`${name}\`.`,
+      'extension ShannonGeneratedStrings {',
+      ...swiftStringLines(apple.filter((entry) => area(entry) === name)),
+      '}', '',
+    ].join('\n');
+  }
+  return files;
+}
+
+/** The main Swift file of the shared copy (the enum and the small areas). */
+export function renderStringsSwift(strings) {
+  return renderStringsSwiftFiles(strings)[swiftStringsFile];
 }
 
 export function renderStringsTs(strings) {
@@ -261,6 +298,11 @@ export function renderMatrixMarkdown(matrix) {
     if (notes.length) lines.push('', ...notes);
     lines.push('');
   }
+  if (matrix.notBuilding?.items?.length) {
+    lines.push('## 作らないもの', '', matrix.notBuilding.about, '');
+    for (const item of matrix.notBuilding.items) lines.push(`- **${tableText(item.name)}**（${item.decided}）: ${tableText(item.note ?? '')}`);
+    lines.push('');
+  }
   return lines.join('\n');
 }
 
@@ -273,27 +315,43 @@ export function readSources(root = defaultRoot) {
 
 /** Every generated file and its current content, by repository-relative path. */
 export function outputs({ tokens, strings, matrix }) {
+  const stringFiles = Object.entries(renderStringsSwiftFiles(strings));
   return {
     'design/generated/ShannonDesignTokens.generated.swift': renderTokensSwift(tokens),
     'design/generated/shannon-tokens.css': renderTokensCss(tokens),
     'design/generated/shannon-tokens.ts': renderTokensTs(tokens),
-    'design/generated/ShannonStrings.generated.swift': renderStringsSwift(strings),
+    ...Object.fromEntries(stringFiles.map(([name, content]) => [`design/generated/${name}`, content])),
     // The same Swift, compiled into the shared Apple package (iOS and macOS read these values).
     [`${appleGeneratedFolder}/ShannonDesignTokens.generated.swift`]: renderTokensSwift(tokens),
-    [`${appleGeneratedFolder}/ShannonStrings.generated.swift`]: renderStringsSwift(strings),
+    ...Object.fromEntries(stringFiles.map(([name, content]) => [`${appleGeneratedFolder}/${name}`, content])),
     'design/generated/shannon-strings.ja.ts': renderStringsTs(strings),
     'docs/product/feature-matrix.md': renderMatrixMarkdown(matrix),
   };
 }
 
+/** Generated files that are still on disk but no longer produced (an area that moved back into the main file). */
+export function orphanedOutputs(root = defaultRoot, produced = outputs(readSources(root))) {
+  const orphaned = [];
+  for (const folder of ['design/generated', appleGeneratedFolder]) {
+    const absolute = resolve(root, folder);
+    if (!existsSync(absolute)) continue;
+    for (const name of readdirSync(absolute)) {
+      const path = `${folder}/${name}`;
+      if (/^ShannonStrings.*\.generated\.swift$/u.test(name) && !(path in produced)) orphaned.push(path);
+    }
+  }
+  return orphaned;
+}
+
 /** The generated files that are missing or differ from what the sources produce. */
 export function staleOutputs(root = defaultRoot) {
   const stale = [];
-  for (const [path, content] of Object.entries(outputs(readSources(root)))) {
+  const produced = outputs(readSources(root));
+  for (const [path, content] of Object.entries(produced)) {
     const absolute = resolve(root, path);
     if (!existsSync(absolute) || readFileSync(absolute, 'utf8') !== content) stale.push(path);
   }
-  return stale;
+  return [...stale, ...orphanedOutputs(root, produced)];
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -312,6 +370,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       mkdirSync(dirname(absolute), { recursive: true });
       writeFileSync(absolute, content);
       console.log(`wrote ${path}`);
+    }
+    for (const path of orphanedOutputs()) {
+      rmSync(resolve(defaultRoot, path));
+      console.log(`removed ${path}`);
     }
   }
 }

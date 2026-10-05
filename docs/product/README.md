@@ -19,14 +19,14 @@ Mac の Electron 版は、SwiftUI の Mac アプリにまとめる（ADR-0004）
 |---|---|---|
 | 機能の一覧表 | [`feature-matrix.json`](feature-matrix.json) | [`feature-matrix.md`](feature-matrix.md) |
 | 色・文字・余白・角丸・動き | [`design/tokens.json`](../../design/tokens.json) | `design/generated/ShannonDesignTokens.generated.swift`、`shannon-tokens.css`、`shannon-tokens.ts` |
-| 画面の文言 | [`design/strings.ja.json`](../../design/strings.ja.json) | `design/generated/ShannonStrings.generated.swift`、`shannon-strings.ja.ts` |
+| 画面の文言 | [`design/strings.ja.json`](../../design/strings.ja.json) | `design/generated/ShannonStrings*.generated.swift`（大きな領域は `ShannonStrings+<領域>.generated.swift` に分ける。500 行の上限のため）、`shannon-strings.ja.ts`。`only: "windows"` の文は Swift に出さない |
 | 画面の構成（2026-10-03 決定） | [`information-architecture.md`](information-architecture.md) | — |
 
 合わせて読むもの:
 
 - [`roadmap.md`](roadmap.md): 決まった構成に 3 つをそろえるまでの順番（Apple 側と Windows 側）。
 - [`gaps.md`](gaps.md): 所有者が選ぶ前に洗い出した、3 つの画面のずれ。
-- [`copy-differences.md`](copy-differences.md): アプリによって違っている文言の一覧。決まったもの（19 行）と残り（41 行）、直す場所。
+- [`copy-differences.md`](copy-differences.md): アプリによって違っている文言の一覧。決まったもの（22 行）と残り（38 行）、直す場所。
 - [`for-windows-app.md`](for-windows-app.md): Windows アプリの担当へ。
 - [`parity-baseline.json`](parity-baseline.json): いま受け入れている遅れの一覧（下の「検証」を参照）。
 
@@ -46,6 +46,8 @@ Mac の Electron 版は、SwiftUI の Mac アプリにまとめる（ADR-0004）
 | `unknown` | 分からない | 何を確かめていないかを書いた `note` |
 
 `evidence` は、iOS と macOS ではこのリポジトリの中のパス（`パス#名前` と書くと、その名前がファイルにあることまで確かめる）。Windows では `shannon-desktop:パス` と、読んだ日（`read`）。Windows のコードはこのリポジトリから確かめられないので、読んだ日を必ず残す。
+
+所有者が作らないと決めたものは `notBuilding` に書く（2026-10-05: 「同調率」「判断の内訳」）。行や文に戻ってくると検証が落ちる。
 
 `scope` は、その機能がどの画面にあるべきかを表す。書かなければ「3 つとも」。`desktop` はデスクトップの追加（iPhone に無くてよい）、`phone` は iPhone の仕組みに乗ったもの（デスクトップに無くてよい）。デスクトップは、同じ構成のまま、より多く見せ、より多く編集できてよい。足したものも一覧表に載せる。
 
