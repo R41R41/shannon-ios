@@ -281,4 +281,61 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         }
         return red > 200 && green < 80
     }
+
+    /// A transcript from speech that began before the tap is his, however late it arrives (here 1.2 s, more than the
+    /// fallback window): the decision follows the onset the recogniser reported.
+    func testALateTranscriptOfSpeechThatBeganBeforeTheTapIsHis() async {
+        let model = liveModel()
+        model.handle(.speechStarted)
+        model.handle(.speechStopped)
+        model.switchParticipantMode(to: .guest, origin: .control)
+        try? await Task.sleep(for: .seconds(1.2))
+        model.handle(.inputTranscript("明日の歯医者は何時だっけ。"))
+        XCTAssertEqual(model.userTranscript, "", "the preview does not show it")
+        await waitForFinalization(model, turns: 1)
+        XCTAssertEqual(model.pendingTurns.turns.count, 1, "answered in the call")
+        XCTAssertEqual(model.pendingTurns.displayText, "", "never shown")
+        model.stop()
+    }
+
+    /// A sentence begun before the tap and delivered in chunks stays his until its segment has ended; the guests'
+    /// next segment is theirs and is not merged into it.
+    func testAPreTapSentenceDeliveredInChunksStaysHis() async {
+        let model = liveModel()
+        model.handle(.speechStarted)
+        model.switchParticipantMode(to: .guest, origin: .control)
+        try? await Task.sleep(for: .seconds(ShannonGeminiLiveSessionModel.recogniserLag + 0.1))
+        model.handle(.inputTranscript("明日の予定は、"))
+        model.handle(.inputTranscript("歯医者だっけ。"))
+        XCTAssertEqual(model.userTranscript, "")
+        model.handle(.speechStopped)
+        model.handle(.speechStarted)
+        model.handle(.speechStopped)
+        model.handle(.inputTranscript("はじめまして。"))
+        XCTAssertEqual(model.userTranscript, "はじめまして。", "the guests' words, and only theirs")
+        await waitForFinalization(model, turns: 2)
+        XCTAssertEqual(model.pendingTurns.turns.map(\.rawText), ["明日の予定は、歯医者だっけ。", "はじめまして。"])
+        XCTAssertEqual(model.pendingTurns.displayText, "はじめまして。")
+        model.stop()
+    }
+
+    func testSpeechSegmentsFollowOnsetsAndForgetSegmentsThatNeverBroughtWords() {
+        var segments = ShannonVoiceSpeechSegments()
+        XCTAssertNil(segments.claimTranscript(at: 0), "no onsets reported: the arrival window decides")
+        segments.started(at: 0)
+        segments.switchedToGuest()
+        XCTAssertEqual(segments.claimTranscript(at: 1), true, "a chunk of the open pre-tap segment")
+        XCTAssertEqual(segments.claimTranscript(at: 2), true, "another chunk")
+        segments.stopped(at: 3)
+        segments.started(at: 4)
+        segments.stopped(at: 5)
+        XCTAssertEqual(segments.claimTranscript(at: 6), false, "the guests' segment, after it")
+        // A segment that never brings words (a cough before the tap) is forgotten after a while.
+        segments.started(at: 10)
+        segments.stopped(at: 10.5)
+        segments.switchedToGuest()
+        segments.started(at: 30)
+        segments.stopped(at: 31)
+        XCTAssertEqual(segments.claimTranscript(at: 32), false, "not taken for the forgotten pre-tap noise")
+    }
 }

@@ -54,7 +54,7 @@ public final class ShannonGeminiLiveSessionModel {
     public internal(set) var callFace: ShannonFace?
     var replyEmotion: ShannonVoiceTurnEmotionDTO?
     private var bargeCandidateStartedAt: TimeInterval?
-    private var heardRightAfterShannon = false
+    var heardRightAfterShannon = false
     var latencyMeasurements = ShannonVoiceLatencyMeasurements()
     var responseDelivery = ShannonVoiceResponseDelivery()
     var responseCommitTask: Task<Bool, Never>?
@@ -81,6 +81,12 @@ public final class ShannonGeminiLiveSessionModel {
     var sameCallReconnectQueued = false
     /// Until when the first words of a transcript are still the owner's, after a switch into 「友人も一緒」 by the control.
     var ownerWordsReceivedUntil: Date?
+    /// The speech segments the recogniser reported, with whether each began before a switch into 「友人も一緒」.
+    var speechSegments = ShannonVoiceSpeechSegments()
+    /// The words being assembled are the owner's (shown nowhere, not kept as the guests').
+    var bufferIsOwners = false
+    /// When the call switched into 「友人も一緒」, until its first words arrive (a content-free diagnostic).
+    var switchedToGuestAt: TimeInterval?
     /// Told after every switch between 本人だけ and 「友人も一緒」, spoken or by the control. Set by the owner of the call.
     var participantModeDidChange: (@MainActor (ShannonVoiceParticipantMode) -> Void)?
     /// Whether the app declares why it uses the microphone (the test host does not).
@@ -316,15 +322,19 @@ public final class ShannonGeminiLiveSessionModel {
             if callStartedAt == nil { callStartedAt = Date() }
             backgroundSilence.speech(at: Date())
         case .speechStarted:
+            speechSegments.started(at: ProcessInfo.processInfo.systemUptime)
             backgroundSilence.ownerSpeechStarted(at: Date())
             echoWindow.speechStarted(isSpeaking: responseTask != nil, now: ProcessInfo.processInfo.systemUptime)
             bargeInRule.speechStarted(at: ProcessInfo.processInfo.systemUptime)
             duckForSpeech()
         case .speechStopped:
+            speechSegments.stopped(at: ProcessInfo.processInfo.systemUptime)
             backgroundSilence.ownerSpeechStopped(at: Date())
             bargeInRule.speechStopped(at: ProcessInfo.processInfo.systemUptime)
             if responseTask != nil { scheduleDuckRelease() }
         case let .inputTranscript(text):
+            // Every transcript takes its speech segment, also one dropped as her echo, so the next lines up.
+            let segmentIsOwners = speechSegments.claimTranscript(at: ProcessInfo.processInfo.systemUptime)
             if discardsNearHerVoice(text) { return }
             if !turnAssembler.hasFinalText {
                 heardRightAfterShannon = ShannonVoiceGuestCallState.follows(
@@ -332,6 +342,8 @@ public final class ShannonGeminiLiveSessionModel {
                     now: ProcessInfo.processInfo.systemUptime)
             }
             backgroundSilence.ownerSpoke(at: Date())
+            // Whose words these are follows when their speech began; the buffer never mixes the two.
+            takeOwnership(segmentIsOwners: segmentIsOwners, at: ProcessInfo.processInfo.systemUptime)
             turnAssembler.appendFinal(text)
             userTranscript = previewInput(turnAssembler.finalText)
             // Only a completed transcript that is not Shannon's own voice interrupts her reply.
@@ -340,10 +352,6 @@ public final class ShannonGeminiLiveSessionModel {
         case let .goAway(reason):
             if reason == ShannonGeminiLiveTransport.audioFailure { audioFailed() } else { connectionEnded() }
         }
-    }
-
-    private func previewInput(_ current: String) -> String {
-[pendingTurns.displayText, assemblingOwnersWords ? "" : current].filter { !$0.isEmpty }.joined(separator: "\n")
     }
 
     private func handleCapture(rms: Float, seconds: Double, started: Bool, ended: Bool, chunks: Int) {
@@ -370,28 +378,6 @@ public final class ShannonGeminiLiveSessionModel {
         if ended, responseTask == nil { phase = .thinking }
     }
 
-    private func scheduleFinalization(turnComplete: Bool) {
-        guard turnAssembler.hasFinalText else { return }
-        finalizeTask?.cancel()
-        let delay = turnAssembler.finalizationDelayMilliseconds(turnComplete: turnComplete)
-        ShannonVoiceTurnDiagnostics.recordFinalizationScheduled(delay: delay, turnComplete: turnComplete)
-        finalizeTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .milliseconds(delay)) } catch { return }
-            self?.finalizeTranscript(turnComplete: turnComplete)
-        }
-    }
-
-    private func finalizeTranscript(turnComplete: Bool) {
-        finalizeTask?.cancel()
-        finalizeTask = nil
-        guard let envelope = turnAssembler.finish() else { return }
-        ShannonVoiceTurnDiagnostics.recordAssembled(envelope, turnComplete: turnComplete)
-        appendUtterance(id: envelope.id, rawText: envelope.rawText, text: envelope.normalizedText,
-            source: .speech, addressedByName: envelope.addressee == "shannon",
-            followsShannonTurn: heardRightAfterShannon, ownersWords: isOwnersWords(startedAt: envelope.startedAt))
-        userTranscript = pendingTurns.displayText
-        beginResponse()
-    }
     /// A sound heard while Shannon speaks may be her own voice returning through the microphone, so
     /// it only lowers playback. The reply stops when a completed transcript shows the owner spoke
     /// (see `.inputTranscript`); the duck lifts shortly after the sound stops.
@@ -448,6 +434,8 @@ public final class ShannonGeminiLiveSessionModel {
         turnAssembler.reset()
         heardRightAfterShannon = false
         ownerWordsReceivedUntil = nil
+        speechSegments.reset()
+        bufferIsOwners = false
     }
 
     func updateCost() {

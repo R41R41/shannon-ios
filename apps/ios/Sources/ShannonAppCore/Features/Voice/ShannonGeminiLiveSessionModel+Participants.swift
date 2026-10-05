@@ -39,6 +39,9 @@ extension ShannonGeminiLiveSessionModel {
                 finishOwnerBufferAtSwitch()
                 ownerWordsReceivedUntil = Date().addingTimeInterval(Self.recogniserLag)
             }
+            // Speech that began before the switch is his, by its onset (`ShannonVoiceSpeechSegments`).
+            speechSegments.switchedToGuest()
+            switchedToGuestAt = ProcessInfo.processInfo.systemUptime
             userTranscript = ""
             shannonTranscript = ""
             textSendState = .idle
@@ -109,8 +112,8 @@ extension ShannonGeminiLiveSessionModel {
         guestPeriodEnded?(period)
     }
 
-    /// How long the first words of a transcript may arrive after the speech they belong to began. An assumption,
-    /// not a measurement: nothing in the repository or its diagnostics records the transcription service's delay,
+    /// The fallback, used only when the call reports no speech onsets: how long the first words of a transcript may
+    /// arrive after the speech they belong to began. An assumption, not a measurement: nothing in the repository or its diagnostics records the transcription service's delay,
     /// and one second is chosen to cover an ordinary delay of the streamed transcription. Owner speech whose first
     /// words arrive this long after a switch by the control is still his. Measure it from the content-free
     /// `voice.turn.*` diagnostics on a device before relying on a finer value.
@@ -121,9 +124,6 @@ extension ShannonGeminiLiveSessionModel {
         guard participantMode == .guest, let until = ownerWordsReceivedUntil, let startedAt else { return false }
         return startedAt <= until
     }
-
-    /// What the assembler holds now is the owner's (shown nowhere).
-    var assemblingOwnersWords: Bool { isOwnersWords(startedAt: turnAssembler.startedAt) }
 
     /// The owner's words still being assembled at the tap become a turn of his now, hidden and answered in the call.
     private func finishOwnerBufferAtSwitch() {
