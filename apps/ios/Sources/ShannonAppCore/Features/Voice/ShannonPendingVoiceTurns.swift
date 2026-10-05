@@ -33,11 +33,13 @@ struct ShannonPendingVoiceTurns: Sendable {
     }
 
     private(set) var turns: [Turn] = []
+    /// Turns the owner said before 「友人も一緒」 began: still answered, never shown on the call's screen.
+    private(set) var hiddenIDs: Set<UUID> = []
 
     mutating func append(
         id: UUID = UUID(), rawText: String, text: String, source: ShannonVoiceUtteranceSource,
         addressedByName: Bool = false, followsShannonTurn: Bool = false,
-        localReply: String? = nil, isIntroductionCue: Bool = false
+        localReply: String? = nil, isIntroductionCue: Bool = false, hidden: Bool = false
     ) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !turns.contains(where: { $0.id == id }) else { return }
@@ -45,10 +47,18 @@ struct ShannonPendingVoiceTurns: Sendable {
             id: id, rawText: rawText, text: text, source: source,
             addressedByName: addressedByName, followsShannonTurn: followsShannonTurn,
             localReply: localReply, isIntroductionCue: isIntroductionCue))
+        if hidden { hiddenIDs.insert(id) }
+    }
+
+    /// Everything pending now stays pending but is no longer shown (a switch into 「友人も一緒」).
+    mutating func hideAll() {
+        hiddenIDs.formUnion(turns.map(\.id))
     }
 
     /// What the subtitle shows for input that has not been answered yet.
-    var displayText: String { turns.map(\.rawText).filter { !$0.isEmpty }.joined(separator: "\n") }
+    var displayText: String {
+        turns.filter { !hiddenIDs.contains($0.id) }.map(\.rawText).filter { !$0.isEmpty }.joined(separator: "\n")
+    }
 
     func batch(maximumCharacters: Int = 8_000) -> Batch? {
         var prefix: [Turn] = []
@@ -65,9 +75,13 @@ struct ShannonPendingVoiceTurns: Sendable {
     mutating func acknowledge(_ batch: Batch) {
         guard Array(turns.prefix(batch.turns.count)) == batch.turns else { return }
         turns.removeFirst(batch.turns.count)
+        hiddenIDs.subtract(batch.turns.map(\.id))
     }
 
-    mutating func reset() { turns.removeAll() }
+    mutating func reset() {
+        turns.removeAll()
+        hiddenIDs.removeAll()
+    }
 }
 
 public enum ShannonVoiceUtteranceSource: String, Codable, Equatable, Sendable {

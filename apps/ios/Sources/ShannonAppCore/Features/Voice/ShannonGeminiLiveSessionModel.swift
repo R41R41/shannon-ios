@@ -294,7 +294,7 @@ public final class ShannonGeminiLiveSessionModel {
         return sendText(text)
     }
 
-    private func handle(_ event: ShannonTranscriptionEvent) {
+    func handle(_ event: ShannonTranscriptionEvent) {
         switch event {
         case .sessionReady:
             phase = .listening

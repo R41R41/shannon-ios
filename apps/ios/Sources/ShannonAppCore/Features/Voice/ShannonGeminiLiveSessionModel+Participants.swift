@@ -29,7 +29,9 @@ extension ShannonGeminiLiveSessionModel {
         } else {
             // Into 「友人も一緒」: the owner's words and her last reply on screen, and owner text that failed to
             // send, are not left for the others at the table to read. What he said and was not yet answered stays
-            // pending and is answered in the in-call context.
+            // pending and is answered in the in-call context, but is never shown again; an owner reply still
+            // streaming does not write onto the screen either (`mayShowReply`).
+            pendingTurns.hideAll()
             userTranscript = ""
             shannonTranscript = ""
             textSendState = .idle
@@ -53,6 +55,7 @@ extension ShannonGeminiLiveSessionModel {
         addressedByName: Bool = false, followsShannonTurn: Bool = false
     ) {
         var localReply: String?
+        var switchedNow = false
         if participantMode == .owner {
             let now = ProcessInfo.processInfo.systemUptime
             let answersQuestion = guestCall.takeCompanionQuestion(now: now)
@@ -61,14 +64,17 @@ extension ShannonGeminiLiveSessionModel {
             let cue = ShannonVoiceCompanionCue.detect(in: rawText) ?? ShannonVoiceCompanionCue.detect(in: heard)
             if cue == .switchToGuest || (answersQuestion && ShannonVoiceCompanionCue.confirms(rawText)) {
                 switchParticipantMode(to: .guest, origin: .spoken)
+                switchedNow = true
             } else if answersQuestion, ShannonVoiceCompanionCue.denies(rawText) {
                 guestCall.companionDenied()
             } else if cue == .ask {
                 localReply = ShannonVoiceCompanionCue.question
             }
         }
+        // The owner's words that switched the call are his own: answered, not shown to the others.
         pendingTurns.append(id: id, rawText: rawText, text: text, source: source,
-            addressedByName: addressedByName, followsShannonTurn: followsShannonTurn, localReply: localReply)
+            addressedByName: addressedByName, followsShannonTurn: followsShannonTurn, localReply: localReply,
+            hidden: switchedNow)
     }
 
     public func shareCameraSnapshot(
@@ -92,6 +98,11 @@ extension ShannonGeminiLiveSessionModel {
     func finishGuestPeriod() {
         guard let period = guestCall.endGuestPeriod() else { return }
         guestPeriodEnded?(period)
+    }
+
+    /// A reply asked in 本人だけ that is still streaming once the call is 「友人も一緒」 is not written on screen.
+    func mayShowReply(of mode: ShannonVoiceParticipantMode) -> Bool {
+        !(mode == .owner && participantMode == .guest)
     }
 
     /// Owner mode: someone may be listening, so protected memories are not read out and the turn is marked.
