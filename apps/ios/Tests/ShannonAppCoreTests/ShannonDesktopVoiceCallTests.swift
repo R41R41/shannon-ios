@@ -90,12 +90,14 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
 
     func testATouchLineIsNotListenedForInADesignPreviewOrWhenTheBodyNoLongerAnswersInVoice() async {
         let call = ShannonDesktopVoiceCall()
-        call.attach(conversation: ShannonConversationModel.designPreview(), menuBar: nil)
+        let conversation = ShannonConversationModel.designPreview()
+        call.attach(conversation: conversation, menuBar: nil)
         var line = ShannonBodyTouchCoordinator.Line(id: "l", text: "えへへ", face: nil)
         line.listenSeconds = 6
         await call.bodyListen(answersInVoice: { true })(line, 6)
         XCTAssertNil(call.workspace.connectionRequestID)
         XCTAssertEqual(call.session.phase, .idle)
+        withExtendedLifetime(conversation) {}
     }
 
     func testTheMacStaysAwakeOnlyWhileTheCallIsLive() {
@@ -121,6 +123,25 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
         XCTAssertLessThan(ContinuousClock.now - started, .seconds(2))
         // Without a call, quitting is not held back.
         XCTAssertEqual(ShannonDesktopAppDelegate().applicationShouldTerminate(NSApplication.shared), .terminateNow)
+    }
+
+    func testStartingACallOrDictationStopsHerEarphoneMessageAndItsAnswer() async {
+        let arbiter = ShannonSpeechArbiter.shared
+        let previous = arbiter.microphoneWillBeTaken
+        defer { arbiter.microphoneWillBeTaken = previous }
+        var taken = 0
+        arbiter.microphoneWillBeTaken = { taken += 1 }
+        let call = ShannonDesktopVoiceCall()
+        let conversation = ShannonConversationModel.designPreview()
+        call.attach(conversation: conversation, menuBar: nil)
+        call.start(threadID: nil)
+        XCTAssertEqual(taken, 1)
+        call.end()
+        call.dictationPrimaryAction { _ in }
+        XCTAssertEqual(taken, 2)
+        await settle()
+        call.dictation.cancel()
+        withExtendedLifetime(conversation) {}
     }
 
     // MARK: Elsewhere (owner decision 2026-10-06, option B)

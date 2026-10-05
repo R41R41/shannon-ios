@@ -14,6 +14,8 @@ extension ShannonDesktopVoiceCall {
         switch dictation.phase {
         case .idle, .denied, .failed:
             guard !dictationWaitsForCall, !ShannonSpeechArbiter.shared.touchLineIsActive else { return }
+            // Her message through the earphones and the exchange after it give way to dictation.
+            ShannonSpeechArbiter.shared.microphoneWillBeTaken?()
             Task { await dictation.startListening() }
         case .listening, .ready:
             guard let recording = dictation.finishListening(), let conversation else { return }
@@ -45,6 +47,7 @@ extension ShannonDesktopVoiceCall {
                   line.audience == .owner, answersInVoice(),
                   ShannonMediaPermission.currentMicrophone() == .granted,
                   !self.holdsMicrophone, !self.dictationHoldsMicrophone else { return }
+            ShannonSpeechArbiter.shared.microphoneWillBeTaken?()
             // The card of the last call's 「友人も一緒」 periods is put back if this call comes to nothing.
             let callMemory = workspace.callMemory
             let starting = workspace.beginCall(

@@ -84,8 +84,10 @@ public final class ShannonDesktopVoiceCall {
     public func start(threadID: String?) {
         guard let conversation, !holdsMicrophone else { return }
         notice = nil
-        // Two captures never run at once: dictation that is still open gives way to the call.
+        // Two captures never run at once: dictation that is still open gives way to the call, and so does her
+        // message through the earphones with the exchange after it.
         dictation.cancel()
+        ShannonSpeechArbiter.shared.microphoneWillBeTaken?()
         workspace.beginCall(
             mode: .owner, speechProvider: Self.speechProvider, threadID: threadID,
             conversationModel: conversation, geminiVoiceModel: session

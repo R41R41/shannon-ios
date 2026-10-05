@@ -30,16 +30,37 @@ final class ShannonMacAnswerListener: ShannonReachOutListening {
 
     static var microphoneIsPermitted: Bool { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized }
 
+    /// Moves on when a voice conversation or dictation takes the microphone: the exchange in progress stops.
+    private var generation = 0
+
+    /// A voice conversation or dictation the owner started takes the microphone (`ShannonSpeechArbiter`).
+    func cancel() {
+        generation &+= 1
+    }
+
+    /// The exchange started as `generation` may go on: not cancelled, and nothing else holds the microphone.
+    private func mayGoOn(_ mine: Int) -> Bool {
+        generation == mine && !(ShannonSpeechArbiter.shared.sessionInUse?() ?? false)
+    }
+
     func listen(for seconds: Int, after message: ShannonPrivateReachOutMessageDTO) async {
         // The microphone is never asked for from here: the permission prompt belongs to the owner's switch in Settings.
         guard Self.microphoneIsPermitted else { return }
+        let mine = generation
+        // A voice conversation or dictation the owner started holds the microphone: his answer is heard there, and
+        // this exchange stops before each step (recording, writing out, answering, storing, speaking).
+        let goesOn = { [weak self] in self?.mayGoOn(mine) ?? false }
         var threadID = message.threadId
         for _ in 0..<Self.maximumTurns {
-            // A voice conversation or dictation the owner started holds the microphone: his answer is heard there.
-            guard stillPrivate(), !conversationModel.isSending, !(ShannonSpeechArbiter.shared.sessionInUse?() ?? false),
-                  let recording = await recordAnswer(window: TimeInterval(seconds)) else { return }
+            guard stillPrivate(), !conversationModel.isSending, goesOn(),
+                  let recording = await recordAnswer(window: TimeInterval(seconds), goesOn: goesOn) else { return }
+            guard goesOn() else {
+                try? FileManager.default.removeItem(at: recording.fileURL)
+                return
+            }
             do {
                 let transcript = try await conversationModel.transcribeVoice(recording)
+                guard goesOn() else { return }
                 // His answer belongs to the Talk her message is in, whichever Talk the window shows.
                 let response = try await conversationModel.performLiveVoiceDelegationResponse(
                     transcript: transcript, participantMode: .owner, threadID: threadID
@@ -47,13 +68,14 @@ final class ShannonMacAnswerListener: ShannonReachOutListening {
                 threadID = response.threadId
                 let reply = response.reply.trimmingCharacters(in: .whitespacesAndNewlines)
                 // She may choose to stay quiet; then there is no turn to store, as in a voice conversation.
-                guard response.voicePlan?.shouldRespond != false, !reply.isEmpty else { return }
+                guard response.voicePlan?.shouldRespond != false, !reply.isEmpty, goesOn() else { return }
                 try await conversationModel.commitRealtimeVoiceTurn(
                     userTranscript: transcript, shannonTranscript: reply, threadID: threadID,
                     emotion: response.voicePlan?.turnEmotion
                 )
-                guard stillPrivate() else { return }
-                guard await speaker.speak(reply, stillPrivate: stillPrivate) == .spoken else { return }
+                guard stillPrivate(), goesOn() else { return }
+                let stillPrivate = stillPrivate
+                guard await speaker.speak(reply, stillPrivate: { stillPrivate() && goesOn() }) == .spoken else { return }
             } catch {
                 return
             }
@@ -62,7 +84,7 @@ final class ShannonMacAnswerListener: ShannonReachOutListening {
 
     /// Records until he has answered and stopped, or the window passed without speech. Silence returns nil
     /// and leaves no file.
-    private func recordAnswer(window: TimeInterval) async -> ShannonVoiceRecording? {
+    private func recordAnswer(window: TimeInterval, goesOn: () -> Bool) async -> ShannonVoiceRecording? {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("shannon-answer-\(UUID().uuidString)")
             .appendingPathExtension("m4a")
@@ -83,8 +105,8 @@ final class ShannonMacAnswerListener: ShannonReachOutListening {
         var decision = ShannonAnswerDetector.Decision.waiting
         while decision == .waiting, recorder.isRecording {
             do { try await Task.sleep(for: .milliseconds(50)) } catch { break }
-            // The earphones left: the microphone closes and what was recorded is dropped.
-            guard stillPrivate() else { break }
+            // The earphones left, or a call or dictation took the microphone: it closes and what was recorded is dropped.
+            guard stillPrivate(), goesOn() else { break }
             recorder.updateMeters()
             decision = detector.observe(level: recorder.averagePower(forChannel: 0), at: Date())
         }
@@ -132,6 +154,11 @@ final class ShannonMacEarphoneController {
         }
         reachOuts.speaker = speaker
         reachOuts.listener = listener
+        // A voice conversation or dictation the owner starts stops her message and the exchange after it at once.
+        ShannonSpeechArbiter.shared.microphoneWillBeTaken = { [weak speaker, weak listener] in
+            speaker?.stop()
+            listener?.cancel()
+        }
         // She does not speak while a message of his is on its way, into a voice conversation or dictation (A16),
         // or over her own line for a touch.
         reachOuts.isConversationActive = { [conversationModel] in
