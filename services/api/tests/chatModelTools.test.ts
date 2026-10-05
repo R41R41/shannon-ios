@@ -69,7 +69,8 @@ describe('her tools in a text turn', () => {
     const result = await model.generate({ ...base, tools: tools.value });
     expect(result.reply).toBe('書斎にメモが1つあります。');
     expect(tools.calls).toEqual([{ name: 'study_list', args: '{"kind":"note"}' }]);
-    expect(bodies[0]).toMatchObject({ tool_choice: 'auto', parallel_tool_calls: false });
+    // A text turn may ask for several calls in one response (ADR-0003 stage 4); `chatModelToolStep.test.ts` holds the rest.
+    expect(bodies[0]).toMatchObject({ tool_choice: 'auto', parallel_tool_calls: true });
     expect((bodies[0]!.tools as Array<{ name: string; type: string }>).map(tool => [tool.type, tool.name])).toEqual([['function', 'study_list'], ['function', 'study_read']]);
     expect(String(bodies[0]!.instructions)).toContain('[ボクの道具]');
     const input = bodies[1]!.input as Array<Record<string, unknown>>;

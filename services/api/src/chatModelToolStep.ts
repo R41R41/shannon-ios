@@ -1,0 +1,122 @@
+import type { ProviderFunctionCall, ShannonModelToolSession, ToolCallOutcome } from './chatModelTools.js';
+import { providerToolName, type ShannonToolDefinition } from './shannonTools.js';
+import { MINIMUM_CALL_MILLISECONDS, TOOL_CALL_CAP_MILLISECONDS } from './turnDeadline.js';
+
+/**
+ * The calls of one model step (one response that asks for tools), run together where that is safe (Syzygy ADR-0003
+ * stage 4; owner decision 2026-10-06). The rule, in the model's order:
+ *
+ * - A run of reading tools (`effect: 'read'`) one after another starts at once and runs concurrently.
+ * - Anything else (a write, or a name this turn does not offer) waits until everything before it has ended, and
+ *   nothing after it starts until it has ended. So a write never runs beside another call, any read or write that the
+ *   model put after a write sees what the write did, and two writes to one target are always one after the other.
+ * - Every call still goes through the session (the runner's one gate, `authorizeToolCall`, and the activity record),
+ *   with the same checks as before in the same order: the turn's call limit, then the time left, then the offer.
+ * - Each call gets min(10 s, what is left minus the answer's reserve) of the turn's deadline when it starts, and is
+ *   cancelled at that time through its signal (an operation on her PC that was not taken is dropped, as before), or
+ *   at once when the caller stops the turn. A run of reads takes as long as its slowest call, not their sum.
+ * - The results go back to the model in the model's order, and each call is noted in the turn's trace in that order
+ *   (`ToolCallOutcome.note`), whichever ended first. The activity record is written by each call as it ends.
+ *
+ * `SHANNON_PARALLEL_TOOLS=off` runs every call alone, one after the other, as before this change, and a text turn
+ * asks the model for one call at a time again (`parallel_tool_calls: false`).
+ */
+export function parallelToolsEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+  return !['off', 'false', '0', 'disabled', 'no', 'none'].includes(environment.SHANNON_PARALLEL_TOOLS?.trim().toLowerCase() ?? '');
+}
+
+/** A call of a name the request did not offer: nothing ran. */
+export const NOT_OFFERED = JSON.stringify({ ok: false, text: 'この返事ではその道具は出していない。', failure: 'not_offered', retryable: false });
+/** A call that was not run because the turn's time ran short: nothing of it happened. */
+export const SKIPPED_FOR_TIME = JSON.stringify({ ok: false, text: '時間が足りず実行しなかった（何もしていない）。', failure: 'timeout', retryable: true });
+const OVER_LIMIT = JSON.stringify({ ok: false, text: 'この返事で使える道具の数を超えた。いまある結果で答える。', failure: 'limit', retryable: false });
+
+/** What the tool rounds of one turn carry from step to step. */
+export interface ToolStepState {
+  /** Calls that ran (were handed to the session), in the whole turn. */
+  used: number;
+  /** No more call runs in this turn (its time ran short, or its round was cut off). */
+  toolsOff: boolean;
+}
+
+export interface ToolStepOptions {
+  /** The caller's own cancellation: in-flight calls end at once, are noted, and then the step throws. */
+  signal?: AbortSignal;
+  /** Whether reads may run concurrently (`parallelToolsEnabled`). */
+  parallel: boolean;
+}
+
+interface Running { index: number; outcome: Promise<ToolCallOutcome>; stop: () => void }
+
+/**
+ * Runs the calls of one step and returns, in the model's order, each call and its result as input items for the next
+ * round. Throws only when the caller stopped the turn, after every call that had started has ended and been noted.
+ */
+export async function runToolStep(
+  calls: readonly ProviderFunctionCall[], session: ShannonModelToolSession, state: ToolStepState, options: ToolStepOptions,
+): Promise<unknown[]> {
+  const deadline = session.deadline;
+  const offered = new Map<string, ShannonToolDefinition>(session.definitions.map(tool => [providerToolName(tool.name), tool]));
+  const start = session.start?.bind(session)
+    ?? (async (name: string, args: string, signal?: AbortSignal, time?: number): Promise<ToolCallOutcome> => ({ output: await session.call(name, args, signal, time), note: () => {} }));
+  const outputs: string[] = new Array(calls.length);
+  let running: Running[] = [];
+  /** Waits for every running call, then notes them in the model's order. */
+  const settle = async () => {
+    if (!running.length) return;
+    const group = running;
+    running = [];
+    const settled = await Promise.allSettled(group.map(item => item.outcome));
+    let failure: unknown;
+    settled.forEach((result, position) => {
+      group[position]!.stop();
+      if (result.status === 'fulfilled') {
+        outputs[group[position]!.index] = result.value.output;
+        result.value.note();
+      } else failure ??= result.reason;
+    });
+    if (failure !== undefined) throw failure;
+  };
+  const stopped = async () => {
+    if (!options.signal?.aborted) return;
+    await settle();
+    options.signal.throwIfAborted();
+  };
+  for (const [index, call] of calls.entries()) {
+    const alone = !options.parallel || offered.get(call.name)?.effect !== 'read';
+    if (alone) await settle();
+    // Checked when the call would start: after what it waits for, so nothing starts once the caller stopped.
+    await stopped();
+    const callTime = deadline.forStep(TOOL_CALL_CAP_MILLISECONDS);
+    if (state.used >= session.maximumCalls) {
+      outputs[index] = OVER_LIMIT;
+    } else if (state.toolsOff || callTime < MINIMUM_CALL_MILLISECONDS) {
+      // The answer's reserve is reached: the rest of this response's calls are not run.
+      outputs[index] = SKIPPED_FOR_TIME;
+      state.toolsOff = true;
+    } else if (!offered.has(call.name)) {
+      // Only the names offered in this request run, whatever the model writes (`folder.create` is not offered).
+      outputs[index] = session.refuse?.(call.name) ?? NOT_OFFERED;
+    } else {
+      const time = callSignal(callTime, options.signal);
+      state.used += 1;
+      running.push({ index, outcome: start(call.name, call.arguments, time.signal, callTime), stop: time.stop });
+    }
+    if (alone) await settle();
+  }
+  await settle();
+  await stopped();
+  return calls.flatMap((call, index) => [
+    { type: 'function_call', call_id: call.callId, name: call.name, arguments: call.arguments },
+    { type: 'function_call_output', call_id: call.callId, output: outputs[index]! },
+  ]);
+}
+
+/** The signal of one call: aborted at its time (a `TimeoutError`), or with the caller's reason when the caller stops. */
+function callSignal(milliseconds: number, caller?: AbortSignal): { signal: AbortSignal; stop: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new DOMException('The tool call ran out of its time.', 'TimeoutError')), Math.max(1, milliseconds));
+  const follow = () => controller.abort(caller?.reason);
+  if (caller?.aborted) follow(); else caller?.addEventListener('abort', follow, { once: true });
+  return { signal: controller.signal, stop: () => { clearTimeout(timer); caller?.removeEventListener('abort', follow); } };
+}

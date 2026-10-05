@@ -20,7 +20,7 @@ import {
 } from './chatModelSupport.js';
 import { APP_LOOK_SCHEMA } from './appLookContract.js';
 import { MINECRAFT_INTENT_SCHEMA } from './minecraftIntent.js';
-import { TOOLS_WITHHELD_INSTRUCTIONS, providerFunctionTools, toolInstructions } from './chatModelTools.js';
+import { TOOLS_WITHHELD_INSTRUCTIONS, parallelToolsEnabled, providerFunctionTools, toolInstructions } from './chatModelTools.js';
 
 /**
  * The text-chat turn of the OpenAI Responses adapter: the request body and the reading of
@@ -159,8 +159,9 @@ export function chatTurnRequestBody(
       include: ['web_search_call.action.sources'],
       max_tool_calls: 3,
     } : {}),
-    // Her registry tools (`chatModelTools.ts`), never beside a forced web search.
-    ...(offersTools(request) ? { tools: providerFunctionTools(request.tools!.definitions), tool_choice: 'auto', parallel_tool_calls: false } : {}),
+    // Her registry tools (`chatModelTools.ts`), never beside a forced web search. A text turn may ask for several calls in one
+    // response, and its reads run together (ADR-0003 stage 4, `chatModelToolStep.ts`); `SHANNON_PARALLEL_TOOLS=off`: one at a time.
+    ...(offersTools(request) ? { tools: providerFunctionTools(request.tools!.definitions), tool_choice: 'auto', parallel_tool_calls: parallelToolsEnabled() } : {}),
     store: false,
     prompt_cache_key: stableScopeIdentifier(request.scopeKey),
     safety_identifier: stableScopeIdentifier(request.scopeKey),

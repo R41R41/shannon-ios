@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { CompanionStateStore } from '@shannon/cognition';
-import { CONVERSATION_TOOL_CALLS, type ShannonModelToolSession } from './chatModelTools.js';
+import { CONVERSATION_TOOL_CALLS, type ShannonModelToolSession, type ToolCallOutcome } from './chatModelTools.js';
 import { conversationSecrets, type SecretCheck } from './conversationSecrets.js';
 import type { ConversationStore, StoredConversationMessage } from './conversationStore.js';
 import { ToolAudienceWatch, type ToolAudienceSource } from './shannonToolAudience.js';
@@ -73,22 +73,28 @@ export function conversationTools(
     return toolResultForModel(runner.refused(providerName.slice(0, 80), scopeKey, toolFailure('not_offered', 'この返事ではその道具は出していない。', { retryable: false, refusal })));
   };
   Object.defineProperty(session, 'refuse', { enumerable: false, value: refuse });
+  /** Runs one call; its note in the turn's trace is left to `note()`, so a step's calls are noted in the model's order. */
+  const start = async (providerName: string, argumentsJson: string, signal?: AbortSignal, timeMilliseconds?: number): Promise<ToolCallOutcome> => {
+    const tool = toolFromProviderName(providerName);
+    // Only a provider name this turn offers runs (`folder.create` is not `folder_create`); a refusal is recorded like any call.
+    if (!tool || !definitions.some(item => item.name === tool.name)) return { output: refuse(providerName), note: () => {} };
+    // What must reach nobody but the owner, read at the moment of the call; a list that cannot be read is null, and writes are then refused.
+    // Read once a turn; a list that could not be read is tried again at the next call.
+    if (!check) { try { check = server.secrets?.(scopeKey); } catch { check = null; } }
+    const secrets = check;
+    const result = await runner.call(tool?.name ?? providerName.slice(0, 80), argumentsJson, {
+      scopeKey, surface, audience: 'owner_alone', memory, threadId, ...(secrets !== undefined ? { secrets } : {}), ...(timeMilliseconds !== undefined ? { timeMilliseconds } : {}),
+    }, signal);
+    return { output: toolResultForModel(result), note: () => trace?.called(toolTraceCall(tool?.name ?? providerName.slice(0, 80), argumentsJson, result, secrets)) };
+  };
   // Not enumerable: two turns that offer the same tools are the same request (what the model is asked), whoever runs the calls.
+  Object.defineProperty(session, 'start', { enumerable: false, value: start });
   Object.defineProperty(session, 'call', {
     enumerable: false,
     value: async (providerName: string, argumentsJson: string, signal?: AbortSignal, timeMilliseconds?: number) => {
-      const tool = toolFromProviderName(providerName);
-      // Only a provider name this turn offers runs (`folder.create` is not `folder_create`); a refusal is recorded like any call.
-      if (!tool || !definitions.some(item => item.name === tool.name)) return refuse(providerName);
-      // What must reach nobody but the owner, read at the moment of the call; a list that cannot be read is null, and writes are then refused.
-      // Read once a turn; a list that could not be read is tried again at the next call.
-      if (!check) { try { check = server.secrets?.(scopeKey); } catch { check = null; } }
-      const secrets = check;
-      const result = await runner.call(tool?.name ?? providerName.slice(0, 80), argumentsJson, {
-        scopeKey, surface, audience: 'owner_alone', memory, threadId, ...(secrets !== undefined ? { secrets } : {}), ...(timeMilliseconds !== undefined ? { timeMilliseconds } : {}),
-      }, signal);
-      trace?.called(toolTraceCall(tool?.name ?? providerName.slice(0, 80), argumentsJson, result, secrets));
-      return toolResultForModel(result);
+      const outcome = await start(providerName, argumentsJson, signal, timeMilliseconds);
+      outcome.note();
+      return outcome.output;
     },
   });
   return { tools: session };
