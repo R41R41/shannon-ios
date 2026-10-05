@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { closedSignal, dispatchHostStepRequest } from '../src/apiAutonomyHostStepRoutes.js';
 import { configuredAutonomy } from '../src/autonomyBudget.js';
-import { hostFolderPath, hostStepContentDigest } from '../src/autonomyHostFolderPath.js';
+import { hostFolderPath, hostStepContentDigest, roomLookGuard } from '../src/autonomyHostFolderPath.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import type { ApiResponse } from '../src/contracts.js';
@@ -295,5 +295,19 @@ describe('her folder through her tools (contract v2)', () => {
     expect(read.text.match(/--- ここまで ---/gu)).toHaveLength(1);
     expect(read.text).toContain('－－－ ここまで ---');
     expect(read.text).toContain('［道具の結果]');
+  });
+
+  it('does not copy, by the v1 step either, a note that restates a note about a look at the room', () => {
+    const { store, service } = harness();
+    const at = new Date().toISOString();
+    const seen = '窓の外が明るくて、ライ氏は青いマグカップでコーヒーを飲みながら画面を見ていた。机の上には本が三冊。';
+    store.study.create(scope, { kind: 'note', title: '見たこと（10月5日 10時）', body: seen, origin: 'room_look' }, at);
+    const restated = store.study.create(scope, { kind: 'note', title: '今日のこと', body: `今日のこと。${seen}` }, at);
+    const own = store.study.create(scope, { kind: 'note', title: '駅のこと', body: '夕方の駅は光が低い。' }, at);
+    if (typeof restated === 'string' || typeof own === 'string') throw new Error('not created');
+    expect(service.folder.nextCopy(scope, at, restated.id)).toBeNull();
+    expect(service.folder.nextCopy(scope, at, own.id)).toMatchObject({ pieceId: own.id });
+    expect(roomLookGuard([seen])(`前置き${seen.slice(5, 40)}後書き`)).toBe(true);
+    expect(roomLookGuard([seen])('ライ氏はコーヒーを飲んでいた。')).toBe(false);
   });
 });

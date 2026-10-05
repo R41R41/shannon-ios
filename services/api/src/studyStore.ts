@@ -151,6 +151,20 @@ export class StudyStore {
     if (!columns.some(column => column.name === 'origin')) database.exec('ALTER TABLE study_pieces ADD COLUMN origin TEXT');
     // Additive (2026-10-05): her own delete is soft. A deleted piece is in her study's trash, and every other path reads it as gone.
     if (!columns.some(column => column.name === 'deleted_at')) database.exec('ALTER TABLE study_pieces ADD COLUMN deleted_at TEXT');
+    database.exec('CREATE INDEX IF NOT EXISTS study_pieces_origin ON study_pieces (scope_key, origin, created_at)');
+  }
+
+  /**
+   * Every version of her newest `maximumNotes` notes about a look at the room, in one query: what the guard against
+   * putting that text into a file (`roomLookGuard`) is built from. Older notes than these are not checked.
+   */
+  roomLookTexts(scopeKey: string, maximumNotes: number): readonly string[] {
+    const rows = this.database.prepare(`
+      SELECT v.body FROM study_piece_versions v
+      JOIN (SELECT piece_id FROM study_pieces WHERE scope_key = ? AND origin = 'room_look' ORDER BY created_at DESC LIMIT ?) p ON v.piece_id = p.piece_id
+      WHERE v.scope_key = ?
+    `).all(scopeKey, Math.max(1, Math.trunc(maximumNotes)), scopeKey) as unknown as Array<{ body: string }>;
+    return Object.freeze(rows.map(row => row.body));
   }
 
   /** Newest change first. Pieces in her trash are left out unless `deleted` asks for them (`only`: nothing else). */

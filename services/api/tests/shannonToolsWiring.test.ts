@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { createInMemoryAutonomyService } from '../src/autonomyService.js';
+import { TOOLS_WITHHELD_INSTRUCTIONS } from '../src/chatModelTools.js';
+import { chatTurnRequestBody } from '../src/chatModelTurn.js';
 import { OTHERS_HEARD_WINDOW_MILLISECONDS, ToolAudienceWatch } from '../src/shannonToolAudience.js';
 import { asksAboutOwnThings, conversationTools } from '../src/shannonToolSession.js';
 
@@ -81,11 +83,15 @@ describe('which conversation turns are offered her tools', () => {
 
   it('offers nothing while her body says someone else can see or hear it, or when that cannot be read', () => {
     const runner = { tools: createInMemoryAutonomyService(() => at).tools };
-    const secrets = () => [];
+    const secrets = () => ({ carries: () => false });
     const offer = (othersPresent: () => boolean) => conversationTools(runner, 'owner', 'text', true, { audience: new ToolAudienceWatch({ othersPresent }, () => at), secrets });
     expect(offer(() => false).tools).toBeDefined();
-    expect(offer(() => true).tools).toBeUndefined();
-    expect(offer(() => { throw new Error('unreadable'); }).tools).toBeUndefined();
+    expect(offer(() => true)).toEqual({ toolsWithheld: true });
+    expect(offer(() => { throw new Error('unreadable'); })).toEqual({ toolsWithheld: true });
+    // She is told in one line, with no names, that her tools are withheld; the line is in no ordinary turn.
+    const withheld = chatTurnRequestBody('gpt-5.6-luna', { scopeKey: 'owner', systemPrompt: '', history: [], message: 'x', toolsWithheld: true }, undefined);
+    expect(String(withheld.instructions)).toContain(TOOLS_WITHHELD_INSTRUCTIONS);
+    expect(String(chatTurnRequestBody('gpt-5.6-luna', { scopeKey: 'owner', systemPrompt: '', history: [], message: 'x' }, undefined).instructions)).not.toContain('[ボクの道具]');
     // Without what the server knows of the audience, nothing is offered.
     expect(conversationTools(runner, 'owner', 'text', true).tools).toBeUndefined();
   });

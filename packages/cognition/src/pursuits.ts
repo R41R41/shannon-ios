@@ -154,7 +154,8 @@ export interface ShannonOwnWork {
 }
 
 const UNSHOWN_NOTE = '（まだ見せていない。題名や中身をいつ言うかは自分で決める）';
-const UNSHOWN_LINE = /^- 作っている物語「.*」: (下書き[^\n]*)（まだ見せていない。題名や中身をいつ言うかは自分で決める）$/gmu;
+// Matched on the unshown note that ends the line, whatever the stage says; the greedy title keeps every 」: of the title in it.
+const UNSHOWN_LINE = /^- 作っている物語「.*」: ([^\n]*)（まだ見せていない。題名や中身をいつ言うかは自分で決める）$/gmu;
 
 /**
  * The same prompt with the title of every unshown draft taken out, for anything that leaves the server: the system

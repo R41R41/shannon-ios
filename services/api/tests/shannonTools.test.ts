@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialCompanionState } from '@shannon/cognition';
-import { conversationSecrets } from '../src/conversationSecrets.js';
+import { conversationSecrets, type SecretCheck } from '../src/conversationSecrets.js';
 import { configuredAutonomy } from '../src/autonomyBudget.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
@@ -8,7 +8,7 @@ import { authorizeToolCall, toolRefusal } from '../src/shannonToolGate.js';
 import { validToolInput } from '../src/shannonToolInput.js';
 import { toolSessionMemory } from '../src/shannonToolTypes.js';
 import {
-  SHANNON_TOOLS, TOOL_FAILURE_KINDS, offeredTools, providerToolName, shannonTool, toolFromProviderName, toolResultForModel,
+  CONVERSATION_WRITE_CHARACTERS, SHANNON_TOOLS, TOOL_FAILURE_KINDS, offeredTools, providerToolName, shannonTool, toolFromProviderName, toolResultForModel,
   type ToolResult, type ToolSurface,
 } from '../src/shannonTools.js';
 
@@ -50,9 +50,10 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
       expect(toolFromProviderName(providerToolName(tool.name))).toBe(tool);
       expect(providerToolName(tool.name)).toMatch(/^[a-z_]+$/u);
     }
-    // Text, voice and her own time are given the same list; with anyone else present there is none.
+    // Text, voice and her own time are given the same tools (a conversation's writes shorter); with anyone else present there are none.
+    expect(offeredTools('autonomy', 'owner_alone')).toEqual(SHANNON_TOOLS);
     for (const surface of ['text', 'voice', 'autonomy'] as const) {
-      expect(offeredTools(surface, 'owner_alone')).toEqual(SHANNON_TOOLS);
+      expect(offeredTools(surface, 'owner_alone').map(tool => tool.name)).toEqual(SHANNON_TOOLS.map(tool => tool.name));
       expect(offeredTools(surface, 'others')).toEqual([]);
     }
     // No tool shows a story to the owner, marks it 「見せてもいい」, or reaches anyone else.
@@ -172,20 +173,26 @@ describe('the study tools', () => {
 describe('what her writes from a conversation must not repeat', () => {
   it('refuses a write that repeats what the owner asked to keep secret or to forget, and every write while the list cannot be read', async () => {
     const { service, store } = harness();
-    const call = (name: string, input: unknown, secrets: readonly string[] | null) =>
+    const call = (name: string, input: unknown, secrets: SecretCheck | null) =>
       service.tools.call(name, JSON.stringify(input), { scopeKey: scope, surface: 'text', audience: 'owner_alone', memory: toolSessionMemory(), secrets });
-    const secrets = ['ユーザーはウォンバット会に入っている'];
-    const refused = await call('study.create', { kind: 'note', title: '会のこと', body: 'ライ氏はウォンバット会に入っているらしい。' }, secrets);
+    const at = '2026-10-05T00:00:00.000Z';
+    const state = { ...createInitialCompanionState('owner', at), userFacts: [
+      { id: 'secret', statement: 'ユーザーはウォンバット会の集まりに毎月出ている', confidence: 0.9, observedAt: at, disclosure: { category: 'secret' as const } },
+    ] };
+    const secrets = conversationSecrets(state, { experienceCandidates: () => [] }, scope);
+    const refused = await call('study.create', { kind: 'note', title: '会のこと', body: 'ライ氏は、ウォンバット会の集まりに毎月出ているらしい。' }, secrets);
     expect(refused).toMatchObject({ ok: false, failure: 'refused', retryable: false, refusal: { why: expect.stringContaining('内緒'), wouldWork: expect.stringContaining('除いて') } });
-    expect(await call('study.create', { kind: 'note', title: 'ウォンバット会', body: '動物の話' }, secrets)).toMatchObject({ ok: false, failure: 'refused' });
-    expect(store.study.list(scope)).toEqual([]);
-    expect(await call('study.create', { kind: 'note', title: '散歩', body: '公園を歩いた。' }, null)).toMatchObject({ ok: false, failure: 'unavailable', retryable: true });
+    expect(refused.text).toContain('同じ言い回し');
+    // A word or two in common is not the secret: runs of ten characters, with the subject and punctuation left out.
+    expect(await call('study.create', { kind: 'note', title: 'ウォンバット', body: '動物園でウォンバットを見た。毎月出かけたい。' }, secrets)).toMatchObject({ ok: true });
+    expect(store.study.list(scope)).toHaveLength(1);
+    expect(await call('study.create', { kind: 'note', title: '散歩', body: '公園を歩いた。' }, null)).toMatchObject({ ok: false, failure: 'unavailable', retryable: true, text: expect.stringContaining('読めなかった') });
     expect(await call('study.create', { kind: 'note', title: '散歩', body: '公園を歩いた。' }, secrets)).toMatchObject({ ok: true });
     // Reading is not writing: it is never refused for this.
     expect(await call('study.list', { query: 'ウォンバット' }, secrets)).toMatchObject({ ok: true });
   });
 
-  it('lists the words of secret, hand-marked and forgotten items, and nothing else of his', () => {
+  it('checks secret, hand-marked, forgotten and rejected items and turns in full, and nothing else of his', () => {
     const at = '2026-10-05T00:00:00.000Z';
     const base = createInitialCompanionState('owner', at);
     const state = {
@@ -194,12 +201,63 @@ describe('what her writes from a conversation must not repeat', () => {
         { id: 'secret', statement: 'ユーザーはウォンバット会に入っている', confidence: 0.9, observedAt: at, disclosure: { category: 'secret' as const } },
         { id: 'marked', statement: 'ユーザーはアルマジロを集めている', confidence: 0.9, observedAt: at, disclosure: { decidedBy: 'owner' as const, sensitivity: 'sensitive' as const } },
         { id: 'forgotten', statement: 'ユーザーはカピバラ基金に寄付した', confidence: 0.9, observedAt: at },
-        { id: 'open', statement: 'ユーザーは紅茶が好き', confidence: 0.9, observedAt: at },
+        { id: 'open', statement: 'ユーザーは紅茶が好きで毎朝ダージリンを飲む', confidence: 0.9, observedAt: at },
+        { id: 'corrected', statement: 'ユーザーはコーヒーが嫌いでまったく飲まない', confidence: 0.9, observedAt: at },
       ],
-      memoryControls: [{ memoryId: 'forgotten', kind: 'user-fact' as const, status: 'forgotten' as const, pinned: false, updatedAt: at, changeReason: 'forget' }],
+      memoryControls: [
+        { memoryId: 'forgotten', kind: 'user-fact' as const, status: 'forgotten' as const, pinned: false, updatedAt: at, changeReason: 'forget' },
+        { memoryId: 'corrected', kind: 'user-fact' as const, status: 'active' as const, pinned: false, updatedAt: at, changeReason: 'correct', overrideText: 'ユーザーはコーヒーも飲む' },
+      ],
     };
-    const words = conversationSecrets(state as typeof base, { experienceCandidates: () => [] }, scope);
-    expect(words).toEqual(expect.arrayContaining(['ユーザーはウォンバット会に入っている', 'ユーザーはアルマジロを集めている', 'ユーザーはカピバラ基金に寄付した']));
-    expect(words).not.toContain('ユーザーは紅茶が好き');
+    const long = `${'あいうえおかきくけこ'.repeat(60)}ナマケモノ投資の話をした`;
+    const turns = [{ id: 'turn-secret', userMessage: long, shannonReply: '', summary: 's', observedAt: at, disclosure: { category: 'secret' as const } }];
+    const check = conversationSecrets(state as typeof base, { experienceCandidates: () => turns as never }, scope);
+    expect(check.carries('ライ氏、ウォンバット会に入っているの？')).toBe(true);
+    expect(check.carries('アルマジロを集めている人の話')).toBe(true);
+    expect(check.carries('カピバラ基金に寄付した、と書く')).toBe(true);
+    // Past the first 400 characters of a long turn: checked too.
+    expect(check.carries('ナマケモノ投資の話をした')).toBe(true);
+    // Not secret, not forgotten: his tea, and the original wording of a corrected item.
+    expect(check.carries('紅茶が好きで毎朝ダージリンを飲む')).toBe(false);
+    expect(check.carries('コーヒーが嫌いでまったく飲まない')).toBe(false);
+    // A run of hiragana alone is filler.
+    expect(check.carries('あいうえおかきくけこ')).toBe(false);
+  });
+});
+
+describe('long writing and repeated writes', () => {
+  it('keeps one conversation write short, builds a long story with append, and lets her own time write it whole', async () => {
+    const { call, store } = harness();
+    const part = '静かな駅の話。'.repeat(450);
+    expect(part.length).toBeGreaterThan(CONVERSATION_WRITE_CHARACTERS);
+    expect(await call('study.create', { kind: 'story', title: '長い話', body: part })).toMatchObject({ ok: false, failure: 'invalid_input' });
+    const first = part.slice(0, 1_400);
+    const id = idIn(await call('study.create', { kind: 'story', title: '長い話', body: first }));
+    expect(await call('study.update', { id, mode: 'append', body: part.slice(1_400, 2_800), changeNote: '続きを足した。' })).toMatchObject({ ok: true, text: expect.stringContaining('続きを足した') });
+    expect(await call('study.update', { id, mode: 'append', body: '\n終わり。', changeNote: '結び。' })).toMatchObject({ ok: true });
+    expect(store.study.get(scope, id)).toMatchObject({ version: 3, body: `${first}\n\n${part.slice(1_400, 2_800)}\n終わり。` });
+    // Past the story's own limit, append is refused like any write.
+    expect(await call('study.update', { id, mode: 'append', body: 'あ'.repeat(1_300), changeNote: 'x' })).toMatchObject({ ok: false, failure: 'invalid_input' });
+    // Her own time: no client is waiting, so the larger limit holds.
+    expect(await call('study.create', { kind: 'story', title: '長い話・自分の時間', body: part }, 'autonomy')).toMatchObject({ ok: true });
+  });
+
+  it('does not write the same piece twice: the same title and body, or the same title for a retry of the same owner message', async () => {
+    const { service, store, clock } = harness();
+    const turn = (key: string) => (name: string, input: unknown) =>
+      service.tools.call(name, JSON.stringify(input), { scopeKey: scope, surface: 'text', audience: 'owner_alone', memory: toolSessionMemory(key) });
+    const first = turn('message-1');
+    const id = idIn(await first('study.create', { kind: 'story', title: '雨の駅', body: STORY }));
+    const again = await first('study.create', { kind: 'story', title: '雨の駅', body: `  ${STORY}` });
+    expect(again).toMatchObject({ ok: true, text: expect.stringContaining('二つにはしなかった') });
+    expect(again.text).toContain(id);
+    // A retry of the same message writes a new text under the same title: still the one piece.
+    expect((await turn('message-1')('study.create', { kind: 'story', title: '雨の駅', body: `${STORY}別の書き方。` })).text).toContain(id);
+    expect(store.study.list(scope)).toHaveLength(1);
+    // Another message may write another piece with that title; and the same text much later is a new piece.
+    expect(await turn('message-2')('study.create', { kind: 'story', title: '雨の駅', body: `${STORY}二本目。` })).toMatchObject({ ok: true });
+    clock.at = '2026-10-05T02:00:00.000Z';
+    expect((await turn('message-3')('study.create', { kind: 'story', title: '雨の駅', body: STORY })).text).not.toContain(id);
+    expect(store.study.list(scope)).toHaveLength(3);
   });
 });

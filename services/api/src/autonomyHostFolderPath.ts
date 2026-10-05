@@ -128,6 +128,31 @@ export function studyCopyContent(piece: Pick<StudyPiece, 'title' | 'body' | 'kin
   return `# ${piece.title}\n\n${piece.body}${sources}\n`;
 }
 
+/**
+ * The guard that keeps the text of her notes about a look at the room out of files (coordinator decision 2026-10-05).
+ * Built once per call from the newest `notes` notes (every version): windows of `run` characters every `step`
+ * characters, whitespace removed; a text that repeats any run of `run + step - 1` characters of a note is caught.
+ * Known limit: it catches copying, not retelling. A restatement with small edits every few words passes.
+ */
+export const ROOM_LOOK_GUARD = Object.freeze({ notes: 1_000, run: 24, step: 6 });
+
+export function roomLookGuard(texts: readonly string[]): (text: string) => boolean {
+  const compact = (value: string) => value.normalize('NFKC').replace(/\s+/gu, '');
+  const windows = new Set<string>();
+  for (const text of texts) {
+    const note = compact(text);
+    for (let index = 0; index + ROOM_LOOK_GUARD.run <= note.length; index += ROOM_LOOK_GUARD.step) windows.add(note.slice(index, index + ROOM_LOOK_GUARD.run));
+  }
+  return text => {
+    if (!windows.size) return false;
+    const candidate = compact(text);
+    for (let index = 0; index + ROOM_LOOK_GUARD.run <= candidate.length; index += 1) {
+      if (windows.has(candidate.slice(index, index + ROOM_LOOK_GUARD.run))) return true;
+    }
+    return false;
+  };
+}
+
 export function hostStepContentDigest(content: string): { bytes: number; sha256: string } {
   const buffer = Buffer.from(content, 'utf8');
   return { bytes: buffer.byteLength, sha256: createHash('sha256').update(buffer).digest('hex') };

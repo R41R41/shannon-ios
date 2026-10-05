@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { OpenAIResponsesChatModel } from '../src/chatModel.js';
-import { CONVERSATION_TOOL_CALLS, CUT_OFF_CALL_NOTE, TOOL_TURN_OUTPUT_TOKENS, functionCallsOf, withToolRounds, type ShannonModelToolSession } from '../src/chatModelTools.js';
-import { FOLDER_WRITE_CHARACTERS } from '../src/shannonTools.js';
+import {
+  CONVERSATION_TOOL_CALLS, CUT_OFF_CALL_NOTE, TEXT_TOOL_TURN_BUDGET, TOOLS_GONE_NOTE, VOICE_TOOL_OUTPUT_TOKENS, functionCallsOf, withToolRounds,
+  type ShannonModelToolSession,
+} from '../src/chatModelTools.js';
+import { CONVERSATION_WRITE_CHARACTERS, FOLDER_WRITE_CHARACTERS, offeredTools } from '../src/shannonTools.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';
 import { shannonTool } from '../src/shannonTools.js';
 
@@ -108,7 +111,7 @@ describe('her tools in a voice turn', () => {
     expect(deltas).toEqual(['ちょっと見てみるね。', 'メモが1つあります。']);
     expect(result.reply).toBe('ちょっと見てみるね。メモが1つあります。');
     expect(tools.calls).toHaveLength(1);
-    expect(String(bodies[0]!.instructions)).toContain('ちょっと見てみるね');
+    expect(String(bodies[0]!.instructions)).toContain('ちょっと見てみますね');
     // A voice turn that searches the web offers no tools.
     const searching = scriptedFetch([sse([{ type: 'response.output_text.delta', delta: 'はい。' }, { type: 'response.completed', response: { output: [message('はい。')] } }])]);
     await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: searching.fetcher }).generateVoiceStreaming(
@@ -137,13 +140,42 @@ describe('a write that does not fit one response', () => {
     expect(input.some(item => item.type === 'function_call')).toBe(false);
   });
 
-  it('gives a turn with tools room for the longest write, and keeps a file write inside what one response can carry', () => {
-    expect(chatTurnRequestBody('gpt-5.6-luna', { ...base, tools: session().value }, undefined).max_output_tokens).toBe(TOOL_TURN_OUTPUT_TOKENS);
-    expect(chatTurnRequestBody('gpt-5.6-luna', base, undefined).max_output_tokens).toBe(2_200);
-    expect(shannonTool('folder.create')!.input.properties.content).toMatchObject({ maxLength: FOLDER_WRITE_CHARACTERS });
-    expect(shannonTool('folder.update')!.input.properties.content).toMatchObject({ maxLength: FOLDER_WRITE_CHARACTERS });
-    expect(FOLDER_WRITE_CHARACTERS).toBeLessThanOrEqual(TOOL_TURN_OUTPUT_TOKENS);
-    expect(shannonTool('folder.create')!.input.properties.content!.description).toContain('6,000字まで');
+  it('keeps the first round ordinary, and a conversation\'s write short enough for its deadline; her own time keeps the larger limits', () => {
+    expect(chatTurnRequestBody('gpt-5.6-luna', { ...base, tools: session().value }, undefined).max_output_tokens).toBe(2_200);
+    for (const surface of ['text', 'voice'] as const) {
+      const offered = new Map(offeredTools(surface, 'owner_alone').map(tool => [tool.name, tool]));
+      expect(offered.get('study.create')!.input.properties.body).toMatchObject({ maxLength: CONVERSATION_WRITE_CHARACTERS });
+      expect(offered.get('study.update')!.input.properties.body).toMatchObject({ maxLength: CONVERSATION_WRITE_CHARACTERS });
+      expect(offered.get('folder.create')!.input.properties.content).toMatchObject({ maxLength: CONVERSATION_WRITE_CHARACTERS });
+      expect(offered.get('folder.update')!.description).toContain('会話では1回に1,500字まで');
+    }
+    const own = new Map(offeredTools('autonomy', 'owner_alone').map(tool => [tool.name, tool]));
+    expect(own.get('study.create')!.input.properties.body).toMatchObject({ maxLength: 4_000 });
+    expect(own.get('folder.create')!.input.properties.content).toMatchObject({ maxLength: FOLDER_WRITE_CHARACTERS });
+  });
+
+  it('ends the whole turn inside its deadline: a round that may run out answers without tools', async () => {
+    let now = 0;
+    const timeouts: Array<number | undefined> = [];
+    const choices: unknown[] = [];
+    const caps: unknown[] = [];
+    const slowSession: ShannonModelToolSession = {
+      definitions: [shannonTool('folder.read')!], maximumCalls: 6,
+      async call() { now += 9_000; return JSON.stringify({ ok: true, text: '読んだ', retryable: false }); },
+    };
+    const responses = [{ output: [functionCall('folder_read', '{"path":"a.md"}')] }, { output: [functionCall('folder_read', '{"path":"b.md"}', 'call-2')] }, { output: [message(TURN)] }];
+    await withToolRounds({ input: [], max_output_tokens: 2_200 }, slowSession, async (body, timeout) => {
+      timeouts.push(timeout); choices.push(body.tool_choice); caps.push(body.max_output_tokens);
+      now += 14_000;
+      return responses.shift();
+    }, { isAnswer: envelope => functionCallsOf(envelope).length === 0, budget: TEXT_TOOL_TURN_BUDGET, clock: () => now });
+    // Round 1 ordinary (30 s, 2,200). Round 2 after a tool: larger output, leaving the reserve. Round 3: what is left, no tools.
+    expect(timeouts[0]).toBe(30_000);
+    expect(caps).toEqual([2_200, 4_000, 2_200]);
+    expect(choices).toEqual([undefined, undefined, 'none']);
+    expect(timeouts[1]).toBe(50_000 - 23_000 - 12_000);
+    expect(timeouts[2]).toBe(50_000 - 23_000 - 23_000);
+    expect(timeouts.reduce<number>((sum, value) => sum + (value ?? 0), 0)).toBeLessThanOrEqual(TEXT_TOOL_TURN_BUDGET.totalMilliseconds);
   });
 
   it('in voice: the arguments of a call count as output for the first-word bound, and a cut-off call does not fail the turn', async () => {
@@ -163,7 +195,7 @@ describe('a write that does not fit one response', () => {
       { ...base, useWebSearch: false, conversationClass: 'direct', tools: tools.value }, () => {});
     expect(result.reply).toBe('ちょっと書いてみるね。長すぎたので、分けて書きます。');
     expect(tools.calls).toEqual([]);
-    expect(bodies[0]!.max_output_tokens).toBe(TOOL_TURN_OUTPUT_TOKENS);
+    expect(bodies[0]!.max_output_tokens).toBe(VOICE_TOOL_OUTPUT_TOKENS);
     expect(bodies[1]!.tool_choice).toBe('none');
   });
 
@@ -198,7 +230,43 @@ describe('a write that does not fit one response', () => {
   });
 });
 
+describe('a voice round that begins a call before she said anything', () => {
+  it('says a fixed waiting phrase first, as ordinary words, so the phone hears her before the call is written', async () => {
+    const tools = session();
+    const { fetcher } = scriptedFetch([
+      sse([
+        { type: 'response.output_item.added', item: { type: 'function_call', name: 'study_list' } },
+        { type: 'response.function_call_arguments.delta', delta: '{}' },
+        { type: 'response.completed', response: { output: [functionCall('study_list')] } },
+      ]),
+      sse([{ type: 'response.output_text.delta', delta: 'メモが1つあります。' }, { type: 'response.completed', response: { output: [message('メモが1つあります。')] } }]),
+    ]);
+    const deltas: string[] = [];
+    const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher }).generateVoiceStreaming(
+      { ...base, useWebSearch: false, conversationClass: 'direct', tools: tools.value }, delta => { deltas.push(delta); });
+    expect(deltas).toEqual(['ちょっと見てみますね。', 'メモが1つあります。']);
+    expect(result.reply).toBe('ちょっと見てみますね。メモが1つあります。');
+  });
+});
+
 describe('a provider that refuses the request offering her tools', () => {
+  it('after a tool ran: keeps what the tools returned, as text, with a note, and offers no tools', async () => {
+    const tools = session();
+    const { fetcher, bodies } = scriptedFetch([{ output: [functionCall('study_list')] }, { status: 400 }, { output: [message(TURN)] }]);
+    const original = console.warn;
+    console.warn = () => {};
+    try {
+      const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher }).generate({ ...base, tools: tools.value });
+      expect(result.reply).toBe('書斎にメモが1つあります。');
+    } finally { console.warn = original; }
+    expect(tools.calls).toHaveLength(1);
+    expect(bodies[2]).not.toHaveProperty('tools');
+    const input = bodies[2]!.input as Array<Record<string, unknown>>;
+    expect(input.some(item => item.type === 'function_call' || item.type === 'function_call_output')).toBe(false);
+    expect(input.some(item => String(item.content).startsWith('[道具の結果]') && String(item.content).includes('メモ「雨」'))).toBe(true);
+    expect(input.at(-1)).toEqual({ role: 'developer', content: TOOLS_GONE_NOTE });
+  });
+
   it('is asked once more without them, in text and in voice, and the code is logged', async () => {
     const lines: string[] = [];
     const tools = session();

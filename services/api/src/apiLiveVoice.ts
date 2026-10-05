@@ -377,7 +377,7 @@ async function completeLiveVoiceDelegation(
     scopeKey, ...replayed,
     // What she said when she was touched is what he is answering: it precedes his words, in every mode, as context only.
     ...(reactionLine ? { history: [...replayed.history, { role: 'assistant' as const, content: reactionLine }] } : {}),
-    message: transcript, ...conversationTools(dependencies.autonomy, scopeKey, 'voice', alone && !temporaryGuest && asksAboutOwnThings(transcript), dependencies.toolServer),
+    message: transcript, ...conversationTools(dependencies.autonomy, scopeKey, 'voice', alone && !temporaryGuest && asksAboutOwnThings(transcript), dependencies.toolServer, `${threadId}\n${transcript}`),
     useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   };

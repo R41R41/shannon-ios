@@ -96,8 +96,11 @@ export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyL
         ...(run.record.link ? { link: run.record.link } : {}),
         ...(run.result.ok ? {} : { reasonCode: run.record.reasonCode ?? run.result.failure ?? 'failed' }),
         ...(run.apply && run.result.ok ? { commit: () => { added = run.apply!() || undefined; } } : {}),
-        // She is told the result only once it and its record are saved; otherwise that it did not happen.
-        settled: saved => results.add(cycle.id, saved ? line() : `- ${tool.name}: できなかった（failed）。結果を保存できなかった。`),
+        // She is told the result only once it and its record are saved; otherwise what is true of it.
+        settled: saved => results.add(cycle.id, saved === true ? line()
+          : saved === 'unknown' ? `- ${tool.name}: 結果が分からない（この一歩は別の進め方と重なった）。確かめてから続ける。`
+            : run.apply ? `- ${tool.name}: できなかった（failed）。書斎への書き込みを保存できなかったので、書かれていない。`
+              : `${line()}\n（ただし、したことの記録に残せなかった）`),
       };
     },
   };

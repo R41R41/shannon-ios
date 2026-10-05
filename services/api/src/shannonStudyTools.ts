@@ -4,7 +4,7 @@ import { clip, type PreparedToolCall, type ToolExecutionContext, type ToolExecut
 import { toolFailure, toolOk, type ToolResult } from './shannonTools.js';
 import {
   STUDY_KIND_LABEL, STUDY_LIMITS, STUDY_STATUS_LABEL,
-  type StudyPiece, type StudyPieceStatus, type StudyRejection,
+  type StudyPiece, type StudyPieceKind, type StudyPieceStatus, type StudyRejection,
 } from './studyStore.js';
 
 /**
@@ -18,7 +18,11 @@ import {
  * What reaches the activity record (which the owner reads) never carries text of hers, and names a story only
  * while the owner can read the version it names; otherwise it says 「まだ見せていない物語」.
  */
+const DUPLICATE_MILLISECONDS = 15 * 60_000;
+
 export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): Readonly<Record<string, ToolExecutor>> {
+  /** What each owner message's turns created, for a retry of the same message (in this process, 15 minutes). */
+  const recent = new Map<string, { id: string; title: string; at: number }[]>();
   const piece = (context: ToolExecutionContext, input: ToolInput, includeDeleted = false): StudyPiece | ToolResult => {
     const id = stringInput(input, 'id')?.trim() ?? '';
     return store.study.find(context.scopeKey, id, includeDeleted)
@@ -92,14 +96,33 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
       }
       const title = stringInput(input, 'title')!;
       const changeNote = stringInput(input, 'changeNote');
+      // The same piece asked for twice (within this turn, a retry of the same message, or minutes apart) is one piece.
+      const twin = duplicate(context, kind, title, body);
+      if (twin) {
+        return immediate('書斎に同じものがあるか確かめます。', () => ({
+          result: toolOk(`同じものがもう書斎にある（二つにはしなかった）。\n${pieceLine(twin)}`),
+          record: { summary: `書斎の${recordLabel(twin)}がもうあったので、同じものは書きませんでした。`, outcome: 'done', link: `shannon-study://${twin.id}` },
+        }));
+      }
       return write(`書斎に${STUDY_KIND_LABEL[kind]}を1つ書きます。`,
         `${STUDY_KIND_LABEL[kind]}「${clip(title, 60)}」を書斎に書いた。${kind === 'story' ? '下書きなので、ライ氏にはまだ見えない。' : ''}`,
         kind === 'story' ? '書斎に物語の下書きを1つ書きました。' : `書斎にメモ「${clip(title, 60)}」を書きました。`,
-        () => store.study.create(context.scopeKey, { kind, title, body, ...(changeNote ? { changeNote } : {}), ...(pursuitId ? { pursuitId } : {}) }, now()), { newId: true });
+        () => {
+          const created = store.study.create(context.scopeKey, { kind, title, body, ...(changeNote ? { changeNote } : {}), ...(pursuitId ? { pursuitId } : {}) }, now());
+          if (typeof created !== 'string' && context.memory.turnKey) remember(context.memory.turnKey, created.id, title);
+          return created;
+        }, { newId: true });
     },
-    'study.update': (input, context) => revise(context, input, {
-      body: stringInput(input, 'body')!, title: stringInput(input, 'title')?.trim() || undefined, changeNote: stringInput(input, 'changeNote')!,
-    }, '書き直した'),
+    'study.update': (input, context) => {
+      const found = piece(context, input);
+      if (!('id' in found)) return found;
+      const part = stringInput(input, 'body')!;
+      const append = stringInput(input, 'mode') === 'append';
+      return revise(context, input, {
+        body: append ? `${found.body}${/^\s/u.test(part) ? '' : '\n\n'}${part}` : part,
+        title: stringInput(input, 'title')?.trim() || undefined, changeNote: stringInput(input, 'changeNote')!,
+      }, append ? '続きを足した' : '書き直した');
+    },
     'study.rename': (input, context) => {
       const found = piece(context, input);
       if (!('id' in found)) return found;
@@ -150,6 +173,25 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
         () => store.study.restore(context.scopeKey, found.id, now()), { link: `shannon-study://${found.id}` });
     },
   });
+
+  /** A piece this one would repeat: the same title asked for again for the same owner message, or the same kind, title and body within 15 minutes. */
+  function duplicate(context: ToolExecutionContext, kind: StudyPieceKind, title: string, body: string): StudyPiece | null {
+    const at = Date.parse(now());
+    const same = (left: string, right: string) => left.replace(/\s+/gu, '') === right.replace(/\s+/gu, '');
+    const earlier = context.memory.turnKey ? (recent.get(context.memory.turnKey) ?? []).filter(item => at - item.at < DUPLICATE_MILLISECONDS && same(item.title, title)) : [];
+    for (const item of earlier) {
+      const found = store.study.get(context.scopeKey, item.id);
+      if (found) return found;
+    }
+    return store.study.list(context.scopeKey, 50).find(item => item.kind === kind && at - Date.parse(item.createdAt) < DUPLICATE_MILLISECONDS
+      && same(item.title, title) && same(item.body, body)) ?? null;
+  }
+
+  function remember(turnKey: string, id: string, title: string): void {
+    const at = Date.parse(now());
+    for (const [key, items] of recent) if (items.every(item => at - item.at >= DUPLICATE_MILLISECONDS)) recent.delete(key);
+    recent.set(turnKey, [...(recent.get(turnKey) ?? []), { id, title, at }].slice(-10));
+  }
 
   function revise(context: ToolExecutionContext, input: ToolInput, change: { body: string; title?: string; changeNote: string }, done: string): PreparedToolCall | ToolResult {
     const found = piece(context, input);

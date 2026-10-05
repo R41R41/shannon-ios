@@ -90,8 +90,6 @@ export class HostFolderOperationsStore {
         PRIMARY KEY (scope_key, host)
       );
     `);
-    // Whatever a stopped process left: nothing older than the retention survives an open.
-    this.prune(new Date().toISOString());
   }
 
   enqueue(scopeKey: string, draft: {

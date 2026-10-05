@@ -19,7 +19,7 @@ import {
   stableScopeIdentifier,
 } from './chatModelSupport.js';
 import { APP_LOOK_SCHEMA } from './appLookContract.js';
-import { TOOL_INSTRUCTIONS, TOOL_TURN_OUTPUT_TOKENS, providerFunctionTools } from './chatModelTools.js';
+import { TOOLS_WITHHELD_INSTRUCTIONS, TOOL_INSTRUCTIONS, providerFunctionTools } from './chatModelTools.js';
 
 /**
  * The text-chat turn of the OpenAI Responses adapter: the request body and the reading of
@@ -43,7 +43,7 @@ export function chatTurnRequestBody(
       THREAD_SUMMARY_INSTRUCTIONS,
       ...(request.generateThreadTitle ? [THREAD_TITLE_INSTRUCTIONS] : []),
       ...(request.offerReplyFeeling ? [REPLY_FEELING_INSTRUCTIONS] : []),
-      ...(offersTools(request) ? [TOOL_INSTRUCTIONS] : []),
+      ...(offersTools(request) ? [TOOL_INSTRUCTIONS] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
     ].join('\n\n'),
     input: [
       ...request.history.map(item => ({ role: item.role, content: item.content })),
@@ -150,7 +150,7 @@ export function chatTurnRequestBody(
         },
       },
     },
-    max_output_tokens: offersTools(request) ? TOOL_TURN_OUTPUT_TOKENS : 2_200,
+    max_output_tokens: 2_200,
     ...(request.useWebSearch || request.placeSearch ? {
       tools: [{ type: 'web_search', search_context_size: 'medium' }],
       tool_choice: { type: 'web_search' },

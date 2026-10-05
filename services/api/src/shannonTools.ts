@@ -68,7 +68,7 @@ const id = { type: 'string', description: '書斎のものの id（study.list �
 const host = { type: 'string', description: 'どのPCのフォルダか。ふだんは書かない（1台だけならそれを使う）', maxLength: 40 } as const;
 const path = (description: string) => ({ type: 'string', description, maxLength: 240 } as const);
 
-/** What one call may write into a file: what one response of hers can carry whole (`TOOL_TURN_OUTPUT_TOKENS`). */
+/** What one call may write into a file in her own time; a conversation's call is shorter (`CONVERSATION_WRITE_CHARACTERS`). */
 export const FOLDER_WRITE_CHARACTERS = 6_000;
 
 const STUDY = '書斎（ボク自身の場所。ボクが書くメモと物語の下書きが、版ごとに残っている。正本はシャノンのデータベース）';
@@ -103,7 +103,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
     description: `${STUDY}のものを1つ、題名と本文まで読む。version を書けばその版を読む。版の一覧（何をなぜ直したか）もつく。`,
     input: schema({ id, version: { type: 'integer', description: '読みたい版。書かなければいまの版', minimum: 1, maximum: 10_000 } }, ['id']) }),
   tool({ name: 'study.create', domain: 'aether_study', effect: 'write',
-    description: `${STUDY}に新しいメモか物語を書く。メモはライ氏も読める。物語は下書きとして始まり、「見せてもいい」にするまでライ氏には題名も中身も見えない。${SECRET_LINE}`,
+    description: `${STUDY}に新しいメモか物語を書く。メモはライ氏も読める。物語は下書きとして始まり、「見せてもいい」にするまでライ氏には題名も中身も見えない。長い物語は、最初の部分を書いてから study.update の append で続きを足していく。同じ題名と本文をもう一度書いても、二つにはならない。${SECRET_LINE}`,
     input: schema({
       kind: { type: 'string', description: 'note（メモ、本文1,200字まで）か story（物語、本文4,000字まで）', enum: ['note', 'story'] },
       title: { type: 'string', description: '題名（80字まで）', minLength: 1, maxLength: 80 },
@@ -112,10 +112,11 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
       changeNote: { type: 'string', description: 'どんな稿か、ひと言（400字まで）', maxLength: 400 },
     }, ['kind', 'title', 'body']) }),
   tool({ name: 'study.update', domain: 'aether_study', effect: 'write',
-    description: `${STUDY}のものを書き直す。新しい版として足され、前の版はそのまま残る。物語は書き直すと下書きに戻る（見せた版はライ氏が読み続ける）。${SECRET_LINE}`,
+    description: `${STUDY}のものを書き直すか、続きを足す。新しい版として足され、前の版はそのまま残る。物語は書き直すと下書きに戻る（見せた版はライ氏が読み続ける）。${SECRET_LINE}`,
     input: schema({
       id,
-      body: { type: 'string', description: '新しい本文（全文）', minLength: 1, maxLength: 4_000 },
+      mode: { type: 'string', description: 'replace（本文を全部書き直す。ふだんはこれ）か append（今の本文の直後に body を足す。段落を分けるなら先頭に改行を書く）', enum: ['replace', 'append'] },
+      body: { type: 'string', description: '新しい本文（replace では全文、append では足す部分）', minLength: 1, maxLength: 4_000 },
       title: { type: 'string', description: '題名も変えるなら（80字まで）', maxLength: 80 },
       changeNote: { type: 'string', description: '何をなぜ直したか（400字まで）', minLength: 1, maxLength: 400 },
     }, ['id', 'body', 'changeNote']) }),
@@ -183,7 +184,32 @@ export function toolFromProviderName(name: unknown): ShannonToolDefinition | nul
 
 /** The tools a surface may offer with this audience: the same rule the gate applies, so an offered tool is never refused for being offered. */
 export function offeredTools(surface: ToolSurface, audience: ToolAudience, available: (tool: ShannonToolDefinition) => boolean = () => true): readonly ShannonToolDefinition[] {
-  return SHANNON_TOOLS.filter(item => item.surfaces.includes(surface) && item.audiences.includes(audience) && available(item));
+  return SHANNON_TOOLS.filter(item => item.surfaces.includes(surface) && item.audiences.includes(audience) && available(item)).map(item => toolForSurface(item, surface));
+}
+
+/**
+ * In a conversation somebody is waiting: one write call is at most this long, so that it fits the turn's deadline
+ * (coordinator decision 2026-10-05). Her own time keeps the larger limits. A long piece is written in parts
+ * (`study.update` with `append`), or in her own time.
+ */
+export const CONVERSATION_WRITE_CHARACTERS = 1_500;
+const CONVERSATION_LIMITED: Readonly<Record<string, string>> = Object.freeze({ 'study.create': 'body', 'study.update': 'body', 'folder.create': 'content', 'folder.update': 'content' });
+const SURFACE_TOOLS = new Map<string, ShannonToolDefinition>();
+
+/** The tool as a surface offers and checks it: in a conversation its write field is shorter, and the description says so. */
+export function toolForSurface(tool: ShannonToolDefinition, surface: ToolSurface): ShannonToolDefinition {
+  const field = CONVERSATION_LIMITED[tool.name];
+  if (!field || surface === 'autonomy') return tool;
+  const known = SURFACE_TOOLS.get(tool.name);
+  if (known) return known;
+  const property = tool.input.properties[field]!;
+  const limited = Object.freeze({
+    ...tool,
+    description: `${tool.description}会話では1回に${CONVERSATION_WRITE_CHARACTERS.toLocaleString('en-US')}字まで。長いものは分けて足していくか、自分の時間に書く。`,
+    input: Object.freeze({ ...tool.input, properties: Object.freeze({ ...tool.input.properties, [field]: Object.freeze({ ...property, maxLength: CONVERSATION_WRITE_CHARACTERS }) }) }),
+  });
+  SURFACE_TOOLS.set(tool.name, limited);
+  return limited;
 }
 
 export function toolOk(text: string): ToolResult {

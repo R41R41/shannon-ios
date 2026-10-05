@@ -303,9 +303,10 @@ The v1 rules apply to every path, with these additions, checked by the server be
 ### What she can and cannot send
 
 - **Who queues.** Only the tool registry (`shannonTools.ts`), through the one tool gate. There is no route, for the owner or anyone, that queues an operation, and the device cannot queue.
-- **Self-replication** stays closed by construction: `create` and `update` take only the text she wrote in that tool call (at most 6,000 characters per call: what one response of hers can carry whole; a call cut off at her output ceiling is never run); no tool reads her code, memory, persona, prompts, or process to send it, text extensions only, and the gate still refuses any request that declares `replicatesSelf`.
+- **Self-replication** stays closed by construction: `create` and `update` take only the text she wrote in that tool call (at most 1,500 characters per call in a conversation, 6,000 in her own time; a call cut off at her output ceiling is never run); no tool reads her code, memory, persona, prompts, or process to send it, text extensions only, and the gate still refuses any request that declares `replicatesSelf`.
 - **Secrets.** What the owner asked to keep secret is not written into the folder (ADR-0002); the tool's description says so, and her own-time steps carry the line of `ownerPrivateRule`.
 - **Others.** Folder tools are never offered while anyone but the owner can hear or read her reply, so folder contents are never spoken or shown to others.
+- **Notes about a look at the room.** Their text never goes into a file (coordinator decision 2026-10-05): a `create`, `update`, `move` or rename whose words repeat a run of one of her newest 1,000 such notes is refused before it is queued, and a v1 copy of a note that restates one is not queued. Known limit: this catches copying, not retelling; a restatement with small edits every few words passes.
 
 ### What a v2 device must implement (checklist)
 

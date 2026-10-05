@@ -44,6 +44,8 @@ export interface VoiceStreamCall {
   onSpentWithoutReply?: (envelope: unknown) => void;
   /** A response that asks for her tools may end without a word, or with only a short waiting phrase. */
   allowToolCalls?: boolean;
+  /** A call begins in this response: the words to say first, if any (they become part of the reply). */
+  onCallStarting?: (providerName: string) => string | null;
 }
 
 export interface VoiceStreamOutcome {
@@ -108,6 +110,16 @@ export async function streamedVoiceReply(
       } else if (value.type === 'response.output_text.done' && !reply && typeof value.text === 'string') {
         reply = value.text;
         await deliver(value.text);
+      } else if (value.type === 'response.output_item.added' && call.allowToolCalls && record(value.item)?.type === 'function_call') {
+        // Said before the arguments are written, so the phone hears something while the call is being made.
+        const phrase = call.onCallStarting?.(String(record(value.item)?.name ?? ''));
+        if (phrase) {
+          reply += phrase;
+          await deliver(phrase);
+        } else {
+          firstOutput = true;
+          arm(call.bounds.idleMilliseconds, 'OPENAI_RESPONSE_IDLE_TIMEOUT');
+        }
       } else if (value.type === 'response.function_call_arguments.delta' && call.allowToolCalls) {
         // The arguments of a call are output too: the wait for the first word ends, and the idle bound applies.
         firstOutput = true;

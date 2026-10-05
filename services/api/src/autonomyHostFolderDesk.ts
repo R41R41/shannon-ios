@@ -1,7 +1,7 @@
 import type { AutonomyActivityEntry } from './autonomyActivity.js';
 import { autonomyDayKey, type AutonomyConfig } from './autonomyBudget.js';
 import {
-  HOST_FOLDER_LIMITS, HOST_STEP_CODES, copyableStudyPiece, hostStepContentDigest, studyCopyContent, studyCopyPath,
+  HOST_FOLDER_LIMITS, HOST_STEP_CODES, ROOM_LOOK_GUARD, copyableStudyPiece, roomLookGuard, hostStepContentDigest, studyCopyContent, studyCopyPath,
   type HostStepCode,
 } from './autonomyHostFolderPath.js';
 import type { HostStep, HostStepStatus } from './autonomyHostFolderSteps.js';
@@ -76,9 +76,10 @@ export class HostFolderDesk {
   nextCopy(scopeKey: string, at: string, pieceId?: string): HostFolderCopy | null {
     if (!this.available(scopeKey, at)) return null;
     const named = pieceId ? this.store.study.get(scopeKey, pieceId) : null;
+    const seen = this.roomLook(scopeKey);
     for (const piece of pieceId ? (named ? [named] : []) : this.store.study.list(scopeKey)) {
       const host = this.boundHosts().find(name => !this.store.hostSteps.hasCopy(scopeKey, name, piece.id, piece.version));
-      const draft = host ? this.draft(piece) : null;
+      const draft = host ? this.draft(piece, seen) : null;
       if (host && draft) {
         return { host, pieceId: piece.id, pieceVersion: piece.version, kind: piece.kind, kindLabel: STUDY_KIND_LABEL[piece.kind], title: piece.title, relativePath: draft.relativePath };
       }
@@ -93,7 +94,7 @@ export class HostFolderDesk {
       if (!this.boundHosts().includes(copy.host)) throw new Error('HOST_STEP_HOST_NOT_BOUND');
       if (this.store.hostSteps.queuedOn(scopeKey, dayKey) >= this.config.maximumHostFolderWritesPerDay) throw new Error('HOST_STEP_DAILY_LIMIT');
       const piece = this.store.study.get(scopeKey, copy.pieceId);
-      const draft = piece && piece.version === copy.pieceVersion ? this.draft(piece) : null;
+      const draft = piece && piece.version === copy.pieceVersion ? this.draft(piece, this.roomLook(scopeKey)) : null;
       if (!piece || !draft) throw new Error('HOST_STEP_PIECE_NOT_COPYABLE');
       if (this.store.hostSteps.hasCopy(scopeKey, copy.host, piece.id, piece.version)) throw new Error('HOST_STEP_ALREADY_QUEUED');
       return this.store.hostSteps.enqueue(scopeKey, { host: copy.host, dayKey, pieceId: piece.id, pieceVersion: piece.version, ...draft }, at);
@@ -187,8 +188,13 @@ export class HostFolderDesk {
     });
   }
 
-  private draft(piece: StudyPiece): { relativePath: string; content: string; contentSha256: string; bytes: number } | null {
-    if (!copyableStudyPiece(piece)) return null;
+  /** A note that restates her note about a look at the room is not copied either (`roomLookGuard`). */
+  private roomLook(scopeKey: string): (text: string) => boolean {
+    return roomLookGuard(this.store.study.roomLookTexts(scopeKey, ROOM_LOOK_GUARD.notes));
+  }
+
+  private draft(piece: StudyPiece, seen: (text: string) => boolean): { relativePath: string; content: string; contentSha256: string; bytes: number } | null {
+    if (!copyableStudyPiece(piece) || seen(`${piece.title}\n${piece.body}`)) return null;
     const relativePath = studyCopyPath(piece, autonomyDayKey(piece.createdAt, this.config));
     const content = studyCopyContent(piece);
     const digest = hostStepContentDigest(content);

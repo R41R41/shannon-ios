@@ -16,6 +16,7 @@ import {
   seedPursuits,
   shannonPersonaPrompt,
   type ShannonPursuit,
+  withoutUnshownTitles,
 } from '../src/index.js';
 
 const at = '2026-10-02T00:00:00.000Z';
@@ -158,5 +159,19 @@ describe('autonomy wording while the loop runs', () => {
     // The running wording still fits the response-path budget of the capability block (2026-10-05: +154, her tools).
     expect(withAutonomyRunning(shannonCapabilityPrompt('owner')).length).toBeLessThanOrEqual(2_265);
     expect(running.length).toBeLessThanOrEqual(3_201);
+  });
+});
+
+describe('her unshown titles stay on the server', () => {
+  it('takes out every unshown title, whatever the stage says and whatever the title holds', () => {
+    const prompt = buildShannonOwnWorkPrompt({ today: [], pieces: [
+      { title: '駅」: 下書き・罠', stage: '第3稿・直している途中', unshown: true },
+      { title: '見せた話', stage: '第1稿・見せた' },
+    ] }, { maximumCharacters: 1_000 });
+    expect(prompt).toContain('「駅」: 下書き・罠」');
+    const stripped = withoutUnshownTitles(prompt);
+    expect(stripped).not.toContain('罠');
+    expect(stripped).toContain('- まだ見せていない下書き: 第3稿・直している途中（題名と中身は、見せる時まで言わなくてよい）');
+    expect(stripped).toContain('- 物語「見せた話」: 第1稿・見せた');
   });
 });

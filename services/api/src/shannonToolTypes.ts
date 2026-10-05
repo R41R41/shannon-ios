@@ -1,4 +1,5 @@
 import type { AutonomousActionRequest } from './autonomyPolicy.js';
+import type { SecretCheck } from './conversationSecrets.js';
 import type { ToolCallContext } from './shannonToolGate.js';
 import type { ToolInput } from './shannonToolInput.js';
 import type { ToolResult } from './shannonTools.js';
@@ -29,32 +30,22 @@ export interface PreparedToolCall {
 export interface ToolSessionMemory {
   /** The digest of each folder file she read in this session, so that `folder.update` refuses to overwrite a change made since. */
   readonly readDigests: Map<string, string>;
+  /** In a conversation: the owner's message this turn answers (thread and words), the same for a retry of it. */
+  readonly turnKey?: string;
 }
 
-export function toolSessionMemory(): ToolSessionMemory {
-  return { readDigests: new Map() };
-}
-
-/** True when `text` repeats a run of at least `length` characters of `source`, ignoring whitespace. */
-export function sharesPassage(text: string, source: string, length: number): boolean {
-  const compact = (value: string) => value.normalize('NFKC').replace(/\s+/gu, '');
-  const candidate = compact(text);
-  const original = compact(source);
-  if (candidate.length < length || original.length < length) return false;
-  for (let index = 0; index + length <= original.length; index += Math.max(1, Math.floor(length / 4))) {
-    if (candidate.includes(original.slice(index, index + length))) return true;
-  }
-  return candidate.includes(original.slice(-length));
+export function toolSessionMemory(turnKey?: string): ToolSessionMemory {
+  return { readDigests: new Map(), ...(turnKey ? { turnKey } : {}) };
 }
 
 export interface ToolExecutionContext extends ToolCallContext {
   memory: ToolSessionMemory;
   /**
-   * In a conversation: the words of what the owner asked to keep secret and what he asked her to forget
-   * (`conversationSecrets.ts`). A write that repeats them is refused; `null` means the list could not be read,
-   * and every write is refused. Absent in her own time, whose plan already drops such inputs.
+   * In a conversation: the check against what the owner asked to keep secret or to forget (`conversationSecrets.ts`).
+   * A write that repeats it is refused; `null` means his memory could not be read just now, and that write is refused
+   * (the next may pass). Absent in her own time, whose plan already drops such inputs.
    */
-  secrets?: readonly string[] | null;
+  secrets?: SecretCheck | null;
 }
 
 export type ToolExecutor = (input: ToolInput, context: ToolExecutionContext) => PreparedToolCall | ToolResult;

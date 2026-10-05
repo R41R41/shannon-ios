@@ -91,7 +91,10 @@ export class HostFolderOperations {
     private readonly recorder: HostOperationRecorder,
     private readonly copies: HostFolderDesk,
     private readonly signals: HostFolderSignals = new HostFolderSignals(),
-  ) {}
+  ) {
+    // Whatever a stopped process left: nothing older than the retention survives an open (by the injected clock).
+    this.maintain();
+  }
 
   /** The hosts whose folder a paired device works in, in the order they were registered. */
   boundHosts(): readonly string[] {
@@ -100,7 +103,8 @@ export class HostFolderOperations {
 
   /** Whether a tool call for this host could be handed to its device now. */
   presence(scopeKey: string, host: string, operation?: HostOperation): 'present' | 'not_bound' | 'offline' | 'stopped' | 'unsupported' {
-    this.maintain();
+    // Only this scope; every scope is swept by the API process's timer.
+    try { const at = this.now(); this.store.transaction(() => this.sweep(scopeKey, at)); } catch { /* the timer tries again */ }
     const bound = (this.config.places.hostDevices ?? {})[host];
     if (!bound || !Object.hasOwn(this.config.places.hostDevices ?? {}, host)) return 'not_bound';
     const seen = this.store.hostOperations.presence(scopeKey, host);

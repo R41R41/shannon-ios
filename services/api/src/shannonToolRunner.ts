@@ -1,13 +1,14 @@
+import { ROOM_LOOK_GUARD, roomLookGuard } from './autonomyHostFolderPath.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
+import type { SecretCheck } from './conversationSecrets.js';
 import type { HostFolderOperations } from './hostFolderOperations.js';
 import { folderExecutors } from './shannonFolderTools.js';
 import { studyExecutors } from './shannonStudyTools.js';
 import { authorizeToolCall } from './shannonToolGate.js';
-import { carriesSecret } from './autonomyLoopOwnerContext.js';
 import { validToolInput } from './shannonToolInput.js';
 import type { PreparedToolCall, ToolExecutionContext, ToolExecutor } from './shannonToolTypes.js';
 import {
-  offeredTools, shannonTool, toolFailure, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface,
+  offeredTools, shannonTool, toolFailure, toolForSurface, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface,
 } from './shannonTools.js';
 
 /**
@@ -38,7 +39,7 @@ export class ShannonToolRunner {
     now: () => string,
     private readonly transaction: <T>(operation: () => T) => T = operation => store.transaction(operation),
   ) {
-    this.executors = Object.freeze({ ...studyExecutors(store, now), ...folderExecutors(folder, scopeKey => roomLookTexts(store, scopeKey)) });
+    this.executors = Object.freeze({ ...studyExecutors(store, now), ...folderExecutors(folder, scopeKey => roomLookGuard(store.study.roomLookTexts(scopeKey, ROOM_LOOK_GUARD.notes))) });
   }
 
   /** The tools a surface offers to this audience now. Her folder's tools only while a device is registered for it. */
@@ -53,7 +54,8 @@ export class ShannonToolRunner {
     if (refused || !tool) return { tool, result: refused ?? toolFailure('not_offered', 'そういう道具はない。', { retryable: false }) };
     const executor = this.executors[tool.name];
     if (!executor) return { tool, result: toolFailure('not_offered', `${tool.name} はまだ使えない。`, { retryable: false }) };
-    const checked = validToolInput(rawInput, tool.input);
+    // The schema of this surface: in a conversation a write is shorter (`toolForSurface`).
+    const checked = validToolInput(rawInput, toolForSurface(tool, context.surface).input);
     if ('problem' in checked) return { tool, result: toolFailure('invalid_input', `入力が正しくない（${checked.problem}）。`, { retryable: false }) };
     const secret = secretRefusal(tool.name, checked.input, context.secrets);
     if (secret) return { tool, result: secret };
@@ -107,20 +109,15 @@ export { STUDY_REJECTIONS };
 const WRITING_TOOLS: ReadonlySet<string> = new Set(['study.create', 'study.update', 'study.rename', 'folder.create', 'folder.update', 'folder.rename', 'folder.move']);
 
 /** A write from a conversation that repeats what must reach nobody but the owner (the check her own time uses), or null. */
-function secretRefusal(name: string, input: Readonly<Record<string, unknown>>, secrets: readonly string[] | null | undefined): ToolResult | null {
+function secretRefusal(name: string, input: Readonly<Record<string, unknown>>, secrets: SecretCheck | null | undefined): ToolResult | null {
   if (secrets === undefined || !WRITING_TOOLS.has(name)) return null;
   if (secrets === null) {
-    return toolFailure('unavailable', 'いまは書く前の確かめができないので、書かない。', { retryable: true, refusal: { why: '内緒のことの一覧が読めなかった', wouldWork: '少しあとでもう一度' } });
+    return toolFailure('unavailable', '書く前に、内緒のことと忘れたことの記憶を読めなかったので、書かなかった。', { retryable: true, refusal: { why: '記憶をいま読めなかった', wouldWork: '少しあとでもう一度' } });
   }
   const words = Object.values(input).filter((value): value is string => typeof value === 'string');
-  if (!words.some(word => carriesSecret(word, secrets))) return null;
-  return toolFailure('refused', 'ライ氏に内緒と言われたこと、忘れてと頼まれたことが入っているので、書かない。', {
+  if (!words.some(word => secrets.carries(word))) return null;
+  return toolFailure('refused', 'ライ氏に内緒と言われたこと、または忘れてと頼まれたことと同じ言い回しが入っているので、書かなかった。', {
     retryable: false, refusal: { why: '内緒のこと・忘れたことを書くことになる', wouldWork: 'そこを除いて書き直す' },
   });
 }
 
-/** Her notes about a look at the room: their text never goes into a file (`shannonFolderTools.ts`). */
-function roomLookTexts(store: SQLiteAutonomyStore, scopeKey: string): readonly string[] {
-  return store.study.list(scopeKey, 500, 'include').filter(piece => piece.origin === 'room_look')
-    .flatMap(piece => [piece.body, ...store.study.versions(scopeKey, piece.id).map(version => version.body)]);
-}

@@ -3,7 +3,7 @@ import type { ListResult, ReadResult, SearchResult, WriteResult } from './hostFo
 import type { HostFolderOperations, HostRunOutcome } from './hostFolderOperations.js';
 import type { HostOperation } from './hostFolderOperationsStore.js';
 import { numberInput, stringInput, type ToolInput } from './shannonToolInput.js';
-import { neutralMarkers, sharesPassage, type ToolExecutionContext, type ToolExecutor, type ToolRun } from './shannonToolTypes.js';
+import { neutralMarkers, type ToolExecutionContext, type ToolExecutor, type ToolRun } from './shannonToolTypes.js';
 import { toolFailure, toolOk, type ToolFailureKind, type ToolResult, type ToolSurface } from './shannonTools.js';
 
 /**
@@ -20,14 +20,11 @@ const READ_BYTES: Readonly<Record<ToolSurface, number>> = Object.freeze({ text: 
 const LIST_LIMIT = 200;
 const SEARCH_LIMIT = 20;
 
-/** A run this long of a room-look note's text in what she writes is that note going into a file. */
-const ROOM_LOOK_PASSAGE = 24;
-
 /**
- * `roomLookTexts`: the text of her notes about a look at the owner's room (every version). By the coordinator's
- * decision of 2026-10-05 that text never goes into a file; anything else of hers may be copied to her folder freely.
+ * `roomLook`: the guard built from her notes about a look at the owner's room (`roomLookGuard`), once per call. By the
+ * coordinator's decision of 2026-10-05 that text never goes into a file; anything else of hers may go to her folder freely.
  */
-export function folderExecutors(operations: HostFolderOperations, roomLookTexts: (scopeKey: string) => readonly string[] = () => []): Readonly<Record<string, ToolExecutor>> {
+export function folderExecutors(operations: HostFolderOperations, roomLook: (scopeKey: string) => (text: string) => boolean = () => () => false): Readonly<Record<string, ToolExecutor>> {
   /** The host she means: the one she named, or the only one there is. */
   const hostOf = (input: ToolInput): string | ToolResult => {
     const hosts = operations.boundHosts();
@@ -75,12 +72,12 @@ export function folderExecutors(operations: HostFolderOperations, roomLookTexts:
 
   /** Refuses a write whose words carry a room-look note; a list that cannot be read refuses the write too. */
   const writing = (executor: ToolExecutor): ToolExecutor => (input, context) => {
-    let notes: readonly string[];
-    try { notes = roomLookTexts(context.scopeKey); } catch {
+    let carries: (text: string) => boolean;
+    try { carries = roomLook(context.scopeKey); } catch {
       return toolFailure('unavailable', 'いまは書く前の確かめができないので、書かない。', { retryable: true });
     }
     const words = [stringInput(input, 'content'), stringInput(input, 'path'), stringInput(input, 'to'), stringInput(input, 'newName')].filter((value): value is string => Boolean(value));
-    if (words.some(word => notes.some(note => sharesPassage(word, note, ROOM_LOOK_PASSAGE)))) {
+    if (words.some(carries)) {
       return toolFailure('refused', '部屋を見たメモの文が入っているので、ファイルには書かない。', {
         retryable: false, refusal: { why: '部屋を見たことのメモは、ファイルに置かない決まり', wouldWork: 'その部分を除いて書く' },
       });
