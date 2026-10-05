@@ -108,8 +108,9 @@ extension ShannonGeminiLiveTransport {
 /// AirPods that change the route now and then never use the budget up.
 struct ShannonVoiceEngineRestartBudget: Equatable, Sendable {
     static let limit = 3
-    /// The capture watch's own limit: a live engine that ran this long without stopping delivered its buffers
-    /// (were it deaf, the watch would have ended it as an audio failure by then).
+    /// The capture watch's own limit. On the Mac a live engine that ran this long without stopping delivered its
+    /// buffers (were it deaf, the watch would have ended it as an audio failure by then). The iPhone has no capture
+    /// watch (its audio session reports interruptions itself): there the value only says when the count resets.
     static let healthyRun: TimeInterval = ShannonVoiceCaptureWatch.limit
     private(set) var count = 0
     private(set) var lastRestartAt: TimeInterval?
