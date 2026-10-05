@@ -1038,7 +1038,7 @@
       "text": "窓を閉じると、音声会話も終わります。",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
       "only": "apple",
-      "note": "Mac の通話の見出しの手がかり。通話を小さくして続ける形（voice.minimised-call）は所有者が選ぶまで無いので、最後の窓を閉じると通話は終わる。"
+      "note": "Mac の通話の見出しの手がかり。通話はトークの外ではサイドバーの行とメニューバーに出る（所有者の決定 2026-10-06、B）が、最後の窓を閉じると終わる。"
     },
     {
       "key": "voice.mac.participantHint",
