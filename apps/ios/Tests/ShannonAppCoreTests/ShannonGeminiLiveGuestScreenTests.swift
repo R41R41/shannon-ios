@@ -243,4 +243,10 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         XCTAssertNil(workspace.ownerMessageAside)
         withExtendedLifetime(conversation) {}
     }
+
+    /// iPhone in front during 「友人も一緒」: her notifications have no banner and no sound, only the list and the badge.
+    func testHerNotificationsShowNoBannerOrSoundWhileAFriendIsInTheCall() {
+        XCTAssertEqual(ShannonGuestCallNotifications.foregroundPresentation(hidesOwnerScreens: true), [.list, .badge])
+        XCTAssertEqual(ShannonGuestCallNotifications.foregroundPresentation(hidesOwnerScreens: false), [.banner, .list, .sound, .badge])
+    }
 }

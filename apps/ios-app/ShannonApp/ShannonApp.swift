@@ -288,7 +288,9 @@ private final class ShannonAppDelegate: NSObject, UIApplicationDelegate, UNUserN
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .list, .sound, .badge]
+        // During 「友人も一緒」 her own notifications go to the list and the badge only: no banner, no sound.
+        let hides = await MainActor.run { ShannonVoiceCallHost.shared.hidesOwnerScreens }
+        return ShannonGuestCallNotifications.foregroundPresentation(hidesOwnerScreens: hides)
     }
 
     nonisolated func userNotificationCenter(
