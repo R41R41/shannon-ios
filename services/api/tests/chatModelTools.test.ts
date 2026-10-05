@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { OpenAIResponsesChatModel } from '../src/chatModel.js';
 import {
-  CONVERSATION_TOOL_CALLS, CUT_OFF_CALL_NOTE, TEXT_TOOL_TURN_BUDGET, TOOLS_GONE_NOTE, VOICE_TOOL_OUTPUT_TOKENS, functionCallsOf, withToolRounds,
-  type ShannonModelToolSession,
+  CONVERSATION_TOOL_CALLS, CUT_OFF_CALL_NOTE, SKIPPED_FOR_TIME, TOOLS_GONE_NOTE, TURN_OUT_OF_TIME_LINE, VOICE_SECOND_PHRASE, VOICE_TOOL_OUTPUT_TOKENS,
+  functionCallsOf, withToolRounds, type ShannonModelToolSession,
 } from '../src/chatModelTools.js';
+import { streamedVoiceToolTurn } from '../src/chatModelVoiceTools.js';
+import { TEXT_TURN_DEADLINE, TurnDeadline, VOICE_TURN_DEADLINE } from '../src/turnDeadline.js';
 import { CONVERSATION_WRITE_CHARACTERS, FOLDER_WRITE_CHARACTERS, offeredTools } from '../src/shannonTools.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';
 import { shannonTool } from '../src/shannonTools.js';
@@ -85,7 +87,7 @@ describe('her tools in a text turn', () => {
 
   it('runs no tool for a round that is already a whole answer', async () => {
     const tools = session();
-    const envelope = await withToolRounds({ input: [] }, tools.value, async () => ({ output: [message(TURN), functionCall('study_list')] }), { isAnswer: () => true });
+    const envelope = await withToolRounds({ input: [] }, tools.value, async () => ({ output: [message(TURN), functionCall('study_list')] }), { isAnswer: () => true, outOfTime: () => 'out' });
     expect(functionCallsOf(envelope)).toHaveLength(1);
     expect(tools.calls).toEqual([]);
   });
@@ -154,28 +156,88 @@ describe('a write that does not fit one response', () => {
     expect(own.get('folder.create')!.input.properties.content).toMatchObject({ maxLength: FOLDER_WRITE_CHARACTERS });
   });
 
-  it('ends the whole turn inside its deadline: a round that may run out answers without tools', async () => {
+  it('ends the whole turn inside its one deadline: rounds and calls take their time from it, and the answer keeps its reserve', async () => {
     let now = 0;
+    const deadline = new TurnDeadline(TEXT_TURN_DEADLINE, () => now);
+    now = 5_000; // Recall and the capability context came first: the deadline runs from the request's arrival.
     const timeouts: Array<number | undefined> = [];
     const choices: unknown[] = [];
-    const caps: unknown[] = [];
-    const slowSession: ShannonModelToolSession = {
-      definitions: [shannonTool('folder.read')!], maximumCalls: 6,
-      async call() { now += 9_000; return JSON.stringify({ ok: true, text: '読んだ', retryable: false }); },
+    const callTimes: Array<number | undefined> = [];
+    const slow: ShannonModelToolSession = {
+      definitions: [shannonTool('folder.read')!], maximumCalls: 6, deadline,
+      async call(_name, _args, _signal, time) { callTimes.push(time); now += 9_000; return JSON.stringify({ ok: true, text: '読んだ', retryable: false }); },
     };
     const responses = [{ output: [functionCall('folder_read', '{"path":"a.md"}')] }, { output: [functionCall('folder_read', '{"path":"b.md"}', 'call-2')] }, { output: [message(TURN)] }];
-    await withToolRounds({ input: [], max_output_tokens: 2_200 }, slowSession, async (body, timeout) => {
-      timeouts.push(timeout); choices.push(body.tool_choice); caps.push(body.max_output_tokens);
-      now += 14_000;
+    const envelope = await withToolRounds({ input: [], max_output_tokens: 2_200 }, slow, async (body, timeout) => {
+      timeouts.push(timeout); choices.push(body.tool_choice);
+      expect(body.max_output_tokens).toBe(2_200);
+      now += 8_000;
       return responses.shift();
-    }, { isAnswer: envelope => functionCallsOf(envelope).length === 0, budget: TEXT_TOOL_TURN_BUDGET, clock: () => now });
-    // Round 1 ordinary (30 s, 2,200). Round 2 after a tool: larger output, leaving the reserve. Round 3: what is left, no tools.
-    expect(timeouts[0]).toBe(30_000);
-    expect(caps).toEqual([2_200, 4_000, 2_200]);
+    }, { isAnswer: value => functionCallsOf(value).length === 0, outOfTime: () => 'out' });
+    expect(envelope).toEqual({ output: [message(TURN)] });
+    // Round 1 at 5 s: 30 s cap. Call at 13 s: 10 s cap. Round 2 at 22 s: min(20, 50-22-12=16). Call at 30 s: min(10, 8).
+    expect(timeouts.slice(0, 2)).toEqual([30_000, 16_000]);
+    expect(callTimes).toEqual([10_000, 8_000]);
+    // At 39 s only the reserve is left (11 s < 4 s + 12 s): the answer, without tools, with all that is left.
     expect(choices).toEqual([undefined, undefined, 'none']);
-    expect(timeouts[1]).toBe(50_000 - 23_000 - 12_000);
-    expect(timeouts[2]).toBe(50_000 - 23_000 - 23_000);
-    expect(timeouts.reduce<number>((sum, value) => sum + (value ?? 0), 0)).toBeLessThanOrEqual(TEXT_TOOL_TURN_BUDGET.totalMilliseconds);
+    expect(timeouts[2]).toBe(11_000);
+  });
+
+  it('does not run a call once the answer\'s reserve is reached, and tells the model it was not run', async () => {
+    let now = 0;
+    const deadline = new TurnDeadline(TEXT_TURN_DEADLINE, () => now);
+    const ran: string[] = [];
+    const tight: ShannonModelToolSession = {
+      definitions: [shannonTool('study.list')!, shannonTool('study.read')!], maximumCalls: 6, deadline,
+      async call(name) { ran.push(name); now += 36_000; return JSON.stringify({ ok: true, text: 'x', retryable: false }); },
+    };
+    const inputs: unknown[][] = [];
+    await withToolRounds({ input: [] }, tight, async body => {
+      inputs.push(body.input as unknown[]);
+      now += 2_000;
+      return inputs.length === 1 ? { output: [functionCall('study_list'), functionCall('study_read', '{"id":"12345678"}', 'call-2')] } : { output: [message(TURN)] };
+    }, { isAnswer: value => functionCallsOf(value).length === 0, outOfTime: () => 'out' });
+    expect(ran).toEqual(['study_list']);
+    const outputs = (inputs[1] as Array<Record<string, unknown>>).filter(item => item.type === 'function_call_output');
+    expect(outputs[1]!.output).toBe(SKIPPED_FOR_TIME);
+    expect(JSON.parse(SKIPPED_FOR_TIME).text).toContain('時間が足りず実行しなかった');
+  });
+
+  it('says the fixed line, and the turn is saved, when even the answer\'s reserve is gone or the answer fails after a tool ran', async () => {
+    let now = 0;
+    const deadline = new TurnDeadline(TEXT_TURN_DEADLINE, () => now);
+    const starving: ShannonModelToolSession = {
+      definitions: [shannonTool('study.list')!], maximumCalls: 6, deadline,
+      async call() { now += 48_500; return JSON.stringify({ ok: true, text: 'x', retryable: false }); },
+    };
+    let sends = 0;
+    const starved = await withToolRounds({ input: [] }, starving, async () => { sends += 1; return { output: [functionCall('study_list')] }; },
+      { isAnswer: () => false, outOfTime: () => 'out-of-time' });
+    expect(starved).toBe('out-of-time');
+    expect(sends).toBe(1);
+    // Through the text adapter: the turn ends with her plain line, as a whole structured turn.
+    const timeouts = scriptedFetch([{ output: [functionCall('study_list')] }]);
+    const failing = (async (url: string, init: { body: string; signal?: AbortSignal }) => {
+      if (timeouts.bodies.length >= 1) throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+      return timeouts.fetcher(url, init as never);
+    }) as unknown as typeof fetch;
+    const tools = session();
+    const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: failing }).generate({ ...base, tools: { ...tools.value, deadline: new TurnDeadline(TEXT_TURN_DEADLINE) } as ShannonModelToolSession });
+    expect(result.reply).toBe(TURN_OUT_OF_TIME_LINE);
+    expect(tools.calls).toHaveLength(1);
+  });
+
+  it('falls back to the answer without tools when a round that offers tools runs out of time', async () => {
+    let first = true;
+    const choices: unknown[] = [];
+    const tools = session();
+    const envelope = await withToolRounds({ input: [] }, { ...tools.value, deadline: new TurnDeadline(TEXT_TURN_DEADLINE) } as ShannonModelToolSession, async body => {
+      choices.push(body.tool_choice);
+      if (first) { first = false; throw Object.assign(new Error('timed out'), { name: 'TimeoutError' }); }
+      return { output: [message(TURN)] };
+    }, { isAnswer: value => functionCallsOf(value).length === 0, outOfTime: () => 'out' });
+    expect(envelope).toEqual({ output: [message(TURN)] });
+    expect(choices).toEqual([undefined, 'none']);
   });
 
   it('in voice: the arguments of a call count as output for the first-word bound, and a cut-off call does not fail the turn', async () => {
@@ -291,5 +353,63 @@ describe('a provider that refuses the request offering her tools', () => {
     } finally { console.warn = original; }
     expect(lines).toEqual(['Shannon tools offer refused by provider: 400', 'Shannon tools offer refused by provider: 422']);
     expect(tools.calls).toEqual([]);
+  });
+});
+
+describe('silence in a voice turn with tools', () => {
+  it('says a second fixed phrase when nothing has been heard for 15 s after the first, as ordinary words', async () => {
+    let now = 0;
+    const encoder = new TextEncoder();
+    let round = 0;
+    const fetcher = (async () => {
+      round += 1;
+      const events = round === 1
+        ? [{ type: 'response.output_item.added', item: { type: 'function_call', name: 'study_list' } },
+          { type: 'response.completed', response: { output: [functionCall('study_list')] } }]
+        : [{ type: 'response.output_text.delta', delta: 'メモが1つあります。' }, { type: 'response.completed', response: { output: [message('メモが1つあります。')] } }];
+      return new Response(new ReadableStream<Uint8Array>({ start(controller) {
+        for (const event of events) controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        controller.close();
+      } }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const slowTool: ShannonModelToolSession = {
+      definitions: [shannonTool('study.list')!], maximumCalls: 6, deadline: new TurnDeadline(VOICE_TURN_DEADLINE, () => now),
+      async call() {
+        // The tool takes long: the clock moves past the silence bound, and the ticker gets its turn.
+        now += 16_000;
+        await new Promise(resolve => setTimeout(resolve, 30));
+        return JSON.stringify({ ok: true, text: 'x', retryable: false });
+      },
+    };
+    const heard: string[] = [];
+    const turn = await streamedVoiceToolTurn({
+      fetcher, endpoint: 'https://example.invalid', apiKey: 'test', body: { input: [] }, plainBody: { input: [] }, tools: slowTool,
+      bounds: { firstOutputMilliseconds: 1_000, idleMilliseconds: 1_000 }, onTextDelta: text => { heard.push(text); },
+      onSpent: () => {}, onSpentWithoutReply: () => {}, clock: () => now, tickMilliseconds: 5,
+    });
+    expect(heard).toEqual(['ちょっと見てみますね。', VOICE_SECOND_PHRASE, 'メモが1つあります。']);
+    expect(turn.reply).toBe(`ちょっと見てみますね。${VOICE_SECOND_PHRASE}メモが1つあります。`);
+  });
+
+  it('ends a voice turn whose answer cannot be had in time with the fixed line, never with a failure', async () => {
+    let now = 0;
+    const encoder = new TextEncoder();
+    const fetcher = (async () => new Response(new ReadableStream<Uint8Array>({ start(controller) {
+      for (const event of [{ type: 'response.output_item.added', item: { type: 'function_call', name: 'study_create' } },
+        { type: 'response.completed', response: { output: [functionCall('study_create', '{}')] } }]) controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+      controller.close();
+    } }), { status: 200 })) as unknown as typeof fetch;
+    const committing: ShannonModelToolSession = {
+      definitions: [shannonTool('study.create')!], maximumCalls: 6, deadline: new TurnDeadline(VOICE_TURN_DEADLINE, () => now),
+      async call() { now += 37_000; return JSON.stringify({ ok: true, text: '書いた', retryable: false }); },
+    };
+    const heard: string[] = [];
+    const turn = await streamedVoiceToolTurn({
+      fetcher, endpoint: 'https://example.invalid', apiKey: 'test', body: { input: [] }, plainBody: { input: [] }, tools: committing,
+      bounds: { firstOutputMilliseconds: 1_000, idleMilliseconds: 1_000 }, onTextDelta: text => { heard.push(text); },
+      onSpent: () => {}, onSpentWithoutReply: () => {}, clock: () => now, tickMilliseconds: 1_000,
+    });
+    expect(heard).toEqual(['ちょっと書いてみますね。', TURN_OUT_OF_TIME_LINE]);
+    expect(turn.reply).toBe(`ちょっと書いてみますね。${TURN_OUT_OF_TIME_LINE}`);
   });
 });

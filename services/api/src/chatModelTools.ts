@@ -1,4 +1,8 @@
 import { providerToolName, type ShannonToolDefinition } from './shannonTools.js';
+import {
+  MINIMUM_ANSWER_MILLISECONDS, MINIMUM_CALL_MILLISECONDS, MINIMUM_ROUND_MILLISECONDS, TOOL_CALL_CAP_MILLISECONDS, TURN_OUT_OF_TIME_LINE, timedOut,
+  type TurnDeadline,
+} from './turnDeadline.js';
 
 /**
  * Function calling for her registry tools in a conversation turn (Syzygy ADR-0003 stage 1). The adapter
@@ -6,43 +10,29 @@ import { providerToolName, type ShannonToolDefinition } from './shannonTools.js'
  * the turn's gate context), and asks again with the results, at most `maximumCalls` calls in one turn; after
  * that the model must answer without tools. A round whose text is already a whole answer ends the turn.
  *
- * The provider sees each result as one JSON object of the shape in `shannonTools.ts`.
+ * The provider sees each result as one JSON object of the shape in `shannonTools.ts`. Every round and every call
+ * takes its time from the session's one turn deadline (`turnDeadline.ts`).
  */
 export interface ShannonModelToolSession {
   readonly definitions: readonly ShannonToolDefinition[];
-  /** Runs one call; returns the result as the model reads it. Never throws. */
-  call(providerName: string, argumentsJson: string, signal?: AbortSignal): Promise<string>;
+  /** Runs one call within `timeMilliseconds`; returns the result as the model reads it. Never throws. */
+  call(providerName: string, argumentsJson: string, signal?: AbortSignal, timeMilliseconds?: number): Promise<string>;
   readonly maximumCalls: number;
+  /** The turn's deadline, from the request's arrival; absent only where nobody waits (tests of the adapter alone). */
+  readonly deadline?: TurnDeadline;
 }
 
 /** A conversation turn uses at most this many tools. */
 export const CONVERSATION_TOOL_CALLS = 6;
 
-/**
- * The deadline of a text turn that offers her tools (coordinator decision 2026-10-05). The iPhone waits 60 s for a
- * non-streaming reply, so the whole turn, every round and every tool together, ends within `totalMilliseconds`. A
- * round before any tool ran is an ordinary round (30 s, the ordinary output ceiling). Rounds after a tool ran get the
- * larger ceiling and up to `laterRoundMilliseconds`, but always leave `finalReserveMilliseconds` for the answer; when
- * less than another round and the reserve is left, the last round answers without tools.
- */
-export const TEXT_TOOL_TURN_BUDGET: Readonly<ToolTurnBudget> = Object.freeze({
-  totalMilliseconds: 50_000, firstRoundMilliseconds: 30_000, laterRoundMilliseconds: 20_000, minimumRoundMilliseconds: 8_000,
-  finalReserveMilliseconds: 12_000, laterOutputTokens: 4_000,
-});
-
 /** A voice turn with tools: room for one conversation write (1,500 characters) and a short spoken answer, no more. */
 export const VOICE_TOOL_OUTPUT_TOKENS = 2_400;
-/** In voice nothing reaches the phone while she writes a call's arguments or a tool runs: the next words come within this. */
-export const VOICE_TOOL_SILENCE_MILLISECONDS = 35_000;
+/** In voice, after her first waiting phrase, this long with nothing heard brings a second fixed phrase. */
+export const VOICE_SECOND_PHRASE_AFTER_MILLISECONDS = 15_000;
+export const VOICE_SECOND_PHRASE = 'もう少し待ってくださいね。';
 
-export interface ToolTurnBudget {
-  totalMilliseconds: number;
-  firstRoundMilliseconds: number;
-  laterRoundMilliseconds: number;
-  minimumRoundMilliseconds: number;
-  finalReserveMilliseconds: number;
-  laterOutputTokens: number;
-}
+/** A call that was not run because the turn's time ran short: nothing of it happened. */
+export const SKIPPED_FOR_TIME = JSON.stringify({ ok: false, text: '時間が足りず実行しなかった（何もしていない）。', failure: 'timeout', retryable: true });
 
 /** What she says in voice when a round begins a call and she has said nothing yet: a fixed phrase, in her voice. */
 export function voiceWaitingPhrase(providerName: string): string {
@@ -98,28 +88,46 @@ function refusedOffer(error: unknown): string | null {
 export interface ToolRoundOptions {
   isAnswer: (envelope: unknown) => boolean;
   onSpent?: (envelope: unknown) => void;
+  /** The caller's own cancellation (the owner hung up or spoke over her); a round's own timeout is not this. */
   signal?: AbortSignal;
-  /** The same request without her tools: sent once when the provider refuses the request that offers them before any tool ran. */
+  /** The same request without her tools: sent once when the provider refuses the request that offers them. */
   plainBody?: Record<string, unknown>;
   /** A content-free line for the service log. */
   log?: (line: string) => void;
-  /** The deadline of the whole turn (text); absent, each round has the sender's own bound. */
-  budget?: ToolTurnBudget;
-  /** Milliseconds, for the budget; a test's clock. */
-  clock?: () => number;
+  /** The envelope of her fixed short line (`TURN_OUT_OF_TIME_LINE`), in the format the caller reads. */
+  outOfTime: () => unknown;
 }
 
 /** Told when the provider refused a later round: the tools are gone, the results so far stay in front of her. */
 export const TOOLS_GONE_NOTE = 'ここから先は道具が使えなくなった。ここまでの道具の結果で答える。';
 
+/** Marks the envelope of the fixed line, so a voice caller speaks it. */
+export const OUT_OF_TIME = Symbol('out-of-time');
+
+export function outOfTimeEnvelope(outputText: string): Record<string | symbol, unknown> {
+  return { output_text: outputText, [OUT_OF_TIME]: true };
+}
+
+export function isOutOfTime(envelope: unknown): boolean {
+  return Boolean(envelope && typeof envelope === 'object' && (envelope as Record<symbol, unknown>)[OUT_OF_TIME]);
+}
+
+export { TURN_OUT_OF_TIME_LINE };
+
 /**
  * Sends `body`, and while the response asks for functions (and is not already a whole answer), runs them and
  * sends again with the calls and their results added to the input. Returns the last response. `onSpent` sees
- * every response before the last, for usage. `send` is given the time its round may take, when the turn has a budget.
+ * every response before the last, for usage. `send` is given the time its round may take.
+ *
+ * Time: every round with tools and every call takes min(its cap, what is left minus the answer's reserve) of the
+ * session's deadline. A round that would get too little is not started: the answer without tools comes instead.
+ * A call that would get too little is not run, and the model is told 「時間が足りず実行しなかった」. The answer keeps
+ * the reserve; when even that is gone, or the answer fails after a tool ran or by its time, she says the fixed line
+ * (`outOfTime`) and the turn is saved. A round with tools that times out falls back to the answer.
  *
  * A response cut off at the output ceiling runs none of its calls: the model is told once and answers without
  * tools. A 4xx refusal of a request that offers tools is sent once more without them: as `plainBody` while no
- * tool has run, and otherwise as the input so far, with the tools' results as text and a note, and no tools.
+ * tool has run, and otherwise as the input so far, with the tools' results as text and a note.
  */
 export async function withToolRounds(
   body: Record<string, unknown>,
@@ -128,33 +136,44 @@ export async function withToolRounds(
   options: ToolRoundOptions,
 ): Promise<unknown> {
   if (!session) return send(body);
-  const clock = options.clock ?? Date.now;
-  const started = clock();
-  const budget = options.budget;
+  const deadline = session.deadline;
   const input = Array.isArray(body.input) ? [...body.input as unknown[]] : [];
   let used = 0;
   let toolsOff = false;
-  const attempt = async (request: Record<string, unknown>, timeout: number | undefined) => {
-    try { return { envelope: await send(request, timeout) }; } catch (error) {
-      const code = refusedOffer(error);
-      if (!code || !options.plainBody) throw error;
-      (options.log ?? (line => console.warn(line)))(`Shannon tools offer refused by provider: ${code}`);
-      const left = budget ? Math.max(1, budget.totalMilliseconds - (clock() - started)) : undefined;
-      if (used === 0) return { envelope: await send(options.plainBody, left), plain: true };
-      return { envelope: await send({ ...withoutTools(options.plainBody), input: [...textOnly(input), { role: 'developer', content: TOOLS_GONE_NOTE }] }, left), plain: true };
+  const callerStopped = () => options.signal?.aborted === true;
+  /** The last round, without tools; `plain` declares none at all. Never fails once a tool ran or by its time. */
+  const answer = async (request: Record<string, unknown>, plain = false): Promise<unknown> => {
+    const left = deadline?.forAnswer();
+    if (left !== undefined && left < MINIMUM_ANSWER_MILLISECONDS) return options.outOfTime();
+    try {
+      return await send(plain ? request : { ...request, tool_choice: 'none' }, left);
+    } catch (error) {
+      if (callerStopped() || (used === 0 && !timedOut(error))) throw error;
+      return options.outOfTime();
     }
   };
   for (;;) {
-    const left = budget ? budget.totalMilliseconds - (clock() - started) : Number.POSITIVE_INFINITY;
-    // After a tool ran, another round with tools only while it and the answer both still fit the deadline.
-    const anotherRound = !budget || used === 0 || left - budget.finalReserveMilliseconds >= budget.minimumRoundMilliseconds;
-    const exhausted = toolsOff || used >= session.maximumCalls || !anotherRound;
-    const timeout = !budget ? undefined : Math.max(1, exhausted ? left
-      : used === 0 ? Math.min(budget.firstRoundMilliseconds, left) : Math.min(budget.laterRoundMilliseconds, left - budget.finalReserveMilliseconds));
-    const larger = budget && used > 0 && !exhausted ? { max_output_tokens: budget.laterOutputTokens } : {};
-    const { envelope, plain } = await attempt({ ...body, ...larger, input, ...(exhausted ? { tool_choice: 'none' } : {}) }, timeout);
+    const cap = used === 0 ? deadline?.plan.firstRoundMilliseconds : deadline?.plan.laterRoundMilliseconds;
+    const time = deadline && cap !== undefined ? deadline.forStep(cap) : undefined;
+    if (toolsOff || used >= session.maximumCalls || (time !== undefined && time < MINIMUM_ROUND_MILLISECONDS)) return answer({ ...body, input });
+    let envelope: unknown;
+    try {
+      envelope = await send({ ...body, input }, time);
+    } catch (error) {
+      if (callerStopped()) throw error;
+      const code = refusedOffer(error);
+      if (code && options.plainBody) {
+        (options.log ?? (line => console.warn(line)))(`Shannon tools offer refused by provider: ${code}`);
+        if (used === 0) return answer(options.plainBody, true);
+        return answer({ ...withoutTools(options.plainBody), input: [...textOnly(input), { role: 'developer', content: TOOLS_GONE_NOTE }] }, true);
+      }
+      // A round with tools that ran out of time, or any failure after a tool ran: the answer without tools comes now.
+      if (!timedOut(error) && used === 0) throw error;
+      toolsOff = true;
+      continue;
+    }
     const calls = functionCallsOf(envelope);
-    if (plain || exhausted || !calls.length || options.isAnswer(envelope)) return envelope;
+    if (!calls.length || options.isAnswer(envelope)) return envelope;
     options.onSpent?.(envelope);
     if (cutOffResponse(envelope)) {
       input.push({ role: 'developer', content: CUT_OFF_CALL_NOTE });
@@ -163,10 +182,18 @@ export async function withToolRounds(
     }
     for (const call of calls) {
       options.signal?.throwIfAborted();
-      const output = used < session.maximumCalls
-        ? await session.call(call.name, call.arguments, options.signal)
-        : JSON.stringify({ ok: false, text: 'この返事で使える道具の数を超えた。いまある結果で答える。', failure: 'limit', retryable: false });
-      used += 1;
+      const callTime = deadline?.forStep(TOOL_CALL_CAP_MILLISECONDS);
+      let output: string;
+      if (used >= session.maximumCalls) {
+        output = JSON.stringify({ ok: false, text: 'この返事で使える道具の数を超えた。いまある結果で答える。', failure: 'limit', retryable: false });
+      } else if (toolsOff || (callTime !== undefined && callTime < MINIMUM_CALL_MILLISECONDS)) {
+        // The answer's reserve is reached: the rest of this response's calls are not run.
+        output = SKIPPED_FOR_TIME;
+        toolsOff = true;
+      } else {
+        output = await session.call(call.name, call.arguments, options.signal, callTime);
+        used += 1;
+      }
       input.push({ type: 'function_call', call_id: call.callId, name: call.name, arguments: call.arguments }, { type: 'function_call_output', call_id: call.callId, output });
     }
   }

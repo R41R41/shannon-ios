@@ -236,6 +236,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/serverChatSentenceStream.ts',
     'services/api/src/chatModelTurn.ts',
     'services/api/src/chatModelTools.ts',
+    'services/api/src/chatModelVoiceTools.ts',
+    'services/api/src/turnDeadline.ts',
     'services/api/src/chatModelStream.ts',
     'services/api/src/chatModelVoiceStream.ts',
     'services/api/src/spokenSentences.ts',

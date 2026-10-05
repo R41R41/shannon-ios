@@ -6,6 +6,7 @@ import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import { authorizeToolCall, toolRefusal } from '../src/shannonToolGate.js';
 import { validToolInput } from '../src/shannonToolInput.js';
+import { similarBodies } from '../src/shannonStudyTools.js';
 import { toolSessionMemory } from '../src/shannonToolTypes.js';
 import {
   CONVERSATION_WRITE_CHARACTERS, SHANNON_TOOLS, TOOL_FAILURE_KINDS, offeredTools, providerToolName, shannonTool, toolFromProviderName, toolResultForModel,
@@ -222,6 +223,22 @@ describe('what her writes from a conversation must not repeat', () => {
     expect(check.carries('コーヒーが嫌いでまったく飲まない')).toBe(false);
     // A run of hiragana alone is filler.
     expect(check.carries('あいうえおかきくけこ')).toBe(false);
+    // What went with a forgotten turn: a fact derived from it, and a fact quoting what a forgotten item quoted.
+    const derived = { ...base,
+      userFacts: [
+        { id: 'from-turn', statement: 'ユーザーはオカピ牧場で働いている', confidence: 0.9, observedAt: at, sourceExperienceId: 'turn-gone' },
+        { id: 'gone', statement: 'ユーザーはイルカ教室に通う', confidence: 0.9, observedAt: at, evidence: 'イルカ教室に毎週通ってる' },
+        { id: 'quoting', statement: 'ユーザーは水泳が得意で大会にも出た', confidence: 0.9, observedAt: at, evidence: 'イルカ教室に毎週通ってる' },
+      ],
+      memoryControls: [
+        { memoryId: 'turn-gone', kind: 'experience' as const, status: 'forgotten' as const, pinned: false, updatedAt: at, changeReason: 'forget' },
+        { memoryId: 'gone', kind: 'user-fact' as const, status: 'forgotten' as const, pinned: false, updatedAt: at, changeReason: 'forget' },
+      ] };
+    const goneTurn = [{ id: 'turn-gone', userMessage: 'じつはスナネコ同好会の会長をやっている', shannonReply: '', summary: 's', observedAt: at }];
+    const withDerived = conversationSecrets(derived as typeof base, { experienceCandidates: () => goneTurn as never }, scope);
+    expect(withDerived.carries('オカピ牧場で働いている人')).toBe(true);
+    expect(withDerived.carries('水泳が得意で大会にも出たらしい')).toBe(true);
+    expect(withDerived.carries('スナネコ同好会の会長をやっている')).toBe(true);
   });
 });
 
@@ -251,13 +268,19 @@ describe('long writing and repeated writes', () => {
     const again = await first('study.create', { kind: 'story', title: '雨の駅', body: `  ${STORY}` });
     expect(again).toMatchObject({ ok: true, text: expect.stringContaining('二つにはしなかった') });
     expect(again.text).toContain(id);
-    // A retry of the same message writes a new text under the same title: still the one piece.
+    // A retry of the same message writes the story again under the same title, with a similar body: still the one piece.
     expect((await turn('message-1')('study.create', { kind: 'story', title: '雨の駅', body: `${STORY}別の書き方。` })).text).toContain(id);
     expect(store.study.list(scope)).toHaveLength(1);
+    // The same title for something else of the same message is another piece: another kind, or a different body.
+    expect((await turn('message-1')('study.create', { kind: 'note', title: '雨の駅', body: '駅の取材メモ。改札の位置。' })).text).not.toContain(id);
+    expect((await turn('message-1')('study.create', { kind: 'story', title: '雨の駅', body: '山の上の小屋で、猫が手紙を待っていた。冬が来る前の話。' })).text).not.toContain(id);
+    expect(store.study.list(scope)).toHaveLength(3);
+    expect(similarBodies('静かな駅の話。雨が降る。', '静かな駅の話。雨が降る。傘を忘れた。')).toBe(true);
+    expect(similarBodies('静かな駅の話', '猫と手紙の物語')).toBe(false);
     // Another message may write another piece with that title; and the same text much later is a new piece.
     expect(await turn('message-2')('study.create', { kind: 'story', title: '雨の駅', body: `${STORY}二本目。` })).toMatchObject({ ok: true });
     clock.at = '2026-10-05T02:00:00.000Z';
     expect((await turn('message-3')('study.create', { kind: 'story', title: '雨の駅', body: STORY })).text).not.toContain(id);
-    expect(store.study.list(scope)).toHaveLength(3);
+    expect(store.study.list(scope)).toHaveLength(5);
   });
 });

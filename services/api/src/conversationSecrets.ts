@@ -3,7 +3,9 @@ import type { ConversationStore } from './conversationStore.js';
 
 /**
  * What a write of hers from a conversation must not repeat (ADR-0002; owner decision 2026-10-05): items the owner
- * asked to keep secret or marked 機微 by hand, and items and turns he asked her to forget or rejected. Nothing else
+ * asked to keep secret or marked 機微 by hand; items and turns he asked her to forget or rejected; and what went with
+ * them as `visibleMemoryText` reads it: items derived from a forgotten turn, items that quote what a forgotten item
+ * quoted, and the turns forgotten items came from. Nothing else
  * of his: her stories and notes may be about him and the people he knows. A corrected item's original wording is not
  * included (it is wrong, not secret). The words are used only to check what her study and folder tools are asked to
  * write; they are never given to a model.
@@ -29,20 +31,33 @@ function keptSecret(disclosure: MemoryDisclosure | undefined): boolean {
   return disclosure?.category === 'secret' || (disclosure?.decidedBy === 'owner' && disclosure.sensitivity === 'sensitive');
 }
 
-function forgotten(state: CompanionStateSnapshot, id: string): boolean {
-  const status = memoryControlFor(state, id)?.status;
+function forgotten(state: CompanionStateSnapshot, id: string | undefined): boolean {
+  const status = id ? memoryControlFor(state, id)?.status : undefined;
   return status === 'forgotten' || status === 'rejected';
 }
 
 export function conversationSecrets(state: CompanionStateSnapshot, conversations: Pick<ConversationStore, 'experienceCandidates'>, scopeKey: string): SecretCheck {
   const items = [
-    ...state.userFacts.map(item => ({ id: item.id, texts: [item.statement, item.evidence ?? ''], disclosure: item.disclosure })),
-    ...state.relationships.map(item => ({ id: item.id, texts: [item.statement, item.evidence ?? ''], disclosure: item.disclosure })),
-    ...state.prospectiveMemories.map(item => ({ id: item.id, texts: [item.summary], disclosure: item.disclosure })),
+    ...state.userFacts.map(item => ({ id: item.id, source: item.sourceExperienceId, evidence: item.evidence, texts: [item.statement, item.evidence ?? ''], disclosure: item.disclosure })),
+    ...state.relationships.map(item => ({ id: item.id, source: item.sourceExperienceId, evidence: item.evidence, texts: [item.statement, item.evidence ?? ''], disclosure: item.disclosure })),
+    ...state.prospectiveMemories.map(item => ({ id: item.id, source: item.sourceExperienceId, evidence: item.evidence, texts: [item.summary, item.evidence ?? ''], disclosure: item.disclosure })),
   ];
+  // What a forgotten or rejected item quoted: an item whose evidence quotes the same words is gone with it.
+  const normalize = (value: string | undefined) => (value ?? '').replace(/[\s。、]/gu, '');
+  const goneQuotes = items.filter(item => forgotten(state, item.id)).map(item => normalize(item.evidence))
+    .concat(state.memoryControls.filter(control => forgotten(state, control.memoryId)).map(control => normalize(control.sourceEvidence)))
+    .filter(quote => quote.length >= 3);
+  const quotesGone = (evidence: string | undefined) => {
+    const quote = normalize(evidence);
+    return quote.length >= 3 && goneQuotes.some(gone => gone.includes(quote) || quote.includes(gone));
+  };
+  // Forgotten or rejected itself, from a forgotten or rejected turn, or quoting what such an item quoted.
+  const gone = (item: typeof items[number]) => forgotten(state, item.id) || forgotten(state, item.source) || quotesGone(item.evidence);
+  const goneTurns = new Set(items.filter(item => forgotten(state, item.id)).map(item => item.source).filter((value): value is string => Boolean(value)));
   const texts = [
-    ...items.filter(item => keptSecret(item.disclosure) || forgotten(state, item.id)).flatMap(item => item.texts),
-    ...conversations.experienceCandidates(scopeKey).filter(turn => keptSecret(turn.disclosure) || forgotten(state, turn.id)).map(turn => turn.userMessage),
+    ...items.filter(item => keptSecret(item.disclosure) || gone(item)).flatMap(item => item.texts),
+    ...conversations.experienceCandidates(scopeKey)
+      .filter(turn => keptSecret(turn.disclosure) || forgotten(state, turn.id) || goneTurns.has(turn.id)).map(turn => turn.userMessage),
   ];
   const runs = new Set<string>();
   const whole = new Set<string>();

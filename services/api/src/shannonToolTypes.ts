@@ -46,6 +46,8 @@ export interface ToolExecutionContext extends ToolCallContext {
    * (the next may pass). Absent in her own time, whose plan already drops such inputs.
    */
   secrets?: SecretCheck | null;
+  /** In a conversation: the time this call may take, from the turn's deadline. A folder operation waits no longer. */
+  timeMilliseconds?: number;
 }
 
 export type ToolExecutor = (input: ToolInput, context: ToolExecutionContext) => PreparedToolCall | ToolResult;

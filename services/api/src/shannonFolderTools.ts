@@ -63,7 +63,7 @@ export function folderExecutors(operations: HostFolderOperations, roomLook: (sco
       async run(signal) {
         const outcome = await operations.run(context.scopeKey, {
           host, origin: context.surface === 'autonomy' ? 'autonomy' : 'conversation', operation, tool, args: { ...args, ...(to !== undefined ? { toRelativePath: to } : {}) },
-          relativePath: path, ...(to !== undefined ? { toRelativePath: to } : {}), waitMilliseconds: WAIT_MILLISECONDS[context.surface],
+          relativePath: path, ...(to !== undefined ? { toRelativePath: to } : {}), waitMilliseconds: Math.min(WAIT_MILLISECONDS[context.surface], context.timeMilliseconds ?? Number.POSITIVE_INFINITY),
         }, signal);
         return runResult(outcome, operation, { host, path, ...(to !== undefined ? { to } : {}) }, context);
       },

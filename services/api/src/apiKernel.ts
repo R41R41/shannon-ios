@@ -57,6 +57,7 @@ import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import { chatAudienceTurn } from './chatAudience.js';
 import { generateChatTurn, validChatStream, withSentenceStream } from './chatSentenceStream.js';
 import { conversationToolServer, conversationTools, type ConversationToolServer } from './shannonToolSession.js';
+import { TEXT_TURN_DEADLINE, TurnDeadline } from './turnDeadline.js';
 import type { TurnMemoryRecall } from './turnMemoryRecall.js';
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type NotionTurnReader } from './conversationCapabilities.js';
 import { prepareConversationOrganize } from './conversationOrganize.js';
@@ -320,6 +321,7 @@ export class ShannonApiKernel {
     if (turnResponse) return await turnResponse;
 
     if (request.method === 'POST' && request.path === '/v1/chat') {
+      const deadline = new TurnDeadline(TEXT_TURN_DEADLINE); // From arrival: recall and context count too (turnDeadline.ts).
       if (!objectBody(request.body)) return badRequest('JSON object body is required');
       const body = request.body as unknown as ChatRequest;
       if (!validScopeKey(body.scopeKey)) return badRequest('scopeKey is required');
@@ -420,7 +422,7 @@ export class ShannonApiKernel {
           .request(placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt),
         ...(priorThreadSummary ? { priorThreadSummary } : {}),
         message,
-        ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...conversationTools(this.autonomy, body.scopeKey, 'text', audience.alone, this.toolServer, `${threadId}\n${message}`),
+        ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...conversationTools(this.autonomy, body.scopeKey, 'text', audience.alone, this.toolServer, `${threadId}\n${message}`, deadline),
         ...(body.webSearch === true || placeSkill ? { useWebSearch: true } : {}),
         generateThreadTitle: this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
       });

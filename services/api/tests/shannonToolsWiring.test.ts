@@ -3,6 +3,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS } from '../src/chatModelTools.js';
+import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/turnDeadline.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';
 import { OTHERS_HEARD_WINDOW_MILLISECONDS, ToolAudienceWatch } from '../src/shannonToolAudience.js';
 import { asksAboutOwnThings, conversationTools } from '../src/shannonToolSession.js';
@@ -92,8 +93,13 @@ describe('which conversation turns are offered her tools', () => {
     const withheld = chatTurnRequestBody('gpt-5.6-luna', { scopeKey: 'owner', systemPrompt: '', history: [], message: 'x', toolsWithheld: true }, undefined);
     expect(String(withheld.instructions)).toContain(TOOLS_WITHHELD_INSTRUCTIONS);
     expect(String(chatTurnRequestBody('gpt-5.6-luna', { scopeKey: 'owner', systemPrompt: '', history: [], message: 'x' }, undefined).instructions)).not.toContain('[ボクの道具]');
-    // Without what the server knows of the audience, nothing is offered.
-    expect(conversationTools(runner, 'owner', 'text', true).tools).toBeUndefined();
+    // Without what the server knows of the audience, nothing is offered, and nothing is said about it.
+    expect(conversationTools(runner, 'owner', 'text', true)).toEqual({});
+    // The session carries the turn's deadline, not as part of what the model is asked.
+    const deadline = new TurnDeadline(TEXT_TURN_DEADLINE);
+    const offered = conversationTools(runner, 'owner', 'text', true, { audience: new ToolAudienceWatch({ othersPresent: () => false }, () => at), secrets }, 'thread\nmessage', deadline);
+    expect(offered.tools?.deadline).toBe(deadline);
+    expect(Object.keys(offered.tools!)).toEqual(['definitions', 'maximumCalls']);
   });
 
   it('offers nothing anywhere with SHANNON_OWN_TOOLS=off', async () => {

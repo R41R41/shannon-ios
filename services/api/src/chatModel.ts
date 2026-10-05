@@ -18,9 +18,10 @@ import {
 } from './chatModelVoiceStream.js';
 import { completeSpokenSentences } from './spokenSentences.js';
 import { chatTurnRequestBody, chatTurnResult, offersTools, parsedChatTurn } from './chatModelTurn.js';
+import { streamedVoiceToolTurn } from './chatModelVoiceTools.js';
 import {
-  TEXT_TOOL_TURN_BUDGET, TOOLS_WITHHELD_INSTRUCTIONS, VOICE_TOOL_INSTRUCTIONS, VOICE_TOOL_OUTPUT_TOKENS, VOICE_TOOL_SILENCE_MILLISECONDS,
-  providerFunctionTools, voiceWaitingPhrase, withToolRounds, type ShannonModelToolSession,
+  TOOLS_WITHHELD_INSTRUCTIONS, TURN_OUT_OF_TIME_LINE, VOICE_TOOL_INSTRUCTIONS, VOICE_TOOL_OUTPUT_TOKENS,
+  outOfTimeEnvelope, providerFunctionTools, withToolRounds, type ShannonModelToolSession,
 } from './chatModelTools.js';
 import {
   WEB_SEARCH_INSTRUCTIONS,
@@ -242,8 +243,11 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       isAnswer: (envelope: unknown) => { try { parsedChatTurn(envelope); return true; } catch { return false; } },
       onSpent: (envelope: unknown) => this.recordChatUsage(request.scopeKey, envelope),
       plainBody: chatTurnRequestBody(this.model, { ...request, tools: undefined }, this.options.agentHostHint),
-      // The phone waits 60 s: the whole turn, every round and tool together, stays inside this.
-      budget: TEXT_TOOL_TURN_BUDGET,
+      // When the turn's deadline leaves no time to answer: her fixed line, as a whole structured turn, so it is saved.
+      outOfTime: () => outOfTimeEnvelope(JSON.stringify({
+        reply: TURN_OUT_OF_TIME_LINE, threadSummary: null, taskDecision: { disposition: 'none', reason: '時間が足りなかった' },
+        taskProposal: null, intentPlan: null, artifacts: null,
+      })),
     };
   }
 
@@ -289,7 +293,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
   async generateVoice(request: ShannonVoiceModelRequest): Promise<ShannonChatModelResult> {
     // Words of a round that called tools (a short waiting phrase) come before the words of the answer.
     const said: string[] = [];
-    const json = await withToolRounds(this.voiceRequestPayload(request), this.voiceTools(request), async body => {
+    const json = await withToolRounds(this.voiceRequestPayload(request), this.voiceTools(request), async (body, timeoutMilliseconds) => {
       const response = await this.fetcher(this.endpoint, {
         method: 'POST',
         headers: {
@@ -297,14 +301,17 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
           'content-type': 'application/json',
         },
         body: JSON.stringify(body),
-        // Nothing arrives before the whole reply, so this bound is a total sized for the longest one.
-        signal: AbortSignal.timeout(this.options.voiceResponseTimeoutMilliseconds ?? VOICE_RESPONSE_TIMEOUT_MILLISECONDS),
+        // With tools, every round's time comes from the turn's deadline; without, this is a total sized for the longest reply.
+        signal: AbortSignal.timeout(timeoutMilliseconds ?? this.options.voiceResponseTimeoutMilliseconds ?? VOICE_RESPONSE_TIMEOUT_MILLISECONDS),
       });
       const raw = await response.text();
       const value = parseJson(raw);
       if (!response.ok) throw new Error(`OPENAI_RESPONSE_${response.status}: ${errorDetail(value)}`);
       return value;
-    }, { isAnswer: () => false, plainBody: this.voiceRequestPayload({ ...request, tools: undefined }), onSpent: envelope => { said.push(extractOutputText(envelope).trim()); this.recordChatUsage(request.scopeKey, envelope); } });
+    }, {
+      isAnswer: () => false, plainBody: this.voiceRequestPayload({ ...request, tools: undefined }), outOfTime: () => outOfTimeEnvelope(TURN_OUT_OF_TIME_LINE),
+      onSpent: envelope => { said.push(extractOutputText(envelope).trim()); this.recordChatUsage(request.scopeKey, envelope); },
+    });
     if (voiceContentWithheld(json)) {
       this.recordSpentVoiceUsage(request.scopeKey, json);
       throw new Error(VOICE_CONTENT_FILTERED);
@@ -330,30 +337,22 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       firstOutputMilliseconds: Math.max(this.voiceStreamBounds.firstOutputMilliseconds, VOICE_WEB_FIRST_OUTPUT_MILLISECONDS),
     } : this.voiceStreamBounds;
     const tools = this.voiceTools(request);
-    // Every round streams; a round that calls tools says a short waiting phrase first, and the answer follows it.
-    const said: string[] = [];
-    let last: { reply: string; envelope: unknown; truncated: boolean } | null = null;
-    let spokenAt = Date.now();
-    let spoke = false;
-    const speak = async (delta: string) => { spoke = true; spokenAt = Date.now(); await onTextDelta(delta); };
-    await withToolRounds(this.voiceRequestPayload(request), tools, async body => {
-      // Nothing reaches the phone while a call is written or a tool runs: the next words must come within the silence bound.
-      const quiet = tools ? { ...bounds, firstOutputMilliseconds: Math.max(3_000, Math.min(bounds.firstOutputMilliseconds, VOICE_TOOL_SILENCE_MILLISECONDS - (Date.now() - spokenAt))) } : bounds;
-      last = await streamedVoiceReply({
-        fetcher: this.fetcher, endpoint: this.endpoint, apiKey: this.options.apiKey,
-        body, bounds: quiet, ...(signal ? { signal } : {}),
-        ...(tools ? { allowToolCalls: true, onCallStarting: (name: string) => (spoke ? null : voiceWaitingPhrase(name)) } : {}),
+    if (tools) {
+      // Her tools: waiting phrases, the turn's deadline, and the out-of-time line (`chatModelVoiceTools.ts`).
+      const turn = await streamedVoiceToolTurn({
+        fetcher: this.fetcher, endpoint: this.endpoint, apiKey: this.options.apiKey, body: this.voiceRequestPayload(request),
+        plainBody: this.voiceRequestPayload({ ...request, tools: undefined }), tools, bounds, ...(signal ? { signal } : {}), onTextDelta,
+        onSpent: envelope => this.recordChatUsage(request.scopeKey, envelope),
         onSpentWithoutReply: envelope => this.recordSpentVoiceUsage(request.scopeKey, envelope),
-      }, tools ? speak : onTextDelta);
-      return last.envelope;
-    }, {
-      isAnswer: () => false, ...(signal ? { signal } : {}), plainBody: this.voiceRequestPayload({ ...request, tools: undefined }),
-      onSpent: envelope => { said.push(last?.reply ?? ''); this.recordChatUsage(request.scopeKey, envelope); },
-    });
-    const outcome = last!;
-    const reply = [...said, outcome.reply].filter(Boolean).join('');
-    if (!reply) throw new Error('OPENAI_RESPONSE_STREAM_INCOMPLETE');
-    return this.voiceResult(request, outcome.envelope, reply, outcome.truncated);
+      });
+      return this.voiceResult(request, turn.envelope, turn.reply, turn.truncated);
+    }
+    const outcome = await streamedVoiceReply({
+      fetcher: this.fetcher, endpoint: this.endpoint, apiKey: this.options.apiKey,
+      body: this.voiceRequestPayload(request), bounds, ...(signal ? { signal } : {}),
+      onSpentWithoutReply: envelope => this.recordSpentVoiceUsage(request.scopeKey, envelope),
+    }, onTextDelta);
+    return this.voiceResult(request, outcome.envelope, outcome.reply, outcome.truncated);
   }
 
   /** A voice response that used tokens but gave no usable reply is still accounted. */

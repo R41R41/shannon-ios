@@ -7,6 +7,7 @@ import { ToolAudienceWatch, type ToolAudienceSource } from './shannonToolAudienc
 import type { ShannonToolRunner } from './shannonToolRunner.js';
 import { toolSessionMemory } from './shannonToolTypes.js';
 import { ownToolsEnabled, toolFromProviderName, toolResultForModel } from './shannonTools.js';
+import type { TurnDeadline } from './turnDeadline.js';
 
 /**
  * The tools of one conversation turn, for the model adapter (`chatModelTools.ts`). Owner decision 2026-10-05: her
@@ -21,26 +22,32 @@ export function conversationTools(
   server: Partial<ConversationToolServer> = {},
   /** The owner's message this turn answers (thread and words): a retry of it does not write the same piece twice. */
   turn?: string,
+  /** The turn's one deadline, from the request's arrival (`turnDeadline.ts`): every round and call takes its time from it. */
+  deadline?: TurnDeadline,
 ): { tools?: ShannonModelToolSession; toolsWithheld?: true } {
   const runner = autonomy?.tools;
-  if (!runner || !ownerAlone || !ownToolsEnabled()) return {};
+  // Without what the server knows of the audience, nothing is offered (and nothing said about it).
+  if (!runner || !ownerAlone || !ownToolsEnabled() || !server.audience) return {};
   // What the client said is not enough: what the server knows of others present vetoes the offer, and she is told so.
-  if (server.audience?.othersKnown(scopeKey) !== false) return { toolsWithheld: true };
+  if (server.audience.othersKnown(scopeKey)) return { toolsWithheld: true };
   const definitions = runner.offered(surface, 'owner_alone');
   if (!definitions.length) return {};
   const memory = toolSessionMemory(turn ? createHash('sha256').update(`${scopeKey}\n${turn}`).digest('hex') : undefined);
   let check: SecretCheck | null | undefined;
   const session = { definitions, maximumCalls: CONVERSATION_TOOL_CALLS } as ShannonModelToolSession;
+  Object.defineProperty(session, 'deadline', { enumerable: false, value: deadline });
   // Not enumerable: two turns that offer the same tools are the same request (what the model is asked), whoever runs the calls.
   Object.defineProperty(session, 'call', {
     enumerable: false,
-    value: async (providerName: string, argumentsJson: string, signal?: AbortSignal) => {
+    value: async (providerName: string, argumentsJson: string, signal?: AbortSignal, timeMilliseconds?: number) => {
       const tool = toolFromProviderName(providerName);
       // What must reach nobody but the owner, read at the moment of the call; a list that cannot be read is null, and writes are then refused.
       // Read once a turn; a list that could not be read is tried again at the next call.
       if (!check) { try { check = server.secrets?.(scopeKey); } catch { check = null; } }
       const secrets = check;
-      const result = await runner.call(tool?.name ?? providerName.slice(0, 80), argumentsJson, { scopeKey, surface, audience: 'owner_alone', memory, ...(secrets !== undefined ? { secrets } : {}) }, signal);
+      const result = await runner.call(tool?.name ?? providerName.slice(0, 80), argumentsJson, {
+        scopeKey, surface, audience: 'owner_alone', memory, ...(secrets !== undefined ? { secrets } : {}), ...(timeMilliseconds !== undefined ? { timeMilliseconds } : {}),
+      }, signal);
       return toolResultForModel(result);
     },
   });

@@ -174,14 +174,17 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
     },
   });
 
-  /** A piece this one would repeat: the same title asked for again for the same owner message, or the same kind, title and body within 15 minutes. */
+  /**
+   * A piece this one would repeat: for the same owner message (a retry of it), the same kind and title with a similar
+   * body; or anywhere, the same kind, title and body within 15 minutes. Two different notes under one title are two.
+   */
   function duplicate(context: ToolExecutionContext, kind: StudyPieceKind, title: string, body: string): StudyPiece | null {
     const at = Date.parse(now());
     const same = (left: string, right: string) => left.replace(/\s+/gu, '') === right.replace(/\s+/gu, '');
     const earlier = context.memory.turnKey ? (recent.get(context.memory.turnKey) ?? []).filter(item => at - item.at < DUPLICATE_MILLISECONDS && same(item.title, title)) : [];
     for (const item of earlier) {
       const found = store.study.get(context.scopeKey, item.id);
-      if (found) return found;
+      if (found && found.kind === kind && similarBodies(found.body, body)) return found;
     }
     return store.study.list(context.scopeKey, 50).find(item => item.kind === kind && at - Date.parse(item.createdAt) < DUPLICATE_MILLISECONDS
       && same(item.title, title) && same(item.body, body)) ?? null;
@@ -208,6 +211,28 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
 
 /** Her note about a look at the owner's room: hers to think with, never put into a file (coordinator decision 2026-10-05). */
 const ROOM_LOOK_MARK = '（部屋を見たメモ。考える材料で、フォルダのファイルには書かない）';
+
+/**
+ * Two bodies that are one piece written twice: one empty, one containing the other, or sharing at least 60% of their
+ * two-character pieces (Dice). A retry that wrote the same story again in other words is usually above that; a
+ * different note under a reused title is not.
+ */
+export function similarBodies(left: string, right: string): boolean {
+  const compact = (value: string) => value.normalize('NFKC').replace(/\s+/gu, '');
+  const a = compact(left);
+  const b = compact(right);
+  if (!a || !b || a.includes(b) || b.includes(a)) return true;
+  const pairs = (value: string) => {
+    const counts = new Map<string, number>();
+    for (let index = 0; index + 2 <= value.length; index += 1) counts.set(value.slice(index, index + 2), (counts.get(value.slice(index, index + 2)) ?? 0) + 1);
+    return counts;
+  };
+  const left2 = pairs(a);
+  const right2 = pairs(b);
+  let shared = 0;
+  for (const [pair, count] of left2) shared += Math.min(count, right2.get(pair) ?? 0);
+  return (2 * shared) / Math.max(1, a.length - 1 + b.length - 1) >= 0.6;
+}
 
 /** One line of a piece for her, with everything she needs to name it in the next call. */
 function pieceLine(item: StudyPiece): string {
