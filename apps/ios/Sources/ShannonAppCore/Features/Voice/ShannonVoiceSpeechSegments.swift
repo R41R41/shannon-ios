@@ -25,10 +25,11 @@ struct ShannonVoiceSpeechSegments: Equatable, Sendable {
         case stale
     }
 
-    /// A segment that ended and never brought a transcript (noise, a cough) is forgotten after this long, as the
-    /// barge-in rule forgets where an utterance began.
+    /// A segment of the guests' (or of 本人だけ) that ended and never brought a transcript (noise, a cough) is
+    /// forgotten after this long, as the barge-in rule forgets where an utterance began. The owner's segments are
+    /// never forgotten before their transcript arrives or the call ends.
     static let untranscribedMemory: TimeInterval = ShannonVoiceBargeInRule.originSeconds
-    /// At most this many segments are kept.
+    /// At most this many segments of others are kept; the owner's are not counted against it.
     static let retained = 8
     static let discardedMemory = 32
 
@@ -59,7 +60,8 @@ struct ShannonVoiceSpeechSegments: Equatable, Sendable {
     }
 
     /// Takes the segment a transcript belongs to: by its id; by order only when the transcript carries none (the
-    /// oldest segment that ended without its transcript, else the one still open, else the last).
+    /// oldest segment that ended without its transcript, else the one still open). With no segment to take, nothing
+    /// is known: never 「the guests'」 by default, the arrival window decides.
     mutating func claimTranscript(itemID: String?, at now: TimeInterval) -> Claim {
         prune(at: now)
         if let itemID {
@@ -72,9 +74,8 @@ struct ShannonVoiceSpeechSegments: Equatable, Sendable {
             usedOrderFallback = true
             ShannonVoiceDiagnostics.shared.record("gemini.input.segment.order_fallback")
         }
-        let index = segments.firstIndex { !$0.open && !$0.transcribed }
-            ?? segments.lastIndex(where: \.open)
-            ?? segments.count - 1
+        guard let index = segments.firstIndex(where: { !$0.open && !$0.transcribed })
+            ?? segments.lastIndex(where: \.open) else { return .unknown }
         return take(index)
     }
 
@@ -93,14 +94,18 @@ struct ShannonVoiceSpeechSegments: Equatable, Sendable {
     private mutating func take(_ index: Int) -> Claim {
         segments[index].transcribed = true
         let claim: Claim = segments[index].owners ? .owners : .others
-        // Settled segments are done with; the last one stays for a late transcript matched by order.
-        let last = segments.indices.last
-        segments = segments.enumerated().filter { !$0.element.transcribed || $0.offset == last || $0.element.open }.map(\.element)
+        // Settled segments are done with (an open one may still bring more words, matched by order).
+        segments.removeAll { $0.transcribed && !$0.open }
         return claim
     }
 
     private mutating func prune(at now: TimeInterval) {
-        segments.removeAll { !$0.open && !$0.transcribed && now - ($0.stoppedAt ?? now) > Self.untranscribedMemory }
-        if segments.count > Self.retained { segments.removeFirst(segments.count - Self.retained) }
+        segments.removeAll {
+            !$0.owners && !$0.open && !$0.transcribed && now - ($0.stoppedAt ?? now) > Self.untranscribedMemory
+        }
+        while segments.filter({ !$0.owners }).count > Self.retained,
+              let oldest = segments.firstIndex(where: { !$0.owners }) {
+            segments.remove(at: oldest)
+        }
     }
 }

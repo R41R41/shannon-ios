@@ -420,4 +420,36 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         XCTAssertTrue(model.pendingTurns.turns.isEmpty)
         model.stop()
     }
+
+    /// The owner's segments are never forgotten (by age or by the count kept) before their transcript arrives.
+    func testTheOwnersSegmentWaitsForItsTranscriptHoweverLongAndHoweverManyFollow() {
+        var segments = ShannonVoiceSpeechSegments()
+        segments.started(itemID: "owner-a", at: 0)
+        segments.stopped(itemID: "owner-a", at: 1)
+        segments.switchedToGuest()
+        for index in 0..<(ShannonVoiceSpeechSegments.retained + 4) {
+            segments.started(itemID: "guest-\(index)", at: Double(2 + index))
+            segments.stopped(itemID: "guest-\(index)", at: Double(2 + index) + 0.5)
+        }
+        XCTAssertEqual(segments.claimTranscript(itemID: "owner-a", at: 40), .owners, "39 s late and after 12 others")
+        // With nothing known about a transcript, the arrival window decides, never 「the guests'」 by default.
+        XCTAssertEqual(segments.claimTranscript(itemID: "never-seen", at: 41), .unknown)
+        var empty = ShannonVoiceSpeechSegments()
+        empty.started(itemID: nil, at: 0)
+        empty.stopped(itemID: nil, at: 0.5)
+        _ = empty.claimTranscript(itemID: nil, at: 1)
+        XCTAssertEqual(empty.claimTranscript(itemID: nil, at: 2), .unknown, "no segment left: not the guests' by default")
+    }
+
+    /// A transcript nothing is known about, just after the switch: the arrival window makes it his.
+    func testATranscriptWithAnUnknownItemJustAfterTheSwitchIsHis() async {
+        let model = liveModel()
+        model.handle(.speechStarted(itemID: "seen"))
+        model.switchParticipantMode(to: .guest, origin: .control)
+        model.handle(.inputTranscript("ちょっと待って。", itemID: "not-seen"))
+        XCTAssertEqual(model.userTranscript, "")
+        await waitForFinalization(model, turns: 1)
+        XCTAssertEqual(model.pendingTurns.displayText, "")
+        model.stop()
+    }
 }
