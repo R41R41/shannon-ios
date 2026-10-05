@@ -155,8 +155,8 @@ describe('autonomy wording while the loop runs', () => {
     expect(running.replace(shannonAutonomyRuleLines('owner', { running: true })[0]!, shannonAutonomyRuleLines('owner')[0]!)).toBe(identity);
     expect(withAutonomyRunning(shannonIdentityPrompt('guest'))).toBe(shannonIdentityPrompt('guest'));
     expect(withAutonomyRunning('関係のない文')).toBe('関係のない文');
-    // The running wording still fits the response-path budget of the capability block.
-    expect(withAutonomyRunning(shannonCapabilityPrompt('owner')).length).toBeLessThanOrEqual(2_111);
-    expect(running.length).toBeLessThanOrEqual(3_047);
+    // The running wording still fits the response-path budget of the capability block (2026-10-05: +154, her tools).
+    expect(withAutonomyRunning(shannonCapabilityPrompt('owner')).length).toBeLessThanOrEqual(2_265);
+    expect(running.length).toBeLessThanOrEqual(3_201);
   });
 });

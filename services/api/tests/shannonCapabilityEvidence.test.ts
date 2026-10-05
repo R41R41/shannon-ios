@@ -29,6 +29,11 @@ import { BoundedPublicReader } from '../src/autonomyReader.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteStudyShowing } from '../src/autonomyShowing.js';
 import { StudyStore } from '../src/studyStore.js';
+import { HostFolderOperations } from '../src/hostFolderOperations.js';
+import { prepareToolStep } from '../src/autonomyLoopToolStep.js';
+import { ShannonToolRunner } from '../src/shannonToolRunner.js';
+import { asksAboutOwnThings, conversationTools } from '../src/shannonToolSession.js';
+import { offeredTools } from '../src/shannonTools.js';
 import { FileAetherProposalStore } from '../src/aetherProposal.js';
 import { BodyLooks } from '../src/bodyLook.js';
 import { BodyReactions } from '../src/bodyReaction.js';
@@ -107,12 +112,20 @@ const capabilityEvidence: Record<ShannonCapabilityId, () => boolean> = {
     && asksAboutNotion('ウサカテの伏線を見て') && !asksAboutNotion('おはよう')
     && configuredNotionSource({}).connected === false
     && NOTION_READ_ENDPOINTS.length === 6 && notionReadOperation('PATCH', '/v1/pages/44444444444444444444444444444444') === null,
-  // Write-out only: she queues a copy, the bound device places it and reports. Nothing reads the folder, and without a
-  // registered device there is no folder (the line says 「用意してくれている時」).
-  own_folder: () => exists(prepareFolderCopy, HostFolderDesk.prototype.nextCopy, HostFolderDesk.prototype.enqueue,
-    HostFolderDesk.prototype.claim, HostFolderDesk.prototype.report)
-    && Object.keys(configuredAutonomy({}).places.hostDevices ?? {}).length === 0
-    && !Object.getOwnPropertyNames(HostFolderDesk.prototype).some(name => /read|list|delete|remove|move/iu.test(name)),
+  // Her study through the registry on every surface (owner decision 2026-10-05): every verb has a tool, deleting is soft and
+  // restorable, and with anyone else present no tool is offered at all.
+  own_study: () => exists(StudyStore.prototype.softDelete, StudyStore.prototype.restore, StudyStore.prototype.takeBack, StudyStore.prototype.search,
+    ShannonToolRunner.prototype.call, prepareToolStep, conversationTools)
+    && ['list', 'search', 'read', 'create', 'update', 'rename', 'move', 'delete', 'restore'].every(verb => (['text', 'voice', 'autonomy'] as const)
+      .every(surface => offeredTools(surface, 'owner_alone').some(tool => tool.name === `study.${verb}`)))
+    && offeredTools('text', 'others').length === 0 && offeredTools('voice', 'others').length === 0 && asksAboutOwnThings('書斎のメモ読んで'),
+  // Her folder (contract v2): the tools queue operations for the bound device, which long-polls, carries them out and reports;
+  // every overwrite and delete goes to the trash on the device. Without a registered device there is no folder
+  // (the line says 「用意してくれている時」), and v1 copies still go out from her own time.
+  own_folder: () => exists(prepareFolderCopy, HostFolderDesk.prototype.enqueue, HostFolderDesk.prototype.claim, HostFolderDesk.prototype.report,
+    HostFolderOperations.prototype.run, HostFolderOperations.prototype.claim, HostFolderOperations.prototype.report)
+    && ['list', 'search', 'read', 'create', 'update', 'rename', 'move', 'delete'].every(verb => offeredTools('text', 'owner_alone').some(tool => tool.name === `folder.${verb}`))
+    && Object.keys(configuredAutonomy({}).places.hostDevices ?? {}).length === 0,
   voyager_tasks: () => voiceSkill('voyager_tasks') && isOrganizeCommand('整理して') && exists(prepareConversationOrganize),
   agent_tasks: () => voiceSkill('agent_status') && agentTaskInstructions().includes('TestFlight')
     && exists(distributeLatestInternalBuild),

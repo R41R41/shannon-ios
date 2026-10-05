@@ -115,7 +115,10 @@ export class StudyDesk {
     return this.piece(scopeKey, id);
   }
 
-  /** What she is working on, for the owner's own prompt: stages and shown titles, never an unshown title or any text. */
+  /**
+   * What she is working on, for her prompt in a conversation with the owner alone: stages and titles, never any text.
+   * Owner decision 2026-10-05: an unshown draft's title is hers to know (marked unshown); his screens still never show it.
+   */
   ownWork(scopeKey: string, at: string): ShannonOwnWork | null {
     const today = this.store.activity.days(scopeKey, { sinceDayKey: this.dayKey(at) }).find(day => day.dayKey === this.dayKey(at));
     const stories = this.store.study.list(scopeKey).filter(piece => piece.kind === 'story' && piece.status !== 'put_away').slice(0, 3);
@@ -123,7 +126,7 @@ export class StudyDesk {
       const readable = this.readable(scopeKey, piece);
       const stage = piece.status === 'draft' ? `下書き・第${piece.version}稿${readable ? '（見せた稿を直している途中）' : ''}`
         : piece.status === 'ready' ? `第${piece.version}稿・見せてもいい（まだ知らせていない）` : `第${piece.version}稿・見せた`;
-      return { ...(readable ? { title: readable.title } : {}), stage };
+      return readable ? { title: readable.title, stage } : { title: piece.title, stage, unshown: true };
     });
     const phrases = autonomyDayPhrases(today?.entries ?? []);
     const reachOuts = this.reachOuts(scopeKey, at);

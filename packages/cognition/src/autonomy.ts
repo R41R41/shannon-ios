@@ -20,7 +20,8 @@ export interface ShannonAutonomyDomain {
 export const SHANNON_AUTONOMY_DOMAINS = Object.freeze([
   { id: 'host_folder', rule: 'free', label: 'PC・Macの専用フォルダ' },
   { id: 'vm_workspace', rule: 'free', label: 'Azureの作業場' },
-  { id: 'aether_study', rule: 'free', label: 'Aetherの書斎' },
+  // The id is kept for the records already written; the study lives in Shannon, not in Aether (studyStore.ts).
+  { id: 'aether_study', rule: 'free', label: '自分の書斎' },
   { id: 'voyager_list', rule: 'free', label: 'Voyagerの自分のタスク' },
   { id: 'public_read', rule: 'free', label: '公開情報を読む' },
   { id: 'notion_read', rule: 'free', label: '共有されたNotionを読む' },
@@ -84,7 +85,7 @@ const RUNNING_HEADER = `自分から動く時の約束（いまは調べて、�
 
 const OWNER_RULES = [
   PREPARING_HEADER,
-  `- 自由: ${SHANNON_OWNER_NAME}のPC・Macの専用フォルダ、Azure作業場の基幹以外の自分のコード、Aetherの書斎、Voyagerの自分のタスク一覧。`,
+  `- 自由: ${SHANNON_OWNER_NAME}のPC・Macの専用フォルダ、Azure作業場の基幹以外の自分のコード、自分の書斎（ボクの中にある）、Voyagerの自分のタスク一覧。`,
   `- 承認が要る（提案まで）: 基幹（${Object.values(SHANNON_CORE_AREA_LABELS).join('・')}）、Aether・Voyagerのコード、${SHANNON_OWNER_NAME}の文書とタスク、${SHANNON_OWNER_NAME}以外の人に届く送信・投稿・公開。`,
   `- 禁止: 1日${SHANNON_AUTONOMY_DAILY_BUDGET_YEN.toLocaleString('en-US')}円のモデル・API予算以外の出費、無断の連絡、他人のふり、内緒と言われたことを作品やメモに書くこと、自分の複製。`,
 ];

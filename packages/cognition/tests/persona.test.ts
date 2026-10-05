@@ -54,9 +54,9 @@ describe('canonical Shannon persona', () => {
     expect(shannonPersonaPrompt('owner').length).toBeLessThanOrEqual(650);
     expect(shannonSuitePrompt().length).toBeLessThanOrEqual(420);
     // +125 on 2026-10-02: the look through the app. 2026-10-03: +74, it does not announce a look by itself; and the phone call
-    // line with no count of messages a day (owner decisions).
-    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(2_097);
-    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(3_033);
+    // line with no count of messages a day (owner decisions). 2026-10-05: +154, her study and her folder through her tools (owner decision).
+    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(2_251);
+    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(3_187);
     expect(SHANNON_ONE_LINE_VOICE.length).toBeLessThanOrEqual(140);
   });
 });
@@ -104,7 +104,7 @@ describe('canonical capability description', () => {
     expect(prompt).toContain('仕組みは準備中');
     expect(prompt).toContain('記録に残り、ライ氏が止められる');
     const line = (prefix: string) => prompt.split('\n').find(item => item.startsWith(prefix)) ?? '';
-    for (const free of ['専用フォルダ', 'Azure作業場の基幹以外の自分のコード', 'Aetherの書斎', 'Voyagerの自分のタスク一覧']) {
+    for (const free of ['専用フォルダ', 'Azure作業場の基幹以外の自分のコード', '自分の書斎（ボクの中にある）', 'Voyagerの自分のタスク一覧']) {
       expect(line('- 自由:'), free).toContain(free);
     }
     for (const area of Object.values(SHANNON_CORE_AREA_LABELS)) expect(line('- 承認が要る'), area).toContain(area);
@@ -163,11 +163,16 @@ describe('canonical capability description', () => {
     expect(shannonCapabilityPrompt('owner')).toContain('連続したカメラ映像');
   });
 
-  it('states her own folder as it is: only when the owner set it up, copies only, nothing read back', () => {
+  it('states her own folder and her study as they are: her tools, the trash, only when the owner set the folder up, never to a guest', () => {
     const line = SHANNON_CAPABILITIES.find(item => item.id === 'own_folder')!;
     expect(line.audience).toBe('owner');
-    expect(line.text).toBe('自分のフォルダ: ライ氏がPCに用意してくれている時、自分の時間に、メモと見せてもいい物語の写しをそこへ置く（置くだけ。中を読むことも、ほかの操作もまだできない）。');
+    for (const words of ['用意してくれている時', '一覧・検索・読む', '書き換える', 'ゴミ箱に残る', 'PCが起きていない時は使えない', '写しも置く']) expect(line.text).toContain(words);
+    const study = SHANNON_CAPABILITIES.find(item => item.id === 'own_study')!;
+    expect(study.audience).toBe('owner');
+    for (const words of ['ボクの中に版ごとに残る', '見せていない下書きも自分は読める', '見せるのは自分の時間の手順だけ']) expect(study.text).toContain(words);
     expect(shannonCapabilityPrompt('owner')).toContain(`- ${line.text}`);
+    expect(shannonCapabilityPrompt('owner')).toContain(`- ${study.text}`);
     expect(shannonCapabilityPrompt('guest')).not.toContain('自分のフォルダ');
+    expect(shannonCapabilityPrompt('guest')).not.toContain('自分の書斎');
   });
 });

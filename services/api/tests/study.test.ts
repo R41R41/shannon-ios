@@ -315,9 +315,8 @@ describe('what the owner\'s own prompts say about her activity', () => {
     for (const prompt of [working.text, working.voice, working.voiceTurn]) {
       expect(prompt).toContain('[ボクがひとりの時間にしていること]（記録にある事実。何をしていたか聞かれたら自分の言葉で話す）');
       expect(prompt).toContain('- 今日したこと: 次にすることを考えた、公開ページを1つ読んだ、メモを1つ書いた、物語の下書きを1つ書いた');
-      expect(prompt).toContain('- 作っている物語: 下書き・第1稿（まだ見せていない。題名と中身は、見せる時まで言わなくてよい）');
-      // Scene 7: the unshown title and text stay hers.
-      expect(prompt).not.toContain('傘のある駅');
+      // Owner decision 2026-10-05: she knows the title of her own unshown draft, marked unshown; its text stays out of the prompt.
+      expect(prompt).toContain('- 作っている物語「傘のある駅」: 下書き・第1稿（まだ見せていない。題名や中身をいつ言うかは自分で決める）');
       expect(prompt).not.toContain('駅のベンチ');
     }
     // Owner one-to-one only: not with someone listening, not with a friend.

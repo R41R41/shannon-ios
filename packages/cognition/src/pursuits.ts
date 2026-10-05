@@ -138,13 +138,14 @@ export function guardedShannonSeenPrompt(ownerPrompt: string, marker: string): s
 
 /**
  * What she is doing in her own time, from the activity record and her study: facts, not
- * wishes. A piece she has not shown yet has no title here, so the reply cannot give it
- * away before she decides to.
+ * wishes. By the owner's decision of 2026-10-05 she knows the titles of her own unshown
+ * drafts too; the line says they are not shown yet, and when to say the title is hers to decide.
  */
 export interface ShannonOwnWork {
   /** What she did today, each already a short phrase such as 「公開ページを2つ読んだ」. */
   readonly today: readonly string[];
-  readonly pieces: readonly { readonly title?: string; readonly stage: string }[];
+  /** `unshown`: the owner cannot read this piece yet; `title` is then her current title, for her alone. */
+  readonly pieces: readonly { readonly title?: string; readonly stage: string; readonly unshown?: boolean }[];
   /**
    * What followed a message she started on her own today, each a sentence of facts from her record such as
    * 「13:05に話しかけた。3分待ったが返事はなかった。」. Never what was said, by her or by the owner.
@@ -161,9 +162,10 @@ export function buildShannonOwnWorkPrompt(work: ShannonOwnWork | null | undefine
   const lines = [
     ...(work.today.length ? [`- 今日したこと: ${work.today.slice(0, 6).join('、')}`] : []),
     ...reachOuts.map(line => `- 自分から話しかけた時のこと（気になるなら自分から触れてよい）: ${line}`),
-    ...work.pieces.slice(0, 3).map(piece => (piece.title
-      ? `- 物語「${piece.title.slice(0, 40)}」: ${piece.stage}`
-      : `- 作っている物語: ${piece.stage}（まだ見せていない。題名と中身は、見せる時まで言わなくてよい）`)),
+    ...work.pieces.slice(0, 3).map(piece => (piece.title && piece.unshown
+      ? `- 作っている物語「${piece.title.slice(0, 40)}」: ${piece.stage}（まだ見せていない。題名や中身をいつ言うかは自分で決める）`
+      : piece.title ? `- 物語「${piece.title.slice(0, 40)}」: ${piece.stage}`
+        : `- 作っている物語: ${piece.stage}（まだ見せていない。題名と中身は、見せる時まで言わなくてよい）`)),
   ];
   if (!lines.length) return '';
   const header = '[ボクがひとりの時間にしていること]（記録にある事実。何をしていたか聞かれたら自分の言葉で話す）';

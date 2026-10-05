@@ -48,7 +48,7 @@ describe('activity record', () => {
     service.authorize(scope, { domain: 'thinking', summary: '構成を考えます。', tool: 'outline', paid: { model: 'gemini-3.8-flash', estimatedCostYen: 5 } });
     service.authorize(scope, null as never);
     const [malformed, paid, replication, core, study] = entries();
-    expect(study).toMatchObject({ kind: 'decision', actor: 'shannon', domain: 'aether_study', domainLabel: 'Aetherの書斎', outcome: 'allowed', approval: 'not_needed', reasonCode: 'free_domain', costYen: 0 });
+    expect(study).toMatchObject({ kind: 'decision', actor: 'shannon', domain: 'aether_study', domainLabel: '自分の書斎', outcome: 'allowed', approval: 'not_needed', reasonCode: 'free_domain', costYen: 0 });
     expect(study!.summary).toBe('書斎に短い物語の下書きを書きます。');
     expect(core).toMatchObject({ domain: 'core', outcome: 'needs_approval', approval: 'needed', reasonCode: 'core_path' });
     expect(replication).toMatchObject({ domain: 'self_replication', outcome: 'refused', reasonCode: 'forbidden_domain' });

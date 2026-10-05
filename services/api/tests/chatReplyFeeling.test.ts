@@ -646,8 +646,10 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
     // Recorded by running these four turns on the sources of the base without this change (responses, stored state and model
     // requests, ids by order). First on 7e227e6 (ddddfebb…); re-recorded on main 68cfe7e after the merge, because that commit
     // added the app camera look to her capability text and every system prompt grew by 125 characters (62314c5f…); and on
-    // ccf29d6 (incoming call) after that merge, whose capability text made each system prompt 376 characters longer again.
-    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('b8d09bcf51c669e45fa74d8fc2489bd9b03c9e9a77f7ea2c57917a12ab281c46');
+    // ccf29d6 (incoming call) after that merge, whose capability text made each system prompt 376 characters longer again; and on
+    // the own-tools branch (2026-10-05), whose capability text is 154 characters longer and whose owner-alone requests carry
+    // the definitions of her tools (`shannonTools.ts`).
+    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('a5173251771ea2a5b0cbe90ee3d6361bf18b24cd0ded8374bf35cc35a556cc4a');
     for (const request of off.seen.requests) expect(request).not.toHaveProperty('offerReplyFeeling');
     // What 7e227e6 does with these four turns: a cue is 0.52 and a mood, no cue is nothing, and nothing lingers for days.
     expect(off.h.state().lingering).toMatchObject([{ kind: 'sulky', span: 'mood', strength: 0.52 }]);
