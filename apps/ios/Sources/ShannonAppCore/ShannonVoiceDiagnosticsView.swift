@@ -5,13 +5,19 @@ import UIKit
 import AppKit
 #endif
 
-struct ShannonVoiceDiagnosticsView: View {
+public struct ShannonVoiceDiagnosticsView: View {
+    /// The iPhone opens it as a sheet with 閉じる; the Mac shows it as a page of 設定 › 管理.
+    private let showsCloseButton: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @State private var report = ""
     @State private var copied = false
 
-    var body: some View {
+    public init(showsCloseButton: Bool = true) {
+        self.showsCloseButton = showsCloseButton
+    }
+
+    public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
 
         NavigationStack {
@@ -53,8 +59,10 @@ struct ShannonVoiceDiagnosticsView: View {
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("閉じる") { dismiss() }
+                if showsCloseButton {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("閉じる") { dismiss() }
+                    }
                 }
             }
             .onAppear {

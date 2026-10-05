@@ -89,6 +89,8 @@ struct ShannonDeskApp: App {
             .shannonEarphoneSpeaking(conversation: conversationModel)
             .shannonPrivateListening(privateListeningModel)
             .onOpenURL { url in
+                // shannon://yousu and shannon://admin/ops open ようす and 設定 › 管理 › 運用.
+                if ShannonYousuLink.open(url) { return }
                 Task {
                     if await connectionModel.connect(using: url) {
                         await connectionModel.verifyConnection()

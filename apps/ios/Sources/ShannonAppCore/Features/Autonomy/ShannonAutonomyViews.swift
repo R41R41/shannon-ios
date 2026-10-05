@@ -143,60 +143,6 @@ struct ShannonAutonomyPursuitsPage: View {
     }
 }
 
-/// Settings section shared by iPhone and Mac: the stop switch and the way to the record.
-public struct ShannonAutonomySettingsSection: View {
-    @Bindable private var model: ShannonAutonomyModel
-    @State private var showsActivity = false
-
-    public init(model: ShannonAutonomyModel) {
-        self.model = model
-    }
-
-    public var body: some View {
-        if model.isSupported {
-            Section {
-                ShannonAutonomyPauseToggle(model: model)
-                Button {
-                    showsActivity = true
-                } label: {
-                    LabeledContent {
-                        Text(model.summary).foregroundStyle(.secondary)
-                    } label: {
-                        Label(ShannonGeneratedStrings.autonomyActivityTitle, systemImage: "list.bullet.clipboard")
-                    }
-                    .frame(minHeight: ShannonTouchTarget.minimum)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityElement(children: .combine)
-                .accessibilityHint("シャノンが自分からしたことと今日の予算を開きます")
-                .accessibilityIdentifier("settings-autonomy-activity")
-                .task { await model.loadIfNeeded() }
-                .sheet(isPresented: $showsActivity) {
-                    NavigationStack {
-                        ShannonAutonomyActivityPage(model: model)
-                            .toolbar {
-                                ToolbarItem(placement: .confirmationAction) {
-                                    Button("完了") { showsActivity = false }
-                                }
-                            }
-                    }
-#if os(macOS)
-                    .frame(minWidth: 520, minHeight: 560)
-#endif
-                }
-                if let message = model.errorMessage {
-                    Text(message).font(.shannon(.footnote)).foregroundStyle(Color.shannonDanger)
-                }
-            } header: {
-                Text(ShannonGeneratedStrings.navAutonomy)
-            } footer: {
-                Text(model.overview?.stateDetail ?? "シャノンが自分から動く範囲・予算・記録を確認できます。")
-            }
-        }
-    }
-}
-
 /// The stop switch. On means paused; it changes only after the server stored it.
 struct ShannonAutonomyPauseToggle: View {
     @Bindable var model: ShannonAutonomyModel

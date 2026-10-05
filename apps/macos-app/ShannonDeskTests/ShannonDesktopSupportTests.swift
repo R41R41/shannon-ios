@@ -241,6 +241,16 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         XCTAssertEqual(DesktopShannonPage.restoring("unknown"), .now)
     }
 
+    func testSettingsOpenWithAdminFirstAndFallBackWithoutOps() {
+        XCTAssertEqual(DesktopSettingsPage.admin, [.ops, .devices, .delivery, .diagnostics])
+        XCTAssertEqual(DesktopSettingsPage.admin + DesktopSettingsPage.others, DesktopSettingsPage.allCases)
+        XCTAssertEqual(DesktopSettingsPage.restoring(nil, opsSupported: true), .ops)
+        XCTAssertEqual(DesktopSettingsPage.restoring(nil, opsSupported: false), .devices)
+        XCTAssertEqual(DesktopSettingsPage.restoring("ops", opsSupported: false), .devices)
+        XCTAssertEqual(DesktopSettingsPage.restoring("calendar", opsSupported: false), .calendar)
+        XCTAssertEqual(DesktopSettingsPage.restoring("unknown", opsSupported: true), .ops)
+    }
+
     func testDevelopmentOptionsDiscardUnsupportedModelAndNormalizeReasoning() {
         let model = ShannonAgentModelDTO(
             id: "codex-main",

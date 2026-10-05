@@ -108,6 +108,19 @@ extension ShannonDesktopRootView {
         .accessibilityElement(children: .combine)
     }
 
+    /// Opens the place of a `shannon://yousu` or `shannon://admin/ops` link.
+    func openPendingYousuLink() {
+        switch ShannonYousuLink.takePending() {
+        case .yousu:
+            selectShannonPage(.now)
+            selectDestination(.shannon)
+        case .ops:
+            openSettings(.ops)
+        case nil:
+            break
+        }
+    }
+
     func reloadShannonHub() async {
         guard !conversation.isDesignPreview else { return }
         async let now: Void = yousu.now.reload()

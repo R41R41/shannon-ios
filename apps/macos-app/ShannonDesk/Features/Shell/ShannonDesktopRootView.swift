@@ -18,6 +18,7 @@ public struct ShannonDesktopRootView: View {
     @SceneStorage("shannon.desktop.showsInspector") var restoredInspectorRawValue: String?
     @SceneStorage("shannon.desktop.auxiliaryPanel") var restoredAuxiliaryPanelRawValue: String?
     @SceneStorage("shannon.desktop.shannonPage") var shannonPageRawValue: String?
+    @SceneStorage("shannon.desktop.settingsPage") var settingsPageRawValue: String?
     @AppStorage("shannon.desktop.lastDestination") var lastDestinationRawValue = DesktopDestination.talk.rawValue
     @AppStorage("shannon.desktop.lastSelectedThread") var lastRestoredThreadID = ""
     @AppStorage("shannon.desktop.lastSelectedTask") var lastRestoredTaskID = ""
@@ -93,6 +94,17 @@ public struct ShannonDesktopRootView: View {
     }
 
     public var body: some View {
+        observingWindowState(windowContent)
+            .focusedSceneValue(\.shannonDesktopCommandActions, desktopCommandActions)
+            .toolbarBackground(Color(nsColor: .textBackgroundColor), for: .windowToolbar)
+            .toolbarBackground(.visible, for: .windowToolbar)
+            .tint(shannonActionColor)
+            // Wide screens use the fixed desktop scale, body 15 (owner decision 2026-10-03).
+            .font(.shannonDesktop(.body))
+            .frame(minWidth: 860, minHeight: 600)
+    }
+
+    private var windowContent: some View {
         NavigationSplitView {
             sidebar
                 .navigationSplitViewColumnWidth(min: 210, ideal: 244, max: 310)
@@ -135,74 +147,5 @@ public struct ShannonDesktopRootView: View {
             Button("保存") { saveThreadRename() }
                 .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        .task {
-            restoreWindowChromeIfAvailable()
-            if connection.isConnected && !conversation.isDesignPreview {
-                await connection.verifyConnection()
-            }
-            await conversation.loadConversationIfNeeded()
-            await restoreSelectedThreadIfAvailable()
-            if !conversation.isDesignPreview {
-                await conversation.synchronizeAgentTasks()
-                await conversation.refreshAgentWorkspace(projectHint: selectedAgentProject)
-                await conversation.refreshAgentProjectProvisioning()
-                await conversation.refreshInitiatives()
-            }
-            restoreSelectedTaskIfAvailable()
-        }
-        .task(id: connection.isConnected) {
-            guard connection.isConnected, !conversation.isDesignPreview else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(60))
-                guard !Task.isCancelled else { return }
-                await conversation.refreshInitiatives()
-                await conversation.refreshCaptures()
-            }
-        }
-        .onChange(of: conversation.agentTasks.map(\.id)) {
-            restoreSelectedTaskIfAvailable()
-        }
-        .onChange(of: selectedTaskID) {
-            steeringText = ""
-            if let selectedTaskID {
-                restoredTaskID = selectedTaskID.uuidString
-                lastRestoredTaskID = selectedTaskID.uuidString
-            }
-        }
-        .onChange(of: conversation.selectedThreadId) {
-            restoredThreadID = conversation.selectedThreadId
-            lastRestoredThreadID = conversation.selectedThreadId ?? ""
-            activeConversationOutlineEntryID = nil
-        }
-        .onChange(of: showsInspector) {
-            restoredInspectorRawValue = showsInspector ? "visible" : "hidden"
-            lastShowsInspector = showsInspector
-        }
-        .onChange(of: auxiliaryPanel) {
-            restoredAuxiliaryPanelRawValue = auxiliaryPanel.rawValue
-            lastAuxiliaryPanelRawValue = auxiliaryPanel.rawValue
-        }
-        .onChange(of: selectedAgentProject) {
-            selectedDevelopmentFilePath = nil
-            developmentWorkspaceResource = .idle
-            guard !conversation.isDesignPreview else { return }
-            Task { await conversation.refreshAgentWorkspace(projectHint: selectedAgentProject) }
-        }
-        .onChange(of: agentHostPreferenceRawValue) {
-            normalizeDevelopmentSelection()
-        }
-        .onChange(of: conversation.agentWorkspace) {
-            normalizeDevelopmentSelection()
-        }
-        .onChange(of: selectedDevelopmentTool) {
-            developmentWorkspaceResource = .idle
-        }
-        .focusedSceneValue(\.shannonDesktopCommandActions, desktopCommandActions)
-        .toolbarBackground(Color(nsColor: .textBackgroundColor), for: .windowToolbar)
-        .toolbarBackground(.visible, for: .windowToolbar)
-        .tint(shannonActionColor)
-        // Wide screens use the fixed desktop scale, body 15 (owner decision 2026-10-03).
-        .font(.shannonDesktop(.body))
-        .frame(minWidth: 860, minHeight: 600)
     }
 }

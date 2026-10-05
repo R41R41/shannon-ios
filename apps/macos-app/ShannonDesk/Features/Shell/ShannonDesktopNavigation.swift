@@ -94,3 +94,29 @@ enum DesktopAuxiliaryPanel: String, CaseIterable, Hashable {
         }
     }
 }
+
+/// The parts of 設定 on the Mac: 管理 first (運用, 接続中の端末, 配信, 診断), then the others in the
+/// order of docs/product/information-architecture.md 1. The left column lists them; the right shows one.
+enum DesktopSettingsPage: String, CaseIterable, Hashable {
+    case ops
+    case devices
+    case delivery
+    case diagnostics
+    case figure
+    case camera
+    case earphones
+    case voice
+    case calendar
+    case appearance
+    case connection
+    case sources
+
+    static let admin: [DesktopSettingsPage] = [.ops, .devices, .delivery, .diagnostics]
+    static let others: [DesktopSettingsPage] = [.figure, .camera, .earphones, .voice, .calendar, .appearance, .connection, .sources]
+
+    /// 運用 is offered only by a server that has it; the page falls back to the next part of 管理.
+    static func restoring(_ rawValue: String?, opsSupported: Bool) -> DesktopSettingsPage {
+        let page = rawValue.flatMap(DesktopSettingsPage.init(rawValue:)) ?? .ops
+        return page == .ops && !opsSupported ? .devices : page
+    }
+}

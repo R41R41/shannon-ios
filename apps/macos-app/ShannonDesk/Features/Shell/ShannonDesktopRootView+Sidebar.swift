@@ -92,36 +92,73 @@ extension ShannonDesktopRootView {
         yousu.now.waiting(approvals: conversation.waitingApprovals).count
     }
 
-    /// The bottom of the sidebar: the 設定 row, then the lines that must always be visible.
+    /// The bottom of the sidebar: the 設定 row, then the lines that must always be visible:
+    /// the 運用 mark's reason (roadmap A12) and, while not connected, the connection.
     var sidebarFooter: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        let opsReason = yousu.ops.attentionReason()
+        return VStack(alignment: .leading, spacing: 2) {
             DesktopSidebarButton(
                 title: ShannonGeneratedStrings.navSettings,
                 symbol: "gearshape",
                 badge: 0,
                 selected: destination == .settings,
+                attention: opsReason,
                 action: { selectDestination(.settings) }
             )
-            if !connection.isConnected {
-                Button {
-                    showsConnection = true
-                } label: {
-                    HStack(spacing: ShannonDesktopSpacing.small) {
-                        Image(systemName: "link.badge.plus")
-                            .foregroundStyle(Color.secondary)
-                        Text(connection.statusLabel)
-                            .lineLimit(1)
-                        Spacer()
-                    }
-                    .font(.shannonDesktop(.callout))
-                    .padding(.horizontal, ShannonDesktopSpacing.medium)
-                    .frame(height: ShannonDesktopMetrics.rowHeight)
-                    .contentShape(Rectangle())
+            if let opsReason {
+                sidebarFooterLine(
+                    ShannonGeneratedStrings.entryOpsReason(reason: opsReason),
+                    hint: ShannonGeneratedStrings.adminOpsHint
+                ) {
+                    DesktopOpsMark()
+                } action: {
+                    openSettings(.ops)
                 }
-                .buttonStyle(.plain)
+            }
+            if !connection.isConnected {
+                sidebarFooterLine(connection.statusLabel, hint: "接続を開きます") {
+                    Image(systemName: "link.badge.plus").foregroundStyle(Color.secondary)
+                } action: {
+                    showsConnection = true
+                }
             }
         }
         .padding(ShannonDesktopSpacing.small)
+        // The mark stays current while the window is open: 運用 is read every three minutes.
+        .task(id: connection.isConnected) {
+            guard connection.isConnected, !conversation.isDesignPreview else { return }
+            await yousu.now.reload()
+            while !Task.isCancelled {
+                await yousu.ops.refresh()
+                do { try await Task.sleep(for: .seconds(180)) } catch { return }
+            }
+        }
+    }
+
+    func sidebarFooterLine<Icon: View>(
+        _ text: String,
+        hint: String,
+        @ViewBuilder icon: () -> Icon,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: ShannonDesktopSpacing.small) {
+                icon()
+                Text(text)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .font(.shannonDesktop(.callout))
+            .padding(.horizontal, ShannonDesktopSpacing.medium)
+            .frame(minHeight: ShannonDesktopMetrics.rowHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
+        .accessibilityHint(hint)
+        .accessibilityAddTraits(.isButton)
     }
 
     func sidebarDestinationRow(

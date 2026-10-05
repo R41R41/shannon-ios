@@ -2200,7 +2200,12 @@
           "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#ShannonOpsView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift"
+          ],
+          "note": "設定 › 管理 › 運用。iPhone と同じ共通の画面（A12）。"
         },
         "windows": {
           "status": "yes",
@@ -2227,7 +2232,12 @@
           "note": "iPhone は確認の画面で長押しして決める。 設定 › 管理 › 運用（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#ShannonOpsView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsConfirmationSheet.swift"
+          ],
+          "note": "共通の確認と長押し。Mac はポインターで押し続け、クリックでは同じ文の確認（A11・A12）。"
         },
         "windows": {
           "status": "yes",
@@ -2255,7 +2265,12 @@
           "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#ShannonOpsView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift"
+          ],
+          "note": "共通の画面（A12）。"
         },
         "windows": {
           "status": "yes",
@@ -2283,7 +2298,12 @@
           "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#ShannonOpsView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift"
+          ],
+          "note": "共通の画面（A12）。"
         },
         "windows": {
           "status": "yes",
@@ -2310,7 +2330,12 @@
           "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#ShannonOpsView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift"
+          ],
+          "note": "共通の画面（A12）。"
         },
         "windows": {
           "status": "yes",
@@ -2335,7 +2360,12 @@
           "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#ShannonOpsView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift"
+          ],
+          "note": "共通の画面（A12）。"
         },
         "windows": {
           "status": "yes",
@@ -2360,7 +2390,12 @@
           "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#ShannonOpsView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift"
+          ],
+          "note": "共通の画面（A12）。"
         },
         "windows": {
           "status": "yes",
@@ -2388,7 +2423,13 @@
           "note": "左上のボタンに橙の三角（赤い点とは別の形）、シートの 設定 のタイルと 設定 › 管理 › 運用 の行に同じ印と理由の 1 行。報告が 1 度も届いていない間は出さない。操作の失敗・期限切れは直近 1 時間だけ（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift#sidebarFooterLine",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopSidebarComponents.swift#DesktopOpsMark",
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#settingsOpsRow"
+          ],
+          "note": "サイドバーの 設定 の行に橙の三角、サイドバーの下に「運用：〈理由〉」の 1 行（押すと 設定 › 管理 › 運用）、管理 の 運用 の行に印と理由。報告が 1 度も届いていない間は出さない。窓が開いている間、3 分おきに読む（A12）。"
         },
         "windows": {
           "status": "yes",
@@ -3393,8 +3434,12 @@
           "note": "設定の先頭（シャノンの札の下）に 管理: 運用・接続中の端末・配信・診断。「接続と詳細」は無くした（A5）。接続中の端末は端末の一覧と解除だけを、設定 › 接続 はこの端末の接続（状態、確認、この端末の解除）を開く（2026-10-05）。"
         },
         "macos": {
-          "status": "no",
-          "note": "運用が無い。接続中の端末は接続のシートの中。"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#settingsColumn",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopNavigation.swift#enum DesktopSettingsPage"
+          ],
+          "note": "設定 は左に区画、右に中身。先頭の 管理 に 運用・接続中の端末・配信・診断（A12）。ほかの区画は すがた・カメラ・イヤホン・声・予定・外観・接続・情報源。自律活動の止めるスイッチは シャノン › 自律活動 へ移った。"
         },
         "windows": {
           "status": "yes",
