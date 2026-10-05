@@ -52,8 +52,11 @@ export class StudyAetherLinks {
     `);
     // Additive: a reaction names the Aether document and version it was about, when the piece lives in Aether.
     const columns = database.prepare(`PRAGMA table_info('study_feedback')`).all() as unknown as Array<{ name: string }>;
-    if (!columns.some(column => column.name === 'aether_document_id')) database.exec('ALTER TABLE study_feedback ADD COLUMN aether_document_id TEXT');
-    if (!columns.some(column => column.name === 'aether_version')) database.exec('ALTER TABLE study_feedback ADD COLUMN aether_version INTEGER');
+    // Two processes opening the database for the first time at once (the API and the autonomy service) may both see the column
+    // missing; the second add is then a duplicate column, which is what was wanted.
+    const add = (sql: string) => { try { database.exec(sql); } catch (error) { if (!/duplicate column/iu.test(error instanceof Error ? error.message : '')) throw error; } };
+    if (!columns.some(column => column.name === 'aether_document_id')) add('ALTER TABLE study_feedback ADD COLUMN aether_document_id TEXT');
+    if (!columns.some(column => column.name === 'aether_version')) add('ALTER TABLE study_feedback ADD COLUMN aether_version INTEGER');
   }
 
   /** Local version `version` of the piece is Aether's `aetherVersion` of `documentId`. A version linked already stays as it was. */

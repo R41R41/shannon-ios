@@ -64,7 +64,8 @@ export function gatedAether(access: AetherAccess, context: Pick<ToolCallContext,
   const placed = (inShannonFolder: boolean) => { if (!inShannonFolder) throw new AetherAccessError('OUTSIDE_AUDIENCE'); };
   return Object.freeze({
     search: async (input, signal) => (await access.search({ ...input, scope: input.scope === 'study' ? 'study' as const : 'shannonFolder' as const }, signal))
-      .filter(hit => hit.inShannonFolder === true || (input.scope === 'study' && hit.inStudy === true)),
+      // Placed in her folder, and for her study also tagged 書斎 there: a hit missing either is dropped.
+      .filter(hit => hit.inShannonFolder === true && (input.scope !== 'study' || hit.inStudy === true)),
     read: async (input, signal) => {
       placed((await access.read({ documentId: input.documentId, offset: 0, maxChars: 1 }, signal)).inShannonFolder);
       const document = await access.read(input, signal);

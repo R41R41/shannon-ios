@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AetherAccessError, HttpAetherAccess, aetherIdempotencyKey, configuredAetherAccess, configuredAetherPorts } from '../src/aetherAccess.js';
+import { AetherAccessError, HttpAetherAccess, type AetherAccess, aetherIdempotencyKey, configuredAetherAccess, configuredAetherPorts } from '../src/aetherAccess.js';
 import { shannonCapabilityPrompt } from '@shannon/cognition';
 import { withToolCapabilityLines } from '../src/shannonAetherTools.js';
 import { FileAetherProposalStore } from '../src/aetherProposal.js';
@@ -14,6 +14,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import { dispatchStudyRequest } from '../src/apiStudyRoutes.js';
 import { toolInstructions } from '../src/chatModelTools.js';
 import { conversationTools, type ConversationToolServer } from '../src/shannonToolSession.js';
+import { gatedAether } from '../src/shannonToolGate.js';
 import { toolSessionMemory } from '../src/shannonToolTypes.js';
 import type { ToolAudience, ToolSurface } from '../src/shannonTools.js';
 import { AETHER_SIDE_CHANGE } from '../src/studyAetherLinks.js';
@@ -355,6 +356,35 @@ describe('her study in Aether', () => {
     expect(fake.inFolder()).toHaveLength(1);
   });
 
+  it('takes in her own change made with aetherFolder.update as hers, and never adopts a document cut short', async () => {
+    const { fake, call, store, service } = await harness();
+    const id = /id: ([0-9a-f-]{36})/u.exec((await call('study.create', { kind: 'story', title: '灯台の話', body: STORY })).text)![1]!;
+    const document = fake.inFolder()[0]!;
+    expect(await call('aetherFolder.update', { documentId: document.id, baseVersion: 1, body: `${STORY}フォルダの道具で足した。` })).toMatchObject({ ok: true });
+    expect(store.study.versions(scope, id).at(-1)).toMatchObject({ version: 2, changeNote: 'シャノン用フォルダの道具で書き換えました。', body: `${STORY}フォルダの道具で足した。` });
+    // Longer than Shannon reads whole: neither a new version of a piece nor a new piece is taken in cut short.
+    fake.ownerEdit(document.id, { body: 'あ'.repeat(120_000) });
+    const long = fake.put({ title: '長い話', body: 'い'.repeat(120_000), projectIds: ['project_shannon_folder'], tags: ['シャノン', '書斎'], type: 'story' });
+    const counts = await service.studyAether!.sync(scope);
+    expect(counts.skipped?.map(item => item.documentId).sort()).toEqual([document.id, long.id].sort());
+    expect(store.study.versions(scope, id)).toHaveLength(2);
+    expect(store.study.aether.pieceFor(scope, long.id)).toBeNull();
+    // Her next whole-body write from the shorter text is refused as stale, so the longer document is never overwritten.
+    expect(await call('study.update', { id, body: '短い本文。', changeNote: '直しました。' })).toMatchObject({ ok: false, failure: 'conflict' });
+    expect([...fake.documents.get(document.id)!.body]).toHaveLength(120_000);
+  });
+
+  it('holds a study search with others present to hits placed in her study inside her folder', async () => {
+    const hit = (documentId: string, inShannonFolder?: boolean, inStudy?: boolean) => ({
+      documentId, version: 1, sectionId: 's0', headingPath: ['x'], excerpt: 'x', updatedAt: '2026-10-06T01:00:00.000Z', href: `aether://documents/${documentId}`,
+      ...(inShannonFolder === undefined ? {} : { inShannonFolder }), ...(inStudy === undefined ? {} : { inStudy }),
+    });
+    const access = { search: async () => [hit('both', true, true), hit('study-only', false, true), hit('folder-only', true, false), hit('neither')] } as unknown as AetherAccess;
+    const others = gatedAether(access, { surface: 'text', audience: 'others' });
+    expect((await others.search({ query: 'x', scope: 'study' })).map(item => item.documentId)).toEqual(['both']);
+    expect((await others.search({ query: 'x', scope: 'shannonFolder' })).map(item => item.documentId)).toEqual(['both', 'folder-only']);
+  });
+
   it('runs one sync per scope at a time and adopts a version once, however many callers race', async () => {
     const { fake, call, store, service } = await harness();
     const created = await call('study.create', { kind: 'story', title: '灯台の話', body: STORY });
@@ -502,6 +532,9 @@ describe('moving her study to Aether', () => {
     expect(report).toContain(`メモ｜「光のメモ」｜9字｜見せてもいい｜見せている｜→ Aetherのシャノン用フォルダ｜${note.id}`);
     expect(report).toContain(`Shannonに残す（部屋を見たメモ）｜${look.id}`);
     expect(report).not.toContain('ひみつの本文');
+    // What stays in Shannon is listed without its title; an unshown draft keeps its title, for the owner to see what moves.
+    expect(report).not.toContain('見たこと（10月6日 10時）');
+    expect(report).toContain(`メモ｜（題名は伏せる）｜4字｜見せてもいい｜見せている｜Shannonに残す（部屋を見たメモ）｜${look.id}`);
     expect(report).not.toContain('雨の日の図書館');
     expect(fake.requests).toEqual([]);
 

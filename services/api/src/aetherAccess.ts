@@ -27,7 +27,9 @@ export type AetherAccessErrorCode =
   | 'STALE_VERSION' | 'OUTSIDE_SHANNON_FOLDER' | 'NOT_FOUND' | 'INVALID_REQUEST' | 'IDEMPOTENCY_KEY_REUSED'
   | 'UNAUTHORIZED' | 'UNAVAILABLE' | 'TIMEOUT' | 'CONTRACT_MISMATCH'
   /** Not from Aether: the gate refused a document outside her folder while someone else may see or hear (`gatedAether`). */
-  | 'OUTSIDE_AUDIENCE';
+  | 'OUTSIDE_AUDIENCE'
+  /** Not from Aether: a study document longer than Shannon reads whole (`STUDY_AETHER_SYNC.readCharacters`); never adopted cut short. */
+  | 'TOO_LONG';
 
 export class AetherAccessError extends Error {
   constructor(readonly code: AetherAccessErrorCode) { super(`AETHER_${code}`); }

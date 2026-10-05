@@ -28,11 +28,17 @@ export const STUDY_AETHER_SYNC = Object.freeze({ refresh: 6, adopt: 5, readChara
 /** A write of hers this recent is still committing in its own transaction: a sync leaves its document and version to it. */
 export const STUDY_AETHER_PENDING_FRESH_MILLISECONDS = 2 * 60_000;
 
-export interface StudyAetherSyncCounts { changed: number; deleted: number; adopted: number }
+export interface StudyAetherSyncCounts {
+  changed: number; deleted: number; adopted: number;
+  /** Documents left as they were, with a closed code (`too_long`: longer than Shannon reads whole). */
+  skipped?: readonly { documentId: string; code: 'too_long' }[];
+}
 
 export class StudyAether {
   /** Documents seen deleted in Aether, at that version: a deleted piece is not read again until Aether changes it. */
   private readonly seenDeleted = new Map<string, number>();
+  /** Documents too long to read whole, at that version: neither adopted nor read again until Aether changes them. */
+  private readonly seenTooLong = new Map<string, number>();
   /** At most one sync per scope at a time in this process: callers that come while one runs share it. */
   private readonly running = new Map<string, Promise<StudyAetherSyncCounts>>();
   /** When the last sync of a scope finished (this process's clock), for a caller that accepts a recent one. */
@@ -80,8 +86,31 @@ export class StudyAether {
     }
   }
 
+  private tooLong(documentId: string, version: number, skipped: { documentId: string; code: 'too_long' }[]): void {
+    this.seenTooLong.set(documentId, version);
+    skipped.push({ documentId, code: 'too_long' });
+  }
+
   private fresh(createdAt: string | undefined): boolean {
     return createdAt !== undefined && Date.parse(this.now()) - Date.parse(createdAt) < STUDY_AETHER_PENDING_FRESH_MILLISECONDS;
+  }
+
+  /**
+   * She changed a document of her study through her Aether folder tools (`aetherFolder.update`): the new version is taken in
+   * at once as hers, with her change note, never as a change of the owner's. Nothing for a document that is no piece of hers.
+   */
+  async adoptOwnWrite(scopeKey: string, write: AetherWriteResult, changeNote: string, signal?: AbortSignal): Promise<void> {
+    const pieceId = this.covers(scopeKey) ? this.store.study.aether.pieceFor(scopeKey, write.documentId) : null;
+    if (!pieceId) return;
+    // Noted first: should the read below fail, a later sync still takes it in as hers.
+    this.store.study.aether.notePending(scopeKey, { documentId: write.documentId, aetherVersion: write.version, operation: 'update', pieceId, changeNote }, this.now());
+    const document = await this.readWhole(write.documentId, signal);
+    if (document.version !== write.version) return;
+    this.store.transaction(() => {
+      const linked = this.link(scopeKey, pieceId);
+      if (!linked || linked.aetherVersion >= write.version) return;
+      this.store.study.aether.adoptVersion(scopeKey, pieceId, { title: document.title, body: document.body, aetherVersion: write.version, documentId: write.documentId, changeNote }, this.now());
+    });
   }
 
   /** A piece whose document is gone from her folder: into her trash, and not read again until Aether changes it. */
@@ -140,18 +169,22 @@ export class StudyAether {
       read += [...next.body].length;
       document = next;
     }
-    return Object.freeze({ ...document, body, bodyOffset: 0, hasMore: document.hasMore });
+    // A body cut at what Shannon reads is never adopted: a later whole-body update from it would overwrite the longer document.
+    if (document.hasMore) throw new AetherAccessError('TOO_LONG');
+    return Object.freeze({ ...document, body, bodyOffset: 0, hasMore: false });
   }
 
   /**
    * One piece as Aether has it now: a newer Aether version becomes her next local version; a document deleted there, or
    * moved out of her folder, puts the piece in her trash, and one the owner restored (in her folder) takes it back out.
    */
-  async refresh(scopeKey: string, pieceId: string, signal?: AbortSignal): Promise<'current' | 'changed' | 'deleted' | 'unlinked'> {
+  async refresh(scopeKey: string, pieceId: string, signal?: AbortSignal): Promise<'current' | 'changed' | 'deleted' | 'unlinked' | 'too_long'> {
     const link = this.link(scopeKey, pieceId);
     if (!link) return 'unlinked';
     let document: AetherDocument;
     try { document = await this.readWhole(link.documentId, signal); } catch (error) {
+      // Too long to read whole: left as Shannon has it (her next write to it is refused as stale, never cut short).
+      if (aetherErrorCode(error) === 'TOO_LONG') return 'too_long';
       if (aetherErrorCode(error) !== 'NOT_FOUND') throw error;
       this.store.transaction(() => this.store.study.aether.setDeleted(scopeKey, pieceId, true, this.now()));
       return 'deleted';
@@ -194,6 +227,7 @@ export class StudyAether {
     const listed = new Map(entries.map(entry => [entry.documentId, entry]));
     const links = this.store.study.aether.all(scopeKey);
     const counts = { changed: 0, deleted: 0, adopted: 0 };
+    const skipped: { documentId: string; code: 'too_long' }[] = [];
     const stale: string[] = [];
     for (const [pieceId, link] of links) {
       const entry = listed.get(link.documentId);
@@ -203,12 +237,13 @@ export class StudyAether {
         if (!piece.deletedAt) { this.store.transaction(() => this.store.study.aether.setDeleted(scopeKey, pieceId, true, this.now())); counts.deleted += 1; }
         continue;
       }
-      if (this.seenDeleted.get(link.documentId) === entry.version) continue;
+      if (this.seenDeleted.get(link.documentId) === entry.version || this.seenTooLong.get(link.documentId) === entry.version) continue;
       if (entry.version > link.aetherVersion || piece.deletedAt) stale.push(pieceId);
     }
     for (const pieceId of stale.slice(0, STUDY_AETHER_SYNC.refresh)) {
       const outcome = await this.refresh(scopeKey, pieceId, signal);
       if (outcome === 'changed') counts.changed += 1;
+      if (outcome === 'too_long') { const link = this.link(scopeKey, pieceId)!; this.tooLong(link.documentId, listed.get(link.documentId)?.version ?? link.aetherVersion, skipped); }
       if (outcome === 'deleted') {
         counts.deleted += 1;
         const link = this.link(scopeKey, pieceId);
@@ -219,11 +254,12 @@ export class StudyAether {
     const known = new Set([...links.values()].map(link => link.documentId));
     const hers = (documentId: string) => this.store.study.aether.pendingCreate(scopeKey, documentId);
     // A create of hers that is still committing (fresh) is left to its own transaction.
-    for (const entry of entries.filter(item => !known.has(item.documentId) && this.seenDeleted.get(item.documentId) !== item.version
+    for (const entry of entries.filter(item => !known.has(item.documentId) && this.seenDeleted.get(item.documentId) !== item.version && this.seenTooLong.get(item.documentId) !== item.version
       && (item.inStudy || hers(item.documentId)) && !this.fresh(hers(item.documentId)?.createdAt)).slice(0, STUDY_AETHER_SYNC.adopt)) {
       let document: AetherDocument;
       try { document = await this.readWhole(entry.documentId, signal); } catch (error) {
         if (aetherErrorCode(error) === 'NOT_FOUND') { this.seenDeleted.set(entry.documentId, entry.version); continue; }
+        if (aetherErrorCode(error) === 'TOO_LONG') { this.tooLong(entry.documentId, entry.version, skipped); continue; }
         throw error;
       }
       const created = hers(document.documentId);
@@ -237,7 +273,7 @@ export class StudyAether {
       }, STUDY_LIMITS.openStories, this.now())));
       if (adopted) counts.adopted += 1;
     }
-    return counts;
+    return skipped.length ? { ...counts, skipped: Object.freeze(skipped) } : counts;
   }
 }
 

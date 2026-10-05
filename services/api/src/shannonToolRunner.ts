@@ -59,7 +59,7 @@ export class ShannonToolRunner {
   ) {
     const folderTools = folderExecutors(folder, scopeKey => roomLookGuard(store.study.roomLookTexts(scopeKey, ROOM_LOOK_GUARD.notes)));
     this.executors = Object.freeze({ ...studyExecutors(store, now, aether.study ?? null), ...(aether.study ? withoutStories(store, folderTools, aether.study) : folderTools),
-      ...minecraftExecutors(minecraft), ...aetherExecutors(aether.proposals ?? null) });
+      ...minecraftExecutors(minecraft), ...aetherExecutors(aether.proposals ?? null, aether.study ?? null) });
   }
 
   /**

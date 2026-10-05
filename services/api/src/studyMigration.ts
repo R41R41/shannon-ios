@@ -38,6 +38,8 @@ export interface StudyMigrationItem {
    * address): its newer version is sent (`update`), or it was put in her trash and is deleted in Aether too (`delete`).
    */
   catchUp?: 'update' | 'delete';
+  /** In her trash. */
+  trashed: boolean;
 }
 
 /** The plan of a scope, every piece (no cap), through the open store (`--apply`). */
@@ -67,7 +69,7 @@ function planOf(rows: readonly StudyMigrationRow[]): readonly StudyMigrationItem
     return Object.freeze({
       pieceId: row.pieceId, kind: row.kind, title: row.title, characters: row.characters, status: row.status,
       shown: row.readableVersion !== null, target, ...(note ? { note } : {}), ...(row.documentId ? { documentId: row.documentId } : {}),
-      ...(catchUp ? { catchUp } : {}),
+      ...(catchUp ? { catchUp } : {}), trashed: row.deleted,
     });
   }).sort((left, right) => order(left) - order(right)));
 }
@@ -94,7 +96,8 @@ export function migrationReport(scopeKey: string, items: readonly StudyMigration
     '',
     '種類｜題名｜字数｜状態｜見せたか｜移す先｜id',
     ...items.map(item => [
-      STUDY_KIND_LABEL[item.kind], `「${line(item.title)}」`, `${item.characters.toLocaleString('en-US')}字`, STUDY_STATUS_LABEL[item.status],
+      // A piece in her trash or one that stays in Shannon is listed without its title; an unshown draft keeps it (the owner reads this).
+      STUDY_KIND_LABEL[item.kind], item.trashed || item.target === 'stays' ? '（題名は伏せる）' : `「${line(item.title)}」`, `${item.characters.toLocaleString('en-US')}字`, STUDY_STATUS_LABEL[item.status],
       item.shown ? '見せている' : 'まだ見せていない',
       item.note ? `${TARGET_LABEL[item.target]}（${NOTE_LABEL[item.note]}${item.documentId ? `: ${item.documentId}` : ''}${item.catchUp ? `、${CATCH_UP_LABEL[item.catchUp]}` : ''}）` : `→ ${TARGET_LABEL[item.target]}`,
       item.pieceId,
