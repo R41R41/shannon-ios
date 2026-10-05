@@ -6,7 +6,11 @@ import { MINIMUM_CALL_MILLISECONDS, TOOL_CALL_CAP_MILLISECONDS } from './turnDea
  * The calls of one model step (one response that asks for tools), run together where that is safe (Syzygy ADR-0003
  * stage 4; owner decision 2026-10-06). The rule, in the model's order:
  *
- * - A run of reading tools (`effect: 'read'`) one after another starts at once and runs concurrently.
+ * - A run of reading tools (`effect: 'read'`) one after another starts at once and runs concurrently, except that the
+ *   reads of one lane (`toolLane`) run one after the other: her PC hands its device one conversation operation at a
+ *   time (`hostFolderOperations.ts`), and every queued operation waits for it from the moment it is queued, so folder
+ *   reads queued together would only wait for each other and the last could time out. A read of a lane takes its time
+ *   from the deadline when it starts, not when the model asked for it.
  * - Anything else (a write, or a name this turn does not offer) waits until everything before it has ended, and
  *   nothing after it starts until it has ended. So a write never runs beside another call, any read or write that the
  *   model put after a write sees what the write did, and two writes to one target are always one after the other.
@@ -14,7 +18,7 @@ import { MINIMUM_CALL_MILLISECONDS, TOOL_CALL_CAP_MILLISECONDS } from './turnDea
  *   with the same checks as before in the same order: the turn's call limit, then the time left, then the offer.
  * - Each call gets min(10 s, what is left minus the answer's reserve) of the turn's deadline when it starts, and is
  *   cancelled at that time through its signal (an operation on her PC that was not taken is dropped, as before), or
- *   at once when the caller stops the turn. A run of reads takes as long as its slowest call, not their sum.
+ *   at once when the caller stops the turn. A run of reads takes as long as its slowest lane, not the sum of its calls.
  * - The results go back to the model in the model's order, and each call is noted in the turn's trace in that order
  *   (`ToolCallOutcome.note`), whichever ended first. The activity record is written by each call as it ends.
  *
@@ -23,6 +27,20 @@ import { MINIMUM_CALL_MILLISECONDS, TOOL_CALL_CAP_MILLISECONDS } from './turnDea
  */
 export function parallelToolsEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
   return !['off', 'false', '0', 'disabled', 'no', 'none'].includes(environment.SHANNON_PARALLEL_TOOLS?.trim().toLowerCase() ?? '');
+}
+
+/**
+ * Whether a request offering these tools asks for several calls in one response. Not while a write is offered: a text
+ * round has 2,200 output tokens and a conversation write up to 1,500 characters, so two writes in one response would be
+ * cut off at the ceiling and none of its calls would run (review of 2026-10-06).
+ */
+export function asksForParallelCalls(definitions: readonly Pick<ShannonToolDefinition, 'effect'>[], environment?: Readonly<Record<string, string | undefined>>): boolean {
+  return parallelToolsEnabled(environment) && !definitions.some(tool => tool.effect === 'write');
+}
+
+/** Reads that must not run beside each other: those that reach the same device (one host in practice). */
+export function toolLane(tool: Pick<ShannonToolDefinition, 'domain'>): string | null {
+  return tool.domain === 'host_folder' ? 'host_folder' : null;
 }
 
 /** A call of a name the request did not offer: nothing ran. */
@@ -46,7 +64,10 @@ export interface ToolStepOptions {
   parallel: boolean;
 }
 
-interface Running { index: number; outcome: Promise<ToolCallOutcome>; stop: () => void }
+interface Running { index: number; outcome: Promise<ToolCallOutcome> }
+
+/** The result of a call of a lane that did not start: the caller stopped, or the turn's time ran short before its turn. */
+const NOT_STARTED: ToolCallOutcome = { output: SKIPPED_FOR_TIME, note: () => {} };
 
 /**
  * Runs the calls of one step and returns, in the model's order, each call and its result as input items for the next
@@ -61,15 +82,23 @@ export async function runToolStep(
     ?? (async (name: string, args: string, signal?: AbortSignal, time?: number): Promise<ToolCallOutcome> => ({ output: await session.call(name, args, signal, time), note: () => {} }));
   const outputs: string[] = new Array(calls.length);
   let running: Running[] = [];
+  let lanes = new Map<string, Promise<unknown>>();
+  /** Starts one call under its own signal, which is let go when the call ends however it ends. */
+  const begin = (call: ProviderFunctionCall, callTime: number): Promise<ToolCallOutcome> => {
+    const time = callSignal(callTime, options.signal);
+    let outcome: Promise<ToolCallOutcome>;
+    try { outcome = start(call.name, call.arguments, time.signal, callTime); } catch (error) { time.stop(); throw error; }
+    return outcome.finally(time.stop);
+  };
   /** Waits for every running call, then notes them in the model's order. */
   const settle = async () => {
     if (!running.length) return;
     const group = running;
     running = [];
+    lanes = new Map();
     const settled = await Promise.allSettled(group.map(item => item.outcome));
     let failure: unknown;
     settled.forEach((result, position) => {
-      group[position]!.stop();
       if (result.status === 'fulfilled') {
         outputs[group[position]!.index] = result.value.output;
         result.value.note();
@@ -83,7 +112,8 @@ export async function runToolStep(
     options.signal.throwIfAborted();
   };
   for (const [index, call] of calls.entries()) {
-    const alone = !options.parallel || offered.get(call.name)?.effect !== 'read';
+    const tool = offered.get(call.name);
+    const alone = !options.parallel || tool?.effect !== 'read';
     if (alone) await settle();
     // Checked when the call would start: after what it waits for, so nothing starts once the caller stopped.
     await stopped();
@@ -98,9 +128,24 @@ export async function runToolStep(
       // Only the names offered in this request run, whatever the model writes (`folder.create` is not offered).
       outputs[index] = session.refuse?.(call.name) ?? NOT_OFFERED;
     } else {
-      const time = callSignal(callTime, options.signal);
       state.used += 1;
-      running.push({ index, outcome: start(call.name, call.arguments, time.signal, callTime), stop: time.stop });
+      const lane = alone ? null : toolLane(tool!);
+      if (!lane) running.push({ index, outcome: begin(call, callTime) });
+      else {
+        // After the lane's call before it, with the time that is left then; nothing more starts once the caller stopped.
+        const outcome = (lanes.get(lane) ?? Promise.resolve()).then(() => {
+          const time = deadline.forStep(TOOL_CALL_CAP_MILLISECONDS);
+          if (options.signal?.aborted) return NOT_STARTED;
+          if (state.toolsOff || time < MINIMUM_CALL_MILLISECONDS) {
+            state.toolsOff = true;
+            state.used -= 1;
+            return NOT_STARTED;
+          }
+          return begin(call, time);
+        });
+        lanes.set(lane, outcome.catch(() => {}));
+        running.push({ index, outcome });
+      }
     }
     if (alone) await settle();
   }

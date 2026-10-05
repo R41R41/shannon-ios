@@ -4,7 +4,7 @@ import { parallelToolsEnabled, runToolStep, type ToolStepState } from './chatMod
 import {
   MINIMUM_ANSWER_MILLISECONDS, MINIMUM_ROUND_MILLISECONDS, PartialAnswerError, TURN_OUT_OF_TIME_LINE, timedOut, type RoundTime, type TurnDeadline,
 } from './turnDeadline.js';
-export { NOT_OFFERED, SKIPPED_FOR_TIME, parallelToolsEnabled } from './chatModelToolStep.js';
+export { NOT_OFFERED, SKIPPED_FOR_TIME, asksForParallelCalls, parallelToolsEnabled } from './chatModelToolStep.js';
 
 /**
  * Function calling for her registry tools in a conversation turn (Syzygy ADR-0003 stage 1). The adapter
