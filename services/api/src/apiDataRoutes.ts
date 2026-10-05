@@ -29,7 +29,7 @@ export interface ApiDataRouteDependencies {
   now: () => string;
 }
 
-export function dispatchDataRequest(request: ApiRequest, dependencies: ApiDataRouteDependencies): ApiResponse | undefined {
+export function dispatchDataRequest(request: ApiRequest, dependencies: ApiDataRouteDependencies): ApiResponse | Promise<ApiResponse> | undefined {
   const personResponse = dispatchPersonRequest(request, dependencies);
   if (personResponse) return personResponse;
   const autonomyResponse = dispatchAutonomyRequest(request, dependencies.autonomy);

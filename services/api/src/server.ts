@@ -61,6 +61,7 @@ import { SQLiteOpsStore } from './opsStore.js';
 import { createOpsRoute, isOpsPath } from './serverOpsRoutes.js';
 import { dispatchWithChatSentences } from './serverChatSentenceStream.js';
 import { CALENDAR_UPCOMING_PATH, calendarRequestBytes } from './calendarContract.js';
+import { hostStepRequestBytes } from './apiAutonomyHostStepRoutes.js';
 import { configuredOwnerUpcoming } from './ownerUpcomingWiring.js';
 import { SQLiteReachOutSpeaker } from './reachOutDelivery.js';
 import { SQLiteReachOutReports } from './reachOutReports.js';
@@ -298,7 +299,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     // One ended 「友人も一緒」 period carries up to sixty turns of text.
-    const body = request.method !== 'GET' && !calendarDelete ? await readJson(request, url.pathname === VOICE_CALL_MEMORY_PATH ? 192 * 1024 : bodyLookRequestBytes(url.pathname) ?? calendarRequestBytes(url.pathname) ?? 64 * 1024) : undefined;
+    const body = request.method !== 'GET' && !calendarDelete ? await readJson(request, url.pathname === VOICE_CALL_MEMORY_PATH ? 192 * 1024 : bodyLookRequestBytes(url.pathname) ?? calendarRequestBytes(url.pathname) ?? hostStepRequestBytes(url.pathname) ?? 64 * 1024) : undefined;
     const query = new URLSearchParams(url.searchParams);
     if (principal) query.set('scopeKey', principal.scopeKey);
     if (url.pathname === '/v1/devices') {

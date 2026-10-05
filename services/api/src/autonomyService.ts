@@ -22,6 +22,8 @@ import {
   type AutonomyModelChoice,
 } from './autonomyModels.js';
 import { HostFolderDesk } from './autonomyHostFolderDesk.js';
+import { HostFolderOperations } from './hostFolderOperations.js';
+import { ShannonToolRunner } from './shannonToolRunner.js';
 import { resolvePhysicalPath, type AutonomyPathResolver } from './autonomyPaths.js';
 import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
 import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './autonomyProposals.js';
@@ -108,6 +110,10 @@ export class ShannonAutonomyService {
   readonly study: StudyDesk;
   /** Her folder on the owner's machines: the queue she fills and the bound device empties. Both ends ask the gate. */
   readonly folder: HostFolderDesk;
+  /** v2: operations in her folder that her tools queue, and the long-poll claim of the bound device (`hostFolderOperations.ts`). */
+  readonly folderOperations: HostFolderOperations;
+  /** Her tools over her study and her folder (`shannonTools.ts`), for every surface. */
+  readonly tools: ShannonToolRunner;
 
   constructor(private readonly dependencies: AutonomyServiceDependencies) {
     this.store = dependencies.store;
@@ -118,6 +124,8 @@ export class ShannonAutonomyService {
     this.study = new StudyDesk(this.store, at => autonomyDayKey(at, this.config), this.now,
       this.config.maximumReachOutFollowUpsPerDay > 0 ? { timeZone: this.config.timeZone, ...(dependencies.ownerFirstActiveAfter ? { ownerFirstActiveAfter: dependencies.ownerFirstActiveAfter } : {}) } : null);
     this.folder = new HostFolderDesk(this.store, this.config, this.now, this);
+    this.folderOperations = new HostFolderOperations(this.store, this.config, this.now, this, this.folder);
+    this.tools = new ShannonToolRunner(this.store, this.folderOperations, this, this.now);
   }
 
   // MARK: The gate

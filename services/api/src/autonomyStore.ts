@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { AutonomyActivityRecord } from './autonomyActivity.js';
 import { roundYen } from './autonomyBudget.js';
 import { AutonomyHostFolderSteps } from './autonomyHostFolderSteps.js';
+import { HostFolderOperationsStore } from './hostFolderOperationsStore.js';
 import { AutonomyLoopState } from './autonomyLoopState.js';
 import { AutonomyProposalLedger } from './autonomyProposals.js';
 import { AutonomyPursuitLedger } from './autonomyPursuits.js';
@@ -65,6 +66,8 @@ export class SQLiteAutonomyStore {
   readonly loop: AutonomyLoopState;
   /** Work queued for her folder on the owner's machines. */
   readonly hostSteps: AutonomyHostFolderSteps;
+  /** v2 operations in her folder, and the presence of each host's device. */
+  readonly hostOperations: HostFolderOperationsStore;
 
   constructor(private readonly path: string) {
     this.database = new DatabaseSync(path);
@@ -123,6 +126,7 @@ export class SQLiteAutonomyStore {
     this.study = new StudyStore(this.database);
     this.loop = new AutonomyLoopState(this.database);
     this.hostSteps = new AutonomyHostFolderSteps(this.database);
+    this.hostOperations = new HostFolderOperationsStore(this.database);
     secureDatabaseFiles(path);
   }
 

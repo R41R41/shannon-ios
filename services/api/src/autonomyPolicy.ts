@@ -6,7 +6,7 @@ import {
 } from '@shannon/cognition';
 import { coreAreaForRepositoryPath } from './autonomyCore.js';
 import { fitsAutonomyBudget, type AutonomyPlaces } from './autonomyBudget.js';
-import { hostFolderRelativePath } from './autonomyHostFolderPath.js';
+import { hostFolderPath } from './autonomyHostFolderPath.js';
 import { isInsideResolvedRoot, relativeToResolvedRoot, type AutonomyPathResolver } from './autonomyPaths.js';
 
 /**
@@ -38,6 +38,13 @@ export interface AutonomousActionRequest {
   host?: string;
   /** For `host_folder` on a machine this server cannot see: one file, relative to her folder there. Never combined with `paths`. */
   relativePath?: string;
+  /**
+   * For `relativePath`: what it names (v2 of the folder contract). `file` (the default) is a text file; `entry` a file or a
+   * folder of any extension; `folder` a folder, where `""` is her folder itself.
+   */
+  pathKind?: 'file' | 'entry' | 'folder';
+  /** For a move inside her folder: where it goes, judged like `relativePath` as an `entry`. */
+  toRelativePath?: string;
   /** Absolute paths the step creates, changes, deletes, or runs. */
   paths?: readonly string[];
   /** For `public_read`: the public pages the step reads. */
@@ -220,7 +227,8 @@ function classifyPaths(request: AutonomousActionRequest, domainId: ShannonAutono
     if (!request.host || !Object.hasOwn(devices, request.host) || !devices[request.host]) {
       return { refusal: refuse('forbidden', 'unknown_host', domainId, '専用フォルダを受け持つ端末が登録されていないため、実行しません。'), coreAreas: [], allowedRoots: [] };
     }
-    const checked = hostFolderRelativePath(request.relativePath);
+    const checked = [hostFolderPath(request.relativePath, request.pathKind ?? 'file'),
+      ...(request.toRelativePath !== undefined ? [hostFolderPath(request.toRelativePath, 'entry')] : [])].find(item => 'problem' in item) ?? { path: '' };
     return {
       refusal: 'problem' in checked ? refuse('forbidden', 'malformed_request', domainId, `専用フォルダの中のパスとして認められないため、実行しません（${checked.problem}）。`) : null,
       coreAreas: [], allowedRoots: [],
@@ -296,6 +304,8 @@ function malformed(request: AutonomousActionRequest): string | null {
   if (request.relativePath !== undefined && (typeof request.relativePath !== 'string' || request.domain !== 'host_folder' || request.paths !== undefined)) {
     return '相対パスの指定が正しくない';
   }
+  if (request.pathKind !== undefined && (request.relativePath === undefined || !['file', 'entry', 'folder'].includes(request.pathKind))) return '相対パスの種類が正しくない';
+  if (request.toRelativePath !== undefined && (typeof request.toRelativePath !== 'string' || request.relativePath === undefined)) return '移す先の指定が正しくない';
   for (const [name, limit] of [['paths', MAXIMUM_PATHS], ['urls', MAXIMUM_URLS]] as const) {
     const value = request[name];
     if (value === undefined) continue;

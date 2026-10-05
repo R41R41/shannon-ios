@@ -9,11 +9,11 @@ import type { AutonomyOwnerError, ShannonAutonomyService } from './autonomyServi
  * owner's decisions (stop switch, budget request, proposal, rest/drop a pursuit).
  * None of them lets a client write as Shannon: her side has no HTTP entrance.
  */
-export function dispatchAutonomyRequest(request: ApiRequest, autonomy: ShannonAutonomyService): ApiResponse | undefined {
+export function dispatchAutonomyRequest(request: ApiRequest, autonomy: ShannonAutonomyService): ApiResponse | Promise<ApiResponse> | undefined {
   if (!request.path.startsWith('/v1/autonomy')) return undefined;
   if (request.path.startsWith('/v1/autonomy/study')) return dispatchStudyRequest(request, autonomy.study);
   // The device side of her folder; the only routes here a non-owner surface (the bound device) uses.
-  if (request.path.startsWith(HOST_STEP_ROUTE_PREFIX)) return dispatchHostStepRequest(request, autonomy.folder);
+  if (request.path.startsWith(HOST_STEP_ROUTE_PREFIX)) return dispatchHostStepRequest(request, autonomy.folder, autonomy.folderOperations);
 
   if (request.method === 'GET' && request.path === '/v1/autonomy') {
     const scopeKey = request.query?.get('scopeKey');

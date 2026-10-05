@@ -32,6 +32,16 @@ export const HOST_STEP_CODES = Object.freeze({
   unsupported_operation: '端末がその操作に対応していない',
   io_error: '書き込みに失敗した',
   unknown: '理由は分からない',
+  // v2 (2026-10-05). Accepted for every step.
+  not_found: 'そのファイルやフォルダはなかった',
+  already_exists: '同じ名前のものがもうあった',
+  not_text: 'テキストのファイルではなかった',
+  not_a_file: 'ファイルではなかった',
+  not_a_folder: 'フォルダではなかった',
+  changed_since_read: '読んだあとで中身が変わっていた',
+  folder_full: 'フォルダの容量か数の上限に達した',
+  protected_path: '触れてはいけない場所だった',
+  stopped_locally: 'PCの側で止められていた',
 } as const);
 export type HostStepCode = keyof typeof HOST_STEP_CODES;
 
@@ -47,9 +57,19 @@ const FORBIDDEN_CHARACTER = /[\u0000-\u001f\u007f-\u009f<>:"|?*]/u;
 /**
  * A relative path inside her folder with `/` separators, or the reason it is refused.
  * Lexical only: no file system is asked, so a link or junction on the device is the
- * device's to refuse.
+ * device's to refuse. This is the rule for a file with content (v1 copies, v2 read, create, update).
  */
 export function hostFolderRelativePath(value: unknown): { path: string } | { problem: string } {
+  return hostFolderPath(value, 'file');
+}
+
+/**
+ * v2 (`docs/host-folder-contract.md`, 「v2 path rules」): `file` needs a text extension; `entry` is a file or a folder
+ * of any extension (move, delete); `folder` is the same and may be `""`, the folder itself (list, search).
+ * `.shannon/` is the device's own (marker and trash) and is refused in every kind.
+ */
+export function hostFolderPath(value: unknown, kind: 'file' | 'entry' | 'folder'): { path: string } | { problem: string } {
+  if (kind === 'folder' && value === '') return { path: '' };
   if (typeof value !== 'string' || !value) return { problem: '相対パスがない' };
   if (value.length > HOST_FOLDER_LIMITS.pathCharacters) return { problem: 'パスが長すぎる' };
   if (FORBIDDEN_CHARACTER.test(value)) return { problem: '使えない文字（ドライブ名や「:」、制御文字など）を含む' };
@@ -65,10 +85,17 @@ export function hostFolderRelativePath(value: unknown): { path: string } | { pro
     if (segment !== segment.trim() || segment.endsWith('.')) return { problem: '名前の前後に空白や「.」がある' };
     if (RESERVED_NAME.test(segment.split('.')[0]!.trim())) return { problem: 'Windowsの予約名を含む' };
   }
-  const name = segments.at(-1)!;
-  const dot = name.lastIndexOf('.');
-  if (dot < 1 || !HOST_FOLDER_EXTENSIONS.includes(name.slice(dot).toLowerCase())) return { problem: '置けるのはテキストのファイルだけ' };
+  if (segments[0]!.toLowerCase() === HOST_FOLDER_PROTECTED) return { problem: '「.shannon」は端末が使う場所で、触れられない' };
+  if (kind === 'file' && !hasTextExtension(segments.at(-1)!)) return { problem: '置けるのはテキストのファイルだけ' };
   return { path: segments.join('/') };
+}
+
+/** The device's own folder inside hers: its marker and her trash. No requested operation may name it. */
+export const HOST_FOLDER_PROTECTED = '.shannon';
+
+export function hasTextExtension(name: string): boolean {
+  const dot = name.lastIndexOf('.');
+  return dot >= 1 && HOST_FOLDER_EXTENSIONS.includes(name.slice(dot).toLowerCase());
 }
 
 /**

@@ -50,6 +50,8 @@ export interface StudyPiece {
   updatedAt: string;
   shownAt?: string;
   putAwayBy?: 'shannon' | 'owner';
+  /** Set while the piece is in her study's trash: restorable, with every version kept. */
+  deletedAt?: string;
   /**
    * `room_look`: her note about one look at the owner's room. She may use it in her own thinking and recall it with the owner; it is never copied to her folder, and never written into a story as it is.
    * `reach_out`: what she wrote down after a message of hers got no answer. Hers to think with; it is not material for a story or for a message.
@@ -95,6 +97,7 @@ interface PieceRow {
   piece_id: string; kind: string; title: string; body: string; status: string; version: number; readable_version: number | null;
   pursuit_id: string | null; sources_json: string; created_at: string; updated_at: string; shown_at: string | null; put_away_by: string | null;
   origin: string | null;
+  deleted_at?: string | null;
 }
 
 export class StudyStore {
@@ -146,21 +149,85 @@ export class StudyStore {
     // Additive: where a note came from, when that matters for who may be given it.
     const columns = database.prepare(`PRAGMA table_info('study_pieces')`).all() as unknown as Array<{ name: string }>;
     if (!columns.some(column => column.name === 'origin')) database.exec('ALTER TABLE study_pieces ADD COLUMN origin TEXT');
+    // Additive (2026-10-05): her own delete is soft. A deleted piece is in her study's trash, and every other path reads it as gone.
+    if (!columns.some(column => column.name === 'deleted_at')) database.exec('ALTER TABLE study_pieces ADD COLUMN deleted_at TEXT');
   }
 
-  /** Newest change first. */
-  list(scopeKey: string, limit = 200): readonly StudyPiece[] {
+  /** Newest change first. Pieces in her trash are left out unless `deleted` asks for them (`only`: nothing else). */
+  list(scopeKey: string, limit = 200, deleted: 'exclude' | 'include' | 'only' = 'exclude'): readonly StudyPiece[] {
+    const filter = deleted === 'exclude' ? 'AND deleted_at IS NULL' : deleted === 'only' ? 'AND deleted_at IS NOT NULL' : '';
     const rows = this.database.prepare(`
-      SELECT * FROM study_pieces WHERE scope_key = ? ORDER BY updated_at DESC, piece_id LIMIT ?
+      SELECT * FROM study_pieces WHERE scope_key = ? ${filter} ORDER BY updated_at DESC, piece_id LIMIT ?
     `).all(scopeKey, Math.max(1, Math.min(500, Math.trunc(limit)))) as unknown as PieceRow[];
     return Object.freeze(rows.map(piece));
   }
 
+  /** A piece in her trash is not found here; `find` with `includeDeleted` reads it. */
   get(scopeKey: string, id: string): StudyPiece | null {
+    return this.find(scopeKey, id, false);
+  }
+
+  find(scopeKey: string, id: string, includeDeleted: boolean): StudyPiece | null {
     const row = this.database.prepare(`
-      SELECT * FROM study_pieces WHERE scope_key = ? AND piece_id = ?
+      SELECT * FROM study_pieces WHERE scope_key = ? AND piece_id = ? ${includeDeleted ? '' : 'AND deleted_at IS NULL'}
     `).get(scopeKey, id) as unknown as PieceRow | undefined;
     return row ? piece(row) : null;
+  }
+
+  /** Her delete: into the trash. The text and every version stay; `restore` takes it back. */
+  softDelete(scopeKey: string, id: string, at: string): StudyPiece | StudyRejection {
+    const current = this.find(scopeKey, id, true);
+    if (!current) return 'STUDY_NOT_FOUND';
+    if (current.deletedAt) return current;
+    this.database.prepare(`UPDATE study_pieces SET deleted_at = ?, updated_at = ? WHERE scope_key = ? AND piece_id = ?`).run(at, at, scopeKey, id);
+    return this.find(scopeKey, id, true)!;
+  }
+
+  restore(scopeKey: string, id: string, at: string): StudyPiece | StudyRejection {
+    const current = this.find(scopeKey, id, true);
+    if (!current) return 'STUDY_NOT_FOUND';
+    if (!current.deletedAt) return current;
+    if (current.kind === 'story' && (current.status === 'draft' || current.status === 'ready') && this.openStoryCount(scopeKey) >= STUDY_LIMITS.openStories) return 'STUDY_LIMIT';
+    this.database.prepare(`UPDATE study_pieces SET deleted_at = NULL, updated_at = ? WHERE scope_key = ? AND piece_id = ?`).run(at, scopeKey, id);
+    return this.get(scopeKey, id)!;
+  }
+
+  /** Takes a piece she or the owner put away back out: a story as a draft, a note as readable. */
+  takeBack(scopeKey: string, id: string, at: string): StudyPiece | StudyRejection {
+    const current = this.get(scopeKey, id);
+    if (!current) return 'STUDY_NOT_FOUND';
+    if (current.status !== 'put_away') return current;
+    if (current.kind === 'story' && this.openStoryCount(scopeKey) >= STUDY_LIMITS.openStories) return 'STUDY_LIMIT';
+    this.database.prepare(`
+      UPDATE study_pieces SET status = ?, put_away_by = NULL, updated_at = ? WHERE scope_key = ? AND piece_id = ?
+    `).run(current.kind === 'note' ? 'ready' : 'draft', at, scopeKey, id);
+    return this.get(scopeKey, id)!;
+  }
+
+  /** Files a piece under one of her pursuits, or under none. */
+  setPursuit(scopeKey: string, id: string, pursuitId: string | null, at: string): StudyPiece | StudyRejection {
+    if (!this.get(scopeKey, id)) return 'STUDY_NOT_FOUND';
+    if (pursuitId !== null && (typeof pursuitId !== 'string' || !pursuitId || pursuitId.length > 80)) return 'STUDY_INVALID';
+    this.database.prepare(`UPDATE study_pieces SET pursuit_id = ?, updated_at = ? WHERE scope_key = ? AND piece_id = ?`).run(pursuitId, at, scopeKey, id);
+    return this.get(scopeKey, id)!;
+  }
+
+  /**
+   * Pieces whose current title or body contains `query` (case-insensitive), newest change first.
+   * `deleted` as in `list`. The caller cuts the snippets.
+   */
+  search(scopeKey: string, query: string, limit: number, deleted: 'exclude' | 'include' | 'only' = 'exclude'): readonly StudyPiece[] {
+    const needle = `%${query.replace(/[\\%_]/gu, match => `\\${match}`)}%`;
+    const filter = deleted === 'exclude' ? 'AND deleted_at IS NULL' : deleted === 'only' ? 'AND deleted_at IS NOT NULL' : '';
+    const rows = this.database.prepare(`
+      SELECT * FROM study_pieces WHERE scope_key = ? ${filter} AND (title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')
+      ORDER BY updated_at DESC, piece_id LIMIT ?
+    `).all(scopeKey, needle, needle, Math.max(1, Math.min(100, Math.trunc(limit)))) as unknown as PieceRow[];
+    return Object.freeze(rows.map(piece));
+  }
+
+  private openStoryCount(scopeKey: string): number {
+    return this.list(scopeKey, 500).filter(item => item.kind === 'story' && (item.status === 'draft' || item.status === 'ready')).length;
   }
 
   versions(scopeKey: string, id: string): readonly StudyVersion[] {
@@ -178,10 +245,7 @@ export class StudyStore {
   create(scopeKey: string, draft: StudyDraft, at: string): StudyPiece | StudyRejection {
     const normalized = normalizedDraft(draft);
     if (!normalized) return 'STUDY_INVALID';
-    if (normalized.kind === 'story') {
-      const open = this.list(scopeKey, 500).filter(item => item.kind === 'story' && (item.status === 'draft' || item.status === 'ready'));
-      if (open.length >= STUDY_LIMITS.openStories) return 'STUDY_LIMIT';
-    }
+    if (normalized.kind === 'story' && this.openStoryCount(scopeKey) >= STUDY_LIMITS.openStories) return 'STUDY_LIMIT';
     const id = randomUUID();
     const note = normalized.kind === 'note';
     this.database.prepare(`
@@ -363,5 +427,6 @@ function piece(row: PieceRow): StudyPiece {
     ...(row.shown_at ? { shownAt: row.shown_at } : {}),
     ...(row.put_away_by ? { putAwayBy: row.put_away_by as 'shannon' | 'owner' } : {}),
     ...(row.origin === 'room_look' || row.origin === 'reach_out' ? { origin: row.origin } : {}),
+    ...(row.deleted_at ? { deletedAt: row.deleted_at } : {}),
   });
 }
