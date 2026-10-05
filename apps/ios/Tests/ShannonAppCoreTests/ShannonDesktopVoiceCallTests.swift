@@ -309,6 +309,27 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
         XCTAssertFalse(call.rootWindows.contains { $0 === shown }, "a root view that went away hosts nothing")
     }
 
+    func testOwnerTextThatFailedToGoIntoTheCallLeavesTheDraftWhenAFriendJoins() {
+        let call = ShannonDesktopVoiceCall()
+        let conversation = ShannonConversationModel.designPreview()
+        call.attach(conversation: conversation, menuBar: nil)
+        call.session.phase = .listening
+        conversation.draft = "明日の歯医者は何時？"
+        XCTAssertFalse(call.sendText(conversation.draft), "not connected: refused, the draft stays")
+        conversation.draft += "あと保険証"
+        call.draftChanged(conversation.draft)
+        call.session.switchParticipantMode(to: .guest, origin: .spoken)
+        call.participantModeChanged(to: .guest)
+        XCTAssertEqual(conversation.draft, "", "edited or not, his failed text leaves")
+
+        // A draft typed for the guests stays.
+        conversation.draft = "ミキさん、ようこそ"
+        call.draftChanged(conversation.draft)
+        call.participantModeChanged(to: .guest)
+        XCTAssertEqual(conversation.draft, "ミキさん、ようこそ")
+        call.session.stop()
+    }
+
     private func settle() async {
         for _ in 0..<5 { await Task.yield() }
         try? await Task.sleep(for: .milliseconds(20))

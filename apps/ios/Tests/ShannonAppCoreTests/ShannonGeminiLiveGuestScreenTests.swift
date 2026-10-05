@@ -168,4 +168,13 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         XCTAssertEqual(guest.requestContext(addressedByName: false, followsShannonTurn: false).turns.map(\.text), ["ミキです", "はじめまして。"])
         model.stop()
     }
+
+    /// iPhone: the send was refused before it left, so the text is still in the composer when the failure comes.
+    func testTheIPhoneMarksFailedOwnerTextThatNeverLeftTheComposer() {
+        let workspace = ShannonVoiceWorkspaceState()
+        workspace.typedMessage = "明日の歯医者は何時？ "
+        workspace.restoreFailedText("明日の歯医者は何時？", participantMode: .owner)
+        workspace.participantModeChanged(to: .guest)
+        XCTAssertEqual(workspace.typedMessage, "")
+    }
 }

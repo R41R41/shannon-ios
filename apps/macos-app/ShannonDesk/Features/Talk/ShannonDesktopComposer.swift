@@ -186,6 +186,8 @@ struct DesktopComposer: View {
             guard let photoPickerItem else { return }
             Task { await loadPickedPhoto(photoPickerItem) }
         }
+        // Owner text that failed to go into the call is cleared from the draft when a friend joins (A16).
+        .onChange(of: model.draft) { voiceCall.draftChanged(model.draft) }
         .onChange(of: model.selectedThreadId) {
             attachments = []
             usesWebSearch = false

@@ -35,6 +35,8 @@ public final class ShannonDesktopVoiceCall {
     @ObservationIgnored var windowsOnScreenProbe: @MainActor () -> Bool = ShannonDesktopVoiceCall.anyWindowOnScreen
     @ObservationIgnored var menuSection: ShannonDesktopVoiceCallMenuSection?
     @ObservationIgnored var windowObservers: [NSObjectProtocol] = []
+    /// Talk's draft holds owner text that failed to go into the call.
+    @ObservationIgnored var draftHoldsOwnerText = false
     /// The window the owner used last: トークに戻る brings this one back.
     @ObservationIgnored weak var lastMainWindow: NSWindow?
     /// The windows that show the app's root view, by root view (`window(_:hosts:)`).
@@ -140,10 +142,28 @@ public final class ShannonDesktopVoiceCall {
         session.switchParticipantMode(to: mode)
     }
 
-    /// Text typed into Talk's composer during a call goes into the call.
+    /// Text typed into Talk's composer during a call goes into the call. Text of 本人だけ that could not be sent
+    /// stays in the draft and is marked as the owner's (as the iPhone marks restored text): it leaves the draft,
+    /// edited or not, when a friend joins.
     @discardableResult
     public func sendText(_ text: String) -> Bool {
-        session.sendText(text)
+        let sent = session.sendText(text)
+        if !sent, session.participantMode == .owner { draftHoldsOwnerText = true }
+        return sent
+    }
+
+    /// Talk's draft changed: once emptied, nothing of the owner's failed text is in it any more.
+    public func draftChanged(_ draft: String) {
+        if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { draftHoldsOwnerText = false }
+    }
+
+    /// The call switched between 本人だけ and 「友人も一緒」: an unshared photo goes, and so does the owner's failed text
+    /// in Talk's draft; a draft typed for the guests stays.
+    func participantModeChanged(to mode: ShannonVoiceParticipantMode) {
+        workspace.participantModeChanged(to: mode)
+        guard mode == .guest, draftHoldsOwnerText else { return }
+        conversation?.draft = ""
+        draftHoldsOwnerText = false
     }
 
     /// The speech provider of 設定 › 声, read at the start of each call (「次の通話から反映」).

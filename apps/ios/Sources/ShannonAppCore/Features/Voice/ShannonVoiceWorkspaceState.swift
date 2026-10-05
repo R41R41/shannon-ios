@@ -51,7 +51,14 @@ final class ShannonVoiceWorkspaceState {
 
     /// Text that failed to send goes back into the empty composer. In 本人だけ it is the owner's own text.
     func restoreFailedText(_ text: String, participantMode: ShannonVoiceParticipantMode) {
-        guard typedMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let current = typedMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Still in the composer (the send was refused before it left): the same text, marked as his.
+        if current == text.trimmingCharacters(in: .whitespacesAndNewlines) {
+            if participantMode == .owner { typedMessageHoldsRestoredOwnerText = true }
+            showsTextComposer = true
+            return
+        }
+        guard current.isEmpty else { return }
         typedMessage = text
         typedMessageHoldsRestoredOwnerText = participantMode == .owner
         showsTextComposer = true
