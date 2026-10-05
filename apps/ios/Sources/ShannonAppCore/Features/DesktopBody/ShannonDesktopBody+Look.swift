@@ -28,7 +28,10 @@ extension ShannonDesktopBody {
         if let expires = ShannonBodySignals.date(look.expiresAt), expires <= Date() { return }
         guard let response = try? await client.answerBodyLook(id: look.id, answer: answer), let message = response.message else { return }
         // Her words about the room (or her one honest line for a look he asked for). A look of her own time has none.
+        // Asked again when it is said: what she saw of his room is for him alone, so with someone else around by then it
+        // is neither shown nor said here (it is in the Talk).
         enqueue {
+            guard self.audience == .owner else { return }
             await self.say(message.text, id: message.id, expression: "curious", speak: self.speaks && !self.soundTaken && !self.away.isAway)
         }
     }
