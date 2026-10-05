@@ -40,6 +40,7 @@ extension ShannonDesktopRootView {
                 }
             }
             Divider()
+            talkTaskNotice
 
             ZStack(alignment: .bottom) {
                 talkTimeline
@@ -52,12 +53,7 @@ extension ShannonDesktopRootView {
     @ViewBuilder
     var talkTimeline: some View {
         if conversation.messages.isEmpty && conversation.unattachedSelectedThreadOrganizeSessions.isEmpty && !conversation.isLoadingHistory {
-            ContentUnavailableView {
-                Label("シャノンに話しかける", systemImage: "bubble.left")
-            } description: {
-                Text("相談、調査、文章、コード、そして実際の作業まで、ここから始められます。")
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            emptyTalk
         } else {
             ScrollViewReader { proxy in
                 ScrollView {

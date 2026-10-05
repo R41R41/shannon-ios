@@ -22,30 +22,19 @@ extension ShannonDesktopRootView {
                     )
                     .frame(maxWidth: .infinity, minHeight: 320)
                 } else {
-                    DesktopTaskSection(
-                        title: "いま",
-                        subtitle: "作業中・許可待ち・続きが必要・一時停止中",
-                        tasks: workProjection.active,
-                        threads: conversation.threads,
-                        selectedTaskID: selectedTaskID,
-                        select: selectTask
-                    )
-                    DesktopTaskSection(
-                        title: "これから",
-                        subtitle: "シャノンからの提案。開始はあなたが決めます",
-                        tasks: workProjection.proposed,
-                        threads: conversation.threads,
-                        selectedTaskID: selectedTaskID,
-                        select: selectTask
-                    )
-                    DesktopTaskSection(
-                        title: "終了",
-                        subtitle: "完了・中止・失敗の結果と変更内容を残します",
-                        tasks: workProjection.finished,
-                        threads: conversation.threads,
-                        selectedTaskID: selectedTaskID,
-                        select: selectTask
-                    )
+                    workSearchBar
+                    workTaskSection("ピン留め", subtitle: "上に留めた作業", tasks: workProjection.pinned)
+                    workTaskSection("いま", subtitle: "作業中・許可待ち・続きが必要・一時停止中", tasks: workProjection.active)
+                    workTaskSection("これから", subtitle: "シャノンからの提案。開始はあなたが決めます", tasks: workProjection.proposed)
+                    workTaskSection("終了", subtitle: "完了・中止・失敗の結果と変更内容を残します", tasks: workProjection.finished)
+                    if showsArchivedDevelopmentTasks {
+                        workTaskSection("アーカイブ", subtitle: "片付けた作業。戻すと一覧に出ます", tasks: workProjection.archived)
+                    }
+                    if workProjection.pinned.isEmpty, workProjection.active.isEmpty, workProjection.proposed.isEmpty,
+                       workProjection.finished.isEmpty, !showsArchivedDevelopmentTasks || workProjection.archived.isEmpty {
+                        Text("一致する作業はありません")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .frame(maxWidth: 900, alignment: .leading)

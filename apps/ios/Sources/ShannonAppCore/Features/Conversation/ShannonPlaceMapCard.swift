@@ -7,14 +7,18 @@ private struct ShannonMapPin: Identifiable {
     var id: String { place.id }
 }
 
-struct ShannonPlaceMapCard: View {
+public struct ShannonPlaceMapCard: View {
     let places: [ShannonPlaceDTO]
     @Environment(\.colorScheme) private var colorScheme
     @State private var pins: [ShannonMapPin] = []
     @State private var isLoading = true
     @State private var showsMap = false
 
-    var body: some View {
+    public init(places: [ShannonPlaceDTO]) {
+        self.places = places
+    }
+
+    public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
         VStack(alignment: .leading, spacing: ShannonSpacing.small) {
             Label("場所の候補", systemImage: "map")
@@ -93,6 +97,9 @@ struct ShannonPlaceMapCard: View {
                     .frame(maxHeight: 250)
                 }
                 .navigationTitle("場所を探す")
+#if os(macOS)
+                .frame(minWidth: 520, minHeight: 560)
+#endif
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("閉じる") { showsMap = false }

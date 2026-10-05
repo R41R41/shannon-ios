@@ -115,6 +115,15 @@ extension ShannonDesktopRootView {
                     openSettings(.ops)
                 }
             }
+            // The camera's state is always visible (A14): 切／見てよい／いま見ています. It opens 設定 › カメラ.
+            ShannonAppLookStateReader(conversation: conversation) { state in
+                sidebarFooterLine(state.line, hint: "設定のカメラを開きます") {
+                    Image(systemName: state.symbol).foregroundStyle(Color.secondary)
+                } action: {
+                    openSettings(.camera)
+                }
+                .accessibilityIdentifier("sidebar-app-look-state")
+            }
             if !connection.isConnected {
                 sidebarFooterLine(connection.statusLabel, hint: "接続を開きます") {
                     Image(systemName: "link.badge.plus").foregroundStyle(Color.secondary)

@@ -40,6 +40,8 @@ public struct ShannonDesktopRootView: View {
     @State var showsWorldSubscriptions = false
     @State var showsAppIconSettings = false
     @State var showsBody = false
+    @State var showsStateDetails = false
+    @AppStorage(ShannonChatAvatarStyle.storageKey) var chatAvatarStyleRawValue = ShannonChatAvatarStyle.expression.rawValue
     @State var renameThread: ChatThreadDTO?
     @State var renameText = ""
     @State var selectedDevelopmentTool = DesktopDevelopmentTool.initialValue

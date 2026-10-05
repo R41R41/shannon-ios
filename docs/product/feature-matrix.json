@@ -386,12 +386,13 @@
           ]
         },
         "macos": {
-          "status": "partial",
-          "note": "文章・Markdown・コードのファイルを 4 件まで。写真は添付できない。",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift",
-            "apps/macos-app/ShannonDesk/ShannonDesktopAttachment.swift"
-          ]
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposerPhoto.swift#loadPickedPhoto",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonChatPhoto.swift",
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift"
+          ],
+          "note": "写真（写真ライブラリから、または画像のファイル）1 枚と、文章・Markdown・コードのファイルを合わせて 4 件まで（A14）。写真は長い辺 1,280、JPEG、2.8 MB まで、情報を付けずに送る。"
         },
         "windows": {
           "status": "no"
@@ -659,8 +660,12 @@
           ]
         },
         "macos": {
-          "status": "no",
-          "note": "Mac のトークには地図のカードが無い。"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopConversationComponents.swift#ShannonPlaceMapCard",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonPlaceMapCard.swift"
+          ],
+          "note": "iPhone と同じ地図のカード（A14）。"
         },
         "windows": {
           "status": "no"
@@ -680,11 +685,12 @@
           ]
         },
         "macos": {
-          "status": "partial",
-          "note": "空のトークに案内の文は出るが、候補は出ない。",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
-          ]
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopTalkEmptyAndNotice.swift#ShannonPromptSuggestionList",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonPromptSuggestions.swift"
+          ],
+          "note": "空のトークに候補を 3 つまで。選ぶと入力欄に入り、送らない（A14）。"
         },
         "windows": {
           "status": "no"
@@ -1183,11 +1189,12 @@
           ]
         },
         "macos": {
-          "status": "partial",
-          "note": "開発の画面にだけ検索・絞り込み・ピン留め・アーカイブがある。「作業全体」には無い。",
+          "status": "yes",
           "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopWorkSearch.swift#workSearchBar",
             "apps/macos-app/ShannonDesk/Features/Development/ShannonDesktopRootView+Development.swift"
-          ]
+          ],
+          "note": "作業 と 開発 の両方で、検索・絞り込み・ピン留め（右クリック）・アーカイブ（A14）。"
         },
         "windows": {
           "status": "no"
@@ -1352,12 +1359,12 @@
           ]
         },
         "macos": {
-          "status": "partial",
-          "note": "サイドバーの件数と、トークの横の「現在地」で分かる。トークの上の知らせは無い。",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift",
-            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopSidebarComponents.swift"
-          ]
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopTalkEmptyAndNotice.swift#talkTaskNotice",
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskNotice.swift"
+          ],
+          "note": "トークの上に、iPhone と同じ作業の知らせ（許可待ち、続きが必要、結果）。押すと現在地。1 回きりのコマンド・ファイル変更の許可は、その場で「許可」（A14）。"
         },
         "windows": {
           "status": "partial",
@@ -2854,12 +2861,12 @@
           ]
         },
         "macos": {
-          "status": "partial",
-          "note": "設定と、見るための仕組みは共有のコードにある。Mac のトークに「いま見ました」の表示が出るかは確かめていない。",
+          "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookSettingsSection.swift",
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
-          ]
+            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookViews.swift#shannonAppLook",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView.swift#shannonAppLook"
+          ],
+          "note": "窓の全体に共通の ShannonAppLookPresenter が付き、見たときは窓の上に「いま見ました」と小さな画像（A14 で確かめた）。"
         },
         "windows": {
           "status": "yes",
@@ -2917,11 +2924,12 @@
           "note": "向き合う表示と音声会話の上に「カメラ：切／見てよい／いま見ています」。切の間は、シートの 設定 のタイルの下に「カメラ：切」（A7）。見た直後の「いま見ました」はこれまでどおり。"
         },
         "macos": {
-          "status": "partial",
-          "note": "設定を開かないと分からない。",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
-          ]
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift#ShannonAppLookStateReader",
+            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookStateViews.swift"
+          ],
+          "note": "サイドバーの下に「カメラ：切／見てよい／いま見ています」。押すと 設定 › カメラ（A14）。"
         },
         "windows": {
           "status": "yes",
@@ -3257,7 +3265,12 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopSettingsForms.swift#ShannonChatAvatarStyle",
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopConversationComponents.swift#ShannonChatAvatarView"
+          ],
+          "note": "設定 › 外観 の「アバター」。トークの返事の横のアイコンが変わる（A14）。"
         },
         "windows": {
           "status": "no"
@@ -3356,7 +3369,11 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#settingsProfileCard"
+          ],
+          "note": "設定の左の列の先頭に、いまの顔と「いま：〈気持ち〉」。押すと状態のシート（A14）。"
         },
         "windows": {
           "status": "no"

@@ -16,6 +16,8 @@
 
 > **2026-10-05 追記（Mac の通知、A13）**: Mac が、新しい許可待ち・続きが必要・完了・失敗・シャノンからの話を、iPhone の push と同じ文で通知し、押すとその場所を開くようにした。閉じた所: `notifications.push`・`notifications.open-target` の Mac。下の 11 は済んだ。
 
+> **2026-10-05 追記（Mac のトークと設定、A14）**: Mac に、写真の添付、地図のカード、空のトークの候補、トークの上の作業の知らせ、サイドバーの下のカメラの状態、アバターの種類、設定の先頭の状態の札、作業 の検索・絞り込み・ピン留め・アーカイブを入れ、「いま見ました」が Mac の窓にも出ることを確かめた。閉じた所: `talk.attachments`・`talk.place-map`・`talk.prompt-suggestions`・`look.app-camera`・`look.always-visible-state`・`settings.avatar-style`・`settings.profile-state`・`tasks.search-filter-pin-archive`・`tasks.notice-in-talk` の Mac。下の 14 の Mac の部分は済んだ。
+
 2026-10-03。Apple 側は `c40a65e`（main）のコード、Windows 側は同じ日に読んだ `shannon-desktop`（VM の `~/handoff/shannon-desktop-src.zip`）から。画面は動かしていない（ビルドもシミュレーターも使っていない）。コードと文書を読んだ結果。
 
 機能ごとの細かい状態は [`feature-matrix.md`](feature-matrix.md)（127 件）。ここは、そのうち所有者の目に入るずれを、目立つ順にまとめたもの。

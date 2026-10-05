@@ -24,6 +24,10 @@ extension ShannonDesktopRootView {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .navigationTitle(ShannonGeneratedStrings.navSettings)
+        .sheet(isPresented: $showsStateDetails) {
+            ShannonStateSheet(state: conversation.state, face: conversation.presentFace)
+                .frame(minWidth: 480, minHeight: 560)
+        }
         .sheet(isPresented: $showsBody) {
             NavigationStack { ShannonBodyScreen(memory: memory) }
                 .frame(minWidth: 460, minHeight: 720)
@@ -36,6 +40,9 @@ extension ShannonDesktopRootView {
             get: { settingsPage },
             set: { page in if let page { settingsPageRawValue = page.rawValue } }
         )) {
+            Section {
+                settingsProfileCard
+            }
             Section(ShannonGeneratedStrings.navAdmin) {
                 if yousu.ops.isSupported {
                     settingsOpsRow
@@ -70,6 +77,34 @@ extension ShannonDesktopRootView {
             }
         }
         .listStyle(.sidebar)
+    }
+
+    /// Her state at the top of 設定, as on the iPhone (A14): her face and how she is; it opens her state.
+    private var settingsProfileCard: some View {
+        Button {
+            showsStateDetails = true
+        } label: {
+            HStack(spacing: ShannonDesktopSpacing.medium) {
+                ShannonChatAvatarView(face: conversation.presentFace, size: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(ShannonGeneratedStrings.appName)
+                        .font(.shannonDesktop(.headline))
+                    Text("いま：\(conversation.presentFace.japaneseName)")
+                        .font(.shannonDesktop(.caption))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.shannonDesktop(.caption))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("シャノンの状態を表示します")
+        .accessibilityIdentifier("settings-shannon-profile")
     }
 
     /// 運用, with the mark and its reason while something there deserves a look. Before the first

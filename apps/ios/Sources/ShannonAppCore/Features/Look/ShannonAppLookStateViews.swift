@@ -35,7 +35,7 @@ public enum ShannonAppLookVisibleState: Equatable, Sendable {
     /// 「カメラ：切」, as 「ようす」 writes the body's camera.
     public var line: String { ShannonAppLookCopy.stateLine(word) }
 
-    var symbol: String {
+    public var symbol: String {
         switch self {
         case .off: "eye.slash"
         case .allowed: "eye"
@@ -49,17 +49,28 @@ extension ShannonAppLookCopy {
 }
 
 /// Reads the facts the state is made of and keeps them current while the view is up.
-struct ShannonAppLookStateReader<Content: View>: View {
+public struct ShannonAppLookStateReader<Content: View>: View {
     let coordinator: ShannonAppLookCoordinator
     var othersPresent = false
     @ViewBuilder let content: (ShannonAppLookVisibleState) -> Content
+
+    init(coordinator: ShannonAppLookCoordinator, othersPresent: Bool = false, @ViewBuilder content: @escaping (ShannonAppLookVisibleState) -> Content) {
+        self.coordinator = coordinator
+        self.othersPresent = othersPresent
+        self.content = content
+    }
+
+    /// The Mac's line under the sidebar (roadmap A14): the camera of this conversation, with nobody else in a call.
+    public init(conversation: ShannonConversationModel, @ViewBuilder content: @escaping (ShannonAppLookVisibleState) -> Content) {
+        self.init(coordinator: conversation.appLook, content: content)
+    }
 
     @AppStorage(ShannonAppLookPreference.enabledDefaultsKey) private var enabled = true
     /// The last answer read; nil until something asked again, so the first frame reads the system itself.
     @State private var permission: ShannonMediaPermission?
     @Environment(\.scenePhase) private var scenePhase
 
-    var body: some View {
+    public var body: some View {
         content(ShannonAppLookVisibleState.make(
             enabled: enabled, hasCamera: coordinator.hasCamera, permission: permission ?? coordinator.permission,
             othersPresent: othersPresent, isCapturing: coordinator.isCapturing

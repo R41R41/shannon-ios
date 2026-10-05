@@ -114,14 +114,19 @@ struct ShannonVoiceStatusBar: View {
     }
 }
 
-struct ShannonStateSheet: View {
+public struct ShannonStateSheet: View {
     let state: CompanionStateDTO?
     let face: ShannonFace
+
+    public init(state: CompanionStateDTO?, face: ShannonFace) {
+        self.state = state
+        self.face = face
+    }
 
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
 
-    var body: some View {
+    public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
 
         NavigationStack {

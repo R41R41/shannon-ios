@@ -46,6 +46,12 @@ extension ShannonDesktopRootView {
             Button("アプリアイコンを選ぶ") {
                 showsAppIconSettings = true
             }
+            Picker("アバター", selection: $chatAvatarStyleRawValue) {
+                ForEach(ShannonChatAvatarStyle.allCases, id: \.rawValue) { style in
+                    Text(style.japaneseName).tag(style.rawValue)
+                }
+            }
+            .help("トークでシャノンの返答の横に出すアイコンを切り替えます。Dock のアイコンは変わりません")
         }
 
         Section("Shannon Desk") {
