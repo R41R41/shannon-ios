@@ -17,8 +17,9 @@ final class ShannonVoiceWorkspaceState {
     var threadContext: ShannonVoiceThreadContext?
     var connectionRequestID: UUID?
     var typedMessage = ""
-    /// Owner text that failed to send and was put back into the composer; cleared from it when a friend joins.
-    var restoredFailedText: String?
+    /// The composer holds owner text that failed to send and was put back (edited or not); it is taken away when a
+    /// friend joins. A draft typed for the guests after that is not marked.
+    private(set) var typedMessageHoldsRestoredOwnerText = false
     /// The multiline composer revealed by the call screen's 文字 control.
     var showsTextComposer = false
     var showsInputPicker = false
@@ -46,6 +47,27 @@ final class ShannonVoiceWorkspaceState {
     var callScreenIsUp: Bool { !callScreenPresenters.isEmpty }
     func setCallScreen(_ presenter: UUID, isUp: Bool) {
         if isUp { callScreenPresenters.insert(presenter) } else { callScreenPresenters.remove(presenter) }
+    }
+
+    /// Text that failed to send goes back into the empty composer. In 本人だけ it is the owner's own text.
+    func restoreFailedText(_ text: String, participantMode: ShannonVoiceParticipantMode) {
+        guard typedMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        typedMessage = text
+        typedMessageHoldsRestoredOwnerText = participantMode == .owner
+        showsTextComposer = true
+    }
+
+    /// The composer was emptied (sent, or cleared by the owner): nothing of the restored text is left.
+    func typedMessageChanged() {
+        if typedMessage.isEmpty { typedMessageHoldsRestoredOwnerText = false }
+    }
+
+    /// Into 「友人も一緒」: restored owner text, edited or not, leaves the composer; his own new draft stays.
+    func participantModeChanged(to mode: ShannonVoiceParticipantMode) {
+        clearPhoto()
+        guard mode == .guest, typedMessageHoldsRestoredOwnerText else { return }
+        typedMessage = ""
+        typedMessageHoldsRestoredOwnerText = false
     }
 
     func clearPhoto() {

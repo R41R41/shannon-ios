@@ -137,12 +137,10 @@ public struct ShannonGeminiLiveVoiceView: View {
 #endif
         }
         .onChange(of: model.textSendState) {
-            guard workspace.typedMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  let failedText = model.textSendState.failedText else { return }
-            workspace.typedMessage = failedText
-            workspace.restoredFailedText = failedText
-            workspace.showsTextComposer = true
+            guard let failedText = model.textSendState.failedText else { return }
+            workspace.restoreFailedText(failedText, participantMode: model.participantMode)
         }
+        .onChange(of: workspace.typedMessage) { workspace.typedMessageChanged() }
     }
 
     private var statusPresentation: ShannonGeminiLiveStatusPresentation {

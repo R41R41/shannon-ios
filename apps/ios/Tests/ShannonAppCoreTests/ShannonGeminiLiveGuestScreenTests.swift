@@ -64,4 +64,55 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         XCTAssertTrue(model.mayShowReply(of: .guest))
         model.stop()
     }
+
+    /// The Mac's bar and the iPhone's composer both read `textSendState`: hidden owner text is never offered back.
+    func testAFailedGuestReplyNeverOffersTheOwnersHiddenTextBack() async {
+        let model = liveModel()
+        model.streamSpeech = { _, _ in throw Refused() }
+        model.performStreamingDelegation = { _, _, _, _ in throw Refused() }
+        model.appendUtterance(rawText: "明日の歯医者は何時？", text: "明日の歯医者は何時？", source: .typed)
+        model.switchParticipantMode(to: .guest, origin: .control)
+        model.beginResponse()
+        for _ in 0..<200 where model.responseTask != nil { try? await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertNil(model.textSendState.failedText, "the owner's question is not shown with 入力を再送")
+        XCTAssertEqual(model.pendingTurns.turns.count, 1, "it stays pending, to be answered")
+
+        // Text the guests typed is offered back as usual.
+        model.appendUtterance(rawText: "ミキです", text: "ミキです", source: .typed)
+        model.beginResponse()
+        for _ in 0..<200 where model.responseTask != nil { try? await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(model.textSendState.failedText, "ミキです")
+        model.stop()
+    }
+
+    func testTheIPhoneComposerLosesRestoredOwnerTextEditedOrNotWhenAFriendJoins() {
+        let workspace = ShannonVoiceWorkspaceState()
+        workspace.restoreFailedText("明日の歯医者は何時？", participantMode: .owner)
+        XCTAssertEqual(workspace.typedMessage, "明日の歯医者は何時？")
+        workspace.typedMessage += "あと保険証"
+        workspace.typedMessageChanged()
+        workspace.participantModeChanged(to: .guest)
+        XCTAssertEqual(workspace.typedMessage, "", "edited owner text leaves too")
+
+        // A draft he types for the guests stays; so does text restored in 「友人も一緒」.
+        workspace.typedMessage = "ミキさん、ようこそ"
+        workspace.typedMessageChanged()
+        workspace.participantModeChanged(to: .guest)
+        XCTAssertEqual(workspace.typedMessage, "ミキさん、ようこそ")
+        workspace.typedMessage = ""
+        workspace.typedMessageChanged()
+        workspace.restoreFailedText("よろしく", participantMode: .guest)
+        workspace.participantModeChanged(to: .guest)
+        XCTAssertEqual(workspace.typedMessage, "よろしく")
+
+        // Once the composer was emptied, nothing is marked any more.
+        workspace.typedMessage = ""
+        workspace.typedMessageChanged()
+        workspace.restoreFailedText("内緒", participantMode: .owner)
+        workspace.typedMessage = ""
+        workspace.typedMessageChanged()
+        workspace.typedMessage = "新しい下書き"
+        workspace.participantModeChanged(to: .guest)
+        XCTAssertEqual(workspace.typedMessage, "新しい下書き")
+    }
 }

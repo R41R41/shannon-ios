@@ -110,7 +110,7 @@ public struct ShannonDesktopVoiceCallBar: View {
             Task { await call.receiveLibraryPhoto(item) }
         }
         // A spoken switch to 「友人も一緒」 happens in the session: an unshared photo is cleared here too.
-        .onChange(of: session.participantMode) { workspace.clearPhoto() }
+        .onChange(of: session.participantMode) { workspace.participantModeChanged(to: session.participantMode) }
         // Her figure is not what the owner sees while one of these is over the window.
         .shannonCoversFigure(workspace.showsCamera || workspace.showsPhotoLibrary || importsPhotoFile || confirmsParticipant)
     }

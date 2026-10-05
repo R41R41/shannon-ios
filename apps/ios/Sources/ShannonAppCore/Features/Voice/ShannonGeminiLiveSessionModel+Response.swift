@@ -191,9 +191,11 @@ extension ShannonGeminiLiveSessionModel {
                 playbackLevel = 0
                 phase = .listening
                 errorMessage = responseDelivery.failureMessage
+                // Owner text heard before 「友人も一緒」 began stays hidden: it is never offered back for sending.
                 if responseDelivery.response == nil, !responseDelivery.keptSpokenPart, !responseDelivery.withheld,
-                   mayShowReply(of: mode),
-                   let text = batch.turns.last(where: { $0.source == .typed && !$0.isIntroductionCue })?.text {
+                   let text = batch.turns.last(where: {
+                       $0.source == .typed && !$0.isIntroductionCue && !pendingTurns.hiddenIDs.contains($0.id)
+                   })?.text {
                     textSendState = .failed(text: text, message: "入力を保持しています。次の発話にも引き継ぎます。")
                 }
             }
