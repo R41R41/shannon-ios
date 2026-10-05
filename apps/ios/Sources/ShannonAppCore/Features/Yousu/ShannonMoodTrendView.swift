@@ -124,17 +124,27 @@ struct ShannonMoodTrendPanel: View {
             .accessibilityAddTraits(.isHeader)
     }
 
+    private var hoursSelection: Binding<Int> {
+        Binding(get: { model.hours }, set: { hours in Task { await model.choose(hours: hours) } })
+    }
+
+    /// Inside the ようす list: on the Mac a segmented choice without an AppKit view (`ShannonSegmentedChoice`).
+    @ViewBuilder
     private var rangePicker: some View {
-        Picker(ShannonGeneratedStrings.yousuMoodTrendTitle, selection: Binding(
-            get: { model.hours },
-            set: { hours in Task { await model.choose(hours: hours) } }
-        )) {
+#if os(macOS)
+        ShannonSegmentedChoice(ShannonGeneratedStrings.yousuMoodTrendTitle, selection: hoursSelection, options: [
+            .init(ShannonGeneratedStrings.yousuMoodTrendRangeDay, value: 24),
+            .init(ShannonGeneratedStrings.yousuMoodTrendRangeWeek, value: 168),
+        ])
+#else
+        Picker(ShannonGeneratedStrings.yousuMoodTrendTitle, selection: hoursSelection) {
             Text(ShannonGeneratedStrings.yousuMoodTrendRangeDay).tag(24)
             Text(ShannonGeneratedStrings.yousuMoodTrendRangeWeek).tag(168)
         }
         .pickerStyle(.segmented)
         .labelsHidden()
         .fixedSize()
+#endif
     }
 
     private func quietLine(_ text: String) -> some View {

@@ -38,6 +38,9 @@ extension ShannonDesktopRootView {
                     openNotificationTarget()
                 }
                 restoreSelectedTaskIfAvailable()
+#if DEBUG
+                await runNavigationSmokeIfAsked()
+#endif
             }
             .task(id: connection.isConnected) {
                 guard connection.isConnected, !conversation.isDesignPreview else { return }

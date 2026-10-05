@@ -18,6 +18,7 @@ public final class ShannonBodyModel {
     private(set) var coversFromWords: Set<UUID> = []
     var sheetFromWordsIsUp: Bool { !coversFromWords.isEmpty }
     func setCoverFromWords(_ id: UUID, isUp: Bool) {
+        guard coversFromWords.contains(id) != isUp else { return }
         if isUp { coversFromWords.insert(id) } else { coversFromWords.remove(id) }
     }
     /// Other sheets, pickers and confirmations that a view opened over the window (`shannonCoversFigure`):
@@ -25,6 +26,8 @@ public final class ShannonBodyModel {
     private(set) var coversFromViews: Set<UUID> = []
     public var isCoveredByAView: Bool { !coversFromViews.isEmpty || sheetFromWordsIsUp }
     func setCoverFromView(_ id: UUID, isUp: Bool) {
+        // Only a real change is written: a write invalidates every view that reads the covers.
+        guard coversFromViews.contains(id) != isUp else { return }
         if isUp { coversFromViews.insert(id) } else { coversFromViews.remove(id) }
     }
     /// Her size and place in Talk after two fingers moved her; 「位置を戻す」 sets it back. Not kept across launches.

@@ -33,6 +33,7 @@
 		8C739CEFD0CB3C02CD2F77AB /* ShannonDesktopRootView+Sidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5EC8A187EA1E022F83C6B2F /* ShannonDesktopRootView+Sidebar.swift */; };
 		966666784C9BCE4AD1C4E145 /* ShannonDesktopArtifactComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58B326D72A3623822545B48 /* ShannonDesktopArtifactComponents.swift */; };
 		A038423C76CA62A66216D51C /* ShannonDesktopSidebarComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F73FD49591755A8E84E48DBB /* ShannonDesktopSidebarComponents.swift */; };
+		A166D918E3778310A6B0D019 /* ShannonDesktopNavigationSmoke.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0506D859207DF117F04C5C8 /* ShannonDesktopNavigationSmoke.swift */; };
 		A1C4A810A6B44940B77A0001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1C4A810A6B44940B77A0002 /* Assets.xcassets */; };
 		A8D403008F0E8FE507710903 /* ShannonDesktopNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76FD64993A41CFC50A310B5 /* ShannonDesktopNavigation.swift */; };
 		AA417BE3C593092C214C2998 /* ShannonDesktopWorkPagePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6531FCFB9988B05BEA12B2AC /* ShannonDesktopWorkPagePicker.swift */; };
@@ -97,6 +98,7 @@
 		CA7081EA2EDACFB28D8A1D7E /* ShannonDesktopConversationComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopConversationComponents.swift; path = Features/Talk/ShannonDesktopConversationComponents.swift; sourceTree = "<group>"; };
 		D76FD64993A41CFC50A310B5 /* ShannonDesktopNavigation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopNavigation.swift; path = Features/Shell/ShannonDesktopNavigation.swift; sourceTree = "<group>"; };
 		DF0C060C67D2AE17F17099DA /* ShannonDesktopArtifactDocument.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopArtifactDocument.swift; sourceTree = "<group>"; };
+		E0506D859207DF117F04C5C8 /* ShannonDesktopNavigationSmoke.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopNavigationSmoke.swift; path = Features/Shell/ShannonDesktopNavigationSmoke.swift; sourceTree = "<group>"; };
 		E1B0F4C380BA53227A6F8179 /* ShannonDesktopRootView+Actions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Actions.swift"; path = "Features/Shell/ShannonDesktopRootView+Actions.swift"; sourceTree = "<group>"; };
 		ED138C1D86162EB5236B0F6B /* ShannonDesktopSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopSupport.swift; sourceTree = "<group>"; };
 		F1C8367D77846D952AA2DDCD /* ShannonDesktopRootView+Work.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Work.swift"; path = "Features/Work/ShannonDesktopRootView+Work.swift"; sourceTree = "<group>"; };
@@ -178,6 +180,7 @@
 				548293668FAEC17E3E6765C3 /* ShannonDesktopComposerPhoto.swift */,
 				4607A5F0392D1329B988BE43 /* ShannonDesktopTalkEmptyAndNotice.swift */,
 				FC20519682304141A7B9BEDA /* ShannonDesktopWorkSearch.swift */,
+				E0506D859207DF117F04C5C8 /* ShannonDesktopNavigationSmoke.swift */,
 			);
 			path = ShannonDesk;
 			sourceTree = "<group>";
@@ -364,6 +367,7 @@
 				80C15648F6A9F8F62369F8B2 /* ShannonDesktopComposerPhoto.swift in Sources */,
 				E4CEE1526BDA991686C88CC0 /* ShannonDesktopTalkEmptyAndNotice.swift in Sources */,
 				044F5354608007BBC8C88DC0 /* ShannonDesktopWorkSearch.swift in Sources */,
+				A166D918E3778310A6B0D019 /* ShannonDesktopNavigationSmoke.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
