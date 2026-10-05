@@ -5,16 +5,24 @@ import UIKit
 import AppKit
 #endif
 
+/// Shannon's round icon. A face that carries a kind with a bundled icon shows that icon
+/// (owner decision 2026-10-05); every other face shows its face icon, as before.
 public struct ShannonAvatarView: View {
-    public let expression: ShannonExpressionDTO
+    public let face: ShannonFace
     public let size: CGFloat
 
     @Environment(\.colorScheme) private var colorScheme
 
-    public init(expression: ShannonExpressionDTO, size: CGFloat = 44) {
-        self.expression = expression
+    public init(face: ShannonFace, size: CGFloat = 44) {
+        self.face = face
         self.size = size
     }
+
+    public init(expression: ShannonExpressionDTO, size: CGFloat = 44) {
+        self.init(face: ShannonFace(expression: expression), size: size)
+    }
+
+    public var expression: ShannonExpressionDTO { face.expression }
 
     public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
@@ -34,17 +42,19 @@ public struct ShannonAvatarView: View {
             }
             .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.10), radius: size / 18, y: size / 36)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(expression.accessibilityDescription)
+            .accessibilityLabel(face.accessibilityDescription)
     }
 
     private var avatarImage: Image {
 #if canImport(UIKit)
-        if let image = ShannonExpressionAssets.uiImage(for: expression) {
+        if let image = ShannonExpressionAssets.uiImage(forAsset: ShannonExpressionAssets.assetName(for: face))
+            ?? ShannonExpressionAssets.uiImage(for: expression) {
             return Image(uiImage: image)
         }
         return Image(systemName: "person.crop.circle.fill")
 #elseif canImport(AppKit)
-        if let image = ShannonExpressionAssets.nsImage(for: expression) {
+        if let image = ShannonExpressionAssets.nsImage(forAsset: ShannonExpressionAssets.assetName(for: face))
+            ?? ShannonExpressionAssets.nsImage(for: expression) {
             return Image(nsImage: image)
         }
         return Image(systemName: "person.crop.circle.fill")
@@ -70,15 +80,19 @@ public enum ShannonChatAvatarStyle: String, CaseIterable, Sendable {
 }
 
 public struct ShannonChatAvatarView: View {
-    public let expression: ShannonExpressionDTO
+    public let face: ShannonFace
     public let size: CGFloat
 
     @AppStorage(ShannonChatAvatarStyle.storageKey) private var styleRawValue = ShannonChatAvatarStyle.expression.rawValue
     @Environment(\.colorScheme) private var colorScheme
 
-    public init(expression: ShannonExpressionDTO, size: CGFloat = 44) {
-        self.expression = expression
+    public init(face: ShannonFace, size: CGFloat = 44) {
+        self.face = face
         self.size = size
+    }
+
+    public init(expression: ShannonExpressionDTO, size: CGFloat = 44) {
+        self.init(face: ShannonFace(expression: expression), size: size)
     }
 
     public var body: some View {
@@ -96,7 +110,7 @@ public struct ShannonChatAvatarView: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("シャノン、2つ目のアイコン")
         } else {
-            ShannonAvatarView(expression: expression, size: size)
+            ShannonAvatarView(face: face, size: size)
         }
     }
 

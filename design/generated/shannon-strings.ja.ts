@@ -312,6 +312,32 @@ export const shannonStrings = {
   "yousu.moodTrend.summary": "気分の明るさは{valence}、元気さは{arousal}、心の開きは{openness}",
   "yousu.moodTrend.empty": "まだ記録がありません",
   "yousu.moodTrend.unreadable": "読めませんでした",
+  "emotion.kind.pride": "得意げ",
+  "emotion.kind.triumphant": "勝ちほこる",
+  "emotion.kind.competitive": "負けず嫌い",
+  "emotion.kind.mischievous": "いたずらっぽい",
+  "emotion.kind.plotting": "たくらみ顔",
+  "emotion.kind.teasing": "からかう",
+  "emotion.kind.playful": "おどける",
+  "emotion.kind.affectionate": "好き",
+  "emotion.kind.attentionSeeking": "かまって",
+  "emotion.kind.lightPossessive": "ちょっと独占したい",
+  "emotion.kind.gratitude": "感謝",
+  "emotion.kind.sulky": "すねている",
+  "emotion.kind.cuteAngry": "ぷんぷん",
+  "emotion.kind.seriousAnger": "本気で怒っている",
+  "emotion.kind.frustrated": "悔しい",
+  "emotion.kind.lonely": "さみしい",
+  "emotion.kind.leftOut": "仲間はずれ",
+  "emotion.kind.disappointed": "がっかり",
+  "emotion.kind.hurt": "傷ついた",
+  "emotion.kind.lamenting": "しょんぼり",
+  "emotion.kind.anxious": "不安",
+  "emotion.kind.panic": "あわてている",
+  "emotion.kind.speechless": "絶句",
+  "emotion.kind.helpless": "お手上げ",
+  "emotion.kind.deadpan": "真顔",
+  "emotion.kind.giggle": "くすくす",
 } as const;
 
 export type ShannonStringKey = keyof typeof shannonStrings;
@@ -963,6 +989,110 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   "yousu.moodTrend.unreadable": {
     "decided": "2026-10-05",
     "windowsBefore": "読めませんでした"
+  },
+  "emotion.kind.pride": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.triumphant": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.competitive": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.mischievous": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.plotting": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.teasing": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.playful": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.affectionate": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.attentionSeeking": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.lightPossessive": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.gratitude": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.sulky": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.cuteAngry": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.seriousAnger": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.frustrated": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.lonely": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.leftOut": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.disappointed": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.hurt": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.lamenting": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.anxious": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.panic": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.speechless": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.helpless": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.deadpan": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
+  },
+  "emotion.kind.giggle": {
+    "decided": "2026-10-05",
+    "windowsBefore": "（無い）"
   }
 };
 

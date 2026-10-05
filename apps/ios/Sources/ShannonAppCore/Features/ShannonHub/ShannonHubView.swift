@@ -99,7 +99,7 @@ struct ShannonHubView: View {
             showsYousu = true
         } label: {
             HStack(alignment: .center, spacing: ShannonSpacing.medium) {
-                ShannonAvatarView(expression: moodFace?.expression ?? .neutral, size: 56)
+                ShannonAvatarView(face: moodFace ?? ShannonFace(expression: .neutral), size: 56)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                     Text(ShannonGeneratedStrings.navNow)

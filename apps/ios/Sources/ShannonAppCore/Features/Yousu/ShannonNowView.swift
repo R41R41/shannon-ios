@@ -142,7 +142,7 @@ public struct ShannonNowView: View {
 
     private func feelingCard(palette: ShannonPalette, moodFace: ShannonFace?, presentFace: ShannonFace?, lingering: [String]) -> some View {
         HStack(alignment: .center, spacing: ShannonSpacing.large) {
-            ShannonAvatarView(expression: (presentFace ?? moodFace)?.expression ?? .neutral, size: 64)
+            ShannonAvatarView(face: presentFace ?? moodFace ?? ShannonFace(expression: .neutral), size: 64)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                 Text(moodFace?.japaneseName ?? ShannonGeneratedStrings.yousuMoodUnknown)

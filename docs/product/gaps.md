@@ -4,6 +4,8 @@
 
 > **2026-10-05 追記**: W5 とそのあとの決定で、行が 7 つ増えた（`tasks.needs-owner`、`voice.wake-name`、`yousu.mood-history`、`yousu.mood-trend`、`body.touch-parts`、`study.tools`、`folder.tools`）。機能は 141 件、遅れている所は 126 か所（同じ日に気分の推移を iPhone に入れて 125）。Windows の `tasks.hold-to-confirm` と `notifications.badge` が閉じた。作らないもの（「同調率」「判断の内訳」）は `feature-matrix.json` の `notBuilding`。
 
+> **2026-10-05 追記（気持ちの種類のアイコン）**: 所有者の決定で `talk.emotion-kind-icons` が増えた（iPhone と Mac はある、Windows は予定）。機能は 142 件、遅れている所は 126 か所。
+
 2026-10-03。Apple 側は `c40a65e`（main）のコード、Windows 側は同じ日に読んだ `shannon-desktop`（VM の `~/handoff/shannon-desktop-src.zip`）から。画面は動かしていない（ビルドもシミュレーターも使っていない）。コードと文書を読んだ結果。
 
 機能ごとの細かい状態は [`feature-matrix.md`](feature-matrix.md)（127 件）。ここは、そのうち所有者の目に入るずれを、目立つ順にまとめたもの。

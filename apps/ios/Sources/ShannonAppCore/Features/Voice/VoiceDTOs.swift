@@ -247,6 +247,8 @@ public struct ShannonVoicePlanDTO: Codable, Equatable, Sendable {
     /// The face of the emotion this turn's voice acts with. Text, so a newer server's value never fails decoding.
     public var expression: String? = nil
     public var feeling: String? = nil
+    /// The kind beside the face (2026-10-05); absent in a guest call and from older servers.
+    public var kind: String? = nil
 
     public init(
         shouldRespond: Bool,
@@ -462,7 +464,7 @@ public struct ShannonVoiceTurnEmotionDTO: Codable, Equatable, Sendable {
 public extension ShannonVoicePlanDTO {
     /// Nil from a server that predates the face, or for a face this build does not know.
     var face: ShannonFace? {
-        expression.flatMap(ShannonExpressionDTO.init(rawValue:)).map { ShannonFace(expression: $0, feelingName: feeling) }
+        expression.flatMap(ShannonExpressionDTO.init(rawValue:)).map { ShannonFace(expression: $0, feelingName: feeling, kindName: kind) }
     }
 
     var turnEmotion: ShannonVoiceTurnEmotionDTO {

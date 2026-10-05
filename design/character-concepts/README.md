@@ -49,7 +49,11 @@ The selected A design was converted into three square, circular-crop-safe chat a
 
 Shared icon prompt: preserve the canonical identity anchors, use a centered head-and-tiny-shoulders composition, enlarge the face and eyes, simplify costume and hair details, use bold clean outlines and low-noise cel shading, and keep every identity feature inside a circular-crop safe area.
 
-## Production expression set
+## Production expression set (2026-10-05)
+
+By the owner's decision of 2026-10-05 the chat icons were redrawn: Shannon as her Live2D design, drawn in the style of the earlier icons, generated with gpt-image-2.5-sunburst. All 22 faces share one framing (head and shoulders, centred) on an opaque pale lavender canvas, and are bundled at 768×768 as `apps/ios/Sources/ShannonAppCore/Resources/shannon-expression-<face>.png`. 26 emotion kinds may have an icon of their own in the same framing, `shannon-emotion-<kind>.png` (the list is `ShannonEmotionKindIcon.swift`); the apps show it when the reply's `messageEmotion.kind` has one and the face otherwise. At display time the apps replace only the canvas joined to the picture's edge with white (`ShannonPortraitBackground.swift`), so pale colours in her hair are kept.
+
+## Earlier production expression set (until 2026-10-05)
 
 `02-icon-chibi-lavender` was selected as the production chat-avatar master. The neutral master and seven identity-preserving expression edits are bundled in:
 

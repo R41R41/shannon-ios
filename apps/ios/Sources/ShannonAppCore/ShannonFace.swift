@@ -10,24 +10,34 @@ public enum ShannonFeelingDTO: String, CaseIterable, Equatable, Sendable {
 }
 
 /// What the owner sees of Shannon's feeling: one of the 22 faces plus, for the
-/// borrowed ones, the feeling's own name. iPhone and Mac read every name from
-/// here; no screen keeps its own table.
+/// borrowed ones, the feeling's own name, and the reply's own kind when it has an
+/// icon (2026-10-05). iPhone and Mac read every name from here; no screen keeps its
+/// own table.
 public struct ShannonFace: Equatable, Sendable {
     public let expression: ShannonExpressionDTO
     public let feeling: ShannonFeelingDTO?
+    /// The reply's own feeling when this build shows an icon for it; nil shows the face icon.
+    public let kind: ShannonEmotionKindIcon?
 
-    public init(expression: ShannonExpressionDTO, feeling: ShannonFeelingDTO? = nil) {
+    public init(expression: ShannonExpressionDTO, feeling: ShannonFeelingDTO? = nil, kind: ShannonEmotionKindIcon? = nil) {
         self.expression = expression
         self.feeling = feeling
+        self.kind = kind
     }
 
-    /// An unknown feeling name from a newer server falls back to the face's own name.
-    public init(expression: ShannonExpressionDTO, feelingName: String?) {
-        self.init(expression: expression, feeling: feelingName.flatMap(ShannonFeelingDTO.init(rawValue:)))
+    /// An unknown feeling name from a newer server falls back to the face's own name; an unknown
+    /// kind, or one whose icon is not bundled, falls back to the face.
+    public init(expression: ShannonExpressionDTO, feelingName: String?, kindName: String? = nil) {
+        self.init(
+            expression: expression,
+            feeling: feelingName.flatMap(ShannonFeelingDTO.init(rawValue:)),
+            kind: ShannonEmotionKindIcon.displayed(kindName)
+        )
     }
 
+    /// The name of what the icon shows: the kind's while its icon is shown, else the face's.
     public var japaneseName: String {
-        feeling?.japaneseName ?? expression.japaneseName
+        kind?.japaneseName ?? feeling?.japaneseName ?? expression.japaneseName
     }
 
     /// Reads as 「シャノン、得意げ」. The name is not followed by 「表情」: several names
@@ -82,7 +92,7 @@ public extension ShannonExpressionDTO {
 }
 
 public extension ShannonMessageEmotionDTO {
-    var face: ShannonFace { ShannonFace(expression: expression, feelingName: feeling) }
+    var face: ShannonFace { ShannonFace(expression: expression, feelingName: feeling, kindName: kind) }
 }
 
 public extension ConversationMessage.EmotionSnapshot {
@@ -93,11 +103,14 @@ public extension ConversationMessage.EmotionSnapshot {
             openness: emotion.openness,
             expression: emotion.expression,
             feeling: emotion.face.feeling,
+            kind: emotion.kind,
             stateVersion: stateVersion
         )
     }
 
-    var face: ShannonFace { ShannonFace(expression: expression, feeling: feeling) }
+    var face: ShannonFace {
+        ShannonFace(expression: expression, feeling: feeling, kind: ShannonEmotionKindIcon.displayed(kind))
+    }
 }
 
 /// 「いま」 as the server presents it at read time: the conversational feeling

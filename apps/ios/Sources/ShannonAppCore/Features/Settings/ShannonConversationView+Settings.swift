@@ -185,7 +185,7 @@ extension ShannonConversationView {
             showsStateDetails = true
         } label: {
             HStack(spacing: ShannonSpacing.medium) {
-                ShannonChatAvatarView(expression: model.presentFace.expression, size: 56)
+                ShannonChatAvatarView(face: model.presentFace, size: 56)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(ShannonGeneratedStrings.appName)
                         .font(.shannon(.title3).weight(.semibold))

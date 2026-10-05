@@ -48,6 +48,26 @@ public struct ShannonMessageEmotionDTO: Codable, Equatable, Sendable {
     /// Name of a core feeling that borrows `expression`'s face. Kept as text so an
     /// unknown value from a newer server never fails decoding; read it through `face`.
     public var feeling: String? = nil
+    /// The reply's own emotion kind (`SHANNON_EMOTION_KINDS`), absent from servers before 2026-10-05 and when
+    /// the face comes from the quiet mood. Text, read through `face`: an unknown name shows the face.
+    public var kind: String? = nil
+}
+
+extension ShannonMessageEmotionDTO {
+    private enum CodingKeys: String, CodingKey {
+        case valence, arousal, openness, expression, feeling, kind
+    }
+
+    /// `feeling` and `kind` are optional names: a value that is not text is read as absent, never as a failed reply.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        valence = try container.decode(Double.self, forKey: .valence)
+        arousal = try container.decode(Double.self, forKey: .arousal)
+        openness = try container.decode(Double.self, forKey: .openness)
+        expression = try container.decode(ShannonExpressionDTO.self, forKey: .expression)
+        feeling = (try? container.decodeIfPresent(String.self, forKey: .feeling)) ?? nil
+        kind = (try? container.decodeIfPresent(String.self, forKey: .kind)) ?? nil
+    }
 }
 
 public struct UserFactDTO: Codable, Equatable, Identifiable, Sendable {

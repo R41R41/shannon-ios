@@ -128,7 +128,7 @@ struct ShannonStateSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: ShannonSpacing.extraLarge) {
                     HStack(spacing: ShannonSpacing.large) {
-                        ShannonAvatarView(expression: face.expression, size: 72)
+                        ShannonAvatarView(face: face, size: 72)
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(face.japaneseName)

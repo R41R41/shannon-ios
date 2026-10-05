@@ -7,7 +7,7 @@ extension ShannonDesktopRootView {
     var sidebar: some View {
         VStack(spacing: 0) {
             HStack(spacing: ShannonDesktopSpacing.small) {
-                ShannonAvatarView(expression: conversation.currentExpression, size: 28)
+                ShannonAvatarView(face: conversation.currentFace, size: 28)
                 Text("シャノン")
                     .font(.shannonDesktop(.headline))
                 Spacer()

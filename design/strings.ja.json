@@ -2257,6 +2257,189 @@
       "decided": "2026-10-05",
       "windowsNow": "読めませんでした",
       "note": "記録が読めなかったとき（500・429・届かない・読み取れない）。区画と切り替えは残し、次に開いたときに読み直す。403・404 のときは区画を出さない。"
+    },
+    {
+      "key": "emotion.kind.pride",
+      "text": "得意げ",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）",
+      "note": "トークのアイコンの、気持ちの種類の名前（読み上げと、名前の横の文字）。所有者の決定（2026-10-05）: 表情アイコンは 22 の表情のほかに、この 26 の種類に自分の絵を持つ。返事の messageEmotion.kind に絵があればそれを、無ければ表情の絵を出す。key の最後は SHANNON_EMOTION_KINDS の名前（packages/cognition/src/types.ts）。Windows は予定（feature-matrix の talk.emotion-kind-icons）。"
+    },
+    {
+      "key": "emotion.kind.triumphant",
+      "text": "勝ちほこる",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.competitive",
+      "text": "負けず嫌い",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.mischievous",
+      "text": "いたずらっぽい",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.plotting",
+      "text": "たくらみ顔",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.teasing",
+      "text": "からかう",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.playful",
+      "text": "おどける",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.affectionate",
+      "text": "好き",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.attentionSeeking",
+      "text": "かまって",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.lightPossessive",
+      "text": "ちょっと独占したい",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.gratitude",
+      "text": "感謝",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.sulky",
+      "text": "すねている",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.cuteAngry",
+      "text": "ぷんぷん",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.seriousAnger",
+      "text": "本気で怒っている",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.frustrated",
+      "text": "悔しい",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.lonely",
+      "text": "さみしい",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.leftOut",
+      "text": "仲間はずれ",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.disappointed",
+      "text": "がっかり",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.hurt",
+      "text": "傷ついた",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.lamenting",
+      "text": "しょんぼり",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.anxious",
+      "text": "不安",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.panic",
+      "text": "あわてている",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.speechless",
+      "text": "絶句",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.helpless",
+      "text": "お手上げ",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.deadpan",
+      "text": "真顔",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
+    },
+    {
+      "key": "emotion.kind.giggle",
+      "text": "くすくす",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "（無い）"
     }
   ]
 }

@@ -9,13 +9,13 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 
 ## 件数
 
-機能は全部で 141 件。
+機能は全部で 142 件。
 
 | 画面 | ○ ある | △ 一部 | × ない | — 当てはまらない | 予定 | ？ 不明 |
 |---|---:|---:|---:|---:|---:|---:|
-| iOS | 117 | 3 | 9 | 10 | 2 | 0 |
-| macOS | 64 | 20 | 41 | 4 | 12 | 0 |
-| Windows | 68 | 21 | 41 | 6 | 4 | 1 |
+| iOS | 118 | 3 | 9 | 10 | 2 | 0 |
+| macOS | 65 | 20 | 41 | 4 | 12 | 0 |
+| Windows | 68 | 21 | 41 | 6 | 5 | 1 |
 
 ## 構成（入口）（`structure`）
 
@@ -51,6 +51,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `talk.source-attribution` | **出典の表示** 調べて答えた返事に、出典を付ける。 | ○ | ○ | ○ |
 | `talk.generated-artifacts` | **作ってくれた文書を開く** シャノンが返事と一緒に作った文書を開いて読む。 | ○ | ○ | △ |
 | `talk.feeling-face` | **返事の横の表情** 返事ごとのシャノンの気持ちを、表情で出す。 | ○ | ○ | △ |
+| `talk.emotion-kind-icons` | **気持ちの種類のアイコン** 返事の気持ちの種類（messageEmotion.kind）に自分の絵があれば、表情の絵の代わりにそれを出す。26 の種類（得意げ、勝ちほこる、かまって、すねている など）。絵が無い種類は表情の絵のまま。名前は strings.ja.json の emotion.kind.*。所有者の決定（2026-10-05）。Live2D の体は変えない（33 の表情のまま）。 | ○ | ○ | 予定 |
 | `talk.feeling-strength` | **気持ちの強さが文字の会話にも出る** 文字の返事にも、気持ちの強さと続き方が反映される（サーバー側）。 | ○ | ○ | ？ |
 | `talk.capture-lines` | **返事の下の「覚えました・約束にしました」** その回に覚えたこと・約束にしたことを 1 行で出し、開く・取り消すができる。約束の知らせには「完了にする／あとで」。 | ○ | ○ | × |
 | `talk.memory-recall-cue` | **思い出しているしるし** 記憶を探している間、そのことを待ちの表示で伝える。 | ○ | ○ | △ |
@@ -69,6 +70,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `talk.attachments` macOS（△）: 文章・Markdown・コードのファイルを 4 件まで。写真は添付できない。
 - `talk.generated-artifacts` Windows（△）: 折りたたみの中に本文を出すだけ。
 - `talk.feeling-face` Windows（△）: 身体の窓は Live2D の顔で出す。管理画面のトークには表情が無い。
+- `talk.emotion-kind-icons` Windows（予定）: ブランチ `未定`。サーバーは messageEmotion.kind を返す（docs/chat-stream-contract.md）。絵は Apple 側の Resources/shannon-emotion-<kind>.png と同じものを使い、名前は emotion.kind.* を読む。それまでは表情のまま（kind を知らなくても表情は正しい）。
 - `talk.feeling-strength` iOS（○）: サーバーと認知の変更。画面の変更は無い。
 - `talk.feeling-strength` macOS（○）: サーバーと認知の変更。画面の変更は無い。
 - `talk.feeling-strength` Windows（？）: サーバー側の変更なので、Windows でも返事の表情に出るはずだが、ブランチが入ってから確かめる。
@@ -354,7 +356,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 |---|---|:-:|:-:|:-:|
 | `settings.appearance` | **外観（システム・ライト・ダーク）** アプリの明るさを選ぶ。 | ○ | ○ | ○ |
 | `settings.app-icon` | **アプリアイコンを選ぶ** アプリのアイコンを選ぶ。 | ○ | ○ | × |
-| `settings.avatar-style` | **トークのアバターの種類** 返事の横のアイコンを、表情の絵にするかなどを選ぶ。 | ○ | × | × |
+| `settings.avatar-style` | **トークのアバターの種類** 返事の横のアイコンを、表情の絵にするかなどを選ぶ。「表情アイコン」の絵は 2026-10-05 に替えた（Live2D の姿のシャノンを前のアイコンの絵柄で描いた 22 の表情。所有者の決定）。気持ちの種類に絵があるときは、その絵を出す（talk.emotion-kind-icons）。 | ○ | × | × |
 | `settings.voice-provider` | **声の種類** 読み上げと音声会話の声を、Gemini と ElevenLabs から選ぶ。 | ○ | △ | ○ |
 | `settings.calendar-sharing` | **カレンダーの予定をシャノンに伝える** これから 14 日ぶんの予定を、シャノンに伝える。切にすると、送った予定を消す。 | ○ | ○ | × |
 | `settings.world-subscriptions` | **情報源** シャノンが読む情報源の候補と試し読みを見て、購読を決める。 | ○ | ○ | × |

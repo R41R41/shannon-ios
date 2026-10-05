@@ -509,6 +509,34 @@
       }
     },
     {
+      "id": "talk.emotion-kind-icons",
+      "area": "talk",
+      "title": "気持ちの種類のアイコン",
+      "description": "返事の気持ちの種類（messageEmotion.kind）に自分の絵があれば、表情の絵の代わりにそれを出す。26 の種類（得意げ、勝ちほこる、かまって、すねている など）。絵が無い種類は表情の絵のまま。名前は strings.ja.json の emotion.kind.*。所有者の決定（2026-10-05）。Live2D の体は変えない（33 の表情のまま）。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift#ShannonEmotionKindIcon",
+            "apps/ios/Sources/ShannonAppCore/ShannonAvatarView.swift#ShannonFace",
+            "apps/ios/Sources/ShannonAppCore/ShannonFace.swift#kindName"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopConversationComponents.swift#emotionSnapshot?.face",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift#currentFace"
+          ]
+        },
+        "windows": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "サーバーは messageEmotion.kind を返す（docs/chat-stream-contract.md）。絵は Apple 側の Resources/shannon-emotion-<kind>.png と同じものを使い、名前は emotion.kind.* を読む。それまでは表情のまま（kind を知らなくても表情は正しい）。"
+        }
+      }
+    },
+    {
       "id": "talk.feeling-strength",
       "area": "talk",
       "title": "気持ちの強さが文字の会話にも出る",
@@ -3093,12 +3121,13 @@
       "id": "settings.avatar-style",
       "area": "settings",
       "title": "トークのアバターの種類",
-      "description": "返事の横のアイコンを、表情の絵にするかなどを選ぶ。",
+      "description": "返事の横のアイコンを、表情の絵にするかなどを選ぶ。「表情アイコン」の絵は 2026-10-05 に替えた（Live2D の姿のシャノンを前のアイコンの絵柄で描いた 22 の表情。所有者の決定）。気持ちの種類に絵があるときは、その絵を出す（talk.emotion-kind-icons）。",
       "surfaces": {
         "ios": {
           "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+            "apps/ios/Sources/ShannonAppCore/ShannonAvatarView.swift#ShannonChatAvatarStyle"
           ]
         },
         "macos": {

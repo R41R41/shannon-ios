@@ -165,7 +165,7 @@ struct ShannonMessageRow: View {
         VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
             HStack(alignment: .center, spacing: ShannonSpacing.extraSmall) {
                 ShannonChatAvatarView(
-                    expression: message.emotionSnapshot?.expression ?? .neutral,
+                    face: message.emotionSnapshot?.face ?? ShannonFace(expression: .neutral),
                     size: 42
                 )
 

@@ -37,7 +37,7 @@ struct DesktopMessageView: View {
         } else {
             VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: ShannonDesktopSpacing.small) {
-                    ShannonAvatarView(expression: message.emotionSnapshot?.expression ?? .neutral, size: 28)
+                    ShannonAvatarView(face: message.emotionSnapshot?.face ?? ShannonFace(expression: .neutral), size: 28)
                     Text("シャノン")
                         .font(.shannonDesktop(.callout).weight(.semibold))
                     Text((message.emotionSnapshot?.face ?? ShannonFace(expression: .neutral)).japaneseName)

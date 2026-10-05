@@ -71,6 +71,7 @@
     "talk.dialogue-mode windows partial",
     "talk.dictation macos no",
     "talk.dictation windows no",
+    "talk.emotion-kind-icons windows planned",
     "talk.feeling-face windows partial",
     "talk.feeling-strength windows unknown",
     "talk.generated-artifacts windows partial",

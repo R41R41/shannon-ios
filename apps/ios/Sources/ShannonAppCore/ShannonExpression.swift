@@ -10,21 +10,25 @@ extension ShannonExpressionDTO {
         "shannon-expression-\(rawValue)"
     }
 
-    /// The original eight assets have a little more shoulder room than the new
-    /// chat-first portraits, so give them a small, safe crop without losing the neck.
+    /// The face icons of 2026-10-05 (and the kind icons that join them) share one framing, so no face is
+    /// cropped more than another. The earlier set needed 1.10 for its eight oldest pictures.
     var avatarScale: CGFloat {
-        switch self {
-        case .joyful, .curious, .tender, .calm, .concerned, .sad, .sleepy, .neutral:
-            1.10
-        default:
-            1.0
-        }
+        1.0
     }
 }
 
 enum ShannonExpressionAssets {
     static func url(for expression: ShannonExpressionDTO) -> URL? {
-        Bundle.module.url(forResource: expression.assetName, withExtension: "png")
+        url(forAsset: expression.assetName)
+    }
+
+    static func url(forAsset name: String) -> URL? {
+        Bundle.module.url(forResource: name, withExtension: "png")
+    }
+
+    /// The picture of a face: the kind's own icon when the face carries one (only bundled kinds do), else the face's.
+    static func assetName(for face: ShannonFace) -> String {
+        face.kind?.assetName ?? face.expression.assetName
     }
 
 #if canImport(UIKit)
@@ -35,18 +39,40 @@ enum ShannonExpressionAssets {
     }()
 
     static func uiImage(for expression: ShannonExpressionDTO) -> UIImage? {
-        let key = expression.assetName as NSString
+        uiImage(forAsset: expression.assetName)
+    }
+
+    static func uiImage(forAsset name: String) -> UIImage? {
+        let key = name as NSString
         if let cached = whiteBackgroundCache.object(forKey: key) { return cached }
-        guard let source = UIImage(named: expression.assetName, in: .module, compatibleWith: nil)
-            ?? url(for: expression).flatMap({ UIImage(contentsOfFile: $0.path) }),
-              let rendered = source.replacingPaleEdgeColorWithWhite() else { return nil }
-        whiteBackgroundCache.setObject(rendered, forKey: key)
-        return rendered
+        guard let source = (UIImage(named: name, in: .module, compatibleWith: nil)
+            ?? url(forAsset: name).flatMap({ UIImage(contentsOfFile: $0.path) }))?.cgImage,
+              let rendered = ShannonPortraitBackground.whitened(source) else { return nil }
+        let image = UIImage(cgImage: rendered, scale: 1, orientation: .up)
+        whiteBackgroundCache.setObject(image, forKey: key)
+        return image
     }
 #elseif canImport(AppKit)
+    nonisolated(unsafe) private static let whiteBackgroundCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 24
+        return cache
+    }()
+
     static func nsImage(for expression: ShannonExpressionDTO) -> NSImage? {
-        guard let url = url(for: expression) else { return nil }
-        return NSImage(contentsOf: url)
+        nsImage(forAsset: expression.assetName)
+    }
+
+    /// The Mac shows the same icons as the iPhone, on the same white canvas.
+    static func nsImage(forAsset name: String) -> NSImage? {
+        let key = name as NSString
+        if let cached = whiteBackgroundCache.object(forKey: key) { return cached }
+        guard let source = url(forAsset: name).flatMap(NSImage.init(contentsOf:))?
+            .cgImage(forProposedRect: nil, context: nil, hints: nil),
+              let rendered = ShannonPortraitBackground.whitened(source) else { return nil }
+        let image = NSImage(cgImage: rendered, size: NSSize(width: rendered.width, height: rendered.height))
+        whiteBackgroundCache.setObject(image, forKey: key)
+        return image
     }
 #endif
 }
@@ -58,45 +84,3 @@ enum ShannonDialogueAssets {
         Bundle.module.url(forResource: stagePortraitName, withExtension: "png")
     }
 }
-
-#if canImport(UIKit)
-private extension UIImage {
-    /// Generated portraits use a pale lavender canvas. Normalize that canvas to
-    /// pure white at display time while preserving blue hair, skin, and outlines.
-    func replacingPaleEdgeColorWithWhite() -> UIImage? {
-        let outputSide = 384
-        let bytesPerPixel = 4
-        let bytesPerRow = outputSide * bytesPerPixel
-        var pixels = [UInt8](repeating: 0, count: outputSide * bytesPerRow)
-        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB), let source = cgImage else { return nil }
-        let rendered = pixels.withUnsafeMutableBytes { buffer -> CGImage? in
-            guard let context = CGContext(
-                data: buffer.baseAddress,
-                width: outputSide,
-                height: outputSide,
-                bitsPerComponent: 8,
-                bytesPerRow: bytesPerRow,
-                space: colorSpace,
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ) else { return nil }
-            context.interpolationQuality = .high
-            context.draw(source, in: CGRect(x: 0, y: 0, width: outputSide, height: outputSide))
-            for index in stride(from: 0, to: buffer.count, by: bytesPerPixel) {
-                let red = Int(buffer[index])
-                let green = Int(buffer[index + 1])
-                let blue = Int(buffer[index + 2])
-                let isPaleLavender = red > 210 && green > 198 && blue > 220
-                    && blue >= red - 6 && blue >= green + 5
-                if isPaleLavender {
-                    buffer[index] = 255
-                    buffer[index + 1] = 255
-                    buffer[index + 2] = 255
-                }
-            }
-            return context.makeImage()
-        }
-        guard let rendered else { return nil }
-        return UIImage(cgImage: rendered, scale: 1, orientation: .up)
-    }
-}
-#endif
