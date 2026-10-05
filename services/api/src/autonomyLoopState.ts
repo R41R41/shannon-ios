@@ -13,7 +13,7 @@ import { AutonomyLoopSessions, type SessionEndCode } from './autonomyLoopSession
  * the same transaction that writes its activity-record entry and its cost. A step a
  * crash left `planned` or `authorized` is closed as `abandoned` and never run again.
  */
-export type AutonomyStepKind = 'think' | 'read' | 'notion' | 'note' | 'draft' | 'revise' | 'show' | 'put_away' | 'copy' | 'look' | 'reach_out' | 'jot' | 'rest';
+export type AutonomyStepKind = 'think' | 'read' | 'notion' | 'note' | 'draft' | 'revise' | 'show' | 'put_away' | 'copy' | 'look' | 'reach_out' | 'jot' | 'rest' | 'tool';
 export type AutonomyStepStatus = 'planned' | 'authorized' | 'reported' | 'refused' | 'abandoned';
 /** What the loop process last said about itself; the API reads it to describe the loop to the owner. */
 export type AutonomyLoopReadiness = 'ready' | 'disabled' | 'no_credential';
@@ -44,6 +44,9 @@ export interface AutonomyPlannedStep {
   minutes?: number;
   /** For `rest`: the bound that ended the session, when it was not her own decision. */
   forced?: Exclude<SessionEndCode, 'rest'>;
+  /** For `tool`: the registry name (`shannonTools.ts`) and its input, as her thinking wrote them; checked again when it runs. */
+  tool?: string;
+  input?: Readonly<Record<string, string | number | boolean>>;
 }
 
 export interface AutonomyLoopCycle {

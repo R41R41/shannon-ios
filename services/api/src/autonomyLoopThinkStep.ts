@@ -12,6 +12,7 @@ import { salvagedModelObject, thinkingPrompt, type ThinkingExtras } from './auto
 import { phoneThinking, withPhone, type PhoneThinking } from './autonomyLoopPhoneStep.js';
 import { reachOutsRemaining } from './autonomyLoopReachOutStep.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
+import { offeredOwnTools, toolThinking } from './autonomyLoopToolStep.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
 import { STUDY_LIMITS, STUDY_STATUS_LABEL } from './studyStore.js';
 
@@ -142,7 +143,13 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
     } : {}),
     ...(owned ? { ownerContext: owned.section } : {}),
   } : base;
-  const priced = (reserveYen?: number) => paidCall(dependencies, cycle.scopeKey, 'planning', thinkingPrompt(materials, extrasWith(reserveYen)), session ? loop.sessionThinkOutputTokens : OUTPUT_TOKENS);
+  // Her registry tools, and what her last calls returned (`autonomyLoopToolStep.ts`); none while they are switched off.
+  const tooling = toolThinking(dependencies, cycle);
+  const withTools = (extras: ThinkingExtras | null): ThinkingExtras | null => (tooling ? {
+    ...(extras ?? { rules: [] }), actions: `${extras?.actions ?? ''}${tooling.actions}`, examples: `${extras?.examples ?? ''}${tooling.examples}`,
+    sections: [...(extras?.sections ?? []), ...tooling.sections], ownTools: true,
+  } : extras);
+  const priced = (reserveYen?: number) => paidCall(dependencies, cycle.scopeKey, 'planning', thinkingPrompt(materials, withTools(extrasWith(reserveYen))), session ? loop.sessionThinkOutputTokens : OUTPUT_TOKENS);
   // In a session she is told what the gate reserves for a thought: the estimate of this very prompt, priced once without that line.
   const first = priced();
   const estimated = first && session ? priced(first.estimatedCostYen) : first;
@@ -194,6 +201,7 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
         call: phone?.offered ? { upcoming: Boolean(materials.reachOut) && (materials.upcoming?.length ?? 0) > 0 } : null,
         ...(again ? { followUp: rethink.followUp, chainLook: rethink.chainLook, jot: rethink.jot } : {}),
         ...(session ? { session: true } : {}), ...(owned ? { secrets: owned.secrets } : {}),
+        ...(tooling ? { tools: offeredOwnTools(dependencies).map(tool => tool.name) } : {}),
       });
       const words = again ? 'さっき起きたことを見て、考え直しました。' : '次に何をするか考えました。';
       // A thought with no step at all: nothing she named could be done, or she named nothing.
@@ -205,6 +213,8 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
         outcome: 'done', usage, ...(code ? { reasonCode: noted(code) } : {}),
         summary: thought.text ? `${words}「${thought.text}」` : words,
         commit: (_remaining, commitAt) => {
+          // What her last calls returned has been in front of her: it is not given again.
+          dependencies.toolResults?.clear(cycle.id);
           const retry = unplannable && maximumSteps > 0 ? thinkAgain(salvaged ? ['reply.truncated'] : thought.asked === 0 ? ['reply.empty'] : thought.dropped) : null;
           // A thought that is about to be thought again changes nothing in her ledger: the next one decides.
           for (const change of retry ? [] : thought.pursuits) {

@@ -4,6 +4,7 @@ import { AUTONOMY_JOT_MAXIMUM_CHARACTERS } from './autonomyLoopObservePrompts.js
 import { carriesSecret } from './autonomyLoopOwnerContext.js';
 import { AUTONOMY_REST_REASON_MAXIMUM_CHARACTERS } from './autonomyLoopSessions.js';
 import type { AutonomyPlannedStep } from './autonomyLoopState.js';
+import { plannedToolStep } from './autonomyLoopToolStep.js';
 import { REACH_OUT_REASONS, type PromptNote, type PromptUpcoming, type ReachOutReason, type ThinkingMaterials } from './autonomyLoopPrompts.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import { STUDY_REACTION_LABEL, STUDY_STATUS_LABEL, type StudyPiece } from './studyStore.js';
@@ -40,7 +41,7 @@ export interface ReasonedThought extends Thought {
 }
 
 /** The actions a thinking reply may name. */
-export const PLANNABLE_ACTIONS = ['read', 'notion', 'note', 'draft', 'revise', 'ready', 'put_away', 'copy', 'look', 'follow_up', 'jot', 'reach_out', 'call'] as const;
+export const PLANNABLE_ACTIONS = ['read', 'notion', 'note', 'draft', 'revise', 'ready', 'put_away', 'copy', 'look', 'follow_up', 'jot', 'reach_out', 'call', 'tool'] as const;
 
 export function storyNotes(store: SQLiteAutonomyStore, scopeKey: string, pursuitId?: string, limit = 6, own = false): PromptNote[] {
   // What she wrote down after an unanswered message is for her own thinking (`own`), never material for a story or a message.
@@ -114,6 +115,8 @@ export function reasonedPlan(
     jot?: boolean;
     /** In a session `rest` is a step of its own: it closes the session and says when she comes back. */
     session?: boolean;
+    /** The registry tools she may call as steps (`autonomyLoopToolStep.ts`); absent or empty, `tool` is not taken. */
+    tools?: readonly string[];
     /**
      * Words that must reach nobody but the owner, when her thinking was given his context. Free text of hers that repeats
      * a run of them is dropped: an idea, an aim, a note, a search, a pursuit, her reason for resting. Present (also when
@@ -189,6 +192,10 @@ export function reasonedPlan(
       const reason = REACH_OUT_REASONS.find(value => value === item?.reason) as ReachOutReason | undefined;
       if (!reason || (reason === 'saw' && !steps.some(step => step.kind === 'look')) || (reason === 'upcoming' && !bounds.call.upcoming)) return 'incomplete';
       steps.push({ kind: 'reach_out', reason, call: true });
+    } else if (action === 'tool' && bounds.tools?.length) {
+      const planned = plannedToolStep(item, bounds.tools, value => !carriesSecret(value, bounds.secrets));
+      if (typeof planned === 'string') return planned;
+      steps.push(planned);
     } else if (action === 'reach_out' && bounds.reachOut && !steps.some(step => step.kind === 'reach_out')) {
       // One in a plan, with a reason from the closed set. `saw` needs the look of this plan before it; `upcoming` needs an item to be about.
       const reason = REACH_OUT_REASONS.find(value => value === item?.reason) as ReachOutReason | undefined;

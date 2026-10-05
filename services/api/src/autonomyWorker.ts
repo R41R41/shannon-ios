@@ -1,3 +1,5 @@
+import { AutonomyToolResults } from './autonomyLoopToolStep.js';
+import { ownToolsEnabled } from './shannonToolSession.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { SQLiteAutonomyAnnouncer } from './autonomyAnnouncer.js';
 import { configuredAwakeClock } from './autonomyAwakeClock.js';
@@ -110,6 +112,8 @@ const loop = new ShannonAutonomyLoop({
   showing, now, looks, ...(notion ? { notion } : {}),
   reachOuts, phone, upcoming: { lines: (scopeKey, at, present) => ownerUpcoming.upcoming.loopLines(scopeKey, at, present) }, observer,
   ...(ownerContext ? { ownerContext: ownerContext.context } : {}),
+  // Her tools over her study and her folder (owner decision 2026-10-05); SHANNON_OWN_TOOLS=off offers none and every prompt is what it was.
+  ...(ownToolsEnabled() ? { toolResults: new AutonomyToolResults() } : {}),
   // Content-free: a step kind and a closed reason code.
   log: line => console.log(`Shannon autonomy step: ${line.replace(/[^a-z0-9_:., -]/giu, '_').slice(0, 300)}`),
 });

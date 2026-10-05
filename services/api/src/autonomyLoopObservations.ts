@@ -25,7 +25,7 @@ export type ReachOutCallOutcome = typeof REACH_OUT_CALL_OUTCOMES[number];
 export const OBSERVED_REACH_OUT_REASONS = ['share', 'wonder', 'upcoming', 'saw', 'follow_up'] as const;
 export type ObservedReachOutReason = typeof OBSERVED_REACH_OUT_REASONS[number];
 
-export const OBSERVED_STEP_KINDS = ['think', 'read', 'notion', 'note', 'draft', 'revise', 'show', 'put_away', 'copy', 'look', 'reach_out', 'jot', 'rest'] as const;
+export const OBSERVED_STEP_KINDS = ['think', 'read', 'notion', 'note', 'draft', 'revise', 'show', 'put_away', 'copy', 'look', 'reach_out', 'jot', 'rest', 'tool'] as const;
 export type ObservedStepKind = typeof OBSERVED_STEP_KINDS[number];
 
 /** What followed one message of hers. */

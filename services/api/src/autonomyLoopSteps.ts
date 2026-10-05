@@ -16,6 +16,7 @@ import { storyNotes, withNoteAfterReading } from './autonomyLoopPlan.js';
 import { AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, revisePrompt } from './autonomyLoopPrompts.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import { prepareThinking } from './autonomyLoopThinkStep.js';
+import { prepareToolStep, type AutonomyToolResults } from './autonomyLoopToolStep.js';
 import type { AutonomyModelPurpose } from './autonomyModels.js';
 import { AUTONOMY_CALL_DOMAIN, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
 import type { AutonomyPublicReader } from './autonomyReader.js';
@@ -63,6 +64,8 @@ export interface StepDependencies {
   observer?: AutonomyReachOutObserver;
   /** The owner's context for her thinking, her writing and her messages (owner decisions 2026-10-02, ADR-0003); absent, or switched off in `loop`, no prompt carries it. */
   ownerContext?: AutonomyOwnerContext;
+  /** Her registry tools in her own time, with what they returned until her next thought; absent, no tool is offered. */
+  toolResults?: AutonomyToolResults;
   /** A line for the service log. Only closed codes are ever passed: never a word of a prompt or a reply. */
   log?: (line: string) => void;
   /** The loop's clock, read while a step waits. */
@@ -152,6 +155,7 @@ export function prepareStep(dependencies: StepDependencies, cycle: AutonomyLoopC
       : step.reason === 'follow_up' ? prepareFollowUp(dependencies, cycle, step, at) : prepareReachOut(dependencies, cycle, step, at);
     case 'jot': return prepareJot(dependencies, cycle, step, at);
     case 'rest': return prepareRest(dependencies, cycle, step);
+    case 'tool': return prepareToolStep(dependencies, cycle, step);
     default: return null;
   }
 }

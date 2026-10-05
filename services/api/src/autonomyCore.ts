@@ -160,6 +160,21 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/autonomyHostFolderDesk.ts',
     'services/api/src/autonomyLoopFolderStep.ts',
     'services/api/src/apiAutonomyHostStepRoutes.ts',
+    // Her tools (Syzygy ADR-0003 stage 1): the one registry, the one gate entry, the runner, the executors over her study and
+    // her folder, the v2 folder operations and their device results, the step of her own time, and the conversation's offer
+    // (the function-calling rounds are in the response path).
+    'services/api/src/shannonTools.ts',
+    'services/api/src/shannonToolGate.ts',
+    'services/api/src/shannonToolInput.ts',
+    'services/api/src/shannonToolTypes.ts',
+    'services/api/src/shannonToolRunner.ts',
+    'services/api/src/shannonToolSession.ts',
+    'services/api/src/shannonStudyTools.ts',
+    'services/api/src/shannonFolderTools.ts',
+    'services/api/src/hostFolderOperations.ts',
+    'services/api/src/hostFolderOperationsStore.ts',
+    'services/api/src/hostFolderOperationResults.ts',
+    'services/api/src/autonomyLoopToolStep.ts',
     // Looking at the room in her own time: the gated step, the look it opens, and the model call charged to her budget.
     'services/api/src/autonomyLoopLookStep.ts',
     'services/api/src/bodyLookActivity.ts',
@@ -217,6 +232,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/chatSentenceSplitter.ts',
     'services/api/src/serverChatSentenceStream.ts',
     'services/api/src/chatModelTurn.ts',
+    'services/api/src/chatModelTools.ts',
     'services/api/src/chatModelStream.ts',
     'services/api/src/chatModelVoiceStream.ts',
     'services/api/src/spokenSentences.ts',
