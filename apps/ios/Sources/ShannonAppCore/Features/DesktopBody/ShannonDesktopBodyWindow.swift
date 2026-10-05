@@ -272,15 +272,19 @@ final class ShannonDesktopBodyWindowController {
         }
     }
 
-    /// The window goes while a press lasts: a carry ends where she is; the page is told nothing more.
+    /// The window goes while a press lasts: a carry ends where she is, and a press the page holds is released there
+    /// (with a release made from the press), so that no touch of the page stays held.
     private func endPress() {
         holdTask?.cancel()
-        heldDown = nil
-        for case let .endCarry(durationMs) in carry.cancel(time: ProcessInfo.processInfo.systemUptime) {
-            NSCursor.pop()
-            savePlace()
-            body?.carried(durationMs: durationMs)
+        let down = heldDown
+        let release = down.flatMap { down in
+            NSEvent.mouseEvent(
+                with: .leftMouseUp, location: down.locationInWindow, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: down.windowNumber, context: nil, eventNumber: down.eventNumber, clickCount: down.clickCount, pressure: 0)
         }
+        let effects = carry.cancel(time: ProcessInfo.processInfo.systemUptime)
+        if let release { apply(effects, event: release) }
+        heldDown = nil
     }
 }
 #endif
