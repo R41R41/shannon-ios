@@ -220,6 +220,30 @@ describe('her study in Aether', () => {
     expect(store.study.get(scope, id)).not.toBeNull();
   });
 
+  it('treats a document the owner moved out of her folder as gone: nothing of it is adopted, and the piece stays in her trash', async () => {
+    const { fake, call, store, get, clock } = await harness();
+    const created = await call('study.create', { kind: 'story', title: '灯台の話', body: STORY });
+    const id = /id: ([0-9a-f-]{36})/u.exec(created.text)![1]!;
+    const document = fake.inFolder()[0]!;
+    store.study.markReady(scope, id, clock.at);
+    // The owner moves it into one of his projects and rewrites it there: Aether answers 200 with inShannonFolder false.
+    fake.ownerEdit(document.id, { projectIds: ['project_owner'], body: 'ライ氏の仕事の本文。' });
+    for (const path of [`/v1/autonomy/study/pieces/${document.id}`, `/v1/autonomy/study/pieces/${id}`]) {
+      expect((await get(path)).status).toBe(404);
+    }
+    expect(store.study.find(scope, id, true)!.deletedAt).toBeDefined();
+    expect(store.study.versions(scope, id).map(version => version.body)).toEqual([STORY]);
+    // Her tools and the overview do not bring it back either, and restoring says who can.
+    expect((await call('study.list', {})).text).not.toContain(id);
+    expect(((await get('/v1/autonomy/study')).body as { pieces: unknown[] }).pieces).toEqual([]);
+    expect(await call('study.restore', { id })).toMatchObject({ ok: false, failure: 'refused', text: expect.stringContaining('フォルダの外') });
+    expect(store.study.find(scope, id, true)!.deletedAt).toBeDefined();
+    expect(JSON.stringify(store.study.versions(scope, id))).not.toContain('ライ氏の仕事');
+    // Moved back into her folder: it comes back out of her trash at the next read.
+    fake.ownerEdit(document.id, { projectIds: ['project_shannon_folder'] });
+    expect((await get(`/v1/autonomy/study/pieces/${id}`)).status).toBe(200);
+  });
+
   it('keeps the owner\'s reaction keyed by the Aether document and version he read', async () => {
     const { fake, call, store, post, clock } = await harness();
     const created = await call('study.create', { kind: 'story', title: '灯台の話', body: STORY });

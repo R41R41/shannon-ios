@@ -80,13 +80,19 @@ export class StudyAether {
     this.store.study.aether.nameFeedbackDocument(scopeKey, piece.id, write.documentId);
   }
 
-  /** The whole document (in parts of at most 20,000 characters), up to `STUDY_AETHER_SYNC.readCharacters`. */
+  /**
+   * The whole document (in parts of at most 20,000 characters), up to `STUDY_AETHER_SYNC.readCharacters`. A document that is no
+   * longer in 「シャノン用フォルダ」 (the owner moved it out) is, for her study, gone exactly like a deleted one: `NOT_FOUND`, and
+   * nothing of its text is kept, adopted, or taken out of her trash.
+   */
   async readWhole(documentId: string, signal?: AbortSignal): Promise<AetherDocument> {
     let document = await this.access.read({ documentId, offset: 0 }, signal);
+    if (!document.inShannonFolder) throw new AetherAccessError('NOT_FOUND');
     let body = document.body;
     let read = [...body].length;
     while (document.hasMore && read < STUDY_AETHER_SYNC.readCharacters) {
       const next = await this.access.read({ documentId, offset: read }, signal);
+      if (!next.inShannonFolder) throw new AetherAccessError('NOT_FOUND');
       if (next.version !== document.version || !next.body) throw new AetherAccessError('STALE_VERSION');
       body += next.body;
       read += [...next.body].length;
@@ -96,8 +102,8 @@ export class StudyAether {
   }
 
   /**
-   * One piece as Aether has it now: a newer Aether version becomes her next local version; a document deleted there puts
-   * the piece in her trash, and one the owner restored takes it back out.
+   * One piece as Aether has it now: a newer Aether version becomes her next local version; a document deleted there, or
+   * moved out of her folder, puts the piece in her trash, and one the owner restored (in her folder) takes it back out.
    */
   async refresh(scopeKey: string, pieceId: string, signal?: AbortSignal): Promise<'current' | 'changed' | 'deleted' | 'unlinked'> {
     const link = this.link(scopeKey, pieceId);

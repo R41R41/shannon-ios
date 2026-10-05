@@ -233,7 +233,7 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string, ae
       if (!found.deletedAt) return toolOk('ゴミ箱には入っていない。');
       // A piece that lives in Aether comes back only once the owner restored it there (the sync before this call takes it back out).
       if (aether?.link(context.scopeKey, found.id)) {
-        return toolFailure('refused', 'Aetherの「最近削除した項目」に入っている。戻せるのはライ氏だけ。', { retryable: false, refusal: { why: 'Aetherで消したものは、ライ氏がiPhoneで戻す', wouldWork: 'ライ氏に戻してもらう（戻ると書斎にも戻る）' } });
+        return toolFailure('refused', 'Aetherで消されたか、シャノン用フォルダの外に移されている。戻せるのはライ氏だけ。', { retryable: false, refusal: { why: 'Aetherで消されたものは「最近削除した項目」から、フォルダの外に移されたものはフォルダに戻すことで、ライ氏が戻す', wouldWork: 'ライ氏に戻してもらう（戻ると書斎にも戻る）' } });
       }
       if (found.kind === 'story' && (found.status === 'draft' || found.status === 'ready') && openStories(store, context.scopeKey) >= STUDY_LIMITS.openStories) {
         return toolFailure('limit', `書きかけの物語が${STUDY_LIMITS.openStories}本あって、戻せない。`, { retryable: false, refusal: { why: '書きかけの物語の上限', wouldWork: 'どれかをしまってから' } });
