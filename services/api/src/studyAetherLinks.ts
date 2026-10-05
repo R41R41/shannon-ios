@@ -87,7 +87,12 @@ export class StudyAetherLinks {
 
   /** Every scope that has a piece in her study (for the migration). */
   scopes(): readonly string[] {
-    return (this.database.prepare('SELECT DISTINCT scope_key FROM study_pieces ORDER BY scope_key').all() as unknown as Array<{ scope_key: string }>).map(row => row.scope_key);
+    return studyScopes(this.database);
+  }
+
+  /** Every piece of a scope as the migration plans it (`studyMigrationRows`), with no cap. */
+  migrationRows(scopeKey: string): readonly StudyMigrationRow[] {
+    return studyMigrationRows(this.database, scopeKey);
   }
 
   /** The newest link of every piece that lives in Aether. */
@@ -199,6 +204,43 @@ export class StudyAetherLinks {
       INSERT INTO study_piece_versions (scope_key, piece_id, version, title, body, change_note, model, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
     `).run(scopeKey, pieceId, version, title, body, changeNote, at);
   }
+}
+
+/** What the migration needs of one piece: metadata and the length of its current body, never the body. */
+export interface StudyMigrationRow {
+  pieceId: string; kind: 'story' | 'note'; title: string; characters: number; status: 'draft' | 'ready' | 'shown' | 'put_away';
+  readableVersion: number | null; origin: 'room_look' | 'reach_out' | null; deleted: boolean; documentId: string | null;
+}
+
+/**
+ * The scopes of her study, read without changing anything: a database that predates the study answers none. Works on a
+ * read-only connection (`readOnlyMigrationPlan`): it creates no table and adds no column.
+ */
+export function studyScopes(database: DatabaseSync): readonly string[] {
+  if (!hasTable(database, 'study_pieces')) return [];
+  return (database.prepare('SELECT DISTINCT scope_key FROM study_pieces ORDER BY scope_key').all() as unknown as Array<{ scope_key: string }>).map(row => row.scope_key);
+}
+
+/** Every piece of a scope, newest change first, read without changing anything; columns and tables added later may be absent. */
+export function studyMigrationRows(database: DatabaseSync, scopeKey: string): readonly StudyMigrationRow[] {
+  if (!hasTable(database, 'study_pieces')) return [];
+  const columns = new Set((database.prepare(`PRAGMA table_info('study_pieces')`).all() as unknown as Array<{ name: string }>).map(column => column.name));
+  const links = hasTable(database, 'study_aether_links');
+  const rows = database.prepare(`
+    SELECT p.piece_id, p.kind, p.title, length(p.body) AS characters, p.status, p.readable_version,
+      ${columns.has('origin') ? 'p.origin' : 'NULL'} AS origin, ${columns.has('deleted_at') ? 'p.deleted_at' : 'NULL'} AS deleted_at,
+      ${links ? `(SELECT l.document_id FROM study_aether_links l WHERE l.scope_key = p.scope_key AND l.piece_id = p.piece_id ORDER BY l.version DESC LIMIT 1)` : 'NULL'} AS document_id
+    FROM study_pieces p WHERE p.scope_key = ? ORDER BY p.updated_at DESC, p.piece_id
+  `).all(scopeKey) as unknown as Array<{ piece_id: string; kind: 'story' | 'note'; title: string; characters: number; status: StudyMigrationRow['status']; readable_version: number | null; origin: string | null; deleted_at: string | null; document_id: string | null }>;
+  return Object.freeze(rows.map(row => Object.freeze({
+    pieceId: row.piece_id, kind: row.kind, title: row.title, characters: Number(row.characters), status: row.status,
+    readableVersion: row.readable_version === null ? null : Number(row.readable_version),
+    origin: row.origin === 'room_look' || row.origin === 'reach_out' ? row.origin : null, deleted: row.deleted_at !== null, documentId: row.document_id,
+  })));
+}
+
+function hasTable(database: DatabaseSync, name: string): boolean {
+  return Boolean(database.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name));
 }
 
 /** The change note of a version that came from Aether rather than from a revision of hers. */

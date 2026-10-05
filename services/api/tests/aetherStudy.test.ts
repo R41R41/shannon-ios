@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -16,7 +17,7 @@ import { conversationTools, type ConversationToolServer } from '../src/shannonTo
 import { toolSessionMemory } from '../src/shannonToolTypes.js';
 import type { ToolAudience, ToolSurface } from '../src/shannonTools.js';
 import { AETHER_SIDE_CHANGE } from '../src/studyAetherLinks.js';
-import { applyMigration, migrationPlan, migrationReport } from '../src/studyMigration.js';
+import { applyMigration, migrationPlan, migrationReport, readOnlyMigrationPlan } from '../src/studyMigration.js';
 import type { StudyPiece } from '../src/studyStore.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/turnDeadline.js';
 import { FakeAether, TOKEN } from './fakeAetherServer.js';
@@ -383,6 +384,33 @@ describe('her own time with Aether', () => {
 });
 
 describe('moving her study to Aether', () => {
+  it('plans the dry run through a read-only connection that changes nothing, with every piece and no body', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'shannon-migration-'));
+    directories.push(directory);
+    // A database from before the study's Aether tables (and before its later columns).
+    const path = join(directory, 'old.sqlite');
+    const old = new DatabaseSync(path);
+    old.exec(`CREATE TABLE study_pieces (scope_key TEXT, piece_id TEXT, kind TEXT, title TEXT, body TEXT, status TEXT, version INTEGER,
+      readable_version INTEGER, pursuit_id TEXT, sources_json TEXT, created_at TEXT, updated_at TEXT, shown_at TEXT, put_away_by TEXT)`);
+    const insert = old.prepare(`INSERT INTO study_pieces VALUES ('owner', ?, ?, ?, ?, ?, 1, ?, NULL, '[]', 'x', ?, NULL, NULL)`);
+    for (let index = 0; index < 520; index += 1) insert.run(`p${index}`, 'note', `メモ${index}`, 'ひみつの本文', 'ready', 1, String(index).padStart(4, '0'));
+    insert.run('s1', 'story', '灯台の話', STORY, 'draft', null, '9999');
+    const schema = () => old.prepare(`SELECT name, sql FROM sqlite_master ORDER BY name`).all();
+    const before = JSON.stringify(schema());
+    old.close();
+    const plan = readOnlyMigrationPlan(path);
+    expect([...plan.keys()]).toEqual(['owner']);
+    expect(plan.get('owner')).toHaveLength(521);
+    expect(plan.get('owner')![0]).toMatchObject({ pieceId: 's1', kind: 'story', characters: [...STORY].length, shown: false, target: 'study' });
+    expect(migrationReport('owner', plan.get('owner')!)).not.toContain('ひみつの本文');
+    const after = new DatabaseSync(path, { readOnly: true });
+    expect(JSON.stringify(after.prepare(`SELECT name, sql FROM sqlite_master ORDER BY name`).all())).toBe(before);
+    after.close();
+    // A path with no database is not created.
+    expect(() => readOnlyMigrationPlan(join(directory, 'none.sqlite'))).toThrow();
+    expect(existsSync(join(directory, 'none.sqlite'))).toBe(false);
+  });
+
   it('shows the owner what moves, as metadata only, then moves it once and keeps the mapping', async () => {
     const { fake, access, store, clock, call } = await harness();
     const story = store.study.create(scope, { kind: 'story', title: '灯台の話', body: STORY }, clock.at) as StudyPiece;

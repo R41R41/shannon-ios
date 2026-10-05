@@ -1,8 +1,10 @@
+import { DatabaseSync } from 'node:sqlite';
 import { SHANNON_AUTONOMY_SYSTEM_DOMAIN } from '@shannon/cognition';
 import { aetherErrorCode, type AetherAccess } from './aetherAccess.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import { studyWriteKey } from './studyAether.js';
-import { STUDY_KIND_LABEL, STUDY_STATUS_LABEL, type StudyPiece, type StudyPieceKind, type StudyPieceStatus } from './studyStore.js';
+import { studyMigrationRows, studyScopes, type StudyMigrationRow } from './studyAetherLinks.js';
+import { STUDY_KIND_LABEL, STUDY_STATUS_LABEL, type StudyPieceKind, type StudyPieceStatus } from './studyStore.js';
 
 /**
  * Moving her study to Aether (Syzygy ADR-0007, revised 2026-10-06, owner decision): her stories go to 「シャノンの書斎」
@@ -33,14 +35,32 @@ export interface StudyMigrationItem {
   documentId?: string;
 }
 
+/** The plan of a scope, every piece (no cap), through the open store (`--apply`). */
 export function migrationPlan(store: SQLiteAutonomyStore, scopeKey: string): readonly StudyMigrationItem[] {
-  return Object.freeze(store.study.list(scopeKey, 500, 'include').map((piece: StudyPiece) => {
-    const link = store.study.aether.current(scopeKey, piece.id);
-    const note = link ? 'moved' as const : piece.origin ?? (piece.deletedAt ? 'trash' as const : undefined);
-    const target: StudyMigrationTarget = piece.origin || (piece.deletedAt && !link) ? 'stays' : piece.kind === 'story' ? 'study' : 'shannon_folder';
+  return planOf(store.study.aether.migrationRows(scopeKey));
+}
+
+/**
+ * The dry run: the plan of every scope (or one), read through a read-only connection. Nothing is created, added or written,
+ * also in a database that predates the study's Aether tables; the body of a piece is never read, only its length.
+ */
+export function readOnlyMigrationPlan(path: string, scopeKey?: string): ReadonlyMap<string, readonly StudyMigrationItem[]> {
+  const database = new DatabaseSync(path, { readOnly: true });
+  try {
+    const scopes = scopeKey ? [scopeKey] : studyScopes(database);
+    return new Map(scopes.map(scope => [scope, planOf(studyMigrationRows(database, scope))]));
+  } finally {
+    database.close();
+  }
+}
+
+function planOf(rows: readonly StudyMigrationRow[]): readonly StudyMigrationItem[] {
+  return Object.freeze(rows.map(row => {
+    const note = row.documentId ? 'moved' as const : row.origin ?? (row.deleted ? 'trash' as const : undefined);
+    const target: StudyMigrationTarget = row.origin || (row.deleted && !row.documentId) ? 'stays' : row.kind === 'story' ? 'study' : 'shannon_folder';
     return Object.freeze({
-      pieceId: piece.id, kind: piece.kind, title: piece.title, characters: [...piece.body].length, status: piece.status,
-      shown: piece.readableVersion !== null, target, ...(note ? { note } : {}), ...(link ? { documentId: link.documentId } : {}),
+      pieceId: row.pieceId, kind: row.kind, title: row.title, characters: row.characters, status: row.status,
+      shown: row.readableVersion !== null, target, ...(note ? { note } : {}), ...(row.documentId ? { documentId: row.documentId } : {}),
     });
   }).sort((left, right) => order(left) - order(right)));
 }
