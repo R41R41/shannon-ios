@@ -7,10 +7,11 @@ import Foundation
 /// - One switch at a time. The page chains to the latest choice itself, but two `setBody` calls in flight can make it
 ///   load two models (each holds a large texture), so nothing more is asked while a request is pending; a choice
 ///   made meanwhile is asked for when the page says which body it shows.
-/// - The page ignores, without a word, a `setBody` for the body it already shows, and its own mending of a lost
-///   drawing surface may bring back the body it had before a switch. So a request is never trusted for ever: one
-///   that is not answered within `deadlineSeconds` of foreground time ends in a reload in the chosen body; and after
-///   the surface came back the shown body is asked again (see `contextRestored`).
+/// - The page of 10:43 answers every `setBody` with `body` and says the body in `contextRestored`. An earlier page
+///   ignored a `setBody` for the body it showed and could bring back the body it had before a switch when it mended
+///   a lost surface. So a request is never trusted for ever: one that is not answered within `deadlineSeconds` of
+///   foreground time ends in a reload in the chosen body; and a `contextRestored` without a body is followed by
+///   asking for the chosen body again (see `contextRestored`).
 struct ShannonLive2DBodySwitch: Equatable, Sendable {
     /// Foreground seconds a switch may take. A switch builds a model from what the page has already read (the first
     /// load, which also reads the 27 MB of assets, took about a minute on a busy simulator), so this is generous;

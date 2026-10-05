@@ -11,11 +11,11 @@ one shared `WKWebView`.
 | | |
 | --- | --- |
 | Location | `apps/ios/Sources/ShannonAppCore/Live2D/embed/` (copied as a folder: `.copy("Live2D")` in `apps/ios/Package.swift`) |
-| `version` | `0.1.0+202610050955` |
-| `builtAt` | `2026-10-05T09:55:22.225Z` |
-| `modelUpdatedAt` | `2026-10-05T06:58:16.654Z` (the character is the model of the build of 07:01. Bundled 2026-10-05 by the owner's decision to take her eyes alone. Against the build of 07:01: `assets.js` gains the eyes model (`model-eyes/`: moc3, one 2048×2048 texture, 34 motions), `embed.js` and `live2d/live2d.js` gain `setBody`, and `README.md` documents it; `embed.html`, `embed.css` and the Cubism Core are byte-identical) |
-| Size | about 27.9 MB, of which `assets.js` is 27.1 MB (the character's model and its two textures, 4096×4096 and 2048×2048, and the eyes' model, texture and motions, as base64); about 16.2 MB zipped. The build of 07:01 was 20.5 MB (14.6 MB zipped): the app grows by about 7.4 MB installed and 1.5 MB to download |
-| sha256 | `assets.js` `da4fdd2e…5bd0bc`, `embed.js` `c3c07c8a…405aff`, `live2d/live2d.js` `2276bc44…405694`, `version.json` `6b6c3eb3…932b5f`, `README.md` `ef9d522d…e0cb3b` (every file was checked against the delivered folder when it was copied) |
+| `version` | `0.1.0+202610051043` |
+| `builtAt` | `2026-10-05T10:43:15.089Z` |
+| `modelUpdatedAt` | `2026-10-05T06:58:16.654Z` (the character is the model of the build of 07:01. Bundled 2026-10-05 by the owner's decision to take her eyes alone. Against the build of 07:01: `assets.js` gains the eyes model (`model-eyes/`: moc3, one 2048×2048 texture, 34 motions), `embed.js` and `live2d/live2d.js` gain `setBody`, and `README.md` documents it; `embed.html`, `embed.css` and the Cubism Core are byte-identical. The build of 10:43 (zip sha256 `c50fb2d0…15e3fb`), approved by the owner the same day, replaces the one of 09:55: only `embed.js`, `README.md` and `version.json` differ. `setBody` now always answers `body`, also for the body already shown, and a rebuilt drawing surface uses the latest requested body and says it in `contextRestored`) |
+| Size | about 27.9 MB (27,893,898 bytes), of which `assets.js` is 27.1 MB (the character's model and its two textures, 4096×4096 and 2048×2048, and the eyes' model, texture and motions, as base64); about 16.2 MB zipped. The build of 07:01 was 20.5 MB (14.6 MB zipped): the app grows by about 7.4 MB installed and 1.5 MB to download |
+| sha256 | `assets.js` `da4fdd2e…5bd0bc`, `embed.js` `29634c5d…c29d55`, `live2d/live2d.js` `2276bc44…405694`, `version.json` `72f5f498…b1b875`, `README.md` `b5516402…8d76c9` (every file was checked against the delivered folder when it was copied) |
 | Licence note | `apps/ios/Sources/ShannonAppCore/Live2D/NOTICE.txt` |
 
 `ShannonBodyTests.testTheEmbedPageIsBundledAsAFolderWithItsFilesInPlace` checks that the files are in the
@@ -90,19 +90,20 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
   meanwhile is asked for once, when `body` arrives. `ready` carries `bodies` and `body`: if the shown body and the
   chosen one differ, the stage asks then. Faces, mood and phase carry over in the page; after a switch the app closes
   the character's mouth and says the layout and the calm again (`ShannonLive2DBodyPolicy.commandsAfterSwitch`).
-- A request is never kept for ever. The page ignores, without a word, `setBody` for the body it already shows, so a
-  wrong belief about the shown body could otherwise hold every later choice. A pending request is forgotten on
+- A request is never kept for ever. The page of 10:43 answers every `setBody` with `body`, also for the body it already
+  shows; an earlier page (09:55) ignored such a call without a word, and a wrong belief about the shown body could then
+  hold every later choice. The stage keeps the fallback for any page that does not answer. A pending request is forgotten on
   `body`, `ready` and a release (an error's reload included), and one that is not answered within 30 seconds of
   foreground time (`ShannonLive2DBodySwitch.deadlineSeconds`; shorter than the 90 seconds of a load, since a switch
   only builds a model from what the page has already read) ends in `recover()`, which reloads the page in the chosen
   body.
 - A lost drawing surface: the page's own mending may bring back the body it had before a switch, after `body` was
   already sent. While the surface is lost nothing is asked and no time counts; a choice made then is held. On
-  `contextRestored` the pending request is forgotten. The page of 09:55 does not say which body it shows then, so the
-  chosen body is asked again as a confirmation: a page that shows another switches and says `body`; one that shows it
-  stays silent, and when the 30 seconds run out that body is taken as shown (no reload) and a choice made meanwhile
-  is asked for. A page that adds `body` to `contextRestored` (asked of the page's thread, 2026-10-05) settles it at
-  once, without the confirmation.
+  `contextRestored` the pending request is forgotten. The page of 10:43 rebuilds the surface with the latest requested
+  body and says it in `contextRestored` (`body`), which settles the question at once; the stage then asks for the
+  chosen body if it differs. A page that does not say it (09:55) is asked for the chosen body again as a
+  confirmation: a page that shows another switches and says `body`; one that shows it and stays silent has that body
+  taken as shown when the 30 seconds run out (no reload), and a choice made meanwhile is asked for then.
 - `bodies`: before the page is loaded, the bundled page's (`version.json` lists `model-eyes/`); after `ready`, the
   page's own (none named means the character only). A body the page does not have is never asked for, its choice is
   shown as 人の姿, and 体 is not offered.

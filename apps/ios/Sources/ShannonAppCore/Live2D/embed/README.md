@@ -51,7 +51,7 @@ webView.loadFileURL(folder.appendingPathComponent("embed.html"), allowingReadAcc
 | `setFrameRate(fps)` | 1 秒あたりに描くコマ数の上限（15〜60）。0 か省略で、画面のコマ数どおり。省電力のときは 30 にすると、描く量が半分になる。 |
 | `setTouchEnabled(true / false)` | 触れるようにするか。 |
 | `setFrameStats(true / false)` | 1 秒あたりのコマ数を、5 秒おきに知らせるか（既定は切）。 |
-| `setBody('human' / 'eyes')` | 体を選ぶ。`human` = 人の姿、`eyes` = 目だけ（水色の目が 2 つだけのシャノン。iOS の Waterlight Eye と同じ動き）。初めての体は読み終えるまで前の体のまま、切り替わると `body` が届く。表情・気分・会話の様子は引き継ぐ。最初から目だけで始めるときは `embed.html?body=eyes` を開く（`loading` もその体の分で進む）。 |
+| `setBody('human' / 'eyes')` | 体を選ぶ。`human` = 人の姿、`eyes` = 目だけ（水色の目が 2 つだけのシャノン。iOS の Waterlight Eye と同じ動き）。初めての体は読み終えるまで前の体のまま、切り替わると `body` が届く（もう出している体を頼んでも、必ず `body` が届く）。表情・気分・会話の様子は引き継ぐ。最初から目だけで始めるときは `embed.html?body=eyes` を開く（`loading` もその体の分で進む）。 |
 | `version` | `{ version, builtAt, modelUpdatedAt }`。 |
 
 ### 目だけの体（`eyes`）のとき
@@ -72,7 +72,7 @@ webView.loadFileURL(folder.appendingPathComponent("embed.html"), allowingReadAcc
 | `ready` | `version` `builtAt` `modelUpdatedAt` `expressions`（表情の名前）`gestures`（しぐさの名前）`layouts` `bodies`（`['human', 'eyes']`）`body`（いまの体）。 |
 | `body` | `body`（`human` / `eyes`）。`setBody` で体が切り替わった。 |
 | `error` | `message`。描けなかった理由（WebGL2 が使えない、など）。`code: 'contextLost'` なら、描く面が失われて作り直せなかった（ページを読み込み直す）。 |
-| `contextLost` / `contextRestored` | 描く面（WebGL）が失われた（裏へ回ったあとなどに起きる）／ページの中で作り直せた（`attempts` = 何回目で作れたか）。作り直す間（0.5 秒ほど）は、絵が消える。表情・気分・映し方は、そのまま。3 回試して駄目なら、`error`（`code: 'contextLost'`）。 |
+| `contextLost` / `contextRestored` | 描く面（WebGL）が失われた（裏へ回ったあとなどに起きる）／ページの中で作り直せた（`attempts` = 何回目で作れたか、`body` = 作り直した体。いちばん新しく `setBody` で頼まれた体）。作り直す間（0.5 秒ほど）は、絵が消える。表情・気分・映し方は、そのまま。3 回試して駄目なら、`error`（`code: 'contextLost'`）。 |
 | `touch` | 触れ合いが 1 つ終わった。`id`、`occurredAt`、`touch: { type, durationMs, strength, ongoing: false, region }`。`type` は `pet`（撫でる）`tickle`（くすぐる）`poke`（つつく）`holdHand`（手をつなぐ）。`region` は触られた部位（`head` 頭・`face` 顔・`side` 脇・`hand` 手・`body` ほかの体。撫でるのは頭、くすぐるのは脇、つつくのは顔か脇、つなぐのは手）。`/v1/body/events` には `{ id, type: touch.type, durationMs: touch.durationMs, strength: touch.strength, audience, occurredAt }` として送れる（`region` を足す欄の名前は、本体の取り決めに従う）。 |
 | `askReaction` | 言葉での反応を聞きに行く時機。`id`、`occurredAt`（触れ合いが始まった時刻）、`touch: { type, durationMs, strength, ongoing, region }`。`/v1/body/reactions` に `{ scopeKey, id, touch, audience, occurredAt }` として、そのまま送れる。最中に聞いた触れ合いは、終わったときの `touch` も同じ `id` で届く。時機の決まりは Windows 版と同じ（撫で 1.5 秒・くすぐり 1.2 秒・手つなぎ 2 秒で `ongoing: true`、つつき直後、0.6 秒以上の短い撫では終わったとき。1 つの触れ合いに 1 回、45 秒に 1 回。`setPhase` が `idle` でない間は出さない）。送るかどうか（設定の入切、聞き手）は、載せる側が決める。 |
 | `tap` | 体（頭・顔・脇・手でない所）を軽く叩いた。Windows 版では、入力欄を出す合図。 |

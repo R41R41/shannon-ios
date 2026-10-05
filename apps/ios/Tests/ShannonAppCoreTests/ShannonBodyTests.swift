@@ -142,7 +142,14 @@ final class ShannonBodyTests: XCTestCase {
         for _ in 1..<BodySwitch.deadlineSeconds { XCTAssertEqual(silent.reduce(.foregroundSecond), []) }
         XCTAssertEqual(silent.reduce(.foregroundSecond), [.request(.human)])
 
-        // A page that says which body it shows after mending settles it at once.
+        // The page of 10:43 answers a request for the body it shows: the confirmation ends at once.
+        var answering = Self.readySwitch(chosen: .eyes, shown: .eyes)
+        _ = answering.reduce(.contextLost)
+        XCTAssertEqual(answering.reduce(.contextRestored(shown: nil)), [.request(.eyes)])
+        XCTAssertEqual(answering.reduce(.switched(.eyes)), [.afterSwitch(.eyes)])
+        XCTAssertNil(answering.pending)
+
+        // A page that says which body it shows after mending (10:43) settles it at once.
         var saying = Self.readySwitch(chosen: .eyes, shown: .eyes)
         _ = saying.reduce(.contextLost)
         XCTAssertEqual(saying.reduce(.contextRestored(shown: .human)), [.request(.eyes)])
@@ -213,8 +220,9 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.deletingLastPathComponent().appendingPathComponent("NOTICE.txt").path))
         let version = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("version.json"))) as? [String: Any]
         XCTAssertEqual(version?["modelUpdatedAt"] as? String, "2026-10-05T06:58:16.654Z")
-        // The build of 2026-10-05 09:55 that carries her eyes alone (`setBody`, `embed.html?body=eyes`).
-        XCTAssertEqual(version?["version"] as? String, "0.1.0+202610050955")
+        // The build of 2026-10-05 10:43 that carries her eyes alone (`setBody`, `embed.html?body=eyes`), which always
+        // answers `body` and says the body in `contextRestored`.
+        XCTAssertEqual(version?["version"] as? String, "0.1.0+202610051043")
         let files = version?["files"] as? [String] ?? []
         XCTAssertTrue(files.contains("model-eyes/Shannon_Eyes_v2.moc3"))
         XCTAssertTrue(files.contains("model/Shannon.moc3"))
@@ -287,8 +295,10 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(ShannonLive2DMessage(body: ["type": "loading", "progress": 7]), .loading(progress: 1))
         XCTAssertEqual(ShannonLive2DMessage(body: ["type": "contextLost"]), .contextLost)
         XCTAssertEqual(ShannonLive2DMessage(body: ["type": "contextRestored", "attempts": 2]), .contextRestored())
-        // A page that says which body it shows after mending its surface (asked of the page's thread, 2026-10-05).
-        XCTAssertEqual(ShannonLive2DMessage(body: ["type": "contextRestored", "body": "eyes"]), .contextRestored(body: .eyes))
+        // The page of 10:43 says which body it rebuilt the surface with; an unknown body is left out, not the message.
+        XCTAssertEqual(ShannonLive2DMessage(body: ["type": "contextRestored", "attempts": 1, "body": "eyes"]), .contextRestored(body: .eyes))
+        XCTAssertEqual(ShannonLive2DMessage(body: ["type": "contextRestored", "attempts": 1, "body": "human"]), .contextRestored(body: .human))
+        XCTAssertEqual(ShannonLive2DMessage(body: ["type": "contextRestored", "body": "tail"]), .contextRestored())
         XCTAssertEqual(ShannonLive2DMessage(body: ["type": "error", "code": "contextLost", "message": "x"]), .error("x", code: "contextLost"))
         let poked: [String: Any] = ["type": "poke", "durationMs": 0, "strength": 0, "ongoing": false, "region": "face"]
         XCTAssertEqual(
@@ -303,7 +313,7 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(
             ShannonLive2DMessage(body: ["type": "ready", "version": "0.1.0", "modelUpdatedAt": "m", "expressions": ["joyful", 3], "gestures": ["wave"]]),
             .ready(version: "0.1.0", modelUpdatedAt: "m", expressions: ["joyful"], gestures: ["wave"]))
-        // The page of 2026-10-05 09:55: the bodies it has and the one it shows, and a switch it made.
+        // The page of 2026-10-05: the bodies it has and the one it shows, and a switch it made.
         XCTAssertEqual(
             ShannonLive2DMessage(body: [
                 "type": "ready", "version": "v", "modelUpdatedAt": "m", "expressions": [], "gestures": [],

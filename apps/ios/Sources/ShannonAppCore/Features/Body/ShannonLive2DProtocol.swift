@@ -228,7 +228,7 @@ public enum ShannonLive2DMessage: Equatable, Sendable {
     case error(String, code: String? = nil)
     /// The drawing surface was lost; the page is making it again by itself.
     case contextLost
-    /// The surface is back. `body`: the body shown, from a page that says it (the page of 09:55 does not).
+    /// The surface is back. `body`: the body it was rebuilt with (the latest requested); the page of 10:43 says it, 09:55 did not.
     case contextRestored(body: ShannonLive2DBody? = nil)
     /// A touch ended.
     case touch(ShannonLive2DTouch)
