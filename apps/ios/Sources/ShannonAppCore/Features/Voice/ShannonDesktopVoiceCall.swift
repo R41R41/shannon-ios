@@ -51,8 +51,9 @@ public final class ShannonDesktopVoiceCall {
     /// The call holds the microphone. A failed call holds nothing.
     public var holdsMicrophone: Bool { session.phase != .idle && session.phase != .failed }
     /// Dictation is recording or being transcribed: the call does not start, and nothing else of hers speaks.
+    /// A recording that stopped by itself at its longest (`.ready`) holds no microphone while it waits for the click.
     public var dictationHoldsMicrophone: Bool {
-        [.requestingPermission, .listening, .ready, .transcribing].contains(dictation.phase)
+        [.requestingPermission, .listening, .transcribing].contains(dictation.phase)
     }
     /// The Talk the call's turns are written to.
     public var threadID: String? { workspace.threadContext?.threadID }
