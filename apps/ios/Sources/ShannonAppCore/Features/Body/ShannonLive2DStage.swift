@@ -204,7 +204,7 @@ public final class ShannonLive2DStage {
     // MARK: Pausing
 
     private func refreshPaused() {
-        let paused = ShannonLive2DStagePolicy.paused(hasHost: activeHost != nil, appActive: appActive || frontIsDesktop, resting: isResting)
+        let paused = ShannonLive2DStagePolicy.paused(hasHost: activeHost != nil, appActive: frontIsDesktop ? ShannonLive2DDesktopLink.shared.windowSeen : appActive, resting: isResting)
         guard status == .ready, sentPaused != paused else { return }
         sentPaused = paused
         if paused, lastMouthLevel > 0 {

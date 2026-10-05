@@ -178,6 +178,8 @@ extension ShannonDesktopBody {
     func observeMac() {
         guard let change = away.observe(idleSeconds: macState.idleSeconds, locked: macState.isLocked, now: Date()) else { return }
         let stage = ShannonLive2DStage.shared
+        // Away, she rests (the page stops drawing); back, she wakes before she greets him.
+        updateSeen()
         switch change {
         case let .away(minutes):
             // She dozes while he is away, and wakes when he is back (as the Windows body does).

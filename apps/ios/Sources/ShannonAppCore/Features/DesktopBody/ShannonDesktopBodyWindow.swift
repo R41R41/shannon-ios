@@ -24,6 +24,7 @@ final class ShannonDesktopBodyWindowController {
     private var hitTask: Task<Void, Never>?
     private var holdTask: Task<Void, Never>?
     private var screenObserver: NSObjectProtocol?
+    private var occlusionObserver: NSObjectProtocol?
     private var places = ShannonDesktopBodyPlaces.load()
     private var mask: ShannonDesktopBodyMask?
     private var maskReadAt = Date.distantPast
@@ -62,6 +63,9 @@ final class ShannonDesktopBodyWindowController {
         screenObserver = screenObserver ?? NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.screensChanged() } }
+        occlusionObserver = occlusionObserver ?? NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification, object: panel, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.body?.updateSeen() } }
         hitTask?.cancel()
         hitTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -79,6 +83,8 @@ final class ShannonDesktopBodyWindowController {
         monitor = nil
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
+        if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
+        occlusionObserver = nil
         panel.orderOut(nil)
     }
 

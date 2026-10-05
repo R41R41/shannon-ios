@@ -12,6 +12,10 @@ final class ShannonLive2DDesktopLink {
     var touch: (@MainActor (ShannonLive2DMessage) -> Void)?
     /// Her eyes alone while the desktop window is small; nil follows the owner's choice.
     var bodyOverride: ShannonLive2DBody?
+    /// Her desktop window can be seen: on screen and not covered, the Mac not locked, the owner not away. While it shows
+    /// the figure this stands for "the app is active" (the window stays when the app is hidden, and is not seen when
+    /// covered or locked), so the page draws only while someone could see her.
+    var windowSeen = true
 }
 
 extension ShannonLive2DStage {
@@ -23,6 +27,13 @@ extension ShannonLive2DStage {
         guard ShannonLive2DDesktopLink.shared.bodyOverride != body else { return }
         ShannonLive2DDesktopLink.shared.bodyOverride = body
         setBody(wantedBody)
+    }
+
+    /// Whether her desktop window can be seen now; the page is paused while it cannot.
+    func setDesktopWindowSeen(_ seen: Bool) {
+        guard ShannonLive2DDesktopLink.shared.windowSeen != seen else { return }
+        ShannonLive2DDesktopLink.shared.windowSeen = seen
+        noteActivity()
     }
 
     /// The desktop body's coordinator receives the page's touches while her desktop window shows the figure.

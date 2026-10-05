@@ -181,6 +181,17 @@ public final class ShannonDesktopBody {
         isShown && smallEyes && scale < ShannonDesktopBodyGeometry.smallEyesBelow && ShannonLive2DStage.shared.offersEyes
     }
 
+    /// Her window can be seen: shown, not covered by other windows or on a display that sleeps, the Mac not locked, and
+    /// the owner not away. The page draws only then.
+    func updateSeen() {
+        let visible = window.map { $0.panel.isVisible && $0.panel.occlusionState.contains(.visible) } ?? false
+        ShannonLive2DStage.shared.setDesktopWindowSeen(Self.windowSeen(shown: isShown, visible: visible, locked: macState.isLocked, away: away.isAway))
+    }
+
+    nonisolated static func windowSeen(shown: Bool, visible: Bool, locked: Bool, away: Bool) -> Bool {
+        shown && visible && !locked && !away
+    }
+
     func applySmallEyes() {
         ShannonLive2DStage.shared.setDesktopBodyOverride(showsEyesBecauseSmall ? .eyes : nil)
     }
@@ -210,7 +221,12 @@ public final class ShannonDesktopBody {
         controller.show(alwaysOnTop: alwaysOnTop)
         ShannonLive2DStage.shared.setDesktopTouchHandler { [weak self] message in self?.touch.handle(message) }
         applySmallEyes()
+        macState.changed = { [weak self] in
+            self?.observeMac()
+            self?.updateSeen()
+        }
         macState.start()
+        updateSeen()
         startLoops()
         // Before the first read the server has not said that it hears her as a body: that read says it then.
         if support == .supported { report(plain: "windowShown") }
@@ -227,6 +243,7 @@ public final class ShannonDesktopBody {
         ShannonLive2DStage.shared.setDesktopTouchHandler(nil)
         ShannonLive2DStage.shared.setDesktopBodyOverride(nil)
         macState.stop()
+        ShannonLive2DStage.shared.setDesktopWindowSeen(true)
     }
 
     // MARK: Touch and voice

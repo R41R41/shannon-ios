@@ -53,6 +53,16 @@ final class ShannonDesktopBodyTests: XCTestCase {
         XCTAssertEqual(ShannonLive2DStagePolicy.insertionIndex(for: .desktop, among: [.hero, .bodyScreen]), 2)
     }
 
+    func testThePageDrawsOnlyWhileHerWindowCanBeSeen() {
+        XCTAssertTrue(ShannonDesktopBody.windowSeen(shown: true, visible: true, locked: false, away: false))
+        XCTAssertFalse(ShannonDesktopBody.windowSeen(shown: true, visible: false, locked: false, away: false))
+        XCTAssertFalse(ShannonDesktopBody.windowSeen(shown: true, visible: true, locked: true, away: false))
+        XCTAssertFalse(ShannonDesktopBody.windowSeen(shown: true, visible: true, locked: false, away: true))
+        XCTAssertFalse(ShannonDesktopBody.windowSeen(shown: false, visible: true, locked: false, away: false))
+        // While her window shows the figure, its being seen stands for the app being active.
+        XCTAssertTrue(ShannonLive2DStagePolicy.paused(hasHost: true, appActive: false, resting: false))
+    }
+
     // MARK: Carrying her
 
     func testAPressOnHerHeadIsThePagesAtOnce() {
