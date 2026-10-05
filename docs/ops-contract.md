@@ -132,6 +132,7 @@ A failed report must never delay or fail the runtime's own work: send it in the 
 | `commands` | array | `[]` while commands are switched off. See [stage 2](#what-get-v1ops-adds). |
 | `commandsSupported` | boolean | `false` while commands are switched off. A client shows command controls only when this is `true`. |
 | `allowed` | object | What a command would be accepted for now; nothing while commands are switched off. See [stage 2](#what-get-v1ops-adds). |
+| `server` | object, absent | This API's own self-diagnosis: the models it resolved, the persona hash, its tools, the deployed revision, and which integrations are configured. **Only for the owner's scope** (`SHANNON_OWNER_SCOPE_KEY`, default `owner`); absent for any other scope. See [The server's self-diagnosis](#the-servers-self-diagnosis). |
 
 What the desktop shows:
 
@@ -151,6 +152,75 @@ What the desktop shows:
 | `429` | `RATE_LIMITED` | More than 120 reads in a minute. |
 
 If the API itself is unreachable (the same VM), the request fails at the network level; the client treats that as the API being down, which is a different message from `stale`.
+
+## The server's self-diagnosis
+
+Added 2026-10-05 (coordinator task taken over from Voyager, approved by the owner the same day). `GET /v1/ops` answers the owner's scope with one more field, `server`: what this API process resolved when it started. It describes the Shannon API itself, not the legacy runtime, and it is read-only. No app shows it yet (server only); read it with an owner device token. Everything else in the answer is unchanged, and the field is absent for a device of any other scope. `GET /health` is unchanged: a request without a device token still answers `401`, which is what the liveness check looks for.
+
+The same summary is written once to the service log at startup, as one line that begins with `Shannon self-diagnosis `.
+
+**Names, counts, a hash and booleans only.** No credential, endpoint, file path, token or other value of the environment is ever in it: an integration is `true` or `false`, and a model is the name its gateway resolved. The code is `services/api/src/serverSelfDiagnosis.ts`; the contract test, which seeds fake secrets into every credential and endpoint variable and asserts that none of them comes back, is `services/api/tests/serverSelfDiagnosis.test.ts`.
+
+```json
+{
+  "server": {
+    "schemaVersion": 1,
+    "startedAt": "2026-10-05T12:00:00.000Z",
+    "build": { "revision": "5943c29" },
+    "models": {
+      "text": "gpt-5.6-luna",
+      "voice": {
+        "reply": "gpt-5.6-luna",
+        "routing": "jev-latest",
+        "transcription": { "gemini": "gemini-3.5-transcribe-live", "openai": "gpt-4o-mini-transcribe" },
+        "speech": { "gemini": "gemini-3.8-flash-lite-tts", "eleven": null },
+        "vision": "gpt-5.6-luna"
+      },
+      "dictation": "gpt-transcribe",
+      "autonomy": { "enabled": true, "prose": "gemini-3.8-flash", "research_reading": "gemini-3.8-flash", "planning": "gemini-3.8-flash", "critique": "gemini-3.8-flash", "roomLook": "gemini-3.8-flash" }
+    },
+    "persona": { "hash": "73b3ed686d94", "algorithm": "sha256" },
+    "tools": {
+      "enabled": true,
+      "count": 17,
+      "names": ["study.list", "study.search", "study.read", "study.create", "study.update", "study.rename", "study.move", "study.delete", "study.restore",
+        "folder.list", "folder.search", "folder.read", "folder.create", "folder.update", "folder.rename", "folder.move", "folder.delete"],
+      "offered": { "text": { "owner_alone": 17, "others": 0 }, "voice": { "owner_alone": 17, "others": 0 }, "autonomy": { "owner_alone": 17, "others": 0 } }
+    },
+    "integrations": { "voyager": true, "notion": true, "aetherContext": true, "aetherProposals": true, "discordBridge": true }
+  }
+}
+```
+
+(The values are an example. The tool list is whatever `services/api/src/shannonTools.ts` holds; `count` is always the length of `names`.)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `schemaVersion` | `1` | |
+| `startedAt` | ISO 8601 | When this API process started. |
+| `build.revision` | string \| `null` | The first word of the file `DEPLOYED_REVISION` in the service's working directory (the deployed source, `/home/azureuser/shannon-ios`), which the deployment writes. `null` when the file is missing or does not hold a revision-like word (`[A-Za-z0-9][A-Za-z0-9._+-]{0,79}`). Read once at startup. |
+| `models.text` | string | The chat model of text replies (`SHANNON_LLM_MODEL` as resolved). `local-stub` when no model key is configured. |
+| `models.voice.reply` | string | Spoken replies use the same chat model. |
+| `models.voice.routing` | string | The voice turn router: the JEV model, the OpenAI router model, or `local-rules`. |
+| `models.voice.transcription.gemini`, `.openai` | string \| `null` | Live transcription of a voice call, per provider the app may ask for. `null`: that provider is not configured. |
+| `models.voice.speech.gemini`, `.eleven` | string \| `null` | Speech synthesis, per provider. |
+| `models.voice.vision` | string \| `null` | A look through the camera during a voice turn. |
+| `models.dictation` | string \| `null` | `POST /v1/voice/transcriptions` (recorded voice input). |
+| `models.autonomy.enabled` | boolean | `SHANNON_AUTONOMY_ENABLED=true`. Whether the owner paused her is not here (it is in her activity page). |
+| `models.autonomy.prose`, `.research_reading`, `.planning`, `.critique` | string \| `null` | The model each purpose of her own activity resolves to now: her preference in the owner's scope, else the default, else any model of the registry whose provider has a dedicated credential (`resolveAutonomyModel`, the rule the activity process uses). Read again on every request, so a changed preference shows at once. `null`: no dedicated credential can serve it. |
+| `models.autonomy.roomLook` | string \| `null` | The model of her look at the room, when its provider has a dedicated credential. |
+| `persona.hash` | 12 hex characters | See below. |
+| `persona.algorithm` | `sha256` | |
+| `tools.enabled` | boolean | `false` when `SHANNON_OWN_TOOLS=off`. |
+| `tools.count` | integer | The number of enabled tools of the registry (`SHANNON_TOOLS`); `0` when switched off. |
+| `tools.names` | string[] | Their names, in registry order. |
+| `tools.offered.<surface>.<audience>` | integer | How many tools `text`, `voice` and `autonomy` offer while only the owner can see or hear the reply (`owner_alone`) and while anyone else may (`others`). Folder tools are also offered only while one of his PCs is bound; that is decided per turn and not counted here. |
+| `integrations.voyager` | boolean | The Voyager integration URL, token and workspace are all configured. |
+| `integrations.notion` | boolean | A usable Notion token is configured. |
+| `integrations.aetherContext`, `.aetherProposals` | boolean | The Aether context file, and the Aether proposal inbox, are configured. |
+| `integrations.discordBridge` | boolean | The platform bridge (Discord and the legacy runtime) is configured. |
+
+**How the persona hash is computed.** `personaHashSource()` builds one JSON array of labelled texts: Shannon's persona prompt for the owner and for a guest, the suite roles, what she can and cannot do for the owner and for a guest (`shannonCapabilityPrompt`), and the one-line voice, all from `packages/cognition/src/persona.ts` and `capabilities.ts`. `persona.hash` is the first 12 hex characters of the SHA-256 of that text in UTF-8. It is the same on every start of the same code and changes whenever any of that text changes, so two servers with the same hash speak with the same persona and the same description of her abilities. The texts themselves are never returned.
 
 ## Server switch
 

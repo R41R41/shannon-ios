@@ -24,6 +24,11 @@ export interface OpsRouteDependencies {
    * `scopeKey: null`: a fixed local token, which names the scope in the query.
    */
   device: (authorization: string | undefined) => { scopeKey: string | null; deviceId?: string } | null;
+  /**
+   * The server's description of itself (`serverSelfDiagnosis.ts`) for a scope: names, counts, a hash and booleans.
+   * Null for any scope but the owner's; the field is then absent. Absent: never shown.
+   */
+  server?: (scopeKey: string) => object | null;
 }
 
 export interface OpsReadResponse {
@@ -37,6 +42,8 @@ export interface OpsReadResponse {
   commandsSupported: boolean;
   /** Stage 2: what a command would be accepted for right now. A client shows only these controls. */
   allowed: OpsCommandAllowed;
+  /** This API's own models, persona hash, tools, revision and integrations. Only for the owner's scope; absent otherwise. */
+  server?: object;
 }
 
 export function isOpsPath(path: string): boolean {
@@ -109,8 +116,9 @@ export function createOpsRoute(dependencies: OpsRouteDependencies) {
 
 /** What a device reads. With ingest off, or before any report, the snapshot and its time are null. */
 export function opsReadResponse(
-  dependencies: Pick<OpsRouteDependencies, 'store' | 'ingestEnabled' | 'commandsEnabled' | 'now'>, scopeKey: string,
+  dependencies: Pick<OpsRouteDependencies, 'store' | 'ingestEnabled' | 'commandsEnabled' | 'now' | 'server'>, scopeKey: string,
 ): OpsReadResponse {
+  const server = dependencies.server?.(scopeKey) ?? null;
   const stored = dependencies.ingestEnabled() ? dependencies.store.latest(scopeKey) : null;
   const ageMs = stored ? Date.parse(dependencies.now()) - Date.parse(stored.receivedAt) : Number.POSITIVE_INFINITY;
   return {
@@ -120,5 +128,6 @@ export function opsReadResponse(
     stale: !(ageMs <= OPS_LIMITS.staleAfterSeconds * 1000),
     staleAfterSeconds: OPS_LIMITS.staleAfterSeconds,
     ...opsCommandsView(dependencies, scopeKey),
+    ...(server ? { server } : {}),
   };
 }

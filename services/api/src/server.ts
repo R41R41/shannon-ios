@@ -76,6 +76,7 @@ import { createPrivateListeningRoute } from './serverPrivateListeningRoute.js';
 import { createIncomingCallRoute, type IncomingCallRoute } from './serverIncomingCallRoute.js';
 import { SQLiteOwnOutreach } from './ownOutreach.js';
 import { SQLiteOwnerCallFacts, ownerCallElsewhereEnabled } from './ownerCallElsewhere.js';
+import { createServerSelfDiagnosis } from './serverSelfDiagnosis.js';
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -128,10 +129,13 @@ const incomingCallRoute: IncomingCallRoute | null = createIncomingCallRoute(proc
 const ownOutreach = new SQLiteOwnOutreach(configuredDatabasePath());
 const ownerCallFacts = new SQLiteOwnerCallFacts(configuredDatabasePath());
 const chatModel = createConfiguredChatModel(process.env, persistentStore);
+const voiceDecision = createConfiguredVoiceDecisionGateway(process.env, persistentStore);
+// Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
+const notion = configuredNotionSource(process.env, { log: line => console.log(line) });
 const kernel = createLocalApiKernel(now, {
   ownOutreach,
   chatModel,
-  voiceDecision: createConfiguredVoiceDecisionGateway(process.env, persistentStore),
+  voiceDecision,
   stateStore: persistentStore,
   conversationStore: persistentStore,
   background: backgroundDispatcher,
@@ -167,10 +171,12 @@ const kernel = createLocalApiKernel(now, {
     // The owner in a call on another of his apps: the presence field and the 409 for her body. SHANNON_OWNER_CALL_ELSEWHERE=off switches both off.
     ownerCalls: { enabled: ownerCallElsewhereEnabled(process.env), surface: (scopeKey, deviceId) => { try { return ownerCallFacts.surface(scopeKey, deviceId); } catch { return undefined; } },
       answered: (scopeKey, since) => { try { return ownerCallFacts.answered(scopeKey, since); } catch { return []; } } } },
-  // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
-  notion: configuredNotionSource(process.env, { log: line => console.log(line) }),
+  notion,
 });
 const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, chatModel, peopleMemoryStore);
+// What this server resolved (docs/ops-contract.md, `server`): model names, persona hash, tools, revision, integrations as booleans. Owner only.
+const selfDiagnosis = createServerSelfDiagnosis({ environment: process.env, startedAt: now(), chatModel, voiceDecision, dictation: voiceTranscriber, vision: voiceVisionGateway,
+  voyagerCatalog, notion, platformBridge, autonomy: { enabled: autonomyConfig.enabled, preferences: scopeKey => autonomyStore.modelPreferences(scopeKey) } });
 const port = parsePort(process.env.SHANNON_API_PORT);
 const host = parseHost(process.env.SHANNON_API_HOST);
 const authMode = configuredAuthMode(host);
@@ -184,6 +190,7 @@ const opsStore = new SQLiteOpsStore(configuredDatabasePath());
 const opsRoute = createOpsRoute({
   store: opsStore, bridge: platformBridge?.configuration ?? null, ingestEnabled: () => opsIngestEnabled(process.env), now,
   commandsEnabled: () => opsCommandsEnabled(process.env),
+  server: scopeKey => selfDiagnosis.forScope(scopeKey),
   device: authorization => deviceAuth ? deviceAuth.authenticate(authorization)
     : bearerAuthorized(authorization, apiToken) ? { scopeKey: null } : null,
 });
@@ -383,6 +390,7 @@ server.listen(port, host, () => {
   console.log(`Shannon API listening on http://${host}:${port}`);
   console.log(`Shannon authentication: ${authMode}`);
   console.log('Shannon persistence ready: sqlite');
+  console.log(selfDiagnosis.startupLine());
 });
 
 let shuttingDown = false;
