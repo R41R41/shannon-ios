@@ -34,7 +34,12 @@ extension ShannonDesktopRootView {
                 if destination == .talk, let threadID = conversation.selectedThreadId {
                     return .thread(threadID)
                 }
-                return .destination(destination)
+                // 開発 and 配信 are pages of 作業; 設定 is the row under the list.
+                switch destination.pillar {
+                case .work: return .destination(.work)
+                case .settings: return nil
+                case .talk, .shannon: return .destination(destination)
+                }
             },
             set: { selection in
                 guard let selection else { return }
@@ -57,7 +62,7 @@ extension ShannonDesktopRootView {
             focusThreadSearch: focusThreadSearch,
             showTalk: { selectDestination(.talk) },
             showWork: { selectDestination(.work) },
-            showMemory: { selectDestination(.memory) },
+            showShannon: { selectDestination(.shannon) },
             showDevelopment: { selectDestination(.development) },
             showRelease: { selectDestination(.release) },
             showSettings: { selectDestination(.settings) },
@@ -65,6 +70,19 @@ extension ShannonDesktopRootView {
             toggleTaskInspector: {
                 prepareTaskInspectorSelection()
                 toggleAuxiliaryPanel(.task)
+            },
+            toggleFigure: { toggleAuxiliaryPanel(.figure) }
+        )
+    }
+
+    /// 「すがた」 belongs beside Talk (decision 2026-10-03): elsewhere (シャノン, 作業, 設定) her panel
+    /// is not shown, so the page keeps its width; it comes back with Talk. Closing it closes the panel.
+    var inspectorIsPresented: Binding<Bool> {
+        Binding(
+            get: { showsInspector && DesktopAuxiliaryPanel.isShown(auxiliaryPanel, on: destination) },
+            // Hidden only for this page: a close that the hiding itself reports must not turn the panel off.
+            set: { shown in
+                if DesktopAuxiliaryPanel.isShown(auxiliaryPanel, on: destination) { showsInspector = shown }
             }
         )
     }
@@ -79,7 +97,9 @@ extension ShannonDesktopRootView {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .padding(ShannonDesktopSpacing.medium)
+            .padding(.horizontal, ShannonDesktopSpacing.medium)
+            .padding(.top, ShannonDesktopSpacing.large)
+            .padding(.bottom, ShannonDesktopSpacing.medium)
 
             Divider()
 
@@ -94,6 +114,8 @@ extension ShannonDesktopRootView {
                 )
             case .task:
                 taskInspector
+            case .figure:
+                ShannonTalkFigurePanel(conversation: conversation, memory: memory)
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))

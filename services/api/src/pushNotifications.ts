@@ -3,6 +3,7 @@ import { chmodSync, existsSync, readFileSync } from 'node:fs';
 import { connect } from 'node:http2';
 import { DatabaseSync } from 'node:sqlite';
 import type { ShannonDevicePrincipal } from './deviceAuth.js';
+import { isRoomLookSource, ROOM_LOOK_NOTICE_LINE } from './roomLookSource.js';
 
 export type APNsEnvironment = 'sandbox' | 'production';
 
@@ -35,13 +36,6 @@ export interface PushNotificationSender {
 
 const DEVICE_TOKEN_PATTERN = /^[a-f0-9]{64,200}$/iu;
 const MAXIMUM_PUSH_AGE_MILLISECONDS = 12 * 60 * 60_000;
-/** Mirrors `BODY_LOOK_SOURCE_PREFIX` (`bodyLookDelivery.ts`); kept here so the push store imports nothing of the body. */
-const ROOM_LOOK_PUSH_SOURCE_PREFIX = 'body-look:';
-/** Mirrors `REACH_OUT_SOURCE_PREFIX` + `saw` (`reachOutDelivery.ts`): a message of her own about what she saw of the room. */
-const ROOM_SEEN_PUSH_SOURCE_PREFIX = 'reach-out:saw:';
-/** Mirrors `REACH_OUT_FOLLOW_UP_SEEN_SOURCE_PREFIX`: her second call after an unanswered message, worded with her note of a look in front of her. */
-const ROOM_SEEN_FOLLOW_UP_PUSH_SOURCE_PREFIX = 'reach-out:follow_up:seen:';
-const ROOM_LOOK_PUSH_LINE = 'ライ氏、部屋のことでひとことあります。';
 const MAXIMUM_ATTEMPTS = 3;
 const DELIVERY_LEASE_MILLISECONDS = 5 * 60_000;
 const DELIVERY_STATE_RETENTION_MILLISECONDS = 30 * 24 * 60 * 60_000;
@@ -161,7 +155,7 @@ export class SQLitePushNotificationStore {
       environment: String(row.environment) as APNsEnvironment,
       threadId: String(row.thread_id),
       // What she saw in the room stays in the Talk; a lock screen shows only that she has something to say.
-      content: [ROOM_LOOK_PUSH_SOURCE_PREFIX, ROOM_SEEN_PUSH_SOURCE_PREFIX, ROOM_SEEN_FOLLOW_UP_PUSH_SOURCE_PREFIX].some(prefix => String(row.source_item_id ?? '').startsWith(prefix)) ? ROOM_LOOK_PUSH_LINE : String(row.content),
+      content: isRoomLookSource(row.source_item_id) ? ROOM_LOOK_NOTICE_LINE : String(row.content),
       expression: String(row.expression),
       createdAt: String(row.created_at),
       badgeCount: Math.max(1, Math.min(99, Number(row.badge_count))),

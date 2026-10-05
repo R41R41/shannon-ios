@@ -5,8 +5,13 @@ import SwiftUI
 /// 「触れたときの返事」. The switches that change what leaves the device are here only, not in Talk,
 /// so that they are not changed by mistake mid-conversation. 「トークで姿を見る」 opens Talk's
 /// dialogue display, where her figure is and where she is touched.
-struct ShannonFigureSettingsSection: View {
+public struct ShannonFigureSettingsSection: View {
     let showInTalk: () -> Void
+
+    /// The iPhone opens Talk's dialogue display; the Mac opens the 「すがた」 panel beside Talk (A15).
+    public init(showInTalk: @escaping () -> Void) {
+        self.showInTalk = showInTalk
+    }
 
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
     @AppStorage(ShannonBodyPreference.reportsTouchKey) private var reportsTouch = false
@@ -21,7 +26,7 @@ struct ShannonFigureSettingsSection: View {
     /// 映し方 frames the character; her eyes alone are only sized and moved.
     private var offersLayoutMode: Bool { usesLive2D && chosenBody.hasCharacterRig }
 
-    var body: some View {
+    public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
         Section {
             Picker(selection: $formRawValue) {

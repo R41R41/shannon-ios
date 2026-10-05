@@ -19,8 +19,10 @@ enum ShannonHoldToConfirm {
 
 /// Commits after a short hold. A tap, keyboard activation, or VoiceOver activation
 /// opens a confirmation dialog instead, so the action never depends on holding.
-struct ShannonHoldToConfirmButton: View {
-    enum Prominence {
+/// On the Mac the hold is a press-and-hold with the pointer, and a click asks first
+/// (decision 2026-10-03, docs/product/information-architecture.md 5).
+public struct ShannonHoldToConfirmButton: View {
+    public enum Prominence: Sendable {
         case prominent
         case standard
     }
@@ -33,6 +35,22 @@ struct ShannonHoldToConfirmButton: View {
     var holdDuration = ShannonHoldToConfirm.defaultDuration
     let action: () -> Void
 
+    public init(
+        title: String,
+        prominence: Prominence,
+        confirmationTitle: String,
+        confirmationMessage: String,
+        confirmActionTitle: String,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.prominence = prominence
+        self.confirmationTitle = confirmationTitle
+        self.confirmationMessage = confirmationMessage
+        self.confirmActionTitle = confirmActionTitle
+        self.action = action
+    }
+
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled
@@ -42,7 +60,7 @@ struct ShannonHoldToConfirmButton: View {
     @State private var showsConfirmation = false
     @State private var commitCount = 0
 
-    var body: some View {
+    public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
 
         Button {
@@ -78,7 +96,33 @@ struct ShannonHoldToConfirmButton: View {
             Text(confirmationMessage)
         }
         .accessibilityLabel(title)
-        .accessibilityHint(ShannonGeneratedStrings.holdHint)
+        .accessibilityHint(Self.hint)
+    }
+
+    /// The pointer's words on the Mac: a click asks first.
+    static var hint: String {
+#if os(macOS)
+        ShannonGeneratedStrings.holdHintClick
+#else
+        ShannonGeneratedStrings.holdHint
+#endif
+    }
+
+    /// The Mac uses its fixed desktop scale (body 15, rows of 40); the iPhone keeps Dynamic Type.
+    private static var labelFont: Font {
+#if os(macOS)
+        .shannonDesktop(.body).weight(.semibold)
+#else
+        .shannon(.body).weight(.semibold)
+#endif
+    }
+
+    private static var minimumHeight: CGFloat {
+#if os(macOS)
+        ShannonDesktopMetrics.rowHeight
+#else
+        50
+#endif
     }
 
     private func label(_ palette: ShannonPalette, progress: Double) -> some View {
@@ -98,10 +142,10 @@ struct ShannonHoldToConfirmButton: View {
                 .minimumScaleFactor(0.8)
                 .monospacedDigit()
         }
-        .font(.shannon(.body).weight(.semibold))
+        .font(Self.labelFont)
         .foregroundStyle(foreground)
         .padding(.horizontal, ShannonSpacing.large)
-        .frame(maxWidth: .infinity, minHeight: 50)
+        .frame(maxWidth: .infinity, minHeight: Self.minimumHeight)
         .background {
             ZStack(alignment: .leading) {
                 Capsule().fill(isProminent ? palette.action : palette.action.opacity(0.14))

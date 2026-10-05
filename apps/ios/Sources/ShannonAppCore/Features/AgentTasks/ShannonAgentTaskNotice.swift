@@ -41,11 +41,19 @@ public struct ShannonAgentTaskNoticePresentation: Equatable, Sendable {
 /// Notice under the navigation bar for work that finished, stopped, or needs a decision.
 /// It names the task and shows what is waiting; a one-off command or file-change approval
 /// whose target is fully visible adds a trailing 「許可」 so it can be granted in place.
-struct ShannonAgentTaskCapsule: View {
+public struct ShannonAgentTaskCapsule: View {
     let task: ShannonAgentTask
     var actionError: String?
     let open: () -> Void
     var approveOnce: (() -> Void)?
+
+    /// Also the Mac's notice above Talk (roadmap A14).
+    public init(task: ShannonAgentTask, actionError: String? = nil, open: @escaping () -> Void, approveOnce: (() -> Void)? = nil) {
+        self.task = task
+        self.actionError = actionError
+        self.open = open
+        self.approveOnce = approveOnce
+    }
 
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -53,7 +61,7 @@ struct ShannonAgentTaskCapsule: View {
     /// The approval already sent from this notice, so a second tap cannot send it twice.
     @State private var sentApprovalID: UUID?
 
-    var body: some View {
+    public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
         let card = ShannonAgentTaskCardPresentation(task: task)
         let notice = ShannonAgentTaskNoticePresentation(

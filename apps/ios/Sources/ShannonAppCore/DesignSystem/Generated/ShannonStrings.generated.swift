@@ -105,6 +105,8 @@ public enum ShannonGeneratedStrings {
     public static let navDelivery = "配信"
     /// `nav.diagnostics`
     public static let navDiagnostics = "診断"
+    /// `nav.development`
+    public static let navDevelopment = "開発"
     /// `shannon.card.nothingWaiting`
     public static let shannonCardNothingWaiting = "あなたを待っていることは、ありません。"
     /// `shannon.card.awaitingReaction`
@@ -137,6 +139,8 @@ public enum ShannonGeneratedStrings {
     public static func adminDevicesCount(count: String) -> String { "\(count)台" }
     /// `talk.display.menuHint`
     public static let talkDisplayMenuHint = "長押しで、姿を選べます。Live2Dの姿では体も、人の姿では映し方も選べます"
+    /// `talk.figurePanel.menuHint`
+    public static let talkFigurePanelMenuHint = "姿を選べます。Live2Dの姿では体も、人の姿では映し方も選べます"
     /// `talk.figure.heroHint`
     public static let talkFigureHeroHint = "向き合う表示にします。そこで姿に触れられます"
     /// `look.state.line`
@@ -149,10 +153,34 @@ public enum ShannonGeneratedStrings {
     public static func holdProgress(percent: String) -> String { "押し続けています… \(percent)%" }
     /// `hold.hint`
     public static let holdHint = "長押しで決定します。タップすると確認してから決定します"
+    /// `hold.hintClick`
+    public static let holdHintClick = "長押しで決定します。クリックすると確認してから決定します"
     /// `common.back`
     public static let commonBack = "戻る"
     /// `autonomy.proposal.confirmQuestion`
     public static func autonomyProposalConfirmQuestion(title: String) -> String { "「\(title)」を作業として始めますか？" }
     /// `autonomy.proposal.confirmStart`
     public static let autonomyProposalConfirmStart = "作業として始める"
+    /// `notification.title.initiative`
+    public static let notificationTitleInitiative = "シャノン"
+    /// `notification.title.approval`
+    public static let notificationTitleApproval = "シャノン · 許可待ち"
+    /// `notification.title.needsOwner`
+    public static let notificationTitleNeedsOwner = "シャノン · 続きが必要"
+    /// `notification.title.completed`
+    public static let notificationTitleCompleted = "シャノン · 完了"
+    /// `notification.title.failed`
+    public static let notificationTitleFailed = "シャノン · 失敗"
+    /// `notification.body.approval`
+    public static func notificationBodyApproval(title: String, approval: String) -> String { "「\(title)」を続けるには、\(approval)が必要です。" }
+    /// `notification.body.needsOwner`
+    public static func notificationBodyNeedsOwner(title: String, next: String) -> String { "ライ氏、「\(title)」は続きが必要です。次：\(next)" }
+    /// `notification.body.needsOwnerNoNext`
+    public static func notificationBodyNeedsOwnerNoNext(title: String) -> String { "ライ氏、「\(title)」は続きが必要です。作業画面で次の一手を確認してください。" }
+    /// `notification.body.completed`
+    public static func notificationBodyCompleted(title: String) -> String { "ライ氏、「\(title)」の作業が終わりました。" }
+    /// `notification.body.failed`
+    public static func notificationBodyFailed(title: String) -> String { "ライ氏、「\(title)」の作業を最後まで進められませんでした。作業画面で状況を確認できます。" }
+    /// `notification.body.roomLook`
+    public static let notificationBodyRoomLook = "ライ氏、部屋のことでひとことあります。"
 }

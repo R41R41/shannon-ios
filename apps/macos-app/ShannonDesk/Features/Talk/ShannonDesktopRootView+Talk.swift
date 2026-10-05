@@ -11,16 +11,20 @@ extension ShannonDesktopRootView {
             talkView
         case .work:
             workOverview
-        case .memory:
-            ShannonMemoryView(model: memory, showsDismissButton: false)
+                .desktopWorkPagePicker(selection: workPageSelection)
+        case .shannon:
+            shannonHub
         case .development:
             developmentView
+                .desktopWorkPagePicker(selection: workPageSelection)
         case .release:
             ShannonTestFlightDeliveryView(
                 model: release,
                 showsDismissButton: false,
                 requestRelease: requestAppleRelease
             )
+            .navigationTitle(ShannonGeneratedStrings.navDelivery)
+            .desktopWorkPagePicker(selection: workPageSelection)
         case .settings:
             settingsView
         }
@@ -36,6 +40,7 @@ extension ShannonDesktopRootView {
                 }
             }
             Divider()
+            talkTaskNotice
 
             ZStack(alignment: .bottom) {
                 talkTimeline
@@ -48,12 +53,7 @@ extension ShannonDesktopRootView {
     @ViewBuilder
     var talkTimeline: some View {
         if conversation.messages.isEmpty && conversation.unattachedSelectedThreadOrganizeSessions.isEmpty && !conversation.isLoadingHistory {
-            ContentUnavailableView {
-                Label("シャノンに話しかける", systemImage: "bubble.left")
-            } description: {
-                Text("相談、調査、文章、コード、そして実際の作業まで、ここから始められます。")
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            emptyTalk
         } else {
             ScrollViewReader { proxy in
                 ScrollView {
@@ -202,6 +202,15 @@ extension ShannonDesktopRootView {
             }
             .buttonStyle(.borderless)
             .help("現在地を表示")
+            Button {
+                toggleAuxiliaryPanel(.figure)
+            } label: {
+                Image(systemName: DesktopAuxiliaryPanel.figure.symbolName)
+                    .symbolVariant(showsInspector && auxiliaryPanel == .figure ? .fill : .none)
+            }
+            .buttonStyle(.borderless)
+            .help("すがたを表示")
+            .accessibilityLabel("すがたを表示")
         }
         .padding(.horizontal, 18)
         .frame(height: 58)

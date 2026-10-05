@@ -2,15 +2,6 @@ import Foundation
 import ShannonAppCore
 import SwiftUI
 
-enum DesktopDestination: String, CaseIterable, Hashable {
-    case talk
-    case work
-    case memory
-    case development
-    case release
-    case settings
-}
-
 enum DesktopDevelopmentTool: String, CaseIterable, Hashable, Identifiable {
     case files
     case terminal
@@ -38,34 +29,18 @@ enum DesktopDevelopmentTool: String, CaseIterable, Hashable, Identifiable {
     }
 }
 
-enum DesktopAuxiliaryPanel: String, CaseIterable, Hashable {
-    case outline
-    case task
-    var title: String {
-        switch self {
-        case .outline: "目次"
-        case .task: "現在地"
-        }
-    }
-    var symbolName: String {
-        switch self {
-        case .outline: "list.bullet.indent"
-        case .task: "location"
-        }
-    }
-}
-
 struct ShannonDesktopWindowChromeState: Equatable {
     let showsInspector: Bool, auxiliaryPanel: DesktopAuxiliaryPanel
 }
 enum ShannonDesktopWindowRestoration {
     static let lastInspectorVisibleKey = "shannon.desktop.lastShowsInspector"
     static let lastAuxiliaryPanelKey = "shannon.desktop.lastAuxiliaryPanel"
+    static let lastDestinationKey = "shannon.desktop.lastDestination"
     static func destination(sceneRawValue: String?, lastRawValue: String) -> DesktopDestination {
-        if let sceneRawValue, let destination = DesktopDestination(rawValue: sceneRawValue) {
+        if let sceneRawValue, let destination = DesktopDestination(restoring: sceneRawValue) {
             return destination
         }
-        return DesktopDestination(rawValue: lastRawValue) ?? .talk
+        return DesktopDestination(restoring: lastRawValue) ?? .talk
     }
     static func identifier(sceneValue: String?, lastValue: String) -> String? {
         if let sceneValue, !sceneValue.isEmpty { return sceneValue }
@@ -149,12 +124,13 @@ struct ShannonDesktopCommandActions {
     let focusThreadSearch: () -> Void
     let showTalk: () -> Void
     let showWork: () -> Void
-    let showMemory: () -> Void
+    let showShannon: () -> Void
     let showDevelopment: () -> Void
     let showRelease: () -> Void
     let showSettings: () -> Void
     let toggleOutline: () -> Void
     let toggleTaskInspector: () -> Void
+    let toggleFigure: () -> Void
 }
 
 private struct ShannonDesktopCommandActionsKey: FocusedValueKey {

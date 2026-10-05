@@ -64,6 +64,26 @@ describe('push notification delivery', () => {
     expect(notification?.content).not.toBe(before);
   });
 
+  it('marks every message about the room in the inbox, so the Mac notification does not quote it either', () => {
+    for (const [source, roomLook] of [
+      ['body-look:look-1', true], ['reach-out:saw:a', true], ['reach-out:follow_up:seen:b', true],
+      ['reach-out:follow_up:c', false], ['reach-out:share:d', false], ['world:story', false],
+    ] as const) {
+      const path = createInitiative();
+      const database = new DatabaseSync(path);
+      database.prepare('UPDATE initiative_messages SET source_item_id = ?').run(source);
+      database.close();
+      const inbox = new SQLiteInitiativeStore(path);
+      const [message] = inbox.unreadMessages('owner');
+      inbox.close();
+      expect(message?.roomLook).toBe(roomLook);
+      const push = new SQLitePushNotificationStore(path, () => '2026-09-03T03:01:00.000Z');
+      push.register({ deviceId: 'iphone-1', scopeKey: 'owner', displayName: 'RyoのiPhone' }, 'ab'.repeat(32), 'sandbox');
+      expect(push.pending()[0]?.content === 'ライ氏、部屋のことでひとことあります。').toBe(roomLook);
+      push.close();
+    }
+  });
+
   it('leases a notification before sending so overlapping workers do not duplicate it', async () => {
     const path = createInitiative();
     const firstStore = new SQLitePushNotificationStore(path);

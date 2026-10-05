@@ -62,6 +62,8 @@ extension ShannonGeneratedStrings {
     public static let taskApprovalHoldTargetSession = "「この作業中」"
     /// `task.approval.holdHint`
     public static func taskApprovalHoldHint(target: String) -> String { "\(target)は長押しで決定。タップすると確認してから決定します。" }
+    /// `task.approval.holdHintClick`
+    public static func taskApprovalHoldHintClick(target: String) -> String { "\(target)は長押しで決定。クリックすると確認してから決定します。" }
     /// `task.status.needsOwner`
     public static let taskStatusNeedsOwner = "続きが必要"
     /// `task.notice.headline`

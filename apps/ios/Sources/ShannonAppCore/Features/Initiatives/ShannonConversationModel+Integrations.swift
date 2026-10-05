@@ -32,6 +32,8 @@ extension ShannonConversationModel {
             let inbox = try await client.loadInitiatives(scopeKey: scopeKey)
             unreadInitiativeCount = inbox.unreadCount
             initiativeThreadIDs = Set(inbox.messages.map(\.threadId))
+            unreadInitiativeMessages = inbox.messages
+            initiativesReadAt = Date()
             guard let latest = inbox.messages.last else { return }
             await loadThreads(force: true)
             if selectedThreadId == nil || selectedThreadId == latest.threadId {

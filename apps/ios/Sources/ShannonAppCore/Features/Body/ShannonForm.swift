@@ -75,13 +75,9 @@ public enum ShannonBodyPreference {
 
 /// Every sentence of her figure in Talk, the 「すがた」 settings section and the Mac's body sheet.
 public enum ShannonBodyCopy {
-    /// The Mac's body sheet only, until her figure stands beside the conversation there (roadmap A15).
-    public static let screenTitle = "からだ"
     public static let sectionTitle = ShannonGeneratedStrings.settingsFigure
     public static let formTitle = ShannonGeneratedStrings.settingsFigure
     public static let formHint = ShannonGeneratedStrings.settingsFigureFormHint
-    /// The Mac's settings only (A15).
-    public static let openScreenTitle = "からだを開く"
     /// 設定 › すがた on the iPhone: opens Talk's dialogue display (「向き合う」), where her figure is.
     public static let showInTalk = ShannonGeneratedStrings.settingsFigureShowInTalk
     public static let showInTalkHint = ShannonGeneratedStrings.settingsFigureShowInTalkHint
@@ -89,14 +85,22 @@ public enum ShannonBodyCopy {
     public static let displayMenuHint = ShannonGeneratedStrings.talkDisplayMenuHint
     public static let reportsTouchTitle = "体に起きたことをシャノンに伝える"
     public static let reportsTouchHint = "オンにすると、Live2Dの姿に触れたことがシャノンに届きます"
-    public static let settingsExplanation = touchWaysHuman + touchPrivacy
+    public static let settingsExplanation = touchWaysHuman + touchPrivacy + touchOnThisDevice
     /// How she can be touched, by body: the eyes can only be poked.
     static let touchWaysHuman = "Live2Dの姿は指で触れられます（頭をなでる、つつく、くすぐる、手をつなぐ）。"
     static let touchPrivacy = "「体に起きたことをシャノンに伝える」がオフの間は、この端末の中で動くだけで、何も送りません。オンにすると、触れた種類・長さ・強さ・時刻だけがシャノンに届き、気持ちが動いて、ひとこと返すことがあります。カメラは使いません。"
     public static func settingsExplanation(body: ShannonLive2DBody) -> String {
-        (body == .eyes ? ShannonGeneratedStrings.settingsFigureTouchEyes : touchWaysHuman) + touchPrivacy
+        (body == .eyes ? ShannonGeneratedStrings.settingsFigureTouchEyes : touchWaysHuman) + touchPrivacy + touchOnThisDevice
     }
-    public static let macExplanation = "Live2Dの姿は「からだを開く」で見られます。このMacからは、触れたことをシャノンに伝えません。"
+    /// The Mac says who a touch reaches as: only when he switched it on, and as from him alone, since the Mac
+    /// has no switch yet for other people being near (A15).
+    static var touchOnThisDevice: String {
+#if os(macOS)
+        ShannonGeneratedStrings.settingsFigureTouchMac
+#else
+        ""
+#endif
+    }
     /// 体 (人の姿／目だけ): in 設定 › すがた, Talk's display options and the Mac's body sheet.
     public static let bodyTitle = ShannonGeneratedStrings.settingsFigureBody
     public static let bodyOnlyLive2D = ShannonGeneratedStrings.settingsFigureBodyOnlyLive2D

@@ -139,7 +139,9 @@ extension ShannonConversationView {
                     task: task,
                     actionError: model.agentTaskActionError(task.id),
                     open: { openAgentTask(task.id) },
-                    approveOnce: { Task { await model.resolveAgentApproval(task.id, accepted: true) } }
+                    approveOnce: { [requestID = task.pendingApproval?.externalRequestID] in
+                        Task { await model.resolveAgentApproval(task.id, accepted: true, requestID: requestID) }
+                    }
                 )
                 .padding(.bottom, ShannonSpacing.extraSmall)
                 .transition(.move(edge: .top).combined(with: .opacity))

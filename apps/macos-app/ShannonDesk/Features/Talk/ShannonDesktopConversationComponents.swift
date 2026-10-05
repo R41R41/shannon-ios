@@ -37,7 +37,8 @@ struct DesktopMessageView: View {
         } else {
             VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: ShannonDesktopSpacing.small) {
-                    ShannonAvatarView(face: message.emotionSnapshot?.face ?? ShannonFace(expression: .neutral), size: 28)
+                    // The avatar follows 設定 › 外観 › アバター, as on the iPhone (A14).
+                    ShannonChatAvatarView(face: message.emotionSnapshot?.face ?? ShannonFace(expression: .neutral), size: 28)
                     Text("シャノン")
                         .font(.shannonDesktop(.callout).weight(.semibold))
                     Text((message.emotionSnapshot?.face ?? ShannonFace(expression: .neutral)).japaneseName)
@@ -64,6 +65,10 @@ struct DesktopMessageView: View {
                         }
                     }
                     .padding(.top, 2)
+                }
+                if !message.places.isEmpty {
+                    ShannonPlaceMapCard(places: message.places)
+                        .frame(maxWidth: 520, alignment: .leading)
                 }
                 if let studyPiece = message.studyPiece {
                     ShannonStudyPieceLinkCard(link: studyPiece)

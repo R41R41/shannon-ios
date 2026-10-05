@@ -137,11 +137,12 @@
           "note": "トークはシートの一覧そのもの。上のタイルは 作業／シャノン／設定（A4）。"
         },
         "macos": {
-          "status": "partial",
-          "note": "サイドバーは 会話／作業全体／頭の中 と、ツール（開発／Release Center／設定）。",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift"
-          ]
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift#sidebarFooter",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopNavigation.swift#enum DesktopPillar"
+          ],
+          "note": "サイドバーの上に トーク／作業／シャノン、その下にトークの一覧と検索、いちばん下に 設定（A10）。開発と配信は 作業 の中のページ（ツールバーの 作業／開発／配信）。⌘1〜⌘4 が 4 つの入口。"
         },
         "windows": {
           "status": "yes",
@@ -168,8 +169,12 @@
           "note": "先頭のカード（シャノンのいまと待っていること。押すと ようす）と、頭の中／自律活動／書斎（A4）。"
         },
         "macos": {
-          "status": "planned",
-          "branch": "未定"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shannon/ShannonDesktopRootView+Shannon.swift#shannonHubColumn",
+            "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubCard.swift"
+          ],
+          "note": "シャノン を選ぶと、2 列目に先頭のカード（iPhone と同じ ShannonHubCard。押すと ようす）と 頭の中／自律活動／書斎、右に中身（はじめは ようす）（A10）。"
         },
         "windows": {
           "status": "no",
@@ -381,12 +386,13 @@
           ]
         },
         "macos": {
-          "status": "partial",
-          "note": "文章・Markdown・コードのファイルを 4 件まで。写真は添付できない。",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift",
-            "apps/macos-app/ShannonDesk/ShannonDesktopAttachment.swift"
-          ]
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposerPhoto.swift#loadPickedPhoto",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonChatPhoto.swift",
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift"
+          ],
+          "note": "写真（写真ライブラリから、または画像のファイル）1 枚と、文章・Markdown・コードのファイルを合わせて 4 件まで（A14）。写真は長い辺 1,280、JPEG、2.8 MB まで、情報を付けずに送る。"
         },
         "windows": {
           "status": "no"
@@ -654,8 +660,12 @@
           ]
         },
         "macos": {
-          "status": "no",
-          "note": "Mac のトークには地図のカードが無い。"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopConversationComponents.swift#ShannonPlaceMapCard",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonPlaceMapCard.swift"
+          ],
+          "note": "iPhone と同じ地図のカード（A14）。"
         },
         "windows": {
           "status": "no"
@@ -675,11 +685,12 @@
           ]
         },
         "macos": {
-          "status": "partial",
-          "note": "空のトークに案内の文は出るが、候補は出ない。",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
-          ]
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopTalkEmptyAndNotice.swift#ShannonPromptSuggestionList",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonPromptSuggestions.swift"
+          ],
+          "note": "空のトークに候補を 3 つまで。選ぶと入力欄に入り、送らない（A14）。"
         },
         "windows": {
           "status": "no"
@@ -722,8 +733,13 @@
           ]
         },
         "macos": {
-          "status": "no",
-          "note": "決定（2026-10-03）: Mac は会話の横に姿を出す。"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopNavigation.swift#case figure",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#public struct ShannonTalkFigurePanel",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+State.swift#ShannonTalkFigurePanel"
+          ],
+          "note": "トークの右の補助パネルの 3 つめ「すがた」。目次・現在地と切り替え、幅 320 から。トークの見出しのボタンと ⌥⌘F でも開く（A15）。"
         },
         "windows": {
           "status": "partial",
@@ -1178,11 +1194,12 @@
           ]
         },
         "macos": {
-          "status": "partial",
-          "note": "開発の画面にだけ検索・絞り込み・ピン留め・アーカイブがある。「作業全体」には無い。",
+          "status": "yes",
           "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopWorkSearch.swift#workSearchBar",
             "apps/macos-app/ShannonDesk/Features/Development/ShannonDesktopRootView+Development.swift"
-          ]
+          ],
+          "note": "作業 と 開発 の両方で、検索・絞り込み・ピン留め（右クリック）・アーカイブ（A14）。"
         },
         "windows": {
           "status": "no"
@@ -1233,11 +1250,11 @@
           ]
         },
         "macos": {
-          "status": "partial",
-          "note": "「今回だけ許可」と「許可しない」だけ。「この作業中は許可」が無い。",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopRootView+Work.swift"
-          ]
+            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopApprovalCard.swift#taskApprovalCard"
+          ],
+          "note": "今回だけ許可／この作業中／許可しない（A11）。古い実行先では「許可せず作業を中止」と確認。"
         },
         "windows": {
           "status": "yes",
@@ -1347,12 +1364,12 @@
           ]
         },
         "macos": {
-          "status": "partial",
-          "note": "サイドバーの件数と、トークの横の「現在地」で分かる。トークの上の知らせは無い。",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift",
-            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopSidebarComponents.swift"
-          ]
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopTalkEmptyAndNotice.swift#talkTaskNotice",
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskNotice.swift"
+          ],
+          "note": "トークの上に、iPhone と同じ作業の知らせ（許可待ち、続きが必要、結果）。押すと現在地。1 回きりのコマンド・ファイル変更の許可は、その場で「許可」（A14）。"
         },
         "windows": {
           "status": "partial",
@@ -1406,8 +1423,12 @@
           ]
         },
         "macos": {
-          "status": "no",
-          "note": "ボタンを 1 回押すだけ。決定（2026-10-03）で、Mac も長押しにする。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonHoldToConfirmButton.swift#public struct ShannonHoldToConfirmButton",
+            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopApprovalCard.swift#ShannonHoldToConfirmButton"
+          ],
+          "note": "ポインターで 0.6 秒押し続けて決める: 「この作業中」のすべてと、外部接続・権限の「今回だけ許可」。クリック・キーボード・VoiceOver では同じ文の確認。添える文は「…クリックすると確認してから決定します。」（task.approval.holdHintClick、A11）。動きを減らす設定では「押し続けています… N%」。"
         },
         "windows": {
           "status": "yes",
@@ -2033,8 +2054,12 @@
           "note": "「シャノン」の先頭のカードから開く。シャノンのいまだけ（運用の切り替えは無くした。A4・A5）。"
         },
         "macos": {
-          "status": "no",
-          "note": "ブランチは iPhone の入口だけを足している。Mac のサイドバーには入口が無い。"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shannon/ShannonDesktopRootView+Shannon.swift#ShannonYousuView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift"
+          ],
+          "note": "シャノン › ようす。iPhone と同じ共通の画面（A10）。"
         },
         "windows": {
           "status": "partial",
@@ -2061,7 +2086,12 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+            "apps/macos-app/ShannonDesk/Features/Shannon/ShannonDesktopRootView+Shannon.swift#openApproval"
+          ],
+          "note": "共通の ようす の画面。許可は押すと 作業 の現在地が開く。サイドバーの シャノン の行に数（A10）。"
         },
         "windows": {
           "status": "partial",
@@ -2087,7 +2117,11 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift"
+          ],
+          "note": "共通の ようす の画面（A10）。"
         },
         "windows": {
           "status": "partial",
@@ -2114,11 +2148,12 @@
           "note": "24 時間と 7 日を読む。403・404 のときは「気分の推移」を出さない。ほかの失敗（500・429・届かない・読み取れない）は区画を残して「読めませんでした」（前に読めた線は残す）。端末の中には記録しない。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift#ShannonMoodTrendModel"
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift#ShannonMoodTrendModel",
+            "apps/macos-app/ShannonDesk/Features/Shannon/ShannonDesktopRootView+Shannon.swift#ShannonYousuView"
           ],
-          "note": "共通の ようす の画面で読む。Mac のサイドバーに ようす の入口が入るのは A10。"
+          "note": "共通の ようす の画面で読む（A10 で Mac にも入口ができた）。"
         },
         "windows": {
           "status": "yes",
@@ -2145,11 +2180,12 @@
           "note": "シャノン › ようす の、気持ちのカードのすぐ下。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift#ShannonMoodTrendPanel"
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift#ShannonMoodTrendPanel",
+            "apps/macos-app/ShannonDesk/Features/Shannon/ShannonDesktopRootView+Shannon.swift#ShannonYousuView"
           ],
-          "note": "共通の ようす の画面で、気持ちのカードの横に広く出す。Mac の ようす の入口は A10。"
+          "note": "共通の ようす の画面で、気持ちのカードの横に広く出す（A10 で Mac にも入口ができた）。"
         },
         "windows": {
           "status": "yes",
@@ -2176,7 +2212,12 @@
           "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#ShannonOpsView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift"
+          ],
+          "note": "設定 › 管理 › 運用。iPhone と同じ共通の画面（A12）。"
         },
         "windows": {
           "status": "yes",
@@ -2203,7 +2244,12 @@
           "note": "iPhone は確認の画面で長押しして決める。 設定 › 管理 › 運用（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#ShannonOpsView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsConfirmationSheet.swift"
+          ],
+          "note": "共通の確認と長押し。Mac はポインターで押し続け、クリックでは同じ文の確認（A11・A12）。"
         },
         "windows": {
           "status": "yes",
@@ -2231,7 +2277,12 @@
           "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#ShannonOpsView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift"
+          ],
+          "note": "共通の画面（A12）。"
         },
         "windows": {
           "status": "yes",
@@ -2259,7 +2310,12 @@
           "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#ShannonOpsView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift"
+          ],
+          "note": "共通の画面（A12）。"
         },
         "windows": {
           "status": "yes",
@@ -2286,7 +2342,12 @@
           "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#ShannonOpsView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift"
+          ],
+          "note": "共通の画面（A12）。"
         },
         "windows": {
           "status": "yes",
@@ -2311,7 +2372,12 @@
           "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#ShannonOpsView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift"
+          ],
+          "note": "共通の画面（A12）。"
         },
         "windows": {
           "status": "yes",
@@ -2336,7 +2402,12 @@
           "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#ShannonOpsView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift"
+          ],
+          "note": "共通の画面（A12）。"
         },
         "windows": {
           "status": "yes",
@@ -2364,7 +2435,13 @@
           "note": "左上のボタンに橙の三角（赤い点とは別の形）、シートの 設定 のタイルと 設定 › 管理 › 運用 の行に同じ印と理由の 1 行。報告が 1 度も届いていない間は出さない。操作の失敗・期限切れは直近 1 時間だけ（A5）。"
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift#sidebarFooterLine",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopSidebarComponents.swift#DesktopOpsMark",
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#settingsOpsRow"
+          ],
+          "note": "サイドバーの 設定 の行に橙の三角、サイドバーの下に「運用：〈理由〉」の 1 行（押すと 設定 › 管理 › 運用）、管理 の 運用 の行に印と理由。報告が 1 度も届いていない間は出さない。窓が開いている間、3 分おきに読む（A12）。"
         },
         "windows": {
           "status": "yes",
@@ -2392,12 +2469,13 @@
           "note": "トークの向き合う表示に大きく立つ。空のトークの小さな姿と音声会話にも出る。別の「からだ」の画面は A6 で無くした。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#ShannonDialogueFigure",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonDialogueFigure.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DStage.swift"
           ],
-          "note": "設定 › すがた の「からだを開く」のシートで見るだけ。トークの会話の横に出すのは A15。"
+          "note": "補助パネル「すがた」に、iPhone の向き合う表示と同じ体のページの姿。読み込み中・失敗・ほかで表示中は水の光の目が立つ（A15）。「からだを開く」のシートは無くした。"
         },
         "windows": {
           "status": "yes",
@@ -2425,12 +2503,12 @@
           "note": "トークの表示の切り替えボタンの長押しと、設定 › すがた（A6）。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#displayOptions",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift"
           ],
-          "note": "設定で切り替えられるが、効くのは「からだを開く」のシートだけ。Mac のトークには姿が無い（A15）。"
+          "note": "パネルのメニュー（iPhone の表示の切り替えボタンの長押しと同じ項目）と、設定 › すがた（A15）。"
         },
         "windows": {
           "status": "no",
@@ -2455,12 +2533,12 @@
           "note": "設定 › すがた の「体」と、トークの表示の切り替えボタンの長押し。体のページを ?body=eyes で始め、setBody で切り替える。目だけのときは映し方を出さない。説明の「（iPhone の目と同じ動き）」は「（水の光の目と同じ動き）」にした。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift#ShannonFormSettingsSection",
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift#public struct ShannonFigureSettingsSection",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#ShannonLive2DBody.selection"
           ],
-          "note": "設定 › すがた と「からだを開く」のシートで選べるが、効くのはシートだけ。Mac のトークには姿が無い（A15）。"
+          "note": "設定 › すがた › 体 と、パネルのメニュー。パネルの姿に効く（A15）。"
         },
         "windows": {
           "status": "yes",
@@ -2486,7 +2564,7 @@
         },
         "macos": {
           "status": "no",
-          "note": "Mac には、窓で立つ体がまだ無い（デスクトップに立つ体を SwiftUI で作るとき、ADR-0004）。「からだを開く」のシートは窓の大きさで体を変えない。"
+          "note": "Mac には、窓で立つ体がまだ無い（デスクトップに立つ体を SwiftUI で作るとき、ADR-0004）。トークの横の「すがた」のパネルは、幅で体を変えない。"
         },
         "windows": {
           "status": "yes",
@@ -2513,11 +2591,11 @@
           ]
         },
         "macos": {
-          "status": "partial",
-          "note": "小さな表情のアイコンだけ。向き合う大きさの目は無い。",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift"
-          ]
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#ShannonWaterlightEyeView"
+          ],
+          "note": "水の光の目の姿のとき、パネルに大きく立つ。押すと表情が変わる（A15）。"
         },
         "windows": {
           "status": "no"
@@ -2538,8 +2616,12 @@
           ]
         },
         "macos": {
-          "status": "no",
-          "note": "Mac の「からだを開く」のシートには、気分・いま・話している様子を体のページへ送る仕組み（ShannonBodyAttachment）がつながっていない。A15。"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView.swift#shannonBodyAttachment",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#nowLine"
+          ],
+          "note": "窓に ShannonBodyAttachment をつなぎ、気分・いま・話している様子を体のページへ送る。姿の下に「いま：〈気持ち〉・〈していること〉」（A15）。"
         },
         "windows": {
           "status": "yes",
@@ -2567,12 +2649,12 @@
           "note": "映し方と位置を戻すは、トークの表示の切り替えボタンの長押しと 設定 › すがた（A6）。2 本の指で大きさと位置。 目だけのときは映し方を出さない（体のページが大きさと位置だけを使う）。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DHostView.swift#scrollWheel",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#layoutModeRawValue"
           ],
-          "note": "「からだを開く」のシートの中だけ。"
+          "note": "映し方（全身／上半身、人の姿だけ）と位置を戻す はパネルのメニューと 設定 › すがた。大きさはピンチか ⌘ を押してスクロール、位置はスクロール（A15）。"
         },
         "windows": {
           "status": "partial",
@@ -2599,12 +2681,12 @@
           "note": "体のページのしぐさ。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DStage.swift",
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift"
           ],
-          "note": "体のページのしぐさは出るが、見られるのは「からだを開く」のシートだけ。"
+          "note": "パネルの姿で、体のページのしぐさが出る（A15）。"
         },
         "windows": {
           "status": "yes",
@@ -2653,12 +2735,12 @@
           "note": "トークの向き合う表示の姿に、その場で触れる（A6）。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DHostView.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DHostView.swift#ShannonLive2DContainerView",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift"
           ],
-          "note": "「からだを開く」のシートの中で、ポインターで触れると体のページが動く。シャノンには伝えない。"
+          "note": "パネルの姿に、ポインターでそのまま触れる（なでる・つつく・くすぐる・手をつなぐ。目だけはつつくだけ）（A15）。"
         },
         "windows": {
           "status": "yes",
@@ -2684,8 +2766,12 @@
           ]
         },
         "macos": {
-          "status": "no",
-          "note": "Mac からは伝えない（設定の文）。A15 で決める。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#shannonBodyAttachment",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift#reportsTouch"
+          ],
+          "note": "設定 › すがた の「体に起きたことをシャノンに伝える」（既定は切）。入のとき、触れた種類・長さ・強さ・時刻だけが届き、返事は姿の近くの吹き出し（A15）。 Mac では相手はいつも所有者ひとり（同席の切り替えはまだ無い）。説明にそう書いた（settings.figure.touchMac）。"
         },
         "windows": {
           "status": "yes",
@@ -2761,8 +2847,12 @@
           "note": "設定 › すがた（A6）。声で返すのは、トークの向き合う表示の姿が見えている間だけ。"
         },
         "macos": {
-          "status": "no",
-          "note": "ブランチの Mac は、触れたことをシャノンに伝えない。"
+          "status": "partial",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift#replyModeRawValue",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyVoice.swift#listen"
+          ],
+          "note": "設定 › すがた の「触れたときの返事」（文字で返す／声で返す）。声で返すと、パネルの姿が出ていて覆うものが無い間、声で言う。そのあと聞く（答えると音声会話になる）ところは、Mac に音声会話が入る A16 で入る（A15）。"
         },
         "windows": {
           "status": "partial",
@@ -2789,12 +2879,12 @@
           ]
         },
         "macos": {
-          "status": "partial",
-          "note": "設定と、見るための仕組みは共有のコードにある。Mac のトークに「いま見ました」の表示が出るかは確かめていない。",
+          "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookSettingsSection.swift",
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
-          ]
+            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookViews.swift#shannonAppLook",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView.swift#shannonAppLook"
+          ],
+          "note": "窓の全体に共通の ShannonAppLookPresenter が付き、見たときは窓の上に「いま見ました」と小さな画像（A14 で確かめた）。"
         },
         "windows": {
           "status": "yes",
@@ -2852,11 +2942,12 @@
           "note": "向き合う表示と音声会話の上に「カメラ：切／見てよい／いま見ています」。切の間は、シートの 設定 のタイルの下に「カメラ：切」（A7）。見た直後の「いま見ました」はこれまでどおり。"
         },
         "macos": {
-          "status": "partial",
-          "note": "設定を開かないと分からない。",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
-          ]
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift#ShannonAppLookStateReader",
+            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookStateViews.swift"
+          ],
+          "note": "サイドバーの下に「カメラ：切／見てよい／いま見ています」。押すと 設定 › カメラ（A14）。"
         },
         "windows": {
           "status": "yes",
@@ -3192,7 +3283,12 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopSettingsForms.swift#ShannonChatAvatarStyle",
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopConversationComponents.swift#ShannonChatAvatarView"
+          ],
+          "note": "設定 › 外観 の「アバター」。トークの返事の横のアイコンが変わる（A14）。"
         },
         "windows": {
           "status": "no"
@@ -3291,7 +3387,11 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#settingsProfileCard"
+          ],
+          "note": "設定の左の列の先頭に、いまの顔と「いま：〈気持ち〉」。押すと状態のシート（A14）。"
         },
         "windows": {
           "status": "no"
@@ -3337,12 +3437,12 @@
           "note": "姿、体（人の姿／目だけ、2026-10-05）、映し方（人の姿のときだけ）、位置を戻す、トークで姿を見る、体に起きたことを伝える、触れたときの返事（A6）。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift#ShannonFormSettingsSection"
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopSettingsForms.swift#ShannonFigureSettingsSection",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift"
           ],
-          "note": "姿の切り替え、体（人の姿／目だけ、2026-10-05）と「からだを開く」だけ。"
+          "note": "iPhone と同じ 設定 › すがた: 姿、体、映し方、位置を戻す、トークで姿を見る（押すとトークと「すがた」のパネル）、体に起きたことを伝える、触れたときの返事（A15）。"
         },
         "windows": {
           "status": "partial",
@@ -3369,8 +3469,12 @@
           "note": "設定の先頭（シャノンの札の下）に 管理: 運用・接続中の端末・配信・診断。「接続と詳細」は無くした（A5）。接続中の端末は端末の一覧と解除だけを、設定 › 接続 はこの端末の接続（状態、確認、この端末の解除）を開く（2026-10-05）。"
         },
         "macos": {
-          "status": "no",
-          "note": "運用が無い。接続中の端末は接続のシートの中。"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift#settingsColumn",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopNavigation.swift#enum DesktopSettingsPage"
+          ],
+          "note": "設定 は左に区画、右に中身。先頭の 管理 に 運用・接続中の端末・配信・診断（A12）。ほかの区画は すがた・カメラ・イヤホン・声・予定・外観・接続・情報源。自律活動の止めるスイッチは シャノン › 自律活動 へ移った。"
         },
         "windows": {
           "status": "yes",
@@ -3538,8 +3642,12 @@
           ]
         },
         "macos": {
-          "status": "no",
-          "note": "Mac のアプリには通知のコードが無い。"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift#DesktopNotificationPlan",
+            "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotifier.swift#UNNotificationRequest"
+          ],
+          "note": "Mac が自分で出す通知（A13）: 新しい許可待ち、続きが必要、完了、失敗、シャノンからの話。文は iPhone の push と同じ。部屋を見た話は「ライ氏、部屋のことでひとことあります。」だけ。窓が開いている間、作業は 1 分おき（動いている作業は 10 秒おき）、シャノンからの話は 1 分おきに読む。はじめて動いたときは、すでにあるものを覚えるだけで出さない。"
         },
         "windows": {
           "status": "partial",
@@ -3593,8 +3701,11 @@
           ]
         },
         "macos": {
-          "status": "not_applicable",
-          "reason": "通知そのものが無い（notifications.push）。"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotifier.swift#openNotificationTarget"
+          ],
+          "note": "押すと、作業は 作業 の現在地、シャノンからの話はそのトークが開く（A13）。"
         },
         "windows": {
           "status": "yes",
@@ -3941,8 +4052,9 @@
         "macos": {
           "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/ShannonDeskApp.swift"
-          ]
+            "apps/macos-app/ShannonDesk/ShannonDeskApp.swift#CommandGroup(replacing: .appSettings)"
+          ],
+          "note": "⌘1〜⌘4 が トーク／作業／シャノン／設定、⌘5 開発、⌘6 配信、⌥⌘O 目次、⌥⌘I 現在地、⌥⌘F すがた。⌘, はサイドバーと同じ 設定 を開く（前の小さな設定の窓は無くした。窓が無いときは新しい窓で 設定）。"
         },
         "windows": {
           "status": "partial",

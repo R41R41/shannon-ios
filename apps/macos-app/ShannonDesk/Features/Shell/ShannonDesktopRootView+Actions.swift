@@ -93,7 +93,7 @@ extension ShannonDesktopRootView {
     }
 
     func selectDestination(_ destination: DesktopDestination) {
-        if destination == .work || destination == .development || destination == .release {
+        if destination.pillar == .work {
             auxiliaryPanel = .task
         }
         restoredDestinationRawValue = destination.rawValue

@@ -22,30 +22,19 @@ extension ShannonDesktopRootView {
                     )
                     .frame(maxWidth: .infinity, minHeight: 320)
                 } else {
-                    DesktopTaskSection(
-                        title: "いま",
-                        subtitle: "作業中・許可待ち・続きが必要・一時停止中",
-                        tasks: workProjection.active,
-                        threads: conversation.threads,
-                        selectedTaskID: selectedTaskID,
-                        select: selectTask
-                    )
-                    DesktopTaskSection(
-                        title: "これから",
-                        subtitle: "シャノンからの提案。開始はあなたが決めます",
-                        tasks: workProjection.proposed,
-                        threads: conversation.threads,
-                        selectedTaskID: selectedTaskID,
-                        select: selectTask
-                    )
-                    DesktopTaskSection(
-                        title: "終了",
-                        subtitle: "完了・中止・失敗の結果と変更内容を残します",
-                        tasks: workProjection.finished,
-                        threads: conversation.threads,
-                        selectedTaskID: selectedTaskID,
-                        select: selectTask
-                    )
+                    workSearchBar
+                    workTaskSection("ピン留め", subtitle: "上に留めた作業", tasks: workProjection.pinned)
+                    workTaskSection("いま", subtitle: "作業中・許可待ち・続きが必要・一時停止中", tasks: workProjection.active)
+                    workTaskSection("これから", subtitle: "シャノンからの提案。開始はあなたが決めます", tasks: workProjection.proposed)
+                    workTaskSection("終了", subtitle: "完了・中止・失敗の結果と変更内容を残します", tasks: workProjection.finished)
+                    if showsArchivedDevelopmentTasks {
+                        workTaskSection("アーカイブ", subtitle: "片付けた作業。戻すと一覧に出ます", tasks: workProjection.archived)
+                    }
+                    if workProjection.pinned.isEmpty, workProjection.active.isEmpty, workProjection.proposed.isEmpty,
+                       workProjection.finished.isEmpty, !showsArchivedDevelopmentTasks || workProjection.archived.isEmpty {
+                        Text("一致する作業はありません")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .frame(maxWidth: 900, alignment: .leading)
@@ -353,7 +342,8 @@ extension ShannonDesktopRootView {
 /// A stop that cannot be undone is confirmed before it is sent.
 enum DesktopTaskStopConfirmation: Equatable {
     case cancel(UUID)
-    case denyAndStop(UUID)
+    /// The approval the owner saw is the one declined; if it is no longer pending, nothing is sent.
+    case denyAndStop(UUID, requestID: String)
 
     var title: String {
         switch self {
@@ -378,56 +368,12 @@ enum DesktopTaskStopConfirmation: Equatable {
 }
 
 extension ShannonDesktopRootView {
-    /// Same decision material as iPhone: the task state word, the reason, and the concrete target.
-    func taskApprovalCard(_ task: ShannonAgentTask, approval: ShannonAgentApproval) -> some View {
-        VStack(alignment: .leading, spacing: ShannonDesktopSpacing.medium) {
-            Label(ShannonAgentTaskStatus.waitingApproval.japaneseName, systemImage: "hand.raised.fill")
-                .font(.shannonDesktop(.headline))
-            Text(approval.title)
-            Text(approval.reason)
-                .font(.shannonDesktop(.callout))
-                .foregroundStyle(.secondary)
-            if let target = approval.target {
-                Label(target, systemImage: "lock.fill")
-                    .font(.shannonDesktop(.callout).monospaced())
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .accessibilityLabel("許可する対象、\(target)")
-            }
-            HStack {
-                Button("今回だけ許可") {
-                    Task { await conversation.resolveAgentApproval(task.id, accepted: true) }
-                }
-                .buttonStyle(.borderedProminent)
-                if approval.denyStopsTask {
-                    Button("許可せず作業を中止", role: .destructive) {
-                        taskStopConfirmation = .denyAndStop(task.id)
-                    }
-                } else {
-                    Button("許可しない") {
-                        Task { await conversation.resolveAgentApproval(task.id, accepted: false) }
-                    }
-                    .help("この操作だけを断ります。作業は中止されません")
-                }
-            }
-            .disabled(conversation.isAgentTaskActionInFlight(task.id))
-            Text(approval.denyStopsTask
-                ? "この実行先では、許可しないと作業全体が止まります。"
-                : "「許可しない」はこの操作だけを断り、シャノンは別の進め方を探すか、次の一手を残して止まります。")
-                .font(.shannonDesktop(.caption))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(ShannonDesktopSpacing.large)
-        .background(Color.shannonAttention.opacity(0.10), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium))
-    }
-
     func performTaskStop(_ confirmation: DesktopTaskStopConfirmation) {
         switch confirmation {
         case .cancel(let id):
             Task { await conversation.cancelAgentTask(id) }
-        case .denyAndStop(let id):
-            Task { await conversation.resolveAgentApproval(id, accepted: false) }
+        case .denyAndStop(let id, let requestID):
+            Task { await conversation.resolveAgentApproval(id, accepted: false, requestID: requestID) }
         }
     }
 }

@@ -182,8 +182,9 @@ extension ShannonLive2DHostView: NSViewRepresentable {
     }
 }
 
-/// The Mac host: the pointer goes to the page (its touch thresholds were tuned for a mouse),
-/// and a trackpad pinch scales her. Moving her is not offered on the Mac.
+/// The Mac host: the pointer goes to the page (its touch thresholds were tuned for a mouse), so a
+/// click or a drag on her is a touch. Her size and place are the wide screen's (A15): a trackpad pinch
+/// or a scroll with ⌘ scales her, and a scroll moves her.
 final class ShannonLive2DContainerView: NSView {
     let hostID: UUID
     private let priority: ShannonLive2DHostPriority
@@ -231,6 +232,37 @@ final class ShannonLive2DContainerView: NSView {
         let view = super.hitTest(point)
         if view != nil, touchEnabled, ShannonLive2DStage.shared.isResting { ShannonLive2DStage.shared.noteActivity() }
         return view
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        guard let onLayoutChange, touchEnabled else { return super.scrollWheel(with: event) }
+        let next = Self.scrolled(
+            figureLayout, deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY,
+            precise: event.hasPreciseScrollingDeltas, inverted: event.isDirectionInvertedFromDevice,
+            scales: event.modifierFlags.contains(.command), in: bounds.size
+        )
+        guard next != figureLayout else { return }
+        figureLayout = next
+        ShannonLive2DStage.shared.update(host: hostID, layout: next, touchEnabled: touchEnabled)
+        onLayoutChange(next)
+    }
+
+    /// A scroll moves her the way the fingers (or the wheel) go, whatever the owner's scroll direction
+    /// setting: AppKit's delta follows the content, so it is turned back when it is not inverted from the
+    /// device. With ⌘, moving up makes her larger. The page's y grows downwards.
+    static func scrolled(
+        _ layout: ShannonLive2DLayout, deltaX: CGFloat, deltaY: CGFloat, precise: Bool, inverted: Bool,
+        scales: Bool, in bounds: CGSize
+    ) -> ShannonLive2DLayout {
+        let sign: CGFloat = inverted ? 1 : -1
+        let fingerX = deltaX * sign
+        let fingerY = deltaY * sign
+        if scales {
+            let step = precise ? fingerY / 200 : fingerY / 20
+            return layout.adjusted(scaleBy: max(0.5, 1 - Double(step)), movedBy: .zero, in: bounds)
+        }
+        let factor: CGFloat = precise ? 1 : 8
+        return layout.adjusted(scaleBy: 1, movedBy: CGSize(width: fingerX * factor, height: fingerY * factor), in: bounds)
     }
 
     @objc private func magnified(_ recognizer: NSMagnificationGestureRecognizer) {

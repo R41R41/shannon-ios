@@ -187,6 +187,7 @@ struct DesktopArtifactCard: View {
             RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium, style: .continuous)
                 .stroke(Color.primary.opacity(0.07), lineWidth: 0.75)
         }
+        .shannonCoversFigure(isPreviewing)
         .sheet(isPresented: $isPreviewing) {
             DesktopArtifactPreview(
                 artifact: artifact,

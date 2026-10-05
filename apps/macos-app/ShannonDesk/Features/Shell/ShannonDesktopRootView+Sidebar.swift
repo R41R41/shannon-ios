@@ -3,12 +3,14 @@ import ShannonAppCore
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// The sidebar of the four pillars (docs/product/information-architecture.md, roadmap A10):
+/// トーク／作業／シャノン at the top, the talks below them with search, and 設定 as the last row.
 extension ShannonDesktopRootView {
     var sidebar: some View {
         VStack(spacing: 0) {
             HStack(spacing: ShannonDesktopSpacing.small) {
                 ShannonAvatarView(face: conversation.currentFace, size: 28)
-                Text("シャノン")
+                Text(ShannonGeneratedStrings.appName)
                     .font(.shannonDesktop(.headline))
                 Spacer()
                 Button {
@@ -27,24 +29,27 @@ extension ShannonDesktopRootView {
             .padding(.bottom, ShannonDesktopSpacing.small)
 
             List(selection: sidebarSelection) {
-                Section("ワークスペース") {
+                Section {
                     sidebarDestinationRow(
-                        title: "トーク",
+                        title: ShannonGeneratedStrings.navTalk,
                         symbol: "bubble.left.and.bubble.right",
                         badge: conversation.unreadInitiativeCount,
+                        badgeLabel: "未確認\(conversation.unreadInitiativeCount)件",
                         destination: .talk
                     )
                     sidebarDestinationRow(
-                        title: "作業",
+                        title: ShannonGeneratedStrings.navWork,
                         symbol: "point.3.connected.trianglepath.dotted",
                         badge: conversation.unreadAgentTaskCount,
+                        badgeLabel: "未確認\(conversation.unreadAgentTaskCount)件",
                         destination: .work
                     )
                     sidebarDestinationRow(
-                        title: "頭の中",
-                        symbol: "brain.head.profile",
-                        badge: 0,
-                        destination: .memory
+                        title: ShannonGeneratedStrings.navShannon,
+                        symbol: "person.crop.circle",
+                        badge: shannonWaitingCount,
+                        badgeLabel: ShannonGeneratedStrings.entryWaiting(count: String(shannonWaitingCount)),
+                        destination: .shannon
                     )
                 }
 
@@ -59,7 +64,7 @@ extension ShannonDesktopRootView {
                     }
                 }
 
-                Section(threadProjection.isSearching ? "検索結果" : "トーク") {
+                Section(threadProjection.isSearching ? "検索結果" : ShannonGeneratedStrings.navTalk) {
                     ForEach(threadProjection.conversations, id: \.threadId) { thread in
                         threadRow(thread, showsInitiativeSignal: false)
                     }
@@ -70,27 +75,6 @@ extension ShannonDesktopRootView {
                             .padding(.vertical, ShannonDesktopSpacing.small)
                     }
                 }
-
-                Section("ツール") {
-                    sidebarDestinationRow(
-                        title: "開発",
-                        symbol: "chevron.left.forwardslash.chevron.right",
-                        badge: workProjection.active.count,
-                        destination: .development
-                    )
-                    sidebarDestinationRow(
-                        title: "配信",
-                        symbol: "shippingbox",
-                        badge: 0,
-                        destination: .release
-                    )
-                    sidebarDestinationRow(
-                        title: "設定",
-                        symbol: "gearshape",
-                        badge: 0,
-                        destination: .settings
-                    )
-                }
             }
             .listStyle(.sidebar)
             .searchable(text: $searchText, placement: .sidebar, prompt: "トークを検索")
@@ -98,32 +82,99 @@ extension ShannonDesktopRootView {
             .onSubmit(of: .search, openFirstSearchResult)
 
             Divider()
-            VStack(spacing: 2) {
-                Button {
-                    showsConnection = true
-                } label: {
-                    HStack(spacing: ShannonDesktopSpacing.small) {
-                        Image(systemName: connection.isConnected ? "checkmark.circle.fill" : "link.badge.plus")
-                            .foregroundStyle(connection.isConnected ? Color.shannonSuccess : Color.secondary)
-                        Text(connection.statusLabel)
-                            .lineLimit(1)
-                        Spacer()
-                    }
-                    .padding(.horizontal, ShannonDesktopSpacing.medium)
-                    .frame(height: ShannonDesktopMetrics.rowHeight)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(ShannonDesktopSpacing.small)
+            sidebarFooter
         }
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    /// What waits for the owner in 「シャノン」, the same count as the iPhone's tile.
+    var shannonWaitingCount: Int {
+        yousu.now.waiting(approvals: conversation.waitingApprovals).count
+    }
+
+    /// The bottom of the sidebar: the 設定 row, then the lines that must always be visible:
+    /// the 運用 mark's reason (roadmap A12) and, while not connected, the connection.
+    var sidebarFooter: some View {
+        let opsReason = yousu.ops.attentionReason()
+        return VStack(alignment: .leading, spacing: 2) {
+            DesktopSidebarButton(
+                title: ShannonGeneratedStrings.navSettings,
+                symbol: "gearshape",
+                badge: 0,
+                selected: destination == .settings,
+                attention: opsReason,
+                action: { selectDestination(.settings) }
+            )
+            if let opsReason {
+                sidebarFooterLine(
+                    ShannonGeneratedStrings.entryOpsReason(reason: opsReason),
+                    hint: ShannonGeneratedStrings.adminOpsHint
+                ) {
+                    DesktopOpsMark()
+                } action: {
+                    openSettings(.ops)
+                }
+            }
+            // The camera's state is always visible (A14): 切／見てよい／いま見ています. It opens 設定 › カメラ.
+            ShannonAppLookStateReader(conversation: conversation) { state in
+                sidebarFooterLine(state.line, hint: "設定のカメラを開きます") {
+                    Image(systemName: state.symbol).foregroundStyle(Color.secondary)
+                } action: {
+                    openSettings(.camera)
+                }
+                .accessibilityIdentifier("sidebar-app-look-state")
+            }
+            if !connection.isConnected {
+                sidebarFooterLine(connection.statusLabel, hint: "接続を開きます") {
+                    Image(systemName: "link.badge.plus").foregroundStyle(Color.secondary)
+                } action: {
+                    showsConnection = true
+                }
+            }
+        }
+        .padding(ShannonDesktopSpacing.small)
+        // The mark stays current while the window is open: 運用 is read every three minutes.
+        .task(id: connection.isConnected) {
+            guard connection.isConnected, !conversation.isDesignPreview else { return }
+            await yousu.now.reload()
+            while !Task.isCancelled {
+                await yousu.ops.refresh()
+                do { try await Task.sleep(for: .seconds(180)) } catch { return }
+            }
+        }
+    }
+
+    func sidebarFooterLine<Icon: View>(
+        _ text: String,
+        hint: String,
+        @ViewBuilder icon: () -> Icon,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: ShannonDesktopSpacing.small) {
+                icon()
+                Text(text)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .font(.shannonDesktop(.callout))
+            .padding(.horizontal, ShannonDesktopSpacing.medium)
+            .frame(minHeight: ShannonDesktopMetrics.rowHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
+        .accessibilityHint(hint)
+        .accessibilityAddTraits(.isButton)
     }
 
     func sidebarDestinationRow(
         title: String,
         symbol: String,
         badge: Int,
+        badgeLabel: String,
         destination: DesktopDestination
     ) -> some View {
         Label {
@@ -140,7 +191,7 @@ extension ShannonDesktopRootView {
             Image(systemName: symbol)
         }
         .tag(DesktopSidebarSelection.destination(destination))
-        .accessibilityValue(badge > 0 ? "未確認\(badge)件" : "")
+        .accessibilityValue(badge > 0 ? badgeLabel : "")
     }
 
     func threadRow(_ thread: ChatThreadDTO, showsInitiativeSignal: Bool) -> some View {

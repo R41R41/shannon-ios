@@ -169,7 +169,11 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         )
         XCTAssertEqual(
             ShannonDesktopWindowRestoration.destination(sceneRawValue: nil, lastRawValue: "memory"),
-            .memory
+            .shannon
+        )
+        XCTAssertEqual(
+            ShannonDesktopWindowRestoration.destination(sceneRawValue: "shannon", lastRawValue: "talk"),
+            .shannon
         )
         XCTAssertEqual(
             ShannonDesktopWindowRestoration.destination(sceneRawValue: "unknown", lastRawValue: "unknown"),
@@ -206,6 +210,19 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
             ShannonDesktopWindowRestoration.auxiliaryPanel(sceneRawValue: "unknown", lastRawValue: "unknown"),
             .task
         )
+        XCTAssertEqual(
+            ShannonDesktopWindowRestoration.auxiliaryPanel(sceneRawValue: "figure", lastRawValue: "task"),
+            .figure
+        )
+        XCTAssertEqual(DesktopAuxiliaryPanel.allCases, [.outline, .task, .figure])
+        XCTAssertEqual(DesktopAuxiliaryPanel.figure.minimumWidth, 320)
+        XCTAssertEqual(DesktopAuxiliaryPanel.figure.title, "すがた")
+        // Her figure stands beside Talk only: on シャノン, 作業 and 設定 the page keeps its width.
+        XCTAssertTrue(DesktopAuxiliaryPanel.isShown(.figure, on: .talk))
+        for page in [DesktopDestination.shannon, .work, .development, .release, .settings] {
+            XCTAssertFalse(DesktopAuxiliaryPanel.isShown(.figure, on: page))
+            XCTAssertTrue(DesktopAuxiliaryPanel.isShown(.task, on: page))
+        }
 
         let initialChrome = ShannonDesktopWindowRestoration.windowChrome(
             sceneInspectorRawValue: nil,
@@ -222,6 +239,107 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         XCTAssertEqual(initialChrome, restoredChrome)
         XCTAssertTrue(initialChrome.showsInspector)
         XCTAssertEqual(initialChrome.auxiliaryPanel, .outline)
+    }
+
+    func testFourPillarsHoldDevelopmentAndReleaseInsideWork() {
+        XCTAssertEqual(DesktopPillar.allCases, [.talk, .work, .shannon, .settings])
+        XCTAssertEqual(DesktopDestination.development.pillar, .work)
+        XCTAssertEqual(DesktopDestination.release.pillar, .work)
+        XCTAssertEqual(DesktopDestination.shannon.pillar, .shannon)
+        XCTAssertEqual(DesktopWorkPage(destination: .release), .release)
+        XCTAssertNil(DesktopWorkPage(destination: .settings))
+        XCTAssertEqual(DesktopWorkPage.allCases.map(\.destination), [.work, .development, .release])
+        XCTAssertEqual(DesktopShannonPage.restoring(nil), .now)
+        XCTAssertEqual(DesktopShannonPage.restoring("study"), .study)
+        XCTAssertEqual(DesktopShannonPage.restoring("unknown"), .now)
+    }
+
+    func testNotificationsFollowTheIPhonePushRules() throws {
+        let approval = ShannonAgentApproval(externalRequestID: "req-1", kind: .network, title: "外部接続の許可", reason: "取得")
+        let waiting = ShannonAgentTask(
+            conversationThreadID: "t1", title: "資料を集める", goal: "g", status: .waitingApproval,
+            summary: "s", pendingApproval: approval
+        )
+        let done = ShannonAgentTask(conversationThreadID: "t1", title: "要約", goal: "g", status: .completed, summary: "s")
+        let cancelled = ShannonAgentTask(conversationThreadID: "t1", title: "やめた", goal: "g", status: .cancelled, summary: "s")
+        let seen = ShannonAgentTask(conversationThreadID: "t1", title: "見た", goal: "g", status: .failed, summary: "s")
+        let room = try JSONDecoder().decode(ShannonInitiativeMessageDTO.self, from: Data("""
+        {"id":"i1","threadId":"t2","content":"机の上にマグカップ","expression":"curious","sourceTitle":"部屋を見た",
+         "sourceURL":"","createdAt":"2026-10-05T00:00:00Z","readAt":null,"roomLook":true}
+        """.utf8))
+        let plain = try JSONDecoder().decode(ShannonInitiativeMessageDTO.self, from: Data("""
+        {"id":"i2","threadId":"t3","content":"面白い記事がありました","expression":"excited","sourceTitle":"HN",
+         "sourceURL":"","createdAt":"2026-10-05T00:00:00Z","readAt":null}
+        """.utf8))
+
+        let notices = DesktopNotificationPlan.notices(
+            tasks: [waiting, done, cancelled, seen],
+            needsNotice: { $0.id != seen.id },
+            initiatives: [room, plain]
+        )
+        XCTAssertEqual(notices.map(\.title), ["シャノン · 許可待ち", "シャノン · 完了", "シャノン", "シャノン"])
+        XCTAssertEqual(notices[0].body, "「資料を集める」を続けるには、外部接続の許可が必要です。")
+        XCTAssertEqual(notices[0].target, .task(waiting.id))
+        XCTAssertEqual(notices[1].body, "ライ氏、「要約」の作業が終わりました。")
+        XCTAssertEqual(notices[2].body, "ライ氏、部屋のことでひとことあります。")
+        XCTAssertEqual(notices[3].body, "面白い記事がありました")
+        XCTAssertEqual(notices[3].target, .thread("t3"))
+
+        let first = DesktopNotificationPlan.toPost(notices, delivered: nil)
+        XCTAssertTrue(first.post.isEmpty)
+        let remembered = try XCTUnwrap(first.delivered)
+        XCTAssertEqual(remembered.count, 4)
+        XCTAssertTrue(DesktopNotificationPlan.toPost(notices, delivered: remembered).post.isEmpty)
+        let later = DesktopNotificationPlan.toPost(notices, delivered: Array(remembered.dropFirst()))
+        XCTAssertEqual(later.post.map(\.key), [notices[0].key])
+    }
+
+    func testNotificationBaselineWaitsForARealReadAndPermission() {
+        let notice = DesktopNotice(key: "initiative:a", title: "シャノン", body: "b", target: .thread("t"))
+        let newer = DesktopNotice(key: "initiative:b", title: "シャノン", body: "c", target: .thread("t"))
+        // Offline or not yet read: no baseline is taken, so an empty list cannot become the baseline.
+        let offline = DesktopNotificationPlan.toPost([], delivered: nil, readSucceeded: false)
+        XCTAssertNil(offline.delivered)
+        XCTAssertTrue(offline.post.isEmpty)
+        // The first read that reached the server remembers what is there without showing it.
+        let baseline = DesktopNotificationPlan.toPost([notice], delivered: nil, readSucceeded: true)
+        XCTAssertEqual(baseline.delivered, ["initiative:a"])
+        XCTAssertTrue(baseline.post.isEmpty)
+        // Not allowed: nothing shown and nothing new remembered, so it shows once allowed.
+        let denied = DesktopNotificationPlan.toPost([notice, newer], delivered: ["initiative:a"], authorized: false)
+        XCTAssertTrue(denied.post.isEmpty)
+        XCTAssertEqual(denied.delivered, ["initiative:a"])
+        let allowed = DesktopNotificationPlan.toPost([notice, newer], delivered: denied.delivered, authorized: true)
+        XCTAssertEqual(allowed.post.map(\.key), ["initiative:b"])
+        XCTAssertEqual(allowed.delivered, ["initiative:a", "initiative:b"])
+    }
+
+    func testEveryCoverAloneHidesHerFigure() {
+        let none = DesktopFigureCovers(
+            connection: false, worldSubscriptions: false, appIcon: false, stateDetails: false,
+            addProject: false, taskStopConfirmation: false, rename: false, fromViews: false
+        )
+        XCTAssertFalse(none.isAny)
+        let paths: [WritableKeyPath<DesktopFigureCovers, Bool>] = [
+            \.connection, \.worldSubscriptions, \.appIcon, \.stateDetails, \.addProject,
+            \.taskStopConfirmation, \.rename, \.fromViews,
+        ]
+        XCTAssertEqual(paths.count, Mirror(reflecting: none).children.count)
+        for path in paths {
+            var covers = none
+            covers[keyPath: path] = true
+            XCTAssertTrue(covers.isAny)
+        }
+    }
+
+    func testSettingsOpenWithAdminFirstAndFallBackWithoutOps() {
+        XCTAssertEqual(DesktopSettingsPage.admin, [.ops, .devices, .delivery, .diagnostics])
+        XCTAssertEqual(DesktopSettingsPage.admin + DesktopSettingsPage.others, DesktopSettingsPage.allCases)
+        XCTAssertEqual(DesktopSettingsPage.restoring(nil, opsSupported: true), .ops)
+        XCTAssertEqual(DesktopSettingsPage.restoring(nil, opsSupported: false), .devices)
+        XCTAssertEqual(DesktopSettingsPage.restoring("ops", opsSupported: false), .devices)
+        XCTAssertEqual(DesktopSettingsPage.restoring("calendar", opsSupported: false), .calendar)
+        XCTAssertEqual(DesktopSettingsPage.restoring("unknown", opsSupported: true), .ops)
     }
 
     func testDevelopmentOptionsDiscardUnsupportedModelAndNormalizeReasoning() {

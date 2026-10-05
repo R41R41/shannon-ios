@@ -67,16 +67,27 @@ public enum ShannonPromptSuggestions {
 
 /// Vertical suggestion list placed above the composer on an empty conversation.
 /// Each row wraps to two lines so no suggestion is cut off at the screen edge.
-struct ShannonPromptSuggestionList: View {
+public struct ShannonPromptSuggestionList: View {
     let suggestions: [ShannonPromptSuggestions.Suggestion]
     let palette: ShannonPalette
     let choose: (ShannonPromptSuggestions.Suggestion) -> Void
+
+    init(suggestions: [ShannonPromptSuggestions.Suggestion], palette: ShannonPalette, choose: @escaping (ShannonPromptSuggestions.Suggestion) -> Void) {
+        self.suggestions = suggestions
+        self.palette = palette
+        self.choose = choose
+    }
+
+    /// The Mac's empty Talk, with the palette of the current appearance.
+    public init(suggestions: [ShannonPromptSuggestions.Suggestion], colorScheme: ColorScheme, choose: @escaping (ShannonPromptSuggestions.Suggestion) -> Void) {
+        self.init(suggestions: suggestions, palette: ShannonPalette.resolve(colorScheme), choose: choose)
+    }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var revealed = false
     @State private var chosenCount = 0
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in
                 if index > 0 {

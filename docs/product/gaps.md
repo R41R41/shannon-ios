@@ -8,6 +8,18 @@
 
 > **2026-10-05 追記（目だけの体）**: 所有者の決定で行が 3 つ増えた。`body.choice`（体を選ぶ 人の姿／目だけ。iPhone と Windows はある）、`body.small-eyes`（小さくしたときは目だけにする。Windows だけの窓の機能、デスクトップの追加）、`desktop.stream-output-body`（配信用の出力も選んだ体で。デスクトップの追加）。機能は 145 件、遅れている所は 127 か所。増えた 1 か所は `body.choice` の Mac（`partial`）: Mac は 設定 › すがた と「からだを開く」のシートで体を選べるが、効くのはシートだけで、Mac のトークには姿が無い。ほかの `body.*` の Mac と同じ遅れで、A15（Mac のトークの右に姿を出す）で閉じる。`--accept-gaps` で `parity-baseline.json` に入れた。
 
+> **2026-10-05 追記（Mac の 4 つの柱、A10）**: Mac のサイドバーを トーク／作業／シャノン（上）・トークの一覧（下）・設定（いちばん下）にし、シャノン に 2 列目（先頭のカードと 頭の中／自律活動／書斎）と ようす を入れた。開発と配信は 作業 の中のページ。閉じた所: `structure.four-entries`・`structure.shannon-hub`・`yousu.now`・`yousu.waiting`・`yousu.recent-events`・`yousu.mood-history`・`yousu.mood-trend` の Mac。遅れている所は 120 か所。下の 1・17 の Mac の部分は、これで済んだ。
+
+> **2026-10-05 追記（Mac の承認、A11）**: Mac の現在地の許可を 今回だけ許可／この作業中／許可しない にし、長く効く許可はポインターで押し続けて決めるようにした（クリック・キーボード・VoiceOver は同じ文の確認）。閉じた所: `tasks.approval`・`tasks.hold-to-confirm` の Mac。下の 9 の Mac の部分は済んだ。
+
+> **2026-10-05 追記（Mac の 設定 › 管理、A12）**: Mac の設定を、左に区画・右に中身にし、先頭の 管理 に 運用・接続中の端末・配信・診断 を置いた。運用の印は、サイドバーの 設定 の行と、サイドバーの下の 1 行。閉じた所: `ops.*`（7）・`ops.attention-mark`・`settings.admin` の Mac。遅れている所は 109 か所。下の 3 の Mac の部分は済んだ。
+
+> **2026-10-05 追記（Mac の通知、A13）**: Mac が、新しい許可待ち・続きが必要・完了・失敗・シャノンからの話を、iPhone の push と同じ文で通知し、押すとその場所を開くようにした。閉じた所: `notifications.push`・`notifications.open-target` の Mac。下の 11 は済んだ。
+
+> **2026-10-05 追記（Mac のトークと設定、A14）**: Mac に、写真の添付、地図のカード、空のトークの候補、トークの上の作業の知らせ、サイドバーの下のカメラの状態、アバターの種類、設定の先頭の状態の札、作業 の検索・絞り込み・ピン留め・アーカイブを入れ、「いま見ました」が Mac の窓にも出ることを確かめた。閉じた所: `talk.attachments`・`talk.place-map`・`talk.prompt-suggestions`・`look.app-camera`・`look.always-visible-state`・`settings.avatar-style`・`settings.profile-state`・`tasks.search-filter-pin-archive`・`tasks.notice-in-talk` の Mac。下の 14 の Mac の部分は済んだ。
+
+> **2026-10-05 追記（Mac の姿、A15）**: Mac のトークの右に、補助パネルの 3 つめ「すがた」（目次・現在地と切り替え、幅 320 から）を入れた。水の光の目と Live2D の姿、ポインターで触れる、触れたことを伝える、設定 › すがた は iPhone と同じ。「からだを開く」のシートは無くした。閉じた所: `talk.dialogue-mode`・`body.live2d`・`body.form-switch`・`body.choice`・`body.waterlight-eye`・`body.presence-on-body`・`body.layout`・`body.idle-gestures`・`touch.gestures`・`touch.tell-shannon`・`settings.figure` の Mac。`touch.reply-mode` の Mac は `partial`（声で言うところまで。聞くところは A16）。下の 4 の Mac の部分は済んだ。
+
 2026-10-03。Apple 側は `c40a65e`（main）のコード、Windows 側は同じ日に読んだ `shannon-desktop`（VM の `~/handoff/shannon-desktop-src.zip`）から。画面は動かしていない（ビルドもシミュレーターも使っていない）。コードと文書を読んだ結果。
 
 機能ごとの細かい状態は [`feature-matrix.md`](feature-matrix.md)（127 件）。ここは、そのうち所有者の目に入るずれを、目立つ順にまとめたもの。

@@ -124,12 +124,22 @@ public struct ShannonNowView: View {
         let lingering = (feeling?.lingering ?? []).compactMap { ShannonNowText.lingeringLabel($0) }
         Section {
 #if os(macOS)
-            // Wide: the trend stands next to the feeling card (owner's pick, 2026-10-05).
-            HStack(alignment: .top, spacing: ShannonSpacing.extraLarge) {
-                feelingCard(palette: palette, moodFace: moodFace, presentFace: presentFace, lingering: lingering)
-                    .frame(minWidth: 220, maxWidth: 320, alignment: .leading)
-                if model.moodTrend.isAvailable {
-                    ShannonMoodTrendPanel(model: model.moodTrend, palette: palette)
+            // Wide: the trend stands next to the feeling card (owner's pick, 2026-10-05). When the column is too
+            // narrow for both, the trend goes under the card instead of being squeezed.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: ShannonSpacing.extraLarge) {
+                    feelingCard(palette: palette, moodFace: moodFace, presentFace: presentFace, lingering: lingering)
+                        .frame(minWidth: 220, maxWidth: 320, alignment: .leading)
+                    if model.moodTrend.isAvailable {
+                        ShannonMoodTrendPanel(model: model.moodTrend, palette: palette)
+                            .frame(minWidth: 320)
+                    }
+                }
+                VStack(alignment: .leading, spacing: ShannonSpacing.large) {
+                    feelingCard(palette: palette, moodFace: moodFace, presentFace: presentFace, lingering: lingering)
+                    if model.moodTrend.isAvailable {
+                        ShannonMoodTrendPanel(model: model.moodTrend, palette: palette)
+                    }
                 }
             }
             .listRowBackground(palette.intelligenceSoft)

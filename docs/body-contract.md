@@ -469,7 +469,7 @@ Her message about a look is one ordinary assistant message, delivered the way sh
 | --- | --- |
 | The answer of `POST /v1/body/looks/{id}` | `message.text` (with `message.id`, `message.threadId`, `message.initiativeId`). The body can show and speak it at once. |
 | `GET /v1/conversation?threadId=…` | An assistant message with `bodyLook: { "id": "<look id>", "outcome": "seen" \| "not_seen" }`, `content` = the text, `sourceExperienceId` = `initiative:<initiativeId>`. |
-| `GET /v1/initiatives` | An unread message with `bodyLookId: "<look id>"`, `sourceTitle: "部屋を見た"`, `sourceURL: ""`, `expression: "curious"` (`"thinking"` for a line about a look that did not happen). The push worker sends it like any initiative. |
+| `GET /v1/initiatives` | An unread message with `bodyLookId: "<look id>"`, `roomLook: true` (every inbox message carries `roomLook`, true also for her own messages about what she saw, `reach-out:saw:` and `reach-out:follow_up:seen:`, so a notice outside the Talk says only 「ライ氏、部屋のことでひとことあります。」; `roomLookSource.ts`), `sourceTitle: "部屋を見た"`, `sourceURL: ""`, `expression: "curious"` (`"thinking"` for a line about a look that did not happen). The push worker sends it like any initiative. |
 
 When the existing apps show it, without a change to them: the Mac app reads `GET /v1/initiatives` every 60 seconds and reloads the Talk, so the message appears within a minute. The iPhone receives it as a push notification (the banner carries a fixed line, 「ライ氏、部屋のことでひとことあります。」, never what she saw — owner decision 2026-10-02) and loads it into the Talk when the app next becomes active or the banner is opened; an iPhone that stays in the foreground on that Talk shows the banner but not yet the message. The body gets it in the answer of its own `POST`.
 

@@ -14,11 +14,22 @@ extension View {
 }
 import UniformTypeIdentifiers
 
+/// The 運用 mark: an orange triangle, a shape as well as a colour (docs/product/information-architecture.md 4).
+struct DesktopOpsMark: View {
+    var body: some View {
+        Image(systemName: "exclamationmark.triangle.fill")
+            .foregroundStyle(Color.shannonAttention)
+            .accessibilityLabel("確かめたいことがあります")
+    }
+}
+
 struct DesktopSidebarButton: View {
     let title: String
     let symbol: String
     let badge: Int
     let selected: Bool
+    /// The reason of the 運用 mark, shown as the triangle on the 設定 row.
+    var attention: String?
     let action: () -> Void
 
     var body: some View {
@@ -33,14 +44,25 @@ struct DesktopSidebarButton: View {
                         .font(.shannonDesktop(.caption).monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
+                if attention != nil {
+                    DesktopOpsMark()
+                }
             }
             .padding(.horizontal, ShannonDesktopSpacing.medium)
             .frame(height: ShannonDesktopMetrics.rowHeight)
+            .background(
+                selected ? Color.primary.opacity(0.08) : Color.clear,
+                in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.small, style: .continuous)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .fontWeight(selected ? .semibold : .regular)
         .foregroundStyle(selected ? .primary : .secondary)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(attention.map { ShannonGeneratedStrings.entryOpsReason(reason: $0) } ?? "")
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 }
 

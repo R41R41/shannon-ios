@@ -109,6 +109,31 @@ for (const legacyPath of [
   if (existsSync(resolve(root, legacyPath))) fail(`${legacyPath} must remain replaced by native navigation`);
 }
 
+// The system segmented control inside a List or grouped Form on the Mac re-enters SwiftUI's graph from
+// AppKit accessibility and hangs the main thread (review of A10–A15, 2026-10-05). Shared views use it only
+// on the iPhone (inside `#if os(iOS)`), or in the few places known to be outside any list on the Mac;
+// elsewhere they use ShannonSegmentedChoice. scripts/smoke-macos-navigation.sh checks the running app.
+const segmentedOutsideLists = new Set([
+  'apps/ios/Sources/ShannonAppCore/ShannonOrganizeSessionCard.swift',
+  'apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonMemoryView.swift',
+]);
+for (const path of swiftFiles.filter(path => projectPath(path).startsWith('apps/ios/Sources/'))) {
+  if (segmentedOutsideLists.has(projectPath(path))) continue;
+  // One entry per open #if: whether the current branch is compiled for the iPhone only.
+  const branches = [];
+  for (const line of source(path).split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('#if')) branches.push({ condition: trimmed, phoneOnly: /^#if\s+os\(iOS\)\s*$/u.test(trimmed) });
+    else if (trimmed.startsWith('#elseif')) { if (branches.length) branches.at(-1).phoneOnly = false; }
+    else if (trimmed.startsWith('#else')) { if (branches.length) branches.at(-1).phoneOnly = /^#if\s+os\(macOS\)\s*$/u.test(branches.at(-1).condition); }
+    else if (trimmed.startsWith('#endif')) branches.pop();
+    else if (trimmed.includes('.pickerStyle(.segmented)') && !branches.some(branch => branch.phoneOnly)) {
+      fail(`${projectPath(path)} uses the system segmented control in a shared view; use ShannonSegmentedChoice on the Mac (it hangs inside lists under accessibility)`);
+      break;
+    }
+  }
+}
+
 const macProject = source(resolve(root, 'apps/macos-app/ShannonDesk.xcodeproj/project.pbxproj'));
 for (const path of filesBelow('apps/macos-app/ShannonDesk', new Set(['.swift']))) {
   if (!macProject.includes(basename(path))) fail(`${projectPath(path)} is missing from the generated Mac project`);

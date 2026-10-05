@@ -253,7 +253,15 @@ extension ShannonConversationModel {
         upsertAgentTask(task)
     }
 
-    public func resolveAgentApproval(_ id: UUID, accepted: Bool, forSession: Bool = false) async {
+    /// Decides the approval the owner saw. `requestID` is the `externalRequestID` of the approval on screen when
+    /// the choice was rendered: if that approval is no longer the pending one (decided elsewhere, or replaced by
+    /// a new request), nothing is sent and the task is read again, so a press never decides another approval.
+    public func resolveAgentApproval(_ id: UUID, accepted: Bool, forSession: Bool = false, requestID: String? = nil) async {
+        if let requestID, !previewAgentTaskIDs.contains(id),
+           agentTask(id: id)?.status != .waitingApproval || agentTask(id: id)?.pendingApproval?.externalRequestID != requestID {
+            await synchronizeAgentTask(id)
+            return
+        }
         guard var task = agentTask(id: id), task.status == .waitingApproval else { return }
         if !previewAgentTaskIDs.contains(id) {
             let decision = accepted ? (forSession ? "allow_session" : "allow_once") : "deny"
@@ -339,6 +347,7 @@ extension ShannonConversationModel {
             agentTasks = (remoteTasks + localOnly).sorted { $0.updatedAt > $1.updatedAt }
             persistAgentTasks()
             agentTaskAcknowledgements.prune(keeping: Set(agentTasks.map(\.id)))
+            agentTasksReadAt = Date()
         } catch {
             // The on-device projection remains usable while the API is offline.
         }

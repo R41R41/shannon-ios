@@ -72,7 +72,7 @@
     {
       "key": "common.loading",
       "text": "読み込み中…",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyViews.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonMemoryCommitmentsPage.swift",
       "windows": "shannon-desktop:src/desk/App.tsx"
     },
     {
@@ -770,7 +770,7 @@
     {
       "key": "nav.now",
       "text": "シャノンのいま",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubCard.swift",
       "decided": "2026-10-03",
       "windowsNow": "（無い）",
       "macNow": "（無い）"
@@ -974,6 +974,13 @@
       "note": "設定 › 管理 の中。"
     },
     {
+      "key": "nav.development",
+      "text": "開発",
+      "apple": "apps/macos-app/ShannonDesk/ShannonDeskApp.swift",
+      "only": "apple",
+      "note": "Mac の 作業 の中のページ（開発の作業場。デスクトップの追加、A10）。"
+    },
+    {
       "key": "settings.section.devices",
       "text": "接続中の端末",
       "apple": "apps/ios/Sources/ShannonAppCore/ShannonConnectionView.swift",
@@ -1024,7 +1031,7 @@
     {
       "key": "shannon.card.nothingWaiting",
       "text": "あなたを待っていることは、ありません。",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubCard.swift",
       "decided": "2026-10-05",
       "windowsNow": "あなたを待っていることは、ありません。",
       "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。「シャノン」の先頭のカード。iPhone も A4 でこの文にした（ようす と シャノンのカード）。"
@@ -1104,14 +1111,14 @@
     {
       "key": "hub.card.hint",
       "text": "ようすを開きます",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubCard.swift",
       "only": "apple",
       "note": "「シャノン」の先頭のカードの手がかり（読み上げ）。"
     },
     {
       "key": "hub.card.waiting",
       "text": "待っていること {count}件：{summary}",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubCard.swift",
       "only": "apple",
       "note": "「シャノン」の先頭のカード。summary は「感想 1・判断 2」の形。"
     },
@@ -1277,6 +1284,13 @@
       "note": "設定 › すがた の説明の最初の文（目だけのとき）。人の姿のときは「Live2Dの姿は指で触れられます（…）」。"
     },
     {
+      "key": "settings.figure.touchMac",
+      "text": "このMacでは、触れたことが届くのは「体に起きたことをシャノンに伝える」を入にしたときだけで、あなたひとりがいるものとして届きます。ほかの人がそばにいることを伝える切り替えは、Macにはまだありません。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "Mac の 設定 › すがた の説明に足す一文（A15 の見直し、2026-10-05）。Mac の触れ方は、所有者が入にしたときだけ、相手は所有者として届く。iPhone の「友人も一緒」のような同席の切り替えは Mac に無い。"
+    },
+    {
       "key": "settings.figure.smallEyes",
       "text": "小さくしたときは、目だけにする",
       "only": "windows",
@@ -1298,6 +1312,13 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
       "only": "apple",
       "note": "トークの表示の切り替えボタンの手がかり（読み上げ）。押すと表示が替わり、長押しで姿、Live2Dの姿のときは体（人の姿／目だけ）、人の姿のときは映し方、位置を戻す（2026-10-05、体を足したときに直した）。"
+    },
+    {
+      "key": "talk.figurePanel.menuHint",
+      "text": "姿を選べます。Live2Dの姿では体も、人の姿では映し方も選べます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift",
+      "only": "apple",
+      "note": "Mac のトークの右の補助パネル「すがた」のメニュー（A15）。talk.display.menuHint の、長押しの無い形。"
     },
     {
       "key": "talk.figure.heroHint",
@@ -1386,9 +1407,9 @@
     {
       "key": "task.approval.holdHintClick",
       "text": "{target}は長押しで決定。クリックすると確認してから決定します。",
+      "apple": "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopApprovalCard.swift",
       "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
-      "only": "windows",
-      "note": "task.approval.holdHint のポインターの形（同じ文で「タップ」を「クリック」に）。Windows の担当の知らせ（2026-10-05、W5）。Mac は A11 で同じ文にする。"
+      "note": "task.approval.holdHint のポインターの形（同じ文で「タップ」を「クリック」に）。Windows の担当の知らせ（2026-10-05、W5）。Mac も A11（2026-10-05）で同じ文にした。"
     },
     {
       "key": "hold.progress",
@@ -1403,6 +1424,13 @@
       "apple": "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonHoldToConfirmButton.swift",
       "only": "apple",
       "note": "長押しのボタンの手がかり（読み上げ）。"
+    },
+    {
+      "key": "hold.hintClick",
+      "text": "長押しで決定します。クリックすると確認してから決定します",
+      "apple": "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonHoldToConfirmButton.swift",
+      "only": "apple",
+      "note": "hold.hint のポインターの形（Mac の長押しのボタンの読み上げ、A11）。"
     },
     {
       "key": "common.back",
@@ -2526,6 +2554,83 @@
       "apple": "apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift",
       "decided": "2026-10-05",
       "windowsNow": "（無い）"
+    },
+    {
+      "key": "notification.title.initiative",
+      "text": "シャノン",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.title.approval",
+      "text": "シャノン · 許可待ち",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.title.needsOwner",
+      "text": "シャノン · 続きが必要",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.title.completed",
+      "text": "シャノン · 完了",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.title.failed",
+      "text": "シャノン · 失敗",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.body.approval",
+      "text": "「{title}」を続けるには、{approval}が必要です。",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.body.needsOwner",
+      "text": "ライ氏、「{title}」は続きが必要です。次：{next}",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.body.needsOwnerNoNext",
+      "text": "ライ氏、「{title}」は続きが必要です。作業画面で次の一手を確認してください。",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.body.completed",
+      "text": "ライ氏、「{title}」の作業が終わりました。",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.body.failed",
+      "text": "ライ氏、「{title}」の作業を最後まで進められませんでした。作業画面で状況を確認できます。",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "notification.body.roomLook",
+      "text": "ライ氏、部屋のことでひとことあります。",
+      "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
+      "only": "apple",
+      "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
     }
   ]
 }

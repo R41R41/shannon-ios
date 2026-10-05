@@ -1,83 +1,161 @@
 import AppKit
 import ShannonAppCore
 import SwiftUI
-import UniformTypeIdentifiers
 
+/// 設定 on the Mac (docs/product/information-architecture.md 2): parts on the left, the chosen one on
+/// the right. 管理 comes first, with 運用 carrying the mark and its reason in one line (roadmap A12).
 extension ShannonDesktopRootView {
+    var settingsPage: DesktopSettingsPage {
+        DesktopSettingsPage.restoring(settingsPageRawValue, opsSupported: yousu.ops.isSupported)
+    }
+
+    func openSettings(_ page: DesktopSettingsPage) {
+        settingsPageRawValue = page.rawValue
+        selectDestination(.settings)
+    }
+
     var settingsView: some View {
-        Form {
-            Section("外観") {
-                Picker("表示", selection: $appearanceRawValue) {
-                    ForEach(ShannonAppearanceMode.allCases) { mode in
-                        Label(mode.japaneseName, systemImage: mode.symbolName)
-                            .tag(mode.rawValue)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                LabeledContent("アプリアイコン", value: appIcon.activeTitle)
-                Button("アプリアイコンを選ぶ") {
-                    showsAppIconSettings = true
-                }
-            }
-
-            Section("接続") {
-                LabeledContent("状態", value: connection.statusLabel)
-                LabeledContent("通信", value: connection.verificationLabel)
-                Button(connection.isConnected ? "接続情報を見る" : "シャノンへ接続") {
-                    showsConnection = true
-                }
-            }
-
-            Section("シャノンの声") {
-                LabeledContent("方式", value: "Gemini")
-                Text("声はShannonサーバー側のGemini設定から一貫して適用されます。")
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("情報源") {
-                LabeledContent("状態", value: worldSubscriptions.summary)
-                Button("購読候補と試読を見る") {
-                    showsWorldSubscriptions = true
-                }
-                if let errorMessage = worldSubscriptions.errorMessage {
-                    Text(errorMessage)
-                        .foregroundStyle(Color.shannonDanger)
-                }
-            }
-
-            ShannonFormSettingsSection(openBody: { showsBody = true }, showsTouchSwitch: false)
-
-            ShannonCalendarSharingSettingsSection()
-
-            ShannonAppLookSettingsSection()
-
-            ShannonPrivateListeningSettingsSection()
-
-            ShannonAutonomySettingsSection(model: memory.autonomy)
-
-            Section("Shannon Desk") {
-                LabeledContent("バージョン", value: appVersionDescription)
-                LabeledContent("会話と記憶", value: "iPhoneと共通")
-                LabeledContent("作業の正本", value: "Azureの永続タスク")
-                Text("水色は操作面を染めず、シャノンの存在・感情・注意が必要な場所にだけ使います。")
-                    .foregroundStyle(.secondary)
-            }
+        HStack(spacing: 0) {
+            settingsColumn
+                .frame(width: 250)
+            Divider()
+            settingsContent
+                .id(settingsPage)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .formStyle(.grouped)
-        .padding(ShannonDesktopSpacing.extraLarge)
-        .navigationTitle("設定")
-        .sheet(isPresented: $showsBody) {
-            NavigationStack { ShannonBodyScreen(memory: memory) }
-                .frame(minWidth: 460, minHeight: 720)
+        .navigationTitle(ShannonGeneratedStrings.navSettings)
+        .sheet(isPresented: $showsStateDetails) {
+            ShannonStateSheet(state: conversation.state, face: conversation.presentFace)
+                .frame(minWidth: 480, minHeight: 560)
         }
         .task { await worldSubscriptions.reload() }
     }
 
-    var appVersionDescription: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
-        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
-        return "\(version) (\(build))"
+    private var settingsColumn: some View {
+        List(selection: Binding(
+            get: { settingsPage },
+            set: { page in if let page { settingsPageRawValue = page.rawValue } }
+        )) {
+            Section {
+                settingsProfileCard
+            }
+            Section(ShannonGeneratedStrings.navAdmin) {
+                if yousu.ops.isSupported {
+                    settingsOpsRow
+                        .tag(DesktopSettingsPage.ops)
+                        .accessibilityHint(ShannonGeneratedStrings.adminOpsHint)
+                }
+                Label(ShannonGeneratedStrings.settingsSectionDevices, systemImage: "laptopcomputer.and.iphone")
+                    .tag(DesktopSettingsPage.devices)
+                    .accessibilityHint(ShannonGeneratedStrings.adminDevicesHint)
+                Label(ShannonGeneratedStrings.navDelivery, systemImage: "arrow.down.app")
+                    .tag(DesktopSettingsPage.delivery)
+                Label(ShannonGeneratedStrings.navDiagnostics, systemImage: "waveform.badge.magnifyingglass")
+                    .tag(DesktopSettingsPage.diagnostics)
+            }
+            Section {
+                Label(ShannonGeneratedStrings.settingsFigure, systemImage: "person.crop.rectangle")
+                    .tag(DesktopSettingsPage.figure)
+                Label(ShannonGeneratedStrings.settingsSectionCamera, systemImage: "camera")
+                    .tag(DesktopSettingsPage.camera)
+                Label(ShannonPrivateListeningCopy.sectionTitle, systemImage: "earbuds")
+                    .tag(DesktopSettingsPage.earphones)
+                Label(ShannonGeneratedStrings.settingsSectionVoice, systemImage: "speaker.wave.2")
+                    .tag(DesktopSettingsPage.voice)
+                Label(ShannonCalendarSharingCopy.sectionTitle, systemImage: "calendar")
+                    .tag(DesktopSettingsPage.calendar)
+                Label("外観", systemImage: "circle.lefthalf.filled")
+                    .tag(DesktopSettingsPage.appearance)
+                Label(ShannonGeneratedStrings.settingsConnection, systemImage: "link")
+                    .tag(DesktopSettingsPage.connection)
+                Label("情報源", systemImage: "newspaper")
+                    .tag(DesktopSettingsPage.sources)
+            }
+        }
+        .listStyle(.sidebar)
     }
 
+    /// Her state at the top of 設定, as on the iPhone (A14): her face and how she is; it opens her state.
+    private var settingsProfileCard: some View {
+        Button {
+            showsStateDetails = true
+        } label: {
+            HStack(spacing: ShannonDesktopSpacing.medium) {
+                ShannonChatAvatarView(face: conversation.presentFace, size: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(ShannonGeneratedStrings.appName)
+                        .font(.shannonDesktop(.headline))
+                    Text("いま：\(conversation.presentFace.japaneseName)")
+                        .font(.shannonDesktop(.caption))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.shannonDesktop(.caption))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("シャノンの状態を表示します")
+        .accessibilityIdentifier("settings-shannon-profile")
+    }
+
+    /// 運用, with the mark and its reason while something there deserves a look. Before the first
+    /// report it says so; a refused connection says that instead (no mark).
+    private var settingsOpsRow: some View {
+        let reason = yousu.ops.attentionReason()
+        let detail = reason
+            ?? (yousu.ops.connectionIsInvalid ? ShannonGeneratedStrings.opsConnectionInvalid : nil)
+            ?? (yousu.ops.didLoad && !yousu.ops.hasReport ? ShannonGeneratedStrings.opsNotReported : nil)
+        return HStack(spacing: ShannonDesktopSpacing.small) {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(ShannonGeneratedStrings.opsTitle)
+                    if let detail {
+                        Text(detail)
+                            .font(.shannonDesktop(.caption))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            } icon: {
+                Image(systemName: "server.rack")
+            }
+            Spacer(minLength: ShannonDesktopSpacing.small)
+            if reason != nil {
+                DesktopOpsMark()
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var settingsContent: some View {
+        switch settingsPage {
+        case .ops:
+            NavigationStack {
+                ShannonOpsView(model: yousu.ops)
+                    .navigationTitle(ShannonGeneratedStrings.opsTitle)
+            }
+        case .devices:
+            ShannonConnectionView(model: connection, part: .devices)
+        case .delivery:
+            ShannonTestFlightDeliveryView(
+                model: release,
+                showsDismissButton: false,
+                requestRelease: requestAppleRelease
+            )
+        case .diagnostics:
+            ShannonVoiceDiagnosticsView(showsCloseButton: false)
+        case .connection:
+            ShannonConnectionView(model: connection, part: .connection)
+        case .sources:
+            ShannonWorldSubscriptionView(model: worldSubscriptions)
+        case .figure, .camera, .earphones, .voice, .calendar, .appearance:
+            settingsForm
+        }
+    }
 }
