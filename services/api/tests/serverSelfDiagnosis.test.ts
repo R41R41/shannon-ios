@@ -111,10 +111,11 @@ describe('the self-diagnosis', () => {
       tools: {
         enabled: true, count: SHANNON_TOOLS.length, names: SHANNON_TOOLS.map(tool => tool.name),
         offered: {
-          text: { owner_alone: SHANNON_TOOLS.length, others: 0 },
-          voice: { owner_alone: SHANNON_TOOLS.length, others: 0 },
-          // Her Minecraft body's tools exist only in conversations (`shannonTools.ts`, `conversationTool`), never in her own time.
-          autonomy: { owner_alone: SHANNON_TOOLS.filter(tool => tool.surfaces.includes('autonomy')).length, others: 0 },
+          // With anyone else present: her Aether reading tools only (Syzygy ADR-0007 revised), counted from the registry.
+          text: { owner_alone: SHANNON_TOOLS.length, others: 3 },
+          voice: { owner_alone: SHANNON_TOOLS.length, others: 3 },
+          // Her Minecraft body's tools and a proposal to Aether exist only in conversations (`shannonTools.ts`, `conversationTool`), never in her own time.
+          autonomy: { owner_alone: SHANNON_TOOLS.filter(tool => tool.surfaces.includes('autonomy')).length, others: 3 },
         },
       },
       integrations: { voyager: true, notion: true, aetherContext: true, aetherProposals: true, discordBridge: true },

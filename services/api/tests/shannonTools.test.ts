@@ -37,27 +37,33 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
   it('lists every tool once with a Japanese description, an object schema, a gate domain, no cost of its own, and the owner alone as audience', () => {
     expect(new Set(SHANNON_TOOLS.map(tool => tool.name)).size).toBe(SHANNON_TOOLS.length);
     expect(SHANNON_TOOLS.map(tool => tool.name).sort()).toEqual([
+      'aether.propose', 'aether.read', 'aether.search', 'aetherFolder.create', 'aetherFolder.delete', 'aetherFolder.list', 'aetherFolder.update',
       'folder.create', 'folder.delete', 'folder.list', 'folder.move', 'folder.read', 'folder.rename', 'folder.search', 'folder.update',
       'minecraft.cancel', 'minecraft.request', 'minecraft.status',
       'study.create', 'study.delete', 'study.list', 'study.move', 'study.read', 'study.rename', 'study.restore', 'study.search', 'study.update',
     ]);
+    // Conversation only: her Minecraft body (phase 4) and a proposal to the owner's Aether inbox.
+    const conversationOnly = (tool: { domain: string }) => tool.domain === 'minecraft_body' || tool.domain === 'aether_proposal';
+    // With anyone else present: only her Aether reading tools (held to 「シャノン用フォルダ」 by the gate, Syzygy ADR-0007 revised).
+    const shared = new Set(['aether.search', 'aether.read', 'aetherFolder.list']);
     for (const tool of SHANNON_TOOLS) {
       expect(tool.description, tool.name).toMatch(/[ぁ-んァ-ヶ一-龠]/u);
       expect(tool.input).toMatchObject({ type: 'object', additionalProperties: false });
       for (const required of tool.input.required) expect(Object.keys(tool.input.properties), tool.name).toContain(required);
-      expect(tool.domain).toBe(tool.name.startsWith('study.') ? 'aether_study' : tool.name.startsWith('minecraft.') ? 'minecraft_body' : 'host_folder');
+      expect(tool.domain).toBe(tool.name.startsWith('study.') || tool.name.startsWith('aetherFolder.') || tool.name === 'aether.search' || tool.name === 'aether.read' ? 'aether_study'
+        : tool.name.startsWith('minecraft.') ? 'minecraft_body' : tool.name === 'aether.propose' ? 'aether_proposal' : 'host_folder');
       expect(tool.cost).toBe('none');
-      expect(tool.audiences).toEqual(['owner_alone']);
-      // Her Minecraft body is asked from a conversation only, never from her own time (phase 4).
-      expect(tool.surfaces).toEqual(tool.domain === 'minecraft_body' ? ['text', 'voice'] : ['text', 'voice', 'autonomy']);
+      expect(tool.audiences).toEqual(shared.has(tool.name) ? ['owner_alone', 'others'] : ['owner_alone']);
+      if (shared.has(tool.name)) expect(tool.effect).toBe('read');
+      expect(tool.surfaces).toEqual(conversationOnly(tool) ? ['text', 'voice'] : ['text', 'voice', 'autonomy']);
       expect(toolFromProviderName(providerToolName(tool.name))).toBe(tool);
-      expect(providerToolName(tool.name)).toMatch(/^[a-z_]+$/u);
+      expect(providerToolName(tool.name)).toMatch(/^[A-Za-z_]+$/u);
     }
-    // Text, voice and her own time are given the same tools (a conversation's writes shorter); with anyone else present there are none.
-    expect(offeredTools('autonomy', 'owner_alone')).toEqual(SHANNON_TOOLS.filter(tool => tool.domain !== 'minecraft_body'));
+    // Text, voice and her own time are given the same tools (a conversation's writes shorter); with anyone else present only the shared reading.
+    expect(offeredTools('autonomy', 'owner_alone')).toEqual(SHANNON_TOOLS.filter(tool => !conversationOnly(tool)));
     for (const surface of ['text', 'voice', 'autonomy'] as const) {
-      expect(offeredTools(surface, 'owner_alone').map(tool => tool.name)).toEqual(SHANNON_TOOLS.filter(tool => surface !== 'autonomy' || tool.domain !== 'minecraft_body').map(tool => tool.name));
-      expect(offeredTools(surface, 'others')).toEqual([]);
+      expect(offeredTools(surface, 'owner_alone').map(tool => tool.name)).toEqual(SHANNON_TOOLS.filter(tool => surface !== 'autonomy' || !conversationOnly(tool)).map(tool => tool.name));
+      expect(offeredTools(surface, 'others').map(tool => tool.name)).toEqual([...shared]);
     }
     // No tool shows a story to the owner, marks it 「見せてもいい」, or reaches anyone else.
     expect(SHANNON_TOOLS.some(tool => /show|ready|publish|send|share/u.test(tool.name))).toBe(false);

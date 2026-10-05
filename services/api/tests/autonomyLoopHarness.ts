@@ -1,3 +1,4 @@
+import type { AetherAccess } from '../src/aetherAccess.js';
 import { autonomyDayKey, configuredAutonomy, type AutonomyConfig } from '../src/autonomyBudget.js';
 import { ShannonAutonomyLoop, type AutonomyLoopTick } from '../src/autonomyLoop.js';
 import { configuredAutonomyLoop, type AutonomyLoopConfig } from '../src/autonomyLoopConfig.js';
@@ -101,6 +102,8 @@ export class FakeShowing implements StudyShowing {
 }
 
 export interface LoopHarnessOptions {
+  /** Her study in Aether (a fake Aether in tests); absent, the SQLite study as before. */
+  aether?: AetherAccess;
   enabled?: boolean;
   path?: string;
   environment?: Record<string, string>;
@@ -158,6 +161,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     store, config, now, ...(options.roomLooks ? { roomLooks: options.roomLooks } : {}),
     ...(reachOuts ? { reachOuts: (scopeKey: string, at: string) => ({ today: reachOuts.sentOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutsPerDay }) } : {}),
     ...(options.phone ? { calls: (scopeKey: string, at: string) => callGateContext(options.phone!, scopeKey, at) } : {}),
+    ...(options.aether ? { aether: { access: options.aether } } : {}),
     ...(reachOuts?.followUpsOn ? { reachOutFollowUps: (scopeKey: string, at: string) => ({ today: reachOuts.followUpsOn!(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutFollowUpsPerDay }) } : {}),
   });
   /** A waiting step does not sleep: the pause moves the test's clock. */

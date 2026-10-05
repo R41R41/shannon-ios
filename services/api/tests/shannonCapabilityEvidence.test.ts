@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  SHANNON_CAPABILITIES, SHANNON_CONDITIONAL_CAPABILITIES, SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_LIMITATIONS, SHANNON_ROOM_LOOK_RULES, SHANNON_TOUCH_FEELINGS, SHANNON_TOUCH_KINDS, isForgetCitedMemoriesCommand, shannonCapabilityPrompt, withAutonomyRunning,
+  SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_CAPABILITIES, SHANNON_CONDITIONAL_CAPABILITIES, SHANNON_MINECRAFT_BODY_CAPABILITY, withAetherAccessCapability, SHANNON_LIMITATIONS, SHANNON_ROOM_LOOK_RULES, SHANNON_TOUCH_FEELINGS, SHANNON_TOUCH_KINDS, isForgetCitedMemoriesCommand, shannonCapabilityPrompt, withAutonomyRunning,
   type ShannonCapabilityId,
   autonomyDomain,
 } from '@shannon/cognition';
@@ -11,6 +11,11 @@ import { configuredAutonomy } from '../src/autonomyBudget.js';
 import { HostFolderDesk } from '../src/autonomyHostFolderDesk.js';
 import { ShannonAutonomyLoop } from '../src/autonomyLoop.js';
 import { prepareFolderCopy } from '../src/autonomyLoopFolderStep.js';
+import { HttpAetherAccess, configuredAetherAccess } from '../src/aetherAccess.js';
+import { aetherExecutors } from '../src/shannonAetherTools.js';
+import { folderExecutors } from '../src/shannonFolderTools.js';
+import { authorizeToolInput, gatedAether } from '../src/shannonToolGate.js';
+import { StudyAether } from '../src/studyAether.js';
 import { prepareRoomLook } from '../src/autonomyLoopLookStep.js';
 import { preparePhoneCall } from '../src/autonomyLoopPhoneStep.js';
 import { prepareReachOut } from '../src/autonomyLoopReachOutStep.js';
@@ -117,18 +122,21 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
     && configuredNotionSource({}).connected === false
     && NOTION_READ_ENDPOINTS.length === 6 && notionReadOperation('PATCH', '/v1/pages/44444444444444444444444444444444') === null,
   // Her study through the registry on every surface (owner decision 2026-10-05): every verb has a tool, deleting is soft and
-  // restorable, and with anyone else present no tool is offered at all.
+  // restorable, and with anyone else present none of them is offered (only her Aether reading tools may be, inside her folder).
   own_study: () => exists(StudyStore.prototype.softDelete, StudyStore.prototype.restore, StudyStore.prototype.takeBack, StudyStore.prototype.search,
     ShannonToolRunner.prototype.call, prepareToolStep, conversationTools)
     && ['list', 'search', 'read', 'create', 'update', 'rename', 'move', 'delete', 'restore'].every(verb => (['text', 'voice', 'autonomy'] as const)
       .every(surface => offeredTools(surface, 'owner_alone').some(tool => tool.name === `study.${verb}`)))
-    && offeredTools('text', 'others').length === 0 && offeredTools('voice', 'others').length === 0 && asksAboutOwnThings('書斎のメモ読んで'),
+    && (['text', 'voice'] as const).every(surface => offeredTools(surface, 'others').every(tool => tool.effect === 'read' && tool.name.startsWith('aether')))
+    && createInMemoryAutonomyService(() => '2026-10-05T00:00:00.000Z').tools.offered('text', 'others').length === 0 && asksAboutOwnThings('書斎のメモ読んで'),
   // Her folder (contract v2): the tools queue operations for the bound device, which long-polls, carries them out and reports;
   // every overwrite and delete goes to the trash on the device. Without a registered device there is no folder
-  // (the line says 「用意してくれている時」), and v1 copies still go out from her own time.
-  own_folder: () => exists(prepareFolderCopy, HostFolderDesk.prototype.enqueue, HostFolderDesk.prototype.claim, HostFolderDesk.prototype.report,
+  // (the line says 「用意してくれている時」). In her own time she places copies with the same tools, and while her study is
+  // Shannon's also with the v1 copy step (with Aether it is gone: stories live in Aether only, Syzygy ADR-0007 revised).
+  own_folder: () => exists(folderExecutors, prepareFolderCopy, HostFolderDesk.prototype.enqueue, HostFolderDesk.prototype.claim, HostFolderDesk.prototype.report,
     HostFolderOperations.prototype.run, HostFolderOperations.prototype.claim, HostFolderOperations.prototype.report)
     && ['list', 'search', 'read', 'create', 'update', 'rename', 'move', 'delete'].every(verb => offeredTools('text', 'owner_alone').some(tool => tool.name === `folder.${verb}`))
+    && offeredTools('autonomy', 'owner_alone').some(tool => tool.name === 'folder.create')
     && Object.keys(configuredAutonomy({}).places.hostDevices ?? {}).length === 0,
   // Phase 4 of her Minecraft body: the tool queues a request, the body claims it, reports progress and a result, and the
   // result reaches her turns with the owner. Only in a conversation with the owner alone (never in her own time, never with others),
@@ -137,7 +145,7 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
   minecraft_body: () => exists(MinecraftBodyRequests.prototype.enqueue, MinecraftBodyRequests.prototype.claim, MinecraftBodyRequests.prototype.report,
     MinecraftBodyRequests.prototype.promptBlock, minecraftExecutors)
     && offeredTools('text', 'owner_alone').some(tool => tool.name === 'minecraft.request')
-    && !offeredTools('autonomy', 'owner_alone').some(tool => tool.domain === 'minecraft_body') && offeredTools('text', 'others').length === 0
+    && !offeredTools('autonomy', 'owner_alone').some(tool => tool.domain === 'minecraft_body') && offeredTools('text', 'others').every(tool => tool.domain !== 'minecraft_body')
     && createInMemoryAutonomyService(() => '2026-10-05T00:00:00.000Z').tools.offered('text', 'owner_alone', 'owner').every(tool => tool.domain !== 'minecraft_body'),
   voyager_tasks: () => voiceSkill('voyager_tasks') && isOrganizeCommand('整理して') && exists(prepareConversationOrganize),
   agent_tasks: () => voiceSkill('agent_status') && agentTaskInstructions().includes('TestFlight')
@@ -153,6 +161,16 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
   initiative: () => exists(SQLiteInitiativeStore, prepareReachOut, SQLiteReachOutSpeaker.prototype.say)
     && configuredAutonomy({}).maximumReachOutsPerDay === Number.POSITIVE_INFINITY && configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: '0' }).maximumReachOutsPerDay === 0,
   // Her own step in her own time: the gated step, the request the API process sends, and the push that rings. Only while he switched it on.
+  // Aether as her place (Syzygy ADR-0007 revised): the client, the gate that holds others-present reading to her folder, the
+  // executors, her study in Aether, and the proposal inbox. Only while Aether is configured (the line is conditional).
+  aether_access: () => exists(HttpAetherAccess.prototype.search, HttpAetherAccess.prototype.read, HttpAetherAccess.prototype.update,
+    gatedAether, authorizeToolInput, aetherExecutors, StudyAether.prototype.sync, FileAetherProposalStore)
+    && configuredAetherAccess({}) === null
+    && ['search', 'read'].every(verb => offeredTools('text', 'others').some(tool => tool.name === `aether.${verb}`))
+    && ['list', 'create', 'update', 'delete'].every(verb => offeredTools('text', 'owner_alone').some(tool => tool.name === `aetherFolder.${verb}`))
+    && offeredTools('text', 'owner_alone').some(tool => tool.name === 'aether.propose') && !offeredTools('autonomy', 'owner_alone').some(tool => tool.name === 'aether.propose')
+    && !shannonCapabilityPrompt('owner').includes(SHANNON_AETHER_ACCESS_CAPABILITY.text)
+    && withAetherAccessCapability(shannonCapabilityPrompt('owner')).includes(SHANNON_AETHER_ACCESS_CAPABILITY.text),
   phone_call: () => exists(preparePhoneCall, IncomingCallRequests.prototype.request, IncomingCalls.prototype.tick, APNsVoipPushSender.prototype.send)
     && autonomyDomain(AUTONOMY_CALL_DOMAIN)?.rule === 'free' && incomingCallsEnabled({}) && !incomingCallsEnabled({ SHANNON_INCOMING_CALLS: 'off' }),
 };

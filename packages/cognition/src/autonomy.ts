@@ -20,7 +20,8 @@ export interface ShannonAutonomyDomain {
 export const SHANNON_AUTONOMY_DOMAINS = Object.freeze([
   { id: 'host_folder', rule: 'free', label: 'PC・Macの専用フォルダ' },
   { id: 'vm_workspace', rule: 'free', label: 'Azureの作業場' },
-  // The id is kept for the records already written; the study lives in Shannon, not in Aether (studyStore.ts).
+  // The id is kept for the records already written. With Aether configured her study's text lives in Aether (Syzygy ADR-0007
+  // revised, services/api/src/studyAether.ts); without it, in Shannon (studyStore.ts). Her Aether reading and folder tools use it too.
   { id: 'aether_study', rule: 'free', label: '自分の書斎' },
   { id: 'voyager_list', rule: 'free', label: 'Voyagerの自分のタスク' },
   { id: 'public_read', rule: 'free', label: '公開情報を読む' },

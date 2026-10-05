@@ -1,7 +1,11 @@
+import { randomUUID } from 'node:crypto';
+import { aetherErrorCode, type AetherWriteResult } from './aetherAccess.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
+import { aetherToolFailure } from './shannonAetherTools.js';
 import { numberInput, stringInput, type ToolInput } from './shannonToolInput.js';
 import { clip, type PreparedToolCall, type ToolExecutionContext, type ToolExecutor, type ToolRun } from './shannonToolTypes.js';
-import { toolFailure, toolOk, type ToolResult } from './shannonTools.js';
+import { toolFailure, toolOk, type ShannonToolDefinition, type ToolResult } from './shannonTools.js';
+import { studyWriteKey, syncedWithin, type StudyAether } from './studyAether.js';
 import {
   STUDY_KIND_LABEL, STUDY_LIMITS, STUDY_STATUS_LABEL,
   type StudyPiece, type StudyPieceKind, type StudyPieceStatus, type StudyRejection,
@@ -17,10 +21,17 @@ import {
  *
  * What reaches the activity record (which the owner reads) never carries text of hers, and names a story only
  * while the owner can read the version it names; otherwise it says 「まだ見せていない物語」.
+ *
+ * With Aether configured (`aether`, Syzygy ADR-0007 revised) every call first brings in what Aether has (`StudyAether.sync`),
+ * a new piece is written to Aether first (a story with `inStudy: true`, a note with `false`), and a piece that lives there is
+ * revised and deleted there first, with its version as `baseVersion`; the local version and its link follow in the same
+ * transaction as the record. A piece that has not moved yet is written here only, as before.
  */
 const DUPLICATE_MILLISECONDS = 15 * 60_000;
+/** What a call may spend bringing in Aether before it goes on with what Shannon has. */
+const SYNC_MILLISECONDS = 4_000;
 
-export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): Readonly<Record<string, ToolExecutor>> {
+export function studyExecutors(store: SQLiteAutonomyStore, now: () => string, aether: StudyAether | null = null): Readonly<Record<string, ToolExecutor>> {
   /** What each owner message's turns created, for a retry of the same message (in this process, 15 minutes). */
   const recent = new Map<string, { id: string; title: string; at: number }[]>();
   /** Parts appended for each owner message (in this process, 15 minutes), so a retry does not append them twice. */
@@ -49,18 +60,32 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
       { retryable: false, refusal: { why: 'その id や題名のものがない', wouldWork: 'study.list で id と題名を確かめて呼び直す' } });
   };
   const immediate = (summary: string, run: () => ToolRun): PreparedToolCall => ({ summary, run: async () => run() });
-  /** A write: `text` is what she reads, `record` what the owner's record says; `newId` adds the id the write made. */
-  const write = (summary: string, text: string, record: string, apply: () => StudyPiece | StudyRejection, options: { link?: string; newId?: true } = {}): PreparedToolCall =>
-    immediate(summary, () => ({
-      result: toolOk(text), record: { summary: record, outcome: 'done', ...(options.link ? { link: options.link } : {}) },
-      apply: () => {
-        const outcome = apply();
-        if (typeof outcome === 'string') throw new Error(outcome);
-        return options.newId ? `id: ${outcome.id}` : undefined;
-      },
-    }));
+  /**
+   * A write: `text` is what she reads, `record` what the owner's record says; `newId` adds the id the write made. With
+   * `aether` the write goes to Aether first; what Aether refused writes nothing here, and what it took is linked in `apply`.
+   */
+  const write = (summary: string, text: string, record: string, apply: () => StudyPiece | StudyRejection,
+    options: { link?: string; newId?: true; aether?: { scopeKey: string; push: (signal?: AbortSignal) => Promise<AetherWriteResult | null> } } = {}): PreparedToolCall => ({
+    summary, run: async signal => {
+      let pushed: AetherWriteResult | null = null;
+      try { pushed = options.aether && aether ? await options.aether.push(signal) : null; } catch (error) {
+        return { result: aetherToolFailure(error), record: { summary: 'Aetherの書斎に書こうとしましたが、できませんでした。', outcome: 'failed', reasonCode: `aether_${aetherErrorCode(error).toLowerCase()}` } };
+      }
+      return {
+        result: toolOk(text), record: { summary: record, outcome: 'done', ...(options.link ? { link: options.link } : {}) },
+        apply: () => {
+          const outcome = apply();
+          if (typeof outcome === 'string') throw new Error(outcome);
+          if (pushed && aether && options.aether) aether.commit(options.aether.scopeKey, outcome, pushed);
+          return options.newId ? `id: ${outcome.id}` : undefined;
+        },
+      };
+    },
+  });
+  /** The same write retried (the same owner message and input) is the same Aether write; any other is another. */
+  const key = (context: ToolExecutionContext, name: string, input: ToolInput) => studyWriteKey(context.scopeKey, context.memory.turnKey ?? randomUUID(), name, JSON.stringify(input));
 
-  return Object.freeze({
+  const executors: Readonly<Record<string, ToolExecutor>> = Object.freeze({
     'study.list': (input, context) => {
       const status = stringInput(input, 'status');
       const kind = stringInput(input, 'kind');
@@ -131,7 +156,7 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
           const created = store.study.create(context.scopeKey, { kind, title, body, ...(changeNote ? { changeNote } : {}), ...(pursuitId ? { pursuitId } : {}) }, now());
           if (typeof created !== 'string' && context.memory.turnKey) remember(context.memory.turnKey, created.id, title);
           return created;
-        }, { newId: true });
+        }, { newId: true, ...(aether ? { aether: { scopeKey: context.scopeKey, push: signal => aether.create({ kind, title: title.replace(/\s+/gu, ' ').trim(), body: body.trim() }, key(context, 'study.create', input), signal) } } : {}) });
     },
     'study.update': (input, context) => {
       const found = piece(context, input);
@@ -197,13 +222,19 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
     'study.delete': (input, context) => {
       const found = piece(context, input);
       if (!('id' in found)) return found;
-      return write('書斎のものを1つゴミ箱に入れます。', 'ゴミ箱に入れた。版も残っていて、study.restore で戻せる。',
-        `書斎の${recordLabel(found)}をゴミ箱に入れました。`, () => store.study.softDelete(context.scopeKey, found.id, now()), { link: `shannon-study://${found.id}` });
+      const linked = aether?.link(context.scopeKey, found.id);
+      return write('書斎のものを1つゴミ箱に入れます。', linked ? 'ゴミ箱に入れた。Aetherでは「最近削除した項目」に移り、戻せるのはライ氏（iPhone）。版はボクの中にも残る。' : 'ゴミ箱に入れた。版も残っていて、study.restore で戻せる。',
+        `書斎の${recordLabel(found)}をゴミ箱に入れました。`, () => store.study.softDelete(context.scopeKey, found.id, now()),
+        { link: `shannon-study://${found.id}`, ...(aether && linked ? { aether: { scopeKey: context.scopeKey, push: signal => aether.remove(context.scopeKey, found, key(context, 'study.delete', input), signal) } } : {}) });
     },
     'study.restore': (input, context) => {
       const found = piece(context, input, true, 'trashed');
       if (!('id' in found)) return found;
       if (!found.deletedAt) return toolOk('ゴミ箱には入っていない。');
+      // A piece that lives in Aether comes back only once the owner restored it there (the sync before this call takes it back out).
+      if (aether?.link(context.scopeKey, found.id)) {
+        return toolFailure('refused', 'Aetherの「最近削除した項目」に入っている。戻せるのはライ氏だけ。', { retryable: false, refusal: { why: 'Aetherで消したものは、ライ氏がiPhoneで戻す', wouldWork: 'ライ氏に戻してもらう（戻ると書斎にも戻る）' } });
+      }
       if (found.kind === 'story' && (found.status === 'draft' || found.status === 'ready') && openStories(store, context.scopeKey) >= STUDY_LIMITS.openStories) {
         return toolFailure('limit', `書きかけの物語が${STUDY_LIMITS.openStories}本あって、戻せない。`, { retryable: false, refusal: { why: '書きかけの物語の上限', wouldWork: 'どれかをしまってから' } });
       }
@@ -211,6 +242,7 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
         () => store.study.restore(context.scopeKey, found.id, now()), { link: `shannon-study://${found.id}` });
     },
   });
+  return aether ? Object.freeze(Object.fromEntries(Object.entries(executors).map(([name, executor]) => [name, synced(aether, name, executor)]))) : executors;
 
   /**
    * A piece this one would repeat: for the same owner message (a retry of it), the same kind and title with a similar
@@ -243,8 +275,48 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
     return write(`書斎の${STUDY_KIND_LABEL[found.kind]}を直します。`,
       `${done}（第${found.version + 1}稿）。${found.kind === 'story' ? '物語は下書きに戻った。ライ氏は見せた版を読み続ける。' : ''}`,
       `書斎の${recordLabel(found)}を直しました（第${found.version + 1}稿）。`,
-      () => store.study.revise(context.scopeKey, found.id, change, now()), { link: `shannon-study://${found.id}` });
+      () => store.study.revise(context.scopeKey, found.id, change, now()), { link: `shannon-study://${found.id}`, ...(aether ? { aether: {
+        scopeKey: context.scopeKey,
+        push: (signal?: AbortSignal) => aether.update(context.scopeKey, found, { body: change.body.trim(), ...(change.title ? { title: change.title.replace(/\s+/gu, ' ').trim() } : {}) }, key(context, `study.revise:${found.version}`, input), signal),
+      } } : {}) });
   }
+}
+
+/**
+ * A study tool with Aether: what Aether has is brought in first (within a few seconds), then the call is prepared again from
+ * it. When Aether could not be reached, a read answers from what Shannon has and says so; a write to Aether fails on its own.
+ */
+function synced(aether: StudyAether, name: string, executor: ToolExecutor): ToolExecutor {
+  return (input, context) => {
+    const first = executor(input, context);
+    // A call that cannot work whatever Aether has (an input out of bounds) is answered at once; a piece not found yet may be new in Aether.
+    if (!('run' in first) && first.failure !== 'not_found') return first;
+    return {
+      summary: 'run' in first ? first.summary : '書斎を確かめます。', ...('run' in first && first.folder ? { folder: first.folder } : {}),
+      run: async signal => {
+        const reached = await syncedWithin(aether, context.scopeKey, Math.min(SYNC_MILLISECONDS, (context.timeMilliseconds ?? 2 * SYNC_MILLISECONDS) / 2), signal);
+        const again = executor(input, context);
+        if (!('run' in again)) return { result: again, record: { summary: `書斎の道具「${name}」を使おうとしましたが、できませんでした。`, outcome: 'failed', ...(again.failure ? { reasonCode: again.failure } : {}) } };
+        const run = await again.run(signal);
+        return reached || !run.result.ok || run.apply ? run
+          : { ...run, result: { ...run.result, text: `${run.result.text}\n（Aetherにつながらなかったので、ボクの中にある写しで答えた）` } };
+      },
+    };
+  };
+}
+
+/** A study tool as it is offered while her study lives in Aether: the description says where its text is. */
+const AETHER_STUDY_TOOLS = new Map<string, ShannonToolDefinition>();
+export function aetherStudyTool(tool: ShannonToolDefinition): ShannonToolDefinition {
+  if (!tool.name.startsWith('study.')) return tool;
+  const key = `${tool.name}\n${tool.description}`;
+  const known = AETHER_STUDY_TOOLS.get(key);
+  if (known) return known;
+  const description = tool.description.replace('正本はシャノンのデータベース', '物語とメモの正本はAetherのシャノン用フォルダ（物語は書斎）。版ごとの記録はボクの中に残る')
+    + (tool.name === 'study.delete' ? 'Aetherにあるものは「最近削除した項目」に移り、戻せるのはライ氏（iPhone）。' : tool.name === 'study.restore' ? 'Aetherにあるものは、ライ氏がAetherで戻した時に書斎にも戻る。' : '');
+  const changed = Object.freeze({ ...tool, description });
+  AETHER_STUDY_TOOLS.set(key, changed);
+  return changed;
 }
 
 /** Her note about a look at the owner's room: hers to think with, never put into a file (coordinator decision 2026-10-05). */

@@ -186,6 +186,9 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/conversationSecrets.ts',
     'services/api/src/shannonStudyTools.ts',
     'services/api/src/shannonFolderTools.ts',
+    // Aether (Syzygy ADR-0007 revised): the client of her access and the executors of her Aether tools.
+    'services/api/src/aetherAccess.ts',
+    'services/api/src/shannonAetherTools.ts',
     'services/api/src/hostFolderOperations.ts',
     'services/api/src/hostFolderOperationsStore.ts',
     'services/api/src/hostFolderOperationResults.ts',

@@ -1,11 +1,15 @@
+import type { AetherAccess } from './aetherAccess.js';
+import type { AetherProposalStore } from './aetherProposal.js';
 import { ROOM_LOOK_GUARD, roomLookGuard } from './autonomyHostFolderPath.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import type { SecretCheck } from './conversationSecrets.js';
 import type { HostFolderOperations } from './hostFolderOperations.js';
 import { folderExecutors } from './shannonFolderTools.js';
 import { minecraftExecutors, minecraftToolOffered, type MinecraftRequestPort } from './shannonMinecraftTools.js';
-import { studyExecutors } from './shannonStudyTools.js';
-import { authorizeToolCall } from './shannonToolGate.js';
+import { aetherExecutors } from './shannonAetherTools.js';
+import { aetherStudyTool, studyExecutors } from './shannonStudyTools.js';
+import { authorizeToolCall, authorizeToolInput, gatedAether } from './shannonToolGate.js';
+import type { StudyAether } from './studyAether.js';
 import { validToolInput } from './shannonToolInput.js';
 import type { PreparedToolCall, ToolExecutionContext, ToolExecutor } from './shannonToolTypes.js';
 import {
@@ -30,6 +34,15 @@ const STUDY_REJECTIONS: Readonly<Record<string, ToolResult>> = Object.freeze({
   STUDY_NOT_FOUND: toolFailure('not_found', '見つからなかった。', { retryable: false }),
 });
 
+/** Aether as her tools reach it (Syzygy ADR-0007 revised); every part absent while it is not configured. */
+export interface ToolAetherPorts {
+  access?: AetherAccess | null;
+  /** Her study in Aether: the study tools write there, and read what Aether has. */
+  study?: StudyAether | null;
+  /** The owner's proposal inbox (`AETHER_SHANNON_PROPOSAL_DIR`), for `aether.propose`. */
+  proposals?: AetherProposalStore | null;
+}
+
 export class ShannonToolRunner {
   private readonly executors: Readonly<Record<string, ToolExecutor>>;
 
@@ -41,9 +54,11 @@ export class ShannonToolRunner {
     private readonly transaction: <T>(operation: () => T) => T = operation => store.transaction(operation),
     /** Her Minecraft body's request queue (`minecraftBodyRequests.ts`); absent, its tools are never offered. */
     private readonly minecraft: MinecraftRequestPort | null = null,
+    private readonly aether: ToolAetherPorts = {},
   ) {
-    this.executors = Object.freeze({ ...studyExecutors(store, now), ...folderExecutors(folder, scopeKey => roomLookGuard(store.study.roomLookTexts(scopeKey, ROOM_LOOK_GUARD.notes))),
-      ...minecraftExecutors(minecraft) });
+    const folderTools = folderExecutors(folder, scopeKey => roomLookGuard(store.study.roomLookTexts(scopeKey, ROOM_LOOK_GUARD.notes)));
+    this.executors = Object.freeze({ ...studyExecutors(store, now, aether.study ?? null), ...(aether.study ? withoutStories(store, folderTools) : folderTools),
+      ...minecraftExecutors(minecraft), ...aetherExecutors(aether.proposals ?? null) });
   }
 
   /**
@@ -51,8 +66,12 @@ export class ShannonToolRunner {
    * Minecraft body's only in the scope that has one (`scopeKey`), and `minecraft.request` only while the body is present.
    */
   offered(surface: ToolSurface, audience: ToolAudience, scopeKey?: string): readonly ShannonToolDefinition[] {
-    return offeredTools(surface, audience, tool => tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
-      : tool.domain === 'minecraft_body' ? minecraftToolOffered(this.minecraft, tool, scopeKey) : true);
+    // Her Aether tools only while Aether is configured, and a proposal only while the inbox is: without them every offer is what it was.
+    const tools = offeredTools(surface, audience, tool => tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
+      : tool.domain === 'minecraft_body' ? minecraftToolOffered(this.minecraft, tool, scopeKey)
+        : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true
+          : tool.name.startsWith('aether') ? Boolean(this.aether.access) : true);
+    return this.aether.study ? tools.map(aetherStudyTool) : tools;
   }
 
   /** The gate, the input check, and the executor's preparation. A result here is the call's answer: nothing ran. */
@@ -65,10 +84,13 @@ export class ShannonToolRunner {
     // The schema of this surface: in a conversation a write is shorter (`toolForSurface`).
     const checked = validToolInput(rawInput, toolForSurface(tool, context.surface).input);
     if ('problem' in checked) return { tool, result: toolFailure('invalid_input', `入力が正しくない（${checked.problem}）。`, { retryable: false }) };
+    const inputRefused = authorizeToolInput(tool, checked.input, context);
+    if (inputRefused) return { tool, result: inputRefused };
     const secret = secretRefusal(tool.name, checked.input, context.secrets);
     if (secret) return { tool, result: secret };
     try {
-      const prepared = executor(checked.input, context);
+      // Aether as this call may reach it: the gate narrows it with anyone else present and in her own time.
+      const prepared = executor(checked.input, this.aether.access ? { ...context, aether: gatedAether(this.aether.access, context) } : context);
       return 'run' in prepared ? { tool, prepared } : { tool, result: prepared };
     } catch {
       return { tool, result: toolFailure('failed', 'うまく準備できなかった。', { retryable: true }) };
@@ -121,8 +143,26 @@ export class ShannonToolRunner {
 
 export { STUDY_REJECTIONS };
 
+/**
+ * With her study in Aether her stories live there only, never in the folder on the owner's PC or Mac (Syzygy ADR-0007
+ * revised): a file write that carries a run of one of her stories is refused. Like the room-look check it catches copying,
+ * not a retelling.
+ */
+function withoutStories(store: SQLiteAutonomyStore, executors: Readonly<Record<string, ToolExecutor>>): Readonly<Record<string, ToolExecutor>> {
+  const guarded = (executor: ToolExecutor): ToolExecutor => (input, context) => {
+    const content = typeof input.content === 'string' ? input.content : '';
+    let carries = false;
+    try { carries = roomLookGuard(store.study.list(context.scopeKey, 500, 'include').filter(piece => piece.kind === 'story').map(piece => piece.body))(content); } catch { carries = true; }
+    return carries ? toolFailure('refused', '物語の文が入っているので、PCのフォルダには書かない。', {
+      retryable: false, refusal: { why: '物語はAetherの書斎にだけ置く決まり', wouldWork: '物語は study の道具で書斎に書き、フォルダには物語の文を除いて書く' },
+    }) : executor(input, context);
+  };
+  return Object.freeze({ ...executors, 'folder.create': guarded(executors['folder.create']!), 'folder.update': guarded(executors['folder.update']!) });
+}
+
 /** The tools whose words end up in her study or her folder. */
-const WRITING_TOOLS: ReadonlySet<string> = new Set(['study.create', 'study.update', 'study.rename', 'folder.create', 'folder.update', 'folder.rename', 'folder.move']);
+const WRITING_TOOLS: ReadonlySet<string> = new Set(['study.create', 'study.update', 'study.rename', 'folder.create', 'folder.update', 'folder.rename', 'folder.move',
+  'aetherFolder.create', 'aetherFolder.update', 'aether.propose']);
 
 /** A write from a conversation that repeats what must reach nobody but the owner (the check her own time uses), or null. */
 function secretRefusal(name: string, input: Readonly<Record<string, unknown>>, secrets: SecretCheck | null | undefined): ToolResult | null {

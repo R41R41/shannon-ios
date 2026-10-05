@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { StudyAetherLinks } from './studyAetherLinks.js';
 
 /**
  * Shannon's study (書斎): the notes and story drafts she writes in her own time.
  *
- * Aether's study does not exist yet, so for now the study lives inside Shannon. The text
+ * When Aether is configured (Syzygy ADR-0007, revised 2026-10-06) the text of a piece that has moved lives in Aether
+ * (`studyAetherLinks.ts`, `studyAether.ts`), and this store keeps its stages, versions and reactions; without Aether, or
+ * for a piece that has not moved, the study lives here as before. The text
  * is hers: the owner reads it and may react or ask her to put a piece away, but no
  * owner route edits a title or a body. Every revision appends a version with what
  * changed and why; earlier versions are kept.
@@ -78,6 +81,9 @@ export interface StudyFeedback {
   createdAt: string;
   /** When a revising step was given this reaction. */
   usedAt?: string;
+  /** The Aether document and version the reaction was about, while the piece lives in Aether (`studyAetherLinks.ts`). */
+  aetherDocumentId?: string;
+  aetherVersion?: number;
 }
 
 export interface StudyDraft {
@@ -101,6 +107,9 @@ interface PieceRow {
 }
 
 export class StudyStore {
+  /** Which pieces live in Aether, as which document and version (Syzygy ADR-0007). */
+  readonly aether: StudyAetherLinks;
+
   constructor(private readonly database: DatabaseSync) {
     database.exec(`
       CREATE TABLE IF NOT EXISTS study_pieces (
@@ -152,6 +161,7 @@ export class StudyStore {
     // Additive (2026-10-05): her own delete is soft. A deleted piece is in her study's trash, and every other path reads it as gone.
     if (!columns.some(column => column.name === 'deleted_at')) database.exec('ALTER TABLE study_pieces ADD COLUMN deleted_at TEXT');
     database.exec('CREATE INDEX IF NOT EXISTS study_pieces_origin ON study_pieces (scope_key, origin, created_at)');
+    this.aether = new StudyAetherLinks(database);
   }
 
   /**
@@ -343,20 +353,25 @@ export class StudyStore {
     if (comment === null) return 'STUDY_INVALID';
     if (this.pendingFeedback(scopeKey, id).length >= STUDY_LIMITS.pendingFeedback) return 'STUDY_LIMIT';
     const feedbackId = randomUUID();
+    // Keyed also by the Aether document and the Aether version of what he read, while the piece lives there.
+    const linked = this.aether.forVersion(scopeKey, id, current.readableVersion) ?? this.aether.current(scopeKey, id);
     this.database.prepare(`
-      INSERT INTO study_feedback (feedback_id, scope_key, piece_id, version, reaction, comment, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(feedbackId, scopeKey, id, current.readableVersion, input.reaction, comment, at);
+      INSERT INTO study_feedback (feedback_id, scope_key, piece_id, version, reaction, comment, created_at, aether_document_id, aether_version)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(feedbackId, scopeKey, id, current.readableVersion, input.reaction, comment, at, linked?.documentId ?? null,
+      linked && linked.version === current.readableVersion ? linked.aetherVersion : null);
     return this.feedback(scopeKey, id).find(item => item.id === feedbackId)!;
   }
 
   feedback(scopeKey: string, id: string): readonly StudyFeedback[] {
     const rows = this.database.prepare(`
       SELECT * FROM study_feedback WHERE scope_key = ? AND piece_id = ? ORDER BY created_at, feedback_id
-    `).all(scopeKey, id) as unknown as Array<{ feedback_id: string; piece_id: string; version: number; reaction: string; comment: string; created_at: string; used_at: string | null }>;
+    `).all(scopeKey, id) as unknown as Array<{ feedback_id: string; piece_id: string; version: number; reaction: string; comment: string; created_at: string; used_at: string | null; aether_document_id?: string | null; aether_version?: number | null }>;
     return Object.freeze(rows.map(row => Object.freeze({
       id: row.feedback_id, pieceId: row.piece_id, version: Number(row.version), reaction: row.reaction as StudyReaction,
       comment: row.comment, createdAt: row.created_at, ...(row.used_at ? { usedAt: row.used_at } : {}),
+      ...(row.aether_document_id ? { aetherDocumentId: row.aether_document_id } : {}),
+      ...(row.aether_version ? { aetherVersion: Number(row.aether_version) } : {}),
     })));
   }
 

@@ -2,7 +2,15 @@ import { randomUUID, createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 
-export type AetherProposalOperation = 'new-note' | 'append';
+/**
+ * Proposals to change the owner's Aether documents, written to Aether's file inbox (`AETHER_SHANNON_PROPOSAL_DIR`).
+ * v2 (`syzygy.aether-shannon-access.v1`, owner decision 2026-10-06) adds `update` (the whole new body, at most 60,000
+ * characters) and `delete` (what is removed, at most 6,000), each against `targetNoteId` and `expectedUpdatedAt`; older
+ * apps ignore them. Nothing here changes a document: the owner adopts or rejects each proposal in his apps.
+ */
+export type AetherProposalOperation = 'new-note' | 'append' | 'update' | 'delete';
+
+export const AETHER_PROPOSAL_LIMITS = Object.freeze({ content: 6_000, updateContent: 60_000, fileBytes: 256 * 1024 });
 
 export interface AetherProposal {
   id: string;
@@ -17,6 +25,8 @@ export interface AetherProposal {
 
 export interface AetherProposalInput {
   requestKey?: string;
+  /** v2: absent, a proposal with a target appends and one without is a new note (as before). */
+  operation?: AetherProposalOperation;
   title?: string;
   content: string;
   reason?: string;
@@ -40,7 +50,9 @@ export class FileAetherProposalStore implements AetherProposalStore {
   create(scopeKey: string, input: AetherProposalInput): AetherProposal {
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     const requestHash = input.requestKey ? createHash('sha256').update(JSON.stringify([scopeKey, input.requestKey])).digest('hex') : undefined;
-    const inputHash = createHash('sha256').update(JSON.stringify([input.content, input.title, input.targetNoteId, input.expectedUpdatedAt])).digest('hex');
+    // The operation joins the hash only when it is one of v2's, so a receipt written before v2 still matches its retry.
+    const v2 = input.operation === 'update' || input.operation === 'delete';
+    const inputHash = createHash('sha256').update(JSON.stringify([input.content, input.title, input.targetNoteId, input.expectedUpdatedAt, ...(v2 ? [input.operation] : [])])).digest('hex');
     const receiptPath = requestHash ? join(this.directory, `.${requestHash}.receipt`) : undefined;
     if (receiptPath && existsSync(receiptPath)) {
       const receipt = JSON.parse(readFileSync(receiptPath, 'utf8')) as { status: string; inputHash: string; proposal: AetherProposal };
@@ -55,17 +67,20 @@ export class FileAetherProposalStore implements AetherProposalStore {
     const expectedUpdatedAt = input.expectedUpdatedAt?.trim();
     if (Boolean(targetNoteId) !== Boolean(expectedUpdatedAt)) throw new Error('INVALID_AETHER_PROPOSAL');
     if (expectedUpdatedAt && !Number.isFinite(Date.parse(expectedUpdatedAt))) throw new Error('INVALID_AETHER_PROPOSAL');
-    const content = boundedContent(input.content, 6_000);
+    const operation: AetherProposalOperation = input.operation ?? (targetNoteId ? 'append' : 'new-note');
+    if ((operation === 'new-note') === Boolean(targetNoteId)) throw new Error('INVALID_AETHER_PROPOSAL');
+    const content = boundedContent(input.content, operation === 'update' ? AETHER_PROPOSAL_LIMITS.updateContent : AETHER_PROPOSAL_LIMITS.content);
     if (!content) throw new Error('INVALID_AETHER_PROPOSAL');
     const proposal: AetherProposal = {
       id: randomUUID(),
-      operation: targetNoteId ? 'append' : 'new-note',
+      operation,
       title: compact(input.title ?? firstLine(content), 120) ?? 'Shannonからの提案',
       content,
       reason: compact(input.reason ?? 'Shannonとの会話から保存', 300) ?? 'Shannonとの会話から保存',
       ...(targetNoteId ? { targetNoteId: compact(targetNoteId, 160)!, expectedUpdatedAt: new Date(expectedUpdatedAt!).toISOString() } : {}),
       createdAt: new Date(this.now()).toISOString(),
     };
+    if (Buffer.byteLength(`${JSON.stringify(proposal)}\n`, 'utf8') > AETHER_PROPOSAL_LIMITS.fileBytes) throw new Error('INVALID_AETHER_PROPOSAL');
     const finalPath = join(this.directory, `${proposal.id}.json`);
     const temporary = join(this.directory, `.${basename(finalPath)}.${process.pid}`);
     try {

@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { configuredAetherAccess } from './aetherAccess.js';
 import { SQLiteAutonomyAnnouncer } from './autonomyAnnouncer.js';
 import { configuredAwakeClock } from './autonomyAwakeClock.js';
 import { moodHistoryRecording } from './moodHistoryContract.js';
@@ -93,6 +94,8 @@ const service = new ShannonAutonomyService({
   reachOuts: (scopeKey, at) => ({ today: reachOuts.sentOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutsPerDay }),
   reachOutFollowUps: (scopeKey, at) => ({ today: reachOuts.followUpsOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutFollowUpsPerDay }),
   calls: (scopeKey, at) => callGateContext(phone, scopeKey, at),
+  // Her study's text in Aether when it is configured (Syzygy ADR-0007); the proposal inbox is the conversation's, never her own time's.
+  aether: { access: configuredAetherAccess(process.env) },
 });
 // Read-only Notion, only when the owner connected it; without a token the loop never plans a Notion step.
 const notion = notionLoopReader(configuredNotionSource(process.env, { log: line => console.log(line) }));
