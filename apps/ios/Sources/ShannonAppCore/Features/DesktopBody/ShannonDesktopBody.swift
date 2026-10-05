@@ -245,11 +245,14 @@ public final class ShannonDesktopBody {
         loop = nil
         minuteTask = nil
         etag = nil
+        // Not seen from now on, and the figure is given back at once (the view leaves only at the next update): the page
+        // never draws in a hidden window. The next show attaches a new host and says it is seen.
+        ShannonLive2DStage.shared.setDesktopWindowSeen(false)
+        if let window { ShannonLive2DStage.shared.detach(host: window.hostID) }
         window?.hide()
         ShannonLive2DStage.shared.setDesktopTouchHandler(nil)
         ShannonLive2DStage.shared.setDesktopBodyOverride(nil)
         macState.stop()
-        ShannonLive2DStage.shared.setDesktopWindowSeen(true)
     }
 
     // MARK: Touch and voice
