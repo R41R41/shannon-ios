@@ -377,6 +377,33 @@ describe('B-1: a Discord friend\'s DM (second review follow-up, 2026-10-06)', ()
   });
 });
 
+describe('a friend\'s DM in the platform context (final review, 2026-10-06)', () => {
+  it('never reaches the owner\'s channel turn, even with that friend as a participant; it reaches the friend\'s own DM', async () => {
+    const { reply, model, bridge, peopleStore, api, close } = harness();
+    const taroDm = 'discord:111:777';
+    const TARO = '900000000000000007';
+    await reply({ requestId: 'f-taro', conversationId: taroDm, conversationKind: 'dm', sourceUserId: TARO, sourceDisplayName: 'タロウ', userMessage: '明日、X1200の拠点で釣りをする' });
+    expect(peopleStore.items('owner').some(item => item.text.includes('X1200'))).toBe(true);
+    const context = (sourceUserId: string, conversationId: string, conversationKind: 'channel' | 'dm') =>
+      bridge.context({ platform: 'discord', conversationId, sourceUserId, conversationKind, participants: [TARO] }).projection;
+    // The owner's channel turn with Taro present: his DM stays out of the context, and of the reply route's prompt.
+    expect(context(OWNER, CHANNEL, 'channel')).not.toContain('X1200');
+    expect(context(OWNER, CHANNEL, 'channel')).toContain('タロウさん');
+    await reply({ requestId: 'f-owner', conversationId: CHANNEL, conversationKind: 'channel', participants: [TARO], userMessage: 'タロウは明日何するって？' });
+    expect(JSON.stringify([model.requests.at(-1)!.systemPrompt, model.requests.at(-1)!.history])).not.toContain('X1200');
+    // Another friend in the channel: neither.
+    expect(context(FRIEND, CHANNEL, 'channel')).not.toContain('X1200');
+    // Taro's own DM still has it.
+    expect(context(TARO, taroDm, 'dm')).toContain('X1200');
+    // An item the owner made ordinary (ふつう) himself may reach his channel turn.
+    for (const item of peopleStore.items('owner').filter(candidate => candidate.kind !== 'turn' && candidate.text.includes('X1200'))) {
+      expect((await api.dispatch({ method: 'POST', path: '/v1/people/memory/action', body: { scopeKey: 'owner', itemId: item.id, action: 'mark-ordinary' } })).status).toBe(200);
+    }
+    expect(context(OWNER, CHANNEL, 'channel')).toContain('X1200');
+    await close();
+  });
+});
+
 describe('the route', () => {
   it('takes the bridge token only, and answers 503 unless SHANNON_PLATFORM_REPLY is on', async () => {
     expect(platformReplyEnabled({})).toBe(false);

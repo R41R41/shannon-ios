@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { assembleShannonSystemPrompt, audienceCovers, withoutUnshownTitles, type CompanionClock, type CompanionStateStore } from '@shannon/cognition';
+import { assembleShannonSystemPrompt, withoutUnshownTitles, type CompanionClock, type CompanionStateStore } from '@shannon/cognition';
 import { agentTaskPromptProjection } from './apiPromptProjection.js';
 import type { AetherContextReader } from './aetherContext.js';
 import type { AetherProposalStore } from './aetherProposal.js';
@@ -26,6 +26,7 @@ import { isOrganizeCommand, type OrganizeExtractor, type OrganizeStore, type Voy
 import type { OwnOutreach } from './ownOutreach.js';
 import type { OwnerUpcoming } from './ownerUpcoming.js';
 import type { PeopleMemory } from './peopleMemory.js';
+import { heardByEveryoneHere } from './platformPeople.js';
 import type { PersonIdentityStore } from './personIdentity.js';
 import type { ShannonBody } from './shannonBody.js';
 import type { ConversationToolServer } from './shannonToolSession.js';
@@ -171,10 +172,11 @@ export function beginTextTurn(dependencies: TextTurnDependencies, input: TextTur
   const provisionalIntent = audience.alone ? extractExplicitUserIntent(message, threadId, occurredAt) : null;
   // What she talked about with other people is recalled here too; alone with the owner all of it may be used. On a surface
   // with others (anyone's turn in a shared chat, someone's whisper, the owner's shared-chat turn) only what everyone here
-  // already heard (`audienceCovers`), as the platform context gives it: one person's whisper never reaches another's turn.
+  // already heard, or what the owner made ordinary himself (`heardByEveryoneHere`), as the platform context gives it: one
+  // person's whisper never reaches another's turn.
   const recalledPeople = dependencies.people.recall(body.scopeKey, captured, message, audience.present);
   const peopleRecall = surface && !audience.alone ? { ...recalledPeople,
-    candidates: recalledPeople.candidates.filter(candidate => audienceCovers(candidate.disclosure?.audience, audience.present)) } : recalledPeople;
+    candidates: recalledPeople.candidates.filter(candidate => heardByEveryoneHere(captured, candidate.id, candidate.disclosure, audience.present)) } : recalledPeople;
   const deterministicContext = prepareTurnCognitiveContext(captured, dependencies.conversationStore, {
     scopeKey: body.scopeKey, message, occurredAt, channel: 'text', present: audience.present,
     threadId, additionalCandidates: peopleRecall.candidates,

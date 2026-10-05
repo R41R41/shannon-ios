@@ -1,11 +1,15 @@
 import { createHash } from 'node:crypto';
 import {
+  audienceCovers,
+  resolveDisclosure,
   disclosureFor,
   groupAudience,
   peopleAudience,
   visibleMemoryText,
+  type CompanionStateSnapshot,
   type CompanionStateStore,
   type MemoryAudience,
+  type MemoryDisclosure,
 } from '@shannon/cognition';
 import { DisclosureGate } from './memoryDisclosure.js';
 import { localDayKey } from './memoryProjection.js';
@@ -167,7 +171,9 @@ export class PlatformPeople {
 
   /**
    * What Shannon remembers about the people in a conversation, for the legacy runtime's prompt.
-   * Every line passed the disclosure gate for `present`; with the owner absent only open lines are used.
+   * Every line passed the disclosure gate for `present`, and was heard by everyone there (`heardByEveryoneHere`, review of
+   * 2026-10-06): a friend's DM never reaches the owner's or anyone else's shared conversation. With the owner absent only
+   * open lines are used.
    */
   contextLines(scopeKey: string, platform: string, userIds: readonly string[], present: MemoryAudience, ownerPresent: boolean, maximum = 12): string[] {
     const snapshot = this.stateStore.snapshot(scopeKey);
@@ -182,7 +188,8 @@ export class PlatformPeople {
     };
     const lines = this.store.items(scopeKey)
       .filter(item => item.kind !== 'turn' && item.personId !== undefined && ids.has(item.personId))
-      .filter(item => visibleMemoryText(snapshot, personMemoryId(item.id), item.text) !== null && gate.allows(personMemoryId(item.id), item.disclosure))
+      .filter(item => visibleMemoryText(snapshot, personMemoryId(item.id), item.text) !== null && gate.allows(personMemoryId(item.id), item.disclosure)
+        && heardByEveryoneHere(snapshot, personMemoryId(item.id), item.disclosure, present))
       .flatMap(item => {
         const marker = gate.marker(personMemoryId(item.id), item.disclosure);
         // Without the owner there nobody can release a protected line, so it is not given at all.
@@ -224,3 +231,16 @@ export class PlatformPeople {
 }
 
 export const platformSummaryId = (callId: string) => `ps-${hash(callId)}`;
+
+/**
+ * Whether a person memory may reach a conversation with others: everyone there already heard it (`audienceCovers`), or
+ * the owner himself made it ordinary (ふつう). Otherwise it stays where it was said: one person's DM or whisper never reaches
+ * another person's turn, nor the owner's turn in a shared conversation (review of 2026-10-06). The owner alone hears all.
+ */
+export function heardByEveryoneHere(
+  snapshot: Pick<CompanionStateSnapshot, 'memoryControls'>, memoryId: string, stored: MemoryDisclosure | undefined, present: MemoryAudience,
+): boolean {
+  if (audienceCovers(stored?.audience, present)) return true;
+  const resolved = resolveDisclosure(snapshot, memoryId, stored);
+  return resolved.decidedBy === 'owner' && resolved.sensitivity === 'ordinary';
+}

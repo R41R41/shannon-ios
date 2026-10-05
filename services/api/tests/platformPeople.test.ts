@@ -306,9 +306,11 @@ describe('using it', () => {
     expect(context.projection).toContain('【機微:健康・ライ氏だけが知っている】ユーザーは病院が苦手');
     expect(context.projection).not.toContain('ウォンバット会');
     expect(context.projection.length).toBeLessThanOrEqual(2_400);
-    // Another channel of the same guild is another audience: the same fact arrives marked.
+    // Another channel of the same guild is another audience: what was said there stays there (final review of 2026-10-06:
+    // a person memory reaches a conversation only when everyone there heard it; before, it arrived marked).
     const elsewhere = bridge.context({ ...fixture('context.request.json'), conversationId: 'discord:111:999' });
-    expect(elsewhere.projection).toMatch(/- 【機微:ほかの人のこと・別のグループの会話で出た】\(2026-10-02 友人グループ（Discord）\) ミキさんは辛いものが苦手/u);
+    expect(elsewhere.projection).toContain('ミキさん、ケンさん');
+    expect(elsewhere.projection).not.toContain('ミキさんは辛いものが苦手');
     // Without participants nothing about people is added.
     expect(bridge.context({ platform: 'discord', conversationId: 'discord:111:222', sourceUserId: OWNER }).projection).not.toContain('[この会話にいる人についての記憶]');
     await close();
