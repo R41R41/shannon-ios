@@ -66,7 +66,8 @@ export class ShannonTurnMemoryRecall implements TurnMemoryRecall {
     const ownerOnly = isOwnerOnly(context.present);
     // A note built from a turn that must not reach the model with these people present is left out with it.
     const gate = new DisclosureGate(context.present, input.snapshot, conversationStoreOf(this.knowledge), input.scopeKey);
-    const usable = (this.knowledge ? usableKnowledgeFor(this.knowledge, input.scopeKey, input.snapshot) : [])
+    // Her notes carry no label of their own, so a turn that may show only open items gets none of them.
+    const usable = (this.knowledge && !context.openOnly ? usableKnowledgeFor(this.knowledge, input.scopeKey, input.snapshot) : [])
       .filter(document => document.sourceExperienceIds.every(id => gate.allowsExperience(id)));
     const usableIds = new Set(usable.map(document => document.id));
     const outcome: SemanticRecallOutcome = this.willSearch(input) ? await this.semantic.recall({
@@ -76,7 +77,8 @@ export class ShannonTurnMemoryRecall implements TurnMemoryRecall {
       isEligible: candidate => candidate.kind !== 'knowledge' || usableIds.has(candidate.sourceId),
       ...(input.signal ? { signal: input.signal } : {}),
     }) : { status: 'skipped', hits: [], modelCalls: 0, elapsedMilliseconds: 0 };
-    const experienceHits = outcome.hits.filter(hit => !hit.id.startsWith('knowledge:'));
+    // A hit with others present carries its marker at its start; with only open items allowed a marked one is left out whole.
+    const experienceHits = outcome.hits.filter(hit => !hit.id.startsWith('knowledge:') && !(context.openOnly && hit.summary.includes('【機微:')));
     const memories = mergeSemanticMemories(context.memories, experienceHits);
     const knowledge = this.knowledge && usable.length ? await recallShannonKnowledge({
       store: this.knowledge, gateway: this.semantic.modelGateway, scopeKey: input.scopeKey, message: input.message,

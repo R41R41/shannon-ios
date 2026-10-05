@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { PLATFORM_REPLY_ALLOWANCE, SurfaceTurnAllowance } from './minecraftTurnAllowance.js';
 import { SHANNON_OWNER_NAME, type CompanionClock } from '@shannon/cognition';
 import type { TextTurnInput, TextTurnResult } from './apiKernel.js';
 import type { ConversationStore } from './conversationStore.js';
@@ -26,8 +27,6 @@ export const PLATFORM_REPLY_LIMITS = Object.freeze({
   /** A new turn is answered only while it is fresh; a retry of an answered one is replayed whatever its age. */
   maximumAgeMinutes: 30,
   futureSkewMinutes: 5,
-  /** Every new turn is one call of the conversation model. */
-  repliesPerMinute: 20,
   /** A stored reply is replayed this long (longer than the 30 minutes a message is answered at all), then deleted at a later reply. */
   replayDays: 1,
   participants: 50,
@@ -65,7 +64,8 @@ export function platformReplyEnabled(environment: Readonly<Record<string, string
 
 export class PlatformReplyService {
   private readonly pending = new Map<string, { hash: string; answer: Promise<PlatformReplyResponse> }>();
-  private readonly recent: number[] = [];
+  /** Model calls per speaker, the owner apart (`minecraftTurnAllowance.ts`); taken only for a turn that reaches the model. */
+  private readonly allowance = new SurfaceTurnAllowance(PLATFORM_REPLY_ALLOWANCE);
 
   constructor(private readonly dependencies: {
     scopeKey: string;
@@ -99,12 +99,10 @@ export class PlatformReplyService {
     if (!policy.ownerWrote && !request.sourceDisplayName) {
       throw new PlatformBridgeError('PLATFORM_ACTOR_DENIED', 403, 'This external actor is not bound to the Shannon owner.');
     }
-    const at = Date.parse(now());
-    while (this.recent.length && at - this.recent[0]! >= 60_000) this.recent.shift();
-    if (this.recent.length >= PLATFORM_REPLY_LIMITS.repliesPerMinute) {
-      throw new PlatformBridgeError('RATE_LIMITED', 429, 'Too many platform replies; retry after a minute.');
+    // Every new turn is one model call: the owner's count apart from everyone else's (second review, 2026-10-06).
+    if (!this.allowance.take(policy.ownerWrote, `${request.platform}:${request.sourceUserId}`, Date.parse(now()))) {
+      throw new PlatformBridgeError('RATE_LIMITED', 429, policy.ownerWrote ? 'Too many platform replies from the owner; retry after a minute.' : 'Too many platform replies for this person; retry later.');
     }
-    this.recent.push(at);
 
     const answer = this.answer(request, policy, hash);
     this.pending.set(key, { hash, answer });

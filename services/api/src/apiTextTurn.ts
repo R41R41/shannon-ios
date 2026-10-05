@@ -28,7 +28,7 @@ import type { OwnerUpcoming } from './ownerUpcoming.js';
 import type { PeopleMemory } from './peopleMemory.js';
 import type { PersonIdentityStore } from './personIdentity.js';
 import type { ShannonBody } from './shannonBody.js';
-import { withOfferedMinecraftBodyLine, type ConversationToolServer } from './shannonToolSession.js';
+import type { ConversationToolServer } from './shannonToolSession.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import { TurnDeadline } from './turnDeadline.js';
 import type { TurnMemoryRecall } from './turnMemoryRecall.js';
@@ -115,16 +115,24 @@ export const NO_LOOK: ConversationLookTurn = Object.freeze({ prompt: '', request
 /** A line that begins an entry or a block of a prompt: a bullet, a bracketed header, a marker, or a blank line. */
 const ENTRY_START = /^(?:\s*$|- |・|\[|【|#)/u;
 
+/** A line that is a marker alone: it marks the whole block after it, up to the next blank line. */
+const MARKER_ONLY = /^\s*(?:- )?【機微:[^】]*】\s*$/u;
+
 /**
- * Memory text without its protected entries. Each protected item carries a 【機微:…】 marker on its first line; an item
- * whose text runs over several lines is left out whole, up to the next entry or block (review N5, 2026-10-06).
+ * Memory text without its protected entries: the second layer behind the source (`openOnly` of the turn's context, which
+ * leaves protected items, his intentions and her unlabelled notes out where they are made). Each protected item carries
+ * a 【機微:…】 marker on its first line; an item whose text runs over several lines is left out whole, up to the next
+ * entry or block (review N5), and a marker alone on its line takes the whole block after it, up to the next blank line
+ * (second review, 2026-10-06).
  */
 export function withoutGuardedEntries(text: string): string {
-  let dropping = false;
+  let dropping: 'entry' | 'block' | null = null;
   return text.split('\n').filter(line => {
-    if (line.includes('【機微:')) { dropping = true; return false; }
-    if (dropping && !ENTRY_START.test(line)) return false;
-    dropping = false;
+    if (MARKER_ONLY.test(line)) { dropping = 'block'; return false; }
+    if (line.includes('【機微:')) { dropping = 'entry'; return false; }
+    if (dropping === 'block' && line.trim() !== '') return false;
+    if (dropping === 'entry' && !ENTRY_START.test(line)) return false;
+    dropping = null;
     return true;
   }).join('\n');
 }
@@ -163,7 +171,7 @@ export function beginTextTurn(dependencies: TextTurnDependencies, input: TextTur
     scopeKey: body.scopeKey, message, occurredAt, channel: 'text', present: audience.present,
     threadId, additionalCandidates: peopleRecall.candidates,
     intents: dependencies.cognitiveIntents.list(body.scopeKey, 'active'),
-    provisionalIntent,
+    provisionalIntent, ...(surface?.openOnly ? { openOnly: true } : {}),
     participants: dependencies.personIdentities.list(body.scopeKey).filter(person => person.status === 'active' && message.includes(person.displayName)).map(person => person.displayName),
   });
   const organizeTurn = !surface && audience.alone && isOrganizeCommand(message);
@@ -177,11 +185,9 @@ export function textTurnIdentityAndCapability(dependencies: TextTurnDependencies
   const { audience, message, surface } = input;
   const body = input.body;
   const { captured, explicitCommand } = begun;
-  // Her Minecraft body's capability line only where `minecraft.request` is offered now: the owner alone as the server knows
-  // it, the body in the game, and a surface that offers her minecraft.* tools (never game chat).
-  const basePrompt = withOfferedMinecraftBodyLine(dependencies.autonomy, dependencies.toolServer, body.scopeKey, 'text', audience.alone && (!surface || surface.minecraftTools === true),
-    dependencies.autonomy.identityProjection(body.scopeKey, audience.identity(() => dependencies.knowledgeStore?.promptProjection(body.scopeKey)
-      ?? assembleShannonSystemPrompt(captured))));
+  // Her Minecraft body's capability line is added to the model request when its tools include `minecraft.request`.
+  const basePrompt = dependencies.autonomy.identityProjection(body.scopeKey, audience.identity(() => dependencies.knowledgeStore?.promptProjection(body.scopeKey)
+    ?? assembleShannonSystemPrompt(captured)));
   const capabilityContext = explicitCommand ? NO_CAPABILITY_CONTEXT : conversationCapabilityContext(body.scopeKey, message,
     { aetherContext: dependencies.aetherContext, voyagerCatalog: dependencies.voyagerCatalog, notion: dependencies.notion, upcoming: dependencies.upcoming,
       ownOutreach: dependencies.ownOutreach }, surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities);

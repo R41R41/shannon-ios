@@ -326,6 +326,40 @@ describe('a Discord friend\'s turn (owner decision S6, 2026-10-06)', () => {
   });
 });
 
+describe('a Discord friend\'s turn and the owner\'s intentions (second review, 2026-10-06)', () => {
+  it('carries no current goal and no intention frame of his', async () => {
+    const { reply, api, model, close } = harness();
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'app-talk', message: '私の目標は新しい家計簿アプリを完成させることです' } });
+    await api.waitForBackground('owner');
+    expect(model.requests.at(-1)!.systemPrompt).toContain('家計簿アプリ');
+    await reply({ requestId: 'goal-friend', conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: 'こんにちは' });
+    const sent = JSON.stringify([model.requests.at(-1)!.systemPrompt, model.requests.at(-1)!.history]);
+    for (const word of ['家計簿', 'current_goal=', 'Current intention frame', 'Primary objective']) expect(sent, word).not.toContain(word);
+    await close();
+  });
+});
+
+describe('model calls of /v1/platform/reply per speaker (second review, 2026-10-06)', () => {
+  it('never lets other people use up the owner\'s replies; each person has a share; refused and repeated turns cost nothing', async () => {
+    const { reply, refusal, model, close } = harness();
+    const friend = (index: number, requestId: string) => reply({ requestId, conversationId: CHANNEL, conversationKind: 'channel',
+      sourceUserId: `90000000000000${String(index).padStart(4, '0')}`, sourceDisplayName: `友達${index}`, userMessage: 'やあ' });
+    for (let index = 0; index < 6; index += 1) await friend(10, `a-${index}`);
+    expect(await refusal(friend(10, 'a-6'))).toBe('429 RATE_LIMITED');
+    expect((await friend(10, 'a-0')).duplicate).toBe(true);
+    for (let index = 0; index < 14; index += 1) await friend(20 + index, `b-${index}`);
+    expect(await refusal(friend(99, 'b-x'))).toBe('429 RATE_LIMITED');
+    const calls = model.requests.length;
+    expect(calls).toBe(20);
+    // The owner, in his DM and in the channel, is still answered.
+    expect((await reply({ requestId: 'owner-dm' })).reply).toBeTruthy();
+    expect((await reply({ requestId: 'owner-ch', conversationId: CHANNEL, conversationKind: 'channel' })).reply).toBeTruthy();
+    // A stale message is refused before it is counted.
+    expect(await refusal(reply({ requestId: 'stale', observedAt: '2026-10-05T10:00:00.000Z' }))).toBe('400 BAD_REQUEST');
+    await close();
+  });
+});
+
 describe('the route', () => {
   it('takes the bridge token only, and answers 503 unless SHANNON_PLATFORM_REPLY is on', async () => {
     expect(platformReplyEnabled({})).toBe(false);

@@ -28,6 +28,17 @@ export function withMinecraftBodyLine(body: { present?(scopeKey: string): boolea
   try { return body?.present?.(scopeKey) ? withMinecraftBodyCapability(prompt) : prompt; } catch { return prompt; }
 }
 
+/**
+ * A model request with her Minecraft body's capability line, exactly when the turn's own tools include `minecraft.request`
+ * (second review, 2026-10-06): the owner alone as the server knows it, her tools on, the body configured and in the game,
+ * and the turn offered tools at all (a voice turn by its words). Otherwise the request is returned as it is, so a server
+ * without a body sends exactly what it sent before.
+ */
+export function withMinecraftToolLine<T extends { systemPrompt: string; tools?: { definitions: readonly { name: string }[] } }>(request: T): T {
+  return request.tools?.definitions.some(tool => tool.name === 'minecraft.request')
+    ? { ...request, systemPrompt: withMinecraftBodyCapability(request.systemPrompt) } : request;
+}
+
 const NOT_CONFIGURED = toolFailure('unavailable', 'マイクラの体は、まだ用意されていない。', {
   retryable: false, refusal: { why: 'マイクラの体の設定がない', wouldWork: 'ライ氏がマイクラの体を用意したあと' },
 });

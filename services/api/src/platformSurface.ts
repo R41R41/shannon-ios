@@ -46,8 +46,10 @@ export function platformAudienceTurn(policy: PlatformAudiencePolicy): ChatAudien
     // The verified owner's own turn in a shared conversation: his words, heard by everyone there (as the bridge stores it).
     turnLabel: Object.freeze({ audience: present, speaker: policy.ownerWrote ? 'owner' as const : 'unknown' as const }),
     identity: () => shannonIdentityPrompt(policy.ownerWrote ? 'owner' : 'guest'),
-    // Today's focus as this audience may hear it; her pursuits, guarded, only where the owner is present.
+    // Today's focus as this audience may hear it; her pursuits, guarded, only where the owner is present. Both carry no label of
+    // their own, so a turn someone else wrote (only open items) gets neither.
     ownFocus: (focus: string, pursuits: string, state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string) => {
+      if (!policy.ownerPresent) return '';
       const gate = new DisclosureGate(present, state, store, scopeKey);
       return [sharedDailyFocus(gate, focus), policy.ownerPresent ? guardedShannonSeenPrompt(pursuits, gate.unlabelledMarker) : '']
         .filter(Boolean).join('\n\n');

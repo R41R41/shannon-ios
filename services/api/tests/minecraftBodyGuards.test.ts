@@ -4,6 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { disclosureDecision, groupAudience } from '@shannon/cognition';
+import { createLocalApiKernel } from '../src/apiKernel.js';
+import { conversationReplay } from '../src/conversationWindow.js';
+import { extractExplicitUserIntent } from '../src/cognitiveIntent.js';
+import { prepareTurnCognitiveContext } from '../src/turnCognitiveContext.js';
+import { minecraftBodyRoute } from '../src/serverMinecraftBodyRoute.js';
+import type { MinecraftBody } from '../src/minecraftBody.js';
+import { configuredMinecraftBody } from '../src/minecraftBodyContract.js';
 import { withoutGuardedEntries } from '../src/apiTextTurn.js';
 import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
 import { LocalStubChatModel } from '../src/chatModel.js';
@@ -151,5 +158,89 @@ describe('N5: what a turn nobody but the owner may release is given', () => {
       '[次の区画]',
     ].join('\n');
     expect(withoutGuardedEntries(text)).toBe(['[記憶]', '- ユーザーは紅茶が好き', '- ユーザーは猫を飼っている', '', '[次の区画]'].join('\n'));
+  });
+
+  it('leaves out a whole block marked by a marker alone on its line, up to the next blank line (second review)', () => {
+    const text = ['[今日の関心]', '- 散歩', '', '【機微:未分類・ライ氏だけが知っている】', '[Current intention frame]', 'Primary objective: 家計簿アプリ',
+      '- Desired outcome: 完成', '', '[次の区画]'].join('\n');
+    expect(withoutGuardedEntries(text)).toBe(['[今日の関心]', '- 散歩', '', '', '[次の区画]'].join('\n'));
+  });
+});
+
+describe('the replay of a turn that may show only open items (second review, 2026-10-06)', () => {
+  it('gives no summary and no marked message, while the same replay for the owner\'s turn with others keeps both, marked', async () => {
+    const at = '2026-10-02T03:00:00.000Z';
+    const store = new SQLiteShannonStore({ path: databasePath(), now: () => at });
+    const state = store;
+    const api = createLocalApiKernel(() => at, { conversationStore: store, stateStore: store });
+    // Enough open talk to pass the replay budget on its own (so a summary would be used even for open items), and among it
+    // words the rule labels sensitive (health).
+    const long = '。'.repeat(150);
+    for (let index = 0; index < 60; index += 1) {
+      const response = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/turns', body: { scopeKey: 'owner', threadId: 'thread',
+        userTranscript: index % 4 === 3 ? `持病の通院の話${index}${long}` : `今日の天気の話${index}${long}`, shannonTranscript: `ボクの返事${index}${long}` } });
+      expect(response.status).toBe(201);
+    }
+    store.saveReplaySummary('owner', 'thread', { summary: 'ゼブラ要約', coveredThroughMessageId: 'none', chainStartedAt: at, updatedAt: at });
+    const present = groupAudience('platform:minecraft:lab');
+    const marked = conversationReplay('text', state.snapshot('owner'), store, 'owner', 'thread', present).request('system');
+    expect(marked.systemPrompt).toContain('ゼブラ要約');
+    expect(JSON.stringify(marked.history)).toContain('【機微:');
+    const open = conversationReplay('text', state.snapshot('owner'), store, 'owner', 'thread', present, undefined, undefined, true).request('system');
+    expect(open.systemPrompt).toBe('system');
+    expect(JSON.stringify(open.history)).not.toContain('【機微:');
+    expect(open.history.some(item => item.content.includes('今日の天気の話'))).toBe(true);
+    expect(open.history.some(item => item.content.includes('通院'))).toBe(false);
+    // The reply to a marked message is left out with it.
+    for (const index of [3, 7, 11, 55, 59]) expect(open.history.some(item => item.content.startsWith(`ボクの返事${index}。`)), String(index)).toBe(false);
+    expect(open.history.some(item => item.content.startsWith('ボクの返事58。'))).toBe(true);
+    store.close();
+  });
+});
+
+describe('N-5: a cheap guard on the turn route before any validation', () => {
+  it('takes at most 120 requests a minute from one device, invalid ones too', async () => {
+    let calls = 0;
+    const service = { turn: async () => { calls += 1; throw new (await import('../src/minecraftBodyContract.js')).MinecraftBodyError('BAD_REQUEST', 400, 'x'); } } as unknown as MinecraftBody;
+    const route = minecraftBodyRoute(service, configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: CONFIGURATION }));
+    const statuses: number[] = [];
+    for (let index = 0; index < 121; index += 1) {
+      const { response, result } = sent();
+      await route.handle(request('POST'), response, '/v1/body/minecraft/turns', {}, principal(DEVICE));
+      statuses.push(result.status!);
+    }
+    expect(statuses.slice(0, 120).every(status => status === 400)).toBe(true);
+    expect(statuses[120]).toBe(429);
+    expect(calls).toBe(120);
+    expect(MINECRAFT_BODY_LIMITS.deviceRequestsPerMinute).toBe(120);
+  });
+});
+
+describe('his intentions in a turn that may show only open items (second review, 2026-10-06)', () => {
+  it('are left out where the context is made: no current_goal and no intention frame, while the owner\'s own turn with others has them marked', () => {
+    const at = '2026-10-06T12:00:00.000Z';
+    const store = new SQLiteShannonStore({ path: databasePath(), now: () => at });
+    const intent = extractExplicitUserIntent('私の目標は新しい家計簿アプリを完成させることです', 'app-talk', at);
+    expect(intent).not.toBeNull();
+    // A protected fact, and a protected promise whose words the message repeats (a goal taken from a promise).
+    const sensitive = { audience: { kind: 'owner' as const }, sensitivity: 'sensitive' as const, category: 'health' as const, reason: '病院', decidedBy: 'rule' as const };
+    store.apply('owner', { type: 'user-fact-upserted', fact: { id: 'fact-h', statement: 'ユーザーは来週オカメインコ病院に行く', confidence: 0.9, observedAt: at, disclosure: sensitive } });
+    store.apply('owner', { type: 'prospective-memory-upserted', memory: { id: 'promise-h', summary: 'ペンギン歯科の予約を入れる', status: 'pending', createdAt: at, updatedAt: at, disclosure: sensitive } });
+    const context = (openOnly: boolean) => prepareTurnCognitiveContext(store.snapshot('owner'), store, {
+      scopeKey: 'owner', message: 'こんにちは、ペンギン歯科の予約の話', occurredAt: at, channel: 'text', present: groupAudience('platform:minecraft:lab'),
+      intents: [{ ...intent!, status: 'active' }], ...(openOnly ? { openOnly } : {}),
+    });
+    const owner = context(false).prompt;
+    expect(owner).toContain('家計簿アプリ');
+    expect(owner).toContain('【機微:未分類・ライ氏だけが知っている】');
+    expect(owner).toContain('【機微:健康・ライ氏だけが知っている】ユーザーは来週オカメインコ病院に行く');
+    const open = context(true);
+    for (const word of ['家計簿', 'current_goal=', 'Current intention frame', 'Primary objective', 'オカメインコ病院', 'ペンギン歯科']) expect(open.prompt, word).not.toContain(word);
+    expect(open.situation.currentGoal).toBeUndefined();
+    // No marked item (the profile's header still names the marker as such: 【機微:…】).
+    expect(open.prompt).not.toMatch(/【機微:(?!…】)/u);
+    expect(open.frame.primaryIntent).toBeUndefined();
+    expect(open.openOnly).toBe(true);
+    store.close();
   });
 });

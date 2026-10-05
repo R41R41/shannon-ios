@@ -98,6 +98,7 @@ import { randomUUID } from 'node:crypto';
 import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from './companionPresence.js';
 import { generateChatTurn, withSentenceStream } from './chatSentenceStream.js';
 import { conversationTools, toolTraceReader } from './shannonToolSession.js';
+import { withMinecraftToolLine } from './shannonMinecraftTools.js';
 import { withCapabilitySources } from './conversationCapabilities.js';
 import { usableThreadSummary } from './memoryVisibility.js';
 import { conversationReplay } from './conversationWindow.js';
@@ -375,11 +376,13 @@ export class ShannonApiKernel {
     const systemPrompt = textTurnSystemPrompt(deps, input, begun, { basePrompt, cognitiveContext, capability, roomLook });
     if (begun.explicitCommand || begun.organizeTurn) return answerTextCommand(deps, input, begun, cognitiveContext, systemPrompt);
     let { orchestrationState } = begun;
-    const priorThreadSummary = usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId, audience.present);
+    // A summary has no label of its own: none where only open items may be given (a turn someone other than the owner wrote).
+    const priorThreadSummary = surface?.openOnly ? undefined : usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId, audience.present);
     const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
-    const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, {
+    // Her Minecraft body's capability line exactly when this turn's tools include `minecraft.request` (`withMinecraftToolLine`).
+    const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withMinecraftToolLine({
       scopeKey: body.scopeKey, // The history is a character budget; what fell out of it is covered by the replay summary.
-      ...conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey))
+      ...conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey), surface?.openOnly)
         .request(placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt),
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message,
@@ -390,7 +393,7 @@ export class ShannonApiKernel {
       ...(surface?.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}),
       // A surface's conversation has its own fixed title.
       generateThreadTitle: surface ? false : this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
-    });
+    }));
     const reply = completion.outOfTime ? completion.reply : placeSkillReply(withCapabilitySources(completion, capability), placeSkill);
     const suppressAgentTaskProposal = !audience.alone || Boolean(surface) || isExplicitVoyagerUpdateRequest(message);
     // Her feeling for this reply, from state already in hand; it is stored after the response.

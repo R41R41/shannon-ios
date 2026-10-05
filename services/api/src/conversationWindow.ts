@@ -132,10 +132,12 @@ export interface ToolTraceReader {
 export function conversationReplay(
   channel: 'text' | 'voice', state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadId: string,
   present: MemoryAudience, environment: Readonly<Record<string, string | undefined>> = process.env, tools?: ToolTraceReader,
+  /** Only what may be shown to anyone (a turn someone other than the owner wrote): no summary, no marked message. */
+  openOnly = false,
 ): ConversationReplay {
   const rule = replayRule(channel, environment);
   const visible = visibleReplayMessages(state, store, scopeKey, threadId, present, rule.maximumMessages + 1);
-  const items = visible.messages.map(entry => entry.item);
+  const items = openOnly ? openItems(visible.messages.map(entry => entry.item)) : visible.messages.map(entry => entry.item);
   let window = replayWindow(items, rule);
   const traced = (start: number) => tools && isOwnerOnly(present) ? replayedToolTraces(tools, state, store, scopeKey, threadId, visible.messages, start) : '';
   let toolBlock = traced(window.start);
@@ -144,7 +146,8 @@ export function conversationReplay(
     toolBlock = traced(window.start);
   }
   const truncated = window.start > 0 || visible.reachedLimit;
-  const summary = truncated ? usableReplaySummary(state, store, scopeKey, threadId, present) : undefined;
+  // A summary has no label of its own: with others it is marked, so it is never given where only open items may be.
+  const summary = truncated && !openOnly ? usableReplaySummary(state, store, scopeKey, threadId, present) : undefined;
   const history = window.history;
   return {
     ...window, truncated, ...(summary ? { summary } : {}),
@@ -189,4 +192,16 @@ function replayedToolTraces(
   }
   turns.sort((left, right) => right.at.localeCompare(left.at));
   return toolTracePrompt(turns.map(turn => ({ record: { ...turn.record, calls: maskedTraceCalls(turn.record.calls, secrets) }, label: turn.label })));
+}
+
+/** The replayed messages without a marked one, and without the reply that answered a marked message. */
+function openItems(items: readonly ShannonConversationItem[]): ShannonConversationItem[] {
+  const open: ShannonConversationItem[] = [];
+  let skipReply = false;
+  for (const item of items) {
+    if (item.role === 'user') { skipReply = item.content.includes('【機微:'); if (!skipReply) open.push(item); continue; }
+    if (!skipReply && !item.content.includes('【機微:')) open.push(item);
+    skipReply = false;
+  }
+  return open;
 }

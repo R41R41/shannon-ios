@@ -29,6 +29,11 @@ export const MINECRAFT_BODY_LIMITS = Object.freeze({
    * Model calls per speaker: `minecraftTurnAllowance.ts`.
    */
   replayDays: 1,
+  /**
+   * Requests a minute to the turn route from one device, whatever they hold: a cheap guard against a flood of invalid
+   * requests before any validation (second review N-5, 2026-10-06). Model calls have their own, finer counts.
+   */
+  deviceRequestsPerMinute: 120,
 });
 
 export interface MinecraftServerBinding {

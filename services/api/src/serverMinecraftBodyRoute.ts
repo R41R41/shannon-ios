@@ -5,7 +5,7 @@ import type { ShannonChatModel } from './chatModel.js';
 import type { ConversationStore } from './conversationStore.js';
 import type { ShannonDevicePrincipal } from './deviceAuth.js';
 import { MinecraftBody, type MinecraftConversation } from './minecraftBody.js';
-import { MINECRAFT_BODY_TURN_PATH, MinecraftBodyError, configuredMinecraftBody, type MinecraftBodyConfiguration } from './minecraftBodyContract.js';
+import { MINECRAFT_BODY_LIMITS, MINECRAFT_BODY_TURN_PATH, MinecraftBodyError, configuredMinecraftBody, type MinecraftBodyConfiguration } from './minecraftBodyContract.js';
 import { SQLiteMinecraftTurnLog } from './minecraftTurnStore.js';
 import type { PeopleMemoryStore } from './peopleMemoryStore.js';
 import { platformPeopleEnabled } from './platformPeople.js';
@@ -50,6 +50,7 @@ export function createMinecraftBodyRoute(
 export function minecraftBodyRoute(service: MinecraftBody | null, configuration: MinecraftBodyConfiguration | null, close: () => void = () => {},
   requests: MinecraftBodyRequests | null = null): MinecraftBodyRoute {
   const requestUsage = new Map<string, { startedAt: number; count: number }>();
+  const usage = new Map<string, { startedAt: number; count: number }>();
   return {
     configuration,
     close,
@@ -65,7 +66,12 @@ export function minecraftBodyRoute(service: MinecraftBody | null, configuration:
         sendJson(response, 403, { error: 'MINECRAFT_BODY_DEVICE_DENIED', message: 'A paired device token is required.' });
         return true;
       }
-      // Model calls are counted by the service after the device, the turn and a repeat were checked (`minecraftTurnAllowance.ts`).
+      // A cheap guard against a flood before any validation; model calls are counted by the service after the device, the
+      // turn and a repeat were checked (`minecraftTurnAllowance.ts`).
+      if (!consumeDeviceAllowance(usage, principal.deviceId, MINECRAFT_BODY_LIMITS.deviceRequestsPerMinute)) {
+        sendJson(response, 429, { error: 'RATE_LIMITED', message: 'Too many requests from this device; retry after a minute.' });
+        return true;
+      }
       try {
         const result = await service.turn(principal.scopeKey, principal.deviceId, body);
         sendJson(response, result.duplicate ? 200 : 201, result);

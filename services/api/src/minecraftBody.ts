@@ -220,9 +220,12 @@ export class MinecraftBody {
   }
 }
 
-/** The body's present as anyone but the owner may hear it: without the task line while the body works on a request. */
+/**
+ * The body's present as anyone but the owner may hear it: the task line only while the body says it works on its own goal
+ * or on nothing (`campaign`, `idle`); while it works on a request, or does not say, the line may carry the owner's request.
+ */
 function withoutRequestTask(body: MinecraftBodyState | undefined): MinecraftBodyState | undefined {
-  if (body?.busyWith !== 'request' || body.task === undefined) return body;
+  if (body?.task === undefined || body.busyWith === 'campaign' || body.busyWith === 'idle') return body;
   const { task: _task, ...rest } = body;
   return rest;
 }

@@ -27,7 +27,7 @@ import { createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import type { HostFolderOperations } from '../src/hostFolderOperations.js';
 import { ShannonToolRunner } from '../src/shannonToolRunner.js';
-import type { MinecraftRequestPort } from '../src/shannonMinecraftTools.js';
+import { withMinecraftToolLine, type MinecraftRequestPort } from '../src/shannonMinecraftTools.js';
 import type { BodyIngestReceipt, BodyPresence } from '../src/shannonBody.js';
 import type { OwnOutreachReader } from '../src/ownOutreach.js';
 
@@ -50,9 +50,12 @@ class GameModel implements ShannonChatModel {
   readonly model = 'test-model';
   readonly requests: ShannonChatModelRequest[] = [];
   intent: MinecraftIntent | undefined;
+  /** The rolling summary the model writes for its thread, when set. */
+  threadSummary: string | undefined;
   async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
     this.requests.push(request);
     return { mode: this.mode, model: this.model, reply: `はい、${this.requests.length}回目です。`,
+      ...(this.threadSummary ? { threadSummary: this.threadSummary } : {}),
       ...(request.offerMinecraftIntent && this.intent ? { minecraftIntent: this.intent } : {}) };
   }
   async generateVoice(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
@@ -494,7 +497,7 @@ const voiceTurn = (transcript: string, extra: { companionPresent?: boolean } = {
   },
 });
 
-describe('her Minecraft body\'s capability line (review N1, 2026-10-06)', () => {
+describe('her Minecraft body\'s capability line (review N1 and N-1, 2026-10-06)', () => {
   it('is in the owner\'s description only where minecraft.request is offered: alone, the body in the game, never game chat', async () => {
     const present = { value: false };
     const autonomy = createInMemoryAutonomyService(() => START, { store: new SQLiteAutonomyStore(':memory:'), minecraftBody: bodyPort(present) });
@@ -507,8 +510,22 @@ describe('her Minecraft body\'s capability line (review N1, 2026-10-06)', () => 
     await chat();
     expect(model.requests.at(-1)!.systemPrompt).toContain(line);
     expect(model.requests.at(-1)!.tools?.definitions.map(tool => tool.name)).toContain('minecraft.request');
-    await api.dispatch(voiceTurn('おはよう'));
-    expect(model.requests.at(-1)!.systemPrompt).toContain(line);
+    // Voice: only a turn whose own tools include minecraft.request (N-1). Words that name Minecraft offer her tools, but a
+    // transcript without a reliability score gets the reading ones only (no minecraft.request), so no line either.
+    await api.dispatch(voiceTurn('マイクラの木材集め、どうなった？'));
+    expect(model.requests.at(-1)!.tools?.definitions.map(tool => tool.name)).toContain('minecraft.status');
+    expect(model.requests.at(-1)!.tools?.definitions.map(tool => tool.name)).not.toContain('minecraft.request');
+    expect(model.requests.at(-1)!.systemPrompt).not.toContain(line);
+    for (const words of ['おはよう', '木を集めてきて']) {
+      await api.dispatch(voiceTurn(words));
+      expect(model.requests.at(-1)!.tools?.definitions.map(tool => tool.name) ?? []).not.toContain('minecraft.request');
+      expect(model.requests.at(-1)!.systemPrompt, words).not.toContain(line);
+    }
+    // The rule itself, as text and voice apply it to their model request.
+    const prompt = model.requests.at(-1)!.systemPrompt;
+    expect(withMinecraftToolLine({ systemPrompt: prompt, tools: { definitions: [{ name: 'minecraft.request' }] } }).systemPrompt).toContain(line);
+    expect(withMinecraftToolLine({ systemPrompt: prompt, tools: { definitions: [{ name: 'minecraft.status' }] } }).systemPrompt).toBe(prompt);
+    expect(withMinecraftToolLine({ systemPrompt: prompt }).systemPrompt).toBe(prompt);
     // A realtime session before anyone spoke offers no tools, so it has no line.
     expect(api.realtimeVoiceSession('owner').instructions).not.toContain(line);
     // Game chat asks the body through its intent, not her tools: no line there, in the whisper or the chat.
@@ -579,6 +596,29 @@ describe('review of 2026-10-06: what other players\' turns are given', () => {
     await close();
   });
 
+  it('S6 (second review): his intentions and current goal reach no other player\'s turn, nor a summary or her notes', async () => {
+    const { turn, model, api, close } = harness();
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'app-talk', message: '私の目標は新しい家計簿アプリを完成させることです' } });
+    await api.waitForBackground('owner');
+    const owner = model.requests.at(-1)!.systemPrompt;
+    expect(owner).toContain('家計簿アプリ');
+    // His own chat turn leaves a summary of the chat's thread; a summary has no label of its own.
+    model.threadSummary = 'ゼブラ色の要約: ライ氏が持病の通院の話をした';
+    await turn({ requestId: 'goal-owner-chat', message: '最近通院が大変でね' });
+    await api.waitForBackground('owner');
+    model.threadSummary = undefined;
+    await turn({ requestId: 'goal-owner-chat-2', message: 'さて' });
+    expect(model.requests.at(-1)!.priorThreadSummary).toContain('ゼブラ色の要約');
+    await turn({ requestId: 'goal-chat', speaker: friend, message: 'こんにちは' });
+    await turn({ requestId: 'goal-dm', speaker: friend, conversation: { kind: 'dm' }, message: 'こんにちは' });
+    for (const request of model.requests.slice(-2)) {
+      const sent = JSON.stringify([request.systemPrompt, request.history, request.priorThreadSummary ?? null]);
+      for (const word of ['家計簿', 'current_goal=', 'Current intention frame', 'Primary objective', 'Desired outcome', 'ゼブラ色の要約']) expect(sent, word).not.toContain(word);
+      expect(request.priorThreadSummary).toBeUndefined();
+    }
+    await close();
+  });
+
   it('S4: a finished request is the owner\'s matter: in full in his whisper, marked in his chat turn, absent from anyone else\'s', async () => {
     const { turn, model, path: databasePath, close } = harness();
     const experiences = new SQLiteGameExperiences(databasePath);
@@ -609,6 +649,11 @@ describe('review of 2026-10-06: what other players\' turns are given', () => {
     // Its own goal is game state, as before.
     await turn({ requestId: 's5-campaign', speaker: friend, body: { ...body, busyWith: 'campaign', task: 'エンドラを倒す' } });
     expect(model.requests.at(-1)!.systemPrompt).toContain('エンドラを倒す');
+    // Without busyWith the line may be a request too (N-2): the owner only.
+    await turn({ requestId: 's5-unsaid', speaker: friend, body: { task: '頼まれた秘密の箱づくり' } });
+    expect(model.requests.at(-1)!.systemPrompt).not.toContain('頼まれた秘密の箱づくり');
+    await turn({ requestId: 's5-unsaid-owner', body: { task: '頼まれた秘密の箱づくり' } });
+    expect(model.requests.at(-1)!.systemPrompt).toContain('頼まれた秘密の箱づくり');
     await close();
   });
 

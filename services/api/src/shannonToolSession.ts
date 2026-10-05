@@ -11,7 +11,7 @@ import { toolSessionMemory } from './shannonToolTypes.js';
 import { ownToolsEnabled, providerToolName, shannonTool, toolFailure, toolFromProviderName, toolResultForModel } from './shannonTools.js';
 import type { TurnDeadline } from './turnDeadline.js';
 import { answersWithPlace, asksForMemo, asksWhichPlace, namesAether } from './memoPlace.js';
-import { withMinecraftBodyLine } from './shannonMinecraftTools.js';
+export { withMinecraftToolLine } from './shannonMinecraftTools.js';
 
 /**
  * The tools of one conversation turn, for the model adapter (`chatModelTools.ts`). Owner decision 2026-10-05: her
@@ -114,18 +114,6 @@ export function asksAboutMinecraftBody(transcript: string): boolean {
 /** Whether the runner offers `minecraft.request` on this surface now: her Minecraft body configured for the scope and in the game. */
 function offersMinecraftRequest(runner: ShannonToolRunner | undefined, scopeKey: string, surface: 'text' | 'voice'): boolean {
   try { return runner?.offered(surface, 'owner_alone', scopeKey).some(tool => tool.name === 'minecraft.request') ?? false; } catch { return false; }
-}
-
-/**
- * The identity prompt with her Minecraft body's capability line, only where `minecraft.request` is offered now: the owner
- * alone (`ownerAlone`, and no one else known to the server), her tools on, and the body in the game. Anywhere else the
- * prompt is returned unchanged, so a server without a body sends exactly what it sent before (review N1, 2026-10-06).
- */
-export function withOfferedMinecraftBodyLine(autonomy: { tools?: ShannonToolRunner } | undefined, server: Partial<ConversationToolServer> | undefined,
-  scopeKey: string, surface: 'text' | 'voice', ownerAlone: boolean, prompt: string): string {
-  let offered = false;
-  try { offered = ownerAlone && ownToolsEnabled() && !!server?.audience && !server.audience.othersKnown(scopeKey) && offersMinecraftRequest(autonomy?.tools, scopeKey, surface); } catch { offered = false; }
-  return withMinecraftBodyLine({ present: () => offered }, scopeKey, prompt);
 }
 
 /** Her reply offered something she would do with her tools and asks him to say yes (「中を見てみましょうか？」). */
