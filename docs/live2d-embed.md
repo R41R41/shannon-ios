@@ -82,13 +82,27 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
   eyes alone never load the character first. The stage follows a later change of the setting by itself, once, at the
   moment it is made (`UserDefaults.didChangeNotification`, `ShannonLive2DStage+Body.swift`), wherever it is made and
   whether or not a figure is on screen; a page kept alive with no screen showing her has switched before she is seen.
-- One switch at a time (`ShannonLive2DBodyPolicy.request`): a body the page has not shown yet is loaded while the other
-  stays, and the page says `body` when it switched. While a switch is under way nothing else is asked for, so the
-  page never loads a model twice (each holds a large texture); a choice made meanwhile is asked for when `body`
-  arrives. The pending request is forgotten on `body`, `ready` and a release (a reload). `ready` carries `bodies` and
-  `body`: if the shown body and the chosen one differ, the stage asks then. Faces, mood and phase carry over in the
-  page; after a switch the app closes the character's mouth and says the layout and the calm again
-  (`ShannonLive2DBodyPolicy.commandsAfterSwitch`).
+- The switch is one value, `ShannonLive2DBodySwitch` (`reduce(event) -> effects`), which the stage feeds and obeys;
+  its tests play whole sequences of the page's messages.
+- One switch at a time: a body the page has not shown yet is loaded while the other stays, and the page says `body`
+  when it switched. The page itself chains to the latest choice, but the stage still sends one `setBody` at a time,
+  because two calls in flight can make the page load two models (each holds a large texture). A choice made
+  meanwhile is asked for once, when `body` arrives. `ready` carries `bodies` and `body`: if the shown body and the
+  chosen one differ, the stage asks then. Faces, mood and phase carry over in the page; after a switch the app closes
+  the character's mouth and says the layout and the calm again (`ShannonLive2DBodyPolicy.commandsAfterSwitch`).
+- A request is never kept for ever. The page ignores, without a word, `setBody` for the body it already shows, so a
+  wrong belief about the shown body could otherwise hold every later choice. A pending request is forgotten on
+  `body`, `ready` and a release (an error's reload included), and one that is not answered within 30 seconds of
+  foreground time (`ShannonLive2DBodySwitch.deadlineSeconds`; shorter than the 90 seconds of a load, since a switch
+  only builds a model from what the page has already read) ends in `recover()`, which reloads the page in the chosen
+  body.
+- A lost drawing surface: the page's own mending may bring back the body it had before a switch, after `body` was
+  already sent. While the surface is lost nothing is asked and no time counts; a choice made then is held. On
+  `contextRestored` the pending request is forgotten. The page of 09:55 does not say which body it shows then, so the
+  chosen body is asked again as a confirmation: a page that shows another switches and says `body`; one that shows it
+  stays silent, and when the 30 seconds run out that body is taken as shown (no reload) and a choice made meanwhile
+  is asked for. A page that adds `body` to `contextRestored` (asked of the page's thread, 2026-10-05) settles it at
+  once, without the confirmation.
 - `bodies`: before the page is loaded, the bundled page's (`version.json` lists `model-eyes/`); after `ready`, the
   page's own (none named means the character only). A body the page does not have is never asked for, its choice is
   shown as 人の姿, and 体 is not offered.

@@ -38,6 +38,8 @@ extension ShannonGeneratedStrings {
     public static let settingsFigureBodyEyesHint = "水色の目が 2 つだけのシャノンです（水の光の目と同じ動き）。表情と、聞いている・考えている・話しているは、目の形と動きで伝えます。"
     /// `settings.figure.bodyOnlyLive2D`
     public static let settingsFigureBodyOnlyLive2D = "体は、Live2Dの姿のときに選べます"
+    /// `settings.figure.bodyEyesUnavailable`
+    public static let settingsFigureBodyEyesUnavailable = "この版には目だけの体が入っていません"
     /// `settings.figure.layoutOnlyHuman`
     public static let settingsFigureLayoutOnlyHuman = "映し方は、人の姿のときに使えます。目だけのときは、大きさと位置だけを変えられます"
     /// `settings.figure.touchEyes`

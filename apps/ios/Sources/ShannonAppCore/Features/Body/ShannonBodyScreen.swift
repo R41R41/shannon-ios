@@ -205,8 +205,9 @@ public struct ShannonBodyScreen: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .disabled(!usesLive2D || !stage.offersEyes)
-            .opacity(usesLive2D ? 1 : 0.45)
+            .disabled(ShannonBodyCopy.bodyUnavailableReason(usesLive2D: usesLive2D) != nil)
+            .opacity(ShannonBodyCopy.bodyUnavailableReason(usesLive2D: usesLive2D) == nil ? 1 : 0.45)
+            .help(ShannonBodyCopy.bodyUnavailableReason(usesLive2D: usesLive2D) ?? "")
 
             HStack(spacing: ShannonSpacing.medium) {
                 Picker(ShannonBodyCopy.layoutTitle, selection: $layoutModeRawValue) {
@@ -315,8 +316,8 @@ public struct ShannonFormSettingsSection: View {
                     Text(explanation)
                 }
             }
-            .disabled(!usesLive2D || !ShannonLive2DStage.shared.offersEyes)
-            .help(usesLive2D ? "" : ShannonBodyCopy.bodyOnlyLive2D)
+            .disabled(ShannonBodyCopy.bodyUnavailableReason(usesLive2D: usesLive2D) != nil)
+            .help(ShannonBodyCopy.bodyUnavailableReason(usesLive2D: usesLive2D) ?? "")
             .accessibilityIdentifier("settings-body-kind")
             if let openBody {
                 Button(action: openBody) {

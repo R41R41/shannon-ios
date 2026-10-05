@@ -54,8 +54,8 @@ struct ShannonFigureSettingsSection: View {
                     Image(systemName: chosenBody == .eyes ? "eyes" : "person")
                 }
             }
-            .disabled(!usesLive2D || !ShannonLive2DStage.shared.offersEyes)
-            .accessibilityHint(usesLive2D ? "" : ShannonBodyCopy.bodyOnlyLive2D)
+            .disabled(ShannonBodyCopy.bodyUnavailableReason(usesLive2D: usesLive2D) != nil)
+            .accessibilityHint(ShannonBodyCopy.bodyUnavailableReason(usesLive2D: usesLive2D) ?? "")
             .accessibilityIdentifier("settings-body-kind")
 
             Picker(selection: $layoutModeRawValue) {

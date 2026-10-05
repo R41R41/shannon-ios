@@ -100,6 +100,11 @@ public enum ShannonBodyCopy {
     /// 体 (人の姿／目だけ): in 設定 › すがた, Talk's display options and the Mac's body sheet.
     public static let bodyTitle = ShannonGeneratedStrings.settingsFigureBody
     public static let bodyOnlyLive2D = ShannonGeneratedStrings.settingsFigureBodyOnlyLive2D
+    public static let bodyEyesUnavailable = ShannonGeneratedStrings.settingsFigureBodyEyesUnavailable
+    /// Why 体 cannot be chosen now, or nothing when it can.
+    @MainActor public static func bodyUnavailableReason(usesLive2D: Bool) -> String? {
+        !usesLive2D ? bodyOnlyLive2D : ShannonLive2DStage.shared.offersEyes ? nil : bodyEyesUnavailable
+    }
     public static let layoutOnlyHuman = ShannonGeneratedStrings.settingsFigureLayoutOnlyHuman
     public static let replyModeTitle = "触れたときの返事"
     public static let replyModeExplanation = ShannonGeneratedStrings.settingsFigureReplyModeExplanation

@@ -45,37 +45,121 @@ final class ShannonBodyTests: XCTestCase {
 
     // MARK: Her body (the character or her eyes alone)
 
-    func testOnlyOneBodySwitchIsUnderWayAtATime() {
-        typealias Body = ShannonLive2DBodyPolicy
-        let both: [ShannonLive2DBody] = [.human, .eyes]
-        // Nothing pending: ask for the chosen body unless it is shown.
-        XCTAssertEqual(Body.request(chosen: .eyes, shown: .human, pending: nil, offered: both), .eyes)
-        XCTAssertNil(Body.request(chosen: .eyes, shown: .eyes, pending: nil, offered: both))
-        // A switch under way: nothing more is asked, whatever the owner taps meanwhile and however many figures ask
-        // (eyes shown, the character loading, 目だけ then 人の姿: the character is not asked for twice).
-        XCTAssertNil(Body.request(chosen: .human, shown: .eyes, pending: .human, offered: both))
-        XCTAssertNil(Body.request(chosen: .eyes, shown: .eyes, pending: .human, offered: both))
-        // When the page says it shows the character, the latest choice is asked for once.
-        XCTAssertEqual(Body.request(chosen: .eyes, shown: .human, pending: nil, offered: both), .eyes)
-        // A body the page does not have is never asked for; the character stays.
-        XCTAssertNil(Body.request(chosen: .eyes, shown: .human, pending: nil, offered: [.human]))
-        XCTAssertEqual(Body.effective(.eyes, offered: [.human]), .human)
-        XCTAssertEqual(Body.effective(.eyes, offered: both), .eyes)
+    private typealias BodySwitch = ShannonLive2DBodySwitch
+    private static let bothBodies: [ShannonLive2DBody] = [.human, .eyes]
+
+    /// The page is ready, showing `shown`, with `chosen` chosen and nothing asked yet.
+    private static func readySwitch(chosen: ShannonLive2DBody, shown: ShannonLive2DBody) -> BodySwitch {
+        var machine = BodySwitch(chosen: chosen, offered: bothBodies)
+        _ = machine.reduce(.ready(bodies: bothBodies, shown: shown))
+        return machine
     }
 
-    func testReadyTellsWhichBodiesThePageHasAndTheChoiceIsFollowedFromThere() {
-        typealias Body = ShannonLive2DBodyPolicy
-        // An older page names no bodies: it has the character only, and the eyes are not asked for.
-        XCTAssertEqual(Body.offered(byReady: []), [.human])
-        XCTAssertNil(Body.request(chosen: .eyes, shown: .human, pending: nil, offered: Body.offered(byReady: [])))
-        // The page of 09:55 started without `?body=` (or the owner chose meanwhile): the chosen body is asked for.
-        let offered = Body.offered(byReady: [.human, .eyes])
-        XCTAssertEqual(Body.request(chosen: .eyes, shown: .human, pending: nil, offered: offered), .eyes)
-        XCTAssertNil(Body.request(chosen: .eyes, shown: .eyes, pending: nil, offered: offered))
+    func testOnlyOneBodySwitchIsUnderWayAtATimeAndTheLatestChoiceIsAskedOnceAfterIt() {
+        var machine = BodySwitch(chosen: .human, offered: Self.bothBodies)
+        // Nothing is asked of a page that is not ready.
+        XCTAssertEqual(machine.reduce(.chose(.eyes)), [])
+        // Ready in the character (the choice came while it loaded): her eyes are asked for.
+        XCTAssertEqual(machine.reduce(.ready(bodies: Self.bothBodies, shown: .human)), [.request(.eyes)])
+        XCTAssertEqual(machine.pending, .eyes)
+        // While that switch is under way, every further choice (or every figure asking again) sends nothing.
+        XCTAssertEqual(machine.reduce(.chose(.human)), [])
+        XCTAssertEqual(machine.reduce(.chose(.eyes)), [])
+        XCTAssertEqual(machine.reduce(.chose(.human)), [])
+        XCTAssertEqual(machine.pending, .eyes)
+        // The page says it shows her eyes: what is said after a switch, then the latest choice, asked once.
+        XCTAssertEqual(machine.reduce(.switched(.eyes)), [.afterSwitch(.eyes), .request(.human)])
+        XCTAssertEqual(machine.pending, .human)
+        XCTAssertEqual(machine.reduce(.switched(.human)), [.afterSwitch(.human)])
+        XCTAssertNil(machine.pending)
+        XCTAssertEqual(machine.shown, .human)
+        // The body shown is not asked for again.
+        XCTAssertEqual(machine.reduce(.chose(.human)), [])
+    }
+
+    func testReadySaysWhichBodiesThePageHasAndWhichItShows() {
+        // Started in her eyes (`?body=eyes`): nothing to ask.
+        var started = BodySwitch(chosen: .eyes, offered: Self.bothBodies)
+        XCTAssertEqual(started.reduce(.ready(bodies: Self.bothBodies, shown: .eyes)), [])
+        XCTAssertEqual(started.shown, .eyes)
+        // An older page names no bodies and no body: the character only, and the eyes are never asked for.
+        var older = BodySwitch(chosen: .eyes, offered: Self.bothBodies)
+        XCTAssertEqual(older.reduce(.ready(bodies: [], shown: nil)), [])
+        XCTAssertEqual(older.offered, [.human])
+        XCTAssertEqual(older.target, .human)
+        XCTAssertEqual(older.reduce(.chose(.eyes)), [])
+        XCTAssertEqual(ShannonLive2DBodyPolicy.effective(.eyes, offered: [.human]), .human)
         // Before it is loaded, the bundled page's bodies come from its file list.
-        XCTAssertEqual(Body.bundled(files: ["model/Shannon.moc3", "model-eyes/Shannon_Eyes_v2.moc3"]), [.human, .eyes])
-        XCTAssertEqual(Body.bundled(files: ["model/Shannon.moc3"]), [.human])
+        XCTAssertEqual(ShannonLive2DBodyPolicy.bundled(files: ["model/Shannon.moc3", "model-eyes/Shannon_Eyes_v2.moc3"]), [.human, .eyes])
+        XCTAssertEqual(ShannonLive2DBodyPolicy.bundled(files: ["model/Shannon.moc3"]), [.human])
         XCTAssertEqual(ShannonLive2DStage.bundledBodies, [.human, .eyes])
+    }
+
+    func testAReleaseWhileASwitchIsPendingForgetsItAndTheNextPageStartsInTheChoice() {
+        var machine = Self.readySwitch(chosen: .human, shown: .human)
+        XCTAssertEqual(machine.reduce(.chose(.eyes)), [.request(.eyes)])
+        // No screen shows her for 90 seconds, or a memory warning: the web view goes.
+        XCTAssertEqual(machine.reduce(.released(bundled: Self.bothBodies)), [])
+        XCTAssertNil(machine.pending)
+        XCTAssertEqual(machine.chosen, .eyes)
+        XCTAssertEqual(machine.reduce(.foregroundSecond), [])
+        // The next page is started in her eyes and says so: nothing is left to ask.
+        XCTAssertEqual(machine.reduce(.ready(bodies: Self.bothBodies, shown: .eyes)), [])
+        XCTAssertNil(machine.pending)
+    }
+
+    func testAnErrorWhileASwitchIsPendingEndsItAndTheReloadedPageIsAskedAgainIfNeeded() {
+        var machine = Self.readySwitch(chosen: .human, shown: .human)
+        XCTAssertEqual(machine.reduce(.chose(.eyes)), [.request(.eyes)])
+        // The page reports `error`: the stage's recover() releases the web view before it reloads.
+        XCTAssertEqual(machine.reduce(.released(bundled: Self.bothBodies)), [])
+        XCTAssertNil(machine.pending)
+        // A reloaded page that comes up in the character after all is asked for her eyes once.
+        XCTAssertEqual(machine.reduce(.ready(bodies: Self.bothBodies, shown: .human)), [.request(.eyes)])
+    }
+
+    func testWhileTheSurfaceIsLostChoicesAreHeldAndTheBodyIsAskedAgainWhenItIsBack() {
+        // The race: her eyes were switched to, then the page's mending brings back the character.
+        var machine = Self.readySwitch(chosen: .human, shown: .human)
+        XCTAssertEqual(machine.reduce(.chose(.eyes)), [.request(.eyes)])
+        XCTAssertEqual(machine.reduce(.switched(.eyes)), [.afterSwitch(.eyes)])
+        XCTAssertEqual(machine.reduce(.contextLost), [])
+        // Held while the surface is lost; no time counts.
+        XCTAssertEqual(machine.reduce(.chose(.eyes)), [])
+        for _ in 0..<60 { XCTAssertEqual(machine.reduce(.foregroundSecond), []) }
+        // Back, without saying which body: the chosen one is asked again.
+        XCTAssertEqual(machine.reduce(.contextRestored(shown: nil)), [.request(.eyes)])
+        // The page shows the character after all: it switches and says so; the owner's next choice goes through.
+        XCTAssertEqual(machine.reduce(.switched(.eyes)), [.afterSwitch(.eyes)])
+        XCTAssertEqual(machine.reduce(.chose(.human)), [.request(.human)])
+
+        // When the page already shows the asked body it stays silent: the question runs out and that body is taken as
+        // shown, without a reload, and a choice made meanwhile is asked then.
+        var silent = Self.readySwitch(chosen: .eyes, shown: .eyes)
+        _ = silent.reduce(.contextLost)
+        XCTAssertEqual(silent.reduce(.contextRestored(shown: nil)), [.request(.eyes)])
+        XCTAssertEqual(silent.reduce(.chose(.human)), [])
+        for _ in 1..<BodySwitch.deadlineSeconds { XCTAssertEqual(silent.reduce(.foregroundSecond), []) }
+        XCTAssertEqual(silent.reduce(.foregroundSecond), [.request(.human)])
+
+        // A page that says which body it shows after mending settles it at once.
+        var saying = Self.readySwitch(chosen: .eyes, shown: .eyes)
+        _ = saying.reduce(.contextLost)
+        XCTAssertEqual(saying.reduce(.contextRestored(shown: .human)), [.request(.eyes)])
+        var settled = Self.readySwitch(chosen: .eyes, shown: .eyes)
+        _ = settled.reduce(.contextLost)
+        XCTAssertEqual(settled.reduce(.contextRestored(shown: .eyes)), [])
+        XCTAssertNil(settled.pending)
+    }
+
+    func testAnUnansweredSwitchEndsInAReloadAfterItsDeadline() {
+        // The page ignored the request (it believed it showed that body already): the request is not kept for ever.
+        var machine = Self.readySwitch(chosen: .eyes, shown: .eyes)
+        XCTAssertEqual(machine.reduce(.chose(.human)), [.request(.human)])
+        for _ in 1..<BodySwitch.deadlineSeconds { XCTAssertEqual(machine.reduce(.foregroundSecond), []) }
+        XCTAssertEqual(machine.reduce(.foregroundSecond), [.recover])
+        XCTAssertNil(machine.pending)
+        XCTAssertEqual(BodySwitch.deadlineSeconds, 30)
     }
 
     func testAfterASwitchTheMouthLayoutAndCalmAreSaidAgain() {
@@ -202,7 +286,9 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(ShannonLive2DMessage(body: ["type": "loading", "progress": 0.4]), .loading(progress: 0.4))
         XCTAssertEqual(ShannonLive2DMessage(body: ["type": "loading", "progress": 7]), .loading(progress: 1))
         XCTAssertEqual(ShannonLive2DMessage(body: ["type": "contextLost"]), .contextLost)
-        XCTAssertEqual(ShannonLive2DMessage(body: ["type": "contextRestored", "attempts": 2]), .contextRestored)
+        XCTAssertEqual(ShannonLive2DMessage(body: ["type": "contextRestored", "attempts": 2]), .contextRestored())
+        // A page that says which body it shows after mending its surface (asked of the page's thread, 2026-10-05).
+        XCTAssertEqual(ShannonLive2DMessage(body: ["type": "contextRestored", "body": "eyes"]), .contextRestored(body: .eyes))
         XCTAssertEqual(ShannonLive2DMessage(body: ["type": "error", "code": "contextLost", "message": "x"]), .error("x", code: "contextLost"))
         let poked: [String: Any] = ["type": "poke", "durationMs": 0, "strength": 0, "ongoing": false, "region": "face"]
         XCTAssertEqual(

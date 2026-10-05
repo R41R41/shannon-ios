@@ -39,10 +39,8 @@ public final class ShannonLive2DStage {
     public private(set) var calmsInPage = false
     /// Seconds from starting the page to its `ready`, for the body screen's diagnostics.
     public private(set) var lastLoadSeconds: Double?
-    /// The body the page shows (the character or her eyes alone), as the page last said it.
-    public internal(set) var body: ShannonLive2DBody = .human
-    /// The bodies the page has: the bundled page's until it says `ready`, then its own (`[.human]` for an older page).
-    public internal(set) var bodies: [ShannonLive2DBody] = ShannonLive2DStage.bundledBodies
+    /// The body chosen, shown and asked for (`ShannonLive2DStage+Body.swift`).
+    var bodySwitch = ShannonLive2DBodySwitch(chosen: .current(), offered: ShannonLive2DStage.bundledBodies)
 
     /// Touches and reaction moments from the page. One listener: the touch coordinator.
     @ObservationIgnored public var onTouchMessage: (@MainActor (ShannonLive2DMessage) -> Void)?
@@ -58,8 +56,8 @@ public final class ShannonLive2DStage {
     @ObservationIgnored private var hosts: [Host] = []
     @ObservationIgnored private(set) var webView: WKWebView?
     @ObservationIgnored private var bridge: ShannonLive2DBridge?
-    @ObservationIgnored private var generation = 0
-    @ObservationIgnored private var appActive = true
+    @ObservationIgnored private(set) var generation = 0
+    @ObservationIgnored private(set) var appActive = true
     @ObservationIgnored var sentPaused: Bool?
     @ObservationIgnored private var lastReloadAt: Date?
     @ObservationIgnored private(set) var loadStartedAt: Date?
@@ -76,10 +74,7 @@ public final class ShannonLive2DStage {
     @ObservationIgnored private var failuresWithoutReady = 0
     @ObservationIgnored private var fingerDown = false
     @ObservationIgnored private var lastHeardAt = Date()
-    /// The body the owner chose (設定 › すがた › 体). The page is started in it and switched to it when they differ.
-    @ObservationIgnored var desiredBody = ShannonLive2DBody.current()
-    /// The body asked for with `setBody` that the page has not yet said it shows. One switch at a time.
-    @ObservationIgnored var requestedBody: ShannonLive2DBody?
+    @ObservationIgnored var bodyRequestWatch: Task<Void, Never>?
 
     private init() {}
 
@@ -273,7 +268,7 @@ public final class ShannonLive2DStage {
         sentPaused = nil
         lastMouthLevel = 0
         loadStartedAt = Date()
-        desiredBody = ShannonLive2DBody.current() // the setting may have changed while no screen showed her
+        bodySwitch.chosen = ShannonLive2DBody.current() // the setting may have changed while no screen showed her
 
         let bridge = ShannonLive2DBridge(stage: self, generation: generation, folder: folder)
         let configuration = WKWebViewConfiguration()
@@ -319,7 +314,8 @@ public final class ShannonLive2DStage {
             }
             webView.configuration.userContentController.add(rules)
             // Started in the chosen body, so that her eyes alone never load the character first.
-            webView.loadFileURL(ShannonLive2DStagePolicy.pageURL(in: folder, body: self.desiredBody), allowingReadAccessTo: folder)
+            let start = ShannonLive2DBodyPolicy.effective(self.bodySwitch.chosen, offered: Self.bundledBodies)
+            webView.loadFileURL(ShannonLive2DStagePolicy.pageURL(in: folder, body: start), allowingReadAccessTo: folder)
         }
 
         timeoutTask?.cancel()
@@ -365,9 +361,8 @@ public final class ShannonLive2DStage {
         webView = nil
         bridge = nil
         calmsInPage = false
-        body = .human
-        bodies = Self.bundledBodies
-        requestedBody = nil
+        bodyRequestWatch?.cancel()
+        dispatch(.released(bundled: Self.bundledBodies))
         loadProgress = 0
         sentPaused = nil
         isResting = false
@@ -414,13 +409,11 @@ public final class ShannonLive2DStage {
             self.modelUpdatedAt = modelUpdatedAt
             self.expressions = expressions
             self.gestures = gestures
-            self.bodies = ShannonLive2DBodyPolicy.offered(byReady: bodies)
-            self.body = body ?? .human // an older page has only the character
-            requestedBody = nil
             lastLoadSeconds = loadStartedAt.map { Date().timeIntervalSince($0) }
             failuresWithoutReady = 0
             loadProgress = 1
             status = .ready
+            dispatch(.ready(bodies: bodies, shown: body)) // a choice made while it loaded, or a page that ignored `?body=`
             detectCalm(generation: received)
             if let mood { send(.setMood(valence: mood.valence, arousal: mood.arousal, openness: mood.openness)) }
             if let presence { send(.setPresence(presence)) }
@@ -430,9 +423,8 @@ public final class ShannonLive2DStage {
             refreshPaused()
             lastActivityAt = Date()
             scheduleRest()
-            requestBodyIfNeeded() // a choice made while the page loaded, or a page that ignored `?body=`
         case let .body(body):
-            bodyChanged(to: body)
+            dispatch(.switched(body))
         case let .loading(progress):
             if status == .loading { loadProgress = max(loadProgress, progress) }
         case .error:
@@ -441,13 +433,15 @@ public final class ShannonLive2DStage {
         case .contextLost:
             // The page mends this itself and keeps the face, the mood and the layout; a reload would only lose them.
             lastActivityAt = Date()
-        case .contextRestored:
+            dispatch(.contextLost)
+        case let .contextRestored(shown):
             // What the app decides is said again: where she stands, how calm she is, and whether she draws.
             lastActivityAt = Date()
             applyHost()
             applyCalm()
             sentPaused = nil
             refreshPaused()
+            dispatch(.contextRestored(shown: shown)) // the page may have brought back the body it had before a switch
         case let .frameStats(fps):
             framesPerSecond = fps
         case .touch, .askReaction, .tap:

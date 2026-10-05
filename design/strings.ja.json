@@ -1256,6 +1256,13 @@
       "note": "水の光の目のとき、体の選択の手がかり（読み上げ）。"
     },
     {
+      "key": "settings.figure.bodyEyesUnavailable",
+      "text": "この版には目だけの体が入っていません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "体のページに目だけが無いとき（古いページ）、体の選択が使えない理由（読み上げ・Mac の説明）。"
+    },
+    {
       "key": "settings.figure.layoutOnlyHuman",
       "text": "映し方は、人の姿のときに使えます。目だけのときは、大きさと位置だけを変えられます",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",

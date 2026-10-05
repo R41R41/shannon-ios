@@ -17,17 +17,6 @@ enum ShannonLive2DBodyPolicy {
         files.contains { $0.hasPrefix("model-eyes/") } ? [.human, .eyes] : [.human]
     }
 
-    /// What to ask the page for now. Nothing while a switch is under way: one switch at a time, so that the page
-    /// never loads a model twice; a choice made meanwhile is asked for when the page says which body it shows.
-    /// Nothing when the page shows it already, or does not have it (then the character stays).
-    static func request(
-        chosen: ShannonLive2DBody, shown: ShannonLive2DBody, pending: ShannonLive2DBody?, offered: [ShannonLive2DBody]
-    ) -> ShannonLive2DBody? {
-        guard pending == nil else { return nil }
-        let target = effective(chosen, offered: offered)
-        return target == shown ? nil : target
-    }
-
     /// The page's own calm (`setIdle`) reaches only the character: the eyes blink and sway as part of their motion,
     /// so with her eyes alone an idle figure is paused to rest as a page without that calm would be.
     static func pageCalms(calmsInPage: Bool, body: ShannonLive2DBody) -> Bool {
@@ -49,7 +38,7 @@ enum ShannonLive2DBodyPolicy {
 
 /// Her body in the Live2D form: the character or her eyes alone (設定 › すがた › 体, owner decision 2026-10-05).
 /// The page is started in the chosen body (`ShannonLive2DStagePolicy.pageURL`); the stage follows a later choice
-/// of the setting by itself, wherever it is made.
+/// of the setting by itself, wherever it is made, through `ShannonLive2DBodySwitch`.
 extension ShannonLive2DStage {
     /// What the bundled page has, before it is loaded.
     static let bundledBodies: [ShannonLive2DBody] = {
@@ -58,6 +47,11 @@ extension ShannonLive2DStage {
               let version = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [.human] }
         return ShannonLive2DBodyPolicy.bundled(files: version["files"] as? [String] ?? [])
     }()
+
+    /// The body the page shows (the character or her eyes alone), as far as its messages tell.
+    public var body: ShannonLive2DBody { bodySwitch.shown }
+    /// The bodies the page has: the bundled page's until it says `ready`, then its own (`[.human]` for an older page).
+    public var bodies: [ShannonLive2DBody] { bodySwitch.offered }
 
     /// Whether 目だけ can be chosen with this page.
     public var offersEyes: Bool { bodies.contains(.eyes) }
@@ -69,32 +63,43 @@ extension ShannonLive2DStage {
 
     /// A body the page has not shown yet is loaded first; until the page says `body`, the other one stays.
     public func setBody(_ value: ShannonLive2DBody) {
-        desiredBody = value
-        requestBodyIfNeeded()
-    }
-
-    func requestBodyIfNeeded() {
-        guard status == .ready,
-              let next = ShannonLive2DBodyPolicy.request(chosen: desiredBody, shown: body, pending: requestedBody, offered: bodies)
-        else { return }
-        requestedBody = next
-        noteActivity()
-        send(.setBody(next))
+        dispatch(.chose(value))
     }
 
     var pageCalms: Bool { ShannonLive2DBodyPolicy.pageCalms(calmsInPage: calmsInPage, body: body) }
 
-    /// The page switched its body. What the app decides is said again for the new one, and a choice made
-    /// while the switch was under way is followed.
-    func bodyChanged(to body: ShannonLive2DBody) {
-        self.body = body
-        requestedBody = nil
-        lastMouthLevel = 0
-        ShannonLive2DBodyPolicy.commandsAfterSwitch(
-            to: body, host: frontHost, calm: calmsInPage ? (reduceMotion, lowPower) : nil
-        ).forEach(send)
-        noteActivity()
-        requestBodyIfNeeded()
+    /// Feeds what happened to the switch and carries out what it says.
+    func dispatch(_ event: ShannonLive2DBodySwitch.Event) {
+        for effect in bodySwitch.reduce(event) {
+            switch effect {
+            case let .request(body):
+                noteActivity()
+                send(.setBody(body))
+                watchBodyRequest()
+            case let .afterSwitch(body):
+                lastMouthLevel = 0
+                ShannonLive2DBodyPolicy.commandsAfterSwitch(
+                    to: body, host: frontHost, calm: calmsInPage ? (reduceMotion, lowPower) : nil
+                ).forEach(send)
+                noteActivity()
+            case .recover:
+                NSLog("[ShannonBody] the page did not answer a switch of body; reloading it in the chosen body")
+                recover(generation: generation)
+            }
+        }
+    }
+
+    /// Counts the foreground seconds of a pending request, so that an unanswered one ends (`deadlineSeconds`).
+    private func watchBodyRequest() {
+        bodyRequestWatch?.cancel()
+        let watched = generation
+        bodyRequestWatch = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, let self, self.generation == watched, self.bodySwitch.pending != nil else { return }
+                if self.appActive { self.dispatch(.foregroundSecond) }
+            }
+        }
     }
 
     /// The setting (設定 › すがた › 体, Talk's display options, the Mac's settings and body sheet) is followed once,

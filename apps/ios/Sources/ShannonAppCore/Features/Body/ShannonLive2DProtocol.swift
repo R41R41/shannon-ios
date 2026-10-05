@@ -228,7 +228,8 @@ public enum ShannonLive2DMessage: Equatable, Sendable {
     case error(String, code: String? = nil)
     /// The drawing surface was lost; the page is making it again by itself.
     case contextLost
-    case contextRestored
+    /// The surface is back. `body`: the body shown, from a page that says it (the page of 09:55 does not).
+    case contextRestored(body: ShannonLive2DBody? = nil)
     /// A touch ended.
     case touch(ShannonLive2DTouch)
     /// The moment to ask whether she says something.
@@ -263,7 +264,7 @@ public enum ShannonLive2DMessage: Equatable, Sendable {
         case "contextLost":
             self = .contextLost
         case "contextRestored":
-            self = .contextRestored
+            self = .contextRestored(body: (object["body"] as? String).flatMap(ShannonLive2DBody.init(rawValue:)))
         case "touch", "askReaction":
             guard let id = object["id"] as? String, Self.isIdentifier(id),
                   let occurredAt = object["occurredAt"] as? String, occurredAt.count <= 40,
