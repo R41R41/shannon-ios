@@ -41,25 +41,29 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         model.stop()
     }
 
-    func testAnOwnerReplyStillStreamingAfterTheSwitchIsNotShown() async {
+    /// A completed owner reply is not interrupted by the switch; what she says about a look behind it arrives later
+    /// and is spoken, but is not written on the screen the guests can read.
+    func testWhatSheSaysAboutALookAfterTheSwitchIsNotShown() async {
         let model = liveModel()
-        var resume: CheckedContinuation<Void, Never>?
+        var lookResult: CheckedContinuation<String?, Never>?
         model.streamSpeech = { _, _ in throw Refused() }
+        model.performAppLook = { _ in await withCheckedContinuation { lookResult = $0 } }
         model.performStreamingDelegation = { _, _, _, onSegment in
-            await onSegment("10時です、ライ氏。", nil)
-            await withCheckedContinuation { resume = $0 }
-            await onSegment("それと、保険証を忘れずに。", nil)
-            return ShannonLiveVoiceDelegationResponseDTO(threadId: "t", model: "m", reply: "10時です、ライ氏。それと、保険証を忘れずに。")
+            await onSegment("見てみますね。", nil)
+            var response = ShannonLiveVoiceDelegationResponseDTO(threadId: "t", model: "m", reply: "見てみますね。")
+            response.appLook = ShannonAppLookAskDTO(id: "look", camera: .front, expiresAt: "2099-01-01T00:00:00Z")
+            return response
         }
-        model.appendUtterance(rawText: "明日の歯医者は何時？", text: "明日の歯医者は何時？", source: .typed)
+        model.appendUtterance(rawText: "これ見て", text: "これ見て", source: .typed)
         model.beginResponse()
-        while resume == nil { await Task.yield() }
-        XCTAssertEqual(model.shannonTranscript, "10時です、ライ氏。", "her owner reply was on screen")
-        model.switchParticipantMode(to: .guest, origin: .control)
+        while lookResult == nil { await Task.yield() }
+        XCTAssertEqual(model.shannonTranscript, "見てみますね。")
+        XCTAssertNotNil(model.responseDelivery.response, "the reply is complete; the switch does not interrupt it")
+        model.switchParticipantMode(to: .guest, origin: .spoken)
         XCTAssertEqual(model.shannonTranscript, "")
-        resume?.resume()
-        for _ in 0..<50 { await Task.yield() }
-        XCTAssertEqual(model.shannonTranscript, "", "the rest of the owner reply does not refill the screen")
+        lookResult?.resume(returning: "机の上に資料が見えます。")
+        for _ in 0..<100 { await Task.yield() }
+        XCTAssertEqual(model.shannonTranscript, "", "what she saw is not written for the guests")
         XCTAssertFalse(model.mayShowReply(of: .owner))
         XCTAssertTrue(model.mayShowReply(of: .guest))
         model.stop()

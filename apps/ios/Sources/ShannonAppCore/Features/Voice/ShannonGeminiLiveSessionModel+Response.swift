@@ -70,6 +70,8 @@ extension ShannonGeminiLiveSessionModel {
                             metadata: ["provider": self.speechProvider.rawValue,
                                        "response_ms": String(milliseconds)])
                     }
+                    // A completed owner reply is not interrupted by a switch into 「友人も一緒」, so what she says about a
+                    // look after it can still arrive then: it is spoken in the call but not written on screen.
                     if self.mayShowReply(of: mode) { self.shannonTranscript += segment }
                     // The echo guard and the spoken part learn the sentence when it is played (`consumeResponseSpeech`).
                     self.responseDelivery.spoken.queued(segment, waitingPhrase: plan?.waitingPhrase, emotion: plan?.turnEmotion)
@@ -84,7 +86,7 @@ extension ShannonGeminiLiveSessionModel {
                 try responseDelivery.complete(response, batch: batch, ledger: &pendingTurns)
                 if let face = response.voicePlan?.face { callFace = face }
                 replyEmotion = mode == .owner ? response.voicePlan?.turnEmotion : nil
-                if mayShowReply(of: mode) { shannonTranscript = response.reply }
+                shannonTranscript = response.reply
                 textSendState = .idle
                 latencyMeasurements.recordServerMetrics(response.voiceMetrics)
                 if mode == .guest {
@@ -213,7 +215,7 @@ extension ShannonGeminiLiveSessionModel {
         of batch: ShannonPendingVoiceTurns.Batch, guestWords: String, mode: ShannonVoiceParticipantMode, generation: UUID
     ) async {
         guard let reply = responseDelivery.keepSpokenPart(batch: batch, ledger: &pendingTurns) else { return }
-        if mayShowReply(of: mode) { shannonTranscript = reply }
+        shannonTranscript = reply
         // The stored face is the feeling she was acting with, not the previous turn's.
         replyEmotion = mode == .owner ? responseDelivery.spoken.emotion : nil
         ShannonVoiceDiagnostics.shared.record("gemini.response.partial_kept", sessionID: generation.uuidString,

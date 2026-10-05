@@ -100,7 +100,8 @@ extension ShannonGeminiLiveSessionModel {
         guestPeriodEnded?(period)
     }
 
-    /// A reply asked in 本人だけ that is still streaming once the call is 「友人も一緒」 is not written on screen.
+    /// Words of a reply asked in 本人だけ that arrive once the call is 「友人も一緒」 (what she says about a look, behind a
+    /// completed reply that the switch does not interrupt) are not written on screen.
     func mayShowReply(of mode: ShannonVoiceParticipantMode) -> Bool {
         !(mode == .owner && participantMode == .guest)
     }
