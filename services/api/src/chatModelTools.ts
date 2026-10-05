@@ -61,7 +61,7 @@ export const TOOL_INSTRUCTIONS = [
 export const VOICE_TOOL_INSTRUCTIONS = `${TOOL_INSTRUCTIONS}\n声の会話なので、道具を呼ぶ前に「ちょっと見てみますね」のような短いひと言を言ってよい。読んだ中身を長く読み上げず、要点を話す。`;
 
 /** Said with the tools of a spoken turn whose words could not be trusted (`transcriptTrust`): reading only, and how a write still happens. */
-export const TOOLS_READ_ONLY_INSTRUCTIONS = '[ボクの道具・この返事] 聞き取りが確かでないので、この返事で使えるのは見る・読む・探す道具だけ。作る・書き換える・消す・移す・しまうなどを頼まれたら、何をするかを短く言って「いいですか？」と確かめる。ライ氏がはっきり「はい」と言った次の返事でする（道具が壊れているのではない）。';
+export const TOOLS_READ_ONLY_INSTRUCTIONS = '[ボクの道具・この返事] 聞き取りが確かでないので、この返事で使えるのは見る・読む・探す道具だけ。作る・書き換える・消す・移す・しまうなどを頼まれたら、何をするかを短く言って「いいですか？」と確かめる。ライ氏がはっきり「はい」と言った次の返事でする（道具が壊れているのではない）。Aetherへの保存案もこの返事では送っていないので、送ったと言わない。';
 
 /** The instructions that go with the tools a request offers. */
 export function toolInstructions(session: ShannonModelToolSession, voice: boolean): string {

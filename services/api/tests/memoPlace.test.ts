@@ -9,12 +9,12 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import { createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { TOOL_INSTRUCTIONS, VOICE_TOOL_INSTRUCTIONS, toolInstructions } from '../src/chatModelTools.js';
+import { TOOLS_READ_ONLY_INSTRUCTIONS, TOOL_INSTRUCTIONS, VOICE_TOOL_INSTRUCTIONS, toolInstructions } from '../src/chatModelTools.js';
 import { asksAboutNotes } from '../src/conversationCapabilities.js';
 import { executeConversationCommand } from '../src/conversationCommands.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
 import type { HostFolderOperations, HostOperationRequest, HostRunOutcome } from '../src/hostFolderOperations.js';
-import { aetherNoteRequest, asksWhichPlace, memoRequestContent, namesMemoPlace } from '../src/memoPlace.js';
+import { aetherNoteRequest, answersWithPlace, asksForMemo, asksWhichPlace, memoNotForAether, memoRequestContent } from '../src/memoPlace.js';
 import { ShannonToolRunner } from '../src/shannonToolRunner.js';
 import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
 import type { VoiceDecisionInput } from '../src/voiceDecisionContract.js';
@@ -54,8 +54,25 @@ describe('the place of a memo, by his words', () => {
     expect(memoRequestContent('メモを作って')).toBe('');
     expect(asksWhichPlace(`いいですよ。${QUESTION}`)).toBe(true);
     expect(asksWhichPlace('書斎のメモ、どこまで読みました？')).toBe(false);
-    expect(['書斎に', 'フォルダで', 'PCのフォルダにお願い', 'Aetherに'].every(namesMemoPlace)).toBe(true);
-    expect(namesMemoPlace('うーん、やっぱりいいや')).toBe(false);
+  });
+
+  it('takes as an answer only a place name with に／で／お願い／します, never a no or a question (review 2)', () => {
+    for (const words of ['書斎に', 'フォルダで', 'PCのフォルダにお願いします', 'Aetherに', 'エーテルでお願い', '書斎にします。']) expect(answersWithPlace(words), words).toBe(true);
+    for (const words of ['書斎はやめて', 'Aetherに入れないで', 'PCのフォルダって何？', '書斎じゃなくて', '書斎でいい', 'Aetherに？', 'うーん、やっぱりいいや']) {
+      expect(answersWithPlace(words), words).toBe(false);
+      expect(aetherNoteRequest(words), words).toBeNull();
+    }
+  });
+
+  it('knows colloquial requests, and a question or a word about an existing note is not a plain memo request (review 3)', () => {
+    for (const words of ['メモっといて', 'メモお願い', '牛乳のことメモよろしく', 'メモ作ってくれる？', 'ノートに残して']) expect(asksForMemo(words), words).toBe(true);
+    expect(memoRequestContent('牛乳を買うってメモっといて')).toBe('牛乳を買う');
+    expect(asksForMemo('ノートに書いて？')).toBe(false);
+    for (const words of ['前のノートに書いてあったことをメモして', 'この前のメモをまとめてノートに残して', 'ノートの内容をメモして', 'ノートに書いて？']) {
+      expect(memoNotForAether(words), words).toBe(false);
+      expect(asksAboutNotes(words), words).toBe(true);
+    }
+    expect(memoNotForAether('名前のメモを作って')).toBe(true);
   });
 
   it('runs no Aether command for an unqualified memo, keeps the explicit ones, and acts on 「Aetherに」 as the answer', () => {
@@ -78,6 +95,15 @@ describe('the place of a memo, by his words', () => {
     conversationStore.appendTurn('owner', 't', 'メモを作って', QUESTION, new Date(start + 2 * 60_000).toISOString());
     expect(run('Aetherに', start + 3 * 60_000)?.receipt).toBeUndefined();
     expect(sent).toHaveLength(2);
+    // What to keep was his turn before the request: one more turn of his, as bound as the request itself.
+    conversationStore.appendTurn('owner', 't', '金曜は燃えないゴミの日', 'そうなんですね。', new Date(start + 4 * 60_000).toISOString());
+    conversationStore.appendTurn('owner', 't', 'それメモして', QUESTION, new Date(start + 5 * 60_000).toISOString());
+    expect(run('Aetherに', start + 6 * 60_000)?.receipt?.capability).toBe('aether.propose');
+    expect(sent.at(-1)?.content).toBe('金曜は燃えないゴミの日');
+    // A question or a request is not something to keep.
+    conversationStore.appendTurn('owner', 't', '明日の天気はどう？ってメモして', QUESTION, new Date(start + 7 * 60_000).toISOString());
+    expect(run('Aetherに', start + 8 * 60_000)?.receipt).toBeUndefined();
+    expect(sent).toHaveLength(3);
   });
 
   it('pushes nothing of Aether at a memo request that does not name it', () => {
@@ -90,6 +116,9 @@ describe('the place of a memo, by his words', () => {
     expect(reader.promptFor('owner', 'メモを作って')).toBe('');
     expect(reader.promptFor('owner', 'Aetherのメモを見せて')).toContain('Shannonの設計');
     expect(reader.promptFor('owner', 'ノートに書いてあったこと覚えてる？')).toContain('Shannonの設計');
+    // A memo that also asks about a note he wrote keeps the notes in front of her (review 3).
+    expect(reader.promptFor('owner', '前のノートに書いてあったことをメモして')).toContain('Shannonの設計');
+    expect(reader.promptFor('owner', 'ノートに書いて？')).toContain('Shannonの設計');
     expect(asksAboutNotes('メモを作って')).toBe(false);
     expect(asksAboutNotes('Aetherにメモして')).toBe(true);
   });
@@ -132,11 +161,11 @@ class PlacingModel implements ShannonChatModel {
       this.calls.push(call[0]);
       expect(JSON.parse(await request.tools!.call(call[0], JSON.stringify(call[1]))).ok).toBe(true);
     }
-    return { mode: this.mode, model: this.model, reply: request.message.includes('メモを作って') ? QUESTION : 'はい。' };
+    return { mode: this.mode, model: this.model, reply: asksForMemo(request.message) && !/書斎|フォルダ/u.test(request.message) ? QUESTION : 'はい。' };
   }
 }
 
-function harness(score?: number) {
+function harness(score?: number | ((transcript: string) => number)) {
   const clock = { at: start };
   const now = () => new Date(clock.at).toISOString();
   const store = new SQLiteAutonomyStore(':memory:');
@@ -147,7 +176,7 @@ function harness(score?: number) {
   const aether = proposals();
   const local = new LocalVoiceDecisionGateway();
   const voiceDecision = score === undefined ? undefined
-    : { mode: local.mode, model: local.model, async decide(input: VoiceDecisionInput) { return { ...await local.decide(input), transcriptReliabilityProbability: score }; } };
+    : { mode: local.mode, model: local.model, async decide(input: VoiceDecisionInput) { return { ...await local.decide(input), transcriptReliabilityProbability: typeof score === 'number' ? score : score(input.transcript) }; } };
   const api = createLocalApiKernel(now, { chatModel: model, autonomy, aetherProposals: aether.store, ...(voiceDecision ? { voiceDecision } : {}) });
   const say = async (transcript: string) => {
     clock.at += 30_000;
@@ -167,7 +196,13 @@ function harness(score?: number) {
     expect(response.status).toBe(200);
     return { request: model.requests.at(-1)!, body: response.body as { receipt?: { capability?: string } } };
   };
-  return { say, chat, model, operations, sent: aether.sent };
+  /** A spoken turn stored as the body stores it, here with someone else present. */
+  const heard = async (userTranscript: string, shannonTranscript: string) => {
+    clock.at += 30_000;
+    expect((await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/turns', body: {
+      scopeKey: 'owner', threadId: 'talk', userTranscript, shannonTranscript, companionPresent: true } })).status).toBe(201);
+  };
+  return { say, chat, heard, model, operations, sent: aether.sent };
 }
 
 describe('the place of a memo, in a conversation', () => {
@@ -197,13 +232,48 @@ describe('the place of a memo, in a conversation', () => {
     expect(sent.map(item => item.content)).toEqual(['明日10時に歯医者']);
   });
 
-  it('takes his answer to her question as the yes of a spoken write, even without a reliability score', async () => {
-    const { say, model } = harness();
+  it('takes his answer to her question as the yes of a spoken write without a reliability score: 書斎 to her tools, Aether to its inbox (review 4)', async () => {
+    const { say, model, sent } = harness();
     const asked = await say('メモを作って');
     expect(asked.request.tools?.writesWithheld).toBe(true);
     const answer = await say('書斎に');
     expect(answer.request.tools?.writesWithheld).toBeUndefined();
     expect(model.calls).toEqual(['study_create']);
+    expect((await say('明日10時に歯医者ってメモして')).body.reply).toBe(QUESTION);
+    const before = model.requests.length;
+    const aether = await say('Aetherに');
+    expect(aether.body.receipt?.capability).toBe('aether.propose');
+    expect(model.requests).toHaveLength(before);
+    expect(sent.map(item => item.content)).toEqual(['明日10時に歯医者']);
+  });
+
+  it('unlocks nothing for a no or a question, and with words that cannot be trusted sends nothing and says so (reviews 2 and 4)', async () => {
+    const { say, sent } = harness(transcript => (transcript.startsWith('Aether') ? 0.4 : 0.95));
+    expect((await say('明日10時に歯医者ってメモして')).body.reply).toBe(QUESTION);
+    const uncertain = await say('Aetherに');
+    expect(uncertain.body.receipt).toBeUndefined();
+    expect(uncertain.request.tools?.writesWithheld).toBe(true);
+    expect(toolInstructions(uncertain.request.tools!, true)).toContain('Aetherへの保存案もこの返事では送っていないので、送ったと言わない');
+    expect(TOOLS_READ_ONLY_INSTRUCTIONS).toContain('送ったと言わない');
+    expect(sent).toHaveLength(0);
+    const unscored = harness();
+    for (const words of ['書斎はやめて', 'Aetherに入れないで', 'PCのフォルダって何？']) {
+      expect((await unscored.say('牛乳を買うってメモして')).body.reply).toBe(QUESTION);
+      const no = await unscored.say(words);
+      expect(no.body.receipt, words).toBeUndefined();
+      expect(no.request.tools?.writesWithheld, words).toBe(true);
+    }
+    expect(unscored.model.calls).toEqual([]);
+    expect(unscored.sent).toHaveLength(0);
+  });
+
+  it('sends nothing when the words before her question were a guest\'s, though the owner answers 「Aetherに」 (review 1)', async () => {
+    const { say, heard, sent } = harness(0.95);
+    await heard('明日10時に歯医者ってメモして', QUESTION);
+    const answer = await say('Aetherに');
+    expect(answer.body.receipt).toBeUndefined();
+    expect(answer.body.reply).toContain('まだ何も送っていません');
+    expect(sent).toHaveLength(0);
   });
 
   it('after a talk about her folder, gives her that talk and her tools for the next 「メモを作って」, and no Aether', async () => {

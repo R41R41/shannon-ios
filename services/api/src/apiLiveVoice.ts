@@ -28,7 +28,7 @@ import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import { withMemorySearchLatency, type TurnMemoryRecall } from './turnMemoryRecall.js';
 import { visibleConversationHistory } from './memoryVisibility.js';
 import { conversationReplay } from './conversationWindow.js';
-import { executeConversationCommand, type ConversationCommandDependencies } from './conversationCommands.js';
+import { executeConversationCommand, spokenCommandAllowed, type ConversationCommandDependencies } from './conversationCommands.js';
 import { extractExplicitUserIntent, type CognitiveIntentStore } from './cognitiveIntent.js';
 import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type ConversationReadCapabilities } from './conversationCapabilities.js';
@@ -204,8 +204,8 @@ async function completeLiveVoiceDelegation(
     tasks: dependencies.agentTasks.list(scopeKey),
   });
   if (orchestrationState) orchestrationState = dependencies.conversationOrchestration.save(orchestrationState);
-  // Commands that act (tasks, notes, remember, forget, promises) run only for the owner alone.
-  const command = alone && !uncertainTranscript && !notHisWordsToHer(decision) && deviceContext?.userUtterance
+  // Commands that act (tasks, notes, remember, forget, promises) run only for the owner alone, on words that can be trusted.
+  const command = alone && spokenCommandAllowed(transcriptTrust(decision, deviceContext?.userUtterance), scopeKey, threadId, deviceContext?.userUtterance, occurredAt, dependencies.conversationStore) && !notHisWordsToHer(decision) && deviceContext?.userUtterance
     ? executeConversationCommand(scopeKey, threadId, deviceContext.userUtterance, occurredAt, {
       ...dependencies, agentTasks: dependencies.agentTasks,
     })

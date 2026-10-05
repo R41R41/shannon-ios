@@ -1,10 +1,13 @@
-import { visibleMemoryText, type CompanionStateStore, type ShannonActionReceipt } from '@shannon/cognition';
-import type { ConversationStore } from './conversationStore.js';
+import type { CompanionStateStore, ShannonActionReceipt } from '@shannon/cognition';
+import type { ConversationStore, StoredConversationMessage } from './conversationStore.js';
 import type { OrganizeSession, OrganizeStore } from './organize.js';
 import type { AetherProposalStore } from './aetherProposal.js';
 import type { AgentTask, AgentTaskStore } from './agentTaskStore.js';
 import { applyExplicitCommitmentCommand } from './commitmentCommands.js';
-import { contentPreview, containsUnresolvedConversationReference, resolveConversationContent, type ResolvedConversationContent } from './conversationReference.js';
+import {
+  boundOwnerTurn, contentPreview, containsUnresolvedConversationReference, isBareConversationReference, keepableStatement,
+  resolveConversationContent, type ResolvedConversationContent,
+} from './conversationReference.js';
 import { aetherNoteRequest, asksWhichPlace, memoRequestContent, type AetherNoteRequest } from './memoPlace.js';
 import { TOOL_FOLLOW_UP_MILLISECONDS } from './shannonToolTurns.js';
 import { ShannonMemoryService } from './memoryService.js';
@@ -106,25 +109,58 @@ export function executeConversationCommand(
 
 /**
  * What an Aether note keeps: its own words; what he just said (「Aetherにメモして」); or, when he answers her question
- * where (「書斎・PCのフォルダ・Aetherのどこに作りますか？」 → 「Aetherに」), the memo he asked for just before it.
+ * where (「書斎・PCのフォルダ・Aetherのどこに作りますか？」 → 「Aetherに」), the memo he asked for just before it. That
+ * answer is held to the rules of `resolveConversationContent` and more: the asking turn, and an earlier turn that held
+ * what to keep, are bound to their stored turns, of the owner alone in his words, and what is kept is a statement.
  * Null when the words are not a request to Aether here.
  */
 function aetherNoteContent(
   request: AetherNoteRequest, scopeKey: string, threadId: string, at: string, dependencies: ConversationCommandDependencies,
 ): ResolvedConversationContent | null {
   const snapshot = dependencies.stateStore.snapshot(scopeKey);
-  const resolve = (value: string) => resolveConversationContent(value, scopeKey, threadId, at, snapshot, dependencies.conversationStore, 6_000);
-  if ('content' in request) return resolve(request.content);
-  const [asked, question] = dependencies.conversationStore.conversationHistory(scopeKey, threadId).slice(-2);
-  const answering = asked?.role === 'user' && question?.role === 'assistant' && asksWhichPlace(question.content)
-    && Date.parse(at) - Date.parse(question.observedAt) <= TOOL_FOLLOW_UP_MILLISECONDS;
-  if (!answering) return request.bare === 'request' ? resolve('それ') : null;
-  const content = memoRequestContent(asked.content);
-  if (!content || containsUnresolvedConversationReference(content)
-    || (asked.sourceExperienceId && !visibleMemoryText(snapshot, asked.sourceExperienceId, asked.content))) {
-    return { clarification: 'Aetherに残すことを、「〇〇をAetherに残して」と言ってもらえますか？ まだ何も送っていません。' };
+  const store = dependencies.conversationStore;
+  if ('content' in request) return resolveConversationContent(request.content, scopeKey, threadId, at, snapshot, store, 6_000);
+  const history = store.conversationHistory(scopeKey, threadId).slice(-8);
+  if (!answersPlaceQuestion(history, at)) {
+    return request.bare === 'request' ? resolveConversationContent('それ', scopeKey, threadId, at, snapshot, store, 6_000) : null;
   }
-  return { content, sourceMessageIds: [asked.id], referenced: true };
+  const clarify = { clarification: 'Aetherに残すことを、「〇〇をAetherに残して」と言ってもらえますか？ まだ何も送っていません。' };
+  const asked = history.at(-2);
+  if (!asked || !boundOwnerTurn(asked, scopeKey, threadId, at, snapshot, store, true)) return clarify;
+  let source = asked;
+  // Not a memo request (she asked on her own): his turn itself is what to keep, if it is a statement.
+  let content = memoRequestContent(asked.content.trim()) ?? asked.content.trim();
+  // 「明日10時に歯医者」 then 「それメモして」: what to keep is the owner's turn before the request.
+  if (!content || isBareConversationReference(content)) {
+    const before = history.slice(0, -2).filter(message => message.role === 'user').at(-1);
+    if (!before || !boundOwnerTurn(before, scopeKey, threadId, at, snapshot, store, true)) return clarify;
+    source = before;
+    content = before.content.trim();
+  }
+  if (!keepableStatement(content, 6_000)) return clarify;
+  return { content, sourceMessageIds: [source.id], ...(source.sourceExperienceId ? { sourceExperienceId: source.sourceExperienceId } : {}), referenced: true };
+}
+
+/** The newest message is her question where a memo goes, from the last ten minutes, answering a turn of his. */
+function answersPlaceQuestion(history: readonly StoredConversationMessage[], at: string): boolean {
+  const question = history.at(-1);
+  return question?.role === 'assistant' && history.at(-2)?.role === 'user' && asksWhichPlace(question.content)
+    && Date.parse(at) - Date.parse(question.observedAt) <= TOOL_FOLLOW_UP_MILLISECONDS;
+}
+
+/**
+ * Whether a spoken turn's words may run a command: reliable words; or, with no reliability score (the router fell back),
+ * his answer 「Aetherに」 to her question where a memo goes, the same yes that lets 「書斎に」 write with her tools.
+ */
+export function spokenCommandAllowed(
+  trust: 'reliable' | 'uncertain' | 'unknown', scopeKey: string, threadId: string, utterance: UserUtterance | undefined, at: string,
+  store: Pick<ConversationStore, 'conversationHistory'>,
+): boolean {
+  if (trust === 'reliable') return true;
+  const text = utterance?.text.trim().replace(/[。！!]$/u, '') ?? '';
+  const request = trust === 'unknown' ? aetherNoteRequest(text) : null;
+  return request !== null && 'bare' in request && request.bare === 'answer'
+    && answersPlaceQuestion(store.conversationHistory(scopeKey, threadId).slice(-8), at);
 }
 
 function executeAgentWorkCommand(

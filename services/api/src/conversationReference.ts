@@ -1,5 +1,5 @@
-import { visibleMemoryText, type CompanionStateSnapshot } from '@shannon/cognition';
-import type { ConversationStore } from './conversationStore.js';
+import { isOwnerOnly, ownerSpoke, visibleMemoryText, type CompanionStateSnapshot } from '@shannon/cognition';
+import type { ConversationStore, StoredConversationMessage } from './conversationStore.js';
 
 const REFERENCE_NOUN_SOURCE = '(?:話|内容|会話|発言|件|計画|予定|作業|タスク|アイデア|案)';
 const REFERENCE_SOURCE = `(?:これ|それ|あれ|(?:この|その)${REFERENCE_NOUN_SOURCE}|(?:さっき|今|直前|先ほど|先程|前|昨日|先日|この前)の${REFERENCE_NOUN_SOURCE}|(?:さっき|今|先ほど|先程)(?:話した|言った)(?:こと|内容|やつ))`;
@@ -41,27 +41,46 @@ export function resolveConversationContent(
   const recent = store.conversationHistory(scopeKey, threadId).slice(-8);
   const source = recent.filter(message => message.role === 'user').at(-1);
   if (!source) return clarify;
-  const age = Date.parse(at) - Date.parse(source.observedAt);
   const text = source.content.trim();
-  // References are intentionally local in time; old context or requests for
-  // an answer cannot identify which part of the reply the owner means.
-  if (!Number.isFinite(age) || age < 0 || age > 15 * 60_000 || text.length > maximumCharacters
-    || text.length < 3 || hasUnresolvedConversationReference(text)
-    || /[?？]|(?:教えて|調べて|どう思う|どちら|どっち|どこ|何を|何が|例えば|もし|仮に)/u.test(text)
-    || /(?:タスクにして|タスクに追加して|(?:ノート|メモ|Aether|エーテル|ノートアプリ)に(?:して|残して|保存して)|メモして|覚えておいて|忘れないで|リマインドして)(?:ね|ください)?[。！!]?$/u.test(text)
-    || /^(?:はい|うん|そう|ありがとう|了解|お願いします)[。！!]?$/u.test(text)) return clarify;
+  if (!keepableStatement(text, maximumCharacters)) return clarify;
   if (purpose === 'task' && (
     text.split(/[。！？!?\n]/u).filter(part => part.trim()).length > 1
     || /(?:または|もしくは|キャンセル|取り消|やめた|やめる|中止|不要|しない|できない|完了した|終わった|済んだ)/u.test(text)
   )) return clarify;
+  const sourceExperienceId = boundOwnerTurn(source, scopeKey, threadId, at, state, store);
+  if (!sourceExperienceId) return clarify;
+  return { content: text, sourceMessageIds: [source.id], sourceExperienceId, referenced: true };
+}
+
+/** Text that can be kept as the owner's statement: not a question, a request, an open reference or an acknowledgement. */
+export function keepableStatement(text: string, maximumCharacters: number): boolean {
+  return !(text.length > maximumCharacters || text.length < 3 || hasUnresolvedConversationReference(text)
+    || /[?？]|(?:教えて|調べて|どう思う|どちら|どっち|どこ|何を|何が|例えば|もし|仮に)/u.test(text)
+    || /(?:タスクにして|タスクに追加して|(?:ノート|メモ|Aether|エーテル|ノートアプリ)に(?:して|残して|保存して)|メモして|覚えておいて|忘れないで|リマインドして)(?:ね|ください)?[。！!]?$/u.test(text)
+    || /^(?:はい|うん|そう|ありがとう|了解|お願いします)[。！!]?$/u.test(text));
+}
+
+/**
+ * The experience id of a stored owner message, bound to its exact turn and still visible, from the last fifteen minutes;
+ * null otherwise. References are intentionally local in time. With `ownerAlone`, also a turn of the owner alone, in his words.
+ */
+export function boundOwnerTurn(
+  source: StoredConversationMessage, scopeKey: string, threadId: string, at: string,
+  state: CompanionStateSnapshot, store: ConversationStore, ownerAlone = false,
+): string | null {
+  const age = Date.parse(at) - Date.parse(source.observedAt);
+  if (source.role !== 'user' || !Number.isFinite(age) || age < 0 || age > 15 * 60_000) return null;
   // Message IDs are bound to their exact stored turn; text/time matching alone
   // could select an identical sentence from a different conversation.
-  if (!source.sourceExperienceId) return clarify;
+  if (!source.sourceExperienceId) return null;
+  const text = source.content.trim();
   const sources = store.experienceCandidates(scopeKey, threadId).filter(experience =>
     experience.id === source.sourceExperienceId
     && experience.observedAt === source.observedAt && experience.userMessage.trim() === text);
-  if (sources.length !== 1 || !visibleMemoryText(state, sources[0]!.id, text)) return clarify;
-  return { content: text, sourceMessageIds: [source.id], sourceExperienceId: sources[0]!.id, referenced: true };
+  const experience = sources.length === 1 ? sources[0]! : null;
+  if (!experience || !visibleMemoryText(state, experience.id, text)) return null;
+  if (ownerAlone && !(isOwnerOnly(experience.disclosure?.audience) && ownerSpoke(experience.disclosure))) return null;
+  return experience.id;
 }
 
 export function contentPreview(content: string): string {

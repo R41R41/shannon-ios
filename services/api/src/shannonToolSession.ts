@@ -10,7 +10,7 @@ import { InMemoryToolTraces, TOOL_FOLLOW_UP_MILLISECONDS, ToolTurnLog, type Tool
 import { toolSessionMemory } from './shannonToolTypes.js';
 import { ownToolsEnabled, providerToolName, shannonTool, toolFailure, toolFromProviderName, toolResultForModel } from './shannonTools.js';
 import type { TurnDeadline } from './turnDeadline.js';
-import { asksWhichPlace, memoNotForAether, namesMemoPlace } from './memoPlace.js';
+import { answersWithPlace, asksForMemo, asksWhichPlace, namesAether } from './memoPlace.js';
 
 /**
  * The tools of one conversation turn, for the model adapter (`chatModelTools.ts`). Owner decision 2026-10-05: her
@@ -49,7 +49,7 @@ export function conversationTools(
   // His answer to her question where a memo goes (「書斎に」) is such a yes too.
   const writes = surface === 'text' || voice.trust === 'reliable'
     || (voice.trust === 'unknown' && ((confirms(words) && lastReplyAsksToConfirm(server, scopeKey, threadId))
-      || (namesMemoPlace(words) && lastReplyAsks(server, scopeKey, threadId, asksWhichPlace))));
+      || (answersWithPlace(words) && lastReplyAsks(server, scopeKey, threadId, asksWhichPlace))));
   const definitions = runner.offered(surface, 'owner_alone').filter(tool => writes || tool.effect === 'read');
   if (!definitions.length) return {};
   const trace = server.turns?.open(scopeKey, threadId, words, offer === 'asked', voice.utteranceId);
@@ -119,7 +119,7 @@ export function asksToConfirmToolAction(reply: string): boolean {
  */
 export function voiceToolOffer(words: string, server: Partial<ConversationToolServer>, scopeKey: string, threadId: string): 'asked' | 'follow_up' | null {
   // A memo he asks for may go to her study or her folder (or she asks where): not only Aether (owner decision 2026-10-05).
-  if (asksAboutOwnThings(words) || memoNotForAether(words)) return 'asked';
+  if (asksAboutOwnThings(words) || (asksForMemo(words) && !namesAether(words))) return 'asked';
   if (server.turns?.recent(scopeKey, threadId)) return 'follow_up';
   return lastReplyAsks(server, scopeKey, threadId, reply => asksToConfirmToolAction(reply) || asksWhichPlace(reply)) ? 'follow_up' : null;
 }

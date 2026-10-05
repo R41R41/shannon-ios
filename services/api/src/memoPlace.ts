@@ -18,8 +18,6 @@ const CONTENT_FIRST = new RegExp(`^${QUOTED}を${AETHER_PLACE}(?:に|へ)${SAVE}
 const PLACE_FIRST = new RegExp(`^${AETHER_PLACE}(?:に|へ)[、,\\s]*${QUOTED}(?:を|って|と)(?:メモ|ノート)?に?${SAVE}$`, 'iu');
 /** 「Aetherにメモして」「Aetherに残して」: what he just said goes there. */
 const BARE_REQUEST = new RegExp(`^${AETHER_PLACE}(?:に|へ)(?:メモ|ノート)?を?(?:${SAVE.slice(3, -1)}|作って)$`, 'iu');
-/** 「Aetherに」「Aetherで」「エーテルにお願いします」: only as the answer to her question where. */
-const BARE_ANSWER = new RegExp(`^${AETHER_PLACE}(?:に|へ|で)?(?:お願い(?:します)?|して|作って|残して)?(?:ください)?$`, 'iu');
 
 export type AetherNoteRequest = { content: string } | { bare: 'request' | 'answer' };
 
@@ -28,7 +26,8 @@ export function aetherNoteRequest(text: string): AetherNoteRequest | null {
   const content = text.match(CONTENT_FIRST)?.[1] ?? text.match(PLACE_FIRST)?.[1];
   if (content) return { content };
   if (BARE_REQUEST.test(text)) return { bare: 'request' };
-  return BARE_ANSWER.test(text) ? { bare: 'answer' } : null;
+  // 「Aetherに」「Aetherでお願いします」: only as the answer to her question where (conversationCommands.ts).
+  return answersWithPlace(text) && namesAether(text) ? { bare: 'answer' } : null;
 }
 
 /** The words name Aether as a place: the product (Latin or Japanese) or 「ノートアプリ」. */
@@ -36,17 +35,28 @@ export function namesAether(words: string): boolean {
   return mentionsSuiteProduct(words, 'aether') || /ノートアプリ/u.test(words);
 }
 
-const MEMO_VERB = '(?:作って|作成して|書いて|残して|保存して|して|しといて|取って|とって)(?:おいて|ください|ほしい|くれる|もらえる|ね|よ)*';
+const MEMO_VERB = '(?:作って|作成して|書いて|残して|保存して|して|しといて|取って|とって|っといて|っておいて|お願い(?:します)?|おねがい|よろしく)'
+  + '(?:おいて|ください|ほしい|くれる|もらえる|ね|よ)*';
 const MEMO_REQUEST = new RegExp(`(?:メモ|ノート)(?:を|に)?${MEMO_VERB}(?=$|[、。！!？?\\s])`, 'u');
+/** 「ノートに書いて？」 asks; 「メモ作ってくれる？」 still requests. */
+const ASKS_BACK = /[?？]\s*$/u;
+const POLITE_REQUEST = /(?:くれる|くれない|もらえる|もらえない|ください|お願い(?:します)?|おねがい)[?？]\s*$/u;
 
-/** A request to make, write or keep a memo or a note: 「メモを作って」「ノートに残して」「メモしておいて」. */
+/** A request to make, write or keep a memo or a note: 「メモを作って」「ノートに残して」「メモっといて」「メモお願い」. */
 export function asksForMemo(words: string): boolean {
-  return MEMO_REQUEST.test(words.trim());
+  const said = words.trim();
+  return MEMO_REQUEST.test(said) && (!ASKS_BACK.test(said) || POLITE_REQUEST.test(said));
 }
 
-/** A memo request that does not name Aether: nothing of Aether is pushed at her, the model decides or asks. */
+/** Words about a note or memo that already exists (「この前のメモ」「ノートに書いてあった」「メモの内容」). */
+const EXISTING_NOTE = /(?:この前|(?<!名)前の|さっきの(?:メモ|ノート)|あの(?:メモ|ノート)|書いてあった|書いた(?:メモ|ノート|やつ|こと)|(?:メモ|ノート)の(?:内容|中身)|(?:メモ|ノート)(?:を|に)?(?:見|読|探|確認))/u;
+
+/**
+ * A memo request that does not name Aether and asks about no existing note: nothing of Aether is pushed at her, the
+ * model decides or asks. A request that also asks about a note he wrote keeps the Aether notes context.
+ */
 export function memoNotForAether(words: string): boolean {
-  return asksForMemo(words) && !namesAether(words);
+  return asksForMemo(words) && !namesAether(words) && !EXISTING_NOTE.test(words);
 }
 
 /** What a memo request asks to keep: 「明日10時に歯医者ってメモして」 → 「明日10時に歯医者」; 「メモを作って」 → ''. */
@@ -63,8 +73,14 @@ export function asksWhichPlace(reply: string): boolean {
   return places >= 2 && /どこ|どれ|どちら/u.test(last);
 }
 
-/** A short answer that names one of the places. */
-export function namesMemoPlace(words: string): boolean {
-  const said = words.normalize('NFKC').replace(/[\s\p{P}]/gu, '');
-  return said.length > 0 && said.length <= 30 && (/書斎|フォルダ|PC|パソコン/iu.test(said) || namesAether(said));
+const PLACE_NAME = `(?:書斎|(?:PC|パソコン|自分)の?フォルダ|フォルダ|PC|パソコン|${AETHER}(?:のノート)?|ノートアプリ)`;
+const PLACE_ANSWER = new RegExp(`^${PLACE_NAME}(?:に|で|へ)?(?:お願い|おねがい)?(?:します)?$`, 'iu');
+
+/**
+ * An answer that is only a place: a place name and at most に／で／お願い／します (「書斎に」「Aetherでお願いします」).
+ * Anything else, a no (「書斎はやめて」「Aetherに入れないで」) or a question (「PCのフォルダって何？」), is not.
+ */
+export function answersWithPlace(words: string): boolean {
+  const said = words.normalize('NFKC').trim();
+  return !/[?？]/u.test(said) && PLACE_ANSWER.test(said.replace(/[\s、。,.!！]/gu, ''));
 }
