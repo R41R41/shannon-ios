@@ -372,7 +372,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `reach.standby` macOS（—）: Mac のアプリは開いたまま動く。
 - `reach.standby` Windows（—）: 常駐しているので、待機の設定は要らない。
 - `reach.body-speaking` iOS（△）: 触れたときのひとことだけ（吹き出しと、「声で返す」なら声）。シャノンのほうから体で話しかけることは無い。
-- `reach.body-speaking` macOS（○）: シャノンから話しかけてきた一言（reach_out）を吹き出しと声で伝え、どうしたかを報告する（shown_spoken／shown／away／hidden／muted）。場面ごとの一言（GET /v1/body/nudges）も、帰ってきた時・朝・深夜・長く話していない時・感想待ちが増えた時に。1 時間 2 回・1 日 10 回、会話の最中とあと 15 分は出さない。音声会話の間は声に出さない。A17。
+- `reach.body-speaking` macOS（○）: シャノンから話しかけてきた一言（reach_out）を吹き出しと声で伝え、どうしたかを報告する（shown_spoken／shown／away／muted。窓を隠している間は読まないので hidden は送らない）。場面ごとの一言（GET /v1/body/nudges）も、帰ってきた時・朝・深夜・長く話していない時・感想待ちが増えた時に。1 時間 2 回・1 日 10 回、会話の最中とあと 15 分は出さない。音声会話の間は声に出さない。A17。
 - `reach.incoming-call` macOS（—）: CallKit の着信は iPhone の仕組み。Mac では、イヤホンの話しかけと（将来は）デスクトップの体が対応する。
 - `reach.incoming-call` Windows（—）: CallKit の着信は iPhone の仕組み。Windows は体が声で話しかける。
 
