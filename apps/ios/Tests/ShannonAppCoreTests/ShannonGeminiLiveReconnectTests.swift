@@ -36,7 +36,7 @@ final class ShannonGeminiLiveReconnectTests: XCTestCase {
         return model
     }
 
-    func testTwoAudioFailuresInABurstReconnectOnceAsTheSameCallWithNoFailureShown() async {
+    func testFailuresAreAbsorbedOnlyWhileTheReconnectIsQueued() async {
         let gate = Gate()
         var reports: [Bool] = []
         let model = await model(gate: gate) { reports.append($0) }
@@ -57,15 +57,15 @@ final class ShannonGeminiLiveReconnectTests: XCTestCase {
         XCTAssertEqual(gate.requests, 2, "one reconnect")
         XCTAssertNotEqual(model.phase, .failed)
         XCTAssertEqual(reports, [], "the same call: no end, no second start")
+        XCTAssertFalse(model.sameCallReconnectQueued, "the old transport is stopped: nothing is absorbed any more")
 
-        // A failure while that reconnect runs is part of the burst too.
+        // A failure of the new transport is a second failure soon after: the call ends where he can see it.
         model.audioFailed()
-        XCTAssertNotEqual(model.phase, .failed)
-
-        // The reconnect fails: now the failure is shown, and the call's end is reported once.
+        XCTAssertEqual(model.phase, .failed)
+        XCTAssertEqual(reports, [false], "its end is reported once")
         gate.continuation?.resume(throwing: Refused())
-        while model.phase != .failed { await Task.yield() }
-        XCTAssertEqual(reports, [false])
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(model.phase, .failed)
         model.stop()
         XCTAssertEqual(reports, [false])
     }

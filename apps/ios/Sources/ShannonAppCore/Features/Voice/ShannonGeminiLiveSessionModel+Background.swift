@@ -88,7 +88,9 @@ extension ShannonGeminiLiveSessionModel {
 
     /// The audio could not be brought back in place (the route changed under the engine, or the media
     /// services were reset). The same call is connected again once; a second failure soon after is shown.
-    /// A failure that arrives while that reconnect is already on its way belongs to the same burst and is absorbed.
+    /// A failure that arrives while that reconnect is queued (the old transport not yet stopped) belongs to the same
+    /// burst and is absorbed. Once the reconnect has stopped the old transport the flag is down, so a failure of the
+    /// new transport is a second failure and is shown.
     func reconnectAfterAudioFailure(now: Date = Date()) -> Bool {
         if sameCallReconnectQueued {
             ShannonVoiceDiagnostics.shared.record("gemini.session.audio.failure.absorbed")
@@ -103,18 +105,25 @@ extension ShannonGeminiLiveSessionModel {
     }
 
     /// Connects the same call again from a fresh transport, one at a time: what was said and not yet answered,
-    /// the mute, the clock and the reported start are kept. The queued reconnect runs only while the call still
-    /// waits for it (the owner may have ended it meanwhile).
+    /// the mute, the clock and the reported start are kept. The queued reconnect runs only for the session it was
+    /// queued for, and only while that call is neither ended nor failed (the owner may have ended it meanwhile).
+    /// `start` lowers the flag as soon as it has stopped the old transport.
     func queueSameCallReconnect() {
         guard !sameCallReconnectQueued else { return }
         sameCallReconnectQueued = true
+        let queuedFor = sessionGenerationID
         interruptResponse()
         phase = .reconnecting
         Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.sameCallReconnectQueued = false }
-            guard self.phase == .reconnecting else { return }
+            guard self.sameCallReconnectQueued, self.sessionGenerationID == queuedFor,
+                  self.phase != .idle, self.phase != .failed else {
+                if self.sessionGenerationID == queuedFor { self.sameCallReconnectQueued = false }
+                return
+            }
             await self.retry()
+            // A retry that could not start (no handlers) leaves the session as it was: the flag goes down here.
+            if self.sessionGenerationID == queuedFor { self.sameCallReconnectQueued = false }
         }
     }
 }

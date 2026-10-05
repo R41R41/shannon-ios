@@ -228,6 +228,8 @@ public final class ShannonGeminiLiveSessionModel {
 
     /// `keepingCallReport`: the same call is about to reconnect; its start stays reported.
     func stop(keepingCallReport: Bool) {
+        // The old transport stops here: a reconnect that was waiting is under way (or the call ended).
+        sameCallReconnectQueued = false
         resolveMicrophonePrimer(proceed: false)
         interruptionGeneration &+= 1
         microphonePrimerPhase = nil
@@ -473,6 +475,7 @@ public final class ShannonGeminiLiveSessionModel {
         )
         // A failed call is no longer a call on this device; a retry makes a new session and reports it again.
         if callIsReported { reportCallEnded() }
+        sameCallReconnectQueued = false
         setKeepsScreenAwake(false)
         stopWatchingCapture()
         responseTask?.cancel()
