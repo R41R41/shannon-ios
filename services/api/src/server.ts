@@ -50,7 +50,7 @@ import { configuredAutonomy } from './autonomyBudget.js';
 import { SQLiteStudyShowing } from './autonomyShowing.js';
 import { ShannonAutonomyService } from './autonomyService.js';
 import { SQLiteAutonomyStore } from './autonomyStore.js';
-import { BODY_CAPABILITIES_PATH, isBodyRoute } from './apiBodyRoutes.js';
+import { BODY_CAPABILITIES_PATH, isBodyRoute, requestDeviceId } from './apiBodyRoutes.js';
 import { bodyIngestEnabled } from './bodyContract.js';
 import { SQLiteBodyStore } from './bodyStore.js';
 import { isFullBody } from './bodyTouchOnly.js';
@@ -327,6 +327,8 @@ const server = createServer(async (request, response) => {
     const body = request.method !== 'GET' && !calendarDelete ? await readJson(request, url.pathname === VOICE_CALL_MEMORY_PATH ? 192 * 1024 : bodyLookRequestBytes(url.pathname) ?? calendarRequestBytes(url.pathname) ?? hostStepRequestBytes(url.pathname) ?? 64 * 1024) : undefined;
     const query = new URLSearchParams(url.searchParams);
     if (principal) query.set('scopeKey', principal.scopeKey);
+    const deviceId = principal ? requestDeviceId(principal.deviceId, request.headers['x-shannon-body'], request.method, url.pathname) : undefined; // Her desktop body in an app speaks for a device of its own (desktopBodyIdentity.ts).
+    if (principal && deviceId !== principal.deviceId) response.setHeader('x-shannon-body', 'desktop'); // Says to the app that its body was heard as one.
     if (url.pathname === '/v1/devices') {
       handleDeviceManagement(request, response, body, principal, { deviceAuth, pushStore, revoked: deviceId => incomingCallRoute?.invalidateDevice(deviceId) });
       return;
@@ -342,12 +344,9 @@ const server = createServer(async (request, response) => {
       sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度話しかけてください。' });
       return;
     }
-    if (isPairedChat && activeChats >= 2) {
-      sendJson(response, 429, { error: 'BUSY', message: 'いま少し混み合っています。' });
-      return;
-    }
+    if (isPairedChat && activeChats >= 2) { sendJson(response, 429, { error: 'BUSY', message: 'いま少し混み合っています。' }); return; }
     // The body polls presence and reports touches; this keeps one device from flooding either.
-    if (principal && isBodyRoute(url.pathname) && !consumeDeviceAllowance(bodyUsage, principal.deviceId, 120)) {
+    if (deviceId && isBodyRoute(url.pathname) && !consumeDeviceAllowance(bodyUsage, deviceId, 120)) {
       sendJson(response, 429, { error: 'RATE_LIMITED', message: 'Too many body requests; retry after a minute.' });
       return;
     }
@@ -358,13 +357,12 @@ const server = createServer(async (request, response) => {
         path: url.pathname,
         query,
         body: principal ? bindScope(body, principal.scopeKey) : body,
-        ...(principal ? { deviceId: principal.deviceId } : {}),
+        ...(deviceId ? { deviceId } : {}),
         // A held long-poll claim of her folder's device ends when the device goes away, so no step is handed to nobody.
         ...(url.pathname === HOST_STEP_CLAIM_PATH ? { signal: closedSignal(response) } : {}),
       });
-      // Her body is not handed a message of hers that one of the owner's apps says through his earphones.
-      const forBody = result && principal && request.method === 'GET' && url.pathname === '/v1/initiatives';
-      if (result) sendJson(response, result.status, forBody ? privateListeningRoute.reachOuts.bodyInitiatives(principal.scopeKey, principal.deviceId, result.body) : result.body);
+      const forBody = result && principal && deviceId && request.method === 'GET' && url.pathname === '/v1/initiatives'; // Her body is not handed a message an app says through his earphones.
+      if (result) sendJson(response, result.status, forBody ? privateListeningRoute.reachOuts.bodyInitiatives(principal.scopeKey, deviceId, result.body) : result.body);
     } finally {
       if (isPairedChat) activeChats -= 1;
     }
