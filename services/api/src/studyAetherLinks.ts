@@ -145,7 +145,9 @@ export class StudyAetherLinks {
 
   /**
    * Shannon has deleted (or found gone) the document of a piece in her trash: it is never deleted again from here, also when
-   * the owner restores it from Recently Deleted (the migration's catch-up and her own deletes note it).
+   * the owner restores it from Recently Deleted (the migration's catch-up and her own deletes note it). One record per piece and
+   * document: a second trashing in Shannon before the switch is not caught up by the migration (after the switch Aether is
+   * canonical and her deletes reach it directly).
    */
   noteDeleted(scopeKey: string, pieceId: string, documentId: string, at: string): void {
     this.database.prepare(`INSERT OR IGNORE INTO study_aether_deletions (scope_key, piece_id, document_id, deleted_at) VALUES (?, ?, ?, ?)`).run(scopeKey, pieceId, documentId, at);

@@ -66,6 +66,9 @@ function planOf(rows: readonly StudyMigrationRow[]): readonly StudyMigrationItem
     const note = row.documentId ? 'moved' as const : row.origin ?? (row.deleted ? 'trash' as const : undefined);
     const target: StudyMigrationTarget = row.origin || (row.deleted && !row.documentId) ? 'stays' : row.kind === 'story' ? 'study' : 'shannon_folder';
     // A delete is planned once: never again after Shannon deleted it (or found it gone), also if the owner restored it since.
+    // The record is per piece (and document), not per trashing: if the owner restored it and she trashed it in Shannon a second
+    // time before the switch, that second delete is not caught up. Accepted: after the switch Aether is canonical, and her
+    // deletes go to Aether directly.
     const catchUp = !row.documentId ? undefined : row.deleted ? (row.deletedInAether ? undefined : 'delete' as const)
       : row.linkedVersion !== null && row.version > row.linkedVersion ? 'update' as const : undefined;
     return Object.freeze({
