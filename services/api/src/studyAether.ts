@@ -25,6 +25,9 @@ import { STUDY_LIMITS, type StudyPiece, type StudyPieceKind } from './studyStore
  */
 export const STUDY_AETHER_SYNC = Object.freeze({ refresh: 6, adopt: 5, readCharacters: 100_000, runMilliseconds: 15_000 });
 
+/** A write of hers this recent is still committing in its own transaction: a sync leaves its document and version to it. */
+export const STUDY_AETHER_PENDING_FRESH_MILLISECONDS = 2 * 60_000;
+
 export interface StudyAetherSyncCounts { changed: number; deleted: number; adopted: number }
 
 export class StudyAether {
@@ -67,6 +70,10 @@ export class StudyAether {
     }
   }
 
+  private fresh(createdAt: string | undefined): boolean {
+    return createdAt !== undefined && Date.parse(this.now()) - Date.parse(createdAt) < STUDY_AETHER_PENDING_FRESH_MILLISECONDS;
+  }
+
   /** A piece whose document is gone from her folder: into her trash, and not read again until Aether changes it. */
   private gone(scopeKey: string, pieceId: string, documentId: string, version: number): void {
     this.store.transaction(() => this.store.study.aether.setDeleted(scopeKey, pieceId, true, this.now()));
@@ -89,8 +96,17 @@ export class StudyAether {
     }
   }
 
-  /** Inside the transaction that records the write: the piece's current version is that Aether version. */
+  /**
+   * Inside the transaction that records the write: the piece's current version is that Aether version. Should a sync have
+   * taken the write in meanwhile (the document is another piece's, or this piece already has that version), the commit
+   * throws `STUDY_AETHER_LINKED` and the transaction leaves no second piece and no second version.
+   */
   commit(scopeKey: string, piece: Pick<StudyPiece, 'id' | 'version'>, write: AetherWriteResult): void {
+    const owner = this.store.study.aether.pieceFor(scopeKey, write.documentId);
+    const linked = this.link(scopeKey, piece.id);
+    if ((owner && owner !== piece.id) || (linked && linked.version < piece.version && linked.documentId === write.documentId && linked.aetherVersion >= write.version)) {
+      throw new Error('STUDY_AETHER_LINKED');
+    }
     this.store.study.aether.link(scopeKey, piece.id, piece.version, write.documentId, write.version, this.now());
     this.store.study.aether.nameFeedbackDocument(scopeKey, piece.id, write.documentId);
     this.store.study.aether.clearPending(scopeKey, write.documentId, write.version);
@@ -138,6 +154,8 @@ export class StudyAether {
       if (!now || now.aetherVersion >= document.version) return 'current' as const;
       // A version she wrote herself whose local half was lost keeps her change note; anything else is a change made in Aether.
       const hers = this.store.study.aether.pending(scopeKey, document.documentId, document.version);
+      // One she wrote a moment ago is still committing in its own transaction: it links itself.
+      if (hers && this.fresh(hers.createdAt)) return 'current' as const;
       this.store.study.aether.adoptVersion(scopeKey, pieceId, { title: document.title, body: document.body, aetherVersion: document.version, documentId: document.documentId, ...(hers ? { changeNote: hers.changeNote } : {}) }, this.now());
       return 'changed' as const;
     });
@@ -189,8 +207,9 @@ export class StudyAether {
     // Unknown documents of her folder: a write of hers whose local half was lost (a story or a note), or a story in her study.
     const known = new Set([...links.values()].map(link => link.documentId));
     const hers = (documentId: string) => this.store.study.aether.pendingCreate(scopeKey, documentId);
+    // A create of hers that is still committing (fresh) is left to its own transaction.
     for (const entry of entries.filter(item => !known.has(item.documentId) && this.seenDeleted.get(item.documentId) !== item.version
-      && (item.inStudy || hers(item.documentId))).slice(0, STUDY_AETHER_SYNC.adopt)) {
+      && (item.inStudy || hers(item.documentId)) && !this.fresh(hers(item.documentId)?.createdAt)).slice(0, STUDY_AETHER_SYNC.adopt)) {
       let document: AetherDocument;
       try { document = await this.readWhole(entry.documentId, signal); } catch (error) {
         if (aetherErrorCode(error) === 'NOT_FOUND') { this.seenDeleted.set(entry.documentId, entry.version); continue; }

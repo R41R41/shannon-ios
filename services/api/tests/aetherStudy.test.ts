@@ -302,6 +302,11 @@ describe('her study in Aether', () => {
     for (let index = 0; index < 11; index += 1) store.study.create(scope, { kind: 'story', title: `下書き${index}`, body: STORY }, clock.at);
     await aether.create(scope, { kind: 'story', title: '迷子の下書き', body: STORY, changeNote: '最初の稿です。' }, aetherIdempotencyKey('lost-story'));
 
+    // While they are fresh, a sync leaves them to their own commit; once that is clearly lost, it takes them in.
+    await call('study.list', {});
+    expect(store.study.list(scope).some(piece => piece.title === '光のメモ')).toBe(false);
+    expect(store.study.versions(scope, storyId)).toHaveLength(1);
+    clock.at = '2026-10-06T01:05:00.000Z';
     await call('study.list', {});
     const note = store.study.list(scope).find(piece => piece.title === '光のメモ')!;
     expect(note).toMatchObject({ kind: 'note', status: 'ready', readableVersion: 1 });
@@ -314,6 +319,40 @@ describe('her study in Aether', () => {
     // Each was linked once, and nothing is pending any more.
     expect(fake.inFolder()).toHaveLength(3);
     for (const document of fake.inFolder()) expect(store.study.aether.pendingCreate(scope, document.id)).toBeNull();
+  });
+
+  it('never links a second piece or a second version when a sync and her own commit race', async () => {
+    const { fake, store, service, clock } = await harness();
+    const aether = service.studyAether!;
+    // Her create was taken by Aether and is committing: a sync now leaves it alone, and her commit links it once.
+    const written = await aether.create(scope, { kind: 'note', title: '光のメモ', body: '光は数えられる。' }, aetherIdempotencyKey('race-1'));
+    await aether.sync(scope);
+    expect(store.study.list(scope)).toEqual([]);
+    const note = store.transaction(() => {
+      const created = store.study.create(scope, { kind: 'note', title: '光のメモ', body: '光は数えられる。' }, clock.at) as StudyPiece;
+      aether.commit(scope, created, written);
+      return created;
+    });
+    expect(store.study.aether.pieceFor(scope, written.documentId)).toBe(note.id);
+    // A second piece for the same document is refused, and its transaction leaves nothing.
+    expect(() => store.transaction(() => {
+      const twin = store.study.create(scope, { kind: 'note', title: '光のメモ', body: '光は数えられる。' }, clock.at) as StudyPiece;
+      aether.commit(scope, twin, written);
+    })).toThrow('STUDY_AETHER_LINKED');
+    expect(store.study.list(scope)).toHaveLength(1);
+    // Her update was taken and a sync ran before its commit: one new version, not two.
+    const updated = (await aether.update(scope, note, { body: '光は数えられる。夜も。', changeNote: '足しました。' }, aetherIdempotencyKey('race-2')))!;
+    await aether.sync(scope);
+    expect(store.study.versions(scope, note.id)).toHaveLength(1);
+    store.transaction(() => aether.commit(scope, store.study.revise(scope, note.id, { body: '光は数えられる。夜も。', changeNote: '足しました。' }, clock.at) as StudyPiece, updated));
+    expect(store.study.versions(scope, note.id).map(version => version.changeNote)).toEqual(['最初の稿です。', '足しました。']);
+    // Had the sync taken it in first (once it looked lost), her late commit is refused rather than doubled.
+    const again = (await aether.update(scope, store.study.get(scope, note.id)!, { body: 'もう一度。', changeNote: 'また直しました。' }, aetherIdempotencyKey('race-3')))!;
+    clock.at = '2026-10-06T01:05:00.000Z';
+    await aether.sync(scope);
+    expect(() => store.transaction(() => aether.commit(scope, store.study.revise(scope, note.id, { body: 'もう一度。', changeNote: 'また直しました。' }, clock.at) as StudyPiece, again))).toThrow('STUDY_AETHER_LINKED');
+    expect(store.study.versions(scope, note.id).map(version => version.changeNote)).toEqual(['最初の稿です。', '足しました。', 'また直しました。']);
+    expect(fake.inFolder()).toHaveLength(1);
   });
 
   it('runs one sync per scope at a time and adopts a version once, however many callers race', async () => {

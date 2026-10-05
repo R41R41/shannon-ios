@@ -32,6 +32,7 @@ const STUDY_REJECTIONS: Readonly<Record<string, ToolResult>> = Object.freeze({
   STUDY_INVALID: toolFailure('invalid_input', '題名か本文か直した理由が、決まりに合わなかった（空、長すぎるなど）。', { retryable: false }),
   STUDY_CLOSED: toolFailure('conflict', 'しまってあるので、できなかった。', { retryable: false }),
   STUDY_NOT_FOUND: toolFailure('not_found', '見つからなかった。', { retryable: false }),
+  STUDY_AETHER_LINKED: toolFailure('conflict', 'Aetherには書けていて、書斎にはもう取り込まれていた（二つにはしなかった）。study.list で確かめる。', { retryable: false }),
 });
 
 /** Aether as her tools reach it (Syzygy ADR-0007 revised); every part absent while it is not configured. */

@@ -118,19 +118,19 @@ export class StudyAetherLinks {
   }
 
   /** Her write that made this version of the document, if its local half has not committed yet. */
-  pending(scopeKey: string, documentId: string, aetherVersion: number): { operation: 'create' | 'update'; pieceId?: string; kind?: 'story' | 'note'; changeNote: string } | null {
+  pending(scopeKey: string, documentId: string, aetherVersion: number): { operation: 'create' | 'update'; pieceId?: string; kind?: 'story' | 'note'; changeNote: string; createdAt: string } | null {
     const row = this.database.prepare(`
-      SELECT operation, piece_id, kind, change_note FROM study_aether_pending WHERE scope_key = ? AND document_id = ? AND aether_version = ?
-    `).get(scopeKey, documentId, aetherVersion) as unknown as { operation: 'create' | 'update'; piece_id: string | null; kind: 'story' | 'note' | null; change_note: string } | undefined;
-    return row ? { operation: row.operation, ...(row.piece_id ? { pieceId: row.piece_id } : {}), ...(row.kind ? { kind: row.kind } : {}), changeNote: row.change_note } : null;
+      SELECT operation, piece_id, kind, change_note, created_at FROM study_aether_pending WHERE scope_key = ? AND document_id = ? AND aether_version = ?
+    `).get(scopeKey, documentId, aetherVersion) as unknown as { operation: 'create' | 'update'; piece_id: string | null; kind: 'story' | 'note' | null; change_note: string; created_at: string } | undefined;
+    return row ? { operation: row.operation, ...(row.piece_id ? { pieceId: row.piece_id } : {}), ...(row.kind ? { kind: row.kind } : {}), changeNote: row.change_note, createdAt: row.created_at } : null;
   }
 
   /** Her create that made this document, if its local half has not committed yet. */
-  pendingCreate(scopeKey: string, documentId: string): { aetherVersion: number; kind?: 'story' | 'note'; changeNote: string } | null {
+  pendingCreate(scopeKey: string, documentId: string): { aetherVersion: number; kind?: 'story' | 'note'; changeNote: string; createdAt: string } | null {
     const row = this.database.prepare(`
-      SELECT aether_version, kind, change_note FROM study_aether_pending WHERE scope_key = ? AND document_id = ? AND operation = 'create' ORDER BY aether_version LIMIT 1
-    `).get(scopeKey, documentId) as unknown as { aether_version: number; kind: 'story' | 'note' | null; change_note: string } | undefined;
-    return row ? { aetherVersion: Number(row.aether_version), ...(row.kind ? { kind: row.kind } : {}), changeNote: row.change_note } : null;
+      SELECT aether_version, kind, change_note, created_at FROM study_aether_pending WHERE scope_key = ? AND document_id = ? AND operation = 'create' ORDER BY aether_version LIMIT 1
+    `).get(scopeKey, documentId) as unknown as { aether_version: number; kind: 'story' | 'note' | null; change_note: string; created_at: string } | undefined;
+    return row ? { aetherVersion: Number(row.aether_version), ...(row.kind ? { kind: row.kind } : {}), changeNote: row.change_note, createdAt: row.created_at } : null;
   }
 
   /** The writes of a document up to a version are settled (committed, or adopted by a sync). */
