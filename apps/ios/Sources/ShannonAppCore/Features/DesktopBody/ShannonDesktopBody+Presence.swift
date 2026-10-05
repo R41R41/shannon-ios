@@ -32,6 +32,7 @@ extension ShannonDesktopBody {
             guard heard else {
                 // An older server would take the window for the app itself: nothing is registered or sent.
                 support = .unsupported
+                registeredCamera = nil
                 return 600
             }
             if probing {
@@ -45,12 +46,19 @@ extension ShannonDesktopBody {
             if presence.unchanged != true { apply(presence) }
             return Double(min(10, max(3, presence.pollAfterSeconds ?? 10)))
         } catch let refusal as ShannonBodyRefusal {
-            if refusal.status == 401 { support = .notConnected }
+            if refusal.status == 401 {
+                // A new pairing is a new device: it registers again before it reads her messages.
+                support = .notConnected
+                registeredCamera = nil
+            }
             return 30
         } catch {
             return 15
         }
     }
+
+    /// The server holds her registration as a full body (the last registration succeeded).
+    var isRegistered: Bool { registeredCamera != nil }
 
     /// Registers her full body (`surface: "mac"`), and again whenever the camera flag changes.
     func registerIfNeeded(force: Bool = false) async {
@@ -87,7 +95,9 @@ extension ShannonDesktopBody {
             answeredLooks.insert(look.id)
             Task { await self.takeLook(look) }
         }
-        if let latest = presence.reachOut?.latestId, latest != lastReachOutID {
+        // Only as her registered body: unregistered, the server would take the read as an ordinary one and hand the body
+        // a message an app is saying through his earphones. The newest id is kept unseen until then.
+        if isRegistered, let latest = presence.reachOut?.latestId, latest != lastReachOutID {
             lastReachOutID = latest
             enqueue { await self.readReachOuts() }
         }
@@ -105,7 +115,7 @@ extension ShannonDesktopBody {
     /// Reads her messages as her body (an app that says one through his earphones keeps it) and shows the new ones.
     /// Reading never marks them read: that belongs to the apps.
     func readReachOuts() async {
-        guard let client, let conversation, isShown,
+        guard let client, let conversation, isShown, isRegistered,
               let inbox = try? await client.bodyInitiatives(scopeKey: conversation.scopeKey) else { return }
         var shown = UserDefaults.standard.stringArray(forKey: Self.shownReachOutsKey) ?? []
         let fresh = inbox.messages.filter { $0.kind == "reach_out" && !shown.contains($0.id) }
@@ -135,7 +145,7 @@ extension ShannonDesktopBody {
     }
 
     private func reportDelivery(_ id: String, _ outcome: String) async {
-        guard let client, let conversation, mayBeHeard else { return }
+        guard let client, let conversation, mayBeHeard, isRegistered else { return }
         try? await client.reportReachOut(scopeKey: conversation.scopeKey, id: id, outcome: outcome)
     }
 
