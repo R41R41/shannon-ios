@@ -32,7 +32,8 @@ extension ShannonDesktopBody {
         // is neither shown nor said here (it is in the Talk).
         enqueue {
             guard self.audience == .owner else { return }
-            await self.say(message.text, id: message.id, expression: "curious", speak: self.speaks && !self.soundTaken && !self.away.isAway)
+            await self.say(
+                message.text, id: message.id, expression: "curious", speak: self.speaks && !self.soundTaken && !self.away.isAway, ownerOnly: true)
         }
     }
 

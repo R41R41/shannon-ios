@@ -315,7 +315,9 @@ public final class ShannonDesktopBody {
 
     /// Shows one line of hers in the bubble, and says it when `speak` is true. Answers whether any of it was heard.
     @discardableResult
-    func say(_ text: String, id: String, expression: String?, feeling: String? = nil, speak: Bool) async -> Bool {
+    /// `ownerOnly`: words for him alone (what she saw of his room). The moment someone else may be there, her voice stops
+    /// and the bubble goes, also while it is still held.
+    func say(_ text: String, id: String, expression: String?, feeling: String? = nil, speak: Bool, ownerOnly: Bool = false) async -> Bool {
         let trimmed = String(text.prefix(160))
         guard !trimmed.isEmpty else { return false }
         if let expression { ShannonLive2DStage.shared.express(expression, feeling: feeling, seconds: ShannonDesktopBodyBubble.seconds(for: trimmed)) }
@@ -323,6 +325,19 @@ public final class ShannonDesktopBody {
         shown.isSpoken = speak
         line = shown
         lineTask?.cancel()
+        if ownerOnly {
+            Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    guard let self, self.line?.id == id else { return }
+                    guard self.audience == .owner else {
+                        self.voice?.stop()
+                        self.line = nil
+                        return
+                    }
+                }
+            }
+        }
         var heard = false
         if speak, let voice {
             await withSpeakingPhase { await voice.say(shown) { heard = $0 } }
