@@ -144,6 +144,21 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
         withExtendedLifetime(conversation) {}
     }
 
+    func testAFinishedDictationIsNeverDroppedByACall() {
+        let call = ShannonDesktopVoiceCall()
+        let conversation = ShannonConversationModel.designPreview()
+        call.attach(conversation: conversation, menuBar: nil)
+        call.dictation.phase = .ready
+        XCTAssertFalse(call.dictationHoldsMicrophone, "a stopped recorder holds no microphone")
+        XCTAssertTrue(call.dictationBlocksCall)
+        call.start(threadID: nil)
+        XCTAssertEqual(call.dictation.phase, .ready, "the recording waits for the owner's click")
+        XCTAssertNil(call.workspace.connectionRequestID, "no call began")
+        XCTAssertEqual(call.session.phase, .idle)
+        call.dictation.phase = .idle
+        withExtendedLifetime(conversation) {}
+    }
+
     func testAReconnectOfTheSameCallIsOneCallToTheOtherDevices() {
         let session = ShannonGeminiLiveSessionModel()
         var reports: [Bool] = []

@@ -104,4 +104,6 @@ extension ShannonGeneratedStrings {
     public static let voiceMacMute = "ミュート"
     /// `voice.mac.unmute`
     public static let voiceMacUnmute = "ミュートを解除"
+    /// `voice.mac.callWaitsForDictation`
+    public static let voiceMacCallWaitsForDictation = "音声入力の文字を入力欄に入れると、音声会話を始められます"
 }

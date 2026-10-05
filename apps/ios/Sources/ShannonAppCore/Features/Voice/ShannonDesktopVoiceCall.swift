@@ -55,6 +55,11 @@ public final class ShannonDesktopVoiceCall {
     public var dictationHoldsMicrophone: Bool {
         [.requestingPermission, .listening, .transcribing].contains(dictation.phase)
     }
+    /// Dictation stands in the way of a call: it holds the microphone, or a finished recording (`.ready`, after the
+    /// automatic stop) waits for the owner's click to be written into the draft. A call never discards dictated speech.
+    public var dictationBlocksCall: Bool {
+        dictationHoldsMicrophone || dictation.phase == .ready
+    }
     /// The Talk the call's turns are written to.
     public var threadID: String? { workspace.threadContext?.threadID }
 
@@ -83,10 +88,10 @@ public final class ShannonDesktopVoiceCall {
 
     /// 音声会話を開始 in Talk's composer: a call on the Talk in front (a new Talk when none is).
     public func start(threadID: String?) {
-        guard let conversation, !holdsMicrophone else { return }
+        guard let conversation, !holdsMicrophone, !dictationBlocksCall else { return }
         notice = nil
-        // Two captures never run at once: dictation that is still open gives way to the call, and so does her
-        // message through the earphones with the exchange after it.
+        // Two captures never run at once: a dictation error left on screen is cleared (dictated speech is never
+        // dropped: the call waits for it, above), and her message through the earphones gives way too.
         dictation.cancel()
         ShannonSpeechArbiter.shared.microphoneWillBeTaken?()
         workspace.beginCall(

@@ -157,7 +157,7 @@ public enum ShannonVoiceRecordingPolicy {
 @MainActor
 @Observable
 public final class ShannonVoiceConversationModel: NSObject {
-    public private(set) var phase: ShannonVoicePhase = .idle
+    public internal(set) var phase: ShannonVoicePhase = .idle
     public private(set) var transcript = ""
     public private(set) var recordingDuration: TimeInterval = 0
     public private(set) var errorMessage: String?

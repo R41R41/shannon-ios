@@ -218,9 +218,11 @@ extension DesktopComposer {
         }
         .buttonStyle(.bordered)
         .buttonBorderShape(.circle)
-        .disabled(voiceCall.dictationHoldsMicrophone)
-        .help(ShannonGeneratedStrings.voiceStart)
+        // A finished dictation is written into the draft first (the microphone button), never dropped by a call.
+        .disabled(voiceCall.dictationBlocksCall)
+        .help(voiceCall.dictationBlocksCall ? ShannonGeneratedStrings.voiceMacCallWaitsForDictation : ShannonGeneratedStrings.voiceStart)
         .accessibilityLabel(ShannonGeneratedStrings.voiceStart)
+        .accessibilityHint(voiceCall.dictationBlocksCall ? ShannonGeneratedStrings.voiceMacCallWaitsForDictation : "")
         .accessibilityIdentifier("talk-voice-start")
     }
 

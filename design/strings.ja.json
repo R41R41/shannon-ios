@@ -1286,6 +1286,13 @@
       "note": "同じ、ミュート中。"
     },
     {
+      "key": "voice.mac.callWaitsForDictation",
+      "text": "音声入力の文字を入力欄に入れると、音声会話を始められます",
+      "apple": "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift",
+      "only": "apple",
+      "note": "Mac の「音声会話を開始」が使えないときの手がかり（読み上げ）。音声入力が録っている間と、録り終えた声が文字になるのを待っている間。録った声を通話が黙って捨てないため（2026-10-06 の見直し）。"
+    },
+    {
       "key": "nav.delivery",
       "text": "配信",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
