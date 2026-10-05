@@ -46,6 +46,13 @@ final class ShannonDesktopBodyTests: XCTestCase {
         XCTAssertNil(ShannonDesktopBodyGeometry.nearestPreset(0.8))
     }
 
+    func testHerDesktopWindowShowsTheFigureAboveEveryPlaceInTheAppsWindows() {
+        // A place that appears while she stands on the desktop goes below her: the last host shows the figure.
+        XCTAssertEqual(ShannonLive2DStagePolicy.insertionIndex(for: .dialogue, among: [.desktop]), 0)
+        XCTAssertEqual(ShannonLive2DStagePolicy.insertionIndex(for: .bodyScreen, among: [.voice, .desktop]), 1)
+        XCTAssertEqual(ShannonLive2DStagePolicy.insertionIndex(for: .desktop, among: [.hero, .bodyScreen]), 2)
+    }
+
     // MARK: Carrying her
 
     func testAPressOnHerHeadIsThePagesAtOnce() {
