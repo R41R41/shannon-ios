@@ -105,24 +105,6 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         }
     }
 
-    /// The switch reaches the screens around the call through the session itself (not a view), on both apps.
-    func testASwitchClearsTheIPhoneComposerThroughTheCallsOwnWiring() {
-        let workspace = ShannonVoiceWorkspaceState()
-        let model = ShannonGeminiLiveSessionModel()
-        let conversation = ShannonConversationModel.designPreview()
-        _ = workspace.beginCall(mode: .owner, speechProvider: .gemini, threadID: nil,
-            conversationModel: conversation, geminiVoiceModel: model)
-        workspace.connectionRequestID = nil
-        model.phase = .listening
-        workspace.restoreFailedText("明日の歯医者は何時？", participantMode: .owner)
-        workspace.pendingCameraData = Data([1])
-        model.switchParticipantMode(to: .guest, origin: .spoken)
-        XCTAssertEqual(workspace.typedMessage, "")
-        XCTAssertNil(workspace.pendingCameraData)
-        model.stop()
-        withExtendedLifetime(conversation) {}
-    }
-
     /// The Mac's bar and the iPhone's composer both read `textSendState`: hidden owner text is never offered back.
     func testAFailedGuestReplyNeverOffersTheOwnersHiddenTextBack() async {
         let model = liveModel()
@@ -141,37 +123,6 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         for _ in 0..<200 where model.responseTask != nil { try? await Task.sleep(for: .milliseconds(5)) }
         XCTAssertEqual(model.textSendState.failedText, "ミキです")
         model.stop()
-    }
-
-    func testTheIPhoneComposerLosesRestoredOwnerTextEditedOrNotWhenAFriendJoins() {
-        let workspace = ShannonVoiceWorkspaceState()
-        workspace.restoreFailedText("明日の歯医者は何時？", participantMode: .owner)
-        XCTAssertEqual(workspace.typedMessage, "明日の歯医者は何時？")
-        workspace.typedMessage += "あと保険証"
-        workspace.typedMessageChanged()
-        workspace.participantModeChanged(to: .guest)
-        XCTAssertEqual(workspace.typedMessage, "", "edited owner text leaves too")
-
-        // A draft he types for the guests stays; so does text restored in 「友人も一緒」.
-        workspace.typedMessage = "ミキさん、ようこそ"
-        workspace.typedMessageChanged()
-        workspace.participantModeChanged(to: .guest)
-        XCTAssertEqual(workspace.typedMessage, "ミキさん、ようこそ")
-        workspace.typedMessage = ""
-        workspace.typedMessageChanged()
-        workspace.restoreFailedText("よろしく", participantMode: .guest)
-        workspace.participantModeChanged(to: .guest)
-        XCTAssertEqual(workspace.typedMessage, "よろしく")
-
-        // Once the composer was emptied, nothing is marked any more.
-        workspace.typedMessage = ""
-        workspace.typedMessageChanged()
-        workspace.restoreFailedText("内緒", participantMode: .owner)
-        workspace.typedMessage = ""
-        workspace.typedMessageChanged()
-        workspace.typedMessage = "新しい下書き"
-        workspace.participantModeChanged(to: .guest)
-        XCTAssertEqual(workspace.typedMessage, "新しい下書き")
     }
 
     /// The owner's words from before the switch are answered, but never kept as the friend's.
@@ -223,15 +174,6 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         model.stop()
     }
 
-    /// iPhone: the send was refused before it left, so the text is still in the composer when the failure comes.
-    func testTheIPhoneMarksFailedOwnerTextThatNeverLeftTheComposer() {
-        let workspace = ShannonVoiceWorkspaceState()
-        workspace.typedMessage = "明日の歯医者は何時？ "
-        workspace.restoreFailedText("明日の歯医者は何時？", participantMode: .owner)
-        workspace.participantModeChanged(to: .guest)
-        XCTAssertEqual(workspace.typedMessage, "")
-    }
-
     /// What he was saying at the tap (being assembled, or still being recognised) is his: shown nowhere, not the guests'.
     func testOwnerSpeechInFlightAtTheControlSwitchStaysHis() async {
         let model = liveModel()
@@ -268,5 +210,35 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         model.stop()
         XCTAssertFalse(model.hidesOwnerScreens, "the call ended")
         XCTAssertEqual(ShannonGeneratedStrings.voiceGuestHidesTalk, "友人も一緒の通話中は、トークを隠しています")
+    }
+
+    /// iPhone: everything in the call's composer when a friend joins was typed outside 「友人も一緒」: it is set aside,
+    /// not deleted, through the call's own wiring (no view), and comes back with 本人だけ or the end of the call.
+    func testTheIPhoneComposerSetsTheOwnersTextAsideWhileAFriendIsThere() {
+        let workspace = ShannonVoiceWorkspaceState()
+        let model = ShannonGeminiLiveSessionModel()
+        let conversation = ShannonConversationModel.designPreview()
+        _ = workspace.beginCall(mode: .owner, speechProvider: .gemini, threadID: nil,
+            conversationModel: conversation, geminiVoiceModel: model)
+        workspace.connectionRequestID = nil
+        model.phase = .listening
+        workspace.typedMessage = "明日の歯医者は何時？"
+        workspace.pendingCameraData = Data([1])
+        model.switchParticipantMode(to: .guest, origin: .spoken)
+        XCTAssertEqual(workspace.typedMessage, "", "not shown, not sent as the guests' words")
+        XCTAssertNil(workspace.pendingCameraData)
+        workspace.typedMessage = "ミキさん、ようこそ"
+        model.switchParticipantMode(to: .owner)
+        XCTAssertEqual(workspace.typedMessage, "明日の歯医者は何時？\nミキさん、ようこそ", "his comes back; the guests' draft stays")
+
+        // A failed text he typed and the end of the call.
+        workspace.typedMessage = ""
+        workspace.restoreFailedText("保険証は？", participantMode: .owner)
+        model.switchParticipantMode(to: .guest, origin: .spoken)
+        XCTAssertEqual(workspace.typedMessage, "")
+        workspace.endCall(model)
+        XCTAssertEqual(workspace.typedMessage, "保険証は？")
+        XCTAssertNil(workspace.ownerMessageAside)
+        withExtendedLifetime(conversation) {}
     }
 }

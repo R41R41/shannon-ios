@@ -127,6 +127,8 @@ extension ShannonVoiceWorkspaceState {
         geminiVoiceModel.stop()
         threadContext = nil
         clearPhoto()
+        // What he had typed before a friend joined comes back with the end of the call.
+        restoreOwnerMessage()
         callEndRevision &+= 1
     }
 }

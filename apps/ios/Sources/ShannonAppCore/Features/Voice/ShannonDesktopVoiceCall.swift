@@ -35,8 +35,8 @@ public final class ShannonDesktopVoiceCall {
     @ObservationIgnored var windowsOnScreenProbe: @MainActor () -> Bool = ShannonDesktopVoiceCall.anyWindowOnScreen
     @ObservationIgnored var menuSection: ShannonDesktopVoiceCallMenuSection?
     @ObservationIgnored var windowObservers: [NSObjectProtocol] = []
-    /// Talk's draft holds owner text that failed to go into the call.
-    @ObservationIgnored var draftHoldsOwnerText = false
+    /// What was in Talk's draft when a friend joined: set aside, put back when the call returns to 本人だけ or ends.
+    @ObservationIgnored var ownerDraftAside: String?
     /// The window the owner used last: トークに戻る brings this one back.
     @ObservationIgnored weak var lastMainWindow: NSWindow?
     /// The windows that show the app's root view, by root view (`window(_:hosts:)`).
@@ -112,6 +112,7 @@ public final class ShannonDesktopVoiceCall {
     /// 終了: what was answered stays stored, a 「友人も一緒」 period is remembered, and the card says so.
     public func end() {
         workspace.endCall(session)
+        restoreOwnerDraft()
     }
 
     /// How long quitting waits for the end of a call to reach the server.
@@ -142,28 +143,31 @@ public final class ShannonDesktopVoiceCall {
         session.switchParticipantMode(to: mode)
     }
 
-    /// Text typed into Talk's composer during a call goes into the call. Text of 本人だけ that could not be sent
-    /// stays in the draft and is marked as the owner's (as the iPhone marks restored text): it leaves the draft,
-    /// edited or not, when a friend joins.
+    /// Text typed into Talk's composer during a call goes into the call.
     @discardableResult
     public func sendText(_ text: String) -> Bool {
-        let sent = session.sendText(text)
-        if !sent, session.participantMode == .owner { draftHoldsOwnerText = true }
-        return sent
+        session.sendText(text)
     }
 
-    /// Talk's draft changed: once emptied, nothing of the owner's failed text is in it any more.
-    public func draftChanged(_ draft: String) {
-        if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { draftHoldsOwnerText = false }
-    }
-
-    /// The call switched between 本人だけ and 「友人も一緒」: an unshared photo goes, and so does the owner's failed text
-    /// in Talk's draft; a draft typed for the guests stays.
+    /// The call switched between 本人だけ and 「友人も一緒」. Into 「友人も一緒」 everything in Talk's draft was typed
+    /// outside it, so it is the owner's: set aside, neither shown nor sent with ⌘↩︎ as the guests' words. Back in
+    /// 本人だけ (or when the call ends) it returns, ahead of anything typed for the guests meanwhile.
     func participantModeChanged(to mode: ShannonVoiceParticipantMode) {
         workspace.participantModeChanged(to: mode)
-        guard mode == .guest, draftHoldsOwnerText else { return }
-        conversation?.draft = ""
-        draftHoldsOwnerText = false
+        if mode == .guest { setOwnerDraftAside() } else { restoreOwnerDraft() }
+    }
+
+    private func setOwnerDraftAside() {
+        guard let conversation, !conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        ownerDraftAside = [ownerDraftAside, conversation.draft].compactMap { $0 }.joined(separator: "\n")
+        conversation.draft = ""
+    }
+
+    func restoreOwnerDraft() {
+        guard let aside = ownerDraftAside, let conversation else { return }
+        ownerDraftAside = nil
+        conversation.draft = conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? aside : aside + "\n" + conversation.draft
     }
 
     /// The speech provider of 設定 › 声, read at the start of each call (「次の通話から反映」).

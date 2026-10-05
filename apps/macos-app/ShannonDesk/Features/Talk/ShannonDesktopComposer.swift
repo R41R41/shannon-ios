@@ -38,8 +38,9 @@ struct DesktopComposer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ShannonDesktopSpacing.small) {
-            photoContext
-            if !attachments.isEmpty {
+            // 「友人も一緒」: his photo, files and web search wait, unseen, until the call is his again (A16).
+            if !hidesOwnerItems { photoContext }
+            if !hidesOwnerItems, !attachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: ShannonDesktopSpacing.small) {
                         ForEach(Array(attachments.enumerated()), id: \.offset) { index, attachment in
@@ -76,14 +77,14 @@ struct DesktopComposer: View {
                 }
             }
 
-            if let attachmentError {
+            if let attachmentError, !hidesOwnerItems {
                 Label(attachmentError, systemImage: "exclamationmark.triangle")
                     .font(.shannonDesktop(.caption))
                     .foregroundStyle(Color.shannonAttention)
             }
             dictationNotice
 
-            if usesWebSearch {
+            if usesWebSearch, !hidesOwnerItems {
                 HStack(spacing: 7) {
                     Image(systemName: "globe")
                     Text("Webで調べる")
@@ -186,8 +187,6 @@ struct DesktopComposer: View {
             guard let photoPickerItem else { return }
             Task { await loadPickedPhoto(photoPickerItem) }
         }
-        // Owner text that failed to go into the call is cleared from the draft when a friend joins (A16).
-        .onChange(of: model.draft) { voiceCall.draftChanged(model.draft) }
         .onChange(of: model.selectedThreadId) {
             attachments = []
             usesWebSearch = false
@@ -201,6 +200,9 @@ struct DesktopComposer: View {
 /// 音声入力 (the microphone: the words go into the draft and nothing is sent until the owner sends it), and,
 /// while a call is on, text sent into the call (`voice.text-in-call`).
 extension DesktopComposer {
+    /// A call in 「友人も一緒」 is on: the owner's attachments, photo and web search are not shown.
+    var hidesOwnerItems: Bool { voiceCall.session.hidesOwnerScreens }
+
     /// A call holds the microphone: ⌘↩︎ sends the draft into it, attachments wait.
     var inCall: Bool { voiceCall.holdsMicrophone }
 

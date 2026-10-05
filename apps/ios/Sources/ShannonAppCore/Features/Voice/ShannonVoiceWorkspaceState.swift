@@ -17,9 +17,10 @@ final class ShannonVoiceWorkspaceState {
     var threadContext: ShannonVoiceThreadContext?
     var connectionRequestID: UUID?
     var typedMessage = ""
-    /// The composer holds owner text that failed to send and was put back (edited or not); it is taken away when a
-    /// friend joins. A draft typed for the guests after that is not marked.
-    private(set) var typedMessageHoldsRestoredOwnerText = false
+    /// What the owner had in the call's composer when a friend joined: set aside, never deleted, and put back when
+    /// the call returns to 本人だけ or ends. Everything in the composer at that moment was typed outside
+    /// 「友人も一緒」, so all of it is his; a draft typed while the friend is there stays where it is.
+    private(set) var ownerMessageAside: String?
     /// The multiline composer revealed by the call screen's 文字 control.
     var showsTextComposer = false
     var showsInputPicker = false
@@ -49,32 +50,36 @@ final class ShannonVoiceWorkspaceState {
         if isUp { callScreenPresenters.insert(presenter) } else { callScreenPresenters.remove(presenter) }
     }
 
-    /// Text that failed to send goes back into the empty composer. In 本人だけ it is the owner's own text.
+    /// Text that failed to send goes back into the empty composer.
     func restoreFailedText(_ text: String, participantMode: ShannonVoiceParticipantMode) {
-        let current = typedMessage.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Still in the composer (the send was refused before it left): the same text, marked as his.
-        if current == text.trimmingCharacters(in: .whitespacesAndNewlines) {
-            if participantMode == .owner { typedMessageHoldsRestoredOwnerText = true }
+        guard typedMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             showsTextComposer = true
             return
         }
-        guard current.isEmpty else { return }
         typedMessage = text
-        typedMessageHoldsRestoredOwnerText = participantMode == .owner
         showsTextComposer = true
     }
 
-    /// The composer was emptied (sent, or cleared by the owner): nothing of the restored text is left.
-    func typedMessageChanged() {
-        if typedMessage.isEmpty { typedMessageHoldsRestoredOwnerText = false }
-    }
-
-    /// Into 「友人も一緒」: restored owner text, edited or not, leaves the composer; his own new draft stays.
+    /// A switch between 本人だけ and 「友人も一緒」: an unshared photo goes; into 「友人も一緒」 the owner's text is set
+    /// aside (so it is neither shown nor sent as the guests' words), back in 本人だけ it returns.
     func participantModeChanged(to mode: ShannonVoiceParticipantMode) {
         clearPhoto()
-        guard mode == .guest, typedMessageHoldsRestoredOwnerText else { return }
+        if mode == .guest { setOwnerMessageAside() } else { restoreOwnerMessage() }
+    }
+
+    private func setOwnerMessageAside() {
+        guard !typedMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        ownerMessageAside = [ownerMessageAside, typedMessage].compactMap { $0 }.joined(separator: "\n")
         typedMessage = ""
-        typedMessageHoldsRestoredOwnerText = false
+    }
+
+    /// Puts the owner's text back, ahead of anything typed meanwhile.
+    func restoreOwnerMessage() {
+        guard let aside = ownerMessageAside else { return }
+        ownerMessageAside = nil
+        typedMessage = typedMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? aside : aside + "\n" + typedMessage
+        if !typedMessage.isEmpty { showsTextComposer = true }
     }
 
     func clearPhoto() {

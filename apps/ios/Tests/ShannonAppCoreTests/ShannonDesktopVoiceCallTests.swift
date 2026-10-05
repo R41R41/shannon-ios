@@ -309,28 +309,7 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
         XCTAssertFalse(call.rootWindows.contains { $0 === shown }, "a root view that went away hosts nothing")
     }
 
-    func testOwnerTextThatFailedToGoIntoTheCallLeavesTheDraftWhenAFriendJoins() {
-        let call = ShannonDesktopVoiceCall()
-        let conversation = ShannonConversationModel.designPreview()
-        call.attach(conversation: conversation, menuBar: nil)
-        call.session.phase = .listening
-        conversation.draft = "明日の歯医者は何時？"
-        XCTAssertFalse(call.sendText(conversation.draft), "not connected: refused, the draft stays")
-        conversation.draft += "あと保険証"
-        call.draftChanged(conversation.draft)
-        call.session.switchParticipantMode(to: .guest, origin: .spoken)
-        call.participantModeChanged(to: .guest)
-        XCTAssertEqual(conversation.draft, "", "edited or not, his failed text leaves")
-
-        // A draft typed for the guests stays.
-        conversation.draft = "ミキさん、ようこそ"
-        call.draftChanged(conversation.draft)
-        call.participantModeChanged(to: .guest)
-        XCTAssertEqual(conversation.draft, "ミキさん、ようこそ")
-        call.session.stop()
-    }
-
-    func testASwitchClearsTalksDraftThroughTheCallsOwnWiring() async {
+    func testTalksDraftIsSetAsideWhileAFriendIsInTheCallAndComesBack() async {
         let call = ShannonDesktopVoiceCall()
         let conversation = ShannonConversationModel.designPreview()
         call.attach(conversation: conversation, menuBar: nil)
@@ -339,11 +318,21 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
         await settle()
         call.session.phase = .listening
         conversation.draft = "明日の歯医者は何時？"
-        XCTAssertFalse(call.sendText(conversation.draft))
-        // A spoken switch: no view is involved.
+        XCTAssertFalse(call.sendText(conversation.draft), "not connected: refused, the draft stays")
+        // A spoken switch: the call's own wiring, no view.
+        call.session.switchParticipantMode(to: .guest, origin: .spoken)
+        XCTAssertEqual(conversation.draft, "", "⌘↩︎ cannot send it as the guests' words")
+        XCTAssertTrue(call.session.hidesOwnerScreens, "his attachments and photo are not shown either")
+        conversation.draft = "ミキさん、ようこそ"
+        call.session.switchParticipantMode(to: .owner)
+        XCTAssertEqual(conversation.draft, "明日の歯医者は何時？\nミキさん、ようこそ")
+
+        // Set aside again, then the call ends: it comes back, and nothing is left marked.
         call.session.switchParticipantMode(to: .guest, origin: .spoken)
         XCTAssertEqual(conversation.draft, "")
-        call.session.stop()
+        call.end()
+        XCTAssertEqual(conversation.draft, "明日の歯医者は何時？\nミキさん、ようこそ")
+        XCTAssertNil(call.ownerDraftAside)
     }
 
     private func settle() async {

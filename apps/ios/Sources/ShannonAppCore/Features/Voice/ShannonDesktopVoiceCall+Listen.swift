@@ -69,6 +69,7 @@ extension ShannonDesktopVoiceCall {
                 return
             }
             workspace.endCall(session)
+            restoreOwnerDraft()
             if workspace.callMemory == nil { workspace.callMemory = callMemory }
         }
     }

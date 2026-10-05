@@ -140,7 +140,6 @@ public struct ShannonGeminiLiveVoiceView: View {
             guard let failedText = model.textSendState.failedText else { return }
             workspace.restoreFailedText(failedText, participantMode: model.participantMode)
         }
-        .onChange(of: workspace.typedMessage) { workspace.typedMessageChanged() }
     }
 
     private var statusPresentation: ShannonGeminiLiveStatusPresentation {
