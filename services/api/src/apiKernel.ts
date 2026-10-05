@@ -105,6 +105,7 @@ import {
   type VoyagerTaskProjection,
 } from './organize.js';
 import { InMemoryVoiceIdentityStore, type ShannonVoiceIdentityStore } from './voiceIdentity.js';
+import { OwnOutreach, type OwnOutreachReader } from './ownOutreach.js';
 export interface ShannonApiKernelOptions {
   chatModel?: ShannonChatModel;
   voiceDecision?: VoiceDecisionGateway;
@@ -132,7 +133,7 @@ export interface ShannonApiKernelOptions {
   memoryRecall?: TurnMemoryRecall;
   peopleMemory?: PeopleMemoryStore;
   autonomy?: ShannonAutonomyService;
-  notion?: NotionTurnReader; body?: ShannonBodyOptions; upcoming?: OwnerUpcoming;
+  notion?: NotionTurnReader; body?: ShannonBodyOptions; upcoming?: OwnerUpcoming; /** What she did on her own (`ownOutreach.ts`). */ ownOutreach?: OwnOutreachReader;
 }
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel;
@@ -160,7 +161,7 @@ export class ShannonApiKernel {
   private readonly memoryRecall: TurnMemoryRecall | null;
   private readonly people: PeopleMemory;
   private readonly autonomy: ShannonAutonomyService;
-  private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming;
+  private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null;
   /** What the server knows when it offers her tools: others present, and what her writes must not repeat (`shannonToolSession.ts`). */
   private readonly toolServer: ConversationToolServer;
   constructor(
@@ -198,12 +199,13 @@ export class ShannonApiKernel {
     this.notion = options.notion ?? null;
     this.people = new PeopleMemory(options.peopleMemory ?? new SQLitePeopleMemoryStore(':memory:'), this.stateStore);
     this.autonomy = options.autonomy ?? createInMemoryAutonomyService(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) });
-    this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now);
+    this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now); this.ownOutreach = options.ownOutreach ? new OwnOutreach(options.ownOutreach, this.now) : null;
     this.body = new ShannonBody({ ...options.body, stateStore: this.stateStore, autonomy: this.autonomy, conversationStore: this.conversationStore, now: this.now });
     this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now);
     this.background = this.toolServer.turns.watching(this.background); // Each stored turn takes what her tools did with it.
   }
 
+  /** `409 OWNER_IN_CALL_ELSEWHERE` for a voice session, or the session is noted as this device's voice conversation. */ voiceSessionRefused(scopeKey: string, deviceId: string | undefined, participantMode: unknown): boolean { return !this.body.ownerCalls.admit(scopeKey, deviceId, participantMode, this.now()); }
   realtimeVoiceSession(scopeKey: string, requestedThreadId?: string, options: {
     clientDelegation?: boolean;
     participantMode?: VoiceParticipantMode;
@@ -377,7 +379,7 @@ export class ShannonApiKernel {
       const basePrompt = this.autonomy.identityProjection(body.scopeKey, audience.identity(() => this.knowledgeStore?.promptProjection(body.scopeKey)
         ?? assembleShannonSystemPrompt(captured)));
       const capabilityContext = explicitCommand ? NO_CAPABILITY_CONTEXT : conversationCapabilityContext(body.scopeKey, message,
-        { aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion, upcoming: this.upcoming }, audience.capabilities);
+        { aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion, upcoming: this.upcoming, ownOutreach: this.ownOutreach }, audience.capabilities);
       const capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
       const roomLook = this.body.turnLooks.turn(body.scopeKey, message, occurredAt, audience.audience, request);
       const dailyMindPrompt = [audience.ownFocus(this.dailyMind?.promptFor(body.scopeKey, this.now()) ?? '', this.autonomy.pursuitPrompt(body.scopeKey), captured, this.conversationStore, body.scopeKey),
@@ -488,7 +490,7 @@ export class ShannonApiKernel {
       aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
       conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people, reactions: this.body.reactions, looks: this.body.turnLooks,
-      toolServer: this.toolServer,
+      toolServer: this.toolServer, ownerCalls: this.body.ownerCalls, ownOutreach: this.ownOutreach,
     };
   }
   waitForBackground(scopeKey: string): Promise<void> { return this.background.waitForIdle(scopeKey); }

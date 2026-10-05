@@ -20,6 +20,7 @@ import { BodyTouches } from './bodyTouch.js';
 import { BODY_TOUCH_ONLY_FLAG, isFullBody, isTouchOnlyBody } from './bodyTouchOnly.js';
 import { bodyPlace, bodySurfaceMark, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
 import { ConversationLooks } from './conversationLooks.js';
+import { OWNER_CALL_LIMITS, OwnerCalls, type OwnerCallElsewhere, type OwnerCallSurface } from './ownerCallElsewhere.js';
 import type { TouchExperienceWriter } from './bodyTouchMemory.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './bodyStore.js';
 import { ownerDay, presentCompanionState } from './companionPresence.js';
@@ -52,6 +53,11 @@ export interface ShannonBodyOptions {
   reachOutReportsEnabled?: boolean;
   /** When she is touched (`bodyReaction.ts`): its tables, switch and timings, the fast model, and where a touch becomes an experience. */
   reactions?: { store?: SQLiteBodyReactionStore; config?: Partial<BodyReactionConfig>; speaker?: BodyReactionSpeaker | null; experiences?: TouchExperienceWriter | null };
+  /**
+   * Whether the owner is in a call on another device (`ownerCallElsewhere.ts`): `enabled` is `SHANNON_OWNER_CALL_ELSEWHERE`
+   * (unset means on); `surface` says which app a device is (default: her body's registration only).
+   */
+  ownerCalls?: { enabled?: boolean; surface?: (scopeKey: string, deviceId: string) => OwnerCallSurface | undefined };
 }
 
 export interface ShannonBodyDependencies extends ShannonBodyOptions {
@@ -90,6 +96,8 @@ export interface BodyPresence {
   look?: { id: string; requestedAt: string; expiresAt: string } | null;
   /** Unread messages she started on her own; `latestId` is the newest one's initiative id. Absent when the server does not deliver them. */
   reachOut?: { pending: number; latestId?: string };
+  /** The owner is in a voice call on another of his apps (added 2026-10-05). Absent when switched off on the server. */
+  ownerCallElsewhere?: OwnerCallElsewhere;
 }
 
 export type BodyPresenceUnchanged = Pick<BodyPresence, 'schemaVersion' | 'etag' | 'changedAt' | 'pollAfterSeconds'> & { unchanged: true };
@@ -127,6 +135,8 @@ const CONTEXT_PHRASE: Partial<Record<BodyEventType, (event: StoredBodyEvent) => 
   carry: () => '持ち上げて運ばれた', holdHand: () => '手をつないでもらった',
   ownerReturned: event => `${SHANNON_OWNER_NAME}が${event.minutesAway ? `${awayPhrase(event.minutesAway)}ぶりに` : ''}席へ戻った`,
 };
+/** What a touch-only body may report besides a touch: the start and end of a call on that device (added 2026-10-05). */
+const TOUCH_ONLY_ALSO: ReadonlySet<string> = new Set(['callStarted', 'callEnded']);
 const awayPhrase = (minutes: number) => minutes >= 120 ? `約${Math.round(minutes / 60)}時間` : `${minutes}分`;
 const round = (value: number, digits: number) => Math.round(value * 10 ** digits) / 10 ** digits;
 
@@ -146,6 +156,8 @@ export class ShannonBody {
   readonly touches: BodyTouches;
   /** When she is touched: her answer, and her line while it waits for his. */
   readonly reactions: BodyReactions;
+  /** The owner in a call on another device: the presence field, and the refusal of a voice request from her body. */
+  readonly ownerCalls: OwnerCalls;
 
   constructor(private readonly dependencies: ShannonBodyDependencies) {
     this.store = dependencies.store ?? new SQLiteBodyStore(':memory:');
@@ -177,6 +189,16 @@ export class ShannonBody {
       surface: (scopeKey, deviceId) => this.store.surface(scopeKey, deviceId),
       record: (scopeKey, entry) => { dependencies.autonomy.recordConversationAction(scopeKey, { ...entry, tool: BODY_REACTION_TOOL }); },
     });
+    const bodySurface = (scopeKey: string, deviceId: string): OwnerCallSurface | undefined => {
+      const surface = this.store.surface(scopeKey, deviceId);
+      return surface === 'iphone' ? 'ios' : surface === 'mac' ? 'mac' : undefined;
+    };
+    this.ownerCalls = new OwnerCalls({
+      ...(dependencies.ownerCalls?.enabled !== undefined ? { enabled: dependencies.ownerCalls.enabled } : {}),
+      events: (scopeKey, since, until) => this.store.callEvents(scopeKey, since, until),
+      isFullBody: (scopeKey, deviceId) => isFullBody(this.store.capabilities(scopeKey, deviceId)),
+      surface: dependencies.ownerCalls?.surface ?? bodySurface,
+    });
   }
 
   /** Stores a validated batch. Each event answers for itself; nothing here calls a model or writes a reply. */
@@ -185,14 +207,15 @@ export class ShannonBody {
     const at = this.dependencies.now();
     const time = Date.parse(at);
     const dayKey = ownerDay(at);
-    // A body that only feels touch has nothing else to report: its other events (away, returned, window…) are not taken.
+    // A body that only feels touch has nothing else to report of the PC: its other events (away, returned, window…) are not taken.
+    // Its own calls are facts about the phone, and tell another body that he is in a call there (`ownerCallElsewhere.ts`).
     const touchOnly = isTouchOnlyBody(this.store.capabilities(scopeKey, deviceId));
     const results = this.store.transaction(() => {
       this.store.prune(scopeKey, new Date(time - BODY_LIMITS.retentionDays * 24 * 60 * 60_000).toISOString());
       let storedToday = this.store.countForDay(scopeKey, dayKey);
       return events.map((event): BodyEventResult => {
         // A repeated key answers the same way however late the retry arrives.
-        if (touchOnly && !BODY_TOUCH_EVENT_TYPES.some(type => type === event.type)) return { id: event.id, status: 'ignored', reason: 'touch_only' };
+        if (touchOnly && !BODY_TOUCH_EVENT_TYPES.some(type => type === event.type) && !TOUCH_ONLY_ALSO.has(event.type)) return { id: event.id, status: 'ignored', reason: 'touch_only' };
         const known = this.store.known(scopeKey, event);
         if (known) return { id: event.id, status: known };
         const age = time - Date.parse(event.occurredAt);
@@ -302,6 +325,7 @@ export class ShannonBody {
       capabilities: this.store.capabilities(scopeKey, deviceId),
       ...(looking.look !== undefined ? { look: looking.look } : {}),
       ...this.reachOut(scopeKey, deviceId),
+      ...(this.ownerCalls.enabled ? { ownerCallElsewhere: this.ownerCalls.elsewhere(scopeKey, deviceId, at) } : {}),
     };
     const etag = createHash('sha256').update(JSON.stringify(content)).digest('hex').slice(0, 16);
     const key = `${scopeKey}\u0000${deviceId}`;
@@ -313,7 +337,8 @@ export class ShannonBody {
     }
     const head = {
       schemaVersion: BODY_SCHEMA_VERSION, etag, changedAt: mark.changedAt,
-      pollAfterSeconds: looking.fastPoll ? BODY_LOOK_LIMITS.fastPollSeconds : BODY_LIMITS.presencePollSeconds,
+      pollAfterSeconds: Math.min(looking.fastPoll ? BODY_LOOK_LIMITS.fastPollSeconds : BODY_LIMITS.presencePollSeconds,
+        content.ownerCallElsewhere?.active ? OWNER_CALL_LIMITS.pollSeconds : Number.POSITIVE_INFINITY),
     };
     return knownEtag === etag ? { ...head, unchanged: true } : { ...head, ...content };
   }

@@ -279,6 +279,7 @@ describe('GET /v1/body/presence', () => {
       schemaVersion: 1, etag: expect.stringMatching(/^[0-9a-f]{16}$/u), changedAt: START, pollAfterSeconds: BODY_LIMITS.presencePollSeconds,
       mood: { expression: expect.any(String), primary: 'neutral', intensity: 0, fromConversation: false, valence: expect.any(Number), arousal: expect.any(Number), openness: expect.any(Number) },
       doing: 'idle', autonomy: { state: 'disabled' }, study: { awaitingReaction: 0 }, capabilities: null, look: null,
+      ownerCallElsewhere: { active: false },
     });
   });
 
