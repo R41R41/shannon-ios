@@ -85,6 +85,29 @@ final class ShannonGeminiLiveReconnectTests: XCTestCase {
         XCTAssertEqual(reports, [false])
     }
 
+    func testEndingTheCallWhileItsReconnectWaitsForASessionSendsOneEnd() async {
+        let gate = Gate()
+        var reports: [Bool] = []
+        var abandoned = 0
+        let model = await model(gate: gate) { reports.append($0) }
+        model.sessionAbandoned = { abandoned += 1 }
+        model.phase = .listening
+        model.callIsReported = true
+        model.lastAudioReconnectAt = nil
+        model.audioFailed()
+        while gate.continuation == nil { await Task.yield() }
+        // 終了 while the reconnect's session is being made: stop() reports the end.
+        model.stop()
+        XCTAssertEqual(reports, [false])
+        // The session arrives after all: no second, orphan end.
+        gate.continuation?.resume(returning: ShannonGeminiLiveSessionDTO(
+            token: "t", model: "m", voice: "v", threadId: "th", instructions: "", expiresAt: "",
+            inputUsdPerMinute: 0, outputUsdPerMinute: 0))
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(abandoned, 0)
+        XCTAssertEqual(reports, [false])
+    }
+
     func testATransportReportsItsAudioFailureOnce() {
         var events: [ShannonTranscriptionEvent] = []
         let transport = ShannonGeminiLiveTransport(

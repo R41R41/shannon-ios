@@ -167,11 +167,13 @@ public final class ShannonGeminiLiveSessionModel {
 
         phase = .connecting
         var failedStage = "session"
+        // A reconnect of a call already reported: if it is ended while the session is made, stop() reported the end.
+        let reportedBefore = callIsReported
         do {
             let created = try await createSession(participantMode)
             failedStage = "audio"
             guard sessionGenerationID == generation else {
-                sessionAbandoned?()
+                if !reportedBefore { sessionAbandoned?() }
                 return
             }
             session = created
