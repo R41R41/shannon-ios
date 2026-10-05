@@ -76,6 +76,13 @@ extension ShannonGeminiLiveTransport {
 
     func restartEngineIfStopped() {
         guard !stopped, audioStarted, !interrupted, !audioEngine.isRunning else { return }
+        // An engine that keeps stopping is not restarted in place for ever: the call's bounded reconnect
+        // takes over, and a second failure soon after is shown.
+        guard engineRestarts.allows(at: ProcessInfo.processInfo.systemUptime) else {
+            ShannonVoiceDiagnostics.shared.record("gemini.audio.engine.restart.exhausted")
+            eventHandler(.goAway(Self.audioFailure))
+            return
+        }
         do {
             try audioEngine.start()
             playerNode.play()
@@ -85,6 +92,21 @@ extension ShannonGeminiLiveTransport {
                 metadata: ["code": String((error as NSError).code)])
             eventHandler(.goAway(Self.audioFailure))
         }
+    }
+}
+
+/// How often an engine may be started again in place: at most `limit` times within `window` seconds.
+struct ShannonVoiceEngineRestartBudget: Equatable, Sendable {
+    static let limit = 3
+    static let window: TimeInterval = 10
+    private(set) var restarts: [TimeInterval] = []
+
+    /// Counts one restart at `now` and says whether it may happen.
+    mutating func allows(at now: TimeInterval) -> Bool {
+        restarts.removeAll { now - $0 > Self.window }
+        guard restarts.count < Self.limit else { return false }
+        restarts.append(now)
+        return true
     }
 }
 

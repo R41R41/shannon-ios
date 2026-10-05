@@ -75,6 +75,15 @@ final class ShannonMacVoiceInputRoutingTests: XCTestCase {
         XCTAssertFalse(watch.isDeaf(at: 200))
     }
 
+    func testAnEngineThatKeepsStoppingIsNotRestartedInPlaceForEver() {
+        var budget = ShannonVoiceEngineRestartBudget()
+        XCTAssertTrue(budget.allows(at: 0))
+        XCTAssertTrue(budget.allows(at: 1))
+        XCTAssertTrue(budget.allows(at: 2))
+        XCTAssertFalse(budget.allows(at: 3), "the fourth within ten seconds goes to the bounded reconnect")
+        XCTAssertTrue(budget.allows(at: 11), "the window moves on")
+    }
+
     @MainActor
     func testASecondAudioFailureSoonAfterIsShownInsteadOfReconnectingAgain() {
         let model = ShannonGeminiLiveSessionModel()
