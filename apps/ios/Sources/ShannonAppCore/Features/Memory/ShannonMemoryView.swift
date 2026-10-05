@@ -66,8 +66,8 @@ public struct ShannonMemoryView: View {
 #else
         ScrollView {
             LazyVStack(alignment: .leading, spacing: ShannonSpacing.large) {
+                // 自律活動 is its own row of 「シャノン」 (A10), next to 頭の中, as on the iPhone (A4).
                 overviewContent(palette)
-                ShannonAutonomyOverviewCard(model: model.autonomy, palette: palette)
             }
             .padding(.horizontal, ShannonSpacing.large)
             .padding(.top, max(ShannonSpacing.large, workspaceTopInset))

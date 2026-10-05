@@ -36,11 +36,16 @@ struct DesktopSidebarButton: View {
             }
             .padding(.horizontal, ShannonDesktopSpacing.medium)
             .frame(height: ShannonDesktopMetrics.rowHeight)
+            .background(
+                selected ? Color.primary.opacity(0.08) : Color.clear,
+                in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.small, style: .continuous)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .fontWeight(selected ? .semibold : .regular)
         .foregroundStyle(selected ? .primary : .secondary)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

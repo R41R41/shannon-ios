@@ -34,7 +34,12 @@ extension ShannonDesktopRootView {
                 if destination == .talk, let threadID = conversation.selectedThreadId {
                     return .thread(threadID)
                 }
-                return .destination(destination)
+                // 開発 and 配信 are pages of 作業; 設定 is the row under the list.
+                switch destination.pillar {
+                case .work: return .destination(.work)
+                case .settings: return nil
+                case .talk, .shannon: return .destination(destination)
+                }
             },
             set: { selection in
                 guard let selection else { return }
@@ -57,7 +62,7 @@ extension ShannonDesktopRootView {
             focusThreadSearch: focusThreadSearch,
             showTalk: { selectDestination(.talk) },
             showWork: { selectDestination(.work) },
-            showMemory: { selectDestination(.memory) },
+            showShannon: { selectDestination(.shannon) },
             showDevelopment: { selectDestination(.development) },
             showRelease: { selectDestination(.release) },
             showSettings: { selectDestination(.settings) },

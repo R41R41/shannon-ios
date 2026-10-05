@@ -72,7 +72,7 @@
     {
       "key": "common.loading",
       "text": "読み込み中…",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyViews.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonMemoryCommitmentsPage.swift",
       "windows": "shannon-desktop:src/desk/App.tsx"
     },
     {
@@ -770,7 +770,7 @@
     {
       "key": "nav.now",
       "text": "シャノンのいま",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubCard.swift",
       "decided": "2026-10-03",
       "windowsNow": "（無い）",
       "macNow": "（無い）"
@@ -1024,7 +1024,7 @@
     {
       "key": "shannon.card.nothingWaiting",
       "text": "あなたを待っていることは、ありません。",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubCard.swift",
       "decided": "2026-10-05",
       "windowsNow": "あなたを待っていることは、ありません。",
       "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。「シャノン」の先頭のカード。iPhone も A4 でこの文にした（ようす と シャノンのカード）。"
@@ -1104,14 +1104,14 @@
     {
       "key": "hub.card.hint",
       "text": "ようすを開きます",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubCard.swift",
       "only": "apple",
       "note": "「シャノン」の先頭のカードの手がかり（読み上げ）。"
     },
     {
       "key": "hub.card.waiting",
       "text": "待っていること {count}件：{summary}",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubCard.swift",
       "only": "apple",
       "note": "「シャノン」の先頭のカード。summary は「感想 1・判断 2」の形。"
     },

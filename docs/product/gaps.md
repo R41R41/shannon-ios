@@ -8,6 +8,8 @@
 
 > **2026-10-05 追記（目だけの体）**: 所有者の決定で行が 3 つ増えた。`body.choice`（体を選ぶ 人の姿／目だけ。iPhone と Windows はある）、`body.small-eyes`（小さくしたときは目だけにする。Windows だけの窓の機能、デスクトップの追加）、`desktop.stream-output-body`（配信用の出力も選んだ体で。デスクトップの追加）。機能は 145 件、遅れている所は 127 か所。増えた 1 か所は `body.choice` の Mac（`partial`）: Mac は 設定 › すがた と「からだを開く」のシートで体を選べるが、効くのはシートだけで、Mac のトークには姿が無い。ほかの `body.*` の Mac と同じ遅れで、A15（Mac のトークの右に姿を出す）で閉じる。`--accept-gaps` で `parity-baseline.json` に入れた。
 
+> **2026-10-05 追記（Mac の 4 つの柱、A10）**: Mac のサイドバーを トーク／作業／シャノン（上）・トークの一覧（下）・設定（いちばん下）にし、シャノン に 2 列目（先頭のカードと 頭の中／自律活動／書斎）と ようす を入れた。開発と配信は 作業 の中のページ。閉じた所: `structure.four-entries`・`structure.shannon-hub`・`yousu.now`・`yousu.waiting`・`yousu.recent-events`・`yousu.mood-history`・`yousu.mood-trend` の Mac。遅れている所は 120 か所。下の 1・17 の Mac の部分は、これで済んだ。
+
 2026-10-03。Apple 側は `c40a65e`（main）のコード、Windows 側は同じ日に読んだ `shannon-desktop`（VM の `~/handoff/shannon-desktop-src.zip`）から。画面は動かしていない（ビルドもシミュレーターも使っていない）。コードと文書を読んだ結果。
 
 機能ごとの細かい状態は [`feature-matrix.md`](feature-matrix.md)（127 件）。ここは、そのうち所有者の目に入るずれを、目立つ順にまとめたもの。

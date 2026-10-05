@@ -137,11 +137,12 @@
           "note": "トークはシートの一覧そのもの。上のタイルは 作業／シャノン／設定（A4）。"
         },
         "macos": {
-          "status": "partial",
-          "note": "サイドバーは 会話／作業全体／頭の中 と、ツール（開発／Release Center／設定）。",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift"
-          ]
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift#sidebarFooter",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopNavigation.swift#enum DesktopPillar"
+          ],
+          "note": "サイドバーの上に トーク／作業／シャノン、その下にトークの一覧と検索、いちばん下に 設定（A10）。開発と配信は 作業 の中のページ（ツールバーの 作業／開発／配信）。⌘1〜⌘4 が 4 つの入口。"
         },
         "windows": {
           "status": "yes",
@@ -168,8 +169,12 @@
           "note": "先頭のカード（シャノンのいまと待っていること。押すと ようす）と、頭の中／自律活動／書斎（A4）。"
         },
         "macos": {
-          "status": "planned",
-          "branch": "未定"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shannon/ShannonDesktopRootView+Shannon.swift#shannonHubColumn",
+            "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubCard.swift"
+          ],
+          "note": "シャノン を選ぶと、2 列目に先頭のカード（iPhone と同じ ShannonHubCard。押すと ようす）と 頭の中／自律活動／書斎、右に中身（はじめは ようす）（A10）。"
         },
         "windows": {
           "status": "no",
@@ -2033,8 +2038,12 @@
           "note": "「シャノン」の先頭のカードから開く。シャノンのいまだけ（運用の切り替えは無くした。A4・A5）。"
         },
         "macos": {
-          "status": "no",
-          "note": "ブランチは iPhone の入口だけを足している。Mac のサイドバーには入口が無い。"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shannon/ShannonDesktopRootView+Shannon.swift#ShannonYousuView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift"
+          ],
+          "note": "シャノン › ようす。iPhone と同じ共通の画面（A10）。"
         },
         "windows": {
           "status": "partial",
@@ -2061,7 +2070,12 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+            "apps/macos-app/ShannonDesk/Features/Shannon/ShannonDesktopRootView+Shannon.swift#openApproval"
+          ],
+          "note": "共通の ようす の画面。許可は押すと 作業 の現在地が開く。サイドバーの シャノン の行に数（A10）。"
         },
         "windows": {
           "status": "partial",
@@ -2087,7 +2101,11 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift"
+          ],
+          "note": "共通の ようす の画面（A10）。"
         },
         "windows": {
           "status": "partial",
@@ -2114,11 +2132,12 @@
           "note": "24 時間と 7 日を読む。403・404 のときは「気分の推移」を出さない。ほかの失敗（500・429・届かない・読み取れない）は区画を残して「読めませんでした」（前に読めた線は残す）。端末の中には記録しない。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift#ShannonMoodTrendModel"
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift#ShannonMoodTrendModel",
+            "apps/macos-app/ShannonDesk/Features/Shannon/ShannonDesktopRootView+Shannon.swift#ShannonYousuView"
           ],
-          "note": "共通の ようす の画面で読む。Mac のサイドバーに ようす の入口が入るのは A10。"
+          "note": "共通の ようす の画面で読む（A10 で Mac にも入口ができた）。"
         },
         "windows": {
           "status": "yes",
@@ -2145,11 +2164,12 @@
           "note": "シャノン › ようす の、気持ちのカードのすぐ下。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift#ShannonMoodTrendPanel"
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift#ShannonMoodTrendPanel",
+            "apps/macos-app/ShannonDesk/Features/Shannon/ShannonDesktopRootView+Shannon.swift#ShannonYousuView"
           ],
-          "note": "共通の ようす の画面で、気持ちのカードの横に広く出す。Mac の ようす の入口は A10。"
+          "note": "共通の ようす の画面で、気持ちのカードの横に広く出す（A10 で Mac にも入口ができた）。"
         },
         "windows": {
           "status": "yes",

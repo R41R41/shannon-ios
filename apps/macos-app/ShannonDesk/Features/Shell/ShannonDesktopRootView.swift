@@ -17,11 +17,14 @@ public struct ShannonDesktopRootView: View {
     @SceneStorage("shannon.desktop.selectedTask") var restoredTaskID: String?
     @SceneStorage("shannon.desktop.showsInspector") var restoredInspectorRawValue: String?
     @SceneStorage("shannon.desktop.auxiliaryPanel") var restoredAuxiliaryPanelRawValue: String?
+    @SceneStorage("shannon.desktop.shannonPage") var shannonPageRawValue: String?
     @AppStorage("shannon.desktop.lastDestination") var lastDestinationRawValue = DesktopDestination.talk.rawValue
     @AppStorage("shannon.desktop.lastSelectedThread") var lastRestoredThreadID = ""
     @AppStorage("shannon.desktop.lastSelectedTask") var lastRestoredTaskID = ""
     @AppStorage(ShannonDesktopWindowRestoration.lastInspectorVisibleKey) var lastShowsInspector = false
     @AppStorage(ShannonDesktopWindowRestoration.lastAuxiliaryPanelKey) var lastAuxiliaryPanelRawValue = DesktopAuxiliaryPanel.task.rawValue
+    /// ようす and 運用 (the mark of 設定), read through the conversation's client and scope.
+    @State var yousu: ShannonYousuModel
     @State var searchText = ""
     @State var selectedTaskID: UUID?
     @State var showsInspector = false
@@ -79,6 +82,7 @@ public struct ShannonDesktopRootView: View {
         )
         _showsInspector = State(initialValue: initialChrome.showsInspector)
         _auxiliaryPanel = State(initialValue: initialChrome.auxiliaryPanel)
+        _yousu = State(initialValue: ShannonYousuModel.make(for: conversation))
         self.conversation = conversation
         self.connection = connection
         self.memory = memory

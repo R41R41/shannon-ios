@@ -57,8 +57,6 @@
     "settings.profile-state windows no",
     "settings.voice-provider macos partial",
     "settings.world-subscriptions windows no",
-    "structure.four-entries macos partial",
-    "structure.shannon-hub macos planned",
     "structure.shannon-hub windows no",
     "study.open-from-talk windows no",
     "study.tools ios planned",
@@ -120,13 +118,8 @@
     "voice.task-in-call macos no",
     "voice.text-in-call macos no",
     "voice.text-in-call windows no",
-    "yousu.mood-history macos partial",
-    "yousu.mood-trend macos partial",
-    "yousu.now macos no",
     "yousu.now windows partial",
-    "yousu.recent-events macos no",
     "yousu.recent-events windows partial",
-    "yousu.waiting macos no",
     "yousu.waiting windows partial"
   ]
 }

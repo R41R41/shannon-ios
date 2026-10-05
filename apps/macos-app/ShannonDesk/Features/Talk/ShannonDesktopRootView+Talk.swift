@@ -11,16 +11,20 @@ extension ShannonDesktopRootView {
             talkView
         case .work:
             workOverview
-        case .memory:
-            ShannonMemoryView(model: memory, showsDismissButton: false)
+                .desktopWorkPagePicker(selection: workPageSelection)
+        case .shannon:
+            shannonHub
         case .development:
             developmentView
+                .desktopWorkPagePicker(selection: workPageSelection)
         case .release:
             ShannonTestFlightDeliveryView(
                 model: release,
                 showsDismissButton: false,
                 requestRelease: requestAppleRelease
             )
+            .navigationTitle(ShannonGeneratedStrings.navDelivery)
+            .desktopWorkPagePicker(selection: workPageSelection)
         case .settings:
             settingsView
         }

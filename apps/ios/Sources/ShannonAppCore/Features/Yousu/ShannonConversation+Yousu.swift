@@ -5,7 +5,7 @@ import SwiftUI
 
 extension ShannonYousuModel {
     /// The models for one conversation, reading through the same client and scope.
-    static func make(for conversation: ShannonConversationModel) -> ShannonYousuModel {
+    public static func make(for conversation: ShannonConversationModel) -> ShannonYousuModel {
 #if DEBUG
         if conversation.isDesignPreview, let variant = ShannonYousuFixtureClient.launchVariant {
             return ShannonYousuModel(scopeKey: conversation.scopeKey, client: ShannonYousuFixtureClient(stale: variant == "opsStale"))
@@ -20,7 +20,7 @@ extension ShannonYousuModel {
 
 extension ShannonConversationModel {
     /// Work tasks that wait for a permission, as 「シャノンのいま」 lists them.
-    var waitingApprovals: [ShannonNowWaitingItem] {
+    public var waitingApprovals: [ShannonNowWaitingItem] {
         agentTasks.filter { $0.pendingApproval != nil && !$0.isArchived }.map { task in
             ShannonNowWaitingItem(id: task.id.uuidString, kind: .approval, title: task.title, detail: "作業が、あなたの許可を待っています")
         }

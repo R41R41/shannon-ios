@@ -156,22 +156,23 @@ private struct ShannonDeskCommands: Commands {
 
             Divider()
 
-            Button("トーク") { actions?.showTalk() }
+            Button(ShannonGeneratedStrings.navTalk) { actions?.showTalk() }
                 .keyboardShortcut("1")
                 .disabled(actions == nil)
-            Button("作業") { actions?.showWork() }
+            Button(ShannonGeneratedStrings.navWork) { actions?.showWork() }
                 .keyboardShortcut("2")
                 .disabled(actions == nil)
-            Button("頭の中") { actions?.showMemory() }
+            Button(ShannonGeneratedStrings.navShannon) { actions?.showShannon() }
                 .keyboardShortcut("3")
                 .disabled(actions == nil)
-            Button("開発") { actions?.showDevelopment() }
+            Button(ShannonGeneratedStrings.navSettings) { actions?.showSettings() }
                 .keyboardShortcut("4")
                 .disabled(actions == nil)
-            Button("配信") { actions?.showRelease() }
+            // 開発 and 配信 are pages of 作業 (roadmap A10).
+            Button("開発") { actions?.showDevelopment() }
                 .keyboardShortcut("5")
                 .disabled(actions == nil)
-            Button("設定") { actions?.showSettings() }
+            Button(ShannonGeneratedStrings.navDelivery) { actions?.showRelease() }
                 .keyboardShortcut("6")
                 .disabled(actions == nil)
             Button("会話の目次") { actions?.toggleOutline() }

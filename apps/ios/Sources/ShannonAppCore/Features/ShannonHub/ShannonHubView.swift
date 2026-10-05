@@ -18,13 +18,12 @@ struct ShannonHubView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     private var autonomy: ShannonAutonomyModel { memory.autonomy }
-    private var waiting: [ShannonNowWaitingItem] { yousu.now.waiting(approvals: approvals) }
 
     var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
         List {
             Section {
-                card(palette: palette)
+                ShannonHubCard(now: yousu.now, fallbackMood: fallbackMood, approvals: approvals) { showsYousu = true }
                     .listRowBackground(palette.intelligenceSoft)
             }
             Section {
@@ -80,67 +79,6 @@ struct ShannonHubView: View {
         async let own: Void = autonomy.loadIfNeeded()
         async let study: Void = autonomy.study.loadIfNeeded()
         _ = await (now, own, study)
-    }
-
-    // MARK: The card
-
-    private var moodFace: ShannonFace? {
-        yousu.now.now?.feeling.present?.face ?? yousu.now.now?.feeling.mood?.face ?? fallbackMood?.face
-    }
-
-    private var waitingLine: String {
-        let items = waiting
-        guard !items.isEmpty else { return ShannonGeneratedStrings.shannonCardNothingWaiting }
-        return ShannonGeneratedStrings.hubCardWaiting(count: String(items.count), summary: ShannonNowText.waitingSummary(items))
-    }
-
-    private func card(palette: ShannonPalette) -> some View {
-        Button {
-            showsYousu = true
-        } label: {
-            HStack(alignment: .center, spacing: ShannonSpacing.medium) {
-                ShannonAvatarView(face: moodFace ?? ShannonFace(expression: .neutral), size: 56)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
-                    Text(ShannonGeneratedStrings.navNow)
-                        .font(.shannon(.caption).weight(.semibold))
-                        .foregroundStyle(palette.textSecondary)
-                    Text(moodFace?.japaneseName ?? "まだ分かりません")
-                        .font(.shannon(.title3).weight(.semibold))
-                        .foregroundStyle(palette.textPrimary)
-                    if let line = yousu.now.ownTimeLine {
-                        Text(line)
-                            .font(.shannon(.footnote))
-                            .foregroundStyle(palette.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Text(waitingLine)
-                        .font(.shannon(.callout).weight(waiting.isEmpty ? .regular : .semibold))
-                        .foregroundStyle(waiting.isEmpty ? palette.textSecondary : palette.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.shannon(.caption).weight(.semibold))
-                    .foregroundStyle(palette.textSecondary)
-                    .accessibilityHidden(true)
-            }
-            .padding(.vertical, ShannonSpacing.small)
-            .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum, alignment: .leading)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(cardAccessibilityLabel)
-        .accessibilityHint(ShannonGeneratedStrings.hubCardHint)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityIdentifier("shannon-hub-card")
-    }
-
-    private var cardAccessibilityLabel: String {
-        [ShannonGeneratedStrings.navNow, moodFace?.japaneseName ?? "まだ分かりません", yousu.now.ownTimeLine, waitingLine]
-            .compactMap { $0 }
-            .joined(separator: "、")
     }
 
     private func row(_ title: String, symbol: String, detail: String?, palette: ShannonPalette) -> some View {

@@ -169,7 +169,11 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         )
         XCTAssertEqual(
             ShannonDesktopWindowRestoration.destination(sceneRawValue: nil, lastRawValue: "memory"),
-            .memory
+            .shannon
+        )
+        XCTAssertEqual(
+            ShannonDesktopWindowRestoration.destination(sceneRawValue: "shannon", lastRawValue: "talk"),
+            .shannon
         )
         XCTAssertEqual(
             ShannonDesktopWindowRestoration.destination(sceneRawValue: "unknown", lastRawValue: "unknown"),
@@ -222,6 +226,19 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         XCTAssertEqual(initialChrome, restoredChrome)
         XCTAssertTrue(initialChrome.showsInspector)
         XCTAssertEqual(initialChrome.auxiliaryPanel, .outline)
+    }
+
+    func testFourPillarsHoldDevelopmentAndReleaseInsideWork() {
+        XCTAssertEqual(DesktopPillar.allCases, [.talk, .work, .shannon, .settings])
+        XCTAssertEqual(DesktopDestination.development.pillar, .work)
+        XCTAssertEqual(DesktopDestination.release.pillar, .work)
+        XCTAssertEqual(DesktopDestination.shannon.pillar, .shannon)
+        XCTAssertEqual(DesktopWorkPage(destination: .release), .release)
+        XCTAssertNil(DesktopWorkPage(destination: .settings))
+        XCTAssertEqual(DesktopWorkPage.allCases.map(\.destination), [.work, .development, .release])
+        XCTAssertEqual(DesktopShannonPage.restoring(nil), .now)
+        XCTAssertEqual(DesktopShannonPage.restoring("study"), .study)
+        XCTAssertEqual(DesktopShannonPage.restoring("unknown"), .now)
     }
 
     func testDevelopmentOptionsDiscardUnsupportedModelAndNormalizeReasoning() {

@@ -8,7 +8,7 @@ This document is the entrypoint for the currently implemented Shannon design. It
 
 - iPhone presentation and lifecycle composition live in `apps/ios-app`.
 - Shared conversation, memory, settings, voice, organization, and task UI live by feature in `apps/ios/Sources/ShannonAppCore/Features`.
-- Mac composition lives by surface in `apps/macos-app/ShannonDesk/Features` (`Shell`, `Talk`, `Work`, `Development`, and `Settings`).
+- Mac composition lives by surface in `apps/macos-app/ShannonDesk/Features` (`Shell`, `Talk`, `Work`, `Development`, `Shannon`, and `Settings`). Its sidebar has the four pillars トーク／作業／シャノン／設定 (roadmap A10); 開発 and 配信 are pages of 作業.
 - Shared semantic colors and presentation primitives live in `apps/ios/Sources/ShannonAppCore/DesignSystem`.
 - The private Gemini Voice Lab under `tools/gemini-voice-lab` is a browser-based operator surface for voice comparison. It shares Shannon's semantic roles and character presence, but does not replace an iPhone or Mac product screen.
 
