@@ -144,6 +144,22 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
         withExtendedLifetime(conversation) {}
     }
 
+    func testAReconnectOfTheSameCallIsOneCallToTheOtherDevices() {
+        let session = ShannonGeminiLiveSessionModel()
+        var reports: [Bool] = []
+        session.callReported = { reports.append($0) }
+        session.callIsReported = true
+        // Another microphone, or an audio failure: the same call reconnects and its start stays reported.
+        session.stop(keepingCallReport: true)
+        XCTAssertEqual(reports, [])
+        XCTAssertTrue(session.callIsReported)
+        // The reconnect fails: the end is reported once.
+        session.fail("x")
+        XCTAssertEqual(reports, [false])
+        session.stop()
+        XCTAssertEqual(reports, [false], "never twice")
+    }
+
     // MARK: Elsewhere (owner decision 2026-10-06, option B)
 
     func testTheRowSaysTheCallAndItsPhase() {

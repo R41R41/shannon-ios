@@ -85,6 +85,9 @@ public final class ShannonGeminiLiveSessionModel {
     var endAfterBackgroundSilence: (@MainActor () -> Void)?
     /// Told `true` once a session was made and `false` when the call ends or fails (`ShannonVoiceCallPresence`). Set by the owner of the call.
     var callReported: (@MainActor (Bool) -> Void)?
+    /// The call was reported as started and not yet as ended. A reconnect of the same call keeps it open, so the
+    /// other devices see one call, not an end and a new start.
+    var callIsReported = false
     /// Told when a session was made but the call was cancelled before it began, so the server hears that it ended.
     var sessionAbandoned: (@MainActor () -> Void)?
     /// Takes the one look an owner turn asked for and returns what she says about it. Set by the owner of the call.
@@ -116,7 +119,7 @@ public final class ShannonGeminiLiveSessionModel {
         let retainedMute = sameCall && isMicrophoneMuted
         let retainedStart = sameCall ? callStartedAt : nil
         let retainedGuestCall = sameCall ? guestCall : ShannonVoiceGuestCallState()
-        stop()
+        stop(keepingCallReport: sameCall)
         backgroundSilence.speech(at: Date())
         guestCall = retainedGuestCall
         pendingTurns = retained
@@ -164,7 +167,10 @@ public final class ShannonGeminiLiveSessionModel {
                 return
             }
             session = created
-            callReported?(true)
+            if !callIsReported {
+                callIsReported = true
+                callReported?(true)
+            }
             model = created.model
             voice = created.voice
             ShannonVoiceDiagnostics.shared.record("gemini.session.created", metadata: [
@@ -212,7 +218,8 @@ public final class ShannonGeminiLiveSessionModel {
         }
     }
 
-    public func stop() {
+    /// `keepingCallReport`: the same call is about to reconnect; its start stays reported.
+    func stop(keepingCallReport: Bool) {
         resolveMicrophonePrimer(proceed: false)
         interruptionGeneration &+= 1
         microphonePrimerPhase = nil
@@ -234,8 +241,8 @@ public final class ShannonGeminiLiveSessionModel {
         stopWatchingCapture()
         if session != nil {
             recordSessionSummary()
-            callReported?(false)
         }
+        if callIsReported, !keepingCallReport { reportCallEnded() }
         transport?.stop()
         transport = nil
         session = nil
@@ -473,7 +480,7 @@ public final class ShannonGeminiLiveSessionModel {
             message: "接続が切れたため送信を中断しました。入力は残しています。"
         )
         // A failed call is no longer a call on this device; a retry makes a new session and reports it again.
-        if session != nil { callReported?(false) }
+        if callIsReported { reportCallEnded() }
         setKeepsScreenAwake(false)
         stopWatchingCapture()
         responseTask?.cancel()
