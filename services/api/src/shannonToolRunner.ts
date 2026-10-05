@@ -84,9 +84,19 @@ export class ShannonToolRunner {
     return Boolean(this.aether.access) && scopeKey !== undefined && (this.aether.study?.covers(scopeKey) ?? false);
   }
 
+  /**
+   * A tool by its name or its provider name, as this server has it: without the Aether client her Aether tools are not
+   * there at all, so a call of one is refused and recorded exactly as a call of a name that never existed (as before Aether).
+   */
+  knownTool(name: string): ShannonToolDefinition | null {
+    const tool = toolFromProviderName(name) ?? shannonTool(name);
+    return tool && !this.aether.access && (tool.name.startsWith('aether') || tool.domain === 'aether_proposal') ? null : tool;
+  }
+
   /** The gate, the input check, and the executor's preparation. A result here is the call's answer: nothing ran. */
   prepare(name: string, rawInput: unknown, context: ToolExecutionContext): { tool: ShannonToolDefinition; prepared: PreparedToolCall } | { tool: ShannonToolDefinition | null; result: ToolResult } {
-    const tool = shannonTool(name);
+    const named = shannonTool(name);
+    const tool = named && this.knownTool(named.name) ? named : null;
     const refused = authorizeToolCall(tool, context);
     if (refused || !tool) return { tool, result: refused ?? toolFailure('not_offered', 'そういう道具はない。', { retryable: false }) };
     const executor = this.executors[tool.name];
@@ -113,7 +123,7 @@ export class ShannonToolRunner {
   /** A call from a conversation that the turn refused before it reached here (a name it does not offer): recorded, not run. */
   refused(name: string, scopeKey: string, result: ToolResult): ToolResult {
     try {
-      this.recorder.recordConversationAction(scopeKey, { summary: `会話の中で道具「${(toolFromProviderName(name) ?? shannonTool(name))?.name ?? '不明'}」を使おうとしましたが、使えませんでした。`, tool: name.slice(0, 120), outcome: 'failed', reasonCode: 'not_offered' });
+      this.recorder.recordConversationAction(scopeKey, { summary: `会話の中で道具「${this.knownTool(name)?.name ?? '不明'}」を使おうとしましたが、使えませんでした。`, tool: name.slice(0, 120), outcome: 'failed', reasonCode: 'not_offered' });
     } catch { /* the refusal stands */ }
     return result;
   }

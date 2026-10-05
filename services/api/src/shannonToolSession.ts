@@ -8,7 +8,7 @@ import type { ShannonToolRunner } from './shannonToolRunner.js';
 import { toolTraceCall } from './shannonToolTrace.js';
 import { InMemoryToolTraces, TOOL_FOLLOW_UP_MILLISECONDS, ToolTurnLog, type ToolTraceStore } from './shannonToolTurns.js';
 import { toolSessionMemory } from './shannonToolTypes.js';
-import { ownToolsEnabled, providerToolName, shannonTool, toolFailure, toolFromProviderName, toolResultForModel } from './shannonTools.js';
+import { ownToolsEnabled, providerToolName, toolFailure, toolFromProviderName, toolResultForModel } from './shannonTools.js';
 import type { TurnDeadline } from './turnDeadline.js';
 import { answersWithPlace, asksForMemo, asksWhichPlace, namesAether } from './memoPlace.js';
 export { withMinecraftToolLine } from './shannonMinecraftTools.js';
@@ -74,7 +74,8 @@ export function conversationTools(
   if (othersPresent) Object.defineProperty(session, 'othersPresent', { enumerable: false, value: true });
   /** A call of a name this turn does not offer, with the reason that is true for it. */
   const refuse = (providerName: string): string => {
-    const tool = toolFromProviderName(providerName) ?? shannonTool(providerName);
+    // As this server has it: without the Aether client an Aether name is a name that does not exist (as before Aether).
+    const tool = runner.knownTool(providerName);
     const refusal = !tool ? { why: 'そういう名前の道具はない', wouldWork: '出してある道具の名前（folder_list のような形）で呼ぶ' }
       : !toolFromProviderName(providerName) ? { why: '道具の名前の形が違う', wouldWork: `${providerToolName(tool.name)} という名前で呼ぶ` }
         : !writes && tool.effect === 'write' ? { why: '聞き取りが確かでないので、書く・消す道具は出していない', wouldWork: 'ライ氏がはっきり確かめた次の返事で' }

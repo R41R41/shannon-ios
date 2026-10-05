@@ -171,6 +171,21 @@ describe('a server with only part of Aether configured', () => {
   });
 });
 
+describe('a call of an Aether tool without the Aether client', () => {
+  it('is refused and recorded exactly like a name that does not exist, as before Aether', async () => {
+    const { service } = await harness({ aether: false });
+    const entries = () => service.activityDays(scope, 30).flatMap(day => day.entries).map(entry => entry.summary);
+    const memory = toolSessionMemory();
+    const call = (name: string) => service.tools.call(name, '{}', { scopeKey: scope, surface: 'text', audience: 'owner_alone', memory });
+    for (const name of ['aether.search', 'aetherFolder.create', 'aether.propose']) expect(await call(name)).toEqual(await call('no.such'));
+    expect(new Set(entries())).toEqual(new Set(['会話の中で道具「不明」を使おうとしましたが、使えませんでした。']));
+    const server: Partial<ConversationToolServer> = { audience: { othersKnown: () => false, noteOthers: () => undefined }, now: () => '2026-10-06T01:00:00.000Z' };
+    const session = conversationTools(service, scope, 'text', true, server, 'thread\nメモを作って', new TurnDeadline(TEXT_TURN_DEADLINE)).tools!;
+    expect(await session.call('aether_search', '{}')).toBe(await session.call('no_such_tool', '{}'));
+    expect(new Set(entries())).toEqual(new Set(['会話の中で道具「不明」を使おうとしましたが、使えませんでした。']));
+  });
+});
+
 describe('her folder in Aether and proposals v2', () => {
   it('writes her own documents, refuses a stale version and the owner\'s documents, and proposes instead', async () => {
     const { fake, call, directory } = await harness({ proposals: true });
