@@ -17,6 +17,8 @@ final class ShannonVoiceWorkspaceState {
     var threadContext: ShannonVoiceThreadContext?
     var connectionRequestID: UUID?
     var typedMessage = ""
+    /// Owner text that failed to send and was put back into the composer; cleared from it when a friend joins.
+    var restoredFailedText: String?
     /// The multiline composer revealed by the call screen's 文字 control.
     var showsTextComposer = false
     var showsInputPicker = false

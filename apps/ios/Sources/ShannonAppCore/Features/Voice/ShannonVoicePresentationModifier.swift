@@ -74,7 +74,12 @@ struct ShannonVoicePresentationModifier: ViewModifier {
         // owner text that failed to send and was put back into the call's composer is not left there either.
         .onChange(of: geminiVoiceModel.participantMode) {
             workspace.clearPhoto()
-            if geminiVoiceModel.participantMode == .guest { workspace.typedMessage = "" }
+            // Only owner text that failed and was put back is taken away; a draft being typed for the guests stays.
+            if geminiVoiceModel.participantMode == .guest, let restored = workspace.restoredFailedText,
+               workspace.typedMessage == restored {
+                workspace.typedMessage = ""
+            }
+            workspace.restoredFailedText = nil
         }
         // A call that ended without this sheet's 終了 (silence in the background, no answer to her own line) closes it too.
         .onChange(of: workspace.callEndRevision) { isPresented = false }

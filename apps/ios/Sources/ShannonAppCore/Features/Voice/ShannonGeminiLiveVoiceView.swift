@@ -140,6 +140,7 @@ public struct ShannonGeminiLiveVoiceView: View {
             guard workspace.typedMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   let failedText = model.textSendState.failedText else { return }
             workspace.typedMessage = failedText
+            workspace.restoredFailedText = failedText
             workspace.showsTextComposer = true
         }
     }

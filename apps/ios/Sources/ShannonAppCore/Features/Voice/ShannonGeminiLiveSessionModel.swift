@@ -128,6 +128,10 @@ public final class ShannonGeminiLiveSessionModel {
         stop(keepingCallReport: sameCall)
         backgroundSilence.speech(at: Date())
         guestCall = retainedGuestCall
+#if os(iOS)
+        // The iPhone keeps its call screen readable while it connects too; the Mac stays awake only once live.
+        setKeepsScreenAwake(true)
+#endif
         pendingTurns = retained
         isMicrophoneMuted = retainedMute
         callStartedAt = retainedStart
@@ -298,7 +302,7 @@ public final class ShannonGeminiLiveSessionModel {
         switch event {
         case .sessionReady:
             phase = .listening
-            // Awake only while the call is live: a failed or abandoned start must not keep the device up.
+            // Awake while the call is live (the Mac takes it only now); a failure releases it.
             setKeepsScreenAwake(true)
             watchCapture()
             if callStartedAt == nil { callStartedAt = Date() }
