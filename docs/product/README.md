@@ -84,7 +84,7 @@ Windows の実装は、このリポジトリからは確かめられない。Win
 1. **色**: `ShannonDesignSystem.swift` の `ShannonColorTokens` の値を、`ShannonGeneratedTokens.Color` から取るようにする。生成した Swift を `apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/` に出すよう、生成の出力先を足す。値は同じなので、見た目は変わらない。`ShannonPalette` の名前（`brandPresence` など）はそのままでよい。役割の対応は `tokens.json` の `swift` に書いてある。
 2. **余白・角丸・動き**: `ShannonSpacing`、`ShannonShape` を生成した値に向ける。動きの長さは、直接書いてある所（下の一覧）を `ShannonGeneratedTokens.Motion` に置き換える。
 3. **Mac**: Mac のアプリは、いま共通の余白・角丸・色をまったく使っていない（[`gaps.md`](gaps.md) の 4）。画面ごとに置き換える。
-4. **文言**: 運用の画面（両方で同じ文になっている）から始め、作業の状態の語、自律活動、と進める。`strings.ja.json` で `decided` が付いている文は、所有者が決めた言葉（`windowsNow`・`macNow` が、いま出ている違う言葉）。まだ決まっていない違いは、決まってから入れる。
+4. **文言**（**A8 で済み、2026-10-05**。iPhone は運用・作業の状態・自律活動・入口の名前・ようす の文を `ShannonGeneratedStrings` から読む）: 運用の画面（両方で同じ文になっている）から始め、作業の状態の語、自律活動、と進める。`strings.ja.json` で `decided` が付いている文は、所有者が決めた言葉（`windowsNow`・`macNow` が、いま出ている違う言葉）。まだ決まっていない違いは、決まってから入れる。
 5. 置き換えた所は、検証が「アプリが生成した値を読んでいる」と見て、値の照合をやめる（`ShannonGeneratedTokens`、`ShannonGeneratedStrings` という名前がファイルにあるかで見分ける）。
 
 文字の大きさは、iPhone では Dynamic Type のテキストスタイル（`.body` など）のまま使う（`typography.scale` は、その既定の値）。Mac と Windows は、本文 15 の固定の目盛り（`typography.desktop`。所有者の決定、2026-10-03）。Swift では `ShannonGeneratedTokens.DesktopTypography`、CSS では `<html data-shannon-density="desktop">` を付けると `--shannon-font-size-*` がこの値になる。
