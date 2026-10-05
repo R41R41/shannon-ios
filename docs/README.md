@@ -13,5 +13,6 @@
 - Branch and worktree lifecycle: [`BRANCHING.md`](BRANCHING.md)
 - Verification entrypoint: [`../scripts/verify.sh`](../scripts/verify.sh)
 - Conversation regression coverage and suite-identity audit: [`testing/conversation-regression-audit.md`](testing/conversation-regression-audit.md)
+- Reach measures (fixed scenarios judged from outside, and counts from use): [`testing/reach-measures-runbook.md`](testing/reach-measures-runbook.md)
 
 These Markdown documents describe the current implementation. Historical decisions and generated operational evidence are kept separately in [`archive/index.md`](archive/index.md); archived HTML is not implementation authority unless the user explicitly selects it.
