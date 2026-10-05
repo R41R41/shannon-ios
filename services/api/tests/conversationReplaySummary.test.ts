@@ -57,30 +57,37 @@ describe('the replay summary is incremental, bounded, and given only when the wi
   it('summarizes what left the window, a little ahead, and then only what left it since', async () => {
     const h = setup();
     thread(h.store, 15);
-    expect(h.replay('voice').start).toBe(10);
+    // The budget alone would start both windows at the tenth message; a full window starts at the first boundary from there
+    // (`StableHead`), and the summary accounts for what the window that drops the most left out.
+    const dropped = () => Math.max(h.replay('voice').start, h.replay('text').start);
+    const first = dropped();
+    expect(first).toBeGreaterThanOrEqual(10);
+    expect(first).toBeLessThan(30 - 8);
     expect(await h.summarizer.refresh('owner', 'thread')).toBe('updated');
     expect(h.calls).toHaveLength(1);
     expect(h.calls[0]!.previousSummary).toBeNull();
-    // The ten messages that left the window and the twelve oldest still inside it.
-    expect(h.calls[0]!.lines).toHaveLength(22);
+    // The messages that left the window and the twelve oldest still inside it.
+    expect(h.calls[0]!.lines).toHaveLength(first + 12);
     expect(h.calls[0]!.lines[0]).toBe(`ユーザー: ${line(0)}`);
-    expect(h.calls[0]!.lines[21]).toBe(`シャノン: ${line(21)}`);
+    expect(h.calls[0]!.lines[first + 11]).toBe(`${(first + 11) % 2 ? 'シャノン' : 'ユーザー'}: ${line(first + 11)}`);
     const messages = h.store.conversationHistory('owner', 'thread');
-    expect(h.store.replaySummary('owner', 'thread')).toEqual({ summary: '要約1', coveredThroughMessageId: messages[21]!.id, chainStartedAt: minute(400), updatedAt: minute(400) });
+    expect(h.store.replaySummary('owner', 'thread')).toEqual({ summary: '要約1', coveredThroughMessageId: messages[first + 11]!.id, chainStartedAt: minute(400), updatedAt: minute(400) });
 
-    // Nothing new left the window: no model call.
+    // Nothing new left the window: no model call, turn after turn, until a message leaves it uncovered.
     expect(await h.summarizer.refresh('owner', 'thread')).toBe('current');
-    thread(h.store, 5, 15);
-    expect(await h.summarizer.refresh('owner', 'thread')).toBe('current');
+    let turns = 15;
+    while (dropped() <= first + 12) {
+      expect(await h.summarizer.refresh('owner', 'thread')).toBe('current');
+      thread(h.store, 1, turns);
+      turns += 1;
+    }
     expect(h.calls).toHaveLength(1);
-
-    // Two more turns: messages 22 and 23 have left the window uncovered.
-    thread(h.store, 2, 20);
+    const second = dropped();
     expect(await h.summarizer.refresh('owner', 'thread')).toBe('updated');
     expect(h.calls).toHaveLength(2);
     expect(h.calls[1]!.previousSummary).toBe('要約1');
-    expect(h.calls[1]!.lines[0]).toBe(`ユーザー: ${line(22)}`);
-    expect(h.calls[1]!.lines).toHaveLength(14);
+    expect(h.calls[1]!.lines[0]).toBe(`${(first + 12) % 2 ? 'シャノン' : 'ユーザー'}: ${line(first + 12)}`);
+    expect(h.calls[1]!.lines).toHaveLength(second - first);
     expect(h.store.replaySummary('owner', 'thread')).toMatchObject({ summary: '要約2', chainStartedAt: minute(400) });
   });
 

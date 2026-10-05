@@ -110,4 +110,30 @@ describe('the provider prompt cache (Syzygy ADR-0003 principle 4)', () => {
     expect(prefixShare(requests, ORDERS.toolsFirst)).toBeGreaterThan(0.85);
     expect(prefixShare(requests, ORDERS.instructionsFirst)).toBeGreaterThan(0.85);
   });
+
+  it('keeps the start of a full history on most turns, so the cache keeps it too', async () => {
+    // The smallest budget, so three games in one Talk overflow it many times over.
+    vi.stubEnv('SHANNON_CONVERSATION_REPLAY_CHARACTERS', '2000');
+    const requests = await shiritoriThread(3);
+    let full = 0;
+    let kept = 0;
+    for (let index = 2; index < requests.length; index += 1) {
+      const [before, after] = [requests[index - 1]!, requests[index]!];
+      expect(after.history.reduce((sum, item) => sum + item.content.length, 0)).toBeLessThanOrEqual(2_000);
+      if (before.history.length < 40) continue;
+      full += 1;
+      // The window kept its start: the next history begins with the whole history before it, and the request repeats it.
+      if (JSON.stringify(after.history.slice(0, before.history.length)) !== JSON.stringify(before.history)) continue;
+      kept += 1;
+      for (const order of Object.values(ORDERS)) {
+        expect(commonPrefix(order(parts(before)), order(parts(after)))).toBeGreaterThanOrEqual(throughHistory(before, order));
+      }
+    }
+    // Sliding by one message, no turn of a full window kept its start, and 0.594 / 0.171 of each request repeated the one
+    // before (54cec9a; 0.785 / 0.787 with the turn's context after the history). With the stable head 155 of 159 turns kept
+    // it, and 0.864 / 0.866 of each request repeats the one before.
+    expect(kept / full).toBeGreaterThan(0.6);
+    expect(prefixShare(requests, ORDERS.toolsFirst)).toBeGreaterThan(0.8);
+    expect(prefixShare(requests, ORDERS.instructionsFirst)).toBeGreaterThan(0.8);
+  });
 });
