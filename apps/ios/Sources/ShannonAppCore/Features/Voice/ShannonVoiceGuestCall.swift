@@ -89,9 +89,12 @@ struct ShannonVoiceGuestCallState: Equatable, Sendable {
     }
 
     /// Records one completed exchange. Speech Shannon stayed quiet for is still context.
-    mutating func record(participant: String, shannon: String) {
+    /// `answersOwnerWords`: the exchange also answered the owner's words from before 「友人も一緒」 began. Her reply may
+    /// carry what those words asked for, so it is not kept as part of the friend's call (coordinator decision
+    /// 2026-10-06); only the guests' own words are. With none, nothing is kept, and she has greeted all the same.
+    mutating func record(participant: String, shannon: String, answersOwnerWords: Bool = false) {
         append(.participant, participant)
-        append(.shannon, shannon)
+        if !answersOwnerWords { append(.shannon, shannon) }
         needsIntroduction = false
         if turns.count > Self.retainedTurnLimit {
             turns.removeFirst(turns.count - Self.retainedTurnLimit)

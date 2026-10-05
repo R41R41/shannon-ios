@@ -137,9 +137,35 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         XCTAssertEqual(sentText, "明日の歯医者は何時？\nミキです", "his question is still answered in the call")
         let context = model.guestCall.requestContext(addressedByName: false, followsShannonTurn: false)
         XCTAssertEqual(context.turns.filter { $0.role == .participant }.map(\.text), ["ミキです"])
+        XCTAssertEqual(context.turns.filter { $0.role == .shannon }, [], "her reply also answered him: not kept as the friend's call")
+        XCTAssertFalse(model.guestCall.needsIntroduction)
         XCTAssertFalse(context.turns.contains { $0.text.contains("歯医者") }, "not in the call's context")
         let period = model.guestCall.endGuestPeriod()
         XCTAssertFalse(period?.turns.contains { $0.text.contains("歯医者") } ?? true, "not in what is remembered of her")
+        model.stop()
+    }
+
+    /// Her reply to his hidden question carries his content; with no words of the guests in that batch nothing is kept.
+    func testAnExchangeThatAnsweredOnlyTheOwnerKeepsNothingButTheGreetingIsDone() async {
+        let model = liveModel()
+        model.streamSpeech = { _, _ in throw Refused() }
+        model.performStreamingDelegation = { _, _, _, _ in
+            ShannonLiveVoiceDelegationResponseDTO(threadId: "t", model: "m", reply: "歯医者は明日の10時です。")
+        }
+        model.appendUtterance(rawText: "明日の歯医者は何時？", text: "明日の歯医者は何時？", source: .typed)
+        model.switchParticipantMode(to: .guest, origin: .spoken)
+        XCTAssertTrue(model.guestCall.needsIntroduction)
+        model.beginResponse()
+        for _ in 0..<200 where model.responseTask != nil { try? await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(model.guestCall.requestContext(addressedByName: false, followsShannonTurn: false).turns, [])
+        XCTAssertFalse(model.guestCall.needsIntroduction)
+        XCTAssertNil(model.guestCall.endGuestPeriod().flatMap { $0.turns.isEmpty ? nil : $0 }, "nothing to remember")
+
+        // A later exchange of the guests alone keeps both sides as before.
+        var guest = ShannonVoiceGuestCallState()
+        guest.beginGuestPeriod()
+        guest.record(participant: "ミキです", shannon: "はじめまして。")
+        XCTAssertEqual(guest.requestContext(addressedByName: false, followsShannonTurn: false).turns.map(\.text), ["ミキです", "はじめまして。"])
         model.stop()
     }
 }
