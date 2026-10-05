@@ -65,7 +65,7 @@ import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
 import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
 import type { ShannonToolRunner } from './shannonToolRunner.js';
-import { conversationTools, toolTraceReader, type ConversationToolServer } from './shannonToolSession.js';
+import { conversationTools, toolTraceReader, withMinecraftToolLine, type ConversationToolServer } from './shannonToolSession.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from './turnDeadline.js';
 import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from './ownerCallElsewhere.js';
 
@@ -378,7 +378,7 @@ async function completeLiveVoiceDelegation(
   observer?.signal?.throwIfAborted();
   const turnPrompt = placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt;
   const replayed = replay?.request(turnPrompt) ?? { systemPrompt: turnPrompt, history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) };
-  const modelRequest = {
+  const modelRequest = withMinecraftToolLine({ // Her Minecraft body's line exactly when its request tool is offered.
     scopeKey, ...replayed,
     // What she said when she was touched is what he is answering: it precedes his words, in every mode, as context only.
     ...(reactionLine ? { history: [...replayed.history, { role: 'assistant' as const, content: reactionLine }] } : {}),
@@ -386,7 +386,7 @@ async function completeLiveVoiceDelegation(
       { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }),
     useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
-  };
+  });
   const modelStartedAt = performance.now();
   const contextMilliseconds = Math.max(0, Math.round(modelStartedAt - contextStartedAt));
   let firstModelTokenMilliseconds: number | undefined;

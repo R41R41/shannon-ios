@@ -13,7 +13,16 @@ export const BODY_SCHEMA_VERSION = 1;
 export const BODY_TOUCH_EVENT_TYPES = ['pet', 'tickle', 'poke', 'carry', 'holdHand'] as const;
 export const BODY_PRESENCE_EVENT_TYPES = ['ownerAway', 'ownerReturned'] as const;
 export const BODY_PLAIN_EVENT_TYPES = ['callStarted', 'callEnded', 'windowHidden', 'windowShown', 'appStarted'] as const;
-export const BODY_EVENT_TYPES = [...BODY_TOUCH_EVENT_TYPES, ...BODY_PRESENCE_EVENT_TYPES, ...BODY_PLAIN_EVENT_TYPES] as const;
+/**
+ * What happened to her Minecraft body (`docs/minecraft-body-contract.md`). Taken only from the one device configured
+ * as that body, in the owner's scope; a closed set, each with its own closed fields and no text.
+ */
+export const BODY_GAME_EVENT_TYPES = ['game.died'] as const;
+export const BODY_EVENT_TYPES = [...BODY_TOUCH_EVENT_TYPES, ...BODY_PRESENCE_EVENT_TYPES, ...BODY_PLAIN_EVENT_TYPES, ...BODY_GAME_EVENT_TYPES] as const;
+export type BodyGameEventType = typeof BODY_GAME_EVENT_TYPES[number];
+export const isBodyGameEvent = (type: string): type is BodyGameEventType => (BODY_GAME_EVENT_TYPES as readonly string[]).includes(type);
+/** A game's namespaced id, such as `minecraft:lava`. */
+const GAME_ID = /^[a-z0-9_.-]{1,32}:[a-z0-9_./-]{1,64}$/u;
 
 export type BodyEventType = typeof BODY_EVENT_TYPES[number];
 export type BodyAudience = 'owner' | 'others';
@@ -92,6 +101,8 @@ export interface BodyEvent {
   minutesAway?: number;
   /** Touch types only: which part of her was touched. */
   region?: BodyTouchRegion;
+  /** `game.died` only: the game's id of what killed her body, such as `minecraft:lava`. */
+  cause?: string;
 }
 
 export interface BodyCapabilities {
@@ -125,6 +136,7 @@ const integerWithin = (value: unknown, maximum: number): value is number => type
 function allowedEventFields(type: BodyEventType): readonly string[] {
   if (includes(BODY_TOUCH_EVENT_TYPES, type)) return [...COMMON_EVENT_FIELDS, 'durationMs', 'strength', 'region'];
   if (includes(BODY_PRESENCE_EVENT_TYPES, type)) return [...COMMON_EVENT_FIELDS, 'minutesAway'];
+  if (type === 'game.died') return [...COMMON_EVENT_FIELDS, 'cause'];
   return COMMON_EVENT_FIELDS;
 }
 
@@ -148,6 +160,7 @@ export function validatedBodyEvents(value: unknown): readonly BodyEvent[] | stri
     if (item.durationMs !== undefined && !integerWithin(item.durationMs, BODY_LIMITS.durationMs)) return `${at}.durationMs is invalid`;
     if (item.strength !== undefined && !(typeof item.strength === 'number' && item.strength >= 0 && item.strength <= 1)) return `${at}.strength must be 0..1`;
     if (item.minutesAway !== undefined && !integerWithin(item.minutesAway, BODY_LIMITS.minutesAway)) return `${at}.minutesAway is invalid`;
+    if (item.type === 'game.died' && (typeof item.cause !== 'string' || !GAME_ID.test(item.cause))) return `${at}.cause must be a namespaced id such as minecraft:lava`;
     events.push({
       id: item.id, type: item.type, audience: item.audience, occurredAt: new Date(time).toISOString(),
       ...(item.durationMs !== undefined ? { durationMs: item.durationMs } : {}),
@@ -155,6 +168,7 @@ export function validatedBodyEvents(value: unknown): readonly BodyEvent[] | stri
       ...(item.minutesAway !== undefined ? { minutesAway: item.minutesAway } : {}),
       // A part outside the vocabulary (a newer body) is left out, not refused: the touch itself still counts.
       ...(isBodyTouchRegion(item.region) ? { region: item.region } : {}),
+      ...(typeof item.cause === 'string' ? { cause: item.cause } : {}),
     });
   }
   return events;

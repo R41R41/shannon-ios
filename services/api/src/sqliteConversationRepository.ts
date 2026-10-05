@@ -6,6 +6,7 @@ import {
   boundedRecalledMemoryIds,
   threadNavigation,
   turnDisclosure,
+  isPlatformThreadId,
   type ThreadSummaryLineage,
   type ConversationStore,
   type ConversationThread,
@@ -111,6 +112,9 @@ export class SQLiteConversationRepository implements ConversationStore {
 
   threadId(scopeKey: string, threadId?: string): string {
     const preferred = threadId?.trim();
+    // A platform conversation (Discord, her Minecraft body…) is never the app's default Talk, and reading one creates
+    // nothing: it is created when its first turn is stored (`appendTurn` ensures it).
+    if (preferred && isPlatformThreadId(preferred)) return preferred;
     if (preferred) {
       this.ensureThread(scopeKey, preferred, null);
       this.context.defaultThreadCache.set(scopeKey, preferred);
@@ -119,10 +123,11 @@ export class SQLiteConversationRepository implements ConversationStore {
     const cached = this.context.defaultThreadCache.get(scopeKey);
     if (cached) return cached;
 
-    const threads = this.listThreads(scopeKey);
-    if (threads[0]) {
-      this.context.defaultThreadCache.set(scopeKey, threads[0].threadId);
-      return threads[0].threadId;
+    // The newest Talk of the app's own; a platform thread (game chat, Discord) that was written last is not one.
+    const newest = this.listThreads(scopeKey).find(thread => !isPlatformThreadId(thread.threadId));
+    if (newest) {
+      this.context.defaultThreadCache.set(scopeKey, newest.threadId);
+      return newest.threadId;
     }
     const created = this.createThread(scopeKey);
     this.context.defaultThreadCache.set(scopeKey, created);

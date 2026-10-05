@@ -30,6 +30,11 @@ export interface TurnCognitiveContext {
   present: MemoryAudience;
   /** Her impressions of the people present (already included in `prompt`). Absent when there are none. */
   impressionPrompt?: string;
+  /**
+   * Only what may be shown to anyone (a turn someone other than the owner wrote; owner decision 2026-10-06): no protected
+   * item, none of his intentions or goals. Later recall stages obey it too.
+   */
+  openOnly?: boolean;
 }
 
 /** A labelled memory from outside the conversation log, such as what was talked about with a person. */
@@ -63,8 +68,11 @@ export function prepareTurnCognitiveContext(
     threadId?: string;
     intents?: readonly ShannonIntent[];
     provisionalIntent?: ShannonIntent | null;
+    /** See `TurnCognitiveContext.openOnly`: decided here, at the source, rather than by filtering lines afterwards. */
+    openOnly?: boolean;
   },
 ): TurnCognitiveContext {
+  const openOnly = input.openOnly === true;
   // Current locations come only from an explicit utterance, never an old memory.
   const locations = input.locationLabels ?? [...input.message.matchAll(/(?:今は?|現在)[、\s]*([^、。\s]{2,24}?)(?:にいる|に来て|に着|です)/gu)].map(match => match[1]!);
   const recentExperiences = conversationStore.experienceCandidates(input.scopeKey);
@@ -73,7 +81,8 @@ export function prepareTurnCognitiveContext(
   // From here on items that must not reach the model with these people present are out of scope.
   snapshot = gate.snapshot();
   // A goal stated in a withheld turn is withheld with it.
-  const intentCandidates = [...input.intents ?? [], ...(input.provisionalIntent ? [input.provisionalIntent] : [])]
+  // His intentions and goals are his: none of them, nor a goal taken from them, in a turn that may show only open items.
+  const intentCandidates = openOnly ? [] : [...input.intents ?? [], ...(input.provisionalIntent ? [input.provisionalIntent] : [])]
     .filter(intent => !intent.sourceExperienceId || gate.allowsExperience(intent.sourceExperienceId))
     .filter((intent, index, rows) => rows.findIndex(candidate => candidate.id === intent.id) === index);
   const primaryIntent = selectPrimaryIntent(
@@ -82,7 +91,7 @@ export function prepareTurnCognitiveContext(
     intentCandidates,
     input.occurredAt,
   );
-  const currentGoal = input.currentGoal ?? primaryIntent?.desiredOutcome ?? snapshot.prospectiveMemories.find(memory =>
+  const currentGoal = openOnly ? undefined : input.currentGoal ?? primaryIntent?.desiredOutcome ?? snapshot.prospectiveMemories.find(memory =>
     memory.status === 'pending' && visibleMemoryText(full, memory.id, memory.summary)
     && memory.summary.split(/[、のをは]/u).some(piece => piece.length >= 3 && input.message.includes(piece)))?.summary;
   // Forgetting is judged against the whole state; the audience rule is a second, independent gate.
@@ -97,7 +106,7 @@ export function prepareTurnCognitiveContext(
     ...snapshot.relationships.map(item => ({ id: item.id, summary: item.statement, observedAt: item.observedAt, marker: gate.marker(item.id, item.disclosure) })),
     ...snapshot.prospectiveMemories.filter(memory => !memory.sourceExperienceId || visibleMemoryText(full, memory.sourceExperienceId, memory.summary))
       .map(memory => ({ id: memory.id, summary: memory.summary, observedAt: memory.createdAt, marker: gate.marker(memory.id, memory.disclosure) })),
-  ].flatMap(candidate => {
+  ].filter(candidate => !openOnly || !candidate.marker).flatMap(candidate => {
     const text = visibleMemoryText(full, candidate.id, candidate.summary);
     const promise = snapshot.prospectiveMemories.find(memory => memory.id === candidate.id);
     const summary = promise ? `[約束 status=${promise.status}; 期限=${promise.dueAt ?? promise.dueDate ?? promise.dueHint ?? '未定'}] ${text}` : text;
@@ -134,9 +143,10 @@ export function prepareTurnCognitiveContext(
     situation,
     memories: Object.freeze(memories),
     frame,
-    prompt: [turnPrompt(snapshot, situation, memories, frame, gate), impressions.prompt].filter(Boolean).join('\n\n'),
+    prompt: [turnPrompt(snapshot, situation, memories, frame, gate, openOnly), impressions.prompt].filter(Boolean).join('\n\n'),
     present: input.present,
     ...(impressions.prompt ? { impressionPrompt: impressions.prompt } : {}),
+    ...(openOnly ? { openOnly } : {}),
   });
 }
 
@@ -157,9 +167,10 @@ export function withRecalledMemories(
     situation: context.situation,
     memories: Object.freeze([...memories]),
     frame,
-    prompt: [turnPrompt(gate.snapshot(), context.situation, memories, frame, gate), context.impressionPrompt, supplementalPrompt].filter(Boolean).join('\n\n'),
+    prompt: [turnPrompt(gate.snapshot(), context.situation, memories, frame, gate, context.openOnly === true), context.impressionPrompt, supplementalPrompt].filter(Boolean).join('\n\n'),
     present: context.present,
     ...(context.impressionPrompt ? { impressionPrompt: context.impressionPrompt } : {}),
+    ...(context.openOnly ? { openOnly: true } : {}),
   });
 }
 
@@ -169,7 +180,10 @@ function turnPrompt(
   memories: readonly ContextualMemory[],
   frame: ShannonCognitiveFrame,
   gate: DisclosureGate,
+  openOnly = false,
 ): string {
+  // Only open items: no intention frame and no protected profile line (they are left out where they are made).
+  if (openOnly) return [buildTurnCognitivePrompt(situation, memories), sharedProfilePrompt(gate, 16, true)].filter(Boolean).join('\n\n');
   // With anyone else present the profile is listed line by line so each protected line carries its marker.
   if (!gate.ownerOnly) {
     const intent = buildIntentPrompt(frame);

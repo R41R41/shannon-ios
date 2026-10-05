@@ -48,6 +48,8 @@ export interface ToolExecutionContext extends ToolCallContext {
   secrets?: SecretCheck | null;
   /** In a conversation: the time this call may take, from the turn's deadline. A folder operation waits no longer. */
   timeMilliseconds?: number;
+  /** In a conversation: the Talk the call was made in (a request to her Minecraft body remembers where it was asked). */
+  threadId?: string;
 }
 
 export type ToolExecutor = (input: ToolInput, context: ToolExecutionContext) => PreparedToolCall | ToolResult;

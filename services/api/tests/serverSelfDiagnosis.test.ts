@@ -113,7 +113,8 @@ describe('the self-diagnosis', () => {
         offered: {
           text: { owner_alone: SHANNON_TOOLS.length, others: 0 },
           voice: { owner_alone: SHANNON_TOOLS.length, others: 0 },
-          autonomy: { owner_alone: SHANNON_TOOLS.length, others: 0 },
+          // Her Minecraft body's tools exist only in conversations (`shannonTools.ts`, `conversationTool`), never in her own time.
+          autonomy: { owner_alone: SHANNON_TOOLS.filter(tool => tool.surfaces.includes('autonomy')).length, others: 0 },
         },
       },
       integrations: { voyager: true, notion: true, aetherContext: true, aetherProposals: true, discordBridge: true },

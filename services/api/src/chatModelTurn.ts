@@ -19,6 +19,7 @@ import {
   stableScopeIdentifier,
 } from './chatModelSupport.js';
 import { APP_LOOK_SCHEMA } from './appLookContract.js';
+import { MINECRAFT_INTENT_SCHEMA } from './minecraftIntent.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, providerFunctionTools, toolInstructions } from './chatModelTools.js';
 
 /**
@@ -145,8 +146,9 @@ export function chatTurnRequestBody(
               ],
             },
             ...(request.placeSearch ? { places: placeSearchSchema } : {}), ...(request.offerRoomLook ? { roomLook: ROOM_LOOK_SCHEMA } : {}), ...(request.offerAppLook ? { appLook: APP_LOOK_SCHEMA } : {}),
+            ...(request.offerMinecraftIntent ? { minecraftIntent: MINECRAFT_INTENT_SCHEMA } : {}),
           },
-          required: ['reply', ...(request.offerReplyFeeling ? ['feeling'] : []), 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.offerRoomLook ? ['roomLook'] : []), ...(request.offerAppLook ? ['appLook'] : []), ...(request.generateThreadTitle ? ['threadTitle'] : [])],
+          required: ['reply', ...(request.offerReplyFeeling ? ['feeling'] : []), 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.offerRoomLook ? ['roomLook'] : []), ...(request.offerAppLook ? ['appLook'] : []), ...(request.offerMinecraftIntent ? ['minecraftIntent'] : []), ...(request.generateThreadTitle ? ['threadTitle'] : [])],
         },
       },
     },
@@ -185,6 +187,7 @@ export function chatTurnResult(
     ...(structured.places.length ? { places: structured.places } : {}),
     ...(request.offerRoomLook && structured.roomLook ? { roomLook: structured.roomLook } : {}), ...(request.offerAppLook && structured.appLook ? { appLook: structured.appLook } : {}),
     ...(request.offerReplyFeeling && structured.replyFeeling ? { replyFeeling: structured.replyFeeling } : {}),
+    ...(request.offerMinecraftIntent && structured.minecraftIntent ? { minecraftIntent: structured.minecraftIntent } : {}),
     ...(structured.artifacts.length ? { artifacts: structured.artifacts } : {}),
     ...(request.generateThreadTitle && structured.threadTitle ? { threadTitle: structured.threadTitle } : {}),
     taskDecision: structured.taskDecision,

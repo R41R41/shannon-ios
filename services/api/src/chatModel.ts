@@ -1,5 +1,6 @@
 import type { PlaceSearchContext, ShannonPlace } from './placeDiscovery.js';
 import type { ChatReplyFeeling } from './chatReplyFeeling.js';
+import type { MinecraftIntent } from './minecraftIntent.js';
 import {
   estimatedOpenAICostUsd,
   responseUsage,
@@ -65,6 +66,8 @@ export interface ShannonChatModelRequest {
   offerReplyFeeling?: boolean;
   /** The structured reply gets an `appLook` field: she may choose one look through the camera of the owner's app (`appLook.ts`). */
   offerAppLook?: boolean;
+  /** The structured reply gets a `minecraftIntent` field: in a game-chat turn of the owner she may ask her Minecraft body to do something (`minecraftBody.ts`). */
+  offerMinecraftIntent?: boolean;
   /** Her registry tools for this turn (`chatModelTools.ts`); offered unless the turn forces a web search. */
   tools?: ShannonModelToolSession;
   /** The server withheld her tools because others may be present: she is told so in one line. */
@@ -108,6 +111,8 @@ export interface ShannonChatModelResult {
   replyFeeling?: ChatReplyFeeling;
   /** What she chose for the app's camera, as the structured reply carried it (`appLookContract.ts`). */
   appLook?: string;
+  /** What she asked her Minecraft body to do, only in a turn that offered the field. */
+  minecraftIntent?: MinecraftIntent;
   artifacts?: ShannonGeneratedArtifact[];
   taskProposal?: ShannonTaskProposal;
   taskDecision?: ShannonTaskDecision;

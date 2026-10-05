@@ -16,18 +16,23 @@ import {
 import { readJson, sendJson } from './serverHttp.js';
 import type { PeopleMemoryStore } from './peopleMemoryStore.js';
 import { PlatformPeople, platformPeopleEnabled } from './platformPeople.js';
+import { SQLiteSurfaceTurnLog } from './minecraftTurnStore.js';
+import { PlatformReplyService, SHANNON_PLATFORM_REPLY_PATH, platformReplyEnabled, type PlatformReplyConversation } from './platformReply.js';
 
 export interface PlatformBridgeRouteDependencies {
   configuration: PlatformBridgeConfiguration;
   service: PlatformBridgeService;
   chatModel: ShannonChatModel;
+  /** `POST /v1/platform/reply`: null while `SHANNON_PLATFORM_REPLY` is not on (503). */
+  reply?: PlatformReplyService | null;
+  close?: () => void;
 }
 
 export const SHANNON_PLATFORM_PLACES_PATH = '/v1/platform/places';
 
 export function isPlatformBridgePath(path: string): boolean {
   return path === SHANNON_PLATFORM_TURN_PATH || path === SHANNON_PLATFORM_CONTEXT_PATH
-    || path === SHANNON_PLATFORM_PLACES_PATH;
+    || path === SHANNON_PLATFORM_PLACES_PATH || path === SHANNON_PLATFORM_REPLY_PATH;
 }
 
 export async function handlePlatformBridgeRequest(
@@ -44,6 +49,10 @@ export async function handlePlatformBridgeRequest(
     await handlePlatformBridgePlaces(request, response, dependencies);
     return;
   }
+  if (path === SHANNON_PLATFORM_REPLY_PATH) {
+    await handlePlatformBridgeReply(request, response, dependencies);
+    return;
+  }
   await handlePlatformBridgeTurn(request, response, dependencies);
 }
 
@@ -55,12 +64,45 @@ export function createConfiguredPlatformBridgeRoute(
   now: CompanionClock,
   chatModel: ShannonChatModel,
   peopleStore: PeopleMemoryStore | null = null,
+  /** The app's conversation kernel and the database, for `POST /v1/platform/reply`. Without them the route answers 503. */
+  replies: { conversation: PlatformReplyConversation; databasePath: string } | null = null,
 ): PlatformBridgeRouteDependencies | null {
   const configuration = configuredPlatformBridge(environment);
-  return configuration
-    ? { configuration, chatModel, service: new PlatformBridgeService(configuration, stateStore, conversationStore, background, now,
-      peopleStore ? new PlatformPeople(peopleStore, stateStore) : null, () => platformPeopleEnabled(environment)) }
-    : null;
+  if (!configuration) return null;
+  const service = new PlatformBridgeService(configuration, stateStore, conversationStore, background, now,
+    peopleStore ? new PlatformPeople(peopleStore, stateStore) : null, () => platformPeopleEnabled(environment));
+  const turns = replies && platformReplyEnabled(environment) ? new SQLiteSurfaceTurnLog(replies.databasePath, 'platform_reply_turns') : null;
+  const reply = replies && turns ? new PlatformReplyService({
+    scopeKey: configuration.scopeKey, bridge: service, conversationStore, conversation: replies.conversation, turns, now,
+  }) : null;
+  return { configuration, chatModel, service, reply, close: () => turns?.close() };
+}
+
+/**
+ * `POST /v1/platform/reply`: her reply to a message in a bound conversation, through the conversation kernel
+ * (`platformReply.ts`). The bridge's service token only; refused exactly as `/v1/platform/context` refuses.
+ */
+export async function handlePlatformBridgeReply(
+  request: IncomingMessage,
+  response: ServerResponse,
+  dependencies: PlatformBridgeRouteDependencies | null,
+): Promise<void> {
+  if (request.method !== 'POST') return sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+  if (!dependencies) return sendJson(response, 503, { error: 'PLATFORM_BRIDGE_NOT_CONFIGURED' });
+  if (!bearerAuthorized(request.headers.authorization, dependencies.configuration.token)) {
+    return sendJson(response, 401, { error: 'PLATFORM_BRIDGE_UNAUTHORIZED' });
+  }
+  if (!dependencies.reply) return sendJson(response, 503, { error: 'PLATFORM_REPLY_DISABLED', message: 'Platform replies are switched off on the server.' });
+  try {
+    const result = await dependencies.reply.reply(await readJson(request, 64 * 1024));
+    sendJson(response, result.duplicate ? 200 : 201, result);
+  } catch (error) {
+    if (error instanceof PlatformBridgeError) {
+      sendJson(response, error.status, { error: error.code, message: error.message });
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function handlePlatformBridgePlaces(

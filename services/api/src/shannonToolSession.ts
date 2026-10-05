@@ -11,6 +11,7 @@ import { toolSessionMemory } from './shannonToolTypes.js';
 import { ownToolsEnabled, providerToolName, shannonTool, toolFailure, toolFromProviderName, toolResultForModel } from './shannonTools.js';
 import type { TurnDeadline } from './turnDeadline.js';
 import { answersWithPlace, asksForMemo, asksWhichPlace, namesAether } from './memoPlace.js';
+export { withMinecraftToolLine } from './shannonMinecraftTools.js';
 
 /**
  * The tools of one conversation turn, for the model adapter (`chatModelTools.ts`). Owner decision 2026-10-05: her
@@ -34,13 +35,16 @@ export function conversationTools(
   deadline: TurnDeadline,
   /** A spoken turn: how far its words can be trusted (`transcriptTrust`), and the client's utterance id. */
   voice: { trust: 'reliable' | 'uncertain' | 'unknown'; utteranceId?: string } = { trust: 'reliable' },
+  /** A surface that has its own way to a domain (her Minecraft body's game chat asks it through the turn's intent). */
+  options: { withoutDomains?: readonly string[] } = {},
 ): { tools?: ShannonModelToolSession; toolsWithheld?: true } {
   const runner = autonomy?.tools;
   // Without what the server knows of the audience, nothing is offered (and nothing said about it).
   if (!runner || ownerAlone === false || !ownToolsEnabled() || !server.audience) return {};
   const threadId = turn.slice(0, Math.max(0, turn.indexOf('\n')));
   const words = turn.slice(turn.indexOf('\n') + 1);
-  const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId) : 'text';
+  // Words about Minecraft count only while her Minecraft body's request tool is offered here (review B2, 2026-10-06).
+  const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface)) : 'text';
   if (!offer) return {};
   // What the client said is not enough: what the server knows of others present vetoes the offer, and she is told so.
   if (ownerAlone === 'others' || server.audience.othersKnown(scopeKey)) return { toolsWithheld: true };
@@ -50,7 +54,8 @@ export function conversationTools(
   const writes = surface === 'text' || voice.trust === 'reliable'
     || (voice.trust === 'unknown' && ((confirms(words) && lastReplyAsksToConfirm(server, scopeKey, threadId))
       || (answersWithPlace(words) && lastReplyAsks(server, scopeKey, threadId, asksWhichPlace))));
-  const definitions = runner.offered(surface, 'owner_alone').filter(tool => writes || tool.effect === 'read');
+  const definitions = runner.offered(surface, 'owner_alone', scopeKey)
+    .filter(tool => (writes || tool.effect === 'read') && !options.withoutDomains?.includes(tool.domain));
   if (!definitions.length) return {};
   const trace = server.turns?.open(scopeKey, threadId, words, offer === 'asked', voice.utteranceId);
   const memory = toolSessionMemory(createHash('sha256').update(`${scopeKey}\n${turn}`).digest('hex'));
@@ -80,7 +85,7 @@ export function conversationTools(
       if (!check) { try { check = server.secrets?.(scopeKey); } catch { check = null; } }
       const secrets = check;
       const result = await runner.call(tool?.name ?? providerName.slice(0, 80), argumentsJson, {
-        scopeKey, surface, audience: 'owner_alone', memory, ...(secrets !== undefined ? { secrets } : {}), ...(timeMilliseconds !== undefined ? { timeMilliseconds } : {}),
+        scopeKey, surface, audience: 'owner_alone', memory, threadId, ...(secrets !== undefined ? { secrets } : {}), ...(timeMilliseconds !== undefined ? { timeMilliseconds } : {}),
       }, signal);
       trace?.called(toolTraceCall(tool?.name ?? providerName.slice(0, 80), argumentsJson, result, secrets));
       return toolResultForModel(result);
@@ -101,6 +106,16 @@ export function asksAboutOwnThings(transcript: string): boolean {
   return HER_PLACES.test(transcript) || (HER_WORK.test(transcript) && MAKES_IT_HERS.test(transcript));
 }
 
+/** Words about her Minecraft body or the game. They offer a voice turn her tools only while her body is in the game (`voiceToolOffer`). */
+export function asksAboutMinecraftBody(transcript: string): boolean {
+  return /マイクラ|マインクラフト|minecraft/iu.test(transcript);
+}
+
+/** Whether the runner offers `minecraft.request` on this surface now: her Minecraft body configured for the scope and in the game. */
+function offersMinecraftRequest(runner: ShannonToolRunner | undefined, scopeKey: string, surface: 'text' | 'voice'): boolean {
+  try { return runner?.offered(surface, 'owner_alone', scopeKey).some(tool => tool.name === 'minecraft.request') ?? false; } catch { return false; }
+}
+
 /** Her reply offered something she would do with her tools and asks him to say yes (「中を見てみましょうか？」). */
 const HER_THING = /(?:メモ|ノート|物語|お話|ファイル|フォルダ|書斎|下書き|原稿|ゴミ箱)/u;
 const HER_ACT = /(?:作|書|消|残|保存|読|見|開|移|直|まとめ|置|戻)/u;
@@ -117,9 +132,10 @@ export function asksToConfirmToolAction(reply: string): boolean {
  * 見て」「はい、お願いします」 name nothing of hers), or when her last reply, in that time, asked him to confirm
  * something she would do with them. Otherwise null: the turn keeps the plain path's speed.
  */
-export function voiceToolOffer(words: string, server: Partial<ConversationToolServer>, scopeKey: string, threadId: string): 'asked' | 'follow_up' | null {
+export function voiceToolOffer(words: string, server: Partial<ConversationToolServer>, scopeKey: string, threadId: string,
+  minecraftBodyPresent = false): 'asked' | 'follow_up' | null {
   // A memo he asks for may go to her study or her folder (or she asks where): not only Aether (owner decision 2026-10-05).
-  if (asksAboutOwnThings(words) || (asksForMemo(words) && !namesAether(words))) return 'asked';
+  if (asksAboutOwnThings(words) || (minecraftBodyPresent && asksAboutMinecraftBody(words)) || (asksForMemo(words) && !namesAether(words))) return 'asked';
   if (server.turns?.recent(scopeKey, threadId)) return 'follow_up';
   return lastReplyAsks(server, scopeKey, threadId, reply => asksToConfirmToolAction(reply) || asksWhichPlace(reply)) ? 'follow_up' : null;
 }
