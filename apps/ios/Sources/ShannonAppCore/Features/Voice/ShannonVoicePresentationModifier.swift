@@ -43,7 +43,8 @@ struct ShannonVoicePresentationModifier: ViewModifier {
             content
                 .accessibilityHidden(coversOwnerScreen && geminiVoiceModel.hidesOwnerScreens)
                 .overlay {
-                    if coversOwnerScreen, geminiVoiceModel.hidesOwnerScreens { ShannonVoiceGuestCover() }
+                    // Under the home indicator too: no row of the list shows below the cover.
+                    if coversOwnerScreen, geminiVoiceModel.hidesOwnerScreens { ShannonVoiceGuestCover().ignoresSafeArea() }
                 }
         }
         .background { ShannonPalette.resolve(colorScheme).canvas.ignoresSafeArea() }
