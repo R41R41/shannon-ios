@@ -11,9 +11,9 @@ import Foundation
 ///
 /// An end must not be lost, or the desktop stays quiet until the server's own limit: it is kept on the device
 /// (`UserDefaults`, a few small records) from the moment the call starts, sent under a little background time when
-/// the call ends, and sent again when a new call begins or the conversation view next becomes active, if it did not
-/// get through. The end of a call the app was killed in has no time of its own: it is stamped with a time before
-/// this run began (never "now", which could be after a live call's start and end that call on the server, as when
+/// the call ends, and sent again when the conversation view next becomes active, if it did not get through. The end of
+/// a call the app was killed in has no time of its own: it is sent before the next call's start (or when the view
+/// becomes active), stamped with the time this run first used the reporter, at least 1 s before that start (never "now", which could be after a live call's start and end that call on the server, as when
 /// her call is answered from the lock screen). The events are sent in order, each retried a few times.
 @MainActor
 public final class ShannonVoiceCallPresence {
