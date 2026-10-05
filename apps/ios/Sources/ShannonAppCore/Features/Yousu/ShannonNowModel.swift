@@ -37,18 +37,18 @@ public final class ShannonNowModel {
         var items = (study?.pieces ?? []).filter(\.awaitingReaction).map { piece in
             ShannonNowWaitingItem(
                 id: "piece-\(piece.id)", kind: .reaction,
-                title: piece.title.flatMap { $0.isEmpty ? nil : $0 } ?? "シャノンの物語", detail: "シャノンが感想を待っています"
+                title: piece.title.flatMap { $0.isEmpty ? nil : $0 } ?? ShannonGeneratedStrings.yousuWaitingStoryFallback, detail: ShannonGeneratedStrings.yousuWaitingAwaitingReaction
             )
         }
         if let request = ownTime?.budgetRequest, request.isPending {
             items.append(.init(
                 id: "budget-\(request.id)", kind: .decision,
-                title: "今日の予算を\(ShannonAutonomyFormat.yen(request.requestedYen))増やすお願い", detail: "自律活動で決められます"
+                title: ShannonGeneratedStrings.yousuWaitingBudgetRequest(amount: ShannonAutonomyFormat.yen(request.requestedYen)), detail: ShannonGeneratedStrings.yousuWaitingDecideInAutonomy
             ))
         }
         items += (ownTime?.proposals ?? []).filter(\.isWaiting).map { proposal in
             ShannonNowWaitingItem(
-                id: "proposal-\(proposal.id)", kind: .decision, title: proposal.title, detail: "シャノンからの提案。自律活動で決められます"
+                id: "proposal-\(proposal.id)", kind: .decision, title: proposal.title, detail: ShannonGeneratedStrings.yousuWaitingProposal
             )
         }
         return items

@@ -53,7 +53,7 @@ public struct ShannonNowView: View {
         }
         .overlay {
             if !model.didLoad, model.isLoading {
-                ProgressView("ようすを確認中")
+                ProgressView(ShannonGeneratedStrings.yousuLoading)
             }
         }
         .refreshable { await model.reload() }
@@ -88,7 +88,7 @@ public struct ShannonNowView: View {
                             .background(palette.action, in: Capsule())
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("待っていること")
+                            Text(ShannonGeneratedStrings.yousuWaitingTitle)
                                 .font(.body.weight(.semibold))
                             Text(ShannonNowText.waitingSummary(items))
                                 .font(.footnote)
@@ -96,7 +96,7 @@ public struct ShannonNowView: View {
                         }
                     }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("待っていること、\(items.count)件、\(ShannonNowText.waitingSummary(items))")
+                    .accessibilityLabel(ShannonGeneratedStrings.yousuWaitingAccessibility(count: String(items.count), summary: ShannonNowText.waitingSummary(items)))
                 }
             }
         }
@@ -115,16 +115,16 @@ public struct ShannonNowView: View {
                 ShannonAvatarView(expression: (presentFace ?? moodFace)?.expression ?? .neutral, size: 64)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
-                    Text(moodFace?.japaneseName ?? "まだ分かりません")
+                    Text(moodFace?.japaneseName ?? ShannonGeneratedStrings.yousuMoodUnknown)
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(palette.textPrimary)
                     if let presentFace {
-                        Text("いまの気持ち：\(presentFace.japaneseName)")
+                        Text(ShannonGeneratedStrings.yousuFeelingPresent(name: presentFace.japaneseName))
                             .font(.callout)
                             .foregroundStyle(palette.textPrimary)
                     }
                     ForEach(lingering, id: \.self) { label in
-                        Text("まだ残っている気持ち：\(label)")
+                        Text(ShannonGeneratedStrings.yousuFeelingLingering(label: label))
                             .font(.footnote)
                             .foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -140,7 +140,7 @@ public struct ShannonNowView: View {
     }
 
     private func feelingAccessibilityLabel(mood: ShannonFace?, present: ShannonFace?, lingering: [String]) -> String {
-        var parts = ["シャノンの気分、\(mood?.japaneseName ?? "まだ分かりません")"]
+        var parts = [ShannonGeneratedStrings.yousuMoodAccessibility(mood: mood?.japaneseName ?? ShannonGeneratedStrings.yousuMoodUnknown)]
         if let present { parts.append("いまの気持ち、\(present.japaneseName)") }
         parts += lingering.map { "まだ残っている気持ち、\($0)" }
         return parts.joined(separator: "。")
@@ -151,7 +151,7 @@ public struct ShannonNowView: View {
     @ViewBuilder
     private func ownTimeSection(palette: ShannonPalette) -> some View {
         if let ownTime = model.ownTime {
-            Section("自分の時間") {
+            Section(ShannonGeneratedStrings.yousuOwnTimeTitle) {
                 VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                     if let line = model.ownTimeLine {
                         Text(line)
@@ -160,7 +160,7 @@ public struct ShannonNowView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if let reason = model.restReason {
-                        Text("シャノンのことば：\(reason)")
+                        Text(ShannonGeneratedStrings.yousuOwnTimeHerWords(reason: reason))
                             .font(.footnote)
                             .foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -170,20 +170,20 @@ public struct ShannonNowView: View {
                             .font(.footnote)
                             .foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityLabel("最近したこと、\(ShannonYousuTime.clock(latest.occurredAt))、\(latest.summary)")
+                            .accessibilityLabel(ShannonGeneratedStrings.yousuOwnTimeLatestAccessibility(time: ShannonYousuTime.clock(latest.occurredAt), summary: latest.summary))
                     }
                 }
                 VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                     ProgressView(value: ownTime.budget.fraction)
                         .tint(palette.action)
                         .accessibilityHidden(true)
-                    Text("今日の予算 \(ownTime.budget.usedLabel)")
+                    Text(ShannonGeneratedStrings.yousuOwnTimeBudget(used: ownTime.budget.usedLabel))
                         .font(.footnote)
                         .monospacedDigit()
                         .foregroundStyle(palette.textSecondary)
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("今日の予算、\(ShannonAutonomyFormat.yen(ownTime.budget.capYen))のうち\(ShannonAutonomyFormat.yen(ownTime.budget.spentYen))を使いました")
+                .accessibilityLabel(ShannonGeneratedStrings.yousuOwnTimeBudgetAccessibility(cap: ShannonAutonomyFormat.yen(ownTime.budget.capYen), spent: ShannonAutonomyFormat.yen(ownTime.budget.spentYen)))
             }
         }
     }
@@ -191,7 +191,7 @@ public struct ShannonNowView: View {
     // MARK: Her body
 
     private func bodySection(_ body: ShannonNowBodyDTO, palette: ShannonPalette) -> some View {
-        Section("体") {
+        Section(ShannonGeneratedStrings.yousuBodyTitle) {
             HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.medium) {
                 Image(systemName: body.known && body.present ? "desktopcomputer" : "desktopcomputer.trianglebadge.exclamationmark")
                     .foregroundStyle(palette.textSecondary)
@@ -218,16 +218,16 @@ public struct ShannonNowView: View {
     @ViewBuilder
     private func timelineSection(palette: ShannonPalette) -> some View {
         let events = model.timeline
-        Section("最近のできごと") {
+        Section(ShannonGeneratedStrings.yousuRecentTitle) {
             if events.isEmpty {
-                Text("まだありません")
+                Text(ShannonGeneratedStrings.yousuRecentEmpty)
                     .font(.callout)
                     .foregroundStyle(palette.textSecondary)
             } else {
                 ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
                     let day = ShannonNowText.dayTitle(event.at)
                     let startsDay = index == 0 || ShannonNowText.dayTitle(events[index - 1].at) != day
-                    ShannonNowEventRow(event: event, day: startsDay && !(index == 0 && day == "今日") ? day : nil, spokenDay: day, palette: palette)
+                    ShannonNowEventRow(event: event, day: startsDay && !(index == 0 && day == ShannonGeneratedStrings.yousuDayToday) ? day : nil, spokenDay: day, palette: palette)
                 }
             }
         }
@@ -292,7 +292,7 @@ struct ShannonNowWaitingPage: View {
                 row(item)
             }
         }
-        .navigationTitle("待っていること")
+        .navigationTitle(ShannonGeneratedStrings.yousuWaitingTitle)
     }
 
     @ViewBuilder
@@ -302,7 +302,7 @@ struct ShannonNowWaitingPage: View {
             if let openStudyPiece {
                 Button { openStudyPiece(String(item.id.dropFirst("piece-".count))) } label: { label(item, opens: true) }
                     .buttonStyle(.plain)
-                    .accessibilityHint("書斎で開きます")
+                    .accessibilityHint(ShannonGeneratedStrings.yousuWaitingOpenStudyHint)
             } else {
                 label(item, opens: false)
             }
@@ -316,7 +316,7 @@ struct ShannonNowWaitingPage: View {
             if let openApproval {
                 Button { openApproval(item) } label: { label(item, opens: true) }
                     .buttonStyle(.plain)
-                    .accessibilityHint("作業を開きます")
+                    .accessibilityHint(ShannonGeneratedStrings.yousuWaitingOpenTaskHint)
             } else {
                 label(item, opens: false)
             }
