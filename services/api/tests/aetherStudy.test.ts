@@ -450,6 +450,25 @@ describe('her study in Aether', () => {
     expect(store.study.aether.current(scope, id)).toMatchObject({ version: 4, aetherVersion: 4 });
   });
 
+  it('leaves no unhandled rejection when the only caller of a failing sync stopped waiting at once', async () => {
+    const { fake, service } = await harness();
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      await fake.stop();
+      const aborted = AbortSignal.abort();
+      await expect(service.studyAether!.sync(scope, aborted)).rejects.toMatchObject({ code: 'TIMEOUT' });
+      // The shared run fails afterwards (Aether is gone), with nobody waiting for it.
+      await new Promise(resolve => setTimeout(resolve, 200));
+      expect(unhandled).toEqual([]);
+      // And a later caller starts a new run, which fails as such.
+      await expect(service.studyAether!.sync(scope)).rejects.toMatchObject({ code: 'UNAVAILABLE' });
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+
   it('lets app reads share a sync that just finished, while her tools still sync first', async () => {
     const { fake, call, get } = await harness();
     await call('study.create', { kind: 'note', title: '光のメモ', body: '光は数えられる。' });

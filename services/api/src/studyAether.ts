@@ -242,6 +242,9 @@ export class StudyAether {
       const started: Promise<StudyAetherSyncCounts> = this.syncOnce(scopeKey, AbortSignal.timeout(STUDY_AETHER_SYNC.runMilliseconds)).then(
         counts => { this.settle(scopeKey, started, true); return counts; },
         (error: unknown) => { this.settle(scopeKey, started, false); throw error; });
+      // The shared run is always handled: a caller may stop waiting at once (an aborted signal) and leave no handler of its own,
+      // and a failure nobody awaits must not become an unhandled rejection in the API or the autonomy service.
+      started.catch(() => undefined);
       run = started;
       this.running.set(scopeKey, run);
     }
