@@ -1,3 +1,4 @@
+import { stableFingerprint } from '../report.js';
 import { scoredCheck, type ReachCheckResult, type ReachScenarioDefinition, type ReachStopCause } from './format.js';
 
 /**
@@ -96,13 +97,35 @@ export function threeToolsOutcome(before: readonly ReachNoteView[], after: reado
   };
 }
 
-/** Where the run stopped short, read from the calls the toolbox saw, never from what the model said. */
+const TRANSIENT: ReadonlySet<ReachToolFailure> = new Set(['failed', 'unavailable', 'timeout']);
+
+/**
+ * Where the run stopped short, read from the calls the toolbox saw, never from what the model said.
+ * A needed tool that was not offered is the build's. Otherwise the last failure decides: a transient one
+ * (`failed`, `unavailable`, `timeout`) is the tool's unless the same tool worked after it; a gate refusal is
+ * the build's; anything else, including a call to a tool that was not offered, is the model's. Rounds that
+ * ran out with no such failure are the budget's.
+ */
 export function threeToolsStopCause(evidence: ThreeToolsEvidence): ReachStopCause {
   if (THREE_TOOLS_REQUIRED.some(name => !evidence.offered.includes(name))) return 'build';
-  if (evidence.calls.some(call => call.failure === 'failed' || call.failure === 'unavailable' || call.failure === 'timeout')) return 'tool';
-  if (evidence.calls.some(call => call.failure === 'not_offered' || call.failure === 'refused')) return 'build';
-  if (evidence.roundLimitHit) return 'budget';
-  return 'model_judgment';
+  const lastFailure = evidence.calls.reduce((found, call, index) => (call.ok ? found : index), -1);
+  if (lastFailure >= 0) {
+    const failed = evidence.calls[lastFailure]!;
+    const recovered = evidence.calls.slice(lastFailure + 1).some(call => call.ok && call.name === failed.name);
+    if (failed.failure && TRANSIENT.has(failed.failure) && !recovered) return 'tool';
+    if (failed.failure === 'refused') return 'build';
+    if (!recovered) return 'model_judgment';
+  }
+  return evidence.roundLimitHit ? 'budget' : 'model_judgment';
+}
+
+/** Fingerprint inputs of this scenario's own script: the seed notes, the owner's two lines, the markers. */
+export function threeToolsScriptInputs(): Record<string, string> {
+  return {
+    seed: stableFingerprint(THREE_TOOLS_SEED),
+    ownerScript: stableFingerprint([THREE_TOOLS_REQUEST, THREE_TOOLS_NUDGE, THREE_TOOLS_REQUIRED]),
+    markers: stableFingerprint(THREE_TOOLS_MARKERS),
+  };
 }
 
 export function judgeThreeTools(evidence: ThreeToolsEvidence): { checks: ReachCheckResult[]; metrics: Record<string, number> } {

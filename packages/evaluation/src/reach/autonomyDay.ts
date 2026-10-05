@@ -11,11 +11,13 @@ export const AUTONOMY_DAY_BUDGET_YEN = 300;
 export const autonomyDayScenario: ReachScenarioDefinition = Object.freeze<ReachScenarioDefinition>({
   schemaVersion: 1,
   id: 'growth.autonomy-day',
-  version: 1,
+  version: 2,
   need: 'grow',
   measure: '作って、直して、良くなる',
   description: '試験用の場所で1日ぶん自分の時間を動かし、小さな予算の中で「物語を見せる」まで行けるか。休みを自分で選んだかも見る。',
   checks: [
+    { id: 'context.study_listed', judge: 'deterministic', threshold: 1,
+      description: 'Every thinking prompt listed every open story of her study (the build, not the model).' },
     { id: 'outcome.story_shown', judge: 'deterministic', threshold: 1,
       description: 'The record has a done `study.show` step, the study a readable story, and the stand-in inbox received the notice.' },
     { id: 'budget.respected', judge: 'deterministic', threshold: 1,
@@ -44,6 +46,9 @@ export interface AutonomyDayEvidence {
   failedModelCalls: number;
   /** Loop ticks by result (`stepped`, `idle`, `budget`, `not-configured`, ...). */
   ticks: Readonly<Record<string, number>>;
+  /** Thinking prompts she was given, and how many of them left out a story that was open in her study at that moment. */
+  thinkPrompts: number;
+  thinkPromptsMissingStories: number;
   /** How the driver's day ended. */
   ended: 'day_end' | 'tick_limit' | 'wall_clock';
 }
@@ -54,6 +59,7 @@ export function autonomyDayStopCause(evidence: AutonomyDayEvidence): ReachStopCa
   if (evidence.storiesReady > 0 && evidence.toldOwner === 0) return 'build';
   if ((evidence.ticks.budget ?? 0) > 0 || (evidence.sessionEnds.budget ?? 0) > 0 || evidence.spentYen >= evidence.budgetCapYen) return 'budget';
   if (evidence.ended !== 'day_end') return 'timeout';
+  if (evidence.thinkPromptsMissingStories > 0) return 'build';
   if (evidence.storyDrafts === 0 && evidence.failedActions > 0 && evidence.failedModelCalls * 2 >= evidence.failedActions) return 'tool';
   return 'model_judgment';
 }
@@ -67,6 +73,8 @@ export function judgeAutonomyDay(evidence: AutonomyDayEvidence): { checks: Reach
   const boundCause: ReachStopCause = (evidence.sessionEnds.budget ?? 0) + (evidence.sessionEnds.session_budget ?? 0) > 0 ? 'budget' : 'model_judgment';
   return {
     checks: [
+      scoredCheck(definition, 'context.study_listed', evidence.thinkPrompts ? 1 - evidence.thinkPromptsMissingStories / evidence.thinkPrompts : 1, 'build',
+        `${evidence.thinkPrompts - evidence.thinkPromptsMissingStories}/${evidence.thinkPrompts}`),
       scoredCheck(definition, 'outcome.story_shown', shown ? 1 : 0, cause, `shown=${evidence.storiesShown} drafts=${evidence.storyDrafts} notes=${evidence.notes}`),
       // Spending past the cap is the gate's failure, never her judgment.
       scoredCheck(definition, 'budget.respected', evidence.spentYen <= evidence.budgetCapYen ? 1 : 0, 'build', `spent=${evidence.spentYen}/${evidence.budgetCapYen}`),

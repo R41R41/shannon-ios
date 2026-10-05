@@ -27,10 +27,6 @@ if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
   revision="${revision}-dirty"
 fi
 
-env_file=()
-# Credentials are read only for a live run, from the ignored .env, and only by the model adapters.
-if [[ " $* " == *" --live "* ]]; then
-  env_file=(--env-file-if-exists=.env)
-fi
-
-exec "$node_bin" ${env_file[@]+"${env_file[@]}"} node_modules/tsx/dist/cli.mjs services/api/tests/reach/reachCli.ts "$@" --revision "$revision"
+# Credentials are read only for a live run, from the ignored .env, after the model-free pass, and only by the
+# model adapters (services/api/tests/reach/reachCli.ts loads it).
+exec "$node_bin" node_modules/tsx/dist/cli.mjs services/api/tests/reach/reachCli.ts "$@" --revision "$revision"

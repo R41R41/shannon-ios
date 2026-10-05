@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SQLiteAutonomyStore } from '../../src/autonomyStore.js';
 import {
-  THREE_TOOLS_NUDGE, THREE_TOOLS_REQUEST, THREE_TOOLS_SEED, judgeThreeTools, threeToolsOutcome, threeToolsScenario,
+  THREE_TOOLS_NUDGE, THREE_TOOLS_REQUEST, THREE_TOOLS_SEED, judgeThreeTools, stableFingerprint, threeToolsOutcome, threeToolsScenario, threeToolsScriptInputs,
   type ReachDriver, type ReachNoteView, type ReachToolCall, type ReachToolResult, type ReachToolbox,
 } from '../../../../packages/evaluation/src/reach/index.js';
 
@@ -92,7 +92,7 @@ export class ScriptedThreeToolModel implements ReachToolTurnModel {
   }
 }
 
-export function threeToolsDriver(model: ReachToolTurnModel, toolbox: ReachToolbox): ReachDriver {
+export function threeToolsDriver(model: ReachToolTurnModel, toolbox: ReachToolbox, inputs: Readonly<Record<string, string>> = {}): ReachDriver {
   return async ({ signal }) => {
     try {
       const before = toolbox.notes();
@@ -120,7 +120,7 @@ export function threeToolsDriver(model: ReachToolTurnModel, toolbox: ReachToolbo
       const { checks, metrics } = judgeThreeTools({
         offered, calls, nudges: ownerMessages.length - 1, completedOnTurn, before, after: toolbox.notes(), roundLimitHit,
       });
-      return { checks, metrics, steps: calls.length, ...(signal.aborted ? { stop: { cause: 'timeout' as const, detail: 'wall-clock' } } : {}) };
+      return { checks, metrics, steps: calls.length, inputs: { ...threeToolsScriptInputs(), ...inputs }, ...(signal.aborted ? { stop: { cause: 'timeout' as const, detail: 'wall-clock' } } : {}) };
     } finally {
       toolbox.close?.();
     }
@@ -128,13 +128,16 @@ export function threeToolsDriver(model: ReachToolTurnModel, toolbox: ReachToolbo
 }
 
 export function scriptedThreeToolsDriver(): ReachDriver {
-  return threeToolsDriver(new ScriptedThreeToolModel(), new StubStudyToolbox());
+  return threeToolsDriver(new ScriptedThreeToolModel(), new StubStudyToolbox(), {
+    scriptedPlayer: stableFingerprint(ScriptedThreeToolModel.toString()), stubTools: stableFingerprint(StubStudyToolbox.toString()),
+  });
 }
 
 /** The live mode until the registry is on main: nothing runs, nothing is spent. */
 export function pendingRegistryDriver(): ReachDriver {
   const registry = fileURLToPath(new URL('../../src/shannonToolRunner.ts', import.meta.url));
   return async () => ({
+    inputs: threeToolsScriptInputs(),
     pending: existsSync(registry)
       ? 'registry on main; write the live adapter (ReachToolbox over ShannonToolRunner, turns through the chat model)'
       : `pending registry: ${threeToolsScenario.liveRequires}`,

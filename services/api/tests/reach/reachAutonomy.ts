@@ -7,10 +7,10 @@ import { ShannonAutonomyLoop } from '../../src/autonomyLoop.js';
 import { configuredAutonomyLoop } from '../../src/autonomyLoopConfig.js';
 import { ShannonAutonomyService } from '../../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../../src/autonomyStore.js';
-import type { AutonomyTextModel } from '../../src/autonomyTextModel.js';
-import { FakeModel, FakeReader, FakeShowing } from '../autonomyLoopHarness.js';
+import type { AutonomyTextModel, AutonomyTextRequest, AutonomyTextResult } from '../../src/autonomyTextModel.js';
+import { FakeModel, FakeReader, FakeShowing, STORY_BODY, callKind } from '../autonomyLoopHarness.js';
 import {
-  AUTONOMY_DAY_BUDGET_YEN, autonomyDayScenario, judgeAutonomyDay, type AutonomyDayEvidence, type ReachDriver,
+  AUTONOMY_DAY_BUDGET_YEN, autonomyDayScenario, judgeAutonomyDay, stableFingerprint, type AutonomyDayEvidence, type ReachDriver,
 } from '../../../../packages/evaluation/src/reach/index.js';
 
 /**
@@ -29,6 +29,42 @@ export interface AutonomyDayOptions {
   budgetYen?: number;
   /** Prices of her models (`SHANNON_AUTONOMY_MODEL_PRICES_JSON`) and other loop settings of the sandbox. */
   environment?: Readonly<Record<string, string>>;
+  /** Live: her model ids and the price table she ran with, by id and fingerprint (never a credential). */
+  inputs?: Readonly<Record<string, string>>;
+  /** The model-free player: its source is fingerprinted with the sandbox, so a changed script is not compared. */
+  scripted?: true;
+}
+
+/**
+ * Sees each thinking prompt on its way to the model and checks it against her study at that moment: a story
+ * that was open but not listed is context the build lost, whatever she then decides.
+ */
+export class ThinkingWatch implements AutonomyTextModel {
+  prompts = 0;
+  missingStories = 0;
+
+  constructor(private readonly inner: AutonomyTextModel, private readonly store: SQLiteAutonomyStore) {}
+
+  canUse(modelId: string): boolean { return this.inner.canUse(modelId); }
+
+  async generate(request: AutonomyTextRequest): Promise<AutonomyTextResult> {
+    if (callKind(request) === 'think') {
+      this.prompts += 1;
+      const text = `${request.system}\n${request.prompt}`;
+      const open = this.store.study.list(SCOPE).filter(piece => piece.kind === 'story' && piece.status !== 'put_away');
+      if (open.some(piece => !text.includes(`(${piece.id})`))) this.missingStories += 1;
+    }
+    return this.inner.generate(request);
+  }
+}
+
+/** The sandbox as fingerprint inputs: its settings, its day, its canned pages, and (model-free) the scripted player. */
+function sandboxInputs(environment: Readonly<Record<string, string>>, scripted: boolean): Record<string, string> {
+  return {
+    sandbox: stableFingerprint({ environment, DAY_START, DAY_END, STEP_MILLISECONDS, WAIT_MILLISECONDS }),
+    cannedPages: stableFingerprint([FakeReader.toString(), FakeShowing.toString()]),
+    ...(scripted ? { scriptedPlayer: stableFingerprint([scriptedAutonomyModel.toString(), FakeModel.toString(), callKind.toString(), STORY_BODY]) } : {}),
+  };
 }
 
 export function autonomyDayDriver(model: AutonomyTextModel, options: AutonomyDayOptions = {}): ReachDriver {
@@ -45,11 +81,12 @@ export function autonomyDayDriver(model: AutonomyTextModel, options: AutonomyDay
         SHANNON_AUTONOMY_PACING: 'sessions', SHANNON_OWNER_SCOPE_KEY: SCOPE, ...options.environment,
       };
       const store = new SQLiteAutonomyStore(path);
+      const watch = new ThinkingWatch(model, store);
       const config = configuredAutonomy(environment);
       const service = new ShannonAutonomyService({ store, config, now });
       const showing = new FakeShowing();
       const loop = new ShannonAutonomyLoop({
-        store, service, config, loop: configuredAutonomyLoop(environment), model, reader: new FakeReader(), showing, now, workerId: 'reach-sandbox',
+        store, service, config, loop: configuredAutonomyLoop(environment), model: watch, reader: new FakeReader(), showing, now, workerId: 'reach-sandbox',
         wait: async (milliseconds: number) => { at = new Date(Date.parse(at) + milliseconds).toISOString(); },
       });
       const ticks: Record<string, number> = {};
@@ -73,10 +110,13 @@ export function autonomyDayDriver(model: AutonomyTextModel, options: AutonomyDay
         loop.release();
         store.close();
       }
-      const evidence = dayEvidence(path, { budgetCapYen: budget, toldOwner: showing.told.length, ticks, ended });
+      const evidence = dayEvidence(path, {
+        budgetCapYen: budget, toldOwner: showing.told.length, ticks, ended, thinkPrompts: watch.prompts, thinkPromptsMissingStories: watch.missingStories,
+      });
       const { checks, metrics } = judgeAutonomyDay(evidence.day);
       return {
         checks, metrics, steps: Object.values(ticks).reduce((sum, count) => sum + count, 0),
+        inputs: { ...sandboxInputs(environment, options.scripted === true), ...options.inputs },
         ...(ended === 'wall_clock' ? { stop: { cause: 'timeout' as const, detail: 'wall-clock' } } : {}),
         cost: { ...evidence.cost, measured: mode === 'live' },
       };
@@ -87,7 +127,7 @@ export function autonomyDayDriver(model: AutonomyTextModel, options: AutonomyDay
 }
 
 /** Read from outside, from the closed database file: the record, the spend, the sessions, the study. */
-function dayEvidence(path: string, input: Pick<AutonomyDayEvidence, 'budgetCapYen' | 'toldOwner' | 'ticks' | 'ended'>) {
+function dayEvidence(path: string, input: Pick<AutonomyDayEvidence, 'budgetCapYen' | 'toldOwner' | 'ticks' | 'ended' | 'thinkPrompts' | 'thinkPromptsMissingStories'>) {
   const database = new DatabaseSync(path, { readOnly: true });
   try {
     const count = (sql: string) => Number((database.prepare(sql).get() as { count: number }).count);
@@ -138,5 +178,5 @@ export function scriptedAutonomyModel(): FakeModel {
 }
 
 export function scriptedAutonomyDayDriver(options: AutonomyDayOptions = {}): ReachDriver {
-  return autonomyDayDriver(scriptedAutonomyModel(), options);
+  return autonomyDayDriver(scriptedAutonomyModel(), { ...options, scripted: true });
 }

@@ -36,7 +36,7 @@ const round = (value: number, digits = 3) => Math.round(value * 10 ** digits) / 
 /**
  * Version-to-version comparison. A scenario is a regression when it passed and now fails, or when it
  * fails in both and any check's score went down; an improvement the other way round. Records with a
- * different definition fingerprint or mode are never compared.
+ * different definition, mode, or inputs (scripts, seeds, model ids, prices) are never compared.
  */
 export function compareReachReports(baseline: ReachReport, candidate: ReachReport): ReachComparison {
   const before = new Map(baseline.runs.map(run => [run.scenarioId, run]));
@@ -61,6 +61,7 @@ function scenarioDelta(id: string, before: ReachRunRecord | null, after: ReachRu
   if (!after) return { ...base, ...empty, change: 'removed' };
   const reason = before.definitionFingerprint !== after.definitionFingerprint ? 'definition-changed'
     : before.mode !== after.mode ? 'mode-differs'
+      : before.inputsFingerprint !== after.inputsFingerprint ? `inputs-changed:${changedInputs(before, after).join(',')}`
       : before.status === 'pending' || after.status === 'pending' ? 'pending'
         : before.status === 'invalid' || after.status === 'invalid' ? 'invalid' : null;
   const ids = [...new Set([...before.checks.map(check => check.id), ...after.checks.map(check => check.id)])];
@@ -77,6 +78,12 @@ function scenarioDelta(id: string, before: ReachRunRecord | null, after: ReachRu
     : before.status === 'failed' && after.status === 'passed' ? 'improvement'
       : worse && !better ? 'regression' : better && !worse ? 'improvement' : 'unchanged';
   return { ...base, ...deltas, change };
+}
+
+/** Names of the inputs that differ (scripts, seeds, models, prices); their values are fingerprints or ids. */
+function changedInputs(before: ReachRunRecord, after: ReachRunRecord): string[] {
+  const keys = [...new Set([...Object.keys(before.inputs ?? {}), ...Object.keys(after.inputs ?? {})])].sort();
+  return keys.filter(key => before.inputs?.[key] !== after.inputs?.[key]);
 }
 
 function stopText(stop: ReachStop | null): string {

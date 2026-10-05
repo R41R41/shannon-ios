@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compareReachReports, isReachReport, reachReportMarkdown } from '../../../../packages/evaluation/src/reach/index.js';
@@ -24,11 +24,13 @@ function option(args: string[], name: string): string | undefined {
   return index >= 0 ? args[index + 1] : undefined;
 }
 
+/** Options that take a value; their value is never a positional argument. */
+const VALUE_OPTIONS = new Set(['--revision', '--only', '--out', '--baseline', '--days', '--until', '--scope']);
+
 /** The arguments that are neither a `--flag` nor the value of one. */
 function positionals(args: string[]): string[] {
   return args.filter((arg, index) => !arg.startsWith('--') && !(index > 0 && args[index - 1]!.startsWith('--') && VALUE_OPTIONS.has(args[index - 1]!)));
 }
-const VALUE_OPTIONS = new Set(['--revision', '--only', '--out', '--baseline', '--days', '--until', '--scope']);
 
 async function run(args: string[]): Promise<number> {
   const live = args.includes('--live');
@@ -44,6 +46,14 @@ async function run(args: string[]): Promise<number> {
     console.log(`\nWrote ${written.json}\n      ${written.markdown}${written.compared ? `\nCompared with ${written.compared}` : ''}`);
     return scripted.totals.failed + scripted.totals.invalid > 0 ? 1 : 0;
   }
+  if (scripted.totals.failed + scripted.totals.invalid > 0) {
+    process.stdout.write(reachReportMarkdown(scripted));
+    console.error('\nThe model-free pass failed, so the live run is refused. Fix the build first. Nothing was spent.');
+    return 1;
+  }
+  // The repository's .env is read only now, after the model-free pass, so its settings never shape that pass.
+  const envFile = join(repositoryRoot, '.env');
+  if (existsSync(envFile)) process.loadEnvFile(envFile);
   const ready = liveReadiness(process.env);
   console.log(`Live mode. Credentials present: conversation=${ready.conversation ? 'yes' : 'no'}, her own time=${ready.autonomy ? 'yes' : 'no'}.`);
   console.log('Estimated cost of this live run (errs high):');
@@ -56,7 +66,7 @@ async function run(args: string[]): Promise<number> {
   const written = writeReachReport(report, out, { ...(baseline ? { baselinePath: baseline } : {}), full: !only });
   process.stdout.write(written.text);
   console.log(`\nSpent ${report.totals.costYen} yen.\nWrote ${written.json}\n      ${written.markdown}${written.compared ? `\nCompared with ${written.compared}` : ''}`);
-  return 0;
+  return report.totals.failed + report.totals.invalid > 0 ? 1 : 0;
 }
 
 function compare(args: string[]): number {

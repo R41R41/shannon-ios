@@ -1,10 +1,11 @@
+import { stableFingerprint } from '../report.js';
 import { scoredCheck, type ReachCheckResult, type ReachScenarioDefinition } from './format.js';
 import { firstBase, isKanaWord, nextBase, sameReading, spokenWord } from './kana.js';
 import { SHIRITORI_WORDS } from './shiritoriWords.js';
 
 /**
  * Scenario (a), 文脈を保つ: a 60-turn game of しりとり with two facts said in passing, then four
- * questions about things said 25 to 50 turns earlier. The owner side is a script that follows the
+ * questions about things said 25 to 48 turns earlier. The owner side is a script that follows the
  * game; the judge is deterministic. A failed answer is put down to the build when the referenced
  * words were not in what the model was given, and to the model's judgment when they were.
  */
@@ -16,10 +17,10 @@ const WORD_TURN = 40;
 export const shiritoriScenario: ReachScenarioDefinition = Object.freeze<ReachScenarioDefinition>({
   schemaVersion: 1,
   id: 'context.shiritori-60',
-  version: 1,
+  version: 2,
   need: 'understand_people',
   measure: '文脈を保つ',
-  description: '60往復のしりとりの後、25〜50往復前に話したことを4つ尋ねる。ルールの守り方と、前の内容を踏まえた答えを外から判定する。',
+  description: '60往復のしりとりの後、25〜48往復前に話したことを4つ尋ねる。ルールの守り方と、前の内容を踏まえた答えを外から判定する。',
   checks: [
     { id: 'context.history_complete', judge: 'deterministic', threshold: 1,
       description: 'Every request of the game carried every earlier message of it (the build, not the model).' },
@@ -30,13 +31,13 @@ export const shiritoriScenario: ReachScenarioDefinition = Object.freeze<ReachSce
     { id: 'shiritori.no_repeat', judge: 'deterministic', threshold: 1,
       description: 'No word of hers repeats a word either side said earlier in the game (needs the whole game in mind).' },
     { id: 'recall.q1_item', judge: 'deterministic', threshold: 1,
-      description: 'Asked 47 turns later what the owner meant to buy, the answer names チーズケーキ.' },
+      description: 'Asked 47 turns later what the owner meant to buy, the answer names チーズケーキ and no other candidate.' },
     { id: 'recall.q2_person', judge: 'deterministic', threshold: 1,
-      description: 'Asked whose birthday it was, the answer names 姉.' },
+      description: 'Asked whose birthday it was (48 turns back), the answer names 姉 and no other candidate.' },
     { id: 'recall.q3_cat', judge: 'deterministic', threshold: 1,
-      description: 'Asked 28 turns later the cat\'s name, the answer names もなか.' },
+      description: 'Asked 28 turns later the cat\'s name, the answer names もなか and no other candidate.' },
     { id: 'recall.q4_word_before', judge: 'deterministic', threshold: 1,
-      description: 'Asked which word she said just before a word of the owner 24 turns back, the answer names it.' },
+      description: 'Asked which word she said 25 turns back (just before a word of the owner), the answer names it and no other word of the game.' },
   ],
   limits: { wallMilliseconds: 20 * 60_000, maximumSteps: 70 },
 });
@@ -170,6 +171,7 @@ export function judgeShiritori(game: ShiritoriGame, questions: readonly Shiritor
     if (chained && nextBase(word) !== null && !repeated) valid += 1;
     if (word && isKanaWord(word)) seen.add(reading);
   }
+  const gameWords = [...game.ownerWords, ...game.herWords.filter((word): word is string => Boolean(word))];
   const complete = game.exchanges.filter(exchange => exchange.historyComplete).length;
   const rate = (count: number) => (turns ? count / turns : 0);
   const checks: ReachCheckResult[] = [
@@ -180,13 +182,39 @@ export function judgeShiritori(game: ShiritoriGame, questions: readonly Shiritor
   ];
   questions.forEach((question, index) => {
     const exchange = game.questionExchanges[index];
-    const answer = exchange ? sameReading(exchange.reply) : '';
-    const right = question.expected.length > 0 && question.expected.some(item => answer.includes(sameReading(item)));
+    const right = exchange ? answerMatches(exchange.reply, question, gameWords) : false;
     const cause = exchange?.needlesPresent === false ? 'build' : 'model_judgment';
     checks.push(scoredCheck(definition, question.checkId, right ? 1 : 0, cause,
       `turn=${question.referencedTurn}${exchange ? '' : ' not-asked'}${exchange?.needlesPresent === false ? ' context-missing' : ''}`));
   });
   return { checks, metrics: { turns, validTurns: valid, repeats, ownerRestarts: game.restarts, questionsAsked: game.questionExchanges.length } };
+}
+
+const ANSWER_MAXIMUM_CHARACTERS = 200;
+
+/**
+ * An answer names what was asked and nothing that could be a guess beside it: every word it quotes is
+ * expected or quoted in the question, it names no other word of the game (three kana or more), and it is
+ * short. A reply that lists candidates does not pass by containing the right one.
+ */
+export function answerMatches(reply: string, question: ShiritoriQuestion, gameWords: readonly string[]): boolean {
+  const answer = sameReading(reply);
+  const expected = question.expected.map(sameReading);
+  if (!expected.length || answer.length > ANSWER_MAXIMUM_CHARACTERS || !expected.some(item => answer.includes(item))) return false;
+  const quotedIn = (text: string) => [...text.matchAll(/[『「]\s*([^』」\s]{1,24})\s*[』」]/gu)].map(match => sameReading(match[1]!));
+  const allowed = new Set([...expected, ...quotedIn(question.message)]);
+  if (quotedIn(reply).some(word => !allowed.has(word))) return false;
+  const containsExpected = (word: string) => expected.some(item => item.includes(word) || word.includes(item));
+  return !gameWords.map(sameReading).some(word => word.length >= 3 && !allowed.has(word) && !containsExpected(word) && answer.includes(word));
+}
+
+/** Fingerprint inputs of this scenario's own script: the word list, the owner's lines, and the model-free player. */
+export function shiritoriScriptInputs(): Record<string, string> {
+  return {
+    words: stableFingerprint(SHIRITORI_WORDS),
+    ownerScript: stableFingerprint([OPENING, ShiritoriGame.toString()]),
+    scriptedPlayer: stableFingerprint([scriptedShiritoriReply.toString(), followableWord.toString()]),
+  };
 }
 
 /** Whether every one of `texts` occurs in what a request carried. */

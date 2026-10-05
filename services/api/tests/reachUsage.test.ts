@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -95,6 +95,20 @@ describe('reach measures from use', () => {
     expect(weekKey('2026-10-05T00:00:00.000Z')).toBe('2026-W41');
     expect(weekKey('2026-01-01T00:00:00.000Z')).toBe('2026-W01');
     expect(weekKey('2027-01-01T00:00:00.000Z')).toBe('2026-W53');
+    // Weeks begin on Monday in Tokyo: 01:00 on Monday there is still Sunday in UTC.
+    expect(weekKey('2026-10-04T16:00:00.000Z')).toBe('2026-W41');
+    expect(weekKey('2026-10-04T14:59:00.000Z')).toBe('2026-W40');
+  });
+
+  it('refuses a refused directory also through a symbolic link', () => {
+    const production = join(directory, 'production');
+    mkdirSync(production);
+    new DatabaseSync(join(production, 'shannon.sqlite')).close();
+    symlinkSync(production, join(directory, 'looks-like-a-copy'));
+    const options = { days: 30, until: '2026-10-10T00:00:00.000Z', scopeKey: 'owner', refusedDirectories: [production] };
+    expect(() => reachUsageReport(join(directory, 'looks-like-a-copy', 'shannon.sqlite'), options)).toThrow(/copy/u);
+    symlinkSync(join(production, 'shannon.sqlite'), join(directory, 'linked.sqlite'));
+    expect(() => reachUsageReport(join(directory, 'linked.sqlite'), options)).toThrow(/copy/u);
   });
 });
 
@@ -113,6 +127,11 @@ describe('the result files of a model-free run', () => {
     expect(second.text).toContain('| helpful.three-tools | unchanged |');
     // A partial run does not replace the latest full one.
     expect(JSON.parse(readFileSync(join(out, 'latest-scripted.json'), 'utf8')).revision).toBe('aaaa');
+    // An explicit baseline must be a valid report; a latest file of an older format is replaced without comparing.
+    writeFileSync(join(out, 'old.json'), JSON.stringify({ ...first, runs: first.runs.map(run => ({ ...run, inputs: undefined })) }));
+    expect(() => writeReachReport(partial, out, { baselinePath: join(out, 'old.json'), full: false })).toThrow(/BASELINE_INVALID/u);
+    writeFileSync(join(out, 'latest-scripted.json'), '{"schemaVersion":1}');
+    expect(writeReachReport(first, out, { full: true }).compared).toBeNull();
     const estimate = liveEstimate(first, {});
     expect(estimate.map(line => line.scenarioId)).toEqual(['context.shiritori-60', 'helpful.three-tools', 'growth.autonomy-day']);
     expect(estimate[0]!.yen).toBeGreaterThan(0);

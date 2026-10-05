@@ -3,7 +3,9 @@ import {
   autonomyDayScenario, runReachScenario, shiritoriScenario, threeToolsScenario,
   type ReachDriver, type ReachScenarioDefinition,
 } from '../../../packages/evaluation/src/reach/index.js';
-import { autonomyDayDriver, scriptedAutonomyDayDriver, scriptedAutonomyModel } from './reach/reachAutonomy.js';
+import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { FakeModel } from './autonomyLoopHarness.js';
+import { ThinkingWatch, autonomyDayDriver, scriptedAutonomyDayDriver, scriptedAutonomyModel } from './reach/reachAutonomy.js';
 import { ScriptedShiritoriModel, scriptedShiritoriDriver, shiritoriDriver } from './reach/reachConversation.js';
 import { ScriptedThreeToolModel, StubStudyToolbox, pendingRegistryDriver, scriptedThreeToolsDriver, threeToolsDriver } from './reach/reachTools.js';
 
@@ -26,6 +28,9 @@ describe('reach (a): the long game through the conversation path', () => {
     // What the live estimate is built on.
     expect(record.cost.calls).toBe(64);
     expect(record.cost.promptCharacters).toBeGreaterThan(64 * 1_000);
+    // The script, the word list and the player are part of what is compared.
+    expect(Object.keys(record.inputs).sort()).toEqual(['chatModel', 'ownerScript', 'scriptedPlayer', 'words']);
+    expect(record.inputs.chatModel).toBe('scripted-shiritori');
   });
 
   it('puts a model that cannot keep the game down to the model, not the build', async () => {
@@ -50,6 +55,7 @@ describe('reach (b): three tools, against the registry interface', () => {
     const record = await run(threeToolsScenario, scriptedThreeToolsDriver());
     expect(failed(record)).toEqual({});
     expect(record).toMatchObject({ status: 'passed', metrics: { calls: 3, failedCalls: 0, nudges: 0 } });
+    expect(Object.keys(record.inputs).sort()).toEqual(['markers', 'ownerScript', 'scriptedPlayer', 'seed', 'stubTools']);
   });
 
   it('stops at the build when a needed tool is not offered, and at the tool when one fails', async () => {
@@ -78,6 +84,21 @@ describe('reach (c): a day of her own time in a sandbox', () => {
     expect(record.metrics.spentYen).toBeLessThanOrEqual(autonomyDayScenario.limits.budgetYen!);
     expect(record.cost).toMatchObject({ measured: false });
     expect(record.cost.calls).toBeGreaterThan(3);
+    expect(record.checks.find(check => check.id === 'context.study_listed')!.detail).toMatch(/^(\d+)\/\1$/u);
+    expect(Object.keys(record.inputs).sort()).toEqual(['cannedPages', 'sandbox', 'scriptedPlayer']);
+  });
+
+  it('counts a thinking prompt that left out an open story as context the build lost', async () => {
+    const store = new SQLiteAutonomyStore(':memory:');
+    const story = store.study.create('owner', { kind: 'story', title: '傘', body: '本文' }, '2026-10-05T00:00:00.000Z');
+    if (typeof story === 'string') throw new Error(story);
+    const watch = new ThinkingWatch(new FakeModel(), store);
+    const think = { model: 'gpt-5.6-luna', system: '[ひとりの時間]', maximumOutputTokens: 100 };
+    await watch.generate({ ...think, prompt: `- (${story.id}) 「傘」 下書き・第1稿` });
+    await watch.generate({ ...think, prompt: 'まだ何もない' });
+    await watch.generate({ ...think, system: '[短い物語を書く]', prompt: '' });
+    expect([watch.prompts, watch.missingStories]).toEqual([2, 1]);
+    store.close();
   });
 
   it('stops at the budget when the cap is too small to get there', async () => {

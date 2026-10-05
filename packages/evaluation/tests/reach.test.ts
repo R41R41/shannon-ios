@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SHIRITORI_TURNS, SHIRITORI_WORDS, ShiritoriGame, autonomyDayScenario, buildReachReport, cappedEstimate, carried,
+  SHIRITORI_TURNS, SHIRITORI_WORDS, ShiritoriGame, answerMatches, isReachReport, autonomyDayScenario, buildReachReport, cappedEstimate, carried,
   compareReachReports, conversationEstimate, emptyReachCost, estimateTotal, firstBase, isKanaWord, judgeAutonomyDay,
   judgeShiritori, judgeThreeTools, kanaBase, lastKana, nextBase, reachReportMarkdown, runReachScenario,
   scriptedShiritoriReply, shiritoriScenario, spokenWord, threeToolsScenario, validReachDefinition,
@@ -87,6 +87,26 @@ describe('scenario (a): the long game', () => {
     for (const id of ['recall.q1_item', 'recall.q2_person', 'recall.q3_cat']) expect(failed[id], id).toBe('build');
   });
 
+  it('does not pass an answer that lists candidates beside the right one', () => {
+    const game = new ShiritoriGame();
+    for (let turn = 1; turn <= SHIRITORI_TURNS; turn += 1) {
+      game.ownerMessage(turn);
+      game.recordReply(turn, { reply: `『${['こけし', 'すだれ', 'ごりら', 'たきび'][turn % 4]}${turn}』`, historyComplete: true });
+    }
+    const [q1, , q3, q4] = game.questions();
+    const words = [...game.ownerWords];
+    expect(answerMatches('チーズケーキですね。', q1!, words)).toBe(true);
+    expect(answerMatches('「もなか」です。', q3!, words)).toBe(true);
+    expect(answerMatches('「たま」か「もなか」か「みけ」だったと思います。', q3!, words)).toBe(false);
+    expect(answerMatches(`もなか、${words.slice(0, 5).join('、')}のどれかです。`, q3!, words)).toBe(false);
+    expect(answerMatches('もなか'.repeat(80), q3!, words)).toBe(false);
+    // The fourth answer may repeat the owner's word quoted in the question, and nothing else of the game.
+    const expected = q4!.expected[0]!;
+    const quoted = /『(.+?)』/u.exec(q4!.message)![1]!;
+    expect(answerMatches(`『${quoted}』の前は「${expected}」です。`, q4!, [...words, expected])).toBe(true);
+    expect(answerMatches(`「${expected}」か「${words[3]}」です。`, q4!, [...words, expected])).toBe(false);
+  });
+
   it('puts a wrong answer down to the model when the words were in front of it', () => {
     const game = new ShiritoriGame();
     for (let turn = 1; turn <= SHIRITORI_TURNS; turn += 1) {
@@ -124,13 +144,24 @@ describe('scenario (b): three tools', () => {
     expect(failedCauses(evidence({ calls: [{ name: 'study.search', ok: true }], after: notes, completedOnTurn: null }))['outcome.note_created']).toBe('model_judgment');
     expect(failedCauses(evidence({ nudges: 1, completedOnTurn: 2 }))).toEqual({ 'process.no_nudge': 'model_judgment' });
     expect(failedCauses(evidence({ calls: [{ name: 'study.read', ok: true }, { name: 'study.search', ok: true }, { name: 'study.create', ok: true }] }))).toEqual({ 'process.tool_order': 'model_judgment' });
+    // Every needed tool was there and she called another one: hers.
+    expect(failedCauses(evidence({ calls: [{ name: 'study.delete', ok: false, failure: 'not_offered' }], after: notes, completedOnTurn: null }))['outcome.note_created']).toBe('model_judgment');
+    // A gate refusal is the build's.
+    expect(failedCauses(evidence({ calls: [{ name: 'study.create', ok: false, failure: 'refused' }], after: notes, completedOnTurn: null }))['outcome.note_created']).toBe('build');
+    // A transient failure she recovered from does not count; what failed after it does.
+    const recovered = [{ name: 'study.search', ok: false, failure: 'unavailable' as const }, { name: 'study.search', ok: true }];
+    expect(failedCauses(evidence({ calls: recovered, after: notes, completedOnTurn: null }))['outcome.note_created']).toBe('model_judgment');
+    expect(failedCauses(evidence({ calls: [...recovered, { name: 'study.read', ok: false, failure: 'not_found' }], after: notes, completedOnTurn: null }))['outcome.note_created']).toBe('model_judgment');
+    expect(failedCauses(evidence({ calls: [...recovered, { name: 'study.read', ok: false, failure: 'timeout' }], roundLimitHit: true, after: notes, completedOnTurn: null }))['outcome.note_created']).toBe('tool');
+    expect(failedCauses(evidence({ calls: recovered, roundLimitHit: true, after: notes, completedOnTurn: null }))['outcome.note_created']).toBe('budget');
   });
 });
 
 describe('scenario (c): a day of her own time', () => {
   const day = (overrides: Partial<AutonomyDayEvidence> = {}): AutonomyDayEvidence => ({
     budgetCapYen: 300, spentYen: 120, storiesShown: 1, toldOwner: 1, storiesReady: 1, storyDrafts: 0, notes: 2,
-    sessionEnds: { rest: 3, idle: 1 }, failedActions: 0, failedModelCalls: 0, ticks: { stepped: 20, idle: 10 }, ended: 'day_end', ...overrides,
+    sessionEnds: { rest: 3, idle: 1 }, failedActions: 0, failedModelCalls: 0, ticks: { stepped: 20, idle: 10 }, ended: 'day_end',
+    thinkPrompts: 4, thinkPromptsMissingStories: 0, ...overrides,
   });
   const shownCause = (input: AutonomyDayEvidence) => judgeAutonomyDay(input).checks.find(check => check.id === 'outcome.story_shown')!.cause;
 
@@ -146,6 +177,9 @@ describe('scenario (c): a day of her own time', () => {
     expect(shownCause(day({ ...none, ended: 'tick_limit' }))).toBe('timeout');
     expect(shownCause(day({ ...none, failedActions: 4, failedModelCalls: 4 }))).toBe('tool');
     expect(shownCause(day({ ...none, storyDrafts: 1 }))).toBe('model_judgment');
+    // A draft she was never shown in her thinking prompt is the build's, not hers.
+    expect(shownCause(day({ ...none, storyDrafts: 1, thinkPromptsMissingStories: 2 }))).toBe('build');
+    expect(judgeAutonomyDay(day({ thinkPromptsMissingStories: 1 })).checks.find(check => check.id === 'context.study_listed')).toMatchObject({ passed: false, cause: 'build', score: 0.75 });
     const over = judgeAutonomyDay(day({ spentYen: 301 })).checks.find(check => check.id === 'budget.respected')!;
     expect(over).toMatchObject({ passed: false, cause: 'build' });
     expect(judgeAutonomyDay(day({ sessionEnds: { session_budget: 3, rest: 1 } })).checks.find(check => check.id === 'pacing.rest_by_her')).toMatchObject({ passed: false, cause: 'budget' });
@@ -188,20 +222,32 @@ describe('the comparison report', () => {
     scenarioId, scenarioVersion: 1, definitionFingerprint: 'f', mode: 'scripted', startedAt: 'now', steps: 1, metrics: {},
     status: Object.values(scores).every(score => score === 1) ? 'passed' : 'failed',
     checks: Object.entries(scores).map(([id, score]) => ({ id, score, passed: score === 1 })),
-    stop: null, cost: { ...emptyReachCost(), yen: 1 }, wallMilliseconds: 10, ...overrides,
+    stop: null, cost: { ...emptyReachCost(), yen: 1 }, wallMilliseconds: 10, inputs: { script: 's1' }, inputsFingerprint: 'i1', ...overrides,
   });
   const report = (runs: ReachRunRecord[], revision: string): ReachReport => buildReachReport(runs, { revision, mode: 'scripted', generatedAt: '2026-10-05T00:00:00.000Z' });
 
   it('finds regressions, improvements, and runs that cannot be compared', () => {
-    const before = report([run('a', { x: 1 }), run('b', { x: 0.5 }), run('c', { x: 1 }), run('d', { x: 1 })], 'old');
-    const after = report([run('a', { x: 0 }), run('b', { x: 0.8 }), run('c', { x: 1 }, { definitionFingerprint: 'g' }), run('e', { x: 1 })], 'new');
+    const before = report([run('a', { x: 1 }), run('b', { x: 0.5 }), run('c', { x: 1 }), run('d', { x: 1 }), run('f', { x: 0 })], 'old');
+    const after = report([run('a', { x: 0 }), run('b', { x: 0.8 }), run('c', { x: 1 }, { definitionFingerprint: 'g' }), run('e', { x: 1 }),
+      run('f', { x: 1 }, { inputs: { script: 's2' }, inputsFingerprint: 'i2' })], 'new');
     const comparison = compareReachReports(before, after);
     expect(comparison.regressions).toEqual(['a']);
     expect(comparison.improvements).toEqual(['b']);
-    expect(Object.fromEntries(comparison.scenarios.map(item => [item.scenarioId, item.change]))).toEqual({ a: 'regression', b: 'improvement', c: 'incomparable', d: 'removed', e: 'added' });
+    expect(Object.fromEntries(comparison.scenarios.map(item => [item.scenarioId, item.change]))).toEqual({ a: 'regression', b: 'improvement', c: 'incomparable', d: 'removed', e: 'added', f: 'incomparable' });
+    // Another script, seed, model or price table: not compared, and the changed input is named.
+    expect(comparison.scenarios.find(item => item.scenarioId === 'f')!.reason).toBe('inputs-changed:script');
     const markdown = reachReportMarkdown(after, comparison);
     expect(markdown).toContain('| a v1 | failed |');
     expect(markdown).toContain('- Regressions: a');
+  });
+
+  it('accepts only a report whose every run and check has the shape this code writes', () => {
+    const good = report([run('a', { x: 1 })], 'r');
+    expect(isReachReport(JSON.parse(JSON.stringify(good)))).toBe(true);
+    expect(isReachReport({ ...good, runs: [{ ...good.runs[0], checks: [{ id: 'x', score: 'high', passed: true }] }] })).toBe(false);
+    expect(isReachReport({ ...good, runs: [{ ...good.runs[0], stop: { cause: 'weather', detail: '' } }] })).toBe(false);
+    expect(isReachReport({ ...good, runs: [{ ...good.runs[0], inputs: undefined }] })).toBe(false);
+    expect(isReachReport({ ...good, runs: [{ ...good.runs[0], cost: { yen: 1 } }] })).toBe(false);
   });
 
   it('estimates a live run high, from the model-free pass', () => {

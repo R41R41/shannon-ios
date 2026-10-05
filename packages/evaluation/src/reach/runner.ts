@@ -1,6 +1,6 @@
 import { stableFingerprint } from '../report.js';
 import {
-  emptyReachCost, validReachDefinition,
+  emptyReachCost, isReachStopCause, validReachDefinition,
   type ReachCheckResult, type ReachCost, type ReachMode, type ReachReport, type ReachRunRecord,
   type ReachScenarioDefinition, type ReachStop,
 } from './format.js';
@@ -13,10 +13,12 @@ export interface ReachDriverOutcome {
   cost?: ReachCost;
   steps?: number;
   metrics?: Readonly<Record<string, number>>;
+  /** Fingerprints of scripts and seeds, model ids and price settings: see `ReachRunRecord.inputs`. */
+  inputs?: Readonly<Record<string, string>>;
 }
 
 /** The live requirement of the scenario is not met: nothing was run, nothing was spent. */
-export interface ReachPending { pending: string }
+export interface ReachPending { pending: string; inputs?: Readonly<Record<string, string>> }
 
 export interface ReachDriverContext {
   mode: ReachMode;
@@ -51,8 +53,9 @@ export async function runReachScenario(
     scenarioId: definition.id, scenarioVersion: definition.version,
     definitionFingerprint: reachDefinitionFingerprint(definition), mode: options.mode, startedAt: options.startedAt,
   };
+  const recorded = (inputs: Readonly<Record<string, string>> = {}) => ({ inputs, inputsFingerprint: stableFingerprint(inputs) });
   const invalid = (reason: string, wallMilliseconds = 0): ReachRunRecord => ({
-    ...base, status: 'invalid', reason, checks: [], stop: null, cost: emptyReachCost(), wallMilliseconds, steps: 0, metrics: {},
+    ...base, status: 'invalid', reason, checks: [], stop: null, cost: emptyReachCost(), wallMilliseconds, steps: 0, metrics: {}, ...recorded(),
   });
   const problem = validReachDefinition(definition);
   if (problem) return invalid(`definition:${problem}`);
@@ -77,7 +80,7 @@ export async function runReachScenario(
   }
   const wallMilliseconds = Math.round(options.clock() - started);
   if (outcome !== 'abandoned' && 'pending' in outcome) {
-    return { ...base, status: 'pending', reason: outcome.pending, checks: [], stop: null, cost: emptyReachCost(), wallMilliseconds, steps: 0, metrics: {} };
+    return { ...base, status: 'pending', reason: outcome.pending, checks: [], stop: null, cost: emptyReachCost(), wallMilliseconds, steps: 0, metrics: {}, ...recorded(outcome.inputs) };
   }
   const evidence: ReachDriverOutcome = outcome === 'abandoned'
     ? { checks: [], stop: { cause: 'timeout', detail: 'wall-clock:abandoned' } }
@@ -96,7 +99,7 @@ export async function runReachScenario(
     ...base,
     status: !firstFailed && !runStop ? 'passed' : 'failed',
     checks, stop, cost: evidence.cost ?? emptyReachCost(), wallMilliseconds,
-    steps: evidence.steps ?? 0, metrics: evidence.metrics ?? {},
+    steps: evidence.steps ?? 0, metrics: evidence.metrics ?? {}, ...recorded(evidence.inputs),
   };
 }
 
@@ -114,9 +117,35 @@ export function buildReachReport(
   };
 }
 
+/** A report as this code writes it, checked down to every run and check before it is compared with. */
 export function isReachReport(value: unknown): value is ReachReport {
   if (!value || typeof value !== 'object') return false;
   const row = value as Record<string, unknown>;
   return row.schemaVersion === 1 && row.kind === 'shannon-reach-report' && Array.isArray(row.runs)
-    && typeof row.revision === 'string' && (row.mode === 'scripted' || row.mode === 'live');
+    && typeof row.revision === 'string' && isMode(row.mode) && typeof row.generatedAt === 'string'
+    && typeof row.scenarioSetFingerprint === 'string' && row.runs.every(isRunRecord);
+}
+
+const STATUSES = new Set(['passed', 'failed', 'pending', 'invalid']);
+const isMode = (value: unknown) => value === 'scripted' || value === 'live';
+const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const isStringRecord = (value: unknown, check: (item: unknown) => boolean) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+  && Object.values(value as Record<string, unknown>).every(check);
+
+function isRunRecord(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const run = value as Record<string, unknown>;
+  const cost = run.cost as Record<string, unknown> | null | undefined;
+  const stop = run.stop as Record<string, unknown> | null | undefined;
+  return typeof run.scenarioId === 'string' && isNumber(run.scenarioVersion) && typeof run.definitionFingerprint === 'string'
+    && isMode(run.mode) && STATUSES.has(run.status as string) && isNumber(run.wallMilliseconds) && isNumber(run.steps)
+    && typeof run.inputsFingerprint === 'string' && isStringRecord(run.inputs, item => typeof item === 'string')
+    && isStringRecord(run.metrics, isNumber)
+    && Boolean(cost) && typeof cost === 'object' && ['calls', 'inputTokens', 'outputTokens', 'yen', 'promptCharacters'].every(key => isNumber(cost![key]))
+    && (stop === null || (typeof stop === 'object' && isReachStopCause(stop?.cause) && typeof stop?.detail === 'string'))
+    && Array.isArray(run.checks) && run.checks.every(check => {
+      const item = check as Record<string, unknown> | null;
+      return Boolean(item) && typeof item!.id === 'string' && isNumber(item!.score) && typeof item!.passed === 'boolean'
+        && (item!.cause === undefined || isReachStopCause(item!.cause));
+    });
 }

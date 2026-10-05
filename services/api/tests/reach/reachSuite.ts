@@ -1,11 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { configuredAutonomyTextModel, dedicatedAutonomyCredential } from '../../src/autonomyTextModel.js';
+import { configuredAutonomyTextModel, dedicatedAutonomyCredential, resolveAutonomyModel } from '../../src/autonomyTextModel.js';
 import { createConfiguredChatModel } from '../../src/chatModel.js';
 import { estimatedOpenAICostUsd } from '../../src/llmUsage.js';
 import {
   autonomyDayScenario, buildReachReport, cappedEstimate, compareReachReports, conversationEstimate, estimateTotal,
-  isReachReport, pendingEstimate, reachReportMarkdown, runReachScenario, shiritoriScenario, threeToolsScenario,
+  isReachReport, pendingEstimate, reachReportMarkdown, runReachScenario, shiritoriScenario, stableFingerprint, threeToolsScenario,
   type ReachDriver, type ReachEstimateLine, type ReachMode, type ReachReport, type ReachRunRecord, type ReachScenarioDefinition,
 } from '../../../../packages/evaluation/src/reach/index.js';
 import { autonomyDayDriver, scriptedAutonomyDayDriver } from './reachAutonomy.js';
@@ -19,13 +19,16 @@ import { pendingRegistryDriver, scriptedThreeToolsDriver } from './reachTools.js
 export const REACH_SCENARIOS: readonly ReachScenarioDefinition[] = [shiritoriScenario, threeToolsScenario, autonomyDayScenario];
 type Environment = Readonly<Record<string, string | undefined>>;
 
+/** Drivers are made only for the scenarios a run includes, so nothing a skipped scenario would open is opened. */
+export type ReachDriverFactory = () => ReachDriver;
+
 const pending = (reason: string): ReachDriver => async () => ({ pending: reason });
 
-export function scriptedDrivers(): Record<string, ReachDriver> {
+export function scriptedDrivers(): Record<string, ReachDriverFactory> {
   return {
-    [shiritoriScenario.id]: scriptedShiritoriDriver(),
-    [threeToolsScenario.id]: scriptedThreeToolsDriver(),
-    [autonomyDayScenario.id]: scriptedAutonomyDayDriver(),
+    [shiritoriScenario.id]: () => scriptedShiritoriDriver(),
+    [threeToolsScenario.id]: () => scriptedThreeToolsDriver(),
+    [autonomyDayScenario.id]: () => scriptedAutonomyDayDriver(),
   };
 }
 
@@ -37,28 +40,53 @@ export function liveReadiness(environment: Environment) {
   };
 }
 
-export function liveDrivers(environment: Environment): Record<string, ReachDriver> {
-  const ready = liveReadiness(environment);
-  const usage = new ReachUsage();
-  const prices = environment.SHANNON_AUTONOMY_MODEL_PRICES_JSON?.trim();
+/** The price settings a live run is charged and estimated with: values and model ids, never a credential. */
+export function livePriceInputs(environment: Environment): { conversation: Record<string, string>; autonomy: Record<string, string> } {
+  const input = environment.SHANNON_LLM_INPUT_USD_PER_MILLION?.trim();
+  const output = environment.SHANNON_LLM_OUTPUT_USD_PER_MILLION?.trim();
+  const table = environment.SHANNON_AUTONOMY_MODEL_PRICES_JSON?.trim();
+  let tableModels = 'unset';
+  if (table) {
+    try { tableModels = Object.keys(JSON.parse(table) as Record<string, unknown>).sort().join(',') || 'empty'; } catch { tableModels = 'unreadable'; }
+  }
   return {
-    [shiritoriScenario.id]: ready.conversation ? shiritoriDriver(createConfiguredChatModel(environment, usage), usage) : pending('credential: OPENAI_API_KEY is not set'),
-    [threeToolsScenario.id]: pendingRegistryDriver(),
-    [autonomyDayScenario.id]: ready.autonomy
-      ? autonomyDayDriver(configuredAutonomyTextModel(environment), prices ? { environment: { SHANNON_AUTONOMY_MODEL_PRICES_JSON: prices } } : {})
-      : pending('credential: no dedicated SHANNON_AUTONOMY_*_API_KEY is set'),
+    conversation: { chatPrices: input && output ? `${input}/${output} USD per million` : 'built-in table' },
+    autonomy: { priceTableModels: tableModels, priceTable: table ? stableFingerprint(table) : 'fail-safe' },
+  };
+}
+
+export function liveDrivers(environment: Environment): Record<string, ReachDriverFactory> {
+  const ready = liveReadiness(environment);
+  const prices = livePriceInputs(environment);
+  const table = environment.SHANNON_AUTONOMY_MODEL_PRICES_JSON?.trim();
+  return {
+    [shiritoriScenario.id]: () => {
+      if (!ready.conversation) return pending('credential: OPENAI_API_KEY is not set');
+      const usage = new ReachUsage();
+      return shiritoriDriver(createConfiguredChatModel(environment, usage), { usage, inputs: prices.conversation });
+    },
+    [threeToolsScenario.id]: () => pendingRegistryDriver(),
+    [autonomyDayScenario.id]: () => {
+      if (!ready.autonomy) return pending('credential: no dedicated SHANNON_AUTONOMY_*_API_KEY is set');
+      const model = configuredAutonomyTextModel(environment);
+      const resolved = (purpose: 'planning' | 'prose') => resolveAutonomyModel(purpose, [], id => model.canUse(id)) ?? 'none';
+      return autonomyDayDriver(model, {
+        ...(table ? { environment: { SHANNON_AUTONOMY_MODEL_PRICES_JSON: table } } : {}),
+        inputs: { planningModel: resolved('planning'), proseModel: resolved('prose'), ...prices.autonomy },
+      });
+    },
   };
 }
 
 export async function runReachSuite(
-  drivers: Record<string, ReachDriver>,
+  drivers: Record<string, ReachDriverFactory>,
   context: { mode: ReachMode; revision: string; only?: readonly string[]; now?: () => string },
 ): Promise<ReachReport> {
   const now = context.now ?? (() => new Date().toISOString());
   const runs: ReachRunRecord[] = [];
   for (const definition of REACH_SCENARIOS) {
     if (context.only?.length && !context.only.some(prefix => definition.id.startsWith(prefix))) continue;
-    runs.push(await runReachScenario(definition, drivers[definition.id]!, { mode: context.mode, startedAt: now(), clock: () => performance.now() }));
+    runs.push(await runReachScenario(definition, drivers[definition.id]!(), { mode: context.mode, startedAt: now(), clock: () => performance.now() }));
   }
   return buildReachReport(runs, { revision: context.revision, mode: context.mode, generatedAt: now() });
 }
@@ -101,10 +129,13 @@ export function writeReachReport(report: ReachReport, directory: string, options
   const latest = join(directory, `latest-${report.mode}.json`);
   const basePath = options.baselinePath ?? (existsSync(latest) ? latest : null);
   let baseline: ReachReport | null = null;
+  let compared: string | null = null;
   if (basePath) {
-    const parsed: unknown = JSON.parse(readFileSync(basePath, 'utf8'));
-    if (!isReachReport(parsed)) throw new Error(`REACH_BASELINE_INVALID: ${basePath}`);
-    baseline = parsed;
+    let parsed: unknown = null;
+    try { parsed = JSON.parse(readFileSync(basePath, 'utf8')); } catch { parsed = null; }
+    // A baseline the owner named must be valid; a latest file of an older format is set aside and replaced.
+    if (isReachReport(parsed)) { baseline = parsed; compared = basePath; }
+    else if (options.baselinePath) throw new Error(`REACH_BASELINE_INVALID: ${basePath}`);
   }
   const comparison = baseline ? compareReachReports(baseline, report) : undefined;
   const stem = `${report.generatedAt.replace(/[:.]/gu, '-')}-${report.revision.slice(0, 12)}-${report.mode}`;
@@ -114,5 +145,5 @@ export function writeReachReport(report: ReachReport, directory: string, options
   writeFileSync(json, `${JSON.stringify({ ...report, ...(comparison ? { comparison } : {}) }, null, 2)}\n`);
   writeFileSync(markdown, text);
   if (options.full) writeFileSync(latest, `${JSON.stringify(report, null, 2)}\n`);
-  return { json, markdown, text, compared: basePath };
+  return { json, markdown, text, compared };
 }

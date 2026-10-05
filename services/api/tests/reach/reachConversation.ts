@@ -6,7 +6,7 @@ import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult 
 import type { LlmUsageEvent, LlmUsageStore } from '../../src/llmUsage.js';
 import { SQLiteShannonStore } from '../../src/sqliteStore.js';
 import {
-  SHIRITORI_TURNS, ShiritoriGame, carried, judgeShiritori, sameReading, scriptedShiritoriReply, shiritoriScenario,
+  SHIRITORI_TURNS, ShiritoriGame, carried, judgeShiritori, sameReading, scriptedShiritoriReply, shiritoriScenario, shiritoriScriptInputs,
   type ReachDriver, type ReachStop,
 } from '../../../../packages/evaluation/src/reach/index.js';
 
@@ -56,12 +56,14 @@ class RequestWatch implements ShannonChatModel {
   }
 }
 
-/** Lets the work a turn leaves behind (scheduled with `setImmediate`) finish before the next turn. */
-async function settle(): Promise<void> {
-  for (let round = 0; round < 4; round += 1) await new Promise(resolve => setImmediate(resolve));
+export interface ShiritoriDriverOptions {
+  usage?: ReachUsage;
+  /** Live: the model and price settings the run used, by name and value (never a credential). */
+  inputs?: Readonly<Record<string, string>>;
 }
 
-export function shiritoriDriver(model: ShannonChatModel, usage?: ReachUsage): ReachDriver {
+export function shiritoriDriver(model: ShannonChatModel, options: ShiritoriDriverOptions = {}): ReachDriver {
+  const usage = options.usage;
   return async ({ signal, mode }) => {
     const directory = mkdtempSync(join(tmpdir(), 'shannon-reach-a-'));
     let clock = Date.parse('2026-10-05T10:00:00.000Z');
@@ -69,6 +71,12 @@ export function shiritoriDriver(model: ShannonChatModel, usage?: ReachUsage): Re
     const store = new SQLiteShannonStore({ path: join(directory, 'reach.sqlite'), now });
     const watch = new RequestWatch(model);
     const api = createLocalApiKernel(now, { chatModel: watch, stateStore: store, conversationStore: store, knowledgeStore: store });
+    // The work a turn leaves behind runs after the reply, as on the server: the feeling of the reply is committed on
+    // the next tick, and the memory refinement by the background coordinator. Both finish before the next turn.
+    const settle = async () => {
+      await new Promise(resolve => setImmediate(resolve));
+      await api.waitForBackground(SCOPE);
+    };
     const said: string[] = [];
     const errors: number[] = [];
     let longestHistory = 0;
@@ -111,8 +119,7 @@ export function shiritoriDriver(model: ShannonChatModel, usage?: ReachUsage): Re
         }
       }
     } finally {
-      // The turn's background work (emotion commit, memory refinement) runs after the reply, as on the server.
-      await new Promise(resolve => setTimeout(resolve, 25));
+      await settle();
       store.close();
       rmSync(directory, { recursive: true, force: true });
     }
@@ -123,6 +130,7 @@ export function shiritoriDriver(model: ShannonChatModel, usage?: ReachUsage): Re
     const usd = events.reduce((sum, event) => sum + event.estimatedCostUsd, 0);
     return {
       checks, stop, steps: watch.calls,
+      inputs: { ...shiritoriScriptInputs(), chatModel: model.model, ...options.inputs },
       metrics: { ...metrics, chatErrors: errors.length, longestHistory },
       cost: {
         calls: watch.calls, promptCharacters: watch.promptCharacters, measured: mode === 'live' && events.length > 0,

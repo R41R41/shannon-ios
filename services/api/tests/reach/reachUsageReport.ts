@@ -1,4 +1,5 @@
-import { resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { resolve, sep } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 /**
@@ -16,7 +17,13 @@ const CORRECTION = /^(?:違う|ちがう|訂正|そうじゃなく|そうでは�
 const REASK_WINDOW = 10 * 60_000;
 const REACTION_SCORE: Readonly<Record<string, number>> = { unclear: 0, more: 1, like: 2 };
 
-export interface UsageReportOptions { days: number; until: string; scopeKey: string }
+export interface UsageReportOptions {
+  days: number;
+  until: string;
+  scopeKey: string;
+  /** Directories whose databases are refused (the production one by default), compared after symbolic links are resolved. */
+  refusedDirectories?: readonly string[];
+}
 
 type Rate = { numerator: number; denominator: number; rate: number | null };
 type Unavailable = { available: false; reason: string };
@@ -30,9 +37,11 @@ export interface UsageReport {
 
 const rate = (numerator: number, denominator: number): Rate => ({ numerator, denominator, rate: denominator ? Math.round(numerator / denominator * 1000) / 1000 : null });
 
-/** ISO week key of an instant, `2026-W40`, for the weekly trend. */
+const JST_OFFSET = 9 * 3_600_000;
+
+/** ISO week key of an instant in the owner's time (Tokyo), `2026-W40`, for the weekly trend. */
 export function weekKey(at: string): string {
-  const date = new Date(at);
+  const date = new Date(Date.parse(at) + JST_OFFSET);
   const day = (date.getUTCDay() + 6) % 7;
   const thursday = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - day + 3));
   const firstThursday = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4));
@@ -41,8 +50,13 @@ export function weekKey(at: string): string {
 }
 
 export function reachUsageReport(path: string, options: UsageReportOptions): UsageReport {
-  const absolute = resolve(path);
-  if (absolute.startsWith(PRODUCTION_DATABASE_DIRECTORY)) throw new Error('REACH_USAGE_PRODUCTION_PATH: run it against a copy');
+  const absolute = realPath(path);
+  for (const directory of options.refusedDirectories ?? [PRODUCTION_DATABASE_DIRECTORY]) {
+    const refused = realPath(directory);
+    if (absolute === refused || absolute.startsWith(refused.endsWith(sep) ? refused : `${refused}${sep}`)) {
+      throw new Error('REACH_USAGE_PRODUCTION_PATH: run it against a copy');
+    }
+  }
   const database = new DatabaseSync(absolute, { readOnly: true });
   try {
     const until = options.until;
@@ -164,6 +178,11 @@ export function reachUsageReport(path: string, options: UsageReportOptions): Usa
   } finally {
     database.close();
   }
+}
+
+/** A path with every symbolic link resolved; a path that does not exist (yet) as written. */
+function realPath(path: string): string {
+  try { return realpathSync(path); } catch { return resolve(path); }
 }
 
 /** Two owner messages say the same thing: equal after spacing and punctuation, or nearly the same pairs of characters. */

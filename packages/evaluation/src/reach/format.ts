@@ -112,6 +112,13 @@ export interface ReachRunRecord {
   startedAt: string;
   /** Content-free numbers the scenario wants kept beside its checks. */
   metrics: Readonly<Record<string, number>>;
+  /**
+   * What the run was given apart from the definition: fingerprints of the scripts and seeds, and for a live
+   * run the model ids and price settings (names and values of prices, never a credential).
+   */
+  inputs: Readonly<Record<string, string>>;
+  /** Fingerprint of `inputs`: two records are comparable only when it is the same. */
+  inputsFingerprint: string;
 }
 
 export interface ReachReport {
