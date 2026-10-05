@@ -110,6 +110,19 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
         XCTAssertNil(session.awakeActivity)
     }
 
+    func testQuittingEndsTheCallAndWaitsAtMostTheLimit() async {
+        let call = ShannonDesktopVoiceCall()
+        call.attach(conversation: ShannonConversationModel.designPreview(), menuBar: nil)
+        XCTAssertTrue(ShannonDesktopAppDelegate.voiceCall === call)
+        call.session.phase = .speaking
+        let started = ContinuousClock.now
+        await call.endForQuit(limit: .milliseconds(300))
+        XCTAssertEqual(call.session.phase, .idle)
+        XCTAssertLessThan(ContinuousClock.now - started, .seconds(2))
+        // Without a call, quitting is not held back.
+        XCTAssertEqual(ShannonDesktopAppDelegate().applicationShouldTerminate(NSApplication.shared), .terminateNow)
+    }
+
     // MARK: Elsewhere (owner decision 2026-10-06, option B)
 
     func testTheRowSaysTheCallAndItsPhase() {

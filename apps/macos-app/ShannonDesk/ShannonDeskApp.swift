@@ -4,6 +4,8 @@ import SwiftUI
 
 @main
 struct ShannonDeskApp: App {
+    /// Quitting during a voice conversation ends the call and lets its end reach the server first (A16).
+    @NSApplicationDelegateAdaptor(ShannonDesktopAppDelegate.self) private var appDelegate
     @State private var conversationModel: ShannonConversationModel
     @State private var connectionModel: ShannonConnectionModel
     @State private var memoryModel: ShannonMemoryModel

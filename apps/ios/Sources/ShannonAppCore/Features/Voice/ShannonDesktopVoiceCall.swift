@@ -62,6 +62,7 @@ public final class ShannonDesktopVoiceCall {
     public func attach(conversation: ShannonConversationModel, menuBar: ShannonDesktopMenuBar? = .shared) {
         guard self.conversation == nil else { return }
         self.conversation = conversation
+        ShannonDesktopAppDelegate.voiceCall = self
         followWindows(menuBar: menuBar)
         let arbiter = ShannonSpeechArbiter.shared
         arbiter.sessionInUse = { [weak self] in
@@ -95,6 +96,27 @@ public final class ShannonDesktopVoiceCall {
     /// 終了: what was answered stays stored, a 「友人も一緒」 period is remembered, and the card says so.
     public func end() {
         workspace.endCall(session)
+    }
+
+    /// How long quitting waits for the end of a call to reach the server.
+    static let quitLimit: Duration = .seconds(2)
+
+    /// ⌘Q during a call: ends it as 終了 does, then waits until `callEnded` was sent and a 「友人も一緒」 period
+    /// handed to the server, or the limit passed, whichever comes first.
+    func endForQuit(limit: Duration = ShannonDesktopVoiceCall.quitLimit) async {
+        guard isShown else { return }
+        end()
+        var sent = false
+        Task { @MainActor in
+            await ShannonVoiceCallPresence.shared.settle()
+            sent = true
+        }
+        let deadline = ContinuousClock.now.advanced(by: limit)
+        while ContinuousClock.now < deadline {
+            if sent, (workspace.callMemory?.pending ?? 0) == 0 { return }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        ShannonVoiceDiagnostics.shared.record("gemini.session.quit.timed_out")
     }
 
     /// The control between 本人だけ and 友人も一緒, after its confirmation. An unshared photo is dropped.
