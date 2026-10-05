@@ -13,15 +13,16 @@ const BASELINE_MOOD: ShannonEmotion = { valence: 0, arousal: 0.3, openness: 0.35
  * voice acts with, so the call Eye and the voice cannot disagree. `mood` is the
  * owner's continuous mood; a guest call passes none and nothing is stored.
  * `kind` (the feeling that decided the face, by the rule of the stored face) is
- * added only for the owner's own call: a 「友人も一緒」 guest call keeps the face alone.
+ * added only when the owner alone hears the call (`ownerAlone`): with a companion
+ * present, and in a 「友人も一緒」 guest call, the plan keeps the face alone.
  */
 export function voicePlanResponse(
   decision: VoiceTurnDecision,
   emotion?: ShannonExpressiveEmotion,
   mood: ShannonEmotion = BASELINE_MOOD,
-  options: { guest?: boolean } = {},
+  options: { ownerAlone?: boolean } = {},
 ): Record<string, unknown> {
-  const kind = options.guest ? undefined : messageEmotionKind(emotion);
+  const kind = options.ownerAlone === true ? messageEmotionKind(emotion) : undefined;
   const selectedWaitingDirection = waitingDirectionFor(decision);
   const waitingDirection = emotion?.overrideReason === 'grief'
     ? { ...selectedWaitingDirection, scenario: 'support' as const, variant: 'warm' as const }

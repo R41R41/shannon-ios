@@ -114,15 +114,26 @@ export function deriveShannonFace(
   mood: ShannonEmotion,
   feeling?: ShannonExpressiveEmotion,
 ): ShannonFace {
-  if (feeling && feeling.primary !== 'neutral' && feeling.visibility !== 'hidden') {
-    return faceForEmotionKind(feeling.primary);
-  }
-  return faceForMood(mood);
+  const kind = messageEmotionKind(feeling);
+  return kind ? faceForEmotionKind(kind) : faceForMood(mood);
 }
 
-/** The kind a message carries with its face: the feeling that decided the face, never the quiet mood's. */
+/**
+ * The kind a message carries with its face: the feeling that decided the face, never the quiet mood's.
+ * `deriveShannonFace` reads this same predicate, so "kind exactly when the face comes from the feeling" holds by construction.
+ */
 export function messageEmotionKind(feeling?: ShannonExpressiveEmotion): ShannonEmotionKind | undefined {
   return feeling && feeling.primary !== 'neutral' && feeling.visibility !== 'hidden' ? feeling.primary : undefined;
+}
+
+/**
+ * The message emotion as it may be sent while anyone but the owner can see or hear the reply (coordinator decision
+ * 2026-10-05): the face as before, without `kind`. `kind` is sent only to the owner alone; it may still be stored.
+ */
+export function messageEmotionForOthers(emotion: ShannonMessageEmotion): ShannonMessageEmotion {
+  if (emotion.kind === undefined) return emotion;
+  const { kind: _kind, ...face } = emotion;
+  return Object.freeze(face);
 }
 
 export function createShannonMessageEmotion(

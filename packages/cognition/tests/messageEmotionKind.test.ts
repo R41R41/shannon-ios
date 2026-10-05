@@ -6,6 +6,7 @@ import {
   createShannonMessageEmotion,
   deriveShannonFace,
   faceForEmotionKind,
+  messageEmotionForOthers,
   messageEmotionKind,
   resolveReplyEmotion,
   type ShannonExpressiveEmotion,
@@ -47,5 +48,15 @@ describe('the kind beside the face (owner decision 2026-10-05)', () => {
     const plain = reply('はい、こう進めるのが良いと思います。', '次の設計を少し考えてみて');
     expect(plain.expression).toBe('calm');
     expect(plain).not.toHaveProperty('kind');
+  });
+});
+
+describe('the kind with others present (coordinator decision 2026-10-05)', () => {
+  it('keeps the face and the values and drops only the kind', () => {
+    const emotion = createShannonMessageEmotion(MOOD, feeling('triumphant'));
+    const { kind: _kind, ...face } = emotion;
+    expect(messageEmotionForOthers(emotion)).toEqual(face);
+    const quiet = createShannonMessageEmotion(MOOD);
+    expect(messageEmotionForOthers(quiet)).toBe(quiet);
   });
 });

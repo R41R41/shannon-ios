@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { InMemoryCompanionStateStore, createShannonMessageEmotion, type ReplyEmotion, type ShannonExpressiveEmotion } from '@shannon/cognition';
+import { InMemoryCompanionStateStore, SHANNON_EMOTION_KINDS, createShannonMessageEmotion, type ReplyEmotion, type ShannonExpressiveEmotion } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { chatSentenceStreamLines } from '../src/chatSentenceStream.js';
@@ -66,10 +67,19 @@ describe('text: messageEmotion.kind', () => {
     expect(lines.filter(line => line.type === 'sentence').every(line => !('kind' in line))).toBe(true);
   });
 
-  it('follows the face with other people present: the same rule, the same reduced response otherwise', async () => {
-    const { chat } = kernel();
+  it('is never sent while other people can see the reply: the face is, and the owner reads the kind in his history', async () => {
+    const { api, model, chat, history } = kernel();
     const emotion = (await chat('もうできたの？', PROUD, { audience: 'others' })).messageEmotion;
-    expect(emotion).toMatchObject({ expression: 'determined', feeling: 'proud', kind: 'smug' });
+    expect(emotion).toMatchObject({ expression: 'determined', feeling: 'proud' });
+    expect(emotion).not.toHaveProperty('kind');
+    model.reply = PROUD;
+    const response = await api.dispatch({ method: 'POST', path: '/v1/chat', deviceId: 'iphone',
+      body: { scopeKey: 'owner', threadId: 'thread', message: 'もうできたの？', stream: 'sentences', audience: 'others' }, chatSentences: { write: () => undefined } });
+    const done = chatSentenceStreamLines(response).find(line => line.type === 'done') as { response: { messageEmotion: Emotion } } | undefined;
+    expect(done?.response.messageEmotion).toMatchObject({ expression: 'determined', feeling: 'proud' });
+    expect(done?.response.messageEmotion).not.toHaveProperty('kind');
+    // Stored with the message: only the owner reads GET /v1/conversation.
+    expect((await history()).map(message => message.messageEmotion?.kind)).toEqual(['smug', 'smug']);
   });
 });
 
@@ -85,6 +95,35 @@ describe('voice: the plan and the stored turn', () => {
       emotion: { primary: plan.emotion.primary, intensity: plan.emotion.intensity } } });
     expect((stored.body as { messageEmotion: Emotion }).messageEmotion).toMatchObject({ expression: 'determined', kind: 'smug' });
     expect((await history()).at(-1)?.messageEmotion).toMatchObject({ kind: 'smug' });
+  });
+
+  it('sends no kind on a /turns response with a companion present, and stores it for the owner\'s history', async () => {
+    const { api, history } = kernel();
+    const stored = await api.dispatch({ method: 'POST', path: turns, body: {
+      scopeKey: 'owner', threadId: 'thread', userTranscript: 'もうできたの？', shannonTranscript: 'ふふん、ボクにかかれば簡単です！',
+      emotion: { primary: 'smug', intensity: 0.7 }, companionPresent: true } });
+    const emotion = (stored.body as { messageEmotion: Emotion }).messageEmotion;
+    expect(emotion).toMatchObject({ expression: 'determined', feeling: 'proud' });
+    expect(emotion).not.toHaveProperty('kind');
+    expect((await history()).at(-1)?.messageEmotion).toMatchObject({ kind: 'smug' });
+  });
+
+  it('keeps the owner\'s plan to the face with a companion present, on every streamed line', async () => {
+    const { api, model } = kernel();
+    model.reply = 'ふふん、ボクにかかれば簡単です！';
+    const plans: Array<Record<string, unknown>> = [];
+    const response = await api.streamLiveVoiceDelegation({ method: 'POST', path: delegations, body: {
+      scopeKey: 'owner', threadId: 'thread', transcript: 'もうできたの？',
+      deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null, companionPresent: true } } },
+    { onPlan: async plan => { plans.push(plan); }, onTextDelta: async () => undefined });
+    const completed = (response.body as { companionPresent?: boolean; voicePlan: Record<string, unknown> });
+    expect(completed.companionPresent).toBe(true);
+    expect(plans.length).toBeGreaterThan(0);
+    // The face comes from her feeling (alone, this plan would carry `kind: 'smug'`).
+    expect(completed.voicePlan).toMatchObject({ expression: 'determined', feeling: 'proud', emotion: { primary: 'smug' } });
+    for (const plan of [...plans, completed.voicePlan]) {
+      expect(plan).not.toHaveProperty('kind');
+    }
   });
 
   it('keeps a 友人も一緒 guest call to the face alone', async () => {
@@ -119,5 +158,16 @@ describe('stored rows', () => {
     expect(parseMessageMetadata(row('aNewerKind'))?.messageEmotion).toEqual({ valence: 0, arousal: 0.3, openness: 0.35, expression: 'joyful' });
     expect(parseMessageMetadata(row(7))?.messageEmotion).toEqual({ valence: 0, arousal: 0.3, openness: 0.35, expression: 'joyful' });
     expect(parseMessageMetadata(row())?.messageEmotion).toEqual({ valence: 0, arousal: 0.3, openness: 0.35, expression: 'joyful' });
+  });
+});
+
+describe('the apps\' kind icons', () => {
+  it('name only kinds this server sends: every case of ShannonEmotionKindIcon is in SHANNON_EMOTION_KINDS', () => {
+    const swift = readFileSync(new URL('../../../apps/ios/Sources/ShannonAppCore/ShannonEmotionKindIcon.swift', import.meta.url), 'utf8');
+    const body = swift.slice(swift.indexOf('enum ShannonEmotionKindIcon'), swift.indexOf('public var japaneseName'));
+    const cases = [...body.matchAll(/^\s*case (\w+)\s*$/gm)].map(match => match[1]);
+    expect(cases).toHaveLength(26);
+    const sent = new Set<string>(SHANNON_EMOTION_KINDS.filter(kind => kind !== 'neutral'));
+    expect(cases.filter(kind => !sent.has(kind))).toEqual([]);
   });
 });

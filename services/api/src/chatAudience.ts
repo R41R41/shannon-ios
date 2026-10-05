@@ -2,6 +2,7 @@ import {
   OWNER_AUDIENCE,
   UNKNOWN_GUEST_PRESENCE,
   guardedShannonSeenPrompt,
+  messageEmotionForOthers,
   shannonIdentityPrompt,
   type CompanionStateSnapshot,
   type MemoryAudience,
@@ -59,7 +60,8 @@ export interface ChatAudienceTurn {
  * existed (guest voice returns none), so only what renders the reply is kept: her traits,
  * emotion values and present face. Collections keep their keys, empty, because deployed
  * decoders require them. The prompt and the thread row (title, rolling summary, sections)
- * are owner material and are not returned.
+ * are owner material and are not returned. The face is sent as before; the reply's emotion `kind`
+ * is the owner's alone (coordinator decision 2026-10-05) and is left out, though it is stored.
  */
 function sharedChatResponse(response: ChatResponse): ChatResponse {
   const { thread: _thread, state, ...rest } = response;
@@ -71,7 +73,7 @@ function sharedChatResponse(response: ChatResponse): ChatResponse {
     // The cause of a feeling may quote an earlier one-to-one turn; the face itself stays.
     presence: { mood: { ...presence.mood, cause: '' }, temperamentReasons: { closeness: '', curiosity: '', confidenceAboutUser: '' } },
   };
-  return { ...rest, systemPrompt: '', state: reduced };
+  return { ...rest, messageEmotion: messageEmotionForOthers(rest.messageEmotion), systemPrompt: '', state: reduced };
 }
 
 const OWNER_TURN: ChatAudienceTurn = Object.freeze({

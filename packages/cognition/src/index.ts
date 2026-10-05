@@ -88,6 +88,7 @@ export {
   deriveShannonFace,
   faceForEmotionKind,
   faceForMood,
+  messageEmotionForOthers,
   messageEmotionKind,
   type ShannonExpression,
   type ShannonFace,

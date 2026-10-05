@@ -242,7 +242,7 @@ async function completeLiveVoiceDelegation(
     target: temporaryGuest ? '現在の話者' : 'ライ氏',
   });
   let expressiveEmotion = provisionalExpressiveEmotion;
-  let voicePlan = voicePlanResponse(decision, expressiveEmotion, voiceMood, { guest: temporaryGuest });
+  let voicePlan = voicePlanResponse(decision, expressiveEmotion, voiceMood, { ownerAlone: alone && !temporaryGuest });
   await observer?.onPlan(voicePlan);
   observer?.signal?.throwIfAborted();
   if (!decision.shouldRespond) {
@@ -414,7 +414,7 @@ async function completeLiveVoiceDelegation(
               now: occurredAt,
               target: temporaryGuest ? '現在の話者' : 'ライ氏',
             });
-            voicePlan = voicePlanResponse(decision, expressiveEmotion, voiceMood, { guest: temporaryGuest });
+            voicePlan = voicePlanResponse(decision, expressiveEmotion, voiceMood, { ownerAlone: alone && !temporaryGuest });
             await observer.onPlan(voicePlan);
           }
         },
@@ -443,7 +443,7 @@ async function completeLiveVoiceDelegation(
     now: occurredAt,
     target: temporaryGuest ? '現在の話者' : 'ライ氏',
   });
-  voicePlan = voicePlanResponse(decision, expressiveEmotion, voiceMood, { guest: temporaryGuest });
+  voicePlan = voicePlanResponse(decision, expressiveEmotion, voiceMood, { ownerAlone: alone && !temporaryGuest });
   // Her stored feeling toward the owner moves only on his own words.
   if (alone) {
     dependencies.stateStore.apply(scopeKey, {

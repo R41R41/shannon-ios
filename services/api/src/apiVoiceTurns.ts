@@ -1,4 +1,4 @@
-import { UNKNOWN_GUEST_PRESENCE, type CompanionStateStore } from '@shannon/cognition';
+import { UNKNOWN_GUEST_PRESENCE, messageEmotionForOthers, type CompanionStateStore } from '@shannon/cognition';
 import { presentCompanionState, resolveReplyEmotion } from './companionPresence.js';
 import { storedVoiceFace } from './voiceEmotionPlan.js';
 import { objectBody, validScopeKey, validBoundedString, badRequest } from './apiValidation.js';
@@ -68,7 +68,9 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
     try { dependencies.looks?.turnStored(scopeKey, threadId, userMessage, utteranceId); } catch { /* the turn is stored either way */ }
   }
   dependencies.background.schedule(turn, experience.id);
-  return { status: 201, body: { threadId, turnId: experience.id, messageEmotion, state: presentCompanionState(captured, completedAt) } };
+  // The face goes back as before; its `kind` is sent only to the owner alone (it is stored either way).
+  const shownEmotion = 'audience' in companion ? messageEmotionForOthers(messageEmotion) : messageEmotion;
+  return { status: 201, body: { threadId, turnId: experience.id, messageEmotion: shownEmotion, state: presentCompanionState(captured, completedAt) } };
 }
 
 function decidedEmotion(value: unknown): { decided: { primary: string; intensity: number } } | null {
