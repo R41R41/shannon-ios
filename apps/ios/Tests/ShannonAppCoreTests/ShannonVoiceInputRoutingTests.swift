@@ -77,11 +77,24 @@ final class ShannonMacVoiceInputRoutingTests: XCTestCase {
 
     func testAnEngineThatKeepsStoppingIsNotRestartedInPlaceForEver() {
         var budget = ShannonVoiceEngineRestartBudget()
+        XCTAssertEqual(ShannonVoiceEngineRestartBudget.healthyRun, ShannonVoiceCaptureWatch.limit)
         XCTAssertTrue(budget.allows(at: 0))
         XCTAssertTrue(budget.allows(at: 1))
         XCTAssertTrue(budget.allows(at: 2))
-        XCTAssertFalse(budget.allows(at: 3), "the fourth within ten seconds goes to the bounded reconnect")
-        XCTAssertTrue(budget.allows(at: 11), "the window moves on")
+        XCTAssertFalse(budget.allows(at: 3), "a fourth stop right after a restart goes to the bounded reconnect")
+    }
+
+    func testEarphonesThatChangeTheRouteNowAndThenNeverUseTheBudgetUp() {
+        var budget = ShannonVoiceEngineRestartBudget()
+        // AirPods reconnecting every ten seconds for a minute: each restart ran healthily before the next stop.
+        for second in stride(from: 0.0, through: 60, by: 10) {
+            XCTAssertTrue(budget.allows(at: second))
+        }
+        // Three quick stops after a healthy run are allowed again; the fourth is not.
+        XCTAssertTrue(budget.allows(at: 70))
+        XCTAssertTrue(budget.allows(at: 71))
+        XCTAssertTrue(budget.allows(at: 72))
+        XCTAssertFalse(budget.allows(at: 73))
     }
 
     @MainActor

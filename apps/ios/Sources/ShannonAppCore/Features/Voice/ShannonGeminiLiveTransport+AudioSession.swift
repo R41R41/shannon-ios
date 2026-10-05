@@ -102,17 +102,24 @@ extension ShannonGeminiLiveTransport {
     }
 }
 
-/// How often an engine may be started again in place: at most `limit` times within `window` seconds.
+/// How often an engine may be started again in place. Only an engine that stops again soon after being restarted
+/// counts: after `limit` such restarts in a row the call's bounded reconnect takes over. An engine that ran for
+/// `healthyRun` seconds after its last restart was healthy, and the next stop starts a new count, so earphones or
+/// AirPods that change the route now and then never use the budget up.
 struct ShannonVoiceEngineRestartBudget: Equatable, Sendable {
     static let limit = 3
-    static let window: TimeInterval = 10
-    private(set) var restarts: [TimeInterval] = []
+    /// The capture watch's own limit: a live engine that ran this long without stopping delivered its buffers
+    /// (were it deaf, the watch would have ended it as an audio failure by then).
+    static let healthyRun: TimeInterval = ShannonVoiceCaptureWatch.limit
+    private(set) var count = 0
+    private(set) var lastRestartAt: TimeInterval?
 
     /// Counts one restart at `now` and says whether it may happen.
     mutating func allows(at now: TimeInterval) -> Bool {
-        restarts.removeAll { now - $0 > Self.window }
-        guard restarts.count < Self.limit else { return false }
-        restarts.append(now)
+        if let last = lastRestartAt, now - last >= Self.healthyRun { count = 0 }
+        guard count < Self.limit else { return false }
+        count += 1
+        lastRestartAt = now
         return true
     }
 }
