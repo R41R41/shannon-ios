@@ -381,7 +381,9 @@ describe('remembering a touch', () => {
       expect(rows, table).not.toContain('覚えました');
     }
     const columns = (table: string) => (database.prepare(`PRAGMA table_info('${table}')`).all() as unknown as Array<{ name: string }>).map(column => column.name);
-    expect(columns('body_touches')).toEqual(['scope_key', 'touch_id', 'touch_type', 'audience', 'occurred_at', 'received_at', 'duration_ms', 'strength', 'burst_id', 'region', 'surface']);
+    expect(columns('body_touches')).toEqual(['scope_key', 'touch_id', 'touch_type', 'audience', 'occurred_at', 'received_at', 'duration_ms', 'strength', 'burst_id', 'region', 'surface',
+      // Touch vocabulary 2 (added 2026-10-06): closed words only.
+      'part', 'side', 'gesture', 'reflex']);
     expect(columns('body_touch_bursts')).toEqual(['scope_key', 'burst_id', 'touch_type', 'started_at', 'last_at', 'touch_count', 'total_duration_ms', 'others', 'said_json', 'region', 'surface']);
     database.close();
   });

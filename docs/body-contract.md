@@ -40,10 +40,11 @@ Things that happened to the body, in a batch.
 | `strength` | number, 0–1 | touch types only, optional | Stored to two decimals. |
 | `minutesAway` | integer, 0–10,080 | `ownerAway` / `ownerReturned` only, optional | |
 | `region` | `head` \| `face` \| `side` \| `hand` \| `body` | touch types only, optional | Which part of her was touched (added 2026-10-03). A value outside the list is left out, not refused. See [Which part, and on which surface](#which-part-and-on-which-surface). |
+| `part`, `side`, `gesture`, `input`, `reflex` | see [Touch vocabulary 2](#touch-vocabulary-2) | touch types only, optional | Added 2026-10-06. Send them only to a server that says `touchVocabulary: 2` or more; an older server refuses them with `400`. |
 
 | Group | `type` | Extra fields |
 | --- | --- | --- |
-| Touch | `pet`, `tickle`, `poke`, `carry`, `holdHand` | `durationMs`, `strength`, `region` |
+| Touch | `pet`, `tickle`, `poke`, `carry`, `holdHand` | `durationMs`, `strength`, `region`, and since 2026-10-06 `part`, `side`, `gesture`, `input`, `reflex` |
 | Owner at the PC | `ownerAway`, `ownerReturned` | `minutesAway` |
 | Plain | `callStarted`, `callEnded`, `windowHidden`, `windowShown`, `appStarted` | none |
 | Game (her Minecraft body only, added 2026-10-05) | `game.died` | `cause` (required, a namespaced id such as `minecraft:lava`) |
@@ -76,6 +77,7 @@ A malformed request is refused as a whole with `400` and stores nothing. A well-
 | `ignored` + `reason: touch_only` | The device registered as a body that only feels touch and the event is not a touch. | No |
 | `ignored` + `reason: not_game_body` | A game event from a device that is not her Minecraft body (`docs/minecraft-body-contract.md`). | No |
 | `ignored` + `reason: game_only` | Her Minecraft body sent an event that is not a game event. | No |
+| `ignored` + `reason: not_a_touch` | Its [touch vocabulary 2](#touch-vocabulary-2) fields name something that cannot be a touch: `gesture: hold` anywhere but the hand, or `input: hover` anywhere but the head and the hair (or with a gesture other than `stroke`). Added 2026-10-06. Only that event; the rest of the batch is taken. | No; it is a bug in the sender |
 
 Retry the same batch with the same `id`s on a network failure or `5xx`. An `id` that was stored answers `duplicate` however late the retry arrives, within the retention period.
 
@@ -134,9 +136,12 @@ A read-only snapshot of what the body should show. Reading it changes nothing of
   "capabilities": { "expressions": ["smile"], "gestures": ["stretch"], "flags": { "tears": true }, "updatedAt": "2026-10-02T02:00:00.000Z" },
   "look": null,
   "reachOut": { "pending": 1, "latestId": "0b6f…" },
-  "ownerCallElsewhere": { "active": false }
+  "ownerCallElsewhere": { "active": false },
+  "touchVocabulary": 2
 }
 ```
+
+`touchVocabulary` (added 2026-10-06) is a fact of the server, not of the snapshot: it is on every answer, also on an `unchanged` one, and it is not part of the `etag`. See [Touch vocabulary 2](#touch-vocabulary-2).
 
 | Field | Values | Source (existing, unchanged) |
 | --- | --- | --- |
@@ -257,7 +262,7 @@ The body registers what it can express. One registration per device and scope; a
 | `flags` | object of at most 16 `id: boolean` | no | For example `shoulders`, `tears`. `camera: true` says the owner has switched the camera on. |
 | `surface` | `windows` \| `mac` \| `iphone` | no | Where this body is (added 2026-10-03). A value outside the list is left out, not refused; a later registration without it removes it. |
 
-An id is 1–40 characters of `[A-Za-z0-9_.-]`, starting with a letter or digit, without repeats in a list. No names in Japanese, no descriptions, no other field. The answer is `200` with the stored registration and `updatedAt`.
+An id is 1–40 characters of `[A-Za-z0-9_.-]`, starting with a letter or digit, without repeats in a list. No names in Japanese, no descriptions, no other field. The answer is `200` with the stored registration and `updatedAt`, and (since 2026-10-06) `touchVocabulary`, the touch vocabulary this server takes (see [Touch vocabulary 2](#touch-vocabulary-2)); `touchVocabulary` is not part of the stored registration and is not in `presence.capabilities`.
 
 Her Minecraft body never registers: from the device of `SHANNON_MINECRAFT_BODY_JSON` this route answers `403 GAME_BODY_CAPABILITIES_DENIED` (see [What the server does with an event](#what-the-server-does-with-an-event)).
 
@@ -518,6 +523,7 @@ Owner decision 2026-10-02 (「触ったり動かしたりしたのがバック�
 | `touch.strength` | number, 0–1 | no | Stored to two decimals. |
 | `touch.ongoing` | boolean | yes | `true` while the touch is still going on. |
 | `touch.region` | `head` \| `face` \| `side` \| `hand` \| `body` | no | Which part of her is touched (added 2026-10-03). A value outside the list is left out, not refused. |
+| `touch.part`, `touch.side`, `touch.gesture`, `touch.input`, `touch.reflex` | see [Touch vocabulary 2](#touch-vocabulary-2) | no | Added 2026-10-06, only to a server that says `touchVocabulary: 2` or more. |
 | `audience` | `owner` \| `others` | yes | Decided as for events. |
 | `occurredAt` | ISO 8601 | yes | When the touch began on the PC. |
 
@@ -542,6 +548,7 @@ The answer is `200`:
 | `message.threadId` | string \| `null` | The Talk a spoken answer would continue (the most recent one); `null` when she has no Talk yet. |
 | `message.listenSeconds` | integer, 0–30 (default 6) | How long the body keeps its microphone open for his answer. |
 | `mood.expression`, `mood.feeling` | the `presence` vocabulary | Her face **after** the touch (and after her line). Present for both statuses, so the body can show the feeling at once instead of waiting for the next presence poll. No cause is returned. |
+| `ignored` | `not_a_touch`, absent otherwise | Added 2026-10-06. The request named something that cannot be a touch (see [Touch vocabulary 2](#touch-vocabulary-2)): the answer is `quiet`, and the touch moved no feeling, left no memory and called no model. The answer is kept under the `id` like any other. |
 
 What the body does:
 
@@ -633,6 +640,78 @@ Touches of one kind are still one memory, and one line of the reaction prompt; i
 **The touch → feeling table is unchanged.** Her feeling still follows the kind of touch and how often (`packages/cognition/src/touchEmotion.ts`); the part reaches her words and her memory, through the prompt, and not the table. The cause the state sheet shows for a feeling keeps the table's own wording.
 
 Idempotency: `region` is part of an event's and a reaction's content only when it is sent, so a retry of a request that never named one answers as before.
+
+## Touch vocabulary 2
+
+Added 2026-10-06 (Syzygy ADR-0005 and its owner answers of 2026-10-05; phase 1a of the body-touch design). Five optional facts of a touch, beside `type` and `region`, on an event of a touch type and inside `touch` of a reaction request. `services/api/src/bodyContract.ts` holds the lists and the check, `bodyTouchWords.ts` the words of a part, and `services/api/tests/bodyTouchVocabulary.test.ts` the behaviour.
+
+**Phase 1a stores these facts and nothing else reads them.** Her feeling still follows `type` and how often (the table in `touchEmotion.ts`), and every sentence she is told (the reaction prompt, the `[体に起きたこと]` block, the memory of a touch) still comes from `type` and `region`. A touch with these fields moves her and is told to her exactly as the same touch without them. What they will change (the parts she may not want touched no longer pleasing her by the table, her own judgement of a touch) is phase 1b and later, which waits for the owner's approval and the models of ADR-0006.
+
+### The signal
+
+`PUT /v1/body/capabilities` answers with `touchVocabulary`, and every `GET /v1/body/presence` answer carries it. This server says `2`. **A body sends the fields below only once it has seen `touchVocabulary` of 2 or more** from the server it is talking to; before that, and to a server that says nothing (it predates them and refuses an unknown field with `400`), it sends the old shape. Read it again after each registration and keep the latest value; a server that is rolled back stops saying it.
+
+### The fields
+
+| Field | Values | Meaning |
+| --- | --- | --- |
+| `part` | see the table below | The finer part that was touched. A value outside the list is left out, not refused, as for `region`; the touch still counts. |
+| `side` | `left` \| `right` | Left or right **from her own view**, not the screen's. Only for a part that has two (cheek, shoulder, arm, hand, side, leg, and the like); leave it out otherwise. |
+| `gesture` | `stroke` \| `poke` \| `tickle` \| `rest` \| `hold` \| `carry` | Stroked, poked, tickled (quickly back and forth), a touch that stays without moving, holding (the hand), carried. |
+| `input` | `press` \| `hover` | Pressed and moved (dragged), or only passed over with the pointer, without a press. |
+| `reflex` | `none` \| `flinch` \| `avoid` | What her body did by itself on the spot, as a fact: nothing, flinched a little, or turned away. The body does not judge a touch; it reports what it did. |
+
+`side`, `gesture`, `input` and `reflex` outside their lists refuse the request with `400`, like any malformed field. Any of the five on an event that is not a touch refuses it too.
+
+Parts. The parts she may not want touched are sent **one by one** (owner answer 1 of 2026-10-05), so that she can be told the part itself.
+
+| `part` | Word | Parent `region` | Group | Hit area on the model |
+| --- | --- | --- | --- | --- |
+| `head` | 頭 | `head` | ordinary | the present top-of-hair part |
+| `hair` | 髪 (the ahoge too) | `head` | ordinary | Hair_Ahoge, Hair_Loop_* |
+| `forehead` | おでこ | `face` | ordinary | Hit_Forehead |
+| `cheek` | 頬 | `face` | ordinary | Hit_Cheek_L/R |
+| `face` | 顔 (the rest; also a body that has only the eyes) | `face` | ordinary | the present face parts |
+| `shoulder` | 肩 | `body` | ordinary | Hit_Shoulder_L/R |
+| `arm` | 腕 | `body` | ordinary | the present sleeve parts |
+| `hand` | 手 | `hand` | ordinary | the present hand parts |
+| `belly` | お腹 | `body` | ordinary | Hit_Belly |
+| `side` | 脇 | `side` | ordinary | Hit_Side_L/R |
+| `neck` | 首 | `body` | not wanted | Hit_Neck |
+| `chest` | 胸 | `body` | not wanted | Hit_Chest |
+| `waist` | 腰 | `body` | not wanted | Hit_Waist |
+| `leg` | 脚 | `body` | not wanted | Hit_Leg_L/R |
+| `skirt` | スカート | `body` | not wanted | Hit_Skirt |
+| `other` | 体 (the boots too) | `body` | ordinary | the rest |
+
+### What the body must send
+
+- **Keep `type` and `region` exactly as before**, on every touch, whatever else it sends. `type` stays required. `region` keeps its five words and is the part's parent from the table; **never put a new part name into `region`** (an iPhone app from before would read an unknown region as none and fill one in from the gesture: a stroke on the chest would become 「頭をなでられた」).
+- `type` from `gesture`: `stroke` → `pet`, `poke` → `poke`, `tickle` → `tickle`, `hold` → `holdHand`, `carry` → `carry`, `rest` → `holdHand` on the hand and `pet` anywhere else.
+- `part` from the hit area that was touched (the invisible hit-area parts of the 2026-10-05 model, matched by their drawn shape rather than by rectangles), `side` for a part that has two, `gesture` from the motion, `input: press` for a drag and `hover` for a pointer that only passes over, and `reflex` for what the body did on the spot.
+- **Hover strokes only the head and the hair** (owner decision 2026-10-05): a pointer that passes anywhere else is not a touch and is not sent.
+- The reflex itself (which parts make her flinch, how far she moves) is the body's, and its size is decided by watching the real app. The server only reads `reflex` as reported and, in this phase, stores it.
+- Use the same `id` for the reaction request and the finished event, as before. The finished event may add what the request could not yet say (most often `reflex`): a field the first message left out is filled in; one it said is kept.
+
+### What cannot be a touch
+
+- `gesture: hold` on anything but the hand (`part: hand`, or, without a `part`, `region: hand`);
+- `input: hover` on anything but the head or the hair (`part: head` / `hair`, or, without a `part`, `region: head`), or with a `gesture` other than `stroke`.
+
+Such an event answers `ignored` with `reason: not_a_touch` and is not stored; the other events of the batch are taken as usual. Such a reaction request answers `200`, `status: quiet`, with `ignored: "not_a_touch"`, and moves nothing. Without a part or a region nothing is ruled out. A touch in the old shape can never be one of these.
+
+### Stored
+
+`body_touches` (the one row of each touch id) has four more columns, added only: `part`, `side`, `gesture`, `reflex`, each the word as sent or empty. `input` is not stored. The event table (`body_events`) and the bursts (`body_touch_bursts`) are unchanged. All of it is closed words; nothing from a microphone.
+
+### Idempotency
+
+Each of the five is part of an event's and a reaction's content **only when it is sent** (and `part` only when it is known), so a retry of a request in the old shape gets exactly the answer it always got, and an event stored before this change still answers `duplicate`. The same `id` sent again with another `part`, `side`, `gesture`, `input` or `reflex`, or without them, is a `conflict` (`409` for a reaction).
+
+### Next, outside this server
+
+- **The Live2D body (Windows, and the embed page built from the same acting code)**: find the touched part by the drawn hit-area parts instead of rectangles (on the Live2D side: register the 14 hit-area parts in HitAreas, and decide whether the arm needs one), and send the five fields after seeing `touchVocabulary: 2`. What the body then does differently for the not-wanted group (its flinch, the face it adds afterwards, the skirt physics, when it asks) is a later phase of ADR-0005 and is decided with the owner first.
+- **The iPhone embed host**: pass `part`, `side`, `gesture`, `input` and `reflex` from the page through as they are, only after `touchVocabulary: 2`; and when the page names a `part`, do not fill in a region from the gesture. `ShannonLive2DProtocol.sentRegion` today fills `head` for any `pet`, `hand` for `holdHand` and `side` for `tickle` when the page names no region; with parts, the page's own `region` is the part's parent, and a missing one must stay missing rather than become 頭.
 
 ## A body that only feels touch
 

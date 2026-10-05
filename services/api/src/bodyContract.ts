@@ -1,5 +1,7 @@
 import type { ShannonEmotionKind, ShannonExpression, ShannonFeeling } from '@shannon/cognition';
-import { isBodySurface, isBodyTouchRegion, type BodySurface, type BodyTouchRegion } from './bodyTouchWords.js';
+import {
+  BODY_TOUCH_PART_WORDS, isBodySurface, isBodyTouchPart, isBodyTouchRegion, type BodySurface, type BodyTouchPart, type BodyTouchRegion,
+} from './bodyTouchWords.js';
 
 /**
  * The wire contract between Shannon's mind (this server) and her body (the Live2D
@@ -11,6 +13,77 @@ import { isBodySurface, isBodyTouchRegion, type BodySurface, type BodyTouchRegio
 export const BODY_SCHEMA_VERSION = 1;
 
 export const BODY_TOUCH_EVENT_TYPES = ['pet', 'tickle', 'poke', 'carry', 'holdHand'] as const;
+
+/**
+ * Touch vocabulary 2 (Syzygy ADR-0005; `docs/body-contract.md`, "Touch vocabulary 2"): the optional finer facts of
+ * a touch, beside `type` and `region`, which keep their meaning. The server says the number on
+ * `PUT /v1/body/capabilities` and on presence; a body sends these fields only once it has seen it, because a server
+ * from before them refuses an unknown field with `400`. Facts only: nothing here changes a feeling or a prompt yet.
+ */
+export const BODY_TOUCH_VOCABULARY = 2;
+/** Left or right from her own view, not the screen's. */
+export const BODY_TOUCH_SIDES = ['left', 'right'] as const;
+/** Stroke, poke, tickle, a touch that rests, holding (the hand), carrying. */
+export const BODY_TOUCH_GESTURES = ['stroke', 'poke', 'tickle', 'rest', 'hold', 'carry'] as const;
+/** Pressed (dragged) or only passed over (the pointer over her without a press). */
+export const BODY_TOUCH_INPUTS = ['press', 'hover'] as const;
+/** What her body did by itself on the spot: a report of fact, not a judgement. */
+export const BODY_TOUCH_REFLEXES = ['none', 'flinch', 'avoid'] as const;
+export type BodyTouchSide = typeof BODY_TOUCH_SIDES[number];
+export type BodyTouchGesture = typeof BODY_TOUCH_GESTURES[number];
+export type BodyTouchInput = typeof BODY_TOUCH_INPUTS[number];
+export type BodyTouchReflex = typeof BODY_TOUCH_REFLEXES[number];
+export const BODY_TOUCH_DETAIL_FIELDS = ['part', 'side', 'gesture', 'input', 'reflex'] as const;
+
+/** The fields of touch vocabulary 2, each present only when the body sent it (and `part` only when it is known). */
+export interface BodyTouchDetail {
+  part?: BodyTouchPart;
+  side?: BodyTouchSide;
+  gesture?: BodyTouchGesture;
+  input?: BodyTouchInput;
+  reflex?: BodyTouchReflex;
+}
+
+/**
+ * The detail of one touch as sent, or why it is refused. An unknown `part` is left out, as an unknown `region` is
+ * (the touch still counts); `side`, `gesture`, `input` and `reflex` outside their lists refuse the request.
+ */
+export function validatedTouchDetail(item: Record<string, unknown>, at: string): BodyTouchDetail | string {
+  for (const [field, list] of [['side', BODY_TOUCH_SIDES], ['gesture', BODY_TOUCH_GESTURES], ['input', BODY_TOUCH_INPUTS], ['reflex', BODY_TOUCH_REFLEXES]] as const) {
+    if (item[field] !== undefined && !(list as readonly unknown[]).includes(item[field])) return `${at}.${field} must be one of ${list.join(', ')}`;
+  }
+  return {
+    ...(isBodyTouchPart(item.part) ? { part: item.part } : {}),
+    ...(item.side !== undefined ? { side: item.side as BodyTouchSide } : {}),
+    ...(item.gesture !== undefined ? { gesture: item.gesture as BodyTouchGesture } : {}),
+    ...(item.input !== undefined ? { input: item.input as BodyTouchInput } : {}),
+    ...(item.reflex !== undefined ? { reflex: item.reflex as BodyTouchReflex } : {}),
+  };
+}
+
+/** Where a hover may be (owner decision 2026-10-05: passing over her strokes only the head and the hair). */
+const HOVER_PARTS: readonly BodyTouchPart[] = ['head', 'hair'];
+
+/**
+ * A combination that cannot be a touch: holding anything but the hand, or a hover anywhere but the head or the
+ * hair, or a hover that is not a stroke. Where the body named no `part`, its `region` stands in. Such a touch is
+ * answered `ignored` with `not_a_touch`, item by item. Only the fields of vocabulary 2 can make one, so a touch in
+ * the old shape is never impossible.
+ */
+export function isImpossibleTouch(touch: BodyTouchDetail & { region?: BodyTouchRegion }): boolean {
+  const region = touch.part ? BODY_TOUCH_PART_WORDS[touch.part].region : touch.region;
+  if (touch.gesture === 'hold' && region !== undefined && (touch.part ?? region) !== 'hand') return true;
+  if (touch.input === 'hover') {
+    if (touch.gesture !== undefined && touch.gesture !== 'stroke') return true;
+    if (touch.part ? !HOVER_PARTS.includes(touch.part) : region !== undefined && region !== 'head') return true;
+  }
+  return false;
+}
+
+/** The detail fields in an idempotency digest: only those sent, each tagged, so a request without them hashes as before. */
+export function touchDetailDigest(touch: BodyTouchDetail): string[] {
+  return BODY_TOUCH_DETAIL_FIELDS.flatMap(field => touch[field] !== undefined ? [`${field}:${touch[field]}`] : []);
+}
 export const BODY_PRESENCE_EVENT_TYPES = ['ownerAway', 'ownerReturned'] as const;
 export const BODY_PLAIN_EVENT_TYPES = ['callStarted', 'callEnded', 'windowHidden', 'windowShown', 'appStarted'] as const;
 /**
@@ -101,6 +174,12 @@ export interface BodyEvent {
   minutesAway?: number;
   /** Touch types only: which part of her was touched. */
   region?: BodyTouchRegion;
+  /** Touch types only, touch vocabulary 2: the finer part, side, gesture, pressed or hovered, and her body's reflex. */
+  part?: BodyTouchPart;
+  side?: BodyTouchSide;
+  gesture?: BodyTouchGesture;
+  input?: BodyTouchInput;
+  reflex?: BodyTouchReflex;
   /** `game.died` only: the game's id of what killed her body, such as `minecraft:lava`. */
   cause?: string;
 }
@@ -134,7 +213,7 @@ const includes = <T extends string>(list: readonly T[], value: unknown): value i
 const integerWithin = (value: unknown, maximum: number): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= maximum;
 
 function allowedEventFields(type: BodyEventType): readonly string[] {
-  if (includes(BODY_TOUCH_EVENT_TYPES, type)) return [...COMMON_EVENT_FIELDS, 'durationMs', 'strength', 'region'];
+  if (includes(BODY_TOUCH_EVENT_TYPES, type)) return [...COMMON_EVENT_FIELDS, 'durationMs', 'strength', 'region', ...BODY_TOUCH_DETAIL_FIELDS];
   if (includes(BODY_PRESENCE_EVENT_TYPES, type)) return [...COMMON_EVENT_FIELDS, 'minutesAway'];
   if (type === 'game.died') return [...COMMON_EVENT_FIELDS, 'cause'];
   return COMMON_EVENT_FIELDS;
@@ -161,6 +240,8 @@ export function validatedBodyEvents(value: unknown): readonly BodyEvent[] | stri
     if (item.strength !== undefined && !(typeof item.strength === 'number' && item.strength >= 0 && item.strength <= 1)) return `${at}.strength must be 0..1`;
     if (item.minutesAway !== undefined && !integerWithin(item.minutesAway, BODY_LIMITS.minutesAway)) return `${at}.minutesAway is invalid`;
     if (item.type === 'game.died' && (typeof item.cause !== 'string' || !GAME_ID.test(item.cause))) return `${at}.cause must be a namespaced id such as minecraft:lava`;
+    const detail = validatedTouchDetail(item, at);
+    if (typeof detail === 'string') return detail;
     events.push({
       id: item.id, type: item.type, audience: item.audience, occurredAt: new Date(time).toISOString(),
       ...(item.durationMs !== undefined ? { durationMs: item.durationMs } : {}),
@@ -168,6 +249,7 @@ export function validatedBodyEvents(value: unknown): readonly BodyEvent[] | stri
       ...(item.minutesAway !== undefined ? { minutesAway: item.minutesAway } : {}),
       // A part outside the vocabulary (a newer body) is left out, not refused: the touch itself still counts.
       ...(isBodyTouchRegion(item.region) ? { region: item.region } : {}),
+      ...detail,
       ...(typeof item.cause === 'string' ? { cause: item.cause } : {}),
     });
   }

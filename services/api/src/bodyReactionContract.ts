@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { ShannonExpression, ShannonFeeling, ShannonTouchKind } from '@shannon/cognition';
-import { BODY_LIMITS, BODY_TOUCH_EVENT_TYPES, type BodyAudience } from './bodyContract.js';
+import {
+  BODY_LIMITS, BODY_TOUCH_DETAIL_FIELDS, BODY_TOUCH_EVENT_TYPES, touchDetailDigest, validatedTouchDetail, type BodyAudience, type BodyTouchDetail,
+} from './bodyContract.js';
 import { isBodyTouchRegion, type BodyTouchRegion } from './bodyTouchWords.js';
 
 /**
@@ -50,7 +52,7 @@ export const BODY_REACTION_LIMITS = Object.freeze({
   touchRetentionDays: BODY_LIMITS.retentionDays,
 });
 
-export interface BodyReactionTouch {
+export interface BodyReactionTouch extends BodyTouchDetail {
   type: ShannonTouchKind;
   durationMs: number;
   strength?: number;
@@ -58,6 +60,7 @@ export interface BodyReactionTouch {
   ongoing: boolean;
   /** Which part of her is touched; absent from a body that does not say. */
   region?: BodyTouchRegion;
+  // Touch vocabulary 2 (`part`, `side`, `gesture`, `input`, `reflex`): see `BodyTouchDetail`.
 }
 
 export interface BodyReactionRequest {
@@ -87,6 +90,8 @@ export interface BodyReactionAnswer {
   message: BodyReactionMessage | null;
   /** Her face after the touch (and after her line, when she said one). */
   mood: { expression: ShannonExpression; feeling?: ShannonFeeling };
+  /** Present only when the touch was not taken in: its fields name something that cannot be a touch (`isImpossibleTouch`). */
+  ignored?: 'not_a_touch';
 }
 
 export interface BodyReactionConfig {
@@ -114,7 +119,7 @@ export function validatedBodyReactionRequest(body: Record<string, unknown>): Bod
   if (!validBodyReactionId(body.id)) return 'id is invalid';
   if (!isRecord(body.touch)) return 'touch must be an object';
   const touch = body.touch;
-  const unknownTouch = only(touch, ['type', 'durationMs', 'strength', 'ongoing', 'region']);
+  const unknownTouch = only(touch, ['type', 'durationMs', 'strength', 'ongoing', 'region', ...BODY_TOUCH_DETAIL_FIELDS]);
   if (unknownTouch) return `touch.${unknownTouch.slice(0, 40)} is not allowed`;
   const type = BODY_TOUCH_EVENT_TYPES.find(value => value === touch.type);
   if (!type) return `touch.type must be one of ${BODY_TOUCH_EVENT_TYPES.join(', ')}`;
@@ -123,6 +128,8 @@ export function validatedBodyReactionRequest(body: Record<string, unknown>): Bod
   }
   if (touch.strength !== undefined && !(typeof touch.strength === 'number' && touch.strength >= 0 && touch.strength <= 1)) return 'touch.strength must be 0..1';
   if (typeof touch.ongoing !== 'boolean') return 'touch.ongoing must be a boolean';
+  const detail = validatedTouchDetail(touch, 'touch');
+  if (typeof detail === 'string') return detail;
   if (body.audience !== 'owner' && body.audience !== 'others') return 'audience must be owner or others';
   const time = typeof body.occurredAt === 'string' && body.occurredAt.length <= 40 ? Date.parse(body.occurredAt) : Number.NaN;
   if (!Number.isFinite(time)) return 'occurredAt must be an ISO 8601 timestamp';
@@ -132,6 +139,7 @@ export function validatedBodyReactionRequest(body: Record<string, unknown>): Bod
       type, durationMs: touch.durationMs, ongoing: touch.ongoing, ...(touch.strength !== undefined ? { strength: Math.round(touch.strength * 100) / 100 } : {}),
       // A part outside the vocabulary (a newer body) is left out, not refused.
       ...(isBodyTouchRegion(touch.region) ? { region: touch.region } : {}),
+      ...detail,
     },
   };
 }
@@ -141,6 +149,8 @@ export function bodyReactionContentHash(request: BodyReactionRequest): string {
   return createHash('sha256').update(JSON.stringify([
     request.touch.type, request.touch.durationMs, request.touch.strength ?? null, request.touch.ongoing, request.audience, request.occurredAt,
     ...(request.touch.region !== undefined ? [request.touch.region] : []),
+    // Touch vocabulary 2: only the fields that were sent, so a retry in the old shape gets the answer it always got.
+    ...touchDetailDigest(request.touch),
   ])).digest('hex').slice(0, 32);
 }
 

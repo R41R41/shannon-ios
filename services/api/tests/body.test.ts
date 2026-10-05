@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { AutonomyActivityDay, AutonomyActivityEntry } from '../src/autonomyActivity.js';
-import { BODY_DOING, BODY_EVENT_TYPES, BODY_LIMITS, BODY_NUDGE_SCENES, bodyIngestEnabled, isBodyGameEvent, type BodyNudge } from '../src/bodyContract.js';
+import {
+  BODY_DOING, BODY_EVENT_TYPES, BODY_LIMITS, BODY_NUDGE_SCENES, BODY_TOUCH_GESTURES, BODY_TOUCH_INPUTS, BODY_TOUCH_REFLEXES, BODY_TOUCH_SIDES,
+  BODY_TOUCH_VOCABULARY, bodyIngestEnabled, isBodyGameEvent, type BodyNudge,
+} from '../src/bodyContract.js';
+import { BODY_TOUCH_PARTS, bodyTouchPartWord } from '../src/bodyTouchWords.js';
 import { BODY_LOOK_LIMITS, BODY_LOOK_REFUSAL_CODES, BODY_LOOK_REQUEST_BYTES } from '../src/bodyLookContract.js';
 import { bodyNudgeCandidates } from '../src/bodyNudges.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
@@ -234,8 +238,10 @@ describe('PUT /v1/body/capabilities', () => {
     const { send, get } = harness();
     const saved = await send('PUT', '/v1/body/capabilities', { expressions: ['smile', 'wink_left'], gestures: ['stretch'], flags: { tears: true, shoulders: false } });
     expect(saved.status).toBe(200);
-    expect(saved.body).toEqual({ expressions: ['smile', 'wink_left'], gestures: ['stretch'], flags: { shoulders: false, tears: true }, updatedAt: START });
-    expect(((await get('/v1/body/presence')).body as BodyPresence).capabilities).toEqual(saved.body);
+    // The answer also says which touch vocabulary this server takes; the stored registration does not carry it.
+    const registration = { expressions: ['smile', 'wink_left'], gestures: ['stretch'], flags: { shoulders: false, tears: true }, updatedAt: START };
+    expect(saved.body).toEqual({ ...registration, touchVocabulary: BODY_TOUCH_VOCABULARY });
+    expect(((await get('/v1/body/presence')).body as BodyPresence).capabilities).toEqual(registration);
     expect(((await get('/v1/body/presence', {}, 'iphone')).body as BodyPresence).capabilities).toBeNull();
     // A later registration replaces the earlier one.
     await send('PUT', '/v1/body/capabilities', { expressions: ['smile'], gestures: [] });
@@ -279,6 +285,7 @@ describe('GET /v1/body/presence', () => {
     expect(result.status).toBe(200);
     expect(result.body).toEqual({
       schemaVersion: 1, etag: expect.stringMatching(/^[0-9a-f]{16}$/u), changedAt: START, pollAfterSeconds: BODY_LIMITS.presencePollSeconds,
+      touchVocabulary: BODY_TOUCH_VOCABULARY,
       mood: { expression: expect.any(String), primary: 'neutral', intensity: 0, fromConversation: false, valence: expect.any(Number), arousal: expect.any(Number), openness: expect.any(Number) },
       doing: 'idle', autonomy: { state: 'disabled' }, study: { awaitingReaction: 0 }, capabilities: null, look: null,
       ownerCallElsewhere: { active: false },
@@ -318,7 +325,7 @@ describe('GET /v1/body/presence', () => {
     const first = (await get('/v1/body/presence')).body as BodyPresence;
     advance(MINUTE);
     expect((await get('/v1/body/presence', { etag: first.etag })).body).toEqual({
-      schemaVersion: 1, etag: first.etag, changedAt: START, pollAfterSeconds: BODY_LIMITS.presencePollSeconds, unchanged: true,
+      schemaVersion: 1, etag: first.etag, changedAt: START, pollAfterSeconds: BODY_LIMITS.presencePollSeconds, touchVocabulary: BODY_TOUCH_VOCABULARY, unchanged: true,
     });
     await send('PUT', '/v1/body/capabilities', { expressions: ['smile'], gestures: [] });
     const changed = (await get('/v1/body/presence', { etag: first.etag })).body as BodyPresence;
@@ -446,6 +453,9 @@ describe('body contract document', () => {
       'LOOK_NOT_YOURS', 'LOOK_ALREADY_ANSWERED', 'LOOK_EXPIRED', 'LOOK_NOT_FOUND', 'BODY_LOOK_DISABLED', 'REQUEST_TOO_LARGE',
       '400,000 bytes', '533,336', '535,384 bytes', '1–960', 'bodyLook', 'bodyLookId', 'not_seen', 'initiativeId', 'store: false',
       'SHANNON_BODY_LOOK', 'SHANNON_BODY_LOOK_PER_HOUR', 'SHANNON_BODY_LOOK_PER_DAY',
+      // Touch vocabulary 2.
+      'touchVocabulary', 'not_a_touch', ...BODY_TOUCH_PARTS.map(part => `\`${part}\``), ...BODY_TOUCH_SIDES, ...BODY_TOUCH_GESTURES, ...BODY_TOUCH_INPUTS, ...BODY_TOUCH_REFLEXES,
+      ...BODY_TOUCH_PARTS.map(bodyTouchPartWord),
     ]) expect(document, word).toContain(word);
     expect(BODY_LOOK_REQUEST_BYTES).toBe(535_384);
     expect(BODY_LOOK_LIMITS).toMatchObject({ imageBytes: 400_000, imageWidth: 960, lifetimeMilliseconds: 30_000, fastPollSeconds: 3, perHour: 6, perDay: Number.POSITIVE_INFINITY, activityPerDay: Number.POSITIVE_INFINITY });

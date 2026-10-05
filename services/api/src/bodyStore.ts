@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import type { BodyAudience, BodyCapabilities, BodyEvent, BodyEventType } from './bodyContract.js';
+import { touchDetailDigest, type BodyAudience, type BodyCapabilities, type BodyEvent, type BodyEventType } from './bodyContract.js';
 import { BODY_TOUCH_ONLY_FLAG } from './bodyTouchOnly.js';
 import { isBodySurface, isBodyTouchRegion, type BodySurface } from './bodyTouchWords.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
@@ -30,6 +30,8 @@ interface EventRow {
 const contentHash = (event: BodyEvent) => createHash('sha256').update(JSON.stringify([
   event.type, event.audience, event.occurredAt, event.durationMs ?? null, event.strength ?? null, event.minutesAway ?? null,
   ...(event.region !== undefined ? [event.region] : []),
+  // Touch vocabulary 2: only the fields that were sent, tagged, so an event in the old shape hashes as it always did.
+  ...touchDetailDigest(event),
   // Only game events have a cause: every other event hashes as it always did.
   ...(event.cause !== undefined ? [`cause:${event.cause}`] : []),
 ])).digest('hex').slice(0, 32);

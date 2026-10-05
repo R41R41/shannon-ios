@@ -5,7 +5,10 @@ import { bodyTouchLine } from '../src/bodyReactionPrompt.js';
 import type { StoredTouchBurst } from '../src/bodyReactionStore.js';
 import { touchExperienceSummary } from '../src/bodyTouchMemory.js';
 import { addColumnOnce } from '../src/bodyStore.js';
-import { BODY_SURFACES, BODY_TOUCH_REGIONS, bodyPlace, bodySurfaceMark, bodyWhere, burstTouchPhrase, touchPartPhrase } from '../src/bodyTouchWords.js';
+import {
+  BODY_SURFACES, BODY_TOUCH_PARTS, BODY_TOUCH_PART_WORDS, BODY_TOUCH_REGIONS, bodyPlace, bodySurfaceMark, bodyTouchPartWord, bodyWhere, burstTouchPhrase,
+  isBodyTouchPart, touchPartPhrase,
+} from '../src/bodyTouchWords.js';
 import { START, reactionHarness, scope } from './bodyReactionHarness.js';
 
 const PHONE = 'iphone-1';
@@ -228,5 +231,29 @@ describe('what she is told, end to end', () => {
     const broken = { prepare: () => ({ all: () => [{ name: 'a' }] }), exec: () => { throw new Error('disk I/O error'); } };
     expect(() => addColumnOnce(broken as never, 't', 'surface', 'TEXT')).toThrow('disk I/O error');
     expect((database.prepare("PRAGMA table_info('t')").all() as unknown as Array<{ name: string }>).map(column => column.name)).toEqual(['a', 'region']);
+  });
+});
+
+describe('the finer part of touch vocabulary 2', () => {
+  it('gives each part its Japanese word and its parent region, the parts she may not want touched one by one', () => {
+    expect(Object.fromEntries(BODY_TOUCH_PARTS.map(part => [part, bodyTouchPartWord(part)]))).toEqual({
+      head: '頭', hair: '髪', forehead: 'おでこ', cheek: '頬', face: '顔', shoulder: '肩', arm: '腕', hand: '手', belly: 'お腹', side: '脇',
+      neck: '首', chest: '胸', waist: '腰', leg: '脚', skirt: 'スカート', other: '体',
+    });
+    expect(Object.fromEntries(BODY_TOUCH_PARTS.map(part => [part, BODY_TOUCH_PART_WORDS[part].region]))).toEqual({
+      head: 'head', hair: 'head', forehead: 'face', cheek: 'face', face: 'face', shoulder: 'body', arm: 'body', hand: 'hand', belly: 'body', side: 'side',
+      neck: 'body', chest: 'body', waist: 'body', leg: 'body', skirt: 'body', other: 'body',
+    });
+    for (const part of BODY_TOUCH_PARTS) expect(BODY_TOUCH_REGIONS).toContain(BODY_TOUCH_PART_WORDS[part].region);
+    expect(isBodyTouchPart('skirt')).toBe(true);
+    for (const value of ['tail', 'Head', '', null, 3]) expect(isBodyTouchPart(value)).toBe(false);
+  });
+
+  it('does not word a touch yet: the sentences still come from the region alone', () => {
+    const request = { id: 'r', touch: { type: 'pet', durationMs: 1_500, ongoing: true, region: 'face', part: 'chest' }, audience: 'owner', occurredAt: START };
+    const withPart = validatedBodyReactionRequest(request) as BodyReactionRequest;
+    const without = validatedBodyReactionRequest({ ...request, touch: { type: 'pet', durationMs: 1_500, ongoing: true, region: 'face' } }) as BodyReactionRequest;
+    expect(bodyTouchLine(withPart.touch, 'owner')).toBe(bodyTouchLine(without.touch, 'owner'));
+    expect(bodyTouchLine(withPart.touch, 'owner')).not.toContain('胸');
   });
 });
