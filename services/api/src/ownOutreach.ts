@@ -33,34 +33,27 @@ export const OWN_OUTREACH_LIMITS = Object.freeze({
   excerptCharacters: 40,
 });
 
-const SHE_WORD = '(?:そっち|そちら|シャノン|しゃのん|きみ|キミ|君|お前|おまえ|あなた)';
-const SHE = `${SHE_WORD}(?:の方|のほう)?(?:から|が)`;
-const DID = '(?:かけ|掛け|電話|でんわ|連絡|送|メッセ|メール|話しかけ|呼|鳴ら|書|置)';
-/**
- * The owner says, or asks whether, she reached out or left something on her own. Read on normalised text without
- * spaces or punctuation except `?`. A miss is the bug and a false alarm costs a short block, so it leans to recall.
- */
-const CUES: readonly RegExp[] = [
-  new RegExp(`${SHE}.{0,12}?${DID}`, 'u'),
-  /(?:かけて|掛けて|電話して|連絡して|送って|鳴らして|話しかけて|呼んで|メールして|line(?:して)?)(?:き|くれ)(?:た|てた|ました|ません)/u,
-  /(?:電話|着信|不在着信|連絡|メッセージ|メッセ|line)(?:が|って)?(?:あった|来た|きた|来てた|きてた|鳴った|入ってた|入った)/u,
-  /(?:電話|連絡|メッセージ|メール)(?:くれた|してきた|してくれた)/u,
-  /(?:書き置き|置き手紙|伝言)/u,
-  // Bare questions: 「何か送った？」「電話かけた？」「呼んだ？」「さっき鳴った？」「メモ置いてった？」「かけたの」.
-  /(?:かけた|掛けた|送った|書いた|呼んだ|鳴らした|鳴った|置いた|置いてった|置いていった|話しかけた|電話した|連絡した|メールした)(?:\?|の)/u,
-];
+const SHE_WORD = '(?:そっち|そちら|シャノン|しゃのん|ボク|ぼく|きみ|キミ|君|お前|おまえ|あなた)';
+/** The stems of reaching out, leaving something, or a call (2026-10-05 re-review: go broad; transcripts drop 「？」). */
+const STEM = '(?:電話|でんわ|かけ[たて]|掛け[たて]|送っ|書い|呼ん|呼び|鳴っ|鳴らし|置い|連絡|メッセ|メール|line|ライン|話しかけ|通話|着信|書き置き|置き手紙|伝言)';
+const OUTREACH = new RegExp(STEM, 'u');
 /** 「母から電話」「友達がメッセージくれた」: someone else as the sender, unless that someone is she. */
-const SOMEONE_SENT = /(?:から|が)(?:の)?(?:電話|でんわ|連絡|メッセージ|メッセ|メール|line|着信|手紙)/gu;
+const SOMEONE_SENT = new RegExp(`(?:から|が)(?:の)?${STEM}`, 'gu');
 const ENDS_WITH_HER = new RegExp(`${SHE_WORD}(?:の方|のほう)?$`, 'u');
-/** 「母に電話した」「上司に連絡しといた」: the owner's own act toward someone else (not 「俺に電話した？」). */
-const OWNER_DID = /(?<!俺|おれ|オレ|僕|ぼく|私|わたし|あたし|ボク|自分)に(?:電話|でんわ|連絡|メッセージ|メール|line)(?:した|してた|しといた|しておいた|入れた|送った)(?!\?|の)/gu;
+/** 「母に電話した」「上司に連絡しといた」: the owner's own act toward someone else (not 「俺に電話した」, which asks about her). */
+const OWNER_DID = /(?<!俺|おれ|オレ|僕|ぼく|私|わたし|あたし|自分)に(?:電話|でんわ|連絡|メッセージ|メール|line|ライン)(?:し|入れ|送っ)/gu;
 
+/**
+ * The owner says, or asks whether, she reached out, left something, or called. Any outreach stem counts, with or
+ * without 「？」 or a particle; only two cheap exclusions remain, both clearly about someone else. A miss is the bug
+ * and a false alarm costs two indexed reads and a short block, so it leans to recall.
+ */
 export function saysSheActedOnHerOwn(text: string): boolean {
-  let value = text.normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, mark => mark === '?' ? '?' : '');
-  if (!value.replace(/\?/gu, '') || value.length > 400) return false;
+  let value = text.normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
+  if (!value || value.length > 400) return false;
   value = value.replace(OWNER_DID, '　');
   value = value.replace(SOMEONE_SENT, (match, offset: number, whole: string) => ENDS_WITH_HER.test(whole.slice(0, offset)) ? match : '　');
-  return CUES.some(cue => cue.test(value));
+  return OUTREACH.test(value);
 }
 
 const CALL_STATE: Readonly<Record<string, string>> = Object.freeze({

@@ -79,6 +79,8 @@ public final class ShannonGeminiLiveSessionModel {
     var endAfterBackgroundSilence: (@MainActor () -> Void)?
     /// Told `true` once a session was made and `false` when the call ends or fails (`ShannonVoiceCallPresence`). Set by the owner of the call.
     var callReported: (@MainActor (Bool) -> Void)?
+    /// Told when a session was made but the call was cancelled before it began, so the server hears that it ended.
+    var sessionAbandoned: (@MainActor () -> Void)?
     /// Takes the one look an owner turn asked for and returns what she says about it. Set by the owner of the call.
     var performAppLook: (@MainActor (ShannonAppLookAskDTO) async -> String?)?
     private static let inputPreferenceDefaultsKey = "shannon.voice.input-preference"
@@ -148,7 +150,10 @@ public final class ShannonGeminiLiveSessionModel {
         do {
             let created = try await createSession(participantMode)
             failedStage = "audio"
-            guard sessionGenerationID == generation else { return }
+            guard sessionGenerationID == generation else {
+                sessionAbandoned?()
+                return
+            }
             session = created
             callReported?(true)
             model = created.model

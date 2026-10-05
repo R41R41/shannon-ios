@@ -44,6 +44,9 @@ extension ShannonVoiceWorkspaceState {
                 ShannonVoiceCallPresence.shared.ended()
             }
         }
+        geminiVoiceModel.sessionAbandoned = { [weak geminiVoiceModel] in
+            ShannonVoiceCallPresence.shared.abandoned(audience: geminiVoiceModel?.participantMode == .guest ? .others : .owner)
+        }
         // The one look an owner turn may ask for; however the call began, it is taken the same way.
         geminiVoiceModel.performAppLook = { [conversationModel] ask in await conversationModel.performAppLook(ask) }
         // One minute without a word from either side, while the app is in the background, ends the call as 終了 does.

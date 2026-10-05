@@ -455,3 +455,25 @@ describe('body contract document', () => {
     }
   });
 });
+
+describe('who can see her window, from events (re-review of e1f6790)', () => {
+  it('stays "others" when the phone reports the end of its call as the owner\'s', () => {
+    const store = new SQLiteBodyStore(':memory:');
+    store.saveCapabilities(scope, 'pc', { expressions: [], gestures: [], flags: {}, surface: 'windows' }, START);
+    store.record(scope, 'pc', { id: 'pc-1', type: 'pet', audience: 'others', occurredAt: START }, START, '2026-10-02');
+    const later = new Date(Date.parse(START) + MINUTE).toISOString();
+    const others = (at: string) => store.othersPresent(scope, at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds);
+    expect(others(later)).toBe(true);
+    // An unregistered phone, and then the same phone registered as touch-only: neither its call events nor its touches stand in.
+    store.record(scope, 'phone', { id: 'ph-1', type: 'callEnded', audience: 'owner', occurredAt: later }, later, '2026-10-02');
+    expect(others(later)).toBe(true);
+    store.record(scope, 'phone', { id: 'ph-2', type: 'pet', audience: 'owner', occurredAt: later }, later, '2026-10-02');
+    expect(others(later)).toBe(true);
+    // Her full body's own call event does not stand in either; its next ordinary event does.
+    store.record(scope, 'pc', { id: 'pc-2', type: 'callStarted', audience: 'owner', occurredAt: later }, later, '2026-10-02');
+    expect(others(later)).toBe(true);
+    store.record(scope, 'pc', { id: 'pc-3', type: 'windowShown', audience: 'owner', occurredAt: later }, later, '2026-10-02');
+    expect(others(later)).toBe(false);
+    store.close();
+  });
+});

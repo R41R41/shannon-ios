@@ -36,6 +36,8 @@ export const OWNER_CALL_LIMITS = Object.freeze({
   voiceIdleMilliseconds: 3 * 60_000,
   /** `pollAfterSeconds` of a presence answer while the owner is in a call elsewhere. */
   pollSeconds: 5,
+  /** The future skew an event may have and still be stored (`BODY_LIMITS.eventFutureSkewMilliseconds`). */
+  ingestSkewMilliseconds: 5 * 60_000,
   trackedDevices: 256,
 });
 
@@ -64,6 +66,13 @@ export interface OwnerCallDependencies {
 interface VoiceRun { first: number; last: number }
 /** What the session route asks (`serverGeminiLiveRoute.ts`): refused, which notes nothing; and created, after a session was made. */
 export interface VoiceSessionCalls { refused(scopeKey: string, deviceId: string | undefined, participantMode: unknown): boolean; created(scopeKey: string, deviceId: string): void }
+
+export function voiceSessionCalls(calls: Pick<OwnerCalls, 'refuses' | 'noteVoice'>, now: () => string): VoiceSessionCalls {
+  return {
+    refused: (scopeKey, deviceId, participantMode) => calls.refuses(scopeKey, deviceId, participantMode, now()),
+    created: (scopeKey, deviceId) => calls.noteVoice(scopeKey, deviceId, now(), 'session'),
+  };
+}
 
 export class OwnerCalls {
   readonly enabled: boolean;
@@ -121,7 +130,8 @@ export class OwnerCalls {
     const time = Date.parse(at);
     const window = new Date(time - OWNER_CALL_LIMITS.reportedCallMaximumMilliseconds).toISOString();
     const reported = new Map<string, OwnerCallEvent>();
-    for (const event of this.dependencies.events(scopeKey, window, at)) {
+    // An event stamped up to the ingest skew ahead of the server's clock is stored (`BODY_LIMITS`), so it is read too.
+    for (const event of this.dependencies.events(scopeKey, window, new Date(time + OWNER_CALL_LIMITS.ingestSkewMilliseconds).toISOString())) {
       const known = reported.get(event.deviceId);
       // The newest event of a device, on its own clock, decides; at the same instant an end wins over a start.
       if (!known || event.occurredAt > known.occurredAt || (event.occurredAt === known.occurredAt && event.type === 'callEnded')) reported.set(event.deviceId, event);

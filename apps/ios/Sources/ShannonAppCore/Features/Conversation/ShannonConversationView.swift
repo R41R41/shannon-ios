@@ -127,6 +127,11 @@ public struct ShannonConversationView: View {
         // The marks on the top-left button: what waits for the owner in 「シャノン」, read when the app comes to the
         // front, and whether 運用 deserves a look, read then and every few minutes while the app stays in front.
         .task(id: scenePhase == .active) { await keepEntryMarks() }
+        // The end of a call that did not get through (the network, or the app closed during it) is sent now.
+        .task(id: scenePhase == .active) {
+            guard scenePhase == .active, !model.isDesignPreview else { return }
+            ShannonVoiceCallPresence.shared.resendUndelivered(scopeKey: model.scopeKey, reporter: model.client as? any ShannonBodyCallReporting)
+        }
         .onChange(of: showsSettings) {
             if !showsSettings {
                 settingsShowsOps = false
