@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 
 /// Pre-permission explanation that runs immediately before the system microphone request.
@@ -11,9 +10,14 @@ extension ShannonGeminiLiveSessionModel {
             return true
         case .denied:
             microphonePrimerPhase = .denied
-            fail("設定でマイクを許可すると、音声で話せます。", recovery: .openSettings)
+            fail(Self.microphoneDeniedMessage, recovery: .openSettings)
             return false
         case .undetermined:
+#if os(macOS)
+            // The Mac has no explanation sheet of its own: the system's question, worded by the app's
+            // microphone description, comes straight from the owner's click on 音声会話を開始.
+            return true
+#else
             microphonePrimerPhase = .explain
             let proceed = await withCheckedContinuation { continuation in
                 microphonePrimerContinuation = continuation
@@ -21,7 +25,17 @@ extension ShannonGeminiLiveSessionModel {
             guard proceed, sessionGenerationID == generation else { return false }
             microphonePrimerPhase = .requesting
             return true
+#endif
         }
+    }
+
+    /// Where the owner gives the microphone back: the iPhone's Settings app, the Mac's System Settings.
+    static var microphoneDeniedMessage: String {
+#if os(macOS)
+        ShannonGeneratedStrings.voiceMacMicrophoneDenied
+#else
+        "設定でマイクを許可すると、音声で話せます。"
+#endif
     }
 
     /// The user tapped the primer's continue button.
@@ -42,4 +56,3 @@ extension ShannonGeminiLiveSessionModel {
         continuation.resume(returning: proceed)
     }
 }
-#endif

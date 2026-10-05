@@ -27,12 +27,19 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
             try ShannonOpenAITranscriptionProtocol.events(from: JSONSerialization.data(withJSONObject: message))
         }
         XCTAssertEqual(try events(["type": "session.created", "session": ["type": "transcription"]]), [.sessionReady])
-        XCTAssertEqual(try events(["type": "input_audio_buffer.speech_started"]), [.speechStarted])
-        XCTAssertEqual(try events(["type": "input_audio_buffer.speech_stopped"]), [.speechStopped])
+        XCTAssertEqual(try events(["type": "input_audio_buffer.speech_started"]), [.speechStarted()])
+        XCTAssertEqual(try events(["type": "input_audio_buffer.speech_started", "item_id": "item_1"]), [.speechStarted(itemID: "item_1")])
+        XCTAssertEqual(try events(["type": "input_audio_buffer.speech_stopped"]), [.speechStopped()])
+        XCTAssertEqual(try events(["type": "input_audio_buffer.speech_stopped", "item_id": "item_1"]), [.speechStopped(itemID: "item_1")])
         XCTAssertEqual(try events([
             "type": "conversation.item.input_audio_transcription.completed",
             "transcript": " 明日は晴れるかな。\n",
         ]), [.inputTranscript("明日は晴れるかな。")])
+        // Completions of different turns can arrive out of order: the id travels with the words.
+        XCTAssertEqual(try events([
+            "type": "conversation.item.input_audio_transcription.completed",
+            "item_id": "item_2", "transcript": "はじめまして",
+        ]), [.inputTranscript("はじめまして", itemID: "item_2")])
     }
 
     func testServerEventsIgnoreLiveDeltasEmptyTranscriptsAndUnrelatedMessages() throws {

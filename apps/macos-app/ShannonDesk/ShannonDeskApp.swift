@@ -4,6 +4,8 @@ import SwiftUI
 
 @main
 struct ShannonDeskApp: App {
+    /// Quitting during a voice conversation ends the call and lets its end reach the server first (A16).
+    @NSApplicationDelegateAdaptor(ShannonDesktopAppDelegate.self) private var appDelegate
     @State private var conversationModel: ShannonConversationModel
     @State private var connectionModel: ShannonConnectionModel
     @State private var memoryModel: ShannonMemoryModel
@@ -13,6 +15,8 @@ struct ShannonDeskApp: App {
     @State private var appIconModel: ShannonAppIconModel
     @State private var calendarSharingModel: ShannonCalendarSharingModel
     @State private var privateListeningModel: ShannonPrivateListeningModel
+    /// The voice conversation (A16), one for the app: it outlives the page and the window it was started from.
+    @State private var voiceCall = ShannonDesktopVoiceCall()
     @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceRawValue = ShannonAppearanceMode.system.rawValue
 
     init() {
@@ -83,7 +87,8 @@ struct ShannonDeskApp: App {
                 voiceIdentity: voiceIdentityModel,
                 worldSubscriptions: worldSubscriptionModel,
                 release: releaseModel,
-                appIcon: appIconModel
+                appIcon: appIconModel,
+                voiceCall: voiceCall
             )
             .preferredColorScheme(preferredColorScheme)
             .shannonCalendarSharing(calendarSharingModel, syncsOnForeground: false)
@@ -104,7 +109,7 @@ struct ShannonDeskApp: App {
         // restored SwiftUI inspector can otherwise re-enter AppKit's constraint pass.
         .defaultSize(width: previewWindowSize.width, height: previewWindowSize.height)
         .commands {
-            ShannonDeskCommands(conversation: conversationModel)
+            ShannonDeskCommands(conversation: conversationModel, voiceCall: voiceCall)
         }
     }
 
@@ -129,6 +134,8 @@ struct ShannonDeskApp: App {
 private struct ShannonDeskCommands: Commands {
     static let mainWindowID = "main"
     let conversation: ShannonConversationModel
+    /// During 「友人も一緒」 a new Talk is not made: his hidden draft and attachments would silently go (A16).
+    let voiceCall: ShannonDesktopVoiceCall
     @FocusedValue(\.shannonDesktopCommandActions) private var actions
     @Environment(\.openWindow) private var openWindow
 
@@ -153,6 +160,7 @@ private struct ShannonDeskCommands: Commands {
                 actions?.showTalk()
             }
             .keyboardShortcut("n")
+            .disabled(voiceCall.session.hidesOwnerScreens)
         }
 
         CommandMenu("Shannon") {

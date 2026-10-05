@@ -30,20 +30,26 @@ extension ShannonDesktopRootView {
         }
     }
 
+    /// A call in 「友人も一緒」 is on: the owner's Talk and its traces are not on screen (coordinator decision
+    /// 2026-10-06). The call bar and the composer stay.
+    var hidesOwnerTalk: Bool { voiceCall.session.hidesOwnerScreens }
+
     var talkView: some View {
         VStack(spacing: 0) {
             talkHeader
-            if let task = conversation.latestActiveAgentTask {
+            if !hidesOwnerTalk, let task = conversation.latestActiveAgentTask {
                 DesktopWorkStrip(task: task) {
                     selectedTaskID = task.id
                     showAuxiliaryPanel(.task)
                 }
             }
             Divider()
-            talkTaskNotice
+            if !hidesOwnerTalk { talkTaskNotice }
 
             ZStack(alignment: .bottom) {
+                // Covered, not only hidden behind: the list is not drawn, so nothing scrolls to new turns either.
                 talkTimeline
+                    .shannonGuestCover(hidesOwnerTalk, style: .replace)
                 conversationBottomOverlay
             }
         }
@@ -131,7 +137,13 @@ extension ShannonDesktopRootView {
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium, style: .continuous))
             }
 
-            DesktopComposer(model: conversation)
+            // The voice conversation sits over the composer while it is on (A16).
+            ShannonDesktopVoiceCallBar(call: voiceCall, conversation: conversation) { taskID in
+                selectedTaskID = taskID
+                showAuxiliaryPanel(.task)
+            }
+
+            DesktopComposer(model: conversation, voiceCall: voiceCall, startCall: startVoiceCall)
                 .background {
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .fill(.ultraThinMaterial)
@@ -165,10 +177,16 @@ extension ShannonDesktopRootView {
         }
     }
 
+    /// 音声会話を開始: a call on the Talk in front, with her figure beside the conversation (「姿は会話の横」).
+    func startVoiceCall() {
+        voiceCall.start(threadID: conversation.selectedThreadId)
+        showAuxiliaryPanel(.figure)
+    }
+
     var talkHeader: some View {
         HStack(spacing: ShannonDesktopSpacing.medium) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(conversation.selectedThread?.title ?? "新しいトーク")
+                Text(hidesOwnerTalk ? ShannonGeneratedStrings.navTalk : conversation.selectedThread?.title ?? "新しいトーク")
                     .font(.shannonDesktop(.headline))
                     .lineLimit(1)
                 Text("会話と作業はiPhoneと同じシャノンへ続きます")

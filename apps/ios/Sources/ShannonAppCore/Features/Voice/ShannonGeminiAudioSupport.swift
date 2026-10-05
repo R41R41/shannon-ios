@@ -54,7 +54,6 @@ enum ShannonGeminiWAV {
     }
 }
 
-#if os(iOS)
 final class ShannonGeminiLiveOutputRenderProbe: @unchecked Sendable {
     private let lock = NSLock()
     private var didRecordStart = false
@@ -106,4 +105,3 @@ final class ShannonGeminiLiveVADState: @unchecked Sendable {
         return transition
     }
 }
-#endif

@@ -2,6 +2,14 @@ import XCTest
 @testable import ShannonAppCore
 
 final class ShannonGeminiLiveStatusPresentationTests: XCTestCase {
+    static func onMac(_ mac: String, else phone: String) -> String {
+#if os(macOS)
+        mac
+#else
+        phone
+#endif
+    }
+
     private let allPhases: [ShannonGeminiLivePhase] = [
         .idle, .requestingPermission, .connecting, .listening, .thinking, .speaking, .reconnecting, .failed,
     ]
@@ -21,7 +29,7 @@ final class ShannonGeminiLiveStatusPresentationTests: XCTestCase {
     func testFailureDetailReflectsRecoveryAction() {
         XCTAssertEqual(
             ShannonGeminiLiveStatusPresentation(phase: .failed, failureRecovery: .openSettings).detail,
-            "設定でマイクを許可してから、もう一度お試しください。"
+            Self.onMac("システム設定でマイクを許可してから、もう一度お試しください。", else: "設定でマイクを許可してから、もう一度お試しください。")
         )
         XCTAssertEqual(
             ShannonGeminiLiveStatusPresentation(phase: .failed, failureRecovery: .updateRequired).detail,
@@ -108,7 +116,8 @@ final class ShannonGeminiLiveStatusPresentationTests: XCTestCase {
     func testMutedListeningSaysSoInTheStatusLine() {
         let presentation = ShannonGeminiLiveStatusPresentation(phase: .listening, isMuted: true, hasConversation: true)
         XCTAssertEqual(presentation.title, "ミュート中")
-        XCTAssertEqual(presentation.detail, "話すときはマイクをタップしてください。")
+        // The Mac is clicked; its control is named マイク.
+        XCTAssertEqual(presentation.detail, Self.onMac("話すときは「マイク」をクリックしてください。", else: "話すときはマイクをタップしてください。"))
         XCTAssertEqual(
             ShannonGeminiLiveStatusPresentation(phase: .speaking, isMuted: true).title,
             "シャノンが話しています"
@@ -153,7 +162,6 @@ final class ShannonGeminiLiveStatusPresentationTests: XCTestCase {
     }
 }
 
-#if os(iOS)
 @MainActor
 final class ShannonGeminiLiveMuteTests: XCTestCase {
     func testMuteTogglesAndClearsLevelThenResetsWhenTheCallEnds() {
@@ -170,8 +178,22 @@ final class ShannonGeminiLiveMuteTests: XCTestCase {
         XCTAssertNil(model.callStartedAt)
     }
 
+    func testSwitchingToAFriendClearsTheOwnersWordsFromTheScreen() {
+        let model = ShannonGeminiLiveSessionModel()
+        model.phase = .listening
+        model.userTranscript = "明日の歯医者、何時だっけ"
+        model.shannonTranscript = "10時からです、ライ氏。"
+        model.textSendState = .failed(text: "内緒の話", message: "送れませんでした")
+        model.switchParticipantMode(to: .guest, origin: .control)
+        XCTAssertEqual(model.participantMode, .guest)
+        XCTAssertEqual(model.userTranscript, "")
+        XCTAssertEqual(model.shannonTranscript, "")
+        XCTAssertEqual(model.textSendState, .idle)
+        XCTAssertNil(model.textSendState.failedText)
+        model.stop()
+    }
+
     func testPhaseLabelDoesNotNameTheProvider() {
         XCTAssertFalse(ShannonGeminiLivePhase.connecting.japaneseLabel.contains("Gemini"))
     }
 }
-#endif

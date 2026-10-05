@@ -957,6 +957,356 @@
       "note": "機能の名前は「音声会話」。1 回分を指すときは「この通話」。"
     },
     {
+      "key": "voice.mac.input",
+      "text": "入力マイク",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallControls.swift",
+      "only": "apple",
+      "note": "Mac の音声会話（A16）の操作「入力マイク」。Mac のマイクを名前で選ぶ（システム設定と同じ並べ方）。"
+    },
+    {
+      "key": "voice.mac.inputAutomatic",
+      "text": "自動（システムの入力）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallControls.swift",
+      "only": "apple",
+      "note": "Mac の入力マイクの選択肢。システム設定 › サウンド › 入力 で選んでいるもの。"
+    },
+    {
+      "key": "voice.mac.muteHint",
+      "text": "クリックするとミュートします。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallControls.swift",
+      "only": "apple",
+      "note": "Mac の音声会話の「マイク」の手がかり（iPhone の「ダブルタップで…」のポインターの形）。"
+    },
+    {
+      "key": "voice.mac.unmuteHint",
+      "text": "クリックするとミュートを解除します。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallControls.swift",
+      "only": "apple",
+      "note": "同じ、ミュート中。"
+    },
+    {
+      "key": "voice.mac.mutedDetail",
+      "text": "話すときは「マイク」をクリックしてください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveStatusPresentation.swift",
+      "only": "apple",
+      "note": "Mac のミュート中の状態の行（iPhone は「話すときはマイクをタップしてください。」）。"
+    },
+    {
+      "key": "voice.mac.microphoneDenied",
+      "text": "システム設定でマイクを許可すると、音声で話せます。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveSessionModel+PermissionPrimer.swift",
+      "only": "apple",
+      "note": "Mac でマイクが許可されていないとき（iPhone は「設定でマイクを許可すると…」）。"
+    },
+    {
+      "key": "voice.mac.microphoneDeniedGuidance",
+      "text": "システム設定でマイクを許可してから、もう一度お試しください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveStatusPresentation.swift",
+      "only": "apple",
+      "note": "同じ、状態の行の補足。"
+    },
+    {
+      "key": "voice.mac.openSystemSettings",
+      "text": "システム設定を開く",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "マイクが許可されていないときのボタン。システム設定 › プライバシーとセキュリティ › マイク を開く。"
+    },
+    {
+      "key": "voice.mac.retry",
+      "text": "もう一度つなぐ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "つながらなかった通話のボタン（iPhone と同じ文）。"
+    },
+    {
+      "key": "voice.mac.retryHint",
+      "text": "会話内容を保ったまま、音声会話へ再接続します。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "同じボタンの手がかり（iPhone と同じ文）。"
+    },
+    {
+      "key": "voice.mac.endLabel",
+      "text": "音声会話を終了する",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallControls.swift",
+      "only": "apple",
+      "note": "「終了」の読み上げの長い形（voice.end の note）。"
+    },
+    {
+      "key": "voice.mac.endsWithWindow",
+      "text": "窓を閉じると、音声会話も終わります。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "Mac の通話の見出しの手がかり。通話はトークの外ではサイドバーの行とメニューバーに出る（所有者の決定 2026-10-06、B）が、最後の窓を閉じると終わる。"
+    },
+    {
+      "key": "voice.mac.participantHint",
+      "text": "本人だけと友人も一緒を切り替えます。通話はそのまま続きます。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallControls.swift",
+      "only": "apple",
+      "note": "Mac の「本人だけ／友人も一緒」の手がかり。押すと iPhone と同じ確認が出る。"
+    },
+    {
+      "key": "voice.mac.cancel",
+      "text": "キャンセル",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "Mac の通話の確認とカメラのシートの取り消し。"
+    },
+    {
+      "key": "voice.mac.photo",
+      "text": "写真",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallControls.swift",
+      "only": "apple",
+      "note": "Mac の通話の操作「写真」。"
+    },
+    {
+      "key": "voice.mac.photoCamera",
+      "text": "カメラで撮る",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallControls.swift",
+      "only": "apple",
+      "note": "Mac の写真の選択肢。Mac のカメラの映像から 1 枚を撮る（シャッター音は出さない）。"
+    },
+    {
+      "key": "voice.mac.photoLibrary",
+      "text": "写真ライブラリから選ぶ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallControls.swift",
+      "only": "apple",
+      "note": "Mac の写真の選択肢（iPhone と同じ文）。"
+    },
+    {
+      "key": "voice.mac.photoFile",
+      "text": "ファイルから選ぶ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallControls.swift",
+      "only": "apple",
+      "note": "Mac の写真の選択肢。画像のファイルを選ぶ（Mac の入力欄の写真と同じ）。"
+    },
+    {
+      "key": "voice.mac.photoPending",
+      "text": "共有前の写真",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "共有する前の写真の読み上げ（iPhone と同じ文）。"
+    },
+    {
+      "key": "voice.mac.photoOnlyThis",
+      "text": "この1枚だけを共有します",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "共有する前の写真の説明（iPhone と同じ文）。"
+    },
+    {
+      "key": "voice.mac.photoBack",
+      "text": "シャノンが見た内容を音声会話へ戻します",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "同じ（iPhone と同じ文）。"
+    },
+    {
+      "key": "voice.mac.photoShare",
+      "text": "共有",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "写真を共有するボタン（iPhone と同じ文）。"
+    },
+    {
+      "key": "voice.mac.photoTakeAgain",
+      "text": "撮り直す",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "カメラで撮った写真を撮り直す（iPhone と同じ文）。"
+    },
+    {
+      "key": "voice.mac.photoChooseAgain",
+      "text": "選び直す",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "選んだ写真を選び直す（iPhone と同じ文）。"
+    },
+    {
+      "key": "voice.mac.photoRemove",
+      "text": "外す",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "共有する前の写真を外す。"
+    },
+    {
+      "key": "voice.mac.photoPreparing",
+      "text": "写真を準備中",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "写真を読み込んでいる間。"
+    },
+    {
+      "key": "voice.mac.cameraTake",
+      "text": "撮る",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCamera.swift",
+      "only": "apple",
+      "note": "Mac のカメラのシートの決定ボタン。"
+    },
+    {
+      "key": "voice.mac.cameraPreview",
+      "text": "カメラの映像",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCamera.swift",
+      "only": "apple",
+      "note": "Mac のカメラのシートの映像の読み上げ。"
+    },
+    {
+      "key": "voice.mac.cameraNotReady",
+      "text": "カメラの映像がまだ届いていません。少し待ってから、もう一度押してください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCamera.swift",
+      "only": "apple",
+      "note": "撮る を押したとき、映像がまだ無い。"
+    },
+    {
+      "key": "voice.mac.cameraMissing",
+      "text": "このMacではカメラを利用できません。写真ライブラリかファイルから選べます。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Photo.swift",
+      "only": "apple",
+      "note": "Mac にカメラが無いとき。"
+    },
+    {
+      "key": "voice.mac.cameraDenied",
+      "text": "システム設定でカメラを許可すると、写真を撮って見せられます。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Photo.swift",
+      "only": "apple",
+      "note": "Mac でカメラが許可されていないとき。"
+    },
+    {
+      "key": "voice.mac.textResend",
+      "text": "入力を再送",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "通話中に送れなかった文字を送り直す（iPhone と同じ文）。"
+    },
+    {
+      "key": "voice.mac.taskProposed",
+      "text": "実装案ができました",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "通話中に頼んだ作業の提案（iPhone と同じ文）。"
+    },
+    {
+      "key": "voice.mac.taskReview",
+      "text": "内容を確認して開始",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "同じ、押すと作業の現在地が開く（iPhone と同じ文）。"
+    },
+    {
+      "key": "voice.mac.taskOpen",
+      "text": "作業を見る",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "始まった作業（iPhone と同じ文）。"
+    },
+    {
+      "key": "voice.mac.taskHint",
+      "text": "音声会話は続きます。開始前に作業環境と内容を確認できます。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallBar.swift",
+      "only": "apple",
+      "note": "同じ行の手がかり（iPhone と同じ文）。"
+    },
+    {
+      "key": "voice.mac.sendInCall",
+      "text": "⌘↩︎で通話に送る",
+      "apple": "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift",
+      "only": "apple",
+      "note": "Mac の入力欄の右下。音声会話の間は、書いた文が通話に届く（voice.text-in-call。ふだんは「⌘↩︎で送信」）。"
+    },
+    {
+      "key": "voice.mac.dictation",
+      "text": "音声入力",
+      "apple": "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift",
+      "only": "apple",
+      "note": "Mac の入力欄のマイク（talk.dictation）。話した言葉が入力欄に入り、送るのは所有者（iPhone と同じ名前）。"
+    },
+    {
+      "key": "voice.mac.dictationStop",
+      "text": "音声入力を終了",
+      "apple": "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift",
+      "only": "apple",
+      "note": "同じボタン、録っている間（iPhone と同じ名前）。"
+    },
+    {
+      "key": "voice.mac.provider",
+      "text": "読み上げ",
+      "apple": "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopSettingsForms.swift",
+      "only": "apple",
+      "note": "Mac の 設定 › 声 の選択（settings.voice-provider。iPhone と同じ名前）。"
+    },
+    {
+      "key": "voice.mac.providerHint",
+      "text": "Geminiで作った声とElevenLabsのShannonクローンを切り替えます。次に開始する音声会話から適用します",
+      "apple": "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopSettingsForms.swift",
+      "only": "apple",
+      "note": "同じ選択の手がかり（iPhone と同じ文）。"
+    },
+    {
+      "key": "voice.mac.providerNote",
+      "text": "声と読み上げの変更は、通話中の会話を変えず次の通話から反映されます。イヤホンで話しかける声と、触れたときに声で返す声も同じです。",
+      "apple": "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopSettingsForms.swift",
+      "only": "apple",
+      "note": "Mac の 設定 › 声 の説明。前の文は iPhone の注記と同じ。後の文は、Mac のイヤホンの声と触れたときの声も同じ設定を読むこと。"
+    },
+    {
+      "key": "voice.mac.rowTitle",
+      "text": "音声会話・{phase}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Elsewhere.swift",
+      "only": "apple",
+      "note": "Mac のサイドバーのいちばん下、カメラの状態の隣の通話の行（voice.minimised-call、所有者の決定 2026-10-06 の B）。{phase} は通話の状態の行と同じ言葉（聞いています・ミュート中…）。メニューバーの見出しも同じ。"
+    },
+    {
+      "key": "voice.mac.rowHint",
+      "text": "クリックするとトークに戻ります。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Elsewhere.swift",
+      "only": "apple",
+      "note": "同じ行の手がかり。"
+    },
+    {
+      "key": "voice.mac.returnToTalk",
+      "text": "トークに戻る",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Elsewhere.swift",
+      "only": "apple",
+      "note": "通話中で窓が画面に無い間のメニューバーの項目。アプリを前に出し、トークを開く。"
+    },
+    {
+      "key": "voice.mac.mute",
+      "text": "ミュート",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Elsewhere.swift",
+      "only": "apple",
+      "note": "サイドバーの通話の行とメニューバーのミュート。"
+    },
+    {
+      "key": "voice.mac.unmute",
+      "text": "ミュートを解除",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Elsewhere.swift",
+      "only": "apple",
+      "note": "同じ、ミュート中。"
+    },
+    {
+      "key": "voice.mac.callWaitsForDictation",
+      "text": "音声入力の文字を入力欄に入れると、音声会話を始められます",
+      "apple": "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift",
+      "only": "apple",
+      "note": "Mac の「音声会話を開始」が使えないときの手がかり（読み上げ）。音声入力が録っている間と、録り終えた声が文字になるのを待っている間。録った声を通話が黙って捨てないため（2026-10-06 の見直し）。"
+    },
+    {
+      "key": "voice.guestHidesTalk",
+      "text": "友人も一緒の通話中は、トークを隠しています",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceGuestCover.swift",
+      "only": "apple",
+      "note": "調整役の決定（2026-10-06）。「友人も一緒」の通話の間、所有者のトークの代わりに出す中立の札。Mac はトークの会話・サイドバーのトークの一覧・目次・現在地、iPhone は通話を小さくした時の下の画面。"
+    },
+    {
+      "key": "voice.mac.sendWaitsForGuestCall",
+      "text": "友人も一緒の通話を終了するか、もう一度つなぐと送れます",
+      "apple": "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift",
+      "only": "apple",
+      "note": "Mac の入力欄の右下と送るボタンの手がかり。「友人も一緒」の通話がつながらなくなって帯に残っている間は、書いた文を所有者のトークへも通話へも送らない（2026-10-06 の見直し）。"
+    },
+    {
       "key": "nav.delivery",
       "text": "配信",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
@@ -1285,10 +1635,10 @@
     },
     {
       "key": "settings.figure.touchMac",
-      "text": "このMacでは、触れたことが届くのは「体に起きたことをシャノンに伝える」を入にしたときだけで、あなたひとりがいるものとして届きます。ほかの人がそばにいることを伝える切り替えは、Macにはまだありません。",
+      "text": "このMacでは、触れたことが届くのは「体に起きたことをシャノンに伝える」を入にしたときだけです。ふだんはあなたひとりがいるものとして届き、音声会話を「友人も一緒」にしている間とそのあと5分は、ほかの人もいるものとして届きます。",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
       "only": "apple",
-      "note": "Mac の 設定 › すがた の説明に足す一文（A15 の見直し、2026-10-05）。Mac の触れ方は、所有者が入にしたときだけ、相手は所有者として届く。iPhone の「友人も一緒」のような同席の切り替えは Mac に無い。"
+      "note": "Mac の 設定 › すがた の説明に足す一文（A15 の見直し、2026-10-05）。Mac の触れ方は、所有者が入にしたときだけ、相手は所有者として届く。iPhone の「友人も一緒」のような同席の切り替えは Mac に無い。 A16（2026-10-06）: Mac に音声会話が入り、「友人も一緒」の通話の間とそのあと 5 分（ShannonBodyAudienceRule.holdSeconds）は iPhone と同じく、ほかの人がいるものとして届くようになったので、文を直した。"
     },
     {
       "key": "settings.figure.smallEyes",

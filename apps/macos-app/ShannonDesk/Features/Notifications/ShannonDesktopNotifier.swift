@@ -49,11 +49,11 @@ final class ShannonDesktopNotifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// Notifies of what is new since the last look (`DesktopNotificationPlan.toPost`).
-    func update(_ notices: [DesktopNotice], readSucceeded: Bool) {
+    func update(_ notices: [DesktopNotice], readSucceeded: Bool, held: Bool = false) {
         guard didAsk else { return }
         let plan = DesktopNotificationPlan.toPost(
             notices, delivered: defaults.stringArray(forKey: Self.deliveredKey),
-            readSucceeded: readSucceeded, authorized: isAuthorized
+            readSucceeded: readSucceeded, authorized: isAuthorized, held: held
         )
         if let delivered = plan.delivered { defaults.set(delivered, forKey: Self.deliveredKey) }
         for notice in plan.post {

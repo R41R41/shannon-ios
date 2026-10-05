@@ -82,14 +82,17 @@ enum DesktopNotificationPlan {
     ///   (`readSucceeded`): a baseline taken from an empty or offline list would later show old things.
     /// - While notifications are not allowed nothing is shown and nothing new is remembered, so that
     ///   what arrives meanwhile is shown once they are allowed.
+    /// `held`: a call is in 「友人も一緒」 (A16): nothing is posted and nothing is marked delivered, so what is new
+    /// now is posted once the period ends.
     static func toPost(
-        _ notices: [DesktopNotice], delivered: [String]?, readSucceeded: Bool = true, authorized: Bool = true
+        _ notices: [DesktopNotice], delivered: [String]?, readSucceeded: Bool = true, authorized: Bool = true,
+        held: Bool = false
     ) -> (post: [DesktopNotice], delivered: [String]?) {
         guard let delivered else {
             guard readSucceeded else { return ([], nil) }
             return ([], Array(notices.map(\.key).suffix(rememberedKeys)))
         }
-        guard authorized else { return ([], delivered) }
+        guard authorized, !held else { return ([], delivered) }
         let known = Set(delivered)
         var seen = Set<String>()
         let post = notices.filter { !known.contains($0.key) && seen.insert($0.key).inserted }

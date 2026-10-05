@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 
 /// Starting and ending a voice conversation. The call screen starts one from its sheet; a message
@@ -17,9 +16,13 @@ extension ShannonVoiceWorkspaceState {
         // A touch line's id belongs to the one call that listens for its answer, armed after this by that call alone:
         // every other way a call begins (the call screen, a call from her) starts without it.
         ShannonBodyReactionLink.shared.disarm()
+#if os(iOS)
         // A call from Shannon that still rings gives way to a conversation the owner starts himself.
         ShannonVoiceCallHost.shared.calls?.appConversationWillBegin()
-        // A call that failed without being ended may still hold a period; it is remembered like any other.
+#endif
+        // A call that failed without being ended may still hold a period; it is remembered like any other, and what
+        // the owner had typed before a friend joined comes back first.
+        restoreOwnerMessage()
         geminiVoiceModel.finishGuestPeriod()
         geminiVoiceModel.stop()
         let context = ShannonVoiceThreadContext(threadID: threadID)
@@ -29,6 +32,8 @@ extension ShannonVoiceWorkspaceState {
         clearPhoto()
         // The previous call stays remembered; its card makes room for the new call.
         callMemory = nil
+        // An unshared photo and the owner's failed text in the composer follow a switch, however it happened.
+        geminiVoiceModel.participantModeDidChange = { [weak self] mode in self?.participantModeChanged(to: mode) }
         geminiVoiceModel.guestPeriodEnded = { [weak self] period in
             self?.remember(period, threadID: context.threadID, using: conversationModel)
         }
@@ -124,7 +129,8 @@ extension ShannonVoiceWorkspaceState {
         geminiVoiceModel.stop()
         threadContext = nil
         clearPhoto()
+        // What he had typed before a friend joined comes back with the end of the call.
+        restoreOwnerMessage()
         callEndRevision &+= 1
     }
 }
-#endif

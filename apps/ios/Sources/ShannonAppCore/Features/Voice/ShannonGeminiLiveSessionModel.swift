@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 import Observation
 @preconcurrency import AVFoundation
@@ -26,7 +25,7 @@ public final class ShannonGeminiLiveSessionModel {
     public internal(set) var participantMode: ShannonVoiceParticipantMode = .owner
     public private(set) var speechProvider: ShannonSpeechProvider = .gemini
     public internal(set) var ttsCostEstimateAvailable = true
-    public private(set) var inputState: ShannonVoiceInputState
+    public internal(set) var inputState: ShannonVoiceInputState
     /// User-chosen mute. It survives a reconnect of the same call and resets when the call ends.
     public internal(set) var isMicrophoneMuted = false
     /// When the call first became ready to listen; kept across a reconnect of the same call.
@@ -34,15 +33,15 @@ public final class ShannonGeminiLiveSessionModel {
     public internal(set) var microphonePrimerPhase: ShannonPermissionPrimerPhase?
     var microphonePrimerContinuation: CheckedContinuation<Bool, Never>?
     var microphonePermission: @MainActor () -> ShannonMediaPermission = ShannonMediaPermission.currentMicrophone
-    var requestMicrophonePermission: @MainActor () async -> Bool = { await AVAudioApplication.requestRecordPermission() }
+    var requestMicrophonePermission: @MainActor () async -> Bool = ShannonMediaPermission.requestMicrophone
     private var session: ShannonGeminiLiveSessionDTO?
     private(set) var sessionGenerationID: UUID?
     var transport: ShannonGeminiLiveTransport?
     var pendingTurns = ShannonPendingVoiceTurns()
     var responseGenerationID: UUID?
-    private var turnAssembler = ShannonVoiceTurnAssembler()
+    var turnAssembler = ShannonVoiceTurnAssembler()
     var responseTask: Task<Void, Never>?
-    private var finalizeTask: Task<Void, Never>?
+    var finalizeTask: Task<Void, Never>?
     private var duckRestoreTask: Task<Void, Never>?
     var echoGuard = ShannonSpeechEchoGuard()
     /// Recognition lags speech, so Shannon's own last words can arrive as a transcript after playback ends.
@@ -55,39 +54,69 @@ public final class ShannonGeminiLiveSessionModel {
     public internal(set) var callFace: ShannonFace?
     var replyEmotion: ShannonVoiceTurnEmotionDTO?
     private var bargeCandidateStartedAt: TimeInterval?
-    private var heardRightAfterShannon = false
+    var heardRightAfterShannon = false
     var latencyMeasurements = ShannonVoiceLatencyMeasurements()
     var responseDelivery = ShannonVoiceResponseDelivery()
     var responseCommitTask: Task<Bool, Never>?
     var ttsCostUsd: Double = 0
     private var didRecordCaptureStart = false
     private var didRecordFirstQueuedChunk = false
-    private var createSession: (@MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO)?
-    private var performDelegation: (@MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO)?
+    var createSession: (@MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO)?
+    var performDelegation: (@MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO)?
     var performStreamingDelegation: ShannonVoiceStreamingDelegation?
     var streamSpeech: (@MainActor (String, String?) async throws -> ShannonGeminiSpeechStream)?
     var commitTurn: (@MainActor (String, String) async throws -> Void)?
     var handleDelegationResponse: (@MainActor (ShannonLiveVoiceDelegationResponseDTO) -> Void)?
     /// Receives each finished 「友人も一緒」 period. Set by the owner of the call, not per start.
     var guestPeriodEnded: (@MainActor (ShannonVoiceGuestPeriod) -> Void)?
+#if os(macOS)
+    /// Keeps the Mac (and its display) awake while a call runs: a call is speech, which macOS does not count as use.
+    @ObservationIgnored var awakeActivity: NSObjectProtocol?
+#endif
     /// The call going on while the app is in the background (`ShannonGeminiLiveSessionModel+Background.swift`).
     var backgroundSilence = ShannonVoiceBackgroundSilence()
     var backgroundWatchTask: Task<Void, Never>?
     var lastAudioReconnectAt: Date?
+    /// A reconnect of the same call is queued or running (`queueSameCallReconnect`).
+    var sameCallReconnectQueued = false
+    /// Until when the first words of a transcript are still the owner's, after a switch into 「友人も一緒」 by the control.
+    var ownerWordsReceivedUntil: Date?
+    /// The speech segments the recogniser reported, with whether each began before a switch into 「友人も一緒」.
+    var speechSegments = ShannonVoiceSpeechSegments()
+    /// The words being assembled are the owner's (shown nowhere, not kept as the guests').
+    var bufferIsOwners = false
+    /// When the call switched into 「友人も一緒」, until its first words arrive (a content-free diagnostic).
+    var switchedToGuestAt: TimeInterval?
+    /// Told after every switch between 本人だけ and 「友人も一緒」, spoken or by the control. Set by the owner of the call.
+    var participantModeDidChange: (@MainActor (ShannonVoiceParticipantMode) -> Void)?
+    /// Whether the app declares why it uses the microphone (the test host does not).
+    var microphoneUsageIsDeclared: @MainActor () -> Bool = {
+        ShannonVoiceUsageDescriptionPolicy.isPresent(Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription"))
+    }
+    /// The Mac's watch for an engine that runs but delivers no microphone buffers (`+CaptureWatch.swift`).
+    var captureWatch = ShannonVoiceCaptureWatch()
+    var captureWatchTask: Task<Void, Never>?
     var interruptionGeneration = 0
     /// Ends the call the way the owner's own 終了 does. Set by the owner of the call.
     var endAfterBackgroundSilence: (@MainActor () -> Void)?
     /// Told `true` once a session was made and `false` when the call ends or fails (`ShannonVoiceCallPresence`). Set by the owner of the call.
     var callReported: (@MainActor (Bool) -> Void)?
+    /// The call was reported as started and not yet as ended. A reconnect of the same call keeps it open, so the
+    /// other devices see one call, not an end and a new start.
+    var callIsReported = false
     /// Told when a session was made but the call was cancelled before it began, so the server hears that it ended.
     var sessionAbandoned: (@MainActor () -> Void)?
     /// Takes the one look an owner turn asked for and returns what she says about it. Set by the owner of the call.
     var performAppLook: (@MainActor (ShannonAppLookAskDTO) async -> String?)?
-    private static let inputPreferenceDefaultsKey = "shannon.voice.input-preference"
+    static let inputPreferenceDefaultsKey = "shannon.voice.input-preference"
     public init() {
         let stored = UserDefaults.standard.string(forKey: Self.inputPreferenceDefaultsKey)
         let preference = stored.flatMap(ShannonVoiceInputPreference.init(rawValue:)) ?? .automatic
+#if os(macOS)
+        inputState = ShannonVoiceInputState(preference: preference, selectedDeviceID: Self.storedMacInputDeviceID)
+#else
         inputState = ShannonVoiceInputState(preference: preference)
+#endif
     }
 
     public func start(
@@ -102,14 +131,19 @@ public final class ShannonGeminiLiveSessionModel {
         handleDelegationResponse: @escaping @MainActor (ShannonLiveVoiceDelegationResponseDTO) -> Void
     ) async {
         let sameCall = preservePendingInput && self.participantMode == participantMode
+        // Words heard but not yet finished become a pending turn (his stay hidden), not lost with the old session.
+        if sameCall, turnAssembler.hasFinalText { finalizeTranscript(turnComplete: true, beginsResponse: false) }
         let retained = sameCall ? pendingTurns : ShannonPendingVoiceTurns()
         let retainedMute = sameCall && isMicrophoneMuted
         let retainedStart = sameCall ? callStartedAt : nil
         let retainedGuestCall = sameCall ? guestCall : ShannonVoiceGuestCallState()
-        stop()
+        stop(keepingCallReport: sameCall)
         backgroundSilence.speech(at: Date())
         guestCall = retainedGuestCall
+#if os(iOS)
+        // The iPhone keeps its call screen readable while it connects too; the Mac stays awake only once live.
         setKeepsScreenAwake(true)
+#endif
         pendingTurns = retained
         isMicrophoneMuted = retainedMute
         callStartedAt = retainedStart
@@ -129,9 +163,7 @@ public final class ShannonGeminiLiveSessionModel {
         failureRecovery = nil
         phase = .requestingPermission
 
-        guard ShannonVoiceUsageDescriptionPolicy.isPresent(
-            Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription")
-        ) else {
+        guard microphoneUsageIsDeclared() else {
             fail("音声機能の設定が不足しています。アプリを更新してください。", recovery: .updateRequired)
             return
         }
@@ -140,7 +172,7 @@ public final class ShannonGeminiLiveSessionModel {
         guard sessionGenerationID == generation else { return }
         guard permitted else {
             microphonePrimerPhase = .denied
-            fail("設定でマイクを許可すると、音声で話せます。", recovery: .openSettings)
+            fail(Self.microphoneDeniedMessage, recovery: .openSettings)
             return
         }
         microphonePrimerPhase = nil
@@ -151,11 +183,16 @@ public final class ShannonGeminiLiveSessionModel {
             let created = try await createSession(participantMode)
             failedStage = "audio"
             guard sessionGenerationID == generation else {
+                // The server noted this session; an end with an id of its own follows it, also when stop() already
+                // reported the call's end (a session noted after that end would count as a new call for a while).
                 sessionAbandoned?()
                 return
             }
             session = created
-            callReported?(true)
+            if !callIsReported {
+                callIsReported = true
+                callReported?(true)
+            }
             model = created.model
             voice = created.voice
             ShannonVoiceDiagnostics.shared.record("gemini.session.created", metadata: [
@@ -185,6 +222,9 @@ public final class ShannonGeminiLiveSessionModel {
                 self?.voicePlaybackProgressed(stillPlaying: stillPlaying)
             }
             next.setInputMuted(isMicrophoneMuted)
+#if os(macOS)
+            next.inputDeviceID = Self.storedMacInputDeviceID
+#endif
             try next.setInputPreference(inputState.preference)
             try await next.start()
             if sessionGenerationID != generation { next.stop() }
@@ -200,7 +240,10 @@ public final class ShannonGeminiLiveSessionModel {
         }
     }
 
-    public func stop() {
+    /// `keepingCallReport`: the same call is about to reconnect; its start stays reported.
+    func stop(keepingCallReport: Bool) {
+        // The old transport stops here: a reconnect that was waiting is under way (or the call ended).
+        sameCallReconnectQueued = false
         resolveMicrophonePrimer(proceed: false)
         interruptionGeneration &+= 1
         microphonePrimerPhase = nil
@@ -213,16 +256,18 @@ public final class ShannonGeminiLiveSessionModel {
         responseTask = nil
         responseGenerationID = nil
         pendingTurns.reset()
+        resetSpeechOwnership()
         guestCall = ShannonVoiceGuestCallState()
         callFace = nil
         replyEmotion = nil
         setKeepsScreenAwake(false)
         finalizeTask = nil
         duckRestoreTask = nil
+        stopWatchingCapture()
         if session != nil {
             recordSessionSummary()
-            callReported?(false)
         }
+        if callIsReported, !keepingCallReport { reportCallEnded() }
         transport?.stop()
         transport = nil
         session = nil
@@ -232,22 +277,6 @@ public final class ShannonGeminiLiveSessionModel {
         callStartedAt = nil
         audioLevel = 0
         playbackLevel = 0
-    }
-
-    public func retry() async {
-        guard let createSession, let performDelegation, let performStreamingDelegation,
-              let streamSpeech, let commitTurn, let handleDelegationResponse else { return }
-        await start(
-            participantMode: participantMode,
-            speechProvider: speechProvider,
-            preservePendingInput: true,
-            createSession: createSession,
-            performDelegation: performDelegation,
-            performStreamingDelegation: performStreamingDelegation,
-            streamSpeech: streamSpeech,
-            commitTurn: commitTurn,
-            handleDelegationResponse: handleDelegationResponse
-        )
     }
 
     @discardableResult
@@ -286,49 +315,31 @@ public final class ShannonGeminiLiveSessionModel {
         return sendText(text)
     }
 
-    public func toggleMicrophoneMute() {
-        isMicrophoneMuted.toggle()
-        if isMicrophoneMuted { audioLevel = 0 }
-        transport?.setInputMuted(isMicrophoneMuted)
-        ShannonVoiceDiagnostics.shared.record("gemini.audio.input.mute", metadata: ["muted": String(isMicrophoneMuted)])
-    }
-
-    public func selectInput(_ preference: ShannonVoiceInputPreference) {
-        guard inputState.canSelect(preference) else {
-            errorMessage = "選んだマイクは現在接続されていません。"
-            return
-        }
-        do {
-            try transport?.setInputPreference(preference)
-            inputState = ShannonVoiceInputState(
-                preference: preference,
-                activeInputName: inputState.activeInputName,
-                isBuiltInAvailable: inputState.isBuiltInAvailable,
-                isConnectedInputAvailable: inputState.isConnectedInputAvailable,
-                isPreferenceUnavailable: false
-            )
-            UserDefaults.standard.set(preference.rawValue, forKey: Self.inputPreferenceDefaultsKey)
-        } catch {
-            errorMessage = "マイクを切り替えられませんでした。接続を確認してください。"
-        }
-    }
-
-    private func handle(_ event: ShannonTranscriptionEvent) {
+    func handle(_ event: ShannonTranscriptionEvent) {
         switch event {
         case .sessionReady:
             phase = .listening
+            // Awake while the call is live (the Mac takes it only now); a failure releases it.
+            setKeepsScreenAwake(true)
+            watchCapture()
             if callStartedAt == nil { callStartedAt = Date() }
             backgroundSilence.speech(at: Date())
-        case .speechStarted:
+        case let .speechStarted(itemID):
+            speechSegments.started(itemID: itemID, at: ProcessInfo.processInfo.systemUptime)
             backgroundSilence.ownerSpeechStarted(at: Date())
             echoWindow.speechStarted(isSpeaking: responseTask != nil, now: ProcessInfo.processInfo.systemUptime)
             bargeInRule.speechStarted(at: ProcessInfo.processInfo.systemUptime)
             duckForSpeech()
-        case .speechStopped:
+        case let .speechStopped(itemID):
+            speechSegments.stopped(itemID: itemID, at: ProcessInfo.processInfo.systemUptime)
             backgroundSilence.ownerSpeechStopped(at: Date())
             bargeInRule.speechStopped(at: ProcessInfo.processInfo.systemUptime)
             if responseTask != nil { scheduleDuckRelease() }
-        case let .inputTranscript(text):
+        case let .inputTranscript(text, itemID):
+            // Every transcript takes its speech segment (by id), also one dropped as her echo.
+            let claim = speechSegments.claimTranscript(itemID: itemID, at: ProcessInfo.processInfo.systemUptime)
+            // Heard in a 「友人も一緒」 period that has ended: never answered with the owner's context.
+            if claim == .stale { return }
             if discardsNearHerVoice(text) { return }
             if !turnAssembler.hasFinalText {
                 heardRightAfterShannon = ShannonVoiceGuestCallState.follows(
@@ -336,22 +347,20 @@ public final class ShannonGeminiLiveSessionModel {
                     now: ProcessInfo.processInfo.systemUptime)
             }
             backgroundSilence.ownerSpoke(at: Date())
+            // Whose words these are follows when their speech began; the buffer never mixes the two.
+            takeOwnership(of: claim, at: ProcessInfo.processInfo.systemUptime)
             turnAssembler.appendFinal(text)
             userTranscript = previewInput(turnAssembler.finalText)
             // Only a completed transcript that is not Shannon's own voice interrupts her reply.
             interruptResponse()
             scheduleFinalization(turnComplete: false)
         case let .goAway(reason):
-            if reason == ShannonGeminiLiveTransport.audioFailure, reconnectAfterAudioFailure() { return }
-            fail("音声会話の接続が終了しました。もう一度つないでください。", recovery: .reconnect)
+            if reason == ShannonGeminiLiveTransport.audioFailure { audioFailed() } else { connectionEnded() }
         }
     }
 
-    private func previewInput(_ current: String) -> String {
-[pendingTurns.displayText, current].filter { !$0.isEmpty }.joined(separator: "\n")
-    }
-
     private func handleCapture(rms: Float, seconds: Double, started: Bool, ended: Bool, chunks: Int) {
+        captureWatch.buffer(at: ProcessInfo.processInfo.systemUptime)
         if !didRecordCaptureStart {
             didRecordCaptureStart = true
             ShannonVoiceDiagnostics.shared.record("gemini.audio.capture.started")
@@ -374,28 +383,6 @@ public final class ShannonGeminiLiveSessionModel {
         if ended, responseTask == nil { phase = .thinking }
     }
 
-    private func scheduleFinalization(turnComplete: Bool) {
-        guard turnAssembler.hasFinalText else { return }
-        finalizeTask?.cancel()
-        let delay = turnAssembler.finalizationDelayMilliseconds(turnComplete: turnComplete)
-        ShannonVoiceTurnDiagnostics.recordFinalizationScheduled(delay: delay, turnComplete: turnComplete)
-        finalizeTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .milliseconds(delay)) } catch { return }
-            self?.finalizeTranscript(turnComplete: turnComplete)
-        }
-    }
-
-    private func finalizeTranscript(turnComplete: Bool) {
-        finalizeTask?.cancel()
-        finalizeTask = nil
-        guard let envelope = turnAssembler.finish() else { return }
-        ShannonVoiceTurnDiagnostics.recordAssembled(envelope, turnComplete: turnComplete)
-        appendUtterance(id: envelope.id, rawText: envelope.rawText, text: envelope.normalizedText,
-            source: .speech, addressedByName: envelope.addressee == "shannon",
-            followsShannonTurn: heardRightAfterShannon)
-        userTranscript = pendingTurns.displayText
-        beginResponse()
-    }
     /// A sound heard while Shannon speaks may be her own voice returning through the microphone, so
     /// it only lowers playback. The reply stops when a completed transcript shows the owner spoke
     /// (see `.inputTranscript`); the duck lifts shortly after the sound stops.
@@ -451,6 +438,11 @@ public final class ShannonGeminiLiveSessionModel {
         finalizeTask = nil
         turnAssembler.reset()
         heardRightAfterShannon = false
+        ownerWordsReceivedUntil = nil
+        // What was heard until now belongs to the period that ended; a late transcript of it is ignored.
+        speechSegments.discardAll()
+        bufferIsOwners = false
+        switchedToGuestAt = nil
     }
 
     func updateCost() {
@@ -461,6 +453,7 @@ public final class ShannonGeminiLiveSessionModel {
         userTranscript = ""
         shannonTranscript = ""
         turnAssembler.reset()
+        resetSpeechOwnership()
         echoGuard.reset()
         echoWindow.reset()
         bargeInRule.reset()
@@ -484,7 +477,10 @@ public final class ShannonGeminiLiveSessionModel {
             message: "接続が切れたため送信を中断しました。入力は残しています。"
         )
         // A failed call is no longer a call on this device; a retry makes a new session and reports it again.
-        if session != nil { callReported?(false) }
+        if callIsReported { reportCallEnded() }
+        sameCallReconnectQueued = false
+        setKeepsScreenAwake(false)
+        stopWatchingCapture()
         responseTask?.cancel()
         responseTask = nil
         responseGenerationID = nil
@@ -496,4 +492,3 @@ public final class ShannonGeminiLiveSessionModel {
         failureRecovery = recovery
     }
 }
-#endif

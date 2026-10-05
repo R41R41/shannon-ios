@@ -6,6 +6,9 @@ import UniformTypeIdentifiers
 
 struct DesktopComposer: View {
     @Bindable var model: ShannonConversationModel
+    /// The voice conversation (A16): started from here, and while it is on, what is typed here goes into it.
+    let voiceCall: ShannonDesktopVoiceCall
+    let startCall: () -> Void
     @State var attachments: [ShannonChatAttachmentDTO] = []
     @State var isImporting = false
     @State var attachmentError: String?
@@ -17,8 +20,10 @@ struct DesktopComposer: View {
     @State var photoPickerItem: PhotosPickerItem?
     @State var isPreparingPhoto = false
 
-    init(model: ShannonConversationModel) {
+    init(model: ShannonConversationModel, voiceCall: ShannonDesktopVoiceCall, startCall: @escaping () -> Void) {
         self.model = model
+        self.voiceCall = voiceCall
+        self.startCall = startCall
 #if DEBUG
         _attachments = State(initialValue: model.isDesignPreview ? [
             ShannonChatAttachmentDTO(
@@ -33,8 +38,9 @@ struct DesktopComposer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ShannonDesktopSpacing.small) {
-            photoContext
-            if !attachments.isEmpty {
+            // 「友人も一緒」: his photo, files and web search wait, unseen, until the call is his again (A16).
+            if !hidesOwnerItems { photoContext }
+            if !hidesOwnerItems, !attachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: ShannonDesktopSpacing.small) {
                         ForEach(Array(attachments.enumerated()), id: \.offset) { index, attachment in
@@ -71,13 +77,14 @@ struct DesktopComposer: View {
                 }
             }
 
-            if let attachmentError {
+            if let attachmentError, !hidesOwnerItems {
                 Label(attachmentError, systemImage: "exclamationmark.triangle")
                     .font(.shannonDesktop(.caption))
                     .foregroundStyle(Color.shannonAttention)
             }
+            dictationNotice
 
-            if usesWebSearch {
+            if usesWebSearch, !hidesOwnerItems {
                 HStack(spacing: 7) {
                     Image(systemName: "globe")
                     Text("Webで調べる")
@@ -125,12 +132,26 @@ struct DesktopComposer: View {
                 }
                 .menuStyle(.borderlessButton)
                 .help("添付とツール")
+                // During a call a photo is shown to her through the call's own 写真; during 「友人も一緒」 his
+                // attachments are not shown at all.
+                .disabled(inCall || hidesOwnerItems)
 
                 Spacer()
-                Text("⌘↩︎で送信")
+                Text(sendHint)
                     .font(.shannonDesktop(.caption))
                     .foregroundStyle(.tertiary)
+                dictationButton
+                if !voiceCall.isShown { callButton }
                 Button {
+                    switch sendRoute {
+                    case .call:
+                        sendIntoCall()
+                        return
+                    case .none:
+                        return
+                    case .talk:
+                        break
+                    }
                     let selectedAttachments = attachments
                     let selectedWebSearch = usesWebSearch
                     let selectedPhoto = photo?.jpegData
@@ -152,7 +173,8 @@ struct DesktopComposer: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.circle)
-                .disabled(isPreparingPhoto || !model.canSendDraft(attachmentCount: attachmentCount))
+                .disabled(sendIsDisabled)
+                .accessibilityHint(sendRoute == .none ? ShannonGeneratedStrings.voiceMacSendWaitsForGuestCall : "")
                 .keyboardShortcut(.return, modifiers: .command)
             }
         }
@@ -177,6 +199,107 @@ struct DesktopComposer: View {
             usesWebSearch = false
             attachmentError = nil
             clearPhoto()
+        }
+    }
+}
+
+/// The composer's voice (roadmap A16): 音声会話を開始 (the waveform, as the iPhone's empty composer shows it),
+/// 音声入力 (the microphone: the words go into the draft and nothing is sent until the owner sends it), and,
+/// while a call is on, text sent into the call (`voice.text-in-call`).
+extension DesktopComposer {
+    /// A call in 「友人も一緒」 is on: the owner's attachments, photo and web search are not shown.
+    var hidesOwnerItems: Bool { voiceCall.session.hidesOwnerScreens }
+
+    var sendRoute: DesktopComposerRoute {
+        .route(callHoldsMicrophone: inCall, hidesOwnerScreens: hidesOwnerItems)
+    }
+
+    var sendIsDisabled: Bool {
+        switch sendRoute {
+        case .call: !canSendIntoCall
+        case .none: true
+        case .talk: isPreparingPhoto || !model.canSendDraft(attachmentCount: attachmentCount)
+        }
+    }
+
+    var sendHint: String {
+        switch sendRoute {
+        case .call: ShannonGeneratedStrings.voiceMacSendInCall
+        case .none: ShannonGeneratedStrings.voiceMacSendWaitsForGuestCall
+        case .talk: "⌘↩︎で送信"
+        }
+    }
+
+    /// A call holds the microphone: ⌘↩︎ sends the draft into it, attachments wait.
+    var inCall: Bool { voiceCall.holdsMicrophone }
+
+    var canSendIntoCall: Bool {
+        !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !voiceCall.session.textSendState.isSending
+    }
+
+    func sendIntoCall() {
+        if voiceCall.sendText(model.draft) { model.draft = "" }
+    }
+
+    var callButton: some View {
+        Button(action: startCall) {
+            Image(systemName: "waveform")
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 26, height: 26)
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.circle)
+        // A finished dictation is written into the draft first (the microphone button), never dropped by a call.
+        .disabled(voiceCall.dictationBlocksCall)
+        .help(voiceCall.dictationBlocksCall ? ShannonGeneratedStrings.voiceMacCallWaitsForDictation : ShannonGeneratedStrings.voiceStart)
+        .accessibilityLabel(ShannonGeneratedStrings.voiceStart)
+        .accessibilityHint(voiceCall.dictationBlocksCall ? ShannonGeneratedStrings.voiceMacCallWaitsForDictation : "")
+        .accessibilityIdentifier("talk-voice-start")
+    }
+
+    var dictationButton: some View {
+        let phase = voiceCall.dictation.phase
+        let listening = phase == .listening || phase == .ready
+        let busy = [.requestingPermission, .transcribing, .thinking].contains(phase)
+        return Button {
+            voiceCall.dictationPrimaryAction { words in
+                let draft = model.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                model.draft = draft.isEmpty ? words : "\(draft) \(words)"
+            }
+        } label: {
+            Group {
+                if busy {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: listening ? "stop.fill" : "mic")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+            }
+            .frame(width: 26, height: 26)
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.circle)
+        .tint(listening ? Color.shannonActionColor : nil)
+        .disabled(model.isSending || busy || voiceCall.dictationWaitsForCall)
+        .help(dictationHelp(listening: listening))
+        .accessibilityLabel(listening ? ShannonGeneratedStrings.voiceMacDictationStop : ShannonGeneratedStrings.voiceMacDictation)
+        .accessibilityHint(voiceCall.dictationWaitsForCall ? ShannonGeneratedStrings.talkDictationWaitsForCall : "")
+        .accessibilityIdentifier("talk-dictation")
+    }
+
+    private func dictationHelp(listening: Bool) -> String {
+        if voiceCall.dictationWaitsForCall { return ShannonGeneratedStrings.talkDictationWaitsForCall }
+        if let error = voiceCall.dictation.errorMessage, [.failed, .denied].contains(voiceCall.dictation.phase) { return error }
+        return listening ? ShannonGeneratedStrings.voiceMacDictationStop : ShannonGeneratedStrings.voiceMacDictation
+    }
+
+    /// Dictation that could not start or could not be written out says why, under the field.
+    @ViewBuilder
+    var dictationNotice: some View {
+        if [.failed, .denied].contains(voiceCall.dictation.phase), let error = voiceCall.dictation.errorMessage {
+            Label(error, systemImage: "mic.slash")
+                .font(.shannonDesktop(.caption))
+                .foregroundStyle(Color.shannonAttention)
         }
     }
 }

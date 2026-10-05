@@ -10,6 +10,9 @@ struct ShannonVoicePresentationModifier: ViewModifier {
     let expression: ShannonExpressionDTO
     var allowsTaskNavigation = true
     var openTask: (UUID) -> Void = { _ in }
+    /// This screen is Talk or the list of talks: covered under the pill during 「友人も一緒」. Pages the owner opens
+    /// himself (作業, シャノン, 設定, a work task) are not (owner decision 2026-10-06, information-architecture 8 #28).
+    var coversOwnerScreen = true
     @State private var taskToOpen: UUID?
     @State private var presenterID = UUID()
     @Environment(\.colorScheme) private var colorScheme
@@ -35,7 +38,10 @@ struct ShannonVoicePresentationModifier: ViewModifier {
                     discard: { workspace.discardCallMemory(using: conversationModel) },
                     close: { workspace.callMemory = nil })
             }
+            // 「友人も一緒」 with the call minimised: the owner's screen under the pill (Talk, or a sheet's page) is
+            // covered, and VoiceOver does not read it either (coordinator decision 2026-10-06).
             content
+                .shannonGuestCover(coversOwnerScreen && geminiVoiceModel.hidesOwnerScreens, style: .overlay)
         }
         .background { ShannonPalette.resolve(colorScheme).canvas.ignoresSafeArea() }
         .shannonAppLook(conversationModel)
@@ -70,8 +76,6 @@ struct ShannonVoicePresentationModifier: ViewModifier {
         // Whether a call screen is up anywhere, for the links that must not close what is under it.
         .onChange(of: isPresented, initial: true) { workspace.setCallScreen(presenterID, isUp: isPresented) }
         .onDisappear { workspace.setCallScreen(presenterID, isUp: false) }
-        // A spoken switch happens in the session, so an unshared photo is cleared here too.
-        .onChange(of: geminiVoiceModel.participantMode) { workspace.clearPhoto() }
         // A call that ended without this sheet's 終了 (silence in the background, no answer to her own line) closes it too.
         .onChange(of: workspace.callEndRevision) { isPresented = false }
 #if DEBUG
@@ -110,12 +114,15 @@ struct ShannonVoiceAccessoryModifier: ViewModifier {
     let workspace: ShannonVoiceWorkspaceState
     let conversationModel: ShannonConversationModel
     let geminiVoiceModel: ShannonGeminiLiveSessionModel
+    /// The list of talks is covered during 「友人も一緒」; Settings and a work task, which he opens himself, are not.
+    var coversOwnerScreen = true
 
     func body(content: Content) -> some View {
         content.modifier(ShannonVoicePresentationModifier(
             isPresented: $showsDetails, speechProvider: geminiVoiceModel.speechProvider, workspace: workspace,
             conversationModel: conversationModel, geminiVoiceModel: geminiVoiceModel,
-            expression: conversationModel.currentExpression, allowsTaskNavigation: false
+            expression: conversationModel.currentExpression, allowsTaskNavigation: false,
+            coversOwnerScreen: coversOwnerScreen
         ))
     }
 }

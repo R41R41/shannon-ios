@@ -34,7 +34,8 @@ extension ShannonDesktopRootView {
                     await conversation.refreshAgentProjectProvisioning()
                     await conversation.refreshInitiatives()
                     await ShannonDesktopNotifier.shared.start()
-                    ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: noticesReadSucceeded)
+                    ShannonDesktopNotifier.shared.update(
+                        desktopNotices, readSucceeded: noticesReadSucceeded, held: voiceCall.session.hidesOwnerScreens)
                     openNotificationTarget()
                 }
                 restoreSelectedTaskIfAvailable()
@@ -64,13 +65,22 @@ extension ShannonDesktopRootView {
                 }
             }
             .onChange(of: desktopNoticeKeys) {
+                // 「友人も一緒」: what she or the work says is held until the period ends (and posted then).
                 guard connection.isConnected, !conversation.isDesignPreview else { return }
-                ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: noticesReadSucceeded)
+                ShannonDesktopNotifier.shared.update(
+                    desktopNotices, readSucceeded: noticesReadSucceeded, held: voiceCall.session.hidesOwnerScreens)
             }
             // The first successful read after a failed one may be what takes the baseline.
             .onChange(of: noticesReadSucceeded) {
                 guard noticesReadSucceeded, !conversation.isDesignPreview else { return }
-                ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: true)
+                ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: true, held: voiceCall.session.hidesOwnerScreens)
+            }
+            .onChange(of: voiceCall.session.hidesOwnerScreens) {
+                // 「友人も一緒」 began: the sidebar's search, which he typed, is cleared with the list it filtered.
+                if voiceCall.session.hidesOwnerScreens { searchText = "" }
+                // It ended: what was held is posted now.
+                guard !voiceCall.session.hidesOwnerScreens, connection.isConnected, !conversation.isDesignPreview else { return }
+                ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: noticesReadSucceeded)
             }
             .onReceive(NotificationCenter.default.publisher(for: .shannonDesktopNotificationOpened)) { _ in
                 openNotificationTarget()
@@ -78,6 +88,13 @@ extension ShannonDesktopRootView {
             .onReceive(NotificationCenter.default.publisher(for: .shannonYousuLinkOpened)) { _ in
                 openPendingYousuLink()
             }
+            // トークに戻る from the call in the menu bar (A16, option B).
+            // Only in the window the call brought back (with none named, every window).
+            .onReceive(NotificationCenter.default.publisher(for: .shannonDesktopReturnToTalk)) { note in
+                if let target = note.object as? NSWindow, let mine = hostWindow.window, target !== mine { return }
+                selectDestination(.talk)
+            }
+            .background(DesktopWindowReader(box: hostWindow) { window in voiceCall.window(window, hosts: windowID) })
     }
 
     /// Keeps what a window restores current as the selection changes.
@@ -123,5 +140,31 @@ extension ShannonDesktopRootView {
             .onChange(of: selectedDevelopmentTool) {
                 developmentWorkspaceResource = .idle
             }
+    }
+}
+
+/// The window a root view is in, so that a request meant for one window is answered there only.
+final class DesktopWindowBox {
+    weak var window: NSWindow?
+}
+
+struct DesktopWindowReader: NSViewRepresentable {
+    let box: DesktopWindowBox
+    /// Told the window whenever it is found or changes.
+    var found: (NSWindow?) -> Void = { _ in }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { [weak view] in
+            box.window = view?.window
+            found(view?.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard box.window !== nsView.window else { return }
+        box.window = nsView.window
+        found(nsView.window)
     }
 }

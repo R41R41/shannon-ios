@@ -294,6 +294,28 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         XCTAssertEqual(later.post.map(\.key), [notices[0].key])
     }
 
+    /// During 「友人も一緒」 the draft never goes to the owner's Talk: into the live call, or nowhere while it has failed.
+    func testTheComposerNeverSendsToTheOwnersTalkDuringAFriendsCall() {
+        XCTAssertEqual(DesktopComposerRoute.route(callHoldsMicrophone: true, hidesOwnerScreens: true), .call)
+        XCTAssertEqual(DesktopComposerRoute.route(callHoldsMicrophone: false, hidesOwnerScreens: true), .none,
+                       "a failed 友人も一緒 call: end it or connect again")
+        XCTAssertEqual(DesktopComposerRoute.route(callHoldsMicrophone: true, hidesOwnerScreens: false), .call)
+        XCTAssertEqual(DesktopComposerRoute.route(callHoldsMicrophone: false, hidesOwnerScreens: false), .talk)
+    }
+
+    /// While a call is in 「友人も一緒」 nothing is posted and nothing is marked delivered; afterwards it is posted.
+    func testNotificationsAreHeldWhileAFriendIsInTheCallAndPostedAfterwards() {
+        let notices = [
+            DesktopNotice(key: "initiative:t1:m1", title: "シャノン", body: "ライ氏、明日の歯医者を忘れないでください。", target: .thread("t1")),
+        ]
+        let baseline: [String] = []
+        let held = DesktopNotificationPlan.toPost(notices, delivered: baseline, held: true)
+        XCTAssertTrue(held.post.isEmpty, "nothing over the call")
+        XCTAssertEqual(held.delivered, baseline, "and nothing marked as delivered")
+        let released = DesktopNotificationPlan.toPost(notices, delivered: held.delivered)
+        XCTAssertEqual(released.post.map(\.key), ["initiative:t1:m1"], "posted once the period ends")
+    }
+
     func testNotificationBaselineWaitsForARealReadAndPermission() {
         let notice = DesktopNotice(key: "initiative:a", title: "シャノン", body: "b", target: .thread("t"))
         let newer = DesktopNotice(key: "initiative:b", title: "シャノン", body: "c", target: .thread("t"))

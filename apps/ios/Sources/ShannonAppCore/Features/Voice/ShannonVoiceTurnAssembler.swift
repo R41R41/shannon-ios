@@ -55,7 +55,8 @@ public struct ShannonVoiceTurnEnvelope: Codable, Equatable, Identifiable, Sendab
 struct ShannonVoiceTurnAssembler: Sendable {
     private(set) var finalText = ""
     private(set) var segments: [ShannonVoiceTranscriptSegment] = []
-    private var startedAt: Date?
+    /// When the first words of the utterance being assembled arrived.
+    private(set) var startedAt: Date?
     private var lastCompletedID: UUID?
 
     var hasFinalText: Bool {
@@ -83,12 +84,25 @@ struct ShannonVoiceTurnAssembler: Sendable {
         )
     }
 
+    /// How long the assembler waits for more words before an utterance is finished, by how it ends (milliseconds).
+    enum FinalizationPause {
+        /// It ends a sentence (。！？).
+        static let sentenceEnd = 80
+        /// It ends on a comma or a word that continues (けど, から…): the longest wait.
+        static let continuation = 420
+        /// Three characters or fewer.
+        static let fragment = 360
+        static let other = 220
+    }
+
     func finalizationDelayMilliseconds(turnComplete: Bool) -> Int {
         if turnComplete { return 0 }
         let value = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.range(of: #"[。！？!?][」』）】”\"]?$"#, options: .regularExpression) != nil { return 80 }
-        if value.range(of: #"(?:[、…]|けど|から|ので|でも|だが|ながら|つつ)$"#, options: .regularExpression) != nil { return 420 }
-        return value.count <= 3 ? 360 : 220
+        if value.range(of: #"[。！？!?][」』）】”\"]?$"#, options: .regularExpression) != nil { return FinalizationPause.sentenceEnd }
+        if value.range(of: #"(?:[、…]|けど|から|ので|でも|だが|ながら|つつ)$"#, options: .regularExpression) != nil {
+            return FinalizationPause.continuation
+        }
+        return value.count <= 3 ? FinalizationPause.fragment : FinalizationPause.other
     }
 
     mutating func finish(endedAt: Date = Date()) -> ShannonVoiceTurnEnvelope? {

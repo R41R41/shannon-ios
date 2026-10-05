@@ -1,8 +1,14 @@
-#if os(iOS)
 import Observation
 import PhotosUI
 import SwiftUI
+#if os(iOS)
 import UIKit
+/// A photo taken or picked for the call, before it is shared.
+typealias ShannonVoicePendingImage = UIImage
+#else
+import AppKit
+typealias ShannonVoicePendingImage = NSImage
+#endif
 
 /// Unsubmitted input and previews outlive the expanded call screen.
 @MainActor
@@ -11,6 +17,10 @@ final class ShannonVoiceWorkspaceState {
     var threadContext: ShannonVoiceThreadContext?
     var connectionRequestID: UUID?
     var typedMessage = ""
+    /// What the owner had in the call's composer when a friend joined: set aside, never deleted, and put back when
+    /// the call returns to 本人だけ or ends. Everything in the composer at that moment was typed outside
+    /// 「友人も一緒」, so all of it is his; a draft typed while the friend is there stays where it is.
+    private(set) var ownerMessageAside: String?
     /// The multiline composer revealed by the call screen's 文字 control.
     var showsTextComposer = false
     var showsInputPicker = false
@@ -19,7 +29,7 @@ final class ShannonVoiceWorkspaceState {
     var showsCamera = false
     var showsPhotoLibrary = false
     var selectedLibraryPhoto: PhotosPickerItem?
-    var pendingCameraImage: UIImage?
+    var pendingCameraImage: ShannonVoicePendingImage?
     var pendingCameraData: Data?
     var pendingPhotoFromLibrary = false
     var cameraErrorMessage: String?
@@ -38,6 +48,38 @@ final class ShannonVoiceWorkspaceState {
     var callScreenIsUp: Bool { !callScreenPresenters.isEmpty }
     func setCallScreen(_ presenter: UUID, isUp: Bool) {
         if isUp { callScreenPresenters.insert(presenter) } else { callScreenPresenters.remove(presenter) }
+    }
+
+    /// Text that failed to send goes back into the empty composer.
+    func restoreFailedText(_ text: String) {
+        guard typedMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            showsTextComposer = true
+            return
+        }
+        typedMessage = text
+        showsTextComposer = true
+    }
+
+    /// A switch between 本人だけ and 「友人も一緒」: an unshared photo goes; into 「友人も一緒」 the owner's text is set
+    /// aside (so it is neither shown nor sent as the guests' words), back in 本人だけ it returns.
+    func participantModeChanged(to mode: ShannonVoiceParticipantMode) {
+        clearPhoto()
+        if mode == .guest { setOwnerMessageAside() } else { restoreOwnerMessage() }
+    }
+
+    private func setOwnerMessageAside() {
+        guard !typedMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        ownerMessageAside = [ownerMessageAside, typedMessage].compactMap { $0 }.joined(separator: "\n")
+        typedMessage = ""
+    }
+
+    /// Puts the owner's text back, ahead of anything typed meanwhile.
+    func restoreOwnerMessage() {
+        guard let aside = ownerMessageAside else { return }
+        ownerMessageAside = nil
+        typedMessage = typedMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? aside : aside + "\n" + typedMessage
+        if !typedMessage.isEmpty { showsTextComposer = true }
     }
 
     func clearPhoto() {
@@ -102,4 +144,3 @@ final class ShannonVoiceThreadContext {
     var threadID: String?
     init(threadID: String?) { self.threadID = threadID }
 }
-#endif

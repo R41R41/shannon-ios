@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 
 public enum ShannonGeminiLivePhase: String, Equatable, Sendable {
@@ -17,4 +16,3 @@ public enum ShannonGeminiLivePhase: String, Equatable, Sendable {
         }
     }
 }
-#endif

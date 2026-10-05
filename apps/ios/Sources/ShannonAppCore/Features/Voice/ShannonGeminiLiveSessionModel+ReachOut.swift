@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 
 /// The microphone after Shannon spoke through the earphones on her own (owner decision 2026-10-02).
@@ -41,4 +40,3 @@ extension ShannonGeminiLiveSessionModel {
         )
     }
 }
-#endif

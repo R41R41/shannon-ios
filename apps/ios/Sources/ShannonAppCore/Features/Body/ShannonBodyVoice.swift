@@ -43,6 +43,9 @@ public final class ShannonSpeechArbiter {
     /// The standby's way of preparing the session for one spoken line and giving it back.
     public var beginSpeech: (@MainActor () throws -> Void)?
     public var endSpeech: (@MainActor () -> Void)?
+    /// Called when the owner starts a voice conversation or dictation, before either opens the microphone:
+    /// whatever else of hers holds sound or listens stops (the Mac's earphone message and its answer).
+    public var microphoneWillBeTaken: (@MainActor () -> Void)?
     /// Her line for a touch is being fetched or spoken, or his answer to it is being listened for.
     public internal(set) var touchLineIsActive = false
 
@@ -75,7 +78,7 @@ public final class ShannonBodyVoice {
     private let callIsActive: @MainActor () -> Bool
     /// The surface still answers in voice: the body screen is up, 声で返す and 伝える are on, the app is in front.
     public var mayAnswerInVoice: @MainActor () -> Bool = { true }
-    /// Opens the microphone for his answer; nil where there is no voice conversation to continue in (the Mac).
+    /// Opens the microphone for his answer: the voice conversation of the iPhone or, since A16, of the Mac.
     public var listen: Listen?
 
     public init(

@@ -45,5 +45,5 @@ extension ShannonGeneratedStrings {
     /// `settings.figure.touchEyes`
     public static let settingsFigureTouchEyes = "目だけのときは、目のあたりを軽くつつけます（なでる・くすぐる・手をつなぐは、ありません）。"
     /// `settings.figure.touchMac`
-    public static let settingsFigureTouchMac = "このMacでは、触れたことが届くのは「体に起きたことをシャノンに伝える」を入にしたときだけで、あなたひとりがいるものとして届きます。ほかの人がそばにいることを伝える切り替えは、Macにはまだありません。"
+    public static let settingsFigureTouchMac = "このMacでは、触れたことが届くのは「体に起きたことをシャノンに伝える」を入にしたときだけです。ふだんはあなたひとりがいるものとして届き、音声会話を「友人も一緒」にしている間とそのあと5分は、ほかの人もいるものとして届きます。"
 }

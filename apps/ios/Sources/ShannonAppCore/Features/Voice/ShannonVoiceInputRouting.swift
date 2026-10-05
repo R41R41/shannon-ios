@@ -26,3 +26,40 @@ public enum ShannonVoiceInputRouting {
         return Resolution(preferredIndex: match, isPreferenceUnavailable: match == nil)
     }
 }
+
+/// One of the Mac's microphones. `id` is Core Audio's unique id, which stays the same across launches.
+public struct ShannonVoiceInputDevice: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let isBuiltIn: Bool
+
+    public init(id: String, name: String, isBuiltIn: Bool) {
+        self.id = id
+        self.name = name
+        self.isBuiltIn = isBuiltIn
+    }
+}
+
+/// Resolves the Mac's chosen microphone against the ones connected now. As on the iPhone, a missing
+/// choice never fails the call: the system's input is used for it, the choice is kept, and the state says so.
+public enum ShannonMacVoiceInputRouting {
+    public struct Resolution: Equatable, Sendable {
+        /// The microphone to use, or nil for the system's input.
+        public let deviceID: String?
+        public let isPreferenceUnavailable: Bool
+    }
+
+    public static func resolve(selectedID: String?, devices: [ShannonVoiceInputDevice]) -> Resolution {
+        guard let selectedID else { return Resolution(deviceID: nil, isPreferenceUnavailable: false) }
+        guard devices.contains(where: { $0.id == selectedID }) else {
+            return Resolution(deviceID: nil, isPreferenceUnavailable: true)
+        }
+        return Resolution(deviceID: selectedID, isPreferenceUnavailable: false)
+    }
+
+    /// The microphone a running call was set to is no longer connected (nil: the call uses the system's input).
+    public static func lost(_ appliedID: String?, devices: [ShannonVoiceInputDevice]) -> Bool {
+        guard let appliedID else { return false }
+        return !devices.contains { $0.id == appliedID }
+    }
+}

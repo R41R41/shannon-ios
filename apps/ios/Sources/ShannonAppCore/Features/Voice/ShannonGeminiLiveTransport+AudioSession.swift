@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 @preconcurrency import AVFoundation
 
@@ -10,13 +9,125 @@ enum ShannonGeminiLiveAudioState: Equatable, Sendable {
     case resumed
 }
 
-/// The audio session of a voice conversation: its category, and what happens when the system
-/// interrupts it or the route changes. A call either runs again or ends with a visible failure;
-/// it is never left looking alive with a stopped engine.
+/// What happens when the system interrupts a call's audio or the hardware changes under it. A call either
+/// runs again or ends with a visible failure; it is never left looking alive with a stopped engine.
+/// The iPhone's audio session lives below; the Mac has none (`ShannonGeminiLiveTransport+MacAudio.swift`).
 extension ShannonGeminiLiveTransport {
     /// `.goAway` with this reason means the audio could not be brought back, not that the network dropped.
     static let audioFailure = "audio"
 
+    /// Tells the call once that its audio cannot be kept running; later failures of this transport add nothing.
+    func reportAudioFailure() {
+        guard !reportedAudioFailure, !stopped else { return }
+        reportedAudioFailure = true
+        eventHandler(.goAway(Self.audioFailure))
+    }
+
+    func removeAudioObservers() {
+        audioObservers.forEach(NotificationCenter.default.removeObserver)
+        audioObservers.removeAll()
+        removePlatformAudioObservers()
+    }
+
+    /// Whether capture and playback are running. False before the first start and while interrupted.
+    var isAudioRunning: Bool { audioStarted && !interrupted && audioEngine.isRunning }
+
+    func beginInterruption() {
+        guard !interrupted else { return }
+        interrupted = true
+        ShannonVoiceDiagnostics.shared.record("gemini.audio.interruption.began")
+        audioStateHandler(.interrupted)
+    }
+
+    /// Brings the session and the engine back after an interruption. Failing ends the call visibly, unless the
+    /// caller only asked whether the interruption is over yet.
+    @discardableResult
+    func resumeAudio(endingCallOnFailure: Bool = true) -> Bool {
+        guard !stopped else { return false }
+        do {
+            try activateAudioSession()
+        } catch {
+            ShannonVoiceDiagnostics.shared.record("gemini.audio.resume.refused",
+                metadata: ["code": String((error as NSError).code), "ending": String(endingCallOnFailure)])
+            // The session could not be taken back: for a caller that only asks, the interruption is simply still going on.
+            if endingCallOnFailure { reportAudioFailure() }
+            return false
+        }
+        do {
+            if audioStarted, !audioEngine.isRunning {
+                try audioEngine.start()
+                playerNode.play()
+            }
+            try applyInputPreference()
+        } catch {
+            // The session is ours again and the audio still does not run: that is a failure, never "still interrupted".
+            ShannonVoiceDiagnostics.shared.record("gemini.audio.resume.failed",
+                metadata: ["code": String((error as NSError).code)])
+            reportAudioFailure()
+            return false
+        }
+        if interrupted {
+            interrupted = false
+            ShannonVoiceDiagnostics.shared.record("gemini.audio.interruption.resumed")
+            audioStateHandler(.resumed)
+        }
+        return true
+    }
+
+    /// Called when the owner returns to the app: a call that was interrupted, or whose engine
+    /// stopped while nobody was looking, runs again or fails where he can see it.
+    func resumeAudioIfNeeded() {
+        guard !stopped, audioStarted, !isAudioRunning else { return }
+        resumeAudio()
+    }
+
+    func restartEngineIfStopped() {
+        guard !stopped, audioStarted, !interrupted, !audioEngine.isRunning else { return }
+        // An engine that keeps stopping is not restarted in place for ever: the call's bounded reconnect
+        // takes over, and a second failure soon after is shown.
+        guard engineRestarts.allows(at: ProcessInfo.processInfo.systemUptime) else {
+            ShannonVoiceDiagnostics.shared.record("gemini.audio.engine.restart.exhausted")
+            reportAudioFailure()
+            return
+        }
+        do {
+            try audioEngine.start()
+            playerNode.play()
+            ShannonVoiceDiagnostics.shared.record("gemini.audio.engine.restarted")
+        } catch {
+            ShannonVoiceDiagnostics.shared.record("gemini.audio.engine.restart.failed",
+                metadata: ["code": String((error as NSError).code)])
+            reportAudioFailure()
+        }
+    }
+}
+
+/// How often an engine may be started again in place. Only an engine that stops again soon after being restarted
+/// counts: after `limit` such restarts in a row the call's bounded reconnect takes over. An engine that ran for
+/// `healthyRun` seconds after its last restart was healthy, and the next stop starts a new count, so earphones or
+/// AirPods that change the route now and then never use the budget up.
+struct ShannonVoiceEngineRestartBudget: Equatable, Sendable {
+    static let limit = 3
+    /// The capture watch's own limit. On the Mac a live engine that ran this long without stopping delivered its
+    /// buffers (were it deaf, the watch would have ended it as an audio failure by then). The iPhone has no capture
+    /// watch (its audio session reports interruptions itself): there the value only says when the count resets.
+    static let healthyRun: TimeInterval = ShannonVoiceCaptureWatch.limit
+    private(set) var count = 0
+    private(set) var lastRestartAt: TimeInterval?
+
+    /// Counts one restart at `now` and says whether it may happen.
+    mutating func allows(at now: TimeInterval) -> Bool {
+        if let last = lastRestartAt, now - last >= Self.healthyRun { count = 0 }
+        guard count < Self.limit else { return false }
+        count += 1
+        lastRestartAt = now
+        return true
+    }
+}
+
+#if os(iOS)
+/// The iPhone's audio session of a voice conversation: its category, interruptions and route changes.
+extension ShannonGeminiLiveTransport {
     func configureAudioSession() throws {
         let audioSession = AVAudioSession.sharedInstance()
         // `playAndRecord` with the `audio` background mode keeps capture and playback running
@@ -56,7 +167,7 @@ extension ShannonGeminiLiveTransport {
                         self.resumeAudio()
                     } else {
                         // The other audio did not hand the session back. The call ends where the owner can see it.
-                        self.eventHandler(.goAway(Self.audioFailure))
+                        self.reportAudioFailure()
                     }
                 @unknown default:
                     break
@@ -83,80 +194,25 @@ extension ShannonGeminiLiveTransport {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, !self.stopped else { return }
-                self.eventHandler(.goAway(Self.audioFailure))
+                self.reportAudioFailure()
             }
         })
     }
 
-    func removeAudioObservers() {
-        audioObservers.forEach(NotificationCenter.default.removeObserver)
-        audioObservers.removeAll()
+    func activateAudioSession() throws {
+        try AVAudioSession.sharedInstance().setActive(true)
     }
 
-    /// Whether capture and playback are running. False before the first start and while interrupted.
-    var isAudioRunning: Bool { audioStarted && !interrupted && audioEngine.isRunning }
-
-    private func beginInterruption() {
-        guard !interrupted else { return }
-        interrupted = true
-        ShannonVoiceDiagnostics.shared.record("gemini.audio.interruption.began")
-        audioStateHandler(.interrupted)
+    func deactivateAudioSession() {
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
-    /// Brings the session and the engine back after an interruption. Failing ends the call visibly, unless the
-    /// caller only asked whether the interruption is over yet.
-    @discardableResult
-    func resumeAudio(endingCallOnFailure: Bool = true) -> Bool {
-        guard !stopped else { return false }
-        do {
-            try AVAudioSession.sharedInstance().setActive(true)
-        } catch {
-            ShannonVoiceDiagnostics.shared.record("gemini.audio.resume.refused",
-                metadata: ["code": String((error as NSError).code), "ending": String(endingCallOnFailure)])
-            // The session could not be taken back: for a caller that only asks, the interruption is simply still going on.
-            if endingCallOnFailure { eventHandler(.goAway(Self.audioFailure)) }
-            return false
-        }
-        do {
-            if audioStarted, !audioEngine.isRunning {
-                try audioEngine.start()
-                playerNode.play()
-            }
-            try applyInputPreference()
-        } catch {
-            // The session is ours again and the audio still does not run: that is a failure, never "still interrupted".
-            ShannonVoiceDiagnostics.shared.record("gemini.audio.resume.failed",
-                metadata: ["code": String((error as NSError).code)])
-            eventHandler(.goAway(Self.audioFailure))
-            return false
-        }
-        if interrupted {
-            interrupted = false
-            ShannonVoiceDiagnostics.shared.record("gemini.audio.interruption.resumed")
-            audioStateHandler(.resumed)
-        }
-        return true
-    }
+    /// The device has no Core Audio listeners of its own: everything is a notification.
+    func removePlatformAudioObservers() {}
 
-    /// Called when the owner returns to the app: a call that was interrupted, or whose engine
-    /// stopped while nobody was looking, runs again or fails where he can see it.
-    func resumeAudioIfNeeded() {
-        guard !stopped, audioStarted, !isAudioRunning else { return }
-        resumeAudio()
-    }
-
-    private func restartEngineIfStopped() {
-        guard !stopped, audioStarted, !interrupted, !audioEngine.isRunning else { return }
-        do {
-            try audioEngine.start()
-            playerNode.play()
-            ShannonVoiceDiagnostics.shared.record("gemini.audio.engine.restarted")
-        } catch {
-            ShannonVoiceDiagnostics.shared.record("gemini.audio.engine.restart.failed",
-                metadata: ["code": String((error as NSError).code)])
-            eventHandler(.goAway(Self.audioFailure))
-        }
-    }
+    /// The iPhone chooses its microphone through the session's preferred input, not on the I/O unit.
+    func prepareInputDevice() {}
+    func confirmInputDevice() {}
 
     func applyInputPreference() throws {
         let audioSession = AVAudioSession.sharedInstance()

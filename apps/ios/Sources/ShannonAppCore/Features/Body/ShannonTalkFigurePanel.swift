@@ -7,9 +7,12 @@ import SwiftUI
 /// pinch or ⌘-scroll for her size, scroll to move her) or the Waterlight Eye, which also stands in
 /// while the page loads. Under her, 「いま：〈気持ち〉・〈していること〉」. Her display options (form,
 /// body, 映し方, 位置を戻す) are in the panel's menu, as in the iPhone's display menu, and in 設定 › すがた.
+/// During a voice conversation (A16) her figure follows the call: listening, thinking and speaking, with the
+/// feeling of each turn, as the iPhone's call screen shows them.
 public struct ShannonTalkFigurePanel: View {
     private let conversation: ShannonConversationModel
     private let memory: ShannonMemoryModel
+    private let voice: ShannonGeminiLiveSessionModel?
 
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
     @AppStorage(ShannonLive2DBody.storageKey) private var bodyRawValue = ShannonLive2DBody.human.rawValue
@@ -19,9 +22,26 @@ public struct ShannonTalkFigurePanel: View {
     @Environment(ShannonBodyModel.self) private var bodyModel: ShannonBodyModel?
     @Environment(\.colorScheme) private var colorScheme
 
-    public init(conversation: ShannonConversationModel, memory: ShannonMemoryModel) {
+    public init(conversation: ShannonConversationModel, memory: ShannonMemoryModel, voice: ShannonGeminiLiveSessionModel? = nil) {
         self.conversation = conversation
         self.memory = memory
+        self.voice = voice
+    }
+
+    /// The call's phase while a call is on, otherwise what the text conversation is doing.
+    private var shownActivity: ShannonDialogueActivity {
+        guard let voice, voice.phase != .idle else { return activity }
+        return Self.callActivity(voice.phase)
+    }
+
+    /// The same eyes as the iPhone's call screen for each phase of the call.
+    static func callActivity(_ phase: ShannonGeminiLivePhase) -> ShannonDialogueActivity {
+        switch phase {
+        case .listening: .listening
+        case .thinking, .connecting, .reconnecting: .thinking
+        case .speaking: .speaking
+        case .idle, .requestingPermission, .failed: .idle
+        }
     }
 
     private var usesLive2D: Bool { formRawValue == ShannonForm.live2d.rawValue && ShannonLive2DStage.isAvailable }
@@ -91,14 +111,14 @@ public struct ShannonTalkFigurePanel: View {
     @ViewBuilder
     private var figure: some View {
         if usesLive2D {
-            ShannonDialogueFigure(face: conversation.currentFace, activity: activity)
+            ShannonDialogueFigure(face: face, activity: shownActivity)
         } else {
             GeometryReader { geometry in
                 Button {
                     waterlightReaction &+= 1
                 } label: {
                     ShannonWaterlightEyeView(
-                        expression: face.expression, activity: activity,
+                        expression: face.expression, activity: shownActivity,
                         size: min(geometry.size.width * 0.72, geometry.size.height * 0.8, 280),
                         reactionTrigger: waterlightReaction, feeling: face.feeling
                     )
@@ -147,11 +167,16 @@ public struct ShannonTalkFigurePanel: View {
 }
 
 public extension View {
-    /// Keeps her figure and the body model in step with the conversation, and lets a touch reach her
-    /// (the Mac's window; the iPhone's conversation root attaches the same itself).
-    func shannonBodyAttachment(_ bodyModel: ShannonBodyModel, conversation: ShannonConversationModel, memory: ShannonMemoryModel) -> some View {
+    /// Keeps her figure and the body model in step with the conversation and the voice conversation, and lets a
+    /// touch reach her (the Mac's window; the iPhone's conversation root attaches the same itself). After her line
+    /// for a touch was said aloud, the Mac's call listens for his answer (A16), as the iPhone's does.
+    func shannonBodyAttachment(
+        _ bodyModel: ShannonBodyModel, conversation: ShannonConversationModel, memory: ShannonMemoryModel,
+        voiceCall: ShannonDesktopVoiceCall
+    ) -> some View {
         modifier(ShannonBodyAttachment(
-            bodyModel: bodyModel, conversation: conversation, memory: memory, voice: ShannonGeminiLiveSessionModel()
+            bodyModel: bodyModel, conversation: conversation, memory: memory, voice: voiceCall.session,
+            listen: voiceCall.bodyListen(answersInVoice: { [weak bodyModel] in bodyModel?.answersInVoice ?? false })
         ))
     }
 }
