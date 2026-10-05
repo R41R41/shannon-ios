@@ -19,7 +19,7 @@ public struct ShannonDesktopRootView: View {
     @SceneStorage("shannon.desktop.auxiliaryPanel") var restoredAuxiliaryPanelRawValue: String?
     @SceneStorage("shannon.desktop.shannonPage") var shannonPageRawValue: String?
     @SceneStorage("shannon.desktop.settingsPage") var settingsPageRawValue: String?
-    @AppStorage("shannon.desktop.lastDestination") var lastDestinationRawValue = DesktopDestination.talk.rawValue
+    @AppStorage(ShannonDesktopWindowRestoration.lastDestinationKey) var lastDestinationRawValue = DesktopDestination.talk.rawValue
     @AppStorage("shannon.desktop.lastSelectedThread") var lastRestoredThreadID = ""
     @AppStorage("shannon.desktop.lastSelectedTask") var lastRestoredTaskID = ""
     @AppStorage(ShannonDesktopWindowRestoration.lastInspectorVisibleKey) var lastShowsInspector = false

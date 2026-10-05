@@ -75,7 +75,7 @@ struct ShannonDeskApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: ShannonDeskCommands.mainWindowID) {
             ShannonDesktopRootView(
                 conversation: conversationModel,
                 connection: connectionModel,
@@ -106,18 +106,6 @@ struct ShannonDeskApp: App {
         .commands {
             ShannonDeskCommands(conversation: conversationModel)
         }
-
-        Settings {
-            ShannonDesktopSettingsScene(
-                connection: connectionModel,
-                appearanceRawValue: $appearanceRawValue,
-                voiceIdentity: voiceIdentityModel,
-                worldSubscriptions: worldSubscriptionModel,
-                appIcon: appIconModel
-            )
-            .environment(calendarSharingModel)
-            .environment(privateListeningModel)
-        }
     }
 
     private var preferredColorScheme: ColorScheme? {
@@ -139,10 +127,26 @@ struct ShannonDeskApp: App {
 }
 
 private struct ShannonDeskCommands: Commands {
+    static let mainWindowID = "main"
     let conversation: ShannonConversationModel
     @FocusedValue(\.shannonDesktopCommandActions) private var actions
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
+        // ⌘, opens the same 設定 as the sidebar (docs/product/information-architecture.md 2), in the
+        // window in front, or in a new window when none is open. There is no separate Settings window.
+        CommandGroup(replacing: .appSettings) {
+            Button("\(ShannonGeneratedStrings.navSettings)…") {
+                if let actions {
+                    actions.showSettings()
+                } else {
+                    UserDefaults.standard.set(DesktopDestination.settings.rawValue, forKey: ShannonDesktopWindowRestoration.lastDestinationKey)
+                    openWindow(id: Self.mainWindowID)
+                }
+            }
+            .keyboardShortcut(",")
+        }
+
         CommandGroup(replacing: .newItem) {
             Button("新しいトーク") {
                 Task { await conversation.createThread(title: nil) }
@@ -215,56 +219,6 @@ private struct ShannonDeskPreviewConnectionStore: ShannonConnectionStoreProtocol
     func load() throws -> ShannonConnectionCredential? { credential }
     func save(_ credential: ShannonConnectionCredential) throws {}
     func delete() throws {}
-}
-
-private struct ShannonDesktopSettingsScene: View {
-    let connection: ShannonConnectionModel
-    @Binding var appearanceRawValue: String
-    let voiceIdentity: ShannonVoiceIdentityModel
-    let worldSubscriptions: ShannonWorldSubscriptionModel
-    let appIcon: ShannonAppIconModel
-    @State private var showsWorldSubscriptions = false
-    @State private var showsAppIconSettings = false
-
-    var body: some View {
-        Form {
-            Picker("外観", selection: $appearanceRawValue) {
-                ForEach(ShannonAppearanceMode.allCases) { mode in
-                    Text(mode.japaneseName).tag(mode.rawValue)
-                }
-            }
-            LabeledContent("接続", value: connection.statusLabel)
-            LabeledContent("通信", value: connection.verificationLabel)
-            LabeledContent("シャノンの声", value: "Gemini（サーバー設定）")
-            Button("情報源（\(worldSubscriptions.summary)）") {
-                showsWorldSubscriptions = true
-            }
-            Button("アプリアイコン（\(appIcon.activeTitle)）") {
-                showsAppIconSettings = true
-            }
-            ShannonCalendarSharingSettingsSection()
-            ShannonPrivateListeningSettingsSection()
-            if connection.isConnected {
-                Button("接続を確認") {
-                    Task { await connection.verifyConnection() }
-                }
-                .disabled(connection.isVerifying)
-            }
-        }
-        .formStyle(.grouped)
-        .font(.shannonDesktop(.body))
-        .tint(Color.shannonActionColor)
-        .padding(ShannonDesktopSpacing.extraLarge)
-        .frame(width: 540, height: 420)
-        .task { await worldSubscriptions.reload() }
-        .sheet(isPresented: $showsWorldSubscriptions) {
-            ShannonWorldSubscriptionView(model: worldSubscriptions)
-                .frame(minWidth: 560, minHeight: 560)
-        }
-        .sheet(isPresented: $showsAppIconSettings) {
-            ShannonAppIconSettingsView(model: appIcon)
-        }
-    }
 }
 
 private enum ShannonDeskRuntimeConfiguration {

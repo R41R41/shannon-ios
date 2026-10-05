@@ -4052,8 +4052,9 @@
         "macos": {
           "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/ShannonDeskApp.swift"
-          ]
+            "apps/macos-app/ShannonDesk/ShannonDeskApp.swift#CommandGroup(replacing: .appSettings)"
+          ],
+          "note": "⌘1〜⌘4 が トーク／作業／シャノン／設定、⌘5 開発、⌘6 配信、⌥⌘O 目次、⌥⌘I 現在地、⌥⌘F すがた。⌘, はサイドバーと同じ 設定 を開く（前の小さな設定の窓は無くした。窓が無いときは新しい窓で 設定）。"
         },
         "windows": {
           "status": "partial",

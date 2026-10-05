@@ -35,6 +35,7 @@ struct ShannonDesktopWindowChromeState: Equatable {
 enum ShannonDesktopWindowRestoration {
     static let lastInspectorVisibleKey = "shannon.desktop.lastShowsInspector"
     static let lastAuxiliaryPanelKey = "shannon.desktop.lastAuxiliaryPanel"
+    static let lastDestinationKey = "shannon.desktop.lastDestination"
     static func destination(sceneRawValue: String?, lastRawValue: String) -> DesktopDestination {
         if let sceneRawValue, let destination = DesktopDestination(restoring: sceneRawValue) {
             return destination

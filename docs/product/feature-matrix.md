@@ -488,6 +488,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `desktop.pc-presence` iOS（—）: PC だけのもの。
 - `desktop.pc-presence` macOS（予定）: ブランチ `未定`。デスクトップの体を SwiftUI で作るときに入れる。
 - `desktop.menu-shortcuts` iOS（—）: iPhone にはメニューバーが無い。
+- `desktop.menu-shortcuts` macOS（○）: ⌘1〜⌘4 が トーク／作業／シャノン／設定、⌘5 開発、⌘6 配信、⌥⌘O 目次、⌥⌘I 現在地、⌥⌘F すがた。⌘, はサイドバーと同じ 設定 を開く（前の小さな設定の窓は無くした。窓が無いときは新しい窓で 設定）。
 - `desktop.menu-shortcuts` Windows（△）: Enter で送信、Shift+Enter で改行、Ctrl+ホイールで大きさ。画面を移る近道は無い。
 
 ## 作らないもの
