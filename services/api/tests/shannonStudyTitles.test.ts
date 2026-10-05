@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { configuredAutonomy } from '../src/autonomyBudget.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
-import { toolTraceCall, toolTracePrompt } from '../src/shannonToolTrace.js';
+import { toolTraceCall, toolTracePrompt, traceLabel } from '../src/shannonToolTrace.js';
 import { toolSessionMemory } from '../src/shannonToolTypes.js';
 import { shannonTool, type ToolResult } from '../src/shannonTools.js';
 
@@ -42,7 +42,7 @@ describe('naming a piece of her study by its title', () => {
     // The id survives in what she remembers of the list for her next turns.
     const trace = toolTraceCall('study.list', '{}', listed, undefined);
     expect(trace.names).toContain(`物語「${TITLE}」（下書き、id: ${id}）`);
-    expect(toolTracePrompt([{ record: { turnId: 't1', threadId: 'talk', recordedAt: '2026-10-05T06:00:00.000Z', asked: false, calls: [trace] }, repliesAgo: 1 }])).toContain(`id: ${id}`);
+    expect(toolTracePrompt([{ record: { turnId: 't1', threadId: 'talk', recordedAt: '2026-10-05T06:00:00.000Z', asked: false, calls: [trace] }, label: traceLabel(1) }])).toContain(`id: ${id}`);
   });
 
   it('lets update, rename, move, delete and restore take a title too', async () => {
@@ -78,5 +78,22 @@ describe('naming a piece of her study by its title', () => {
     // A title of one character is accepted by the schema; the description says a title is fine.
     expect(shannonTool('study.read')!.input.properties.id).toMatchObject({ minLength: 1 });
     expect(shannonTool('study.read')!.description).toContain('題名でもよい');
+  });
+
+  it('prefers the live piece under a title for reading and changing, and the one in the trash for restoring (review 6)', async () => {
+    const { call, store } = harness();
+    const old = idIn(await call('study.create', { kind: 'note', title: '買い物', body: '古いメモ。' }));
+    expect(await call('study.delete', { id: old })).toMatchObject({ ok: true });
+    const live = idIn(await call('study.create', { kind: 'note', title: '買い物', body: '新しいメモ、別の中身。' }));
+    expect((await call('study.read', { id: '買い物' })).text).toContain('新しいメモ');
+    expect(await call('study.rename', { id: '『買い物』', title: '買い物リスト' })).toMatchObject({ ok: true });
+    expect(store.study.get(scope, live)).toMatchObject({ title: '買い物リスト' });
+    expect(await call('study.restore', { id: '買い物' })).toMatchObject({ ok: true });
+    expect(store.study.get(scope, old)).toMatchObject({ title: '買い物' });
+    // Two in the trash under one title are still not guessed.
+    const another = idIn(await call('study.create', { kind: 'note', title: '買い物', body: '三つ目のまったく違う中身。' }));
+    await call('study.delete', { id: old });
+    await call('study.delete', { id: another });
+    expect(await call('study.restore', { id: '買い物' })).toMatchObject({ ok: false, failure: 'conflict' });
   });
 });

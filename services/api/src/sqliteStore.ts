@@ -32,7 +32,7 @@ import type { KnowledgeDraft } from '@shannon/cognition';
 import { SQLiteMemoryEmbeddingIndex, type MemoryEmbeddingIndex, type PendingEmbeddingSource } from './sqliteMemoryEmbeddings.js';
 import { ensureTurnCaptureSchema, type TurnCaptureRecord } from './turnCaptures.js';
 import { ensureReplaySummarySchema, selectRecentMessages, selectReplaySummary, selectThreadOfTurn, upsertReplaySummary } from './sqliteReplaySummary.js';
-import { ensureToolTraceSchema, insertToolTrace, selectToolTraces } from './sqliteToolTraces.js';
+import { deleteToolTraces, ensureToolTraceSchema, insertToolTrace, pruneToolTraces, selectToolTraceScopes, selectToolTraces, toolTraceRetentionBoundary } from './sqliteToolTraces.js';
 import type { ToolTraceRecord } from './shannonToolTrace.js';
 import type { ReplaySummaryRecord } from './conversationStore.js';
 import { SQLiteImpressionStore } from './sqliteImpressions.js';
@@ -79,6 +79,9 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     ensureSummaryLineageSchema(this.context.database);
     ensureReplaySummarySchema(this.context.database);
     ensureToolTraceSchema(this.context.database);
+    // What her tools did is kept 30 days: older traces go at every open too, in every scope.
+    const traceBoundary = toolTraceRetentionBoundary(this.context.now());
+    if (traceBoundary) pruneToolTraces(this.context.database, traceBoundary);
     if (!options.leavesMoodHistory) {
       ensureMoodHistorySchema(this.context.database);
       // Retention holds also while nothing is recorded (the switch is off, or no write for weeks): old points go at every start.
@@ -149,7 +152,10 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   saveReplaySummary(scopeKey: string, threadId: string, record: ReplaySummaryRecord) { this.context.transaction(() => upsertReplaySummary(this.context.database, scopeKey, threadId, record)); }
   threadOfTurn(scopeKey: string, experienceId: string) { return selectThreadOfTurn(this.context.database, scopeKey, experienceId); }
   saveToolTrace(scopeKey: string, record: ToolTraceRecord) { this.context.transaction(() => insertToolTrace(this.context.database, scopeKey, record)); }
-  toolTraces(scopeKey: string, threadId: string, query: { turnIds?: readonly string[]; since?: string }) { return selectToolTraces(this.context.database, scopeKey, threadId, query); }
+  toolTraces(scopeKey: string, threadId: string | null, query: { turnIds?: readonly string[]; since?: string }) { return selectToolTraces(this.context.database, scopeKey, threadId, query); }
+  deleteToolTraces(scopeKey: string, turnIds: readonly string[]) { if (turnIds.length) this.context.transaction(() => deleteToolTraces(this.context.database, scopeKey, turnIds)); }
+  toolTraceScopes() { return selectToolTraceScopes(this.context.database); }
+  pruneToolTraces(before: string) { this.context.transaction(() => pruneToolTraces(this.context.database, before)); }
   impressionStore() { return this.personImpressions; }
   events(scopeKey: string): readonly PersistedExperienceEvent[] { return this.conversations.events(scopeKey); }
   activityTimeline(scopeKey: string): readonly ActivityItem[] { return this.conversations.activityTimeline(scopeKey); }

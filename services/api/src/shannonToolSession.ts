@@ -6,9 +6,9 @@ import type { ConversationStore, StoredConversationMessage } from './conversatio
 import { ToolAudienceWatch, type ToolAudienceSource } from './shannonToolAudience.js';
 import type { ShannonToolRunner } from './shannonToolRunner.js';
 import { toolTraceCall } from './shannonToolTrace.js';
-import { InMemoryToolTraces, TOOL_FOLLOW_UP_MILLISECONDS, ToolTurnLog } from './shannonToolTurns.js';
+import { InMemoryToolTraces, TOOL_FOLLOW_UP_MILLISECONDS, ToolTurnLog, type ToolTraceStore } from './shannonToolTurns.js';
 import { toolSessionMemory } from './shannonToolTypes.js';
-import { ownToolsEnabled, toolFromProviderName, toolResultForModel } from './shannonTools.js';
+import { ownToolsEnabled, toolFailure, toolFromProviderName, toolResultForModel } from './shannonTools.js';
 import type { TurnDeadline } from './turnDeadline.js';
 
 /**
@@ -31,6 +31,8 @@ export function conversationTools(
   turn: string,
   /** The turn's one deadline, from the request's arrival (`turnDeadline.ts`): every round and call takes its time from it. */
   deadline: TurnDeadline,
+  /** A spoken turn: how far its words can be trusted (`transcriptTrust`), and the client's utterance id. */
+  voice: { trust: 'reliable' | 'uncertain' | 'unknown'; utteranceId?: string } = { trust: 'reliable' },
 ): { tools?: ShannonModelToolSession; toolsWithheld?: true } {
   const runner = autonomy?.tools;
   // Without what the server knows of the audience, nothing is offered (and nothing said about it).
@@ -41,18 +43,28 @@ export function conversationTools(
   if (!offer) return {};
   // What the client said is not enough: what the server knows of others present vetoes the offer, and she is told so.
   if (ownerAlone === 'others' || server.audience.othersKnown(scopeKey)) return { toolsWithheld: true };
-  const definitions = runner.offered(surface, 'owner_alone');
+  // Words that could not be trusted write nothing: an uncertain turn reads only. With no score at all (the router fell
+  // back), a write waits for his explicit yes to a reply of hers that asked for it (「はい、お願いします」).
+  const writes = surface === 'text' || voice.trust === 'reliable'
+    || (voice.trust === 'unknown' && confirms(words) && lastReplyAsksToConfirm(server, scopeKey, threadId));
+  const definitions = runner.offered(surface, 'owner_alone').filter(tool => writes || tool.effect === 'read');
   if (!definitions.length) return {};
-  const trace = server.turns?.open(scopeKey, threadId, words, offer === 'asked');
+  const trace = server.turns?.open(scopeKey, threadId, words, offer === 'asked', voice.utteranceId);
   const memory = toolSessionMemory(createHash('sha256').update(`${scopeKey}\n${turn}`).digest('hex'));
   let check: SecretCheck | null | undefined;
-  const session = { definitions, maximumCalls: CONVERSATION_TOOL_CALLS } as ShannonModelToolSession;
+  const session = { definitions, maximumCalls: CONVERSATION_TOOL_CALLS } as unknown as ShannonModelToolSession;
   Object.defineProperty(session, 'deadline', { enumerable: false, value: deadline });
+  if (!writes) Object.defineProperty(session, 'writesWithheld', { enumerable: false, value: true });
   // Not enumerable: two turns that offer the same tools are the same request (what the model is asked), whoever runs the calls.
   Object.defineProperty(session, 'call', {
     enumerable: false,
     value: async (providerName: string, argumentsJson: string, signal?: AbortSignal, timeMilliseconds?: number) => {
       const tool = toolFromProviderName(providerName);
+      // A tool of the registry that this turn does not offer (a write after words that could not be trusted) is not run.
+      if (tool && !definitions.some(item => item.name === tool.name)) {
+        return toolResultForModel(toolFailure('not_offered', 'この返事ではその道具は出していない。', { retryable: false,
+          refusal: { why: '聞き取りが確かでないので、書く・消す道具は出していない', wouldWork: 'ライ氏がはっきり確かめた次の返事で' } }));
+      }
       // What must reach nobody but the owner, read at the moment of the call; a list that cannot be read is null, and writes are then refused.
       // Read once a turn; a list that could not be read is tried again at the next call.
       if (!check) { try { check = server.secrets?.(scopeKey); } catch { check = null; } }
@@ -98,10 +110,32 @@ export function asksToConfirmToolAction(reply: string): boolean {
 export function voiceToolOffer(words: string, server: Partial<ConversationToolServer>, scopeKey: string, threadId: string): 'asked' | 'follow_up' | null {
   if (asksAboutOwnThings(words)) return 'asked';
   if (server.turns?.recent(scopeKey, threadId)) return 'follow_up';
+  return lastReplyAsksToConfirm(server, scopeKey, threadId) ? 'follow_up' : null;
+}
+
+/** Her newest message in the Talk, in the last ten minutes, asked him to confirm something she would do with her tools. */
+function lastReplyAsksToConfirm(server: Partial<ConversationToolServer>, scopeKey: string, threadId: string): boolean {
   let last: StoredConversationMessage | undefined;
   try { last = server.lastMessage?.(scopeKey, threadId); } catch { last = undefined; }
   const recent = last?.role === 'assistant' && Date.parse(server.now?.() ?? '') - Date.parse(last.observedAt) < TOOL_FOLLOW_UP_MILLISECONDS;
-  return recent && asksToConfirmToolAction(last!.content) ? 'follow_up' : null;
+  return recent && asksToConfirmToolAction(last!.content);
+}
+
+/** A short, explicit yes: 「はい、お願いします」「うん、やって」「いいよ」. Nothing that adds or changes what is asked. */
+const YES = /^(?:はい|うん|ええ|おう|いいよ|いいです|いいね|どうぞ|お願い|おねがい|やって|頼む|たのむ|オッケー|ok|了解|そうして)(?:お願い|おねがい|します|して|です|ね|よ|やって|どうぞ|ください|いいよ|いいです|頼む)*$/u;
+
+export function confirms(words: string): boolean {
+  const said = words.normalize('NFKC').toLowerCase().replace(/[\s\p{P}]/gu, '');
+  return said.length > 0 && said.length <= 20 && YES.test(said);
+}
+
+/**
+ * The reader of what her tools did, for the replay of a turn: only while the server itself knows nobody else is there
+ * (BLOCKER of the 2026-10-05 review: the client's word that the owner is alone is not enough).
+ */
+export function toolTraceReader(server: Partial<ConversationToolServer> | undefined, scopeKey: string): ToolTurnLog | undefined {
+  if (!server?.turns || !server.audience) return undefined;
+  try { return server.audience.othersKnown(scopeKey) ? undefined : server.turns; } catch { return undefined; }
 }
 
 /** What the server, not the client, knows when it offers her tools in a conversation. */
@@ -117,10 +151,12 @@ export interface ConversationToolServer {
 
 export function conversationToolServer(
   body: ToolAudienceSource | null, stateStore: Pick<CompanionStateStore, 'snapshot'>,
-  conversations: Pick<ConversationStore, 'experienceCandidates' | 'conversationHistory' | 'recentMessages' | 'saveToolTrace' | 'toolTraces'>, now: () => string,
+  conversations: Pick<ConversationStore, 'experienceCandidates' | 'conversationHistory' | 'recentMessages'> & Partial<ToolTraceStore>, now: () => string,
 ): ConversationToolServer {
-  const traces = conversations.saveToolTrace && conversations.toolTraces
-    ? { saveToolTrace: conversations.saveToolTrace.bind(conversations), toolTraces: conversations.toolTraces.bind(conversations) } : new InMemoryToolTraces();
+  // The SQLite store keeps the traces (`sqliteToolTraces.ts`); a store without them keeps them in memory.
+  const kept = conversations as Partial<ToolTraceStore>;
+  const traces: ToolTraceStore = kept.saveToolTrace && kept.toolTraces && kept.deleteToolTraces && kept.toolTraceScopes && kept.pruneToolTraces
+    ? kept as ToolTraceStore : new InMemoryToolTraces();
   return {
     audience: new ToolAudienceWatch(body, now),
     secrets: scopeKey => { try { return conversationSecrets(stateStore.snapshot(scopeKey), conversations, scopeKey); } catch { return null; } },

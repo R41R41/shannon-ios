@@ -56,7 +56,7 @@ import { optionalPlaceDiscoverySkill, placeSkillReply } from './placeDiscoverySk
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import { chatAudienceTurn } from './chatAudience.js';
 import { generateChatTurn, validChatStream, withSentenceStream } from './chatSentenceStream.js';
-import { conversationToolServer, conversationTools, type ConversationToolServer } from './shannonToolSession.js';
+import { conversationToolServer, conversationTools, toolTraceReader, type ConversationToolServer } from './shannonToolSession.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from './turnDeadline.js';
 import type { TurnMemoryRecall } from './turnMemoryRecall.js';
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type NotionTurnReader } from './conversationCapabilities.js';
@@ -419,7 +419,7 @@ export class ShannonApiKernel {
       const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
       const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, {
         scopeKey: body.scopeKey, // The history is a character budget; what fell out of it is covered by the replay summary.
-        ...conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, this.toolServer.turns)
+        ...conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey))
           .request(placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt),
         ...(priorThreadSummary ? { priorThreadSummary } : {}),
         message,

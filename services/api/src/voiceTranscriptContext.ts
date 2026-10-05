@@ -2,13 +2,23 @@ import type { VoiceTurnDecision } from './voiceDecision.js';
 import type { UserUtterance } from './conversationCommands.js';
 
 export function transcriptNeedsInterpretation(decision: VoiceTurnDecision, utterance?: UserUtterance): boolean {
-  if (utterance?.source === 'typed' || utterance?.source === 'camera') return false;
+  // Old clients retain their literal-command contract. New ASR clients fail closed
+  // when assessment is missing (including provider timeout/local fallback).
+  return transcriptTrust(decision, utterance) !== 'reliable';
+}
+
+/**
+ * How far a spoken turn's words can be trusted, for what her tools may do (`shannonToolSession.ts`): `reliable` (typed,
+ * an old client, or a reliability score at the threshold or above), `uncertain` (a score below it), or `unknown` (speech
+ * with no score: the router fell back, as `LocalVoiceDecisionGateway` does). The interpretation prompt treats the last two alike.
+ */
+export function transcriptTrust(decision: Pick<VoiceTurnDecision, 'transcriptReliabilityProbability'>, utterance?: UserUtterance): 'reliable' | 'uncertain' | 'unknown' {
+  if (utterance?.source === 'typed' || utterance?.source === 'camera') return 'reliable';
   const configured = Number(process.env.SHANNON_VOICE_TRANSCRIPT_RELIABILITY_THRESHOLD ?? '0.85');
   const threshold = Number.isFinite(configured) && configured >= 0 && configured <= 1 ? configured : 0.85;
   const score = decision.transcriptReliabilityProbability;
-  // Old clients retain their literal-command contract. New ASR clients fail closed
-  // when assessment is missing (including provider timeout/local fallback).
-  return score === undefined ? utterance?.source === 'speech' : score < threshold;
+  if (score === undefined) return utterance?.source === 'speech' ? 'unknown' : 'reliable';
+  return score < threshold ? 'uncertain' : 'reliable';
 }
 
 export function voiceTranscriptInterpretationPrompt(uncertain: boolean, rawText: string): string {

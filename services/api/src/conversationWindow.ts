@@ -3,7 +3,9 @@ import type { ShannonConversationItem } from './chatModel.js';
 import { earlierConversationSummaryInstructions } from './chatModelSupport.js';
 import type { ConversationStore } from './conversationStore.js';
 import { usableReplaySummary, visibleReplayMessages, type VisibleMessage } from './memoryVisibility.js';
-import { toolTracePrompt, type ToolTraceRecord } from './shannonToolTrace.js';
+import { conversationSecrets, type SecretCheck } from './conversationSecrets.js';
+import { UNLINKED_TURN, maskedTraceCalls, toolTracePrompt, traceLabel, type ToolTraceRecord } from './shannonToolTrace.js';
+import { shannonTool } from './shannonTools.js';
 
 /**
  * How much of a thread is replayed to the reply model. The window is a character budget, not a
@@ -111,7 +113,7 @@ export interface ConversationReplay extends ReplayWindow {
 
 /** Where the replay reads what her tools did in the replayed turns (`shannonToolTurns.ts`). */
 export interface ToolTraceReader {
-  traces(scopeKey: string, threadId: string, turnIds: readonly string[]): readonly ToolTraceRecord[];
+  traces(scopeKey: string, threadId: string, turnIds: readonly string[], since?: string): readonly ToolTraceRecord[];
 }
 
 /**
@@ -121,8 +123,11 @@ export interface ToolTraceReader {
  *
  * With `tools` and the owner alone, what her tools did in the replayed turns follows the system prompt as a block of
  * its own (`toolTracePrompt`), inside the budget: when it does not fit beside the window, older messages make room.
- * A trace goes with its stored turn, so a turn that is withheld or out of the window brings none. The block is only
- * in `request()`, the model's input; never with anyone else present.
+ * The caller passes `tools` only while the server itself knows nobody else is there (`toolTraceReader`). A trace goes
+ * with its stored turn, and only while both his words and her reply of that turn are replayed, so a turn that is
+ * withheld (also only his words, by evidence) or out of the window brings none; a turn not in the Talk (her reply was
+ * cut off) brings its calls by time. Names and targets that now repeat what must reach nobody but the owner are masked.
+ * The block is only in `request()`, the model's input; never with anyone else present.
  */
 export function conversationReplay(
   channel: 'text' | 'voice', state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadId: string,
@@ -132,32 +137,56 @@ export function conversationReplay(
   const visible = visibleReplayMessages(state, store, scopeKey, threadId, present, rule.maximumMessages + 1);
   const items = visible.messages.map(entry => entry.item);
   let window = replayWindow(items, rule);
-  let toolBlock = tools && isOwnerOnly(present) ? replayedToolTraces(tools, scopeKey, threadId, visible.messages, window.start) : '';
+  const traced = (start: number) => tools && isOwnerOnly(present) ? replayedToolTraces(tools, state, store, scopeKey, threadId, visible.messages, start) : '';
+  let toolBlock = traced(window.start);
   if (toolBlock && window.characters + toolBlock.length > rule.budgetCharacters) {
     window = replayWindow(items, { ...rule, budgetCharacters: Math.max(0, rule.budgetCharacters - toolBlock.length) });
-    toolBlock = replayedToolTraces(tools!, scopeKey, threadId, visible.messages, window.start);
+    toolBlock = traced(window.start);
   }
   const truncated = window.start > 0 || visible.reachedLimit;
   const summary = truncated ? usableReplaySummary(state, store, scopeKey, threadId, present) : undefined;
-  const replayed = window;
+  const history = window.history;
   return {
-    ...replayed, truncated, ...(summary ? { summary } : {}),
+    ...window, truncated, ...(summary ? { summary } : {}),
     request: systemPrompt => ({
       systemPrompt: [summary ? `${systemPrompt}\n\n${earlierConversationSummaryInstructions(summary)}` : systemPrompt, toolBlock].filter(Boolean).join('\n\n'),
-      history: replayed.history,
+      history,
     }),
   };
 }
 
-/** The trace block of the replayed turns from `start`, newest first, each counted in her replies from the newest (notes are not replies). */
-function replayedToolTraces(tools: ToolTraceReader, scopeKey: string, threadId: string, messages: readonly VisibleMessage[], start: number): string {
-  const replies = messages.slice(start).filter(entry => entry.message.role === 'assistant' && entry.message.sourceExperienceId && !entry.message.sourceExperienceId.includes(':')).reverse();
+/** The trace block of the replayed turns from `start`, newest first; replies are counted from the newest (notes are not replies). */
+function replayedToolTraces(
+  tools: ToolTraceReader, state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadId: string,
+  messages: readonly VisibleMessage[], start: number,
+): string {
+  const inWindow = messages.slice(start);
+  // A turn whose words are withheld (by evidence too) while her reply is still replayed brings no trace.
+  const heard = new Set(messages.filter(entry => entry.message.role === 'user').map(entry => entry.message.sourceExperienceId));
+  const replies = inWindow.filter(entry => entry.message.role === 'assistant' && entry.message.sourceExperienceId
+    && !entry.message.sourceExperienceId.includes(':')).reverse();
   const turnIds = [...new Set(replies.map(entry => entry.message.sourceExperienceId!))];
+  const since = inWindow[0]?.message.observedAt;
   let records: readonly ToolTraceRecord[];
-  try { records = tools.traces(scopeKey, threadId, turnIds); } catch { return ''; }
+  let secrets: SecretCheck | null;
+  try {
+    records = tools.traces(scopeKey, threadId, turnIds, since);
+    if (!records.length) return '';
+    try { secrets = conversationSecrets(state, store, scopeKey); } catch { secrets = null; }
+  } catch { return ''; }
   const byTurn = new Map(records.map(record => [record.turnId, record]));
-  return toolTracePrompt(turnIds.flatMap((turnId, index) => {
+  const turns: Array<{ record: ToolTraceRecord; label: string; at: string }> = [];
+  turnIds.forEach((turnId, index) => {
     const record = byTurn.get(turnId);
-    return record ? [{ record, repliesAgo: index + 1 }] : [];
-  }));
+    const reply = replies.find(entry => entry.message.sourceExperienceId === turnId);
+    if (record && heard.has(turnId)) turns.push({ record, label: traceLabel(index + 1), at: reply?.message.observedAt ?? record.recordedAt });
+  });
+  // A turn not in the Talk: what it wrote, moved or deleted really happened; what it only looked at is not told.
+  for (const record of records) {
+    if (!record.turnId.startsWith(UNLINKED_TURN) || (since !== undefined && record.recordedAt < since)) continue;
+    const calls = record.calls.filter(call => shannonTool(call.tool)?.effect === 'write');
+    if (calls.length) turns.push({ record: { ...record, calls }, label: traceLabel('unstored'), at: record.recordedAt });
+  }
+  turns.sort((left, right) => right.at.localeCompare(left.at));
+  return toolTracePrompt(turns.map(turn => ({ record: { ...turn.record, calls: maskedTraceCalls(turn.record.calls, secrets) }, label: turn.label })));
 }

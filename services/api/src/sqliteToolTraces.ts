@@ -1,8 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { boundedTraceCalls, type ToolTraceRecord } from './shannonToolTrace.js';
+import { TOOL_TRACE_RETENTION_MILLISECONDS } from './shannonToolTurns.js';
 
-/** A trace is kept this long; it is replayed only while its turn is in the replayed window anyway. */
-const RETENTION_MILLISECONDS = 30 * 24 * 60 * 60_000;
 const MAXIMUM_READ = 400;
 
 /**
@@ -31,16 +30,33 @@ export function insertToolTrace(database: DatabaseSync, scopeKey: string, record
     VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(scope_key, turn_id) DO UPDATE SET calls_json = excluded.calls_json, asked = excluded.asked
   `).run(scopeKey, record.turnId, record.threadId, record.recordedAt, record.asked ? 1 : 0, JSON.stringify(boundedTraceCalls(record.calls)));
-  const recorded = Date.parse(record.recordedAt);
-  if (Number.isFinite(recorded)) {
-    database.prepare('DELETE FROM conversation_tool_traces WHERE scope_key = ? AND recorded_at < ?')
-      .run(scopeKey, new Date(recorded - RETENTION_MILLISECONDS).toISOString());
+}
+
+export function deleteToolTraces(database: DatabaseSync, scopeKey: string, turnIds: readonly string[]): void {
+  for (let index = 0; index < turnIds.length; index += 200) {
+    const part = turnIds.slice(index, index + 200);
+    database.prepare(`DELETE FROM conversation_tool_traces WHERE scope_key = ? AND turn_id IN (${part.map(() => '?').join(', ')})`).run(scopeKey, ...part);
   }
+}
+
+export function selectToolTraceScopes(database: DatabaseSync): readonly string[] {
+  return (database.prepare('SELECT DISTINCT scope_key FROM conversation_tool_traces').all() as unknown as Array<{ scope_key: string }>).map(row => row.scope_key);
+}
+
+/** Every scope at once: run when the store opens, on the API's maintenance timer, and by `pruneToolTraces`. */
+export function pruneToolTraces(database: DatabaseSync, before: string): void {
+  database.prepare('DELETE FROM conversation_tool_traces WHERE recorded_at < ?').run(before);
+}
+
+/** The retention boundary seen from `now`. */
+export function toolTraceRetentionBoundary(now: string): string | null {
+  const at = Date.parse(now);
+  return Number.isFinite(at) ? new Date(at - TOOL_TRACE_RETENTION_MILLISECONDS).toISOString() : null;
 }
 
 interface ToolTraceRow { turn_id: string; thread_id: string; recorded_at: string; asked: number; calls_json: string }
 
-export function selectToolTraces(database: DatabaseSync, scopeKey: string, threadId: string, query: { turnIds?: readonly string[]; since?: string }): readonly ToolTraceRecord[] {
+export function selectToolTraces(database: DatabaseSync, scopeKey: string, threadId: string | null, query: { turnIds?: readonly string[]; since?: string }): readonly ToolTraceRecord[] {
   const turnIds = (query.turnIds ?? []).slice(0, MAXIMUM_READ);
   const conditions = [
     ...(turnIds.length ? [`turn_id IN (${turnIds.map(() => '?').join(', ')})`] : []),
@@ -49,9 +65,9 @@ export function selectToolTraces(database: DatabaseSync, scopeKey: string, threa
   if (!conditions.length) return [];
   const rows = database.prepare(`
     SELECT turn_id, thread_id, recorded_at, asked, calls_json FROM conversation_tool_traces
-    WHERE scope_key = ? AND thread_id = ? AND (${conditions.join(' OR ')})
-    ORDER BY recorded_at DESC LIMIT ${MAXIMUM_READ}
-  `).all(scopeKey, threadId, ...turnIds, ...(query.since !== undefined ? [query.since] : [])) as unknown as ToolTraceRow[];
+    WHERE scope_key = ? AND (? IS NULL OR thread_id = ?) AND (${conditions.join(' OR ')})
+    ORDER BY recorded_at DESC LIMIT ${threadId === null ? 5_000 : MAXIMUM_READ}
+  `).all(scopeKey, threadId, threadId, ...turnIds, ...(query.since !== undefined ? [query.since] : [])) as unknown as ToolTraceRow[];
   return Object.freeze(rows.map(row => {
     let calls: unknown = [];
     try { calls = JSON.parse(row.calls_json); } catch { calls = []; }

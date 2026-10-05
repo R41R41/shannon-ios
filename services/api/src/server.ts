@@ -11,6 +11,7 @@ import { createLiveVoiceStreamRoute } from './serverLiveVoiceStreamRoute.js';
 import { createLocalApiKernel } from './apiKernel.js';
 import { createConfiguredTurnMemoryRecall } from './turnMemoryRecall.js';
 import { DurableBackgroundDispatcher } from './backgroundUpdates.js';
+import { startToolTraceSweep } from './shannonToolTraceSweep.js';
 import { createConfiguredChatModel } from './chatModel.js';
 import { createConfiguredVoiceDecisionGateway } from './voiceDecision.js';
 import { configuredAuthPepper, SQLiteDeviceAuthStore, type ShannonDevicePrincipal } from './deviceAuth.js';
@@ -101,6 +102,8 @@ const autonomy = new ShannonAutonomyService({
 });
 // Her folder's operations (docs/host-folder-contract.md): stale ones are closed and results pruned also when no device or tool calls.
 const stopFolderMaintenance = autonomy.folderOperations.startMaintenance();
+// What her tools did in conversations (shannonToolTrace.ts): retention, forgetting and secrets reach stored traces too.
+const stopToolTraceSweep = startToolTraceSweep(persistentStore, now);
 const backgroundDispatcher = new DurableBackgroundDispatcher(persistentStore, persistentStore);
 const voyagerCatalog = createConfiguredVoyagerCatalog(process.env);
 // The owner's upcoming items (docs/calendar-contract.md): calendar snapshots from the apps, promises, dated Voyager tasks when configured.
@@ -390,6 +393,7 @@ function shutdown(): void {
     conversationOrchestrationStore.close();
     peopleMemoryStore.close();
     stopFolderMaintenance();
+    stopToolTraceSweep();
     autonomyAnnouncer.close();
     bodyStore.close();
     reachOuts.close();

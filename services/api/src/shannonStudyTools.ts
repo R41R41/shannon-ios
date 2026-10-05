@@ -30,13 +30,16 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
    * could not read it). An id first, then the exact title, then a title that matches once width, spacing, case and the
    * quotes 『』「」 around it are set aside. Two pieces under one title are not guessed: she is given both with their ids.
    */
-  const piece = (context: ToolExecutionContext, input: ToolInput, includeDeleted = false): StudyPiece | ToolResult => {
+  const piece = (context: ToolExecutionContext, input: ToolInput, includeDeleted = false, prefer: 'live' | 'trashed' = 'live'): StudyPiece | ToolResult => {
     const named = stringInput(input, 'id')?.trim() ?? '';
     const byId = named ? store.study.find(context.scopeKey, named, includeDeleted) : null;
     if (byId) return byId;
     const pieces = store.study.list(context.scopeKey, 500, includeDeleted ? 'include' : 'exclude');
     const exact = pieces.filter(item => item.title.trim() === named);
-    const matches = exact.length ? exact : pieces.filter(item => titleKey(item.title) === titleKey(named) && titleKey(named) !== '');
+    const all = exact.length ? exact : pieces.filter(item => titleKey(item.title) === titleKey(named) && titleKey(named) !== '');
+    // One live and one trashed piece under a title: restoring means the one in the trash, everything else the live one.
+    const preferred = all.filter(item => (prefer === 'trashed') === Boolean(item.deletedAt));
+    const matches = all.length > 1 && preferred.length ? preferred : all;
     if (matches.length === 1) return matches[0]!;
     if (matches.length > 1) {
       return toolFailure('conflict', [`題名「${clip(named, 60)}」のものが${matches.length}つある。どれかの id で呼び直す:`, ...matches.slice(0, 10).map(pieceLine)].join('\n'),
@@ -198,7 +201,7 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string): R
         `書斎の${recordLabel(found)}をゴミ箱に入れました。`, () => store.study.softDelete(context.scopeKey, found.id, now()), { link: `shannon-study://${found.id}` });
     },
     'study.restore': (input, context) => {
-      const found = piece(context, input, true);
+      const found = piece(context, input, true, 'trashed');
       if (!('id' in found)) return found;
       if (!found.deletedAt) return toolOk('ゴミ箱には入っていない。');
       if (found.kind === 'story' && (found.status === 'draft' || found.status === 'ready') && openStories(store, context.scopeKey) >= STUDY_LIMITS.openStories) {

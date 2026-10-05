@@ -60,7 +60,7 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
     dependencies.conversationStore.appendNote?.(scopeKey, threadId, reaction.text, reaction.saidAt, 'body-reaction');
   }
   const turn = { scopeKey, threadId, capturedState: captured, userMessage, shannonReply,
-    messageEmotion, completedAt, timeZone, ...companion };
+    messageEmotion, completedAt, timeZone, ...companion, ...(utteranceId ? { utteranceId } : {}) };
   const experience = dependencies.background.recordTurn(turn);
   // Her message about a look opened in this turn was waiting for the turn to be in the Talk (bodyLook.ts). Only a turn
   // with the owner alone can have a look, so a turn someone else heard is not noted there.

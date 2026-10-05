@@ -163,9 +163,6 @@ export interface ConversationStore {
   saveReplaySummary?(scopeKey: string, threadId: string, record: ReplaySummaryRecord): void;
   /** The thread a completed turn was stored in. */
   threadOfTurn?(scopeKey: string, experienceId: string): string | undefined;
-  /** What her tools did in a turn (`shannonToolTurns.ts`), beside the turn and never in its messages. Absent: kept in memory. */
-  saveToolTrace?(scopeKey: string, record: import('./shannonToolTrace.js').ToolTraceRecord): void;
-  toolTraces?(scopeKey: string, threadId: string, query: { turnIds?: readonly string[]; since?: string }): readonly import('./shannonToolTrace.js').ToolTraceRecord[];
   /** Her impressions of people (`impressions.ts`). Absent: none are read or written. */
   impressionStore?(): import('./impressions.js').ImpressionStore;
 }

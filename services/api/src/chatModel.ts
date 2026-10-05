@@ -22,7 +22,7 @@ import { streamedVoiceToolTurn } from './chatModelVoiceTools.js';
 import { ChatSentenceSplitter } from './chatSentenceSplitter.js';
 import { PartialAnswerError, RoundTimer, type RoundTime } from './turnDeadline.js';
 import {
-  TOOLS_WITHHELD_INSTRUCTIONS, TURN_OUT_OF_TIME_LINE, VOICE_TOOL_INSTRUCTIONS, VOICE_TOOL_OUTPUT_TOKENS,
+  TOOLS_WITHHELD_INSTRUCTIONS, TURN_OUT_OF_TIME_LINE, VOICE_TOOL_OUTPUT_TOKENS, toolInstructions,
   isOutOfTime, outOfTimeEnvelope, providerFunctionTools, withToolRounds, type ShannonModelToolSession,
 } from './chatModelTools.js';
 import {
@@ -415,7 +415,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
         request.systemPrompt,
         VOICE_REPLY_INSTRUCTIONS,
         ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
-        ...(tools ? [VOICE_TOOL_INSTRUCTIONS] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
+        ...(tools ? [toolInstructions(tools, true)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
       ].join('\n\n'),
       input: [
         ...request.history.map(item => ({ role: item.role, content: item.content })),

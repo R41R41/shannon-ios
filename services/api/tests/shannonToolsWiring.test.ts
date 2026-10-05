@@ -63,7 +63,8 @@ describe('which conversation turns are offered her tools', () => {
   it('offers them in a voice turn only with the owner alone and words about her writing or her folder', async () => {
     const { voice } = kernel();
     expect((await voice('おはよう、今日は寒いね')).tools).toBeUndefined();
-    expect((await voice('書斎のメモを読んで')).tools?.definitions.length).toBe(9);
+    // The local router gives no reliability score, so a spoken turn reads only until he says yes (shannonToolFollowUps.test.ts).
+    expect((await voice('書斎のメモを読んで')).tools?.definitions.map(tool => tool.name)).toEqual(['study.list', 'study.search', 'study.read']);
     // An ordinary turn after such a talk is a follow-up (shannonToolFollowUps.test.ts); in another Talk it is not.
     expect((await voice('おはよう、今日は寒いね', { threadId: 'other' })).tools).toBeUndefined();
     expect((await voice('書斎のメモを読んで', { companionPresent: true })).tools).toBeUndefined();

@@ -39,6 +39,8 @@ export interface ToolTraceRecord {
 }
 
 export const TRACE_CALLS = 6;
+/** The turn id of a trace whose turn is not in the Talk (yet): linked to the Talk only (`shannonToolTurns.ts`). */
+export const UNLINKED_TURN = 'unstored:';
 export const TRACE_NAMES = 12;
 const NAME_CHARACTERS = 60;
 /** A study name is a short title, its stage and its whole id (a UUID is 36 characters). */
@@ -98,12 +100,28 @@ export function toolTraceCall(tool: string, argumentsJson: string, result: ToolR
   if (/\.(?:list|search)$/u.test(tool)) {
     const found = namesOf(tool, result.text);
     const names = found.slice(0, TRACE_NAMES).map(name => keep(name, tool.startsWith('study.') ? STUDY_NAME_CHARACTERS : NAME_CHARACTERS)!);
-    return { ...call, names, ...(found.length > TRACE_NAMES || /（ほかにもある）|途中で打ち切った|新しい順に/u.test(result.text) ? { more: true as const } : {}) };
+    // Only the lines that are not names or snippets say whether there was more (a snippet may say anything).
+    const said = result.text.split('\n').filter(line => !/^(?:- |\s)/u.test(line)).join('\n');
+    return { ...call, names, ...(found.length > TRACE_NAMES || /（ほかにもある）|途中で打ち切った|新しい順に/u.test(said) ? { more: true as const } : {}) };
   }
   const size = /（全(\d+)バイト/u.exec(result.text)?.[1];
   const id = /id[:：]\s*([\w-]{8,80})/u.exec(result.text)?.[1];
   const note = size ? `全${size}バイト` : id ? `id: ${id}` : undefined;
   return note ? { ...call, note } : call;
+}
+
+/**
+ * The calls with every target and name that now repeats what must reach nobody but the owner hidden: a later 「内緒」, or
+ * an item he asked her to forget, applies to traces already stored. A check that cannot be read hides all of them.
+ */
+export function maskedTraceCalls(calls: readonly ToolTraceCall[], secrets: SecretCheck | null): ToolTraceCall[] {
+  const hide = (value: string): string => {
+    if (value === HIDDEN) return value;
+    try { return secrets && !secrets.carries(value) ? value : HIDDEN; } catch { return HIDDEN; }
+  };
+  return calls.map(call => ({
+    ...call, ...(call.target !== undefined ? { target: hide(call.target) } : {}), ...(call.names ? { names: call.names.map(hide) } : {}),
+  }));
 }
 
 /** A stored trace read back: anything that is not the shape above is dropped, and every part is bounded again. */
@@ -132,19 +150,23 @@ function callLine(call: ToolTraceCall): string {
 
 const TRACE_HEADER = [
   '[さっきボクが道具でしたこと・見たこと]',
-  '前の返事でボクが実際に道具を使った記録（その時の結果。ファイルや書斎の中身は記録していない）。ここにあることは本当にしたこと・見たことなので、取り消さない。いまの様子をもっと詳しく知るには、道具をもう一度使う。',
+  '前の返事でボクが実際に道具を使った記録（その時の結果。ファイルや書斎の中身は記録していない）。ここにあることは本当にしたこと・見たことなので、取り消さない。いまの様子をもっと詳しく知りたい時は、この返事に道具があれば使い、なければそう短く伝える。',
 ].join('\n');
 
+/** Which reply of hers a trace belongs to: how many replies ago (1 = her last), or a reply that is not in the Talk. */
+export function traceLabel(repliesAgo: number | 'unstored'): string {
+  return repliesAgo === 'unstored' ? '会話の記録に残っていない返事（途中で切れたなど）' : repliesAgo <= 1 ? '直前の返事' : `${repliesAgo}つ前の返事`;
+}
+
 /**
- * The block for the model: `turns` newest first, each with how many of her replies ago it was (1 = her last reply).
+ * The block for the model: `turns` newest first, each with its label (`traceLabel`).
  * Older turns are left out until the block fits `maximum` characters; nothing fits, nothing is said.
  */
-export function toolTracePrompt(turns: readonly { record: ToolTraceRecord; repliesAgo: number }[], maximum = TRACE_PROMPT_CHARACTERS): string {
+export function toolTracePrompt(turns: readonly { record: ToolTraceRecord; label: string }[], maximum = TRACE_PROMPT_CHARACTERS): string {
   const lines: string[] = [];
   let length = TRACE_HEADER.length;
-  for (const { record, repliesAgo } of turns) {
+  for (const { record, label } of turns) {
     if (!record.calls.length) continue;
-    const label = repliesAgo <= 1 ? '直前の返事' : `${repliesAgo}つ前の返事`;
     const turn = record.calls.map(call => `- ${label}: ${callLine(call)}`);
     const added = turn.reduce((sum, line) => sum + line.length + 1, 0);
     const room = Math.min(maximum, TRACE_PROMPT_CHARACTERS);

@@ -35,7 +35,7 @@ import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySou
 import { asksAboutNotion } from './notionConversation.js';
 import type { PersonIdentityStore } from './personIdentity.js';
 import { voicePlanResponse } from './voiceEmotionPlan.js';
-import { transcriptNeedsInterpretation, voiceTranscriptInterpretationPrompt } from './voiceTranscriptContext.js';
+import { transcriptNeedsInterpretation, transcriptTrust, voiceTranscriptInterpretationPrompt } from './voiceTranscriptContext.js';
 import {
   buildConversationOrchestrationPrompt,
   confirmedVoiceImplementationRequest,
@@ -65,7 +65,7 @@ import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
 import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
 import type { ShannonToolRunner } from './shannonToolRunner.js';
-import { conversationTools, type ConversationToolServer } from './shannonToolSession.js';
+import { conversationTools, toolTraceReader, type ConversationToolServer } from './shannonToolSession.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from './turnDeadline.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
@@ -365,7 +365,7 @@ async function completeLiveVoiceDelegation(
   // The owner's thread is replayed by character budget, with the replay summary for what fell out of it;
   // a 「友人も一緒」 call keeps its own in-call turns and never sees the owner's thread.
   const replay = temporaryGuest ? null
-    : conversationReplay('voice', captured, dependencies.conversationStore, scopeKey, threadId, present, undefined, dependencies.toolServer?.turns);
+    : conversationReplay('voice', captured, dependencies.conversationStore, scopeKey, threadId, present, undefined, toolTraceReader(dependencies.toolServer, scopeKey));
   const placeSkill = selectedSkills.has('place_discovery') || wantsPlaceDiscovery(transcript)
     ? await runPlaceDiscoverySkill(dependencies.chatModel, { scopeKey, message: transcript, context: {
       ...(wantsNearbyPlaces(transcript) && deviceContext?.location ? {
@@ -379,7 +379,8 @@ async function completeLiveVoiceDelegation(
     scopeKey, ...replayed,
     // What she said when she was touched is what he is answering: it precedes his words, in every mode, as context only.
     ...(reactionLine ? { history: [...replayed.history, { role: 'assistant' as const, content: reactionLine }] } : {}),
-    message: transcript, ...conversationTools(dependencies.autonomy, scopeKey, 'voice', temporaryGuest ? false : alone || 'others', dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline),
+    message: transcript, ...conversationTools(dependencies.autonomy, scopeKey, 'voice', temporaryGuest ? false : alone || 'others', dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline,
+      { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }),
     useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   };

@@ -44,6 +44,8 @@ export interface CompletedTurn {
   audience?: MemoryAudience;
   /** Who spoke the user side. Absent: the owner when alone, otherwise unknown. */
   speaker?: 'owner' | 'unknown';
+  /** A voice turn: the client's id of the utterance, as its delegation carried it. Not stored; it links what her tools did. */
+  utteranceId?: string;
 }
 
 function turnPersistenceContext(turn: CompletedTurn): TurnPersistenceContext {

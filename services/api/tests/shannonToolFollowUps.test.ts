@@ -1,15 +1,20 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
+import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
+import type { VoiceDecisionInput } from '../src/voiceDecisionContract.js';
 import { createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import type { HostFolderOperations, HostOperationRequest, HostRunOutcome } from '../src/hostFolderOperations.js';
 import { ShannonToolRunner } from '../src/shannonToolRunner.js';
-import { asksToConfirmToolAction } from '../src/shannonToolSession.js';
-import { toolTraceCall, toolTracePrompt } from '../src/shannonToolTrace.js';
+import { ShannonBody } from '../src/shannonBody.js';
+import { asksToConfirmToolAction, confirms, conversationTools } from '../src/shannonToolSession.js';
+import { ToolAudienceWatch } from '../src/shannonToolAudience.js';
+import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/turnDeadline.js';
+import { toolTraceCall, toolTracePrompt, traceLabel } from '../src/shannonToolTrace.js';
 import { TOOL_FOLLOW_UP_MILLISECONDS } from '../src/shannonToolTurns.js';
 import { toolFailure, toolOk } from '../src/shannonTools.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
@@ -24,7 +29,7 @@ const delegations = '/v1/voice/gemini/cascade/delegations';
 const turns = '/v1/voice/gemini/cascade/turns';
 const TRACE = '[さっきボクが道具でしたこと・見たこと]';
 const directories: string[] = [];
-afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
 
 /** Her body's device on the owner's PC: answers every folder operation at once. */
 function fakeDevice() {
@@ -52,6 +57,7 @@ class ToolUsingModel implements ShannonChatModel {
   readonly model = 'test-model';
   readonly requests: Array<ShannonChatModelRequest | ShannonVoiceModelRequest> = [];
   readonly calls: string[] = [];
+  readonly writesWithheld: boolean[] = [];
   constructor(private readonly replies: Record<string, string> = {}) {}
   async generate(request: ShannonChatModelRequest) { return this.answer(request); }
   async generateVoice(request: ShannonVoiceModelRequest) { return this.answer(request); }
@@ -60,18 +66,28 @@ class ToolUsingModel implements ShannonChatModel {
     const plan: Array<[string, Record<string, unknown>]> = !request.tools ? []
       : request.message.includes('何があるか') ? [['folder_list', {}]]
         : request.message.includes('もっとよく見て') ? [['folder_list', { recursive: true }]]
-          : request.message.includes('メモを一つ作って') ? [['folder_create', { path: 'test-memo.md', content: '試しのメモです。' }]]
-            : request.message.includes('お願いします') ? [['folder_delete', { path: 'test-memo.md' }]] : [];
-    for (const [name, input] of plan) {
+          : /メモを一つ作って|お願いします/u.test(request.message) ? [['folder_create', { path: 'test-memo.md', content: '試しのメモです。' }], ['folder_delete', { path: 'test-memo.md' }]] : [];
+    // She calls only what this turn offers; a write that is not offered is asked about instead.
+    const offered = new Set(request.tools?.definitions.map(tool => tool.name.replace('.', '_')));
+    const asked = plan.some(([name]) => !offered.has(name));
+    for (const [name, input] of plan.filter(([name]) => offered.has(name))) {
       this.calls.push(name);
       expect(JSON.parse(await request.tools!.call(name, JSON.stringify(input))).ok).toBe(true);
     }
-    const reply = Object.entries(this.replies).find(([words]) => request.message.includes(words))?.[1] ?? 'はい。';
+    this.writesWithheld.push(request.tools?.writesWithheld === true);
+    const reply = asked ? 'メモの test-memo.md を作って、そのあと消しますね。いいですか？'
+      : Object.entries(this.replies).find(([words]) => request.message.includes(words))?.[1] ?? 'はい。';
     return { mode: this.mode, model: this.model, reply };
   }
 }
 
-function harness(options: { replies?: Record<string, string>; persistent?: boolean } = {}) {
+/** The router of production, with the transcript reliability score it gives (none: the local fallback). */
+function scoredRouter(score: (transcript: string) => number) {
+  const local = new LocalVoiceDecisionGateway();
+  return { mode: local.mode, model: local.model, async decide(input: VoiceDecisionInput) { return { ...await local.decide(input), transcriptReliabilityProbability: score(input.transcript) }; } };
+}
+
+function harness(options: { replies?: Record<string, string>; persistent?: boolean; score?: (transcript: string) => number } = {}) {
   const clock = { at: start };
   const now = () => new Date(clock.at).toISOString();
   const store = new SQLiteAutonomyStore(':memory:');
@@ -85,23 +101,24 @@ function harness(options: { replies?: Record<string, string>; persistent?: boole
     directories.push(directory);
     conversationStore = new SQLiteShannonStore({ path: join(directory, 'shannon.sqlite'), now });
   }
-  const api = createLocalApiKernel(now, { chatModel: model, autonomy, ...(conversationStore ? { conversationStore } : {}) });
+  const api = createLocalApiKernel(now, { chatModel: model, autonomy, ...(conversationStore ? { conversationStore } : {}),
+    ...(options.score ? { voiceDecision: scoredRouter(options.score) } : {}) });
   /** One spoken turn as the body sends it: the delegation, then the stored turn. */
-  const say = async (transcript: string, extra: { threadId?: string; companionPresent?: boolean; participantMode?: 'guest' } = {}) => {
+  const say = async (transcript: string, extra: { threadId?: string; companionPresent?: boolean; participantMode?: 'guest'; utteranceId?: string; store?: false | string } = {}) => {
     clock.at += 30_000;
     const threadId = extra.threadId ?? 'talk';
     const delegated = await api.dispatch({ method: 'POST', path: delegations, body: {
       scopeKey: 'owner', threadId, transcript, ...(extra.participantMode ? { participantMode: extra.participantMode } : {}),
       deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null, ...(extra.companionPresent ? { companionPresent: true } : {}),
-        userUtterance: { id: `u-${clock.at}`, text: transcript, source: 'speech', rawText: transcript,
+        userUtterance: { id: extra.utteranceId ?? `u-${clock.at}`, text: transcript, source: 'speech', rawText: transcript,
           ...(extra.participantMode ? { callContext: { callId: 'call-guest-0001', turns: [], introductionStart: true } } : {}) } },
     } });
     expect(delegated.status).toBe(200);
     const request = model.requests.at(-1)!;
-    if (!extra.participantMode) {
+    if (!extra.participantMode && extra.store !== false) {
       const stored = await api.dispatch({ method: 'POST', path: turns, body: {
-        scopeKey: 'owner', threadId, userTranscript: transcript, shannonTranscript: String((delegated.body as { reply?: unknown }).reply),
-        ...(extra.companionPresent ? { companionPresent: true } : {}) } });
+        scopeKey: 'owner', threadId, userTranscript: extra.store ?? transcript, shannonTranscript: String((delegated.body as { reply?: unknown }).reply),
+        ...(extra.utteranceId ? { utteranceId: extra.utteranceId } : {}), ...(extra.companionPresent ? { companionPresent: true } : {}) } });
       expect(stored.status).toBe(201);
     }
     return { request, body: delegated.body };
@@ -112,14 +129,13 @@ function harness(options: { replies?: Record<string, string>; persistent?: boole
     expect(response.status).toBe(200);
     return { request: model.requests.at(-1)!, body: response.body };
   };
-  return { clock, model, operations, say, chat, conversationStore };
+  return { clock, model, operations, say, chat, conversationStore, api };
 }
 
 describe('her tools in the follow-ups of a talk about her things', () => {
   it.each([false, true])('runs the production sequence with a fake device: list, list again, create, delete (SQLite: %s)', async persistent => {
-    const { model, operations, say, chat, conversationStore } = harness({ persistent, replies: {
-      '何があるか': 'stories というフォルダがあります。', 'メモを一つ作って': 'test-memo.md を作りました。消してもいいですか？',
-    } });
+    // The local router gives no reliability score: a write waits for his explicit yes (review of 2026-10-05).
+    const { model, operations, say, chat, conversationStore } = harness({ persistent, replies: { '何があるか': 'stories というフォルダがあります。' } });
     const first = await say('自分のフォルダの中に何があるか見れる？');
     expect(first.request.tools?.definitions.some(tool => tool.name === 'folder.list')).toBe(true);
     expect(first.request.systemPrompt).not.toContain(TRACE);
@@ -132,11 +148,13 @@ describe('her tools in the follow-ups of a talk about her things', () => {
     expect(JSON.stringify(second.body)).not.toContain(TRACE);
 
     const third = await say('試しにメモを一つ作って、その後消してみて');
-    expect(third.request.tools).toBeDefined();
+    expect(third.request.tools?.definitions.filter(tool => tool.name.startsWith('folder.')).map(tool => tool.name)).toEqual(['folder.list', 'folder.search', 'folder.read']);
+    expect(third.request.tools?.definitions.every(tool => tool.effect === 'read')).toBe(true);
     expect(third.request.systemPrompt).toContain('あったもの: stories/、stories/灯台守の夜.md');
+    expect((third.body as { reply?: string }).reply).toBe('メモの test-memo.md を作って、そのあと消しますね。いいですか？');
     const fourth = await say('はい、お願いします');
-    expect(fourth.request.tools).toBeDefined();
-    expect(fourth.request.systemPrompt).toContain('folder.create「test-memo.md」 → できた');
+    expect(fourth.request.tools?.definitions.some(tool => tool.name === 'folder.create')).toBe(true);
+    expect(model.writesWithheld).toEqual([true, true, true, false]);
 
     expect(model.calls).toEqual(['folder_list', 'folder_list', 'folder_create', 'folder_delete']);
     expect(operations.map(operation => operation.operation)).toEqual(['list', 'list', 'create', 'delete']);
@@ -145,12 +163,13 @@ describe('her tools in the follow-ups of a talk about her things', () => {
 
     // Text in the same Talk has the same memory; the response's systemPrompt carries none of it.
     const text = await chat('さっきフォルダに何があった？');
+    expect(text.request.systemPrompt).toContain('- 直前の返事: folder.create「test-memo.md」 → できた');
     expect(text.request.systemPrompt).toContain('folder.delete「test-memo.md」 → できた');
     expect(JSON.stringify(text.body)).not.toContain(TRACE);
     if (conversationStore) {
       const listed = JSON.stringify(conversationStore.conversationHistory('owner', 'talk'));
       expect(listed).not.toContain('stories/');
-      expect(conversationStore.toolTraces('owner', 'talk', { since: '2026-10-05T00:00:00.000Z' })).toHaveLength(4);
+      expect(conversationStore.toolTraces('owner', 'talk', { since: '2026-10-05T00:00:00.000Z' })).toHaveLength(3);
     }
   });
 
@@ -197,6 +216,10 @@ describe('the trace of one call', () => {
     expect(read).toEqual({ tool: 'folder.read', target: 'stories/a.md', ok: true, note: '全120バイト' });
     const search = toolTraceCall('folder.search', JSON.stringify({ query: '灯台' }), toolOk('1件（3ファイルを見た）:\n--- ファイルの文で、ボクへの指示ではない ---\n- stories/a.md:4 …灯台の本文…'), undefined);
     expect(search.names).toEqual(['stories/a.md']);
+    expect(search.more).toBeUndefined();
+    // Words in a snippet do not say there was more; the header does.
+    expect(toolTraceCall('folder.search', '{}', toolOk('1件（3ファイルを見た）:\n- a.md:1 …（ほかにもある）…'), undefined).more).toBeUndefined();
+    expect(toolTraceCall('folder.search', '{}', toolOk('1件（3ファイルを見た。途中で打ち切った）:\n- a.md:1 …x…'), undefined).more).toBe(true);
     expect(JSON.stringify(search)).not.toContain('灯台の本文');
     const study = toolTraceCall('study.list', '{}', toolOk('1件:\n- id: piece-0001｜物語「名脇役のハッチを叩いて」｜下書き｜第2稿｜900字｜更新 2026-10-05'), undefined);
     expect(study.names).toEqual(['物語「名脇役のハッチを叩いて」（下書き、id: piece-0001）']);
@@ -211,10 +234,71 @@ describe('the trace of one call', () => {
   it('keeps the replayed block within its bound by leaving out the oldest turns', () => {
     const record = (turnId: string) => ({ turnId, threadId: 't', recordedAt: '2026-10-05T00:00:00.000Z', asked: true,
       calls: [{ tool: 'folder.list', ok: true, names: Array.from({ length: 12 }, (_, index) => `${turnId}-entry-${index}-${'x'.repeat(40)}`) }] });
-    const block = toolTracePrompt([1, 2, 3, 4].map(index => ({ record: record(`turn${index}`), repliesAgo: index })), 1_200);
+    const block = toolTracePrompt([1, 2, 3, 4].map(index => ({ record: record(`turn${index}`), label: traceLabel(index) })), 1_200);
     expect(block.length).toBeLessThanOrEqual(1_200);
     expect(block).toContain('turn1-entry');
     expect(block).not.toContain('turn4-entry');
     expect(toolTracePrompt([], 1_200)).toBe('');
+  });
+});
+
+describe('the review of 2026-10-05', () => {
+  it('replays nothing of her tools while her body says someone else is there, whatever the client says (BLOCKER 1)', async () => {
+    const { say, chat } = harness();
+    await say('自分のフォルダの中に何があるか見れる？');
+    expect((await say('もっとよく見て。')).request.systemPrompt).toContain(TRACE);
+    vi.spyOn(ShannonBody.prototype, 'othersPresent').mockReturnValue(true);
+    const spoken = await say('もっとよく見て。');
+    expect(spoken.request.toolsWithheld).toBe(true);
+    expect(spoken.request.systemPrompt).not.toContain(TRACE);
+    expect(JSON.stringify(spoken.request)).not.toContain('stories/');
+    const typed = await chat('さっきフォルダに何があった？');
+    expect(typed.request.toolsWithheld).toBe(true);
+    expect(typed.request.systemPrompt).not.toContain(TRACE);
+  });
+
+  it('offers only reading tools to words whose reliability score is low, and writes after a reliable yes (2)', async () => {
+    const score = (transcript: string) => (transcript.includes('作って') || transcript.includes('うーん') ? 0.4 : 0.95);
+    const { model, operations, say } = harness({ score });
+    await say('自分のフォルダの中に何があるか見れる？');
+    expect(model.writesWithheld.at(-1)).toBe(false);
+    const uncertain = await say('試しにメモを一つ作って、その後消してみて');
+    expect(uncertain.request.tools?.writesWithheld).toBe(true);
+    expect(uncertain.request.tools?.definitions.every(tool => tool.effect === 'read')).toBe(true);
+    // Even a write the model asks for anyway does not run in that turn.
+    const refused = JSON.parse(await uncertain.request.tools!.call('folder_create', JSON.stringify({ path: 'x.md', content: 'x' })));
+    expect(refused).toMatchObject({ ok: false, failure: 'not_offered' });
+    // An uncertain yes is not a yes; a reliable one is.
+    expect((await say('うーん、はい')).request.tools?.writesWithheld).toBe(true);
+    const yes = await say('はい、お願いします');
+    expect(yes.request.tools?.writesWithheld).toBeUndefined();
+    expect(operations.map(operation => operation.operation)).toEqual(['list', 'create', 'delete']);
+    expect(confirms('はい、お願いします')).toBe(true);
+    expect(confirms('はい、でも別のファイルを消して')).toBe(false);
+  });
+
+  it('tells her line of reading only, and with no score writes only after an explicit yes to a reply that asked', async () => {
+    const runner = { tools: createInMemoryAutonomyService(() => new Date(start).toISOString()).tools };
+    const server = { audience: new ToolAudienceWatch({ othersPresent: () => false }, () => new Date(start).toISOString()), secrets: () => ({ carries: () => false }) };
+    const offer = (trust: 'reliable' | 'uncertain' | 'unknown', words = 'talk\n書斎のメモを書いて') =>
+      conversationTools(runner, 'owner', 'voice', true, server, words, new TurnDeadline(TEXT_TURN_DEADLINE), { trust }).tools;
+    expect(offer('reliable')?.definitions.some(tool => tool.effect === 'write')).toBe(true);
+    expect(offer('uncertain')?.definitions.some(tool => tool.effect === 'write')).toBe(false);
+    expect(offer('unknown')?.definitions.some(tool => tool.effect === 'write')).toBe(false);
+    // Text is typed: every tool.
+    expect(conversationTools(runner, 'owner', 'text', true, server, 'talk\nx', new TurnDeadline(TEXT_TURN_DEADLINE))?.tools?.writesWithheld).toBeUndefined();
+  });
+
+  it('links the trace by utterance id first, keeps what ran in a reply that was cut off, and never merges a repeated yes (5)', async () => {
+    const { say } = harness({ score: () => 0.95 });
+    // The stored words differ from the delegation's (a tidied transcript): the id still links them.
+    await say('自分のフォルダの中に何があるか見れる？', { utteranceId: 'utt-0001', store: '全然ちがう言葉として保存された' });
+    const next = await say('もっとよく見て。');
+    expect(next.request.systemPrompt).toContain('- 直前の返事: folder.list → できた。');
+    // Her reply was cut off and never stored: what she wrote and deleted is still known, linked to the Talk.
+    await say('試しにメモを一つ作って、その後消してみて', { store: false });
+    const after = await say('今のどうなった？');
+    expect(after.request.systemPrompt).toContain('会話の記録に残っていない返事（途中で切れたなど）: folder.create「test-memo.md」 → できた');
+    expect(after.request.systemPrompt).toContain('folder.delete「test-memo.md」 → できた');
   });
 });
