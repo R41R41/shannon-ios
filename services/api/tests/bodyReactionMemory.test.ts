@@ -41,6 +41,7 @@ describe('conversation only if he answers', () => {
     advance(6 * SECOND + BODY_REACTION_LIMITS.linkMarginMilliseconds + SECOND);
     expect((await delegate('さっきのは何？', { reactionId: 'touch-1' })).status).toBe(200);
     expect(chatModel.voiceRequests[0]!.history).toEqual([]);
+    expect(chatModel.voiceRequests[0]!.precedingReply).toBeUndefined();
     expect(reactionStore.reaction(scope, 'touch-1')).toMatchObject({ linkState: 'dropped' });
     await persist('さっきのは何？', 'なんでしょう。', { reactionId: 'touch-1' });
     expect(messages()).toEqual([{ role: 'user', content: 'さっきのは何？' }, { role: 'assistant', content: 'なんでしょう。' }]);
@@ -88,6 +89,7 @@ describe('conversation only if he answers', () => {
     // Once: a second turn with the same id is an ordinary turn, and later turns see her line as history.
     await delegate('それでね', { reactionId: answer.id });
     expect(chatModel.voiceRequests.at(-1)!.history.filter(item => item.content === HEHE)).toHaveLength(1);
+    expect(chatModel.voiceRequests.at(-1)!.precedingReply).toBeUndefined();
     await persist('それでね', 'はい。', { reactionId: answer.id });
     expect(messages(talk.threadId).filter(item => item.content === HEHE)).toHaveLength(1);
     expect(messages(talk.threadId)).toHaveLength(7);
