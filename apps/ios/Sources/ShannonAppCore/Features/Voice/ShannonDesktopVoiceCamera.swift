@@ -79,12 +79,15 @@ private struct ShannonDesktopCameraPreview: NSViewRepresentable {
 struct ShannonDesktopVoiceCameraSheet: View {
     let take: (Data) -> Void
     let cancel: () -> Void
-    @State private var camera = ShannonDesktopCameraSession()
+    /// Made once when the sheet appears, not with every rebuild of the view.
+    @State private var camera: ShannonDesktopCameraSession?
     @State private var failed = false
 
     var body: some View {
         VStack(spacing: ShannonDesktopSpacing.medium) {
-            ShannonDesktopCameraPreview(session: camera.session)
+            Group {
+                if let camera { ShannonDesktopCameraPreview(session: camera.session) } else { Color.black }
+            }
                 .frame(minWidth: 480, minHeight: 360)
                 .background(Color.black)
                 .clipShape(RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium))
@@ -99,15 +102,18 @@ struct ShannonDesktopVoiceCameraSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button(ShannonGeneratedStrings.voiceMacCameraTake) {
-                    if let jpeg = camera.takeJPEG() { take(jpeg) } else { failed = true }
+                    if let jpeg = camera?.takeJPEG() { take(jpeg) } else { failed = true }
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
             }
         }
         .padding(ShannonDesktopSpacing.large)
-        .onAppear { camera.start() }
-        .onDisappear { camera.stop() }
+        .onAppear {
+            if camera == nil { camera = ShannonDesktopCameraSession() }
+            camera?.start()
+        }
+        .onDisappear { camera?.stop() }
     }
 }
 #endif
