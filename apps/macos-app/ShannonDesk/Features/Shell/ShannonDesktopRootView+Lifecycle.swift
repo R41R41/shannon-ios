@@ -94,6 +94,12 @@ extension ShannonDesktopRootView {
                 if let target = note.object as? NSWindow, let mine = hostWindow.window, target !== mine { return }
                 selectDestination(.talk)
             }
+            // One of the four entries from the menu bar item (A17), in the window it brought back.
+            .onReceive(NotificationCenter.default.publisher(for: .shannonDesktopOpenEntry)) { note in
+                if let target = note.object as? NSWindow, let mine = hostWindow.window, target !== mine { return }
+                guard let raw = note.userInfo?["entry"] as? String, let destination = DesktopDestination(rawValue: raw) else { return }
+                selectDestination(destination)
+            }
             .background(DesktopWindowReader(box: hostWindow) { window in voiceCall.window(window, hosts: windowID) })
     }
 

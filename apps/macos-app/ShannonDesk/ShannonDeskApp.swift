@@ -16,7 +16,7 @@ struct ShannonDeskApp: App {
     @State private var calendarSharingModel: ShannonCalendarSharingModel
     @State private var privateListeningModel: ShannonPrivateListeningModel
     /// The voice conversation (A16), one for the app: it outlives the page and the window it was started from.
-    @State private var voiceCall = ShannonDesktopVoiceCall()
+    @State private var voiceCall: ShannonDesktopVoiceCall
     @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceRawValue = ShannonAppearanceMode.system.rawValue
 
     init() {
@@ -35,9 +35,9 @@ struct ShannonDeskApp: App {
             connectionStore: connectionStore
         )
 #if DEBUG
-        _conversationModel = State(initialValue: usesDesignPreview
+        let conversation = usesDesignPreview
             ? ShannonConversationModel.designPreview()
-            : ShannonConversationModel(client: client))
+            : ShannonConversationModel(client: client)
         let previewCalendar = ShannonCalendarSharingStatus.designPreview(
             named: UserDefaults.standard.string(forKey: "ShannonPreviewCalendar")
         )
@@ -45,13 +45,25 @@ struct ShannonDeskApp: App {
             ? .designPreview(previewCalendar ?? .off)
             : ShannonCalendarSharingModel(client: client, periodicInterval: ShannonCalendarSyncGate.macInterval)
 #else
-        _conversationModel = State(initialValue: ShannonConversationModel(client: client))
+        let conversation = ShannonConversationModel(client: client)
         let calendarSharing = ShannonCalendarSharingModel(
             client: client,
             periodicInterval: ShannonCalendarSyncGate.macInterval
         )
 #endif
+        _conversationModel = State(initialValue: conversation)
         _calendarSharingModel = State(initialValue: calendarSharing)
+        // Her desktop body (A17): one for the app, with the app's call. Shown after launch if the owner left her out;
+        // in the design preview only when asked (-ShannonPreviewDesktopBody), and it never sends anything there.
+        let voiceCall = ShannonDesktopVoiceCall()
+        _voiceCall = State(initialValue: voiceCall)
+        ShannonDesktopBody.shared.configure(conversation: conversation, voiceCall: voiceCall)
+#if DEBUG
+        let showsDesktopBody = !usesDesignPreview || ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDesktopBody")
+#else
+        let showsDesktopBody = true
+#endif
+        ShannonDesktopAppDelegate.didFinishLaunching = { ShannonDesktopBody.shared.start(showsWindow: showsDesktopBody) }
 #if DEBUG
         _privateListeningModel = State(initialValue: usesDesignPreview
             ? .designPreview(outputs: [], registered: [], status: .notListening)

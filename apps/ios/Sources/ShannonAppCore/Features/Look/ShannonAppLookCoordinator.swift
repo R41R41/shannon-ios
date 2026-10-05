@@ -73,6 +73,9 @@ public final class ShannonAppLookCoordinator {
     public private(set) var cue: Cue?
     /// The camera is open for a frame right now: 「いま見ています」.
     public private(set) var isCapturing = false
+    /// Her desktop body on the Mac has the camera open for its one frame of the room (A17): the state shown in the
+    /// app says 「いま見ています」 then too.
+    public internal(set) var bodyIsCapturing = false
     /// Non-nil while the explanation that precedes the system's camera prompt is on screen.
     public private(set) var primerPhase: ShannonPermissionPrimerPhase?
 

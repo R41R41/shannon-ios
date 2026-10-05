@@ -66,7 +66,17 @@ describe('S1: the token of her Minecraft body reaches its own routes only', () =
     }
     for (const [method, route] of [['POST', '/v1/body/events'], ['GET', '/v1/body/presence']]) {
       expect(await wiring.serve(request(method!), sent().response, route!, principal(DEVICE))).toBe(false);
+      // Review of A17, B1: never as an app's desktop body, which would escape every rule of the game body.
+      const asBody = sent();
+      const withHeader = { method, headers: { authorization: '', 'x-shannon-body': 'desktop' } } as unknown as IncomingMessage;
+      expect(await wiring.serve(withHeader, asBody.response, route!, principal(DEVICE))).toBe(true);
+      expect(asBody.result).toEqual({ status: 403, error: 'GAME_BODY_DEVICE_DENIED' });
+      expect(wiring.isGameDevice(principal(DEVICE))).toBe(true);
+      expect(wiring.isGameDevice(principal('owner-mac'))).toBe(false);
     }
+    // The header is an app's own business: the Mac app's body is not held back.
+    const mac = { method: 'GET', headers: { authorization: '', 'x-shannon-body': 'desktop' } } as unknown as IncomingMessage;
+    expect(await wiring.serve(mac, sent().response, '/v1/body/presence', principal('owner-mac'))).toBe(false);
     // The owner's apps are not held back, and the body's own routes are answered (the owner's list is his apps' only).
     expect(await wiring.serve(request('POST'), sent().response, '/v1/chat', principal('owner-iphone'))).toBe(false);
     const list = sent();
@@ -99,6 +109,9 @@ describe('S1: the token of her Minecraft body reaches its own routes only', () =
     expect(gate).toBeGreaterThan(server.indexOf("error: 'PAIRING_REQUIRED'"));
     expect(gate).toBeLessThan(server.indexOf('url.pathname === SHANNON_NOW_PATH'));
     expect(server).toContain('if (!minecraft.refusesConsole(request, response, deviceAuth)) await opsRoute(');
+    // Review of A17, B1: no desktop-body identity is ever derived for the game token, and it is derived after the gate.
+    expect(server).toContain("url.pathname, () => mayHaveDesktopBody({ isGame: minecraft.isGameDevice(principal),");
+    expect(server.indexOf('requestDeviceId(principal.deviceId')).toBeGreaterThan(gate);
   });
 });
 

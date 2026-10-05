@@ -2626,8 +2626,12 @@
           "reason": "iPhone の姿は画面の中にあり、所有者が大きさを決める窓が無い（2 本の指の拡大は、向き合う表示の中の映し方）。目だけにしたいときは 設定 › すがた › 体 で選ぶ。"
         },
         "macos": {
-          "status": "no",
-          "note": "Mac には、窓で立つ体がまだ無い（デスクトップに立つ体を SwiftUI で作るとき、ADR-0004）。トークの横の「すがた」のパネルは、幅で体を変えない。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DStage+Desktop.swift"
+          ],
+          "note": "デスクトップの体の窓が 60% 未満のとき、目だけで出す（既定は入）。トークの横の「すがた」は、幅で体を変えない。A17。"
         },
         "windows": {
           "status": "yes",
@@ -2880,9 +2884,12 @@
           "reason": "アプリの 1 画面の中では、窓ごと運べない（体のページにも無い）。"
         },
         "macos": {
-          "status": "planned",
-          "branch": "未定",
-          "note": "デスクトップに立つ体を SwiftUI で作るときに入れる（ADR-0004）。いまは Electron 版。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyCarry.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyWindow.swift"
+          ],
+          "note": "体のページには運ぶ動きが無いので、窓が見分ける（頭を押せばページへ、体を押して動かせば運ぶ、押したまま止めればページへ）。下ろしたあとに carry として、反応を聞き、事実を送る（「体に起きたことをシャノンに伝える」が入のとき）。場所は画面ごとに覚える。A17。"
         },
         "windows": {
           "status": "yes",
@@ -3035,9 +3042,13 @@
           "reason": "iPhone は持ち歩く端末で、「PC の前の部屋」を見るカメラではない。アプリのカメラ（look.app-camera）が対応する機能。"
         },
         "macos": {
-          "status": "planned",
-          "branch": "未定",
-          "note": "デスクトップに立つ体を SwiftUI で作るときに決める（ADR-0004）。いまは Electron 版。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBody+Look.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyRules.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift"
+          ],
+          "note": "設定 › カメラ › デスクトップの体「シャノンがカメラで部屋を見てよい」（既定は切）。窓が出ていて、あなたひとりの時だけ、1 枚。保存しない。足もとにカメラの状態。1 時間 6 回まで。A17。"
         },
         "windows": {
           "status": "yes",
@@ -3184,9 +3195,13 @@
           "note": "触れたときのひとことだけ（吹き出しと、「声で返す」なら声）。シャノンのほうから体で話しかけることは無い。"
         },
         "macos": {
-          "status": "planned",
-          "branch": "未定",
-          "note": "デスクトップに立つ体を SwiftUI で作るときに入れる（ADR-0004）。いまは Electron 版。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBody+Presence.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyRules.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyView.swift"
+          ],
+          "note": "シャノンから話しかけてきた一言（reach_out）を吹き出しと声で伝え、どうしたかを報告する（shown_spoken／shown／away／muted。窓を隠している間は読まないので hidden は送らない）。場面ごとの一言（GET /v1/body/nudges）も、帰ってきた時・朝・深夜・長く話していない時・感想待ちが増えた時に。1 時間 2 回・1 日 10 回、会話の最中とあと 15 分は出さない。音声会話の間は声に出さない。A17。"
         },
         "windows": {
           "status": "yes",
@@ -3843,9 +3858,12 @@
           "reason": "iPhone にはトレイが無い。"
         },
         "macos": {
-          "status": "planned",
-          "branch": "未定",
-          "note": "デスクトップの体を SwiftUI で作るときに決める（ADR-0004）。いまは Electron 版がメニューバーに出る。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyMenuSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Desktop/ShannonDesktopMenuBar.swift"
+          ],
+          "note": "メニューバーの項目は 1 つ（情報設計 8 の 27）。アプリの区画: シャノンを表示／隠す、常に手前に表示、大きさ、トーク・作業・シャノン・設定、シャノンを終了。通話中で窓が画面に無い間は、通話の区画が先頭に出る（A16）。A17（2026-10-06）。"
         },
         "windows": {
           "status": "yes",
@@ -3869,9 +3887,12 @@
           "reason": "アプリの中の 1 画面なので、当てはまらない。"
         },
         "macos": {
-          "status": "planned",
-          "branch": "未定",
-          "note": "ADR-0004 の移行で決める。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyWindow.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift"
+          ],
+          "note": "既定は入。メニューバーと 設定 › すがた › デスクトップの体。切のときは、ふつうの窓の重なり。A17。"
         },
         "windows": {
           "status": "yes",
@@ -4022,9 +4043,12 @@
           "reason": "PC だけのもの。"
         },
         "macos": {
-          "status": "planned",
-          "branch": "未定",
-          "note": "デスクトップの体を SwiftUI で作るときに入れる。"
+          "status": "partial",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyAway.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBody+Presence.swift"
+          ],
+          "note": "席を外した（操作が無くて 10 分、または画面のロック・スクリーンセーバー・スリープ）と戻ったを感じて ownerAway／ownerReturned を送り、外している間は眠そうにし、戻ると手を振る。カーソルを目で追うのは、体のページに視線を渡す呼び出しが無いため、まだ無い（体のページの変更が要る。shannon-desktop）。A17。"
         },
         "windows": {
           "status": "yes",

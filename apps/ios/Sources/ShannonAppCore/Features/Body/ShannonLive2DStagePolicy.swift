@@ -2,8 +2,10 @@ import Foundation
 
 /// Which screen shows the one figure when several are on screen at once (a cover over the dialogue
 /// stage, a sheet over a call). The higher one wins; among equals, the one that appeared last.
+/// Her desktop body on the Mac (A17) is above all: while she stands on the desktop, the places in the
+/// app's windows show the Waterlight Eye.
 public enum ShannonLive2DHostPriority: Int, Comparable, Sendable {
-    case hero, dialogue, voice, bodyScreen
+    case hero, dialogue, voice, bodyScreen, desktop
 
     public static func < (left: Self, right: Self) -> Bool { left.rawValue < right.rawValue }
 }

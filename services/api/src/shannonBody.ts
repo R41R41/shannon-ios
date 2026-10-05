@@ -18,6 +18,7 @@ import type { BodyReactionSpeaker } from './bodyReactionModel.js';
 import { SQLiteBodyReactionStore } from './bodyReactionStore.js';
 import { BodyTouches, type BodyTouchDependencies } from './bodyTouch.js';
 import { BODY_TOUCH_ONLY_FLAG, isFullBody, isTouchOnlyBody } from './bodyTouchOnly.js';
+import { desktopBodyDeviceId, isDesktopBodyDeviceId } from './desktopBodyIdentity.js';
 import { bodyPlace, bodySurfaceMark, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
 import { ConversationLooks } from './conversationLooks.js';
 import { OWNER_CALL_LIMITS, OwnerCalls, type OwnerCallDependencies, type OwnerCallElsewhere, type OwnerCallSurface } from './ownerCallElsewhere.js';
@@ -221,8 +222,9 @@ export class ShannonBody {
     const touchOnly = isTouchOnlyBody(this.store.capabilities(scopeKey, deviceId));
     // Game events come from her Minecraft body alone, and that body reports nothing else.
     const game = this.dependencies.game;
-    const gameBody = Boolean(game && game.deviceId === deviceId);
-    const gameAllowed = gameBody && game!.ownerScopeKey === scopeKey;
+    // Its desktop-body identity (`desktopBodyIdentity.ts`) is the game body too, and may report no game event.
+    const gameBody = this.isGameBody(deviceId);
+    const gameAllowed = Boolean(game && game.deviceId === deviceId && game.ownerScopeKey === scopeKey);
     const results = this.store.transaction(() => {
       this.store.prune(scopeKey, new Date(time - BODY_LIMITS.retentionDays * 24 * 60 * 60_000).toISOString());
       let storedToday = this.store.countForDay(scopeKey, dayKey);
@@ -332,14 +334,17 @@ export class ShannonBody {
    * Registers what a body can express. Her Minecraft body (the device of `SHANNON_MINECRAFT_BODY_JSON`) never registers:
    * it is identified by that device id alone, so it can never become a full or a touch-only body (`game_body`).
    */
-  saveCapabilities(scopeKey: string, deviceId: string, capabilities: BodyCapabilities): StoredBodyCapabilities | 'game_body' {
+  saveCapabilities(scopeKey: string, deviceId: string, capabilities: BodyCapabilities): StoredBodyCapabilities | 'game_body' | 'desktop_body_shape' {
     if (this.isGameBody(deviceId)) return 'game_body';
+    if (isDesktopBodyDeviceId(deviceId) && (capabilities.surface !== 'mac' || isTouchOnlyBody(capabilities))) return 'desktop_body_shape';
     return this.store.saveCapabilities(scopeKey, deviceId, capabilities, this.dependencies.now());
   }
 
   /** The configured Minecraft body (`docs/minecraft-body-contract.md`): a game body, never one that shows her or is touched. */
   isGameBody(deviceId: string): boolean {
-    return this.dependencies.game?.deviceId === deviceId;
+    const game = this.dependencies.game?.deviceId;
+    // A body identity derived from its token is still the game (the server never derives one for it; this holds regardless).
+    return game !== undefined && (deviceId === game || deviceId === desktopBodyDeviceId(game));
   }
 
   /** A body that shows her: registered, not touch-only, and never her Minecraft body whatever was registered for it. */

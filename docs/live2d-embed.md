@@ -40,7 +40,7 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
 ## How the apps use it
 
 - `ShannonLive2DStage` owns the only web view. Of the screens that show her, the one with the highest
-  priority shows it (the Mac's body sheet, then the voice call, then Talk's dialogue display, then the small
+  priority shows it (her desktop body on the Mac, roadmap A17, above all; then the Mac's body sheet, then the voice call, then Talk's dialogue display, then the small
   figure of an empty Talk; among equals the one that appeared last. On the iPhone her figure lives in the
   dialogue display since A6: the body screen was folded into it); every other place her figure stands shows the
   Waterlight Eye meanwhile. With no screen showing her, the page is paused at once and the web view is
@@ -72,6 +72,14 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
   owner's activity record: it is refreshed every 30 seconds while her Live2D figure is in Talk's dialogue display and otherwise as old as the
   app's last read of that record.
 - Touch, the part that was touched, and her voice: `docs/body-contract.md`, "A body that only feels touch".
+- Her desktop body on the Mac (A17, `Features/DesktopBody/`, `ShannonLive2DStage+Desktop.swift`) shows the page in a
+  transparent window of its own, `full` and fitted. While it is the place that shows her: the page draws only while that
+  window can be seen (on screen and not covered, the Mac not locked, the owner not away; hiding the app does not pause it), the page's touches go to the desktop body's own coordinator (her full body,
+  `docs/body-contract.md`, "Her desktop body inside an app"), and below 60% of her size she is asked for her eyes alone
+  (`setBody('eyes')`) while the owner's choice stays as it is. The page has no carry: the window tells a carry from the
+  page's touches before the page sees the press (`ShannonDesktopBodyCarry`), so a carry is never a page message
+  (`ShannonLive2DMessage` refuses `carry` from the page). The window takes the pointer only over her, read from a small
+  snapshot of the page (`WKWebView.takeSnapshot`, 48 cells across; nothing is kept).
 
 ## Her eyes alone (`setBody`)
 

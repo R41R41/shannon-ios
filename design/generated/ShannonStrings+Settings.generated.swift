@@ -46,4 +46,8 @@ extension ShannonGeneratedStrings {
     public static let settingsFigureTouchEyes = "目だけのときは、目のあたりを軽くつつけます（なでる・くすぐる・手をつなぐは、ありません）。"
     /// `settings.figure.touchMac`
     public static let settingsFigureTouchMac = "このMacでは、触れたことが届くのは「体に起きたことをシャノンに伝える」を入にしたときだけです。ふだんはあなたひとりがいるものとして届き、音声会話を「友人も一緒」にしている間とそのあと5分は、ほかの人もいるものとして届きます。"
+    /// `settings.figure.smallEyes`
+    public static let settingsFigureSmallEyes = "小さくしたときは、目だけにする"
+    /// `settings.figure.smallEyesNote`
+    public static let settingsFigureSmallEyesNote = "いまは小さいので、目だけで出ています。"
 }

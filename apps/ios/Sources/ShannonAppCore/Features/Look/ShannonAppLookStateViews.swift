@@ -73,7 +73,7 @@ public struct ShannonAppLookStateReader<Content: View>: View {
     public var body: some View {
         content(ShannonAppLookVisibleState.make(
             enabled: enabled, hasCamera: coordinator.hasCamera, permission: permission ?? coordinator.permission,
-            othersPresent: othersPresent, isCapturing: coordinator.isCapturing
+            othersPresent: othersPresent, isCapturing: coordinator.isCapturing || coordinator.bodyIsCapturing
         ))
         .task { await coordinator.discoverCamera() }
         // The system's permission can change in the Settings app: read again whenever the app comes back.

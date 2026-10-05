@@ -13,8 +13,15 @@ public final class ShannonDesktopAppDelegate: NSObject, NSApplicationDelegate {
     /// Answers a `.terminateLater`. Replaced in tests.
     var replyToTerminate: @MainActor (Bool) -> Void = { NSApplication.shared.reply(toApplicationShouldTerminate: $0) }
 
+    /// Runs once the app has finished launching: her desktop body's menu bar item and window (A17). Set by the app.
+    public static var didFinishLaunching: (@MainActor () -> Void)?
+
     public override init() {
         super.init()
+    }
+
+    public func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.didFinishLaunching?()
     }
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
