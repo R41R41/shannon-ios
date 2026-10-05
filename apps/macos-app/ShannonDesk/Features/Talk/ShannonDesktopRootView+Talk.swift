@@ -202,6 +202,15 @@ extension ShannonDesktopRootView {
             }
             .buttonStyle(.borderless)
             .help("現在地を表示")
+            Button {
+                toggleAuxiliaryPanel(.figure)
+            } label: {
+                Image(systemName: DesktopAuxiliaryPanel.figure.symbolName)
+                    .symbolVariant(showsInspector && auxiliaryPanel == .figure ? .fill : .none)
+            }
+            .buttonStyle(.borderless)
+            .help("すがたを表示")
+            .accessibilityLabel("すがたを表示")
         }
         .padding(.horizontal, 18)
         .frame(height: 58)

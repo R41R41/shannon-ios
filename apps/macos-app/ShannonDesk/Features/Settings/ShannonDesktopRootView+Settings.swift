@@ -28,10 +28,6 @@ extension ShannonDesktopRootView {
             ShannonStateSheet(state: conversation.state, face: conversation.presentFace)
                 .frame(minWidth: 480, minHeight: 560)
         }
-        .sheet(isPresented: $showsBody) {
-            NavigationStack { ShannonBodyScreen(memory: memory) }
-                .frame(minWidth: 460, minHeight: 720)
-        }
         .task { await worldSubscriptions.reload() }
     }
 

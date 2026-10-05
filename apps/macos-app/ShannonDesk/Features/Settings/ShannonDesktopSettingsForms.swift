@@ -8,7 +8,11 @@ extension ShannonDesktopRootView {
         Form {
             switch settingsPage {
             case .figure:
-                ShannonFormSettingsSection(openBody: { showsBody = true }, showsTouchSwitch: false)
+                // 「トークで姿を見る」 opens the 「すがた」 panel beside Talk (A15).
+                ShannonFigureSettingsSection {
+                    selectDestination(.talk)
+                    showAuxiliaryPanel(.figure)
+                }
             case .camera:
                 ShannonAppLookSettingsSection()
             case .earphones:

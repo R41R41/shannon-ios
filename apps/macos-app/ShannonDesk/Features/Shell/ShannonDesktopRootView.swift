@@ -39,7 +39,8 @@ public struct ShannonDesktopRootView: View {
     @State var showsConnection = false
     @State var showsWorldSubscriptions = false
     @State var showsAppIconSettings = false
-    @State var showsBody = false
+    /// Her figure's shared state: what she does in words, her size and place, and touches (A15).
+    @State var bodyModel = ShannonBodyModel()
     @State var showsStateDetails = false
     @AppStorage(ShannonChatAvatarStyle.storageKey) var chatAvatarStyleRawValue = ShannonChatAvatarStyle.expression.rawValue
     @State var renameThread: ChatThreadDTO?
@@ -119,7 +120,9 @@ public struct ShannonDesktopRootView: View {
         .shannonAppLook(conversation)
         .inspector(isPresented: $showsInspector) {
             auxiliaryInspector
-                .inspectorColumnWidth(min: 230, ideal: 286, max: 390)
+                .inspectorColumnWidth(
+                    min: auxiliaryPanel.minimumWidth, ideal: auxiliaryPanel.idealWidth, max: auxiliaryPanel.maximumWidth
+                )
         }
         .sheet(isPresented: $showsConnection) {
             ShannonConnectionView(model: connection)
@@ -149,5 +152,8 @@ public struct ShannonDesktopRootView: View {
             Button("保存") { saveThreadRename() }
                 .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
+        // Her figure and touches, kept in step with the conversation (A15). Outside the inspector, so that
+        // the 「すがた」 panel and 設定 › すがた read the same body model.
+        .shannonBodyAttachment(bodyModel, conversation: conversation, memory: memory)
     }
 }

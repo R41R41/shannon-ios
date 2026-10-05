@@ -1300,6 +1300,13 @@
       "note": "トークの表示の切り替えボタンの手がかり（読み上げ）。押すと表示が替わり、長押しで姿、Live2Dの姿のときは体（人の姿／目だけ）、人の姿のときは映し方、位置を戻す（2026-10-05、体を足したときに直した）。"
     },
     {
+      "key": "talk.figurePanel.menuHint",
+      "text": "姿を選べます。Live2Dの姿では体も、人の姿では映し方も選べます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift",
+      "only": "apple",
+      "note": "Mac のトークの右の補助パネル「すがた」のメニュー（A15）。talk.display.menuHint の、長押しの無い形。"
+    },
+    {
       "key": "talk.figure.heroHint",
       "text": "向き合う表示にします。そこで姿に触れられます",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",

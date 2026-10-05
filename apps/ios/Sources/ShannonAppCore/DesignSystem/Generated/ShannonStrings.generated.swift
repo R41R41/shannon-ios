@@ -137,6 +137,8 @@ public enum ShannonGeneratedStrings {
     public static func adminDevicesCount(count: String) -> String { "\(count)台" }
     /// `talk.display.menuHint`
     public static let talkDisplayMenuHint = "長押しで、姿を選べます。Live2Dの姿では体も、人の姿では映し方も選べます"
+    /// `talk.figurePanel.menuHint`
+    public static let talkFigurePanelMenuHint = "姿を選べます。Live2Dの姿では体も、人の姿では映し方も選べます"
     /// `talk.figure.heroHint`
     public static let talkFigureHeroHint = "向き合う表示にします。そこで姿に触れられます"
     /// `look.state.line`

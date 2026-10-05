@@ -70,7 +70,8 @@ extension ShannonDesktopRootView {
             toggleTaskInspector: {
                 prepareTaskInspectorSelection()
                 toggleAuxiliaryPanel(.task)
-            }
+            },
+            toggleFigure: { toggleAuxiliaryPanel(.figure) }
         )
     }
 
@@ -99,6 +100,8 @@ extension ShannonDesktopRootView {
                 )
             case .task:
                 taskInspector
+            case .figure:
+                ShannonTalkFigurePanel(conversation: conversation, memory: memory)
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))

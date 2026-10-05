@@ -733,8 +733,13 @@
           ]
         },
         "macos": {
-          "status": "no",
-          "note": "決定（2026-10-03）: Mac は会話の横に姿を出す。"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopNavigation.swift#case figure",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#public struct ShannonTalkFigurePanel",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+State.swift#ShannonTalkFigurePanel"
+          ],
+          "note": "トークの右の補助パネルの 3 つめ「すがた」。目次・現在地と切り替え、幅 320 から。トークの見出しのボタンと ⌥⌘F でも開く（A15）。"
         },
         "windows": {
           "status": "partial",
@@ -2464,12 +2469,13 @@
           "note": "トークの向き合う表示に大きく立つ。空のトークの小さな姿と音声会話にも出る。別の「からだ」の画面は A6 で無くした。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#ShannonDialogueFigure",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonDialogueFigure.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DStage.swift"
           ],
-          "note": "設定 › すがた の「からだを開く」のシートで見るだけ。トークの会話の横に出すのは A15。"
+          "note": "補助パネル「すがた」に、iPhone の向き合う表示と同じ体のページの姿。読み込み中・失敗・ほかで表示中は水の光の目が立つ（A15）。「からだを開く」のシートは無くした。"
         },
         "windows": {
           "status": "yes",
@@ -2497,12 +2503,12 @@
           "note": "トークの表示の切り替えボタンの長押しと、設定 › すがた（A6）。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#displayOptions",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift"
           ],
-          "note": "設定で切り替えられるが、効くのは「からだを開く」のシートだけ。Mac のトークには姿が無い（A15）。"
+          "note": "パネルのメニュー（iPhone の表示の切り替えボタンの長押しと同じ項目）と、設定 › すがた（A15）。"
         },
         "windows": {
           "status": "no",
@@ -2527,12 +2533,12 @@
           "note": "設定 › すがた の「体」と、トークの表示の切り替えボタンの長押し。体のページを ?body=eyes で始め、setBody で切り替える。目だけのときは映し方を出さない。説明の「（iPhone の目と同じ動き）」は「（水の光の目と同じ動き）」にした。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift#ShannonFormSettingsSection",
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift#public struct ShannonFigureSettingsSection",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#ShannonLive2DBody.selection"
           ],
-          "note": "設定 › すがた と「からだを開く」のシートで選べるが、効くのはシートだけ。Mac のトークには姿が無い（A15）。"
+          "note": "設定 › すがた › 体 と、パネルのメニュー。パネルの姿に効く（A15）。"
         },
         "windows": {
           "status": "yes",
@@ -2558,7 +2564,7 @@
         },
         "macos": {
           "status": "no",
-          "note": "Mac には、窓で立つ体がまだ無い（デスクトップに立つ体を SwiftUI で作るとき、ADR-0004）。「からだを開く」のシートは窓の大きさで体を変えない。"
+          "note": "Mac には、窓で立つ体がまだ無い（デスクトップに立つ体を SwiftUI で作るとき、ADR-0004）。トークの横の「すがた」のパネルは、幅で体を変えない。"
         },
         "windows": {
           "status": "yes",
@@ -2585,11 +2591,11 @@
           ]
         },
         "macos": {
-          "status": "partial",
-          "note": "小さな表情のアイコンだけ。向き合う大きさの目は無い。",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift"
-          ]
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#ShannonWaterlightEyeView"
+          ],
+          "note": "水の光の目の姿のとき、パネルに大きく立つ。押すと表情が変わる（A15）。"
         },
         "windows": {
           "status": "no"
@@ -2610,8 +2616,12 @@
           ]
         },
         "macos": {
-          "status": "no",
-          "note": "Mac の「からだを開く」のシートには、気分・いま・話している様子を体のページへ送る仕組み（ShannonBodyAttachment）がつながっていない。A15。"
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView.swift#shannonBodyAttachment",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#nowLine"
+          ],
+          "note": "窓に ShannonBodyAttachment をつなぎ、気分・いま・話している様子を体のページへ送る。姿の下に「いま：〈気持ち〉・〈していること〉」（A15）。"
         },
         "windows": {
           "status": "yes",
@@ -2639,12 +2649,12 @@
           "note": "映し方と位置を戻すは、トークの表示の切り替えボタンの長押しと 設定 › すがた（A6）。2 本の指で大きさと位置。 目だけのときは映し方を出さない（体のページが大きさと位置だけを使う）。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DHostView.swift#scrollWheel",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#layoutModeRawValue"
           ],
-          "note": "「からだを開く」のシートの中だけ。"
+          "note": "映し方（全身／上半身、人の姿だけ）と位置を戻す はパネルのメニューと 設定 › すがた。大きさはピンチか ⌘ を押してスクロール、位置はスクロール（A15）。"
         },
         "windows": {
           "status": "partial",
@@ -2671,12 +2681,12 @@
           "note": "体のページのしぐさ。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DStage.swift",
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift"
           ],
-          "note": "体のページのしぐさは出るが、見られるのは「からだを開く」のシートだけ。"
+          "note": "パネルの姿で、体のページのしぐさが出る（A15）。"
         },
         "windows": {
           "status": "yes",
@@ -2725,12 +2735,12 @@
           "note": "トークの向き合う表示の姿に、その場で触れる（A6）。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DHostView.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DHostView.swift#ShannonLive2DContainerView",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift"
           ],
-          "note": "「からだを開く」のシートの中で、ポインターで触れると体のページが動く。シャノンには伝えない。"
+          "note": "パネルの姿に、ポインターでそのまま触れる（なでる・つつく・くすぐる・手をつなぐ。目だけはつつくだけ）（A15）。"
         },
         "windows": {
           "status": "yes",
@@ -2756,8 +2766,12 @@
           ]
         },
         "macos": {
-          "status": "no",
-          "note": "Mac からは伝えない（設定の文）。A15 で決める。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#shannonBodyAttachment",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift#reportsTouch"
+          ],
+          "note": "設定 › すがた の「体に起きたことをシャノンに伝える」（既定は切）。入のとき、触れた種類・長さ・強さ・時刻だけが届き、返事は姿の近くの吹き出し（A15）。"
         },
         "windows": {
           "status": "yes",
@@ -2833,8 +2847,12 @@
           "note": "設定 › すがた（A6）。声で返すのは、トークの向き合う表示の姿が見えている間だけ。"
         },
         "macos": {
-          "status": "no",
-          "note": "ブランチの Mac は、触れたことをシャノンに伝えない。"
+          "status": "partial",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift#replyModeRawValue",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyVoice.swift#listen"
+          ],
+          "note": "設定 › すがた の「触れたときの返事」（文字で返す／声で返す）。声で返すと、パネルの姿が出ていて覆うものが無い間、声で言う。そのあと聞く（答えると音声会話になる）ところは、Mac に音声会話が入る A16 で入る（A15）。"
         },
         "windows": {
           "status": "partial",
@@ -3419,12 +3437,12 @@
           "note": "姿、体（人の姿／目だけ、2026-10-05）、映し方（人の姿のときだけ）、位置を戻す、トークで姿を見る、体に起きたことを伝える、触れたときの返事（A6）。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift#ShannonFormSettingsSection"
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopSettingsForms.swift#ShannonFigureSettingsSection",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift"
           ],
-          "note": "姿の切り替え、体（人の姿／目だけ、2026-10-05）と「からだを開く」だけ。"
+          "note": "iPhone と同じ 設定 › すがた: 姿、体、映し方、位置を戻す、トークで姿を見る（押すとトークと「すがた」のパネル）、体に起きたことを伝える、触れたときの返事（A15）。"
         },
         "windows": {
           "status": "partial",

@@ -129,6 +129,7 @@ struct ShannonDesktopCommandActions {
     let showSettings: () -> Void
     let toggleOutline: () -> Void
     let toggleTaskInspector: () -> Void
+    let toggleFigure: () -> Void
 }
 
 private struct ShannonDesktopCommandActionsKey: FocusedValueKey {

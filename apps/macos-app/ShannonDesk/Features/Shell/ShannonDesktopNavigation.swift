@@ -1,4 +1,5 @@
 import Foundation
+import ShannonAppCore
 
 /// The places of Shannon Desk. The sidebar shows four pillars (docs/product/information-architecture.md):
 /// トーク／作業／シャノン at the top and 設定 at the bottom. 開発 and 配信 are pages inside 作業
@@ -78,21 +79,30 @@ enum DesktopShannonPage: String, CaseIterable, Hashable {
     }
 }
 
+/// The auxiliary panel beside Talk: 目次, 現在地, and 「すがた」, her figure (decision 2026-10-03, roadmap A15).
+/// One at a time; closing it leaves the conversation alone.
 enum DesktopAuxiliaryPanel: String, CaseIterable, Hashable {
     case outline
     case task
+    case figure
     var title: String {
         switch self {
         case .outline: "目次"
         case .task: "現在地"
+        case .figure: ShannonGeneratedStrings.settingsFigure
         }
     }
     var symbolName: String {
         switch self {
         case .outline: "list.bullet.indent"
         case .task: "location"
+        case .figure: "person.crop.rectangle"
         }
     }
+    /// Her figure needs room: the panel is at least 320 wide while it shows her.
+    var minimumWidth: CGFloat { self == .figure ? 320 : 230 }
+    var idealWidth: CGFloat { self == .figure ? 360 : 286 }
+    var maximumWidth: CGFloat { self == .figure ? 560 : 390 }
 }
 
 /// The parts of 設定 on the Mac: 管理 first (運用, 接続中の端末, 配信, 診断), then the others in the

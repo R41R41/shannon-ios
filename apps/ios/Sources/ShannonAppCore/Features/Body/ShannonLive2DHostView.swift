@@ -182,8 +182,9 @@ extension ShannonLive2DHostView: NSViewRepresentable {
     }
 }
 
-/// The Mac host: the pointer goes to the page (its touch thresholds were tuned for a mouse),
-/// and a trackpad pinch scales her. Moving her is not offered on the Mac.
+/// The Mac host: the pointer goes to the page (its touch thresholds were tuned for a mouse), so a
+/// click or a drag on her is a touch. Her size and place are the wide screen's (A15): a trackpad pinch
+/// or a scroll with ⌘ scales her, and a scroll moves her.
 final class ShannonLive2DContainerView: NSView {
     let hostID: UUID
     private let priority: ShannonLive2DHostPriority
@@ -231,6 +232,25 @@ final class ShannonLive2DContainerView: NSView {
         let view = super.hitTest(point)
         if view != nil, touchEnabled, ShannonLive2DStage.shared.isResting { ShannonLive2DStage.shared.noteActivity() }
         return view
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        guard let onLayoutChange, touchEnabled else { return super.scrollWheel(with: event) }
+        let next: ShannonLive2DLayout
+        if event.modifierFlags.contains(.command) {
+            let step = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 200 : event.scrollingDeltaY / 20
+            next = figureLayout.adjusted(scaleBy: max(0.5, 1 + Double(step)), movedBy: .zero, in: bounds.size)
+        } else {
+            let factor: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 8
+            // The page's y grows downwards, as AppKit's scroll delta does for natural scrolling.
+            next = figureLayout.adjusted(
+                scaleBy: 1, movedBy: CGSize(width: event.scrollingDeltaX * factor, height: event.scrollingDeltaY * factor), in: bounds.size
+            )
+        }
+        guard next != figureLayout else { return }
+        figureLayout = next
+        ShannonLive2DStage.shared.update(host: hostID, layout: next, touchEnabled: touchEnabled)
+        onLayoutChange(next)
     }
 
     @objc private func magnified(_ recognizer: NSMagnificationGestureRecognizer) {

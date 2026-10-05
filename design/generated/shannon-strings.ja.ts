@@ -190,6 +190,7 @@ export const shannonStrings = {
   "settings.figure.smallEyes": "小さくしたときは、目だけにする",
   "settings.figure.smallEyesNote": "いまは小さいので、目だけで出ています。",
   "talk.display.menuHint": "長押しで、姿を選べます。Live2Dの姿では体も、人の姿では映し方も選べます",
+  "talk.figurePanel.menuHint": "姿を選べます。Live2Dの姿では体も、人の姿では映し方も選べます",
   "talk.figure.heroHint": "向き合う表示にします。そこで姿に触れられます",
   "look.state.line": "カメラ：{state}",
   "ops.connectionInvalid": "接続が無効になりました。もう一度接続してください。",

@@ -2,6 +2,14 @@ import AppKit
 import ShannonAppCore
 import SwiftUI
 
+extension ShannonDesktopRootView {
+    var figureIsInFront: Bool {
+        destination == .talk && showsInspector && auxiliaryPanel == .figure
+            && !showsConnection && !showsWorldSubscriptions && !showsAppIconSettings
+            && !showsStateDetails && !showsAddAgentProject
+    }
+}
+
 /// What the window loads at start, polls while connected, and keeps restorable as it changes.
 extension ShannonDesktopRootView {
     func observingWindowState<Content: View>(_ content: Content) -> some View {
@@ -60,6 +68,8 @@ extension ShannonDesktopRootView {
     /// Keeps what a window restores current as the selection changes.
     func restoringWindowState<Content: View>(_ content: Content) -> some View {
         content
+            // Her figure is what the owner sees: Talk with the 「すがた」 panel open and no sheet over the window.
+            .onChange(of: figureIsInFront, initial: true) { bodyModel.setFigureIsInFront(figureIsInFront) }
             .onChange(of: conversation.agentTasks.map(\.id)) {
                 restoreSelectedTaskIfAvailable()
             }

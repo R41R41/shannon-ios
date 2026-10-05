@@ -183,6 +183,9 @@ private struct ShannonDeskCommands: Commands {
             Button("現在地インスペクタ") { actions?.toggleTaskInspector() }
                 .keyboardShortcut("i", modifiers: [.command, .option])
                 .disabled(actions == nil)
+            Button(ShannonGeneratedStrings.settingsFigure) { actions?.toggleFigure() }
+                .keyboardShortcut("f", modifiers: [.command, .option])
+                .disabled(actions == nil)
 
             Divider()
 

@@ -210,6 +210,13 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
             ShannonDesktopWindowRestoration.auxiliaryPanel(sceneRawValue: "unknown", lastRawValue: "unknown"),
             .task
         )
+        XCTAssertEqual(
+            ShannonDesktopWindowRestoration.auxiliaryPanel(sceneRawValue: "figure", lastRawValue: "task"),
+            .figure
+        )
+        XCTAssertEqual(DesktopAuxiliaryPanel.allCases, [.outline, .task, .figure])
+        XCTAssertEqual(DesktopAuxiliaryPanel.figure.minimumWidth, 320)
+        XCTAssertEqual(DesktopAuxiliaryPanel.figure.title, "すがた")
 
         let initialChrome = ShannonDesktopWindowRestoration.windowChrome(
             sceneInspectorRawValue: nil,
