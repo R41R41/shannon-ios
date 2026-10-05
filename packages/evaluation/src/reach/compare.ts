@@ -1,4 +1,4 @@
-import { REACH_STOP_CAUSE_LABEL, type ReachReport, type ReachRunRecord, type ReachStop } from './format.js';
+import { REACH_STOP_CAUSE_LABEL, type ReachCost, type ReachReport, type ReachRunRecord, type ReachStop } from './format.js';
 
 export type ReachChange = 'regression' | 'improvement' | 'unchanged' | 'incomparable' | 'added' | 'removed';
 
@@ -86,6 +86,16 @@ function changedInputs(before: ReachRunRecord, after: ReachRunRecord): string[] 
   return keys.filter(key => before.inputs?.[key] !== after.inputs?.[key]);
 }
 
+/** The cost, and beside it the cost with the cache discount when the scenario reported cached input. */
+function costText(cost: ReachCost): string {
+  const discounted = cost.yenWithCacheDiscount !== undefined && cost.cachedInputTokens ? ` (${cost.yenWithCacheDiscount} with cache discount)` : '';
+  return `${cost.yen}${discounted}${cost.measured ? '' : ' (simulated)'}`;
+}
+
+function tokenText(cost: ReachCost): string {
+  return `${cost.inputTokens}${cost.cachedInputTokens !== undefined ? ` (${cost.cachedInputTokens} cached)` : ''}/${cost.outputTokens}`;
+}
+
 function stopText(stop: ReachStop | null): string {
   return stop ? `${REACH_STOP_CAUSE_LABEL[stop.cause]} (${stop.cause}: ${stop.detail})` : '—';
 }
@@ -100,12 +110,12 @@ export function reachReportMarkdown(report: ReachReport, comparison?: ReachCompa
     `- Scenario set: \`${report.scenarioSetFingerprint}\``,
     `- Totals: passed ${report.totals.passed}, failed ${report.totals.failed}, pending ${report.totals.pending}, invalid ${report.totals.invalid}; cost ${report.totals.costYen} yen`,
     '',
-    '| Scenario | Status | Stopped at | Checks passed | Cost (yen) | Tokens in/out | Wall (s) |',
+    '| Scenario | Status | Stopped at | Checks passed | Cost (yen) | Tokens in (cached)/out | Wall (s) |',
     '| --- | --- | --- | --- | --- | --- | --- |',
     ...report.runs.map(run => {
       const judged = run.checks.filter(check => !check.skipped);
       const passed = judged.filter(check => check.passed).length;
-      return `| ${run.scenarioId} v${run.scenarioVersion} | ${run.status}${run.reason ? ` (${run.reason})` : ''} | ${stopText(run.stop)} | ${passed}/${judged.length} | ${run.cost.yen}${run.cost.measured ? '' : ' (simulated)'} | ${run.cost.inputTokens}/${run.cost.outputTokens} | ${round(run.wallMilliseconds / 1000, 1)} |`;
+      return `| ${run.scenarioId} v${run.scenarioVersion} | ${run.status}${run.reason ? ` (${run.reason})` : ''} | ${stopText(run.stop)} | ${passed}/${judged.length} | ${costText(run.cost)} | ${tokenText(run.cost)} | ${round(run.wallMilliseconds / 1000, 1)} |`;
     }),
   ];
   for (const run of report.runs.filter(item => item.checks.length)) {

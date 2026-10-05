@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createLocalApiKernel } from '../../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../../src/chatModel.js';
-import type { LlmUsageEvent, LlmUsageStore } from '../../src/llmUsage.js';
+import { estimatedOpenAICostWithCacheUsd, type LlmUsageEvent, type LlmUsageStore } from '../../src/llmUsage.js';
 import { SQLiteShannonStore } from '../../src/sqliteStore.js';
 import {
   SHIRITORI_TURNS, ShiritoriGame, carried, judgeShiritori, sameReading, scriptedShiritoriReply, shiritoriScenario, shiritoriScriptInputs,
@@ -128,6 +128,8 @@ export function shiritoriDriver(model: ShannonChatModel, options: ShiritoriDrive
     const { checks, metrics } = judgeShiritori(game, asked);
     const events = usage?.events ?? [];
     const usd = events.reduce((sum, event) => sum + event.estimatedCostUsd, 0);
+    // The same calls with the provider's discount for cached input; `yen` keeps every input token at the full price.
+    const discountedUsd = events.reduce((sum, event) => sum + estimatedOpenAICostWithCacheUsd(event.model, event), 0);
     return {
       checks, stop, steps: watch.calls,
       inputs: { ...shiritoriScriptInputs(), chatModel: model.model, ...options.inputs },
@@ -135,8 +137,10 @@ export function shiritoriDriver(model: ShannonChatModel, options: ShiritoriDrive
       cost: {
         calls: watch.calls, promptCharacters: watch.promptCharacters, measured: mode === 'live' && events.length > 0,
         inputTokens: events.reduce((sum, event) => sum + event.inputTokens, 0),
+        cachedInputTokens: events.reduce((sum, event) => sum + event.cachedInputTokens, 0),
         outputTokens: events.reduce((sum, event) => sum + event.outputTokens, 0),
         yen: Math.round(usd * REACH_YEN_PER_USD * 100) / 100,
+        yenWithCacheDiscount: Math.round(discountedUsd * REACH_YEN_PER_USD * 100) / 100,
       },
     };
   };
