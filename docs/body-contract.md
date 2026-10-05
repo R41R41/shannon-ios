@@ -697,7 +697,7 @@ What follows, with no other rule changed:
 | Registration | Its figure in Talk, `flags.touchOnly`, `surface: "mac"` (only while touches are reported) | A full body, `surface: "mac"`, `flags.camera` as the owner set the body's camera |
 | Its voice call (`callStarted`, a session, a turn) | **Counts as the owner in a call elsewhere** for the Windows desktop and for its own desktop body; **never refused** | Makes no voice request (the owner's answer to a touch line is the app's call) |
 | `audience` on presence reads | Not read (it reads no presence) | **Kept**, and says whether others are present |
-| `ownerCallElsewhere` in its presence | — | Active while the Mac app (or the iPhone) is in a call |
+| `ownerCallElsewhere` in its presence | — | Active while the Mac app (or the iPhone) is in a call. A call on this Mac is known to the body at once (same app); a call on another device reaches it with its next presence read, so up to one poll (10 seconds, 5 while a call is known) passes before it falls silent: accepted latency, as there is no push to the body |
 | Looks at the room, delivery reports, `ownerAway` / `ownerReturned` | Not a body | As any full body |
 | `GET /v1/initiatives` | An app's read (its Talk and its earphones) | Her body's read (with the header). Before it has registered as her full body it is told of none of her messages (`presence.reachOut` is `{ pending: 0 }`) and claims nothing, never the app's unfiltered inbox |
 
