@@ -79,9 +79,12 @@ extension ShannonDesktopRootView {
                 openPendingYousuLink()
             }
             // トークに戻る from the call in the menu bar (A16, option B).
-            .onReceive(NotificationCenter.default.publisher(for: .shannonDesktopReturnToTalk)) { _ in
+            // Only in the window the call brought back (with none named, every window).
+            .onReceive(NotificationCenter.default.publisher(for: .shannonDesktopReturnToTalk)) { note in
+                if let target = note.object as? NSWindow, let mine = hostWindow.window, target !== mine { return }
                 selectDestination(.talk)
             }
+            .background(DesktopWindowReader(box: hostWindow))
     }
 
     /// Keeps what a window restores current as the selection changes.
@@ -127,5 +130,24 @@ extension ShannonDesktopRootView {
             .onChange(of: selectedDevelopmentTool) {
                 developmentWorkspaceResource = .idle
             }
+    }
+}
+
+/// The window a root view is in, so that a request meant for one window is answered there only.
+final class DesktopWindowBox {
+    weak var window: NSWindow?
+}
+
+struct DesktopWindowReader: NSViewRepresentable {
+    let box: DesktopWindowBox
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { [weak view] in box.window = view?.window }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        if box.window !== nsView.window { box.window = nsView.window }
     }
 }

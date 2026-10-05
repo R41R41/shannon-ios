@@ -36,13 +36,16 @@ extension ShannonDesktopVoiceCall {
     }
 
     /// トークに戻る: the window comes back (unhidden, out of the Dock) and shows Talk.
+    /// The window is the one the owner last used (or, if that is gone, any window of the app that can be).
     public func returnToTalk() {
         let app = NSApplication.shared
+        let window = lastMainWindow.flatMap { $0.canBecomeMain ? $0 : nil }
+            ?? app.windows.first { $0.canBecomeMain && ($0.isVisible || $0.isMiniaturized) }
         if app.isHidden { app.unhide(nil) }
-        app.windows.first { $0.isMiniaturized && $0.canBecomeMain }?.deminiaturize(nil)
+        if let window, window.isMiniaturized { window.deminiaturize(nil) }
         app.activate()
-        app.windows.first { $0.isVisible && $0.canBecomeMain }?.makeKeyAndOrderFront(nil)
-        NotificationCenter.default.post(name: .shannonDesktopReturnToTalk, object: nil)
+        window?.makeKeyAndOrderFront(nil)
+        NotificationCenter.default.post(name: .shannonDesktopReturnToTalk, object: window)
     }
 
     /// Re-reads whether a window is on screen.
@@ -78,6 +81,12 @@ extension ShannonDesktopVoiceCall {
             })
         }
         updateWindowsOnScreen()
+        windowObservers.append(center.addObserver(forName: NSWindow.didBecomeMainNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                // The window that just became main is the app's main window now.
+                if let window = NSApplication.shared.mainWindow, window.canBecomeMain { self?.lastMainWindow = window }
+            }
+        })
         guard let menuBar else { return }
         let section = ShannonDesktopVoiceCallMenuSection(call: self, menuBar: menuBar)
         menuSection = section
@@ -114,10 +123,10 @@ final class ShannonDesktopVoiceCallMenuSection: ShannonDesktopMenuBarSection {
         let back = ShannonDesktopMenuItem(ShannonGeneratedStrings.voiceMacReturnToTalk, symbol: "bubble.left.and.bubble.right") { [weak call] in
             call?.returnToTalk()
         }
-        let muted = call.session.isMicrophoneMuted
+        // A toggle in a macOS menu keeps its name and shows its state with a checkmark.
         let mute = ShannonDesktopMenuItem(
-            muted ? ShannonGeneratedStrings.voiceMacUnmute : ShannonGeneratedStrings.voiceMacMute,
-            symbol: muted ? "mic.fill" : "mic.slash.fill"
+            ShannonGeneratedStrings.voiceMacMute, symbol: "mic.slash",
+            state: call.session.isMicrophoneMuted ? .on : .off
         ) { [weak call] in call?.session.toggleMicrophoneMute() }
         mute.isEnabled = call.holdsMicrophone
         let end = ShannonDesktopMenuItem(ShannonGeneratedStrings.voiceMacEndLabel, symbol: "phone.down.fill") { [weak call] in
@@ -152,7 +161,8 @@ final class ShannonDesktopVoiceCallMenuSection: ShannonDesktopMenuBarSection {
             ticker = Task { @MainActor [weak self] in
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(1))
-                    self?.refresh()
+                    guard let self else { return }
+                    self.refresh()
                 }
             }
         } else if !shown {
@@ -209,8 +219,10 @@ public struct ShannonDesktopVoiceCallRow: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(!call.holdsMicrophone)
+                // The symbol shows the state (as the menu's checkmark does); the hint says what a click does.
                 .help(muted ? ShannonGeneratedStrings.voiceMacUnmute : ShannonGeneratedStrings.voiceMacMute)
-                .accessibilityLabel(muted ? ShannonGeneratedStrings.voiceMacUnmute : ShannonGeneratedStrings.voiceMacMute)
+                .accessibilityLabel(ShannonGeneratedStrings.voiceMacMute)
+                .accessibilityValue(ShannonGeminiLiveMicrophoneControl(isMuted: muted).accessibilityValue)
                 .accessibilityIdentifier("sidebar-voice-call-mute")
 
                 Button(action: call.end) {

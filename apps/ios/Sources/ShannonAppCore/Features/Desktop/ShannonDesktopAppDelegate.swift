@@ -10,15 +10,18 @@ public final class ShannonDesktopAppDelegate: NSObject, NSApplicationDelegate {
     /// The app's call. Set by the call itself when it is attached.
     static weak var voiceCall: ShannonDesktopVoiceCall?
 
+    /// Answers a `.terminateLater`. Replaced in tests.
+    var replyToTerminate: @MainActor (Bool) -> Void = { NSApplication.shared.reply(toApplicationShouldTerminate: $0) }
+
     public override init() {
         super.init()
     }
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let call = Self.voiceCall, call.isShown else { return .terminateNow }
-        Task { @MainActor in
+        Task { @MainActor [replyToTerminate] in
             await call.endForQuit()
-            sender.reply(toApplicationShouldTerminate: true)
+            replyToTerminate(true)
         }
         return .terminateLater
     }

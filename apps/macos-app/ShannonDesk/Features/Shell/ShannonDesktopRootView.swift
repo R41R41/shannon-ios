@@ -15,6 +15,8 @@ public struct ShannonDesktopRootView: View {
     let voiceCall: ShannonDesktopVoiceCall
     /// This window, as the voice conversation counts the windows that can stop it.
     @State var windowID = UUID()
+    /// This window's `NSWindow` (トークに戻る from the menu bar answers in the window it brought back).
+    @State var hostWindow = DesktopWindowBox()
 
     @SceneStorage("shannon.desktop.destination") var restoredDestinationRawValue: String?
     @SceneStorage("shannon.desktop.selectedThread") var restoredThreadID: String?

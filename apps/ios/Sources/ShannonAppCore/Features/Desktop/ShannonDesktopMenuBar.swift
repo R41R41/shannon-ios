@@ -37,6 +37,7 @@ public final class ShannonDesktopMenuBar: NSObject, NSMenuDelegate {
 
     private var sections: [ShannonDesktopMenuBarSection] = []
     private var item: NSStatusItem?
+    private var appliedSymbol: String?
     /// For tests: makes no status item, only records what would be shown.
     var makesStatusItem = true
     private(set) var shownButton: ShannonDesktopMenuBarButton?
@@ -60,6 +61,7 @@ public final class ShannonDesktopMenuBar: NSObject, NSMenuDelegate {
         guard sections.contains(where: \.wantsMenuBarItem) else {
             if let item { NSStatusBar.system.removeStatusItem(item) }
             item = nil
+            appliedSymbol = nil
             shownButton = nil
             return
         }
@@ -75,11 +77,19 @@ public final class ShannonDesktopMenuBar: NSObject, NSMenuDelegate {
             item = made
         }
         guard let statusButton = item?.button else { return }
-        statusButton.image = NSImage(systemSymbolName: button.symbol, accessibilityDescription: nil)
-        statusButton.image?.isTemplate = true
-        statusButton.imagePosition = button.title.isEmpty ? .imageOnly : .imageLeading
+        // Refreshed every second while a call shows its time: only what changed is written.
+        if appliedSymbol != button.symbol {
+            appliedSymbol = button.symbol
+            let image = NSImage(systemSymbolName: button.symbol, accessibilityDescription: nil)
+            image?.isTemplate = true
+            statusButton.image = image
+        }
+        let position: NSControl.ImagePosition = button.title.isEmpty ? .imageOnly : .imageLeading
+        if statusButton.imagePosition != position { statusButton.imagePosition = position }
         if statusButton.title != button.title { statusButton.title = button.title }
-        statusButton.setAccessibilityLabel(button.accessibilityLabel)
+        if statusButton.accessibilityLabel() != button.accessibilityLabel {
+            statusButton.setAccessibilityLabel(button.accessibilityLabel)
+        }
     }
 
     /// The items of every part that wants the item, in order, with a separator between parts.

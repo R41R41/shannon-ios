@@ -35,6 +35,8 @@ public final class ShannonDesktopVoiceCall {
     @ObservationIgnored var windowsOnScreenProbe: @MainActor () -> Bool = ShannonDesktopVoiceCall.anyWindowOnScreen
     @ObservationIgnored var menuSection: ShannonDesktopVoiceCallMenuSection?
     @ObservationIgnored var windowObservers: [NSObjectProtocol] = []
+    /// The window the owner used last: トークに戻る brings this one back.
+    @ObservationIgnored weak var lastMainWindow: NSWindow?
 
     @ObservationIgnored private(set) weak var conversation: ShannonConversationModel?
     @ObservationIgnored private var windows: Set<UUID> = []

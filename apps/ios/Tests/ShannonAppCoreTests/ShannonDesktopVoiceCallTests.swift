@@ -112,6 +112,47 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
         XCTAssertNil(session.awakeActivity)
     }
 
+    actor EndReporter: ShannonBodyCallReporting {
+        var sent: [ShannonBodyCallEventDTO.Kind] = []
+        func sendBodyCallEvent(scopeKey: String, event: ShannonBodyCallEventDTO) async throws { sent.append(event.type) }
+    }
+
+    func testQuittingSendsTheCallsEndBeforeTheAppIsLetGo() async {
+        let presence = ShannonVoiceCallPresence.shared
+        let suite = "shannon.tests.quit.\(UUID().uuidString)"
+        let previousDefaults = presence.defaults
+        presence.defaults = UserDefaults(suiteName: suite)!
+        presence.holdBackgroundTime = { _ in {} }
+        defer {
+            presence.defaults = previousDefaults
+            UserDefaults().removePersistentDomain(forName: suite)
+        }
+        let reporter = EndReporter()
+        presence.configure(scopeKey: "owner", reporter: reporter, mayReport: { true })
+
+        let call = ShannonDesktopVoiceCall()
+        let conversation = ShannonConversationModel.designPreview()
+        call.attach(conversation: conversation, menuBar: nil)
+        // A call that was reported as started, the way beginCall wires it.
+        call.session.callReported = { active in if active { presence.began(audience: .owner) } else { presence.ended() } }
+        call.session.callIsReported = true
+        presence.began(audience: .owner)
+        call.session.phase = .speaking
+
+        let delegate = ShannonDesktopAppDelegate()
+        var sentWhenReplied: [ShannonBodyCallEventDTO.Kind]?
+        let replied = expectation(description: "replied")
+        delegate.replyToTerminate = { allow in
+            XCTAssertTrue(allow)
+            Task { sentWhenReplied = await reporter.sent; replied.fulfill() }
+        }
+        XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateLater)
+        await fulfillment(of: [replied], timeout: 5)
+        XCTAssertEqual(sentWhenReplied, [.callStarted, .callEnded], "callEnded was sent before the app was let go")
+        XCTAssertEqual(call.session.phase, .idle)
+        withExtendedLifetime(conversation) {}
+    }
+
     func testQuittingEndsTheCallAndWaitsAtMostTheLimit() async {
         let call = ShannonDesktopVoiceCall()
         call.attach(conversation: ShannonConversationModel.designPreview(), menuBar: nil)
@@ -237,9 +278,12 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
         let items = menuBar.currentItems()
         let mute = items.first { $0.title == "ミュート" }
         XCTAssertEqual(mute?.isEnabled, true)
+        XCTAssertEqual(mute?.state, .off)
         _ = mute.map { NSApplication.shared.sendAction($0.action!, to: $0.target, from: $0) }
         XCTAssertTrue(call.session.isMicrophoneMuted)
-        XCTAssertEqual(menuBar.currentItems().map(\.title)[2], "ミュートを解除")
+        // A macOS toggle item keeps its name and shows the state with a checkmark, as the sidebar's symbol does.
+        XCTAssertEqual(menuBar.currentItems()[2].title, "ミュート")
+        XCTAssertEqual(menuBar.currentItems()[2].state, .on)
         let end = menuBar.currentItems().first { $0.title == "音声会話を終了する" }
         _ = end.map { NSApplication.shared.sendAction($0.action!, to: $0.target, from: $0) }
         await settle()
