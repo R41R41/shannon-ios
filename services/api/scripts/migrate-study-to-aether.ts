@@ -5,8 +5,10 @@
  *     Dry run (the default): prints, for each piece, its kind, title, length, stage, whether the owner has seen it, and
  *     where it goes. Metadata only; no body is printed or read. The database is opened read-only: nothing is created,
  *     added or written, so it is safe against the production database. Show this to the owner before anything moves.
- *   ... --apply
- *     Moves what the dry run listed. Needs SHANNON_AETHER_API_URL and SHANNON_AETHER_SHANNON_TOKEN in this command's
+ *   ... --apply --services-not-on-aether
+ *     Moves what the dry run listed. Run it before SHANNON_AETHER_API_URL is set for the API and the autonomy service, or with
+ *     both stopped: a service syncing her study with Aether while pieces move could take a moved story in as a second piece.
+ *     The second flag says so and is required. Needs SHANNON_AETHER_API_URL and SHANNON_AETHER_SHANNON_TOKEN in this command's
  *     environment. Back up the database first (docs/self-improvement-runbook.md): it opens the database read-write and adds
  *     the study's Aether tables. Idempotent: run it again after an interruption. The mapping from each piece's id to its
  *     Aether document is kept in `study_aether_links`.
@@ -35,6 +37,9 @@ if (!args.includes('--apply')) {
   }
   if (!plans.size) console.log('書斎には何もありません。');
   for (const [scopeKey, items] of plans) console.log(`${migrationReport(scopeKey, items)}\n`);
+} else if (!args.includes('--services-not-on-aether')) {
+  console.error('--apply は、APIと自律サービスがまだAetherを使っていない時（SHANNON_AETHER_API_URL を設定する前）か、両方を止めている時に、--services-not-on-aether をつけて実行してください。何も移していません。');
+  process.exit(2);
 } else {
   const access = configuredAetherAccess(process.env);
   if (!access) {
