@@ -35,8 +35,20 @@ extension ShannonGeminiLiveSessionModel {
     /// ended); only when the call reports no onsets does the arrival window after the switch decide
     /// (`recogniserLag`). Words of the other side already being assembled are finished first, so the buffer never
     /// mixes the two.
+    /// A new session or the end of the call: nothing of the last call's speech or ownership carries over.
+    func resetSpeechOwnership() {
+        // Words still being assembled when a call ends belong to that call.
+        turnAssembler.reset()
+        heardRightAfterShannon = false
+        speechSegments.reset()
+        bufferIsOwners = false
+        switchedToGuestAt = nil
+        ownerWordsReceivedUntil = nil
+    }
+
     func takeOwnership(of claim: ShannonVoiceSpeechSegments.Claim, at now: TimeInterval) {
-        if let switchedAt = switchedToGuestAt {
+        // Logged only within the 「友人も一緒」 period the switch began.
+        if participantMode == .guest, let switchedAt = switchedToGuestAt {
             // How long the first words took to arrive after the switch: the delay alone, no content.
             ShannonVoiceDiagnostics.shared.record("gemini.participant.first_words_after_switch",
                 metadata: ["delay_ms": String(Int(max(0, now - switchedAt) * 1_000))])

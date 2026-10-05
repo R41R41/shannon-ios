@@ -452,4 +452,29 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         XCTAssertEqual(model.pendingTurns.displayText, "")
         model.stop()
     }
+
+    /// A 「友人も一緒」 period that ends with his words being assembled leaves nothing behind: the next owner call's
+    /// first utterance is shown as usual.
+    func testNothingOfAFriendsPeriodCarriesIntoTheNextCall() async {
+        let model = liveModel()
+        model.handle(.speechStarted(itemID: "owner-a"))
+        model.switchParticipantMode(to: .guest, origin: .control)
+        model.handle(.inputTranscript("明日の予定は、", itemID: "owner-a"))
+        XCTAssertTrue(model.bufferIsOwners)
+        model.stop()
+        XCTAssertFalse(model.bufferIsOwners)
+        XCTAssertNil(model.switchedToGuestAt)
+        XCTAssertTrue(model.speechSegments.segments.isEmpty)
+
+        // The next call, 本人だけ.
+        model.participantMode = .owner
+        model.phase = .listening
+        model.handle(.speechStarted(itemID: "owner-b"))
+        model.handle(.speechStopped(itemID: "owner-b"))
+        model.handle(.inputTranscript("こんにちは。", itemID: "owner-b"))
+        XCTAssertEqual(model.userTranscript, "こんにちは。")
+        await waitForFinalization(model, turns: 1)
+        XCTAssertEqual(model.pendingTurns.displayText, "こんにちは。")
+        model.stop()
+    }
 }

@@ -254,6 +254,7 @@ public final class ShannonGeminiLiveSessionModel {
         responseTask = nil
         responseGenerationID = nil
         pendingTurns.reset()
+        resetSpeechOwnership()
         guestCall = ShannonVoiceGuestCallState()
         callFace = nil
         replyEmotion = nil
@@ -439,6 +440,7 @@ public final class ShannonGeminiLiveSessionModel {
         // What was heard until now belongs to the period that ended; a late transcript of it is ignored.
         speechSegments.discardAll()
         bufferIsOwners = false
+        switchedToGuestAt = nil
     }
 
     func updateCost() {
@@ -449,6 +451,7 @@ public final class ShannonGeminiLiveSessionModel {
         userTranscript = ""
         shannonTranscript = ""
         turnAssembler.reset()
+        resetSpeechOwnership()
         echoGuard.reset()
         echoWindow.reset()
         bargeInRule.reset()
