@@ -41,11 +41,7 @@ struct ShannonVoicePresentationModifier: ViewModifier {
             // 「友人も一緒」 with the call minimised: the owner's screen under the pill (Talk, or a sheet's page) is
             // covered, and VoiceOver does not read it either (coordinator decision 2026-10-06).
             content
-                .accessibilityHidden(coversOwnerScreen && geminiVoiceModel.hidesOwnerScreens)
-                .overlay {
-                    // Under the home indicator too: no row of the list shows below the cover.
-                    if coversOwnerScreen, geminiVoiceModel.hidesOwnerScreens { ShannonVoiceGuestCover().ignoresSafeArea() }
-                }
+                .shannonGuestCover(coversOwnerScreen && geminiVoiceModel.hidesOwnerScreens, style: .overlay)
         }
         .background { ShannonPalette.resolve(colorScheme).canvas.ignoresSafeArea() }
         .shannonAppLook(conversationModel)

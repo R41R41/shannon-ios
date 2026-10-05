@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import ShannonAppCore
 
@@ -248,5 +249,36 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
     func testHerNotificationsShowNoBannerOrSoundWhileAFriendIsInTheCall() {
         XCTAssertEqual(ShannonGuestCallNotifications.foregroundPresentation(hidesOwnerScreens: true), [.list, .badge])
         XCTAssertEqual(ShannonGuestCallNotifications.foregroundPresentation(hidesOwnerScreens: false), [.banner, .list, .sound, .badge])
+    }
+
+    /// View level: the cover both apps use (the iPhone's overlay under the pill, the Mac's replacement of Talk) is
+    /// drawn exactly while it is on. A red stand-in for the owner's Talk is rendered and its middle pixel read.
+    func testTheCoverIsDrawnOverTheOwnersTalkExactlyWhileOn() {
+        for style in [ShannonVoiceGuestCoverStyle.overlay, .replace] {
+            XCTAssertTrue(middleIsRed(Color.red.frame(width: 80, height: 80).shannonGuestCover(false, style: style)))
+            XCTAssertFalse(middleIsRed(Color.red.frame(width: 80, height: 80).shannonGuestCover(true, style: style)),
+                           "the owner's Talk is not visible under the cover (\(style))")
+        }
+    }
+
+    private func middleIsRed(_ view: some View) -> Bool {
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 1
+        guard let image = renderer.cgImage,
+              let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return false }
+        let offset = (image.height / 2) * image.bytesPerRow + (image.width / 2) * (image.bitsPerPixel / 8)
+        let info = image.bitmapInfo.rawValue & CGBitmapInfo.alphaInfoMask.rawValue
+        let alphaFirst = info == CGImageAlphaInfo.premultipliedFirst.rawValue || info == CGImageAlphaInfo.first.rawValue
+            || info == CGImageAlphaInfo.noneSkipFirst.rawValue
+        let littleEndian = image.bitmapInfo.contains(.byteOrder32Little)
+        // Read red and green whatever the byte order: red is high and green is low only for the stand-in.
+        let channels = (0..<4).map { Int(bytes[offset + $0]) }
+        let (red, green): (Int, Int) = switch (alphaFirst, littleEndian) {
+        case (true, true): (channels[2], channels[1])   // BGRA
+        case (true, false): (channels[1], channels[2])  // ARGB
+        case (false, true): (channels[3], channels[2])  // ABGR
+        case (false, false): (channels[0], channels[1]) // RGBA
+        }
+        return red > 200 && green < 80
     }
 }

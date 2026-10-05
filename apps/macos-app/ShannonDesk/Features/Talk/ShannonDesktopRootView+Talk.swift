@@ -48,11 +48,8 @@ extension ShannonDesktopRootView {
 
             ZStack(alignment: .bottom) {
                 // Covered, not only hidden behind: the list is not drawn, so nothing scrolls to new turns either.
-                if hidesOwnerTalk {
-                    ShannonVoiceGuestCover()
-                } else {
-                    talkTimeline
-                }
+                talkTimeline
+                    .shannonGuestCover(hidesOwnerTalk, style: .replace)
                 conversationBottomOverlay
             }
         }

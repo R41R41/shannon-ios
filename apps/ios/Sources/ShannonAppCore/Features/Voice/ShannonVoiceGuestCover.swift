@@ -28,6 +28,38 @@ public struct ShannonVoiceGuestCover: View {
     }
 }
 
+/// Puts the cover over (`.overlay`, the iPhone: the screen keeps its state underneath and is hidden from VoiceOver)
+/// or in place of (`.replace`, the Mac's Talk: the list is not drawn at all, so nothing scrolls) the owner's content.
+public enum ShannonVoiceGuestCoverStyle: Sendable {
+    case overlay, replace
+}
+
+private struct ShannonVoiceGuestCoverModifier: ViewModifier {
+    let isOn: Bool
+    let style: ShannonVoiceGuestCoverStyle
+
+    func body(content: Content) -> some View {
+        switch style {
+        case .replace:
+            if isOn { ShannonVoiceGuestCover() } else { content }
+        case .overlay:
+            content
+                .accessibilityHidden(isOn)
+                .overlay {
+                    // Under the home indicator too: no row of a list shows below the cover.
+                    if isOn { ShannonVoiceGuestCover().ignoresSafeArea() }
+                }
+        }
+    }
+}
+
+public extension View {
+    /// Covers the owner's Talk while `isOn` (a call in 「友人も一緒」, `hidesOwnerScreens`).
+    func shannonGuestCover(_ isOn: Bool, style: ShannonVoiceGuestCoverStyle) -> some View {
+        modifier(ShannonVoiceGuestCoverModifier(isOn: isOn, style: style))
+    }
+}
+
 extension ShannonGeminiLiveSessionModel {
     /// A call in 「友人も一緒」 is on (also failed or reconnecting): the owner's Talk and its traces are covered.
     public var hidesOwnerScreens: Bool { phase != .idle && participantMode == .guest }
