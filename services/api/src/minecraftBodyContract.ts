@@ -1,6 +1,7 @@
 import { MINECRAFT_INTENT_GOAL_CHARACTERS, type MinecraftIntent } from './minecraftIntent.js';
 import { validatedMinecraftBodyState, type MinecraftBodyState } from './minecraftBodyState.js';
-import { composedPlatformBridgeConfiguration, type PlatformBridgeBinding, type PlatformBridgeConfiguration } from './platformBridge.js';
+import type { PlatformBridgeBinding, PlatformBridgeConfiguration } from './platformBridge.js';
+import { composedPlatformBridgeConfiguration } from './platformBridgeBindings.js';
 
 /**
  * Shannon's Minecraft body (Minebot), phase 1: the wire contract of a game-chat turn and the server's
@@ -22,10 +23,12 @@ export const MINECRAFT_BODY_LIMITS = Object.freeze({
   goalCharacters: MINECRAFT_INTENT_GOAL_CHARACTERS,
   requestIdCharacters: 120,
   servers: 16,
-  /** Turns per minute from the one device. Every turn is a model call. */
-  turnsPerMinute: 20,
-  /** A stored answer is replayed for a repeated requestId for this long. */
-  replayDays: 30,
+  /**
+   * A stored answer is replayed for a repeated requestId for this long, and then deleted at a later answer (review N2):
+   * longer than the 30 minutes in which a turn is answered at all, so a later repeat is refused, never answered twice.
+   * Model calls per speaker: `minecraftTurnAllowance.ts`.
+   */
+  replayDays: 1,
 });
 
 export interface MinecraftServerBinding {
@@ -91,7 +94,8 @@ const DEVICE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/u;
 const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/u;
 /** A Java Edition name, and the `.` that Bedrock players carry through a proxy. */
 const PLAYER_NAME = /^[.A-Za-z0-9_]{1,17}$/u;
-const TURN_FIELDS = ['requestId', 'serverId', 'conversation', 'speaker', 'message', 'observedAt', 'body', 'scopeKey'];
+// No `scopeKey` (review N4): the scope is the device's, never the body's.
+const TURN_FIELDS = ['requestId', 'serverId', 'conversation', 'speaker', 'message', 'observedAt', 'body'];
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const boundedText = (value: unknown, maximum: number): value is string =>

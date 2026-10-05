@@ -105,12 +105,15 @@ Response, unchanged in shape: `{ "schemaVersion": 1, "stateVersion": number, "up
 
 - In a conversation other people can read, `projection` starts with the speak-time self-check, then `[この会話にいる人についての記憶]` with what Shannon remembers of the participants, then what she may know of the owner. A line that starts with `【機微:…】` is something the people present do not all know yet; the runtime passes it through untouched and must not strip the marker.
 - What was said in a conversation is known to everyone in it, so it arrives unmarked there and marked anywhere else.
-- A DM with someone else (`conversationKind: "dm"`, `sourceUserId` not the owner) is that person alone: only what they said in that DM and the owner's unprotected content. Nothing marked is returned, because the owner is not there to release it.
+- A DM with someone else (`conversationKind: "dm"`, `sourceUserId` not the owner) is that person alone: only what they said in that DM and the owner's unprotected content.
+- **A message anyone other than the owner wrote** (owner decision 2026-10-06, S6), in a DM or in a shared conversation, gets only what may be shown to anyone: no line marked `【機微:…】` of the owner's (nor his recent interests), and a header without the sentence that ライ氏 may release a protected line by asking (only he can). The owner's own message in a shared conversation is unchanged: marked lines and that sentence.
 - A conversation bound `owner-private` answers only the owner.
 
 ## Replies: `POST /v1/platform/reply`
 
 Added 2026-10-06 (Minecraft body phase 5a). Instead of answering with a model of its own and mirroring the turn, a runtime may ask Shannon's one mind for the reply. Off unless the API's `SHANNON_PLATFORM_REPLY` is `on` (also `true`, `1`, `enabled`): every new message is one call of the conversation model. Off, the route answers `503 PLATFORM_REPLY_DISABLED`. `/v1/platform/turns` and `/v1/platform/context` are unchanged and keep working.
+
+**What the token can do once this is on** (review S8, 2026-10-06): whoever holds `SHANNON_PLATFORM_BRIDGE_TOKEN` can then write as the owner in any conversation bound `owner-private` and get a turn of the owner alone: his profile and memory in the prompt, her tools (writing her study and his PC folder, asking her Minecraft body), his feeling moved, his promises and memories stored from it. That is the power of one of his paired apps. Before switching it on, treat the token as an owner credential: only the runtime that holds it, never in a repository or a log, and rotated if it may have leaked. With `SHANNON_PLATFORM_REPLY` off the token keeps its old reach (mirroring turns, reading the bounded context).
 
 Same transport, token and bindings as above; body at most 64 KiB.
 
@@ -134,7 +137,7 @@ The turn is a turn of the app's conversation kernel (`ShannonApiKernel.textTurn`
 | --- | --- | --- | --- |
 | Owner, conversation bound `owner-private` | the owner alone: the app's owner turn (his profile, memory, today's focus, `[マイクラの体で起きたこと]`, his feeling moves) | by the app's owner-alone rule, including `minecraft.request` while her Minecraft body is present (`docs/minecraft-body-contract.md`, phase 4) | his turn in the conversation's platform thread, owner-private |
 | Owner, shared conversation | everyone in it: shared header, people lines, speak-time check, memory through the disclosure gate; no notes, tasks, Notion or calendar | none | his turn in the platform thread, audience the conversation, speaker verified owner |
-| Anyone else | that conversation (or that person alone in a DM, without the owner's protected lines): her guest identity | none | person memory, as `/v1/platform/turns` keeps it |
+| Anyone else | that conversation (or that person alone in a DM): her guest identity; in a DM and a shared conversation alike only what may be shown to anyone (no protected line of the owner's, none of her pursuits, no rule that he may release one; owner decision 2026-10-06) | none | person memory, as `/v1/platform/turns` keeps it |
 
 A platform reply is never told what she did on her own to reach the owner (the `[ボクが自分からしたこと]` block of `/v1/chat`): the surface switch `TextTurnSurface.ownOutreach` is off for it (core owner recommendation, 2026-10-06). Her Minecraft body's game chat has it on, on the owner's own turns (`docs/minecraft-body-contract.md`). The `minecraft_body` capability line is in the owner's description of an `owner-private` conversation only while her Minecraft body is present.
 

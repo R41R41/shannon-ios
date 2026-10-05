@@ -13,7 +13,8 @@ import {
 import type { MinecraftTurnLog } from './minecraftTurnStore.js';
 import type { MinecraftBodyRequests } from './minecraftBodyRequests.js';
 import { MINECRAFT_INTENT_GOAL_CHARACTERS } from './minecraftIntent.js';
-import { minecraftBodyStateBlock } from './minecraftBodyState.js';
+import { minecraftBodyStateBlock, type MinecraftBodyState } from './minecraftBodyState.js';
+import { MinecraftTurnAllowance } from './minecraftTurnAllowance.js';
 import { PlatformBridgeError, PlatformBridgeService, platformBridgeThreadId, type PlatformAudiencePolicy } from './platformBridge.js';
 import type { PeopleMemoryStore } from './peopleMemoryStore.js';
 import { PlatformPeople, platformPeopleEnabled } from './platformPeople.js';
@@ -58,6 +59,8 @@ const TURN_FUTURE_SKEW_MILLISECONDS = 5 * 60_000;
 export class MinecraftBody {
   private readonly bridge: PlatformBridgeService;
   private readonly pending = new Map<string, { hash: string; answer: Promise<MinecraftTurnResponse> }>();
+  /** Model calls per speaker, the owner apart (`minecraftTurnAllowance.ts`); taken only for a turn that reaches the model. */
+  private readonly allowance = new MinecraftTurnAllowance();
 
   constructor(private readonly dependencies: MinecraftBodyDependencies) {
     const { stateStore, conversationStore, background, now, peopleStore } = dependencies;
@@ -84,6 +87,11 @@ export class MinecraftBody {
     const age = Date.parse(this.dependencies.now()) - Date.parse(request.observedAt);
     if (age > TURN_MAXIMUM_AGE_MILLISECONDS || age < -TURN_FUTURE_SKEW_MILLISECONDS) {
       throw new MinecraftBodyError('BAD_REQUEST', 400, 'observedAt is outside the window in which a game-chat turn is answered.');
+    }
+    // Only an online-mode server proves the owner; a turn anyone else wrote takes from that player's share and the others'.
+    const owner = server.onlineMode && request.speaker.uuid === server.ownerUuid;
+    if (!this.allowance.take(owner, `${request.serverId}:${request.speaker.uuid}`, Date.parse(this.dependencies.now()))) {
+      throw new MinecraftBodyError('RATE_LIMITED', 429, owner ? 'Too many game-chat turns from the owner; retry after a minute.' : 'Too many game-chat turns from this player; retry later.');
     }
     const answer = this.answer(scopeKey, server, request, hash);
     this.pending.set(key, { hash, answer });
@@ -113,8 +121,9 @@ export class MinecraftBody {
       if (owner || !(error instanceof PlatformBridgeError) || error.code !== 'PLATFORM_ACTOR_DENIED') throw error;
       return this.answerStranger(scopeKey, server, request, threadId, 'people_disabled');
     }
-    // The body's present is game state, not anyone's private matter: given for the owner, and in the shared chat.
-    const bodyNow = owner || kind === 'channel' ? minecraftBodyStateBlock(request.body) : '';
+    // The body's present is game state: given for the owner, and in the shared chat. While the body works on something it was
+    // asked (`busyWith: request`), its task line may carry the request, the owner's matter: left out for anyone else (S5).
+    const bodyNow = owner || kind === 'channel' ? minecraftBodyStateBlock(owner ? request.body : withoutRequestTask(request.body)) : '';
     let ignored: string | undefined;
     const result = await this.dependencies.conversation.textTurn(platformTextTurnInput({
       scopeKey, policy,
@@ -173,7 +182,7 @@ export class MinecraftBody {
       scopeKey,
       systemPrompt: [
         shannonIdentityPrompt('guest'), UNKNOWN_SPEAKER_PROJECTION, minecraftDeliveryInstructions(server, kind, request.speaker.name),
-        ...(kind === 'channel' ? [minecraftBodyStateBlock(request.body)] : []),
+        ...(kind === 'channel' ? [minecraftBodyStateBlock(withoutRequestTask(request.body))] : []),
       ].filter(Boolean).join('\n\n'),
       history: [],
       message: `${request.speaker.name}: ${request.message}`,
@@ -209,6 +218,13 @@ export class MinecraftBody {
       throw error;
     }
   }
+}
+
+/** The body's present as anyone but the owner may hear it: without the task line while the body works on a request. */
+function withoutRequestTask(body: MinecraftBodyState | undefined): MinecraftBodyState | undefined {
+  if (body?.busyWith !== 'request' || body.task === undefined) return body;
+  const { task: _task, ...rest } = body;
+  return rest;
 }
 
 function replayed(storedHash: string, hash: string, response: MinecraftTurnResponse): MinecraftTurnResponse {

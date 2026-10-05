@@ -32,7 +32,8 @@ The owner's scope is `SHANNON_OWNER_SCOPE_KEY` (default `owner`). An invalid val
 - `POST /v1/body/minecraft/turns`, JSON, at most 64 KiB.
 - `Authorization: Bearer <device token>` of the paired device named in `deviceId`. The platform bridge's service token (`SHANNON_PLATFORM_BRIDGE_TOKEN`) does **not** authenticate this route, and this route needs no platform-bridge configuration: its bindings are derived from `SHANNON_MINECRAFT_BODY_JSON`.
 - Any other paired device: `403 MINECRAFT_BODY_DEVICE_DENIED`. The configured device in any scope other than the owner's: `403 MINECRAFT_BODY_SCOPE_DENIED`.
-- At most 20 turns a minute from the device (`429 RATE_LIMITED`). Every new turn is one call of the conversation model.
+- Every new turn is one call of the conversation model, so turns are counted per speaker before the model is called, after the device, the turn and a repeated `requestId` were checked (a refused or replayed turn costs nothing; `minecraftTurnAllowance.ts`, review S3 and N3 of 2026-10-06): the owner 20 a minute and 1,000 a day, apart from everyone else, so other players never use up his turns; each other player 6 a minute and 100 a day; all other players together 20 a minute and 400 a day (below the bridge's 120 person turns a minute, so a turn that was answered is never refused memory afterwards). Over a limit: `429 RATE_LIMITED`, nothing answered. The counts are in memory and begin again at a restart.
+- **The device's token reaches nothing else** (review S1, 2026-10-06). The device of `SHANNON_MINECRAFT_BODY_JSON` may call only `/v1/body/minecraft/*`, `POST /v1/body/events` (game events) and `GET /v1/body/presence`. Every other route answers `403 GAME_BODY_DEVICE_DENIED` before anything is read (`serverMinecraftBodyWiring.ts`), so the body cannot talk as the owner in `/v1/chat`, use her study or folder, read his memory, or open the operations console (which treats its token as no device).
 
 ## `POST /v1/body/minecraft/turns`
 
@@ -63,12 +64,12 @@ One chat message to Shannon, in the server's chat or whispered to her.
 | `requestId` | string, 1–120, `[A-Za-z0-9][A-Za-z0-9_.:-]*` | Idempotency key, unique per message across all servers. |
 | `serverId` | string | One of the configured servers; otherwise `403 MINECRAFT_SERVER_DENIED`. |
 | `conversation` | `{ "kind": "channel" \| "dm" }` | `channel`: the server's chat, read by everyone on it. `dm`: a whisper (`/msg`, `/tell`) between that player and her. |
-| `speaker` | `{ "uuid", "name" }` | The player who **actually wrote** it: account UUID (with dashes) and current name (`[.A-Za-z0-9_]{1,17}`). |
+| `speaker` | `{ "uuid", "name" }` | The player who **actually wrote** it: account UUID (with dashes) and current name (`[.A-Za-z0-9_]{1,17}`). The UUID must be the sender UUID of a signed player-chat packet as the body received it, never parsed from system chat, a disguised chat message or any other text (review S2, 2026-10-06). A server that does not enforce secure (signed) chat, or an offline-mode one, cannot prove who wrote: there everyone is a stranger (`onlineMode: false` in the configuration). |
 | `message` | string, 1–600 | Plain text of the message, without the name prefix the game adds. |
 | `observedAt` | ISO 8601 | When it was written. A new turn more than 30 minutes old or more than 5 minutes ahead is `400`. |
 | `body` | object, optional (added in 1.5) | What her Minecraft body is doing right now. See [The body's present](#the-bodys-present-body). |
 
-No other field is accepted (`400 BAD_REQUEST`), including `scopeKey`-like routing, audiences, attachments, or a reply.
+No other field is accepted (`400 BAD_REQUEST`), including `scopeKey` (the scope is the device's; review N4, 2026-10-06), audiences, attachments, or a reply.
 
 How a turn is mapped:
 
@@ -88,8 +89,10 @@ A turn on an online-mode server is a turn of the app's own conversation kernel (
   | --- | --- | --- | --- | --- | --- |
   | Owner, whisper | the owner alone | the app's owner turn: his profile, everything she may use with him alone | as in the app | offered, by the app's owner-alone rule | his turn in the whisper's platform thread, owner-private; his feeling moves |
   | Owner, chat | everyone on the server (the chat's group audience) | without his profile, with the shared header, the people lines and the speak-time privacy check | no notes, tasks, Notion or calendar; memory through the disclosure gate (what that audience may not hear is left out, protected lines are marked) | none | his turn in the chat's platform thread, audience the chat, speaker verified owner |
-  | Anyone else, chat | everyone on the server | guest | as the line above | none | person memory (`docs/platform-people-contract.md`) |
-  | Anyone else, whisper | that player alone | guest | as above, and no protected line of the owner's at all (he is not there to release one) | none | person memory |
+  | Anyone else, chat | everyone on the server | guest, with the shared header and speak-time check **without** the rule that ライ氏 may release a protected line by asking | only what may be shown to anyone: no notes, tasks, Notion or calendar, no protected (【機微】-marked) line of his, none of her pursuits, nothing of what she did on her own | none | person memory (`docs/platform-people-contract.md`) |
+  | Anyone else, whisper | that player alone | as the line above | as the line above | none | person memory |
+
+  Owner decision 2026-10-06 (S6): only the owner himself may release a protected line of his, so a turn anyone else wrote, in the chat or a whisper, is given only what may be shown to anyone (`openOnly`), and its header and speak-time check leave out the sentence that he may ask for it. His own turn in the chat keeps both, with protected lines marked. The same holds for Discord (`docs/platform-people-contract.md`).
 
   The audience is decided by the conversation the message was written in, and by nothing else: the chat is bound `shared` and the owner's whisper `owner-private` (`minecraftBridgeConfiguration`, `minecraftBodyContract.ts`), and `PlatformBridgeService.audiencePolicy` (`platformBridge.ts`) and `platformAudienceTurn` (`platformSurface.ts`) turn that into the kernel's audience. A chat turn is the shared chat whether the owner is alone on the server or not: a turn carries no list of players, and none can be sent (`players`, `participants`, or a player count in `body`, refuse the turn). Only the owner's whisper (`dm` with `ownerUuid`) is the owner alone; another player's whisper is that player alone (unknown until remembered).
 
@@ -114,7 +117,7 @@ Optional on every turn. Closed: any other field, or a value outside these, refus
 | Field | Type | Notes |
 | --- | --- | --- |
 | `busyWith` | `campaign` \| `request` \| `idle` | Working on her own goal, on something she was asked, or nothing. |
-| `task` | string, 0–120 | The body's own short line about what it is working on, e.g. 「エンドラを倒す → 今は鉄のツルハシ作り」. Control characters become spaces. |
+| `task` | string, 0–120 | The body's own short line about what it is working on, e.g. 「エンドラを倒す → 今は鉄のツルハシ作り」. Control characters become spaces. It must not carry the contents of a request (the owner's matter); while `busyWith` is `request` it is given to the owner's turns only and left out of everyone else's (review S5, 2026-10-06). |
 | `dimension` | `overworld` \| `the_nether` \| `the_end` | |
 | `health` | number, 0–20 | Half hearts; kept to one decimal. |
 | `food` | integer, 0–20 | |
@@ -149,7 +152,7 @@ Optional on every turn. Closed: any other field, or a value outside these, refus
 
 ### Idempotency
 
-`requestId` identifies a turn for 30 days. The content is `serverId`, `conversation.kind`, `speaker`, `message` and `observedAt`; `body` is not part of it. The same `requestId` with the same content answers `200` with the stored answer, however old. With different content (server, kind, speaker, message, time) it is `409 MINECRAFT_TURN_CONFLICT`. Two identical requests at once are one model call. Retry on a network failure or `5xx` with the same `requestId`.
+`requestId` identifies a turn for one day (review N2, 2026-10-06: the stored answers are deleted at a later answer once a day old; a repeat after that is outside the 30-minute window and refused, never answered twice). The content is `serverId`, `conversation.kind`, `speaker`, `message` and `observedAt`; `body` is not part of it. The same `requestId` with the same content answers `200` with the stored answer, while it is kept. With different content (server, kind, speaker, message, time) it is `409 MINECRAFT_TURN_CONFLICT`. Two identical requests at once are one model call. Retry on a network failure or `5xx` with the same `requestId`.
 
 ## Body event `game.died`
 
@@ -255,7 +258,7 @@ In the tool registry (`shannonTools.ts`, domain `minecraft_body`, surfaces text 
 ### What she knows of the result
 
 - **`[マイクラの体で起きたこと]`**: in every turn the owner alone reads (the app's text chat, and his whisper in the game), the open requests and those that finished in the last 12 hours (at most 5), in the server's words: 「「オークの原木を16個集める」: 3分前にやり終えた（手に入れたもの: オークの原木 16個）」, 「…: 体が取り組んでいる（いま: オークの木を探す、1分前の報告）」, and whether the body is in the game now. Marked as the body's report, not an instruction. Never with anyone else present, never on a voice turn (there she uses `minecraft.status`).
-- **An experience**: when a request the body took closes, one experience (`experience_events`, source `body.game`, `game: { type: "request", requestId, state }`), in fixed words like her death: 「ゲームの記憶: 10月5日の夜、ライ氏に頼まれた「オークの原木を16個集める」をマイクラの体でやり終えた（オークの原木 16個）。」 The goal is her own wording of the owner's request; nothing the body sent becomes words except the closed fields. A request that never reached the body is not an experience.
+- **An experience**: when a request the body took closes, one experience (`experience_events`, source `body.game`, `game: { type: "request", requestId, state }`), in fixed words like her death: 「ゲームの記憶: 10月5日の夜、ライ氏に頼まれた「オークの原木を16個集める」をマイクラの体でやり終えた（オークの原木 16個）。」 The goal is her own wording of the owner's request; nothing the body sent becomes words except the closed fields. A request that never reached the body is not an experience. It is stored **sensitive** (`GAME_REQUEST_DISCLOSURE`, review S4, 2026-10-06): used freely with the owner alone, marked in his own turn in a shared chat, and left out of any turn someone else wrote. Her death stays **ordinary** (`GAME_DISCLOSURE`): the game itself tells everyone on the server that she died and of what.
 - She does not reach out by herself when a request finishes (left for later).
 
 ## Errors
@@ -274,7 +277,8 @@ Body: `{ "error": "<code>", "message": "…" }`.
 | 403 | `MINECRAFT_OWNER_ONLY` | Phase 4: the body called an owner's route (list, cancel). | No |
 | 404 | `MINECRAFT_REQUEST_NOT_FOUND` | Phase 4: no such request handed to this device (or in this scope). | No |
 | 409 | `MINECRAFT_REQUEST_FINISHED` | Phase 4: cancel of a request that already finished. | No |
-| 429 | `RATE_LIMITED` | More than 20 turns a minute. | After a minute, same `requestId` |
+| 429 | `RATE_LIMITED` | Over a speaker's limit (see Transport). | Later, same `requestId` |
+| 403 | `GAME_BODY_DEVICE_DENIED` | Her Minecraft body's token on a route other than its own, game events and presence. | No |
 | 502 | `MODEL_UNAVAILABLE` | The model could not answer. | Yes, same `requestId` |
 | 503 | `MINECRAFT_BODY_NOT_CONFIGURED` | `SHANNON_MINECRAFT_BODY_JSON` is not set. | Later |
 
@@ -284,7 +288,7 @@ A refused turn must never stop the Minebot from playing; it may stay silent.
 
 - Who the owner is comes from the configuration and the account UUID of an online-mode server. Never from a name, a skin, a writing style, or the Minebot's guess.
 - Offline-mode servers: everyone is a stranger. No owner memory, no person memory, no intent, and nothing is stored (`ignored: offline_server`). She answers from her identity alone.
-- The server's chat is shared: the bridge's speak-time check applies, and owner content other players do not know is marked or left out exactly as on Discord and in the app with others present (`docs/architecture.md`, disclosure gate): what he said is secret or marked 機微 by hand never reaches such a request; ordinary items are open, as they are to anyone the owner talks with. A whisper with the owner is his alone. A whisper with someone else is that person's conversation, without the owner's protected lines.
+- The server's chat is shared: the bridge's speak-time check applies. On the owner's own turn there, owner content other players do not know is marked or left out exactly as on Discord and in the app with others present (`docs/architecture.md`, disclosure gate): what he said is secret or marked 機微 by hand never reaches such a request; ordinary items are open, as they are to anyone the owner talks with. On a turn anyone else wrote, in the chat or a whisper, nothing protected reaches the request at all (owner decision 2026-10-06). A whisper with the owner is his alone.
 - Only the owner's turns become the owner's experiences and may carry an `intent`. Other players' words are person memory, never instructions to her body. Requests (phase 4) come only from the owner: his own game-chat turns and her tools in a conversation he alone reads.
 - A request result is the owner's matter: its block is given only while he alone reads the reply. The body is handed the goal and the surface it was asked on, never the Talk or anything of the conversation. The `gained` counts are the only inventory facts the body sends, and only for a request.
 - What reaches the server is text the player wrote to her, the facts above, and the body's present in its closed form. The Minebot sends no coordinates, inventories, screenshots, chat she was not part of, or her own messages as turns.

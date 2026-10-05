@@ -65,9 +65,21 @@ export function gameEvidence(experienceId: string): string {
   return `body-game-${Array.from(experienceId.replace(/[^0-9a-f]/gu, ''), digit => String.fromCharCode(97 + Number.parseInt(digit, 16))).join('')}`;
 }
 
-/** The disclosure of every game experience: the owner's, ordinary, decided by rule, and no words of his. */
+/**
+ * The disclosure of her death in the game: the owner's, ordinary, decided by rule, and no words of his. Ordinary because
+ * the game itself tells everyone on the server that she died, and of what (its death message).
+ */
 export const GAME_DISCLOSURE: MemoryDisclosure = Object.freeze({
   audience: OWNER_AUDIENCE, sensitivity: 'ordinary' as const, reason: 'マイクラの体に起きたこと', decidedBy: 'rule' as const, speaker: 'unknown' as const,
+});
+
+/**
+ * The disclosure of a request that finished (review S4, 2026-10-06): what the owner asked her body for is his matter, so
+ * it is sensitive. Used freely while he alone reads the reply; with others it is guarded (marked, for his own turn in a
+ * shared chat) and left out of any turn someone else wrote (`openOnly`).
+ */
+export const GAME_REQUEST_DISCLOSURE: MemoryDisclosure = Object.freeze({
+  audience: OWNER_AUDIENCE, sensitivity: 'sensitive' as const, reason: 'ライ氏がマイクラの体に頼んだこと', decidedBy: 'rule' as const, speaker: 'unknown' as const,
 });
 
 export function gameDeathExperience(scopeKey: string, deviceId: string, event: BodyEvent & { cause: string }): GameExperience {

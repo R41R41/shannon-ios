@@ -28,7 +28,8 @@ export const PLATFORM_REPLY_LIMITS = Object.freeze({
   futureSkewMinutes: 5,
   /** Every new turn is one call of the conversation model. */
   repliesPerMinute: 20,
-  replayDays: 30,
+  /** A stored reply is replayed this long (longer than the 30 minutes a message is answered at all), then deleted at a later reply. */
+  replayDays: 1,
   participants: 50,
 });
 

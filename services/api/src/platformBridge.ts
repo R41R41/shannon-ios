@@ -16,6 +16,7 @@ import {
 import type { TurnBackgroundService } from './backgroundUpdates.js';
 import type { ConversationStore } from './conversationStore.js';
 import { platformImpressionLines } from './impressionRecall.js';
+import { bindingFor, composedPlatformBridgeConfiguration, sharedAudienceHeader } from './platformBridgeBindings.js';
 
 export const SHANNON_PLATFORM_TURN_PATH = '/v1/platform/turns';
 export const SHANNON_PLATFORM_CONTEXT_PATH = '/v1/platform/context';
@@ -213,7 +214,7 @@ export class PlatformBridgeService {
     // marked, and the projection carries the check to make before saying them.
     const projection = gate.ownerOnly
       ? buildCompanionStatePrompt(snapshot, { maximumCharacters: 2_400 })
-      : [SHARED_AUDIENCE_HEADER, ...policy.peopleLines, ...policy.impressionLines, sharedProfilePrompt(gate, 16, !policy.ownerPresent)].join('\n').slice(0, 2_400);
+      : [sharedAudienceHeader(policy.ownerWrote), ...policy.peopleLines, ...policy.impressionLines, sharedProfilePrompt(gate, 16, !policy.ownerPresent)].join('\n').slice(0, 2_400);
     return Object.freeze({
       schemaVersion: 1 as const,
       stateVersion: gate.ownerOnly ? snapshot.version : 0,
@@ -242,8 +243,9 @@ export class PlatformBridgeService {
     // The owner's private conversation is never projected for anyone else.
     if (!ownerWrote && platformAudience(binding, request).kind === 'owner') throw actorDenied();
     const gate = new DisclosureGate(present, snapshot, this.conversationStore, scopeKey);
-    // In a friend's DM the owner is not there to release anything, so protected owner lines are left out entirely.
-    const ownerPresent = ownerWrote || request.conversationKind !== 'dm';
+    // Owner decision 2026-10-06 (S6): a turn anyone else wrote, in a DM or a shared conversation, is given only what may
+    // be shown to anyone; nobody but the owner himself releases a protected line, so none is given.
+    const ownerPresent = ownerWrote;
     const userIds = [...new Set([...(ownerWrote ? [] : [request.sourceUserId]), ...(request.participants ?? [])])]
       .filter(id => id !== binding.ownerUserId).slice(0, MAXIMUM_CONTEXT_PARTICIPANTS);
     const peopleLines = this.people && this.peopleEnabled() && !gate.ownerOnly
@@ -297,46 +299,6 @@ export function configuredPlatformBridge(
   }
   return composedPlatformBridgeConfiguration(token, scopeKey, decoded.map(validatedBinding), 'SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON');
 }
-
-/**
- * A bridge configuration from bindings that are already valid. The environment's bindings may not overlap;
- * a configuration the server derives itself (the Minecraft body, `minecraftBodyContract.ts`) may let an exact
- * conversation stand inside a prefix, and the exact one then wins (`bindingFor` reads it first).
- */
-export function composedPlatformBridgeConfiguration(
-  token: string,
-  scopeKey: string,
-  candidates: readonly PlatformBridgeBinding[],
-  source: string,
-  options: { exactInsidePrefix?: boolean } = {},
-): PlatformBridgeConfiguration {
-  const bindings = new Map<string, PlatformBridgeBinding>();
-  const prefixBindings: PlatformBridgeBinding[] = [];
-  for (const binding of candidates) {
-    if (binding.conversationId) {
-      const key = bindingKey(binding.platform, binding.conversationId);
-      if (bindings.has(key)) throw new Error(`${source} contains a duplicate conversation`);
-      bindings.set(key, Object.freeze({ ...binding }));
-    } else {
-      if (prefixBindings.some(existing => existing.platform === binding.platform
-        && existing.conversationIdPrefix === binding.conversationIdPrefix)) {
-        throw new Error(`${source} contains a duplicate conversation prefix`);
-      }
-      prefixBindings.push(Object.freeze({ ...binding }));
-    }
-  }
-  if (!options.exactInsidePrefix) {
-    for (const exact of bindings.values()) {
-      if (prefixBindings.some(prefix => prefix.platform === exact.platform
-        && exact.conversationId?.startsWith(prefix.conversationIdPrefix ?? ''))) {
-        throw new Error(`${source} contains overlapping bindings`);
-      }
-    }
-  }
-  return Object.freeze({ token, scopeKey, bindings, prefixBindings: Object.freeze(prefixBindings) });
-}
-
-export const SHARED_AUDIENCE_HEADER = '[Shannon shared audience]\nあなたはシャノンです。この会話はライ氏以外の人も読みます。発言する前に、その内容がこの場の人がまだ知らない個人情報にならないかを自分で確かめ、なるなら言わないか、一般的な言い方にしてください。ライ氏本人がこの場ではっきり求めた時は、本人の判断なので答えて構いません。控えていること自体は、聞かれない限り言わないでください。\n下に載っていない記憶は、覚えているふりをしないでください。';
 
 /**
  * Who can read a bound conversation. Only an exact conversation the server marked
@@ -449,32 +411,6 @@ function validatedBinding(value: unknown): PlatformBridgeBinding {
   };
 }
 
-function bindingFor(
-  configuration: PlatformBridgeConfiguration,
-  platform: ShannonPlatform,
-  conversationId: string,
-): PlatformBridgeBinding | undefined {
-  return configuration.bindings.get(bindingKey(platform, conversationId))
-    ?? configuration.prefixBindings.find(binding => binding.platform === platform
-      && matchesConversationPrefix(platform, conversationId, binding.conversationIdPrefix));
-}
-
-/**
- * What may follow a prefix: a Discord channel id, or the UUID of a Minecraft player (a whisper with Shannon's
- * Minecraft body; only the server derives such a prefix, the environment's prefixes are Discord ones).
- */
-const PREFIX_SUFFIX: Readonly<Partial<Record<ShannonPlatform, RegExp>>> = Object.freeze({
-  discord: /^\d{1,32}$/,
-  minecraft: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-});
-
-function matchesConversationPrefix(platform: ShannonPlatform, conversationId: string, prefix: string | undefined): boolean {
-  const suffix = PREFIX_SUFFIX[platform];
-  return prefix !== undefined && suffix !== undefined
-    && conversationId.startsWith(prefix)
-    && suffix.test(conversationId.slice(prefix.length));
-}
-
 function validConversationPrefix(platform: unknown, value: unknown): value is string {
   return platform === 'discord'
     && typeof value === 'string'
@@ -488,10 +424,6 @@ function validObservedAt(value: string, now: string): boolean {
   const maximumFutureSkew = 5 * 60 * 1_000;
   const maximumAge = 30 * 24 * 60 * 60 * 1_000;
   return observed <= current + maximumFutureSkew && observed >= current - maximumAge;
-}
-
-function bindingKey(platform: ShannonPlatform, conversationId: string): string {
-  return `${platform}\u0000${conversationId}`;
 }
 
 function isPlatform(value: unknown): value is ShannonPlatform {

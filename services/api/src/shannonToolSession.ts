@@ -11,6 +11,7 @@ import { toolSessionMemory } from './shannonToolTypes.js';
 import { ownToolsEnabled, providerToolName, shannonTool, toolFailure, toolFromProviderName, toolResultForModel } from './shannonTools.js';
 import type { TurnDeadline } from './turnDeadline.js';
 import { answersWithPlace, asksForMemo, asksWhichPlace, namesAether } from './memoPlace.js';
+import { withMinecraftBodyLine } from './shannonMinecraftTools.js';
 
 /**
  * The tools of one conversation turn, for the model adapter (`chatModelTools.ts`). Owner decision 2026-10-05: her
@@ -42,7 +43,8 @@ export function conversationTools(
   if (!runner || ownerAlone === false || !ownToolsEnabled() || !server.audience) return {};
   const threadId = turn.slice(0, Math.max(0, turn.indexOf('\n')));
   const words = turn.slice(turn.indexOf('\n') + 1);
-  const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId) : 'text';
+  // Words about Minecraft count only while her Minecraft body's request tool is offered here (review B2, 2026-10-06).
+  const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface)) : 'text';
   if (!offer) return {};
   // What the client said is not enough: what the server knows of others present vetoes the offer, and she is told so.
   if (ownerAlone === 'others' || server.audience.othersKnown(scopeKey)) return { toolsWithheld: true };
@@ -104,9 +106,26 @@ export function asksAboutOwnThings(transcript: string): boolean {
   return HER_PLACES.test(transcript) || (HER_WORK.test(transcript) && MAKES_IT_HERS.test(transcript));
 }
 
-/** Words about her Minecraft body or the game: a voice turn then offers her tools (her Minecraft body's among them, when she has one). */
+/** Words about her Minecraft body or the game. They offer a voice turn her tools only while her body is in the game (`voiceToolOffer`). */
 export function asksAboutMinecraftBody(transcript: string): boolean {
   return /マイクラ|マインクラフト|minecraft/iu.test(transcript);
+}
+
+/** Whether the runner offers `minecraft.request` on this surface now: her Minecraft body configured for the scope and in the game. */
+function offersMinecraftRequest(runner: ShannonToolRunner | undefined, scopeKey: string, surface: 'text' | 'voice'): boolean {
+  try { return runner?.offered(surface, 'owner_alone', scopeKey).some(tool => tool.name === 'minecraft.request') ?? false; } catch { return false; }
+}
+
+/**
+ * The identity prompt with her Minecraft body's capability line, only where `minecraft.request` is offered now: the owner
+ * alone (`ownerAlone`, and no one else known to the server), her tools on, and the body in the game. Anywhere else the
+ * prompt is returned unchanged, so a server without a body sends exactly what it sent before (review N1, 2026-10-06).
+ */
+export function withOfferedMinecraftBodyLine(autonomy: { tools?: ShannonToolRunner } | undefined, server: Partial<ConversationToolServer> | undefined,
+  scopeKey: string, surface: 'text' | 'voice', ownerAlone: boolean, prompt: string): string {
+  let offered = false;
+  try { offered = ownerAlone && ownToolsEnabled() && !!server?.audience && !server.audience.othersKnown(scopeKey) && offersMinecraftRequest(autonomy?.tools, scopeKey, surface); } catch { offered = false; }
+  return withMinecraftBodyLine({ present: () => offered }, scopeKey, prompt);
 }
 
 /** Her reply offered something she would do with her tools and asks him to say yes (「中を見てみましょうか？」). */
@@ -125,9 +144,10 @@ export function asksToConfirmToolAction(reply: string): boolean {
  * 見て」「はい、お願いします」 name nothing of hers), or when her last reply, in that time, asked him to confirm
  * something she would do with them. Otherwise null: the turn keeps the plain path's speed.
  */
-export function voiceToolOffer(words: string, server: Partial<ConversationToolServer>, scopeKey: string, threadId: string): 'asked' | 'follow_up' | null {
+export function voiceToolOffer(words: string, server: Partial<ConversationToolServer>, scopeKey: string, threadId: string,
+  minecraftBodyPresent = false): 'asked' | 'follow_up' | null {
   // A memo he asks for may go to her study or her folder (or she asks where): not only Aether (owner decision 2026-10-05).
-  if (asksAboutOwnThings(words) || asksAboutMinecraftBody(words) || (asksForMemo(words) && !namesAether(words))) return 'asked';
+  if (asksAboutOwnThings(words) || (minecraftBodyPresent && asksAboutMinecraftBody(words)) || (asksForMemo(words) && !namesAether(words))) return 'asked';
   if (server.turns?.recent(scopeKey, threadId)) return 'follow_up';
   return lastReplyAsks(server, scopeKey, threadId, reply => asksToConfirmToolAction(reply) || asksWhichPlace(reply)) ? 'follow_up' : null;
 }

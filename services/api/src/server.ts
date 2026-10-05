@@ -77,10 +77,7 @@ import { createIncomingCallRoute, type IncomingCallRoute } from './serverIncomin
 import { SQLiteOwnOutreach } from './ownOutreach.js';
 import { SQLiteOwnerCallFacts, ownerCallElsewhereEnabled } from './ownerCallElsewhere.js';
 import { createServerSelfDiagnosis } from './serverSelfDiagnosis.js';
-import { createMinecraftBodyRoute } from './serverMinecraftBodyRoute.js';
-import { SQLiteGameExperiences } from './gameBodyMemory.js';
-import { configuredMinecraftBody } from './minecraftBodyContract.js';
-import { MinecraftBodyRequests } from './minecraftBodyRequests.js';
+import { createMinecraftBodyWiring } from './serverMinecraftBodyWiring.js';
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -102,18 +99,11 @@ const bodyStore = new SQLiteBodyStore(configuredDatabasePath());
 // Bounded autonomy (ADR-0002): the gate, record, budget and stop switch. No activity loop runs in this process.
 const autonomyConfig = configuredAutonomy(process.env, { databasePath: configuredDatabasePath() });
 const ownerTurns = new SQLiteStudyShowing(configuredDatabasePath());
-// Her Minecraft body (docs/minecraft-body-contract.md). Its game experiences, and (phase 4) the queue of requests her
-// tools and the owner's game chat fill and the body claims. SHANNON_MINECRAFT_BODY_JSON unset: neither exists.
-const minecraftConfiguration = configuredMinecraftBody(process.env);
-const gameExperiences = minecraftConfiguration ? new SQLiteGameExperiences(configuredDatabasePath()) : null;
-const minecraftRequests = minecraftConfiguration
-  ? new MinecraftBodyRequests(configuredDatabasePath(), minecraftConfiguration, now, gameExperiences) : null;
-const stopMinecraftRequestMaintenance = minecraftRequests?.startMaintenance() ?? (() => {});
+const minecraft = createMinecraftBodyWiring(process.env, configuredDatabasePath(), now); // Her Minecraft body (docs/minecraft-body-contract.md); unset SHANNON_MINECRAFT_BODY_JSON: none of it.
 const autonomy = new ShannonAutonomyService({
   store: autonomyStore, config: autonomyConfig, now, ownerFirstActiveAfter: (scopeKey, after) => ownerTurns.ownerFirstActiveAfter(scopeKey, after),
   announcer: autonomyAnnouncer, agentTasks: agentTaskStore, defaultThread: scopeKey => persistentStore.threadId(scopeKey),
-  defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST?.trim() || null,
-  minecraftBody: minecraftRequests,
+  defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST?.trim() || null, minecraftBody: minecraft.requests,
 });
 // Her folder's operations (docs/host-folder-contract.md): stale ones are closed and results pruned also when no device or tool calls.
 const stopFolderMaintenance = autonomy.folderOperations.startMaintenance();
@@ -144,14 +134,7 @@ const chatModel = createConfiguredChatModel(process.env, persistentStore);
 const voiceDecision = createConfiguredVoiceDecisionGateway(process.env, persistentStore);
 // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
 const notion = configuredNotionSource(process.env, { log: line => console.log(line) });
-// Her Minecraft body (docs/minecraft-body-contract.md): game chat from one paired device, through the platform bridge's gate and people.
-// SHANNON_MINECRAFT_BODY_JSON unset: the route answers 503 and game events are ignored.
-const minecraftBodyRoute = createMinecraftBodyRoute(process.env, configuredDatabasePath(), {
-  stateStore: persistentStore, conversationStore: persistentStore, background: backgroundDispatcher, now, chatModel, peopleStore: peopleMemoryStore,
-  // The same conversation kernel as the apps: Minecraft is one more surface of it.
-  conversation: { textTurn: input => kernel.textTurn(input) },
-  requests: minecraftRequests,
-});
+minecraft.connect({ stateStore: persistentStore, conversationStore: persistentStore, background: backgroundDispatcher, now, chatModel, peopleStore: peopleMemoryStore, conversation: { textTurn: input => kernel.textTurn(input) } });
 const kernel = createLocalApiKernel(now, {
   ownOutreach,
   chatModel,
@@ -190,14 +173,10 @@ const kernel = createLocalApiKernel(now, {
   body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), appLook: configuredAppLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: (scopeKey, deviceId) => privateListeningRoute.reachOuts.bodyPresence(scopeKey, deviceId, reachOuts.pending(scopeKey)), reachOutReports: privateListeningRoute.bodyReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env, configuredDatabasePath(), persistentStore, persistentStore.predictionShadow()),
     // The owner in a call on another of his apps: the presence field and the 409 for her body. SHANNON_OWNER_CALL_ELSEWHERE=off switches both off.
     ownerCalls: { enabled: ownerCallElsewhereEnabled(process.env), surface: (scopeKey, deviceId) => { try { return ownerCallFacts.surface(scopeKey, deviceId); } catch { return undefined; } },
-      answered: (scopeKey, since) => { try { return ownerCallFacts.answered(scopeKey, since); } catch { return []; } } },
-    game: minecraftBodyRoute.configuration ? { deviceId: minecraftBodyRoute.configuration.deviceId, ownerScopeKey: minecraftBodyRoute.configuration.ownerScopeKey, experiences: gameExperiences } : null },
-  notion,
-  minecraftRequests,
+      answered: (scopeKey, since) => { try { return ownerCallFacts.answered(scopeKey, since); } catch { return []; } } }, game: minecraft.game },
+  notion, minecraftRequests: minecraft.requests,
 });
-// The platform bridge; with SHANNON_PLATFORM_REPLY=on also POST /v1/platform/reply, a platform turn answered by the same kernel.
-const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, chatModel, peopleMemoryStore,
-  { conversation: { textTurn: input => kernel.textTurn(input) }, databasePath: configuredDatabasePath() });
+const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, chatModel, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input) }, databasePath: configuredDatabasePath() });
 // What this server resolved (docs/ops-contract.md, `server`): model names, persona hash, tools, revision, integrations as booleans. Owner only.
 const selfDiagnosis = createServerSelfDiagnosis({ environment: process.env, startedAt: now(), chatModel, voiceDecision, dictation: voiceTranscriber, vision: voiceVisionGateway,
   voyagerCatalog, notion, platformBridge, autonomy: { enabled: autonomyConfig.enabled, preferences: scopeKey => autonomyStore.modelPreferences(scopeKey) } });
@@ -282,7 +261,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (isOpsPath(url.pathname)) {
-      await opsRoute(url.pathname, request, response, url.searchParams);
+      if (!minecraft.refusesConsole(request, response, deviceAuth)) await opsRoute(url.pathname, request, response, url.searchParams); // Never her Minecraft body's token.
       return;
     }
     if (isPlatformBridgePath(url.pathname)) {
@@ -297,6 +276,7 @@ const server = createServer(async (request, response) => {
       sendJson(response, 401, { error: 'PAIRING_REQUIRED', message: '接続コードでシャノンと接続してください。' });
       return;
     }
+    if (await minecraft.serve(request, response, url.pathname, principal)) return; // Her Minecraft body's token reaches its own routes only.
     if (url.pathname === SHANNON_NOW_PATH) {
       shannonNowRoute(request, response, principal);
       return;
@@ -357,7 +337,6 @@ const server = createServer(async (request, response) => {
     }
     if (privateListeningRoute.handle(request, response, url, body, principal)) return;
     if (incomingCallRoute?.handle(request, response, url, body, principal)) return;
-    if (await minecraftBodyRoute.handle(request, response, url.pathname, body, principal)) return;
     const isPairedChat = principal !== null && url.pathname === '/v1/chat';
     if (isPairedChat && !consumeDeviceAllowance(deviceUsage, principal.deviceId, 20)) {
       sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度話しかけてください。' });
@@ -438,11 +417,7 @@ function shutdown(): void {
     stopToolTraceSweep();
     autonomyAnnouncer.close();
     bodyStore.close();
-    minecraftBodyRoute.close();
-    platformBridge?.close?.();
-    gameExperiences?.close();
-    stopMinecraftRequestMaintenance();
-    minecraftRequests?.close();
+    minecraft.close(); platformBridge?.close?.();
     reachOuts.close();
     reachOutReports.close();
     privateListeningRoute.close();

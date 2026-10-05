@@ -18,7 +18,7 @@ A snapshot is operational data. It must not carry conversation text.
 
 ## `POST /v1/platform/ops/snapshot`
 
-- `Authorization: Bearer <SHANNON_PLATFORM_BRIDGE_TOKEN>` — the existing service credential of `/v1/platform/*`. A device token is refused.
+- `Authorization: Bearer <SHANNON_PLATFORM_BRIDGE_TOKEN>` — the existing service credential of `/v1/platform/*`. A device token is refused. With `SHANNON_PLATFORM_REPLY=on` this token can also make owner-alone conversation turns (`docs/platform-people-contract.md`, Replies), so it is then as powerful as one of the owner's paired apps and must be guarded like one. The device token of her Minecraft body is refused here as any device token is.
 - JSON, at most 64 KiB. Report once a minute (`reportAfterSeconds` in the answer), and once more right after a change if wanted; at most 30 a minute are accepted.
 - The whole snapshot is sent every time. The server keeps only the latest one per scope (one row, replaced); there is no history.
 
@@ -214,7 +214,7 @@ The same summary is written once to the service log at startup, as one line that
 | `tools.enabled` | boolean | `false` when `SHANNON_OWN_TOOLS=off`. |
 | `tools.count` | integer | The number of enabled tools of the registry (`SHANNON_TOOLS`); `0` when switched off. |
 | `tools.names` | string[] | Their names, in registry order. |
-| `tools.offered.<surface>.<audience>` | integer | How many tools `text`, `voice` and `autonomy` offer while only the owner can see or hear the reply (`owner_alone`) and while anyone else may (`others`). Folder tools are also offered only while one of his PCs is bound; that is decided per turn and not counted here. |
+| `tools.offered.<surface>.<audience>` | integer | How many tools `text`, `voice` and `autonomy` offer while only the owner can see or hear the reply (`owner_alone`) and while anyone else may (`others`). Counted from the registry: folder tools are also offered only while one of his PCs is bound, and her Minecraft body's tools (`minecraft.*`, `text` and `voice` only, never `autonomy`) only while `SHANNON_MINECRAFT_BODY_JSON` is set (`minecraft.status`, `minecraft.cancel`) and the body is in the game (`minecraft.request`); that is decided per turn and not counted here, so a server without a body still counts them. |
 | `integrations.voyager` | boolean | The Voyager integration URL, token and workspace are all configured. |
 | `integrations.notion` | boolean | A usable Notion token is configured. |
 | `integrations.aetherContext`, `.aetherProposals` | boolean | The Aether context file, and the Aether proposal inbox, are configured. |

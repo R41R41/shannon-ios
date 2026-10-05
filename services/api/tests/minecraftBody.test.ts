@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { OWNER_AUDIENCE, SHANNON_MINECRAFT_BODY_CAPABILITY, groupAudience } from '@shannon/cognition';
+import { OWNER_AUDIENCE, SHANNON_MINECRAFT_BODY_CAPABILITY, groupAudience, type MemoryDisclosure } from '@shannon/cognition';
 import { createLocalApiKernel, type ShannonApiKernelOptions, type TextTurnInput } from '../src/apiKernel.js';
 import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
 import { BODY_EVENT_TYPES, BODY_GAME_EVENT_TYPES } from '../src/bodyContract.js';
@@ -12,7 +12,7 @@ import { SQLiteBodyStore } from '../src/bodyStore.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';
 import { parseStructuredTurn } from '../src/chatModelSupport.js';
-import { BODY_GAME_SOURCE, SQLiteGameExperiences, gameDeathSummary } from '../src/gameBodyMemory.js';
+import { BODY_GAME_SOURCE, GAME_REQUEST_DISCLOSURE, SQLiteGameExperiences, gameDeathSummary, gameExperienceId } from '../src/gameBodyMemory.js';
 import { MinecraftBody } from '../src/minecraftBody.js';
 import {
   MINECRAFT_BODY_TURN_PATH, MinecraftBodyError, configuredMinecraftBody, minecraftConversationId,
@@ -27,6 +27,7 @@ import { createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import type { HostFolderOperations } from '../src/hostFolderOperations.js';
 import { ShannonToolRunner } from '../src/shannonToolRunner.js';
+import type { MinecraftRequestPort } from '../src/shannonMinecraftTools.js';
 import type { BodyIngestReceipt, BodyPresence } from '../src/shannonBody.js';
 import type { OwnOutreachReader } from '../src/ownOutreach.js';
 
@@ -53,6 +54,10 @@ class GameModel implements ShannonChatModel {
     this.requests.push(request);
     return { mode: this.mode, model: this.model, reply: `はい、${this.requests.length}回目です。`,
       ...(request.offerMinecraftIntent && this.intent ? { minecraftIntent: this.intent } : {}) };
+  }
+  async generateVoice(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
+    this.requests.push(request);
+    return { mode: this.mode, model: this.model, reply: 'はい。' };
   }
 }
 
@@ -475,24 +480,182 @@ describe('what she did on her own, in game chat (owner decision 2026-10-06)', ()
   });
 });
 
-describe('her Minecraft body\'s capability line', () => {
-  it('is in the owner\'s description only while the configured body is in the game, and never in game chat', async () => {
+/** Her Minecraft body's request queue as her tools see it: configured for the owner, in the game while `present.value`. */
+function bodyPort(present: { value: boolean }): MinecraftRequestPort {
+  return { configuredFor: (scopeKey: string) => scopeKey === 'owner', present: (scopeKey: string) => scopeKey === 'owner' && present.value,
+    enqueue: () => ({ kind: 'absent' }), cancel: () => 'NOT_FOUND', statusText: () => '' } as unknown as MinecraftRequestPort;
+}
+
+const voiceTurn = (transcript: string, extra: { companionPresent?: boolean } = {}) => ({
+  method: 'POST' as const, path: '/v1/voice/gemini/cascade/delegations', body: {
+    scopeKey: 'owner', threadId: 'desktop', transcript,
+    deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null, ...(extra.companionPresent ? { companionPresent: true } : {}),
+      userUtterance: { id: `u-${Math.random().toString(36).slice(2)}`, text: transcript, source: 'speech', rawText: transcript } },
+  },
+});
+
+describe('her Minecraft body\'s capability line (review N1, 2026-10-06)', () => {
+  it('is in the owner\'s description only where minecraft.request is offered: alone, the body in the game, never game chat', async () => {
     const present = { value: false };
-    const minecraftRequests = { promptBlock: () => '', present: (scopeKey: string) => scopeKey === 'owner' && present.value };
-    const { turn, model, api, close } = harness({ kernel: { minecraftRequests } });
+    const autonomy = createInMemoryAutonomyService(() => START, { store: new SQLiteAutonomyStore(':memory:'), minecraftBody: bodyPort(present) });
+    const { turn, model, api, close } = harness({ kernel: { autonomy } });
     const line = SHANNON_MINECRAFT_BODY_CAPABILITY.text;
-    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'app-talk', message: 'おはよう' } });
+    const chat = (extra: Record<string, unknown> = {}) => api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'app-talk', message: 'おはよう', ...extra } });
+    await chat();
     expect(model.requests.at(-1)!.systemPrompt).not.toContain(line);
     present.value = true;
-    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'app-talk', message: 'おはよう' } });
+    await chat();
     expect(model.requests.at(-1)!.systemPrompt).toContain(line);
-    expect(api.realtimeVoiceSession('owner').instructions).toContain(line);
+    expect(model.requests.at(-1)!.tools?.definitions.map(tool => tool.name)).toContain('minecraft.request');
+    await api.dispatch(voiceTurn('おはよう'));
+    expect(model.requests.at(-1)!.systemPrompt).toContain(line);
+    // A realtime session before anyone spoke offers no tools, so it has no line.
+    expect(api.realtimeVoiceSession('owner').instructions).not.toContain(line);
     // Game chat asks the body through its intent, not her tools: no line there, in the whisper or the chat.
     await turn({ requestId: 'cap-dm', conversation: { kind: 'dm' } });
     await turn({ requestId: 'cap-chat' });
     for (const request of model.requests.slice(-2)) expect(request.systemPrompt).not.toContain(line);
-    present.value = false;
-    expect(api.realtimeVoiceSession('owner').instructions).not.toContain(line);
+    // With others present no tool is offered, so neither is the line (text marked others, then the ten minutes after it).
+    await chat({ audience: 'others' });
+    expect(model.requests.at(-1)!.systemPrompt).not.toContain(line);
+    await chat();
+    expect(model.requests.at(-1)!.systemPrompt).not.toContain(line);
+    await close();
+  });
+});
+
+describe('Minecraft words in a voice turn (review B2, 2026-10-06)', () => {
+  const said = '昨日マイクラで遊んだよ';
+  it('change nothing without a body, or while it is away: no tools offered, as before her Minecraft body existed', async () => {
+    for (const minecraftBody of [undefined, bodyPort({ value: false })]) {
+      const autonomy = createInMemoryAutonomyService(() => START, { store: new SQLiteAutonomyStore(':memory:'), ...(minecraftBody ? { minecraftBody } : {}) });
+      const { model, api, close } = harness({ kernel: { autonomy } });
+      expect((await api.dispatch(voiceTurn(said))).status).toBe(200);
+      const request = model.requests.at(-1)!;
+      expect(request.tools).toBeUndefined();
+      expect(request).not.toHaveProperty('toolsWithheld');
+      expect(request.systemPrompt).not.toContain(SHANNON_MINECRAFT_BODY_CAPABILITY.text);
+      // A turn naming her own things still offers them, as before.
+      await api.dispatch(voiceTurn('書斎のメモを読んで'));
+      expect(model.requests.at(-1)!.tools?.definitions.length).toBeGreaterThan(0);
+      await close();
+    }
+  });
+
+  it('offer her tools, her body\'s among them, while the body is in the game', async () => {
+    const autonomy = createInMemoryAutonomyService(() => START, { store: new SQLiteAutonomyStore(':memory:'), minecraftBody: bodyPort({ value: true }) });
+    const { model, api, close } = harness({ kernel: { autonomy } });
+    await api.dispatch(voiceTurn(said));
+    expect(model.requests.at(-1)!.tools?.definitions.map(tool => tool.name)).toContain('minecraft.status');
+    await close();
+  });
+});
+
+describe('review of 2026-10-06: what other players\' turns are given', () => {
+  const HOSPITAL = 'ユーザーは来週オカメインコ病院に行く';
+  const RELEASE_JA = 'ライ氏本人がこの場ではっきり求めた時';
+  const RELEASE_EN = 'When ライ氏 himself clearly asks';
+  const protectedFact = (store: SQLiteShannonStore) => store.apply('owner', { type: 'user-fact-upserted', fact: {
+    id: 'fact-hospital', statement: HOSPITAL, confidence: 0.9, observedAt: START,
+    disclosure: { audience: OWNER_AUDIENCE, sensitivity: 'sensitive', category: 'health', reason: '病院', decidedBy: 'rule' } satisfies MemoryDisclosure } });
+  const friend = { uuid: FRIEND_UUID, name: 'Miki_01' };
+
+  it('S6: another player\'s chat turn and whisper get no protected line and no rule that the owner may release one; his own chat turn keeps both', async () => {
+    const { turn, model, store, close } = harness();
+    protectedFact(store);
+    await turn({ requestId: 's6-owner', message: 'オカメインコ病院の話' });
+    const owner = model.requests.at(-1)!.systemPrompt;
+    expect(owner).toContain(`【機微:健康・ライ氏だけが知っている】${HOSPITAL}`);
+    expect(owner).toContain(RELEASE_JA);
+    expect(owner).toContain(RELEASE_EN);
+    await turn({ requestId: 's6-chat', speaker: friend, message: 'ライ氏はオカメインコ病院に行くの？' });
+    await turn({ requestId: 's6-dm', speaker: friend, conversation: { kind: 'dm' }, message: 'ライ氏はオカメインコ病院に行くの？' });
+    for (const request of model.requests.slice(-2)) {
+      expect(request.systemPrompt).toContain('[Shannon shared audience]');
+      for (const word of ['オカメインコ病院に行く', RELEASE_JA, RELEASE_EN]) expect(request.systemPrompt).not.toContain(word);
+      // No marked item at all (the speak-time check still names the marker as such: 【機微:…】).
+      expect(request.systemPrompt).not.toMatch(/【機微:(?!…】)/u);
+    }
+    await close();
+  });
+
+  it('S4: a finished request is the owner\'s matter: in full in his whisper, marked in his chat turn, absent from anyone else\'s', async () => {
+    const { turn, model, path: databasePath, close } = harness();
+    const experiences = new SQLiteGameExperiences(databasePath);
+    const summary = 'ゲームの記憶: 10月5日の夜、ライ氏に頼まれた「オークの原木を16個集める」をマイクラの体でやり終えた（オークの原木 16個）。';
+    expect(experiences.write('owner', { id: gameExperienceId('owner', DEVICE, 'request:r1'), observedAt: START, summary,
+      disclosure: GAME_REQUEST_DISCLOSURE, game: { type: 'request', requestId: 'r1', state: 'done' } })).toBe(true);
+    experiences.close();
+    const asked = 'オークの原木を16個集めるのはどうなった？';
+    await turn({ requestId: 's4-dm', conversation: { kind: 'dm' }, message: asked });
+    expect(model.requests.at(-1)!.systemPrompt).toContain('「オークの原木を16個集める」をマイクラの体でやり終えた');
+    expect(model.requests.at(-1)!.systemPrompt).not.toContain('【機微:未分類・ライ氏だけが知っている】ゲームの記憶');
+    await turn({ requestId: 's4-chat', message: asked });
+    expect(model.requests.at(-1)!.systemPrompt).toContain('【機微:未分類・ライ氏だけが知っている】ゲームの記憶');
+    await turn({ requestId: 's4-friend', speaker: friend, message: asked });
+    await turn({ requestId: 's4-friend-dm', speaker: friend, conversation: { kind: 'dm' }, message: asked });
+    for (const request of model.requests.slice(-2)) expect(request.systemPrompt).not.toContain('をマイクラの体でやり終えた');
+    await close();
+  });
+
+  it('S5: while the body works on a request, its task line reaches the owner\'s turns only', async () => {
+    const { turn, model, close } = harness();
+    const body = { busyWith: 'request', task: '頼まれた秘密の箱づくり', dimension: 'overworld' };
+    await turn({ requestId: 's5-owner', body });
+    expect(model.requests.at(-1)!.systemPrompt).toContain('頼まれた秘密の箱づくり');
+    await turn({ requestId: 's5-friend', speaker: friend, body });
+    expect(model.requests.at(-1)!.systemPrompt).toContain('[マイクラの体の今]（');
+    expect(model.requests.at(-1)!.systemPrompt).not.toContain('頼まれた秘密の箱づくり');
+    // Its own goal is game state, as before.
+    await turn({ requestId: 's5-campaign', speaker: friend, body: { ...body, busyWith: 'campaign', task: 'エンドラを倒す' } });
+    expect(model.requests.at(-1)!.systemPrompt).toContain('エンドラを倒す');
+    await close();
+  });
+
+  it('N4: a turn that carries scopeKey is refused', async () => {
+    const { turn, refusal, model, close } = harness();
+    expect(await refusal(turn({ requestId: 'n4', scopeKey: 'owner' }))).toBe('400 BAD_REQUEST');
+    expect(model.requests).toEqual([]);
+    await close();
+  });
+});
+
+describe('review of 2026-10-06: model calls per speaker (S3, N3)', () => {
+  const player = (index: number) => ({ uuid: `0f6a8c52-1b2d-4e3f-9a8b-${String(index).padStart(12, '0')}`, name: `Player_${index}` });
+
+  it('never lets other players use up the owner\'s turns; one player has his own share', async () => {
+    const { turn, refusal, model, close } = harness();
+    for (let index = 0; index < 6; index += 1) await turn({ requestId: `p-${index}`, speaker: player(1) });
+    const calls = model.requests.length;
+    expect(await refusal(turn({ requestId: 'p-6', speaker: player(1) }))).toBe('429 RATE_LIMITED');
+    expect(model.requests).toHaveLength(calls);
+    // Another player, and the owner, are still answered.
+    expect((await turn({ requestId: 'p2-0', speaker: player(2) })).reply).toBeTruthy();
+    expect((await turn({ requestId: 'owner-after-spam' })).reply).toBeTruthy();
+    await close();
+  });
+
+  it('caps all other players together below the bridge\'s person-turn limit, and still answers the owner', async () => {
+    const { turn, refusal, close } = harness();
+    for (let index = 0; index < 20; index += 1) await turn({ requestId: `many-${index}`, speaker: player(100 + index) });
+    expect(await refusal(turn({ requestId: 'many-20', speaker: player(200) }))).toBe('429 RATE_LIMITED');
+    expect((await turn({ requestId: 'owner-many' })).reply).toBeTruthy();
+    await close();
+  });
+
+  it('counts only turns that reach the model: a refused device, a malformed turn and a replay cost nothing', async () => {
+    const { turn, refusal, model, close, advance } = harness();
+    for (let index = 0; index < 25; index += 1) {
+      expect(await refusal(turn({ requestId: `x-${index}` }, 'body-pc'))).toBe('403 MINECRAFT_BODY_DEVICE_DENIED');
+      expect(await refusal(turn({ requestId: `y-${index}`, message: '' }))).toBe('400 BAD_REQUEST');
+    }
+    await turn({ requestId: 'once' });
+    for (let index = 0; index < 25; index += 1) expect((await turn({ requestId: 'once', observedAt: START })).duplicate).toBe(true);
+    for (let index = 1; index < 20; index += 1) await turn({ requestId: `owner-${index}` });
+    expect(model.requests).toHaveLength(20);
+    expect(await refusal(turn({ requestId: 'owner-21' }))).toBe('429 RATE_LIMITED');
+    advance(61_000);
+    expect((await turn({ requestId: 'owner-22' })).reply).toBeTruthy();
     await close();
   });
 });
@@ -643,7 +806,7 @@ describe('docs/minecraft-body-contract.md', () => {
       'MINECRAFT_BODY_NOT_CONFIGURED', 'MINECRAFT_BODY_DEVICE_DENIED', 'MINECRAFT_BODY_SCOPE_DENIED', 'MINECRAFT_SERVER_DENIED',
       'MINECRAFT_TURN_CONFLICT', 'RATE_LIMITED', 'BAD_REQUEST', 'game.died', 'not_game_body', 'game_only', 'body.game',
       '`body`', '`task`', '`dimension`', '`health`', '`food`', '`timeOfDay`', '`recentAdvancements`', '`busyWith`', '[マイクラの体の今]',
-      'GAME_BODY_CAPABILITIES_DENIED', 'TextTurnSurface.ownOutreach', 'SHANNON_MINECRAFT_BODY_CAPABILITY', 'withMinecraftBodyLine']) {
+      'GAME_BODY_CAPABILITIES_DENIED', 'GAME_BODY_DEVICE_DENIED', 'TextTurnSurface.ownOutreach', 'SHANNON_MINECRAFT_BODY_CAPABILITY', 'withMinecraftBodyLine']) {
       expect(document).toContain(word);
     }
   });

@@ -1,0 +1,72 @@
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { ShannonDevicePrincipal } from './deviceAuth.js';
+import { SQLiteGameExperiences } from './gameBodyMemory.js';
+import { configuredMinecraftBody } from './minecraftBodyContract.js';
+import { MinecraftBodyRequests } from './minecraftBodyRequests.js';
+import { readJson, sendJson } from './serverHttp.js';
+import { createMinecraftBodyRoute, type MinecraftBodyRoute } from './serverMinecraftBodyRoute.js';
+
+/** Every route of her Minecraft body (`docs/minecraft-body-contract.md`). */
+export const MINECRAFT_BODY_ROUTE_PREFIX = '/v1/body/minecraft/';
+
+/**
+ * What the device of `SHANNON_MINECRAFT_BODY_JSON` may call (review S1, 2026-10-06): its own routes, game events, and the
+ * presence read. Its token is a paired device's, so without this it could do what the owner's apps do (his chat, her
+ * study and folder, his memory); everything else answers `403 GAME_BODY_DEVICE_DENIED`.
+ */
+export function gameBodyMayCall(method: string | undefined, path: string): boolean {
+  return path.startsWith(MINECRAFT_BODY_ROUTE_PREFIX)
+    || (method === 'POST' && path === '/v1/body/events') || (method === 'GET' && path === '/v1/body/presence');
+}
+
+type RouteDependencies = Omit<Parameters<typeof createMinecraftBodyRoute>[2], 'requests'>;
+
+/**
+ * Her Minecraft body as the server wires it: its game experiences, the request queue her tools and the owner's game chat
+ * fill (phase 4), the game-chat route, and the gate on its device token. `SHANNON_MINECRAFT_BODY_JSON` unset: none of it
+ * exists, its routes answer 503, and no device is held back.
+ */
+export function createMinecraftBodyWiring(environment: Readonly<Record<string, string | undefined>>, databasePath: string, now: () => string) {
+  const configuration = configuredMinecraftBody(environment);
+  const experiences = configuration ? new SQLiteGameExperiences(databasePath) : null;
+  const requests = configuration ? new MinecraftBodyRequests(databasePath, configuration, now, experiences) : null;
+  const stopMaintenance = requests?.startMaintenance() ?? (() => {});
+  const isGameBody = (principal: ShannonDevicePrincipal | null) => Boolean(configuration && principal?.deviceId === configuration.deviceId);
+  let route: MinecraftBodyRoute | null = null;
+  return {
+    configuration,
+    requests,
+    /** `ShannonBodyOptions.game`: the one device whose game events are taken. */
+    game: configuration ? { deviceId: configuration.deviceId, ownerScopeKey: configuration.ownerScopeKey, experiences } : null,
+    /** The game-chat route, once the conversation kernel it answers through exists. */
+    connect(dependencies: RouteDependencies): void {
+      route = createMinecraftBodyRoute(environment, databasePath, { ...dependencies, requests });
+    },
+    /** The operations console authenticates on its own: her Minecraft body's token is refused there before it is read. */
+    refusesConsole(request: IncomingMessage, response: ServerResponse, devices: { authenticate(authorization: string | undefined): ShannonDevicePrincipal | null } | null): boolean {
+      if (!configuration || !devices || !isGameBody(devices.authenticate(request.headers.authorization))) return false;
+      sendJson(response, 403, { error: 'GAME_BODY_DEVICE_DENIED', message: 'Her Minecraft body may call its own routes, game events and presence only.' });
+      return true;
+    },
+    /**
+     * After authentication: refuses her Minecraft body's token outside its routes, and answers those routes (reading the
+     * body itself). True when it answered.
+     */
+    async serve(request: IncomingMessage, response: ServerResponse, path: string, principal: ShannonDevicePrincipal | null): Promise<boolean> {
+      if (isGameBody(principal) && !gameBodyMayCall(request.method, path)) {
+        sendJson(response, 403, { error: 'GAME_BODY_DEVICE_DENIED', message: 'Her Minecraft body may call its own routes, game events and presence only.' });
+        return true;
+      }
+      if (!path.startsWith(MINECRAFT_BODY_ROUTE_PREFIX)) return false;
+      const body = request.method === 'POST' ? await readJson(request, 64 * 1024) : undefined;
+      if (!route || !(await route.handle(request, response, path, body, principal))) sendJson(response, 404, { error: 'NOT_FOUND' });
+      return true;
+    },
+    close(): void {
+      route?.close();
+      experiences?.close();
+      stopMaintenance();
+      requests?.close();
+    },
+  };
+}

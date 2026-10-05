@@ -6,10 +6,14 @@ import type { ChatResponse } from './contracts.js';
 import type { ConversationStore, ShannonExperience } from './conversationStore.js';
 import { DisclosureGate, sharedDailyFocus } from './memoryDisclosure.js';
 import {
-  PlatformBridgeError, SHARED_AUDIENCE_HEADER,
+  PlatformBridgeError,
   type PlatformAudiencePolicy, type PlatformBridgeService, type PlatformTurnRequest, type ShannonPlatform,
 } from './platformBridge.js';
 import { speakTimePrivacyCheck } from './voiceCompanionPresence.js';
+import { sharedAudienceHeader } from './platformBridgeBindings.js';
+
+/** The speak-time check of a turn someone other than the owner wrote: nobody there may release a protected line of his. */
+const OTHERS_SPEAK_TIME_CHECK = speakTimePrivacyCheck.split('\n').filter(line => !line.startsWith('- When ライ氏 himself')).join('\n');
 
 /**
  * One platform surface of the conversation kernel (`ShannonApiKernel.textTurn`), shared by every place where a bound
@@ -23,8 +27,8 @@ import { speakTimePrivacyCheck } from './voiceCompanionPresence.js';
  *   without his profile, the speak-time check, no owner reads (notes, tasks, Notion, calendar), no tools; his turn is
  *   kept in the platform thread as his (`speaker: owner`) with that audience;
  * - anyone else: their audience (the conversation as a whole, or that person alone in a DM), her guest identity, what
- *   she remembers of the people there. In a DM the owner is not present, so no protected line of his is given
- *   (`openOnly` of the surface).
+ *   she remembers of the people there. In a DM or a shared conversation alike (owner decision 2026-10-06), only what may
+ *   be shown to anyone: no protected line of his, none of her pursuits, and no rule that he may release one (`openOnly`).
  */
 export function platformAudienceTurn(policy: PlatformAudiencePolicy): ChatAudienceTurn {
   if (policy.gate.ownerOnly) return chatAudienceTurn('owner')!;
@@ -36,7 +40,9 @@ export function platformAudienceTurn(policy: PlatformAudiencePolicy): ChatAudien
     participantMode: 'guest' as const,
     // Nothing of his notes, tasks, Notion or calendar is read for a conversation others can read.
     capabilities: Object.freeze({ aetherNotes: false, voyagerTasks: false, notion: false, upcoming: false }),
-    instructions: [SHARED_AUDIENCE_HEADER, ...policy.peopleLines, ...policy.impressionLines, speakTimePrivacyCheck].join('\n'),
+    // The owner's own turn keeps the rule that he may release a protected line by asking; anyone else's has neither that rule nor such a line.
+    instructions: [sharedAudienceHeader(policy.ownerWrote), ...policy.peopleLines, ...policy.impressionLines,
+      policy.ownerWrote ? speakTimePrivacyCheck : OTHERS_SPEAK_TIME_CHECK].join('\n'),
     // The verified owner's own turn in a shared conversation: his words, heard by everyone there (as the bridge stores it).
     turnLabel: Object.freeze({ audience: present, speaker: policy.ownerWrote ? 'owner' as const : 'unknown' as const }),
     identity: () => shannonIdentityPrompt(policy.ownerWrote ? 'owner' : 'guest'),

@@ -67,7 +67,10 @@ export interface ServerSelfDiagnosis {
     /** Tools of the registry that are enabled (`SHANNON_OWN_TOOLS`); 0 when switched off. */
     count: number;
     names: string[];
-    /** What each surface offers for each audience (folder tools also need a bound PC at the time of the turn). */
+    /**
+     * What each surface offers for each audience, counted from the registry: folder tools also need a bound PC at the time
+     * of the turn, and her Minecraft body's tools a configured body (`minecraft.request` one in the game).
+     */
     offered: Record<ToolSurface, Record<ToolAudience, number>>;
   };
   integrations: { voyager: boolean; notion: boolean; aetherContext: boolean; aetherProposals: boolean; discordBridge: boolean };

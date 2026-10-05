@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SHANNON_MINECRAFT_BODY_CAPABILITY, groupAudience } from '@shannon/cognition';
+import { OWNER_AUDIENCE, SHANNON_MINECRAFT_BODY_CAPABILITY, groupAudience } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
@@ -263,10 +263,10 @@ describe('the ownOutreach selection of the capability context (review of 2026-10
 
   it('(2) is set only for a surface turn, by the surface\'s switch, which only game chat turns on', () => {
     const source = (name: string) => readFileSync(join(import.meta.dirname, '../src', name), 'utf8');
-    const kernel = source('apiKernel.ts');
+    const kernel = source('apiTextTurn.ts');
     // The app's chat passes its audience's selection untouched; only a surface (game chat, a platform reply) sets ownOutreach.
     expect(kernel).toContain('surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities');
-    for (const name of ['apiLiveVoice.ts', 'chatAudience.ts', 'platformSurface.ts', 'platformReply.ts', 'minecraftBody.ts']) {
+    for (const name of ['apiKernel.ts', 'apiLiveVoice.ts', 'chatAudience.ts', 'platformSurface.ts', 'platformReply.ts', 'minecraftBody.ts']) {
       expect(source(name), name).not.toMatch(/ownOutreach:\s*(?:'guarded'|surfaceOwnOutreach)/u);
     }
     expect(source('minecraftBody.ts')).toMatch(/\n\s+ownOutreach: true,\n/u);
@@ -297,6 +297,31 @@ describe('the ownOutreach selection of the capability context (review of 2026-10
     expect(prompts[1]).toContain(TIMES);
     expect(prompts[1]).not.toContain(TEXT);
     expect(prompts[2]).not.toContain('[ボクが自分からしたこと]');
+    await close();
+  });
+});
+
+describe('a Discord friend\'s turn (owner decision S6, 2026-10-06)', () => {
+  const HOSPITAL = 'ユーザーは来週オカメインコ病院に行く';
+  const RELEASE = 'ライ氏本人がこの場ではっきり求めた時';
+  it('gets no protected line of the owner\'s and no rule that he may release one, in a reply and in the context; his own turn keeps both', async () => {
+    const { reply, model, store, bridge, close } = harness();
+    store.apply('owner', { type: 'user-fact-upserted', fact: { id: 'fact-hospital', statement: HOSPITAL, confidence: 0.9, observedAt: START,
+      disclosure: { audience: OWNER_AUDIENCE, sensitivity: 'sensitive', category: 'health', reason: '病院', decidedBy: 'rule' } } });
+    await reply({ requestId: 'd-owner', conversationId: CHANNEL, conversationKind: 'channel', userMessage: 'オカメインコ病院の話' });
+    expect(model.requests.at(-1)!.systemPrompt).toContain(`【機微:健康・ライ氏だけが知っている】${HOSPITAL}`);
+    expect(model.requests.at(-1)!.systemPrompt).toContain(RELEASE);
+    await reply({ requestId: 'd-friend', conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: 'ライ氏はオカメインコ病院に行くの？' });
+    const friend = model.requests.at(-1)!.systemPrompt;
+    expect(friend).toContain('[Shannon shared audience]');
+    for (const word of ['オカメインコ病院に行く', RELEASE, 'When ライ氏 himself clearly asks']) expect(friend).not.toContain(word);
+    expect(friend).not.toMatch(/【機微:(?!…】)/u);
+    // `/v1/platform/context` for the same people: the friend's projection is open items only, the owner's as before.
+    const context = (sourceUserId: string) => bridge.context({ platform: 'discord', conversationId: CHANNEL, sourceUserId, conversationKind: 'channel' }).projection;
+    expect(context(FRIEND)).not.toContain(HOSPITAL);
+    expect(context(FRIEND)).not.toContain(RELEASE);
+    expect(context(OWNER)).toContain(`【機微:健康・ライ氏だけが知っている】${HOSPITAL}`);
+    expect(context(OWNER)).toContain(RELEASE);
     await close();
   });
 });

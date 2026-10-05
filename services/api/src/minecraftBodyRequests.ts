@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { touchWhen } from './bodyTouchMemory.js';
-import { GAME_DISCLOSURE, gameExperienceId, type GameExperience, type GameExperienceWriter } from './gameBodyMemory.js';
+import { GAME_REQUEST_DISCLOSURE, gameExperienceId, type GameExperience, type GameExperienceWriter } from './gameBodyMemory.js';
 import { HostFolderSignals } from './hostFolderOperations.js';
 import {
   MINECRAFT_REPORT_CODES, MINECRAFT_REQUEST_LIMITS, OPEN_REQUEST_STATES, gainedWords, requestGoal,
@@ -439,6 +439,6 @@ export function requestExperienceSummary(item: MinecraftRequestView): string {
 export function requestExperience(scopeKey: string, deviceId: string, item: MinecraftRequestView): GameExperience {
   return {
     id: gameExperienceId(scopeKey, deviceId, `request:${item.id}`), observedAt: item.finishedAt ?? item.updatedAt,
-    summary: requestExperienceSummary(item), disclosure: GAME_DISCLOSURE, game: { type: 'request', requestId: item.id, state: item.state },
+    summary: requestExperienceSummary(item), disclosure: GAME_REQUEST_DISCLOSURE, game: { type: 'request', requestId: item.id, state: item.state },
   };
 }
