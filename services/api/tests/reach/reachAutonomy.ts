@@ -130,7 +130,7 @@ export function scriptedAutonomyModel(): FakeModel {
     } else if (stories.length) {
       model.plans = [{ thought: '書いた物語を見せます。', steps: [{ action: 'ready', pieceId: stories[0]!.id }, rest(240, '物語を見せたので、少し休みます。')] }];
     } else {
-      const url = /https?:\/\/[^\s)」]+/u.exec(text)?.[0] ?? 'https://www.aozora.gr.jp/';
+      const url = /https?:\/\/[^\s)」"…]+/u.exec(text)?.[0] ?? 'https://www.aozora.gr.jp/';
       model.plans = [{ thought: '読んで、メモにして、短い物語を書いてみます。', steps: [{ action: 'read', url }, { action: 'note' }, { action: 'draft', idea: '誰もいない駅に残された傘の話' }] }];
     }
   };
