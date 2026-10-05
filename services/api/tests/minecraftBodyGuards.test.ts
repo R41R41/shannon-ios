@@ -165,6 +165,15 @@ describe('N5: what a turn nobody but the owner may release is given', () => {
       '- Desired outcome: 完成', '', '[次の区画]'].join('\n');
     expect(withoutGuardedEntries(text)).toBe(['[今日の関心]', '- 散歩', '', '', '[次の区画]'].join('\n'));
   });
+
+  it('leaves out a whole block whose header line opens with the marker, as upstream places it on the intention frame', () => {
+    const text = ['[Current cognitive context — use before answering]', 'Situation: channel=text', '',
+      '【機微:未分類・ライ氏だけが知っている】[Current intention frame — durable, owner-visible, and evidence-backed]',
+      'Primary objective: 家計簿アプリ', 'Desired outcome: 完成', 'Owner-visible plan proposal:', '1. 画面を作る', '- 箇条書きの続き', '',
+      '[ライ氏についての記憶 — ほかの人がいる場]', '- ユーザーは紅茶が好き', '- 【機微:健康・ライ氏だけが知っている】ユーザーは通院している', '- ユーザーは猫を飼っている'].join('\n');
+    expect(withoutGuardedEntries(text)).toBe(['[Current cognitive context — use before answering]', 'Situation: channel=text', '', '',
+      '[ライ氏についての記憶 — ほかの人がいる場]', '- ユーザーは紅茶が好き', '- ユーザーは猫を飼っている'].join('\n'));
+  });
 });
 
 describe('the replay of a turn that may show only open items (second review, 2026-10-06)', () => {

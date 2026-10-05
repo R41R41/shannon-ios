@@ -619,6 +619,31 @@ describe('review of 2026-10-06: what other players\' turns are given', () => {
     await close();
   });
 
+  it('his goal in game chat after upstream e63866a: whisper in full, his chat turn marked on the frame\'s first line without current_goal, anyone else nothing', async () => {
+    const { turn, model, api, close } = harness();
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'app-talk', message: '私の目標は新しい家計簿アプリを完成させることです' } });
+    await api.waitForBackground('owner');
+    const asked = '家計簿アプリの続きをやろう';
+    await turn({ requestId: 'g3-dm', conversation: { kind: 'dm' }, message: asked });
+    const alone = model.requests.at(-1)!.systemPrompt;
+    expect(alone).toMatch(/current_goal=[^;\n]*家計簿アプリ/u);
+    expect(alone).toMatch(/^\[Current intention frame/mu);
+    expect(alone).not.toContain('【機微:未分類・ライ氏だけが知っている】[Current intention frame');
+    await turn({ requestId: 'g3-chat', message: asked });
+    const shared = model.requests.at(-1)!.systemPrompt;
+    expect(shared).not.toContain('current_goal=');
+    expect(shared).toContain('【機微:未分類・ライ氏だけが知っている】[Current intention frame');
+    expect(shared).not.toMatch(/^\[Current intention frame/mu);
+    await turn({ requestId: 'g3-friend', speaker: friend, message: asked });
+    await turn({ requestId: 'g3-friend-dm', speaker: friend, conversation: { kind: 'dm' }, message: asked });
+    for (const request of model.requests.slice(-2)) {
+      // No goal, frame or objective of his. (His turn that stated it is an ordinary memory by the disclosure rule, and ordinary
+      // items are open to anyone; that rule is upstream's and unchanged.)
+      for (const word of ['current_goal=', 'Current intention frame', 'Primary objective', 'Desired outcome']) expect(request.systemPrompt, word).not.toContain(word);
+    }
+    await close();
+  });
+
   it('S4: a finished request is the owner\'s matter: in full in his whisper, marked in his chat turn, absent from anyone else\'s', async () => {
     const { turn, model, path: databasePath, close } = harness();
     const experiences = new SQLiteGameExperiences(databasePath);

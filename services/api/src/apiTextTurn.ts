@@ -115,20 +115,24 @@ export const NO_LOOK: ConversationLookTurn = Object.freeze({ prompt: '', request
 /** A line that begins an entry or a block of a prompt: a bullet, a bracketed header, a marker, or a blank line. */
 const ENTRY_START = /^(?:\s*$|- |・|\[|【|#)/u;
 
-/** A line that is a marker alone: it marks the whole block after it, up to the next blank line. */
-const MARKER_ONLY = /^\s*(?:- )?【機微:[^】]*】\s*$/u;
+/**
+ * A line that marks a whole block, up to the next blank line: a marker alone on its line (the block follows), or a marker
+ * that opens a block's header on the same line, as the intention frame carries it with others present (`【機微:…】[Current
+ * intention frame …]`, upstream e63866a).
+ */
+const BLOCK_MARKER = /^\s*(?:- )?【機微:[^】]*】\s*(?:\[.*)?$/u;
 
 /**
  * Memory text without its protected entries: the second layer behind the source (`openOnly` of the turn's context, which
  * leaves protected items, his intentions and her unlabelled notes out where they are made). Each protected item carries
  * a 【機微:…】 marker on its first line; an item whose text runs over several lines is left out whole, up to the next
- * entry or block (review N5), and a marker alone on its line takes the whole block after it, up to the next blank line
- * (second review, 2026-10-06).
+ * entry or block (review N5), and a marker alone on its line, or one that opens a block's header, takes the whole block,
+ * up to the next blank line (second review, 2026-10-06).
  */
 export function withoutGuardedEntries(text: string): string {
   let dropping: 'entry' | 'block' | null = null;
   return text.split('\n').filter(line => {
-    if (MARKER_ONLY.test(line)) { dropping = 'block'; return false; }
+    if (BLOCK_MARKER.test(line)) { dropping = 'block'; return false; }
     if (line.includes('【機微:')) { dropping = 'entry'; return false; }
     if (dropping === 'block' && line.trim() !== '') return false;
     if (dropping === 'entry' && !ENTRY_START.test(line)) return false;
