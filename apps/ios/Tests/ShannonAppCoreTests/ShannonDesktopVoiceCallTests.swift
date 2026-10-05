@@ -330,6 +330,22 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
         call.session.stop()
     }
 
+    func testASwitchClearsTalksDraftThroughTheCallsOwnWiring() async {
+        let call = ShannonDesktopVoiceCall()
+        let conversation = ShannonConversationModel.designPreview()
+        call.attach(conversation: conversation, menuBar: nil)
+        call.start(threadID: nil)
+        call.workspace.connectionRequestID = nil
+        await settle()
+        call.session.phase = .listening
+        conversation.draft = "明日の歯医者は何時？"
+        XCTAssertFalse(call.sendText(conversation.draft))
+        // A spoken switch: no view is involved.
+        call.session.switchParticipantMode(to: .guest, origin: .spoken)
+        XCTAssertEqual(conversation.draft, "")
+        call.session.stop()
+    }
+
     private func settle() async {
         for _ in 0..<5 { await Task.yield() }
         try? await Task.sleep(for: .milliseconds(20))

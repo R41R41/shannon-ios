@@ -81,6 +81,8 @@ public final class ShannonGeminiLiveSessionModel {
     var sameCallReconnectQueued = false
     /// Until when an utterance that finalises is still the owner's, after a switch into 「友人も一緒」 by the control.
     var ownerWordsUntil: TimeInterval?
+    /// Told after every switch between 本人だけ and 「友人も一緒」, spoken or by the control. Set by the owner of the call.
+    var participantModeDidChange: (@MainActor (ShannonVoiceParticipantMode) -> Void)?
     /// Whether the app declares why it uses the microphone (the test host does not).
     var microphoneUsageIsDeclared: @MainActor () -> Bool = {
         ShannonVoiceUsageDescriptionPolicy.isPresent(Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription"))

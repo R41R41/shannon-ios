@@ -41,6 +41,8 @@ extension ShannonGeminiLiveSessionModel {
         participantMode = mode
         ShannonVoiceDiagnostics.shared.record("gemini.participant.switched",
             metadata: ["mode": mode.rawValue, "origin": origin.rawValue])
+        // What is on the screens around the call (an unshared photo, the owner's failed text) follows the switch.
+        participantModeDidChange?(mode)
         guard mode == .guest else { return }
         guestCall.beginGuestPeriod()
         // By the control nobody has spoken yet, so Shannon opens with the greeting herself.

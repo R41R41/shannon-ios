@@ -30,6 +30,8 @@ extension ShannonVoiceWorkspaceState {
         clearPhoto()
         // The previous call stays remembered; its card makes room for the new call.
         callMemory = nil
+        // An unshared photo and the owner's failed text in the composer follow a switch, however it happened.
+        geminiVoiceModel.participantModeDidChange = { [weak self] mode in self?.participantModeChanged(to: mode) }
         geminiVoiceModel.guestPeriodEnded = { [weak self] period in
             self?.remember(period, threadID: context.threadID, using: conversationModel)
         }

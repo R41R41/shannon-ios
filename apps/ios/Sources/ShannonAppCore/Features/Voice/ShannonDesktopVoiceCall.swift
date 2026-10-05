@@ -106,7 +106,7 @@ public final class ShannonDesktopVoiceCall {
             mode: .owner, speechProvider: Self.speechProvider, threadID: threadID,
             conversationModel: conversation, geminiVoiceModel: session
         )
-        installEndAfterSilence()
+        installCallHooks()
     }
 
     /// 終了: what was answered stays stored, a 「友人も一緒」 period is remembered, and the card says so.
@@ -208,7 +208,9 @@ public final class ShannonDesktopVoiceCall {
     }
 
     /// A silent minute while another app is in front ends the call through 終了's path; Talk says so afterwards.
-    func installEndAfterSilence() {
+    func installCallHooks() {
+        // The Mac's switch handler also clears the owner's failed text from Talk's draft.
+        session.participantModeDidChange = { [weak self] mode in self?.participantModeChanged(to: mode) }
         session.endAfterBackgroundSilence = { [weak self] in
             guard let self else { return }
             self.end()

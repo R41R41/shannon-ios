@@ -54,7 +54,7 @@ extension ShannonDesktopVoiceCall {
                 mode: .owner, speechProvider: Self.speechProvider, threadID: line.threadID,
                 conversationModel: conversation, geminiVoiceModel: session
             )
-            installEndAfterSilence()
+            installCallHooks()
             // After `beginCall`, which drops any id an earlier line left behind: this call, and no other, carries this one.
             ShannonBodyReactionLink.shared.arm(reactionID: line.reactionID, listenSeconds: seconds)
             let request = workspace.connectionRequestID

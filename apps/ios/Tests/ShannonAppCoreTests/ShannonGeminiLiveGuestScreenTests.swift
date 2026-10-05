@@ -43,12 +43,17 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         model.stop()
     }
 
-    /// A completed owner reply is not interrupted by the switch; what she says about a look behind it arrives later
-    /// and is spoken, but is not written on the screen the guests can read.
-    func testWhatSheSaysAboutALookAfterTheSwitchIsNotShown() async {
+    /// The production order: the owner reply completes and is on screen, the look starts while it is spoken, the
+    /// owner confirms 友人も一緒 by the control while she waits for what she saw, and then her line about it arrives.
+    /// It is spoken (sent for speech) but not written on the screen the guests can read.
+    func testWhatSheSaysAboutALookAfterTheSwitchIsSpokenButNotShown() async {
         let model = liveModel()
         var lookResult: CheckedContinuation<String?, Never>?
-        model.streamSpeech = { _, _ in throw Refused() }
+        var sentForSpeech: [String] = []
+        model.streamSpeech = { text, _ in
+            sentForSpeech.append(text)
+            throw Refused()
+        }
         model.performAppLook = { _ in await withCheckedContinuation { lookResult = $0 } }
         model.performStreamingDelegation = { _, _, _, onSegment in
             await onSegment("見てみますね。", nil)
@@ -61,14 +66,61 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         while lookResult == nil { await Task.yield() }
         XCTAssertEqual(model.shannonTranscript, "見てみますね。")
         XCTAssertNotNil(model.responseDelivery.response, "the reply is complete; the switch does not interrupt it")
-        model.switchParticipantMode(to: .guest, origin: .spoken)
+        model.switchParticipantMode(to: .guest, origin: .control)
         XCTAssertEqual(model.shannonTranscript, "")
         lookResult?.resume(returning: "机の上に資料が見えます。")
-        for _ in 0..<100 { await Task.yield() }
-        XCTAssertEqual(model.shannonTranscript, "", "what she saw is not written for the guests")
-        XCTAssertFalse(model.mayShowReply(of: .owner))
-        XCTAssertTrue(model.mayShowReply(of: .guest))
+        // The look line must arrive; the test fails if it never does.
+        for _ in 0..<200 where !sentForSpeech.contains(where: { $0.contains("資料") }) {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertTrue(sentForSpeech.contains { $0.contains("資料") }, "her line about the look was spoken")
+        XCTAssertEqual(model.shannonTranscript, "", "but not written for the guests")
         model.stop()
+    }
+
+    /// A guest reply that fails after a sentence was played keeps the spoken part (`keepSpokenPart`): for the guests,
+    /// their own words and that part; with the owner's hidden words in the batch, their words only.
+    func testAKeptSpokenPartIsRecordedForTheGuestsOnly() async {
+        for withOwnerWords in [false, true] {
+            let model = liveModel()
+            model.streamSpeech = { _, _ in throw Refused() }
+            model.performStreamingDelegation = { [unowned model] _, _, _, onSegment in
+                await onSegment("はじめまして、ミキさん。", nil)
+                model.responseDelivery.spoken.played("はじめまして、ミキさん。")
+                throw Refused()
+            }
+            if withOwnerWords {
+                model.appendUtterance(rawText: "明日の歯医者は何時？", text: "明日の歯医者は何時？", source: .typed)
+            }
+            model.switchParticipantMode(to: .guest, origin: .spoken)
+            model.appendUtterance(rawText: "ミキです", text: "ミキです", source: .typed)
+            model.beginResponse()
+            for _ in 0..<200 where model.responseTask != nil { try? await Task.sleep(for: .milliseconds(5)) }
+            XCTAssertTrue(model.responseDelivery.keptSpokenPart, "the spoken part was kept")
+            let turns = model.guestCall.requestContext(addressedByName: false, followsShannonTurn: false).turns
+            XCTAssertEqual(turns.filter { $0.role == .participant }.map(\.text), ["ミキです"])
+            XCTAssertFalse(turns.contains { $0.text.contains("歯医者") })
+            XCTAssertEqual(turns.contains { $0.role == .shannon }, !withOwnerWords)
+            model.stop()
+        }
+    }
+
+    /// The switch reaches the screens around the call through the session itself (not a view), on both apps.
+    func testASwitchClearsTheIPhoneComposerThroughTheCallsOwnWiring() {
+        let workspace = ShannonVoiceWorkspaceState()
+        let model = ShannonGeminiLiveSessionModel()
+        let conversation = ShannonConversationModel.designPreview()
+        _ = workspace.beginCall(mode: .owner, speechProvider: .gemini, threadID: nil,
+            conversationModel: conversation, geminiVoiceModel: model)
+        workspace.connectionRequestID = nil
+        model.phase = .listening
+        workspace.restoreFailedText("明日の歯医者は何時？", participantMode: .owner)
+        workspace.pendingCameraData = Data([1])
+        model.switchParticipantMode(to: .guest, origin: .spoken)
+        XCTAssertEqual(workspace.typedMessage, "")
+        XCTAssertNil(workspace.pendingCameraData)
+        model.stop()
+        withExtendedLifetime(conversation) {}
     }
 
     /// The Mac's bar and the iPhone's composer both read `textSendState`: hidden owner text is never offered back.
