@@ -21,7 +21,7 @@ struct ShannonAutonomyOverviewCard: View {
                                 ShannonPursuitLine(pursuit: pursuit, palette: palette)
                             }
                             if model.featuredPursuits.isEmpty {
-                                Text(model.overview == nil ? (model.errorMessage ?? "読み込み中…") : "いま続けているものはありません")
+                                Text(model.overview == nil ? (model.errorMessage ?? ShannonGeneratedStrings.commonLoading) : "いま続けているものはありません")
                                     .foregroundStyle(palette.textSecondary)
                             }
                         }
@@ -54,7 +54,7 @@ struct ShannonAutonomyOverviewCard: View {
                 } label: {
                     HStack(spacing: ShannonSpacing.medium) {
                         Image(systemName: "list.bullet.clipboard").foregroundStyle(palette.action).accessibilityHidden(true)
-                        Text("したことの記録").foregroundStyle(palette.textPrimary)
+                        Text(ShannonGeneratedStrings.autonomyActivityTitle).foregroundStyle(palette.textPrimary)
                         Spacer(minLength: 0)
                         Text(model.summary).font(.callout).foregroundStyle(palette.textSecondary)
                         Image(systemName: "chevron.right").font(.caption).foregroundStyle(palette.textSecondary).accessibilityHidden(true)
@@ -141,7 +141,7 @@ struct ShannonAutonomyPursuitsPage: View {
                         .accessibilityElement(children: .combine)
                     }
                 } header: {
-                    Text("使うモデル")
+                    Text(ShannonGeneratedStrings.autonomyModelsTitle)
                 } footer: {
                     Text("何にどのモデルを使うかは、シャノンが選びます。使った分は今日の予算から引かれます。")
                 }
@@ -240,7 +240,7 @@ public struct ShannonAutonomySettingsSection: View {
                     LabeledContent {
                         Text(model.summary).foregroundStyle(.secondary)
                     } label: {
-                        Label("したことの記録", systemImage: "list.bullet.clipboard")
+                        Label(ShannonGeneratedStrings.autonomyActivityTitle, systemImage: "list.bullet.clipboard")
                     }
                     .frame(minHeight: ShannonTouchTarget.minimum)
                     .contentShape(Rectangle())

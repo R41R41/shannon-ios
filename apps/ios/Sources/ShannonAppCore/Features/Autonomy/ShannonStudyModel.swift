@@ -33,7 +33,7 @@ public final class ShannonStudyModel {
 
     /// One line for the entrance row.
     public var summary: String {
-        if pieces.isEmpty { return isLoading ? "読み込み中…" : "まだありません" }
+        if pieces.isEmpty { return isLoading ? ShannonGeneratedStrings.commonLoading : "まだありません" }
         var parts: [String] = []
         if !stories.isEmpty { parts.append("物語 \(stories.count)") }
         if !notes.isEmpty { parts.append("メモ \(notes.count)") }

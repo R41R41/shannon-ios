@@ -52,7 +52,7 @@ public struct ShannonAutonomyActivityPage: View {
                 }
             }
         }
-        .navigationTitle(isHub ? ShannonGeneratedStrings.navAutonomy : "したことの記録")
+        .navigationTitle(isHub ? ShannonGeneratedStrings.navAutonomy : ShannonGeneratedStrings.autonomyActivityTitle)
         .overlay {
             if model.overview == nil, model.isLoading {
                 ProgressView("記録を確認中")
@@ -88,7 +88,7 @@ public struct ShannonAutonomyActivityPage: View {
                         ShannonPursuitLine(pursuit: pursuit, palette: ShannonPalette.resolve(colorScheme))
                     }
                     if model.featuredPursuits.isEmpty {
-                        Text(model.overview == nil ? (model.errorMessage ?? "読み込み中…") : "いま続けているものはありません")
+                        Text(model.overview == nil ? (model.errorMessage ?? ShannonGeneratedStrings.commonLoading) : "いま続けているものはありません")
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -143,7 +143,7 @@ public struct ShannonAutonomyActivityPage: View {
                 budgetRequestRow(request, maximum: overview.maximumExtraYen)
             }
         } header: {
-            Text("今日の予算")
+            Text(ShannonGeneratedStrings.autonomyBudgetToday)
         } footer: {
             Text("モデルとAPIの利用料だけが対象です。1ドル\(Int(overview.budget.yenPerUsd))円で換算しています。")
         }
@@ -170,11 +170,11 @@ public struct ShannonAutonomyActivityPage: View {
                 .frame(minHeight: ShannonTouchTarget.minimum)
                 .accessibilityHint("今日だけ増やす額を、100円ずつ変えます")
                 HStack {
-                    Button("見送る", role: .destructive) {
+                    Button(ShannonGeneratedStrings.autonomyDecline, role: .destructive) {
                         Task { await model.decideBudgetRequest(request, approve: false) }
                     }
                     Spacer()
-                    Button("今日だけ増やす") {
+                    Button(ShannonGeneratedStrings.autonomyBudgetApproveToday) {
                         Task { await model.decideBudgetRequest(request, approve: true, amountYen: amount(for: request, upper: upper)) }
                     }
                     .buttonStyle(.borderedProminent)
@@ -218,7 +218,7 @@ public struct ShannonAutonomyActivityPage: View {
                             .foregroundStyle(.secondary)
                         if proposal.isWaiting {
                             HStack {
-                                Button("見送る", role: .destructive) {
+                                Button(ShannonGeneratedStrings.autonomyDecline, role: .destructive) {
                                     Task { await model.decideProposal(proposal, start: false) }
                                 }
                                 Spacer()
@@ -235,7 +235,7 @@ public struct ShannonAutonomyActivityPage: View {
                     .padding(.vertical, ShannonSpacing.extraSmall)
                 }
             } header: {
-                Text("シャノンからの提案")
+                Text(ShannonGeneratedStrings.autonomyProposalsTitle)
             } footer: {
                 Text("シャノンが自分の活動から出した提案です。あなたが開始するまで、何も始まりません。")
             }

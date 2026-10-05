@@ -102,7 +102,7 @@ public struct ShannonStudyPieceCardDTO: Codable, Equatable, Identifiable, Sendab
 
     public var statusLine: String {
         var parts = [kindLabel, statusLabel]
-        if let version, isStory, !hidden { parts.append("第\(version)稿") }
+        if let version, isStory, !hidden { parts.append(ShannonGeneratedStrings.studyVersion(version: String(version))) }
         return parts.joined(separator: " ・ ")
     }
 }

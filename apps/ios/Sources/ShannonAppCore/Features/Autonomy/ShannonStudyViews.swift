@@ -226,7 +226,7 @@ public struct ShannonStudyPiecePage: View {
         Section {
             ForEach(piece.versions.reversed()) { version in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("第\(version.version)稿")
+                    Text(ShannonGeneratedStrings.studyVersion(version: String(version.version)))
                         .font(.subheadline.weight(.semibold))
                     Text(version.changeNote)
                         .font(.callout)
@@ -265,7 +265,7 @@ public struct ShannonStudyPiecePage: View {
                         .accessibilityIdentifier("study-reaction-\(choice.id)")
                     }
                 }
-                TextField("ひとこと（なくても送れます）", text: $comment, axis: .vertical)
+                TextField(ShannonGeneratedStrings.studyReactionPlaceholder, text: $comment, axis: .vertical)
                     .lineLimit(2...6)
                     .frame(minHeight: ShannonTouchTarget.minimum)
                     .accessibilityLabel("感想のひとこと")
@@ -303,7 +303,7 @@ public struct ShannonStudyPiecePage: View {
             }
             ForEach(piece.feedback.reversed()) { feedback in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(feedback.reactionLabel)（第\(feedback.version)稿に）")
+                    Text("\(feedback.reactionLabel)（\(ShannonGeneratedStrings.studyVersion(version: String(feedback.version)))に）")
                         .font(.subheadline.weight(.semibold))
                     if !feedback.comment.isEmpty {
                         Text(feedback.comment)

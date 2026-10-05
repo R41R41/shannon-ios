@@ -20,7 +20,7 @@ public struct ShannonAutonomyControlDTO: Codable, Equatable, Sendable {
 
     public var stateLabel: String {
         if !enabled { return "準備中" }
-        return paused ? "一時停止中" : "動いてよい状態"
+        return paused ? ShannonGeneratedStrings.autonomyStatePaused : "動いてよい状態"
     }
 
     public var stateDetail: String {
@@ -147,9 +147,9 @@ public struct ShannonPursuitDTO: Codable, Equatable, Identifiable, Sendable {
 
     public var kindLabel: String {
         switch kind {
-        case "goal": "目標"
-        case "question": "問い"
-        default: "作品"
+        case "goal": ShannonGeneratedStrings.autonomyPursuitKindGoal
+        case "question": ShannonGeneratedStrings.autonomyPursuitKindQuestion
+        default: ShannonGeneratedStrings.autonomyPursuitKindWork
         }
     }
 
@@ -163,10 +163,10 @@ public struct ShannonPursuitDTO: Codable, Equatable, Identifiable, Sendable {
 
     public var statusLabel: String {
         switch status {
-        case "active": "続けている"
-        case "resting": "休ませている"
-        case "done": "やり終えた"
-        case "dropped": "やめた"
+        case "active": ShannonGeneratedStrings.autonomyPursuitStatusActive
+        case "resting": ShannonGeneratedStrings.autonomyPursuitStatusResting
+        case "done": ShannonGeneratedStrings.autonomyPursuitStatusDone
+        case "dropped": ShannonGeneratedStrings.autonomyPursuitStatusDropped
         default: "状態を確認中"
         }
     }
@@ -192,7 +192,7 @@ public struct ShannonAutonomyModelChoiceDTO: Codable, Equatable, Identifiable, S
     public let updatedAt: String?
 
     public var id: String { purpose }
-    public var chosenByLabel: String { chosenBy == "shannon" ? "シャノンが選択" : "既定" }
+    public var chosenByLabel: String { chosenBy == "shannon" ? "シャノンが選択" : ShannonGeneratedStrings.autonomyModelsDefault }
 }
 
 public struct ShannonAutonomyProposalDTO: Codable, Equatable, Identifiable, Sendable {
@@ -369,7 +369,7 @@ public struct ShannonAutonomyActivityEntryDTO: Codable, Equatable, Identifiable,
 
     /// Who, where, with what, and for how much, on one line.
     public var metadataLine: String {
-        var parts = [actor == "owner" ? "あなた" : "シャノン", domainLabel, outcomeLabel]
+        var parts = [actor == "owner" ? ShannonGeneratedStrings.recordActorOwner : "シャノン", domainLabel, outcomeLabel]
         if let approvalLabel, approvalLabel != outcomeLabel { parts.append(approvalLabel) }
         if let model { parts.append(model) }
         if let tool { parts.append(tool) }
