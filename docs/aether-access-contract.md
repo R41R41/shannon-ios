@@ -69,7 +69,7 @@ Nothing she reads is stored: results live in the turn (or until her next thought
 
 ## App-facing routes (unchanged paths, additive fields)
 
-- `GET /v1/autonomy/study`: with Aether, syncs first (4 s), then the same body plus `source: { kind: "aether", reached }`. Each readable card may carry `aetherDocumentId` and `aetherVersion` (the Aether version of the version he reads). A hidden card carries neither.
+- `GET /v1/autonomy/study`: with Aether, syncs first (4 s; a sync of the scope that finished in the last 2 s serves as it is, and one in flight is shared), then the same body plus `source: { kind: "aether", reached }`. Each readable card may carry `aetherDocumentId` and `aetherVersion` (the Aether version of the version he reads). A hidden card carries neither.
 - `GET /v1/autonomy/study/pieces/{id}`: `{id}` may be the piece id or its Aether document id; refreshes that piece first. `feedback[]` items may carry `aetherDocumentId`, `aetherVersion`.
 - `POST …/{id}/reaction` and `POST …/{id}/put-away`: `{id}` as above; the reaction is stored in Shannon with the Aether document and version.
 - Piece ids, `shannon-study://<id>` links in her messages, and every existing field keep their meaning.

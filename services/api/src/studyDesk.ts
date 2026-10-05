@@ -61,6 +61,8 @@ export interface StudyOverview {
 
 /** How long a route waits for Aether before it answers from what Shannon has. */
 const ROUTE_SYNC_MILLISECONDS = 4_000;
+/** A sync that finished this recently serves an app read as it is. */
+const ROUTE_FRESH_MILLISECONDS = 2_000;
 
 export class StudyDesk {
   constructor(
@@ -78,7 +80,8 @@ export class StudyDesk {
   /** The overview after bringing in what Aether has (or, when it cannot be reached, from what Shannon has, saying so). */
   async overviewFresh(scopeKey: string): Promise<StudyOverview> {
     if (!this.aether) return this.overview(scopeKey);
-    const reached = await syncedWithin(this.aether, scopeKey, ROUTE_SYNC_MILLISECONDS);
+    // An app read accepts a sync that finished a moment ago (several screens open at once share one).
+    const reached = await syncedWithin(this.aether, scopeKey, ROUTE_SYNC_MILLISECONDS, undefined, ROUTE_FRESH_MILLISECONDS);
     return Object.freeze({ ...this.overview(scopeKey), source: { kind: 'aether' as const, reached } });
   }
 

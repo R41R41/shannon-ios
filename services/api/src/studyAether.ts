@@ -32,6 +32,8 @@ export class StudyAether {
   private readonly seenDeleted = new Map<string, number>();
   /** At most one sync per scope at a time in this process: callers that come while one runs share it. */
   private readonly running = new Map<string, Promise<StudyAetherSyncCounts>>();
+  /** When the last sync of a scope finished (this process's clock), for a caller that accepts a recent one. */
+  private readonly finished = new Map<string, number>();
 
   constructor(private readonly store: SQLiteAutonomyStore, readonly access: AetherAccess, private readonly now: () => string) {}
 
@@ -135,14 +137,17 @@ export class StudyAether {
 
   /**
    * Her folder as Aether lists it, against the pieces that live there: what changed, what was deleted, what is new in her
-   * study. One run per scope at a time (callers share it; each stops waiting at its own signal, the run goes on for the next).
+   * study. One run per scope at a time (callers share it; each stops waiting at its own signal, the run goes on for the next);
+   * `maxAgeMilliseconds` accepts a run that finished that recently instead of starting another (the app's reads).
    */
-  sync(scopeKey: string, signal?: AbortSignal): Promise<StudyAetherSyncCounts> {
+  sync(scopeKey: string, signal?: AbortSignal, options: { maxAgeMilliseconds?: number } = {}): Promise<StudyAetherSyncCounts> {
+    const finished = this.finished.get(scopeKey);
+    if (options.maxAgeMilliseconds && finished !== undefined && Date.now() - finished < options.maxAgeMilliseconds) return Promise.resolve({ changed: 0, deleted: 0, adopted: 0 });
     let run = this.running.get(scopeKey);
     if (!run) {
       run = this.syncOnce(scopeKey, AbortSignal.timeout(STUDY_AETHER_SYNC.runMilliseconds));
       this.running.set(scopeKey, run);
-      run.catch(() => undefined).finally(() => this.running.delete(scopeKey));
+      run.then(() => this.finished.set(scopeKey, Date.now()), () => undefined).finally(() => this.running.delete(scopeKey));
     }
     return signal ? untilAborted(run, signal) : run;
   }
@@ -209,9 +214,9 @@ export async function aetherStep<T>(operation: () => Promise<T>): Promise<{ valu
 }
 
 /** Sync before a call, within `milliseconds`; false when Aether could not be reached (the caller goes on with what Shannon has). */
-export async function syncedWithin(aether: StudyAether, scopeKey: string, milliseconds: number, signal?: AbortSignal): Promise<boolean> {
+export async function syncedWithin(aether: StudyAether, scopeKey: string, milliseconds: number, signal?: AbortSignal, maxAgeMilliseconds = 0): Promise<boolean> {
   const timeout = AbortSignal.timeout(Math.max(500, milliseconds));
-  try { await aether.sync(scopeKey, signal ? AbortSignal.any([signal, timeout]) : timeout); return true; } catch { return false; }
+  try { await aether.sync(scopeKey, signal ? AbortSignal.any([signal, timeout]) : timeout, { maxAgeMilliseconds }); return true; } catch { return false; }
 }
 
 /** A shared run as one caller waits for it: that caller stops at its own signal; the run itself goes on. */

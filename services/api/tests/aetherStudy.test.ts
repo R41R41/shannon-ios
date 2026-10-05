@@ -314,6 +314,22 @@ describe('her study in Aether', () => {
     expect(store.study.aether.current(scope, id)).toMatchObject({ version: 3, aetherVersion: 3 });
   });
 
+  it('lets app reads share a sync that just finished, while her tools still sync first', async () => {
+    const { fake, call, get } = await harness();
+    await call('study.create', { kind: 'note', title: '光のメモ', body: '光は数えられる。' });
+    const lists = () => fake.requests.filter(request => request.body.kind === 'list').length;
+    const before = lists();
+    for (let index = 0; index < 3; index += 1) expect(((await get('/v1/autonomy/study')).body as { source: unknown }).source).toEqual({ kind: 'aether', reached: true });
+    // The tool's sync a moment ago serves all three.
+    expect(lists() - before).toBe(0);
+    await call('study.list', {});
+    expect(lists() - before).toBe(1);
+    // Aether away: the read answers from Shannon's copy and says so.
+    await fake.stop();
+    await new Promise(resolve => setTimeout(resolve, 2_100));
+    expect(((await get('/v1/autonomy/study')).body as { source: unknown; pieces: unknown[] })).toMatchObject({ source: { kind: 'aether', reached: false }, pieces: [expect.objectContaining({ title: '光のメモ' })] });
+  });
+
   it('keeps the owner\'s reaction keyed by the Aether document and version he read', async () => {
     const { fake, call, store, post, clock } = await harness();
     const created = await call('study.create', { kind: 'story', title: '灯台の話', body: STORY });
