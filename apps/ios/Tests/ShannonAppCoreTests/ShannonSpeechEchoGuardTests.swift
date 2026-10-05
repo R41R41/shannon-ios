@@ -126,11 +126,27 @@ final class ShannonSpeechEchoGuardTests: XCTestCase {
     func testAStopPhraseFromHerStoryNeverSwallowsTheOwnersStop() {
         var state = ShannonSpeechEchoGuard()
         state.recordPlayed("「ちょっと待って」と少女は言いました。", at: 0)
-        state.recordPlayed("ちょっと待ってそれ違うと思うよ、と船長は答えました。", at: 2)
-        XCTAssertTrue(state.isEcho("ちょっと待ってそれ違うと思う", now: 4))
-        XCTAssertFalse(state.isOwnVoice("ちょっと待ってそれ違うと思う", now: 4))
-        XCTAssertFalse(state.isOwnVoice("ちょっと待って", now: 4))
-        XCTAssertTrue(state.isOwnVoice("と船長は答えました", now: 4))
+        XCTAssertTrue(state.isEcho("ちょっと待って", now: 1))
+        XCTAssertFalse(state.isOwnVoice("ちょっと待って", now: 1))
+        for index in 0..<10 {
+            state.recordPlayed("灯台の光は海の上をゆっくり回っていました\(index)。", at: 3 + Double(index) * 3)
+        }
+        state.recordPlayed("「もういいよ」と船長は笑いました。", at: 34)
+        // The owner's own stop, though her story had the same words.
+        XCTAssertFalse(state.isOwnVoice("ちょっと待って", now: 35))
+        XCTAssertFalse(state.isOwnVoice("もういいよ", now: 35))
+        // A sentence of his that begins with the stop phrase from early in her story interrupts her.
+        XCTAssertFalse(state.isOwnVoice("ちょっと待ってそれ違うと思う", now: 35))
+        XCTAssertTrue(state.isOwnVoice("と船長は笑いました", now: 35))
+    }
+
+    func testHerOwnNarrativeWithAStopWordInsideIsStillEcho() {
+        var state = ShannonSpeechEchoGuard()
+        state.recordPlayed("物語が始まって、少女は静かに歩いた。", at: 0)
+        state.recordPlayed("夜が始まってしまって、港は賑やかでした。", at: 3)
+        XCTAssertTrue(state.isOwnVoice("物語が始まって少女は静かに歩いた", now: 5))
+        XCTAssertTrue(state.isOwnVoice("始まってしまって", now: 5))
+        XCTAssertTrue(state.isOwnVoice("少女は静かに", now: 5))
     }
 
     func testRecognisesHerVoiceInTheFormThatWasSpoken() {

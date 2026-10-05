@@ -26,8 +26,8 @@ struct ShannonVoiceBargeInRuleTests {
             let admitted2 = rule.admits(word, now: 11)
             #expect(admitted2, "\(word)")
         }
-        #expect(ShannonVoiceBargeInRule.isStopWord(ShannonSpeechEchoGuard.normalized("ストップストップ")))
-        #expect(!ShannonVoiceBargeInRule.isStopWord(ShannonSpeechEchoGuard.normalized("はい")))
+        #expect(ShannonVoiceBargeInRule.isStopRequest(ShannonSpeechEchoGuard.normalized("ストップストップ")))
+        #expect(!ShannonVoiceBargeInRule.isStopRequest(ShannonSpeechEchoGuard.normalized("はい")))
     }
 
     @Test func eightCharactersOrMoreKeepTheEchoRule() {
@@ -109,9 +109,40 @@ struct ShannonVoiceBargeInRuleTests {
 
     @Test func theAddedStopWordsStopHer() {
         for word in ["まて", "もういい", "うるさい"] {
-            #expect(ShannonVoiceBargeInRule.isStopWord(ShannonSpeechEchoGuard.normalized(word)), "\(word)")
+            #expect(ShannonVoiceBargeInRule.isStopRequest(ShannonSpeechEchoGuard.normalized(word)), "\(word)")
         }
-        #expect(!ShannonVoiceBargeInRule.isStopWord(ShannonSpeechEchoGuard.normalized("ちょっと")))
+        #expect(!ShannonVoiceBargeInRule.isStopRequest(ShannonSpeechEchoGuard.normalized("ちょっと")))
+    }
+
+    @Test func aStopRequestIsTheWholeUtteranceNotAWordInsideASentence() {
+        let stops = ["待って", "ちょっと待って", "ストップ", "もういいよ", "まってまって", "ねえ、やめてよ", "静かにして", "シャノン、止めて"]
+        for utterance in stops {
+            #expect(ShannonVoiceBargeInRule.isStopRequest(ShannonSpeechEchoGuard.normalized(utterance)), "\(utterance)")
+        }
+        let narrative = ["始まってしまって", "物語が始まって少女は静かに歩いた", "決まって", "集まって", "待っていました",
+                         "まとめて", "静かに歩いた", "黙って聞いていた", "ちょっと待ってそれ違うと思う"]
+        for utterance in narrative {
+            #expect(!ShannonVoiceBargeInRule.isStopRequest(ShannonSpeechEchoGuard.normalized(utterance)), "\(utterance)")
+        }
+    }
+
+    @Test func aStopWordInsideAShortFragmentDoesNotStopHer() {
+        var rule = speaking()
+        rule.speechStarted(at: 10.5)
+        let fragment = rule.admits("始まって", now: 11)
+        #expect(!fragment)
+    }
+
+    @Test func aNearStartFoldedIntoTheSameUtteranceReopensIt() {
+        var rule = speaking()
+        rule.speechStarted(at: 10.1)
+        rule.speechStopped(at: 10.4)
+        // The recogniser splits one utterance: it starts again near her voice.
+        rule.speechStarted(at: 10.6)
+        rule.voiceStopped(at: 11)
+        // Long after the first stop, but the utterance never stopped again.
+        let folded = rule.admits("うん", now: 25)
+        #expect(!folded)
     }
 
     @Test func stoppingWithoutHavingSoundedLeavesNoTail() {

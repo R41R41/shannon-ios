@@ -122,15 +122,19 @@ enum ShannonGeminiCascadeSpeech {
 
 }
 
+/// The speech route refused a sentence because the owner's speech slots are busy (`429 BUSY`).
+struct ShannonSpeechBusy: Error, Equatable {}
+
 @MainActor
 final class ShannonGeminiStreamingSpeechCoordinator {
     typealias StreamSpeech = @MainActor (String, String?) async throws -> ShannonGeminiSpeechStream
     /// The speech of one sentence and its display text, so the sentence is known when it plays.
     typealias ConsumeSpeech = @MainActor (ShannonGeminiSpeechStream, String) async throws -> Void
 
-    /// A sentence refused with 429 (the server's per-owner speech slots are busy, for example while
+    /// A sentence refused as BUSY (the server's per-owner speech slots are taken, for example while
     /// another of her bodies speaks, or a slot of a cancelled sentence is not released yet) is asked
-    /// again after these pauses instead of failing the reply's audio.
+    /// again after these pauses instead of failing the reply's audio. RATE_LIMITED is not retried:
+    /// its window is a minute.
     static let busyRetryDelays: [Duration] = [.milliseconds(250), .milliseconds(500), .seconds(1), .seconds(2)]
 
     private let style: @MainActor (String, ShannonVoicePlanDTO?) -> String
@@ -171,7 +175,7 @@ final class ShannonGeminiStreamingSpeechCoordinator {
             // At most two sentences are in flight here (the one still streaming and one prefetched),
             // which is the server's limit; a 429 means someone else holds a slot for a moment.
             for delay in busyRetryDelays {
-                do { return try await streamSpeech(spokenText, style(text, plan)) } catch ShannonAPIError.rejected(status: 429) {
+                do { return try await streamSpeech(spokenText, style(text, plan)) } catch is ShannonSpeechBusy {
                     try await Task.sleep(for: delay)
                 }
             }

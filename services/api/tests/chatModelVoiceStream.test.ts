@@ -123,6 +123,13 @@ describe('a streamed voice reply that reaches its output limit', () => {
     })));
     await expect(emptyWhole.model.generateVoice(request)).rejects.toThrow('OPENAI_RESPONSE_EMPTY');
     expect(emptyWhole.recorded).toHaveLength(1);
+    // A withheld non-streaming reply is an error too, not its partial words.
+    const withheldWhole = voiceModel(() => new Response(JSON.stringify({
+      status: 'incomplete', incomplete_details: { reason: 'content_filter' }, usage,
+      output: [{ type: 'message', content: [{ type: 'output_text', text: '途中まで。' }] }],
+    })));
+    await expect(withheldWhole.model.generateVoice(request)).rejects.toThrow('OPENAI_RESPONSE_CONTENT_FILTERED');
+    expect(withheldWhole.recorded).toHaveLength(1);
     const failed = voiceModel(() => new Response(timedStream([[0, delta('途中まで。')], [0, sse({ type: 'response.failed', response: {} })]])));
     await expect(failed.model.generateVoiceStreaming(request, () => {})).rejects.toThrow('OPENAI_RESPONSE_STREAM_FAILED');
   });

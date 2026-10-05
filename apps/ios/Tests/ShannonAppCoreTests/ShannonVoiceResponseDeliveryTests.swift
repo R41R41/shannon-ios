@@ -135,6 +135,42 @@ struct ShannonVoiceResponseDeliveryTests {
         #expect(delivery.failureMessage.contains("話した部分までを会話に残し"))
     }
 
+    @Test func aKeptPartCarriesTheFeelingOfTheAnswerNotOfTheWaitingPhrase() throws {
+        var spoken = ShannonVoiceSpokenReply()
+        spoken.queued("少し考えますね。", waitingPhrase: "少し考えますね。",
+                      emotion: ShannonVoiceTurnEmotionDTO(primary: "caring", intensity: 0.6))
+        #expect(spoken.emotion == nil)
+        spoken.queued("むかしむかし。", waitingPhrase: "少し考えますね。",
+                      emotion: ShannonVoiceTurnEmotionDTO(primary: "excited", intensity: 0.8))
+        #expect(spoken.emotion == ShannonVoiceTurnEmotionDTO(primary: "excited", intensity: 0.8))
+    }
+
+    @Test func aKeptPartThatCouldNotBeWrittenIsNotCalledKept() throws {
+        var ledger = ShannonPendingVoiceTurns()
+        ledger.append(rawText: "長い話をして", text: "長い話をして", source: .speech)
+        let batch = try #require(ledger.batch())
+        var delivery = ShannonVoiceResponseDelivery()
+        delivery.spoken.queued("むかしむかし。", waitingPhrase: nil)
+        delivery.spoken.played("むかしむかし。")
+        #expect(delivery.keepSpokenPart(batch: batch, ledger: &ledger) == "むかしむかし。…")
+        delivery.keptPartNotSaved()
+        #expect(delivery.failureMessage.contains("保存できませんでした"))
+        #expect(!delivery.failureMessage.contains("残しています"))
+    }
+
+    @Test func aWithheldReplyDropsItsInputSoItIsNotSentAgain() throws {
+        var ledger = ShannonPendingVoiceTurns()
+        ledger.append(rawText: "質問", text: "質問", source: .speech)
+        let batch = try #require(ledger.batch())
+        ledger.append(rawText: "後から言ったこと", text: "後から言ったこと", source: .speech)
+        var delivery = ShannonVoiceResponseDelivery()
+        delivery.scheduledAudio(seconds: 2)
+        delivery.withdraw(batch: batch, ledger: &ledger)
+        #expect(ledger.batch()?.text == "後から言ったこと")
+        #expect(delivery.failureMessage.contains("取り消され"))
+        #expect(!delivery.failureMessage.contains("保持"))
+    }
+
     @Test func nothingIsKeptWhenSheSaidOnlyTheWaitingPhrase() throws {
         var ledger = ShannonPendingVoiceTurns()
         ledger.append(rawText: "天気は？", text: "天気は？", source: .speech)

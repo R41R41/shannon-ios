@@ -12,6 +12,22 @@ struct ShannonVoiceResponseDelivery {
     var spoken = ShannonVoiceSpokenReply()
     /// The spoken part of an unfinished answer was kept as her reply.
     private(set) var keptSpokenPart = false
+    /// Whether writing that kept part to the conversation succeeded.
+    private(set) var keptPartSaved = true
+    /// The provider withheld the reply: nothing of it is shown or kept, and its input is dropped.
+    private(set) var withheld = false
+
+    mutating func keptPartNotSaved() {
+        keptPartSaved = false
+    }
+
+    /// A withheld reply answers its input by not answering it: the input is acknowledged so it is
+    /// not sent again with every later utterance.
+    mutating func withdraw(batch: ShannonPendingVoiceTurns.Batch, ledger: inout ShannonPendingVoiceTurns) {
+        guard response == nil else { return }
+        withheld = true
+        ledger.acknowledge(batch)
+    }
 
     /// After a generation failure that was not withheld content: her reply is the part she said
     /// (marked as cut off), and the input it answered is acknowledged. Nil when she said nothing of it.
@@ -47,8 +63,13 @@ struct ShannonVoiceResponseDelivery {
         if response != nil {
             return "返答はできていますが、音声を最後まで再生できませんでした。画面の返答をご確認ください。"
         }
+        if withheld {
+            return "この返答は内容の制限により取り消されました。同じ入力は再送しません。"
+        }
         if keptSpokenPart {
-            return "返答が途中で途切れました。話した部分までを会話に残しています。"
+            return keptPartSaved
+                ? "返答が途中で途切れました。話した部分までを会話に残しています。"
+                : "返答が途中で途切れました。話した部分を会話履歴に保存できませんでした。"
         }
         if scheduledAudioSeconds > 0 {
             return "返答が途中で止まりました。未完了の入力は保持しています。続けて話すか再送してください。"
@@ -87,25 +108,25 @@ struct ShannonVoiceResponseDelivery {
         }
         if error is ShannonVoicePlaybackDrain.Failure { return "playback_timeout" }
         if error is ShannonVoiceReplyWithheld { return "content_filter" }
+        if error is ShannonSpeechBusy { return "speech_busy" }
         return "other_failure"
     }
 }
 
 /// Which sentences of the answer she actually said, in order. Playback is FIFO, so the sentences
 /// played are a prefix of those queued; the waiting phrase before the answer is not part of it.
-struct ShannonVoiceSpokenReply: Equatable, Sendable {
+struct ShannonVoiceSpokenReply: Sendable {
     private var pending: [(text: String, answer: Bool)] = []
     private(set) var said: [String] = []
-
-    static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.said == rhs.said && lhs.pending.map(\.text) == rhs.pending.map(\.text)
-    }
+    /// The feeling the answer was being acted with (the provisional plan), for a reply kept cut off.
+    private(set) var emotion: ShannonVoiceTurnEmotionDTO?
 
     /// One sentence handed to speech. The waiting phrase is the first sentence when it equals the plan's.
-    mutating func queued(_ text: String, waitingPhrase: String?) {
+    mutating func queued(_ text: String, waitingPhrase: String?, emotion: ShannonVoiceTurnEmotionDTO? = nil) {
         let waiting = pending.allSatisfy { !$0.answer } && said.isEmpty
             && text == waitingPhrase?.trimmingCharacters(in: .whitespacesAndNewlines)
         pending.append((text, !waiting))
+        if !waiting, let emotion { self.emotion = emotion }
     }
 
     /// The first audio of `text` played. Sentences queued before it with no audio of their own

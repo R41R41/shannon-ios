@@ -80,6 +80,14 @@ extension ShannonAPIClient {
         if provider == .gemini && (http.statusCode == 404 || http.statusCode == 405) {
             return try await legacyGeminiSpeechStream(scopeKey: scopeKey, text: text, style: style)
         }
+        if http.statusCode == 429 {
+            // BUSY (the owner's two speech slots are taken) is brief and worth asking again; RATE_LIMITED is not.
+            var body = Data()
+            for try await byte in bytes where body.count < 2_048 { body.append(byte) }
+            if (try? JSONDecoder().decode(ShannonRealtimeVoiceErrorDTO.self, from: body))?.error == "BUSY" {
+                throw ShannonSpeechBusy()
+            }
+        }
         guard (200..<300).contains(http.statusCode) else {
             throw ShannonAPIError.rejected(status: http.statusCode)
         }

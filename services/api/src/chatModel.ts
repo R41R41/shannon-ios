@@ -9,8 +9,10 @@ import { streamedChatTurnEnvelope } from './chatModelStream.js';
 import {
   DEFAULT_VOICE_STREAM_BOUNDS,
   VOICE_RESPONSE_TIMEOUT_MILLISECONDS,
+  VOICE_CONTENT_FILTERED,
   VOICE_WEB_FIRST_OUTPUT_MILLISECONDS,
   reachedVoiceLengthLimit,
+  voiceContentWithheld,
   streamedVoiceReply,
   type VoiceStreamBounds,
 } from './chatModelVoiceStream.js';
@@ -269,6 +271,10 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     const raw = await response.text();
     const json = parseJson(raw);
     if (!response.ok) throw new Error(`OPENAI_RESPONSE_${response.status}: ${errorDetail(json)}`);
+    if (voiceContentWithheld(json)) {
+      this.recordSpentVoiceUsage(request.scopeKey, json);
+      throw new Error(VOICE_CONTENT_FILTERED);
+    }
     const written = extractOutputText(json).trim();
     // A reply cut at its output limit ends at its last complete sentence, as in the stream.
     const truncated = reachedVoiceLengthLimit(json);

@@ -143,6 +143,12 @@ export function reachedVoiceLengthLimit(envelope: unknown): boolean {
     && record(value.incomplete_details)?.reason === 'max_output_tokens';
 }
 
+/** A non-streaming voice response the provider withheld for its content. */
+export function voiceContentWithheld(envelope: unknown): boolean {
+  const value = record(envelope);
+  return value?.status === 'incomplete' && record(value.incomplete_details)?.reason === 'content_filter';
+}
+
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>

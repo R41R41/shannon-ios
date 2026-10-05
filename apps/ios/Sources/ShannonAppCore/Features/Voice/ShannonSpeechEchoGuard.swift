@@ -83,10 +83,11 @@ struct ShannonSpeechEchoGuard {
             || Self.matches(heard, String(recent.map(\.spoken).joined().suffix(Self.recentCharacters)))
     }
 
-    /// `isEcho`, except that a stop word always reaches her, also when the same words were in
-    /// what she just said (her story's 「ちょっと待って」 must not swallow the owner's).
+    /// `isEcho`, except that a short stop request always reaches her, also when the same words were
+    /// in what she just said (her story's 「ちょっと待って」 must not swallow the owner's). A stop word
+    /// inside a sentence of hers (「物語が始まって」) is still checked as echo.
     func isOwnVoice(_ transcript: String, now: TimeInterval) -> Bool {
-        !ShannonVoiceBargeInRule.isStopWord(Self.normalized(transcript)) && isEcho(transcript, now: now)
+        !ShannonVoiceBargeInRule.isStopRequest(Self.normalized(transcript)) && isEcho(transcript, now: now)
     }
 
     private static func matches(_ heard: String, _ spoken: String) -> Bool {

@@ -61,7 +61,7 @@ struct ShannonGeminiSpeechPipelineTests {
             style: { _, _ in "" },
             streamSpeech: { text, _ in
                 attempts[text, default: 0] += 1
-                if text == "最初です。", attempts[text]! <= 2 { throw ShannonAPIError.rejected(status: 429) }
+                if text == "最初です。", attempts[text]! <= 2 { throw ShannonSpeechBusy() }
                 return Self.stream(named: text)
             },
             consumeSpeech: { speech, _ in
@@ -77,6 +77,20 @@ struct ShannonGeminiSpeechPipelineTests {
         #expect(played == ["最初です。", "次です。"])
     }
 
+    @Test("a rate-limited sentence is not asked again")
+    func doesNotRetryRateLimit() async {
+        var attempts = 0
+        let coordinator = ShannonGeminiStreamingSpeechCoordinator(
+            style: { _, _ in "" },
+            streamSpeech: { _, _ in attempts += 1; throw ShannonAPIError.rejected(status: 429) },
+            consumeSpeech: { _, _ in },
+            busyRetryDelays: [.milliseconds(1), .milliseconds(1)]
+        )
+        await coordinator.enqueue("最初です。", plan: nil)
+        await #expect(throws: ShannonAPIError.rejected(status: 429)) { try await coordinator.finish() }
+        #expect(attempts == 1)
+    }
+
     @Test("a sentence still refused after the pauses fails, and other errors are not retried")
     func givesUpOnPersistentRefusal() async {
         var attempts = 0
@@ -84,7 +98,8 @@ struct ShannonGeminiSpeechPipelineTests {
             style: { _, _ in "" },
             streamSpeech: { _, _ in
                 attempts += 1
-                throw attempts == 1 ? ShannonAPIError.rejected(status: 429) : ShannonAPIError.rejected(status: 502)
+                if attempts == 1 { throw ShannonSpeechBusy() }
+                throw ShannonAPIError.rejected(status: 502)
             },
             consumeSpeech: { _, _ in },
             busyRetryDelays: [.milliseconds(1), .milliseconds(1)]

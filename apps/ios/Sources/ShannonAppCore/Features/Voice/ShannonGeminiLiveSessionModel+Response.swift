@@ -69,7 +69,7 @@ extension ShannonGeminiLiveSessionModel {
                     }
                     self.shannonTranscript += segment
                     // The echo guard and the spoken part learn the sentence when it is played (`consumeResponseSpeech`).
-                    self.responseDelivery.spoken.queued(segment, waitingPhrase: plan?.waitingPhrase)
+                    self.responseDelivery.spoken.queued(segment, waitingPhrase: plan?.waitingPhrase, emotion: plan?.turnEmotion)
                     await coordinator.enqueue(segment, plan: plan)
                 }
                 let response = if let localReply {
@@ -178,14 +178,21 @@ extension ShannonGeminiLiveSessionModel {
                 }
                 guard responseGenerationID == generation, !Task.isCancelled else { return }
                 if queued == .discard { transport?.discardPlayback() }
-                if queued == .finishReceivedSentences { keepSpokenPart(of: batch, mode: mode, generation: generation) }
+                if error is ShannonVoiceReplyWithheld {
+                    // Nothing of a withheld reply stays on screen or in the conversation.
+                    responseDelivery.withdraw(batch: batch, ledger: &pendingTurns)
+                    shannonTranscript = ""
+                } else if queued == .finishReceivedSentences {
+                    await keepSpokenPart(of: batch, mode: mode, generation: generation)
+                    guard responseGenerationID == generation, !Task.isCancelled else { return }
+                }
                 responseTask = nil
                 responseGenerationID = nil
                 markPlaybackEnded()
                 playbackLevel = 0
                 phase = .listening
                 errorMessage = responseDelivery.failureMessage
-                if responseDelivery.response == nil, !responseDelivery.keptSpokenPart,
+                if responseDelivery.response == nil, !responseDelivery.keptSpokenPart, !responseDelivery.withheld,
                    let text = batch.turns.last(where: { $0.source == .typed && !$0.isIntroductionCue })?.text {
                     textSendState = .failed(text: text, message: "入力を保持しています。次の発話にも引き継ぎます。")
                 }
@@ -195,20 +202,28 @@ extension ShannonGeminiLiveSessionModel {
 
     /// Generation failed after she had said part of the answer: that part is her reply, marked as
     /// cut off, written like a completed one, and the input it answered is not asked again.
-    private func keepSpokenPart(of batch: ShannonPendingVoiceTurns.Batch, mode: ShannonVoiceParticipantMode, generation: UUID) {
+    /// The write is awaited, so the notice says whether it was kept.
+    private func keepSpokenPart(
+        of batch: ShannonPendingVoiceTurns.Batch, mode: ShannonVoiceParticipantMode, generation: UUID
+    ) async {
         guard let reply = responseDelivery.keepSpokenPart(batch: batch, ledger: &pendingTurns) else { return }
         shannonTranscript = reply
+        // The stored face is the feeling she was acting with, not the previous turn's.
+        replyEmotion = mode == .owner ? responseDelivery.spoken.emotion : nil
         ShannonVoiceDiagnostics.shared.record("gemini.response.partial_kept", sessionID: generation.uuidString,
             metadata: ["characters": String(reply.count)])
         if mode == .guest {
             guestCall.record(participant: batch.rawText, shannon: reply)
         } else if mode.allowsTranscriptPersistence, let commitTurn {
-            responseCommitTask = Task { @MainActor in
+            let task = Task { @MainActor in
                 do { try await commitTurn(batch.rawText, reply); return true } catch {
                     ShannonVoiceDiagnostics.shared.record("gemini.response.history.failed", sessionID: generation.uuidString)
                     return false
                 }
             }
+            responseCommitTask = task
+            let saved = await task.value
+            if !saved, responseGenerationID == generation { responseDelivery.keptPartNotSaved() }
         }
     }
 
