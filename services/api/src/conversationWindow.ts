@@ -147,8 +147,8 @@ function stableWindowStart(
 /**
  * The furthest the window that now starts at `start` can start after its next drop: the next boundary after it (a full
  * window drops to a boundary, `stableWindowStart`), or the next message when there is none or the rule has no stable head.
- * The replay summary covers everything before it in advance (`conversationReplaySummary.ts`), so on the turn of a drop no
- * message reaches the model in neither the summary nor the window.
+ * The replay summary covers in advance everything before the boundary after that one (`conversationReplaySummary.ts`),
+ * which is what it takes for an ordinary turn not to miss a message in both; see there for what can still slip.
  */
 export function nextWindowStart(messages: readonly ShannonConversationItem[], rule: ReplayRule, start: number): number {
   if (!rule.stableHead) return start + 1;

@@ -63,9 +63,12 @@ export class ConversationReplaySummarizer {
     const dropped = Math.max(...windows.map(window => window.start));
     if (!windows.some((window, index) => window.start > 0 || nearlyFull(window, index ? voice : text))) return 'current';
     // A full window drops to its next boundary in one turn (`StableHead`), its first drop included: what it will leave out
-    // then is covered now, before that turn, as sliding by a message or two was covered by the lookahead. The model is
-    // given the summary only once the window leaves something out.
-    const next = Math.max(nextWindowStart(items, text, windows[0].start), nextWindowStart(items, voice, windows[1].start));
+    // then is covered now, before that turn, as sliding by a message or two was covered by the lookahead. The cover reaches
+    // the boundary after that one, so a refresh that ends only after the next request (the background worker) still leaves
+    // nothing out of both on an ordinary turn; a turn whose messages fill much of the budget at once can still drop past it.
+    // The model is given the summary only once the window leaves something out.
+    const twoAhead = (rule: ReplayRule, start: number) => nextWindowStart(items, rule, nextWindowStart(items, rule, start));
+    const next = Math.max(twoAhead(text, windows[0].start), twoAhead(voice, windows[1].start));
 
     const stored = this.store.replaySummary(scopeKey, threadId);
     const previous = stored && !new MemoryWithholding(state, this.store, scopeKey).withholdsReplaySummary(threadId, stored) ? stored : null;
