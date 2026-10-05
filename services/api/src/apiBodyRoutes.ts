@@ -10,7 +10,6 @@ import { BODY_REACTION_PATH, validatedBodyReactionRequest } from './bodyReaction
 import type { ShannonBody } from './shannonBody.js';
 import { dispatchAppLookRequest } from './apiAppLookRoutes.js';
 import { APP_LOOK_ROUTE_PREFIX } from './appLookContract.js';
-export { requestDeviceId } from './desktopBodyIdentity.js';
 
 export const BODY_ROUTE_PREFIX = '/v1/body/';
 export const BODY_CAPABILITIES_PATH = '/v1/body/capabilities';
