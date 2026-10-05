@@ -375,8 +375,8 @@ async function completeLiveVoiceDelegation(
   const replayed = replay?.request(turnPrompt) ?? { ...(turnPrompt ? { turnContext: turnPrompt } : {}), history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) };
   const modelRequest = withMinecraftToolLine({ // Her Minecraft body's line exactly when its request tool is offered.
     scopeKey, systemPrompt: basePrompt, ...(identity.profile ? { profilePrompt: identity.profile } : {}), ...replayed,
-    // What she said when she was touched is what he is answering: it precedes his words, in every mode, as context only.
-    ...(reactionLine ? { history: [...replayed.history, { role: 'assistant' as const, content: reactionLine }] } : {}),
+    // What she said when she was touched is what he is answering: it directly precedes his words, in every mode, as context only.
+    ...(reactionLine ? { precedingReply: reactionLine } : {}),
     message: transcript, ...conversationTools(dependencies.autonomy, scopeKey, 'voice', temporaryGuest ? false : alone || 'others', dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline,
       { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }),
     useWebSearch: selectedSkills.has('current_web') || !!placeSkill,

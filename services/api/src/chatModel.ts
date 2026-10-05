@@ -18,7 +18,7 @@ import {
   type VoiceStreamBounds,
 } from './chatModelVoiceStream.js';
 import { completeSpokenSentences } from './spokenSentences.js';
-import { chatTurnRequestBody, chatTurnResult, offersTools, parsedChatTurn, turnContextMessage } from './chatModelTurn.js';
+import { chatTurnRequestBody, chatTurnResult, offersTools, parsedChatTurn, precedingReplyMessage, turnContextMessage } from './chatModelTurn.js';
 import { streamedVoiceToolTurn } from './chatModelVoiceTools.js';
 import { ChatSentenceSplitter } from './chatSentenceSplitter.js';
 import { PartialAnswerError, RoundTimer, type RoundTime } from './turnDeadline.js';
@@ -63,7 +63,15 @@ export interface ShannonPromptLayers {
   turnContext?: string;
 }
 
-export interface ShannonChatModelRequest extends ShannonPromptLayers {
+/**
+ * What she said just before the owner's words, which he is answering (her reaction to a touch, `apiLiveVoice.ts`): sent
+ * as her message directly before his, after the turn's context, never in the replayed history.
+ */
+export interface ShannonPrecedingReply {
+  precedingReply?: string;
+}
+
+export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPrecedingReply {
   generateThreadTitle?: boolean;
   priorThreadSummary?: string;
   scopeKey: string;
@@ -86,7 +94,7 @@ export interface ShannonChatModelRequest extends ShannonPromptLayers {
   toolsWithheld?: true;
 }
 
-export interface ShannonVoiceModelRequest extends ShannonPromptLayers {
+export interface ShannonVoiceModelRequest extends ShannonPromptLayers, ShannonPrecedingReply {
   scopeKey: string;
   history: readonly ShannonConversationItem[];
   message: string;
@@ -437,6 +445,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       input: [
         ...request.history.map(item => ({ role: item.role, content: item.content })),
         ...turnContextMessage([...(request.turnContext ? [request.turnContext] : []), ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : [])]),
+        ...precedingReplyMessage(request),
         { role: 'user', content: request.message },
       ],
       reasoning: { effort: complex ? 'low' : 'none' },

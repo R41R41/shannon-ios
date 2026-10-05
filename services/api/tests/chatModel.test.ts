@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { OpenAIResponsesChatModel, VOICE_REPLY_INSTRUCTIONS, createConfiguredChatModel } from '../src/chatModel.js';
+import { chatTurnRequestBody } from '../src/chatModelTurn.js';
 import type { LlmUsageEvent, LlmUsageStore } from '../src/llmUsage.js';
 
 /** The developer message of a turn's own blocks, which follows the history (`chatTurnContextBlocks`). */
@@ -58,14 +59,20 @@ describe('OpenAI Responses chat adapter', () => {
     await model.generateVoice({
       scopeKey: 'owner', systemPrompt: 'identity', profilePrompt: 'profile', turnContext: 'state and context',
       history: [{ role: 'user', content: 'さっきの話' }, { role: 'assistant', content: 'はい。' }], message: '続けて',
-      useWebSearch: true, conversationClass: 'direct',
+      useWebSearch: true, conversationClass: 'direct', precedingReply: 'ひゃっ',
     });
     expect(body!.instructions).toBe(`identity\n\n${VOICE_REPLY_INSTRUCTIONS}\n\nprofile`);
-    expect(body!.input).toEqual([
+    // Her reaction to a touch, which he is answering, stays directly before his words, as it was before the turn's message moved.
+    const input = [
       { role: 'user', content: 'さっきの話' }, { role: 'assistant', content: 'はい。' },
       { role: 'developer', content: expect.stringMatching(/^state and context\n\n\[Web検索\]/u) },
+      { role: 'assistant', content: 'ひゃっ' },
       { role: 'user', content: '続けて' },
-    ]);
+    ];
+    expect(body!.input).toEqual(input);
+    const text = chatTurnRequestBody('gpt-test', { scopeKey: 'owner', systemPrompt: 'identity', turnContext: 'state and context',
+      history: [{ role: 'user', content: 'さっきの話' }, { role: 'assistant', content: 'はい。' }], message: '続けて', useWebSearch: true, precedingReply: 'ひゃっ' }, undefined);
+    expect(text.input).toEqual(input);
   });
 
   it('streams voice text deltas before the completed response arrives', async () => {

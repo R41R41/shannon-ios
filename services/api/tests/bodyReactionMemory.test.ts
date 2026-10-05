@@ -62,7 +62,8 @@ describe('conversation only if he answers', () => {
     expect(reply.status).toBe(200);
     expect(reply.body).toMatchObject({ threadId: talk.threadId, reply: chatModel.voiceReply });
     const request = chatModel.voiceRequests.at(-1)!;
-    expect(request.history.at(-1)).toEqual({ role: 'assistant', content: HEHE });
+    expect(request.precedingReply).toBe(HEHE);
+    expect(request.history.at(-1)).not.toEqual({ role: 'assistant', content: HEHE });
     expect(request.message).toBe('なんでもないよ、えらいなと思って');
     // Nothing is stored yet: the body persists the turn after speaking.
     expect(messages(talk.threadId)).toHaveLength(2);
@@ -141,9 +142,8 @@ describe('conversation only if he answers', () => {
         userUtterance: { id: 'u1', text: 'シャノン、いま何て言ったの？', source: 'speech', rawText: 'シャノン、いま何て言ったの？', callContext: { turns, followsShannonTurn: true } } },
     });
     expect(response.status).toBe(200);
-    expect(guest.chatModel.voiceRequests.at(-1)!.history).toEqual([
-      { role: 'user', content: 'こんにちは' }, { role: 'assistant', content: 'こんにちは。' }, { role: 'assistant', content: HEHE },
-    ]);
+    expect(guest.chatModel.voiceRequests.at(-1)!.history).toEqual([{ role: 'user', content: 'こんにちは' }, { role: 'assistant', content: 'こんにちは。' }]);
+    expect(guest.chatModel.voiceRequests.at(-1)!.precedingReply).toBe(HEHE);
     // A guest call stores nothing in the owner's Talk.
     expect(guest.conversationStore.listThreads(scope)).toEqual([]);
 

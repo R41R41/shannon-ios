@@ -52,6 +52,7 @@ export function chatTurnRequestBody(
     input: [
       ...request.history.map(item => ({ role: item.role, content: item.content })),
       ...turnContextMessage(chatTurnContextBlocks(request)),
+      ...precedingReplyMessage(request),
       {
         role: 'user',
         content: request.attachments?.length
@@ -189,6 +190,11 @@ export function chatTurnContextBlocks(request: ShannonChatModelRequest): string[
 /** The turn's blocks as the one developer message that follows the history; nothing when there are none. */
 export function turnContextMessage(blocks: readonly string[]): Array<{ role: 'developer'; content: string }> {
   return blocks.length ? [{ role: 'developer', content: blocks.join('\n\n') }] : [];
+}
+
+/** Her words just before the owner's (`ShannonPrecedingReply`), directly before his message; nothing without them. */
+export function precedingReplyMessage(request: { precedingReply?: string }): Array<{ role: 'assistant'; content: string }> {
+  return request.precedingReply ? [{ role: 'assistant', content: request.precedingReply }] : [];
 }
 
 export type ParsedChatTurn = ReturnType<typeof parseStructuredTurn>;
