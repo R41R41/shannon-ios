@@ -124,7 +124,7 @@ extension ShannonLive2DStage {
     /// here, at the moment it changes: also a page kept alive while no screen shows her switches before she is seen.
     func observeChosenBody() {
         _ = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { ShannonLive2DStage.shared.setBody(.current()) }
+            MainActor.assumeIsolated { ShannonLive2DStage.shared.setBody(ShannonLive2DStage.shared.wantedBody) }
         }
     }
 }

@@ -4,10 +4,10 @@ import AppKit
 /// One part of the app's single menu bar item. The item exists while any part wants it, its button shows the
 /// first part that has something to show, and its menu lists every part's items in order, separated.
 ///
-/// Today the only part is the voice conversation (roadmap A16, owner decision 2026-10-06, option B): it wants
-/// the item while a call is on and no window of the app is on screen. Roadmap A17 adds the app's own part
-/// (the desktop body's 出す・隠す, 常に手前, the four entries and 終了) to this same item instead of making a
-/// second one, so the call becomes a section of that menu.
+/// Two parts: the voice conversation (roadmap A16, owner decision 2026-10-06, option B), which wants the item
+/// while a call is on and no window of the app is on screen, and the app's own part (roadmap A17: her desktop
+/// body's 出す・隠す, 常に手前, 大きさ, the four entries and 終了), which wants it while the app runs. There is
+/// never a second item: the call is the first section of the same menu.
 @MainActor
 public protocol ShannonDesktopMenuBarSection: AnyObject {
     /// The item is shown while at least one part wants it.
@@ -16,6 +16,12 @@ public protocol ShannonDesktopMenuBarSection: AnyObject {
     var menuBarButton: ShannonDesktopMenuBarButton? { get }
     /// This part's items, built each time the menu opens so that they are current.
     func menuBarItems() -> [NSMenuItem]
+    /// Where the part stands in the menu: lower first.
+    var menuBarOrder: Int { get }
+}
+
+public extension ShannonDesktopMenuBarSection {
+    var menuBarOrder: Int { 0 }
 }
 
 public struct ShannonDesktopMenuBarButton: Equatable, Sendable {
@@ -45,6 +51,7 @@ public final class ShannonDesktopMenuBar: NSObject, NSMenuDelegate {
     public func register(_ section: ShannonDesktopMenuBarSection) {
         guard !sections.contains(where: { $0 === section }) else { return }
         sections.append(section)
+        sections.sort { $0.menuBarOrder < $1.menuBarOrder }
         refresh()
     }
 

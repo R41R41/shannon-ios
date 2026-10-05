@@ -176,6 +176,11 @@ public struct ShannonDesktopRootView: View {
                 UserDefaults.standard.set(DesktopDestination.talk.rawValue, forKey: ShannonDesktopWindowRestoration.lastDestinationKey)
                 openWindow(id: "main")
             }
+            // The four entries of the menu bar item (A17) with no window to bring back open one on that entry.
+            ShannonDesktopBody.shared.openWindowForEntry = { entry in
+                UserDefaults.standard.set(entry.rawValue, forKey: ShannonDesktopWindowRestoration.lastDestinationKey)
+                openWindow(id: "main")
+            }
         }
         .onDisappear { voiceCall.windowDisappeared(windowID) }
     }

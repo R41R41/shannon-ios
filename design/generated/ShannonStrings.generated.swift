@@ -175,4 +175,42 @@ public enum ShannonGeneratedStrings {
     public static func notificationBodyFailed(title: String) -> String { "ライ氏、「\(title)」の作業を最後まで進められませんでした。作業画面で状況を確認できます。" }
     /// `notification.body.roomLook`
     public static let notificationBodyRoomLook = "ライ氏、部屋のことでひとことあります。"
+    /// `desktop.body.figure`
+    public static let desktopBodyFigure = "デスクトップのシャノン"
+    /// `desktop.body.show`
+    public static let desktopBodyShow = "シャノンを表示"
+    /// `desktop.body.hide`
+    public static let desktopBodyHide = "シャノンを隠す"
+    /// `desktop.body.alwaysOnTop`
+    public static let desktopBodyAlwaysOnTop = "常に手前に表示"
+    /// `desktop.body.sizeNow`
+    public static func desktopBodySizeNow(percent: String) -> String { "大きさ（いま \(percent)%）" }
+    /// `desktop.body.sizeNormal`
+    public static let desktopBodySizeNormal = "100%（ふつう）"
+    /// `desktop.body.sizeHint`
+    public static let desktopBodySizeHint = "シャノンの上で ⌘ を押しながらスクロールしても変えられます"
+    /// `desktop.body.quit`
+    public static let desktopBodyQuit = "シャノンを終了"
+    /// `desktop.body.section`
+    public static let desktopBodySection = "デスクトップの体"
+    /// `desktop.body.visible`
+    public static let desktopBodyVisible = "シャノンを画面に出す"
+    /// `desktop.body.size`
+    public static let desktopBodySize = "大きさ"
+    /// `desktop.body.speaks`
+    public static let desktopBodySpeaks = "シャノンから話しかける"
+    /// `desktop.body.speaksHint`
+    public static let desktopBodySpeaksHint = "シャノンから話しかけてきた一言と、場面ごとの一言を、体が吹き出しと声で伝えます。ほかの人がいる時も話します。席を外している間と、音声会話の間は、声に出しません。"
+    /// `desktop.body.explanation`
+    public static let desktopBodyExplanation = "シャノンがデスクトップに立ちます。体の外のクリックは後ろの窓へ通り、体をつまんで好きな場所へ運べます。場所と大きさは画面ごとに覚えます。触れたこと・運んだこと・席を外して戻ったことは、「体に起きたことをシャノンに伝える」が入のときだけ届きます。体の窓が出ている間は、Live2D の姿はこちらに出て、トークの横の姿は水の光の目になります。"
+    /// `desktop.body.unsupported`
+    public static let desktopBodyUnsupported = "サーバーがまだ対応していないため、デスクトップの体はシャノンに何も送りません。姿だけを表示しています。"
+    /// `desktop.body.notConnected`
+    public static let desktopBodyNotConnected = "シャノンに接続すると、デスクトップの体がシャノンとつながります。"
+    /// `desktop.body.camera`
+    public static let desktopBodyCamera = "シャノンがカメラで部屋を見てよい"
+    /// `desktop.body.cameraExplanation`
+    public static let desktopBodyCameraExplanation = "入にすると、シャノンの窓が出ていて、あなたひとりの時だけ、シャノンが Mac のカメラで部屋を 1 枚だけ見ることがあります。話している時に頼まれた時と、シャノンが自分の時間に気になった時です。写した画像は一度見るために送るだけで、Mac にもシャノンのサーバーにも保存しません。見ている間は、足もとに「カメラ：いま見ています」と出ます。"
+    /// `desktop.body.cameraDenied`
+    public static let desktopBodyCameraDenied = "システム設定でカメラを許可すると、デスクトップの体が部屋を見られます。"
 }

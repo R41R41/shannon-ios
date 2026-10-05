@@ -13,8 +13,12 @@ extension ShannonDesktopRootView {
                     selectDestination(.talk)
                     showAuxiliaryPanel(.figure)
                 }
+                // Her desktop body (A17): her window, on top, her size (also in the menu bar item).
+                ShannonDesktopBodySettingsSection()
             case .camera:
                 ShannonAppLookSettingsSection()
+                // Her desktop body's one look at the room: its own switch, off by default (Syzygy ADR-0002).
+                ShannonDesktopBodyCameraSection()
             case .earphones:
                 ShannonPrivateListeningSettingsSection()
             case .voice:

@@ -176,6 +176,8 @@ public enum ShannonLive2DCommand: Equatable, Sendable {
 public struct ShannonLive2DTouch: Equatable, Sendable {
     public enum Kind: String, CaseIterable, Sendable {
         case pet, tickle, poke, holdHand
+        /// Picked up and put down elsewhere: her desktop window carries her (the page itself has no carry).
+        case carry
     }
 
     /// Which part of her was touched (the body contract's vocabulary).
@@ -210,7 +212,7 @@ public struct ShannonLive2DTouch: Equatable, Sendable {
         case .pet: return .head
         case .holdHand: return .hand
         case .tickle: return .side
-        case .poke: return nil
+        case .poke, .carry: return nil
         }
     }
 }
@@ -269,7 +271,8 @@ public enum ShannonLive2DMessage: Equatable, Sendable {
             guard let id = object["id"] as? String, Self.isIdentifier(id),
                   let occurredAt = object["occurredAt"] as? String, occurredAt.count <= 40,
                   let touch = object["touch"] as? [String: Any],
-                  let kind = (touch["type"] as? String).flatMap(ShannonLive2DTouch.Kind.init(rawValue:)),
+                  // The page has no carry: only her desktop window makes one.
+                  let kind = (touch["type"] as? String).flatMap(ShannonLive2DTouch.Kind.init(rawValue:)), kind != .carry,
                   let duration = (touch["durationMs"] as? NSNumber)?.doubleValue, duration.isFinite else { return nil }
             let strength = (touch["strength"] as? NSNumber)?.doubleValue ?? 0
             let value = ShannonLive2DTouch(

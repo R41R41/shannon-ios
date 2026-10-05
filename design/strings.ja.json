@@ -1643,17 +1643,19 @@
     {
       "key": "settings.figure.smallEyes",
       "text": "小さくしたときは、目だけにする",
-      "only": "windows",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
       "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
       "decided": "2026-10-05",
-      "note": "Windows の 設定 › すがた の切り替え。既定で入。体の大きさが 60% 未満のとき、目だけで出す（窓の大きさの機能。iPhone と Mac には無い）。体のスレッドの知らせ（2026-10-05）。Windows の置き場所のファイル名は知らせに無い（設定の入口のファイルを書いた）。"
+      "windowsNow": "小さくしたときは、目だけにする",
+      "note": "Windows の 設定 › すがた の切り替え。既定で入。体の大きさが 60% 未満のとき、目だけで出す（窓の大きさの機能。Mac は A17 のデスクトップの体の窓で同じ。iPhone には無い）。体のスレッドの知らせ（2026-10-05）。Windows の置き場所のファイル名は知らせに無い（設定の入口のファイルを書いた）。"
     },
     {
       "key": "settings.figure.smallEyesNote",
       "text": "いまは小さいので、目だけで出ています。",
-      "only": "windows",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
       "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
       "decided": "2026-10-05",
+      "windowsNow": "いまは小さいので、目だけで出ています。",
       "note": "Windows で、小さいため目だけで出ているときの 1 行。体のスレッドの知らせ（2026-10-05）。Windows の置き場所のファイル名は知らせに無い（設定の入口のファイルを書いた）。"
     },
     {
@@ -2981,6 +2983,139 @@
       "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
       "only": "apple",
       "note": "Mac の通知（A13）。iPhone の push（services/api/src/pushNotifications.ts）と同じ文。"
+    },
+    {
+      "key": "desktop.body.figure",
+      "text": "デスクトップのシャノン",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyView.swift",
+      "only": "apple",
+      "note": "Mac のデスクトップに立つ体の窓の名前と読み上げ（A17）。"
+    },
+    {
+      "key": "desktop.body.show",
+      "text": "シャノンを表示",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyMenuSection.swift",
+      "only": "apple",
+      "note": "メニューバーの項目の、アプリの区画（情報設計 8 の 27）。体の窓を出す。Windows のトレイの 2026-10-02 の言葉と同じ。"
+    },
+    {
+      "key": "desktop.body.hide",
+      "text": "シャノンを隠す",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyMenuSection.swift",
+      "only": "apple",
+      "note": "同じ、出ているとき。"
+    },
+    {
+      "key": "desktop.body.alwaysOnTop",
+      "text": "常に手前に表示",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyMenuSection.swift",
+      "only": "apple",
+      "note": "メニューバーと 設定 › すがた › デスクトップの体。Windows の設定と同じ言葉（2026-10-02 の写し）。"
+    },
+    {
+      "key": "desktop.body.sizeNow",
+      "text": "大きさ（いま {percent}%）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyMenuSection.swift",
+      "only": "apple",
+      "note": "メニューバーの、大きさの入れ子の見出し。Windows のトレイの 2026-10-02 の言葉と同じ形。"
+    },
+    {
+      "key": "desktop.body.sizeNormal",
+      "text": "100%（ふつう）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyMenuSection.swift",
+      "only": "apple",
+      "note": "大きさの選択肢。等倍（絵の高さ 520）。"
+    },
+    {
+      "key": "desktop.body.sizeHint",
+      "text": "シャノンの上で ⌘ を押しながらスクロールしても変えられます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyMenuSection.swift",
+      "only": "apple",
+      "note": "大きさの手がかり（Windows の「Ctrl + ホイール」の Mac の形）。"
+    },
+    {
+      "key": "desktop.body.quit",
+      "text": "シャノンを終了",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyMenuSection.swift",
+      "only": "apple",
+      "note": "メニューバーの最後の項目。アプリを終える（通話中なら通話を終えてから）。"
+    },
+    {
+      "key": "desktop.body.section",
+      "text": "デスクトップの体",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
+      "only": "apple",
+      "note": "設定 › すがた と 設定 › カメラ の中の、Mac の体の窓の区画の見出し（A17）。"
+    },
+    {
+      "key": "desktop.body.visible",
+      "text": "シャノンを画面に出す",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
+      "only": "apple",
+      "note": "設定 › すがた › デスクトップの体 の入切。Windows の設定と同じ言葉（2026-10-02 の写し）。既定は切。"
+    },
+    {
+      "key": "desktop.body.size",
+      "text": "大きさ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
+      "only": "apple",
+      "note": "同じ区画の大きさの選択。50%〜300%。画面ごとに覚える。"
+    },
+    {
+      "key": "desktop.body.speaks",
+      "text": "シャノンから話しかける",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
+      "only": "apple",
+      "note": "同じ区画の入切（既定は入）。切のとき、シャノンから話しかけてきた一言は体に出さず、muted と報告する。Windows の設定と同じ言葉（2026-10-02 の写し）。"
+    },
+    {
+      "key": "desktop.body.speaksHint",
+      "text": "シャノンから話しかけてきた一言と、場面ごとの一言を、体が吹き出しと声で伝えます。ほかの人がいる時も話します。席を外している間と、音声会話の間は、声に出しません。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
+      "only": "apple",
+      "note": "「シャノンから話しかける」の説明。"
+    },
+    {
+      "key": "desktop.body.explanation",
+      "text": "シャノンがデスクトップに立ちます。体の外のクリックは後ろの窓へ通り、体をつまんで好きな場所へ運べます。場所と大きさは画面ごとに覚えます。触れたこと・運んだこと・席を外して戻ったことは、「体に起きたことをシャノンに伝える」が入のときだけ届きます。体の窓が出ている間は、Live2D の姿はこちらに出て、トークの横の姿は水の光の目になります。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
+      "only": "apple",
+      "note": "設定 › すがた › デスクトップの体 の説明。"
+    },
+    {
+      "key": "desktop.body.unsupported",
+      "text": "サーバーがまだ対応していないため、デスクトップの体はシャノンに何も送りません。姿だけを表示しています。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
+      "only": "apple",
+      "note": "サーバーが X-Shannon-Body に答えないとき（body-contract.md「Her desktop body inside an app」）。"
+    },
+    {
+      "key": "desktop.body.notConnected",
+      "text": "シャノンに接続すると、デスクトップの体がシャノンとつながります。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
+      "only": "apple",
+      "note": "接続していないとき。"
+    },
+    {
+      "key": "desktop.body.camera",
+      "text": "シャノンがカメラで部屋を見てよい",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
+      "only": "apple",
+      "note": "設定 › カメラ › デスクトップの体 の入切。既定は切（Syzygy ADR-0002「部屋をひと目見る」）。会話中のアプリのカメラ（look.setting）とは別の切り替え。Windows のトレイの 2026-10-02 の言葉。"
+    },
+    {
+      "key": "desktop.body.cameraExplanation",
+      "text": "入にすると、シャノンの窓が出ていて、あなたひとりの時だけ、シャノンが Mac のカメラで部屋を 1 枚だけ見ることがあります。話している時に頼まれた時と、シャノンが自分の時間に気になった時です。写した画像は一度見るために送るだけで、Mac にもシャノンのサーバーにも保存しません。見ている間は、足もとに「カメラ：いま見ています」と出ます。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
+      "only": "apple",
+      "note": "同じ切り替えの説明（同意の文）。"
+    },
+    {
+      "key": "desktop.body.cameraDenied",
+      "text": "システム設定でカメラを許可すると、デスクトップの体が部屋を見られます。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
+      "only": "apple",
+      "note": "カメラが許可されていないとき。"
     }
   ]
 }

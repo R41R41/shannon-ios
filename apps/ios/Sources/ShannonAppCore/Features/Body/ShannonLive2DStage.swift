@@ -166,6 +166,7 @@ public final class ShannonLive2DStage {
     /// Where the screen in front wants her, and whether it lets her be touched.
     var frontHost: (layout: ShannonLive2DLayout, touchEnabled: Bool)? { hosts.last.map { ($0.layout, $0.touchEnabled) } }
     var frontContainer: ShannonLive2DPlatformView? { hosts.last?.container }
+    var frontIsDesktop: Bool { hosts.last?.priority == .desktop }
 
     func applyHost() { frontHost.map { ShannonLive2DStagePolicy.hostCommands(layout: $0.layout, touchEnabled: $0.touchEnabled) }?.forEach(send) }
 
@@ -203,7 +204,7 @@ public final class ShannonLive2DStage {
     // MARK: Pausing
 
     private func refreshPaused() {
-        let paused = ShannonLive2DStagePolicy.paused(hasHost: activeHost != nil, appActive: appActive, resting: isResting)
+        let paused = ShannonLive2DStagePolicy.paused(hasHost: activeHost != nil, appActive: appActive || frontIsDesktop, resting: isResting)
         guard status == .ready, sentPaused != paused else { return }
         sentPaused = paused
         if paused, lastMouthLevel > 0 {
@@ -273,7 +274,7 @@ public final class ShannonLive2DStage {
         sentPaused = nil
         lastMouthLevel = 0
         loadStartedAt = Date()
-        bodySwitch.chosen = ShannonLive2DBody.current() // the setting may have changed while no screen showed her
+        bodySwitch.chosen = wantedBody // the setting may have changed while no screen showed her
 
         let bridge = ShannonLive2DBridge(stage: self, generation: generation, folder: folder)
         let configuration = WKWebViewConfiguration()
@@ -452,7 +453,7 @@ public final class ShannonLive2DStage {
             framesPerSecond = fps
         case .touch, .askReaction, .tap:
             lastActivityAt = Date()
-            onTouchMessage?(message)
+            (frontIsDesktop ? ShannonLive2DDesktopLink.shared.touch ?? onTouchMessage : onTouchMessage)?(message)
         }
     }
 
