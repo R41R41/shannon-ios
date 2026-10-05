@@ -55,6 +55,7 @@ import { optionalPlaceDiscoverySkill, placeSkillReply } from './placeDiscoverySk
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import { chatAudienceTurn } from './chatAudience.js';
 import { generateChatTurn, validChatStream, withSentenceStream } from './chatSentenceStream.js';
+import { conversationTools } from './shannonToolSession.js';
 import type { TurnMemoryRecall } from './turnMemoryRecall.js';
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type NotionTurnReader } from './conversationCapabilities.js';
 import { prepareConversationOrganize } from './conversationOrganize.js';
@@ -425,7 +426,7 @@ export class ShannonApiKernel {
           .request(placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt),
         ...(priorThreadSummary ? { priorThreadSummary } : {}),
         message,
-        ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone),
+        ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...conversationTools(this.autonomy, body.scopeKey, 'text', audience.alone),
         ...(body.webSearch === true || placeSkill ? { useWebSearch: true } : {}),
         generateThreadTitle: this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
       });

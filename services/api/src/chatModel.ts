@@ -17,7 +17,8 @@ import {
   type VoiceStreamBounds,
 } from './chatModelVoiceStream.js';
 import { completeSpokenSentences } from './spokenSentences.js';
-import { chatTurnRequestBody, chatTurnResult, parsedChatTurn } from './chatModelTurn.js';
+import { chatTurnRequestBody, chatTurnResult, offersTools, parsedChatTurn } from './chatModelTurn.js';
+import { VOICE_TOOL_INSTRUCTIONS, providerFunctionTools, withToolRounds, type ShannonModelToolSession } from './chatModelTools.js';
 import {
   WEB_SEARCH_INSTRUCTIONS,
   errorDetail,
@@ -58,6 +59,8 @@ export interface ShannonChatModelRequest {
   offerReplyFeeling?: boolean;
   /** The structured reply gets an `appLook` field: she may choose one look through the camera of the owner's app (`appLook.ts`). */
   offerAppLook?: boolean;
+  /** Her registry tools for this turn (`chatModelTools.ts`); offered unless the turn forces a web search. */
+  tools?: ShannonModelToolSession;
 }
 
 export interface ShannonVoiceModelRequest {
@@ -67,6 +70,8 @@ export interface ShannonVoiceModelRequest {
   message: string;
   useWebSearch: boolean;
   conversationClass: 'greeting' | 'direct' | 'skill_simple' | 'skill_complex';
+  /** Her registry tools for this turn; offered unless the turn uses web search. */
+  tools?: ShannonModelToolSession;
 }
 
 export interface ShannonWebSource {
@@ -201,22 +206,33 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
   }
 
   async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
-    const response = await this.fetcher(this.endpoint, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${this.options.apiKey}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(chatTurnRequestBody(this.model, request, this.options.agentHostHint)),
-      signal: AbortSignal.timeout(this.timeoutMilliseconds),
-    });
-
-    const raw = await response.text();
-    const json = parseJson(raw);
-    if (!response.ok) {
-      throw new Error(`OPENAI_RESPONSE_${response.status}: ${errorDetail(json)}`);
-    }
+    const send = async (body: Record<string, unknown>) => {
+      const response = await this.fetcher(this.endpoint, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${this.options.apiKey}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(this.timeoutMilliseconds),
+      });
+      const raw = await response.text();
+      const json = parseJson(raw);
+      if (!response.ok) {
+        throw new Error(`OPENAI_RESPONSE_${response.status}: ${errorDetail(json)}`);
+      }
+      return json;
+    };
+    const json = await withToolRounds(chatTurnRequestBody(this.model, request, this.options.agentHostHint), offersTools(request) ? request.tools : undefined, send, this.chatRounds(request));
     return this.completedChatTurn(request, json);
+  }
+
+  /** How a text turn's tool rounds end and are accounted: a round whose text is the whole structured turn is the answer. */
+  private chatRounds(request: ShannonChatModelRequest) {
+    return {
+      isAnswer: (envelope: unknown) => { try { parsedChatTurn(envelope); return true; } catch { return false; } },
+      onSpent: (envelope: unknown) => this.recordChatUsage(request.scopeKey, envelope),
+    };
   }
 
   /**
@@ -227,14 +243,15 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     request: ShannonChatModelRequest,
     onReplyText: (text: string) => void | Promise<void>,
   ): Promise<ShannonChatModelResult> {
-    const envelope = await streamedChatTurnEnvelope({
-      fetcher: this.fetcher, endpoint: this.endpoint, apiKey: this.options.apiKey,
-      timeoutMilliseconds: this.timeoutMilliseconds,
-      body: chatTurnRequestBody(this.model, request, this.options.agentHostHint),
-    }, onReplyText, failed => {
-      // A failed response is recorded only when the provider reported what it used.
-      if (responseUsage(failed).totalTokens > 0) this.recordChatUsage(request.scopeKey, failed);
-    });
+    // Each tool round streams on its own; a round that only calls tools writes no reply text.
+    const envelope = await withToolRounds(chatTurnRequestBody(this.model, request, this.options.agentHostHint), offersTools(request) ? request.tools : undefined,
+      body => streamedChatTurnEnvelope({
+        fetcher: this.fetcher, endpoint: this.endpoint, apiKey: this.options.apiKey,
+        timeoutMilliseconds: this.timeoutMilliseconds, body,
+      }, onReplyText, failed => {
+        // A failed response is recorded only when the provider reported what it used.
+        if (responseUsage(failed).totalTokens > 0) this.recordChatUsage(request.scopeKey, failed);
+      }), this.chatRounds(request));
     return this.completedChatTurn(request, envelope);
   }
 
@@ -258,24 +275,29 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
   }
 
   async generateVoice(request: ShannonVoiceModelRequest): Promise<ShannonChatModelResult> {
-    const response = await this.fetcher(this.endpoint, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${this.options.apiKey}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(this.voiceRequestPayload(request)),
-      // Nothing arrives before the whole reply, so this bound is a total sized for the longest one.
-      signal: AbortSignal.timeout(this.options.voiceResponseTimeoutMilliseconds ?? VOICE_RESPONSE_TIMEOUT_MILLISECONDS),
-    });
-    const raw = await response.text();
-    const json = parseJson(raw);
-    if (!response.ok) throw new Error(`OPENAI_RESPONSE_${response.status}: ${errorDetail(json)}`);
+    // Words of a round that called tools (a short waiting phrase) come before the words of the answer.
+    const said: string[] = [];
+    const json = await withToolRounds(this.voiceRequestPayload(request), this.voiceTools(request), async body => {
+      const response = await this.fetcher(this.endpoint, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${this.options.apiKey}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        // Nothing arrives before the whole reply, so this bound is a total sized for the longest one.
+        signal: AbortSignal.timeout(this.options.voiceResponseTimeoutMilliseconds ?? VOICE_RESPONSE_TIMEOUT_MILLISECONDS),
+      });
+      const raw = await response.text();
+      const value = parseJson(raw);
+      if (!response.ok) throw new Error(`OPENAI_RESPONSE_${response.status}: ${errorDetail(value)}`);
+      return value;
+    }, { isAnswer: () => false, onSpent: envelope => { said.push(extractOutputText(envelope).trim()); this.recordChatUsage(request.scopeKey, envelope); } });
     if (voiceContentWithheld(json)) {
       this.recordSpentVoiceUsage(request.scopeKey, json);
       throw new Error(VOICE_CONTENT_FILTERED);
     }
-    const written = extractOutputText(json).trim();
+    const written = [...said, extractOutputText(json).trim()].filter(Boolean).join('');
     // A reply cut at its output limit ends at its last complete sentence, as in the stream.
     const truncated = reachedVoiceLengthLimit(json);
     const reply = truncated ? completeSpokenSentences(written) || written : written;
@@ -295,12 +317,22 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       ...this.voiceStreamBounds,
       firstOutputMilliseconds: Math.max(this.voiceStreamBounds.firstOutputMilliseconds, VOICE_WEB_FIRST_OUTPUT_MILLISECONDS),
     } : this.voiceStreamBounds;
-    const outcome = await streamedVoiceReply({
-      fetcher: this.fetcher, endpoint: this.endpoint, apiKey: this.options.apiKey,
-      body: this.voiceRequestPayload(request), bounds, ...(signal ? { signal } : {}),
-      onSpentWithoutReply: envelope => this.recordSpentVoiceUsage(request.scopeKey, envelope),
-    }, onTextDelta);
-    return this.voiceResult(request, outcome.envelope, outcome.reply, outcome.truncated);
+    const tools = this.voiceTools(request);
+    // Every round streams; a round that calls tools may first say a short waiting phrase, and the answer follows it.
+    const said: string[] = [];
+    let last: { reply: string; envelope: unknown; truncated: boolean } | null = null;
+    await withToolRounds(this.voiceRequestPayload(request), tools, async body => {
+      last = await streamedVoiceReply({
+        fetcher: this.fetcher, endpoint: this.endpoint, apiKey: this.options.apiKey,
+        body, bounds, ...(signal ? { signal } : {}), ...(tools ? { allowToolCalls: true } : {}),
+        onSpentWithoutReply: envelope => this.recordSpentVoiceUsage(request.scopeKey, envelope),
+      }, onTextDelta);
+      return last.envelope;
+    }, { isAnswer: () => false, ...(signal ? { signal } : {}), onSpent: envelope => { said.push(last?.reply ?? ''); this.recordChatUsage(request.scopeKey, envelope); } });
+    const outcome = last!;
+    const reply = [...said, outcome.reply].filter(Boolean).join('');
+    if (!reply) throw new Error('OPENAI_RESPONSE_STREAM_INCOMPLETE');
+    return this.voiceResult(request, outcome.envelope, reply, outcome.truncated);
   }
 
   /** A voice response that used tokens but gave no usable reply is still accounted. */
@@ -326,15 +358,22 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     };
   }
 
+  /** A voice turn offers her registry tools unless it searches the web. */
+  private voiceTools(request: ShannonVoiceModelRequest): ShannonModelToolSession | undefined {
+    return request.tools?.definitions.length && !request.useWebSearch ? request.tools : undefined;
+  }
+
   private voiceRequestPayload(request: ShannonVoiceModelRequest): Record<string, unknown> {
     const complex = request.conversationClass === 'skill_complex';
     const maximumOutputTokens = VOICE_MAX_OUTPUT_TOKENS[request.conversationClass];
+    const tools = this.voiceTools(request);
     return {
       model: this.model,
       instructions: [
         request.systemPrompt,
         VOICE_REPLY_INSTRUCTIONS,
         ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
+        ...(tools ? [VOICE_TOOL_INSTRUCTIONS] : []),
       ].join('\n\n'),
       input: [
         ...request.history.map(item => ({ role: item.role, content: item.content })),
@@ -349,6 +388,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
         include: ['web_search_call.action.sources'],
         max_tool_calls: complex ? 3 : 2,
       } : {}),
+      ...(tools ? { tools: providerFunctionTools(tools.definitions), tool_choice: 'auto', parallel_tool_calls: false } : {}),
       store: false,
       prompt_cache_key: stableScopeIdentifier(request.scopeKey),
       safety_identifier: stableScopeIdentifier(request.scopeKey),

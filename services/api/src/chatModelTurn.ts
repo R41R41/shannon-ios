@@ -19,6 +19,7 @@ import {
   stableScopeIdentifier,
 } from './chatModelSupport.js';
 import { APP_LOOK_SCHEMA } from './appLookContract.js';
+import { TOOL_INSTRUCTIONS, providerFunctionTools } from './chatModelTools.js';
 
 /**
  * The text-chat turn of the OpenAI Responses adapter: the request body and the reading of
@@ -42,6 +43,7 @@ export function chatTurnRequestBody(
       THREAD_SUMMARY_INSTRUCTIONS,
       ...(request.generateThreadTitle ? [THREAD_TITLE_INSTRUCTIONS] : []),
       ...(request.offerReplyFeeling ? [REPLY_FEELING_INSTRUCTIONS] : []),
+      ...(offersTools(request) ? [TOOL_INSTRUCTIONS] : []),
     ].join('\n\n'),
     input: [
       ...request.history.map(item => ({ role: item.role, content: item.content })),
@@ -155,6 +157,8 @@ export function chatTurnRequestBody(
       include: ['web_search_call.action.sources'],
       max_tool_calls: 3,
     } : {}),
+    // Her registry tools (`chatModelTools.ts`), never beside a forced web search.
+    ...(offersTools(request) ? { tools: providerFunctionTools(request.tools!.definitions), tool_choice: 'auto', parallel_tool_calls: false } : {}),
     store: false,
     prompt_cache_key: stableScopeIdentifier(request.scopeKey),
     safety_identifier: stableScopeIdentifier(request.scopeKey),
@@ -187,4 +191,9 @@ export function chatTurnResult(
     ...(structured.intentPlan ? { intentPlan: structured.intentPlan } : {}),
     ...(structured.taskProposal ? { taskProposal: structured.taskProposal } : {}),
   };
+}
+
+/** A turn offers her registry tools when it has a session with tools and does not force a web search. */
+export function offersTools(request: Pick<ShannonChatModelRequest, 'tools' | 'useWebSearch' | 'placeSearch'>): boolean {
+  return Boolean(request.tools?.definitions.length) && !request.useWebSearch && !request.placeSearch;
 }

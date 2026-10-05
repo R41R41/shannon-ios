@@ -1,6 +1,7 @@
 import { errorDetail, parseJson } from './chatModelSupport.js';
 import { responseSSEEvents } from './chatModelStream.js';
 import { completeSpokenSentences } from './spokenSentences.js';
+import { functionCallsOf } from './chatModelTools.js';
 
 /** Bounds of one streamed voice reply. A long reply has no total limit, only these. */
 export interface VoiceStreamBounds {
@@ -41,6 +42,8 @@ export interface VoiceStreamCall {
   signal?: AbortSignal;
   /** An incomplete response that is still a failure, with the usage it reported. */
   onSpentWithoutReply?: (envelope: unknown) => void;
+  /** A response that asks for her tools may end without a word, or with only a short waiting phrase. */
+  allowToolCalls?: boolean;
 }
 
 export interface VoiceStreamOutcome {
@@ -121,6 +124,7 @@ export async function streamedVoiceReply(
     }
     reply = reply.trim();
     if (truncated) reply = completeSpokenSentences(reply) || reply;
+    if (envelope && call.allowToolCalls && !truncated && functionCallsOf(envelope).length) return { reply, envelope, truncated };
     if (!reply || !envelope) {
       // The output limit was spent before any word (for example on reasoning): accounted, then failed.
       if (truncated) call.onSpentWithoutReply?.(envelope);

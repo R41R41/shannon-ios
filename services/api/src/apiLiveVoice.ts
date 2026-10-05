@@ -64,6 +64,7 @@ import { DisclosureGate, sharedDailyFocus } from './memoryDisclosure.js';
 import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
 import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
+import { asksAboutOwnThings, conversationTools } from './shannonToolSession.js'; import type { ShannonToolRunner } from './shannonToolRunner.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
   /** Looking through her body's camera or the app's (`voiceAppLook.ts`); absent, a voice turn never looks. */
@@ -76,7 +77,7 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   knowledgeStore: KnowledgeStore | null;
   dailyMind: DailyMindReader | null;
   /** Her own pursuits and work, and the autonomy wording of the identity block. */
-  autonomy?: { pursuitPrompt(scopeKey: string): string; identityProjection(scopeKey: string, prompt: string): string };
+  autonomy?: { pursuitPrompt(scopeKey: string): string; identityProjection(scopeKey: string, prompt: string): string; tools?: ShannonToolRunner };
   agentTasks: AgentTaskStore;
   now: CompanionClock;
   cognitiveIntents: CognitiveIntentStore;
@@ -372,7 +373,7 @@ async function completeLiveVoiceDelegation(
     scopeKey, ...replayed,
     // What she said when she was touched is what he is answering: it precedes his words, in every mode, as context only.
     ...(reactionLine ? { history: [...replayed.history, { role: 'assistant' as const, content: reactionLine }] } : {}),
-    message: transcript,
+    message: transcript, ...conversationTools(dependencies.autonomy, scopeKey, 'voice', alone && !temporaryGuest && asksAboutOwnThings(transcript)),
     useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   };
