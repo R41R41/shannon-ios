@@ -51,7 +51,7 @@ function prefixShare(requests: readonly ShannonChatModelRequest[], order: (p: Re
  * One Talk of `games` shiritori games of the reach measure (a), one after the other, through the kernel over a SQLite
  * store (so her knowledge projection is there too), and every request the model was given.
  */
-async function shiritoriThread(games: number): Promise<ShannonChatModelRequest[]> {
+async function shiritoriThread(games: number, seed?: (store: SQLiteShannonStore) => void): Promise<ShannonChatModelRequest[]> {
   const inner = new ScriptedShiritoriModel();
   const requests: ShannonChatModelRequest[] = [];
   const directory = mkdtempSync(join(tmpdir(), 'shannon-prefix-'));
@@ -60,6 +60,7 @@ async function shiritoriThread(games: number): Promise<ShannonChatModelRequest[]
   const store = new SQLiteShannonStore({ path: join(directory, 'prefix.sqlite'), now });
   const api = createLocalApiKernel(now, { chatModel: { mode: inner.mode, model: inner.model,
     generate: request => { requests.push(request); return inner.generate(request); } }, stateStore: store, conversationStore: store, knowledgeStore: store });
+  seed?.(store);
   try {
     for (let round = 0; round < games; round += 1) {
       const game = new ShiritoriGame();
@@ -135,5 +136,41 @@ describe('the provider prompt cache (Syzygy ADR-0003 principle 4)', () => {
     expect(kept / full).toBeGreaterThan(0.6);
     expect(prefixShare(requests, ORDERS.toolsFirst)).toBeGreaterThan(0.8);
     expect(prefixShare(requests, ORDERS.instructionsFirst)).toBeGreaterThan(0.8);
+  });
+
+  it('puts what she knows of the owner after the fixed blocks and before the shared state', async () => {
+    const requests = await shiritoriThread(1, store => store.apply('prefix:owner', {
+      type: 'user-fact-upserted', source: 'conversation',
+      fact: { id: 'favorite-food', statement: 'ユーザーの好きな食べ物は寿司', confidence: 0.95, observedAt: '2026-10-05T09:00:00.000Z', evidence: '好きな食べ物は寿司' },
+    }));
+    for (const request of requests) {
+      expect(request.systemPrompt).not.toContain('寿司');
+      expect(request.profilePrompt).toMatch(/^\[User knowledge\]\n- 好きな食べ物は？: ユーザーの好きな食べ物は寿司 /u);
+      expect(request.turnContext).toMatch(/^\[Shannon shared state v\d+\]/u);
+      const body = chatTurnRequestBody('gpt-5.6-luna', request, 'shannon-mac') as Body;
+      // Identity first, the profile last in the instructions, the state at the head of the turn's message.
+      expect(body.instructions.startsWith(request.systemPrompt)).toBe(true);
+      expect(body.instructions.endsWith(`\n\n${request.profilePrompt}`)).toBe(true);
+      expect(body.input.at(-2)?.content).toMatch(/^\[Shannon shared state v\d+\]/u);
+    }
+    // The order of the bracketed headers of one whole request, pinned: identity, fixed blocks, profile, then the turn.
+    const headers = (request: ShannonChatModelRequest) => {
+      const body = chatTurnRequestBody('gpt-5.6-luna', request, 'shannon-mac') as Body;
+      return [body.instructions, ...body.input.map(item => String(item.content))].join('\n').split('\n').filter(line => /^\[[^\]]+\]$/u.test(line));
+    };
+    expect(headers(requests[1]!).map(header => header.replace(/ v\d+\]$/u, ']'))).toEqual([
+      '[シャノンの人格]', '[Syzygyの3つのアプリ]', '[ボクにできること・できないこと]',
+      '[ユーザーに見せる返答]', '[生成物]', '[目的の計画案]', '[Codexで行う作業]', '[トークの現在地]', '[この返答での気持ち]', '[ボクの道具]',
+      '[User knowledge]',
+      // The turn's developer message. The second state block is the cognitive context's own (`turnCognitiveContext.ts`).
+      '[Shannon shared state]', '[Current cognitive context — use before answering]',
+      '[Current intention frame — durable, owner-visible, and evidence-backed]', '[Shannon shared state]', '[直前までの保存済みトーク要約]',
+    ]);
+    // The profile is part of the prefix the next turn repeats.
+    for (let index = 1; index < requests.length; index += 1) {
+      for (const order of Object.values(ORDERS)) {
+        expect(commonPrefix(order(parts(requests[index - 1]!)), order(parts(requests[index]!)))).toBeGreaterThanOrEqual(throughHistory(requests[index - 1]!, order));
+      }
+    }
   });
 });
