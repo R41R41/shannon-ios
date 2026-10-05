@@ -117,7 +117,9 @@ export function prepareTurnCognitiveContext(
     localTime: new Intl.DateTimeFormat('ja-JP', { timeZone: input.timeZone ?? 'Asia/Tokyo', dateStyle: 'full', timeStyle: 'short' }).format(new Date(input.occurredAt)),
     ...(input.participants?.length ? { participants: Object.freeze([...input.participants]) } : {}),
     ...(locations.length ? { locationLabels: Object.freeze([...locations]) } : {}),
-    ...(currentGoal ? { currentGoal } : {}),
+    // The goal is the owner's own. With anyone else present it stays out of the Situation line; the
+    // intention frame, which carries its marker, is the only place it reaches the model.
+    ...(currentGoal && gate.ownerOnly ? { currentGoal } : {}),
   });
   // What she has come to notice about the people present. Deterministic, no model; empty when switched off.
   const impressions = recallImpressions(conversationStore, full, input, recentExperiences);
@@ -171,7 +173,8 @@ function turnPrompt(
   // With anyone else present the profile is listed line by line so each protected line carries its marker.
   if (!gate.ownerOnly) {
     const intent = buildIntentPrompt(frame);
-    return [buildTurnCognitivePrompt(situation, memories), intent ? `${gate.unlabelledMarker}\n${intent}` : '',
+    // The marker opens the frame's first line, so nothing that splits the prompt by line can separate them.
+    return [buildTurnCognitivePrompt(situation, memories), intent ? `${gate.unlabelledMarker}${intent}` : '',
       sharedProfilePrompt(gate)].filter(Boolean).join('\n\n');
   }
   return [buildTurnCognitivePrompt(situation, memories), buildIntentPrompt(frame),
