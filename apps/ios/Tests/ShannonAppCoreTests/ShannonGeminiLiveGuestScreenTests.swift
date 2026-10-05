@@ -115,4 +115,27 @@ final class ShannonGeminiLiveGuestScreenTests: XCTestCase {
         workspace.participantModeChanged(to: .guest)
         XCTAssertEqual(workspace.typedMessage, "新しい下書き")
     }
+
+    /// The owner's words from before the switch are answered, but never kept as the friend's.
+    func testTheOwnersHiddenWordsAreNeverRememberedAsTheFriends() async {
+        let model = liveModel()
+        var sentText: String?
+        model.streamSpeech = { _, _ in throw Refused() }
+        model.performStreamingDelegation = { text, _, _, _ in
+            sentText = text
+            return ShannonLiveVoiceDelegationResponseDTO(threadId: "t", model: "m", reply: "はじめまして、ミキさん。")
+        }
+        model.appendUtterance(rawText: "明日の歯医者は何時？", text: "明日の歯医者は何時？", source: .typed)
+        model.switchParticipantMode(to: .guest, origin: .control)
+        model.appendUtterance(rawText: "ミキです", text: "ミキです", source: .typed)
+        model.beginResponse()
+        for _ in 0..<200 where model.responseTask != nil { try? await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(sentText, "明日の歯医者は何時？\nミキです", "his question is still answered in the call")
+        let context = model.guestCall.requestContext(addressedByName: false, followsShannonTurn: false)
+        XCTAssertEqual(context.turns.filter { $0.role == .participant }.map(\.text), ["ミキです"])
+        XCTAssertFalse(context.turns.contains { $0.text.contains("歯医者") }, "not in the call's context")
+        let period = model.guestCall.endGuestPeriod()
+        XCTAssertFalse(period?.turns.contains { $0.text.contains("歯医者") } ?? true, "not in what is remembered of her")
+        model.stop()
+    }
 }

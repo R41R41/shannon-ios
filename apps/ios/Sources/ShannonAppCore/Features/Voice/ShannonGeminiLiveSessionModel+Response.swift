@@ -13,6 +13,10 @@ extension ShannonGeminiLiveSessionModel {
         let generation = UUID()
         responseGenerationID = generation
         let mode = participantMode
+        // What the guests said in this batch. The owner's words from before 「友人も一緒」 (hidden) are answered in
+        // the call but are never kept as theirs: not in the call's context, not in what is remembered of them.
+        let guestWords = batch.turns.filter { !pendingTurns.hiddenIDs.contains($0.id) }
+            .map(\.rawText).filter { !$0.isEmpty }.joined(separator: "\n")
         latencyMeasurements.startResponse()
         shannonTranscript = ""
         errorMessage = nil
@@ -85,7 +89,7 @@ extension ShannonGeminiLiveSessionModel {
                 latencyMeasurements.recordServerMetrics(response.voiceMetrics)
                 if mode == .guest {
                     // Kept for this call only; a later owner turn never sees it.
-                    guestCall.record(participant: batch.rawText, shannon: response.reply)
+                    guestCall.record(participant: guestWords, shannon: response.reply)
                 } else if localReply != nil {
                     guestCall.askedAboutCompanion(now: ProcessInfo.processInfo.systemUptime)
                 } else {
@@ -182,7 +186,7 @@ extension ShannonGeminiLiveSessionModel {
                     responseDelivery.withdraw(batch: batch, ledger: &pendingTurns)
                     shannonTranscript = ""
                 } else if queued == .finishReceivedSentences {
-                    await keepSpokenPart(of: batch, mode: mode, generation: generation)
+                    await keepSpokenPart(of: batch, guestWords: guestWords, mode: mode, generation: generation)
                     guard responseGenerationID == generation, !Task.isCancelled else { return }
                 }
                 responseTask = nil
@@ -206,7 +210,7 @@ extension ShannonGeminiLiveSessionModel {
     /// cut off, written like a completed one, and the input it answered is not asked again.
     /// The write is awaited, so the notice says whether it was kept.
     private func keepSpokenPart(
-        of batch: ShannonPendingVoiceTurns.Batch, mode: ShannonVoiceParticipantMode, generation: UUID
+        of batch: ShannonPendingVoiceTurns.Batch, guestWords: String, mode: ShannonVoiceParticipantMode, generation: UUID
     ) async {
         guard let reply = responseDelivery.keepSpokenPart(batch: batch, ledger: &pendingTurns) else { return }
         if mayShowReply(of: mode) { shannonTranscript = reply }
@@ -215,7 +219,7 @@ extension ShannonGeminiLiveSessionModel {
         ShannonVoiceDiagnostics.shared.record("gemini.response.partial_kept", sessionID: generation.uuidString,
             metadata: ["characters": String(reply.count)])
         if mode == .guest {
-            guestCall.record(participant: batch.rawText, shannon: reply)
+            guestCall.record(participant: guestWords, shannon: reply)
         } else if mode.allowsTranscriptPersistence, let commitTurn {
             let task = Task { @MainActor in
                 do { try await commitTurn(batch.rawText, reply); return true } catch {
