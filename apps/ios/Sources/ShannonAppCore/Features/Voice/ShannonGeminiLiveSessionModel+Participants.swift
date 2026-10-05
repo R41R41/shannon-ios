@@ -1,6 +1,7 @@
-#if os(iOS)
 import Foundation
+#if os(iOS)
 import UIKit
+#endif
 
 enum ShannonVoiceParticipantSwitchOrigin: String, Sendable {
     case control, spoken
@@ -95,10 +96,21 @@ extension ShannonGeminiLiveSessionModel {
         phase != .idle && (participantMode == .guest || guestCall.companionSuspected)
     }
 
-    /// Keeps the call screen readable on a table. Released when the call ends.
+    /// Keeps the call screen readable on a table. Released when the call ends. On the Mac the call also keeps
+    /// the computer from sleeping by itself: speaking is not use that macOS counts, and a sleeping Mac ends the call.
     func setKeepsScreenAwake(_ awake: Bool) {
+#if os(iOS)
         guard UIApplication.shared.isIdleTimerDisabled != awake else { return }
         UIApplication.shared.isIdleTimerDisabled = awake
+#else
+        if awake, awakeActivity == nil {
+            awakeActivity = ProcessInfo.processInfo.beginActivity(
+                options: [.userInitiated, .idleDisplaySleepDisabled], reason: "A voice conversation with Shannon")
+        } else if !awake, let activity = awakeActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+            awakeActivity = nil
+        }
+#endif
     }
 }
 
@@ -114,4 +126,3 @@ enum ShannonVoiceLocalReply {
         return ShannonLiveVoiceDelegationResponseDTO(threadId: threadID, model: "local-rule", reply: text)
     }
 }
-#endif

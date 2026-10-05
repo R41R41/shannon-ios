@@ -957,6 +957,27 @@
       "note": "機能の名前は「音声会話」。1 回分を指すときは「この通話」。"
     },
     {
+      "key": "voice.mac.mutedDetail",
+      "text": "話すときは「マイク」をクリックしてください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveStatusPresentation.swift",
+      "only": "apple",
+      "note": "Mac のミュート中の状態の行（iPhone は「話すときはマイクをタップしてください。」）。"
+    },
+    {
+      "key": "voice.mac.microphoneDenied",
+      "text": "システム設定でマイクを許可すると、音声で話せます。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveSessionModel+PermissionPrimer.swift",
+      "only": "apple",
+      "note": "Mac でマイクが許可されていないとき（iPhone は「設定でマイクを許可すると…」）。"
+    },
+    {
+      "key": "voice.mac.microphoneDeniedGuidance",
+      "text": "システム設定でマイクを許可してから、もう一度お試しください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveStatusPresentation.swift",
+      "only": "apple",
+      "note": "同じ、状態の行の補足。"
+    },
+    {
       "key": "nav.delivery",
       "text": "配信",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",

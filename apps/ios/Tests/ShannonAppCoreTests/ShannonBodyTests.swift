@@ -1012,15 +1012,11 @@ final class ShannonBodyTests: XCTestCase {
 
         // Any call that begins starts without a touch line's id (the call screen, a call from her).
         ShannonBodyReactionLink.shared.arm(reactionID: "stale", listenSeconds: 6)
-#if os(iOS)
         let workspace = ShannonVoiceWorkspaceState()
         _ = workspace.beginCall(
             mode: .owner, speechProvider: .gemini, threadID: nil,
             conversationModel: ShannonConversationModel.designPreview(), geminiVoiceModel: ShannonGeminiLiveSessionModel())
         workspace.connectionRequestID = nil
-#else
-        ShannonBodyReactionLink.shared.disarm()
-#endif
         XCTAssertNil(ShannonBodyReactionLink.shared.forDelegation(ownerMode: true, utterance: "もしもし"))
     }
 

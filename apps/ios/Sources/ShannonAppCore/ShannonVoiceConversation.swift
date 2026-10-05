@@ -152,7 +152,6 @@ public enum ShannonVoiceRecordingPolicy {
     }
 }
 
-#if os(iOS)
 @preconcurrency import AVFoundation
 
 @MainActor
@@ -210,7 +209,7 @@ public final class ShannonVoiceConversationModel: NSObject {
         }
 
         diagnostics.record("permission.microphone.before", sessionID: sessionID)
-        let permitted = await AVAudioApplication.requestRecordPermission()
+        let permitted = await ShannonMediaPermission.requestMicrophone()
         diagnostics.record(
             "permission.microphone.after",
             sessionID: sessionID,
@@ -306,8 +305,10 @@ public final class ShannonVoiceConversationModel: NSObject {
     public func speakGemini(_ speech: ShannonGeminiSpeech) throws {
         guard !speech.audio.isEmpty else { throw PlaybackError.invalidAudio }
         stopSpeaking()
+#if os(iOS)
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+#endif
         try audioLease.activate()
         let player = try AVAudioPlayer(data: speech.audio)
         player.delegate = self
@@ -344,6 +345,7 @@ public final class ShannonVoiceConversationModel: NSObject {
     }
 
     private func beginFileRecording(sessionID: String) throws {
+#if os(iOS)
         let session = AVAudioSession.sharedInstance()
         diagnostics.record("capture.session.category.before", sessionID: sessionID)
         try session.setCategory(.record, mode: .measurement, options: [.duckOthers])
@@ -356,6 +358,11 @@ public final class ShannonVoiceConversationModel: NSObject {
             metadata: ["input_available": String(session.isInputAvailable)]
         )
         guard session.isInputAvailable else { throw RecordingError.inputUnavailable }
+#else
+        // The Mac records from the system's input; there is no session to prepare.
+        guard AVCaptureDevice.default(for: .audio) != nil else { throw RecordingError.inputUnavailable }
+        try audioLease.activate()
+#endif
 
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("shannon-voice-\(UUID().uuidString)")
@@ -469,25 +476,3 @@ extension ShannonVoiceConversationModel: AVAudioRecorderDelegate, AVSpeechSynthe
         }
     }
 }
-#else
-@MainActor
-@Observable
-public final class ShannonVoiceConversationModel {
-    public private(set) var phase: ShannonVoicePhase = .denied
-    public private(set) var transcript = ""
-    public private(set) var recordingDuration: TimeInterval = 0
-    public private(set) var errorMessage: String? = "音声会話はiPhoneで利用できます。"
-    public init() {}
-    public var primaryAction: ShannonVoicePrimaryAction { .none }
-    public func startListening() async {}
-    public func finishListening() -> ShannonVoiceRecording? { nil }
-    public func acceptTranscript(_ value: String) {}
-    public func finishAfterFailedTranscription() {}
-    public func speak(_ text: String) {}
-    public func speakGemini(_ speech: ShannonGeminiSpeech) throws {}
-    public func stopSpeaking() {}
-    public func cancel() { phase = .denied }
-    public func finishAfterFailedReply() {}
-    public func finishAfterFailedGeminiSpeech() {}
-}
-#endif

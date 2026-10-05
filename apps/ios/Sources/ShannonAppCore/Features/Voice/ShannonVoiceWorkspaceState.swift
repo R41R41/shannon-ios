@@ -1,8 +1,14 @@
-#if os(iOS)
 import Observation
 import PhotosUI
 import SwiftUI
+#if os(iOS)
 import UIKit
+/// A photo taken or picked for the call, before it is shared.
+typealias ShannonVoicePendingImage = UIImage
+#else
+import AppKit
+typealias ShannonVoicePendingImage = NSImage
+#endif
 
 /// Unsubmitted input and previews outlive the expanded call screen.
 @MainActor
@@ -19,7 +25,7 @@ final class ShannonVoiceWorkspaceState {
     var showsCamera = false
     var showsPhotoLibrary = false
     var selectedLibraryPhoto: PhotosPickerItem?
-    var pendingCameraImage: UIImage?
+    var pendingCameraImage: ShannonVoicePendingImage?
     var pendingCameraData: Data?
     var pendingPhotoFromLibrary = false
     var cameraErrorMessage: String?
@@ -102,4 +108,3 @@ final class ShannonVoiceThreadContext {
     var threadID: String?
     init(threadID: String?) { self.threadID = threadID }
 }
-#endif

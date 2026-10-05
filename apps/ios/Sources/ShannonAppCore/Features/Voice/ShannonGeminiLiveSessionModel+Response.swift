@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 
 extension ShannonGeminiLiveSessionModel {
@@ -287,4 +286,3 @@ extension ShannonGeminiLiveSessionModel {
         ])
     }
 }
-#endif

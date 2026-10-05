@@ -140,7 +140,6 @@ struct ShannonBodyAttachment: ViewModifier {
     private var usesLive2D: Bool { formRawValue == ShannonForm.live2d.rawValue }
 
     private var callActivity: ShannonDialogueActivity? {
-#if os(iOS)
         switch voice.phase {
         case .idle: nil
         case .listening: .listening
@@ -150,18 +149,11 @@ struct ShannonBodyAttachment: ViewModifier {
         case .requestingPermission, .connecting, .reconnecting: .connecting
         case .failed: .listening
         }
-#else
-        nil
-#endif
     }
 
     /// 「友人も一緒」, or a companion the owner mentioned in an owner call.
     private var othersMayBeListening: Bool {
-#if os(iOS)
         voice.othersMayBeListening
-#else
-        false
-#endif
     }
 
     private var phase: ShannonLive2DPhase {
@@ -188,11 +180,7 @@ struct ShannonBodyAttachment: ViewModifier {
     }
 
     private var callFeeling: CallFeeling {
-#if os(iOS)
         CallFeeling(face: voice.callFace, emotion: voice.replyEmotion)
-#else
-        CallFeeling(face: nil, emotion: nil)
-#endif
     }
 
     func body(content: Content) -> some View {
@@ -263,20 +251,12 @@ struct ShannonBodyAttachment: ViewModifier {
     }
 
     private static func callIsActive(_ voice: ShannonGeminiLiveSessionModel?) -> Bool {
-#if os(iOS)
         guard let voice else { return false }
         return voice.phase != .idle && voice.phase != .failed
-#else
-        false
-#endif
     }
 
     private static func othersMayBeListening(_ voice: ShannonGeminiLiveSessionModel?) -> Bool {
-#if os(iOS)
         voice?.othersMayBeListening ?? false
-#else
-        false
-#endif
     }
 
     private func keepClock() async {
@@ -369,11 +349,7 @@ struct ShannonBodyAttachment: ViewModifier {
     }
 
     private func refreshWords() {
-#if os(iOS)
         let callFace = voice.phase != .idle ? voice.callFace : nil
-#else
-        let callFace: ShannonFace? = nil
-#endif
         bodyModel.face = callFace ?? (conversation.isSending ? conversation.currentFace : conversation.presentFace)
         bodyModel.doingLine = ShannonBodySignals.doingLine(phase: phase, doing: doing, awaitingReaction: awaitingReaction)
     }

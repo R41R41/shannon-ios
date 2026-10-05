@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 
 /// Her own voice coming back, and short sounds around it, never cut her off.
@@ -56,4 +55,3 @@ extension ShannonGeminiLiveSessionModel {
         bargeInRule.voiceStopped(at: now)
     }
 }
-#endif

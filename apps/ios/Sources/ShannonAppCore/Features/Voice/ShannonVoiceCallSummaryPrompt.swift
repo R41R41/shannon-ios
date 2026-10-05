@@ -1,8 +1,7 @@
-#if os(iOS)
 import SwiftUI
 
 /// Shown once a call that had a 「友人も一緒」 period has ended. It takes the place of the call
-/// pill, so it never blocks the screen. The call is already remembered; the card says what was
+/// pill (the Mac: of the call bar in Talk), so it never blocks the screen. The call is already remembered; the card says what was
 /// kept and lets the owner take it back with 「今回は残さない」.
 struct ShannonVoiceCallMemoryCard: View {
     let state: ShannonVoiceCallMemoryState
@@ -83,4 +82,3 @@ struct ShannonVoiceCallMemoryCard: View {
         }
     }
 }
-#endif

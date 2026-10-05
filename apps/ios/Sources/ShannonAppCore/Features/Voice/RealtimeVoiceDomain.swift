@@ -105,25 +105,44 @@ public struct ShannonVoiceInputState: Equatable, Sendable {
     public let isConnectedInputAvailable: Bool
     /// The saved choice is not connected, so this call uses automatic routing.
     public let isPreferenceUnavailable: Bool
+    /// The Mac's microphones, by name, as System Settings lists them. Empty on the iPhone, which chooses by kind.
+    public let devices: [ShannonVoiceInputDevice]
+    /// The Mac's chosen microphone; nil is the system's input (自動).
+    public let selectedDeviceID: String?
 
     public init(
         preference: ShannonVoiceInputPreference = .automatic,
         activeInputName: String? = nil,
         isBuiltInAvailable: Bool = true,
         isConnectedInputAvailable: Bool = false,
-        isPreferenceUnavailable: Bool = false
+        isPreferenceUnavailable: Bool = false,
+        devices: [ShannonVoiceInputDevice] = [],
+        selectedDeviceID: String? = nil
     ) {
         self.preference = preference
         self.activeInputName = activeInputName
         self.isBuiltInAvailable = isBuiltInAvailable
         self.isConnectedInputAvailable = isConnectedInputAvailable
         self.isPreferenceUnavailable = isPreferenceUnavailable
+        self.devices = devices
+        self.selectedDeviceID = selectedDeviceID
     }
 
     public var activeInputLabel: String {
         guard let activeInputName else { return "入力を確認中" }
         guard isPreferenceUnavailable else { return "使用中: \(activeInputName)" }
+        // The Mac names its microphones; the one it chose is either not connected or could not be switched to.
+        guard selectedDeviceID == nil else { return "使用中: \(activeInputName)（選んだマイクを使えません）" }
         return "使用中: \(activeInputName)（\(preference.japaneseLabel)が未接続）"
+    }
+
+    /// The same state with another Mac microphone chosen; what is in use is reported again by the call.
+    public func choosing(deviceID: String?) -> ShannonVoiceInputState {
+        ShannonVoiceInputState(
+            preference: preference, activeInputName: activeInputName, isBuiltInAvailable: isBuiltInAvailable,
+            isConnectedInputAvailable: isConnectedInputAvailable, isPreferenceUnavailable: false,
+            devices: devices, selectedDeviceID: deviceID
+        )
     }
 
     public func canSelect(_ preference: ShannonVoiceInputPreference) -> Bool {

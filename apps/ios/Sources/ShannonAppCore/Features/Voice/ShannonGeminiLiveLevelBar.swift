@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 
 struct ShannonGeminiLiveLevelBar: View {
@@ -26,4 +25,3 @@ struct ShannonGeminiLiveLevelBar: View {
         return 5 + CGFloat(min(1, max(0, level))) * 13 * shape
     }
 }
-#endif

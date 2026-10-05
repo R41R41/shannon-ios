@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 import Observation
 @preconcurrency import AVFoundation
@@ -26,7 +25,7 @@ public final class ShannonGeminiLiveSessionModel {
     public internal(set) var participantMode: ShannonVoiceParticipantMode = .owner
     public private(set) var speechProvider: ShannonSpeechProvider = .gemini
     public internal(set) var ttsCostEstimateAvailable = true
-    public private(set) var inputState: ShannonVoiceInputState
+    public internal(set) var inputState: ShannonVoiceInputState
     /// User-chosen mute. It survives a reconnect of the same call and resets when the call ends.
     public internal(set) var isMicrophoneMuted = false
     /// When the call first became ready to listen; kept across a reconnect of the same call.
@@ -34,7 +33,7 @@ public final class ShannonGeminiLiveSessionModel {
     public internal(set) var microphonePrimerPhase: ShannonPermissionPrimerPhase?
     var microphonePrimerContinuation: CheckedContinuation<Bool, Never>?
     var microphonePermission: @MainActor () -> ShannonMediaPermission = ShannonMediaPermission.currentMicrophone
-    var requestMicrophonePermission: @MainActor () async -> Bool = { await AVAudioApplication.requestRecordPermission() }
+    var requestMicrophonePermission: @MainActor () async -> Bool = ShannonMediaPermission.requestMicrophone
     private var session: ShannonGeminiLiveSessionDTO?
     private(set) var sessionGenerationID: UUID?
     var transport: ShannonGeminiLiveTransport?
@@ -70,6 +69,10 @@ public final class ShannonGeminiLiveSessionModel {
     var handleDelegationResponse: (@MainActor (ShannonLiveVoiceDelegationResponseDTO) -> Void)?
     /// Receives each finished 「友人も一緒」 period. Set by the owner of the call, not per start.
     var guestPeriodEnded: (@MainActor (ShannonVoiceGuestPeriod) -> Void)?
+#if os(macOS)
+    /// Keeps the Mac (and its display) awake while a call runs: a call is speech, which macOS does not count as use.
+    @ObservationIgnored var awakeActivity: NSObjectProtocol?
+#endif
     /// The call going on while the app is in the background (`ShannonGeminiLiveSessionModel+Background.swift`).
     var backgroundSilence = ShannonVoiceBackgroundSilence()
     var backgroundWatchTask: Task<Void, Never>?
@@ -83,11 +86,15 @@ public final class ShannonGeminiLiveSessionModel {
     var sessionAbandoned: (@MainActor () -> Void)?
     /// Takes the one look an owner turn asked for and returns what she says about it. Set by the owner of the call.
     var performAppLook: (@MainActor (ShannonAppLookAskDTO) async -> String?)?
-    private static let inputPreferenceDefaultsKey = "shannon.voice.input-preference"
+    static let inputPreferenceDefaultsKey = "shannon.voice.input-preference"
     public init() {
         let stored = UserDefaults.standard.string(forKey: Self.inputPreferenceDefaultsKey)
         let preference = stored.flatMap(ShannonVoiceInputPreference.init(rawValue:)) ?? .automatic
+#if os(macOS)
+        inputState = ShannonVoiceInputState(preference: preference, selectedDeviceID: Self.storedMacInputDeviceID)
+#else
         inputState = ShannonVoiceInputState(preference: preference)
+#endif
     }
 
     public func start(
@@ -140,7 +147,7 @@ public final class ShannonGeminiLiveSessionModel {
         guard sessionGenerationID == generation else { return }
         guard permitted else {
             microphonePrimerPhase = .denied
-            fail("設定でマイクを許可すると、音声で話せます。", recovery: .openSettings)
+            fail(Self.microphoneDeniedMessage, recovery: .openSettings)
             return
         }
         microphonePrimerPhase = nil
@@ -185,6 +192,9 @@ public final class ShannonGeminiLiveSessionModel {
                 self?.voicePlaybackProgressed(stillPlaying: stillPlaying)
             }
             next.setInputMuted(isMicrophoneMuted)
+#if os(macOS)
+            next.inputDeviceID = Self.storedMacInputDeviceID
+#endif
             try next.setInputPreference(inputState.preference)
             try await next.start()
             if sessionGenerationID != generation { next.stop() }
@@ -284,33 +294,6 @@ public final class ShannonGeminiLiveSessionModel {
         }
         textSendState = .idle
         return sendText(text)
-    }
-
-    public func toggleMicrophoneMute() {
-        isMicrophoneMuted.toggle()
-        if isMicrophoneMuted { audioLevel = 0 }
-        transport?.setInputMuted(isMicrophoneMuted)
-        ShannonVoiceDiagnostics.shared.record("gemini.audio.input.mute", metadata: ["muted": String(isMicrophoneMuted)])
-    }
-
-    public func selectInput(_ preference: ShannonVoiceInputPreference) {
-        guard inputState.canSelect(preference) else {
-            errorMessage = "選んだマイクは現在接続されていません。"
-            return
-        }
-        do {
-            try transport?.setInputPreference(preference)
-            inputState = ShannonVoiceInputState(
-                preference: preference,
-                activeInputName: inputState.activeInputName,
-                isBuiltInAvailable: inputState.isBuiltInAvailable,
-                isConnectedInputAvailable: inputState.isConnectedInputAvailable,
-                isPreferenceUnavailable: false
-            )
-            UserDefaults.standard.set(preference.rawValue, forKey: Self.inputPreferenceDefaultsKey)
-        } catch {
-            errorMessage = "マイクを切り替えられませんでした。接続を確認してください。"
-        }
     }
 
     private func handle(_ event: ShannonTranscriptionEvent) {
@@ -496,4 +479,3 @@ public final class ShannonGeminiLiveSessionModel {
         failureRecovery = recovery
     }
 }
-#endif

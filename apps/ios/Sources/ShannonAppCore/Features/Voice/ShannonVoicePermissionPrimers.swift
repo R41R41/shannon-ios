@@ -54,15 +54,6 @@ enum ShannonVoicePermissionPrimerKind: String, Identifiable {
 }
 
 extension ShannonMediaPermission {
-    static func currentMicrophone() -> ShannonMediaPermission {
-        switch AVAudioApplication.shared.recordPermission {
-        case .granted: .granted
-        case .denied: .denied
-        case .undetermined: .undetermined
-        @unknown default: .undetermined
-        }
-    }
-
     static func currentCamera() -> ShannonMediaPermission {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized: .granted

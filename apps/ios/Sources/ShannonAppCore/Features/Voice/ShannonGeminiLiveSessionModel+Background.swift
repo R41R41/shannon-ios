@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 
 /// A voice conversation that goes on after the owner leaves the app (owner decision 2026-10-02).
@@ -100,4 +99,3 @@ extension ShannonGeminiLiveSessionModel {
         return true
     }
 }
-#endif

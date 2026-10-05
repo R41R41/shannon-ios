@@ -101,9 +101,9 @@ public struct ShannonGeminiLiveVoiceView: View {
             isPresented: $workspace.showsParticipantModePicker, titleVisibility: .visible
         ) {
             if model.participantMode == .owner {
-                Button("友人も一緒にする") { switchParticipantMode(to: .guest) }
+                Button(ShannonVoiceGuestModeCopy.switchToGuestAction) { switchParticipantMode(to: .guest) }
             } else {
-                Button("本人だけに戻す") { switchParticipantMode(to: .owner) }
+                Button(ShannonVoiceGuestModeCopy.switchToOwnerAction) { switchParticipantMode(to: .owner) }
             }
             Button("キャンセル", role: .cancel) {}
         } message: {

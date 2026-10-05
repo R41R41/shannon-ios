@@ -75,7 +75,7 @@ public final class ShannonBodyVoice {
     private let callIsActive: @MainActor () -> Bool
     /// The surface still answers in voice: the body screen is up, 声で返す and 伝える are on, the app is in front.
     public var mayAnswerInVoice: @MainActor () -> Bool = { true }
-    /// Opens the microphone for his answer; nil where there is no voice conversation to continue in (the Mac).
+    /// Opens the microphone for his answer: the voice conversation of the iPhone or, since A16, of the Mac.
     public var listen: Listen?
 
     public init(

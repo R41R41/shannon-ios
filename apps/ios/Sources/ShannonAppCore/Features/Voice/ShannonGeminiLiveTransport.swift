@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 @preconcurrency import AVFoundation
 private struct ShannonGeminiLiveOutgoingPayload: Sendable {
@@ -52,6 +51,12 @@ final class ShannonGeminiLiveTransport {
     var preferenceUnavailable = false
     private var inputMuted = false
     var audioObservers: [NSObjectProtocol] = []
+#if os(macOS)
+    /// The Mac microphone the owner chose (Core Audio's unique id); nil is the system's input.
+    var inputDeviceID: String?
+    /// Stops listening for microphones that come and go.
+    var stopObservingDevices: (() -> Void)?
+#endif
     private(set) var sentAudioSeconds: Double = 0
     private(set) var receivedAudioSeconds: Double = 0
     init(
@@ -217,12 +222,14 @@ final class ShannonGeminiLiveTransport {
         audioStarted = false
         removeAudioObservers()
         interrupted = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        deactivateAudioSession()
     }
 
     private func startAudioEngine() throws {
         ShannonVoiceDiagnostics.shared.record("gemini.audio.engine.start.before")
         let input = audioEngine.inputNode
+        // The Mac chooses its microphone on the I/O unit, before voice processing takes it over and again after.
+        prepareInputDevice()
         if !audioEngine.outputNode.isVoiceProcessingEnabled {
             try audioEngine.outputNode.setVoiceProcessingEnabled(true)
         }
@@ -232,10 +239,11 @@ final class ShannonGeminiLiveTransport {
         input.isVoiceProcessingBypassed = false
         input.isVoiceProcessingInputMuted = inputMuted
 
+        confirmInputDevice()
         // Voice Processing I/O exposes the physical microphone format on bus 1,
         // even though the input node must be connected from its sole graph output.
         // Reading bus 0 here can produce an active engine with silent capture on iPhone.
-        let inputFormat = input.outputFormat(forBus: 1)
+        let inputFormat = Self.captureFormat(of: input)
         guard inputFormat.sampleRate > 0,
               inputFormat.channelCount > 0,
               inputFormat.commonFormat == .pcmFormatFloat32 else {
@@ -318,6 +326,16 @@ final class ShannonGeminiLiveTransport {
         ShannonVoiceDiagnostics.shared.record("gemini.audio.engine.started")
         playerNode.play()
         ShannonVoiceDiagnostics.shared.record("gemini.audio.player.started")
+    }
+
+    /// The microphone's own format. The iPhone's Voice Processing I/O reports it on bus 1; the Mac's input
+    /// node has one output bus, and asking for a bus it does not have raises.
+    private static func captureFormat(of input: AVAudioInputNode) -> AVAudioFormat {
+#if os(iOS)
+        input.outputFormat(forBus: 1)
+#else
+        input.outputFormat(forBus: 0)
+#endif
     }
 
     /// AVAudioSourceNode is pulled on Core Audio's realtime I/O thread. Keep the
@@ -412,4 +430,3 @@ final class ShannonGeminiLiveTransport {
     }
 
 }
-#endif

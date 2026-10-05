@@ -33,3 +33,61 @@ final class ShannonVoiceInputRoutingTests: XCTestCase {
         XCTAssertEqual(ShannonVoiceInputState().activeInputLabel, "入力を確認中")
     }
 }
+
+/// The Mac chooses its microphone by name; a missing one never fails the call.
+final class ShannonMacVoiceInputRoutingTests: XCTestCase {
+    private let devices = [
+        ShannonVoiceInputDevice(id: "BuiltInMicrophoneDevice", name: "MacBook Proのマイク", isBuiltIn: true),
+        ShannonVoiceInputDevice(id: "usb-mic", name: "USBマイク", isBuiltIn: false),
+    ]
+
+    func testTheSystemInputIsUsedUnlessAConnectedMicrophoneWasChosen() {
+        XCTAssertEqual(
+            ShannonMacVoiceInputRouting.resolve(selectedID: nil, devices: devices),
+            .init(deviceID: nil, isPreferenceUnavailable: false))
+        XCTAssertEqual(
+            ShannonMacVoiceInputRouting.resolve(selectedID: "usb-mic", devices: devices),
+            .init(deviceID: "usb-mic", isPreferenceUnavailable: false))
+        // Unplugged: the system's input for this call, and the choice is said to be unavailable.
+        XCTAssertEqual(
+            ShannonMacVoiceInputRouting.resolve(selectedID: "usb-mic", devices: [devices[0]]),
+            .init(deviceID: nil, isPreferenceUnavailable: true))
+    }
+
+    func testTheLabelSaysWhenTheChosenMicrophoneCannotBeUsed() {
+        let state = ShannonVoiceInputState(
+            activeInputName: "MacBook Proのマイク", isPreferenceUnavailable: true, devices: devices, selectedDeviceID: "usb-mic")
+        XCTAssertEqual(state.activeInputLabel, "使用中: MacBook Proのマイク（選んだマイクを使えません）")
+        let chosen = state.choosing(deviceID: nil)
+        XCTAssertFalse(chosen.isPreferenceUnavailable)
+        XCTAssertNil(chosen.selectedDeviceID)
+        XCTAssertEqual(chosen.devices, devices)
+    }
+
+#if os(macOS)
+    @MainActor
+    func testAChoiceIsKeptForLaterCallsAndAMissingOneIsRefused() {
+        let key = ShannonGeminiLiveSessionModel.macInputDeviceDefaultsKey
+        let previous = UserDefaults.standard.string(forKey: key)
+        defer {
+            if let previous { UserDefaults.standard.set(previous, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) }
+        }
+        UserDefaults.standard.removeObject(forKey: key)
+        let model = ShannonGeminiLiveSessionModel()
+        model.inputState = ShannonVoiceInputState(devices: devices)
+        model.selectInputDevice("gone")
+        XCTAssertEqual(model.errorMessage, "選んだマイクは現在接続されていません。")
+        XCTAssertNil(UserDefaults.standard.string(forKey: key))
+
+        model.selectInputDevice("usb-mic")
+        XCTAssertEqual(model.inputState.selectedDeviceID, "usb-mic")
+        XCTAssertEqual(UserDefaults.standard.string(forKey: key), "usb-mic")
+        // Without a call nothing reconnects.
+        XCTAssertEqual(model.phase, .idle)
+        XCTAssertEqual(ShannonGeminiLiveSessionModel().inputState.selectedDeviceID, "usb-mic")
+
+        model.selectInputDevice(nil)
+        XCTAssertNil(UserDefaults.standard.string(forKey: key))
+    }
+#endif
+}

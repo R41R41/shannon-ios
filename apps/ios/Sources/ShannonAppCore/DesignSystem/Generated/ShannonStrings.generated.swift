@@ -101,6 +101,12 @@ public enum ShannonGeneratedStrings {
     public static let lookStateLooking = "いま見ています"
     /// `voice.thisCall`
     public static let voiceThisCall = "この通話"
+    /// `voice.mac.mutedDetail`
+    public static let voiceMacMutedDetail = "話すときは「マイク」をクリックしてください。"
+    /// `voice.mac.microphoneDenied`
+    public static let voiceMacMicrophoneDenied = "システム設定でマイクを許可すると、音声で話せます。"
+    /// `voice.mac.microphoneDeniedGuidance`
+    public static let voiceMacMicrophoneDeniedGuidance = "システム設定でマイクを許可してから、もう一度お試しください。"
     /// `nav.delivery`
     public static let navDelivery = "配信"
     /// `nav.diagnostics`

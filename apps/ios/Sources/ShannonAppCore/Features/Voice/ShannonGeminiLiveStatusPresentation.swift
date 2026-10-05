@@ -65,16 +65,29 @@ struct ShannonGeminiLiveStatusPresentation: Equatable, Sendable {
             detailTone = .secondary
             detail = switch phase {
             case .reconnecting: "会話内容を保ったまま、接続を回復しています。"
-            case .listening where isMuted: "話すときはマイクをタップしてください。"
+            case .listening where isMuted: Self.mutedGuidance
             case .listening where !hasConversation: "自然に話しかけてください。途中で遮っても大丈夫です。"
             default: nil
             }
         }
     }
 
+    /// The Mac is clicked, not tapped, and its microphone permission is in System Settings.
+    private static var mutedGuidance: String {
+#if os(macOS)
+        ShannonGeneratedStrings.voiceMacMutedDetail
+#else
+        "話すときはマイクをタップしてください。"
+#endif
+    }
+
     private static func recoveryGuidance(_ recovery: ShannonGeminiLiveFailureRecovery?) -> String {
         switch recovery {
+#if os(macOS)
+        case .openSettings: ShannonGeneratedStrings.voiceMacMicrophoneDeniedGuidance
+#else
         case .openSettings: "設定でマイクを許可してから、もう一度お試しください。"
+#endif
         case .updateRequired: "最新版へ更新してから、もう一度開いてください。"
         case .reconnect, .none: "通信を確認して、もう一度つないでください。"
         }

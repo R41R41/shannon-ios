@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 
 /// Starting and ending a voice conversation. The call screen starts one from its sheet; a message
@@ -17,8 +16,10 @@ extension ShannonVoiceWorkspaceState {
         // A touch line's id belongs to the one call that listens for its answer, armed after this by that call alone:
         // every other way a call begins (the call screen, a call from her) starts without it.
         ShannonBodyReactionLink.shared.disarm()
+#if os(iOS)
         // A call from Shannon that still rings gives way to a conversation the owner starts himself.
         ShannonVoiceCallHost.shared.calls?.appConversationWillBegin()
+#endif
         // A call that failed without being ended may still hold a period; it is remembered like any other.
         geminiVoiceModel.finishGuestPeriod()
         geminiVoiceModel.stop()
@@ -127,4 +128,3 @@ extension ShannonVoiceWorkspaceState {
         callEndRevision &+= 1
     }
 }
-#endif
