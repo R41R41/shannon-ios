@@ -296,6 +296,24 @@ describe('her study in Aether', () => {
     for (const document of fake.inFolder()) expect(store.study.aether.pendingCreate(scope, document.id)).toBeNull();
   });
 
+  it('runs one sync per scope at a time and adopts a version once, however many callers race', async () => {
+    const { fake, call, store, service } = await harness();
+    const created = await call('study.create', { kind: 'story', title: '灯台の話', body: STORY });
+    const id = /id: ([0-9a-f-]{36})/u.exec(created.text)![1]!;
+    const document = fake.inFolder()[0]!;
+    const lists = () => fake.requests.filter(request => request.body.kind === 'list').length;
+    fake.ownerEdit(document.id, { body: `${STORY}一。` });
+    const before = lists();
+    fake.delay = 50;
+    await Promise.all([service.studyAether!.sync(scope), service.studyAether!.sync(scope), service.studyAether!.sync(scope)]);
+    expect(lists() - before).toBe(1);
+    fake.ownerEdit(document.id, { body: `${STORY}二。` });
+    await Promise.all([service.studyAether!.refresh(scope, id), service.studyAether!.refresh(scope, id), service.studyAether!.sync(scope)]);
+    fake.delay = 0;
+    expect(store.study.versions(scope, id).map(version => version.body)).toEqual([STORY, `${STORY}一。`, `${STORY}二。`]);
+    expect(store.study.aether.current(scope, id)).toMatchObject({ version: 3, aetherVersion: 3 });
+  });
+
   it('keeps the owner\'s reaction keyed by the Aether document and version he read', async () => {
     const { fake, call, store, post, clock } = await harness();
     const created = await call('study.create', { kind: 'story', title: '灯台の話', body: STORY });

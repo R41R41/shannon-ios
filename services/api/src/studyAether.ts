@@ -23,11 +23,15 @@ import { STUDY_LIMITS, type StudyPiece, type StudyPieceKind } from './studyStore
  * after the owner has seen what moves (`studyMigration.ts`). Her notes about a look at the room and what she jotted after an
  * unanswered message never move: they are hers to think with, and with others present her Aether folder may be read.
  */
-export const STUDY_AETHER_SYNC = Object.freeze({ refresh: 6, adopt: 5, readCharacters: 100_000 });
+export const STUDY_AETHER_SYNC = Object.freeze({ refresh: 6, adopt: 5, readCharacters: 100_000, runMilliseconds: 15_000 });
+
+export interface StudyAetherSyncCounts { changed: number; deleted: number; adopted: number }
 
 export class StudyAether {
   /** Documents seen deleted in Aether, at that version: a deleted piece is not read again until Aether changes it. */
   private readonly seenDeleted = new Map<string, number>();
+  /** At most one sync per scope at a time in this process: callers that come while one runs share it. */
+  private readonly running = new Map<string, Promise<StudyAetherSyncCounts>>();
 
   constructor(private readonly store: SQLiteAutonomyStore, readonly access: AetherAccess, private readonly now: () => string) {}
 
@@ -117,18 +121,33 @@ export class StudyAether {
       return 'deleted';
     }
     this.seenDeleted.delete(link.documentId);
-    const changed = document.version > link.aetherVersion;
-    this.store.transaction(() => {
+    return this.store.transaction(() => {
       this.store.study.aether.setDeleted(scopeKey, pieceId, false, this.now());
+      // Read the link again inside the transaction: a write of hers or another refresh may have linked this version meanwhile.
+      const now = this.link(scopeKey, pieceId);
+      if (!now || now.aetherVersion >= document.version) return 'current' as const;
       // A version she wrote herself whose local half was lost keeps her change note; anything else is a change made in Aether.
       const hers = this.store.study.aether.pending(scopeKey, document.documentId, document.version);
-      if (changed) this.store.study.aether.adoptVersion(scopeKey, pieceId, { title: document.title, body: document.body, aetherVersion: document.version, documentId: document.documentId, ...(hers ? { changeNote: hers.changeNote } : {}) }, this.now());
+      this.store.study.aether.adoptVersion(scopeKey, pieceId, { title: document.title, body: document.body, aetherVersion: document.version, documentId: document.documentId, ...(hers ? { changeNote: hers.changeNote } : {}) }, this.now());
+      return 'changed' as const;
     });
-    return changed ? 'changed' : 'current';
   }
 
-  /** Her folder as Aether lists it, against the pieces that live there: what changed, what was deleted, what is new in her study. */
-  async sync(scopeKey: string, signal?: AbortSignal): Promise<{ changed: number; deleted: number; adopted: number }> {
+  /**
+   * Her folder as Aether lists it, against the pieces that live there: what changed, what was deleted, what is new in her
+   * study. One run per scope at a time (callers share it; each stops waiting at its own signal, the run goes on for the next).
+   */
+  sync(scopeKey: string, signal?: AbortSignal): Promise<StudyAetherSyncCounts> {
+    let run = this.running.get(scopeKey);
+    if (!run) {
+      run = this.syncOnce(scopeKey, AbortSignal.timeout(STUDY_AETHER_SYNC.runMilliseconds));
+      this.running.set(scopeKey, run);
+      run.catch(() => undefined).finally(() => this.running.delete(scopeKey));
+    }
+    return signal ? untilAborted(run, signal) : run;
+  }
+
+  private async syncOnce(scopeKey: string, signal: AbortSignal): Promise<StudyAetherSyncCounts> {
     const entries = await this.access.list(signal);
     const listed = new Map(entries.map(entry => [entry.documentId, entry]));
     const links = this.store.study.aether.all(scopeKey);
@@ -166,13 +185,14 @@ export class StudyAether {
       }
       const created = hers(document.documentId);
       const kind = created?.kind ?? (document.inStudy ? 'story' as const : null);
-      if (!kind || this.store.study.aether.pieceFor(scopeKey, document.documentId)) continue;
-      this.store.transaction(() => this.store.study.aether.adoptPiece(scopeKey, {
+      if (!kind) continue;
+      // Checked again inside the transaction: a write of hers may have linked it while it was being read.
+      const adopted = this.store.transaction(() => !this.store.study.aether.pieceFor(scopeKey, document.documentId) && Boolean(this.store.study.aether.adoptPiece(scopeKey, {
         documentId: document.documentId, aetherVersion: document.version, title: document.title, body: document.body, kind,
         // Her own note only when the version is the one she wrote; a later change in Aether is the owner's.
         ...(created && document.version === created.aetherVersion ? { changeNote: created.changeNote } : {}),
-      }, STUDY_LIMITS.openStories, this.now()));
-      counts.adopted += 1;
+      }, STUDY_LIMITS.openStories, this.now())));
+      if (adopted) counts.adopted += 1;
     }
     return counts;
   }
@@ -192,4 +212,14 @@ export async function aetherStep<T>(operation: () => Promise<T>): Promise<{ valu
 export async function syncedWithin(aether: StudyAether, scopeKey: string, milliseconds: number, signal?: AbortSignal): Promise<boolean> {
   const timeout = AbortSignal.timeout(Math.max(500, milliseconds));
   try { await aether.sync(scopeKey, signal ? AbortSignal.any([signal, timeout]) : timeout); return true; } catch { return false; }
+}
+
+/** A shared run as one caller waits for it: that caller stops at its own signal; the run itself goes on. */
+function untilAborted<T>(run: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(new AetherAccessError('TIMEOUT'));
+  return new Promise<T>((resolve, reject) => {
+    const stop = () => reject(new AetherAccessError('TIMEOUT'));
+    signal.addEventListener('abort', stop, { once: true });
+    run.then(value => { signal.removeEventListener('abort', stop); resolve(value); }, (error: unknown) => { signal.removeEventListener('abort', stop); reject(error); });
+  });
 }
