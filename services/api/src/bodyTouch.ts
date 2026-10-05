@@ -3,6 +3,7 @@ import { BODY_LIMITS } from './bodyContract.js';
 import { BODY_REACTION_LIMITS } from './bodyReactionContract.js';
 import type { SQLiteBodyReactionStore, StoredTouchBurst, TouchRecord } from './bodyReactionStore.js';
 import { touchExperience, type TouchExperienceWriter } from './bodyTouchMemory.js';
+import type { PredictionShadow } from './predictionShadow.js';
 
 /**
  * A touch reaches her: the one entrance behind both ways a touch arrives, a reaction request
@@ -25,6 +26,8 @@ export interface BodyTouchDependencies {
   enabled: boolean;
   now: () => string;
   reportError?: (error: unknown) => void;
+  /** Syzygy ADR-0006 stage 1: a read-only tap that learns from the touch beside the table; absent or null, nothing is recorded. */
+  prediction?: Pick<PredictionShadow, 'touch'> | null;
 }
 
 export interface FeltTouch {
@@ -69,6 +72,12 @@ export class BodyTouches {
         ...(touch.durationMs !== undefined ? { durationMs: touch.durationMs } : {}),
         ...(touch.strength !== undefined ? { strength: touch.strength } : {}),
       } });
+      // The shadow is handed what was felt and returns nothing (it never fails the touch).
+      this.dependencies.prediction?.touch(scopeKey, {
+        burstId: receipt.burst.id, kind: touch.type, audience: touch.audience, count: receipt.burst.count,
+        ...(touch.region ? { region: touch.region } : {}), ...(touch.surface ? { surface: touch.surface } : {}),
+        ...(touch.strength !== undefined ? { strength: touch.strength } : {}), ...(touch.durationMs !== undefined ? { durationMs: touch.durationMs } : {}),
+      }, snapshot, at);
     }
     this.remember(scopeKey, receipt.burst);
     return { fresh: receipt.fresh, burst: receipt.burst, snapshot };

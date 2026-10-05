@@ -1,7 +1,7 @@
 import { autonomyDayKey } from './autonomyBudget.js';
 import { callModel, ownerLocalTime, paidCall } from './autonomyLoopCalls.js';
 import { roomLookAvailable } from './autonomyLoopLookStep.js';
-import type { ObservedStepKind } from './autonomyLoopObservations.js';
+import { OBSERVATION_RETENTION_DAYS, type ObservedStepKind } from './autonomyLoopObservations.js';
 import { agenticLoop, followUpsRemaining, ownerRepliedAt, reachOutChain, thinkingSteps } from './autonomyLoopObserve.js';
 import { reachOutMemories, reachOutMemoryExtras, rethinkExtras } from './autonomyLoopObservePrompts.js';
 import type { OwnerContextBlock } from './autonomyLoopOwnerContext.js';
@@ -33,7 +33,7 @@ import { STUDY_LIMITS, STUDY_STATUS_LABEL } from './studyStore.js';
 const OUTPUT_TOKENS = 1_500;
 const DAY_MILLISECONDS = 24 * 60 * 60_000;
 /** Observations older than this are dropped when a cycle starts thinking. */
-const OBSERVATION_RETENTION_MILLISECONDS = 14 * DAY_MILLISECONDS;
+const OBSERVATION_RETENTION_MILLISECONDS = OBSERVATION_RETENTION_DAYS * DAY_MILLISECONDS;
 
 interface Rethink {
   extras: ThinkingExtras | null;

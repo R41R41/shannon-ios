@@ -39,6 +39,7 @@ import { SQLiteImpressionStore } from './sqliteImpressions.js';
 import { ensureMoodHistorySchema, pruneMoodHistory, recordMoodPoint } from './moodHistory.js';
 import { SQLiteRealtimeVoiceRepository } from './sqliteRealtimeVoiceRepository.js';
 import { moodHistoryRecording, type MoodHistoryRecording } from './moodHistoryContract.js';
+import { PredictionShadow, predictionShadowEnabled } from './predictionShadow.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
@@ -52,6 +53,10 @@ export interface SQLiteShannonStoreOptions {
    * it neither creates, prunes nor records the mood history. That table stays the API's.
    */
   leavesMoodHistory?: true;
+  /** The prediction shadow beside each committed state write (Syzygy ADR-0006 stage 1). Absent: `SHANNON_PREDICTION_SHADOW`; never with `leavesMoodHistory`. */
+  predictionShadow?: boolean;
+  /** When the shadow's work runs. Absent: `setImmediate`. Tests may pass one that runs at once. */
+  predictionShadowDefer?: (task: () => void) => void;
 }
 
 export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore, MemoryEmbeddingIndex, ShannonKnowledgeStore {
@@ -64,13 +69,23 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   private readonly embeddings: SQLiteMemoryEmbeddingIndex;
   private readonly shannonKnowledge: SQLiteShannonKnowledgeStore;
   private readonly personImpressions: SQLiteImpressionStore;
+  private readonly shadow: PredictionShadow | null;
 
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
     const moodHistory = options.leavesMoodHistory ? null : options.moodHistory === undefined ? moodHistoryRecording(process.env) : options.moodHistory;
-    // After each write of her state, a point of her mood from the state as written, at the instant it was reduced at; it never changes the state.
-    this.companion = new SQLiteCompanionRepository(this.context, (scopeKey, state, at) => recordMoodPoint(
-      this.context.database, moodHistory, scopeKey, state, at, this.context.emotionTiming()));
+    // After each write of her state, a point of her mood from the state as written, at the instant it was reduced at, and the
+    // prediction shadow's tap on the same write (ADR-0006 stage 1); neither changes the state.
+    const shadowOn = !options.leavesMoodHistory && (options.predictionShadow ?? predictionShadowEnabled(process.env));
+    this.shadow = shadowOn ? new PredictionShadow({
+      database: this.context.database, createsSchema: true, timing: () => this.context.emotionTiming(),
+      // After the response and after the caller's transaction: no turn, touch or worker waits for the shadow.
+      defer: options.predictionShadowDefer ?? (task => { setImmediate(task); }),
+    }) : null;
+    this.companion = new SQLiteCompanionRepository(this.context, (scopeKey, state, at, event) => {
+      recordMoodPoint(this.context.database, moodHistory, scopeKey, state, at, this.context.emotionTiming());
+      this.shadow?.stateWritten(scopeKey, state, at, event);
+    });
     this.realtimeVoice = new SQLiteRealtimeVoiceRepository(this.context);
     this.conversations = new SQLiteConversationRepository(this.context);
     this.jobs = new SQLiteBackgroundJobRepository(this.context, this.companion);
@@ -157,6 +172,8 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   toolTraceScopes() { return selectToolTraceScopes(this.context.database); }
   pruneToolTraces(before: string) { this.context.transaction(() => pruneToolTraces(this.context.database, before)); }
   impressionStore() { return this.personImpressions; }
+  /** The prediction shadow on this store's connection, or null while it is switched off. */
+  predictionShadow(): PredictionShadow | null { return this.shadow; }
   events(scopeKey: string): readonly PersistedExperienceEvent[] { return this.conversations.events(scopeKey); }
   activityTimeline(scopeKey: string): readonly ActivityItem[] { return this.conversations.activityTimeline(scopeKey); }
 

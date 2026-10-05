@@ -6,7 +6,7 @@ import type { AutonomyLoopConfig } from './autonomyLoopConfig.js';
 import { prepareFolderCopy } from './autonomyLoopFolderStep.js';
 import { ROOM_LOOK_DOMAIN, prepareRoomLook, type AutonomyRoomLooks } from './autonomyLoopLookStep.js';
 import { prepareFollowUp, prepareJot } from './autonomyLoopFollowUpStep.js';
-import type { ReachOutFacts } from './autonomyLoopObservations.js';
+import type { AutonomyPredictionTap, ReachOutFacts } from './autonomyLoopObservations.js';
 import type { AutonomyReachOutObserver } from './autonomyLoopObserve.js';
 import type { AutonomyOwnerContext } from './autonomyLoopOwnerContext.js';
 import { prepareRest, sessionOf } from './autonomyLoopPacing.js';
@@ -74,6 +74,8 @@ export interface StepDependencies {
   renew?: () => boolean;
   /** The pause between two looks at whether the owner answered; absent, a real timer. */
   wait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
+  /** Syzygy ADR-0006 stage 1: a write-only tap handed what followed a message of hers; it returns nothing to the loop. */
+  prediction?: AutonomyPredictionTap;
 }
 
 /** The adapters of one domain. A step allowed for a domain can reach nothing else. */

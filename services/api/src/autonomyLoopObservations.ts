@@ -22,6 +22,9 @@ export type ReachOutAppSurface = typeof REACH_OUT_APP_SURFACES[number];
 export const REACH_OUT_CALL_OUTCOMES = ['answered', 'declined', 'unanswered', 'failed'] as const;
 export type ReachOutCallOutcome = typeof REACH_OUT_CALL_OUTCOMES[number];
 
+/** How long observations are kept (pruned by a thinking step). The prediction shadow's rows from her messages follow it. */
+export const OBSERVATION_RETENTION_DAYS = 14;
+
 export const OBSERVED_REACH_OUT_REASONS = ['share', 'wonder', 'upcoming', 'saw', 'follow_up'] as const;
 export type ObservedReachOutReason = typeof OBSERVED_REACH_OUT_REASONS[number];
 
@@ -52,6 +55,14 @@ export interface ReachOutFacts {
   others: boolean;
   /** The step stopped before she could watch what followed: whether he answered is not known. */
   unwatched?: true;
+}
+
+/**
+ * Syzygy ADR-0006 stage 1 (影): what followed a message of hers is also handed to the prediction shadow. The loop names
+ * this interface only; the shadow writes its own table and returns nothing, so the loop learns nothing from it.
+ */
+export interface AutonomyPredictionTap {
+  reachOut(scopeKey: string, facts: ReachOutFacts, at: string): void;
 }
 
 export interface StepObservation {

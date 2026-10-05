@@ -164,6 +164,8 @@ export function observeStep(
     ...(outcome.observed ? { reachOut: outcome.observed } : {}),
   };
   dependencies.store.loop.observations.add(cycle.scopeKey, observation, at);
+  // Syzygy ADR-0006 stage 1: the prediction shadow is handed what followed a message of hers and returns nothing.
+  if (outcome.observed) { try { dependencies.prediction?.reachOut(cycle.scopeKey, outcome.observed, at); } catch { /* the shadow never stops a step */ } }
   if (!worthThinkingAbout(row.step, observation) || remaining[0]?.kind === 'think') return null;
   return mayThinkAgain(dependencies, cycle, row.ordinal + 1) ? [{ kind: 'think', again: true }, ...remaining] : null;
 }

@@ -31,13 +31,13 @@ interface KnowledgeRevisionRow { revision_id: string; answer_id: string; previou
 
 export class SQLiteCompanionRepository implements CompanionStateStore, KnowledgeStore, LlmUsageStore {
   /**
-   * `committed` (the mood history, `moodHistory.ts`) is handed every state as it was written and the instant it was reduced
-   * at, once the write is done: after the state's transaction committed, or, when a caller holds a transaction around this
+   * `committed` (the mood history, `moodHistory.ts`, and the prediction shadow, `predictionShadow.ts`) is handed every state
+   * as it was written, the instant it was reduced at, and the event, once the write is done: after the state's transaction committed, or, when a caller holds a transaction around this
    * write, inside it, so that it commits or rolls back with that transaction. It cannot change the state.
    */
   constructor(
     private readonly context: SQLiteStoreContext,
-    private readonly committed?: (scopeKey: string, state: CompanionStateSnapshot, at: string) => void,
+    private readonly committed?: (scopeKey: string, state: CompanionStateSnapshot, at: string, event: CompanionStateEvent) => void,
   ) {}
 
   snapshot(scopeKey: string): CompanionStateSnapshot {
@@ -98,7 +98,7 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
       written = { state: next, at };
       return next;
     });
-    if (written) this.committed?.(scopeKey, written.state, written.at);
+    if (written) this.committed?.(scopeKey, written.state, written.at, event);
     return result;
   }
 
