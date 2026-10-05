@@ -85,28 +85,54 @@ final class ShannonGeminiLiveReconnectTests: XCTestCase {
         XCTAssertEqual(reports, [false])
     }
 
+    actor Reporter: ShannonBodyCallReporting {
+        var sent: [ShannonBodyCallEventDTO] = []
+        func sendBodyCallEvent(scopeKey: String, event: ShannonBodyCallEventDTO) async throws { sent.append(event) }
+    }
+
     func testEndingTheCallWhileItsReconnectWaitsForASessionAlsoEndsThatSession() async {
+        let suite = "shannon.tests.reconnect.\(UUID().uuidString)"
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        let presence = ShannonVoiceCallPresence()
+        presence.defaults = UserDefaults(suiteName: suite)!
+        presence.holdBackgroundTime = { _ in {} }
+        presence.retryDelay = { _ in }
+        let reporter = Reporter()
+        presence.configure(scopeKey: "owner", reporter: reporter, mayReport: { true })
+
         let gate = Gate()
         var reports: [Bool] = []
-        var abandoned = 0
-        let model = await model(gate: gate) { reports.append($0) }
-        model.sessionAbandoned = { abandoned += 1 }
+        let model = await model(gate: gate) { active in
+            reports.append(active)
+            if active { presence.began(audience: .owner) } else { presence.ended() }
+        }
+        model.sessionAbandoned = { presence.abandoned(audience: .owner) }
+        presence.began(audience: .owner)
         model.phase = .listening
         model.callIsReported = true
         model.lastAudioReconnectAt = nil
         model.audioFailed()
         while gate.continuation == nil { await Task.yield() }
-        // 終了 while the reconnect's session is being made: stop() reports the end.
+        // 終了 while the reconnect's session is being made: stop() reports the call's end.
         model.stop()
         XCTAssertEqual(reports, [false])
-        // The session arrives after all: the server noted it, so it hears an end of its own (`abandoned`), or it would
-        // count it as a new call for a while. The call's own end is not sent twice.
+        // The session arrives after all. The server noted it now, so it hears an end of its own (`abandoned`),
+        // stamped after that moment; otherwise it would count the session as a new call for a while.
+        let noted = Date()
         gate.continuation?.resume(returning: ShannonGeminiLiveSessionDTO(
             token: "t", model: "m", voice: "v", threadId: "th", instructions: "", expiresAt: "",
             inputUsdPerMinute: 0, outputUsdPerMinute: 0))
-        for _ in 0..<20 { await Task.yield() }
-        XCTAssertEqual(abandoned, 1)
-        XCTAssertEqual(reports, [false])
+        for _ in 0..<50 { await Task.yield() }
+        await presence.settle()
+        XCTAssertEqual(reports, [false], "the call's own end is not sent twice")
+        let sent = await reporter.sent
+        XCTAssertEqual(sent.map(\.type), [.callStarted, .callEnded, .callEnded])
+        XCTAssertNotEqual(sent[1].id, sent[2].id, "the abandoned end has an id of its own")
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let stamped = formatter.date(from: sent[2].occurredAt)
+        XCTAssertNotNil(stamped)
+        XCTAssertGreaterThanOrEqual(stamped ?? .distantPast, noted.addingTimeInterval(-0.001), "stamped after the session was noted")
     }
 
     func testATransportReportsItsAudioFailureOnce() {
