@@ -31,10 +31,11 @@ enum ShannonExpressionAssets {
         face.kind?.assetName ?? face.expression.assetName
     }
 
+    // 22 faces and 26 kind icons (48 pictures) fit with room to spare; each rendered one is 384×384.
 #if canImport(UIKit)
     nonisolated(unsafe) private static let whiteBackgroundCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 24
+        cache.countLimit = 64
         return cache
     }()
 
@@ -55,7 +56,7 @@ enum ShannonExpressionAssets {
 #elseif canImport(AppKit)
     nonisolated(unsafe) private static let whiteBackgroundCache: NSCache<NSString, NSImage> = {
         let cache = NSCache<NSString, NSImage>()
-        cache.countLimit = 24
+        cache.countLimit = 64
         return cache
     }()
 

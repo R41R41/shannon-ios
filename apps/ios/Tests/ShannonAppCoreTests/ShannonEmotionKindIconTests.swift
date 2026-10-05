@@ -141,17 +141,44 @@ struct ShannonEmotionKindIconTests {
     @Test
     func theBundledFacesGetAWhiteCanvasAndKeepTheirFigure() throws {
         for expression in ShannonExpressionDTO.allCases {
-            let url = try #require(ShannonExpressionAssets.url(for: expression))
-            let data = try Data(contentsOf: url)
-            let provider = try #require(CGDataProvider(data: data as CFData))
-            let source = try #require(CGImage(pngDataProviderSource: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent))
-            #expect(source.width == 768 && source.height == 768, "\(expression.rawValue)")
-            let output = pixels(try #require(ShannonPortraitBackground.whitened(source)))
-            #expect(output[0] == [255, 255, 255], "\(expression.rawValue)")
-            let white = output.filter { $0 == [255, 255, 255] }.count
-            // The canvas is about a quarter of each picture; the figure is never whitened away.
-            #expect(white > output.count / 10 && white < output.count / 2, "\(expression.rawValue): \(white)")
+            try expectWhiteCanvasAndFigure(asset: expression.assetName)
         }
+    }
+
+    @Test
+    func theBundledKindPicturesGetAWhiteCanvasAndKeepTheirFigure() throws {
+        // All 26 are in this build; each is drawn and whitened like the faces.
+        #expect(ShannonEmotionKindIcon.bundled == Set(ShannonEmotionKindIcon.allCases))
+        for kind in ShannonEmotionKindIcon.allCases {
+            try expectWhiteCanvasAndFigure(asset: kind.assetName)
+        }
+    }
+
+    @Test
+    func aFaceMadeWithAKindWhosePictureIsNotBundledShowsTheFace() {
+        let proud = ShannonFace(expression: .determined, feeling: .proud)
+        let unbundled = ShannonFace(expression: .determined, feeling: .proud, kind: .triumphant, bundled: [.pride])
+        #expect(unbundled == proud)
+        #expect(unbundled.kind == nil)
+        #expect(ShannonExpressionAssets.assetName(for: unbundled) == "shannon-expression-determined")
+        #expect(unbundled.japaneseName == "得意げ")
+        let bundled = ShannonFace(expression: .determined, feeling: .proud, kind: .pride, bundled: [.pride])
+        #expect(bundled.kind == .pride)
+    }
+
+    /// A bundled icon is 384×384 (the loader's own size, so nothing larger is shipped), its top corner becomes
+    /// white, and the white canvas stays between a tenth and a half of the picture.
+    private func expectWhiteCanvasAndFigure(asset name: String) throws {
+        let url = try #require(ShannonExpressionAssets.url(forAsset: name), "\(name)")
+        let data = try Data(contentsOf: url)
+        let provider = try #require(CGDataProvider(data: data as CFData))
+        let source = try #require(CGImage(pngDataProviderSource: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent))
+        #expect(source.width == ShannonPortraitBackground.outputSide && source.height == ShannonPortraitBackground.outputSide, "\(name)")
+        let output = pixels(try #require(ShannonPortraitBackground.whitened(source)))
+        #expect(output[0] == [255, 255, 255], "\(name)")
+        let white = output.filter { $0 == [255, 255, 255] }.count
+        // The canvas is about a quarter of each picture; the figure is never whitened away.
+        #expect(white > output.count / 10 && white < output.count / 2, "\(name): \(white)")
     }
 
     private func decode<Value: Decodable>(_ type: Value.Type, _ json: String) throws -> Value {

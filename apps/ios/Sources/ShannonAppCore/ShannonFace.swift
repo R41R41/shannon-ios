@@ -19,10 +19,16 @@ public struct ShannonFace: Equatable, Sendable {
     /// The reply's own feeling when this build shows an icon for it; nil shows the face icon.
     public let kind: ShannonEmotionKindIcon?
 
+    /// A kind whose picture is not in this build's bundle is dropped, so every way of making a face shows
+    /// the face icon and its name for it, never an empty picture.
     public init(expression: ShannonExpressionDTO, feeling: ShannonFeelingDTO? = nil, kind: ShannonEmotionKindIcon? = nil) {
+        self.init(expression: expression, feeling: feeling, kind: kind, bundled: ShannonEmotionKindIcon.bundled)
+    }
+
+    init(expression: ShannonExpressionDTO, feeling: ShannonFeelingDTO?, kind: ShannonEmotionKindIcon?, bundled: Set<ShannonEmotionKindIcon>) {
         self.expression = expression
         self.feeling = feeling
-        self.kind = kind
+        self.kind = kind.flatMap { bundled.contains($0) ? $0 : nil }
     }
 
     /// An unknown feeling name from a newer server falls back to the face's own name; an unknown

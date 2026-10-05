@@ -10,7 +10,8 @@ import CoreGraphics
 /// about 12% of each picture white, mostly the pink and lavender highlights of her hair.) Background
 /// enclosed by the figure, such as the inside of her hair loops, keeps the canvas colour.
 enum ShannonPortraitBackground {
-    /// The side of the rendered icon. The apps show icons at 96 points at most (192 pixels at 2×).
+    /// The side of the rendered icon: 384 pixels. The apps show icons at 96 points at most (288 pixels at 3×,
+    /// 192 at 2×). The bundled pictures are 384×384 too, so they are drawn at their own size.
     static let outputSide = 384
     /// Largest per-channel distance from the corner colour that is canvas.
     static let canvasDistance = 12
