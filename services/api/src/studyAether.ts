@@ -126,10 +126,14 @@ export class StudyAether {
     try {
       const deleted = await this.access.delete({ documentId: link.documentId, baseVersion: link.aetherVersion, idempotencyKey: key }, signal);
       this.seenDeleted.set(link.documentId, deleted.version);
+      this.store.study.aether.noteDeleted(scopeKey, piece.id, link.documentId, this.now());
       return deleted;
     } catch (error) {
       // Gone already, or moved out of her folder by the owner: her trash says so too, and Aether is left as it is.
-      if (aetherErrorCode(error) === 'NOT_FOUND' || aetherErrorCode(error) === 'OUTSIDE_SHANNON_FOLDER') return { documentId: link.documentId, version: link.aetherVersion };
+      if (aetherErrorCode(error) === 'NOT_FOUND' || aetherErrorCode(error) === 'OUTSIDE_SHANNON_FOLDER') {
+        this.store.study.aether.noteDeleted(scopeKey, piece.id, link.documentId, this.now());
+        return { documentId: link.documentId, version: link.aetherVersion };
+      }
       if (aetherErrorCode(error) === 'STALE_VERSION') await this.refresh(scopeKey, piece.id, signal).catch(() => 'unknown');
       throw error;
     }

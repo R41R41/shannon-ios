@@ -65,6 +65,7 @@ if (!args.includes('--apply')) {
     for (const scopeKey of [scope]) {
       const outcome = await applyMigration(store, access, scopeKey, { now: () => new Date().toISOString(), dayKey: at => autonomyDayKey(at, config) });
       console.log(migrationReport(scopeKey, migrationPlan(store, scopeKey), true));
+      console.log(`この実行で移したもの ${outcome.moved.length}件、移したあとの変更を送ったもの ${outcome.caughtUp.length}件。`);
       for (const failure of outcome.failed) console.log(`移せなかったもの: ${failure.pieceId}（${failure.code}）`);
       if (outcome.failed.length) process.exitCode = 1;
       console.log('');

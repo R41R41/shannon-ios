@@ -517,7 +517,7 @@ describe('moving her study to Aether', () => {
   });
 
   it('shows the owner what moves, as metadata only, then moves it once and keeps the mapping', async () => {
-    const { fake, access, store, clock, call } = await harness();
+    const { fake, access, store, clock, call, service } = await harness();
     const story = store.study.create(scope, { kind: 'story', title: '灯台の話', body: STORY }, clock.at) as StudyPiece;
     store.study.markReady(scope, story.id, clock.at);
     store.study.addFeedback(scope, story.id, { reaction: 'like' }, clock.at);
@@ -564,9 +564,19 @@ describe('moving her study to Aether', () => {
     expect(draftDocument).toMatchObject({ version: 2, aetherVersion: 2 });
     expect(fake.documents.get(draftDocument.documentId)!.body).toBe(`${STORY}その後の直し。`);
     expect(fake.documents.get(store.study.aether.current(scope, note.id)!.documentId)!.status).toBe('deleted');
-    const writes = fake.requests.filter(request => request.body.kind === 'update').length;
-    await applyMigration(store, access!, scope, { now: () => clock.at, dayKey });
-    expect(fake.requests.filter(request => request.body.kind === 'update').length).toBe(writes);
+    expect(caught).toMatchObject({ moved: [], caughtUp: [expect.anything(), expect.anything()] });
+    // The owner restores the deleted note from Recently Deleted; a later run neither deletes it again nor sends anything else,
+    // the dry run plans nothing more, and the activity record gains no line.
+    const noteDocument = store.study.aether.current(scope, note.id)!.documentId;
+    fake.ownerEdit(noteDocument, { status: 'growing' });
+    const writes = fake.requests.filter(request => request.body.kind === 'update' || request.body.kind === 'delete').length;
+    const lines = service.activityDays(scope, 30).flatMap(day => day.entries).filter(entry => entry.summary.startsWith('書斎の移行')).length;
+    expect(migrationPlan(store, scope).filter(item => item.catchUp)).toEqual([]);
+    expect(migrationReport(scope, migrationPlan(store, scope))).not.toContain('Aetherでも消す');
+    expect(await applyMigration(store, access!, scope, { now: () => clock.at, dayKey })).toMatchObject({ moved: [], caughtUp: [], failed: [] });
+    expect(fake.requests.filter(request => request.body.kind === 'update' || request.body.kind === 'delete').length).toBe(writes);
+    expect(fake.documents.get(noteDocument)!.status).toBe('growing');
+    expect(service.activityDays(scope, 30).flatMap(day => day.entries).filter(entry => entry.summary.startsWith('書斎の移行'))).toHaveLength(lines);
     // The moved story is revised in Aether from now on, by the id the apps and her messages already use.
     expect(await call('study.update', { id: story.id, body: `${STORY}続き。`, changeNote: '続き。' })).toMatchObject({ ok: true });
     expect(fake.documents.get(store.study.aether.current(scope, story.id)!.documentId)!.body).toBe(`${STORY}続き。`);

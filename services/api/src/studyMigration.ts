@@ -65,7 +65,9 @@ function planOf(rows: readonly StudyMigrationRow[]): readonly StudyMigrationItem
   return Object.freeze(rows.map(row => {
     const note = row.documentId ? 'moved' as const : row.origin ?? (row.deleted ? 'trash' as const : undefined);
     const target: StudyMigrationTarget = row.origin || (row.deleted && !row.documentId) ? 'stays' : row.kind === 'story' ? 'study' : 'shannon_folder';
-    const catchUp = !row.documentId ? undefined : row.deleted ? 'delete' as const : row.linkedVersion !== null && row.version > row.linkedVersion ? 'update' as const : undefined;
+    // A delete is planned once: never again after Shannon deleted it (or found it gone), also if the owner restored it since.
+    const catchUp = !row.documentId ? undefined : row.deleted ? (row.deletedInAether ? undefined : 'delete' as const)
+      : row.linkedVersion !== null && row.version > row.linkedVersion ? 'update' as const : undefined;
     return Object.freeze({
       pieceId: row.pieceId, kind: row.kind, title: row.title, characters: row.characters, status: row.status,
       shown: row.readableVersion !== null, target, ...(note ? { note } : {}), ...(row.documentId ? { documentId: row.documentId } : {}),
@@ -109,6 +111,8 @@ export function migrationReport(scopeKey: string, items: readonly StudyMigration
 
 export interface StudyMigrationOutcome {
   moved: readonly { pieceId: string; documentId: string; version: number }[];
+  /** Moved pieces whose later change in Shannon was sent (a newer version, or a delete). */
+  caughtUp: readonly { pieceId: string; documentId: string; version: number }[];
   failed: readonly { pieceId: string; code: string }[];
 }
 
@@ -118,11 +122,12 @@ export async function applyMigration(
 ): Promise<StudyMigrationOutcome> {
   const { now } = clock;
   const moved: { pieceId: string; documentId: string; version: number }[] = [];
+  const caughtUp: { pieceId: string; documentId: string; version: number }[] = [];
   const failed: { pieceId: string; code: string }[] = [];
   for (const item of migrationPlan(store, scopeKey)) {
     if (item.catchUp) {
       const outcome = await catchUp(store, access, scopeKey, item, now, signal);
-      if ('code' in outcome) failed.push({ pieceId: item.pieceId, code: outcome.code }); else moved.push(outcome);
+      if ('code' in outcome) failed.push({ pieceId: item.pieceId, code: outcome.code }); else caughtUp.push(outcome);
       continue;
     }
     if (item.target === 'stays' || item.note === 'moved') continue;
@@ -144,14 +149,15 @@ export async function applyMigration(
       failed.push({ pieceId: piece.id, code: `aether_${aetherErrorCode(error).toLowerCase()}` });
     }
   }
-  if (moved.length || failed.length) {
+  if (moved.length || caughtUp.length || failed.length) {
     const at = now();
+    const parts = [...(moved.length ? [`物語とメモを${moved.length}件Aetherへ移しました`] : []), ...(caughtUp.length ? [`移したあとの変更を${caughtUp.length}件Aetherへ送りました`] : [])];
     store.activity.append(scopeKey, clock.dayKey(at), at, {
       kind: 'control', actor: 'owner', domain: SHANNON_AUTONOMY_SYSTEM_DOMAIN.id, outcome: 'recorded', approval: 'not_needed',
-      summary: `書斎の物語とメモをAetherへ移しました（${moved.length}件${failed.length ? `、移せなかったもの${failed.length}件` : ''}）。`,
+      summary: `書斎の移行: ${parts.length ? parts.join('。') : '送れたものはありません'}${failed.length ? `（できなかったもの${failed.length}件）` : ''}。`,
     });
   }
-  return Object.freeze({ moved: Object.freeze(moved), failed: Object.freeze(failed) });
+  return Object.freeze({ moved: Object.freeze(moved), caughtUp: Object.freeze(caughtUp), failed: Object.freeze(failed) });
 }
 
 /**
@@ -168,6 +174,7 @@ async function catchUp(store: SQLiteAutonomyStore, access: AetherAccess, scopeKe
   try {
     if (item.catchUp === 'delete') {
       const deleted = await access.delete({ documentId: link.documentId, baseVersion: link.aetherVersion, idempotencyKey: key }, signal);
+      store.transaction(() => store.study.aether.noteDeleted(scopeKey, piece.id, link.documentId, now()));
       return { pieceId: piece.id, documentId: deleted.documentId, version: deleted.version };
     }
     const written = await access.update({ documentId: link.documentId, baseVersion: link.aetherVersion, title: piece.title, body: piece.body, idempotencyKey: key }, signal);
@@ -176,7 +183,10 @@ async function catchUp(store: SQLiteAutonomyStore, access: AetherAccess, scopeKe
   } catch (error) {
     const code = aetherErrorCode(error);
     // Already gone from her folder: her trash agrees, nothing to send.
-    if (item.catchUp === 'delete' && (code === 'NOT_FOUND' || code === 'OUTSIDE_SHANNON_FOLDER')) return { pieceId: piece.id, documentId: link.documentId, version: link.aetherVersion };
+    if (item.catchUp === 'delete' && (code === 'NOT_FOUND' || code === 'OUTSIDE_SHANNON_FOLDER')) {
+      store.transaction(() => store.study.aether.noteDeleted(scopeKey, piece.id, link.documentId, now()));
+      return { pieceId: piece.id, documentId: link.documentId, version: link.aetherVersion };
+    }
     return { code: `aether_${code.toLowerCase()}` };
   }
 }
