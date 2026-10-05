@@ -71,6 +71,7 @@ public struct ShannonPlaceMapCard: View {
         .padding(ShannonSpacing.medium)
         .background(palette.subtleSurface, in: RoundedRectangle(cornerRadius: ShannonShape.large))
         .task(id: places.map(\.id)) { await resolvePlaces() }
+        .shannonCoversFigure(showsMap)
         .sheet(isPresented: $showsMap) {
             NavigationStack {
                 VStack(spacing: 0) {

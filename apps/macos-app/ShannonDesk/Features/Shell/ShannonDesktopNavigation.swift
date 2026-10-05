@@ -130,3 +130,21 @@ enum DesktopSettingsPage: String, CaseIterable, Hashable {
         return page == .ops && !opsSupported ? .devices : page
     }
 }
+
+/// Everything that can come over the Mac window while her figure stands beside Talk (A15). Each one alone
+/// means her figure is not what the owner sees. No defaults: the window names each one, as on the iPhone.
+struct DesktopFigureCovers: Equatable {
+    var connection: Bool
+    var worldSubscriptions: Bool
+    var appIcon: Bool
+    var stateDetails: Bool
+    var addProject: Bool
+    var taskStopConfirmation: Bool
+    var rename: Bool
+    /// A sheet, picker or confirmation of a view in the window (the composer's pickers, an artifact's
+    /// preview, the map, what she took in from a turn): `ShannonBodyModel.isCoveredByAView`.
+    var fromViews: Bool
+
+    /// Any one of them is up. Read from every field, so a cover added above counts at once.
+    var isAny: Bool { Mirror(reflecting: self).children.contains { ($0.value as? Bool) == true } }
+}

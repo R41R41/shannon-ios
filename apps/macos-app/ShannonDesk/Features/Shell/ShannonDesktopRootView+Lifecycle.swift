@@ -4,9 +4,16 @@ import SwiftUI
 
 extension ShannonDesktopRootView {
     var figureIsInFront: Bool {
-        destination == .talk && showsInspector && auxiliaryPanel == .figure
-            && !showsConnection && !showsWorldSubscriptions && !showsAppIconSettings
-            && !showsStateDetails && !showsAddAgentProject
+        destination == .talk && showsInspector && auxiliaryPanel == .figure && !figureCovers.isAny
+    }
+
+    var figureCovers: DesktopFigureCovers {
+        DesktopFigureCovers(
+            connection: showsConnection, worldSubscriptions: showsWorldSubscriptions, appIcon: showsAppIconSettings,
+            stateDetails: showsStateDetails, addProject: showsAddAgentProject,
+            taskStopConfirmation: taskStopConfirmation != nil, rename: renameThread != nil,
+            fromViews: bodyModel.isCoveredByAView
+        )
     }
 }
 

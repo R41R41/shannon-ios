@@ -167,6 +167,7 @@ struct DesktopComposer: View {
             importFiles(result)
         }
         .photosPicker(isPresented: $isPickingPhoto, selection: $photoPickerItem, matching: .images)
+        .shannonCoversFigure(isImporting || isPickingPhoto)
         .onChange(of: photoPickerItem) {
             guard let photoPickerItem else { return }
             Task { await loadPickedPhoto(photoPickerItem) }

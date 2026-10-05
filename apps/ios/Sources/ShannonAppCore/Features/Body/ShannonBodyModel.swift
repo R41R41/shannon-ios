@@ -20,6 +20,13 @@ public final class ShannonBodyModel {
     func setCoverFromWords(_ id: UUID, isUp: Bool) {
         if isUp { coversFromWords.insert(id) } else { coversFromWords.remove(id) }
     }
+    /// Other sheets, pickers and confirmations that a view opened over the window (`shannonCoversFigure`):
+    /// the Mac counts them, as her figure beside Talk is then not what the owner sees.
+    private(set) var coversFromViews: Set<UUID> = []
+    public var isCoveredByAView: Bool { !coversFromViews.isEmpty || sheetFromWordsIsUp }
+    func setCoverFromView(_ id: UUID, isUp: Bool) {
+        if isUp { coversFromViews.insert(id) } else { coversFromViews.remove(id) }
+    }
     /// Her size and place in Talk after two fingers moved her; 「位置を戻す」 sets it back. Not kept across launches.
     public var figureAdjustment = ShannonLive2DLayout()
     /// Asks the conversation root to show Talk's dialogue display (「トークで姿を見る」, the small figure of an empty Talk).
@@ -396,4 +403,24 @@ struct ShannonDialogueCovers: Equatable, Sendable {
 
     /// Any one of them is up. Read from every field, so a cover added above counts at once.
     var isAny: Bool { Mirror(reflecting: self).children.contains { ($0.value as? Bool) == true } }
+}
+
+/// Says that a sheet, picker or confirmation of this view is up over the window, so her figure is
+/// not what the owner sees (and a touch line is not spoken) while it is.
+private struct ShannonFigureCover: ViewModifier {
+    let isUp: Bool
+    @State private var id = UUID()
+    @Environment(ShannonBodyModel.self) private var bodyModel: ShannonBodyModel?
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: isUp, initial: true) { bodyModel?.setCoverFromView(id, isUp: isUp) }
+            .onDisappear { bodyModel?.setCoverFromView(id, isUp: false) }
+    }
+}
+
+public extension View {
+    func shannonCoversFigure(_ isUp: Bool) -> some View {
+        modifier(ShannonFigureCover(isUp: isUp))
+    }
 }

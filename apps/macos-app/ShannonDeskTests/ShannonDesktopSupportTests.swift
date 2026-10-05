@@ -308,6 +308,24 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         XCTAssertEqual(allowed.delivered, ["initiative:a", "initiative:b"])
     }
 
+    func testEveryCoverAloneHidesHerFigure() {
+        let none = DesktopFigureCovers(
+            connection: false, worldSubscriptions: false, appIcon: false, stateDetails: false,
+            addProject: false, taskStopConfirmation: false, rename: false, fromViews: false
+        )
+        XCTAssertFalse(none.isAny)
+        let paths: [WritableKeyPath<DesktopFigureCovers, Bool>] = [
+            \.connection, \.worldSubscriptions, \.appIcon, \.stateDetails, \.addProject,
+            \.taskStopConfirmation, \.rename, \.fromViews,
+        ]
+        XCTAssertEqual(paths.count, Mirror(reflecting: none).children.count)
+        for path in paths {
+            var covers = none
+            covers[keyPath: path] = true
+            XCTAssertTrue(covers.isAny)
+        }
+    }
+
     func testSettingsOpenWithAdminFirstAndFallBackWithoutOps() {
         XCTAssertEqual(DesktopSettingsPage.admin, [.ops, .devices, .delivery, .diagnostics])
         XCTAssertEqual(DesktopSettingsPage.admin + DesktopSettingsPage.others, DesktopSettingsPage.allCases)
