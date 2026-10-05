@@ -28,6 +28,7 @@ import type { LlmUsageEvent } from '../src/llmUsage.js';
 import type { BodyPresence } from '../src/shannonBody.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { SQLiteWorldStore } from '../src/worldStore.js';
+import { promptOf } from './modelPrompt.js';
 
 const scope = 'owner';
 const START = '2026-10-02T01:00:00.000Z';
@@ -131,7 +132,7 @@ describe('offering a look', () => {
     await presence();
     const turn = await chat('おはよう');
     expect(turn.request.offerRoomLook).toBe(true);
-    expect(turn.body.systemPrompt).toContain(ROOM_LOOK_OFFER_PROMPT);
+    expect(promptOf(turn.body)).toContain(ROOM_LOOK_OFFER_PROMPT);
     expect(ROOM_LOOK_OFFER_PROMPT).toContain('roomLook');
   });
 
@@ -157,7 +158,7 @@ describe('offering a look', () => {
       h.chatModel.choice = 'asked';
       const turn = await h.chat('今日はどんな日でしたか', extra);
       expect(turn.request.offerRoomLook, name).toBeUndefined();
-      expect(turn.body.systemPrompt, name).not.toContain('[部屋を見る]');
+      expect(promptOf(turn.body), name).not.toContain('[部屋を見る]');
       h.advance(SECOND);
       await h.presence();
       expect(h.lookStore.waiting(scope), name).toEqual([]);
@@ -181,18 +182,18 @@ describe('offering a look', () => {
 
   it('tells her she cannot look only when the owner asks, with the reason, so she answers honestly', async () => {
     const h = harness();
-    expect((await h.chat('おはよう')).body.systemPrompt).not.toContain('[部屋を見る]');
-    const asked = (await h.chat('ねえ、部屋を見てみて')).body.systemPrompt;
+    expect(promptOf((await h.chat('おはよう')).body)).not.toContain('[部屋を見る]');
+    const asked = promptOf((await h.chat('ねえ、部屋を見てみて')).body);
     expect(asked).toContain('[部屋を見る]（体のカメラで部屋を見てほしいという頼みなら、いまは見られない: 体（PCのアプリ）がつながっていない。');
     expect(asked).toContain('見たふりをせず');
     await h.camera(false);
-    expect((await h.chat('部屋を見て')).body.systemPrompt).toContain('いまは見られない: 体のカメラが入っていない。');
+    expect(promptOf((await h.chat('部屋を見て')).body)).toContain('いまは見られない: 体のカメラが入っていない。');
     await h.camera();
-    expect((await h.chat('こっち見て')).body.systemPrompt).toContain('いまは見られない: 体からの知らせがしばらく届いていない（体の窓が隠れているか、体が動いていない）。');
-    expect((await harness({ config: { enabled: false } }).chat('カメラで見て')).body.systemPrompt).toContain('この機能は止めてある');
+    expect(promptOf((await h.chat('こっち見て')).body)).toContain('いまは見られない: 体からの知らせがしばらく届いていない（体の窓が隠れているか、体が動いていない）。');
+    expect(promptOf((await harness({ config: { enabled: false } }).chat('カメラで見て')).body)).toContain('この機能は止めてある');
     const shared = await harness().chat('部屋見える？', { audience: 'others' });
     expect(shared.request.offerRoomLook).toBeUndefined();
-    expect(shared.request.systemPrompt).toContain('ほかの人がいる場では見ない');
+    expect(promptOf(shared.request)).toContain('ほかの人がいる場では見ない');
     expect(asksToLook('今日の予定を教えて')).toBe(false);
   });
 
@@ -202,7 +203,7 @@ describe('offering a look', () => {
     h.chatModel.choice = 'asked';
     const second = await h.chat('もう一回部屋を見て');
     expect(second.request.offerRoomLook).toBeUndefined();
-    expect(second.body.systemPrompt).toContain('いま見ている途中');
+    expect(promptOf(second.body)).toContain('いま見ている途中');
     expect(h.lookStore.waiting(scope).map(look => look.id)).toEqual([id]);
   });
 
@@ -449,7 +450,7 @@ describe('limits', () => {
     await h.camera();
     for (let index = 0; index < 6; index += 1) expect(await look(h, 5 * MINUTE), `look ${index + 1}`).toBe(true);
     expect(await look(h, 0)).toBe(false);
-    expect((await h.chat('部屋を見て')).body.systemPrompt).toContain('この1時間に見られる回数を使い切った');
+    expect(promptOf((await h.chat('部屋を見て')).body)).toContain('この1時間に見られる回数を使い切った');
     h.advance(30 * MINUTE + SECOND);
     expect(await look(h, 0)).toBe(true);
     expect(h.viewer.calls).toHaveLength(7);
@@ -469,7 +470,7 @@ describe('limits', () => {
     await h.camera();
     for (let index = 0; index < 30; index += 1) expect(await look(h, 11 * MINUTE), `look ${index + 1}`).toBe(true);
     expect(await look(h, 0)).toBe(false);
-    expect((await h.chat('カメラで見て')).body.systemPrompt).toContain('今日見られる回数を使い切った');
+    expect(promptOf((await h.chat('カメラで見て')).body)).toContain('今日見られる回数を使い切った');
     h.clock.at = '2026-10-02T15:00:01.000Z';
     expect(await look(h, 0)).toBe(true);
   });
@@ -628,7 +629,7 @@ describe('her message about a look', () => {
     const shared = h.chatModel.requests.at(-1)!;
     expect(shared.history.map(item => item.content)).not.toContain(SEEN_TEXT);
     expect(shared.priorThreadSummary).toBeUndefined();
-    expect(shared.systemPrompt).not.toContain(SEEN_TEXT);
+    expect(promptOf(shared)).not.toContain(SEEN_TEXT);
   });
 
   it('is display history only: no experience, no fact, no person, no capture comes from it', async () => {

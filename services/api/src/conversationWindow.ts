@@ -107,8 +107,8 @@ export interface ConversationReplay extends ReplayWindow {
   truncated: boolean;
   /** The replay summary, present only when the window is truncated and the summary may be used here. */
   summary?: string;
-  /** The model request fields: the history, and the system prompt with the summary block when there is one. */
-  request(systemPrompt: string): { systemPrompt: string; history: ShannonConversationItem[] };
+  /** The model request fields: the history, and the turn's context with the summary block and the trace block when there are. */
+  request(turnContext: string): { turnContext?: string; history: ShannonConversationItem[] };
 }
 
 /** Where the replay reads what her tools did in the replayed turns (`shannonToolTurns.ts`). */
@@ -121,7 +121,7 @@ export interface ToolTraceReader {
  * (`visibleReplayMessages`), the budget second, so a forgotten or withheld turn is never replayed
  * and never counted.
  *
- * With `tools` and the owner alone, what her tools did in the replayed turns follows the system prompt as a block of
+ * With `tools` and the owner alone, what her tools did in the replayed turns follows the turn's context as a block of
  * its own (`toolTracePrompt`), inside the budget: when it does not fit beside the window, older messages make room.
  * The caller passes `tools` only while the server itself knows nobody else is there (`toolTraceReader`). A trace goes
  * with its stored turn, and only while both his words and her reply of that turn are replayed, so a turn that is
@@ -151,10 +151,10 @@ export function conversationReplay(
   const history = window.history;
   return {
     ...window, truncated, ...(summary ? { summary } : {}),
-    request: systemPrompt => ({
-      systemPrompt: [summary ? `${systemPrompt}\n\n${earlierConversationSummaryInstructions(summary)}` : systemPrompt, toolBlock].filter(Boolean).join('\n\n'),
-      history,
-    }),
+    request: turnContext => {
+      const context = [turnContext, summary ? earlierConversationSummaryInstructions(summary) : '', toolBlock].filter(Boolean).join('\n\n');
+      return { ...(context ? { turnContext: context } : {}), history };
+    },
   };
 }
 

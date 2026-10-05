@@ -9,6 +9,7 @@ import {
   SHIRITORI_TURNS, ShiritoriGame, carried, judgeShiritori, sameReading, scriptedShiritoriReply, shiritoriScenario, shiritoriScriptInputs,
   type ReachDriver, type ReachStop,
 } from '../../../../packages/evaluation/src/reach/index.js';
+import { promptOf } from '../modelPrompt.js';
 
 /**
  * Scenario (a) driven through the real conversation path: the API kernel over a temporary SQLite store,
@@ -50,7 +51,7 @@ class RequestWatch implements ShannonChatModel {
   async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
     this.calls += 1;
     this.last = request;
-    this.promptCharacters += request.systemPrompt.length + request.message.length + (request.priorThreadSummary?.length ?? 0)
+    this.promptCharacters += promptOf(request).length + request.message.length + (request.priorThreadSummary?.length ?? 0)
       + request.history.reduce((sum, item) => sum + item.content.length, 0);
     return this.inner.generate(request);
   }
@@ -96,7 +97,7 @@ export function shiritoriDriver(model: ShannonChatModel, options: ShiritoriDrive
       longestHistory = Math.max(longestHistory, request?.history.length ?? 0);
       const history = sameReading((request?.history ?? []).map(item => item.content).join('\n'));
       const historyComplete = said.every(text => history.includes(sameReading(text)));
-      const whole = request ? [request.systemPrompt, request.priorThreadSummary ?? '', history, request.message].join('\n') : '';
+      const whole = request ? [promptOf(request), request.priorThreadSummary ?? '', history, request.message].join('\n') : '';
       said.push(message, reply);
       await settle();
       return { reply, historyComplete, whole };

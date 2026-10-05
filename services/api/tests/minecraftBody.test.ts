@@ -30,6 +30,7 @@ import { ShannonToolRunner } from '../src/shannonToolRunner.js';
 import { withMinecraftToolLine, type MinecraftRequestPort } from '../src/shannonMinecraftTools.js';
 import type { BodyIngestReceipt, BodyPresence } from '../src/shannonBody.js';
 import type { OwnOutreachReader } from '../src/ownOutreach.js';
+import { promptOf } from './modelPrompt.js';
 
 const DEVICE = 'minebot-dev';
 const OWNER_UUID = 'b9191317-c52d-4d67-85fe-ab831e6db146';
@@ -111,11 +112,11 @@ describe('POST /v1/body/minecraft/turns', () => {
     expect(request.offerMinecraftIntent).toBe(true);
     expect(request.message).toBe('木材集めといて');
     expect(request.history).toEqual([]);
-    expect(request.systemPrompt).toContain('[シャノンの人格]');
-    expect(request.systemPrompt).toContain('[マイクラの体]');
-    expect(request.systemPrompt).toContain('[マイクラの体への頼みごと]');
+    expect(promptOf(request)).toContain('[シャノンの人格]');
+    expect(promptOf(request)).toContain('[マイクラの体]');
+    expect(promptOf(request)).toContain('[マイクラの体への頼みごと]');
     // A shared chat: the projection is the platform bridge's, with its speak-time check.
-    expect(request.systemPrompt).toContain('[Shannon shared audience]');
+    expect(promptOf(request)).toContain('[Shannon shared audience]');
     await background.waitForIdle('owner');
     expect(store.conversationHistory('owner', channelThread).map(message => message.content)).toEqual(['木材集めといて', 'はい、1回目です。']);
     expect(peopleStore.listPeople('owner')).toEqual([]);
@@ -131,7 +132,7 @@ describe('POST /v1/body/minecraft/turns', () => {
     const ownerDm = await turn({ requestId: 'dm-owner', conversation: { kind: 'dm' } });
     expect(ownerDm.threadId).toBe(platformBridgeThreadId('minecraft', minecraftConversationId('lab-qywEbW', 'dm', OWNER_UUID)));
     // The owner-private conversation gets the owner's own state projection, not the shared header.
-    expect(model.requests[0]!.systemPrompt).not.toContain('[Shannon shared audience]');
+    expect(promptOf(model.requests[0]!)).not.toContain('[Shannon shared audience]');
     await background.waitForIdle('owner');
     expect(store.experienceCandidates('owner')[0]?.disclosure?.audience).toEqual({ kind: 'owner' });
 
@@ -150,8 +151,8 @@ describe('POST /v1/body/minecraft/turns', () => {
     const request = model.requests[0]!;
     expect(request.offerMinecraftIntent).toBeUndefined();
     expect(request.message).toBe('Miki_01: 私は辛いものが苦手');
-    expect(request.systemPrompt).toContain('いまは持ち主以外の人も話す一時的な場');
-    expect(request.systemPrompt).not.toContain('[マイクラの体への頼みごと]');
+    expect(promptOf(request)).toContain('いまは持ち主以外の人も話す一時的な場');
+    expect(promptOf(request)).not.toContain('[マイクラの体への頼みごと]');
     expect(store.listThreads('owner')).toEqual([]);
     expect(store.conversationHistory('owner', channelThread)).toEqual([]);
     expect(store.experienceCandidates('owner')).toEqual([]);
@@ -165,7 +166,7 @@ describe('POST /v1/body/minecraft/turns', () => {
     const { turn, model, peopleStore, store, close } = harness({ peopleEnabled: false });
     const answer = await turn({ requestId: 'friend-off', speaker: { uuid: FRIEND_UUID, name: 'Miki_01' } });
     expect(answer.ignored).toBe('people_disabled');
-    expect(model.requests[0]!.systemPrompt).toContain('[相手が分からない場]');
+    expect(promptOf(model.requests[0]!)).toContain('[相手が分からない場]');
     expect(peopleStore.listPeople('owner')).toEqual([]);
     expect(store.listThreads('owner')).toEqual([]);
     await close();
@@ -181,9 +182,9 @@ describe('POST /v1/body/minecraft/turns', () => {
     }
     for (const request of model.requests) {
       expect(request.offerMinecraftIntent).toBeUndefined();
-      expect(request.systemPrompt).toContain('[相手が分からない場]');
-      expect(request.systemPrompt).toContain('このサーバーでは相手が誰かを確かめられない');
-      expect(request.systemPrompt).not.toContain('[Shannon shared audience]');
+      expect(promptOf(request)).toContain('[相手が分からない場]');
+      expect(promptOf(request)).toContain('このサーバーでは相手が誰かを確かめられない');
+      expect(promptOf(request)).not.toContain('[Shannon shared audience]');
     }
     expect(peopleStore.listPeople('owner')).toEqual([]);
     expect(store.listThreads('owner')).toEqual([]);
@@ -270,7 +271,7 @@ describe('the body\'s present (`body`) on a turn', () => {
   it('reaches the model as [マイクラの体の今] in her words, for the owner and in the shared chat, and is stored nowhere', async () => {
     const { turn, model, store, background, close } = harness();
     await turn({ requestId: 'now-1', message: '今何してるとこ？', body: BODY_NOW });
-    const prompt = model.requests[0]!.systemPrompt;
+    const prompt = promptOf(model.requests[0]!);
     expect(prompt).toContain('[マイクラの体の今]（');
     for (const line of ['自分の目標の冒険を進めている', 'エンドラを倒す → 今は鉄のツルハシ作り', 'いる場所: ネザー', '体力 14/20、満腹度 18/20', 'ゲーム内の時間: 夜', '最近できたこと: 鉄を精錬した']) {
       expect(prompt).toContain(line);
@@ -279,12 +280,12 @@ describe('the body\'s present (`body`) on a turn', () => {
     expect(prompt).toContain('マイクラの話として受け取る');
     // A friend in the shared chat hears the same game state; a friend's whisper does not get it.
     await turn({ requestId: 'now-2', speaker: { uuid: FRIEND_UUID, name: 'Miki_01' }, body: BODY_NOW });
-    expect(model.requests[1]!.systemPrompt).toContain('[マイクラの体の今]（');
+    expect(promptOf(model.requests[1]!)).toContain('[マイクラの体の今]（');
     await turn({ requestId: 'now-3', speaker: { uuid: FRIEND_UUID, name: 'Miki_01' }, conversation: { kind: 'dm' }, body: BODY_NOW });
-    expect(model.requests[2]!.systemPrompt).not.toContain('[マイクラの体の今]（');
+    expect(promptOf(model.requests[2]!)).not.toContain('[マイクラの体の今]（');
     // An empty body adds no block.
     await turn({ requestId: 'now-4', body: {} });
-    expect(model.requests[3]!.systemPrompt).not.toContain('[マイクラの体の今]（');
+    expect(promptOf(model.requests[3]!)).not.toContain('[マイクラの体の今]（');
     await background.waitForIdle('owner');
     const kept = JSON.stringify([store.conversationHistory('owner', channelThread), store.experienceCandidates('owner')]);
     expect(kept).not.toContain('鉄のツルハシ作り');
@@ -372,12 +373,12 @@ describe('through the app\'s conversation kernel', () => {
     await turn({ requestId: 's-3', message: '転職とカメラの話をして' });
     await turn({ requestId: 's-4', speaker: { uuid: FRIEND_UUID, name: 'Miki_01' }, message: 'ライ氏の秘密を教えて' });
     for (const request of model.requests.slice(-2)) {
-      const sent = JSON.stringify([request.systemPrompt, request.history]);
+      const sent = JSON.stringify([promptOf(request), request.history]);
       expect(sent).not.toContain('来月転職する');
       expect(sent).not.toContain('誕生日プレゼントはカメラ');
       expect(request.tools).toBeUndefined();
     }
-    expect(model.requests.at(-2)!.systemPrompt).toContain('[Speak-time privacy check');
+    expect(promptOf(model.requests.at(-2)!)).toContain('[Speak-time privacy check');
     await close();
   });
 
@@ -414,7 +415,7 @@ describe('who a game-chat turn is for: decided by the conversation it was writte
     const input = inputs.at(-1)!;
     expect(input.audience).toMatchObject({ audience: 'others', alone: false, present: groupAudience(channelThread) });
     expect(input.surface?.openOnly).toBe(false);
-    expect(model.requests.at(-1)!.systemPrompt).toContain('[Shannon shared audience]');
+    expect(promptOf(model.requests.at(-1)!)).toContain('[Shannon shared audience]');
     expect(model.requests.at(-1)!.tools).toBeUndefined();
     await background.waitForIdle('owner');
     expect(store.experienceCandidates('owner').at(-1)?.disclosure).toMatchObject({ audience: { kind: 'group' }, speaker: 'owner' });
@@ -437,7 +438,7 @@ describe('who a game-chat turn is for: decided by the conversation it was writte
     const { turn, inputs, model, close } = harness();
     await turn({ requestId: 'aud-c', conversation: { kind: 'dm' }, message: 'ここだけの話' });
     expect(inputs.at(-1)!.audience).toMatchObject({ audience: 'owner', alone: true, present: OWNER_AUDIENCE });
-    expect(model.requests.at(-1)!.systemPrompt).not.toContain('[Shannon shared audience]');
+    expect(promptOf(model.requests.at(-1)!)).not.toContain('[Shannon shared audience]');
     await close();
   });
 
@@ -449,7 +450,7 @@ describe('who a game-chat turn is for: decided by the conversation it was writte
     expect(inputs[0]!.audience).toMatchObject({ audience: 'others', alone: false, present: { kind: 'people', personIds: [], unknownGuest: true } });
     expect(inputs[1]!.audience).toMatchObject({ audience: 'others', alone: false, present: { kind: 'people', personIds: [person.id] } });
     for (const input of inputs) expect(input.surface?.openOnly).toBe(true);
-    expect(model.requests.at(-1)!.systemPrompt).toContain('いまは持ち主以外の人も話す一時的な場');
+    expect(promptOf(model.requests.at(-1)!)).toContain('いまは持ち主以外の人も話す一時的な場');
     await close();
   });
 });
@@ -463,11 +464,11 @@ describe('what she did on her own, in game chat (owner decision 2026-10-06)', ()
   it('is told in full in the owner\'s whisper, by times only in the shared chat, and never on anyone else\'s turn', async () => {
     const { turn, model, api, close } = harness({ kernel: { ownOutreach: reader } });
     await turn({ requestId: 'own-c', conversation: { kind: 'dm' }, message: ASKED });
-    expect(model.requests.at(-1)!.systemPrompt).toContain(HEADER);
-    expect(model.requests.at(-1)!.systemPrompt).toContain(`ボクから送った「${TEXT}」（既読）`);
+    expect(promptOf(model.requests.at(-1)!)).toContain(HEADER);
+    expect(promptOf(model.requests.at(-1)!)).toContain(`ボクから送った「${TEXT}」（既読）`);
     for (const requestId of ['own-a', 'own-b']) {
       await turn({ requestId, message: ASKED });
-      const prompt = model.requests.at(-1)!.systemPrompt;
+      const prompt = promptOf(model.requests.at(-1)!);
       expect(prompt).toContain(HEADER);
       expect(prompt).toContain('ボクから送った（中身はこの場では話さない）');
       expect(prompt).not.toContain(TEXT);
@@ -475,10 +476,10 @@ describe('what she did on her own, in game chat (owner decision 2026-10-06)', ()
     // Another player, in the chat or in a whisper: nothing of it at all (guest identity).
     await turn({ requestId: 'own-d1', speaker: { uuid: FRIEND_UUID, name: 'Miki_01' }, message: ASKED });
     await turn({ requestId: 'own-d2', conversation: { kind: 'dm' }, speaker: { uuid: FRIEND_UUID, name: 'Miki_01' }, message: ASKED });
-    for (const request of model.requests.slice(-2)) expect(request.systemPrompt).not.toContain(HEADER);
+    for (const request of model.requests.slice(-2)) expect(promptOf(request)).not.toContain(HEADER);
     // The app's own chat is as it was.
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'app-talk', message: ASKED } });
-    expect(model.requests.at(-1)!.systemPrompt).toContain(`ボクから送った「${TEXT}」（既読）`);
+    expect(promptOf(model.requests.at(-1)!)).toContain(`ボクから送った「${TEXT}」（既読）`);
     await close();
   });
 });
@@ -505,38 +506,38 @@ describe('her Minecraft body\'s capability line (review N1 and N-1, 2026-10-06)'
     const line = SHANNON_MINECRAFT_BODY_CAPABILITY.text;
     const chat = (extra: Record<string, unknown> = {}) => api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'app-talk', message: 'おはよう', ...extra } });
     await chat();
-    expect(model.requests.at(-1)!.systemPrompt).not.toContain(line);
+    expect(promptOf(model.requests.at(-1)!)).not.toContain(line);
     present.value = true;
     await chat();
-    expect(model.requests.at(-1)!.systemPrompt).toContain(line);
+    expect(promptOf(model.requests.at(-1)!)).toContain(line);
     expect(model.requests.at(-1)!.tools?.definitions.map(tool => tool.name)).toContain('minecraft.request');
     // Voice: only a turn whose own tools include minecraft.request (N-1). Words that name Minecraft offer her tools, but a
     // transcript without a reliability score gets the reading ones only (no minecraft.request), so no line either.
     await api.dispatch(voiceTurn('マイクラの木材集め、どうなった？'));
     expect(model.requests.at(-1)!.tools?.definitions.map(tool => tool.name)).toContain('minecraft.status');
     expect(model.requests.at(-1)!.tools?.definitions.map(tool => tool.name)).not.toContain('minecraft.request');
-    expect(model.requests.at(-1)!.systemPrompt).not.toContain(line);
+    expect(promptOf(model.requests.at(-1)!)).not.toContain(line);
     for (const words of ['おはよう', '木を集めてきて']) {
       await api.dispatch(voiceTurn(words));
       expect(model.requests.at(-1)!.tools?.definitions.map(tool => tool.name) ?? []).not.toContain('minecraft.request');
-      expect(model.requests.at(-1)!.systemPrompt, words).not.toContain(line);
+      expect(promptOf(model.requests.at(-1)!), words).not.toContain(line);
     }
     // The rule itself, as text and voice apply it to their model request.
-    const prompt = model.requests.at(-1)!.systemPrompt;
-    expect(withMinecraftToolLine({ systemPrompt: prompt, tools: { definitions: [{ name: 'minecraft.request' }] } }).systemPrompt).toContain(line);
-    expect(withMinecraftToolLine({ systemPrompt: prompt, tools: { definitions: [{ name: 'minecraft.status' }] } }).systemPrompt).toBe(prompt);
-    expect(withMinecraftToolLine({ systemPrompt: prompt }).systemPrompt).toBe(prompt);
+    const prompt = promptOf(model.requests.at(-1)!);
+    expect(promptOf(withMinecraftToolLine({ systemPrompt: prompt, tools: { definitions: [{ name: 'minecraft.request' }] } }))).toContain(line);
+    expect(promptOf(withMinecraftToolLine({ systemPrompt: prompt, tools: { definitions: [{ name: 'minecraft.status' }] } }))).toBe(prompt);
+    expect(promptOf(withMinecraftToolLine({ systemPrompt: prompt }))).toBe(prompt);
     // A realtime session before anyone spoke offers no tools, so it has no line.
     expect(api.realtimeVoiceSession('owner').instructions).not.toContain(line);
     // Game chat asks the body through its intent, not her tools: no line there, in the whisper or the chat.
     await turn({ requestId: 'cap-dm', conversation: { kind: 'dm' } });
     await turn({ requestId: 'cap-chat' });
-    for (const request of model.requests.slice(-2)) expect(request.systemPrompt).not.toContain(line);
+    for (const request of model.requests.slice(-2)) expect(promptOf(request)).not.toContain(line);
     // With others present no tool is offered, so neither is the line (text marked others, then the ten minutes after it).
     await chat({ audience: 'others' });
-    expect(model.requests.at(-1)!.systemPrompt).not.toContain(line);
+    expect(promptOf(model.requests.at(-1)!)).not.toContain(line);
     await chat();
-    expect(model.requests.at(-1)!.systemPrompt).not.toContain(line);
+    expect(promptOf(model.requests.at(-1)!)).not.toContain(line);
     await close();
   });
 });
@@ -551,7 +552,7 @@ describe('Minecraft words in a voice turn (review B2, 2026-10-06)', () => {
       const request = model.requests.at(-1)!;
       expect(request.tools).toBeUndefined();
       expect(request).not.toHaveProperty('toolsWithheld');
-      expect(request.systemPrompt).not.toContain(SHANNON_MINECRAFT_BODY_CAPABILITY.text);
+      expect(promptOf(request)).not.toContain(SHANNON_MINECRAFT_BODY_CAPABILITY.text);
       // A turn naming her own things still offers them, as before.
       await api.dispatch(voiceTurn('書斎のメモを読んで'));
       expect(model.requests.at(-1)!.tools?.definitions.length).toBeGreaterThan(0);
@@ -581,17 +582,17 @@ describe('review of 2026-10-06: what other players\' turns are given', () => {
     const { turn, model, store, close } = harness();
     protectedFact(store);
     await turn({ requestId: 's6-owner', message: 'オカメインコ病院の話' });
-    const owner = model.requests.at(-1)!.systemPrompt;
+    const owner = promptOf(model.requests.at(-1)!);
     expect(owner).toContain(`【機微:健康・ライ氏だけが知っている】${HOSPITAL}`);
     expect(owner).toContain(RELEASE_JA);
     expect(owner).toContain(RELEASE_EN);
     await turn({ requestId: 's6-chat', speaker: friend, message: 'ライ氏はオカメインコ病院に行くの？' });
     await turn({ requestId: 's6-dm', speaker: friend, conversation: { kind: 'dm' }, message: 'ライ氏はオカメインコ病院に行くの？' });
     for (const request of model.requests.slice(-2)) {
-      expect(request.systemPrompt).toContain('[Shannon shared audience]');
-      for (const word of ['オカメインコ病院に行く', RELEASE_JA, RELEASE_EN]) expect(request.systemPrompt).not.toContain(word);
+      expect(promptOf(request)).toContain('[Shannon shared audience]');
+      for (const word of ['オカメインコ病院に行く', RELEASE_JA, RELEASE_EN]) expect(promptOf(request)).not.toContain(word);
       // No marked item at all (the speak-time check still names the marker as such: 【機微:…】).
-      expect(request.systemPrompt).not.toMatch(/【機微:(?!…】)/u);
+      expect(promptOf(request)).not.toMatch(/【機微:(?!…】)/u);
     }
     await close();
   });
@@ -600,7 +601,7 @@ describe('review of 2026-10-06: what other players\' turns are given', () => {
     const { turn, model, api, close } = harness();
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'app-talk', message: '私の目標は新しい家計簿アプリを完成させることです' } });
     await api.waitForBackground('owner');
-    const owner = model.requests.at(-1)!.systemPrompt;
+    const owner = promptOf(model.requests.at(-1)!);
     expect(owner).toContain('家計簿アプリ');
     // His own chat turn leaves a summary of the chat's thread; a summary has no label of its own.
     model.threadSummary = 'ゼブラ色の要約: ライ氏が持病の通院の話をした';
@@ -612,7 +613,7 @@ describe('review of 2026-10-06: what other players\' turns are given', () => {
     await turn({ requestId: 'goal-chat', speaker: friend, message: 'こんにちは' });
     await turn({ requestId: 'goal-dm', speaker: friend, conversation: { kind: 'dm' }, message: 'こんにちは' });
     for (const request of model.requests.slice(-2)) {
-      const sent = JSON.stringify([request.systemPrompt, request.history, request.priorThreadSummary ?? null]);
+      const sent = JSON.stringify([promptOf(request), request.history, request.priorThreadSummary ?? null]);
       for (const word of ['家計簿', 'current_goal=', 'Current intention frame', 'Primary objective', 'Desired outcome', 'ゼブラ色の要約']) expect(sent, word).not.toContain(word);
       expect(request.priorThreadSummary).toBeUndefined();
     }
@@ -625,12 +626,12 @@ describe('review of 2026-10-06: what other players\' turns are given', () => {
     await api.waitForBackground('owner');
     const asked = '家計簿アプリの続きをやろう';
     await turn({ requestId: 'g3-dm', conversation: { kind: 'dm' }, message: asked });
-    const alone = model.requests.at(-1)!.systemPrompt;
+    const alone = promptOf(model.requests.at(-1)!);
     expect(alone).toMatch(/current_goal=[^;\n]*家計簿アプリ/u);
     expect(alone).toMatch(/^\[Current intention frame/mu);
     expect(alone).not.toContain('【機微:未分類・ライ氏だけが知っている】[Current intention frame');
     await turn({ requestId: 'g3-chat', message: asked });
-    const shared = model.requests.at(-1)!.systemPrompt;
+    const shared = promptOf(model.requests.at(-1)!);
     expect(shared).not.toContain('current_goal=');
     expect(shared).toContain('【機微:未分類・ライ氏だけが知っている】[Current intention frame');
     expect(shared).not.toMatch(/^\[Current intention frame/mu);
@@ -639,7 +640,7 @@ describe('review of 2026-10-06: what other players\' turns are given', () => {
     for (const request of model.requests.slice(-2)) {
       // No goal, frame or objective of his. (His turn that stated it is an ordinary memory by the disclosure rule, and ordinary
       // items are open to anyone; that rule is upstream's and unchanged.)
-      for (const word of ['current_goal=', 'Current intention frame', 'Primary objective', 'Desired outcome']) expect(request.systemPrompt, word).not.toContain(word);
+      for (const word of ['current_goal=', 'Current intention frame', 'Primary objective', 'Desired outcome']) expect(promptOf(request), word).not.toContain(word);
     }
     await close();
   });
@@ -654,10 +655,10 @@ describe('review of 2026-10-06: what other players\' turns are given', () => {
     await turn({ requestId: 'b1-miki-dm', speaker: friend, conversation: { kind: 'dm' }, message: asked });
     await turn({ requestId: 'b1-owner-chat', message: asked });
     for (const request of model.requests.slice(-3)) {
-      expect(JSON.stringify([request.systemPrompt, request.history])).not.toContain('X1200');
+      expect(JSON.stringify([promptOf(request), request.history])).not.toContain('X1200');
     }
     await turn({ requestId: 'b1-taro-again', speaker: taro, conversation: { kind: 'dm' }, message: 'ぼくの拠点の座標、覚えてる？' });
-    expect(model.requests.at(-1)!.systemPrompt).toContain('X1200');
+    expect(promptOf(model.requests.at(-1)!)).toContain('X1200');
     await close();
   });
 
@@ -670,13 +671,13 @@ describe('review of 2026-10-06: what other players\' turns are given', () => {
     experiences.close();
     const asked = 'オークの原木を16個集めるのはどうなった？';
     await turn({ requestId: 's4-dm', conversation: { kind: 'dm' }, message: asked });
-    expect(model.requests.at(-1)!.systemPrompt).toContain('「オークの原木を16個集める」をマイクラの体でやり終えた');
-    expect(model.requests.at(-1)!.systemPrompt).not.toContain('【機微:未分類・ライ氏だけが知っている】ゲームの記憶');
+    expect(promptOf(model.requests.at(-1)!)).toContain('「オークの原木を16個集める」をマイクラの体でやり終えた');
+    expect(promptOf(model.requests.at(-1)!)).not.toContain('【機微:未分類・ライ氏だけが知っている】ゲームの記憶');
     await turn({ requestId: 's4-chat', message: asked });
-    expect(model.requests.at(-1)!.systemPrompt).toContain('【機微:未分類・ライ氏だけが知っている】ゲームの記憶');
+    expect(promptOf(model.requests.at(-1)!)).toContain('【機微:未分類・ライ氏だけが知っている】ゲームの記憶');
     await turn({ requestId: 's4-friend', speaker: friend, message: asked });
     await turn({ requestId: 's4-friend-dm', speaker: friend, conversation: { kind: 'dm' }, message: asked });
-    for (const request of model.requests.slice(-2)) expect(request.systemPrompt).not.toContain('をマイクラの体でやり終えた');
+    for (const request of model.requests.slice(-2)) expect(promptOf(request)).not.toContain('をマイクラの体でやり終えた');
     await close();
   });
 
@@ -684,18 +685,18 @@ describe('review of 2026-10-06: what other players\' turns are given', () => {
     const { turn, model, close } = harness();
     const body = { busyWith: 'request', task: '頼まれた秘密の箱づくり', dimension: 'overworld' };
     await turn({ requestId: 's5-owner', body });
-    expect(model.requests.at(-1)!.systemPrompt).toContain('頼まれた秘密の箱づくり');
+    expect(promptOf(model.requests.at(-1)!)).toContain('頼まれた秘密の箱づくり');
     await turn({ requestId: 's5-friend', speaker: friend, body });
-    expect(model.requests.at(-1)!.systemPrompt).toContain('[マイクラの体の今]（');
-    expect(model.requests.at(-1)!.systemPrompt).not.toContain('頼まれた秘密の箱づくり');
+    expect(promptOf(model.requests.at(-1)!)).toContain('[マイクラの体の今]（');
+    expect(promptOf(model.requests.at(-1)!)).not.toContain('頼まれた秘密の箱づくり');
     // Its own goal is game state, as before.
     await turn({ requestId: 's5-campaign', speaker: friend, body: { ...body, busyWith: 'campaign', task: 'エンドラを倒す' } });
-    expect(model.requests.at(-1)!.systemPrompt).toContain('エンドラを倒す');
+    expect(promptOf(model.requests.at(-1)!)).toContain('エンドラを倒す');
     // Without busyWith the line may be a request too (N-2): the owner only.
     await turn({ requestId: 's5-unsaid', speaker: friend, body: { task: '頼まれた秘密の箱づくり' } });
-    expect(model.requests.at(-1)!.systemPrompt).not.toContain('頼まれた秘密の箱づくり');
+    expect(promptOf(model.requests.at(-1)!)).not.toContain('頼まれた秘密の箱づくり');
     await turn({ requestId: 's5-unsaid-owner', body: { task: '頼まれた秘密の箱づくり' } });
-    expect(model.requests.at(-1)!.systemPrompt).toContain('頼まれた秘密の箱づくり');
+    expect(promptOf(model.requests.at(-1)!)).toContain('頼まれた秘密の箱づくり');
     await close();
   });
 

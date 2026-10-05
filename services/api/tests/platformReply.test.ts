@@ -19,6 +19,7 @@ import { PlatformPeople } from '../src/platformPeople.js';
 import { PLATFORM_REPLY_LIMITS, PlatformReplyService, SHANNON_PLATFORM_REPLY_PATH, platformReplyEnabled } from '../src/platformReply.js';
 import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeReply, isPlatformBridgePath } from '../src/serverPlatformBridgeRoute.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { promptOf } from './modelPrompt.js';
 
 const OWNER = '900000000000000001';
 const FRIEND = '900000000000000002';
@@ -102,9 +103,9 @@ describe('POST /v1/platform/reply', () => {
     expect(answer).toEqual({ reply: 'はい、1回目です。', threadId: dmThread, duplicate: false });
     const request = model.requests[0]!;
     expect(request.message).toBe('今日は寒いね');
-    expect(request.systemPrompt).toContain('[シャノンの人格]');
-    expect(request.systemPrompt).toContain('[Discordでの会話]');
-    expect(request.systemPrompt).not.toContain('[Shannon shared audience]');
+    expect(promptOf(request)).toContain('[シャノンの人格]');
+    expect(promptOf(request)).toContain('[Discordでの会話]');
+    expect(promptOf(request)).not.toContain('[Shannon shared audience]');
     expect(request.offerMinecraftIntent).toBeUndefined();
     await background.waitForIdle('owner');
     expect(store.conversationHistory('owner', dmThread).map(message => message.content)).toEqual(['今日は寒いね', 'はい、1回目です。']);
@@ -126,14 +127,14 @@ describe('POST /v1/platform/reply', () => {
     const answer = await reply({ requestId: 'ch-1', conversationId: CHANNEL, conversationKind: 'channel', userMessage: '転職とカメラの話をして' });
     expect(answer.threadId).toBe(channelThread);
     const request = model.requests.at(-1)!;
-    const sent = JSON.stringify([request.systemPrompt, request.history]);
+    const sent = JSON.stringify([promptOf(request), request.history]);
     expect(sent).not.toContain('来月転職する');
     expect(sent).not.toContain('誕生日プレゼントはカメラ');
-    expect(request.systemPrompt).toContain('[Shannon shared audience]');
-    expect(request.systemPrompt).toContain('[Speak-time privacy check');
-    expect(request.systemPrompt).toContain('「テストサーバー」');
+    expect(promptOf(request)).toContain('[Shannon shared audience]');
+    expect(promptOf(request)).toContain('[Speak-time privacy check');
+    expect(promptOf(request)).toContain('「テストサーバー」');
     expect(request.tools).toBeUndefined();
-    expect(request.systemPrompt).not.toContain('[マイクラの体で起きたこと]');
+    expect(promptOf(request)).not.toContain('[マイクラの体で起きたこと]');
     await background.waitForIdle('owner');
     const kept = store.experienceCandidates('owner').find(item => item.userMessage === '転職とカメラの話をして');
     expect(kept?.disclosure?.audience).toEqual(groupAudience(channelThread));
@@ -146,7 +147,7 @@ describe('POST /v1/platform/reply', () => {
     expect(Object.keys(answer).sort()).toEqual(['duplicate', 'reply', 'threadId']);
     expect(model.requests[0]!.message).toBe('ミキ: 私は辛いものが苦手');
     expect(model.requests[0]!.tools).toBeUndefined();
-    expect(model.requests[0]!.systemPrompt).toContain('話している相手は「ミキ」');
+    expect(promptOf(model.requests[0]!)).toContain('話している相手は「ミキ」');
     expect(store.conversationHistory('owner', channelThread)).toEqual([]);
     expect(peopleStore.listPeople('owner').map(person => person.displayName)).toEqual(['ミキ']);
     // The owner's private DM is never answered for anyone else, and a friend must say who they are.
@@ -199,15 +200,15 @@ describe('one mind on Discord: requests to her Minecraft body', () => {
     // The next turn with him alone knows what it asked.
     model.callTool = null;
     await reply({ requestId: 'mc-2', userMessage: '何頼んだっけ？' });
-    expect(model.requests.at(-1)!.systemPrompt).toContain('[マイクラの体で起きたこと]');
-    expect(model.requests.at(-1)!.systemPrompt).toContain('オークの原木を16個集める');
+    expect(promptOf(model.requests.at(-1)!)).toContain('[マイクラの体で起きたこと]');
+    expect(promptOf(model.requests.at(-1)!)).toContain('オークの原木を16個集める');
     // Never in a shared channel, nor for a friend.
     model.callTool = { name: 'minecraft_request', input: { goal: 'ダイヤを掘る' } };
     await reply({ requestId: 'mc-3', conversationId: CHANNEL, conversationKind: 'channel', userMessage: 'マイクラで木材集めといて' });
     expect(model.requests.at(-1)!.tools).toBeUndefined();
     await reply({ requestId: 'mc-4', conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: 'マイクラでダイヤ掘って' });
     expect(model.requests.at(-1)!.tools).toBeUndefined();
-    expect(model.requests.at(-1)!.systemPrompt).not.toContain('[マイクラの体で起きたこと]');
+    expect(promptOf(model.requests.at(-1)!)).not.toContain('[マイクラの体で起きたこと]');
     expect(requests!.recent('owner')).toHaveLength(1);
     await close();
   });
@@ -220,9 +221,9 @@ describe('what a platform reply is not told', () => {
     const { reply, api, model, close } = harness({ ownOutreach });
     await reply({ requestId: 'own-dm', userMessage: 'さっき電話した？' });
     await reply({ requestId: 'own-ch', conversationId: CHANNEL, userMessage: 'さっき電話した？' });
-    for (const request of model.requests) expect(request.systemPrompt).not.toContain('[ボクが自分からしたこと]');
+    for (const request of model.requests) expect(promptOf(request)).not.toContain('[ボクが自分からしたこと]');
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'app-talk', message: 'さっき電話した？' } });
-    expect(model.requests.at(-1)!.systemPrompt).toContain(`ボクから送った「${TEXT}」（既読）`);
+    expect(promptOf(model.requests.at(-1)!)).toContain(`ボクから送った「${TEXT}」（既読）`);
     await close();
   });
 
@@ -230,12 +231,12 @@ describe('what a platform reply is not told', () => {
     const { reply, model, claim, close } = harness({ minecraft: true });
     const line = SHANNON_MINECRAFT_BODY_CAPABILITY.text;
     await reply({ requestId: 'cap-1' });
-    expect(model.requests.at(-1)!.systemPrompt).not.toContain(line);
+    expect(promptOf(model.requests.at(-1)!)).not.toContain(line);
     await claim();
     await reply({ requestId: 'cap-2' });
-    expect(model.requests.at(-1)!.systemPrompt).toContain(line);
+    expect(promptOf(model.requests.at(-1)!)).toContain(line);
     await reply({ requestId: 'cap-3', conversationId: CHANNEL });
-    expect(model.requests.at(-1)!.systemPrompt).not.toContain(line);
+    expect(promptOf(model.requests.at(-1)!)).not.toContain(line);
     await close();
   });
 });
@@ -283,15 +284,15 @@ describe('the ownOutreach selection of the capability context (review of 2026-10
         userUtterance: { id: `u-${model.requests.length}-${Math.random()}`, text: 'さっき電話した？', source: 'speech', rawText: 'さっき電話した？',
           ...(extra.participantMode ? { callContext: { callId: 'call-guest-0001', turns: [], introductionStart: true } } : {}) } } } });
     await chat();
-    expect(model.requests.at(-1)!.systemPrompt).toContain(FULL);
+    expect(promptOf(model.requests.at(-1)!)).toContain(FULL);
     await chat({ audience: 'others' });
-    expect(model.requests.at(-1)!.systemPrompt).toContain(TIMES);
-    expect(model.requests.at(-1)!.systemPrompt).not.toContain(TEXT);
+    expect(promptOf(model.requests.at(-1)!)).toContain(TIMES);
+    expect(promptOf(model.requests.at(-1)!)).not.toContain(TEXT);
     const before = model.requests.length;
     await voice();
     await voice({ companionPresent: true });
     await voice({ participantMode: 'guest' });
-    const prompts = model.requests.slice(before).map(request => request.systemPrompt);
+    const prompts = model.requests.slice(before).map(request => promptOf(request));
     expect(prompts).toHaveLength(3);
     expect(prompts[0]).toContain(FULL);
     expect(prompts[1]).toContain(TIMES);
@@ -309,10 +310,10 @@ describe('a Discord friend\'s turn (owner decision S6, 2026-10-06)', () => {
     store.apply('owner', { type: 'user-fact-upserted', fact: { id: 'fact-hospital', statement: HOSPITAL, confidence: 0.9, observedAt: START,
       disclosure: { audience: OWNER_AUDIENCE, sensitivity: 'sensitive', category: 'health', reason: '病院', decidedBy: 'rule' } } });
     await reply({ requestId: 'd-owner', conversationId: CHANNEL, conversationKind: 'channel', userMessage: 'オカメインコ病院の話' });
-    expect(model.requests.at(-1)!.systemPrompt).toContain(`【機微:健康・ライ氏だけが知っている】${HOSPITAL}`);
-    expect(model.requests.at(-1)!.systemPrompt).toContain(RELEASE);
+    expect(promptOf(model.requests.at(-1)!)).toContain(`【機微:健康・ライ氏だけが知っている】${HOSPITAL}`);
+    expect(promptOf(model.requests.at(-1)!)).toContain(RELEASE);
     await reply({ requestId: 'd-friend', conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: 'ライ氏はオカメインコ病院に行くの？' });
-    const friend = model.requests.at(-1)!.systemPrompt;
+    const friend = promptOf(model.requests.at(-1)!);
     expect(friend).toContain('[Shannon shared audience]');
     for (const word of ['オカメインコ病院に行く', RELEASE, 'When ライ氏 himself clearly asks']) expect(friend).not.toContain(word);
     expect(friend).not.toMatch(/【機微:(?!…】)/u);
@@ -331,9 +332,9 @@ describe('a Discord friend\'s turn and the owner\'s intentions (second review, 2
     const { reply, api, model, close } = harness();
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'app-talk', message: '私の目標は新しい家計簿アプリを完成させることです' } });
     await api.waitForBackground('owner');
-    expect(model.requests.at(-1)!.systemPrompt).toContain('家計簿アプリ');
+    expect(promptOf(model.requests.at(-1)!)).toContain('家計簿アプリ');
     await reply({ requestId: 'goal-friend', conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: 'こんにちは' });
-    const sent = JSON.stringify([model.requests.at(-1)!.systemPrompt, model.requests.at(-1)!.history]);
+    const sent = JSON.stringify([promptOf(model.requests.at(-1)!), model.requests.at(-1)!.history]);
     for (const word of ['家計簿', 'current_goal=', 'Current intention frame', 'Primary objective']) expect(sent, word).not.toContain(word);
     await close();
   });
@@ -370,9 +371,9 @@ describe('B-1: a Discord friend\'s DM (second review follow-up, 2026-10-06)', ()
     await reply({ requestId: 'b1-miki', conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: asked });
     await reply({ requestId: 'b1-miki-dm', conversationId: 'discord:111:888', conversationKind: 'dm', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: asked });
     await reply({ requestId: 'b1-owner', conversationId: CHANNEL, conversationKind: 'channel', userMessage: asked });
-    for (const request of model.requests.slice(-3)) expect(JSON.stringify([request.systemPrompt, request.history])).not.toContain('X1200');
+    for (const request of model.requests.slice(-3)) expect(JSON.stringify([promptOf(request), request.history])).not.toContain('X1200');
     await reply({ requestId: 'b1-taro-2', ...taro, userMessage: 'ぼくの拠点の座標、覚えてる？' });
-    expect(model.requests.at(-1)!.systemPrompt).toContain('X1200');
+    expect(promptOf(model.requests.at(-1)!)).toContain('X1200');
     await close();
   });
 });
@@ -390,7 +391,7 @@ describe('a friend\'s DM in the platform context (final review, 2026-10-06)', ()
     expect(context(OWNER, CHANNEL, 'channel')).not.toContain('X1200');
     expect(context(OWNER, CHANNEL, 'channel')).toContain('タロウさん');
     await reply({ requestId: 'f-owner', conversationId: CHANNEL, conversationKind: 'channel', participants: [TARO], userMessage: 'タロウは明日何するって？' });
-    expect(JSON.stringify([model.requests.at(-1)!.systemPrompt, model.requests.at(-1)!.history])).not.toContain('X1200');
+    expect(JSON.stringify([promptOf(model.requests.at(-1)!), model.requests.at(-1)!.history])).not.toContain('X1200');
     // Another friend in the channel: neither.
     expect(context(FRIEND, CHANNEL, 'channel')).not.toContain('X1200');
     // Taro's own DM still has it.

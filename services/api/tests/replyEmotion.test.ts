@@ -4,6 +4,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
 import { ownerDay, presentCompanionState, sharedTimeEvent } from '../src/companionPresence.js';
+import { promptOf } from './modelPrompt.js';
 
 const at = '2026-10-02T03:00:00.000Z';
 const delegations = '/v1/voice/gemini/cascade/delegations';
@@ -65,7 +66,7 @@ describe('text chat expression', () => {
     expect(stateStore.snapshot('owner').expressiveEmotion).toMatchObject({ primary: 'bashful', updatedAt: at });
     // The next text turn tells the model the feeling as it stands now.
     await chat('ところで明日の予定は', '明日は午前が空いています。');
-    expect(model.requests.at(-1)?.systemPrompt).toContain('いまの会話感情: bashful');
+    expect(promptOf(model.requests.at(-1))).toContain('いまの会話感情: bashful');
   });
 
   it('keeps the stored history face equal to the response face', async () => {

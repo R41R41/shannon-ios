@@ -14,6 +14,7 @@ import { InMemoryConversationStore } from '../src/conversationStore.js';
 import { visibleConversationHistory } from '../src/memoryVisibility.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { LocalVoiceDecisionGateway, type VoiceDecisionInput } from '../src/voiceDecision.js';
+import { promptOf } from './modelPrompt.js';
 
 const at = '2026-10-02T03:00:00.000Z';
 const delegations = '/v1/voice/live/delegations';
@@ -81,7 +82,7 @@ describe('the production voice transcript of 2026-10-02', () => {
     expect(said(request)).toHaveLength(10);
     // The rule it replaces (the newest four messages) had already lost the date.
     expect(said({ history: request.history.slice(-4) }).join('')).not.toContain('デート');
-    expect(request.systemPrompt).not.toContain(SUMMARY_HEADER);
+    expect(promptOf(request)).not.toContain(SUMMARY_HEADER);
   });
 });
 
@@ -215,7 +216,7 @@ describe('a short thread sends what it sent before', () => {
     const request = await h.chat('次の質問', '次の答え');
     expect(before).toHaveLength(18);
     expect(request.history).toEqual(before);
-    expect(request.systemPrompt).not.toContain(SUMMARY_HEADER);
+    expect(promptOf(request)).not.toContain(SUMMARY_HEADER);
     const body = async (history: ShannonChatModelRequest['history']) => {
       let sent = '';
       const fetcher = async (_url: unknown, init?: RequestInit) => {
@@ -260,7 +261,7 @@ describe('helpers keep their small windows', () => {
     h.store.saveReplaySummary('owner', 'thread', { summary: 'ゼブラ要約', coveredThroughMessageId: 'none', chainStartedAt: at, updatedAt: at });
     const request = await h.voice('シャノン、こんにちは', { participantMode: 'guest' });
     expect(request.history).toEqual([]);
-    expect(request.systemPrompt).not.toContain(SUMMARY_HEADER);
-    expect(request.systemPrompt).not.toContain('ゼブラ要約');
+    expect(promptOf(request)).not.toContain(SUMMARY_HEADER);
+    expect(promptOf(request)).not.toContain('ゼブラ要約');
   });
 });

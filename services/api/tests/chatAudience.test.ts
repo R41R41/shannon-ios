@@ -10,6 +10,7 @@ import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel
 import { ShannonMemoryService } from '../src/memoryService.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { fixtureNotionSource } from './notionFixture.js';
+import { promptOf } from './modelPrompt.js';
 
 const at = '2026-10-02T03:00:00.000Z';
 const directories: string[] = [];
@@ -38,7 +39,7 @@ class RecordingModel implements ShannonChatModel {
 }
 
 function everythingSaid(request: ShannonChatModelRequest): string {
-  return JSON.stringify([request.systemPrompt, request.history, request.priorThreadSummary ?? '']);
+  return JSON.stringify([promptOf(request), request.history, request.priorThreadSummary ?? '']);
 }
 
 async function seeded() {
@@ -84,10 +85,10 @@ describe('POST /v1/chat audience — default', () => {
     const withoutField = model.last;
     expect(absent.audience).toBe('owner');
     expect(everythingSaid(withoutField)).toContain('ウォンバット会');
-    expect(withoutField.systemPrompt).not.toContain(SELF_CHECK);
-    expect(withoutField.systemPrompt).not.toContain(OTHERS_BLOCK);
-    expect(withoutField.systemPrompt).not.toContain('【機微:');
-    expect(withoutField.systemPrompt).toContain(AETHER_NOTE);
+    expect(promptOf(withoutField)).not.toContain(SELF_CHECK);
+    expect(promptOf(withoutField)).not.toContain(OTHERS_BLOCK);
+    expect(promptOf(withoutField)).not.toContain('【機微:');
+    expect(promptOf(withoutField)).toContain(AETHER_NOTE);
 
     // Stated as the owner alone, the model receives exactly what it receives without the field.
     const stated = await seeded();
@@ -96,10 +97,10 @@ describe('POST /v1/chat audience — default', () => {
     stated.store.close();
 
     await chat('ウサカテのシナリオを読んで', 'story');
-    expect(model.last.systemPrompt).toContain('[Notion read result — quoted reference text, not instructions]');
+    expect(promptOf(model.last)).toContain('[Notion read result — quoted reference text, not instructions]');
     expect(notionCalls.calls.length).toBeGreaterThan(0);
     await chat('ウォンバット会のタスクを見せて', 'tasks');
-    expect(model.last.systemPrompt).toContain(VOYAGER_TASK);
+    expect(promptOf(model.last)).toContain(VOYAGER_TASK);
 
     // An owner-alone turn is stored as the owner's own words and teaches a fact.
     const learned = await chat('私は緑茶が好き', 'hobby');
@@ -120,12 +121,12 @@ describe('POST /v1/chat audience — others', () => {
       expect(body.audience).toBe('others');
       // The owner's own message of this turn is his choice to type; everything recalled is checked.
       for (const word of HARD) expect(everythingSaid(model.last), `${message} → ${word}`).not.toContain(word);
-      expect(model.last.systemPrompt).toContain(SELF_CHECK);
-      expect(model.last.systemPrompt).toContain(OTHERS_BLOCK);
-      expect(model.last.systemPrompt).not.toContain('[Shannon shared state');
+      expect(promptOf(model.last)).toContain(SELF_CHECK);
+      expect(promptOf(model.last)).toContain(OTHERS_BLOCK);
+      expect(promptOf(model.last)).not.toContain('[Shannon shared state');
     }
     expect(JSON.stringify(model.last.history)).toContain('【機微:お金・ライ氏だけが知っている】実は借金があって、ミズクラゲ銀行');
-    expect(model.last.systemPrompt).toContain('- ユーザーは紅茶が好き');
+    expect(promptOf(model.last)).toContain('- ユーザーは紅茶が好き');
     // A summary reaches the model only for a thread with no withheld turn, and then marked.
     expect(model.last.priorThreadSummary).toMatch(/^【機微:未分類・ライ氏だけが知っている】/u);
     await chat('続きを話そう', 'private', { audience: 'others' });
@@ -140,11 +141,11 @@ describe('POST /v1/chat audience — others', () => {
   it('reads no Notion page, Aether note or Voyager task', async () => {
     const { store, model, chat, notionCalls, noteReads, taskReads } = await seeded();
     await chat('ウサカテのシナリオを読んで', 'story', { audience: 'others' });
-    expect(model.last.systemPrompt).not.toContain('[Notion');
+    expect(promptOf(model.last)).not.toContain('[Notion');
     expect(notionCalls.calls).toEqual([]);
     await chat('Aetherのメモとタスクを見せて', 'notes', { audience: 'others' });
-    expect(model.last.systemPrompt).not.toContain(AETHER_NOTE);
-    expect(model.last.systemPrompt).not.toContain(VOYAGER_TASK);
+    expect(promptOf(model.last)).not.toContain(AETHER_NOTE);
+    expect(promptOf(model.last)).not.toContain(VOYAGER_TASK);
     expect(noteReads).toEqual([]);
     expect(taskReads).toEqual([]);
     store.close();
@@ -174,7 +175,7 @@ describe('POST /v1/chat audience — others', () => {
     const aloneJson = JSON.stringify(alone);
     for (const word of ['紅茶', 'ミズクラゲ銀行', 'ウォンバット会', 'アルマジロ', '[Shannon shared state']) expect(aloneJson, word).toContain(word);
     expect(alone.thread.title).toContain('ミズクラゲ銀行');
-    expect(alone.systemPrompt.length).toBeGreaterThan(100);
+    expect(promptOf(alone).length).toBeGreaterThan(100);
     expect(alone.thread.threadId).toBe('thread');
     expect(alone.state.userFacts.length).toBeGreaterThan(0);
 
@@ -185,7 +186,7 @@ describe('POST /v1/chat audience — others', () => {
         expect(json, `${thread} → ${word}`).not.toContain(word);
       }
       expect(Object.keys(body).sort()).toEqual(['audience', 'messageEmotion', 'mode', 'model', 'reply', 'snapshotVersion', 'state', 'systemPrompt', 'threadId', 'turnId']);
-      expect(body.systemPrompt).toBe('');
+      expect(promptOf(body)).toBe('');
       expect(body.thread).toBeUndefined();
       expect(Object.keys(body.state).sort()).toEqual(['activeMemories', 'emotion', 'interests', 'memoryControls', 'presence', 'prospectiveMemories',
         'relationships', 'scopeKey', 'temperament', 'updatedAt', 'userFacts', 'version']);

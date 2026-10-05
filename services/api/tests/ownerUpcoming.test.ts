@@ -6,6 +6,7 @@ import { conversationCapabilityPrompt } from '../src/conversationCapabilities.js
 import { DisabledVoyagerCatalog, HttpVoyagerCatalog, createConfiguredVoyagerCatalog, type VoyagerCatalog } from '../src/organize.js';
 import { OwnerUpcoming, UPCOMING_LIMITS, asksAboutSchedule, upcomingWhen } from '../src/ownerUpcoming.js';
 import { SQLiteUpcomingStore } from '../src/upcomingStore.js';
+import { promptOf } from './modelPrompt.js';
 
 const scope = 'owner';
 const START = '2026-10-02T01:00:00.000Z'; // Friday 10:00 in Tokyo
@@ -186,7 +187,7 @@ describe('the owner asks what is coming up', () => {
     const api = createLocalApiKernel(() => clock.at, { chatModel, stateStore, upcoming });
     const prompt = async (message: string, extra: Record<string, unknown> = {}) => {
       expect((await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: scope, message, ...extra } })).status).toBe(200);
-      return chatModel.requests.at(-1)!.systemPrompt;
+      return promptOf(chatModel.requests.at(-1)!);
     };
     const alone = await prompt('今日の予定は？');
     expect(alone).toContain('- 予定: 今日 14:00〜15:00 歯医者');

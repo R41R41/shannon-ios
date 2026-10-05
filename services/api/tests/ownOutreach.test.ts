@@ -10,6 +10,7 @@ import { SQLiteIncomingCallStore } from '../src/incomingCallStore.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { SQLiteOwnOutreach, ownOutreachPrompt, saysSheActedOnHerOwn, type OwnOutreachFacts, type OwnOutreachReader } from '../src/ownOutreach.js';
+import { promptOf } from './modelPrompt.js';
 
 /**
  * Production, 2026-10-05 10:34–10:36Z: the desktop body took her iPhone voice for the owner's turns, he asked
@@ -80,7 +81,7 @@ describe('what the owner says she did on her own', () => {
   it('gives a text turn the absence of any call and her last message, when the owner says she called', async () => {
     const { chat, model } = harness();
     expect((await chat(ASKED)).status).toBe(200);
-    const prompt = model.last.systemPrompt;
+    const prompt = promptOf(model.last);
     expect(prompt).toContain(HEADER);
     expect(prompt).toContain(NO_CALL);
     expect(prompt).toContain(`- メッセージ: 26分前にボクから送った「${LAST_TEXT}」（既読）`);
@@ -93,19 +94,19 @@ describe('what the owner says she did on her own', () => {
     const reader = incident();
     const { voice, model } = harness(reader);
     expect((await voice('お、シャノン、元気？')).status).toBe(200);
-    expect(model.last.systemPrompt).not.toContain(HEADER);
+    expect(promptOf(model.last)).not.toContain(HEADER);
     expect(reader.reads).toBe(0);
     expect((await voice(ASKED)).status).toBe(200);
-    expect(model.last.systemPrompt).toContain(NO_CALL);
-    expect(model.last.systemPrompt).toContain(`「${LAST_TEXT}」（既読）`);
+    expect(promptOf(model.last)).toContain(NO_CALL);
+    expect(promptOf(model.last)).toContain(`「${LAST_TEXT}」（既読）`);
     expect(reader.reads).toBe(1);
   });
 
   it('tells a call she did place, with what became of it', async () => {
     const { chat, model } = harness(new FakeReader({ messages: [], calls: [{ createdAt: '2026-10-05T10:30:00.000Z', state: 'unanswered' }] }));
     await chat(ASKED);
-    expect(model.last.systemPrompt).toContain('- 電話: 6分前にボクからライ氏のiPhoneへ電話をかけた（出てもらえなかった）。');
-    expect(model.last.systemPrompt).toContain('- メッセージ: 直近24時間、ボクから送ったメッセージの記録はない。');
+    expect(promptOf(model.last)).toContain('- 電話: 6分前にボクからライ氏のiPhoneへ電話をかけた（出てもらえなかった）。');
+    expect(promptOf(model.last)).toContain('- メッセージ: 直近24時間、ボクから送ったメッセージの記録はない。');
   });
 
   it('tells a voice call her PC body started, so that the mix-up of the incident can be explained, and says what is not recorded', async () => {
@@ -113,7 +114,7 @@ describe('what the owner says she did on her own', () => {
       bodyCalls: [{ startedAt: '2026-10-05T10:34:34.431Z', endedAt: '2026-10-05T10:36:10.000Z', surface: 'windows' }] });
     const { chat, model } = harness(reader);
     await chat(ASKED);
-    const prompt = model.last.systemPrompt;
+    const prompt = promptOf(model.last);
     expect(prompt).toContain('- PCのボク: 19:34（1分前）にWindowsのデスクトップのボクが音声で聞き始めた（19:36に終了）。ボクの名前が聞こえたと思うと、自分から聞き始めることがある。');
     expect(prompt).toContain('ここにないことは、この記録には残っていないということ');
     expect(prompt).toContain('聞かれた時に確かめるための参考で、聞かれていなければ持ち出さない');
@@ -125,25 +126,25 @@ describe('what the owner says she did on her own', () => {
     const { chat, model } = harness(new FakeReader({ messages: [{ createdAt: 'garbage', content: '壊れた行', read: false }], calls: [{ createdAt: '', state: 'answered' }],
       bodyCalls: [{ startedAt: 'x' }] }));
     await chat(ASKED);
-    expect(model.last.systemPrompt).toContain(NO_CALL);
-    expect(model.last.systemPrompt).not.toContain('NaN');
-    expect(model.last.systemPrompt).not.toContain('壊れた行');
-    expect(model.last.systemPrompt).not.toContain('PCのボク');
+    expect(promptOf(model.last)).toContain(NO_CALL);
+    expect(promptOf(model.last)).not.toContain('NaN');
+    expect(promptOf(model.last)).not.toContain('壊れた行');
+    expect(promptOf(model.last)).not.toContain('PCのボク');
   });
 
   it('with other people able to see or hear, keeps the times and leaves the words of her messages and what became of a call out', async () => {
     const placed = harness(new FakeReader({ messages: [], calls: [{ createdAt: '2026-10-05T10:30:00.000Z', state: 'declined' }] }));
     await placed.chat(ASKED, { audience: 'others' });
-    expect(placed.model.last.systemPrompt).toContain('- 電話: 6分前にボクからライ氏のiPhoneへ電話をかけた。');
-    expect(placed.model.last.systemPrompt).not.toContain('断られた');
+    expect(promptOf(placed.model.last)).toContain('- 電話: 6分前にボクからライ氏のiPhoneへ電話をかけた。');
+    expect(promptOf(placed.model.last)).not.toContain('断られた');
     const { chat, voice, model } = harness();
     await chat(ASKED, { audience: 'others' });
-    expect(model.last.systemPrompt).toContain(NO_CALL);
-    expect(model.last.systemPrompt).toContain('- メッセージ: 26分前にボクから送った（中身はこの場では話さない）');
-    expect(model.last.systemPrompt).not.toContain(LAST_TEXT);
+    expect(promptOf(model.last)).toContain(NO_CALL);
+    expect(promptOf(model.last)).toContain('- メッセージ: 26分前にボクから送った（中身はこの場では話さない）');
+    expect(promptOf(model.last)).not.toContain(LAST_TEXT);
     await voice(ASKED, { companionPresent: true });
-    expect(model.last.systemPrompt).toContain(NO_CALL);
-    expect(model.last.systemPrompt).not.toContain(LAST_TEXT);
+    expect(promptOf(model.last)).toContain(NO_CALL);
+    expect(promptOf(model.last)).not.toContain(LAST_TEXT);
   });
 
   it('gives a friend\'s own call nothing of it', async () => {
@@ -157,10 +158,10 @@ describe('what the owner says she did on her own', () => {
   it('claims no absence from a record it could not read, and is absent without a reader', async () => {
     const unreadable = harness(new FakeReader(null));
     await unreadable.chat(ASKED);
-    expect(unreadable.model.last.systemPrompt).not.toContain(HEADER);
+    expect(promptOf(unreadable.model.last)).not.toContain(HEADER);
     const none = harness(null);
     await none.chat(ASKED);
-    expect(none.model.last.systemPrompt).not.toContain(HEADER);
+    expect(promptOf(none.model.last)).not.toContain(HEADER);
     expect(ownOutreachPrompt(null, { scopeKey: 'owner', message: ASKED, at: AT, present: 'owner' })).toBe('');
   });
 });

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { assembleShannonSystemPrompt, withoutUnshownTitles, type CompanionClock, type CompanionStateStore } from '@shannon/cognition';
+import { withoutUnshownTitles, type CompanionClock, type CompanionStateStore } from '@shannon/cognition';
 import { agentTaskPromptProjection } from './apiPromptProjection.js';
 import type { AetherContextReader } from './aetherContext.js';
 import type { AetherProposalStore } from './aetherProposal.js';
@@ -21,7 +21,7 @@ import {
 import { prepareConversationOrganize } from './conversationOrganize.js';
 import type { ConversationStore, ShannonExperience } from './conversationStore.js';
 import type { DailyMindReader } from './dailyMind.js';
-import type { KnowledgeStore } from './knowledgeStore.js';
+import { companionIdentityPrompt, type KnowledgeStore, type LayeredIdentityPrompt } from './knowledgeStore.js';
 import { isOrganizeCommand, type OrganizeExtractor, type OrganizeStore, type VoyagerCatalog } from './organize.js';
 import type { OwnOutreach } from './ownOutreach.js';
 import type { OwnerUpcoming } from './ownerUpcoming.js';
@@ -196,18 +196,30 @@ export function textTurnIdentityAndCapability(dependencies: TextTurnDependencies
   const body = input.body;
   const { captured, explicitCommand } = begun;
   // Her Minecraft body's capability line is added to the model request when its tools include `minecraft.request`.
-  const basePrompt = dependencies.autonomy.identityProjection(body.scopeKey, audience.identity(() => dependencies.knowledgeStore?.promptProjection(body.scopeKey)
-    ?? assembleShannonSystemPrompt(captured)));
+  const identity = audience.identity(() => dependencies.knowledgeStore?.promptProjectionParts(body.scopeKey) ?? companionIdentityPrompt(captured));
+  const basePrompt: LayeredIdentityPrompt = { ...identity, identity: dependencies.autonomy.identityProjection(body.scopeKey, identity.identity) };
   const capabilityContext = explicitCommand ? NO_CAPABILITY_CONTEXT : conversationCapabilityContext(body.scopeKey, message,
     { aetherContext: dependencies.aetherContext, voyagerCatalog: dependencies.voyagerCatalog, notion: dependencies.notion, upcoming: dependencies.upcoming,
       ownOutreach: dependencies.ownOutreach }, surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities);
   return { basePrompt, capabilityContext };
 }
 
-/** The system prompt of the turn, from what the stages before gave and the look the kernel asked for. */
+/**
+ * The prompt of the turn, from what the stages before gave and the look the kernel asked for, in the layers the model
+ * request keeps apart (Syzygy ADR-0003 principle 4): her fixed identity, what she knows of the owner, and the turn's
+ * context, which begins with the shared state and holds everything that changes from turn to turn. `prompt` is the three
+ * joined in that order, as the response shows it.
+ */
+export interface TextTurnPrompt {
+  prompt: string;
+  systemPrompt: string;
+  profilePrompt: string;
+  turnContext: string;
+}
+
 export function textTurnSystemPrompt(dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn, parts: {
-  basePrompt: string; cognitiveContext: { prompt: string }; capability: ConversationCapabilityContext; roomLook: ConversationLookTurn;
-}): string {
+  basePrompt: LayeredIdentityPrompt; cognitiveContext: { prompt: string }; capability: ConversationCapabilityContext; roomLook: ConversationLookTurn;
+}): TextTurnPrompt {
   const { audience, threadId, surface } = input;
   const body = input.body;
   const { occurredAt, captured, peopleRecall, orchestrationState } = begun;
@@ -220,11 +232,15 @@ export function textTurnSystemPrompt(dependencies: TextTurnDependencies, input: 
   const memory = (text: string) => surface?.openOnly ? withoutGuardedEntries(text) : text;
   // Her work with the owner is his: on another surface it is given only while he alone reads the reply.
   const ownerWork = !surface || audience.alone;
-  return [
-    basePrompt, memory(cognitiveContext.prompt), memory(peopleRecall.prompt), memory(dailyMindPrompt), memory(capability.prompt),
+  const turnContext = [
+    basePrompt.state, memory(cognitiveContext.prompt), memory(peopleRecall.prompt), memory(dailyMindPrompt), memory(capability.prompt),
     ...(ownerWork ? [buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(body.scopeKey)),
       agentTaskPromptProjection(dependencies.agentTasks.list(body.scopeKey), threadId)] : []), audience.instructions, surface?.prompt ?? '',
   ].filter(Boolean).join('\n\n');
+  return {
+    prompt: [basePrompt.identity, basePrompt.profile, turnContext].filter(Boolean).join('\n\n'),
+    systemPrompt: basePrompt.identity, profilePrompt: basePrompt.profile, turnContext,
+  };
 }
 
 /** A fixed command or organizing turn, answered without the model's reply. Awaits only organizing, as before the split. */

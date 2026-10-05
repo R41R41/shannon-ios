@@ -1,4 +1,4 @@
-import type { UserFact } from '@shannon/cognition';
+import { SHANNON_CORE_PROMPT, buildCompanionStatePrompt, type CompanionStateSnapshot, type UserFact } from '@shannon/cognition';
 
 export type KnowledgeSource = 'conversation' | 'sleep' | 'user' | 'inference';
 
@@ -36,6 +36,34 @@ export interface PersonalityProfile {
   createdAt: string;
 }
 
+/**
+ * Her identity block split by how often each part changes (Syzygy ADR-0003 principle 4: fixed instructions first,
+ * changing state at the end, so the provider's prompt cache holds the start of every request): `identity` (persona,
+ * suite roles, capabilities) is fixed; `profile` (what she knows of the owner, the personality analysis) changes when
+ * background work learns something; `state` (the shared state) changes every turn. The model request puts `identity`
+ * first and `state` with the turn's context (`chatModelTurn.ts`).
+ */
+export interface LayeredIdentityPrompt {
+  identity: string;
+  profile: string;
+  state: string;
+}
+
+/** The identity block in the order it had before it was split, and still has where one string is shown. */
+export function joinedIdentityPrompt(parts: LayeredIdentityPrompt): string {
+  return [parts.identity, parts.state, parts.profile].filter(Boolean).join('\n\n');
+}
+
+/** An identity without the owner's profile or state (another audience). */
+export function identityOnly(identity: string): LayeredIdentityPrompt {
+  return { identity, profile: '', state: '' };
+}
+
+/** Without a knowledge store: the core identity and the shared state, as `assembleShannonSystemPrompt` joins them. */
+export function companionIdentityPrompt(snapshot: CompanionStateSnapshot): LayeredIdentityPrompt {
+  return { identity: SHANNON_CORE_PROMPT, profile: '', state: buildCompanionStatePrompt(snapshot) };
+}
+
 export interface KnowledgeStore {
   synchronizeFact(scopeKey: string, fact: UserFact, source: KnowledgeSource): void;
   correctKnowledge(scopeKey: string, answerId: string, answer: string, observedAt: string): void;
@@ -43,6 +71,8 @@ export interface KnowledgeStore {
   knowledgeRevisions(scopeKey: string, answerId?: string): readonly KnowledgeRevision[];
   personalityProfile(scopeKey: string): PersonalityProfile | null;
   promptProjection(scopeKey: string): string | null;
+  /** `promptProjection` in its parts; `joinedIdentityPrompt` of it is `promptProjection`. */
+  promptProjectionParts(scopeKey: string): LayeredIdentityPrompt | null;
 }
 
 export const DEFAULT_QUESTION_DEFINITIONS = Object.freeze([

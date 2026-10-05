@@ -50,11 +50,23 @@ export interface ShannonChatAttachment {
   text: string;
 }
 
-export interface ShannonChatModelRequest {
+/**
+ * The prompt layers of a conversation request, by how often each changes (Syzygy ADR-0003 principle 4). `systemPrompt`
+ * comes first and should not change within a Talk (her identity); `profilePrompt`, what she knows of the owner, follows
+ * the fixed instructions of the adapter; `turnContext`, everything that changes from turn to turn (the shared state, time,
+ * recall, people, focus, capabilities, work, audience, replay summary, tool trace), comes last. A caller with one fixed
+ * prompt passes only `systemPrompt`.
+ */
+export interface ShannonPromptLayers {
+  systemPrompt: string;
+  profilePrompt?: string;
+  turnContext?: string;
+}
+
+export interface ShannonChatModelRequest extends ShannonPromptLayers {
   generateThreadTitle?: boolean;
   priorThreadSummary?: string;
   scopeKey: string;
-  systemPrompt: string;
   history: readonly ShannonConversationItem[];
   message: string;
   attachments?: readonly ShannonChatAttachment[];
@@ -74,9 +86,8 @@ export interface ShannonChatModelRequest {
   toolsWithheld?: true;
 }
 
-export interface ShannonVoiceModelRequest {
+export interface ShannonVoiceModelRequest extends ShannonPromptLayers {
   scopeKey: string;
-  systemPrompt: string;
   history: readonly ShannonConversationItem[];
   message: string;
   useWebSearch: boolean;
@@ -416,11 +427,14 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     const tools = this.voiceTools(request);
     return {
       model: this.model,
+      // Fixed first, what changes last (`ShannonPromptLayers`).
       instructions: [
         request.systemPrompt,
         VOICE_REPLY_INSTRUCTIONS,
-        ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
         ...(tools ? [toolInstructions(tools, true)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
+        ...(request.profilePrompt ? [request.profilePrompt] : []),
+        ...(request.turnContext ? [request.turnContext] : []),
+        ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
       ].join('\n\n'),
       input: [
         ...request.history.map(item => ({ role: item.role, content: item.content })),

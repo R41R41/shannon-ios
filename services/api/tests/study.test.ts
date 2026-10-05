@@ -13,6 +13,7 @@ import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import type { StudyOverview, StudyPieceDetail } from '../src/studyDesk.js';
 import { FULL_PLAN, STORY_BODY, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
+import { promptOf } from './modelPrompt.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'shannon-study-'));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
@@ -254,8 +255,8 @@ describe('what the owner\'s own prompts say about her activity', () => {
     readonly mode = 'openai' as const;
     readonly model = 'test-model';
     readonly prompts: string[] = [];
-    async generate(request: ShannonChatModelRequest) { this.prompts.push(request.systemPrompt); return { mode: this.mode, model: this.model, reply: '返答です。' }; }
-    async generateVoice(request: ShannonVoiceModelRequest) { this.prompts.push(request.systemPrompt); return { mode: this.mode, model: this.model, reply: '音声の返答です。' }; }
+    async generate(request: ShannonChatModelRequest) { this.prompts.push(promptOf(request)); return { mode: this.mode, model: this.model, reply: '返答です。' }; }
+    async generateVoice(request: ShannonVoiceModelRequest) { this.prompts.push(promptOf(request)); return { mode: this.mode, model: this.model, reply: '音声の返答です。' }; }
   }
   const chat = async (harness: ReturnType<typeof loopHarness>) => {
     const chatModel = new PromptRecorder();
@@ -272,7 +273,7 @@ describe('what the owner\'s own prompts say about her activity', () => {
     const voiceTurn = await turn({});
     const companionTurn = await turn({ deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null, companionPresent: true } });
     const guestTurn = await turn({ participantMode: 'guest' });
-    return { text: chatModel.prompts[0]!, voice, guest, voiceTurn, companionTurn, guestTurn, returned: (answered.body as { systemPrompt: string }).systemPrompt };
+    return { text: chatModel.prompts[0]!, voice, guest, voiceTurn, companionTurn, guestTurn, returned: promptOf((answered.body as { systemPrompt: string })) };
   };
 
   it('keeps 「仕組みは準備中」 until the loop is enabled and running, and removes it only then', async () => {

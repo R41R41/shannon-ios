@@ -5,6 +5,7 @@ import { conversationCapabilityContext } from '../src/conversationCapabilities.j
 import { NOTION_TURN_BOUNDS, asksAboutNotion, notionSearchPhrases, notionTurnProjection } from '../src/notionConversation.js';
 import { configuredNotionSource } from '../src/notionSource.js';
 import { NOTION_FIXTURE_IDS as ids, fakeNotion, fixtureNotionSource, notionJson } from './notionFixture.js';
+import { promptOf } from './modelPrompt.js';
 
 class RecordingChatModel implements ShannonChatModel {
   readonly mode = 'openai' as const;
@@ -18,7 +19,7 @@ class RecordingChatModel implements ShannonChatModel {
 }
 
 const now = () => '2026-10-02T03:00:00.000Z';
-const lastPrompt = (model: RecordingChatModel) => model.requests.at(-1)?.systemPrompt ?? '';
+const lastPrompt = (model: RecordingChatModel) => promptOf(model.requests.at(-1)) ?? '';
 
 describe('Notion routing rule', () => {
   it.each([
@@ -228,7 +229,7 @@ describe('Notion in conversation', () => {
       scopeKey: 'owner', transcript: 'シャノン、ウサカテのシナリオを読んで', participantMode: 'guest',
     } });
     expect(result.status).toBe(200);
-    for (const request of model.requests) expect(request.systemPrompt).not.toContain('[Notion');
+    for (const request of model.requests) expect(promptOf(request)).not.toContain('[Notion');
     expect(fake.calls).toEqual([]);
   });
 

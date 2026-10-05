@@ -24,9 +24,14 @@ import { TOOLS_WITHHELD_INSTRUCTIONS, providerFunctionTools, toolInstructions } 
 
 /**
  * The text-chat turn of the OpenAI Responses adapter: the request body and the reading of
- * the completed response. Moved out of `chatModel.ts` unchanged so the streaming call can
- * send the same body and read the same way (`chatModelGolden.test.ts` holds both to the
- * bytes recorded before the move). Key order is part of the request; do not reorder.
+ * the completed response. Moved out of `chatModel.ts` so the streaming call can send the same
+ * body and read the same way (`chatModelGolden.test.ts` holds both to recorded bytes). Key
+ * order is part of the request; do not reorder.
+ *
+ * The instructions run from what never changes to what changes every turn, so the provider's
+ * prompt cache holds their start (Syzygy ADR-0003 principle 4): her identity, the fixed blocks
+ * of this adapter, the blocks fixed for a Talk (her reply's feeling, her tools), what she knows
+ * of the owner, and last the turn's own blocks (`chatTurnContextBlocks`).
  */
 export function chatTurnRequestBody(
   model: string, request: ShannonChatModelRequest, agentHostHint: string | undefined,
@@ -34,17 +39,14 @@ export function chatTurnRequestBody(
   return {
     model,
     instructions: [request.systemPrompt, SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
-      ...(request.attachments?.length ? [ATTACHMENT_SAFETY_INSTRUCTIONS] : []),
-      ...(request.useWebSearch || request.placeSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
-      ...(request.placeSearch ? [placeSearchInstructions(request.placeSearch)] : []),
       GENERATED_ARTIFACT_INSTRUCTIONS,
       INTENT_PLAN_INSTRUCTIONS,
       agentTaskInstructions(agentHostHint),
-      ...(request.priorThreadSummary ? [priorThreadSummaryInstructions(request.priorThreadSummary)] : []),
       THREAD_SUMMARY_INSTRUCTIONS,
-      ...(request.generateThreadTitle ? [THREAD_TITLE_INSTRUCTIONS] : []),
       ...(request.offerReplyFeeling ? [REPLY_FEELING_INSTRUCTIONS] : []),
       ...(offersTools(request) ? [toolInstructions(request.tools!, false)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
+      ...(request.profilePrompt ? [request.profilePrompt] : []),
+      ...chatTurnContextBlocks(request),
     ].join('\n\n'),
     input: [
       ...request.history.map(item => ({ role: item.role, content: item.content })),
@@ -165,6 +167,21 @@ export function chatTurnRequestBody(
     prompt_cache_key: stableScopeIdentifier(request.scopeKey),
     safety_identifier: stableScopeIdentifier(request.scopeKey),
   };
+}
+
+/**
+ * The blocks of one turn, in this order: its context (the shared state and everything else that changes, `turnContext`),
+ * then what this turn alone asks for (attachments, a web or place search, the saved summary of the Talk, a title).
+ */
+export function chatTurnContextBlocks(request: ShannonChatModelRequest): string[] {
+  return [
+    ...(request.turnContext ? [request.turnContext] : []),
+    ...(request.attachments?.length ? [ATTACHMENT_SAFETY_INSTRUCTIONS] : []),
+    ...(request.useWebSearch || request.placeSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
+    ...(request.placeSearch ? [placeSearchInstructions(request.placeSearch)] : []),
+    ...(request.priorThreadSummary ? [priorThreadSummaryInstructions(request.priorThreadSummary)] : []),
+    ...(request.generateThreadTitle ? [THREAD_TITLE_INSTRUCTIONS] : []),
+  ];
 }
 
 export type ParsedChatTurn = ReturnType<typeof parseStructuredTurn>;

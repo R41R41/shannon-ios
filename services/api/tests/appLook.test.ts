@@ -33,6 +33,7 @@ import type { BodyPresence } from '../src/shannonBody.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { LocalVoiceDecisionGateway, type VoiceDecisionGateway, type VoiceDecisionInput } from '../src/voiceDecision.js';
 import { roomLookRouterQuestions, roomLookRouterSchema, voiceRoomLookPrompt } from '../src/voiceRoomLook.js';
+import { promptOf } from './modelPrompt.js';
 
 const scope = 'owner';
 const START = '2026-10-02T09:00:00.000Z';
@@ -136,7 +137,7 @@ function harness(options: { config?: Partial<AppLookConfig>; viewer?: RoomLookVi
     });
     expect(response.status).toBe(200);
     const body = response.body as { reply: string; threadId: string; appLook?: { id: string; camera: string; expiresAt: string } };
-    return { body, prompt: model.voiceRequests.length > before ? model.voiceRequests.at(-1)!.systemPrompt : '' };
+    return { body, prompt: model.voiceRequests.length > before ? promptOf(model.voiceRequests.at(-1)!) : '' };
   };
   const answer = (id: string, body: Record<string, unknown> = seen(), deviceId = 'iphone') => send('POST', `/v1/app/looks/${id}`, body, deviceId);
   /** Her body with its camera on, showing her window. */
@@ -158,7 +159,7 @@ describe('a text turn from the app', () => {
     const turn = await h.chat('これ見れる？');
     expect(turn.request.offerAppLook).toBe(true);
     expect(turn.request.offerRoomLook).toBeUndefined();
-    expect(turn.body.systemPrompt).toContain(APP_LOOK_OFFER_PROMPT);
+    expect(promptOf(turn.body)).toContain(APP_LOOK_OFFER_PROMPT);
     expect(APP_LOOK_OFFER_PROMPT).toContain('必ず見る');
     const ask = turn.body.appLook!;
     expect(ask).toMatchObject({ camera: 'back', lifetimeSeconds: 30, expiresAt: new Date(Date.parse(START) + APP_LOOK_LIMITS.lifetimeMilliseconds).toISOString() });
@@ -210,7 +211,7 @@ describe('a text turn from the app', () => {
     const turn = await h.chat('これ見れる？');
     expect(turn.request).toMatchObject({ offerAppLook: true });
     expect(turn.request.offerRoomLook).toBeUndefined();
-    expect(turn.body.systemPrompt).not.toContain(ROOM_LOOK_OFFER_PROMPT);
+    expect(promptOf(turn.body)).not.toContain(ROOM_LOOK_OFFER_PROMPT);
     expect(turn.body.appLook).toBeTruthy();
     expect(await h.bodyLook()).toBeNull();
     expect(h.bodyLooks.waiting(scope)).toEqual([]);
@@ -236,9 +237,9 @@ describe('a text turn from the app', () => {
       const quiet = await h.chat('おはよう', { state, cameras: ['back', 'front'], platform: 'ios' });
       expect(quiet.request.offerAppLook, state).toBeUndefined();
       // The reason is a fact of the turn whether or not he asks: she must not think that she can look, or has.
-      expect(quiet.body.systemPrompt, state).toContain(appLookUnavailablePrompt(state, 'ios'));
+      expect(promptOf(quiet.body), state).toContain(appLookUnavailablePrompt(state, 'ios'));
       const asked = await h.chat('これ見える？', { state, cameras: ['back', 'front'], platform: 'ios' });
-      expect(asked.body.systemPrompt, state).toContain(appLookUnavailablePrompt(state, 'ios'));
+      expect(promptOf(asked.body), state).toContain(appLookUnavailablePrompt(state, 'ios'));
       expect(asked.body.appLook, state).toBeUndefined();
       expect(h.store.waiting(scope), state).toEqual([]);
     }
@@ -254,7 +255,7 @@ describe('a text turn from the app', () => {
     h.model.roomLook = 'asked';
     const turn = await h.chat('部屋を見てみて', { state: 'background', cameras: ['back'], platform: 'ios' });
     expect(turn.request.offerRoomLook).toBe(true);
-    expect(turn.body.systemPrompt).toContain(ROOM_LOOK_OFFER_PROMPT);
+    expect(promptOf(turn.body)).toContain(ROOM_LOOK_OFFER_PROMPT);
     expect(await h.bodyLook()).toBeTruthy();
   });
 
@@ -311,7 +312,7 @@ describe('the loop guard', () => {
     const second = await h.chat('これも見える？');
     expect(second.request.offerAppLook).toBeUndefined();
     expect(second.body.appLook).toBeUndefined();
-    expect(second.body.systemPrompt).toContain(appLookUnavailablePrompt('busy', 'ios'));
+    expect(promptOf(second.body)).toContain(appLookUnavailablePrompt('busy', 'ios'));
     await h.answer(first.body.appLook!.id);
     // Answered 6 seconds after it was asked: the next turn may look again at once.
     expect((await h.chat('これも見える？')).body.appLook).toBeTruthy();
@@ -356,7 +357,7 @@ describe('the server switch', () => {
     const turn = await h.chat('これ見える？');
     expect(turn.request.offerAppLook).toBeUndefined();
     expect(turn.body.appLook).toBeUndefined();
-    expect(turn.body.systemPrompt).toContain(appLookUnavailablePrompt('server_off', 'ios'));
+    expect(promptOf(turn.body)).toContain(appLookUnavailablePrompt('server_off', 'ios'));
     const answered = await h.answer('0b6c1f0e-5a47-4d0c-9d1c-7a2f6f1f0a11');
     expect(answered.status).toBe(403);
     expect(answered.body).toMatchObject({ error: 'APP_LOOK_DISABLED' });
@@ -372,7 +373,7 @@ describe('the server switch', () => {
     h.model.appLook = 'asked_back';
     const turn = await h.chat('これ見える？');
     expect(turn.request.offerAppLook).toBeUndefined();
-    expect(turn.body.systemPrompt).toContain(appLookUnavailablePrompt('no_viewer', 'ios'));
+    expect(promptOf(turn.body)).toContain(appLookUnavailablePrompt('no_viewer', 'ios'));
   });
 });
 
@@ -694,7 +695,7 @@ describe('a voice turn from the app', () => {
     });
     expect(response.status).toBe(200);
     expect(h.model.voiceRequests.length).toBe(before + 1);
-    const prompt = h.model.voiceRequests.at(-1)!.systemPrompt;
+    const prompt = promptOf(h.model.voiceRequests.at(-1)!);
     expect(prompt).not.toContain('一度だけ見られる');
     expect(prompt).not.toContain('[カメラ]（');
     expect(prompt).not.toContain('いま見えているものとして語らない');
@@ -805,7 +806,7 @@ describe('the voice call of 2026-10-02 (Build 131): she announced a look, none w
     for (const [index, said] of SAID.entries()) {
       h.model.generateVoiceStreaming = async (request, onDelta) => {
         h.model.voiceRequests.push(request);
-        const reply = replies(request.systemPrompt, said);
+        const reply = replies(promptOf(request), said);
         await onDelta(reply);
         return { mode: 'openai', model: 'fake', reply };
       };
@@ -814,7 +815,7 @@ describe('the voice call of 2026-10-02 (Build 131): she announced a look, none w
         { onPlan: () => undefined, onTextDelta: () => undefined });
       expect(response.status).toBe(200);
       const body = response.body as { reply: string; appLook?: { id: string; camera: string } };
-      turnsOut.push({ said, prompt: h.model.voiceRequests.at(-1)!.systemPrompt, reply: body.reply, ...(body.appLook ? { appLook: body.appLook } : {}) });
+      turnsOut.push({ said, prompt: promptOf(h.model.voiceRequests.at(-1)!), reply: body.reply, ...(body.appLook ? { appLook: body.appLook } : {}) });
       // The app stores the turn, answers a look if one was asked, and time passes before he speaks again.
       await h.send('POST', turns, { threadId: 'voice-thread', userTranscript: said, shannonTranscript: body.reply });
       if (body.appLook) expect((await h.answer(body.appLook.id, seen(body.appLook.camera))).status).toBe(200);
@@ -949,7 +950,7 @@ describe('the voice call of 2026-10-02 (Build 131): she announced a look, none w
     expect(LOOK_NOT_SEEN_GUARD).toContain('この返事ではカメラで見ていない');
     expect(LOOK_NOT_SEEN_GUARD).not.toContain('見られない');
     const text = await h.chat('この服どう？', null);
-    expect(text.body.systemPrompt).toContain(LOOK_NOT_SEEN_GUARD);
+    expect(promptOf(text.body)).toContain(LOOK_NOT_SEEN_GUARD);
     // A 「友人も一緒」 turn is told of no camera, and so of no guard either.
     h.model.generateVoiceStreaming = undefined;
     const guest = await h.say('シャノン、これ見れる？', null, { participantMode: 'guest' });
@@ -961,7 +962,7 @@ describe('the voice call of 2026-10-02 (Build 131): she announced a look, none w
     h.model.reply = 'いいですね、カメラで見てみますね。';
     const turn = await h.chat('この服どう？');
     expect(turn.body.appLook).toMatchObject({ camera: 'front' });
-    expect(turn.body.systemPrompt).toContain('appLookでnoneを選ぶ返事では、見るとも見えたとも言わない');
+    expect(promptOf(turn.body)).toContain('appLookでnoneを選ぶ返事では、見るとも見えたとも言わない');
     const away = harness();
     away.model.reply = 'カメラで見てみますね。';
     const refused = await away.chat('この服どう？', { state: 'denied', cameras: ['back', 'front'], platform: 'ios' });

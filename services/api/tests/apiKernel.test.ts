@@ -5,6 +5,7 @@ import { InMemoryVoiceIdentityStore } from '../src/voiceIdentity.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
 import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
 import type { WorldSubscription } from '../src/worldStore.js';
+import { promptOf } from './modelPrompt.js';
 
 class RecordingChatModel implements ShannonChatModel {
   readonly mode = 'openai' as const;
@@ -78,8 +79,8 @@ describe('Shannon local API kernel', () => {
     expect(model.requests[1]).toMatchObject({ useWebSearch: true,
       message: 'この近くの公園を地図で探して、今日の天気も教えて' });
     expect(model.requests[1]?.placeSearch).toBeUndefined();
-    expect(model.requests[1]?.systemPrompt).toContain('浜松城公園');
-    expect(model.requests[1]?.systemPrompt).toContain('Place discovery skill result');
+    expect(promptOf(model.requests[1])).toContain('浜松城公園');
+    expect(promptOf(model.requests[1])).toContain('Place discovery skill result');
   });
 
   it('passes place skill results into voice synthesis and keeps map links out of speech', async () => {
@@ -94,8 +95,8 @@ describe('Shannon local API kernel', () => {
     expect(result).toMatchObject({ status: 200, body: { reply: '浜松城公園です。地図 今日の天気は晴れです。',
       uiBlocks: [{ type: 'place_search', places: [expect.objectContaining({ name: '浜松城公園' })] }] } });
     expect(model.requests[0]).toMatchObject({ useWebSearch: true, placeSearch: { spoken: true } });
-    expect(model.requests[1]?.systemPrompt).toContain('浜松城公園');
-    expect(model.requests[1]?.systemPrompt).toContain('Selected capabilities: current_web, place_discovery');
+    expect(promptOf(model.requests[1])).toContain('浜松城公園');
+    expect(promptOf(model.requests[1])).toContain('Selected capabilities: current_web, place_discovery');
     expect(model.requests[1]?.placeSearch).toBeUndefined();
     expect(model.voiceRequests).toHaveLength(0);
   });
@@ -112,8 +113,8 @@ describe('Shannon local API kernel', () => {
     } });
     expect(model.voiceRequests).toHaveLength(1);
     expect(model.voiceRequests[0]?.useWebSearch).toBe(false);
-    expect(model.voiceRequests[0]?.systemPrompt).toContain('short malformed fragment');
-    expect(model.voiceRequests[0]?.systemPrompt).toContain('Do not automatically append a question');
+    expect(promptOf(model.voiceRequests[0])).toContain('short malformed fragment');
+    expect(promptOf(model.voiceRequests[0])).toContain('Do not automatically append a question');
     expect(model.requests).toHaveLength(0);
   });
 
@@ -140,7 +141,7 @@ describe('Shannon local API kernel', () => {
     expect(plans[1]).not.toHaveProperty('emotion.cause');
     expect(deltas).toEqual(['最初の文です。', '次の文です。']);
     expect(model.streamingVoiceRequests).toHaveLength(1);
-    expect(model.streamingVoiceRequests[0]?.systemPrompt).toContain('Current expressive emotion');
+    expect(promptOf(model.streamingVoiceRequests[0])).toContain('Current expressive emotion');
     expect(model.voiceRequests).toHaveLength(0);
     expect(result.body).not.toHaveProperty('truncated');
   });
@@ -176,7 +177,7 @@ describe('Shannon local API kernel', () => {
     const additionBlock = (addition.body as { uiBlocks: Array<{ proposalId: string }> }).uiBlocks[0]!;
     expect(firstBlock.proposalId).toBeTruthy();
     expect(additionBlock.proposalId).toBe(firstBlock.proposalId);
-    expect(model.requests[1]?.systemPrompt).toContain('addedRequirements=あと、Voyagerのタスクも完了にして');
+    expect(promptOf(model.requests[1])).toContain('addedRequirements=あと、Voyagerのタスクも完了にして');
     expect(model.requests).toHaveLength(2);
   });
 
@@ -244,7 +245,7 @@ describe('Shannon local API kernel', () => {
     } });
     expect(model.requests).toHaveLength(1);
     expect(model.voiceRequests).toHaveLength(0);
-    expect(model.requests[0]?.systemPrompt).toContain('[Confirmed implementation clarification]');
+    expect(promptOf(model.requests[0])).toContain('[Confirmed implementation clarification]');
   });
 
   it('shows a proposal for a confirmed skill improvement even when the assistant calls it a development task', async () => {
@@ -365,8 +366,8 @@ describe('Shannon local API kernel', () => {
       useWebSearch: true,
       generateThreadTitle: false,
     });
-    expect(model.requests[0]?.systemPrompt).toContain('This lane is read-only');
-    expect(model.requests[0]?.systemPrompt).toContain('2026年9月15日');
+    expect(promptOf(model.requests[0])).toContain('This lane is read-only');
+    expect(promptOf(model.requests[0])).toContain('2026年9月15日');
   });
 
   it('passes fresh one-time device location and local clock to travel search without writing state', async () => {
@@ -393,11 +394,11 @@ describe('Shannon local API kernel', () => {
     });
     expect(result.status).toBe(200);
     expect(model.requests[0]?.message).toBe('ここから浜松城までバスでどう行く？');
-    expect(model.requests[0]?.systemPrompt).toContain('2026年9月22日');
-    expect(model.requests[0]?.systemPrompt).toContain('10:38');
-    expect(model.requests[0]?.systemPrompt).toContain('34.7038');
-    expect(model.requests[0]?.systemPrompt).toContain('137.7346');
-    expect(model.requests[0]?.systemPrompt).toContain('Give no exact departure');
+    expect(promptOf(model.requests[0])).toContain('2026年9月22日');
+    expect(promptOf(model.requests[0])).toContain('10:38');
+    expect(promptOf(model.requests[0])).toContain('34.7038');
+    expect(promptOf(model.requests[0])).toContain('137.7346');
+    expect(promptOf(model.requests[0])).toContain('Give no exact departure');
     expect(model.requests[0]?.useWebSearch).toBe(true);
   });
 
@@ -415,7 +416,7 @@ describe('Shannon local API kernel', () => {
       },
     });
     expect(unavailable.status).toBe(200);
-    expect(model.requests[0]?.systemPrompt).toContain('could not provide a current location');
+    expect(promptOf(model.requests[0])).toContain('could not provide a current location');
 
     const invalid = await api.dispatch({
       method: 'POST', path: '/v1/voice/live/delegations', body: {
@@ -480,8 +481,8 @@ describe('Shannon local API kernel', () => {
     expect(delegated).toMatchObject({ status: 200, body: { threadId: privateThreadId } });
     expect(model.requests).toHaveLength(1);
     expect(model.requests[0]?.history).toEqual([]);
-    expect(model.requests[0]?.systemPrompt).toContain('[Introduction mode — 友人も一緒]');
-    expect(model.requests[0]?.systemPrompt).not.toContain('ミズクラゲ');
+    expect(promptOf(model.requests[0])).toContain('[Introduction mode — 友人も一緒]');
+    expect(promptOf(model.requests[0])).not.toContain('ミズクラゲ');
   });
 
   it('rejects an unknown live voice participant mode', async () => {
@@ -676,7 +677,7 @@ describe('Shannon local API kernel', () => {
       { role: 'user', content: '最初' },
       { role: 'assistant', content: '返答1' },
     ]);
-    expect(model.requests[1]?.systemPrompt).toContain('[Shannon shared state v2]');
+    expect(promptOf(model.requests[1])).toContain('[Shannon shared state v2]');
   });
 
   it('recalls a related past turn before generating the current response', async () => {
@@ -693,9 +694,9 @@ describe('Shannon local API kernel', () => {
       scopeKey: 'owner-a', message: '浜松の雨の日の続き、覚えてる？',
     } });
 
-    expect(model.requests[1]?.systemPrompt).toContain('[Current cognitive context — use before answering]');
-    expect(model.requests[1]?.systemPrompt).toContain('浜松で雨の日にうなぎ屋を探したね');
-    expect(model.requests[1]?.systemPrompt).toContain('cue: words');
+    expect(promptOf(model.requests[1])).toContain('[Current cognitive context — use before answering]');
+    expect(promptOf(model.requests[1])).toContain('浜松で雨の日にうなぎ屋を探したね');
+    expect(promptOf(model.requests[1])).toContain('cue: words');
   });
 
   it('captures explicit future intent and projects it into later turns', async () => {
@@ -720,8 +721,8 @@ describe('Shannon local API kernel', () => {
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: {
       scopeKey: 'owner-a', message: '次は何をしようか',
     } });
-    expect(model.requests[1]?.systemPrompt).toContain('未完了の約束・未来記憶');
-    expect(model.requests[1]?.systemPrompt).toContain('旅行の写真を一緒に整理');
+    expect(promptOf(model.requests[1])).toContain('未完了の約束・未来記憶');
+    expect(promptOf(model.requests[1])).toContain('旅行の写真を一緒に整理');
   });
 
   it('suppresses a duplicate agent-work card for an explicit Voyager update request', async () => {
@@ -921,7 +922,7 @@ describe('Shannon local API kernel', () => {
     );
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner-a', message: '設計の続きを話したい' } });
     expect(model.requests).toHaveLength(1);
-    expect(model.requests[0]?.systemPrompt).toContain('設計メモ');
+    expect(promptOf(model.requests[0])).toContain('設計メモ');
   });
 
   it('lets today\'s focus color the same chat prompt without treating it as a user fact', async () => {
@@ -942,8 +943,8 @@ describe('Shannon local API kernel', () => {
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner-a', message: 'おはよう' } });
 
     expect(model.requests).toHaveLength(1);
-    expect(model.requests[0]?.systemPrompt).toContain('topic: 記憶が育つ条件');
-    expect(model.requests[0]?.systemPrompt).toContain('not a fact about the user');
+    expect(promptOf(model.requests[0])).toContain('topic: 記憶が育つ条件');
+    expect(promptOf(model.requests[0])).toContain('not a fact about the user');
   });
 
   it('projects the authoritative agent task status across conversations', async () => {
@@ -984,12 +985,12 @@ describe('Shannon local API kernel', () => {
     } });
 
     expect(model.requests).toHaveLength(1);
-    expect(model.requests[0]?.systemPrompt).toContain('[Codex作業の現在状態 — Azure DB上の事実・会話履歴より優先]');
-    expect(model.requests[0]?.systemPrompt).toContain('リンク表示を直す [waiting_approval] 状態名=許可待ち');
-    expect(model.requests[0]?.systemPrompt).toContain('SwiftPMの検証にsandbox-execが必要です。');
-    expect(model.requests[0]?.systemPrompt).toContain('scripts/verify.sh ios');
-    expect(model.requests[0]?.systemPrompt).toContain('別トークから尋ねられても');
-    expect(model.requests[0]?.systemPrompt).toContain('completedを作業中、cancelledを再開中、runningを未開始とは言わない');
+    expect(promptOf(model.requests[0])).toContain('[Codex作業の現在状態 — Azure DB上の事実・会話履歴より優先]');
+    expect(promptOf(model.requests[0])).toContain('リンク表示を直す [waiting_approval] 状態名=許可待ち');
+    expect(promptOf(model.requests[0])).toContain('SwiftPMの検証にsandbox-execが必要です。');
+    expect(promptOf(model.requests[0])).toContain('scripts/verify.sh ios');
+    expect(promptOf(model.requests[0])).toContain('別トークから尋ねられても');
+    expect(promptOf(model.requests[0])).toContain('completedを作業中、cancelledを再開中、runningを未開始とは言わない');
   });
 
   it('routes tasks from older clients to the configured default Agent Host', async () => {

@@ -3,6 +3,7 @@ import { shannonCapabilityPrompt, shannonIdentityPrompt, shannonPersonaPrompt, s
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { temporaryGuestVoiceInstructions, voiceConversationInstructions } from '../src/voiceConversationInstructions.js';
+import { promptOf } from './modelPrompt.js';
 
 class PromptRecorder implements ShannonChatModel {
   readonly mode = 'openai' as const;
@@ -10,12 +11,12 @@ class PromptRecorder implements ShannonChatModel {
   readonly prompts: string[] = [];
 
   async generate(request: ShannonChatModelRequest) {
-    this.prompts.push(request.systemPrompt);
+    this.prompts.push(promptOf(request));
     return { mode: this.mode, model: this.model, reply: '返答です。' };
   }
 
   async generateVoice(request: ShannonVoiceModelRequest) {
-    this.prompts.push(request.systemPrompt);
+    this.prompts.push(promptOf(request));
     return { mode: this.mode, model: this.model, reply: '音声の返答です。' };
   }
 }

@@ -12,6 +12,7 @@ import {
 import { synchronizeIntentWithAgentTask } from '../src/cognitiveWork.js';
 import type { AgentTask } from '../src/agentTaskStore.js';
 import type { ShannonChatModelRequest } from '../src/chatModel.js';
+import { promptOf } from './modelPrompt.js';
 
 const at = '2026-09-25T03:00:00.000Z';
 const directories: string[] = [];
@@ -108,14 +109,14 @@ describe('durable cognitive intentions', () => {
       scopeKey: 'owner', threadId: 'thread-a', message: 'その方針で続けて',
     } });
     expect(requests).toHaveLength(2);
-    expect(requests[0]?.systemPrompt).toContain('[Current intention frame');
-    expect(requests[1]?.systemPrompt).toContain('シャノンを一貫した人格');
+    expect(promptOf(requests[0])).toContain('[Current intention frame');
+    expect(promptOf(requests[1])).toContain('シャノンを一貫した人格');
     expect(api.realtimeVoiceSession('owner', 'thread-a').instructions).toContain('シャノンを一貫した人格');
     expect(api.realtimeVoiceSession('owner', 'thread-a', { participantMode: 'guest' }).instructions).not.toContain('シャノンを一貫した人格');
     await api.dispatch({ method: 'POST', path: '/v1/voice/live/delegations', body: {
       scopeKey: 'owner', threadId: 'thread-a', transcript: '今の目標を踏まえて次を考えて',
     } });
-    expect(requests[2]?.systemPrompt).toContain('シャノンを一貫した人格');
+    expect(promptOf(requests[2])).toContain('シャノンを一貫した人格');
     const projection = await api.dispatch({ method: 'GET', path: '/v1/cognition', query: new URLSearchParams({ scopeKey: 'owner' }) });
     expect(projection).toMatchObject({ status: 200, body: { intents: [expect.objectContaining({
       status: 'active', nextStep: '人格の現在地を確認する',

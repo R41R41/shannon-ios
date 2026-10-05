@@ -60,7 +60,7 @@ describe('the stored traces of her tools', () => {
     new TurnRefinementProcessor(store, store).process('owner', source.userMessage, source.id, source.observedAt);
     const fact = store.snapshot('owner').userFacts[0]!;
     turn('フォルダの中は？', 'こうなっています。', 2, [list('紅茶が好き.md', '転職活動中のメモ.md', 'stories/')]);
-    const replay = () => conversationReplay('text', store.snapshot('owner'), store, 'owner', 'talk', OWNER_AUDIENCE, {}, log).request('').systemPrompt;
+    const replay = () => conversationReplay('text', store.snapshot('owner'), store, 'owner', 'talk', OWNER_AUDIENCE, {}, log).request('').turnContext ?? '';
     expect(replay()).toContain('tea/');
     expect(replay()).toContain('転職活動中のメモ.md');
 
@@ -119,7 +119,7 @@ describe('the stored traces of her tools', () => {
     // The reply that was cut off keeps its Talk-only trace.
     expect(kept.filter(record => record.turnId.startsWith('unstored:')).map(record => record.calls[0]!.target)).toEqual(['cut.md']);
     const after = new ToolTurnLog(reopened, () => later);
-    expect(conversationReplay('text', reopened.snapshot('owner'), reopened, 'owner', 'talk', OWNER_AUDIENCE, {}, after).request('').systemPrompt)
+    expect(conversationReplay('text', reopened.snapshot('owner'), reopened, 'owner', 'talk', OWNER_AUDIENCE, {}, after).request('').turnContext ?? '')
       .toContain('- 2つ前の返事: folder.create「memo.md」 → できた');
     reopened.close();
   });

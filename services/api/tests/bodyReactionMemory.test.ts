@@ -8,6 +8,7 @@ import { SQLiteTouchExperiences, touchEvidence, touchExperienceSummary, touchWhe
 import { ShannonMemoryService } from '../src/memoryService.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { HEHE, MINUTE, SECOND, START, reactionHarness, scope } from './bodyReactionHarness.js';
+import { promptOf } from './modelPrompt.js';
 
 const directories: string[] = [];
 afterEach(() => { directories.splice(0).forEach(directory => rmSync(directory, { recursive: true, force: true })); });
@@ -226,7 +227,7 @@ describe('a touch that arrives only as an event', () => {
     await events({ id: 'o1', type: 'tickle', audience: 'others', occurredAt: START, durationMs: 1_500 });
     expect(state().expressiveEmotion).toMatchObject({ primary: 'giggle', cause: 'くすぐられた', target: '触れた人' });
     expect(reactionStore.recentBursts(scope, START, now(), 10)).toMatchObject([{ type: 'tickle', count: 1, others: true }]);
-    expect((await chat('こんにちは')).systemPrompt).not.toContain('[体に起きたこと]');
+    expect(promptOf((await chat('こんにちは')))).not.toContain('[体に起きたこと]');
   });
 
   it('tells a later reaction what the events of this sitting were', async () => {
@@ -312,7 +313,7 @@ describe('remembering a touch', () => {
     const summary = touchMemories()[0]!.summary;
     expect(summary).toContain('たくさん、6回');
     const turn = await chat('今日の午後、頭をなでたの覚えてる？');
-    expect(turn.systemPrompt).toContain(summary);
+    expect(promptOf(turn)).toContain(summary);
     // Full text: the index holds the rewritten memory, not its first wording.
     const hits = store.searchMemory(scope, 'なでてもらった');
     expect(hits.map(hit => hit.summary)).toEqual([summary]);
@@ -334,7 +335,7 @@ describe('remembering a touch', () => {
     store.apply(scope, { type: 'memory-control-upserted', control: {
       memoryId: memory.id, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: clock.at, changeReason: 'ライ氏が忘れてと言った',
     } });
-    expect((await chat('さっき頭をなでたの覚えてる？')).systemPrompt).not.toContain('体の記憶');
+    expect(promptOf((await chat('さっき頭をなでたの覚えてる？')))).not.toContain('体の記憶');
     // The next touch does not continue the forgotten memory and is not told about it.
     advance(20 * SECOND);
     await said();
@@ -363,9 +364,9 @@ describe('remembering a touch', () => {
     expect(turn.threadId).toBe(earlier.threadId);
     // The earlier turn is still in the replayed history and still recalled; the touch is gone.
     expect(chatModel.requests.at(-1)!.history.map(item => item.content)).toEqual(['来月、金沢へ旅行に行くんだ', 'はい、ライ氏。']);
-    expect(turn.systemPrompt).toContain('金沢へ旅行');
-    expect(turn.systemPrompt).not.toContain('体の記憶');
-    expect((await chat('頭をなでたの覚えてる？')).systemPrompt).not.toContain('体の記憶');
+    expect(promptOf(turn)).toContain('金沢へ旅行');
+    expect(promptOf(turn)).not.toContain('体の記憶');
+    expect(promptOf((await chat('頭をなでたの覚えてる？')))).not.toContain('体の記憶');
   });
 
   it('holds nothing from a microphone: only kinds, numbers, identifiers and her own words are stored', async () => {

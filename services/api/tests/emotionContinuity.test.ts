@@ -17,6 +17,7 @@ import { InMemoryConversationStore } from '../src/conversationStore.js';
 import { emotionTiming } from '../src/emotionTiming.js';
 import type { BodyPresence } from '../src/shannonBody.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { promptOf } from './modelPrompt.js';
 
 // Whole conversations through the kernel on a loaded machine: the default five seconds says nothing about the code.
 vi.setConfig({ testTimeout: 30_000 });
@@ -76,7 +77,7 @@ function harness(start = NIGHT) {
     await api.dispatch({ method: 'PUT', path: '/v1/body/capabilities', body: { scopeKey: scope, expressions: ['smile'], gestures: [] }, deviceId: 'body-pc' });
     return (await api.dispatch({ method: 'GET', path: '/v1/body/presence', query: new URLSearchParams({ scopeKey: scope }), deviceId: 'body-pc' })).body as BodyPresence;
   };
-  const prompt = () => model.requests.at(-1)!.systemPrompt;
+  const prompt = () => promptOf(model.requests.at(-1)!);
   return { clock, now, api, model, stateStore, conversationStore, chat, advance, state, shown, body, prompt, settle };
 }
 
@@ -160,8 +161,8 @@ describe('(a) continuity across conversations, voice', () => {
     // The plan goes to a device: no cause, no clock stamp, and none of the resolver's notes to the reducer.
     for (const key of ['cause', 'awakeAt', 'continued', 'decided', 'presentAt']) expect(plan.emotion).not.toHaveProperty(key);
     expect(Object.keys(plan.emotion).sort()).toEqual(['arousal', 'carryover', 'decay', 'intensity', 'primary', 'secondary', 'startedAt', 'target', 'updatedAt', 'valence', 'visibility']);
-    expect(model.voiceRequests.at(-1)!.systemPrompt).toContain('primary=bright; secondary=sulky');
-    expect(model.voiceRequests.at(-1)!.systemPrompt).toMatch(/まだ残っている気持ち: 9時間前にライ氏との会話ですねたことを、まだ少し引きずっている/u);
+    expect(promptOf(model.voiceRequests.at(-1)!)).toContain('primary=bright; secondary=sulky');
+    expect(promptOf(model.voiceRequests.at(-1)!)).toMatch(/まだ残っている気持ち: 9時間前にライ氏との会話ですねたことを、まだ少し引きずっている/u);
     // A bright tone is not a mood: nothing covers the sulk underneath, and when the moment has passed she is sulking again.
     expect(state().lingering).toMatchObject([{ kind: 'sulky' }]);
     expect(state().lingering).toHaveLength(1);
@@ -250,7 +251,7 @@ describe('(i) guests and (j) other people present', () => {
     expect(shared.state.presence.mood.cause).toBe('');
     expect(shared.state.lingering).toBeUndefined();
     expect(shared.state.emotionClock).toBeUndefined();
-    expect(shared.systemPrompt).toBe('');
+    expect(promptOf(shared)).toBe('');
     // Her feeling toward the owner, what lies underneath and her clock did not move.
     expect(state()).toBe(before);
     // Alone again the line is back.
@@ -271,7 +272,7 @@ describe('(j) the owner\'s call while someone else can hear', () => {
     model.reply = 'はい、わかりました。';
     const response = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
       body: { scopeKey: scope, threadId: 'thread', transcript: '友達が一緒にいるよ、今日の天気は？' } });
-    const prompt = model.voiceRequests.at(-1)!.systemPrompt;
+    const prompt = promptOf(model.voiceRequests.at(-1)!);
     // She is still sulking and it may show in how she speaks.
     expect((response.body as { voicePlan: Record<string, any> }).voicePlan.emotion.secondary.concat(
       (response.body as { voicePlan: Record<string, any> }).voicePlan.emotion.primary)).toContain('sulky');
@@ -564,7 +565,7 @@ describe('(l) the kill switch SHANNON_EMOTION_CLOCK=wall', () => {
     const morning = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
       body: { scopeKey: scope, threadId: 'thread', transcript: '今日の予定を確認して' } });
     expect((morning.body as { voicePlan: Record<string, any> }).voicePlan.emotion.primary).not.toBe('sulky');
-    for (const request of [...model.voiceRequests, ...model.requests]) expect(request.systemPrompt).not.toContain(LINE);
+    for (const request of [...model.voiceRequests, ...model.requests]) expect(promptOf(request)).not.toContain(LINE);
     expect(model.voiceRequests.length + model.requests.length).toBeGreaterThanOrEqual(3);
     expect(state().lingering).toBeUndefined();
     expect(state().emotionClock).toBeUndefined();

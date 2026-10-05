@@ -20,6 +20,7 @@ import { SQLiteUpcomingStore } from '../src/upcomingStore.js';
 import { SQLitePeopleMemoryStore } from '../src/peopleMemoryStore.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { FakeModel, loopHarness, runUntilIdle, scope, type FakeShowing } from './autonomyLoopHarness.js';
+import { promptOf } from './modelPrompt.js';
 
 /**
  * What her own activity may see of the owner's, and what may leave her head (owner decision 2026-10-02, Syzygy ADR-0003:
@@ -138,7 +139,7 @@ async function ownerWorld(name: string, options: { ownerContext: boolean; charac
 
   // Control: a conversation with the owner alone is given all of it except what he asked her to forget.
   await say(`${PERSON}のこと、覚えてる？`);
-  const ownerPrompt = `${chatModel.requests.at(-1)!.systemPrompt}\n${JSON.stringify(chatModel.requests.at(-1)!.history)}`;
+  const ownerPrompt = `${promptOf(chatModel.requests.at(-1)!)}\n${JSON.stringify(chatModel.requests.at(-1)!.history)}`;
   for (const sentinel of ['SENTINEL-PROFILE-4402', 'SENTINEL-TALK-7731', ...SECRETS]) expect(ownerPrompt, sentinel).toContain(sentinel);
   for (const sentinel of FORGOTTEN) expect(ownerPrompt, sentinel).not.toContain(sentinel);
 

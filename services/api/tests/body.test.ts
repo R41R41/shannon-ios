@@ -10,6 +10,7 @@ import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { bodyDoing, type BodyIngestReceipt, type BodyNudges, type BodyPresence } from '../src/shannonBody.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
 import { FULL_PLAN, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
+import { promptOf } from './modelPrompt.js';
 
 const MINUTE = 60_000;
 const START = '2026-10-02T01:00:00.000Z';
@@ -28,7 +29,7 @@ function harness(options: { ingestEnabled?: boolean; store?: SQLiteBodyStore } =
     api.dispatch({ method, path, body: { scopeKey: scope, ...body }, deviceId });
   const events = (...items: Record<string, unknown>[]) => send('POST', '/v1/body/events', { events: items });
   const chat = async (message: string, extra: Record<string, unknown> = {}) =>
-    ((await send('POST', '/v1/chat', { message, ...extra })).body as { systemPrompt: string }).systemPrompt;
+    promptOf(((await send('POST', '/v1/chat', { message, ...extra })).body as { systemPrompt: string }));
   const advance = (milliseconds: number) => { clock.at = new Date(Date.parse(clock.at) + milliseconds).toISOString(); };
   const ago = (milliseconds: number) => new Date(Date.parse(clock.at) - milliseconds).toISOString();
   return { clock, api, store, stateStore, conversationStore, get, send, events, chat, advance, ago };
