@@ -51,7 +51,7 @@ webView.loadFileURL(folder.appendingPathComponent("embed.html"), allowingReadAcc
 | `setFrameRate(fps)` | 1 秒あたりに描くコマ数の上限（15〜60）。0 か省略で、画面のコマ数どおり。省電力のときは 30 にすると、描く量が半分になる。 |
 | `setTouchEnabled(true / false)` | 触れるようにするか。 |
 | `setFrameStats(true / false)` | 1 秒あたりのコマ数を、5 秒おきに知らせるか（既定は切）。 |
-| `setBody('human' / 'eyes')` | 体を選ぶ。`human` = 人の姿、`eyes` = 目だけ（水色の目が 2 つだけのシャノン。iOS の Waterlight Eye と同じ動き）。初めての体は読み終えるまで前の体のまま、切り替わると `body` が届く（もう出している体を頼んでも、必ず `body` が届く）。表情・気分・会話の様子は引き継ぐ。最初から目だけで始めるときは `embed.html?body=eyes` を開く（`loading` もその体の分で進む）。 |
+| `setBody('human' / 'eyes')` | 体を選ぶ。`human` = 人の姿、`eyes` = 目だけ（水色の目が 2 つだけのシャノン。iOS の Waterlight Eye と同じ動き）。初めての体は読み終えるまで前の体のまま、切り替わると `body` が届く（もう出している体を頼んでも、必ず `body` が届く）。体の切り替えと描く面の作り直しは 1 つずつ順に行い、その最中に来た `setBody` は記録して、終わったときにいちばん新しく頼まれた体へ揃えてから `body` で答える（`contextLost` のすぐあとに頼んでも、絵を 2 つ同時には作らない）。表情・気分・会話の様子は引き継ぐ。最初から目だけで始めるときは `embed.html?body=eyes` を開く（`loading` もその体の分で進む）。 |
 | `version` | `{ version, builtAt, modelUpdatedAt }`。 |
 
 ### 目だけの体（`eyes`）のとき

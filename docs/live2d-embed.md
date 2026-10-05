@@ -11,11 +11,11 @@ one shared `WKWebView`.
 | | |
 | --- | --- |
 | Location | `apps/ios/Sources/ShannonAppCore/Live2D/embed/` (copied as a folder: `.copy("Live2D")` in `apps/ios/Package.swift`) |
-| `version` | `0.1.0+202610051043` |
-| `builtAt` | `2026-10-05T10:43:15.089Z` |
-| `modelUpdatedAt` | `2026-10-05T06:58:16.654Z` (the character is the model of the build of 07:01. Bundled 2026-10-05 by the owner's decision to take her eyes alone. Against the build of 07:01: `assets.js` gains the eyes model (`model-eyes/`: moc3, one 2048×2048 texture, 34 motions), `embed.js` and `live2d/live2d.js` gain `setBody`, and `README.md` documents it; `embed.html`, `embed.css` and the Cubism Core are byte-identical. The build of 10:43 (zip sha256 `c50fb2d0…15e3fb`), approved by the owner the same day, replaces the one of 09:55: only `embed.js`, `README.md` and `version.json` differ. `setBody` now always answers `body`, also for the body already shown, and a rebuilt drawing surface uses the latest requested body and says it in `contextRestored`) |
-| Size | about 27.9 MB (27,893,898 bytes), of which `assets.js` is 27.1 MB (the character's model and its two textures, 4096×4096 and 2048×2048, and the eyes' model, texture and motions, as base64); about 16.2 MB zipped. The build of 07:01 was 20.5 MB (14.6 MB zipped): the app grows by about 7.4 MB installed and 1.5 MB to download |
-| sha256 | `assets.js` `da4fdd2e…5bd0bc`, `embed.js` `29634c5d…c29d55`, `live2d/live2d.js` `2276bc44…405694`, `version.json` `72f5f498…b1b875`, `README.md` `b5516402…8d76c9` (every file was checked against the delivered folder when it was copied) |
+| `version` | `0.1.0+202610051101` |
+| `builtAt` | `2026-10-05T11:01:11.750Z` |
+| `modelUpdatedAt` | `2026-10-05T06:58:16.654Z` (the character is the model of the build of 07:01. Bundled 2026-10-05 by the owner's decision to take her eyes alone. Against the build of 07:01: `assets.js` gains the eyes model (`model-eyes/`: moc3, one 2048×2048 texture, 34 motions), `embed.js` and `live2d/live2d.js` gain `setBody`, and `README.md` documents it; `embed.html`, `embed.css` and the Cubism Core are byte-identical. The build of 10:43 (zip sha256 `c50fb2d0…15e3fb`), approved by the owner the same day, replaces the one of 09:55: only `embed.js`, `README.md` and `version.json` differ. `setBody` now always answers `body`, also for the body already shown, and a rebuilt drawing surface uses the latest requested body and says it in `contextRestored`. The build of 11:01 (`shannon-embed-20261005-c2d1.zip`, sha256 `c2d1e556…edad1c`), approved by the owner the same day, replaces it; again only `embed.js`, `README.md` and `version.json` differ. Body switches and surface rebuilds now run one at a time on one ordered path (`settle`): a `setBody` that arrives mid-build only records the wanted body, and when the build ends the page matches the newest choice and answers `body`; a rebuild uses the newest wanted body, which is the `body` of `contextRestored`; a `setBody` before `ready` is answered after the first frame) |
+| Size | about 27.9 MB (27,894,320 bytes), of which `assets.js` is 27.1 MB (the character's model and its two textures, 4096×4096 and 2048×2048, and the eyes' model, texture and motions, as base64); about 16.2 MB zipped. The build of 07:01 was 20.5 MB (14.6 MB zipped): the app grows by about 7.4 MB installed and 1.5 MB to download |
+| sha256 | `assets.js` `da4fdd2e…5bd0bc`, `embed.js` `5d80c702…274fa5`, `live2d/live2d.js` `2276bc44…405694`, `version.json` `efee4fb1…e748e4`, `README.md` `5f7bf325…509298` (every file was checked against the delivered folder when it was copied) |
 | Licence note | `apps/ios/Sources/ShannonAppCore/Live2D/NOTICE.txt` |
 
 `ShannonBodyTests.testTheEmbedPageIsBundledAsAFolderWithItsFilesInPlace` checks that the files are in the
@@ -90,17 +90,23 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
   meanwhile is asked for once, when `body` arrives. `ready` carries `bodies` and `body`: if the shown body and the
   chosen one differ, the stage asks then. Faces, mood and phase carry over in the page; after a switch the app closes
   the character's mouth and says the layout and the calm again (`ShannonLive2DBodyPolicy.commandsAfterSwitch`).
-- A request is never kept for ever. The page of 10:43 answers every `setBody` with `body`, also for the body it already
-  shows; an earlier page (09:55) ignored such a call without a word, and a wrong belief about the shown body could then
+- A request is never kept for ever. The page (since 10:43) answers every `setBody` with `body`, also for the body it
+  already shows, and since 11:01 also one that arrives while it builds a body or rebuilds its surface (it answers with
+  the newest choice when the build ends); an earlier page (09:55) ignored a call for the shown body without a word, and a wrong belief about the shown body could then
   hold every later choice. The stage keeps the fallback for any page that does not answer. A pending request is
   forgotten on `body`, `ready` and a release (an error's reload included). One that is not answered within 30 seconds
   (`ShannonLive2DBodySwitch.deadlineSeconds`; shorter than the 90 seconds of a load, since a switch only builds a
   model from what the page has already read) ends in `recover()`. Only seconds in which her figure can be seen count
-  (`ShannonLive2DBodyPolicy.countsDeadline`): the app in front, a screen showing her, and that screen's window visible
-  (on the Mac: not minimised and not covered, `NSWindow.occlusionState`), and never while the surface is lost. While a
-  switch is under way the figure is not paused to rest. What `recover()` then does:
+  (`ShannonLive2DBodyPolicy.countsDeadline`): the app active (on the iPhone the scene is active; on the Mac the app is
+  not hidden, `!NSApplication.isHidden`, which is all `appActive` means there), a screen showing her, and that screen's
+  window visible (on the iPhone the host is in a window; on the Mac the window is not minimised and not fully covered,
+  `NSWindow.occlusionState` contains `.visible`), and never while the surface is lost. While a switch is under way the
+  figure is not paused to rest. That holds also while she is not seen but the page is not paused (a Mac window
+  minimised or covered while the app is not hidden, an iPhone host out of its window): accepted, because WebKit
+  throttles drawing there and the deadline does not run meanwhile. What `recover()` then does:
   - With a screen showing her, the page is reloaded and starts in the chosen body. The first such reload of a switch
-    ignores the one-reload-a-minute spacing, so that a switch alone never ends as failed; a second unanswered request
+    ignores the one-reload-a-minute spacing, so that a reload shortly before is not by itself what ends the switch as
+    failed (two failed loads without `ready` still do); a second unanswered request
     for the same switch keeps the spacing: within a minute of the last automatic reload her figure is shown as
     failed with 「もう一度読み込む」 and the Waterlight Eye stands in, otherwise it is reloaded again. The bypass comes back
     once the page shows the chosen body or the owner chooses another. A page that failed twice without becoming ready
@@ -111,8 +117,8 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
   they change, and a change of another setting of the app does not reach it (the setting is compared first).
 - A lost drawing surface: the page's own mending may bring back the body it had before a switch, after `body` was
   already sent. While the surface is lost nothing is asked and no time counts; a choice made then is held. On
-  `contextRestored` the pending request is forgotten. The page of 10:43 rebuilds the surface with the latest requested
-  body and says it in `contextRestored` (`body`), which settles the question at once; the stage then asks for the
+  `contextRestored` the pending request is forgotten. The page (since 10:43; since 11:01 on the same ordered path as
+  its switches) rebuilds the surface with the newest requested body and says it in `contextRestored` (`body`), which settles the question at once; the stage then asks for the
   chosen body if it differs. A page that does not say it (09:55) is asked for the chosen body again as a
   confirmation: a page that shows another switches and says `body`; one that shows it and stays silent has that body
   taken as shown when the 30 seconds run out (no reload), and a choice made meanwhile is asked for then.

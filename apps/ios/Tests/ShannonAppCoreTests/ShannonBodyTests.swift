@@ -170,6 +170,9 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(machine.reduce(.contextRestored(shown: .eyes)), [])
         XCTAssertNil(machine.pending)
         XCTAssertEqual(machine.shown, .eyes)
+        // The page of 11:01 may also answer the request itself once its ordered path is done: harmless, nothing asked.
+        XCTAssertEqual(machine.reduce(.switched(.eyes)), [.afterSwitch(.eyes)])
+        XCTAssertNil(machine.pending)
     }
 
     func testAReadyPageHasItsSurfaceAgain() {
@@ -209,9 +212,14 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertFalse(ShannonLive2DBodyPolicy.countsDeadline(appActive: true, showing: false, windowVisible: true))
         // The Mac: a minimised or covered window is not seen, though the app is not hidden.
         XCTAssertFalse(ShannonLive2DBodyPolicy.countsDeadline(appActive: true, showing: true, windowVisible: false))
-        // A spacing that is ignored is a reload whatever the last one was, but never for a page that keeps failing.
-        XCTAssertTrue(ShannonLive2DStagePolicy.mayReload(lastReloadAt: nil, now: Date()))
-        XCTAssertFalse(ShannonLive2DStagePolicy.mayReload(lastReloadAt: nil, now: Date(), failuresWithoutReady: 2))
+        // The rule recover() applies: within a minute of the last reload only an unanswered switch's first reload goes
+        // ahead; never for a page that failed twice without becoming ready.
+        let now = Date()
+        let recent = now.addingTimeInterval(-15)
+        XCTAssertFalse(ShannonLive2DStagePolicy.mayReload(lastReloadAt: recent, now: now))
+        XCTAssertTrue(ShannonLive2DStagePolicy.mayReload(lastReloadAt: recent, now: now, ignoringSpacing: true))
+        XCTAssertTrue(ShannonLive2DStagePolicy.mayReload(lastReloadAt: now.addingTimeInterval(-61), now: now))
+        XCTAssertFalse(ShannonLive2DStagePolicy.mayReload(lastReloadAt: recent, now: now, failuresWithoutReady: 2, ignoringSpacing: true))
     }
 
     func testAnUnansweredSwitchEndsInAReloadAfterItsDeadline() {
@@ -275,9 +283,9 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.deletingLastPathComponent().appendingPathComponent("NOTICE.txt").path))
         let version = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("version.json"))) as? [String: Any]
         XCTAssertEqual(version?["modelUpdatedAt"] as? String, "2026-10-05T06:58:16.654Z")
-        // The build of 2026-10-05 10:43 that carries her eyes alone (`setBody`, `embed.html?body=eyes`), which always
-        // answers `body` and says the body in `contextRestored`.
-        XCTAssertEqual(version?["version"] as? String, "0.1.0+202610051043")
+        // The build of 2026-10-05 11:01 that carries her eyes alone (`setBody`, `embed.html?body=eyes`), which always
+        // answers `body`, says the body in `contextRestored`, and runs switches and rebuilds on one ordered path.
+        XCTAssertEqual(version?["version"] as? String, "0.1.0+202610051101")
         let files = version?["files"] as? [String] ?? []
         XCTAssertTrue(files.contains("model-eyes/Shannon_Eyes_v2.moc3"))
         XCTAssertTrue(files.contains("model/Shannon.moc3"))

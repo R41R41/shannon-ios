@@ -33,9 +33,10 @@ enum ShannonLive2DStagePolicy {
     static let reloadSpacingSeconds: TimeInterval = 60
     /// A page that has failed this many times in a row without once saying `ready` is not reloaded again.
     static let failuresWithoutReadyLimit = 2
-    static func mayReload(lastReloadAt: Date?, now: Date, failuresWithoutReady: Int = 0) -> Bool {
+    /// `ignoringSpacing`: the first reload of an unanswered body switch (`ShannonLive2DBodySwitch`).
+    static func mayReload(lastReloadAt: Date?, now: Date, failuresWithoutReady: Int = 0, ignoringSpacing: Bool = false) -> Bool {
         guard failuresWithoutReady < failuresWithoutReadyLimit else { return false }
-        guard let lastReloadAt else { return true }
+        guard !ignoringSpacing, let lastReloadAt else { return true }
         return now.timeIntervalSince(lastReloadAt) >= reloadSpacingSeconds
     }
 

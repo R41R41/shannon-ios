@@ -388,7 +388,8 @@ public final class ShannonLive2DStage {
         let now = Date()
         // A page that was drawing and broke is given another start; one that never became ready is not reloaded for ever.
         failuresWithoutReady = status == .ready ? 0 : failuresWithoutReady + 1
-        let mayReload = ShannonLive2DStagePolicy.mayReload(lastReloadAt: ignoringSpacing ? nil : lastReloadAt, now: now, failuresWithoutReady: failuresWithoutReady)
+        let mayReload = ShannonLive2DStagePolicy.mayReload(
+            lastReloadAt: lastReloadAt, now: now, failuresWithoutReady: failuresWithoutReady, ignoringSpacing: ignoringSpacing)
         release()
         guard mayReload, !hosts.isEmpty else {
             status = hosts.isEmpty ? .unloaded : .failed
