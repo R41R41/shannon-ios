@@ -335,6 +335,28 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
         XCTAssertNil(call.ownerDraftAside)
     }
 
+    func testALatePushOfTheSameTextIsNotSetAsideOrRestoredTwice() {
+        XCTAssertTrue(ShannonDesktopVoiceCall.holds("明日の歯医者", "明日の歯医者"))
+        XCTAssertTrue(ShannonDesktopVoiceCall.holds("前の文\n明日の歯医者", "明日の歯医者"))
+        XCTAssertFalse(ShannonDesktopVoiceCall.holds("明日の歯医者は何時", "何時"))
+        let call = ShannonDesktopVoiceCall()
+        let conversation = ShannonConversationModel.designPreview()
+        call.attach(conversation: conversation, menuBar: nil)
+        call.session.phase = .listening
+        call.installCallHooks()
+        conversation.draft = "明日の歯医者"
+        call.session.switchParticipantMode(to: .guest, origin: .spoken)
+        // The input method commits the same text again just after.
+        conversation.draft = "明日の歯医者"
+        call.participantModeChanged(to: .guest)
+        XCTAssertEqual(call.ownerDraftAside, "明日の歯医者")
+        // Pushed back once more before the call returns to 本人だけ.
+        conversation.draft = "明日の歯医者"
+        call.restoreOwnerDraft()
+        XCTAssertEqual(conversation.draft, "明日の歯医者")
+        call.session.stop()
+    }
+
     private func settle() async {
         for _ in 0..<5 { await Task.yield() }
         try? await Task.sleep(for: .milliseconds(20))

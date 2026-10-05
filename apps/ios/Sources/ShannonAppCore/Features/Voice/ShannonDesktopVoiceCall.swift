@@ -172,15 +172,27 @@ public final class ShannonDesktopVoiceCall {
 
     private func moveDraftAside() {
         guard let conversation, !conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        // A late push of the same text (the input method committing what was already set aside) is not kept twice.
+        if let aside = ownerDraftAside, Self.holds(aside, conversation.draft) {
+            conversation.draft = ""
+            return
+        }
         ownerDraftAside = [ownerDraftAside, conversation.draft].compactMap { $0 }.joined(separator: "\n")
         conversation.draft = ""
+    }
+
+    /// Whether `aside` already ends with `draft` (as a whole line).
+    static func holds(_ aside: String, _ draft: String) -> Bool {
+        aside == draft || aside.hasSuffix("\n" + draft)
     }
 
     func restoreOwnerDraft() {
         guard let aside = ownerDraftAside, let conversation else { return }
         ownerDraftAside = nil
-        conversation.draft = conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? aside : aside + "\n" + conversation.draft
+        let current = conversation.draft
+        // The same text pushed back meanwhile is not doubled.
+        conversation.draft = current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || Self.holds(aside, current)
+            ? aside : aside + "\n" + current
     }
 
     /// The speech provider of 設定 › 声, read at the start of each call (「次の通話から反映」).

@@ -109,7 +109,7 @@ struct ShannonDeskApp: App {
         // restored SwiftUI inspector can otherwise re-enter AppKit's constraint pass.
         .defaultSize(width: previewWindowSize.width, height: previewWindowSize.height)
         .commands {
-            ShannonDeskCommands(conversation: conversationModel)
+            ShannonDeskCommands(conversation: conversationModel, voiceCall: voiceCall)
         }
     }
 
@@ -134,6 +134,8 @@ struct ShannonDeskApp: App {
 private struct ShannonDeskCommands: Commands {
     static let mainWindowID = "main"
     let conversation: ShannonConversationModel
+    /// During 「友人も一緒」 a new Talk is not made: his hidden draft and attachments would silently go (A16).
+    let voiceCall: ShannonDesktopVoiceCall
     @FocusedValue(\.shannonDesktopCommandActions) private var actions
     @Environment(\.openWindow) private var openWindow
 
@@ -158,6 +160,7 @@ private struct ShannonDeskCommands: Commands {
                 actions?.showTalk()
             }
             .keyboardShortcut("n")
+            .disabled(voiceCall.session.hidesOwnerScreens)
         }
 
         CommandMenu("Shannon") {

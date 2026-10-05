@@ -17,7 +17,8 @@ extension ShannonGeminiLiveSessionModel {
         }
     }
 
-    func finalizeTranscript(turnComplete: Bool) {
+    /// `beginsResponse`: false when the caller is about to interrupt and answer anyway (an ownership flip).
+    func finalizeTranscript(turnComplete: Bool, beginsResponse: Bool = true) {
         finalizeTask?.cancel()
         finalizeTask = nil
         guard let envelope = turnAssembler.finish() else { return }
@@ -27,7 +28,7 @@ extension ShannonGeminiLiveSessionModel {
             followsShannonTurn: heardRightAfterShannon, ownersWords: bufferIsOwners)
         bufferIsOwners = false
         userTranscript = pendingTurns.displayText
-        beginResponse()
+        if beginsResponse { beginResponse() }
     }
 
     /// Decides whose words a transcript arriving now are. In 「友人も一緒」 they are the owner's when their speech
@@ -60,7 +61,8 @@ extension ShannonGeminiLiveSessionModel {
         case .others: false
         case .unknown, .stale: isOwnersWords(startedAt: Date())
         }
-        if turnAssembler.hasFinalText, owners != bufferIsOwners { finalizeTranscript(turnComplete: true) }
+        // The words of the other side become their own turn; the reply waits for this transcript (no begin-then-cut).
+        if turnAssembler.hasFinalText, owners != bufferIsOwners { finalizeTranscript(turnComplete: true, beginsResponse: false) }
         bufferIsOwners = owners
     }
 }

@@ -23,6 +23,8 @@ extension ShannonDesktopRootView {
                 }
                 .buttonStyle(.borderless)
                 .help("新しいトーク")
+                // During 「友人も一緒」 a new Talk is not made (his hidden draft and attachments would go).
+                .disabled(voiceCall.session.hidesOwnerScreens)
             }
             .padding(.horizontal, ShannonDesktopSpacing.medium)
             .padding(.top, ShannonDesktopSpacing.medium)
