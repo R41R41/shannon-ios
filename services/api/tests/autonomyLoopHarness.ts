@@ -7,6 +7,7 @@ import type { AutonomyOwnerContext } from '../src/autonomyLoopOwnerContext.js';
 import { callGateContext, type AutonomyPhone } from '../src/autonomyLoopPhoneStep.js';
 import type { AutonomyReachOuts, AutonomyUpcoming } from '../src/autonomyLoopReachOutStep.js';
 import type { AutonomyNotionReader } from '../src/autonomyLoopSteps.js';
+import type { AutonomyToolResults } from '../src/autonomyLoopToolStep.js';
 import type { AutonomyPublicReader, PublicReading } from '../src/autonomyReader.js';
 import { ShannonAutonomyService, type AutonomyServiceDependencies } from '../src/autonomyService.js';
 import type { ShowablePiece, ShowingOutcome, StudyShowing } from '../src/autonomyShowing.js';
@@ -136,6 +137,8 @@ export interface LoopHarnessOptions {
   log?: (line: string) => void;
   /** Environment of the loop's own configuration (`configuredAutonomyLoop`). */
   loopEnvironment?: Record<string, string>;
+  /** Her registry tools in her own time; absent, as with `SHANNON_OWN_TOOLS=off`, none is offered. */
+  toolResults?: AutonomyToolResults;
 }
 
 export function loopHarness(options: LoopHarnessOptions = {}) {
@@ -173,6 +176,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     ...(options.notion ? { notion: options.notion } : {}), ...(options.looks ? { looks: options.looks } : {}),
     ...(reachOuts ? { reachOuts } : {}), ...(options.upcoming ? { upcoming: options.upcoming } : {}), ...(options.phone ? { phone: options.phone } : {}),
     ...(options.ownerContext ? { ownerContext: options.ownerContext } : {}), ...(options.log ? { log: options.log } : {}),
+    ...(options.toolResults ? { toolResults: options.toolResults } : {}),
   });
   const loop = newLoop('runner-a');
   const entries = () => service.activityDays(scope, 30).flatMap(day => day.entries);
