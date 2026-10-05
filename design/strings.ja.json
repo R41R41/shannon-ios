@@ -1300,6 +1300,13 @@
       "note": "調整役の決定（2026-10-06）。「友人も一緒」の通話の間、所有者のトークの代わりに出す中立の札。Mac はトークの会話・サイドバーのトークの一覧・目次・現在地、iPhone は通話を小さくした時の下の画面。"
     },
     {
+      "key": "voice.mac.sendWaitsForGuestCall",
+      "text": "友人も一緒の通話を終了するか、もう一度つなぐと送れます",
+      "apple": "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift",
+      "only": "apple",
+      "note": "Mac の入力欄の右下と送るボタンの手がかり。「友人も一緒」の通話がつながらなくなって帯に残っている間は、書いた文を所有者のトークへも通話へも送らない（2026-10-06 の見直し）。"
+    },
+    {
       "key": "nav.delivery",
       "text": "配信",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",

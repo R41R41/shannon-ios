@@ -193,6 +193,7 @@ export const shannonStrings = {
   "voice.mac.unmute": "ミュートを解除",
   "voice.mac.callWaitsForDictation": "音声入力の文字を入力欄に入れると、音声会話を始められます",
   "voice.guestHidesTalk": "友人も一緒の通話中は、トークを隠しています",
+  "voice.mac.sendWaitsForGuestCall": "友人も一緒の通話を終了するか、もう一度つなぐと送れます",
   "nav.delivery": "配信",
   "nav.diagnostics": "診断",
   "nav.development": "開発",

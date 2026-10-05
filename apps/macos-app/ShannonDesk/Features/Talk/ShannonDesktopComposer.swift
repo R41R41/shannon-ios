@@ -132,19 +132,25 @@ struct DesktopComposer: View {
                 }
                 .menuStyle(.borderlessButton)
                 .help("添付とツール")
-                // During a call a photo is shown to her through the call's own 写真.
-                .disabled(inCall)
+                // During a call a photo is shown to her through the call's own 写真; during 「友人も一緒」 his
+                // attachments are not shown at all.
+                .disabled(inCall || hidesOwnerItems)
 
                 Spacer()
-                Text(inCall ? ShannonGeneratedStrings.voiceMacSendInCall : "⌘↩︎で送信")
+                Text(sendHint)
                     .font(.shannonDesktop(.caption))
                     .foregroundStyle(.tertiary)
                 dictationButton
                 if !voiceCall.isShown { callButton }
                 Button {
-                    if inCall {
+                    switch sendRoute {
+                    case .call:
                         sendIntoCall()
                         return
+                    case .none:
+                        return
+                    case .talk:
+                        break
                     }
                     let selectedAttachments = attachments
                     let selectedWebSearch = usesWebSearch
@@ -167,7 +173,8 @@ struct DesktopComposer: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.circle)
-                .disabled(inCall ? !canSendIntoCall : isPreparingPhoto || !model.canSendDraft(attachmentCount: attachmentCount))
+                .disabled(sendIsDisabled)
+                .accessibilityHint(sendRoute == .none ? ShannonGeneratedStrings.voiceMacSendWaitsForGuestCall : "")
                 .keyboardShortcut(.return, modifiers: .command)
             }
         }
@@ -202,6 +209,26 @@ struct DesktopComposer: View {
 extension DesktopComposer {
     /// A call in 「友人も一緒」 is on: the owner's attachments, photo and web search are not shown.
     var hidesOwnerItems: Bool { voiceCall.session.hidesOwnerScreens }
+
+    var sendRoute: DesktopComposerRoute {
+        .route(callHoldsMicrophone: inCall, hidesOwnerScreens: hidesOwnerItems)
+    }
+
+    var sendIsDisabled: Bool {
+        switch sendRoute {
+        case .call: !canSendIntoCall
+        case .none: true
+        case .talk: isPreparingPhoto || !model.canSendDraft(attachmentCount: attachmentCount)
+        }
+    }
+
+    var sendHint: String {
+        switch sendRoute {
+        case .call: ShannonGeneratedStrings.voiceMacSendInCall
+        case .none: ShannonGeneratedStrings.voiceMacSendWaitsForGuestCall
+        case .talk: "⌘↩︎で送信"
+        }
+    }
 
     /// A call holds the microphone: ⌘↩︎ sends the draft into it, attachments wait.
     var inCall: Bool { voiceCall.holdsMicrophone }

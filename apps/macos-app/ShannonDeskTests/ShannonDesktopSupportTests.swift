@@ -294,6 +294,15 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         XCTAssertEqual(later.post.map(\.key), [notices[0].key])
     }
 
+    /// During 「友人も一緒」 the draft never goes to the owner's Talk: into the live call, or nowhere while it has failed.
+    func testTheComposerNeverSendsToTheOwnersTalkDuringAFriendsCall() {
+        XCTAssertEqual(DesktopComposerRoute.route(callHoldsMicrophone: true, hidesOwnerScreens: true), .call)
+        XCTAssertEqual(DesktopComposerRoute.route(callHoldsMicrophone: false, hidesOwnerScreens: true), .none,
+                       "a failed 友人も一緒 call: end it or connect again")
+        XCTAssertEqual(DesktopComposerRoute.route(callHoldsMicrophone: true, hidesOwnerScreens: false), .call)
+        XCTAssertEqual(DesktopComposerRoute.route(callHoldsMicrophone: false, hidesOwnerScreens: false), .talk)
+    }
+
     /// While a call is in 「友人も一緒」 nothing is posted and nothing is marked delivered; afterwards it is posted.
     func testNotificationsAreHeldWhileAFriendIsInTheCallAndPostedAfterwards() {
         let notices = [

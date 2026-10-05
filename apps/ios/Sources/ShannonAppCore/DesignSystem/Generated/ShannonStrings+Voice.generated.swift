@@ -108,4 +108,6 @@ extension ShannonGeneratedStrings {
     public static let voiceMacCallWaitsForDictation = "音声入力の文字を入力欄に入れると、音声会話を始められます"
     /// `voice.guestHidesTalk`
     public static let voiceGuestHidesTalk = "友人も一緒の通話中は、トークを隠しています"
+    /// `voice.mac.sendWaitsForGuestCall`
+    public static let voiceMacSendWaitsForGuestCall = "友人も一緒の通話を終了するか、もう一度つなぐと送れます"
 }
