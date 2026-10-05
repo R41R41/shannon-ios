@@ -78,7 +78,10 @@ extension ShannonGeminiLiveTransport {
             guard let self, !self.stopped else { return }
             // The chosen microphone went away under the running call: an audio failure, so the call reconnects
             // once onto the system's input (and says the choice cannot be used) instead of going on deaf.
-            if self.audioStarted, ShannonMacVoiceInputRouting.lost(self.appliedInputUID, devices: ShannonMacAudioDevices.inputs()) {
+            // A chosen microphone voice processing ignored (the call already hears another) is not in use: losing it
+            // changes nothing.
+            if self.audioStarted, !self.preferenceUnavailable,
+               ShannonMacVoiceInputRouting.lost(self.appliedInputUID, devices: ShannonMacAudioDevices.inputs()) {
                 ShannonVoiceDiagnostics.shared.record("gemini.audio.input.device.lost")
                 self.appliedInputUID = nil
                 self.reportAudioFailure()
