@@ -974,6 +974,13 @@
       "note": "設定 › 管理 の中。"
     },
     {
+      "key": "nav.development",
+      "text": "開発",
+      "apple": "apps/macos-app/ShannonDesk/ShannonDeskApp.swift",
+      "only": "apple",
+      "note": "Mac の 作業 の中のページ（開発の作業場。デスクトップの追加、A10）。"
+    },
+    {
       "key": "settings.section.devices",
       "text": "接続中の端末",
       "apple": "apps/ios/Sources/ShannonAppCore/ShannonConnectionView.swift",

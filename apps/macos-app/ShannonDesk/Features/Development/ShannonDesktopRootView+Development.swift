@@ -27,7 +27,7 @@ extension ShannonDesktopRootView {
             }
         }
         .background(Color(nsColor: .textBackgroundColor))
-        .navigationTitle("開発")
+        .navigationTitle(ShannonGeneratedStrings.navDevelopment)
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 developmentProjectMenu

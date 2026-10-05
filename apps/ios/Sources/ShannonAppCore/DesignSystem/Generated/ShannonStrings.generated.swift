@@ -105,6 +105,8 @@ public enum ShannonGeneratedStrings {
     public static let navDelivery = "配信"
     /// `nav.diagnostics`
     public static let navDiagnostics = "診断"
+    /// `nav.development`
+    public static let navDevelopment = "開発"
     /// `shannon.card.nothingWaiting`
     public static let shannonCardNothingWaiting = "あなたを待っていることは、ありません。"
     /// `shannon.card.awaitingReaction`

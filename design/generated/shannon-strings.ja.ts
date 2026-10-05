@@ -146,6 +146,7 @@ export const shannonStrings = {
   "voice.thisCall": "この通話",
   "nav.delivery": "配信",
   "nav.diagnostics": "診断",
+  "nav.development": "開発",
   "settings.section.devices": "接続中の端末",
   "settings.section.voice": "声",
   "settings.section.speakUp": "話しかけ",

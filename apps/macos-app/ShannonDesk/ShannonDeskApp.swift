@@ -173,7 +173,7 @@ private struct ShannonDeskCommands: Commands {
                 .keyboardShortcut("4")
                 .disabled(actions == nil)
             // 開発 and 配信 are pages of 作業 (roadmap A10).
-            Button("開発") { actions?.showDevelopment() }
+            Button(ShannonGeneratedStrings.navDevelopment) { actions?.showDevelopment() }
                 .keyboardShortcut("5")
                 .disabled(actions == nil)
             Button(ShannonGeneratedStrings.navDelivery) { actions?.showRelease() }

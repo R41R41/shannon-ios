@@ -16,7 +16,7 @@ extension DesktopWorkPage {
     var title: String {
         switch self {
         case .tasks: ShannonGeneratedStrings.navWork
-        case .development: "開発"
+        case .development: ShannonGeneratedStrings.navDevelopment
         case .release: ShannonGeneratedStrings.navDelivery
         }
     }
