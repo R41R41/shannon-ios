@@ -517,6 +517,23 @@ describe('moving her study to Aether', () => {
     expect((await applyMigration(store, access!, scope, { now: () => clock.at, dayKey })).moved).toEqual([]);
     expect(fake.inFolder()).toHaveLength(3);
     expect(migrationReport(scope, migrationPlan(store, scope), true)).toContain('移動済み 3件');
+    // Between --apply and setting the address, she revised one moved piece and put another in her trash, in Shannon only:
+    // the next --apply sends both to Aether from the version Aether has, once.
+    store.study.revise(scope, draft.id, { body: `${STORY}その後の直し。`, changeNote: '直しました。' }, clock.at);
+    store.study.softDelete(scope, note.id, clock.at);
+    const plan = migrationPlan(store, scope);
+    expect(plan.find(item => item.pieceId === draft.id)).toMatchObject({ note: 'moved', catchUp: 'update' });
+    expect(plan.find(item => item.pieceId === note.id)).toMatchObject({ note: 'moved', catchUp: 'delete' });
+    expect(migrationReport(scope, plan)).toContain('移したあとの直しをAetherへ送る');
+    const caught = await applyMigration(store, access!, scope, { now: () => clock.at, dayKey });
+    expect(caught.failed).toEqual([]);
+    const draftDocument = store.study.aether.current(scope, draft.id)!;
+    expect(draftDocument).toMatchObject({ version: 2, aetherVersion: 2 });
+    expect(fake.documents.get(draftDocument.documentId)!.body).toBe(`${STORY}その後の直し。`);
+    expect(fake.documents.get(store.study.aether.current(scope, note.id)!.documentId)!.status).toBe('deleted');
+    const writes = fake.requests.filter(request => request.body.kind === 'update').length;
+    await applyMigration(store, access!, scope, { now: () => clock.at, dayKey });
+    expect(fake.requests.filter(request => request.body.kind === 'update').length).toBe(writes);
     // The moved story is revised in Aether from now on, by the id the apps and her messages already use.
     expect(await call('study.update', { id: story.id, body: `${STORY}続き。`, changeNote: '続き。' })).toMatchObject({ ok: true });
     expect(fake.documents.get(store.study.aether.current(scope, story.id)!.documentId)!.body).toBe(`${STORY}続き。`);

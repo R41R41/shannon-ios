@@ -210,6 +210,8 @@ export class StudyAetherLinks {
 export interface StudyMigrationRow {
   pieceId: string; kind: 'story' | 'note'; title: string; characters: number; status: 'draft' | 'ready' | 'shown' | 'put_away';
   readableVersion: number | null; origin: 'room_look' | 'reach_out' | null; deleted: boolean; documentId: string | null;
+  /** The piece's current local version, and the local version its newest link is (a piece revised in Shannon since is ahead). */
+  version: number; linkedVersion: number | null;
 }
 
 /**
@@ -227,15 +229,17 @@ export function studyMigrationRows(database: DatabaseSync, scopeKey: string): re
   const columns = new Set((database.prepare(`PRAGMA table_info('study_pieces')`).all() as unknown as Array<{ name: string }>).map(column => column.name));
   const links = hasTable(database, 'study_aether_links');
   const rows = database.prepare(`
-    SELECT p.piece_id, p.kind, p.title, length(p.body) AS characters, p.status, p.readable_version,
+    SELECT p.piece_id, p.kind, p.title, length(p.body) AS characters, p.status, p.readable_version, p.version,
+      ${links ? `(SELECT MAX(l.version) FROM study_aether_links l WHERE l.scope_key = p.scope_key AND l.piece_id = p.piece_id)` : 'NULL'} AS linked_version,
       ${columns.has('origin') ? 'p.origin' : 'NULL'} AS origin, ${columns.has('deleted_at') ? 'p.deleted_at' : 'NULL'} AS deleted_at,
       ${links ? `(SELECT l.document_id FROM study_aether_links l WHERE l.scope_key = p.scope_key AND l.piece_id = p.piece_id ORDER BY l.version DESC LIMIT 1)` : 'NULL'} AS document_id
     FROM study_pieces p WHERE p.scope_key = ? ORDER BY p.updated_at DESC, p.piece_id
-  `).all(scopeKey) as unknown as Array<{ piece_id: string; kind: 'story' | 'note'; title: string; characters: number; status: StudyMigrationRow['status']; readable_version: number | null; origin: string | null; deleted_at: string | null; document_id: string | null }>;
+  `).all(scopeKey) as unknown as Array<{ piece_id: string; kind: 'story' | 'note'; title: string; characters: number; status: StudyMigrationRow['status']; readable_version: number | null; version: number; linked_version: number | null; origin: string | null; deleted_at: string | null; document_id: string | null }>;
   return Object.freeze(rows.map(row => Object.freeze({
     pieceId: row.piece_id, kind: row.kind, title: row.title, characters: Number(row.characters), status: row.status,
     readableVersion: row.readable_version === null ? null : Number(row.readable_version),
     origin: row.origin === 'room_look' || row.origin === 'reach_out' ? row.origin : null, deleted: row.deleted_at !== null, documentId: row.document_id,
+    version: Number(row.version), linkedVersion: row.linked_version === null ? null : Number(row.linked_version),
   })));
 }
 

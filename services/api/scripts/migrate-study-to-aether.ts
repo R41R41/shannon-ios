@@ -5,10 +5,13 @@
  *     Dry run (the default): prints, for each piece, its kind, title, length, stage, whether the owner has seen it, and
  *     where it goes. Metadata only; no body is printed or read. The database is opened read-only: nothing is created,
  *     added or written, so it is safe against the production database. Show this to the owner before anything moves.
- *   ... --apply --services-not-on-aether
- *     Moves what the dry run listed. Run it before SHANNON_AETHER_API_URL is set for the API and the autonomy service, or with
- *     both stopped: a service syncing her study with Aether while pieces move could take a moved story in as a second piece.
- *     The second flag says so and is required. Needs SHANNON_AETHER_API_URL and SHANNON_AETHER_SHANNON_TOKEN in this command's
+ *   ... --apply --services-stopped
+ *     Moves what the dry run listed. Stop the API and the autonomy service first and keep them stopped from --apply until
+ *     SHANNON_AETHER_API_URL is set for both: a service syncing her study during the move could take a moved story in as a
+ *     second piece, and a piece she revises in Shannon in between leaves Aether behind. The second flag says they are
+ *     stopped and is required; the autonomy loop's lease is also checked (refused while its runner reported in the last
+ *     five minutes). Run --apply again right before setting the address: a moved piece revised or put in her trash since
+ *     is sent to Aether then (from the version Aether has). Needs SHANNON_AETHER_API_URL and SHANNON_AETHER_SHANNON_TOKEN in this command's
  *     environment. Back up the database first (docs/self-improvement-runbook.md): it opens the database read-write and adds
  *     the study's Aether tables. Idempotent: run it again after an interruption. The mapping from each piece's id to its
  *     Aether document is kept in `study_aether_links`.
@@ -19,6 +22,7 @@ import { aetherStudyScope, configuredAetherAccess } from '../src/aetherAccess.js
 import { autonomyDayKey, configuredAutonomy } from '../src/autonomyBudget.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import { configuredDatabasePath } from '../src/sqliteStore.js';
+import { DatabaseSync } from 'node:sqlite';
 import { applyMigration, migrationPlan, migrationReport, readOnlyMigrationPlan } from '../src/studyMigration.js';
 
 const args = process.argv.slice(2);
@@ -43,8 +47,11 @@ if (!args.includes('--apply')) {
   console.log(`${migrationReport(scope, plans.get(scope) ?? [])}\n`);
   const others = [...plans.keys()].filter(key => key !== scope);
   if (others.length) console.log(`ほかの scope（${others.join('、')}）の書斎は移さず、Shannonに残ります。`);
-} else if (!args.includes('--services-not-on-aether')) {
-  console.error('--apply は、APIと自律サービスがまだAetherを使っていない時（SHANNON_AETHER_API_URL を設定する前）か、両方を止めている時に、--services-not-on-aether をつけて実行してください。何も移していません。');
+} else if (!args.includes('--services-stopped')) {
+  console.error('--apply は、APIと自律サービスを止めてから（SHANNON_AETHER_API_URL を両方に設定して起動し直すまで止めたまま）、--services-stopped をつけて実行してください。何も移していません。');
+  process.exit(2);
+} else if (loopRunning(databasePath)) {
+  console.error('自律サービスがこの5分以内に動いていました。止めてから、もう一度実行してください。何も移していません。');
   process.exit(2);
 } else {
   const access = configuredAetherAccess(process.env);
@@ -64,5 +71,18 @@ if (!args.includes('--apply')) {
     }
   } finally {
     store.close();
+  }
+}
+
+/** Whether the autonomy loop's runner reported in the last five minutes (its lease), read without changing anything. */
+function loopRunning(path: string): boolean {
+  let database: DatabaseSync;
+  try { database = new DatabaseSync(path, { readOnly: true }); } catch { return false; }
+  try {
+    if (!database.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'autonomy_loop_lease'`).get()) return false;
+    const rows = database.prepare('SELECT heartbeat_at FROM autonomy_loop_lease').all() as unknown as Array<{ heartbeat_at: string }>;
+    return rows.some(row => Date.now() - Date.parse(row.heartbeat_at) < 5 * 60_000);
+  } finally {
+    database.close();
   }
 }

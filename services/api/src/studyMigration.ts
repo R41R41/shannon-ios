@@ -33,6 +33,11 @@ export interface StudyMigrationItem {
   /** Why it stays, or that it has moved already. */
   note?: 'room_look' | 'reach_out' | 'trash' | 'moved';
   documentId?: string;
+  /**
+   * A piece that moved and then changed in Shannon before the services used Aether (between `--apply` and setting the
+   * address): its newer version is sent (`update`), or it was put in her trash and is deleted in Aether too (`delete`).
+   */
+  catchUp?: 'update' | 'delete';
 }
 
 /** The plan of a scope, every piece (no cap), through the open store (`--apply`). */
@@ -58,9 +63,11 @@ function planOf(rows: readonly StudyMigrationRow[]): readonly StudyMigrationItem
   return Object.freeze(rows.map(row => {
     const note = row.documentId ? 'moved' as const : row.origin ?? (row.deleted ? 'trash' as const : undefined);
     const target: StudyMigrationTarget = row.origin || (row.deleted && !row.documentId) ? 'stays' : row.kind === 'story' ? 'study' : 'shannon_folder';
+    const catchUp = !row.documentId ? undefined : row.deleted ? 'delete' as const : row.linkedVersion !== null && row.version > row.linkedVersion ? 'update' as const : undefined;
     return Object.freeze({
       pieceId: row.pieceId, kind: row.kind, title: row.title, characters: row.characters, status: row.status,
       shown: row.readableVersion !== null, target, ...(note ? { note } : {}), ...(row.documentId ? { documentId: row.documentId } : {}),
+      ...(catchUp ? { catchUp } : {}),
     });
   }).sort((left, right) => order(left) - order(right)));
 }
@@ -70,6 +77,9 @@ const TARGET_LABEL: Readonly<Record<StudyMigrationTarget, string>> = Object.free
 });
 const NOTE_LABEL: Readonly<Record<NonNullable<StudyMigrationItem['note']>, string>> = Object.freeze({
   room_look: '部屋を見たメモ', reach_out: '話しかけたあとのメモ', trash: 'ゴミ箱', moved: '移動済み',
+});
+const CATCH_UP_LABEL: Readonly<Record<NonNullable<StudyMigrationItem['catchUp']>, string>> = Object.freeze({
+  update: '移したあとの直しをAetherへ送る', delete: '移したあとでゴミ箱に入れたので、Aetherでも消す',
 });
 
 /** The dry run as the owner reads it: counts, then one line per piece. Titles and lengths only; never a body. */
@@ -86,7 +96,7 @@ export function migrationReport(scopeKey: string, items: readonly StudyMigration
     ...items.map(item => [
       STUDY_KIND_LABEL[item.kind], `「${line(item.title)}」`, `${item.characters.toLocaleString('en-US')}字`, STUDY_STATUS_LABEL[item.status],
       item.shown ? '見せている' : 'まだ見せていない',
-      item.note ? `${TARGET_LABEL[item.target]}（${NOTE_LABEL[item.note]}${item.documentId ? `: ${item.documentId}` : ''}）` : `→ ${TARGET_LABEL[item.target]}`,
+      item.note ? `${TARGET_LABEL[item.target]}（${NOTE_LABEL[item.note]}${item.documentId ? `: ${item.documentId}` : ''}${item.catchUp ? `、${CATCH_UP_LABEL[item.catchUp]}` : ''}）` : `→ ${TARGET_LABEL[item.target]}`,
       item.pieceId,
     ].join('｜')),
     '',
@@ -107,6 +117,11 @@ export async function applyMigration(
   const moved: { pieceId: string; documentId: string; version: number }[] = [];
   const failed: { pieceId: string; code: string }[] = [];
   for (const item of migrationPlan(store, scopeKey)) {
+    if (item.catchUp) {
+      const outcome = await catchUp(store, access, scopeKey, item, now, signal);
+      if ('code' in outcome) failed.push({ pieceId: item.pieceId, code: outcome.code }); else moved.push(outcome);
+      continue;
+    }
     if (item.target === 'stays' || item.note === 'moved') continue;
     const piece = store.study.find(scopeKey, item.pieceId, true);
     if (!piece) continue;
@@ -134,6 +149,33 @@ export async function applyMigration(
     });
   }
   return Object.freeze({ moved: Object.freeze(moved), failed: Object.freeze(failed) });
+}
+
+/**
+ * A moved piece that changed in Shannon before the services used Aether: its current version is sent from the version Aether
+ * has (`baseVersion`, so a change the owner made in Aether meanwhile is not overwritten: `aether_stale_version`), or, put in
+ * her trash, it is deleted in Aether too. Keyed by piece and version, so a re-run sends nothing twice.
+ */
+async function catchUp(store: SQLiteAutonomyStore, access: AetherAccess, scopeKey: string, item: StudyMigrationItem, now: () => string, signal?: AbortSignal):
+  Promise<{ pieceId: string; documentId: string; version: number } | { code: string }> {
+  const piece = store.study.find(scopeKey, item.pieceId, true);
+  const link = store.study.aether.current(scopeKey, item.pieceId);
+  if (!piece || !link) return { code: 'not_found' };
+  const key = studyWriteKey(scopeKey, 'migration-catch-up', piece.id, String(piece.version), item.catchUp!);
+  try {
+    if (item.catchUp === 'delete') {
+      const deleted = await access.delete({ documentId: link.documentId, baseVersion: link.aetherVersion, idempotencyKey: key }, signal);
+      return { pieceId: piece.id, documentId: deleted.documentId, version: deleted.version };
+    }
+    const written = await access.update({ documentId: link.documentId, baseVersion: link.aetherVersion, title: piece.title, body: piece.body, idempotencyKey: key }, signal);
+    store.transaction(() => store.study.aether.link(scopeKey, piece.id, piece.version, written.documentId, written.version, now()));
+    return { pieceId: piece.id, documentId: written.documentId, version: written.version };
+  } catch (error) {
+    const code = aetherErrorCode(error);
+    // Already gone from her folder: her trash agrees, nothing to send.
+    if (item.catchUp === 'delete' && (code === 'NOT_FOUND' || code === 'OUTSIDE_SHANNON_FOLDER')) return { pieceId: piece.id, documentId: link.documentId, version: link.aetherVersion };
+    return { code: `aether_${code.toLowerCase()}` };
+  }
 }
 
 function order(item: StudyMigrationItem): number {
