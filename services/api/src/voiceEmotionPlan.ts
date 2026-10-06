@@ -63,7 +63,12 @@ export function voicePlanResponse(
  */
 function planEmotion(emotion: ShannonExpressiveEmotion): Omit<ShannonExpressiveEmotion, 'cause' | 'awakeAt' | 'presentAt' | 'continued' | 'decided' | 'underneath' | 'easedPeak' | 'heights' | 'strengths' | 'placeAbove'> {
   const { cause: _cause, awakeAt: _awakeAt, ...shown } = normalizeShannonExpressiveEmotion(emotion);
-  return shown;
+  // The apps hand `primary` to the body page (`expressEmotion`), whose faces are those of the kinds it was built with: a
+  // newer kind would show no face at all. It is sent as its nearest older kind; her stored feeling keeps its own kind,
+  // and `kind` beside the face names it for a client that knows it.
+  const primary = voicedAffect(shown.primary);
+  const secondary = [...new Set(shown.secondary.map(voicedAffect))].filter(kind => kind !== primary);
+  return { ...shown, primary, secondary };
 }
 
 function waitingPerformanceFor(
