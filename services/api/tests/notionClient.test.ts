@@ -1,10 +1,11 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   NOTION_API_VERSION, NOTION_READ_ENDPOINTS, NotionReadClient, NotionReadError, normalizedNotionId, notionReadOperation,
   usableNotionToken, type NotionRequestDiagnostic,
 } from '../src/notionClient.js';
+import { apiSourceFilesNamed, readApiSource } from './support/sources.js';
 import { FIXTURE_TOKEN, NOTION_FIXTURE_IDS, fakeNotion, notionJson } from './notionFixture.js';
 
 const id = NOTION_FIXTURE_IDS.scenario;
@@ -77,11 +78,12 @@ describe('Notion read allowlist', () => {
   });
 
   it('keeps every Notion source free of write methods and of a second network exit', () => {
-    const directory = join(import.meta.dirname, '../src');
-    const sources = readdirSync(directory).filter(name => /^notion.*\.ts$/u.test(name));
+    const files = apiSourceFilesNamed(/^notion.*\.ts$/u);
+    const sources = files.map(path => basename(path));
     expect(sources.sort()).toEqual(['notionAutonomousRead.ts', 'notionClient.ts', 'notionConversation.ts', 'notionLoopReader.ts', 'notionSource.ts', 'notionText.ts']);
-    for (const name of sources) {
-      const text = readFileSync(join(directory, name), 'utf8');
+    for (const path of files) {
+      const name = basename(path);
+      const text = readFileSync(path, 'utf8');
       expect(text, name).not.toMatch(/['"`](?:PATCH|PUT|DELETE)['"`]/u);
       if (name !== 'notionClient.ts') {
         expect(text, name).not.toMatch(/\bfetch\s*\(|api\.notion\.com|node:https?|\.fetcher\b/u);
@@ -89,7 +91,7 @@ describe('Notion read allowlist', () => {
         expect(text, name).not.toMatch(/\.read\(/u);
       }
     }
-    const transport = readFileSync(join(directory, 'notionClient.ts'), 'utf8');
+    const transport = readApiSource('notionClient.ts');
     expect(transport.match(/this\.fetcher\(/gu)).toHaveLength(1);
   });
 });

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   InMemoryCompanionStateStore, SHANNON_EMOTION_KINDS, livingLingering, presentShannonFeeling,
@@ -22,6 +23,7 @@ import { storedVoiceFace } from '../src/voiceEmotionPlan.js';
 import { AFFECT_INTENSITY_STEPS, affectIntensityOf, affectIntensityValue } from '../src/voiceDecisionValues.js';
 import { GOLDEN_BASE } from './chatModelGoldenCases.js';
 import { promptOf } from './modelPrompt.js';
+import { apiSourceFiles, apiSourcePath, readApiSource } from './support/sources.js';
 
 // Whole conversations through the kernel on a loaded machine: a short timeout says nothing about the code.
 vi.setConfig({ testTimeout: 120_000 });
@@ -585,12 +587,13 @@ describe('guests and other people present never move her feeling toward the owne
     expect(decidedReplyFeeling({ replyFeeling: { kind: 'neutral', intensity: 0.9 } }, true, {})).toEqual({});
     expect(decidedReplyFeeling({ replyFeeling: { kind: 'furious' as never, intensity: 0.9 } }, true, {})).toEqual({});
     // Every production source is read: the field is named only by the adapter, this module, the presence entry and the kernel's chat turn.
-    const directory = new URL('../src/', import.meta.url);
-    const naming = (readdirSync(directory, { recursive: true }) as string[]).filter(file => file.endsWith('.ts'))
-      .filter(file => /replyFeeling|resolveTextReplyEmotion|resolveWrittenReplyEmotion/iu.test(readFileSync(new URL(file, directory), 'utf8'))).sort();
+    const files = apiSourceFiles();
+    expect(files.length).toBeGreaterThanOrEqual(360);
+    const naming = files.filter(path => /replyFeeling|resolveTextReplyEmotion|resolveWrittenReplyEmotion/iu.test(readFileSync(path, 'utf8')))
+      .map(path => basename(path)).sort();
     // (`autonomyCore.ts` names the module's path among the core paths.)
     expect(naming).toEqual(['apiKernel.ts', 'autonomyCore.ts', 'chatModel.ts', 'chatModelSupport.ts', 'chatModelTurn.ts', 'chatReplyFeeling.ts', 'companionPresence.ts']);
-    const kernel = readFileSync(new URL('apiKernel.ts', directory), 'utf8');
+    const kernel = readApiSource('apiKernel.ts');
     expect(kernel.match(/replyFeelingOffer\(audience\.alone\)/gu)).toHaveLength(1);
     expect(kernel.match(/resolveTextReplyEmotion\(\{[^}]*\}, completion, audience\.alone\)/gu)).toHaveLength(1);
     expect(kernel.match(/replyFeeling|resolveTextReplyEmotion/giu)).toHaveLength(4);
@@ -686,8 +689,8 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
 
 describe('the emotion source stays core', () => {
   it('lists the module among the paths that need the owner\'s approval, and it holds no state', () => {
-    expect(SHANNON_CORE_PATHS.emotion).toContain('services/api/src/chatReplyFeeling.ts');
-    const source = readFileSync(new URL('../src/chatReplyFeeling.ts', import.meta.url), 'utf8');
+    expect(SHANNON_CORE_PATHS.emotion).toContain(apiSourcePath('chatReplyFeeling.ts'));
+    const source = readApiSource('chatReplyFeeling.ts');
     expect(source).not.toMatch(/stateStore|\.apply\(|DatabaseSync|new Map|let /u);
   });
 });

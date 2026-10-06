@@ -18,6 +18,7 @@ import { SHANNON_TOOLS, offeredTools } from '../src/shannonTools.js';
 import { createConfiguredVoiceDecisionGateway } from '../src/voiceDecision.js';
 import { createConfiguredVoiceTranscriber } from '../src/voiceTranscription.js';
 import { createConfiguredVoiceVisionGateway } from '../src/voiceVision.js';
+import { readApiSource } from './support/sources.js';
 
 const START = '2026-10-05T12:00:00.000Z';
 const DEVICE_TOKEN = 'device-token-of-the-owner';
@@ -328,7 +329,7 @@ describe('GET /v1/ops', () => {
 });
 
 describe('server.ts', () => {
-  const server = readFileSync(resolve(import.meta.dirname, '../src/server.ts'), 'utf8');
+  const server = readApiSource('server.ts');
 
   it('logs the same summary once at startup and hands the ops route the owner-only reader', () => {
     expect(server.match(/selfDiagnosis\.startupLine\(\)/gu)).toHaveLength(1);

@@ -34,6 +34,7 @@ import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { LocalVoiceDecisionGateway, type VoiceDecisionGateway, type VoiceDecisionInput } from '../src/voiceDecision.js';
 import { roomLookRouterQuestions, roomLookRouterSchema, voiceRoomLookPrompt } from '../src/voiceRoomLook.js';
 import { promptOf } from './modelPrompt.js';
+import { apiSourceNames, readApiSource } from './support/sources.js';
 
 const scope = 'owner';
 const START = '2026-10-02T09:00:00.000Z';
@@ -1138,7 +1139,7 @@ describe('the frame is never kept', () => {
   });
 
   it('has a table with identifiers, timestamps, an outcome and a code, and modules that reach no other store', () => {
-    const source = (name: string) => readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8');
+    const source = (name: string) => readApiSource(name);
     const table = source('appLookStore.ts').match(/CREATE TABLE IF NOT EXISTS app_looks \(([\s\S]*?)\n\s*\);/u)![1]!;
     const columns = table.split('\n').map(line => line.trim().split(/\s+/u)[0]!).filter(Boolean);
     expect(columns).toEqual(['look_id', 'scope_key', 'device_id', 'thread_id', 'camera', 'platform', 'requested_at', 'expires_at',
@@ -1154,8 +1155,8 @@ describe('the frame is never kept', () => {
       expect(source(name), name).not.toMatch(/BodyLookImage|AppLookResult|base64|RoomLookViewRequest|\.image\b/u);
     }
     // One place opens a look through the app, and her activity loop knows nothing of it.
-    const sourceDirectory = new URL('../src/', import.meta.url);
-    const names = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts'));
+    const names = apiSourceNames();
+    expect(names.length).toBeGreaterThanOrEqual(360);
     expect(names.filter(name => /offerAppLook: true/u.test(source(name)))).toEqual(['appLook.ts']);
     expect(names.filter(name => /^(?:autonomy|platformBridge|push|initiative)/u.test(name) && /appLook|AppLook/u.test(source(name)))).toEqual([]);
   });

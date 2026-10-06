@@ -1,10 +1,9 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { resolveCommitmentCommand } from '../src/commitmentCommands.js';
 import { createInitialCompanionState } from '@shannon/cognition';
 import { notificationBody } from '../src/pushNotificationSender.js';
 import { groundedWorldOpening } from '../src/worldInterestRelevance.js';
+import { readApiSource } from './support/sources.js';
 
 /**
  * Files whose Japanese string literals are spoken or shown as Shannon herself
@@ -28,8 +27,9 @@ const OUT_OF_CHARACTER = [
 describe('sentences authored as Shannon', () => {
   it('stay in です・ます, call the owner ライ氏, and never say あなた', () => {
     const offenders: string[] = [];
+    expect(SHANNON_VOICE_SOURCES.length).toBeGreaterThan(0);
     for (const file of SHANNON_VOICE_SOURCES) {
-      const lines = readFileSync(join(import.meta.dirname, '../src', file), 'utf8').split('\n');
+      const lines = readApiSource(file).split('\n');
       lines.forEach((line, index) => {
         // Only quoted text is checked; recognition patterns for the owner's words are regex literals.
         // 「…」 inside a sentence quotes the owner's own words or a title, so it is skipped.
@@ -49,7 +49,7 @@ describe('sentences authored as Shannon', () => {
   });
 
   it('keeps every waiting phrase polite', () => {
-    const source = readFileSync(join(import.meta.dirname, '../src/voiceWaitingCue.ts'), 'utf8');
+    const source = readApiSource('voiceWaitingCue.ts');
     const phrases = [...source.matchAll(/(?:steady|warm|lively): '([^']+)'/gu)].map(match => match[1]!)
       .filter(phrase => /[ぁ-ん]/u.test(phrase));
     expect(phrases).toHaveLength(48);

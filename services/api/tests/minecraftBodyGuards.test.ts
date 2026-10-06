@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,6 +24,7 @@ import { SQLiteSurfaceTurnLog } from '../src/minecraftTurnStore.js';
 import { PLATFORM_REPLY_LIMITS } from '../src/platformReply.js';
 import { createMinecraftBodyWiring, gameBodyMayCall } from '../src/serverMinecraftBodyWiring.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { readApiSource } from './support/sources.js';
 
 /** The review of 2026-10-06 of the Minecraft body branch: S1, S3, S4, N2 and N5 at their units. */
 const DEVICE = 'minebot-dev';
@@ -104,7 +105,7 @@ describe('S1: the token of her Minecraft body reaches its own routes only', () =
   });
 
   it('is applied by the server right after authentication, before every other device route, and before the operations console', () => {
-    const server = readFileSync(new URL('../src/server.ts', import.meta.url), 'utf8');
+    const server = readApiSource('server.ts');
     const gate = server.indexOf('await minecraft.serve(request, response, url.pathname, principal)');
     expect(gate).toBeGreaterThan(server.indexOf("error: 'PAIRING_REQUIRED'"));
     expect(gate).toBeLessThan(server.indexOf('url.pathname === SHANNON_NOW_PATH'));

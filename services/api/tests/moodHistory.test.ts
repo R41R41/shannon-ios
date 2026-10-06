@@ -1,7 +1,7 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CompanionStateEvent, ShannonExpressiveEmotion } from '@shannon/cognition';
@@ -18,6 +18,7 @@ import {
 import { SQLiteMoodHistoryReader, downsampleMoodPoints } from '../src/moodHistoryReader.js';
 import { createMoodHistoryRoute, moodHistoryResponse, requestedHours } from '../src/serverMoodHistoryRoute.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { apiSourceFiles, apiSourcePath, readApiSource, resolvedImports } from './support/sources.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -593,7 +594,8 @@ describe('the activity loop\'s process', () => {
 });
 
 describe('structure', () => {
-  const source = (name: string) => readFileSync(resolve(import.meta.dirname, '../src', name), 'utf8');
+  const source = (name: string) => readApiSource(name);
+  const imports = (name: string, target: string) => resolvedImports(name).includes(apiSourcePath(target));
 
   it('reads through a connection that cannot write', () => {
     const reader = source('moodHistoryReader.ts');
@@ -603,10 +605,11 @@ describe('structure', () => {
   });
 
   it('is written by the recorder alone and read by its route alone: not the kernel, not a prompt, not the activity loop', () => {
-    const names = readdirSync(resolve(import.meta.dirname, '../src')).filter(name => name.endsWith('.ts'));
+    const names = apiSourceFiles().map(path => basename(path));
+    expect(names.length).toBeGreaterThanOrEqual(360);
     expect(names.filter(name => source(name).includes('shannon_mood_history')).sort()).toEqual(['moodHistory.ts', 'moodHistoryReader.ts']);
-    expect(names.filter(name => source(name).includes("'./moodHistoryReader.js'")).sort()).toEqual(['server.ts', 'serverMoodHistoryRoute.ts']);
-    expect(names.filter(name => source(name).includes("'./moodHistory.js'")).sort())
+    expect(names.filter(name => imports(name, 'moodHistoryReader.ts')).sort()).toEqual(['server.ts', 'serverMoodHistoryRoute.ts']);
+    expect(names.filter(name => imports(name, 'moodHistory.ts')).sort())
       .toEqual(['autonomyAwakeClock.ts', 'moodHistoryReader.ts', 'sqliteStore.ts']);
     for (const name of names.filter(name => /^autonomyLoop/u.test(name) || ['apiKernel.ts', 'apiPromptProjection.ts', 'worker.ts'].includes(name))) {
       expect(source(name), name).not.toMatch(/moodHistory|MoodHistory|mood-history/u);

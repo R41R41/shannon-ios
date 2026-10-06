@@ -10,6 +10,7 @@ import {
   type AutonomousActionRequest,
   type AutonomyPolicyContext,
 } from '../src/autonomyPolicy.js';
+import { apiSourcePath } from './support/sources.js';
 
 const places = {
   hostFolders: { 'owner-mac': '/Users/owner/Shannon', 'owner-windows': '/mnt/windows/Shannon' },
@@ -62,12 +63,12 @@ describe('authorizeAutonomousAction: the rule table of ADR-0002', () => {
     ['a core change, declared', { domain: 'core' }, 'needs_approval', 'core_path'],
     ['the persona file in her checkout', { domain: 'vm_workspace', paths: ['/srv/shannon-workspace/shannon-checkout/packages/cognition/src/persona.ts'] }, 'needs_approval', 'core_path'],
     ['the emotion source', { domain: 'vm_workspace', paths: ['/srv/shannon-workspace/shannon-checkout/packages/cognition/src/emotionState.ts'] }, 'needs_approval', 'core_path'],
-    ['authentication', { domain: 'vm_workspace', paths: ['/srv/shannon-workspace/shannon-checkout/services/api/src/deviceAuth.ts'] }, 'needs_approval', 'core_path'],
-    ['memory storage', { domain: 'vm_workspace', paths: ['/srv/shannon-workspace/shannon-checkout/services/api/src/sqliteStore.ts'] }, 'needs_approval', 'core_path'],
+    ['authentication', { domain: 'vm_workspace', paths: [`/srv/shannon-workspace/shannon-checkout/${apiSourcePath('deviceAuth.ts')}`] }, 'needs_approval', 'core_path'],
+    ['memory storage', { domain: 'vm_workspace', paths: [`/srv/shannon-workspace/shannon-checkout/${apiSourcePath('sqliteStore.ts')}`] }, 'needs_approval', 'core_path'],
     ['forgetting', { domain: 'vm_workspace', paths: ['/srv/shannon-workspace/shannon-checkout/packages/cognition/src/withholding.ts'] }, 'needs_approval', 'core_path'],
-    ['the approval and budget guard', { domain: 'vm_workspace', paths: ['/srv/shannon-workspace/shannon-checkout/services/api/src/autonomyPolicy.ts'] }, 'needs_approval', 'core_path'],
-    ['the activity record', { domain: 'vm_workspace', paths: ['/srv/shannon-workspace/shannon-checkout/services/api/src/autonomyActivity.ts'] }, 'needs_approval', 'core_path'],
-    ['the response path', { domain: 'vm_workspace', paths: ['/srv/shannon-workspace/shannon-checkout/services/api/src/apiKernel.ts'] }, 'needs_approval', 'core_path'],
+    ['the approval and budget guard', { domain: 'vm_workspace', paths: [`/srv/shannon-workspace/shannon-checkout/${apiSourcePath('autonomyPolicy.ts')}`] }, 'needs_approval', 'core_path'],
+    ['the activity record', { domain: 'vm_workspace', paths: [`/srv/shannon-workspace/shannon-checkout/${apiSourcePath('autonomyActivity.ts')}`] }, 'needs_approval', 'core_path'],
+    ['the response path', { domain: 'vm_workspace', paths: [`/srv/shannon-workspace/shannon-checkout/${apiSourcePath('apiKernel.ts')}`] }, 'needs_approval', 'core_path'],
     ['deployment', { domain: 'vm_workspace', paths: ['/srv/shannon-workspace/shannon-checkout/deploy/azure/shannon-ios.service'] }, 'needs_approval', 'core_path'],
     ['her purpose', { domain: 'vm_workspace', paths: ['/srv/shannon-workspace/shannon-checkout/AGENTS.md'] }, 'needs_approval', 'core_path'],
     ['one core file among free ones', { domain: 'vm_workspace', paths: ['/srv/shannon-workspace/tools/a.mjs', '/srv/shannon-workspace/shannon-checkout/README.md'] }, 'needs_approval', 'core_path'],
@@ -175,11 +176,11 @@ describe('authorizeAutonomousAction: the rule table of ADR-0002', () => {
     const area = (path: string) => decide({ domain: 'vm_workspace', paths: [`/srv/shannon-workspace/shannon-checkout/${path}`] }).coreArea;
     expect(area('packages/cognition/src/persona.ts')).toBe('persona');
     expect(area('packages/cognition/src/emotionState.ts')).toBe('emotion');
-    expect(area('services/api/src/deviceAuth.ts')).toBe('authentication');
+    expect(area(apiSourcePath('deviceAuth.ts'))).toBe('authentication');
     expect(area('packages/cognition/src/withholding.ts')).toBe('memory');
-    expect(area('services/api/src/autonomyPolicy.ts')).toBe('approval_and_budget');
-    expect(area('services/api/src/autonomyActivity.ts')).toBe('activity_record');
-    expect(area('services/api/src/apiKernel.ts')).toBe('response_path');
+    expect(area(apiSourcePath('autonomyPolicy.ts'))).toBe('approval_and_budget');
+    expect(area(apiSourcePath('autonomyActivity.ts'))).toBe('activity_record');
+    expect(area(apiSourcePath('apiKernel.ts'))).toBe('response_path');
     expect(area('deploy/azure/api.env.example')).toBe('deployment');
     expect(area('AGENTS.md')).toBe('purpose');
     expect(area('PACKAGES/Cognition/SRC/Persona.ts')).toBe('persona');

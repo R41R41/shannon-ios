@@ -1,10 +1,9 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, statSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SHANNON_CORE_AREA_LABELS } from '@shannon/cognition';
 import { SHANNON_CORE_PATHS, allCorePaths, coreAreaForRepositoryPath, normalizedRepositoryPath } from '../src/autonomyCore.js';
-
-const repositoryRoot = resolve(import.meta.dirname, '../../..');
+import { apiSourceFilesNamed, apiSourcePath, repositoryPath, repositoryRoot } from './support/sources.js';
 
 describe('CORE as code', () => {
   it('covers the nine core areas of ADR-0002, each with at least one path', () => {
@@ -30,11 +29,10 @@ describe('CORE as code', () => {
   });
 
   it('keeps every autonomy source file of the API inside core', () => {
-    const sources = readdirSync(join(repositoryRoot, 'services/api/src'))
-      .filter(name => /^(?:autonomy|apiAutonomy).*\.ts$/u.test(name));
-    expect(sources.length).toBeGreaterThanOrEqual(11);
-    for (const name of sources) {
-      expect(coreAreaForRepositoryPath(`services/api/src/${name}`), name).not.toBeNull();
+    const sources = apiSourceFilesNamed(/^(?:autonomy|apiAutonomy).*\.ts$/u);
+    expect(sources.length).toBeGreaterThanOrEqual(48);
+    for (const path of sources) {
+      expect(coreAreaForRepositoryPath(repositoryPath(path)), basename(path)).not.toBeNull();
     }
   });
 
@@ -48,8 +46,8 @@ describe('CORE as code', () => {
     expect(coreAreaForRepositoryPath('deployment-notes.md')).toBeNull();
     expect(coreAreaForRepositoryPath('packages/cognition/src/persona.ts.bak')).toBeNull();
     expect(coreAreaForRepositoryPath('tools/story-lab/run.mjs')).toBeNull();
-    expect(coreAreaForRepositoryPath('services/api/src/autonomyActivity.ts')?.area).toBe('activity_record');
-    expect(coreAreaForRepositoryPath('services/api/src/autonomyPolicy.ts')?.area).toBe('approval_and_budget');
+    expect(coreAreaForRepositoryPath(apiSourcePath('autonomyActivity.ts'))?.area).toBe('activity_record');
+    expect(coreAreaForRepositoryPath(apiSourcePath('autonomyPolicy.ts'))?.area).toBe('approval_and_budget');
   });
 
   it('rejects a path that is not inside the repository', () => {

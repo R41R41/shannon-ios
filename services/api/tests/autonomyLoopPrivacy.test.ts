@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -21,6 +21,7 @@ import { SQLitePeopleMemoryStore } from '../src/peopleMemoryStore.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { FakeModel, loopHarness, runUntilIdle, scope, type FakeShowing } from './autonomyLoopHarness.js';
 import { promptOf } from './modelPrompt.js';
+import { apiSourceNames, importedModules, readApiSource } from './support/sources.js';
 
 /**
  * What her own activity may see of the owner's, and what may leave her head (owner decision 2026-10-02, Syzygy ADR-0003:
@@ -528,10 +529,12 @@ describe('what reaches the prompts of her own activity', () => {
   });
 
   it('is built around one interface: the loop names it, one module reads the owner\'s context through the conversation\'s entry points, and nothing else of the loop opens a private store', () => {
-    const sourceDirectory = join(import.meta.dirname, '../src');
-    const read = (name: string) => readFileSync(join(sourceDirectory, name), 'utf8');
-    const imports = (name: string) => [...read(name).matchAll(/from '([^']+)'/gu)].map(match => match[1]!);
-    const loopSources = readdirSync(sourceDirectory).filter(name => /^autonomyLoop.*\.ts$/u.test(name));
+    // Files are found wherever the layout puts them, and imports are compared as the files they resolve to (Syzygy ADR-0008 §6).
+    const read = (name: string) => readApiSource(name);
+    const imports = (name: string) => importedModules(name);
+    const names = apiSourceNames();
+    expect(names.length).toBeGreaterThanOrEqual(360);
+    const loopSources = names.filter(name => /^autonomyLoop.*\.ts$/u.test(name));
     expect(loopSources.sort()).toEqual([
       'autonomyLoop.ts', 'autonomyLoopCalls.ts', 'autonomyLoopConfig.ts', 'autonomyLoopFolderStep.ts', 'autonomyLoopFollowUpStep.ts', 'autonomyLoopLookStep.ts',
       'autonomyLoopObservations.ts', 'autonomyLoopObserve.ts', 'autonomyLoopObservePrompts.ts', 'autonomyLoopOwnerContext.ts', 'autonomyLoopPacing.ts', 'autonomyLoopPhoneStep.ts', 'autonomyLoopPlan.ts',
@@ -541,34 +544,34 @@ describe('what reaches the prompts of her own activity', () => {
     const allowed = new Set([
       'node:crypto', 'node:sqlite', '@shannon/cognition',
       // Her folder on the owner's machines: checked below to reach nothing but her study and its own queue.
-      './autonomyHostFolderDesk.js', './autonomyHostFolderPath.js', './autonomyLoopFolderStep.js',
+      'autonomyHostFolderDesk.ts', 'autonomyHostFolderPath.ts', 'autonomyLoopFolderStep.ts',
       // Her study in Aether (Syzygy ADR-0007 revised): a note, a draft or a revision is written there first, through the adapter
       // the aether_study domain is handed; nothing of the owner's is read through it.
-      './studyAether.js',
+      'studyAether.ts',
       // One look at the room: the step names an interface and imports no module of the body; it is handed text and token counts.
-      './autonomyLoopLookStep.js',
+      'autonomyLoopLookStep.ts',
       // One message of her own: the step names two interfaces (the way her words leave, the owner's upcoming items as lines) and imports neither store.
-      './autonomyLoopReachOutStep.js',
+      'autonomyLoopReachOutStep.ts',
       // Act, observe, think again: what a step led to as closed facts, the words for those facts, the wait after a message of hers,
       // and the one second call. The observer is an interface the step names; the reports and the body store are not imported.
-      './autonomyLoopObservations.js', './autonomyLoopObserve.js', './autonomyLoopObservePrompts.js', './autonomyLoopFollowUpStep.js',
-      './autonomyLoopThinkStep.js', './autonomyLoopCalls.js',
+      'autonomyLoopObservations.ts', 'autonomyLoopObserve.ts', 'autonomyLoopObservePrompts.ts', 'autonomyLoopFollowUpStep.ts',
+      'autonomyLoopThinkStep.ts', 'autonomyLoopCalls.ts',
       // Phoning his iPhone: the gated step. The phone is an interface the step names; the call store and the push sender are not imported.
-      './autonomyLoopPhoneStep.js',
+      'autonomyLoopPhoneStep.ts',
       // She paces her own day: the bounds of a session, its row, and the words for its facts.
-      './autonomyLoopPacing.js', './autonomyLoopSessions.js', './autonomyLoopSessionPrompts.js',
+      'autonomyLoopPacing.ts', 'autonomyLoopSessions.ts', 'autonomyLoopSessionPrompts.ts',
       // Her tools (owner decision 2026-10-05): the step names the registry, its gate request and its result shape; the runner it is
       // handed by the service reaches her study and her folder's queue only.
-      './autonomyLoopToolStep.js', './shannonToolGate.js', './shannonToolTypes.js', './shannonTools.js',
+      'autonomyLoopToolStep.ts', 'shannonToolGate.ts', 'shannonToolTypes.ts', 'shannonTools.ts',
       // The provenance mark (ADR-0007): ids and times of what a session read and wrote, through the store's own marks; no text.
-      './autonomyLoopProvenance.js', './ownerInformedMarks.js',
+      'autonomyLoopProvenance.ts', 'ownerInformedMarks.ts',
       // What she may see of the owner's: the interface the loop is handed, the output rule, and the check of her own free text. No store.
-      './autonomyLoopOwnerContext.js',
+      'autonomyLoopOwnerContext.ts',
       // The closed vocabulary of what her body may report about a message of hers: constants of the wire contract, no store.
-      './bodyContract.js',
-      './autonomyBudget.js', './autonomyLoopConfig.js', './autonomyLoopPlan.js', './autonomyLoopPrompts.js', './autonomyLoopState.js',
-      './autonomyLoopSteps.js', './autonomyModels.js', './autonomyPolicy.js', './autonomyReader.js', './autonomyService.js',
-      './autonomyShowing.js', './autonomyStore.js', './autonomyTextModel.js', './studyStore.js',
+      'bodyContract.ts',
+      'autonomyBudget.ts', 'autonomyLoopConfig.ts', 'autonomyLoopPlan.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopState.ts',
+      'autonomyLoopSteps.ts', 'autonomyModels.ts', 'autonomyPolicy.ts', 'autonomyReader.ts', 'autonomyService.ts',
+      'autonomyShowing.ts', 'autonomyStore.ts', 'autonomyTextModel.ts', 'studyStore.ts',
     ]);
     for (const name of loopSources) {
       for (const imported of imports(name)) expect(allowed.has(imported), `${name} imports ${imported}`).toBe(true);
@@ -581,8 +584,8 @@ describe('what reaches the prompts of her own activity', () => {
     // replay under forgetting and disclosure, the replay window, the deterministic recall of a turn, people memory, today's focus.
     const context = read('autonomyOwnerContext.ts');
     expect(imports('autonomyOwnerContext.ts').sort()).toEqual([
-      './autonomyLoopOwnerContext.js', './chatModel.js', './conversationStore.js', './conversationWindow.js', './dailyMind.js',
-      './memoryDisclosure.js', './memoryVisibility.js', './peopleMemory.js', './turnCognitiveContext.js', '@shannon/cognition',
+      '@shannon/cognition', 'autonomyLoopOwnerContext.ts', 'chatModel.ts', 'conversationStore.ts', 'conversationWindow.ts',
+      'dailyMind.ts', 'memoryDisclosure.ts', 'memoryVisibility.ts', 'peopleMemory.ts', 'turnCognitiveContext.ts',
     ]);
     for (const entry of ['new DisclosureGate(', 'visibleReplayMessages(', 'replayWindow(', 'prepareTurnCognitiveContext(', '.recall(', 'visibleMemoryText(', '.promptProjection(', '.currentFocus(']) {
       expect(context, entry).toContain(entry);
@@ -599,9 +602,9 @@ describe('what reaches the prompts of her own activity', () => {
     // The worker is given no conversation model key and no Voyager credential, and names no private store itself.
     expect(worker).not.toMatch(/Voyager(?:Catalog|Destination)|SQLiteShannonStore|createConfiguredChatModel|peopleMemory|OPENAI_API_KEY|GEMINI_API_KEY/u);
     // No other module of her activity imports the context module or its wiring.
-    for (const name of readdirSync(sourceDirectory).filter(file => file.endsWith('.ts') && !['autonomyOwnerContextWiring.ts', 'autonomyWorker.ts'].includes(file))) {
-      expect(imports(name), name).not.toContain('./autonomyOwnerContextWiring.js');
-      if (name !== 'autonomyOwnerContext.ts') expect(imports(name), name).not.toContain('./autonomyOwnerContext.js');
+    for (const name of names.filter(file => !['autonomyOwnerContextWiring.ts', 'autonomyWorker.ts'].includes(file))) {
+      expect(imports(name), name).not.toContain('autonomyOwnerContextWiring.ts');
+      if (name !== 'autonomyOwnerContext.ts') expect(imports(name), name).not.toContain('autonomyOwnerContext.ts');
     }
 
     // The loop's journal, her sessions and her study share the autonomy database connection, and name no table but the autonomy's own.
@@ -617,8 +620,8 @@ describe('what reaches the prompts of her own activity', () => {
     // What leaves for her folder is built from a study piece and nothing else: these modules import no private store,
     // no prompt, no persona, and no file system, and the text of a step has a single source.
     const folderAllowed = new Set([
-      'node:crypto', 'node:sqlite', './autonomyActivity.js', './autonomyBudget.js', './autonomyHostFolderPath.js', './autonomyHostFolderSteps.js',
-      './autonomyPolicy.js', './autonomyService.js', './autonomyStore.js', './studyStore.js',
+      'node:crypto', 'node:sqlite', 'autonomyActivity.ts', 'autonomyBudget.ts', 'autonomyHostFolderPath.ts', 'autonomyHostFolderSteps.ts',
+      'autonomyPolicy.ts', 'autonomyService.ts', 'autonomyStore.ts', 'studyStore.ts',
     ]);
     for (const name of ['autonomyHostFolderDesk.ts', 'autonomyHostFolderPath.ts', 'autonomyHostFolderSteps.ts']) {
       for (const imported of imports(name)) expect(folderAllowed.has(imported), `${name} imports ${imported}`).toBe(true);

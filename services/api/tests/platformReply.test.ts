@@ -20,6 +20,7 @@ import { PLATFORM_REPLY_LIMITS, PlatformReplyService, SHANNON_PLATFORM_REPLY_PAT
 import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeReply, isPlatformBridgePath } from '../src/serverPlatformBridgeRoute.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { promptOf } from './modelPrompt.js';
+import { readApiSource } from './support/sources.js';
 
 const OWNER = '900000000000000001';
 const FRIEND = '900000000000000002';
@@ -263,7 +264,7 @@ describe('the ownOutreach selection of the capability context (review of 2026-10
   });
 
   it('(2) is set only for a surface turn, by the surface\'s switch, which only game chat turns on', () => {
-    const source = (name: string) => readFileSync(join(import.meta.dirname, '../src', name), 'utf8');
+    const source = (name: string) => readApiSource(name);
     const kernel = source('apiTextTurn.ts');
     // The app's chat passes its audience's selection untouched; only a surface (game chat, a platform reply) sets ownOutreach.
     expect(kernel).toContain('surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities');

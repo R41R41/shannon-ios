@@ -30,6 +30,7 @@ import type { BodyPresence } from '../src/shannonBody.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 import { promptOf } from './modelPrompt.js';
+import { readApiSource } from './support/sources.js';
 
 /**
  * Stage 2 of looking at the room: a look she takes in her own time. The activity loop and the
@@ -423,7 +424,7 @@ describe('one look in her own time, across two processes', () => {
     expect(shannonCapabilityPrompt('guest')).not.toMatch(/部屋を見る|自分のフォルダ/u);
     // Platform conversations (Discord and the others) are built without her own-time prompt at all.
     for (const name of ['platformBridge.ts', 'platformPeople.ts', 'platformPeopleSummaries.ts']) {
-      expect(readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8'), name).not.toMatch(/pursuitPrompt|SeenPrompt|studyDesk|\.study\b/u);
+      expect(readApiSource(name), name).not.toMatch(/pursuitPrompt|SeenPrompt|studyDesk|\.study\b/u);
     }
   });
 

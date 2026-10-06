@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { apiSourcePath } from './support/sources.js';
 
 describe('Azure deployment contract', () => {
   it('ships the activity loop switched off, with placeholders only for its dedicated credential', () => {
@@ -15,7 +16,9 @@ describe('Azure deployment contract', () => {
       }
     }
     const unit = readFileSync(new URL('../../../deploy/azure/shannon-ios-autonomy.service', import.meta.url), 'utf8');
-    expect(unit).toContain('services/api/src/autonomyWorker.ts');
+    // An entry file stays at the root of the API sources (Syzygy ADR-0008 §6): the unit runs it there.
+    expect(apiSourcePath('autonomyWorker.ts')).toBe('services/api/src/autonomyWorker.ts');
+    expect(unit).toContain(apiSourcePath('autonomyWorker.ts'));
     expect(unit).toContain('EnvironmentFile=/home/azureuser/.config/shannon-ios/api.env');
     expect(unit).toContain('ReadWritePaths=/home/azureuser/shannon-ios-data');
     expect(unit).toContain('NoNewPrivileges=true');

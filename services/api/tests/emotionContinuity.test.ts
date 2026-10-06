@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -18,6 +18,7 @@ import { emotionTiming } from '../src/emotionTiming.js';
 import type { BodyPresence } from '../src/shannonBody.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { promptOf } from './modelPrompt.js';
+import { apiSourceNames, apiSourcePath, importedModules, readApiSource } from './support/sources.js';
 
 // Whole conversations through the kernel on a loaded machine: the default five seconds says nothing about the code.
 vi.setConfig({ testTimeout: 30_000 });
@@ -607,9 +608,9 @@ describe('(l) the kill switch SHANNON_EMOTION_CLOCK=wall', () => {
 describe('the emotion source stays core', () => {
   it('lists the new modules among the paths that need the owner\'s approval', () => {
     for (const path of ['packages/cognition/src/emotionTime.ts', 'packages/cognition/src/emotionContinuity.ts',
-      'services/api/src/emotionTiming.ts', 'services/api/src/autonomyAwakeClock.ts',
+      apiSourcePath('emotionTiming.ts'), apiSourcePath('autonomyAwakeClock.ts'),
       // Syzygy ADR-0005 stage 1b: where only the reflex moves her (not the table), beside the table and its one entrance.
-      'packages/cognition/src/touchEmotion.ts', 'services/api/src/bodyTouch.ts', 'services/api/src/bodyTouchReflex.ts']) {
+      'packages/cognition/src/touchEmotion.ts', apiSourcePath('bodyTouch.ts'), apiSourcePath('bodyTouchReflex.ts')]) {
       expect(SHANNON_CORE_PATHS.emotion).toContain(path);
     }
   });
@@ -635,23 +636,25 @@ describe('the emotion source stays core', () => {
   });
 
   it('gives the loop\'s process one narrow write and nothing to read', () => {
-    const source = (name: string) => readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8');
+    const source = (name: string) => readApiSource(name);
     const clock = source('autonomyAwakeClock.ts');
     // It opens no conversation store and no model, and its only event is the content-free one. After its write the mood
     // history may add a point of the state as written (`moodHistory.ts`, which imports no store either).
-    expect([...clock.matchAll(/from '([^']+)'/gu)].map(match => match[1]).sort())
-      .toEqual(['./emotionTiming.js', './moodHistory.js', './moodHistoryContract.js', '@shannon/cognition', 'node:sqlite']);
-    expect([...source('moodHistory.ts').matchAll(/from '([^']+)'/gu)].map(match => match[1]).sort())
-      .toEqual(['./moodHistoryContract.js', '@shannon/cognition', 'node:sqlite']);
-    expect([...source('moodHistoryContract.ts').matchAll(/from '([^']+)'/gu)].map(match => match[1])).toEqual(['./shannonNowContract.js']);
+    expect(importedModules('autonomyAwakeClock.ts').sort())
+      .toEqual(['@shannon/cognition', 'emotionTiming.ts', 'moodHistory.ts', 'moodHistoryContract.ts', 'node:sqlite']);
+    expect(importedModules('moodHistory.ts').sort())
+      .toEqual(['@shannon/cognition', 'moodHistoryContract.ts', 'node:sqlite']);
+    expect(importedModules('moodHistoryContract.ts')).toEqual(['shannonNowContract.ts']);
     expect(clock).not.toMatch(/SQLiteShannonStore|conversationStore|chatModel|peopleMemory|OPENAI_API_KEY|GEMINI_API_KEY|INSERT |DELETE |CREATE /u);
     expect(clock.match(/type: '[a-z-]+'/gu)).toEqual(["type: 'awake-observed'"]);
     expect(clock.match(/UPDATE [a-z_]+ SET [a-z_]+ = \?/gu)).toEqual(['UPDATE companion_states SET snapshot_json = ?']);
     // What it hands the loop: two functions that return nothing.
     expect(clock).toMatch(/observe\(scopeKey: string\): void;\n  close\(\): void;/u);
     // Only the worker's entry file uses it; no module of the loop does, and the loop still imports nothing of her emotion.
-    for (const name of readdirSync(new URL('../src/', import.meta.url)).filter(file => file.endsWith('.ts') && file !== 'autonomyWorker.ts')) {
-      expect(source(name), name).not.toContain("'./autonomyAwakeClock.js'");
+    const names = apiSourceNames();
+    expect(names.length).toBeGreaterThanOrEqual(360);
+    expect(names.filter(name => importedModules(name).includes('autonomyAwakeClock.ts'))).toEqual(['autonomyWorker.ts']);
+    for (const name of names.filter(file => file !== 'autonomyWorker.ts')) {
       if (/^autonomyLoop/u.test(name)) expect(source(name), name).not.toMatch(/presentShannonFeeling|expressiveEmotion|lingering|emotionTiming/u);
     }
     expect(source('autonomyWorker.ts').match(/awakeClock\.[a-z]+\(/gu)).toEqual(['awakeClock.observe(', 'awakeClock.close(']);

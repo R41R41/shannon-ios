@@ -1,5 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_CAPABILITIES, SHANNON_CONDITIONAL_CAPABILITIES, SHANNON_MINECRAFT_BODY_CAPABILITY, withAetherAccessCapability, SHANNON_LIMITATIONS, SHANNON_ROOM_LOOK_RULES, SHANNON_TOUCH_FEELINGS, SHANNON_TOUCH_KINDS, isForgetCitedMemoriesCommand, shannonCapabilityPrompt, withAutonomyRunning,
@@ -73,6 +72,7 @@ import { APP_LOOK_SCHEMA, configuredAppLook } from '../src/appLookContract.js';
 import { appLookUnavailablePrompt } from '../src/appLookLines.js';
 import { ConversationLooks } from '../src/conversationLooks.js';
 import { createConfiguredVoiceVisionGateway } from '../src/voiceVision.js';
+import { apiSourceFiles } from './support/sources.js';
 
 const voiceSkill = (skill: VoiceSkill) => (VOICE_SKILLS as readonly string[]).includes(skill);
 const exists = (...values: unknown[]) => values.every(value => typeof value === 'function');
@@ -214,9 +214,9 @@ describe('Shannon capability description', () => {
     }
     // No mail, alarm, or media-generation integration exists in the API sources, and no calendar is reached from the server:
     // the apps send a snapshot of upcoming events (`calendar_read`); nothing here reads or writes a calendar service.
-    const sourceDirectory = join(import.meta.dirname, '../src');
-    const sources = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts'))
-      .map(name => readFileSync(join(sourceDirectory, name), 'utf8')).join('\n');
+    const files = apiSourceFiles();
+    expect(files.length).toBeGreaterThanOrEqual(360);
+    const sources = files.map(path => readFileSync(path, 'utf8')).join('\n');
     expect(limitations.has('media_generation')).toBe(true);
     expect(sources).not.toMatch(/image_generation|images\/generations|video_generation/u);
     expect(limitations.has('calendar_mail')).toBe(true);

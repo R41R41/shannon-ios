@@ -1,10 +1,9 @@
-import { existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { SQLiteAutonomyStore } from '../../src/autonomyStore.js';
 import {
   THREE_TOOLS_NUDGE, THREE_TOOLS_REQUEST, THREE_TOOLS_SEED, judgeThreeTools, stableFingerprint, threeToolsOutcome, threeToolsScenario, threeToolsScriptInputs,
   type ReachDriver, type ReachNoteView, type ReachToolCall, type ReachToolResult, type ReachToolbox,
 } from '../../../../packages/evaluation/src/reach/index.js';
+import { apiSourceNames } from '../support/sources.js';
 
 /**
  * Scenario (b) against an interface. A turn model calls tools until it replies; the toolbox is what
@@ -135,10 +134,11 @@ export function scriptedThreeToolsDriver(): ReachDriver {
 
 /** The live mode until the registry is on main: nothing runs, nothing is spent. */
 export function pendingRegistryDriver(): ReachDriver {
-  const registry = fileURLToPath(new URL('../../src/shannonToolRunner.ts', import.meta.url));
+  // Found wherever the layout puts it (Syzygy ADR-0008 §6).
+  const registry = apiSourceNames().includes('shannonToolRunner.ts');
   return async () => ({
     inputs: threeToolsScriptInputs(),
-    pending: existsSync(registry)
+    pending: registry
       ? 'registry on main; write the live adapter (ReachToolbox over ShannonToolRunner, turns through the chat model)'
       : `pending registry: ${threeToolsScenario.liveRequires}`,
   });

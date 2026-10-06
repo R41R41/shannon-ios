@@ -1,7 +1,7 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
@@ -16,6 +16,7 @@ import { SQLiteReachOutReports } from '../src/reachOutReports.js';
 import { createShannonNowRoute, shannonNowResponse } from '../src/serverShannonNowRoute.js';
 import { SHANNON_NOW_LIMITS, SHANNON_NOW_PATH, shannonNowEnabled, shannonNowOwnerScope, type ShannonNowResponse } from '../src/shannonNowContract.js';
 import { SQLiteShannonNowReader, type ReachOutDeliverySource } from '../src/shannonNowReader.js';
+import { readApiSource } from './support/sources.js';
 
 const NOW = '2026-10-03T07:00:00.000Z';
 const MINUTE = 60_000;
@@ -23,7 +24,7 @@ const DAY = 24 * 60 * MINUTE;
 const OWNER = 'owner';
 const ago = (milliseconds: number) => new Date(Date.parse(NOW) - milliseconds).toISOString();
 
-const source = (name: string) => readFileSync(resolve(import.meta.dirname, '../src', name), 'utf8');
+const source = (name: string) => readApiSource(name);
 const servers: Array<ReturnType<typeof createServer>> = [];
 const directories: string[] = [];
 const closers: Array<{ close(): void }> = [];
