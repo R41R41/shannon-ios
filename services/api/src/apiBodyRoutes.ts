@@ -1,7 +1,7 @@
 import type { ApiRequest, ApiResponse } from './contracts.js';
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
 import {
-  BODY_REACH_OUT_REPORT_PREFIX, BODY_SCHEMA_VERSION, bodyReachOutReportId, validatedBodyCapabilities, validatedBodyEvents, validatedBodyReachOutReport,
+  BODY_REACH_OUT_REPORT_PREFIX, BODY_SCHEMA_VERSION, BODY_TOUCH_VOCABULARY, bodyReachOutReportId, validatedBodyCapabilities, validatedBodyEvents, validatedBodyReachOutReport,
 } from './bodyContract.js';
 import { BODY_LOOK_RESULT_PREFIX, bodyLookResultId, validatedBodyLookResult } from './bodyLookContract.js';
 import type { BodyLookAnswer } from './bodyLook.js';
@@ -94,7 +94,8 @@ export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): Api
     if (saved === 'game_body') return { status: 403, body: { error: 'GAME_BODY_CAPABILITIES_DENIED', message: 'The Minecraft body does not register body capabilities.' } };
     // An app's desktop body (desktopBodyIdentity.ts) is a full body on the Mac and nothing else.
     if (saved === 'desktop_body_shape') return badRequest('a desktop body registers surface "mac" and no touchOnly');
-    return { status: 200, body: saved };
+    // The touch vocabulary this server takes: a body sends the fields of vocabulary 2 only once it has seen it here or on presence.
+    return { status: 200, body: { ...saved, touchVocabulary: BODY_TOUCH_VOCABULARY } };
   }
   return { status: 404, body: { error: 'NOT_FOUND' } };
 }

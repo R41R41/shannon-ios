@@ -5,7 +5,7 @@ import {
   type CompanionStateSnapshot, type CompanionStateStore,
 } from '@shannon/cognition';
 import { emotionTiming, resolveReplyEmotion } from './companionPresence.js';
-import { BODY_LIMITS } from './bodyContract.js';
+import { BODY_LIMITS, isImpossibleTouch } from './bodyContract.js';
 import {
   BODY_REACTION_LIMITS, bodyReactionContentHash, validBodyReactionId,
   type BodyReactionAnswer, type BodyReactionConfig, type BodyReactionRequest,
@@ -72,6 +72,12 @@ export class BodyReactions {
     // A touch reaction is for the owner's own body only: no other scope may ask for one.
     if (config.ownerScopeKey !== scopeKey) return { kind: 'not_owner' };
     if (!this.dependencies.isBody(scopeKey, deviceId)) return { kind: 'not_a_body' };
+    // Holding anything but the hand, or a hover anywhere but the head and the hair, is not a touch: no feeling, no memory,
+    // no model, no request counted against the limit and no row written. As for an event, it is answered so every time,
+    // whatever its id was used for before (a known id resent in such a shape is `not_a_touch`, not a conflict).
+    if (isImpossibleTouch(request.touch)) {
+      return { kind: 'done', answer: { ...this.quiet(request.id, this.dependencies.stateStore.snapshot(scopeKey), this.dependencies.now()), ignored: 'not_a_touch' } };
+    }
 
     const hash = bodyReactionContentHash(request);
     const key = `${scopeKey}\u0000${request.id}`;
@@ -134,6 +140,9 @@ export class BodyReactions {
         id: request.id, type: request.touch.type, audience: request.audience, occurredAt: request.occurredAt,
         durationMs: request.touch.durationMs, ...(request.touch.strength !== undefined ? { strength: request.touch.strength } : {}),
         ...(request.touch.region !== undefined ? { region: request.touch.region } : {}), ...(surface ? { surface } : {}),
+        // Touch vocabulary 2: stored with the touch, as sent; nothing reads it for the feeling or the words yet.
+        ...(request.touch.part !== undefined ? { part: request.touch.part } : {}), ...(request.touch.side !== undefined ? { side: request.touch.side } : {}),
+        ...(request.touch.gesture !== undefined ? { gesture: request.touch.gesture } : {}), ...(request.touch.reflex !== undefined ? { reflex: request.touch.reflex } : {}),
       }) : null;
       const timely = age <= BODY_REACTION_LIMITS.requestMaximumAgeMilliseconds;
       const decision = felt && timely ? await this.decide(scopeKey, request, felt, at, startedAt, surface) : null;

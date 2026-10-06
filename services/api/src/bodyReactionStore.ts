@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import type { ShannonTouchKind } from '@shannon/cognition';
-import type { BodyAudience } from './bodyContract.js';
+import type { BodyAudience, BodyTouchGesture, BodyTouchReflex, BodyTouchSide } from './bodyContract.js';
 import { BODY_REACTION_LIMITS, type BodyReactionAnswer } from './bodyReactionContract.js';
-import { BODY_TOUCH_MIXED, isBodySurface, isBodyTouchRegion, type BodySurface, type BodyTouchRegion } from './bodyTouchWords.js';
+import { BODY_TOUCH_MIXED, isBodySurface, isBodyTouchRegion, type BodySurface, type BodyTouchPart, type BodyTouchRegion } from './bodyTouchWords.js';
 import { addColumnOnce } from './bodyStore.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 
@@ -27,7 +27,15 @@ export interface TouchRecord {
   /** Which part was touched, and on which surface her body was; absent when the body did not say. */
   region?: BodyTouchRegion;
   surface?: BodySurface;
+  /** Touch vocabulary 2, as the body sent it: kept on the touch's own row only, read by nothing yet. */
+  part?: BodyTouchPart;
+  side?: BodyTouchSide;
+  gesture?: BodyTouchGesture;
+  reflex?: BodyTouchReflex;
 }
+
+/** The columns of touch vocabulary 2 on `body_touches` (added 2026-10-06). */
+const TOUCH_DETAIL_COLUMNS = ['part', 'side', 'gesture', 'reflex'] as const;
 
 export interface StoredTouchBurst {
   /** Also the id of the experience (`experience_events.event_id`). */
@@ -163,6 +171,8 @@ export class SQLiteBodyReactionStore {
     for (const table of ['body_touches', 'body_touch_bursts']) {
       for (const column of ['region', 'surface']) addColumnOnce(this.database, table, column, 'TEXT');
     }
+    // Added 2026-10-06 (touch vocabulary 2): the finer part, the side, the gesture and the body's reflex, on a touch only.
+    for (const column of TOUCH_DETAIL_COLUMNS) addColumnOnce(this.database, 'body_touches', column, 'TEXT');
     secureDatabaseFiles(path);
   }
 
@@ -198,6 +208,12 @@ export class SQLiteBodyReactionStore {
             UPDATE body_touches SET duration_ms = MAX(duration_ms, ?), strength = COALESCE(?, strength) WHERE scope_key = ? AND touch_id = ?
           `).run(duration, touch.strength ?? null, scopeKey, touch.id);
         }
+        // The finished touch may say what its first message did not (the reflex, most often): a column still empty takes it.
+        const detail = TOUCH_DETAIL_COLUMNS.filter(column => touch[column] !== undefined);
+        if (detail.length) {
+          this.database.prepare(`UPDATE body_touches SET ${detail.map(column => `${column} = COALESCE(${column}, ?)`).join(', ')} WHERE scope_key = ? AND touch_id = ?`)
+            .run(...detail.map(column => touch[column]!), scopeKey, touch.id);
+        }
         if (longer > 0 || touch.audience === 'others') {
           this.database.prepare('UPDATE body_touch_bursts SET total_duration_ms = total_duration_ms + ?, others = MAX(others, ?) WHERE scope_key = ? AND burst_id = ?')
             .run(longer, touch.audience === 'others' ? 1 : 0, scopeKey, known.burst_id);
@@ -228,10 +244,11 @@ export class SQLiteBodyReactionStore {
           touch.region ?? null, touch.surface ?? null);
       }
       this.database.prepare(`
-        INSERT INTO body_touches (scope_key, touch_id, touch_type, audience, occurred_at, received_at, duration_ms, strength, burst_id, region, surface)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO body_touches (scope_key, touch_id, touch_type, audience, occurred_at, received_at, duration_ms, strength, burst_id, region, surface,
+          part, side, gesture, reflex)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(scopeKey, touch.id, touch.type, touch.audience, touch.occurredAt, receivedAt, duration, touch.strength ?? null, burstId,
-        touch.region ?? null, touch.surface ?? null);
+        touch.region ?? null, touch.surface ?? null, touch.part ?? null, touch.side ?? null, touch.gesture ?? null, touch.reflex ?? null);
       return { fresh: true, burst: this.burst(scopeKey, burstId)! };
     });
   }
@@ -239,6 +256,14 @@ export class SQLiteBodyReactionStore {
   burst(scopeKey: string, burstId: string): StoredTouchBurst | null {
     const row = this.database.prepare('SELECT * FROM body_touch_bursts WHERE scope_key = ? AND burst_id = ?').get(scopeKey, burstId) as unknown as BurstRow | undefined;
     return row ? burstOf(row) : null;
+  }
+
+  /** What touch vocabulary 2 stored for a touch id: only the fields that were sent; null for an id never counted. */
+  touchDetail(scopeKey: string, touchId: string): Pick<TouchRecord, typeof TOUCH_DETAIL_COLUMNS[number]> | null {
+    const row = this.database.prepare(`SELECT ${TOUCH_DETAIL_COLUMNS.join(', ')} FROM body_touches WHERE scope_key = ? AND touch_id = ?`)
+      .get(scopeKey, touchId) as unknown as Record<typeof TOUCH_DETAIL_COLUMNS[number], string | null> | undefined;
+    if (!row) return null;
+    return Object.fromEntries(TOUCH_DETAIL_COLUMNS.flatMap(column => row[column] !== null ? [[column, row[column]]] : [])) as Pick<TouchRecord, typeof TOUCH_DETAIL_COLUMNS[number]>;
   }
 
   /** The burst a touch id was counted in. */

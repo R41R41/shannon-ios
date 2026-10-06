@@ -3,7 +3,7 @@ import { SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME, presentShannonFeeling, type C
 import type { AutonomyActivityDay } from './autonomyActivity.js';
 import type { AutonomyControlLabel, ShannonAutonomyService } from './autonomyService.js';
 import {
-  BODY_LIMITS, BODY_SCHEMA_VERSION, BODY_TOUCH_EVENT_TYPES, isBodyGameEvent,
+  BODY_LIMITS, BODY_SCHEMA_VERSION, BODY_TOUCH_EVENT_TYPES, BODY_TOUCH_VOCABULARY, isBodyGameEvent, isImpossibleTouch,
   type BodyAudience, type BodyCapabilities, type BodyDoing, type BodyEvent, type BodyEventType, type BodyNudge, type BodyReachOutDeliveryOutcome,
 } from './bodyContract.js';
 import { AppLooks, type AppLookOptions } from './appLook.js';
@@ -76,7 +76,7 @@ export interface ShannonBodyDependencies extends ShannonBodyOptions {
 
 export type BodyEventResult =
   | { id: string; status: 'stored' | 'duplicate' | 'conflict' }
-  | { id: string; status: 'ignored'; reason: 'stale' | 'future' | 'daily_cap' | 'touch_only' | 'not_game_body' | 'game_only' };
+  | { id: string; status: 'ignored'; reason: 'stale' | 'future' | 'daily_cap' | 'touch_only' | 'not_game_body' | 'game_only' | 'not_a_touch' };
 
 export interface BodyIngestReceipt {
   schemaVersion: number;
@@ -91,6 +91,8 @@ export interface BodyPresence {
   /** When this server first saw the snapshot with this `etag`. */
   changedAt: string;
   pollAfterSeconds: number;
+  /** The touch vocabulary this server takes (`BODY_TOUCH_VOCABULARY`); a body sends the fields of vocabulary 2 only once it sees 2 or more. */
+  touchVocabulary: number;
   mood: {
     expression: string; feeling?: string; primary: string; intensity: number; fromConversation: boolean;
     valence: number; arousal: number; openness: number;
@@ -107,7 +109,7 @@ export interface BodyPresence {
   ownerCallElsewhere?: OwnerCallElsewhere;
 }
 
-export type BodyPresenceUnchanged = Pick<BodyPresence, 'schemaVersion' | 'etag' | 'changedAt' | 'pollAfterSeconds'> & { unchanged: true };
+export type BodyPresenceUnchanged = Pick<BodyPresence, 'schemaVersion' | 'etag' | 'changedAt' | 'pollAfterSeconds' | 'touchVocabulary'> & { unchanged: true };
 
 export interface BodyNudges {
   schemaVersion: number;
@@ -233,6 +235,8 @@ export class ShannonBody {
         if (touchOnly && !BODY_TOUCH_EVENT_TYPES.some(type => type === event.type) && !TOUCH_ONLY_ALSO.has(event.type)) return { id: event.id, status: 'ignored', reason: 'touch_only' };
         if (isBodyGameEvent(event.type) && !gameAllowed) return { id: event.id, status: 'ignored', reason: 'not_game_body' };
         if (!isBodyGameEvent(event.type) && gameBody) return { id: event.id, status: 'ignored', reason: 'game_only' };
+        // Holding anything but the hand, or a hover anywhere but the head and the hair: this one item only, never the batch.
+        if (isImpossibleTouch(event)) return { id: event.id, status: 'ignored', reason: 'not_a_touch' };
         const known = this.store.known(scopeKey, event);
         if (known) return { id: event.id, status: known };
         const age = time - Date.parse(event.occurredAt);
@@ -394,6 +398,8 @@ export class ShannonBody {
       schemaVersion: BODY_SCHEMA_VERSION, etag, changedAt: mark.changedAt,
       pollAfterSeconds: Math.min(looking.fastPoll ? BODY_LOOK_LIMITS.fastPollSeconds : BODY_LIMITS.presencePollSeconds,
         content.ownerCallElsewhere?.active ? OWNER_CALL_LIMITS.pollSeconds : Number.POSITIVE_INFINITY),
+      // A fact of this server, not of the snapshot: outside the etag, and on an unchanged answer too.
+      touchVocabulary: BODY_TOUCH_VOCABULARY,
     };
     return knownEtag === etag ? { ...head, unchanged: true } : { ...head, ...content };
   }
