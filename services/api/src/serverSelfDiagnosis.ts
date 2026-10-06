@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { SHANNON_ONE_LINE_VOICE, looksSecret, shannonCapabilityPrompt, shannonPersonaPrompt, shannonSuitePrompt } from '@shannon/cognition';
+import { configuredAutonomy } from './autonomyBudget.js';
 import { ownerDocumentsEnabled } from './autonomyLoopConfig.js';
 import { AUTONOMY_MODEL_PURPOSES, AUTONOMY_ROOM_LOOK_MODEL, autonomyModel, type AutonomyModelPurpose } from './autonomyModels.js';
 import { dedicatedAutonomyCredential, resolveAutonomyModel } from './autonomyTextModel.js';
@@ -70,8 +71,9 @@ export interface ServerSelfDiagnosis {
     count: number;
     names: string[];
     /**
-     * What each surface offers for each audience, counted from the registry: folder tools also need a bound PC at the time
-     * of the turn, and her Minecraft body's tools a configured body (`minecraft.request` one in the game).
+     * What each surface offers for each audience, counted from the registry: folder tools only while a PC or Mac is bound
+     * (`SHANNON_AUTONOMY_HOST_FOLDERS_JSON` with a `deviceId`); her Minecraft body's tools need a configured body at the
+     * time of the turn (`minecraft.request` one in the game), which is not counted here.
      */
     offered: Record<ToolSurface, Record<ToolAudience, number>>;
   };
@@ -147,8 +149,11 @@ function toolSummary(environment: Environment): ServerSelfDiagnosis['tools'] {
   const aether = configuredAetherAccess(environment) !== null;
   // The owner's documents in her own time exist only with Aether and SHANNON_AUTONOMY_OWNER_DOCUMENTS=on (ADR-0007).
   const here = (tool: { name: string; domain: string }) => tool.domain === 'owner_documents_read' ? aether && ownerDocumentsEnabled(environment) : aether || !tool.name.startsWith('aether');
+  // Her folder's tools are offered only while a PC or Mac is bound to it (`ShannonToolRunner.offered`), as the API reads it.
+  const bound = Object.keys(configuredAutonomy(environment).places.hostDevices ?? {}).length > 0;
+  const offeredHere = (tool: { name: string; domain: string }) => here(tool) && (tool.domain !== 'host_folder' || bound);
   const offered = Object.fromEntries(SURFACES.map(surface => [surface, Object.fromEntries(AUDIENCES.map(audience => [
-    audience, enabled ? offeredTools(surface, audience, here).length : 0,
+    audience, enabled ? offeredTools(surface, audience, offeredHere).length : 0,
   ]))])) as ServerSelfDiagnosis['tools']['offered'];
   const names = enabled ? SHANNON_TOOLS.filter(here).map(tool => tool.name) : [];
   return { enabled, count: names.length, names, offered };

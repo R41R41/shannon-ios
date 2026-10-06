@@ -22,6 +22,9 @@ import type { LlmUsageEvent } from '../src/llmUsage.js';
  * Re-recorded on 2026-10-06 (no-task-after-write) for one deliberate wording change of the `[Codexで行う作業]` block: Codex
  * works in the owner's repositories and projects, and her notes, stories and files in her own places are written with her
  * own tools, never proposed as a Codex task. Only the instructions of each request changed; the results are the same.
+ * Re-recorded on 2026-10-06 (folder-wording) for one more sentence of that block: looking at, listing, searching and
+ * reading her own places is done with her own tools too, never a Codex task (「Mac のシャノン用フォルダを、フォルダの道具で
+ * 一覧して」 became a task proposal in production). Again only the instructions changed; the results are the same.
  */
 const fixture = new URL('./fixtures/chat-model-turn-v1.json', import.meta.url);
 const at = '2026-10-02T03:00:00.000Z';

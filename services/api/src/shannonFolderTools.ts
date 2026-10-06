@@ -171,7 +171,7 @@ function runResult(outcome: HostRunOutcome, operation: HostOperation, target: { 
 export function folderToolForHosts(tool: ShannonToolDefinition, hosts: readonly string[]): ShannonToolDefinition {
   const property = tool.input.properties.host;
   if (tool.domain !== 'host_folder' || hosts.length < 2 || !property) return tool;
-  const description = `どのフォルダか（${hostNames(hosts)}）。ふだんは書かない（つながっているのが1台ならそれを使う。両方つながっている時は、どちらかライ氏に聞いてから書く）`;
+  const description = `どのフォルダか（${hostNames(hosts)}）。ライ氏がMacかPCを言ったら、そのフォルダの名前を書く。言っていない時は書かない（つながっているのが1台ならそれを使う。両方つながっている時は、どちらかライ氏に聞いてから書く）`;
   return Object.freeze({ ...tool, input: Object.freeze({ ...tool.input, properties: Object.freeze({ ...tool.input.properties, host: Object.freeze({ ...property, description }) }) }) });
 }
 
