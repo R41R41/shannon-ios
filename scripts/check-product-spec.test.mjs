@@ -58,6 +58,7 @@ test('every generated file is produced from the three sources', () => {
     // The copy is split by area (500-line ceiling): large areas get a file of their own.
     'apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/ShannonDesignTokens.generated.swift',
     'apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/ShannonStrings+Emotion.generated.swift',
+    'apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/ShannonStrings+Folder.generated.swift',
     'apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/ShannonStrings+Ops.generated.swift',
     'apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/ShannonStrings+Settings.generated.swift',
     'apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/ShannonStrings+Task.generated.swift',
@@ -66,6 +67,7 @@ test('every generated file is produced from the three sources', () => {
     'apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/ShannonStrings.generated.swift',
     'design/generated/ShannonDesignTokens.generated.swift',
     'design/generated/ShannonStrings+Emotion.generated.swift',
+    'design/generated/ShannonStrings+Folder.generated.swift',
     'design/generated/ShannonStrings+Ops.generated.swift',
     'design/generated/ShannonStrings+Settings.generated.swift',
     'design/generated/ShannonStrings+Task.generated.swift',

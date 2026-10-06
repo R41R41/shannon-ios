@@ -63,7 +63,16 @@ struct ShannonDeskApp: App {
 #else
         let showsDesktopBody = true
 #endif
-        ShannonDesktopAppDelegate.didFinishLaunching = { ShannonDesktopBody.shared.start(showsWindow: showsDesktopBody) }
+#if DEBUG
+        let hostsFolder = !usesDesignPreview
+#else
+        let hostsFolder = true
+#endif
+        ShannonDesktopAppDelegate.didFinishLaunching = {
+            ShannonDesktopBody.shared.start(showsWindow: showsDesktopBody)
+            // Her folder on this Mac (A18): resolved and hosted from launch while one is chosen; never in the design preview.
+            if hostsFolder { ShannonFolderHostModel.shared.start(api: client) }
+        }
 #if DEBUG
         _privateListeningModel = State(initialValue: usesDesignPreview
             ? .designPreview(outputs: [], registered: [], status: .notListening)

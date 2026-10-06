@@ -24,6 +24,12 @@ public final class ShannonDesktopAppDelegate: NSObject, NSApplicationDelegate {
         Self.didFinishLaunching?()
     }
 
+    /// Closing the last window never quits the app: her desktop body, a call in the menu bar, and (A18, owner decision
+    /// 2026-10-06) her folder while one is chosen keep running, with the app's menu bar item (`ShannonFolderHostMenuSection`).
+    public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let call = Self.voiceCall, call.isShown else { return .terminateNow }
         Task { @MainActor [replyToTerminate] in

@@ -40,6 +40,9 @@ extension ShannonDesktopRootView {
                 }
             case .calendar:
                 ShannonCalendarSharingSettingsSection()
+            case .folder:
+                // Her folder on this Mac (A18 S2): chosen, paused, checked and stopped here; she lists, searches and reads it.
+                ShannonFolderHostSettingsSection()
             case .appearance:
                 appearanceSections
             case .ops, .devices, .delivery, .diagnostics, .connection, .sources:

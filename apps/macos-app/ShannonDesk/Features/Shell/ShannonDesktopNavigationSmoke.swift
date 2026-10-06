@@ -13,7 +13,7 @@ extension ShannonDesktopRootView {
               ProcessInfo.processInfo.arguments.contains("-ShannonPreviewNavigationSmoke") else { return }
         let steps: [(DesktopDestination, String?)] = [
             (.shannon, nil), (.settings, DesktopSettingsPage.appearance.rawValue), (.shannon, nil),
-            (.work, nil), (.settings, DesktopSettingsPage.ops.rawValue), (.talk, nil),
+            (.work, nil), (.settings, DesktopSettingsPage.ops.rawValue), (.settings, DesktopSettingsPage.folder.rawValue), (.talk, nil),
         ]
         try? await Task.sleep(for: .seconds(3))
         for round in 0..<8 {
