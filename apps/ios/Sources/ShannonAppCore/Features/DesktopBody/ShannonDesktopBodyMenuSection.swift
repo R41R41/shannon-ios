@@ -2,7 +2,7 @@
 import AppKit
 
 /// The app's own part of its one menu bar item (information-architecture.md 8 #27; roadmap A17): her desktop body
-/// shown or hidden, always on top, her size, the four entries, and 終了. It wants the item for as long as the app runs;
+/// shown or hidden, always on top, her size, the stream output (A18 S5), the four entries, and 終了. It wants the item for as long as the app runs;
 /// the voice call's part (A16) is the first section while a call is on and no window is on screen.
 @MainActor
 final class ShannonDesktopBodyMenuSection: ShannonDesktopMenuBarSection {
@@ -37,7 +37,17 @@ final class ShannonDesktopBodyMenuSection: ShannonDesktopMenuBarSection {
         sizes.addItem(.separator())
         sizes.addItem(ShannonDesktopMenuItem.caption(ShannonGeneratedStrings.desktopBodySizeHint))
         size.submenu = sizes
-        var items: [NSMenuItem] = [shown, onTop, size, .separator()]
+        // 配信用の出力（OBS） and its address, as in the Windows tray (A18 S5).
+        let output = body.streamOutput
+        let stream = ShannonDesktopMenuItem(ShannonGeneratedStrings.desktopStreamTitle, state: output.isOn ? .on : .off) { [weak output] in
+            output.map { $0.setOn(!$0.isOn) }
+        }
+        var items: [NSMenuItem] = [shown, onTop, size, stream]
+        // Only while the page is out (the menu enables every item that has an action, so it is left out otherwise).
+        if output.state == .live {
+            items.append(ShannonDesktopMenuItem(ShannonGeneratedStrings.desktopStreamCopyURL) { [weak output] in output?.copyPageURL() })
+        }
+        items.append(.separator())
         for entry in ShannonDesktopEntry.allCases {
             items.append(ShannonDesktopMenuItem(entry.title) { [weak body] in body?.open(entry) })
         }

@@ -191,7 +191,12 @@ private struct ShannonPrivateListeningLifecycle: ViewModifier {
     func body(content: Content) -> some View {
         content
             .environment(model)
-            .task { model.start() }
+            .task {
+                model.start()
+#if os(macOS)
+                model.followStreamOutput()
+#endif
+            }
             .onChange(of: scenePhase, initial: true) {
                 model.isInForeground = scenePhase != .background
             }

@@ -4,21 +4,25 @@ import Foundation
 extension ShannonLive2DStage {
 
     public func express(_ expression: String, feeling: String? = nil, seconds: Double? = nil) {
+        mirror(.express(expression: expression, feeling: feeling, seconds: seconds))
         noteActivity()
         send(.express(expression: expression, feeling: feeling, seconds: seconds))
     }
 
     public func expressEmotion(_ name: String, intensity: Double) {
+        mirror(.expressEmotion(name: name, intensity: intensity))
         noteActivity()
         send(.expressEmotion(name: name, intensity: intensity))
     }
 
     public func setMood(valence: Double, arousal: Double, openness: Double) {
         mood = (valence, arousal, openness)
+        mirror(.setMood(valence: valence, arousal: arousal, openness: openness))
         send(.setMood(valence: valence, arousal: arousal, openness: openness))
     }
 
     public func setPresence(_ value: ShannonLive2DPresence) {
+        mirror(.setPresence(value))
         guard presence != value else { return }
         // More stories waiting makes her fidget: that is worth waking a resting figure for.
         if value.awaitingReaction > (presence?.awaitingReaction ?? 0) { noteActivity() }
@@ -27,6 +31,7 @@ extension ShannonLive2DStage {
     }
 
     public func setPhase(_ value: ShannonLive2DPhase) {
+        mirror(.setPhase(value))
         guard phase != value else { return }
         phase = value
         noteActivity()
@@ -37,6 +42,7 @@ extension ShannonLive2DStage {
     /// The level of the audio being played, 0–1. Zero when speech ends. Her eyes alone have no mouth: nothing is sent.
     public func setMouthLevel(_ level: Double) {
         let clamped = min(1, max(0, level.isFinite ? level : 0))
+        mirror(.setMouthLevel(clamped))
         guard status == .ready, sentPaused == false || clamped <= 0,
               ShannonLive2DStagePolicy.sendsMouthLevel(clamped, last: lastMouthLevel, body: body) else { return }
         lastMouthLevel = clamped
@@ -46,6 +52,7 @@ extension ShannonLive2DStage {
 
     /// A gesture of the character. Her eyes alone have no arms: nothing is sent.
     public func play(_ gesture: String) {
+        mirror(.play(gesture))
         guard ShannonLive2DStagePolicy.playsGesture(gesture, known: gestures, body: body) else { return }
         noteActivity()
         send(.play(gesture))

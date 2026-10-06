@@ -107,6 +107,8 @@ Retry the same batch with the same `id`s on a network failure or `5xx`. An `id` 
 - `owner`: the owner alone at the PC, not streaming.
 - `others`: anything else — an OBS stream or recording is live, someone else is at the PC, or the body cannot tell. When in doubt, send `others`.
 
+On the Mac (roadmap A18 S5), while the owner has 配信用の出力（OBS） on, her desktop body sends `others` on its presence reads and events, refuses a look with `others_present`, and the app's figure in Talk reports its touches as `others`, as the Windows body does while its stream output is on. It is decided by the switch alone (not by whether a page is watching), with no hold after it is turned off. Meanwhile a Mac voice call is 「友人も一緒」 (`participantMode: "guest"`) and its `callStarted` / `callEnded` carry `others`, and the Mac reports that the owner is not privately listening. Nothing changes on the server.
+
 An event with `audience: others` is stored and **never** added to the `[体に起きたこと]` block of a conversation, in any channel. The store reads events by audience, so the owner block cannot include one by mistake. A touch with `audience: others` still moves her feeling and is remembered (owner decision 2026-10-02: other people present make no difference to a touch); the cause the server keeps for that feeling then names no one. A text turn that is not for the owner alone (`audience` other than `owner` on `POST /v1/chat`, once that field exists) does not receive the block either.
 
 What the server returns to the body is safe to show to others unless marked:

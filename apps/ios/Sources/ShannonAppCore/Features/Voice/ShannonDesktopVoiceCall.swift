@@ -49,6 +49,9 @@ public final class ShannonDesktopVoiceCall {
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     /// How long the last window may be gone before the call ends: a window rebuilt in place comes straight back.
     @ObservationIgnored var lastWindowGrace: Duration = .seconds(1)
+    /// 配信用の出力（OBS） is on (A18 S5). Read at the moment of a start or a switch; tests set their own.
+    @ObservationIgnored var streamOutputIsOn: @MainActor () -> Bool = { ShannonStreamOutput.shared.othersPresent }
+    @ObservationIgnored var streamObserver: NSObjectProtocol?
 
     public init(session: ShannonGeminiLiveSessionModel = ShannonGeminiLiveSessionModel()) {
         self.session = session
@@ -78,6 +81,7 @@ public final class ShannonDesktopVoiceCall {
         self.conversation = conversation
         ShannonDesktopAppDelegate.voiceCall = self
         followWindows(menuBar: menuBar)
+        followStreamOutput()
         let arbiter = ShannonSpeechArbiter.shared
         arbiter.sessionInUse = { [weak self] in
             guard let self else { return false }
@@ -104,11 +108,15 @@ public final class ShannonDesktopVoiceCall {
         ShannonSpeechArbiter.shared.microphoneWillBeTaken?()
         // A failed 「友人も一緒」 call this replaces gives his draft back first.
         restoreOwnerDraft()
+        // While the stream output is on, others may be listening: the call starts in 「友人も一緒」 (A18 S5).
+        let mode = Self.startingMode(streamOutputOn: streamOutputIsOn())
         workspace.beginCall(
-            mode: .owner, speechProvider: Self.speechProvider, threadID: threadID,
+            mode: mode, speechProvider: Self.speechProvider, threadID: threadID,
             conversationModel: conversation, geminiVoiceModel: session
         )
         installCallHooks()
+        // Talk's draft was typed before the call: the owner's, set aside as at a switch.
+        if mode == .guest { participantModeChanged(to: .guest) }
     }
 
     /// 終了: what was answered stays stored, a 「友人も一緒」 period is remembered, and the card says so.
@@ -140,7 +148,7 @@ public final class ShannonDesktopVoiceCall {
 
     /// The control between 本人だけ and 友人も一緒, after its confirmation. An unshared photo is dropped.
     func switchParticipant(to mode: ShannonVoiceParticipantMode) {
-        guard mode != session.participantMode else { return }
+        guard mode != session.participantMode, !keepsGuestForStream(switchingTo: mode) else { return }
         workspace.clearPhoto()
         session.switchParticipantMode(to: mode)
     }

@@ -122,6 +122,11 @@ extension ShannonDesktopRootView {
 
     var desktopNoticeKeys: [String] { desktopNotices.map(\.key) }
 
+    /// Banners wait during 「友人も一緒」 and while 配信用の出力（OBS） is on (A18 S5).
+    var notificationsHeld: Bool {
+        DesktopNotificationPlan.isHeld(guestCall: voiceCall.session.hidesOwnerScreens, streamOutputOn: ShannonStreamOutput.shared.isOn)
+    }
+
     /// The tasks and her messages were read from the server while connected, in this launch.
     var noticesReadSucceeded: Bool {
         connection.isConnected && conversation.agentTasksReadAt != nil && conversation.initiativesReadAt != nil

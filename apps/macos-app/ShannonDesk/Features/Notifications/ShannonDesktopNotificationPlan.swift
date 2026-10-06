@@ -82,8 +82,11 @@ enum DesktopNotificationPlan {
     ///   (`readSucceeded`): a baseline taken from an empty or offline list would later show old things.
     /// - While notifications are not allowed nothing is shown and nothing new is remembered, so that
     ///   what arrives meanwhile is shown once they are allowed.
-    /// `held`: a call is in 「友人も一緒」 (A16): nothing is posted and nothing is marked delivered, so what is new
-    /// now is posted once the period ends.
+    /// `held` (`isHeld`): a call is in 「友人も一緒」 (A16), or 配信用の出力（OBS） is on (A18 S5: a banner would show
+    /// conversation text to a screen capture): nothing is posted and nothing is marked delivered, so what is new now is
+    /// posted once that ends.
+    static func isHeld(guestCall: Bool, streamOutputOn: Bool) -> Bool { guestCall || streamOutputOn }
+
     static func toPost(
         _ notices: [DesktopNotice], delivered: [String]?, readSucceeded: Bool = true, authorized: Bool = true,
         held: Bool = false

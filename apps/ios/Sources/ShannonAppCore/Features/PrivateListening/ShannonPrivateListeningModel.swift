@@ -100,6 +100,8 @@ public final class ShannonPrivateListeningModel {
     @ObservationIgnored public var stateEvaluated: (@MainActor () -> Void)?
     /// The platform's speaking and listening, kept alive for as long as the app runs.
     @ObservationIgnored var platformController: AnyObject?
+    /// The Mac: follows 配信用の出力（OBS） (`ShannonPrivateListeningModel+Stream.swift`).
+    @ObservationIgnored var streamObserver: NSObjectProtocol?
 
     public static let speaksDefaultsKey = "shannon.privateListening.speaks"
     public static let standbyDefaultsKey = "shannon.privateListening.standby"

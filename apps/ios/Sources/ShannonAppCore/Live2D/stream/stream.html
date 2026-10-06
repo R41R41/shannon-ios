@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>シャノン（配信用）</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="embed.css">
+</head>
+<body>
+  <!-- 配信用の出力（OBS のブラウザソース）。体のページ（embed）と同じ置き方で、背景は透明。言葉・吹き出し・カメラの絵は出さない。
+       体のページのファイルは stream.js が、どの体で始めるかが分かってから読む（embed.html と同じ順）。 -->
+  <div id="stage" aria-label="シャノン" data-max-pixel-ratio="3" data-max-drawing-height="4096"></div>
+  <div id="emotes" aria-hidden="true"></div>
+  <script src="stream.js"></script>
+</body>
+</html>

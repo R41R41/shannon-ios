@@ -15,6 +15,8 @@ extension ShannonDesktopRootView {
                 }
                 // Her desktop body (A17): her window, on top, her size (also in the menu bar item).
                 ShannonDesktopBodySettingsSection()
+                // 配信用の出力（OBS, A18 S5): her figure for an OBS browser source, off by default (also in the menu bar item).
+                ShannonStreamOutputSettingsSection()
             case .camera:
                 ShannonAppLookSettingsSection()
                 // Her desktop body's one look at the room: its own switch, off by default (Syzygy ADR-0002).

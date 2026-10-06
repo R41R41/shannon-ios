@@ -72,6 +72,8 @@ struct ShannonDeskApp: App {
             ShannonDesktopBody.shared.start(showsWindow: showsDesktopBody)
             // Her folder on this Mac (A18): resolved and hosted from launch while one is chosen; never in the design preview.
             if hostsFolder { ShannonFolderHostModel.shared.start(api: client) }
+            // 配信用の出力（OBS, A18 S5): listens again if the owner left it on; never in the design preview.
+            if hostsFolder { ShannonStreamOutput.shared.start() }
         }
 #if DEBUG
         _privateListeningModel = State(initialValue: usesDesignPreview

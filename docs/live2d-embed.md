@@ -85,6 +85,17 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
   (`ShannonLive2DMessage` refuses `carry` from the page). The window takes the pointer only over her, read from a small
   snapshot of the page (`WKWebView.takeSnapshot`, 48 cells across; nothing is kept).
 
+- The stream output on the Mac (roadmap A18 S5, `Features/StreamOutput/`): while 配信用の出力（OBS） is on, the app serves this
+  folder unchanged on `http://127.0.0.1:41760/` with its own page `Live2D/stream/stream.html` and `stream.js` in place of
+  `embed.html` (the same stage and the same four scripts in the same order, which `ShannonStreamOutputTests` checks against
+  `embed.html`; `embed.html`, `version.json` and `README.md` are not served). `stream.js` stands in for the WebKit message
+  handler, starts the page in the body the stream shows (`?body=eyes`), and on `ready` turns touch off and asks for `full`,
+  `contain`. Every call of `ShannonLive2DStage+Driving.swift` and the body (`setBody`) is also given to the stream
+  (`ShannonLive2DDesktopLink.streamMirror`), whatever the app's own page does with it, and reaches the page as JSON over
+  Server-Sent Events (`/events`); the page calls only `express`, `expressEmotion`, `setMood`, `setPresence`, `setPhase`,
+  `setMouthLevel`, `play` and `setBody`. Touch reactions drawn inside the app's page and her words are not in the stream, and the stream's mood, presence and faces come from what drives the app's figure (her desktop body above all): the owner keeps her desktop body shown while streaming (設定 › すがた says so). In OBS the owner captures this page as a browser source rather than the whole display: the app keeps its own windows out of capture only on a best-effort basis (`docs/architecture.md`, "Her stream output on the Mac").
+  When this folder is updated, `stream.js`'s list of scripts follows `embed.html`'s (a test fails until it does).
+
 ## Her eyes alone (`setBody`)
 
 - The owner chooses the body in 設定 › すがた › 体 (iPhone and the Mac's settings), in Talk's display options

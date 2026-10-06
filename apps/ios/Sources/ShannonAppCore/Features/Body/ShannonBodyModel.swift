@@ -41,7 +41,14 @@ public final class ShannonBodyModel {
     var audienceRule = ShannonBodyAudienceRule(defaults: .standard) {
         didSet { if audienceRule.othersUntil != oldValue.othersUntil { audienceRule.save(to: .standard) } }
     }
-    public var audience: ShannonBodyAudience { audienceRule.audience(at: Date()) }
+    /// On the Mac, also `others` while the stream output is on (roadmap A18 S5): people may be watching her.
+    public var audience: ShannonBodyAudience {
+#if os(macOS)
+        ShannonStreamOutput.audience(streamOutputOn: ShannonStreamOutput.shared.othersPresent, held: audienceRule.audience(at: Date()))
+#else
+        audienceRule.audience(at: Date())
+#endif
+    }
     /// The app is in front. Her voice for a touch and the microphone after it never run in the background.
     @ObservationIgnored var sceneIsActive = true
 

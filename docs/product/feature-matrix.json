@@ -3947,9 +3947,14 @@
           "reason": "この PC の中の URL へ出す仕組み。iPhone には持っていかない。"
         },
         "macos": {
-          "status": "planned",
-          "branch": "未定",
-          "note": "ADR-0004 の一覧で、移し方を決める。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/StreamOutput/ShannonStreamOutput.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/StreamOutput/ShannonStreamOutputServer.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/StreamOutput/ShannonStreamOutputHTTP.swift",
+            "apps/ios/Sources/ShannonAppCore/Live2D/stream/stream.js"
+          ],
+          "note": "A18 S5（2026-10-06）：設定 › すがた とメニューバーの入切（既定は切）。http://127.0.0.1:41760/stream.html（Windows と同じ URL）に、同梱の体のページ（0.1.0+202610060340）を透明の背景で出し、アプリの姿と同じ呼び出し（表情・気分・いまの様子・会話の様子・口・しぐさ・体）を SSE で写す。この Mac の中だけ（127.0.0.1、Host と Origin を確かめる）。入れている間は others。 入れている間は、音声会話は「友人も一緒」、アプリの窓はスクリーンショットや古い取り込み方から外す（できる範囲で。OBS の画面全体のキャプチャには映ることがあるので、ブラウザソースだけを取り込むよう設定で勧める。デスクトップの体は映る）、通知は後で、イヤホンでの一言は伝えない（所有者の決定とレビュー、2026-10-06）。触れたときの反応は配信に映らない。配信中はデスクトップの体を出しておく。"
         },
         "windows": {
           "status": "yes",
@@ -3973,9 +3978,12 @@
           "reason": "配信用の出力は、この PC の中の URL へ出す仕組み。iPhone には持っていかない（desktop.stream-output）。"
         },
         "macos": {
-          "status": "planned",
-          "branch": "未定",
-          "note": "配信用の出力を Mac へ移すとき（desktop.stream-output）に一緒に入れる。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DStage+Desktop.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/StreamOutput/ShannonStreamOutputEvents.swift"
+          ],
+          "note": "A18 S5（2026-10-06）：デスクトップの体と同じ体（持ち主の選んだ体、窓が小さい間は目だけ）。体が変わると配信のページも切り替わる。"
         },
         "windows": {
           "status": "yes",

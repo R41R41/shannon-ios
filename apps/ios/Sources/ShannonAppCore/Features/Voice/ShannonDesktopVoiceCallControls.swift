@@ -32,8 +32,9 @@ struct ShannonDesktopVoiceCallControls: View {
                 Label(session.participantMode.japaneseName,
                       systemImage: session.participantMode == .guest ? "person.2.fill" : "person.fill")
             }
-            .disabled(!live)
-            .help(ShannonGeneratedStrings.voiceMacParticipantHint)
+            // While the stream output is on the call stays 「友人も一緒」 (A18 S5).
+            .disabled(!live || call.participantIsHeldForStream)
+            .help(call.participantIsHeldForStream ? ShannonGeneratedStrings.desktopStreamCallHeld : ShannonGeneratedStrings.voiceMacParticipantHint)
             .accessibilityIdentifier("voice-call-participant")
 
             Spacer(minLength: ShannonDesktopSpacing.small)
