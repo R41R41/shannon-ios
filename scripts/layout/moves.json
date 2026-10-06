@@ -1,0 +1,1845 @@
+{
+  "schemaVersion": 1,
+  "about": "The target folder of every file of services/api/src (Syzygy ADR-0008 §6), applied wave by wave by scripts/layout/apply.mjs. A move keeps the basename; only the folder changes. Entry files stay at the root. scripts/check-api-layers.mjs reads this map to check the layout rules on the projected layout before the files move. A file added later that is not listed here is checked where it is.",
+  "sourceRoot": "services/api/src",
+  "entries": [
+    "agentHost.ts",
+    "authCli.ts",
+    "autonomyWorker.ts",
+    "fakeAgentHost.ts",
+    "server.ts",
+    "testflightDistributor.ts",
+    "worker.ts",
+    "worldWorker.ts"
+  ],
+  "entriesWhy": "Run by a systemd unit (deploy/azure), the Agent Host plist (deploy/macos) or a services/api/package.json script; they stay at the src root.",
+  "pathDataFiles": [
+    "docs/product/feature-matrix.json"
+  ],
+  "pathDataFilesWhy": "Their services/api/src paths are evidence a check verifies (scripts/check-product-spec.mjs), so a wave rewrites them like the core map.",
+  "waves": {
+    "1": "contracts/, integrations/*, infra/ops",
+    "2": "mind/memory, mind/recall, mind/sleep, mind/prediction, mind/emotion, and infra/sqlite with the memory stores",
+    "3": "surfaces/* except surfaces/text",
+    "4": "mind/inhibition, mind/tools, and mind/action/agentTasks",
+    "5": "mind/action/ownTime and wiring/, with infra/config and mind/self; check-api-layers switches to --enforce here",
+    "6": "infra/http (with apiKernel), infra/models (chatModel*), surfaces/text, infra/auth, mind/action/respond, mind/selectors"
+  },
+  "moves": {
+    "aetherAccess.ts": {
+      "to": "integrations/aether/aetherAccess.ts",
+      "wave": 1,
+      "why": "Aether access contract client"
+    },
+    "aetherContext.ts": {
+      "to": "integrations/aether/aetherContext.ts",
+      "wave": 1,
+      "why": "File reader of the bounded Aether projection"
+    },
+    "aetherKnowledgeSearch.ts": {
+      "to": "integrations/aether/aetherKnowledgeSearch.ts",
+      "wave": 1,
+      "why": "Aether knowledge-search consumer adapter"
+    },
+    "aetherProposal.ts": {
+      "to": "integrations/aether/aetherProposal.ts",
+      "wave": 1,
+      "why": "Proposals written to Aether's file inbox"
+    },
+    "aetherShownText.ts": {
+      "to": "mind/inhibition/aetherShownText.ts",
+      "wave": 4,
+      "why": "Removes owner secrets from Aether reads with others present"
+    },
+    "agentHostBroker.ts": {
+      "to": "integrations/agentHost/agentHostBroker.ts",
+      "wave": 1,
+      "why": "Agent Host client of the API broker"
+    },
+    "agentHostConfig.ts": {
+      "to": "integrations/agentHost/agentHostConfig.ts",
+      "wave": 1,
+      "why": "Agent Host configuration loader"
+    },
+    "agentHostRegistry.ts": {
+      "to": "mind/action/agentTasks/store/agentHostRegistry.ts",
+      "wave": 4,
+      "why": "API-side SQL registry of hosts for task routing"
+    },
+    "agentHostState.ts": {
+      "to": "integrations/agentHost/agentHostState.ts",
+      "wave": 1,
+      "why": "Agent Host local session/project state"
+    },
+    "agentProjectProvisioner.ts": {
+      "to": "integrations/agentHost/agentProjectProvisioner.ts",
+      "wave": 1,
+      "why": "Host-side project provisioner, used only by agentHost"
+    },
+    "agentProjectProvisioning.ts": {
+      "to": "mind/action/agentTasks/store/agentProjectProvisioning.ts",
+      "wave": 4,
+      "why": "SQL persistence of project provisioning requests"
+    },
+    "agentTaskHostProjection.ts": {
+      "to": "mind/action/agentTasks/store/agentTaskHostProjection.ts",
+      "wave": 4,
+      "why": "SQL projection of host events onto task rows"
+    },
+    "agentTaskPersistence.ts": {
+      "to": "mind/action/agentTasks/store/agentTaskPersistence.ts",
+      "wave": 4,
+      "why": "SQL persistence of agent tasks"
+    },
+    "agentTaskPersistenceSupport.ts": {
+      "to": "mind/action/agentTasks/store/agentTaskPersistenceSupport.ts",
+      "wave": 4,
+      "why": "SQL helpers for agent task persistence"
+    },
+    "agentTaskQueue.ts": {
+      "to": "mind/action/agentTasks/store/agentTaskQueue.ts",
+      "wave": 4,
+      "why": "SQL one-task-per-host queue"
+    },
+    "agentTaskStore.ts": {
+      "to": "mind/action/agentTasks/agentTaskStore.ts",
+      "wave": 4,
+      "why": "Agent task model and store interface"
+    },
+    "agentTaskVocabulary.ts": {
+      "to": "mind/action/agentTasks/agentTaskVocabulary.ts",
+      "wave": 4,
+      "why": "User-facing words per task state"
+    },
+    "agentWorkspaceResources.ts": {
+      "to": "mind/action/agentTasks/store/agentWorkspaceResources.ts",
+      "wave": 4,
+      "why": "SQL persistence of workspace file/diff requests"
+    },
+    "agentWorkspaceSnapshot.ts": {
+      "to": "integrations/agentHost/agentWorkspaceSnapshot.ts",
+      "wave": 1,
+      "why": "Host-side git snapshot reader, used only by agentHost"
+    },
+    "apiAgentRoutes.ts": {
+      "to": "infra/http/apiAgentRoutes.ts",
+      "wave": 6,
+      "why": "Owner-app HTTP routes for agent tasks"
+    },
+    "apiAppLookRoutes.ts": {
+      "to": "surfaces/body/apiAppLookRoutes.ts",
+      "wave": 3,
+      "why": "Route answering a look through the app camera"
+    },
+    "apiAuth.ts": {
+      "to": "infra/auth/apiAuth.ts",
+      "wave": 6,
+      "why": "Bearer/fixed-token request authentication"
+    },
+    "apiAutonomyHostStepRoutes.ts": {
+      "to": "infra/http/apiAutonomyHostStepRoutes.ts",
+      "wave": 6,
+      "why": "Device HTTP protocol for her host folder"
+    },
+    "apiAutonomyRoutes.ts": {
+      "to": "infra/http/apiAutonomyRoutes.ts",
+      "wave": 6,
+      "why": "Owner-facing autonomy HTTP routes"
+    },
+    "apiBodyRoutes.ts": {
+      "to": "surfaces/body/apiBodyRoutes.ts",
+      "wave": 3,
+      "why": "HTTP routes of her Live2D body"
+    },
+    "apiConversationRead.ts": {
+      "to": "surfaces/text/apiConversationRead.ts",
+      "wave": 6,
+      "why": "GET /v1/conversation Talk read"
+    },
+    "apiDataRoutes.ts": {
+      "to": "infra/http/apiDataRoutes.ts",
+      "wave": 6,
+      "why": "Generic owner data HTTP routes"
+    },
+    "apiKernel.ts": {
+      "to": "infra/http/apiKernel.ts",
+      "wave": 6,
+      "why": "Conversation kernel dispatch; split later"
+    },
+    "apiLiveVoice.ts": {
+      "to": "surfaces/voice/apiLiveVoice.ts",
+      "wave": 3,
+      "why": "Live voice turn of the kernel"
+    },
+    "apiOrganizeRoutes.ts": {
+      "to": "infra/http/apiOrganizeRoutes.ts",
+      "wave": 6,
+      "why": "Owner-app HTTP routes for Voyager organize"
+    },
+    "apiPeopleMemoryRoutes.ts": {
+      "to": "infra/http/apiPeopleMemoryRoutes.ts",
+      "wave": 6,
+      "why": "Owner-app HTTP routes for people memory"
+    },
+    "apiPersonRoutes.ts": {
+      "to": "infra/http/apiPersonRoutes.ts",
+      "wave": 6,
+      "why": "Owner-app HTTP routes for person identities"
+    },
+    "apiPreferenceRoutes.ts": {
+      "to": "infra/http/apiPreferenceRoutes.ts",
+      "wave": 6,
+      "why": "Owner-app HTTP routes for preferences"
+    },
+    "apiPromptProjection.ts": {
+      "to": "mind/action/respond/apiPromptProjection.ts",
+      "wave": 6,
+      "why": "Prompt projections of history and agent tasks"
+    },
+    "apiStudyRoutes.ts": {
+      "to": "infra/http/apiStudyRoutes.ts",
+      "wave": 6,
+      "why": "Owner-facing HTTP routes of her study"
+    },
+    "apiTextTurn.ts": {
+      "to": "surfaces/text/apiTextTurn.ts",
+      "wave": 6,
+      "why": "Text chat turn of the kernel"
+    },
+    "apiValidation.ts": {
+      "to": "infra/http/apiValidation.ts",
+      "wave": 6,
+      "why": "Request body validation helpers"
+    },
+    "apiVoiceCallSummary.ts": {
+      "to": "surfaces/voice/apiVoiceCallSummary.ts",
+      "wave": 3,
+      "why": "Guest call summary after a voice call"
+    },
+    "apiVoiceTurns.ts": {
+      "to": "surfaces/voice/apiVoiceTurns.ts",
+      "wave": 3,
+      "why": "Stores delegated voice turns"
+    },
+    "appLook.ts": {
+      "to": "surfaces/body/appLook.ts",
+      "wave": 3,
+      "why": "One look through the app camera"
+    },
+    "appLookContract.ts": {
+      "to": "contracts/appLookContract.ts",
+      "wave": 1,
+      "why": "Wire contract of a look through the app"
+    },
+    "appLookDelivery.ts": {
+      "to": "surfaces/body/store/appLookDelivery.ts",
+      "wave": 3,
+      "why": "SQL write of her app-look message"
+    },
+    "appLookLines.ts": {
+      "to": "surfaces/body/appLookLines.ts",
+      "wave": 3,
+      "why": "Fixed lines when an app look fails"
+    },
+    "appLookStore.ts": {
+      "to": "surfaces/body/store/appLookStore.ts",
+      "wave": 3,
+      "why": "SQL table of app looks"
+    },
+    "arxiv.ts": {
+      "to": "integrations/world/arxiv.ts",
+      "wave": 1,
+      "why": "arXiv public reading source"
+    },
+    "autonomyActivity.ts": {
+      "to": "mind/inhibition/store/autonomyActivity.ts",
+      "wave": 4,
+      "why": "Append-only activity record (SQL)"
+    },
+    "autonomyAnnouncer.ts": {
+      "to": "mind/action/ownTime/autonomyAnnouncer.ts",
+      "wave": 5,
+      "why": "Announces budget requests via initiative"
+    },
+    "autonomyAwakeClock.ts": {
+      "to": "mind/emotion/autonomyAwakeClock.ts",
+      "wave": 2,
+      "why": "Awake clock write to companion state"
+    },
+    "autonomyBudget.ts": {
+      "to": "mind/inhibition/autonomyBudget.ts",
+      "wave": 4,
+      "why": "Autonomy budget and switches configuration"
+    },
+    "autonomyCore.ts": {
+      "to": "mind/inhibition/autonomyCore.ts",
+      "wave": 4,
+      "why": "Core areas mapped to paths for the gate"
+    },
+    "autonomyDayLog.ts": {
+      "to": "mind/inhibition/autonomyDayLog.ts",
+      "wave": 4,
+      "why": "Wording of the activity record"
+    },
+    "autonomyHostFolderDesk.ts": {
+      "to": "mind/action/ownTime/autonomyHostFolderDesk.ts",
+      "wave": 5,
+      "why": "Her host folder v1 write-out desk"
+    },
+    "autonomyHostFolderPath.ts": {
+      "to": "mind/action/ownTime/autonomyHostFolderPath.ts",
+      "wave": 5,
+      "why": "Host folder path rules"
+    },
+    "autonomyHostFolderSteps.ts": {
+      "to": "mind/action/ownTime/store/autonomyHostFolderSteps.ts",
+      "wave": 5,
+      "why": "SQL queue of host folder steps"
+    },
+    "autonomyLoop.ts": {
+      "to": "mind/action/ownTime/autonomyLoop.ts",
+      "wave": 5,
+      "why": "Activity loop tick"
+    },
+    "autonomyLoopCalls.ts": {
+      "to": "mind/action/ownTime/autonomyLoopCalls.ts",
+      "wave": 5,
+      "why": "Paid model call of a loop step"
+    },
+    "autonomyLoopConfig.ts": {
+      "to": "mind/action/ownTime/autonomyLoopConfig.ts",
+      "wave": 5,
+      "why": "Loop cadence and bounds from env"
+    },
+    "autonomyLoopFolderStep.ts": {
+      "to": "mind/action/ownTime/autonomyLoopFolderStep.ts",
+      "wave": 5,
+      "why": "Loop step: copy to her folder"
+    },
+    "autonomyLoopFollowUpStep.ts": {
+      "to": "mind/action/ownTime/autonomyLoopFollowUpStep.ts",
+      "wave": 5,
+      "why": "Loop step: follow up unanswered message"
+    },
+    "autonomyLoopLookStep.ts": {
+      "to": "mind/action/ownTime/autonomyLoopLookStep.ts",
+      "wave": 5,
+      "why": "Loop step: look at the room"
+    },
+    "autonomyLoopObservations.ts": {
+      "to": "mind/action/ownTime/store/autonomyLoopObservations.ts",
+      "wave": 5,
+      "why": "SQL table of step observations"
+    },
+    "autonomyLoopObserve.ts": {
+      "to": "mind/action/ownTime/autonomyLoopObserve.ts",
+      "wave": 5,
+      "why": "Act-observe-think-again logic"
+    },
+    "autonomyLoopObservePrompts.ts": {
+      "to": "mind/action/ownTime/autonomyLoopObservePrompts.ts",
+      "wave": 5,
+      "why": "Fixed words for step observations"
+    },
+    "autonomyLoopOwnerContext.ts": {
+      "to": "mind/action/ownTime/autonomyLoopOwnerContext.ts",
+      "wave": 5,
+      "why": "ownerPrivateRule and owner context types"
+    },
+    "autonomyLoopPacing.ts": {
+      "to": "mind/action/ownTime/autonomyLoopPacing.ts",
+      "wave": 5,
+      "why": "Session pacing of her day"
+    },
+    "autonomyLoopPhoneStep.ts": {
+      "to": "mind/action/ownTime/autonomyLoopPhoneStep.ts",
+      "wave": 5,
+      "why": "Loop step: phone the owner"
+    },
+    "autonomyLoopPlan.ts": {
+      "to": "mind/action/ownTime/autonomyLoopPlan.ts",
+      "wave": 5,
+      "why": "Thinking materials and plan parsing"
+    },
+    "autonomyLoopPrompts.ts": {
+      "to": "mind/action/ownTime/autonomyLoopPrompts.ts",
+      "wave": 5,
+      "why": "Prompts of her own activity"
+    },
+    "autonomyLoopProvenance.ts": {
+      "to": "mind/action/ownTime/autonomyLoopProvenance.ts",
+      "wave": 5,
+      "why": "Provenance marking inside loop steps"
+    },
+    "autonomyLoopReachOutStep.ts": {
+      "to": "mind/action/ownTime/autonomyLoopReachOutStep.ts",
+      "wave": 5,
+      "why": "Loop step: reach out to owner"
+    },
+    "autonomyLoopSessionPrompts.ts": {
+      "to": "mind/action/ownTime/autonomyLoopSessionPrompts.ts",
+      "wave": 5,
+      "why": "Words for her sessions"
+    },
+    "autonomyLoopSessions.ts": {
+      "to": "mind/action/ownTime/store/autonomyLoopSessions.ts",
+      "wave": 5,
+      "why": "SQL rows of loop sessions"
+    },
+    "autonomyLoopState.ts": {
+      "to": "mind/action/ownTime/store/autonomyLoopState.ts",
+      "wave": 5,
+      "why": "SQL durable loop state and lease"
+    },
+    "autonomyLoopSteps.ts": {
+      "to": "mind/action/ownTime/autonomyLoopSteps.ts",
+      "wave": 5,
+      "why": "Step kinds of the activity loop"
+    },
+    "autonomyLoopThinkStep.ts": {
+      "to": "mind/action/ownTime/autonomyLoopThinkStep.ts",
+      "wave": 5,
+      "why": "Loop thinking step"
+    },
+    "autonomyLoopToolStep.ts": {
+      "to": "mind/action/ownTime/autonomyLoopToolStep.ts",
+      "wave": 5,
+      "why": "Loop step: one registry tool call"
+    },
+    "autonomyModels.ts": {
+      "to": "mind/action/ownTime/autonomyModels.ts",
+      "wave": 5,
+      "why": "Model registry for her own activity"
+    },
+    "autonomyOwnerContext.ts": {
+      "to": "mind/action/ownTime/autonomyOwnerContext.ts",
+      "wave": 5,
+      "why": "Owner context block for her thinking"
+    },
+    "autonomyOwnerContextWiring.ts": {
+      "to": "wiring/autonomyOwnerContextWiring.ts",
+      "wave": 5,
+      "why": "Opens conversation stores for loop owner context"
+    },
+    "autonomyPaths.ts": {
+      "to": "mind/inhibition/autonomyPaths.ts",
+      "wave": 4,
+      "why": "Physical path resolution for the gate"
+    },
+    "autonomyPolicy.ts": {
+      "to": "mind/inhibition/autonomyPolicy.ts",
+      "wave": 4,
+      "why": "authorizeAutonomousAction policy gate"
+    },
+    "autonomyProposals.ts": {
+      "to": "mind/action/ownTime/store/autonomyProposals.ts",
+      "wave": 5,
+      "why": "SQL agent-task proposals from her activity"
+    },
+    "autonomyPursuits.ts": {
+      "to": "mind/self/autonomyPursuits.ts",
+      "wave": 5,
+      "why": "Her pursuits ledger; split later"
+    },
+    "autonomyReader.ts": {
+      "to": "mind/action/ownTime/autonomyReader.ts",
+      "wave": 5,
+      "why": "Bounded public page reader for loop"
+    },
+    "autonomyService.ts": {
+      "to": "mind/action/ownTime/autonomyService.ts",
+      "wave": 5,
+      "why": "Live autonomy service around the gate"
+    },
+    "autonomyServiceParts.ts": {
+      "to": "mind/action/ownTime/autonomyServiceParts.ts",
+      "wave": 5,
+      "why": "Autonomy overview and wording helpers"
+    },
+    "autonomySessionView.ts": {
+      "to": "mind/action/ownTime/autonomySessionView.ts",
+      "wave": 5,
+      "why": "Owner view of her session or rest"
+    },
+    "autonomyShowing.ts": {
+      "to": "mind/action/ownTime/autonomyShowing.ts",
+      "wave": 5,
+      "why": "Tells owner a piece is ready"
+    },
+    "autonomyStore.ts": {
+      "to": "mind/action/ownTime/store/autonomyStore.ts",
+      "wave": 5,
+      "why": "SQL durable state of bounded autonomy"
+    },
+    "autonomyTextModel.ts": {
+      "to": "mind/action/ownTime/autonomyTextModel.ts",
+      "wave": 5,
+      "why": "Model adapters of her own activity"
+    },
+    "backgroundJobStore.ts": {
+      "to": "mind/sleep/store/backgroundJobStore.ts",
+      "wave": 2,
+      "why": "Background job store interface and payloads"
+    },
+    "backgroundUpdates.ts": {
+      "to": "mind/sleep/backgroundUpdates.ts",
+      "wave": 2,
+      "why": "After-turn refinement dispatch to background"
+    },
+    "backgroundWorker.ts": {
+      "to": "mind/sleep/backgroundWorker.ts",
+      "wave": 2,
+      "why": "Runs refinement and nightly sleep jobs"
+    },
+    "bluesky.ts": {
+      "to": "integrations/world/bluesky.ts",
+      "wave": 1,
+      "why": "Bluesky public reading source"
+    },
+    "bodyContract.ts": {
+      "to": "contracts/bodyContract.ts",
+      "wave": 1,
+      "why": "Wire contract with the Live2D body"
+    },
+    "bodyLook.ts": {
+      "to": "surfaces/body/bodyLook.ts",
+      "wave": 3,
+      "why": "One look at the room via body camera"
+    },
+    "bodyLookActivity.ts": {
+      "to": "surfaces/body/bodyLookActivity.ts",
+      "wave": 3,
+      "why": "Own-time look opened from loop process"
+    },
+    "bodyLookActivityStore.ts": {
+      "to": "surfaces/body/store/bodyLookActivityStore.ts",
+      "wave": 3,
+      "why": "SQL hand-off of own-time looks"
+    },
+    "bodyLookActivityVision.ts": {
+      "to": "surfaces/body/bodyLookActivityVision.ts",
+      "wave": 3,
+      "why": "Vision call for own-time look"
+    },
+    "bodyLookContract.ts": {
+      "to": "contracts/bodyLookContract.ts",
+      "wave": 1,
+      "why": "Wire contract of a body camera look"
+    },
+    "bodyLookDelivery.ts": {
+      "to": "surfaces/body/store/bodyLookDelivery.ts",
+      "wave": 3,
+      "why": "SQL write of her look message and initiative"
+    },
+    "bodyLookLines.ts": {
+      "to": "surfaces/body/bodyLookLines.ts",
+      "wave": 3,
+      "why": "Fixed lines when a body look fails"
+    },
+    "bodyLookStore.ts": {
+      "to": "surfaces/body/store/bodyLookStore.ts",
+      "wave": 3,
+      "why": "SQL table of body looks"
+    },
+    "bodyLookTurnWait.ts": {
+      "to": "surfaces/body/bodyLookTurnWait.ts",
+      "wave": 3,
+      "why": "Orders look message after voice turn"
+    },
+    "bodyLookVision.ts": {
+      "to": "surfaces/body/bodyLookVision.ts",
+      "wave": 3,
+      "why": "Model call that sees a look frame"
+    },
+    "bodyLookWiring.ts": {
+      "to": "wiring/bodyLookWiring.ts",
+      "wave": 5,
+      "why": "Gives the kernel look stores and viewers"
+    },
+    "bodyNudges.ts": {
+      "to": "surfaces/body/bodyNudges.ts",
+      "wave": 3,
+      "why": "Fixed nudge lines for the body"
+    },
+    "bodyReaction.ts": {
+      "to": "surfaces/body/bodyReaction.ts",
+      "wave": 3,
+      "why": "Touch reflex to her answer"
+    },
+    "bodyReactionContract.ts": {
+      "to": "contracts/bodyReactionContract.ts",
+      "wave": 1,
+      "why": "Wire contract of body reactions"
+    },
+    "bodyReactionModel.ts": {
+      "to": "surfaces/body/bodyReactionModel.ts",
+      "wave": 3,
+      "why": "Fast model call of a touch reaction"
+    },
+    "bodyReactionPrompt.ts": {
+      "to": "surfaces/body/bodyReactionPrompt.ts",
+      "wave": 3,
+      "why": "Prompt words of a touch reaction"
+    },
+    "bodyReactionStore.ts": {
+      "to": "surfaces/body/store/bodyReactionStore.ts",
+      "wave": 3,
+      "why": "SQL tables of touches and bursts"
+    },
+    "bodyReactionWiring.ts": {
+      "to": "wiring/bodyReactionWiring.ts",
+      "wave": 5,
+      "why": "Gives the kernel touch stores and model"
+    },
+    "bodyStore.ts": {
+      "to": "surfaces/body/store/bodyStore.ts",
+      "wave": 3,
+      "why": "SQL body events and capabilities"
+    },
+    "bodyTouch.ts": {
+      "to": "mind/emotion/bodyTouch.ts",
+      "wave": 2,
+      "why": "Touch entrance that moves her feeling"
+    },
+    "bodyTouchMemory.ts": {
+      "to": "surfaces/body/store/bodyTouchMemory.ts",
+      "wave": 3,
+      "why": "SQL experience rows for touches"
+    },
+    "bodyTouchOnly.ts": {
+      "to": "surfaces/body/bodyTouchOnly.ts",
+      "wave": 3,
+      "why": "Touch-only body rules"
+    },
+    "bodyTouchPrediction.ts": {
+      "to": "mind/prediction/bodyTouchPrediction.ts",
+      "wave": 2,
+      "why": "ADR-0006 touch prediction stage 2"
+    },
+    "bodyTouchReflex.ts": {
+      "to": "surfaces/body/bodyTouchReflex.ts",
+      "wave": 3,
+      "why": "Reflex-only body parts"
+    },
+    "bodyTouchWords.ts": {
+      "to": "surfaces/body/bodyTouchWords.ts",
+      "wave": 3,
+      "why": "Touch part and surface vocabulary"
+    },
+    "calendarContract.ts": {
+      "to": "contracts/calendarContract.ts",
+      "wave": 1,
+      "why": "Wire contract of owner calendar snapshot"
+    },
+    "calendarRoutes.ts": {
+      "to": "infra/http/calendarRoutes.ts",
+      "wave": 6,
+      "why": "Owner-app calendar HTTP routes"
+    },
+    "chatAudience.ts": {
+      "to": "surfaces/text/chatAudience.ts",
+      "wave": 6,
+      "why": "Audience of a text chat turn"
+    },
+    "chatModel.ts": {
+      "to": "infra/models/chatModel.ts",
+      "wave": 6,
+      "why": "Conversation model adapter; split later"
+    },
+    "chatModelStream.ts": {
+      "to": "infra/models/chatModelStream.ts",
+      "wave": 6,
+      "why": "Responses API streaming call"
+    },
+    "chatModelSupport.ts": {
+      "to": "infra/models/chatModelSupport.ts",
+      "wave": 6,
+      "why": "Conversation model helpers"
+    },
+    "chatModelToolStep.ts": {
+      "to": "infra/models/chatModelToolStep.ts",
+      "wave": 6,
+      "why": "Model tool step execution"
+    },
+    "chatModelTools.ts": {
+      "to": "infra/models/chatModelTools.ts",
+      "wave": 6,
+      "why": "Function calling in model adapter"
+    },
+    "chatModelTurn.ts": {
+      "to": "infra/models/chatModelTurn.ts",
+      "wave": 6,
+      "why": "Text turn request/response of adapter"
+    },
+    "chatModelVoiceStream.ts": {
+      "to": "infra/models/chatModelVoiceStream.ts",
+      "wave": 6,
+      "why": "Streamed voice reply model call"
+    },
+    "chatModelVoiceTools.ts": {
+      "to": "infra/models/chatModelVoiceTools.ts",
+      "wave": 6,
+      "why": "Streamed voice turn with tools"
+    },
+    "chatReplyFeeling.ts": {
+      "to": "mind/emotion/chatReplyFeeling.ts",
+      "wave": 2,
+      "why": "Feeling of a text reply"
+    },
+    "chatReplyStreamDecoder.ts": {
+      "to": "infra/models/chatReplyStreamDecoder.ts",
+      "wave": 6,
+      "why": "Decodes streamed reply JSON"
+    },
+    "chatSentenceSplitter.ts": {
+      "to": "surfaces/text/chatSentenceSplitter.ts",
+      "wave": 6,
+      "why": "Splits text reply into sentences"
+    },
+    "chatSentenceStream.ts": {
+      "to": "surfaces/text/chatSentenceStream.ts",
+      "wave": 6,
+      "why": "Sentence streaming for /v1/chat"
+    },
+    "codexAppServerClient.ts": {
+      "to": "integrations/agentHost/codexAppServerClient.ts",
+      "wave": 1,
+      "why": "Codex app-server client on host"
+    },
+    "codexModelCatalog.ts": {
+      "to": "integrations/agentHost/codexModelCatalog.ts",
+      "wave": 1,
+      "why": "Codex model catalog on host"
+    },
+    "codexTaskBridge.ts": {
+      "to": "integrations/agentHost/codexTaskBridge.ts",
+      "wave": 1,
+      "why": "Host-side Codex task bridge"
+    },
+    "codexTaskCommands.ts": {
+      "to": "integrations/agentHost/codexTaskCommands.ts",
+      "wave": 1,
+      "why": "Host-side Codex task commands"
+    },
+    "codexTaskEvents.ts": {
+      "to": "integrations/agentHost/codexTaskEvents.ts",
+      "wave": 1,
+      "why": "Host-side Codex task events"
+    },
+    "codexTaskProjection.ts": {
+      "to": "integrations/agentHost/codexTaskProjection.ts",
+      "wave": 1,
+      "why": "Host-side Codex event projection"
+    },
+    "codexTaskRuntime.ts": {
+      "to": "integrations/agentHost/codexTaskRuntime.ts",
+      "wave": 1,
+      "why": "Host-side Codex task runtime"
+    },
+    "cognitiveCycle.ts": {
+      "to": "mind/action/respond/cognitiveCycle.ts",
+      "wave": 6,
+      "why": "Cognitive cycle of a turn"
+    },
+    "cognitiveIntent.ts": {
+      "to": "mind/action/respond/cognitiveIntent.ts",
+      "wave": 6,
+      "why": "Owner intents ledger; split later"
+    },
+    "cognitiveWork.ts": {
+      "to": "mind/action/agentTasks/cognitiveWork.ts",
+      "wave": 4,
+      "why": "Links agent evidence to an objective"
+    },
+    "commitmentCommands.ts": {
+      "to": "mind/action/respond/commitmentCommands.ts",
+      "wave": 6,
+      "why": "Local promise command resolution"
+    },
+    "commitmentInitiative.ts": {
+      "to": "mind/action/respond/commitmentInitiative.ts",
+      "wave": 6,
+      "why": "Reminder initiative rules"
+    },
+    "commitmentTime.ts": {
+      "to": "mind/action/respond/commitmentTime.ts",
+      "wave": 6,
+      "why": "Promise time resolution rules"
+    },
+    "companionPresence.ts": {
+      "to": "mind/emotion/companionPresence.ts",
+      "wave": 2,
+      "why": "Companion state presence and reply emotion"
+    },
+    "contracts.ts": {
+      "to": "contracts/contracts.ts",
+      "wave": 1,
+      "why": "API request/response wire contracts"
+    },
+    "conversationCapabilities.ts": {
+      "to": "mind/action/respond/conversationCapabilities.ts",
+      "wave": 6,
+      "why": "Turn-scoped capability context"
+    },
+    "conversationCommands.ts": {
+      "to": "mind/action/respond/conversationCommands.ts",
+      "wave": 6,
+      "why": "Fixed conversation commands"
+    },
+    "conversationLooks.ts": {
+      "to": "surfaces/body/conversationLooks.ts",
+      "wave": 3,
+      "why": "Which camera a turn may look through"
+    },
+    "conversationOrchestration.ts": {
+      "to": "mind/action/respond/conversationOrchestration.ts",
+      "wave": 6,
+      "why": "Conversation orchestration of a turn"
+    },
+    "conversationOrchestrationPersistence.ts": {
+      "to": "mind/action/respond/store/conversationOrchestrationPersistence.ts",
+      "wave": 6,
+      "why": "SQL persistence of orchestration"
+    },
+    "conversationOrganize.ts": {
+      "to": "integrations/voyager/conversationOrganize.ts",
+      "wave": 1,
+      "why": "Voyager organize preparation from chat"
+    },
+    "conversationReference.ts": {
+      "to": "mind/action/respond/conversationReference.ts",
+      "wave": 6,
+      "why": "Resolves preceding owner statement"
+    },
+    "conversationReplaySummary.ts": {
+      "to": "mind/memory/conversationReplaySummary.ts",
+      "wave": 2,
+      "why": "Writes thread replay summaries"
+    },
+    "conversationSecrets.ts": {
+      "to": "mind/inhibition/conversationSecrets.ts",
+      "wave": 4,
+      "why": "What her writes must not repeat"
+    },
+    "conversationStore.ts": {
+      "to": "mind/memory/store/conversationStore.ts",
+      "wave": 2,
+      "why": "Conversation store interface; split later"
+    },
+    "conversationWindow.ts": {
+      "to": "mind/recall/conversationWindow.ts",
+      "wave": 2,
+      "why": "Replay window of a thread"
+    },
+    "dailyCount.ts": {
+      "to": "infra/config/dailyCount.ts",
+      "wave": 5,
+      "why": "Daily count limit env reader"
+    },
+    "dailyMind.ts": {
+      "to": "mind/action/respond/dailyMind.ts",
+      "wave": 6,
+      "why": "Daily focus; split later"
+    },
+    "desktopBodyIdentity.ts": {
+      "to": "surfaces/body/desktopBodyIdentity.ts",
+      "wave": 3,
+      "why": "Desktop body inside owner's app"
+    },
+    "deviceAuth.ts": {
+      "to": "infra/auth/deviceAuth.ts",
+      "wave": 6,
+      "why": "Device pairing and token credentials"
+    },
+    "elevenSpeech.ts": {
+      "to": "infra/models/elevenSpeech.ts",
+      "wave": 6,
+      "why": "ElevenLabs speech provider"
+    },
+    "emotionTiming.ts": {
+      "to": "mind/emotion/emotionTiming.ts",
+      "wave": 2,
+      "why": "Emotion timing configuration"
+    },
+    "gameBodyMemory.ts": {
+      "to": "surfaces/minecraft/store/gameBodyMemory.ts",
+      "wave": 3,
+      "why": "SQL experience rows for Minecraft body"
+    },
+    "geminiLive.ts": {
+      "to": "infra/models/geminiLive.ts",
+      "wave": 6,
+      "why": "Gemini Live provider session"
+    },
+    "geminiSpeech.ts": {
+      "to": "infra/models/geminiSpeech.ts",
+      "wave": 6,
+      "why": "Gemini speech provider"
+    },
+    "githubReleases.ts": {
+      "to": "integrations/world/githubReleases.ts",
+      "wave": 1,
+      "why": "GitHub releases world source"
+    },
+    "hackerNews.ts": {
+      "to": "integrations/world/hackerNews.ts",
+      "wave": 1,
+      "why": "Hacker News world source"
+    },
+    "hostFolderOperationResults.ts": {
+      "to": "mind/action/ownTime/hostFolderOperationResults.ts",
+      "wave": 5,
+      "why": "Host folder v2 result validation"
+    },
+    "hostFolderOperations.ts": {
+      "to": "mind/action/ownTime/hostFolderOperations.ts",
+      "wave": 5,
+      "why": "Host folder v2 operations"
+    },
+    "hostFolderOperationsStore.ts": {
+      "to": "mind/action/ownTime/store/hostFolderOperationsStore.ts",
+      "wave": 5,
+      "why": "SQL queue of host folder operations"
+    },
+    "impressionRecall.ts": {
+      "to": "mind/recall/impressionRecall.ts",
+      "wave": 2,
+      "why": "Recalls impressions into a turn"
+    },
+    "impressionUpdater.ts": {
+      "to": "mind/memory/impressionUpdater.ts",
+      "wave": 2,
+      "why": "Background update of impressions"
+    },
+    "impressionViews.ts": {
+      "to": "mind/memory/impressionViews.ts",
+      "wave": 2,
+      "why": "Owner views and corrections of impressions"
+    },
+    "impressions.ts": {
+      "to": "mind/memory/impressions.ts",
+      "wave": 2,
+      "why": "Impressions model and rules"
+    },
+    "incomingCallContract.ts": {
+      "to": "contracts/incomingCallContract.ts",
+      "wave": 1,
+      "why": "Wire contract of a call from Shannon"
+    },
+    "incomingCallRequests.ts": {
+      "to": "surfaces/outreach/incomingCallRequests.ts",
+      "wave": 3,
+      "why": "Loop side of asking for a call"
+    },
+    "incomingCallRoutes.ts": {
+      "to": "surfaces/outreach/incomingCallRoutes.ts",
+      "wave": 3,
+      "why": "Incoming call HTTP handlers"
+    },
+    "incomingCallStore.ts": {
+      "to": "surfaces/outreach/store/incomingCallStore.ts",
+      "wave": 3,
+      "why": "SQL VoIP tokens and placed calls"
+    },
+    "incomingCalls.ts": {
+      "to": "surfaces/outreach/incomingCalls.ts",
+      "wave": 3,
+      "why": "Places a call from Shannon"
+    },
+    "initiativeIntentCandidates.ts": {
+      "to": "mind/action/respond/initiativeIntentCandidates.ts",
+      "wave": 6,
+      "why": "Initiative candidates from intents"
+    },
+    "initiativeSchedule.ts": {
+      "to": "surfaces/outreach/initiativeSchedule.ts",
+      "wave": 3,
+      "why": "Initiative delivery scheduling"
+    },
+    "initiativeSelection.ts": {
+      "to": "mind/action/respond/initiativeSelection.ts",
+      "wave": 6,
+      "why": "Decides whether she should speak"
+    },
+    "initiativeStore.ts": {
+      "to": "surfaces/outreach/store/initiativeStore.ts",
+      "wave": 3,
+      "why": "Initiative messages and delivery"
+    },
+    "intentRules.ts": {
+      "to": "mind/action/respond/intentRules.ts",
+      "wave": 6,
+      "why": "Goal statement rules"
+    },
+    "ipSafety.ts": {
+      "to": "integrations/world/ipSafety.ts",
+      "wave": 1,
+      "why": "Private address guard for outbound fetches"
+    },
+    "jmaForecast.ts": {
+      "to": "integrations/world/jmaForecast.ts",
+      "wave": 1,
+      "why": "JMA weather world source"
+    },
+    "knowledgeConsolidation.ts": {
+      "to": "mind/sleep/knowledgeConsolidation.ts",
+      "wave": 2,
+      "why": "Knowledge building on sleep batch"
+    },
+    "knowledgeStore.ts": {
+      "to": "mind/memory/store/knowledgeStore.ts",
+      "wave": 2,
+      "why": "Knowledge store interface and identity block"
+    },
+    "llmUsage.ts": {
+      "to": "infra/models/llmUsage.ts",
+      "wave": 6,
+      "why": "Model usage accounting"
+    },
+    "memoPlace.ts": {
+      "to": "mind/action/respond/memoPlace.ts",
+      "wave": 6,
+      "why": "Where a memo goes: study, folder, Aether"
+    },
+    "memoryDisclosure.ts": {
+      "to": "mind/inhibition/memoryDisclosure.ts",
+      "wave": 4,
+      "why": "Disclosure gate for prompt assembly"
+    },
+    "memoryEmbeddingWorker.ts": {
+      "to": "mind/memory/memoryEmbeddingWorker.ts",
+      "wave": 2,
+      "why": "Background memory embedding"
+    },
+    "memoryForgetCommand.ts": {
+      "to": "mind/memory/memoryForgetCommand.ts",
+      "wave": 2,
+      "why": "Forget command for cited items"
+    },
+    "memoryModels.ts": {
+      "to": "mind/recall/memoryModels.ts",
+      "wave": 2,
+      "why": "Model operations of semantic recall"
+    },
+    "memoryProjection.ts": {
+      "to": "mind/memory/memoryProjection.ts",
+      "wave": 2,
+      "why": "Memory projections"
+    },
+    "memoryProjectionSafety.ts": {
+      "to": "mind/memory/memoryProjectionSafety.ts",
+      "wave": 2,
+      "why": "Profile projection evidence safety"
+    },
+    "memoryService.ts": {
+      "to": "mind/memory/memoryService.ts",
+      "wave": 2,
+      "why": "Memory service"
+    },
+    "memoryVisibility.ts": {
+      "to": "mind/memory/memoryVisibility.ts",
+      "wave": 2,
+      "why": "Withholding rule after forgetting"
+    },
+    "minecraftBody.ts": {
+      "to": "surfaces/minecraft/minecraftBody.ts",
+      "wave": 3,
+      "why": "Minecraft game-chat turn"
+    },
+    "minecraftBodyContract.ts": {
+      "to": "contracts/minecraftBodyContract.ts",
+      "wave": 1,
+      "why": "Minecraft body wire contract"
+    },
+    "minecraftBodyRequestContract.ts": {
+      "to": "contracts/minecraftBodyRequestContract.ts",
+      "wave": 1,
+      "why": "Minecraft request queue wire shapes"
+    },
+    "minecraftBodyRequests.ts": {
+      "to": "surfaces/minecraft/minecraftBodyRequests.ts",
+      "wave": 3,
+      "why": "Minecraft request queue"
+    },
+    "minecraftBodyState.ts": {
+      "to": "surfaces/minecraft/minecraftBodyState.ts",
+      "wave": 3,
+      "why": "Minecraft body present state"
+    },
+    "minecraftIntent.ts": {
+      "to": "surfaces/minecraft/minecraftIntent.ts",
+      "wave": 3,
+      "why": "Minecraft intent reply field"
+    },
+    "minecraftTurnAllowance.ts": {
+      "to": "surfaces/minecraft/minecraftTurnAllowance.ts",
+      "wave": 3,
+      "why": "Turn allowance for kernel surfaces"
+    },
+    "minecraftTurnStore.ts": {
+      "to": "surfaces/minecraft/store/minecraftTurnStore.ts",
+      "wave": 3,
+      "why": "SQL replay of game-chat answers"
+    },
+    "moodHistory.ts": {
+      "to": "mind/emotion/store/moodHistory.ts",
+      "wave": 2,
+      "why": "SQL mood history points"
+    },
+    "moodHistoryContract.ts": {
+      "to": "contracts/moodHistoryContract.ts",
+      "wave": 1,
+      "why": "Mood history wire contract"
+    },
+    "moodHistoryReader.ts": {
+      "to": "mind/emotion/store/moodHistoryReader.ts",
+      "wave": 2,
+      "why": "Query-only mood history reader"
+    },
+    "notionAutonomousRead.ts": {
+      "to": "integrations/notion/notionAutonomousRead.ts",
+      "wave": 1,
+      "why": "Gated Notion read for own activity"
+    },
+    "notionClient.ts": {
+      "to": "integrations/notion/notionClient.ts",
+      "wave": 1,
+      "why": "Notion REST transport"
+    },
+    "notionConversation.ts": {
+      "to": "integrations/notion/notionConversation.ts",
+      "wave": 1,
+      "why": "Notion use in conversation"
+    },
+    "notionLoopReader.ts": {
+      "to": "integrations/notion/notionLoopReader.ts",
+      "wave": 1,
+      "why": "Notion adapter of activity loop"
+    },
+    "notionSource.ts": {
+      "to": "integrations/notion/notionSource.ts",
+      "wave": 1,
+      "why": "Bounded Notion view"
+    },
+    "notionText.ts": {
+      "to": "integrations/notion/notionText.ts",
+      "wave": 1,
+      "why": "Notion objects to plain text"
+    },
+    "openaiTranscriptionSession.ts": {
+      "to": "infra/models/openaiTranscriptionSession.ts",
+      "wave": 6,
+      "why": "OpenAI transcription session secret"
+    },
+    "opsCommandContract.ts": {
+      "to": "contracts/opsCommandContract.ts",
+      "wave": 1,
+      "why": "Ops command wire contract"
+    },
+    "opsCommandStore.ts": {
+      "to": "infra/ops/store/opsCommandStore.ts",
+      "wave": 1,
+      "why": "SQL ops commands"
+    },
+    "opsContract.ts": {
+      "to": "contracts/opsContract.ts",
+      "wave": 1,
+      "why": "Ops snapshot wire contract"
+    },
+    "opsStore.ts": {
+      "to": "infra/ops/store/opsStore.ts",
+      "wave": 1,
+      "why": "SQL latest ops snapshot"
+    },
+    "organize.ts": {
+      "to": "integrations/voyager/organize.ts",
+      "wave": 1,
+      "why": "Voyager organize model"
+    },
+    "organizeIntegrations.ts": {
+      "to": "integrations/voyager/organizeIntegrations.ts",
+      "wave": 1,
+      "why": "Voyager organize integrations"
+    },
+    "organizeMemoryStore.ts": {
+      "to": "integrations/voyager/store/organizeMemoryStore.ts",
+      "wave": 1,
+      "why": "In-memory organize store"
+    },
+    "organizePersistence.ts": {
+      "to": "integrations/voyager/store/organizePersistence.ts",
+      "wave": 1,
+      "why": "SQL organize store"
+    },
+    "organizeSupport.ts": {
+      "to": "integrations/voyager/organizeSupport.ts",
+      "wave": 1,
+      "why": "Organize helpers"
+    },
+    "ownOutreach.ts": {
+      "to": "surfaces/outreach/ownOutreach.ts",
+      "wave": 3,
+      "why": "What she did to reach the owner"
+    },
+    "ownerCallElsewhere.ts": {
+      "to": "surfaces/voice/ownerCallElsewhere.ts",
+      "wave": 3,
+      "why": "Owner in a voice call on another device"
+    },
+    "ownerInformedMarks.ts": {
+      "to": "mind/inhibition/store/ownerInformedMarks.ts",
+      "wave": 4,
+      "why": "SQL provenance marks"
+    },
+    "ownerUpcoming.ts": {
+      "to": "mind/memory/ownerUpcoming.ts",
+      "wave": 2,
+      "why": "Owner upcoming items projection"
+    },
+    "ownerUpcomingWiring.ts": {
+      "to": "wiring/ownerUpcomingWiring.ts",
+      "wave": 5,
+      "why": "Gives processes upcoming projection"
+    },
+    "peopleMemory.ts": {
+      "to": "mind/memory/peopleMemory.ts",
+      "wave": 2,
+      "why": "People memory"
+    },
+    "peopleMemoryPrompts.ts": {
+      "to": "mind/memory/peopleMemoryPrompts.ts",
+      "wave": 2,
+      "why": "People memory prompt lines"
+    },
+    "peopleMemoryStore.ts": {
+      "to": "mind/memory/store/peopleMemoryStore.ts",
+      "wave": 2,
+      "why": "SQL people memory store"
+    },
+    "personIdentity.ts": {
+      "to": "mind/memory/store/personIdentity.ts",
+      "wave": 2,
+      "why": "SQL person identities"
+    },
+    "placeDiscovery.ts": {
+      "to": "integrations/places/placeDiscovery.ts",
+      "wave": 1,
+      "why": "Place discovery"
+    },
+    "placeDiscoverySkill.ts": {
+      "to": "integrations/places/placeDiscoverySkill.ts",
+      "wave": 1,
+      "why": "Place discovery skill output"
+    },
+    "platformBridge.ts": {
+      "to": "surfaces/platform/platformBridge.ts",
+      "wave": 3,
+      "why": "Platform bridge"
+    },
+    "platformBridgeBindings.ts": {
+      "to": "surfaces/platform/platformBridgeBindings.ts",
+      "wave": 3,
+      "why": "Platform bridge bindings"
+    },
+    "platformPeople.ts": {
+      "to": "surfaces/platform/platformPeople.ts",
+      "wave": 3,
+      "why": "Platform people messages and memory"
+    },
+    "platformPeopleSummaries.ts": {
+      "to": "surfaces/platform/platformPeopleSummaries.ts",
+      "wave": 3,
+      "why": "Nightly platform conversation summaries"
+    },
+    "platformReply.ts": {
+      "to": "surfaces/platform/platformReply.ts",
+      "wave": 3,
+      "why": "POST /v1/platform/reply"
+    },
+    "platformSurface.ts": {
+      "to": "surfaces/platform/platformSurface.ts",
+      "wave": 3,
+      "why": "Platform surface of the kernel"
+    },
+    "predictionShadow.ts": {
+      "to": "mind/prediction/predictionShadow.ts",
+      "wave": 2,
+      "why": "Prediction shadow taps; split later"
+    },
+    "predictionShadowFold.ts": {
+      "to": "mind/prediction/predictionShadowFold.ts",
+      "wave": 2,
+      "why": "Prediction fold from outcomes"
+    },
+    "predictionShadowReadings.ts": {
+      "to": "mind/prediction/predictionShadowReadings.ts",
+      "wave": 2,
+      "why": "Prediction readings"
+    },
+    "predictionStore.ts": {
+      "to": "mind/prediction/store/predictionStore.ts",
+      "wave": 2,
+      "why": "SQL predictions and outcomes"
+    },
+    "privateListeningContract.ts": {
+      "to": "contracts/privateListeningContract.ts",
+      "wave": 1,
+      "why": "Private listening wire contract"
+    },
+    "privateListeningRoutes.ts": {
+      "to": "surfaces/body/privateListeningRoutes.ts",
+      "wave": 3,
+      "why": "Private listening HTTP handlers"
+    },
+    "privateListeningStore.ts": {
+      "to": "surfaces/body/store/privateListeningStore.ts",
+      "wave": 3,
+      "why": "SQL private listening devices"
+    },
+    "privateReachOuts.ts": {
+      "to": "surfaces/outreach/privateReachOuts.ts",
+      "wave": 3,
+      "why": "Reach-outs spoken through earphones"
+    },
+    "promiseRules.ts": {
+      "to": "mind/action/respond/promiseRules.ts",
+      "wave": 6,
+      "why": "Promise statement rules"
+    },
+    "prospectiveMemory.ts": {
+      "to": "mind/memory/prospectiveMemory.ts",
+      "wave": 2,
+      "why": "Prospective memory"
+    },
+    "pubmed.ts": {
+      "to": "integrations/world/pubmed.ts",
+      "wave": 1,
+      "why": "PubMed world source"
+    },
+    "pushNotificationSender.ts": {
+      "to": "surfaces/outreach/pushNotificationSender.ts",
+      "wave": 3,
+      "why": "APNs push sender"
+    },
+    "pushNotifications.ts": {
+      "to": "surfaces/outreach/pushNotifications.ts",
+      "wave": 3,
+      "why": "Push notification registrations and delivery"
+    },
+    "reachOutClaims.ts": {
+      "to": "surfaces/outreach/store/reachOutClaims.ts",
+      "wave": 3,
+      "why": "SQL which surface speaks a reach-out"
+    },
+    "reachOutDelivery.ts": {
+      "to": "surfaces/outreach/reachOutDelivery.ts",
+      "wave": 3,
+      "why": "Delivers her reach-out message"
+    },
+    "reachOutReports.ts": {
+      "to": "surfaces/outreach/store/reachOutReports.ts",
+      "wave": 3,
+      "why": "SQL body reports on reach-outs"
+    },
+    "realtimeVoice.ts": {
+      "to": "surfaces/voice/realtimeVoice.ts",
+      "wave": 3,
+      "why": "Realtime voice session types"
+    },
+    "rememberRequest.ts": {
+      "to": "mind/action/respond/rememberRequest.ts",
+      "wave": 6,
+      "why": "Remember request interpretation"
+    },
+    "reminderCapability.ts": {
+      "to": "mind/action/respond/reminderCapability.ts",
+      "wave": 6,
+      "why": "Reminder capability facts"
+    },
+    "reminderReply.ts": {
+      "to": "mind/action/respond/reminderReply.ts",
+      "wave": 6,
+      "why": "Binds a done reply to a reminder"
+    },
+    "roomLookSource.ts": {
+      "to": "surfaces/body/roomLookSource.ts",
+      "wave": 3,
+      "why": "Messages about the room look"
+    },
+    "semanticMemoryRecall.ts": {
+      "to": "mind/recall/semanticMemoryRecall.ts",
+      "wave": 2,
+      "why": "Semantic memory recall"
+    },
+    "serverChatSentenceStream.ts": {
+      "to": "surfaces/text/serverChatSentenceStream.ts",
+      "wave": 6,
+      "why": "NDJSON sentence stream route"
+    },
+    "serverDeviceRoutes.ts": {
+      "to": "infra/auth/serverDeviceRoutes.ts",
+      "wave": 6,
+      "why": "Device routes"
+    },
+    "serverGeminiLiveRoute.ts": {
+      "to": "surfaces/voice/serverGeminiLiveRoute.ts",
+      "wave": 3,
+      "why": "Gemini Live route"
+    },
+    "serverGeminiSpeechRoute.ts": {
+      "to": "surfaces/voice/serverGeminiSpeechRoute.ts",
+      "wave": 3,
+      "why": "Speech synthesis route"
+    },
+    "serverHttp.ts": {
+      "to": "infra/http/serverHttp.ts",
+      "wave": 6,
+      "why": "HTTP route helpers"
+    },
+    "serverIncomingCallRoute.ts": {
+      "to": "surfaces/outreach/serverIncomingCallRoute.ts",
+      "wave": 3,
+      "why": "Incoming call route and timer"
+    },
+    "serverLiveVoiceStreamRoute.ts": {
+      "to": "surfaces/voice/serverLiveVoiceStreamRoute.ts",
+      "wave": 3,
+      "why": "Live voice stream route"
+    },
+    "serverMinecraftBodyRoute.ts": {
+      "to": "surfaces/minecraft/serverMinecraftBodyRoute.ts",
+      "wave": 3,
+      "why": "Minecraft game-chat route"
+    },
+    "serverMinecraftBodyWiring.ts": {
+      "to": "wiring/serverMinecraftBodyWiring.ts",
+      "wave": 5,
+      "why": "Minecraft routes wiring"
+    },
+    "serverMoodHistoryRoute.ts": {
+      "to": "infra/http/serverMoodHistoryRoute.ts",
+      "wave": 6,
+      "why": "Mood history owner-app route"
+    },
+    "serverOpsCommandRoutes.ts": {
+      "to": "infra/ops/serverOpsCommandRoutes.ts",
+      "wave": 1,
+      "why": "Ops command routes"
+    },
+    "serverOpsRoutes.ts": {
+      "to": "infra/ops/serverOpsRoutes.ts",
+      "wave": 1,
+      "why": "Ops routes"
+    },
+    "serverPairingRoute.ts": {
+      "to": "infra/auth/serverPairingRoute.ts",
+      "wave": 6,
+      "why": "Pairing route"
+    },
+    "serverPlatformBridgeRoute.ts": {
+      "to": "surfaces/platform/serverPlatformBridgeRoute.ts",
+      "wave": 3,
+      "why": "Platform bridge route"
+    },
+    "serverPrivateListeningRoute.ts": {
+      "to": "surfaces/body/serverPrivateListeningRoute.ts",
+      "wave": 3,
+      "why": "Private listening route"
+    },
+    "serverRealtimeVoiceAllowanceRoute.ts": {
+      "to": "surfaces/voice/serverRealtimeVoiceAllowanceRoute.ts",
+      "wave": 3,
+      "why": "Realtime voice allowance route"
+    },
+    "serverSelfDiagnosis.ts": {
+      "to": "infra/ops/serverSelfDiagnosis.ts",
+      "wave": 1,
+      "why": "Server self-description"
+    },
+    "serverShannonNowRoute.ts": {
+      "to": "infra/http/serverShannonNowRoute.ts",
+      "wave": 6,
+      "why": "Shannon-now owner-app route"
+    },
+    "serverVoiceVisionRoute.ts": {
+      "to": "surfaces/voice/serverVoiceVisionRoute.ts",
+      "wave": 3,
+      "why": "Voice vision route"
+    },
+    "shannonAetherTools.ts": {
+      "to": "mind/tools/shannonAetherTools.ts",
+      "wave": 4,
+      "why": "Aether tool executors"
+    },
+    "shannonBody.ts": {
+      "to": "surfaces/body/shannonBody.ts",
+      "wave": 3,
+      "why": "Her body seen from her mind; split later"
+    },
+    "shannonFolderTools.ts": {
+      "to": "mind/tools/shannonFolderTools.ts",
+      "wave": 4,
+      "why": "Folder tool executors"
+    },
+    "shannonMinecraftTools.ts": {
+      "to": "mind/tools/shannonMinecraftTools.ts",
+      "wave": 4,
+      "why": "Minecraft tool executors"
+    },
+    "shannonNowContract.ts": {
+      "to": "contracts/shannonNowContract.ts",
+      "wave": 1,
+      "why": "Shannon-now wire contract"
+    },
+    "shannonNowReader.ts": {
+      "to": "mind/self/store/shannonNowReader.ts",
+      "wave": 5,
+      "why": "Query-only Shannon-now reader"
+    },
+    "shannonOwnerDocumentTools.ts": {
+      "to": "mind/tools/shannonOwnerDocumentTools.ts",
+      "wave": 4,
+      "why": "Owner document tool executors"
+    },
+    "shannonStudyTools.ts": {
+      "to": "mind/tools/shannonStudyTools.ts",
+      "wave": 4,
+      "why": "Study tool executors"
+    },
+    "shannonToolAudience.ts": {
+      "to": "mind/inhibition/shannonToolAudience.ts",
+      "wave": 4,
+      "why": "Server-known audience for tool gate"
+    },
+    "shannonToolGate.ts": {
+      "to": "mind/inhibition/shannonToolGate.ts",
+      "wave": 4,
+      "why": "authorizeToolCall gate"
+    },
+    "shannonToolInput.ts": {
+      "to": "mind/tools/shannonToolInput.ts",
+      "wave": 4,
+      "why": "Tool input schema checking"
+    },
+    "shannonToolRunner.ts": {
+      "to": "mind/tools/shannonToolRunner.ts",
+      "wave": 4,
+      "why": "Tool runner"
+    },
+    "shannonToolSession.ts": {
+      "to": "mind/tools/shannonToolSession.ts",
+      "wave": 4,
+      "why": "Tools of one conversation turn"
+    },
+    "shannonToolTrace.ts": {
+      "to": "mind/tools/shannonToolTrace.ts",
+      "wave": 4,
+      "why": "Tool traces of a turn"
+    },
+    "shannonToolTraceSweep.ts": {
+      "to": "mind/tools/shannonToolTraceSweep.ts",
+      "wave": 4,
+      "why": "Sweeps tool traces after forgetting"
+    },
+    "shannonToolTurns.ts": {
+      "to": "mind/tools/shannonToolTurns.ts",
+      "wave": 4,
+      "why": "Tool trace store interface"
+    },
+    "shannonToolTypes.ts": {
+      "to": "mind/tools/shannonToolTypes.ts",
+      "wave": 4,
+      "why": "Tool executor types"
+    },
+    "shannonTools.ts": {
+      "to": "mind/tools/shannonTools.ts",
+      "wave": 4,
+      "why": "Tool registry"
+    },
+    "sleepCommitmentReview.ts": {
+      "to": "mind/sleep/sleepCommitmentReview.ts",
+      "wave": 2,
+      "why": "Sleep commitment review"
+    },
+    "sleepConsolidation.ts": {
+      "to": "mind/sleep/sleepConsolidation.ts",
+      "wave": 2,
+      "why": "Sleep consolidation"
+    },
+    "sleepConsolidationRules.ts": {
+      "to": "mind/sleep/sleepConsolidationRules.ts",
+      "wave": 2,
+      "why": "Sleep consolidation rules"
+    },
+    "spokenSentences.ts": {
+      "to": "surfaces/voice/spokenSentences.ts",
+      "wave": 3,
+      "why": "Spoken sentence cutting"
+    },
+    "sqliteBackgroundJobRepository.ts": {
+      "to": "infra/sqlite/sqliteBackgroundJobRepository.ts",
+      "wave": 2,
+      "why": "SQLite background job repository"
+    },
+    "sqliteCompanionRepository.ts": {
+      "to": "infra/sqlite/sqliteCompanionRepository.ts",
+      "wave": 2,
+      "why": "SQLite companion repository"
+    },
+    "sqliteConversationRepository.ts": {
+      "to": "infra/sqlite/sqliteConversationRepository.ts",
+      "wave": 2,
+      "why": "SQLite conversation repository"
+    },
+    "sqliteImpressions.ts": {
+      "to": "mind/memory/store/sqliteImpressions.ts",
+      "wave": 2,
+      "why": "SQL impressions"
+    },
+    "sqliteMemoryEmbeddings.ts": {
+      "to": "mind/memory/store/sqliteMemoryEmbeddings.ts",
+      "wave": 2,
+      "why": "SQL memory embeddings"
+    },
+    "sqliteMemorySearch.ts": {
+      "to": "mind/memory/store/sqliteMemorySearch.ts",
+      "wave": 2,
+      "why": "SQL memory search documents"
+    },
+    "sqliteMigrations.ts": {
+      "to": "infra/sqlite/sqliteMigrations.ts",
+      "wave": 2,
+      "why": "Numbered migrations"
+    },
+    "sqliteRealtimeVoiceRepository.ts": {
+      "to": "infra/sqlite/sqliteRealtimeVoiceRepository.ts",
+      "wave": 2,
+      "why": "Retired realtime voice ledger repository"
+    },
+    "sqliteReplaySummary.ts": {
+      "to": "mind/memory/store/sqliteReplaySummary.ts",
+      "wave": 2,
+      "why": "SQL replay summaries"
+    },
+    "sqliteShannonKnowledge.ts": {
+      "to": "mind/memory/store/sqliteShannonKnowledge.ts",
+      "wave": 2,
+      "why": "SQL Shannon knowledge"
+    },
+    "sqliteStore.ts": {
+      "to": "infra/sqlite/sqliteStore.ts",
+      "wave": 2,
+      "why": "Main SQLite store composition"
+    },
+    "sqliteStoreCodecs.ts": {
+      "to": "infra/sqlite/sqliteStoreCodecs.ts",
+      "wave": 2,
+      "why": "SQLite row codecs"
+    },
+    "sqliteStoreContext.ts": {
+      "to": "infra/sqlite/sqliteStoreContext.ts",
+      "wave": 2,
+      "why": "Shared SQLite context"
+    },
+    "sqliteToolTraces.ts": {
+      "to": "mind/tools/store/sqliteToolTraces.ts",
+      "wave": 4,
+      "why": "SQL tool traces"
+    },
+    "studyAether.ts": {
+      "to": "mind/action/ownTime/studyAether.ts",
+      "wave": 5,
+      "why": "Her study in Aether"
+    },
+    "studyAetherLinks.ts": {
+      "to": "mind/action/ownTime/store/studyAetherLinks.ts",
+      "wave": 5,
+      "why": "SQL study-to-Aether links"
+    },
+    "studyDesk.ts": {
+      "to": "mind/action/ownTime/studyDesk.ts",
+      "wave": 5,
+      "why": "Owner side of her study"
+    },
+    "studyMigration.ts": {
+      "to": "mind/action/ownTime/store/studyMigration.ts",
+      "wave": 5,
+      "why": "Study migration to Aether"
+    },
+    "studyStore.ts": {
+      "to": "mind/action/ownTime/store/studyStore.ts",
+      "wave": 5,
+      "why": "SQL her study"
+    },
+    "syndicationFeed.ts": {
+      "to": "integrations/world/syndicationFeed.ts",
+      "wave": 1,
+      "why": "RSS/Atom world source"
+    },
+    "testflightDeliveryStore.ts": {
+      "to": "integrations/testflight/store/testflightDeliveryStore.ts",
+      "wave": 1,
+      "why": "SQL TestFlight delivery records"
+    },
+    "threadTitle.ts": {
+      "to": "surfaces/text/threadTitle.ts",
+      "wave": 6,
+      "why": "Thread title metadata"
+    },
+    "turnCaptures.ts": {
+      "to": "mind/memory/store/turnCaptures.ts",
+      "wave": 2,
+      "why": "SQL turn captures"
+    },
+    "turnCognitiveContext.ts": {
+      "to": "mind/action/respond/turnCognitiveContext.ts",
+      "wave": 6,
+      "why": "Cognitive context of a turn"
+    },
+    "turnDeadline.ts": {
+      "to": "mind/action/respond/turnDeadline.ts",
+      "wave": 6,
+      "why": "Turn deadline"
+    },
+    "turnKnowledgeRecall.ts": {
+      "to": "mind/recall/turnKnowledgeRecall.ts",
+      "wave": 2,
+      "why": "Knowledge recall into a turn"
+    },
+    "turnMemoryRecall.ts": {
+      "to": "mind/recall/turnMemoryRecall.ts",
+      "wave": 2,
+      "why": "Memory recall into a turn"
+    },
+    "upcomingStore.ts": {
+      "to": "mind/memory/store/upcomingStore.ts",
+      "wave": 2,
+      "why": "SQL upcoming snapshots"
+    },
+    "voiceAppLook.ts": {
+      "to": "surfaces/voice/voiceAppLook.ts",
+      "wave": 3,
+      "why": "Look from a voice turn"
+    },
+    "voiceCompanionPresence.ts": {
+      "to": "surfaces/voice/voiceCompanionPresence.ts",
+      "wave": 3,
+      "why": "Others present in owner-mode call"
+    },
+    "voiceConversationInstructions.ts": {
+      "to": "surfaces/voice/voiceConversationInstructions.ts",
+      "wave": 3,
+      "why": "Live voice delivery instructions"
+    },
+    "voiceDecision.ts": {
+      "to": "mind/selectors/voiceDecision.ts",
+      "wave": 6,
+      "why": "Jev voice decision; split later"
+    },
+    "voiceDecisionContract.ts": {
+      "to": "contracts/voiceDecisionContract.ts",
+      "wave": 1,
+      "why": "Voice affect wire vocabulary"
+    },
+    "voiceDecisionValues.ts": {
+      "to": "mind/selectors/voiceDecisionValues.ts",
+      "wave": 6,
+      "why": "Voice decision value rules"
+    },
+    "voiceDeviceContext.ts": {
+      "to": "surfaces/voice/voiceDeviceContext.ts",
+      "wave": 3,
+      "why": "Voice device context"
+    },
+    "voiceEmotionPlan.ts": {
+      "to": "mind/emotion/voiceEmotionPlan.ts",
+      "wave": 2,
+      "why": "Voice emotion plan"
+    },
+    "voiceGuestCall.ts": {
+      "to": "surfaces/voice/voiceGuestCall.ts",
+      "wave": 3,
+      "why": "Guest call context"
+    },
+    "voiceGuestNames.ts": {
+      "to": "surfaces/voice/voiceGuestNames.ts",
+      "wave": 3,
+      "why": "Guest names in calls"
+    },
+    "voiceIdentity.ts": {
+      "to": "surfaces/voice/voiceIdentity.ts",
+      "wave": 3,
+      "why": "Voice identity preferences"
+    },
+    "voiceIntroductionInstructions.ts": {
+      "to": "surfaces/voice/voiceIntroductionInstructions.ts",
+      "wave": 3,
+      "why": "Participant-mode voice sections"
+    },
+    "voiceRoomLook.ts": {
+      "to": "surfaces/voice/voiceRoomLook.ts",
+      "wave": 3,
+      "why": "Room look from voice"
+    },
+    "voiceSessionProjection.ts": {
+      "to": "surfaces/voice/voiceSessionProjection.ts",
+      "wave": 3,
+      "why": "Voice session instructions"
+    },
+    "voiceSilence.ts": {
+      "to": "surfaces/voice/voiceSilence.ts",
+      "wave": 3,
+      "why": "When not to answer in a call"
+    },
+    "voiceTranscriptContext.ts": {
+      "to": "surfaces/voice/voiceTranscriptContext.ts",
+      "wave": 3,
+      "why": "Voice transcript command context"
+    },
+    "voiceTranscription.ts": {
+      "to": "infra/models/voiceTranscription.ts",
+      "wave": 6,
+      "why": "Voice transcription provider"
+    },
+    "voiceVision.ts": {
+      "to": "surfaces/voice/voiceVision.ts",
+      "wave": 3,
+      "why": "Voice vision model call"
+    },
+    "voiceWaitingCue.ts": {
+      "to": "surfaces/voice/voiceWaitingCue.ts",
+      "wave": 3,
+      "why": "Waiting cue in voice"
+    },
+    "voipPushSender.ts": {
+      "to": "surfaces/outreach/voipPushSender.ts",
+      "wave": 3,
+      "why": "VoIP push sender"
+    },
+    "worldContracts.ts": {
+      "to": "integrations/world/worldContracts.ts",
+      "wave": 1,
+      "why": "World integration types"
+    },
+    "worldDiscovery.ts": {
+      "to": "integrations/world/worldDiscovery.ts",
+      "wave": 1,
+      "why": "Feed link discovery"
+    },
+    "worldInterestRelevance.ts": {
+      "to": "integrations/world/worldInterestRelevance.ts",
+      "wave": 1,
+      "why": "World item interest relevance"
+    },
+    "worldSignalQuality.ts": {
+      "to": "integrations/world/worldSignalQuality.ts",
+      "wave": 1,
+      "why": "World signal quality"
+    },
+    "worldStore.ts": {
+      "to": "integrations/world/store/worldStore.ts",
+      "wave": 1,
+      "why": "SQL world store"
+    }
+  }
+}
