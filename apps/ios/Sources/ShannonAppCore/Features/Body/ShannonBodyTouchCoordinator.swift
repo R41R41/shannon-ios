@@ -252,7 +252,7 @@ public final class ShannonBodyTouchCoordinator {
             environment.express(expression, message?.expression != nil ? message?.feeling : answer.mood?.feeling)
         }
         guard let message, !message.text.isEmpty else { return }
-        let face = message.expression.flatMap(ShannonExpressionDTO.init(rawValue:)).map { ShannonFace(expression: $0, feelingName: message.feeling) }
+        let face = message.expression.flatMap(ShannonExpressionDTO.known).map { ShannonFace(expression: $0, feelingName: message.feeling) }
         // Voice mode, the owner alone, and nothing else holding the sound: the bubble and her voice, then a moment
         // in which he may answer. Otherwise the bubble only.
         let speaks = audience == .owner && environment.speak != nil && !isSpeaking && environment.repliesInVoice()

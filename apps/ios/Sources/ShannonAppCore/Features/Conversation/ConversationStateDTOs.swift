@@ -40,6 +40,23 @@ public enum ShannonExpressionDTO: String, Codable, CaseIterable, Equatable, Send
     case neutral
 }
 
+public extension ShannonExpressionDTO {
+    /// The feeling kind the server adds in body stage 1b (気持ち悪い・いや, Syzygy ADR-0005). It has no face of its own:
+    /// it shows the `annoyed` face, as the server and the Live2D page also show it.
+    static let uncomfortableName = "uncomfortable"
+
+    /// A face this build knows by this name: one of the 22, or `annoyed` for `uncomfortable`; nil for any other name.
+    static func known(_ name: String) -> Self? {
+        Self(rawValue: name) ?? (name == uncomfortableName ? .annoyed : nil)
+    }
+
+    /// A face name from a newer server never fails a reply, a message, a mood or her presence: `uncomfortable` is
+    /// `annoyed`, and any other name this build does not know is the usual face.
+    init(from decoder: any Decoder) throws {
+        self = Self.known(try decoder.singleValueContainer().decode(String.self)) ?? .neutral
+    }
+}
+
 public struct ShannonMessageEmotionDTO: Codable, Equatable, Sendable {
     public let valence: Double
     public let arousal: Double

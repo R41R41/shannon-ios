@@ -22,9 +22,9 @@ public struct ShannonNowFaceDTO: Decodable, Equatable, Sendable {
         self.startedAt = startedAt
     }
 
-    /// The face every other screen names. Nil for an expression this app has no name for.
+    /// The face every other screen names (`uncomfortable` is `annoyed`). Nil for an expression this app has no name for.
     public var face: ShannonFace? {
-        ShannonExpressionDTO(rawValue: expression).map { ShannonFace(expression: $0, feelingName: feeling) }
+        ShannonExpressionDTO.known(expression).map { ShannonFace(expression: $0, feelingName: feeling) }
     }
 }
 

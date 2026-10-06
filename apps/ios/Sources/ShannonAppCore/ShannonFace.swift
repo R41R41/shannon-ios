@@ -33,9 +33,10 @@ public struct ShannonFace: Equatable, Sendable {
 
     /// An unknown feeling name from a newer server falls back to the face's own name; an unknown
     /// kind, or one whose icon is not bundled, falls back to the face.
+    /// The kind `uncomfortable` (body stage 1b) has no icon: it shows the `annoyed` face and its icon.
     public init(expression: ShannonExpressionDTO, feelingName: String?, kindName: String? = nil) {
         self.init(
-            expression: expression,
+            expression: kindName == ShannonExpressionDTO.uncomfortableName ? .annoyed : expression,
             feeling: feelingName.flatMap(ShannonFeelingDTO.init(rawValue:)),
             kind: ShannonEmotionKindIcon.displayed(kindName)
         )
@@ -115,7 +116,9 @@ public extension ConversationMessage.EmotionSnapshot {
     }
 
     var face: ShannonFace {
-        ShannonFace(expression: expression, feeling: feeling, kind: ShannonEmotionKindIcon.displayed(kind))
+        ShannonFace(
+            expression: kind == ShannonExpressionDTO.uncomfortableName ? .annoyed : expression, feeling: feeling,
+            kind: ShannonEmotionKindIcon.displayed(kind))
     }
 }
 
