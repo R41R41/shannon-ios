@@ -70,6 +70,11 @@ public enum ShannonDesktopBodyGrip {
         let box: CGRect
     }
 
+    /// The `modelUpdatedAt` of the bundled page the zones were measured on. A test holds it equal to the bundled
+    /// `version.json`, so that a new model cannot be bundled with zones of the old one (`docs/live2d-embed.md`,
+    /// "Updating the page").
+    static let measuredFor = "2026-10-06T02:07:35.221Z"
+
     /// Measured from the bundled page (0.1.0+202610060219; its hit areas are those of the model of 2026-10-06 02:07) with
     /// `tools/live2d-grip-probe` in a 400 x 680 page, her own sway off: each point pressed once (her face settled with a
     /// pause between presses, so that the resting stroke a tap on her head starts is never credited to the next point),

@@ -32,7 +32,11 @@ model) and `embed.js` (poses, hit regions, timing) belong together.
 3. Update the table above and the pinned `modelUpdatedAt` and `version` in `ShannonBodyTests` from the new `version.json`.
 4. Read the new `README.md` of the folder for changes to `window.shannonBody` or the posted messages, and
    follow them in `ShannonLive2DProtocol.swift`.
-5. `swift test --package-path apps/ios`, then look at her figure in Talk's dialogue display on a device in both layouts.
+5. When `modelUpdatedAt` changed, measure again where the page names her face and her boots for the Mac desktop body's
+   carry (`ShannonDesktopBodyGrip.zones`): follow the steps at the top of `tools/live2d-grip-probe/probe.mjs` (headless
+   Chrome over the new folder, then `zones.py`), put the zones it prints in place, and set
+   `ShannonDesktopBodyGrip.measuredFor` to the new `modelUpdatedAt`. A test fails until both are done.
+6. `swift test --package-path apps/ios`, then look at her figure in Talk's dialogue display on a device in both layouts.
 
 The Cubism Core (`embed/live2d/live2dcubismcore.min.js`) is Live2D's proprietary redistributable code. It
 stays inside the folder as delivered and is not copied anywhere else in the repository.

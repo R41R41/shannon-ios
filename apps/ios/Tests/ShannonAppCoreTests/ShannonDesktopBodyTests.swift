@@ -161,6 +161,15 @@ final class ShannonDesktopBodyTests: XCTestCase {
         }
     }
 
+    /// The zones belong to one model: bundling another without measuring again fails here (`docs/live2d-embed.md`).
+    @MainActor func testTheCarryZonesWereMeasuredOnTheBundledModel() throws {
+        let folder = try XCTUnwrap(ShannonLive2DStage.embedFolder)
+        let version = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("version.json"))) as? [String: Any]
+        XCTAssertEqual(
+            ShannonDesktopBodyGrip.measuredFor, version?["modelUpdatedAt"] as? String,
+            "The bundled model changed: measure the carry zones again with tools/live2d-grip-probe and update measuredFor.")
+    }
+
     func testThePageDrawsHerAsTheGripReadsIt() {
         // `embed.js`, `wa` for `full` with `fit: contain`: in a 400 x 680 page the drawing is 664 high from 14 down.
         let canvas = ShannonDesktopBodyGrip.canvas(CGSize(width: 400, height: 680))
