@@ -659,8 +659,11 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
     // `systemPrompt` is her identity alone, and the shared state and everything after it are `turnContext`. With each
     // request's layers joined back into `systemPrompt` (`promptOf`) the trace is b61f391a… again: no text changed (0cb946e1…);
     // and on the body-1b branch (2026-10-06, Syzygy ADR-0005 owner answer 7), whose capability line about her body ends
-    // 「体は自分のもの。触れられ方は自分で受け取る。」: every system prompt of these four turns is 22 characters longer, nothing else.
-    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('29ef5a91d2b09d59dc8ab39f95b03eface81139d06851404c38c53a2eff12025');
+    // 「体は自分のもの。触れられ方は自分で受け取る。」 (22 characters longer, 29ef5a91… alone); and on the Mac folder branch
+    // (2026-10-06, A18, owner approval), whose `own_folder` capability line names the PC or the Mac and says the Mac's folder is
+    // only read for now (33 characters longer, 71ac4474… alone). With both lines, every system prompt of these four turns is
+    // 55 characters longer and nothing else changed: with the two lines as before, the trace is 0cb946e1… again.
+    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('2dd0a8dbfcd6965ea27c1a2deb483c2de82cadbd2cf7049663ebfa1252019778');
     for (const request of off.seen.requests) expect(request).not.toHaveProperty('offerReplyFeeling');
     // What 7e227e6 does with these four turns: a cue is 0.52 and a mood, no cue is nothing, and nothing lingers for days.
     expect(off.h.state().lingering).toMatchObject([{ kind: 'sulky', span: 'mood', strength: 0.52 }]);

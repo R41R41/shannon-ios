@@ -57,10 +57,11 @@ describe('canonical Shannon persona', () => {
     // line with no count of messages a day (owner decisions). 2026-10-05: +154, her study and her folder through her tools (owner decision);
     // +109 the same day, the rule that asks where a memo goes (owner decision, SHANNON_MEMO_PLACE_RULE); +124 the same day, the
     // rule that she does not go along with a premise about something she did on her own that no record shows (owner decision).
-    // 2026-10-06: +22, 「体は自分のもの。触れられ方は自分で受け取る。」 in the body line (Syzygy ADR-0005, owner answer 7).
-    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(2_506);
-    // The core prompt holds the owner capability text: +22 for the same line (3,420 before).
-    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(3_442);
+    // 2026-10-06: +22, 「体は自分のもの。触れられ方は自分で受け取る。」 in the body line (Syzygy ADR-0005, owner answer 7);
+    // +33 the same day, her folder may be on the PC or the Mac, and the Mac's is only read for now (A18; owner approval).
+    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(2_539);
+    // The core prompt holds the owner capability text: +22 and +33 for the same two lines (3,420 before).
+    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(3_475);
     expect(SHANNON_ONE_LINE_VOICE.length).toBeLessThanOrEqual(140);
   });
 });
