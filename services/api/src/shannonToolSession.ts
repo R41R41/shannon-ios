@@ -28,8 +28,8 @@ export { withToolCapabilityLines } from './shannonAetherTools.js';
  * in 「友人も一緒」, someone else on a platform. It is offered the same Aether reading tools and nothing else; while they
  * are not offered (Aether not configured) it gets nothing and nothing is said about it, exactly as `false`. Its calls
  * are kept in no trace: its turn is never stored in the owner's Talk. `openOnly`: nobody present may release a protected
- * line of the owner's (a turn someone else wrote on a platform), so his guarded matters are left out of what she reads
- * rather than marked.
+ * line of the owner's (a turn someone else wrote on a platform), so what she reads carries no marker (his secrets and
+ * personal matters are left out of it in every turn with others, `aetherShownText.ts`).
  *
  * `ownerAlone: 'shared'` is the owner's own turn that others can read (app text marked `others`, his turn in a shared
  * platform conversation; owner decision 2026-10-06): like `'others'`, except that while nothing is offered it gets nothing

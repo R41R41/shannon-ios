@@ -60,13 +60,20 @@ async function harness(options: { aether?: boolean } = {}) {
   const contexts: ToolExecutionContext[] = [];
   const call = service.tools.call.bind(service.tools);
   vi.spyOn(service.tools, 'call').mockImplementation((name, input, context, signal) => { contexts.push(context); return call(name, input, context, signal); });
-  const turn = (ownerAlone: boolean | 'others' | 'guests', surface: 'text' | 'voice' = 'text', openOnly = false, words = 'シャノンのフォルダの灯台のメモを読んで') =>
+  const turn = (ownerAlone: boolean | 'others' | 'guests' | 'shared', surface: 'text' | 'voice' = 'text', openOnly = false, words = 'シャノンのフォルダの灯台のメモを読んで') =>
     conversationTools(service, scope, surface, ownerAlone, server, `thread\n${words}`, new TurnDeadline(TEXT_TURN_DEADLINE), undefined, openOnly ? { openOnly: true } : {});
   return { fake, service, server, note, owners, contexts, turn };
 }
 
 const result = async (session: { call(name: string, argumentsJson: string): Promise<string> } | undefined, name: string, input: unknown) =>
   JSON.parse(await session!.call(name, JSON.stringify(input))) as { ok: boolean; text: string; failure?: string };
+
+/** The run check of `conversationSecrets.ts` over these texts, as `othersSecrets` builds it. */
+function runCheckOf(texts: readonly string[]) {
+  const base = createInitialCompanionState(scope, at);
+  return othersSecrets({ ...base, userFacts: texts.map((statement, index) => ({ id: `t${index}`, statement, confidence: 0.9, observedAt: at, disclosure: { category: 'secret' as const } })) } as never,
+    { experienceCandidates: () => [] }, scope).withheld;
+}
 
 describe('a guest-only turn (owner decision 2026-10-06)', () => {
   it('gets exactly the three reading tools, with the others instruction, and only results inside her folder', async () => {
@@ -115,7 +122,7 @@ describe('a guest-only turn (owner decision 2026-10-06)', () => {
 });
 
 describe('what she reads of her folder in front of others', () => {
-  it('removes the owner\'s secret and, where he is not there, his personal matters; keeps all of it with him alone', async () => {
+  it('removes the owner\'s secret and his personal matters with anyone else present; keeps all of it with him alone', async () => {
     const { turn, note } = await harness();
     const read = (offered: ReturnType<typeof turn>) => result(offered.tools, 'aether_read', { documentId: note.id });
 
@@ -124,17 +131,18 @@ describe('what she reads of her folder in front of others', () => {
     expect(alone.text).toContain(HEALTH);
     expect(alone.text).not.toContain(LEFT_OUT_LINE);
 
-    // The owner with others, and 「友人も一緒」: the secret is left out, his health is marked as memory marks it.
+    // The owner with others (voice and app text), and 「友人も一緒」: his secret and his health are both left out (「除く」, S-2).
     expect(toolInstructions(turn('others').tools!, false)).toBe(TOOLS_OTHERS_INSTRUCTIONS);
     // ADR-0007 revised: her works, unshown drafts included, may be read aloud with others present, without his approval first.
     for (const words of [TOOLS_OTHERS_INSTRUCTIONS, TOOLS_GUESTS_INSTRUCTIONS]) {
       expect(words).toContain('まだライ氏に見せていない下書きも、ここで読み上げたり話したりしてよい');
       expect(words).not.toContain('承認');
     }
-    for (const offered of [turn('others'), turn('guests', 'voice')]) {
+    for (const offered of [turn('others'), turn('others', 'voice'), turn('shared'), turn('guests', 'voice')]) {
       const text = (await read(offered)).text;
       expect(text).not.toContain('ウォンバット');
-      expect(text).toContain(`${UNLABELLED_DISCLOSURE_MARKER}ライ氏は${HEALTH}そうだ。`);
+      expect(text).not.toContain('胃の調子');
+      expect(text).toContain('今日はライ氏と灯台の話をした。');
       expect(text).toContain('灯台の光は夜に十二回まわる。');
       expect(text).toContain(LEFT_OUT_LINE);
       // With him there, all of what she read is unlabelled derived text: marked as a whole, for the speak-time check.
@@ -169,6 +177,11 @@ describe('what she reads of her folder in front of others', () => {
     const check = { ...othersSecrets(state as never, { experienceCandidates: () => [] }, scope), openOnly: true };
     expect(textForOthers('灯台の光。紅茶が好きで毎朝ダージリンを飲む。', check)).toBe('灯台の光。紅茶が好きで毎朝ダージリンを飲む。');
     expect(textForOthers('ウォンバット会の集。まりに毎月出ている。', check)).toBeNull();
+    // A marker put before a guarded sentence must not split a withheld run that crosses into it (review S-1).
+    const crossing = { withheld: runCheckOf(['来月に手術。病院は東大病院']), guarded: runCheckOf(['病院は東大病院で入院予定']), openOnly: false };
+    // Both sentences of his are left out now (S-2); what stays is checked plain.
+    expect(textForOthers('来月に手術。病院は東大病院で入院予定。', crossing)).toBe(`来月に手術。\n${LEFT_OUT_LINE}`);
+    expect(textForOthers('来月に手術。病院は東大病院で入院予定。', crossing)).not.toContain('東大病院');
   });
 });
 
