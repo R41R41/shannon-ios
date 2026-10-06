@@ -137,7 +137,8 @@ public final class ShannonStreamOutput {
             state = .starting
             return
         }
-        let snapshot = ShannonStreamOutputSnapshot(body: ShannonLive2DStage.shared.streamBody)
+        let stage = ShannonLive2DStage.shared
+        let snapshot = ShannonStreamOutputSnapshot.seeded(body: stage.streamBody, mood: stage.mood, presence: stage.presence, phase: stage.phase)
         let token = UUID()
         let server = ShannonStreamOutputServer(port: port, files: files, snapshot: snapshot) { [weak self] state in
             Task { @MainActor in self?.serverChanged(state, token: token) }

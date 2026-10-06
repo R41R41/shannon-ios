@@ -67,6 +67,19 @@ struct ShannonStreamOutputSnapshot: Equatable, Sendable {
         self.body = body
     }
 
+    /// A snapshot that starts from what her figure was last told, so that a page that connects before anything changes
+    /// shows her mood, presence and phase at once rather than a neutral figure.
+    static func seeded(
+        body: ShannonLive2DBody, mood: (valence: Double, arousal: Double, openness: Double)?, presence: ShannonLive2DPresence?,
+        phase: ShannonLive2DPhase
+    ) -> ShannonStreamOutputSnapshot {
+        var snapshot = ShannonStreamOutputSnapshot(body: body)
+        if let mood { _ = snapshot.take(.setMood(valence: mood.valence, arousal: mood.arousal, openness: mood.openness)) }
+        if let presence { _ = snapshot.take(.setPresence(presence)) }
+        _ = snapshot.take(.setPhase(phase))
+        return snapshot
+    }
+
     /// Takes a command; answers the event to send now, or nil when it changes nothing for a watching page.
     mutating func take(_ command: ShannonLive2DCommand) -> ShannonStreamOutputEvent? {
         guard let event = command.streamEvent else { return nil }

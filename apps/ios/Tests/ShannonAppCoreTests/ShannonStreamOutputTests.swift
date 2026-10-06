@@ -168,6 +168,16 @@ final class ShannonStreamOutputTests: XCTestCase {
         XCTAssertEqual(snapshot.opening.first?.payload, #"{"args":["eyes"],"call":"setBody"}"#)
     }
 
+    func testAPageThatConnectsFirstIsToldWhatHerFigureWasLastTold() {
+        let presence = ShannonLive2DPresence(expression: "tender", feeling: nil, intensity: 0.3, doing: "reading", awaitingReaction: 1)
+        let snapshot = ShannonStreamOutputSnapshot.seeded(
+            body: .human, mood: (valence: 0.4, arousal: 0.2, openness: 0.6), presence: presence, phase: .speaking)
+        XCTAssertEqual(snapshot.opening.map(\.call), ["setBody", "setMood", "setPresence", "setPhase"])
+        XCTAssertEqual(snapshot.opening.last?.payload, #"{"args":["speaking"],"call":"setPhase"}"#)
+        let bare = ShannonStreamOutputSnapshot.seeded(body: .eyes, mood: nil, presence: nil, phase: .idle)
+        XCTAssertEqual(bare.opening.map(\.call), ["setBody", "setPhase"])
+    }
+
     // MARK: The page
 
     @MainActor
