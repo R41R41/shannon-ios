@@ -762,6 +762,22 @@ Xcode; the Finder launcher delegates to that same path.
 
 Production Swift and TypeScript source files have a 500-line ceiling. `scripts/check-architecture.mjs` also keeps WebRTC inside its transport adapter, Security inside the Keychain adapter, UI frameworks out of the HTTP adapter, retired monolith files absent, and every nested Mac source included in the generated project. `scripts/verify.sh` runs this guard before API and Apple-client verification.
 
+## Code layout (target)
+
+The API sources move from one flat `services/api/src` into folders by part and role (Syzygy ADR-0008 §6, owner decision 2026-10-07). Until the moves land the folders below are the target, not the tree.
+
+- The entry files stay at the root of `services/api/src`: `server.ts`, `worker.ts`, `worldWorker.ts`, `autonomyWorker.ts`, `agentHost.ts`, `fakeAgentHost.ts`, `testflightDistributor.ts`, `authCli.ts` (what a systemd unit, the Agent Host plist or a `package.json` script runs).
+- `mind/<part>`: perception, attention, workspace, selectors, recall, prediction, emotion, action (`respond`, `agentTasks`, `ownTime`, `threads`), inhibition, tools, memory, learning, self, sleep. A part reaches another part only through that part's `ports.ts`.
+- `surfaces/<place>`: text, voice, body, minecraft, platform, outreach. A surface imports no other surface and no other part's store.
+- `integrations/<service>`: aether, notion, voyager, world, places, agentHost, testflight. An integration does not import the mind except a `ports.ts`.
+- `infra/`: http, auth, sqlite, models, config, ops. `contracts/`: the wire contracts with the bodies and the apps. `wiring/`: the one place that hands a part its stores.
+- A part's persistence sits in its own `store/` folder; only a `store/` folder, `infra/sqlite` and `wiring` open SQLite, and `process.env` is read in `infra/config`, `wiring` and the entry files.
+- The pure packages (`packages/cognition`, later `packages/learning` and `packages/mind`) hold no database, network, environment or timer and import only `@shannon/*`.
+
+`scripts/layout/moves.json` maps every current file to its target and to one of six waves, from quiet code to busy code: (1) contracts, integrations, `infra/ops`; (2) memory, recall, sleep, prediction, emotion, with `infra/sqlite`; (3) surfaces; (4) inhibition, tools, `agentTasks`; (5) ownTime and wiring, with `infra/config` and `self`; (6) `infra/http` with `apiKernel`, `infra/models` (`chatModel*`), text, `infra/auth`, `respond`, `selectors`. `scripts/layout/apply.mjs --wave N` applies one wave: `git mv`, relative specifiers rewritten everywhere (imports of every kind, `vi.mock`, `new URL(…, import.meta.url)`), the moved paths rewritten in `autonomyCore.ts`, and a refusal unless the set of core files is the same before and after. A move keeps the basename and changes nothing else; each wave is one deployable commit that can be reverted alone, and the owner is told before each wave is deployed. Imports stay relative; there are no path aliases.
+
+`scripts/check-api-layers.mjs` checks these rules (`scripts/api-layers.json`) on resolved import paths, on the projected layout (each file at its target in `moves.json`), so it means the same before, during and after the waves. Today's violations are listed in `scripts/api-layers-baseline.json`, which may only shrink. `scripts/verify.sh fast` runs it as a report; it starts enforcing (`--enforce`) with wave 5. Tests read the API sources through `services/api/tests/support/sources.ts` (recursive listing, lookup by basename, imports resolved to files), never through a flat path.
+
 ## Production layout
 
 ```text
