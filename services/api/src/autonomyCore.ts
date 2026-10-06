@@ -76,6 +76,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/bodyTouchPrediction.ts',
     // Syzygy ADR-0008 stage 1: the pure package of the prediction ledger, calibration, reward, values and the mood exit.
     'packages/learning/',
+    // Syzygy ADR-0008 stage 1: the prediction ledger, its store, and where predictions are opened and settled.
+    'services/api/src/mind/learning/',
   ]),
   authentication: Object.freeze([
     'services/api/src/apiAuth.ts',

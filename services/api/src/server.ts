@@ -14,6 +14,7 @@ import { DurableBackgroundDispatcher } from './backgroundUpdates.js';
 import { startToolTraceSweep } from './shannonToolTraceSweep.js';
 import { createConfiguredChatModel } from './chatModel.js';
 import { configuredVoiceDecision } from './mind/inhibition/tracedVoiceDecision.js';
+import { storyReacted, touchLedger } from './mind/learning/predictionLedgerTaps.js';
 import { configuredAuthPepper, SQLiteDeviceAuthStore, type ShannonDevicePrincipal } from './deviceAuth.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
 import { ShannonMemoryService } from './memoryService.js';
@@ -102,11 +103,12 @@ const autonomyConfig = configuredAutonomy(process.env, { databasePath: configure
 const ownerTurns = new SQLiteStudyShowing(configuredDatabasePath());
 const minecraft = createMinecraftBodyWiring(process.env, configuredDatabasePath(), now); // Her Minecraft body (docs/minecraft-body-contract.md); unset SHANNON_MINECRAFT_BODY_JSON: none of it.
 const aetherPorts = configuredAetherPorts(process.env, now); // Aether (Syzygy ADR-0007): unset SHANNON_AETHER_API_URL/_SHANNON_TOKEN, none of it.
+const predictionLedger = persistentStore.predictionLedger(); // Syzygy ADR-0008 stage 1 (docs/cognition-ledger-contract.md); null under SHANNON_PREDICTION_LEDGER=off.
 const autonomy = new ShannonAutonomyService({
   store: autonomyStore, config: autonomyConfig, now, ownerFirstActiveAfter: (scopeKey, after) => ownerTurns.ownerFirstActiveAfter(scopeKey, after),
   announcer: autonomyAnnouncer, agentTasks: agentTaskStore, defaultThread: scopeKey => persistentStore.threadId(scopeKey),
   defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST?.trim() || null, minecraftBody: minecraft.requests, aether: aetherPorts,
-});
+  ...(predictionLedger ? { storyReacted: (scopeKey, pieceId, reaction, at) => storyReacted(predictionLedger, scopeKey, pieceId, reaction, at) } : {}) });
 // Her folder's operations (docs/host-folder-contract.md): stale ones are closed and results pruned also when no device or tool calls.
 const stopFolderMaintenance = autonomy.folderOperations.startMaintenance();
 // What her tools did in conversations (shannonToolTrace.ts): retention, forgetting and secrets reach stored traces too.
@@ -133,8 +135,7 @@ const incomingCallRoute: IncomingCallRoute | null = createIncomingCallRoute(proc
 const ownOutreach = new SQLiteOwnOutreach(configuredDatabasePath());
 const ownerCallFacts = new SQLiteOwnerCallFacts(configuredDatabasePath());
 const chatModel = createConfiguredChatModel(process.env, persistentStore);
-// Syzygy ADR-0008 stage 1: one content-free trace per routing decision, and Jev's calls counted. SHANNON_DECISION_TRACES=off: the gateway as it was.
-const voiceDecision = configuredVoiceDecision(process.env, persistentStore, persistentStore.decisionTraces()?.writer ?? null);
+const voiceDecision = configuredVoiceDecision(process.env, persistentStore, persistentStore.decisionTraces()?.writer ?? null); // ADR-0008: traced; SHANNON_DECISION_TRACES=off: as it was.
 // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
 const notion = configuredNotionSource(process.env, { log: line => console.log(line) });
 minecraft.connect({ stateStore: persistentStore, conversationStore: persistentStore, background: backgroundDispatcher, now, chatModel, peopleStore: peopleMemoryStore, conversation: { textTurn: input => kernel.textTurn(input) } });
@@ -171,7 +172,7 @@ const kernel = createLocalApiKernel(now, {
   memoryRecall: createConfiguredTurnMemoryRecall(persistentStore),
   autonomy,
   // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
-  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), appLook: configuredAppLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: (scopeKey, deviceId) => privateListeningRoute.reachOuts.bodyPresence(scopeKey, deviceId, reachOuts.pending(scopeKey)), reachOutReports: privateListeningRoute.bodyReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env, configuredDatabasePath(), persistentStore, persistentStore.predictionShadow()),
+  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), appLook: configuredAppLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: (scopeKey, deviceId) => privateListeningRoute.reachOuts.bodyPresence(scopeKey, deviceId, reachOuts.pending(scopeKey)), reachOutReports: privateListeningRoute.bodyReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env, configuredDatabasePath(), persistentStore, persistentStore.predictionShadow(), predictionLedger ? touchLedger(predictionLedger) : null),
     // The owner in a call on another of his apps: the presence field and the 409 for her body. SHANNON_OWNER_CALL_ELSEWHERE=off switches both off.
     ownerCalls: { enabled: ownerCallElsewhereEnabled(process.env), surface: (scopeKey, deviceId) => { try { return ownerCallFacts.surface(scopeKey, deviceId); } catch { return undefined; } },
       answered: (scopeKey, since) => { try { return ownerCallFacts.answered(scopeKey, since); } catch { return []; } } }, game: minecraft.game },

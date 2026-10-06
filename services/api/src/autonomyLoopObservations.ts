@@ -63,6 +63,16 @@ export interface ReachOutFacts {
  */
 export interface AutonomyPredictionTap {
   reachOut(scopeKey: string, facts: ReachOutFacts, at: string): void;
+  /**
+   * Syzygy ADR-0008 stage 1 (the prediction ledger): a prediction is opened when a message of hers is sent, a call of hers is
+   * asked for, a story is shown and a page is read, and one is settled when a note of a reading is written. Write-only, like
+   * the shadow's tap: closed values and ids, never words, and nothing comes back. Absent, nothing is opened.
+   */
+  sent?(scopeKey: string, message: { id: string; reason: ObservedReachOutReason; others: boolean }, at: string): void;
+  called?(scopeKey: string, call: { id: string; reason: ObservedReachOutReason; others: boolean }, at: string): void;
+  shown?(scopeKey: string, piece: { id: string; revised: boolean }, at: string): void;
+  read?(scopeKey: string, reading: { id: string; source: 'public' | 'notion' }, at: string): void;
+  noted?(scopeKey: string, readingId: string, at: string): void;
 }
 
 export interface StepObservation {

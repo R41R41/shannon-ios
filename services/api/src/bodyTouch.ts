@@ -9,6 +9,7 @@ import { TouchPredictions, stanceOutcome, type TouchPrediction, type TouchPredic
 export { touchPredictionEnabled } from './bodyTouchPrediction.js';
 import { bodyTouchPartWord, bodyTouchRegionWord } from './bodyTouchWords.js';
 import type { PredictionShadow } from './predictionShadow.js';
+import type { TouchLedger } from './mind/learning/predictionLedgerTaps.js';
 
 /**
  * A touch reaches her: the one entrance behind both ways a touch arrives, a reaction request
@@ -41,6 +42,8 @@ export interface BodyTouchDependencies {
    * arousal, her stance is the outcome and its prediction error moves her (`bodyTouchPrediction.ts`). False: stage 1b.
    */
   stage2?: boolean;
+  /** Syzygy ADR-0008 stage 1: the prediction ledger's touch port (`predictionLedgerTaps.ts`); absent or null, nothing is opened. */
+  ledger?: TouchLedger | null;
 }
 
 export interface FeltTouch {
@@ -74,7 +77,7 @@ export class BodyTouches {
   constructor(private readonly dependencies: BodyTouchDependencies) {
     const record = dependencies.prediction;
     const usable = record?.predict && record.recent && record.learnLater && record.stanceCompared ? record as TouchPredictionRecord : null;
-    this.predictions = usable ? new TouchPredictions(usable) : null;
+    this.predictions = usable ? new TouchPredictions(usable, dependencies.ledger ?? null) : null;
     // Stage 2 learns in the prediction record. Without it (`SHANNON_PREDICTION_SHADOW=off`, a kernel without SQLite) every
     // touch would meet the same empty prior, the same startle and the same surprise: touches run as stage 1b instead. The
     // warning is for a server whose record was configured away (`null`); a kernel built without one (`undefined`) is quiet.
@@ -103,10 +106,10 @@ export class BodyTouches {
     if (receipt.fresh && age <= BODY_REACTION_LIMITS.feelingFreshMilliseconds && age >= -BODY_LIMITS.eventFutureSkewMilliseconds && this.stage2) {
       // Syzygy ADR-0006 stage 2: no table for any part. The startle (how unsure she was of such a touch), and the stance she
       // took for the same key earlier in this episode when there is one and she is not about to be asked.
-      prediction = this.predictions!.expect(scopeKey, touch, at);
+      prediction = this.predictions!.expect(scopeKey, touch, at, receipt.burst.id);
       const carried = options.awaitsStance ? null : this.predictions!.carried(scopeKey, prediction.key, at);
-      // Felt, not learned: only a stance she gives is an outcome.
-      if (carried !== null) prediction = { ...prediction, outcome: this.predictions!.felt(prediction, carried) };
+      // Felt, not learned: only a stance she gives is an outcome (and the ledger's prediction of it is void).
+      if (carried !== null) { prediction = { ...prediction, outcome: this.predictions!.felt(prediction, carried) }; this.predictions!.voided(scopeKey, prediction, at); }
       // The part, else the region, names the cause of a feeling (頭をなでられた): her stance is not known yet, so factual words,
       // no favour read into the verb; with neither, `factual`.
       const partWord = touch.part ? bodyTouchPartWord(touch.part) : touch.region ? bodyTouchRegionWord(touch.region) : undefined;
@@ -159,6 +162,7 @@ export class BodyTouches {
       const carried = predictions.carried(scopeKey, prediction.key, at);
       if (carried === null) return null;
       outcome = predictions.felt(prediction, carried);
+      predictions.voided(scopeKey, prediction, at);
     }
     const snapshot = stateStore.apply(scopeKey, { type: 'touch-appraised', outcome });
     predictions.compared(scopeKey, snapshot, at);

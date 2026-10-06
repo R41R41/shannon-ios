@@ -151,6 +151,8 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
       if (delivery === 'sent') {
         const sent = agentic ? latestOf(adapters.reachOuts, cycle.scopeKey) : null;
         if (!sent) return { outcome: 'done', usage, summary: `持ち主に話しかけました（理由: ${label}）。` };
+        // Syzygy ADR-0008 stage 1: what she expects of it is opened now and settled by what she sees follow (`observeStep`).
+        dependencies.prediction?.sent?.(cycle.scopeKey, { id: sent.id, reason, others: others !== null }, sent.at);
         // She stays with it for a short while: did he answer, and what did her body do with it. Facts only.
         let observed: Awaited<ReturnType<typeof observeReachOut>>;
         try {

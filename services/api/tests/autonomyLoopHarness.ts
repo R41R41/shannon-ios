@@ -148,6 +148,8 @@ export interface LoopHarnessOptions {
   prediction?: AutonomyPredictionTap;
   /** Syzygy ADR-0008 stage 1: the decision trace writer; absent, as with `SHANNON_DECISION_TRACES=off`. */
   trace?: DecisionTraceWriter;
+  /** Syzygy ADR-0008 stage 1: told the owner's reaction to a story; absent, as with `SHANNON_PREDICTION_LEDGER=off`. */
+  storyReacted?: AutonomyServiceDependencies['storyReacted'];
 }
 
 export function loopHarness(options: LoopHarnessOptions = {}) {
@@ -164,7 +166,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
   const now = () => clock.at;
   const reachOuts = options.reachOuts;
   const service = new ShannonAutonomyService({
-    store, config, now, ...(options.roomLooks ? { roomLooks: options.roomLooks } : {}),
+    store, config, now, ...(options.roomLooks ? { roomLooks: options.roomLooks } : {}), ...(options.storyReacted ? { storyReacted: options.storyReacted } : {}),
     ...(reachOuts ? { reachOuts: (scopeKey: string, at: string) => ({ today: reachOuts.sentOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutsPerDay }) } : {}),
     ...(options.phone ? { calls: (scopeKey: string, at: string) => callGateContext(options.phone!, scopeKey, at) } : {}),
     ...(options.aether ? { aether: { access: options.aether, ownerDocuments: loopConfig.ownerDocuments } } : {}),

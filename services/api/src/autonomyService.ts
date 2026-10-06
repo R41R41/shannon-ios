@@ -32,7 +32,7 @@ import type { PursuitDraft, PursuitRejection } from './autonomyPursuits.js';
 import { autonomyPacing } from './autonomyLoopConfig.js';
 import { autonomySessionView } from './autonomySessionView.js';
 import { SQLiteAutonomyStore, type AutonomyBudgetRequest } from './autonomyStore.js';
-import { StudyDesk } from './studyDesk.js';
+import { StudyDesk, type StudyReactionTap } from './studyDesk.js';
 import { clip, pursuitStatusPhrase, type AutonomyOverview } from './autonomyServiceParts.js';
 
 /**
@@ -66,6 +66,8 @@ export interface AutonomyServiceDependencies {
   minecraftBody?: MinecraftRequestPort | null;
   /** Aether (Syzygy ADR-0007 revised): her study's text and her Aether folder, and the owner's proposal inbox; absent, none of it. */
   aether?: Pick<ToolAetherPorts, 'access' | 'proposals' | 'ownerDocuments'> & { studyScopeKey?: string };
+  /** Syzygy ADR-0008 stage 1: told the reaction (the enum only) after the owner reacted to a story; absent, nothing is told. */
+  storyReacted?: StudyReactionTap;
 }
 
 export interface RecordedDecision extends AutonomyDecision {
@@ -117,7 +119,7 @@ export class ShannonAutonomyService {
     this.resolvePath = dependencies.resolvePath ?? resolvePhysicalPath;
     this.studyAether = dependencies.aether?.access ? new StudyAether(this.store, dependencies.aether.access, this.now, dependencies.aether.studyScopeKey) : null;
     this.study = new StudyDesk(this.store, at => autonomyDayKey(at, this.config), this.now,
-      this.config.maximumReachOutFollowUpsPerDay > 0 ? { timeZone: this.config.timeZone, ...(dependencies.ownerFirstActiveAfter ? { ownerFirstActiveAfter: dependencies.ownerFirstActiveAfter } : {}) } : null, this.studyAether);
+      this.config.maximumReachOutFollowUpsPerDay > 0 ? { timeZone: this.config.timeZone, ...(dependencies.ownerFirstActiveAfter ? { ownerFirstActiveAfter: dependencies.ownerFirstActiveAfter } : {}) } : null, this.studyAether, dependencies.storyReacted ?? null);
     this.folder = new HostFolderDesk(this.store, this.config, this.now, this);
     this.folderOperations = new HostFolderOperations(this.store, this.config, this.now, this, this.folder);
     this.tools = new ShannonToolRunner(this.store, this.folderOperations, this, this.now, undefined, dependencies.minecraftBody ?? null,

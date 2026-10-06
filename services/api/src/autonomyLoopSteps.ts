@@ -198,6 +198,7 @@ function prepareReading(dependencies: StepDependencies, cycle: AutonomyLoopCycle
             const reading = dependencies.store.loop.addReading(cycle.scopeKey, {
               url: page.url, title: page.title, text: page.text, links: page.links, ...(step.pursuitId ? { pursuitId: step.pursuitId } : {}),
             }, at);
+            dependencies.prediction?.read?.(cycle.scopeKey, { id: reading.id, source: 'public' }, at);
             return { plan: withNoteAfterReading(remaining, reading.id) };
           },
         };
@@ -235,6 +236,7 @@ function prepareNotion(dependencies: StepDependencies, cycle: AutonomyLoopCycle,
               url: page.url, title: page.title, text: page.text.slice(0, 6_000), links: [], ...(step.pursuitId ? { pursuitId: step.pursuitId } : {}),
             }, at);
             wrote.push(`${READING_DOCUMENT_PREFIX}${reading.id}`);
+            dependencies.prediction?.read?.(cycle.scopeKey, { id: reading.id, source: 'notion' }, at);
             return { plan: withNoteAfterReading(remaining, reading.id) };
           },
         };
@@ -279,6 +281,7 @@ function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, s
           if (typeof piece === 'string') throw new Error(piece);
           if (pushed) adapters.aether!.commit(cycle.scopeKey, piece, pushed.value);
           store.loop.markReadingNoted(cycle.scopeKey, reading.id, commitAt);
+          dependencies.prediction?.noted?.(cycle.scopeKey, reading.id, commitAt);
           if (question && questionWhy) service.addPursuit(cycle.scopeKey, { kind: 'question', title: question, why: questionWhy, origin: 'self' });
           return { link: `shannon-study://${piece.id}` };
         },
@@ -389,7 +392,8 @@ function prepareShowing(dependencies: StepDependencies, cycle: AutonomyLoopCycle
         outcome: 'done', link: `shannon-study://${piece.id}`, tool: sent ? 'study.show' : 'study.ready',
         summary: sent ? `物語「${clip(ready.title, 60)}」を持ち主に見せました。`
           : `物語「${clip(ready.title, 60)}」を「見せてもいい」にしました。知らせるのは、あとにします（${waitingReason(told)}）。`,
-        commit: (_remaining, commitAt) => { if (sent) store.study.markShown(cycle.scopeKey, piece.id, commitAt); },
+        // Syzygy ADR-0008 stage 1: whether and how the owner reacts is predicted when he is told (`StudyDesk.react` settles it).
+        commit: (_remaining, commitAt) => { if (sent) { store.study.markShown(cycle.scopeKey, piece.id, commitAt); dependencies.prediction?.shown?.(cycle.scopeKey, { id: piece.id, revised }, commitAt); } },
       };
     },
   };

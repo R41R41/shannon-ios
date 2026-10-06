@@ -12,7 +12,7 @@ This file is the contract. The pure parts are in `packages/learning` (`@shannon/
 | --- | --- | --- |
 | 1 | This contract, the instructions, `packages/learning`, core map | in place |
 | 2 | Decision traces, Jev call count | in place (`mind/inhibition/decisionTraces.ts`, `tracedVoiceDecision.ts`, `infra/models/jev/`; tests `decisionTraces.test.ts`) |
-| 3 | Prediction ledger, five new domains, calibration | next |
+| 3 | Prediction ledger, five new domains, calibration | in place (`packages/learning/src/{predictionLedger,calibration}.ts`, `mind/learning/`; tests `predictionLedger.test.ts`, `cognitionLedgerContention.test.ts`) |
 | 4 | Choice ledger, reward settlement, nightly pass, tool-call choices | not yet |
 | 5 | Value table, versions, CLI and owner route | not yet |
 | 6 | Scenario suite v1 and a baseline report | not yet |
@@ -99,6 +99,8 @@ A prediction with an id, opened before its outcome and settled against it (ADR-0
 | `status` | `open`, `matched`, `expired`, `void`. |
 | `outcome`, `outcome_seq`, `settled_at` | The outcome on the domain's scale, its place in the order of settling (the fold order), and when. |
 
+`shannon_prediction_ledger_seq` (`scope_key`, `last_seq`) keeps the last place given per scope, so a place is never given twice, also after the row that had it was deleted (a cached fold in another process can then tell what changed).
+
 **The ledger's own model.** Its expectations come from the same pure prediction layer as ADR-0006 (`packages/cognition/src/prediction.ts`: Kalman/Rescorla–Wagner, empirical-Bayes priors, latent causes), folded from the ledger's own settled rows in `outcome_seq` order. It is a separate fold from the ADR-0006 record: the shadow's rows, its derived values and what moves her feeling are unchanged. A row's derived values always equal a fold of the settled rows up to its `basis_seq`, so after forgetting or pruning every row is recomputed (delete under the lock, fold outside, write back what changed under the lock; the third attempt folds under the lock).
 
 ### Domains
@@ -118,6 +120,14 @@ A prediction with an id, opened before its outcome and settled against it (ADR-0
 `<reason>` is the message's reason (`share`, `wonder`, `upcoming`, `saw`), `<band>` the owner-local quarter of the day (`night`, `morning`, `afternoon`, `evening`); `context` is `alone` or `others` for a message or a call, the body's surface for a touch, empty otherwise.
 
 Only an `open` row is settled; a second outcome for the same source is ignored. An expiry that settles 0 counts as an outcome for the fold and the calibration; one that is unscored does not. Void rows are kept (unscored) until retention.
+
+**Maintenance.** In the API's processes, at the first committed state write of an owner day per scope (the nightly pass of step 4 calls the same `maintain`): open rows whose time ran out expire, rows opened more than 90 days ago go, forgetting is reconciled against the state's memory controls (and at once on a memory-control event), every derived value is recomputed when settled rows went, and one line is logged:
+
+```text
+Shannon prediction ledger: day=2026-10-22 open=1 matched=12 expired=2 void=3 reading_used:n=4,brier=0.188,kappa=0.250 reply:n=9,brier=0.201,kappa=0.105 story_reaction:n=2,brier=0.063,kappa=-,cover=1.000
+```
+
+**Where it is wired.** Her own time: `autonomyLoopReachOutStep.ts` (sent), `autonomyLoopPhoneStep.ts` (called), `autonomyLoopSteps.ts` (read, noted, shown) and `autonomyLoopObserve.ts` (what followed, through the tap that also feeds the shadow), all through `AutonomyPredictionTap` (`mind/learning/predictionLedgerTaps.ts` builds it in `autonomyWorker.ts`). The API: `StudyDesk.react` (the reaction's enum, after it is stored) and `TouchPredictions` (`expect` opens, `learn` matches, a carried stance is void).
 
 ### Calibration (`packages/learning/src/calibration.ts`)
 

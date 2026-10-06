@@ -20,6 +20,9 @@ import {
  * what Aether has (`overviewFresh`, `pieceFresh`), and a card and a reaction name the Aether document and version
  * (`aetherDocumentId`, `aetherVersion`; additive, the apps may ignore them). A piece may be named by its id or its document.
  */
+/** What is told after the owner reacted to a story: the piece and the reaction's enum, never his comment. */
+export type StudyReactionTap = (scopeKey: string, pieceId: string, reaction: StudyReaction, at: string) => void;
+
 export interface StudyPieceCard {
   id: string;
   kind: StudyPieceKind;
@@ -73,6 +76,8 @@ export class StudyDesk {
     private readonly reachOutMemory: { timeZone: string; ownerFirstActiveAfter?: (scopeKey: string, after: string) => string | null } | null = null,
     /** Her study in Aether; null, the SQLite study is the whole study and every answer is what it was. */
     private readonly aether: StudyAether | null = null,
+    /** Syzygy ADR-0008 stage 1: told the reaction (its enum, never the comment) once it is stored; null, nothing is told. */
+    private readonly reacted: StudyReactionTap | null = null,
   ) {}
 
   /** Whether this scope's study lives in Aether (one scope only, the owner's). */
@@ -140,6 +145,7 @@ export class StudyDesk {
       this.record(scopeKey, at, `所有者が「${clip(this.readable(scopeKey, piece)?.title ?? piece.title, 60)}」に感想を残しました（${STUDY_REACTION_LABEL[reaction]}）。`, id);
       return null;
     });
+    if (result === null) { try { this.reacted?.(scopeKey, piece.id, reaction, at); } catch { /* never fails a reaction */ } }
     return result ?? this.piece(scopeKey, id);
   }
 

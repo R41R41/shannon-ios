@@ -9,6 +9,7 @@ import {
   type ShannonTouchOutcome,
 } from '@shannon/cognition';
 import type { BodyTouchGesture } from './bodyContract.js';
+import type { TouchLedger } from './mind/learning/predictionLedgerTaps.js';
 import type { TouchRecord } from './bodyReactionStore.js';
 import type { BodyTouchStance } from './bodyTouchReflex.js';
 import type { PredictionShadow } from './predictionShadow.js';
@@ -70,19 +71,27 @@ export interface TouchPrediction {
   noise: number;
   /** Set when the touch's stance is already known (carried from earlier in the episode): nothing more is learned for it. */
   outcome?: ShannonTouchOutcome;
+  /** Syzygy ADR-0008 stage 1: the id of the ledger's prediction of her stance (matched by her stance, void when carried). */
+  ledgerId?: string;
 }
 
 export class TouchPredictions {
-  constructor(private readonly record: TouchPredictionRecord) {}
+  constructor(private readonly record: TouchPredictionRecord, private readonly ledger: TouchLedger | null = null) {}
 
-  /** The key, and the startle before she has taken the touch. */
-  expect(scopeKey: string, touch: TouchRecord, at: string): TouchPrediction {
+  /** The key, and the startle before she has taken the touch. With the ledger and the burst, the prediction of her stance is opened. */
+  expect(scopeKey: string, touch: TouchRecord, at: string, burstId?: string): TouchPrediction {
     const key = touchPredictionKey(touch);
     const context = touch.surface ?? 'unknown';
     const query = { domain: BODY_STANCE_DOMAIN, key, at: Date.parse(at), context } as const;
     // A record that cannot be read now meets the empty prior for this touch (never a failed touch).
     const prediction: Prediction = this.record.predict(scopeKey, query) ?? predictOutcome(createPredictionModel(), query);
-    return { key, context, startle: relativeUncertainty(prediction), expectation: prediction.expectation, uncertainty: prediction.uncertainty, noise: prediction.noise };
+    const ledgerId = this.ledger && burstId ? this.ledger.open(scopeKey, { key, context, burstId }, at) : null;
+    return { key, context, startle: relativeUncertainty(prediction), expectation: prediction.expectation, uncertainty: prediction.uncertainty, noise: prediction.noise, ...(ledgerId ? { ledgerId } : {}) };
+  }
+
+  /** Syzygy ADR-0008 stage 1: her stance was carried, not given: the ledger's prediction is void. */
+  voided(scopeKey: string, prediction: TouchPrediction, at: string): void {
+    if (prediction.ledgerId) this.ledger?.settle(scopeKey, prediction.ledgerId, null, at);
   }
 
   /** How a stance outcome is felt against what she expects, without learning anything (a carried stance). */
@@ -110,6 +119,7 @@ export class TouchPredictions {
     const now = this.record.predict(scopeKey, { domain: BODY_STANCE_DOMAIN, key: prediction.key, at: Date.parse(at), context: prediction.context });
     const outcome = this.felt(now ? { ...prediction, expectation: now.expectation, uncertainty: now.uncertainty, noise: now.noise } : prediction, stance);
     this.record.learnLater(scopeKey, outcome_(prediction, burstId, stance, at), state, remembered);
+    if (prediction.ledgerId) this.ledger?.settle(scopeKey, prediction.ledgerId, stance, at);
     return outcome;
   }
 

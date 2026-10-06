@@ -16,12 +16,14 @@ export function configuredBodyReactionOptions(
   databasePath: string,
   usageStore: { recordLlmUsage(event: LlmUsageEvent): void },
   prediction: NonNullable<ShannonBodyOptions['reactions']>['prediction'] = null,
+  /** Syzygy ADR-0008 stage 1: the prediction ledger's touch port; null while the ledger is switched off. */
+  ledger: NonNullable<ShannonBodyOptions['reactions']>['ledger'] = null,
 ): NonNullable<ShannonBodyOptions['reactions']> {
   const store = new SQLiteBodyReactionStore(databasePath);
   const experiences = new SQLiteTouchExperiences(databasePath);
   opened.push(store, experiences);
   return { store, experiences, config: configuredBodyReactions(environment), speaker: createConfiguredBodyReactionSpeaker(environment, usageStore), prediction,
-    stage2: touchPredictionEnabled(environment) };
+    stage2: touchPredictionEnabled(environment), ledger };
 }
 
 const opened: Array<{ close(): void }> = [];

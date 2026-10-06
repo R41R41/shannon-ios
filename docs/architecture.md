@@ -703,6 +703,7 @@ On the iPhone, 「シャノン」 (`Features/ShannonHub`) opens on a card that l
 | Her mood over time | `shannon_mood_history` (coalesced points of the owner's scope, kept 14 days; created outside the numbered migrations; schema version unchanged) |
 | Prediction (shadow, Syzygy ADR-0006 stage 1) | `shannon_prediction_outcomes` (one row per outcome, symbols and numbers only, recomputable in `seq` order), `shannon_prediction_shadow` (current and new trajectory compared); `docs/prediction-shadow-contract.md`; created outside the numbered migrations; schema version unchanged |
 | Decision traces (Syzygy ADR-0008 stage 1) | `shannon_decision_traces` (one content-free row per decision: decider, model, sizes, latency, fallback, closed answers, Jev's cost or null); the `jev` row of the usage summary; `docs/cognition-ledger-contract.md`; created outside the numbered migrations; kept 30 days |
+| Prediction ledger (Syzygy ADR-0008 stage 1) | `shannon_predictions` (a prediction with an id, opened before its outcome: domain, key, context, expectation, uncertainty, noise, 80 % interval, prior, basis, expiry, source, status, outcome, place in the order of settling; closed symbols and numbers only; every derived value a fold of the settled rows up to its basis), `shannon_prediction_ledger_seq`; `docs/cognition-ledger-contract.md`; created outside the numbered migrations; kept 90 days |
 | Pairing | device pairing records and device tokens |
 
 ## Cognitive Evaluation Harness v0

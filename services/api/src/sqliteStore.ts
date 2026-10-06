@@ -42,6 +42,7 @@ import { moodHistoryRecording, type MoodHistoryRecording } from './moodHistoryCo
 import { PredictionShadow, predictionShadowEnabled } from './predictionShadow.js';
 import { DecisionTraces, decisionTracesEnabled } from './mind/inhibition/decisionTraces.js';
 import { jevUsageRow } from './infra/models/jev/jevUsage.js';
+import { PredictionLedger, predictionLedgerEnabled } from './mind/learning/predictionLedger.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
@@ -61,6 +62,8 @@ export interface SQLiteShannonStoreOptions {
   predictionShadowDefer?: (task: () => void) => void;
   /** Decision traces (Syzygy ADR-0008 stage 1). Absent: `SHANNON_DECISION_TRACES`; never with `leavesMoodHistory`. */
   decisionTraces?: boolean;
+  /** The prediction ledger (Syzygy ADR-0008 stage 1). Absent: `SHANNON_PREDICTION_LEDGER` and its implications; never with `leavesMoodHistory`. */
+  predictionLedger?: boolean;
   /** When the cognition ledger's writes run (traces, predictions). Absent: `setImmediate`. Tests may pass one that runs at once. */
   cognitionDefer?: (task: () => void) => void;
 }
@@ -77,6 +80,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   private readonly personImpressions: SQLiteImpressionStore;
   private readonly shadow: PredictionShadow | null;
   private readonly traces: DecisionTraces | null;
+  private readonly ledger: PredictionLedger | null;
 
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
@@ -84,14 +88,20 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     // After each write of her state, a point of her mood from the state as written, at the instant it was reduced at, and the
     // prediction shadow's tap on the same write (ADR-0006 stage 1); neither changes the state.
     const shadowOn = !options.leavesMoodHistory && (options.predictionShadow ?? predictionShadowEnabled(process.env));
+    // Syzygy ADR-0008 stage 1: the prediction ledger, its daily maintenance and its forgetting after each committed state write.
+    const ledgerOn = !options.leavesMoodHistory && (options.predictionLedger ?? predictionLedgerEnabled(process.env));
     this.shadow = shadowOn ? new PredictionShadow({
       database: this.context.database, createsSchema: true, timing: () => this.context.emotionTiming(),
       // After the response and after the caller's transaction: no turn, touch or worker waits for the shadow.
       defer: options.predictionShadowDefer ?? (task => { setImmediate(task); }),
     }) : null;
+    this.ledger = ledgerOn ? new PredictionLedger({
+      database: this.context.database, createsSchema: true, ...(options.cognitionDefer ? { defer: options.cognitionDefer } : {}),
+    }) : null;
     this.companion = new SQLiteCompanionRepository(this.context, (scopeKey, state, at, event) => {
       recordMoodPoint(this.context.database, moodHistory, scopeKey, state, at, this.context.emotionTiming());
       this.shadow?.stateWritten(scopeKey, state, at, event);
+      this.ledger?.stateWritten(scopeKey, state, at, event);
     });
     this.realtimeVoice = new SQLiteRealtimeVoiceRepository(this.context);
     this.conversations = new SQLiteConversationRepository(this.context);
@@ -190,6 +200,8 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   toolTraceScopes() { return selectToolTraceScopes(this.context.database); }
   pruneToolTraces(before: string) { this.context.transaction(() => pruneToolTraces(this.context.database, before)); }
   impressionStore() { return this.personImpressions; }
+  /** The prediction ledger on this store's connection (Syzygy ADR-0008), or null while it is switched off. */
+  predictionLedger(): PredictionLedger | null { return this.ledger; }
   /** Decision traces on this store's connection (Syzygy ADR-0008), or null while they are switched off. */
   decisionTraces(): DecisionTraces | null { return this.traces; }
   /** The prediction shadow on this store's connection, or null while it is switched off. */
@@ -206,7 +218,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   dailyUserMessages(scopeKey: string, startAt: string, endAt: string): readonly DailyUserMessage[] { return this.jobs.dailyUserMessages(scopeKey, startAt, endAt); }
   applySleepOutcome(job: ClaimedBackgroundJob, workerId: string, completedAt: string, outcome: SleepConsolidationOutcome) { return this.jobs.applySleepOutcome(job, workerId, completedAt, outcome); }
   pendingBackgroundJobCount() { return this.jobs.pendingBackgroundJobCount(); }
-  close() { this.traces?.flushLockWaits(); this.context.close(); }
+  close() { this.traces?.flushLockWaits(); this.ledger?.flushLockWaits(); this.context.close(); }
 }
 
 export function configuredDatabasePath(environment: Readonly<Record<string, string | undefined>> = process.env): string {

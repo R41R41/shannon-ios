@@ -239,6 +239,8 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
       try { asked = adapters.phone.request(cycle.scopeKey, sent.id, writeAt); } catch { asked = 'unavailable'; }
       let call: ReachOutCallOutcome | null = 'failed';
       if (asked === 'requested') {
+        // Syzygy ADR-0008 stage 1: whether he answers is predicted now and settled by what became of the call.
+        dependencies.prediction?.called?.(cycle.scopeKey, { id: sent.id, reason, others: others !== null }, writeAt);
         const watched = await callOutcome(dependencies, adapters.phone, cycle.scopeKey, sent, signal);
         // No outcome by the limit means the API process, which rings and closes every call, is not running: nothing rang.
         // No outcome because she was paused or stopped meanwhile means only that she did not see it: the phone may be ringing.

@@ -46,6 +46,14 @@ const spec = (family: PredictionFamily, lower: number, upper: number, valence: b
  * - `body_stance` (stage 2): how she took a touch, her own stance scored on the valence scale (`touchAppraisal.ts`).
  *   Key: gesture.part.who (who: `owner`, or `unknown` while others were present). It moves her feeling under
  *   `SHANNON_PREDICTION` (on by default); the stage-1 `touch` domain keeps the table's appraisal for the shadow under off.
+ *
+ * Syzygy ADR-0008 stage 1 adds five domains for the prediction ledger (`docs/cognition-ledger-contract.md`), none on the
+ * valence scale: the ADR-0006 record never writes them, and they move no feeling through the dynamics.
+ * - `call_answer`: whether the owner answers a call of hers. Key: reason × time of day.
+ * - `story_reacted`: whether he reacts to a story she showed (within 14 days). Key: first showing or a revision.
+ * - `story_reaction`: how he reacts, like 1, more 0.5, unclear 0.
+ * - `reading_used`: whether a page she read is used in a note of hers. Key: public or notion.
+ * - `step_success`: whether a step of hers succeeds. Key: the choice.
  */
 export const SHANNON_PREDICTION_DOMAINS = Object.freeze({
   reply: spec('bernoulli', 0, 1, false, ['closeness', 'talk']),
@@ -54,6 +62,11 @@ export const SHANNON_PREDICTION_DOMAINS = Object.freeze({
   touch: spec('gaussian', -1, 1, true, []),
   reply_feeling: spec('gaussian', -1, 1, true, []),
   body_stance: spec('gaussian', -1, 1, true, []),
+  call_answer: spec('bernoulli', 0, 1, false, []),
+  story_reacted: spec('bernoulli', 0, 1, false, []),
+  story_reaction: spec('gaussian', 0, 1, false, []),
+  reading_used: spec('bernoulli', 0, 1, false, []),
+  step_success: spec('bernoulli', 0, 1, false, []),
 });
 export type PredictionDomain = keyof typeof SHANNON_PREDICTION_DOMAINS;
 

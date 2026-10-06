@@ -34,6 +34,8 @@ import { ownToolsEnabled } from './shannonTools.js';
 import { configuredDatabasePath } from './sqliteStore.js';
 import { configuredPredictionShadow } from './predictionShadow.js';
 import { configuredDecisionTraces } from './mind/inhibition/decisionTraces.js';
+import { configuredPredictionLedger } from './mind/learning/predictionLedger.js';
+import { ledgerPredictionTap } from './mind/learning/predictionLedgerTaps.js';
 
 /**
  * Entry of the activity loop (Syzygy ADR-0002 step 3): its own process, so the API,
@@ -119,6 +121,11 @@ const awakeClock = configuredAwakeClock(databasePath, {
 // Syzygy ADR-0008 stage 1: one content-free trace per thought of hers. Its own connection writes only `shannon_decision_traces` (once
 // the API has created it); the loop is handed one function. SHANNON_DECISION_TRACES=off opens nothing.
 const decisionTraces = configuredDecisionTraces(process.env, databasePath);
+// Syzygy ADR-0008 stage 1: the prediction ledger. Its own connection writes only `shannon_predictions` (once the API has created it);
+// the loop is handed functions beside the shadow's (opened at a message, a call, a story shown, a page read; settled by what
+// followed). SHANNON_PREDICTION_LEDGER=off (and SHANNON_PREDICTION_SHADOW=off) opens nothing and the loop's tap is the shadow's alone.
+const predictionLedger = configuredPredictionLedger(process.env, databasePath);
+const shadowTap = shadow ? { reachOut: (...args: Parameters<typeof shadow.reachOut>) => shadow.reachOut(...args) } : null;
 const loop = new ShannonAutonomyLoop({
   store, service, config, loop: loopConfig, model: configuredAutonomyTextModel(process.env, undefined, line => console.log(line)),
   reader: new BoundedPublicReader({
@@ -130,7 +137,7 @@ const loop = new ShannonAutonomyLoop({
   ...(ownerContext ? { ownerContext: ownerContext.context } : {}),
   // Her tools over her study and her folder (owner decision 2026-10-05); SHANNON_OWN_TOOLS=off offers none and every prompt is what it was.
   ...(ownToolsEnabled() ? { toolResults: new AutonomyToolResults() } : {}),
-  ...(shadow ? { prediction: { reachOut: (...args: Parameters<typeof shadow.reachOut>) => shadow.reachOut(...args) } } : {}),
+  ...(shadowTap ? { prediction: predictionLedger ? ledgerPredictionTap(predictionLedger.ledger, shadowTap) : shadowTap } : {}),
   ...(decisionTraces ? { trace: decisionTraces.traces.writer } : {}),
   // Content-free: a step kind and a closed reason code.
   log: line => console.log(`Shannon autonomy step: ${line.replace(/[^a-z0-9_:., -]/giu, '_').slice(0, 300)}`),
@@ -169,6 +176,7 @@ try {
   awakeClock.close();
   prediction?.close();
   decisionTraces?.close();
+  predictionLedger?.close();
   ownerContext?.close();
   ownerUpcoming.close();
   ownerState.close();

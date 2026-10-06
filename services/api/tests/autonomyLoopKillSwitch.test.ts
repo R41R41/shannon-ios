@@ -6,6 +6,9 @@ import { ownerPrivateRule, type AutonomyOwnerContext } from '../src/autonomyLoop
 import { draftPrompt, reachOutPrompt, revisePrompt, thinkingPrompt } from '../src/autonomyLoopPrompts.js';
 import { OwnerInformedMarks } from '../src/ownerInformedMarks.js';
 import { checkedTrace, type DecisionTraceDraft } from '../src/mind/inhibition/decisionTraceContract.js';
+import { PredictionLedger } from '../src/mind/learning/predictionLedger.js';
+import { ledgerPredictionTap, storyReacted } from '../src/mind/learning/predictionLedgerTaps.js';
+import { DatabaseSync } from 'node:sqlite';
 import { agenticDay, builderDigests, plainDay } from './autonomyLoopKillSwitchScenario.js';
 import { loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 
@@ -145,6 +148,30 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
       expect(traces).toHaveLength(day.filter(call => call.kind === 'think').length);
       expect(traces.every(trace => trace.decision === 'autonomy_think' && trace.decider === 'model' && trace.outcome === 'ok' && Array.isArray(trace.answers.steps))).toBe(true);
     } finally { rmSync(other, { recursive: true, force: true }); }
+  });
+
+  it('sends byte for byte the same prompts with the prediction ledger of Syzygy ADR-0008 stage 1 attached, which opens and settles beside them', async () => {
+    const other = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-ledger-'));
+    const database = new DatabaseSync(join(other, 'kill-switch-agentic.sqlite'));
+    database.exec('PRAGMA busy_timeout = 5000;');
+    const ledger = new PredictionLedger({ database, createsSchema: true, log: () => undefined });
+    const shadow = { reachOut: vi.fn() };
+    try {
+      const day = await agenticDay(other, {
+        ...CAP_OF_78C3493, prediction: ledgerPredictionTap(ledger, shadow),
+        storyReacted: (scopeKey, pieceId, reaction, at) => storyReacted(ledger, scopeKey, pieceId, reaction, at),
+      });
+      expect(day.map(call => [call.kind, call.digest])).toEqual(AGENTIC_DAY_AT_78C3493);
+      await new Promise(resolve => setImmediate(resolve));
+      const rows = ledger.rows(scope);
+      expect(shadow.reachOut).toHaveBeenCalled();
+      expect(new Set(rows.map(row => row.domain))).toEqual(new Set(['reply', 'reading_used', 'story_reacted', 'story_reaction']));
+      expect(rows.filter(row => row.domain === 'reply').every(row => row.status !== 'open')).toBe(true);
+      expect(rows.find(row => row.domain === 'story_reaction')).toMatchObject({ status: 'matched', outcome: 1 });
+    } finally {
+      database.close();
+      rmSync(other, { recursive: true, force: true });
+    }
   });
 
   it('builds byte for byte the prompts of the commit before from every prompt builder', () => {
