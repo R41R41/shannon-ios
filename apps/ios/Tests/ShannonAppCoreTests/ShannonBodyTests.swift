@@ -1246,6 +1246,61 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(ShannonBodyTouchVocabulary.said(inAnswer: Data()), 1)
     }
 
+    /// Messages exactly as the bundled page 0.1.0+202610060134 posts them (`embed.js`: `touch` on the end of a drag and on a
+    /// poke, `askReaction` at the page's moment; the vocabulary-2 fields spread after `region`, `side` only for a part with two).
+    func testTheBundledPagesTouchesReachTheServerAsItSaysThem() async throws {
+        let id = "3b8f2c1e-6d4a-4f0b-9a7e-2c5d8e1f0a6b"
+        let fixtures = [
+            #"{"type":"askReaction","id":"3b8f2c1e-6d4a-4f0b-9a7e-2c5d8e1f0a6b","touch":{"type":"pet","durationMs":1500,"strength":0.38,"ongoing":true,"region":"body","part":"chest","gesture":"stroke","input":"press","reflex":"flinch"},"occurredAt":"2026-10-06T01:40:00.000Z"}"#,
+            #"{"type":"touch","id":"3b8f2c1e-6d4a-4f0b-9a7e-2c5d8e1f0a6b","occurredAt":"2026-10-06T01:40:02.100Z","touch":{"type":"pet","durationMs":2100,"strength":0.42,"ongoing":false,"region":"body","part":"chest","gesture":"stroke","input":"press","reflex":"flinch"}}"#,
+            #"{"type":"touch","id":"9c1d7a20-4e3b-4b8f-8f61-0d2e5a7c9b13","occurredAt":"2026-10-06T01:41:00.000Z","touch":{"type":"poke","durationMs":0,"strength":0,"ongoing":false,"region":"face","part":"cheek","side":"left","gesture":"poke","input":"press","reflex":"none"}}"#,
+        ]
+        let messages = try fixtures.map { text in
+            try XCTUnwrap(ShannonLive2DMessage(body: try JSONSerialization.jsonObject(with: Data(text.utf8))))
+        }
+        guard case let .askReaction(asked) = messages[0], case let .touch(chest) = messages[1], case let .touch(cheek) = messages[2] else {
+            return XCTFail("the page's messages are read as a question and two touches")
+        }
+        XCTAssertEqual(asked.id, id)
+        XCTAssertTrue(asked.ongoing)
+        XCTAssertEqual(chest.detail, .init(part: .chest, gesture: .stroke, input: .press, reflex: .flinch))
+        XCTAssertEqual(chest.sentRegion, .body, "the page's region, never the head a stroke used to imply")
+        XCTAssertEqual(cheek.detail, .init(part: .cheek, side: .left, gesture: .poke, input: .press, reflex: ShannonLive2DTouch.Reflex.none))
+        for says in [1, 2] {
+            let client = FakeBodyClient()
+            await client.says(touchVocabulary: says)
+            let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: .init(
+                reportsTouch: { true }, capabilities: { ([], []) }, express: { _, _ in }))
+            for message in messages { await coordinator.handle(message)?.value }
+            let asks = await client.sentAsks
+            let events = await client.sentEvents
+            let askedTouch = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: JSONEncoder().encode(try XCTUnwrap(asks.first))) as? [String: Any])["touch"] as? [String: Any]
+            let reported = try events.map { try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) as? [String: Any]) }
+            XCTAssertEqual(reported.map { $0["id"] as? String }, [id, "9c1d7a20-4e3b-4b8f-8f61-0d2e5a7c9b13"])
+            XCTAssertEqual(reported.map { $0["region"] as? String }, ["body", "face"])
+            XCTAssertEqual(askedTouch?["region"] as? String, "body")
+            if says >= 2 {
+                XCTAssertEqual(askedTouch?["part"] as? String, "chest")
+                XCTAssertEqual(askedTouch?["reflex"] as? String, "flinch")
+                XCTAssertEqual(reported[0]["part"] as? String, "chest")
+                XCTAssertEqual(reported[0]["gesture"] as? String, "stroke")
+                XCTAssertEqual(reported[0]["input"] as? String, "press")
+                XCTAssertEqual(reported[0]["reflex"] as? String, "flinch")
+                XCTAssertNil(reported[0]["side"])
+                XCTAssertEqual(reported[1]["part"] as? String, "cheek")
+                XCTAssertEqual(reported[1]["side"] as? String, "left")
+                XCTAssertEqual(reported[1]["reflex"] as? String, "none")
+            } else {
+                // An older server is sent exactly the shape it knows.
+                XCTAssertEqual(Set(askedTouch?.keys ?? [:].keys), ["type", "durationMs", "strength", "ongoing", "region"])
+                for event in reported {
+                    XCTAssertEqual(Set(event.keys), ["id", "type", "audience", "occurredAt", "durationMs", "strength", "region"])
+                }
+            }
+        }
+    }
+
     private static func pageTouch(_ touch: [String: Any]) -> ShannonLive2DTouch? {
         var fields: [String: Any] = ["durationMs": 900, "strength": 0.4, "ongoing": false]
         fields.merge(touch) { $1 }
