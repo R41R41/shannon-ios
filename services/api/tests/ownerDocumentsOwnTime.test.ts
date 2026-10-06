@@ -21,9 +21,14 @@ afterEach(async () => { await Promise.all(servers.splice(0).map(server => server
 
 /** `ownerDocumentsScenario.ts` run on a10fdedd (the commit before), with the flag unset, `off`, `On` and `on`: all four equal. */
 const OWN_TIME_AT_A10FDEDD = [['think', '6226278233e39c92'], ['think', '1faff08ce417ecb3'], ['think', '3a1a5ce0540cca3f'], ['think', 'f9cb79957eb8404c']];
-/** `ownTimeFullDay` on a10fdedd: her tools, then a note, a draft and a message of hers; the same with the flag unset, `off` and `on` there. */
+/**
+ * `ownTimeFullDay` on a10fdedd: her tools, then a note, a draft and a message of hers; the same with the flag unset, `off` and `on` there.
+ * Her temperament is taken out before digesting (`withoutTemperament`). One digest re-recorded on the stage-2 branch (2026-10-06,
+ * scope (a) of owner decision "a"): the second thinking prompt prints what a thinking step needs free, estimated from the prompt's
+ * length, and her persona's 65 more characters move it from 約24円 to 約25円 (6c50b1b6d37584fd before); nothing else changed.
+ */
 const FULL_DAY_AT_A10FDEDD = [
-  ['think', 'fc7c0d375915ce41'], ['think', '6c50b1b6d37584fd'], ['think', '7ec6855733e08835'], ['note', '2977210b0f7b5e1c'], ['think', 'd1bbc8f5a63bb549'],
+  ['think', 'fc7c0d375915ce41'], ['think', '0566c8e4b4d7d3b3'], ['think', '7ec6855733e08835'], ['note', '2977210b0f7b5e1c'], ['think', 'd1bbc8f5a63bb549'],
   ['draft', '3162903bd56a2e60'], ['think', '953d19b568a648dd'], ['reach_out', '09597eda74b05e3c'], ['think', 'b5f9fb6265c1b2b0'],
 ];
 const rest = { action: 'rest', resumeInMinutes: 120, reason: 'ここまで' };

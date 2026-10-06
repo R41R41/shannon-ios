@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SHANNON_TEMPERAMENT, SHANNON_TOUCH_FEELINGS } from '@shannon/cognition';
+import { SHANNON_TEMPERAMENT, SHANNON_TOUCH_FEELINGS, shannonTemperament } from '@shannon/cognition';
 import type { BodyReactionAnswer } from '../src/bodyReactionContract.js';
 import { OpenAIBodyReactionSpeaker } from '../src/bodyReactionModel.js';
 import {
@@ -75,9 +75,10 @@ describe('a touch in the old shape (touch vocabulary 1)', () => {
     // Recorded on a10fdedd, the production commit before stage 1b: f8a35ecb…. Since owner decision "a" (2026-10-06) every touch
     // prompt carries her temperament (`SHANNON_TEMPERAMENT`, one line in its rules, outside the stage-2 switch). Re-recorded for
     // that line alone: taken out of each prompt, the day is f8a35ecb… again, so nothing else changed.
-    const without = { ...day, calls: day.calls.map(call => ({ ...call, prompt: call.prompt.replace(`\n- ${SHANNON_TEMPERAMENT}`, '') })) };
+    const without = { ...day, calls: day.calls.map(call => ({ ...call, prompt: call.prompt.replace(`\n- ${SHANNON_TEMPERAMENT}`, '').replace(`\n- ${shannonTemperament('others')}`, '') })) };
     expect(digest(without)).toBe('f8a35ecb23a99642f2beae03d12ac9c0fd3f268a3ece4a64df9e99c938391601');
-    expect(digest(day)).toBe('466fd4efc4ba741087d389301209f1ac8f79a99d4bf7de578af3b5ead69e98d1');
+    // 466fd4ef… with the owner's wording in every prompt; with scope (a) a touch while others are present says 「相手に」.
+    expect(digest(day)).toBe('fdb92212832ddbdbea036c03ae65fc70e28ffca5c835b97558c8ee4321bdaf3d');
   });
 
   it('under stage 2 (ADR-0006, on by default) is asked her stance and moved by it instead of the table: the same day, recorded', async () => {
@@ -87,7 +88,8 @@ describe('a touch in the old shape (touch vocabulary 1)', () => {
     // outcome (none here: the script's answers carry no stance, so only the startle and the feeling she chose move her).
     // a722223c… at bec4ad1b, recorded without a prediction record; re-recorded after review items 4 and 5: stage 2 now needs
     // the record (here an in-memory one), and an old-shape touch whose stance is not welcome or fine is told without favour.
-    expect(digest(day)).toBe('8606cfd25da80eaf4ed9074a085e80feb9ff8e29c02d094f15b092edeaecb106');
+    // 8606cfd2… before scope (a): the touch while others are present now says 「相手に」 in her temperament.
+    expect(digest(day)).toBe('da6bf62333d94554f4a418ecbd5441943485ff18a824c111ebcb24ddaea62de1');
   });
 
   it('is asked with the answer of before, without a stance; a touch that names its part is asked its stance too', async () => {

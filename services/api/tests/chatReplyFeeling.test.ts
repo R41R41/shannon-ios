@@ -666,8 +666,9 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
     // folder's S3 branch (2026-10-06, A18 S3, owner approval) the `own_folder` line drops its note that the Mac's folder is only
     // read (25 characters shorter); with that note the trace is 2dd0a8db… again. Recomputed after merging main 97b52985 (its
     // PC/Mac tool wording is not in these turns): unchanged. On the stage-2 branch (2026-10-06, owner decision "a") her body
-    // line gains her temperament (`SHANNON_TEMPERAMENT`, 62 characters): without it the trace is 34e375cd… again.
-    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('bbbe9e359dc0e3576b98cb6befdf9863b62b200cee73834819c57e2cdb20fba1');
+    // line gained her temperament (62 characters, bbbe9e35…); with scope (a) the same day it moved to the last line of her
+    // persona (`shannonTemperament('owner')`) and left the body line: without it the trace is 34e375cd… again.
+    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('d1910d3c4fcc2c6e73f11749baecee2e0f27f34fa9fefd46fb9a2bbc9ead151f');
     for (const request of off.seen.requests) expect(request).not.toHaveProperty('offerReplyFeeling');
     // What 7e227e6 does with these four turns: a cue is 0.52 and a mood, no cue is nothing, and nothing lingers for days.
     expect(off.h.state().lingering).toMatchObject([{ kind: 'sulky', span: 'mood', strength: 0.52 }]);

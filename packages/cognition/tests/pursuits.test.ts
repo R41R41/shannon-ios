@@ -160,9 +160,9 @@ describe('autonomy wording while the loop runs', () => {
     expect(withAutonomyRunning('関係のない文')).toBe('関係のない文');
     // The running wording still fits the response-path budget of the capability block (2026-10-05: +154, her tools; +109, where a memo goes; +124, no going along with a false premise about her own actions).
     // 2026-10-06: +22, her body line (Syzygy ADR-0005, owner answer 7); +33, her folder on the PC or the Mac (A18); 2,498 before.
-    // +62 the same day, her temperament (SHANNON_TEMPERAMENT, owner decision "a"; 2,553 before).
-    expect(withAutonomyRunning(shannonCapabilityPrompt('owner')).length).toBeLessThanOrEqual(2_615);
-    expect(running.length).toBeLessThanOrEqual(3_551); // +22 and +33 the same day (3,434 before); +62 her temperament (3,489 before).
+    // Her temperament stood in the capability block for one commit and moved to her persona (scope (a)): 2,553 again.
+    expect(withAutonomyRunning(shannonCapabilityPrompt('owner')).length).toBeLessThanOrEqual(2_553);
+    expect(running.length).toBeLessThanOrEqual(3_554); // +22 and +33 the same day (3,434 before); +65 her temperament in her persona (3,489 before).
   });
 });
 

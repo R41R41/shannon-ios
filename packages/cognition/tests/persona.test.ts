@@ -53,7 +53,8 @@ describe('canonical Shannon persona', () => {
   });
 
   it('stays compact enough for the response path', () => {
-    expect(shannonPersonaPrompt('owner').length).toBeLessThanOrEqual(650);
+    // +65 on 2026-10-06: her temperament as a persona line (scope (a): `shannonTemperament`, 62 characters and 「- 」; 650 before).
+    expect(shannonPersonaPrompt('owner').length).toBeLessThanOrEqual(715);
     expect(shannonSuitePrompt().length).toBeLessThanOrEqual(420);
     // +125 on 2026-10-02: the look through the app. 2026-10-03: +74, it does not announce a look by itself; and the phone call
     // line with no count of messages a day (owner decisions). 2026-10-05: +154, her study and her folder through her tools (owner decision);
@@ -61,10 +62,11 @@ describe('canonical Shannon persona', () => {
     // rule that she does not go along with a premise about something she did on her own that no record shows (owner decision).
     // 2026-10-06: +22, 「体は自分のもの。触れられ方は自分で受け取る。」 in the body line (Syzygy ADR-0005, owner answer 7);
     // +33 the same day, her folder may be on the PC or the Mac, and the Mac's is only read for now (A18; owner approval).
-    // +62 the same day, her temperament beside it (SHANNON_TEMPERAMENT, owner decision "a"; 2,539 before).
-    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(2_601);
-    // The core prompt holds the owner capability text: +22 and +33 for the same two lines (3,420 before), +62 her temperament (3,475 before).
-    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(3_537);
+    // Her temperament stood beside it for one commit (+62) and moved to her persona with scope (a): back to 2,539.
+    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(2_539);
+    // The core prompt holds the owner capability text: +22 and +33 for the same two lines (3,420 before); +65 her temperament
+    // in her persona (scope (a), 2026-10-06; 3,475 before).
+    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(3_540);
     expect(SHANNON_ONE_LINE_VOICE.length).toBeLessThanOrEqual(140);
   });
 });
