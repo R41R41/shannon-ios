@@ -17,7 +17,7 @@ import { bodyLookNotSeenSummary } from '../src/bodyLook.js';
 import { ActivityRoomLooks } from '../src/bodyLookActivity.js';
 import { SQLiteBodyLookActivityStore } from '../src/bodyLookActivityStore.js';
 import { GeminiActivityRoomLookViewer, createConfiguredActivityRoomLookViewer } from '../src/bodyLookActivityVision.js';
-import { BODY_LOOK_ACTIVITY_THREAD, configuredBodyLook } from '../src/bodyLookContract.js';
+import { BODY_LOOK_ACTIVITY_THREAD, configuredBodyLook } from '../src/contracts/bodyLookContract.js';
 import { SQLiteBodyLookSpeaker } from '../src/bodyLookDelivery.js';
 import { SQLiteBodyLookStore } from '../src/bodyLookStore.js';
 import type { RoomLookViewRequest, RoomLookViewer } from '../src/bodyLookVision.js';

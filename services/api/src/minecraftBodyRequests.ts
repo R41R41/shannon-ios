@@ -8,7 +8,7 @@ import {
   MINECRAFT_REPORT_CODES, MINECRAFT_REQUEST_LIMITS, OPEN_REQUEST_STATES, gainedWords, requestGoal,
   type ClaimedMinecraftRequest, type MinecraftProgressPhase, type MinecraftRequestOrigin, type MinecraftRequestProgress,
   type MinecraftRequestResult, type MinecraftRequestState, type MinecraftRequestView,
-} from './minecraftBodyRequestContract.js';
+} from './contracts/minecraftBodyRequestContract.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 
 /**

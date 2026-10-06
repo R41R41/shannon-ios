@@ -1,15 +1,15 @@
-import type { ApiRequest, ApiResponse } from './contracts.js';
+import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
 import {
   BODY_REACH_OUT_REPORT_PREFIX, BODY_SCHEMA_VERSION, BODY_TOUCH_VOCABULARY, bodyReachOutReportId, validatedBodyCapabilities, validatedBodyEvents, validatedBodyReachOutReport,
-} from './bodyContract.js';
-import { BODY_LOOK_RESULT_PREFIX, bodyLookResultId, validatedBodyLookResult } from './bodyLookContract.js';
+} from './contracts/bodyContract.js';
+import { BODY_LOOK_RESULT_PREFIX, bodyLookResultId, validatedBodyLookResult } from './contracts/bodyLookContract.js';
 import type { BodyLookAnswer } from './bodyLook.js';
 import type { BodyReactionOutcome } from './bodyReaction.js';
-import { BODY_REACTION_PATH, validatedBodyReactionRequest } from './bodyReactionContract.js';
+import { BODY_REACTION_PATH, validatedBodyReactionRequest } from './contracts/bodyReactionContract.js';
 import type { ShannonBody } from './shannonBody.js';
 import { dispatchAppLookRequest } from './apiAppLookRoutes.js';
-import { APP_LOOK_ROUTE_PREFIX } from './appLookContract.js';
+import { APP_LOOK_ROUTE_PREFIX } from './contracts/appLookContract.js';
 
 export const BODY_ROUTE_PREFIX = '/v1/body/';
 export const BODY_CAPABILITIES_PATH = '/v1/body/capabilities';

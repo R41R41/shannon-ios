@@ -1,13 +1,13 @@
 import { filterMeaningfulInterests } from '@shannon/cognition';
-import { topicMatchesSource } from './worldInterestRelevance.js';
+import { topicMatchesSource } from './integrations/world/worldInterestRelevance.js';
 import {
   isRepeatedWorldSignal,
   recentSignalCutoff,
   sourceDiversityAdjustment,
   type RecentWorldSignal,
-} from './worldSignalQuality.js';
-export { isRepeatedWorldSignal, recentSignalCutoff } from './worldSignalQuality.js';
-export type { RecentWorldSignal } from './worldSignalQuality.js';
+} from './integrations/world/worldSignalQuality.js';
+export { isRepeatedWorldSignal, recentSignalCutoff } from './integrations/world/worldSignalQuality.js';
+export type { RecentWorldSignal } from './integrations/world/worldSignalQuality.js';
 
 const CANDIDATE_MAX_AGE_MILLISECONDS = 48 * 60 * 60_000;
 

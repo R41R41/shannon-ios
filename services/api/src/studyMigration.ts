@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { SHANNON_AUTONOMY_SYSTEM_DOMAIN } from '@shannon/cognition';
-import { aetherErrorCode, type AetherAccess } from './aetherAccess.js';
+import { aetherErrorCode, type AetherAccess } from './integrations/aether/aetherAccess.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import { studyWriteKey } from './studyAether.js';
 import { studyMigrationRows, studyScopes, type StudyMigrationRow } from './studyAetherLinks.js';

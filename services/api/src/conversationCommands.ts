@@ -1,7 +1,7 @@
 import type { CompanionStateStore, ShannonActionReceipt } from '@shannon/cognition';
 import type { ConversationStore, StoredConversationMessage } from './conversationStore.js';
-import type { OrganizeSession, OrganizeStore } from './organize.js';
-import type { AetherProposalStore } from './aetherProposal.js';
+import type { OrganizeSession, OrganizeStore } from './integrations/voyager/organize.js';
+import type { AetherProposalStore } from './integrations/aether/aetherProposal.js';
 import type { AgentTask, AgentTaskStore } from './agentTaskStore.js';
 import { applyExplicitCommitmentCommand } from './commitmentCommands.js';
 import {

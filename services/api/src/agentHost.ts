@@ -1,11 +1,11 @@
-import { AgentHostBrokerClient } from './agentHostBroker.js';
-import { loadAgentHostConfig } from './agentHostConfig.js';
-import { AgentHostStateStore } from './agentHostState.js';
-import { CodexAppServerClient } from './codexAppServerClient.js';
-import { codexModelCatalog } from './codexModelCatalog.js';
-import { CodexTaskBridge } from './codexTaskBridge.js';
-import { AgentWorkspaceSnapshotReader } from './agentWorkspaceSnapshot.js';
-import { AgentProjectProvisioner } from './agentProjectProvisioner.js';
+import { AgentHostBrokerClient } from './integrations/agentHost/agentHostBroker.js';
+import { loadAgentHostConfig } from './integrations/agentHost/agentHostConfig.js';
+import { AgentHostStateStore } from './integrations/agentHost/agentHostState.js';
+import { CodexAppServerClient } from './integrations/agentHost/codexAppServerClient.js';
+import { codexModelCatalog } from './integrations/agentHost/codexModelCatalog.js';
+import { CodexTaskBridge } from './integrations/agentHost/codexTaskBridge.js';
+import { AgentWorkspaceSnapshotReader } from './integrations/agentHost/agentWorkspaceSnapshot.js';
+import { AgentProjectProvisioner } from './integrations/agentHost/agentProjectProvisioner.js';
 import { readWorkspaceResource } from './agentWorkspaceResources.js';
 
 const config = loadAgentHostConfig();

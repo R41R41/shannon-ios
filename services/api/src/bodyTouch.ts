@@ -1,6 +1,6 @@
 import { memoryControlFor, type CompanionStateSnapshot, type CompanionStateStore, type ShannonTouchOutcome } from '@shannon/cognition';
-import { BODY_LIMITS } from './bodyContract.js';
-import { BODY_REACTION_LIMITS } from './bodyReactionContract.js';
+import { BODY_LIMITS } from './contracts/bodyContract.js';
+import { BODY_REACTION_LIMITS } from './contracts/bodyReactionContract.js';
 import type { SQLiteBodyReactionStore, StoredTouchBurst, TouchRecord } from './bodyReactionStore.js';
 import { touchExperience, type TouchExperienceWriter } from './bodyTouchMemory.js';
 import { reflexPartWord, type BodyTouchStance } from './bodyTouchReflex.js';

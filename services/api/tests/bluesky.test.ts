@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseBlueskyPosts } from '../src/bluesky.js';
+import { parseBlueskyPosts } from '../src/integrations/world/bluesky.js';
 
 describe('Bluesky response boundary', () => {
   it('creates a post permalink with author and creation time', () => {

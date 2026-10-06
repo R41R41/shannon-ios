@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseHackerNewsItems, parseHackerNewsTopIds } from '../src/hackerNews.js';
+import { parseHackerNewsItems, parseHackerNewsTopIds } from '../src/integrations/world/hackerNews.js';
 
 describe('Hacker News source adapter', () => {
   it('keeps only distinct positive integer top story ids', () => {

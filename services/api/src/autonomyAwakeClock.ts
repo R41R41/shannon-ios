@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { reduceCompanionState, restoreCompanionState, type CompanionStateSnapshot } from '@shannon/cognition';
 import { emotionTiming } from './emotionTiming.js';
 import { recordMoodPoint } from './moodHistory.js';
-import type { MoodHistoryRecording } from './moodHistoryContract.js';
+import type { MoodHistoryRecording } from './contracts/moodHistoryContract.js';
 
 /**
  * While she works in a session of her own she is awake, so her awake clock runs. Core: emotion.

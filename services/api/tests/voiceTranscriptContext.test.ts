@@ -3,7 +3,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import { LocalVoiceDecisionGateway, JevVoiceDecisionGateway, VOICE_SKILLS } from '../src/voiceDecision.js';
 import type { VoiceDecisionInput } from '../src/voiceDecision.js';
 import type { ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { InMemoryOrganizeStore } from '../src/organize.js';
+import { InMemoryOrganizeStore } from '../src/integrations/voyager/organize.js';
 import { transcriptNeedsInterpretation } from '../src/voiceTranscriptContext.js';
 import { promptOf } from './modelPrompt.js';
 

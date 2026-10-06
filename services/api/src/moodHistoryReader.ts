@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { faceChanged, storedPoint, type MoodHistoryRow, type StoredMoodPoint } from './moodHistory.js';
-import { MOOD_HISTORY_LIMITS, type MoodHistoryPoint } from './moodHistoryContract.js';
+import { MOOD_HISTORY_LIMITS, type MoodHistoryPoint } from './contracts/moodHistoryContract.js';
 
 /**
  * Reads her mood history for `GET /v1/shannon/mood-history`. The connection is `query_only`: it

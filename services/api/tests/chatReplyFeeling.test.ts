@@ -16,7 +16,7 @@ import {
   replyFeelingOffer, type ChatReplyFeeling,
 } from '../src/chatReplyFeeling.js';
 import { ChatReplyStreamDecoder } from '../src/chatReplyStreamDecoder.js';
-import type { ChatStreamLine } from '../src/contracts.js';
+import type { ChatStreamLine } from '../src/contracts/contracts.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
 import { emotionTiming } from '../src/emotionTiming.js';
 import { storedVoiceFace } from '../src/voiceEmotionPlan.js';

@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { withAetherAccessCapability } from '@shannon/cognition';
-import { aetherErrorCode, aetherIdempotencyKey, type AetherDocument } from './aetherAccess.js';
-import type { AetherSectionHit } from './aetherKnowledgeSearch.js';
-import type { AetherProposalOperation, AetherProposalStore } from './aetherProposal.js';
+import { aetherErrorCode, aetherIdempotencyKey, type AetherDocument } from './integrations/aether/aetherAccess.js';
+import type { AetherSectionHit } from './integrations/aether/aetherKnowledgeSearch.js';
+import type { AetherProposalOperation, AetherProposalStore } from './integrations/aether/aetherProposal.js';
 import type { StudyAether } from './studyAether.js';
 import { withMinecraftToolLine } from './shannonMinecraftTools.js';
 import { numberInput, stringInput, type ToolInput } from './shannonToolInput.js';

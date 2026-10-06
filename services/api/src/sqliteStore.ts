@@ -38,7 +38,7 @@ import type { ReplaySummaryRecord } from './conversationStore.js';
 import { SQLiteImpressionStore } from './sqliteImpressions.js';
 import { ensureMoodHistorySchema, pruneMoodHistory, recordMoodPoint } from './moodHistory.js';
 import { SQLiteRealtimeVoiceRepository } from './sqliteRealtimeVoiceRepository.js';
-import { moodHistoryRecording, type MoodHistoryRecording } from './moodHistoryContract.js';
+import { moodHistoryRecording, type MoodHistoryRecording } from './contracts/moodHistoryContract.js';
 import { PredictionShadow, predictionShadowEnabled } from './predictionShadow.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));

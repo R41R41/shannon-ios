@@ -5,14 +5,14 @@ import type { ShannonChatModel } from './chatModel.js';
 import type { ConversationStore } from './conversationStore.js';
 import type { ShannonDevicePrincipal } from './deviceAuth.js';
 import { MinecraftBody, type MinecraftConversation } from './minecraftBody.js';
-import { MINECRAFT_BODY_LIMITS, MINECRAFT_BODY_TURN_PATH, MinecraftBodyError, configuredMinecraftBody, type MinecraftBodyConfiguration } from './minecraftBodyContract.js';
+import { MINECRAFT_BODY_LIMITS, MINECRAFT_BODY_TURN_PATH, MinecraftBodyError, configuredMinecraftBody, type MinecraftBodyConfiguration } from './contracts/minecraftBodyContract.js';
 import { SQLiteMinecraftTurnLog } from './minecraftTurnStore.js';
 import type { PeopleMemoryStore } from './peopleMemoryStore.js';
 import { platformPeopleEnabled } from './platformPeople.js';
 import { consumeDeviceAllowance, sendJson } from './serverHttp.js';
 import { closedSignal } from './apiAutonomyHostStepRoutes.js';
 import type { MinecraftBodyRequests } from './minecraftBodyRequests.js';
-import { MINECRAFT_REQUEST_LIMITS, MINECRAFT_REQUEST_PATHS, validClaim, validProgress, validReport } from './minecraftBodyRequestContract.js';
+import { MINECRAFT_REQUEST_LIMITS, MINECRAFT_REQUEST_PATHS, validClaim, validProgress, validReport } from './contracts/minecraftBodyRequestContract.js';
 
 export interface MinecraftBodyRoute {
   configuration: MinecraftBodyConfiguration | null;

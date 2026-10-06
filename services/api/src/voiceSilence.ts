@@ -1,6 +1,6 @@
 import type {
   VoiceDecisionInput, VoiceSilenceCategory, VoiceTurnDecision, VoiceTurnFacts,
-} from './voiceDecisionContract.js';
+} from './contracts/voiceDecisionContract.js';
 import { ADDRESS_EVIDENCE, guestAddressDecision, type GuestAddressReason } from './voiceGuestCall.js';
 
 /**

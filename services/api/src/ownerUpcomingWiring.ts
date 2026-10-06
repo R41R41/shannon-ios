@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { restoreCompanionState, type CompanionStateSnapshot } from '@shannon/cognition';
-import { calendarIngestEnabled } from './calendarContract.js';
+import { calendarIngestEnabled } from './contracts/calendarContract.js';
 import { OwnerUpcoming, type UpcomingTaskCatalog } from './ownerUpcoming.js';
 import { SQLiteUpcomingStore } from './upcomingStore.js';
 

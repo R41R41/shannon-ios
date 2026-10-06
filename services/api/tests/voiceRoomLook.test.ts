@@ -4,7 +4,7 @@ import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { ROOM_LOOK_UNAVAILABLE_REASON } from '../src/bodyLook.js';
-import { configuredBodyLook, type BodyLookConfig } from '../src/bodyLookContract.js';
+import { configuredBodyLook, type BodyLookConfig } from '../src/contracts/bodyLookContract.js';
 import { BODY_LOOK_CUT_OFF_LINE, UNOPENED_LINE, bodyLookNotSeenLine } from '../src/bodyLookLines.js';
 import { VoiceTurnWaits } from '../src/bodyLookTurnWait.js';
 import { SQLiteBodyLookStore } from '../src/bodyLookStore.js';

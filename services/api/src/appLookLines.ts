@@ -1,5 +1,5 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
-import type { AppLookCamera, AppLookClient, AppLookCode } from './appLookContract.js';
+import type { AppLookCamera, AppLookClient, AppLookCode } from './contracts/appLookContract.js';
 import { BODY_LOOK_CUT_OFF_LINE } from './bodyLookLines.js';
 
 /**

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { chmodSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { SHANNON_ONE_LINE_VOICE, restoreCompanionState } from '@shannon/cognition';
-import { groundedWorldOpening, isWorldFocusVisible, topicMatchesSource, worldVisibleInterests } from './worldInterestRelevance.js';
+import { groundedWorldOpening, isWorldFocusVisible, topicMatchesSource, worldVisibleInterests } from './integrations/world/worldInterestRelevance.js';
 import {
   configuredBackgroundBudgetUsd,
   estimatedOpenAICostUsd,
@@ -10,13 +10,13 @@ import {
   utcMonthKey,
   type LlmUsageStore,
 } from './llmUsage.js';
-import type { WorldItem } from './worldStore.js';
+import type { WorldItem } from './integrations/world/store/worldStore.js';
 import {
   isRepeatedWorldSignal,
   recentSignalCutoff,
   sourceDiversityAdjustment,
   type RecentWorldSignal,
-} from './worldSignalQuality.js';
+} from './integrations/world/worldSignalQuality.js';
 
 const DAILY_MIND_CANDIDATE_MAX_AGE_MILLISECONDS = 48 * 60 * 60_000;
 

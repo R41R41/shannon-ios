@@ -5,7 +5,7 @@ import {
   chatStreamEarlyEnabled,
   sameChatStreamLine,
 } from './chatSentenceStream.js';
-import type { ApiRequest, ApiResponse, ChatStreamLine } from './contracts.js';
+import type { ApiRequest, ApiResponse, ChatStreamLine } from './contracts/contracts.js';
 import { startStream, writeEvent } from './serverLiveVoiceStreamRoute.js';
 
 /**

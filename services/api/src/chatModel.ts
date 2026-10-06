@@ -1,4 +1,4 @@
-import type { PlaceSearchContext, ShannonPlace } from './placeDiscovery.js';
+import type { PlaceSearchContext, ShannonPlace } from './integrations/places/placeDiscovery.js';
 import type { ChatReplyFeeling } from './chatReplyFeeling.js';
 import type { MinecraftIntent } from './minecraftIntent.js';
 import {

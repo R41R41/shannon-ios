@@ -1,4 +1,4 @@
-import type { BodyCapabilities } from './bodyContract.js';
+import type { BodyCapabilities } from './contracts/bodyContract.js';
 
 /**
  * A body that only feels touch (`docs/body-contract.md`, "A body that only feels touch"): the owner's

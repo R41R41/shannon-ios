@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { aetherErrorCode, type AetherWriteResult } from './aetherAccess.js';
+import { aetherErrorCode, type AetherWriteResult } from './integrations/aether/aetherAccess.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import { aetherToolFailure } from './shannonAetherTools.js';
 import { numberInput, stringInput, type ToolInput } from './shannonToolInput.js';

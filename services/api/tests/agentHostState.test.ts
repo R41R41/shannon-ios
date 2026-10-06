@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AgentHostStateStore } from '../src/agentHostState.js';
+import { AgentHostStateStore } from '../src/integrations/agentHost/agentHostState.js';
 
 describe('AgentHostStateStore', () => {
   it('persists resumable sessions and an idempotent durable event outbox', () => {

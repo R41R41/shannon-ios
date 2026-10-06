@@ -3,7 +3,7 @@ import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import {
   BODY_LOOK_ACTIVITY_THREAD, BODY_LOOK_LIMITS, configuredBodyLook, roomLookChoice,
   type BodyLookCode, type BodyLookConfig, type BodyLookResult, type RoomLookChoice,
-} from './bodyLookContract.js';
+} from './contracts/bodyLookContract.js';
 import { BODY_LOOK_CUT_OFF_LINE, ROOM_LOOK_UNAVAILABLE_REASON, UNOPENED_LINE, bodyLookNotSeenLine, type BodyLookUnavailable } from './bodyLookLines.js';
 import { VoiceTurnWaits, type TurnWait } from './bodyLookTurnWait.js';
 import { SQLiteBodyLookStore, type BodyLookOutcome, type StoredBodyLook } from './bodyLookStore.js';

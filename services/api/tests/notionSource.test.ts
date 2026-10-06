@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { NotionReadError } from '../src/notionClient.js';
-import { NOTION_BOUNDS, configuredNotionSource } from '../src/notionSource.js';
-import { notionSimpleProperties, notionUrl, renderNotionBlocks } from '../src/notionText.js';
+import { NotionReadError } from '../src/integrations/notion/notionClient.js';
+import { NOTION_BOUNDS, configuredNotionSource } from '../src/integrations/notion/notionSource.js';
+import { notionSimpleProperties, notionUrl, renderNotionBlocks } from '../src/integrations/notion/notionText.js';
 import { NOTION_FIXTURE_IDS as ids, fakeNotion, fixtureNotionSource, notionJson, notionWorkspace } from './notionFixture.js';
 
 const code = (promise: Promise<unknown>) => promise.then(() => 'resolved', error => (error instanceof NotionReadError ? error.code : `unexpected:${String(error)}`));

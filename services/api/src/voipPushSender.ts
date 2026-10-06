@@ -1,6 +1,6 @@
 import { createPrivateKey } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { incomingCallPushBody, type IncomingCallPayload, type VoipEnvironment } from './incomingCallContract.js';
+import { incomingCallPushBody, type IncomingCallPayload, type VoipEnvironment } from './contracts/incomingCallContract.js';
 import { parseReason, postHTTP2, signAPNsProviderToken } from './pushNotificationSender.js';
 
 /**

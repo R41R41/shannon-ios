@@ -2,7 +2,7 @@ import { shannonIdentityPrompt, guardedShannonSeenPrompt, type CompanionStateSna
 import { turnPersistenceContext, type CompletedTurn } from './backgroundUpdates.js';
 import type { TextTurnInput } from './apiKernel.js';
 import { chatAudienceTurn, type ChatAudienceTurn } from './chatAudience.js';
-import type { ChatResponse } from './contracts.js';
+import type { ChatResponse } from './contracts/contracts.js';
 import type { ConversationStore, ShannonExperience } from './conversationStore.js';
 import { identityOnly } from './knowledgeStore.js';
 import { DisclosureGate, sharedDailyFocus } from './memoryDisclosure.js';

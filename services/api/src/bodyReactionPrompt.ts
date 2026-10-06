@@ -2,8 +2,8 @@ import {
   SHANNON_EMOTION_KINDS, SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_OWNER_NAME, isShannonEmotionKind, shannonTemperament,
   type ShannonEmotionKind, type ShannonExpressiveEmotion, type ShannonTouchKind,
 } from '@shannon/cognition';
-import type { BodyAudience } from './bodyContract.js';
-import { BODY_REACTION_LIMITS, type BodyReactionTouch } from './bodyReactionContract.js';
+import type { BodyAudience } from './contracts/bodyContract.js';
+import { BODY_REACTION_LIMITS, type BodyReactionTouch } from './contracts/bodyReactionContract.js';
 import type { StoredTouchBurst } from './bodyReactionStore.js';
 import { BODY_TOUCH_STANCES, type BodyTouchStance, isBodyTouchStance } from './bodyTouchReflex.js';
 import { bodyPlace, burstTouchPhrase, touchDetailPhrase, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';

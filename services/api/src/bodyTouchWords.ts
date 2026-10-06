@@ -1,5 +1,5 @@
 import { SHANNON_FIRST_PERSON, type ShannonTouchKind } from '@shannon/cognition';
-import type { BodyTouchGesture, BodyTouchSide } from './bodyContract.js';
+import type { BodyTouchGesture, BodyTouchSide } from './contracts/bodyContract.js';
 
 /**
  * Where she was touched and where her body was (`docs/body-contract.md`, "Which part, and on which

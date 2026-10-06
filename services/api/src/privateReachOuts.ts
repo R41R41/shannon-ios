@@ -1,6 +1,6 @@
-import type { BodyReachOutDeliveryOutcome } from './bodyContract.js';
+import type { BodyReachOutDeliveryOutcome } from './contracts/bodyContract.js';
 import { isDesktopBodyDeviceId } from './desktopBodyIdentity.js';
-import { PRIVATE_REACH_OUT_LIMITS, type PrivateReachOutOutcome } from './privateListeningContract.js';
+import { PRIVATE_REACH_OUT_LIMITS, type PrivateReachOutOutcome } from './contracts/privateListeningContract.js';
 import type { PrivateListener, SQLitePrivateListeningStore } from './privateListeningStore.js';
 import type { ClaimedReachOut, ReachOutClaim, SQLiteReachOutClaims, UnreadReachOut } from './reachOutClaims.js';
 import type { ReachOutReportResult, SQLiteReachOutReports } from './reachOutReports.js';

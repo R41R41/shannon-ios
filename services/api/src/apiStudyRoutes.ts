@@ -1,4 +1,4 @@
-import type { ApiRequest, ApiResponse } from './contracts.js';
+import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
 import type { StudyDesk } from './studyDesk.js';
 import { STUDY_LIMITS, STUDY_REACTION_LABEL, type StudyReaction, type StudyRejection } from './studyStore.js';

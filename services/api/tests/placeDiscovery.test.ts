@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validatedPlaceSearchOptions, wantsPlaceDiscovery, validatedPlaces } from '../src/placeDiscovery.js';
+import { validatedPlaceSearchOptions, wantsPlaceDiscovery, validatedPlaces } from '../src/integrations/places/placeDiscovery.js';
 
 describe('place discovery', () => {
   it('recognizes place requests with the recommendation first or last', () => {

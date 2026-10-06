@@ -1,6 +1,6 @@
 import {
   AetherAccessError, aetherErrorCode, aetherIdempotencyKey, type AetherAccess, type AetherDocument, type AetherWriteResult,
-} from './aetherAccess.js';
+} from './integrations/aether/aetherAccess.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import type { StudyAetherLink } from './studyAetherLinks.js';
 import { STUDY_LIMITS, type StudyPiece, type StudyPieceKind } from './studyStore.js';

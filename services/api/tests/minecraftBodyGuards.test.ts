@@ -12,12 +12,12 @@ import { extractExplicitUserIntent } from '../src/cognitiveIntent.js';
 import { prepareTurnCognitiveContext } from '../src/turnCognitiveContext.js';
 import { minecraftBodyRoute } from '../src/serverMinecraftBodyRoute.js';
 import type { MinecraftBody } from '../src/minecraftBody.js';
-import { configuredMinecraftBody } from '../src/minecraftBodyContract.js';
+import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.js';
 import { withoutGuardedEntries } from '../src/apiTextTurn.js';
 import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
 import { LocalStubChatModel } from '../src/chatModel.js';
 import { GAME_DISCLOSURE, GAME_REQUEST_DISCLOSURE } from '../src/gameBodyMemory.js';
-import { MINECRAFT_BODY_LIMITS } from '../src/minecraftBodyContract.js';
+import { MINECRAFT_BODY_LIMITS } from '../src/contracts/minecraftBodyContract.js';
 import { requestExperience } from '../src/minecraftBodyRequests.js';
 import { MINECRAFT_TURN_ALLOWANCE, MinecraftTurnAllowance } from '../src/minecraftTurnAllowance.js';
 import { SQLiteSurfaceTurnLog } from '../src/minecraftTurnStore.js';
@@ -227,7 +227,7 @@ describe('the replay of a turn that may show only open items (second review, 202
 describe('N-5: a cheap guard on the turn route before any validation', () => {
   it('takes at most 120 requests a minute from one device, invalid ones too', async () => {
     let calls = 0;
-    const service = { turn: async () => { calls += 1; throw new (await import('../src/minecraftBodyContract.js')).MinecraftBodyError('BAD_REQUEST', 400, 'x'); } } as unknown as MinecraftBody;
+    const service = { turn: async () => { calls += 1; throw new (await import('../src/contracts/minecraftBodyContract.js')).MinecraftBodyError('BAD_REQUEST', 400, 'x'); } } as unknown as MinecraftBody;
     const route = minecraftBodyRoute(service, configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: CONFIGURATION }));
     const statuses: number[] = [];
     for (let index = 0; index < 121; index += 1) {

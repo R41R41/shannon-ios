@@ -20,7 +20,7 @@ import {
   type VoyagerTaskDestination,
   type VoyagerTaskReference,
   type VoyagerCatalog,
-} from '../src/organize.js';
+} from '../src/integrations/voyager/organize.js';
 
 class RecordingChatModel implements ShannonChatModel {
   readonly mode = 'openai' as const;

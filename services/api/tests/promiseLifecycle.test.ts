@@ -9,7 +9,7 @@ import { nextInitiativeDelayMilliseconds } from '../src/initiativeSchedule.js';
 import { extractProspectiveMemories } from '../src/prospectiveMemory.js';
 import { resolveReminderReply } from '../src/reminderReply.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
-import { SQLiteWorldStore } from '../src/worldStore.js';
+import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
 
 const directories: string[] = [];
 afterEach(() => directories.splice(0).forEach(path => rmSync(path, { recursive: true, force: true })));

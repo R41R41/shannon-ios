@@ -5,7 +5,7 @@ import {
   aetherReferenceFromHit,
   FixtureAetherKnowledgeSearch,
   parseAetherKnowledgeSearchResponse,
-} from '../src/aetherKnowledgeSearch.js';
+} from '../src/integrations/aether/aetherKnowledgeSearch.js';
 
 const directory = new URL('./fixtures/aether-knowledge-search-v1/', import.meta.url);
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(name, directory), 'utf8')) as Record<string, unknown>;

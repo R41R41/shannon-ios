@@ -8,7 +8,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import { reachOutHappenedLines, reachOutMemoryLine } from '../src/autonomyLoopObservePrompts.js';
 import { AutonomyLoopObservations, type ReachOutFacts } from '../src/autonomyLoopObservations.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
-import { INCOMING_CALL_LIMITS, incomingCallMinimumIntervalMilliseconds, incomingCallPushBody, incomingCallsEnabled, type IncomingCallPayload } from '../src/incomingCallContract.js';
+import { INCOMING_CALL_LIMITS, incomingCallMinimumIntervalMilliseconds, incomingCallPushBody, incomingCallsEnabled, type IncomingCallPayload } from '../src/contracts/incomingCallContract.js';
 import { dispatchIncomingCallRequest } from '../src/incomingCallRoutes.js';
 import { IncomingCallRequests, incomingCallsConfigured } from '../src/incomingCallRequests.js';
 import { IncomingCalls } from '../src/incomingCalls.js';

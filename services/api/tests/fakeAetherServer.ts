@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { AETHER_SHANNON_ACCESS_CONTRACT, HttpAetherAccess } from '../src/aetherAccess.js';
-import { AETHER_KNOWLEDGE_SEARCH_CONTRACT } from '../src/aetherKnowledgeSearch.js';
+import { AETHER_SHANNON_ACCESS_CONTRACT, HttpAetherAccess } from '../src/integrations/aether/aetherAccess.js';
+import { AETHER_KNOWLEDGE_SEARCH_CONTRACT } from '../src/integrations/aether/aetherKnowledgeSearch.js';
 
 /**
  * A fake Aether provider of `syzygy.aether-shannon-access.v1` over real HTTP on 127.0.0.1, with the semantics of the

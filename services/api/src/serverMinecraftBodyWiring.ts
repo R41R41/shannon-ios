@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ShannonDevicePrincipal } from './deviceAuth.js';
 import { namesDesktopBody } from './desktopBodyIdentity.js';
 import { SQLiteGameExperiences } from './gameBodyMemory.js';
-import { configuredMinecraftBody } from './minecraftBodyContract.js';
+import { configuredMinecraftBody } from './contracts/minecraftBodyContract.js';
 import { MinecraftBodyRequests } from './minecraftBodyRequests.js';
 import { readJson, sendJson } from './serverHttp.js';
 import { createMinecraftBodyRoute, type MinecraftBodyRoute } from './serverMinecraftBodyRoute.js';

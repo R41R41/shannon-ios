@@ -1,6 +1,6 @@
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { isPrivateOrReservedAddress } from './ipSafety.js';
+import { isPrivateOrReservedAddress } from './integrations/world/ipSafety.js';
 
 /**
  * The bounded reader of public pages for Shannon's own activity (domain `public_read`).

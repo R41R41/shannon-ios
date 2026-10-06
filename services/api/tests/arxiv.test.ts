@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseArxivFeed, prepareArxivQuery } from '../src/arxiv.js';
+import { parseArxivFeed, prepareArxivQuery } from '../src/integrations/world/arxiv.js';
 
 describe('arXiv source adapter', () => {
   it('asks the official API for the newest submissions in a bounded page', () => {

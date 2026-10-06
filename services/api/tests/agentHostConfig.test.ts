@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadAgentHostConfig, resolveAgentProject } from '../src/agentHostConfig.js';
+import { loadAgentHostConfig, resolveAgentProject } from '../src/integrations/agentHost/agentHostConfig.js';
 
 describe('Agent Host configuration', () => {
   it('resolves only an exact Mac-side allowlist alias', () => {

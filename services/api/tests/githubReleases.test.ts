@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { configuredGithubRepositories, parseGithubReleases } from '../src/githubReleases.js';
+import { configuredGithubRepositories, parseGithubReleases } from '../src/integrations/world/githubReleases.js';
 
 describe('GitHub Releases source adapter', () => {
   it('normalizes, deduplicates, and rejects malformed configured repositories', () => {

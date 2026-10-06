@@ -1,5 +1,5 @@
 import type { AppLooks, AppLookTurn } from './appLook.js';
-import { appLookClient, type AppLookAsk, type AppLookClient } from './appLookContract.js';
+import { appLookClient, type AppLookAsk, type AppLookClient } from './contracts/appLookContract.js';
 import { LOOK_NOT_NOW_GUARD, LOOK_NOT_SEEN_GUARD, announcedLook } from './appLookLines.js';
 import { asksToLook } from './bodyLook.js';
 import type { BodyLooks } from './bodyLook.js';

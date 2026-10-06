@@ -7,8 +7,8 @@ import { memoryIdentifier } from '@shannon/cognition';
 import { OpenAIDailyMindModel, SQLiteDailyMindStore, type DailyMindModel } from '../src/dailyMind.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
-import { SQLiteWorldStore } from '../src/worldStore.js';
-import type { WorldItem } from '../src/worldStore.js';
+import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
+import type { WorldItem } from '../src/integrations/world/store/worldStore.js';
 
 const directories: string[] = [];
 afterEach(() => directories.splice(0).forEach(directory => rmSync(directory, { recursive: true, force: true })));

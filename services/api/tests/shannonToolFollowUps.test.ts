@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
-import type { VoiceDecisionInput } from '../src/voiceDecisionContract.js';
+import type { VoiceDecisionInput } from '../src/contracts/voiceDecisionContract.js';
 import { createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';

@@ -9,7 +9,7 @@ import {
   MINECRAFT_BODY_LIMITS, MINECRAFT_PLATFORM, MinecraftBodyError, minecraftBridgeConfiguration, minecraftConversationId, minecraftSourceUserId,
   validatedMinecraftTurn,
   type MinecraftBodyConfiguration, type MinecraftConversationKind, type MinecraftIntent, type MinecraftServerBinding, type MinecraftTurnRequest, type MinecraftTurnResponse,
-} from './minecraftBodyContract.js';
+} from './contracts/minecraftBodyContract.js';
 import type { MinecraftTurnLog } from './minecraftTurnStore.js';
 import type { MinecraftBodyRequests } from './minecraftBodyRequests.js';
 import { MINECRAFT_INTENT_GOAL_CHARACTERS } from './minecraftIntent.js';

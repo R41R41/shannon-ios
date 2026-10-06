@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { memoryWithholdingRules, ownerSpoke } from '@shannon/cognition';
-import { BODY_REACTION_LIMITS } from '../src/bodyReactionContract.js';
+import { BODY_REACTION_LIMITS } from '../src/contracts/bodyReactionContract.js';
 import { SQLiteTouchExperiences, touchEvidence, touchExperienceSummary, touchWhen } from '../src/bodyTouchMemory.js';
 import { ShannonMemoryService } from '../src/memoryService.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';

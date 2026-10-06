@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentHostConfig, AgentHostProject } from '../src/agentHostConfig.js';
-import { deliveryInstructions, recoveryPrompt } from '../src/codexTaskProjection.js';
+import type { AgentHostConfig, AgentHostProject } from '../src/integrations/agentHost/agentHostConfig.js';
+import { deliveryInstructions, recoveryPrompt } from '../src/integrations/agentHost/codexTaskProjection.js';
 
 describe('cloud TestFlight task instructions', () => {
   const config = { deliveryMode: 'cloud-testflight' } as AgentHostConfig;

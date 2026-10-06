@@ -7,7 +7,7 @@ import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';
 import { FOLDER_OR_AETHER_INSTRUCTIONS, HOST_FOLDER_TOOL_INSTRUCTIONS, toolInstructions } from '../src/chatModelTools.js';
-import type { ApiRequest, ApiResponse } from '../src/contracts.js';
+import type { ApiRequest, ApiResponse } from '../src/contracts/contracts.js';
 import { conversationToolServer, conversationTools } from '../src/shannonToolSession.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/turnDeadline.js';
 import { FakeAether } from './fakeAetherServer.js';

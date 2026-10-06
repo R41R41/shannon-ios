@@ -1,5 +1,5 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
-import { BODY_LIMITS, type BodyNudge, type BodyNudgeScene } from './bodyContract.js';
+import { BODY_LIMITS, type BodyNudge, type BodyNudgeScene } from './contracts/bodyContract.js';
 
 /**
  * 軽い声かけ, stage 1: fixed lines the body may show at a suitable moment. No model is called.

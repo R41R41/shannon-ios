@@ -6,11 +6,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   OPS_COMMAND_LIMITS, OPS_COMMAND_REPORT_CODES, OPS_COMMAND_TYPES, OPS_FORBIDDEN_TARGET_PREFIXES, OPS_SERVICE_START_ALLOWED,
   OPS_SERVICE_START_WITHHELD, OPS_SERVICE_STOP_ALLOWED, opsCommandsAllowed, opsCommandsEnabled, validatedOpsCommandRequest,
-} from '../src/opsCommandContract.js';
-import { OPS_LIMITS, opsIngestEnabled, validatedOpsSnapshot, type OpsSnapshot } from '../src/opsContract.js';
-import { SQLiteOpsStore } from '../src/opsStore.js';
-import { OPS_COMMAND_CLAIM_PATH, OPS_COMMANDS_PATH } from '../src/serverOpsCommandRoutes.js';
-import { createOpsRoute, isOpsPath, OPS_READ_PATH, OPS_SNAPSHOT_PATH } from '../src/serverOpsRoutes.js';
+} from '../src/contracts/opsCommandContract.js';
+import { OPS_LIMITS, opsIngestEnabled, validatedOpsSnapshot, type OpsSnapshot } from '../src/contracts/opsContract.js';
+import { SQLiteOpsStore } from '../src/infra/ops/store/opsStore.js';
+import { OPS_COMMAND_CLAIM_PATH, OPS_COMMANDS_PATH } from '../src/infra/ops/serverOpsCommandRoutes.js';
+import { createOpsRoute, isOpsPath, OPS_READ_PATH, OPS_SNAPSHOT_PATH } from '../src/infra/ops/serverOpsRoutes.js';
 
 const BRIDGE_TOKEN = 'b'.repeat(40);
 const DEVICE_TOKEN = 'device-token-of-the-desktop';

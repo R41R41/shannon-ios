@@ -4,7 +4,7 @@ import {
 import { badRequest, objectBody, validBoundedString, validScopeKey } from './apiValidation.js';
 import { acceptedSummary } from './apiVoiceCallSummary.js';
 import type { ShannonChatModel } from './chatModel.js';
-import type { ApiRequest, ApiResponse } from './contracts.js';
+import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import { audiencePeople, personMemoryId, placeLabel, type CallSummarizer, type PeopleMemory } from './peopleMemory.js';
 import type { PersonCall, PersonMemoryItem, RememberedPerson } from './peopleMemoryStore.js';
 import { platformDisplayName } from './platformPeople.js';

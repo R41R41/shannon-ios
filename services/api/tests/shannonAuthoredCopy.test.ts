@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveCommitmentCommand } from '../src/commitmentCommands.js';
 import { createInitialCompanionState } from '@shannon/cognition';
 import { notificationBody } from '../src/pushNotificationSender.js';
-import { groundedWorldOpening } from '../src/worldInterestRelevance.js';
+import { groundedWorldOpening } from '../src/integrations/world/worldInterestRelevance.js';
 import { readApiSource } from './support/sources.js';
 
 /**

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
-import { combinedPlaceSources, placeSkillReply, runPlaceDiscoverySkill, spokenPlaceReply } from '../src/placeDiscoverySkill.js';
+import { combinedPlaceSources, placeSkillReply, runPlaceDiscoverySkill, spokenPlaceReply } from '../src/integrations/places/placeDiscoverySkill.js';
 
 describe('place discovery skill', () => {
   it('returns bounded candidate data for later skills without sending private history', async () => {

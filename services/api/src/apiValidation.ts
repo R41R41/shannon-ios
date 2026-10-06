@@ -1,9 +1,9 @@
 import type { CompanionStateEvent } from '@shannon/cognition';
 import type { AgentCommandType, AgentPlanItem, HostAgentEvent } from './agentTaskStore.js';
 import type { ShannonChatAttachment, ShannonWebSource } from './chatModel.js';
-import type { ApiResponse } from './contracts.js';
+import type { ApiResponse } from './contracts/contracts.js';
 import type { MemoryAction } from './memoryService.js';
-import type { VoyagerTaskProjection } from './organize.js';
+import type { VoyagerTaskProjection } from './integrations/voyager/organize.js';
 
 export function objectBody(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

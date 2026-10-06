@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { PRIVATE_LISTENING_LIMITS, privateListeningEnabled, validatedPrivateListeningReport } from '../src/privateListeningContract.js';
+import { PRIVATE_LISTENING_LIMITS, privateListeningEnabled, validatedPrivateListeningReport } from '../src/contracts/privateListeningContract.js';
 import { dispatchPrivateListeningRequest } from '../src/privateListeningRoutes.js';
 import { SQLitePrivateListeningStore } from '../src/privateListeningStore.js';
 

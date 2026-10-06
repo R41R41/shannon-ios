@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { bodyLookNotSeenSummary } from './bodyLook.js';
-import { BODY_LOOK_ACTIVITY_THREAD, BODY_LOOK_LIMITS, type BodyLookCode, type BodyLookConfig } from './bodyLookContract.js';
+import { BODY_LOOK_ACTIVITY_THREAD, BODY_LOOK_LIMITS, type BodyLookCode, type BodyLookConfig } from './contracts/bodyLookContract.js';
 import type { ActivityLookUsage, SQLiteBodyLookActivityStore } from './bodyLookActivityStore.js';
 import type { SQLiteBodyLookStore, StoredBodyLook } from './bodyLookStore.js';
 

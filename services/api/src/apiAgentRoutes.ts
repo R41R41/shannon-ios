@@ -7,7 +7,7 @@ import type {
   AgentWorkspaceProjectState,
   HostAgentEvent,
 } from './agentTaskStore.js';
-import type { ApiRequest, ApiResponse } from './contracts.js';
+import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import { badRequest, objectBody, validAgentCommandType, validBoundedString, validHostEvents, validPlan, validScopeKey } from './apiValidation.js';
 import {
   normalizedAgentProjectKey,

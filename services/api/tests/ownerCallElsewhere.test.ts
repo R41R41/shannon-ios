@@ -7,7 +7,7 @@ import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { BODY_LIMITS } from '../src/bodyContract.js';
+import { BODY_LIMITS } from '../src/contracts/bodyContract.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import type { ShannonDevicePrincipal } from '../src/deviceAuth.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';

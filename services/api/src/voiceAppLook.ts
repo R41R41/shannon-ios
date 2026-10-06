@@ -1,4 +1,4 @@
-import { voiceLookCamera, type AppLookAsk } from './appLookContract.js';
+import { voiceLookCamera, type AppLookAsk } from './contracts/appLookContract.js';
 import {
   LOOK_NOT_NOW_GUARD, LOOK_NOT_SEEN_GUARD, announcedLook, appLookUnavailablePrompt, voiceAppLookOfferPrompt, voiceAppLookPrompt,
 } from './appLookLines.js';

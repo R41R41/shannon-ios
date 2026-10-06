@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore, SHANNON_MEMO_PLACE_RULE, shannonCapabilityPrompt } from '@shannon/cognition';
-import type { AetherProposalInput, AetherProposalStore } from '../src/aetherProposal.js';
-import { FileAetherContextReader } from '../src/aetherContext.js';
+import type { AetherProposalInput, AetherProposalStore } from '../src/integrations/aether/aetherProposal.js';
+import { FileAetherContextReader } from '../src/integrations/aether/aetherContext.js';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
@@ -17,7 +17,7 @@ import type { HostFolderOperations, HostOperationRequest, HostRunOutcome } from 
 import { aetherNoteRequest, answersWithPlace, asksForMemo, asksWhichPlace, memoNotForAether, memoRequestContent } from '../src/memoPlace.js';
 import { ShannonToolRunner } from '../src/shannonToolRunner.js';
 import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
-import type { VoiceDecisionInput } from '../src/voiceDecisionContract.js';
+import type { VoiceDecisionInput } from '../src/contracts/voiceDecisionContract.js';
 import { promptOf } from './modelPrompt.js';
 
 /**

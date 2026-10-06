@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { wantsNearbyPlaces, wantsPlaceDiscovery } from './placeDiscovery.js';
-import { combinedPlaceSources, runPlaceDiscoverySkill, spokenPlaceReply } from './placeDiscoverySkill.js';
+import { wantsNearbyPlaces, wantsPlaceDiscovery } from './integrations/places/placeDiscovery.js';
+import { combinedPlaceSources, runPlaceDiscoverySkill, spokenPlaceReply } from './integrations/places/placeDiscoverySkill.js';
 import {
   OWNER_AUDIENCE,
   UNKNOWN_GUEST_PRESENCE,
@@ -17,7 +17,7 @@ import {
 import { agentTaskPromptProjection } from './apiPromptProjection.js';
 import { badRequest, objectBody, validBoundedString, validScopeKey } from './apiValidation.js';
 import type { AgentTaskStore } from './agentTaskStore.js';
-import type { ApiRequest, ApiResponse } from './contracts.js';
+import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import type { ConversationStore } from './conversationStore.js';
 import type { DailyMindReader } from './dailyMind.js';
 import { companionIdentityPrompt, identityOnly, type KnowledgeStore } from './knowledgeStore.js';
@@ -31,7 +31,7 @@ import { executeConversationCommand, spokenCommandAllowed, type ConversationComm
 import { extractExplicitUserIntent, type CognitiveIntentStore } from './cognitiveIntent.js';
 import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type ConversationReadCapabilities } from './conversationCapabilities.js';
-import { asksAboutNotion } from './notionConversation.js';
+import { asksAboutNotion } from './integrations/notion/notionConversation.js';
 import type { PersonIdentityStore } from './personIdentity.js';
 import { voicePlanResponse } from './voiceEmotionPlan.js';
 import { transcriptNeedsInterpretation, transcriptTrust, voiceTranscriptInterpretationPrompt } from './voiceTranscriptContext.js';
@@ -43,7 +43,7 @@ import {
   recordConversationReceipt,
   type ConversationOrchestrationStore,
 } from './conversationOrchestration.js';
-import { isExplicitVoyagerUpdateRequest } from './organize.js';
+import { isExplicitVoyagerUpdateRequest } from './integrations/voyager/organize.js';
 import {
   validatedVoiceDeviceContext,
   voiceDeviceContextPrompt,

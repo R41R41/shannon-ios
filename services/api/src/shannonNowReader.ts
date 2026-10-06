@@ -5,7 +5,7 @@ import { SHANNON_TOUCH_KINDS } from '@shannon/cognition';
 import { REACH_OUT_SOURCE_PREFIX, reachOutOfSource } from './reachOutDelivery.js';
 import {
   SHANNON_NOW_LIMITS, type ShannonNowBody, type ShannonNowDelivery, type ShannonNowLook, type ShannonNowReachOut, type ShannonNowTouch,
-} from './shannonNowContract.js';
+} from './contracts/shannonNowContract.js';
 
 /**
  * Reads the tables other modules own, for `GET /v1/shannon/now`. The connection is

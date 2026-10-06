@@ -8,7 +8,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import {
   APP_LOOK_CLIENT_STATES, APP_LOOK_LIMITS, APP_LOOK_REFUSAL_CODES, APP_LOOK_SCHEMA, appLookChoice, appLookClient, appLookRequestBytes,
   configuredAppLook, validatedAppLookResult, voiceLookCamera, type AppLookConfig,
-} from '../src/appLookContract.js';
+} from '../src/contracts/appLookContract.js';
 import { SQLiteAppLookSpeaker } from '../src/appLookDelivery.js';
 import {
   APP_LOOK_OFFER_PROMPT, APP_LOOK_SEEN_SUMMARY, VOICE_APP_LOOK_OFFER_PROMPT, LOOK_NOT_NOW_GUARD, LOOK_NOT_SEEN_GUARD, announcedLook, announcesCameraLook, lookAnnouncement, voiceAppLookOfferPrompt, appLookNotSeenLine, appLookNotSeenSummary,
@@ -19,7 +19,7 @@ import { configuredAutonomy } from '../src/autonomyBudget.js';
 import { ShannonAutonomyService, createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import { ROOM_LOOK_OFFER_PROMPT } from '../src/bodyLook.js';
-import { BODY_LOOK_REQUEST_BYTES, configuredBodyLook } from '../src/bodyLookContract.js';
+import { BODY_LOOK_REQUEST_BYTES, configuredBodyLook } from '../src/contracts/bodyLookContract.js';
 import { BODY_LOOK_CUT_OFF_LINE } from '../src/bodyLookLines.js';
 import { SQLiteBodyLookStore } from '../src/bodyLookStore.js';
 import { roomLookInstructions, type RoomLookViewRequest, type RoomLookViewer } from '../src/bodyLookVision.js';

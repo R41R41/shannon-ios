@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLocalApiKernel, type ShannonApiKernelOptions } from '../src/apiKernel.js';
 import { OpenAIResponsesChatModel, type ShannonChatModel, type ShannonChatModelRequest, type ShannonChatModelResult } from '../src/chatModel.js';
 import { chatStreamEarlyEnabled } from '../src/chatSentenceStream.js';
-import type { ChatResponse, ChatStreamLine } from '../src/contracts.js';
+import type { ChatResponse, ChatStreamLine } from '../src/contracts/contracts.js';
 import { dispatchWithChatSentences } from '../src/serverChatSentenceStream.js';
 import { readJson, sendJson } from '../src/serverHttp.js';
 import { fixtureNotionSource } from './notionFixture.js';

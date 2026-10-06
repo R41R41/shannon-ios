@@ -1,6 +1,6 @@
 import type { TurnBackgroundService } from './backgroundUpdates.js';
 import type { ShannonChatModel } from './chatModel.js';
-import type { ApiRequest, ApiResponse } from './contracts.js';
+import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
 import type { VoiceDecisionGateway } from './voiceDecision.js';
 import {

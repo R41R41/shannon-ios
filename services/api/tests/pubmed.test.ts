@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePubmedSearchIds, parsePubmedSummaries, pubmedSummaryURL } from '../src/pubmed.js';
+import { parsePubmedSearchIds, parsePubmedSummaries, pubmedSummaryURL } from '../src/integrations/world/pubmed.js';
 
 describe('PubMed response boundary', () => {
   it('accepts only bounded numeric search identifiers without duplicates', () => {

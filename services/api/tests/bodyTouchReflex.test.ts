@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SHANNON_TEMPERAMENT, SHANNON_TOUCH_FEELINGS, shannonTemperament } from '@shannon/cognition';
-import type { BodyReactionAnswer } from '../src/bodyReactionContract.js';
+import type { BodyReactionAnswer } from '../src/contracts/bodyReactionContract.js';
 import { OpenAIBodyReactionSpeaker } from '../src/bodyReactionModel.js';
 import {
   BODY_REACTION_OWN_RULE, BODY_REACTION_SCHEMA, BODY_REACTION_SCHEMA_WITH_STANCE, parsedBodyReaction,

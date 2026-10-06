@@ -11,7 +11,7 @@ import {
 import type { ConversationStore, ShannonExperience } from './conversationStore.js';
 import type { KnowledgeAnswer, KnowledgeStore } from './knowledgeStore.js';
 import type { PersonalityProfile } from './knowledgeStore.js';
-import type { WorldItem, WorldReader } from './worldStore.js';
+import type { WorldItem, WorldReader } from './integrations/world/store/worldStore.js';
 import { configuredBackgroundBudgetUsd, type LlmUsageReader, type LlmUsageSummaryRow } from './llmUsage.js';
 import { commitmentDeadline } from './commitmentTime.js';
 import { SNOOZE_MILLISECONDS } from './commitmentInitiative.js';

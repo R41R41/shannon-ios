@@ -1,4 +1,4 @@
-import type { BodyLookCode } from './bodyLookContract.js';
+import type { BodyLookCode } from './contracts/bodyLookContract.js';
 
 /**
  * What she says when the owner asked her to look and she could not. Fixed sentences in her

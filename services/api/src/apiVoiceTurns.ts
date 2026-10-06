@@ -2,7 +2,7 @@ import { UNKNOWN_GUEST_PRESENCE, messageEmotionForOthers, type CompanionStateSto
 import { presentCompanionState, resolveReplyEmotion } from './companionPresence.js';
 import { storedVoiceFace } from './voiceEmotionPlan.js';
 import { objectBody, validScopeKey, validBoundedString, badRequest } from './apiValidation.js';
-import type { ApiRequest, ApiResponse } from './contracts.js';
+import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import type { TurnBackgroundService } from './backgroundUpdates.js';
 import type { ConversationStore } from './conversationStore.js';
 import type { ShannonChatModel } from './chatModel.js';

@@ -18,7 +18,7 @@
  *
  * The token is read from the environment and never printed.
  */
-import { aetherStudyScope, configuredAetherAccess } from '../src/aetherAccess.js';
+import { aetherStudyScope, configuredAetherAccess } from '../src/integrations/aether/aetherAccess.js';
 import { autonomyDayKey, configuredAutonomy } from '../src/autonomyBudget.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import { configuredDatabasePath } from '../src/sqliteStore.js';

@@ -1,11 +1,11 @@
 import type { AppLookOptions } from './appLook.js';
-import { appLookRequestBytes, configuredAppLook } from './appLookContract.js';
+import { appLookRequestBytes, configuredAppLook } from './contracts/appLookContract.js';
 import { SQLiteAppLookSpeaker } from './appLookDelivery.js';
 import { SQLiteAppLookStore } from './appLookStore.js';
 import type { BodyLookOptions } from './bodyLook.js';
 import { SQLiteBodyLookActivityStore } from './bodyLookActivityStore.js';
 import { createConfiguredActivityRoomLookViewer } from './bodyLookActivityVision.js';
-import { BODY_LOOK_REQUEST_BYTES, bodyLookResultId, configuredBodyLook } from './bodyLookContract.js';
+import { BODY_LOOK_REQUEST_BYTES, bodyLookResultId, configuredBodyLook } from './contracts/bodyLookContract.js';
 import { SQLiteBodyLookSpeaker } from './bodyLookDelivery.js';
 import { SQLiteBodyLookStore } from './bodyLookStore.js';
 import { createConfiguredRoomLookViewer } from './bodyLookVision.js';

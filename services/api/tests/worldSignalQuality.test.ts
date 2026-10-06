@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isRepeatedWorldSignal, sourceDiversityAdjustment } from '../src/worldSignalQuality.js';
+import { isRepeatedWorldSignal, sourceDiversityAdjustment } from '../src/integrations/world/worldSignalQuality.js';
 
 const previous = {
   sourceId: 'hn:top', sourceTitle: 'Hacker News',

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { normalizedThreadTitle } from './threadTitle.js';
-import { validatedPlaces, type ShannonPlace } from './placeDiscovery.js';
+import { validatedPlaces, type ShannonPlace } from './integrations/places/placeDiscovery.js';
 import { parsedReplyFeeling, type ChatReplyFeeling } from './chatReplyFeeling.js';
 import { parsedMinecraftIntent, type MinecraftIntent } from './minecraftIntent.js';
 import type {

@@ -3,10 +3,10 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { OPS_COMMAND_LIMITS, OPS_COMMAND_REPORT_CODES, OPS_SERVICE_START_ALLOWED, OPS_SERVICE_STOP_ALLOWED } from '../src/opsCommandContract.js';
-import { OPS_LIMITS, opsIngestEnabled, opsSecretLike, validatedOpsSnapshot } from '../src/opsContract.js';
-import { SQLiteOpsStore } from '../src/opsStore.js';
-import { createOpsRoute, isOpsPath, OPS_READ_PATH, OPS_SNAPSHOT_PATH } from '../src/serverOpsRoutes.js';
+import { OPS_COMMAND_LIMITS, OPS_COMMAND_REPORT_CODES, OPS_SERVICE_START_ALLOWED, OPS_SERVICE_STOP_ALLOWED } from '../src/contracts/opsCommandContract.js';
+import { OPS_LIMITS, opsIngestEnabled, opsSecretLike, validatedOpsSnapshot } from '../src/contracts/opsContract.js';
+import { SQLiteOpsStore } from '../src/infra/ops/store/opsStore.js';
+import { createOpsRoute, isOpsPath, OPS_READ_PATH, OPS_SNAPSHOT_PATH } from '../src/infra/ops/serverOpsRoutes.js';
 import { apiSourceFile, apiSourceFiles, apiSourcePath, readApiSource, resolvedImports } from './support/sources.js';
 
 const BRIDGE_TOKEN = 'b'.repeat(40);

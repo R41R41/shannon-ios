@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isPrivateOrReservedAddress } from '../src/ipSafety.js';
+import { isPrivateOrReservedAddress } from '../src/integrations/world/ipSafety.js';
 
 describe('IP safety boundary', () => {
   it('rejects private, carrier-grade, documentation, and mapped-private addresses', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCodexModelCatalog } from '../src/codexModelCatalog.js';
+import { parseCodexModelCatalog } from '../src/integrations/agentHost/codexModelCatalog.js';
 
 describe('Codex model catalog', () => {
   it('normalizes App Server models and reasoning effort descriptors', () => {

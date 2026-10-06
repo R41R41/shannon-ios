@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { withoutUnshownTitles, type CompanionClock, type CompanionStateStore } from '@shannon/cognition';
 import { agentTaskPromptProjection } from './apiPromptProjection.js';
-import type { AetherContextReader } from './aetherContext.js';
-import type { AetherProposalStore } from './aetherProposal.js';
+import type { AetherContextReader } from './integrations/aether/aetherContext.js';
+import type { AetherProposalStore } from './integrations/aether/aetherProposal.js';
 import type { AgentTaskStore } from './agentTaskStore.js';
 import type { ShannonAutonomyService } from './autonomyService.js';
 import type { CompletedTurn, TurnBackgroundService } from './backgroundUpdates.js';
@@ -11,18 +11,18 @@ import type { ShannonChatAttachment, ShannonChatModel, ShannonChatModelResult } 
 import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
 import { extractExplicitUserIntent, type CognitiveIntentStore } from './cognitiveIntent.js';
 import { presentCompanionState, resolveReplyEmotion } from './companionPresence.js';
-import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse } from './contracts.js';
+import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse } from './contracts/contracts.js';
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, type ConversationCapabilityContext, type NotionTurnReader } from './conversationCapabilities.js';
 import type { ConversationLookTurn } from './conversationLooks.js';
 import { executeConversationCommand } from './conversationCommands.js';
 import {
   buildConversationOrchestrationPrompt, observeConversationTurn, recordConversationReceipt, type ConversationOrchestrationStore,
 } from './conversationOrchestration.js';
-import { prepareConversationOrganize } from './conversationOrganize.js';
+import { prepareConversationOrganize } from './integrations/voyager/conversationOrganize.js';
 import type { ConversationStore, ShannonExperience } from './conversationStore.js';
 import type { DailyMindReader } from './dailyMind.js';
 import { companionIdentityPrompt, type KnowledgeStore, type LayeredIdentityPrompt } from './knowledgeStore.js';
-import { isOrganizeCommand, type OrganizeExtractor, type OrganizeStore, type VoyagerCatalog } from './organize.js';
+import { isOrganizeCommand, type OrganizeExtractor, type OrganizeStore, type VoyagerCatalog } from './integrations/voyager/organize.js';
 import type { OwnOutreach } from './ownOutreach.js';
 import type { OwnerUpcoming } from './ownerUpcoming.js';
 import type { PeopleMemory } from './peopleMemory.js';

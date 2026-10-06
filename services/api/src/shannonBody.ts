@@ -5,15 +5,15 @@ import type { AutonomyControlLabel, ShannonAutonomyService } from './autonomySer
 import {
   BODY_LIMITS, BODY_SCHEMA_VERSION, BODY_TOUCH_EVENT_TYPES, BODY_TOUCH_VOCABULARY, isBodyGameEvent, isImpossibleTouch,
   type BodyAudience, type BodyCapabilities, type BodyDoing, type BodyEvent, type BodyEventType, type BodyNudge, type BodyReachOutDeliveryOutcome,
-} from './bodyContract.js';
+} from './contracts/bodyContract.js';
 import { AppLooks, type AppLookOptions } from './appLook.js';
 import { APP_LOOK_TOOL } from './appLookLines.js';
 import { BODY_LOOK_TOOL, BodyLooks, type BodyLookOptions } from './bodyLook.js';
-import { BODY_LOOK_LIMITS } from './bodyLookContract.js';
+import { BODY_LOOK_LIMITS } from './contracts/bodyLookContract.js';
 import { noteBodyLookSpeaker } from './bodyLookDelivery.js';
 import { bodyNudgeCandidates } from './bodyNudges.js';
 import { BodyReactions } from './bodyReaction.js';
-import { BODY_REACTION_TOOL, configuredBodyReactions, type BodyReactionConfig } from './bodyReactionContract.js';
+import { BODY_REACTION_TOOL, configuredBodyReactions, type BodyReactionConfig } from './contracts/bodyReactionContract.js';
 import type { BodyReactionSpeaker } from './bodyReactionModel.js';
 import { SQLiteBodyReactionStore } from './bodyReactionStore.js';
 import { BodyTouches, touchPredictionEnabled, type BodyTouchDependencies } from './bodyTouch.js';

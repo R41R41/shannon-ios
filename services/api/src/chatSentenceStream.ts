@@ -1,5 +1,5 @@
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from './chatModel.js';
-import type { ApiResponse, ChatRequest, ChatResponse, ChatSentenceFallback, ChatSentenceSink, ChatStreamLine } from './contracts.js';
+import type { ApiResponse, ChatRequest, ChatResponse, ChatSentenceFallback, ChatSentenceSink, ChatStreamLine } from './contracts/contracts.js';
 import { ChatSentenceSplitter, splitChatSentences } from './chatSentenceSplitter.js';
 
 /**

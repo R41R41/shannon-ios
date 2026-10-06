@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import type { BodyLookCode } from './bodyLookContract.js';
+import type { BodyLookCode } from './contracts/bodyLookContract.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 
 /**
