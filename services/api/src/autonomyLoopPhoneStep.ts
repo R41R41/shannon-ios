@@ -1,7 +1,7 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { autonomyDayKey, yenFromUsd } from './autonomyBudget.js';
 import { storyNotes } from './autonomyLoopPlan.js';
-import { unmarkedOnly } from './autonomyLoopProvenance.js';
+import { heldForOthers, unmarkedOnly } from './autonomyLoopProvenance.js';
 import {
   AUTONOMY_REACH_OUT_MAXIMUM_CHARACTERS, REACH_OUT_REASON_LABEL, parsedModelObject, reachOutPrompt,
   type ReachOutReason, type ThinkingExtras,
@@ -224,6 +224,8 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
       // Checked again with her words in hand: the model took a moment, and he may have begun to talk meanwhile.
       const after = unavailable(writeAt);
       if (after) return { outcome: 'failed', usage, summary: `いまは電話をかけられないので、かけませんでした（理由: ${label}）。`, reasonCode: after };
+      // Someone else may have come while she wrote it: in a marked session she holds the call (ADR-0007).
+      if (heldForOthers(dependencies, cycle, writeAt)) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, reasonCode: 'others_present', summary: `ほかの人がいるので、電話はやめておきました（理由: ${label}）。` };
       let written: ReturnType<NonNullable<typeof adapters.reachOuts.sayByPhone>>;
       try {
         written = adapters.reachOuts.sayByPhone(cycle.scopeKey, { reason: reason as ReachOutReason, text, dayKey: autonomyDayKey(writeAt, config) }, writeAt);

@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { prepareFollowUp } from '../src/autonomyLoopFollowUpStep.js';
+import { preparePhoneCall, type AutonomyPhone } from '../src/autonomyLoopPhoneStep.js';
 import { prepareReachOut, type AutonomyReachOuts } from '../src/autonomyLoopReachOutStep.js';
 import { AutonomyToolResults } from '../src/autonomyLoopToolStep.js';
 import { toolSessionMemory } from '../src/shannonToolTypes.js';
@@ -104,6 +106,41 @@ describe('a marked session', () => {
     const result = await prepared.perform({ model, reachOuts, showing: harness.showing }, harness.clock.at);
     expect(result).toMatchObject({ tool: 'owner.reach_out_held', reasonCode: 'others_present' });
     expect(said).toEqual([]);
+  });
+});
+
+describe('a second call and a phone call of a marked session', () => {
+  it('are held when someone comes in while their words are written, and go when nobody does', async () => {
+    const said: string[] = [];
+    const state = { others: false };
+    const reachOuts: AutonomyReachOuts = {
+      sentOn: () => 0, lastSentAt: () => null, audience: () => (state.others ? { instructions: '[ほかの人がいる場]', marker: '【機微】' } : null),
+      say: () => 'sent', sayByPhone: (_scope, input) => { said.push(input.text); return 'sent'; },
+      sayAgain: (_scope, input) => { said.push(input.text); return 'sent'; },
+      latest: () => null, followUpsOn: () => 0, followedUp: () => false, text: () => 'ライ氏、いま何をしていますか。',
+    };
+    const phone: AutonomyPhone = { facts: () => ({ switchedOn: true, serverReady: true, ringing: false, waitMinutes: 0, earphones: false }) as never, request: () => 'requested', outcome: () => 'answered' };
+    for (const comes of [true, false]) {
+      const { harness } = await ownTime({ reachOuts, phone, agentic: true }, false);
+      const at = harness.clock.at;
+      const cycle = harness.store.loop.startCycle(scope, '2026-10-02', 'activity', [], at);
+      harness.store.loop.observations.add(scope, { cycleId: cycle.id, ordinal: 0, step: 'reach_out', outcome: 'done', reachOut: { id: 'initiative-1', reason: 'wonder', sentAt: at, waitedSeconds: 180, replied: false, delivery: 'unknown' } }, at);
+      harness.store.informed.markSession(cycle.id, at);
+      const model = new FakeModel();
+      model.during = () => { state.others = comes; };
+      const dependencies = { ...harness, loop: harness.loopConfig, model, reachOuts, phone, now: () => harness.clock.at, wait: async () => undefined };
+      said.length = 0;
+      state.others = false;
+      const again = prepareFollowUp(dependencies, cycle, { kind: 'reach_out', reason: 'follow_up', originId: 'initiative-1' }, at)!;
+      const call = preparePhoneCall(dependencies, cycle, { kind: 'reach_out', reason: 'wonder', call: true }, at)!;
+      const results = [await again.perform({ model, reachOuts, phone, showing: harness.showing }, at), await call.perform({ model, reachOuts, phone, showing: harness.showing }, at)];
+      if (comes) {
+        for (const result of results) expect(result).toMatchObject({ tool: 'owner.reach_out_held', reasonCode: 'others_present' });
+        expect(said).toEqual([]);
+      } else {
+        expect(said).toHaveLength(2);
+      }
+    }
   });
 });
 
