@@ -128,6 +128,8 @@ export class PlatformReplyService {
       ...(owner && policy.gate.ownerOnly ? { minecraftTools: true } : {}),
       // Not told what she did on her own to reach the owner: a platform conversation is not where that is talked about.
       ownOutreach: false,
+      // Someone else's turn: her Aether reading tools inside 「シャノン用フォルダ」, nothing else (owner decision 2026-10-06).
+      guestFolderReading: true,
       store: turn => {
         try {
           if (owner) return keepOwnerPlatformTurn(conversationStore, { platform: request.platform, requestId: request.requestId, payloadHash: hash }, turn);

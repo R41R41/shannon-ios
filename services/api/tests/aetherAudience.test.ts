@@ -1,0 +1,238 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { UNLABELLED_DISCLOSURE_MARKER, createInitialCompanionState } from '@shannon/cognition';
+import { LEFT_OUT_LINE, textForOthers } from '../src/aetherShownText.js';
+import { createLocalApiKernel } from '../src/apiKernel.js';
+import { configuredAutonomy } from '../src/autonomyBudget.js';
+import { ShannonAutonomyService } from '../src/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
+import { TOOLS_OTHERS_INSTRUCTIONS, toolInstructions } from '../src/chatModelTools.js';
+import { othersSecrets } from '../src/conversationSecrets.js';
+import { SQLitePeopleMemoryStore } from '../src/peopleMemoryStore.js';
+import { PlatformBridgeService, configuredPlatformBridge } from '../src/platformBridge.js';
+import { PlatformPeople } from '../src/platformPeople.js';
+import { PlatformReplyService } from '../src/platformReply.js';
+import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteSurfaceTurnLog } from '../src/minecraftTurnStore.js';
+import { conversationToolServer, conversationTools, type ConversationToolServer } from '../src/shannonToolSession.js';
+import type { ToolExecutionContext } from '../src/shannonToolTypes.js';
+import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/turnDeadline.js';
+import { FakeAether } from './fakeAetherServer.js';
+
+/**
+ * Owner decisions of 2026-10-06 (Syzygy ADR-0007): a turn the owner did not speak or write (a friend in 「友人も一緒」,
+ * someone else on a platform) is offered her Aether reading tools inside 「シャノン用フォルダ」 and nothing else; and what
+ * she reads there in front of others reaches the model without what the owner told her alone.
+ */
+const scope = 'owner';
+const at = '2026-10-06T01:00:00.000Z';
+const SECRET = 'ウォンバット会の集まりに毎月出ている';
+const HEALTH = '最近胃の調子が悪くて病院に通っている';
+const NOTE = `今日はライ氏と灯台の話をした。ライ氏は${SECRET}らしい。ライ氏は${HEALTH}そうだ。\n灯台の光は夜に十二回まわる。`;
+const servers: FakeAether[] = [];
+const directories: string[] = [];
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await Promise.all(servers.splice(0).map(server => server.stop()));
+  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
+
+const state = { ...createInitialCompanionState(scope, at), userFacts: [
+  { id: 'secret', statement: `ユーザーは${SECRET}`, confidence: 0.9, observedAt: at, disclosure: { category: 'secret' as const } },
+  { id: 'health', statement: `ユーザーは${HEALTH}`, confidence: 0.9, observedAt: at, disclosure: { sensitivity: 'sensitive' as const, category: 'health' as const, decidedBy: 'rule' as const } },
+  { id: 'tea', statement: 'ユーザーは紅茶が好きで毎朝ダージリンを飲む', confidence: 0.9, observedAt: at, disclosure: { sensitivity: 'ordinary' as const } },
+] };
+
+async function harness(options: { aether?: boolean } = {}) {
+  const fake = new FakeAether();
+  servers.push(fake);
+  const access = options.aether === false ? null : await fake.access();
+  const service = new ShannonAutonomyService({ store: new SQLiteAutonomyStore(':memory:'), config: configuredAutonomy({}), now: () => at, aether: { access, proposals: null } });
+  // The server of production, over this state: what the server knows of the audience, the secrets, the traces.
+  const server: ConversationToolServer = conversationToolServer(null, { snapshot: () => state as never },
+    { experienceCandidates: () => [], conversationHistory: () => [], recentMessages: () => [] }, () => at);
+  const note = fake.put({ title: '灯台の話', body: NOTE, projectIds: ['project_shannon_folder'], tags: ['シャノン'], type: 'note' });
+  const owners = fake.ownerDocument('ライ氏の灯台メモ', '灯台はライ氏の文書にもある。');
+  const contexts: ToolExecutionContext[] = [];
+  const call = service.tools.call.bind(service.tools);
+  vi.spyOn(service.tools, 'call').mockImplementation((name, input, context, signal) => { contexts.push(context); return call(name, input, context, signal); });
+  const turn = (ownerAlone: boolean | 'others' | 'guests', surface: 'text' | 'voice' = 'text', openOnly = false, words = 'シャノンのフォルダの灯台のメモを読んで') =>
+    conversationTools(service, scope, surface, ownerAlone, server, `thread\n${words}`, new TurnDeadline(TEXT_TURN_DEADLINE), undefined, openOnly ? { openOnly: true } : {});
+  return { fake, service, server, note, owners, contexts, turn };
+}
+
+const result = async (session: { call(name: string, argumentsJson: string): Promise<string> } | undefined, name: string, input: unknown) =>
+  JSON.parse(await session!.call(name, JSON.stringify(input))) as { ok: boolean; text: string; failure?: string };
+
+describe('a guest-only turn (owner decision 2026-10-06)', () => {
+  it('gets exactly the three reading tools, with the others instruction, and only results inside her folder', async () => {
+    const { turn, note, owners, contexts, server } = await harness();
+    const open = vi.spyOn(server.turns, 'open');
+    for (const [surface, openOnly] of [['text', true], ['voice', false]] as const) {
+      const offered = turn('guests', surface, openOnly);
+      expect(offered.toolsWithheld).toBeUndefined();
+      expect(offered.tools!.definitions.map(tool => tool.name)).toEqual(['aether.search', 'aether.read', 'aetherFolder.list']);
+      expect(offered.tools!.definitions.every(tool => tool.effect === 'read')).toBe(true);
+      expect(toolInstructions(offered.tools!, surface === 'voice')).toBe(TOOLS_OTHERS_INSTRUCTIONS);
+      expect(await result(offered.tools, 'aether_search', { query: '灯台' })).toMatchObject({ ok: false, failure: 'refused' });
+      const found = await result(offered.tools, 'aether_search', { query: '灯台', scope: 'shannonFolder' });
+      expect(found.text).toContain(note.id);
+      expect(found.text).not.toContain(owners.id);
+      expect(await result(offered.tools, 'aether_read', { documentId: owners.id })).toMatchObject({ ok: false, failure: 'refused' });
+      expect(await result(offered.tools, 'aetherFolder_create', { title: 't', body: 'b' })).toMatchObject({ ok: false, failure: 'not_offered' });
+      expect(await result(offered.tools, 'aether_propose', { operation: 'new-note', content: 'x' })).toMatchObject({ ok: false, failure: 'not_offered' });
+    }
+    // The audience that reaches the gate is `others`, with the check of what is shown to them; no trace is opened.
+    expect(contexts.length).toBeGreaterThan(0);
+    for (const context of contexts) {
+      expect(context.audience).toBe('others');
+      expect(context.othersText).toBeTruthy();
+    }
+    expect(contexts.map(context => context.othersText!.openOnly)).toContain(true);
+    expect(contexts.map(context => context.othersText!.openOnly)).toContain(false);
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('is given nothing and told nothing while Aether is not configured, exactly as a turn with no tools', async () => {
+    const { turn, server } = await harness({ aether: false });
+    const open = vi.spyOn(server.turns, 'open');
+    for (const surface of ['text', 'voice'] as const) {
+      expect(turn('guests', surface)).toEqual({});
+      expect(turn('guests', surface, true)).toEqual(turn(false, surface, true));
+    }
+    // An owner turn with others present keeps its one withheld line, as on main.
+    server.audience.noteOthers(scope);
+    expect(turn(true)).toEqual({ toolsWithheld: true });
+    expect(open).not.toHaveBeenCalled();
+  });
+});
+
+describe('what she reads of her folder in front of others', () => {
+  it('removes the owner\'s secret and, where he is not there, his personal matters; keeps all of it with him alone', async () => {
+    const { turn, note } = await harness();
+    const read = (offered: ReturnType<typeof turn>) => result(offered.tools, 'aether_read', { documentId: note.id });
+
+    const alone = await read(turn(true));
+    expect(alone.text).toContain(SECRET);
+    expect(alone.text).toContain(HEALTH);
+    expect(alone.text).not.toContain(LEFT_OUT_LINE);
+
+    // The owner with others, and 「友人も一緒」: the secret is left out, his health is marked as memory marks it.
+    for (const offered of [turn('others'), turn('guests', 'voice')]) {
+      const text = (await read(offered)).text;
+      expect(text).not.toContain('ウォンバット');
+      expect(text).toContain(`${UNLABELLED_DISCLOSURE_MARKER}ライ氏は${HEALTH}そうだ。`);
+      expect(text).toContain('灯台の光は夜に十二回まわる。');
+      expect(text).toContain(LEFT_OUT_LINE);
+    }
+    // Someone else's turn on a platform (openOnly): neither reaches the model, in a read or in a search hit.
+    const guest = turn('guests', 'text', true);
+    for (const shown of [await read(guest), await result(guest.tools, 'aether_search', { query: '灯台', scope: 'shannonFolder' })]) {
+      expect(shown.ok).toBe(true);
+      expect(shown.text).not.toContain('ウォンバット');
+      expect(shown.text).not.toContain('胃の調子');
+      expect(shown.text).toContain('灯台の話をした。');
+    }
+  });
+
+  it('gives nothing read while the check cannot be read, and nothing of a text whose secret runs across sentences', async () => {
+    const { turn, note, server } = await harness();
+    vi.spyOn(server, 'othersText').mockImplementation(() => null);
+    const unreadable = await result(turn('guests', 'text', true).tools, 'aether_read', { documentId: note.id });
+    expect(unreadable).toMatchObject({ ok: false, failure: 'unavailable' });
+    expect(unreadable.text).not.toContain('灯台');
+
+    const check = { ...othersSecrets(state as never, { experienceCandidates: () => [] }, scope), openOnly: true };
+    expect(textForOthers('灯台の光。紅茶が好きで毎朝ダージリンを飲む。', check)).toBe('灯台の光。紅茶が好きで毎朝ダージリンを飲む。');
+    expect(textForOthers('ウォンバット会の集。まりに毎月出ている。', check)).toBeNull();
+  });
+});
+
+/** A model that reads one document of her folder when it is offered her tools, and keeps what it was given. */
+class ReadingModel implements ShannonChatModel {
+  readonly mode = 'openai' as const;
+  readonly model = 'test-model';
+  readonly requests: ShannonChatModelRequest[] = [];
+  readonly read: string[] = [];
+  documentId = '';
+  async generateVoice(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> { return this.generate(request); }
+  async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
+    this.requests.push(request);
+    if (request.tools) this.read.push(await request.tools.call('aether_read', JSON.stringify({ documentId: this.documentId })));
+    return { mode: this.mode, model: this.model, reply: 'はい。' };
+  }
+}
+
+describe('someone else\'s turn on a platform (the platform reply route)', () => {
+  it('is offered her folder reading with Aether, without the owner\'s secret; without Aether nothing, as before', async () => {
+    const BINDINGS = [{ platform: 'discord', conversationIdPrefix: 'discord:111:', ownerUserId: '900000000000000001', title: 'テストサーバー' }];
+    const environment = { SHANNON_PLATFORM_BRIDGE_TOKEN: 'b'.repeat(40), SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: scope, SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify(BINDINGS) };
+    for (const configured of [true, false]) {
+      const directory = mkdtempSync(join(tmpdir(), 'shannon-aether-audience-'));
+      directories.push(directory);
+      const path = join(directory, 'shannon.sqlite');
+      const now = () => at;
+      const store = new SQLiteShannonStore({ path, now });
+      const peopleStore = new SQLitePeopleMemoryStore(path);
+      const background = new BackgroundUpdateCoordinator(store, store);
+      const fake = new FakeAether();
+      servers.push(fake);
+      const autonomyStore = new SQLiteAutonomyStore(':memory:');
+      const autonomy = new ShannonAutonomyService({ store: autonomyStore, config: configuredAutonomy({}), now, aether: { access: configured ? await fake.access() : null, proposals: null } });
+      const model = new ReadingModel();
+      const api = createLocalApiKernel(now, { chatModel: model, stateStore: store, conversationStore: store, knowledgeStore: store, background, peopleMemory: peopleStore, autonomy });
+      const bridge = new PlatformBridgeService(configuredPlatformBridge(environment)!, store, store, background, now, new PlatformPeople(peopleStore, store), () => true);
+      const turns = new SQLiteSurfaceTurnLog(path, 'platform_reply_turns');
+      const service = new PlatformReplyService({ scopeKey: scope, bridge, conversationStore: store, conversation: api, turns, now });
+      // What the owner told her alone, and her note that repeats his words (a run of ten characters; a retelling in other words is not caught).
+      await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: scope, threadId: 'app-talk', message: 'これは内緒だけど、来月転職するつもり' } });
+      await api.waitForBackground(scope);
+      model.documentId = fake.put({ title: '今日のこと', body: 'ライ氏が「これは内緒だけど、来月転職するつもり」と話してくれた。灯台の本を読んだ。', projectIds: ['project_shannon_folder'], tags: ['シャノン'], type: 'note' }).id;
+      model.read.length = 0;
+      await service.reply({ platform: 'discord', requestId: `f-${configured}`, conversationId: 'discord:111:222', conversationKind: 'channel', sourceUserId: '900000000000000002',
+        sourceDisplayName: 'ミキ', userMessage: 'シャノンのメモに何が書いてある？', observedAt: now() });
+      const request = model.requests.at(-1)!;
+      if (configured) {
+        expect(request.tools!.definitions.map(tool => tool.name)).toEqual(['aether.search', 'aether.read', 'aetherFolder.list']);
+        expect(model.read).toHaveLength(1);
+        expect(model.read[0]).toContain('灯台の本を読んだ。');
+        expect(model.read[0]).not.toContain('転職');
+      } else {
+        expect(request.tools).toBeUndefined();
+        expect(request.toolsWithheld).toBeUndefined();
+      }
+      await background.waitForIdle(scope);
+      turns.close(); autonomyStore.close(); peopleStore.close(); store.close();
+    }
+  });
+});
+
+describe('a friend in 「友人も一緒」 (voice)', () => {
+  it('is offered her folder reading with Aether, his secret left out; a client that predates people memory is offered nothing', async () => {
+    const fake = new FakeAether();
+    servers.push(fake);
+    const now = () => at;
+    const autonomy = new ShannonAutonomyService({ store: new SQLiteAutonomyStore(':memory:'), config: configuredAutonomy({}), now, aether: { access: await fake.access(), proposals: null } });
+    const model = new ReadingModel();
+    const api = createLocalApiKernel(now, { chatModel: model, autonomy });
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: scope, threadId: 'talk', message: 'これは内緒だけど、来月転職するつもり' } });
+    await api.waitForBackground(scope);
+    model.documentId = fake.put({ title: '今日のこと', body: 'ライ氏が「これは内緒だけど、来月転職するつもり」と話してくれた。灯台の本を読んだ。', projectIds: ['project_shannon_folder'], tags: ['シャノン'], type: 'note' }).id;
+    const say = (transcript: string, callContext: boolean) => api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations', body: {
+      scopeKey: scope, threadId: 'talk', transcript, participantMode: 'guest',
+      deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null,
+        userUtterance: { id: `u-${callContext}`, text: transcript, source: 'speech', rawText: transcript,
+          ...(callContext ? { callContext: { callId: 'call-audience-0001', turns: [], introductionStart: true } } : {}) } } } });
+    expect((await say('シャノンのフォルダに何があるの？', true)).status).toBe(200);
+    expect(model.requests.at(-1)!.tools!.definitions.map(tool => tool.name)).toEqual(['aether.search', 'aether.read', 'aetherFolder.list']);
+    expect(model.read.at(-1)).toContain('灯台の本を読んだ。');
+    expect(model.read.at(-1)).not.toContain('転職');
+    expect((await say('シャノンのフォルダに何があるの？', false)).status).toBe(200);
+    expect(model.requests.at(-1)!.tools).toBeUndefined();
+    expect(model.requests.at(-1)!.toolsWithheld).toBeUndefined();
+  });
+});

@@ -30,6 +30,9 @@ const OTHERS_SPEAK_TIME_CHECK = speakTimePrivacyCheck.split('\n').filter(line =>
  * - anyone else: their audience (the conversation as a whole, or that person alone in a DM), her guest identity, what
  *   she remembers of the people there. In a DM or a shared conversation alike (owner decision 2026-10-06), only what may
  *   be shown to anyone: no protected line of his, none of her pursuits, and no rule that he may release one (`openOnly`).
+ *   Where the surface asks for it (`guestFolderReading`, the platform reply route) such a turn is offered her Aether
+ *   reading tools inside 「シャノン用フォルダ」 and nothing else (owner decision 2026-10-06), with his guarded matters left
+ *   out of what she reads; her Minecraft body's game chat does not ask for it.
  */
 export function platformAudienceTurn(policy: PlatformAudiencePolicy): ChatAudienceTurn {
   if (policy.gate.ownerOnly) return chatAudienceTurn('owner')!;
@@ -76,6 +79,8 @@ export interface PlatformSurfaceTurn {
   minecraftTools?: boolean;
   /** Whether the surface tells the owner's turns what she did on her own (`TextTurnSurface.ownOutreach`): her Minecraft body yes, a platform reply no. */
   ownOutreach: boolean;
+  /** Someone else's turn is offered her Aether reading tools (`TextTurnSurface.guestFolderReading`): a platform reply yes, game chat no. */
+  guestFolderReading?: boolean;
   store(turn: CompletedTurn): ShannonExperience | null;
 }
 
@@ -90,6 +95,7 @@ export function platformTextTurnInput(turn: PlatformSurfaceTurn): TextTurnInput 
       ...(turn.minecraftTools ? { minecraftTools: true } : {}),
       // Where the owner is not there to release a protected line of his (someone else's DM), none is given.
       openOnly: !turn.policy.ownerPresent,
+      ...(turn.guestFolderReading && !turn.policy.ownerPresent ? { guestFolderReading: true } : {}),
       // Her own outreach is the owner's matter: told only on his own turn, never to anyone else who writes (guest identity).
       ownOutreach: turn.ownOutreach && turn.policy.ownerWrote,
       store: completed => turn.store(completed),
