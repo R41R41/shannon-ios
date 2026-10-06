@@ -194,6 +194,16 @@ export const shannonStrings = {
   "voice.mac.callWaitsForDictation": "音声入力の文字を入力欄に入れると、音声会話を始められます",
   "voice.guestHidesTalk": "友人も一緒の通話中は、トークを隠しています",
   "voice.mac.sendWaitsForGuestCall": "友人も一緒の通話を終了するか、もう一度つなぐと送れます",
+  "voice.wakeName.setting": "名前で呼ぶ",
+  "voice.wakeName.description": "「シャノン」と呼んで話しかける",
+  "voice.wakeName.tryCall": "試しに呼んでみる",
+  "voice.wakeName.tryCallListening": "呼んでください…",
+  "voice.wakeName.heardAt": "聞き取れました（{time}）",
+  "voice.wakeName.state.waiting": "待っています",
+  "voice.wakeName.state.restingWhileTalking": "話し中は休み",
+  "voice.wakeName.state.preparing": "準備中",
+  "voice.wakeName.state.unavailable": "待てません",
+  "voice.wakeName.state.called": "呼ばれました",
   "nav.delivery": "配信",
   "nav.diagnostics": "診断",
   "nav.development": "開発",
@@ -577,6 +587,46 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   "voice.thisCall": {
     "decided": "2026-10-03",
     "windowsBefore": "通話"
+  },
+  "voice.wakeName.setting": {
+    "decided": "2026-10-05",
+    "windowsBefore": "名前で呼ぶ"
+  },
+  "voice.wakeName.description": {
+    "decided": "2026-10-05",
+    "windowsBefore": "「シャノン」と呼んで話しかける"
+  },
+  "voice.wakeName.tryCall": {
+    "decided": "2026-10-05",
+    "windowsBefore": "試しに呼んでみる"
+  },
+  "voice.wakeName.tryCallListening": {
+    "decided": "2026-10-05",
+    "windowsBefore": "呼んでください…"
+  },
+  "voice.wakeName.heardAt": {
+    "decided": "2026-10-05",
+    "windowsBefore": "聞き取れました（{time}）"
+  },
+  "voice.wakeName.state.waiting": {
+    "decided": "2026-10-05",
+    "windowsBefore": "呼びかけ: 待っています"
+  },
+  "voice.wakeName.state.restingWhileTalking": {
+    "decided": "2026-10-05",
+    "windowsBefore": "呼びかけ: 話し中は休み"
+  },
+  "voice.wakeName.state.preparing": {
+    "decided": "2026-10-05",
+    "windowsBefore": "呼びかけ: 準備中"
+  },
+  "voice.wakeName.state.unavailable": {
+    "decided": "2026-10-05",
+    "windowsBefore": "呼びかけ: 待てません"
+  },
+  "voice.wakeName.state.called": {
+    "decided": "2026-10-05",
+    "windowsBefore": "呼ばれました"
   },
   "nav.delivery": {
     "decided": "2026-10-03",

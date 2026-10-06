@@ -33,6 +33,21 @@ const touchRow = (index: number): PredictionOutcomeDraft => ({
   sourceKind: 'touch', sourceId: `burst-${Math.floor(index / 10)}`, observedAt: new Date(Date.parse('2026-10-05T00:00:00.000Z') + index * 30_000).toISOString(),
 });
 
+/**
+ * Seeds `count` touch rows in one transaction on the same handle, before any shadow exists. Autocommit inserts sync the
+ * disk once per row, which on a slow disk (the Azure VM) takes longer than the test's timeout.
+ */
+function seedTouchRows(database: DatabaseSync, store: SQLitePredictionStore, count: number): void {
+  database.exec('BEGIN');
+  try {
+    for (let index = 0; index < count; index += 1) store.insert(scope, touchRow(index), derived);
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
+}
+
 /** Records, for every read of all rows (the start of a fold from scratch), whether a write transaction was open. */
 function watchFullReads(): Array<{ inTransaction: boolean }> {
   const reads: Array<{ inTransaction: boolean }> = [];
@@ -50,7 +65,7 @@ describe('the write lock', () => {
     const database = new DatabaseSync(path);
     ensurePredictionSchema(database);
     const store = new SQLitePredictionStore(database, { createSchema: false });
-    for (let index = 0; index < 2_000; index += 1) store.insert(scope, touchRow(index), derived);
+    seedTouchRows(database, store, 2_000);
     const reads = watchFullReads();
     const shadow = new PredictionShadow({ database, createsSchema: true, log: () => {} });
     const state = new SQLiteShannonStore({ path, now: () => '2026-10-05T23:00:00.000Z', moodHistory: null, predictionShadow: false }).snapshot(scope);
@@ -69,7 +84,7 @@ describe('the write lock', () => {
     const second = new DatabaseSync(path);
     ensurePredictionSchema(first);
     const store = new SQLitePredictionStore(first, { createSchema: false });
-    for (let index = 0; index < 200; index += 1) store.insert(scope, touchRow(index), derived);
+    seedTouchRows(first, store, 200);
     const ours = new PredictionShadow({ database: first, createsSchema: false, log: () => {} });
     const theirs = new PredictionShadow({ database: second, createsSchema: false, log: () => {} });
     ours.mind(scope);
@@ -101,7 +116,7 @@ describe('the write lock', () => {
     const second = new DatabaseSync(path);
     ensurePredictionSchema(first);
     const store = new SQLitePredictionStore(first, { createSchema: false });
-    for (let index = 0; index < 200; index += 1) store.insert(scope, touchRow(index), derived);
+    seedTouchRows(first, store, 200);
     const ours = new PredictionShadow({ database: first, createsSchema: false, log: () => {} });
     const theirs = new PredictionShadow({ database: second, createsSchema: false, log: () => {} });
     ours.mind(scope);

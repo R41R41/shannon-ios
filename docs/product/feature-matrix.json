@@ -1199,21 +1199,25 @@
       "id": "voice.wake-name",
       "area": "voice",
       "title": "「シャノン」と呼んで話しかける",
-      "description": "名前を呼ばれたら聞き始める（ADR-0002 の追記。カメラは常に取らない）。置き場所は 設定 › 声 と、待っている間の体の足もとの印。",
+      "description": "名前を呼ばれたら聞き始める（ADR-0002 の追記。名前の聞き取りは端末の中だけ。既定は切。カメラは常に取らない）。置き場所は 設定 › 声 と、待っている間の体の足もとの印。",
       "scope": "desktop",
       "surfaces": {
         "ios": {
           "status": "no",
-          "note": "iPhone と Mac は、Windows で測ってから決める（2026-10-05）。"
+          "note": "iPhone と Mac は、Windows で測ってから決める（所有者の決定、2026-10-05。名前への誤反応の 1 日の回数と、名前から返事までの遅れ）。iPhone は、するとしてもアプリが前に出ている間か充電中に限り、省電力モード中は待たない。"
         },
         "macos": {
           "status": "no",
-          "note": "iPhone と Mac は、Windows で測ってから決める（2026-10-05）。"
+          "note": "iPhone と Mac は、Windows で測ってから決める（所有者の決定、2026-10-05。名前への誤反応の 1 日の回数と、名前から返事までの遅れ）。iPhone は、するとしてもアプリが前に出ている間か充電中に限り、省電力モード中は待たない。"
         },
         "windows": {
-          "status": "planned",
-          "branch": "shannon-desktop（体のスレッド）",
-          "note": "方法 A（Silero VAD と ReazonSpeech の hotword）を所有者が採った（2026-10-05）。常駐に入れる前に、体が話している最中と音楽での誤反応を測り、見た目を所有者が確かめる。Windows body thread report 2026-10-05。"
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/WakeSection.tsx",
+            "shannon-desktop:src/renderer/wakeUi.ts"
+          ],
+          "note": "既定は切。設定 › 声 の「名前で呼ぶ」で入れる（試しに呼ぶボタンと、聞き取れた時刻）。待っている間は体の足もとの印で状態を出す（待っています／話し中は休み／準備中／待てません／呼ばれました。文は design/strings.ja.json の voice.wakeName.*）。「話し中は休み」は、所有者がほかのアプリでシャノンと通話している間（presence の ownerCallElsewhere.active、docs/body-contract.md）の足もとの印でもある。方法 A（Silero VAD と ReazonSpeech の hotword）。所有者の決定（Syzygy ADR-0002 の追記、2026-10-05）。場所は設定が WakeSection.tsx、足もとの印が wakeUi.ts（体のスレッドの知らせ、2026-10-06）。足もとの印は Windows では「呼びかけ: 」を前に付けて出す（呼ばれました を除く）。",
+          "read": "2026-10-06"
         }
       }
     },
@@ -2610,7 +2614,7 @@
             "shannon-desktop:src/embed/main.ts"
           ],
           "read": "2026-10-05",
-          "note": "設定 › すがた › 体（人の姿／目だけ）。体のスレッドの知らせ（2026-10-05）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。"
+          "note": "設定 › すがた › 体（人の姿／目だけ）。体のスレッドの知らせ（2026-10-05）。設定の文の場所が SettingsView.tsx であることは、体のスレッドが確かめた（2026-10-06）。"
         }
       }
     },
@@ -2640,7 +2644,7 @@
             "shannon-desktop:src/bodySize.ts"
           ],
           "read": "2026-10-05",
-          "note": "既定は入、しきい値 60%。体のスレッドの知らせ（2026-10-05）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。"
+          "note": "既定は入、しきい値 60%。体のスレッドの知らせ（2026-10-05）。設定の文の場所が SettingsView.tsx であることは、体のスレッドが確かめた（2026-10-06）。"
         }
       }
     },

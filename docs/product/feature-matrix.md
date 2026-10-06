@@ -15,7 +15,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 |---|---:|---:|---:|---:|---:|---:|
 | iOS | 119 | 3 | 9 | 12 | 2 | 0 |
 | macOS | 125 | 3 | 9 | 2 | 6 | 0 |
-| Windows | 71 | 21 | 41 | 6 | 5 | 1 |
+| Windows | 72 | 21 | 41 | 6 | 4 | 1 |
 
 ## 構成（入口）（`structure`）
 
@@ -104,7 +104,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `voice.task-in-call` | **通話中に作業を頼む** 声で作業を頼むと、作業の提案が出て、押して始められる。 | ○ | ○ | ○ |
 | `voice.location-in-call` | **通話中にいまいる場所を伝える**【iPhone だけ】 許可した場合だけ、いまいる場所を通話に添える。 | ○ | × | × |
 | `voice.diagnostics` | **音声の診断** 声の処理にかかった時間を見て、コピーする。 | ○ | ○ | × |
-| `voice.wake-name` | **「シャノン」と呼んで話しかける**【デスクトップの追加】 名前を呼ばれたら聞き始める（ADR-0002 の追記。カメラは常に取らない）。置き場所は 設定 › 声 と、待っている間の体の足もとの印。 | × | × | 予定 |
+| `voice.wake-name` | **「シャノン」と呼んで話しかける**【デスクトップの追加】 名前を呼ばれたら聞き始める（ADR-0002 の追記。名前の聞き取りは端末の中だけ。既定は切。カメラは常に取らない）。置き場所は 設定 › 声 と、待っている間の体の足もとの印。 | × | × | ○ |
 
 - `voice.conversation` macOS（○）: A16（2026-10-06）。トークの入力欄の「音声会話を開始」（波の形）から始め、通話は入力欄の上の帯に出る。姿は会話の横の「すがた」（通話が始まると開く）。iPhone と同じ通話（Gemini のカスケード、割り込み、エコーの見分け）を、AVAudioEngine の Voice Processing I/O で動かす。Mac が眠らないようにする。
 - `voice.conversation` Windows（△）: 身体の窓だけ（「話す」「切る」）。管理画面には無い。
@@ -125,9 +125,9 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `voice.task-in-call` macOS（○）: 通話で頼んだ作業の提案が帯に出て、押すと 現在地 で内容を見て始められる。
 - `voice.location-in-call` Windows（×）: README の「まだのこと」に、声の会話での位置は無いとある。
 - `voice.diagnostics` macOS（○）: 設定 › 管理 › 診断。Mac の通話も、iPhone と同じ処理の段階と時間を残す（中身は残さない）。
-- `voice.wake-name` iOS（×）: iPhone と Mac は、Windows で測ってから決める（2026-10-05）。
-- `voice.wake-name` macOS（×）: iPhone と Mac は、Windows で測ってから決める（2026-10-05）。
-- `voice.wake-name` Windows（予定）: ブランチ `shannon-desktop（体のスレッド）`。方法 A（Silero VAD と ReazonSpeech の hotword）を所有者が採った（2026-10-05）。常駐に入れる前に、体が話している最中と音楽での誤反応を測り、見た目を所有者が確かめる。Windows body thread report 2026-10-05。
+- `voice.wake-name` iOS（×）: iPhone と Mac は、Windows で測ってから決める（所有者の決定、2026-10-05。名前への誤反応の 1 日の回数と、名前から返事までの遅れ）。iPhone は、するとしてもアプリが前に出ている間か充電中に限り、省電力モード中は待たない。
+- `voice.wake-name` macOS（×）: iPhone と Mac は、Windows で測ってから決める（所有者の決定、2026-10-05。名前への誤反応の 1 日の回数と、名前から返事までの遅れ）。iPhone は、するとしてもアプリが前に出ている間か充電中に限り、省電力モード中は待たない。
+- `voice.wake-name` Windows（○）: 既定は切。設定 › 声 の「名前で呼ぶ」で入れる（試しに呼ぶボタンと、聞き取れた時刻）。待っている間は体の足もとの印で状態を出す（待っています／話し中は休み／準備中／待てません／呼ばれました。文は design/strings.ja.json の voice.wakeName.*）。「話し中は休み」は、所有者がほかのアプリでシャノンと通話している間（presence の ownerCallElsewhere.active、docs/body-contract.md）の足もとの印でもある。方法 A（Silero VAD と ReazonSpeech の hotword）。所有者の決定（Syzygy ADR-0002 の追記、2026-10-05）。場所は設定が WakeSection.tsx、足もとの印が wakeUi.ts（体のスレッドの知らせ、2026-10-06）。足もとの印は Windows では「呼びかけ: 」を前に付けて出す（呼ばれました を除く）。
 
 ## 作業（`tasks`）
 
@@ -297,10 +297,10 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `body.form-switch` Windows（×）: Live2D の姿だけ。水の光の目は無い（確認用の静止画はある）。決定（2026-10-03）: Windows にも水の光の目を作る（順番は後ろ。roadmap の W11）。
 - `body.choice` iOS（○）: 設定 › すがた の「体」と、トークの表示の切り替えボタンの長押し。体のページを ?body=eyes で始め、setBody で切り替える。目だけのときは映し方を出さない。説明の「（iPhone の目と同じ動き）」は「（水の光の目と同じ動き）」にした。
 - `body.choice` macOS（○）: 設定 › すがた › 体 と、パネルのメニュー。パネルの姿に効く（A15）。
-- `body.choice` Windows（○）: 設定 › すがた › 体（人の姿／目だけ）。体のスレッドの知らせ（2026-10-05）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。
+- `body.choice` Windows（○）: 設定 › すがた › 体（人の姿／目だけ）。体のスレッドの知らせ（2026-10-05）。設定の文の場所が SettingsView.tsx であることは、体のスレッドが確かめた（2026-10-06）。
 - `body.small-eyes` iOS（—）: iPhone の姿は画面の中にあり、所有者が大きさを決める窓が無い（2 本の指の拡大は、向き合う表示の中の映し方）。目だけにしたいときは 設定 › すがた › 体 で選ぶ。
 - `body.small-eyes` macOS（○）: デスクトップの体の窓が 60% 未満のとき、目だけで出す（既定は入）。トークの横の「すがた」は、幅で体を変えない。A17。
-- `body.small-eyes` Windows（○）: 既定は入、しきい値 60%。体のスレッドの知らせ（2026-10-05）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。
+- `body.small-eyes` Windows（○）: 既定は入、しきい値 60%。体のスレッドの知らせ（2026-10-05）。設定の文の場所が SettingsView.tsx であることは、体のスレッドが確かめた（2026-10-06）。
 - `body.waterlight-eye` macOS（○）: 水の光の目の姿のとき、パネルに大きく立つ。押すと表情が変わる（A15）。
 - `body.presence-on-body` macOS（○）: 窓に ShannonBodyAttachment をつなぎ、気分・いま・話している様子を体のページへ送る。姿の下に「いま：〈気持ち〉・〈していること〉」（A15）。
 - `body.layout` iOS（○）: 映し方と位置を戻すは、トークの表示の切り替えボタンの長押しと 設定 › すがた（A6）。2 本の指で大きさと位置。 目だけのときは映し方を出さない（体のページが大きさと位置だけを使う）。
