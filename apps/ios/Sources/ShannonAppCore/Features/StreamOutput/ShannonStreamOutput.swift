@@ -48,16 +48,19 @@ public final class ShannonStreamOutput {
     @ObservationIgnored private(set) var listeningPort: UInt16?
     @ObservationIgnored private var started = false
     @ObservationIgnored private var bodyObserver: NSObjectProtocol?
+    /// Keeps the app's windows out of screen capture while the switch is on (owner decision 2026-10-06).
+    @ObservationIgnored let capture: ShannonStreamOutputWindowCapture
     /// The key of `.shannonStreamOutputChanged`'s `userInfo`: whether the switch is on now.
     public static let isOnKey = "isOn"
 
     init(
         defaults: UserDefaults = .standard, port: UInt16 = ShannonStreamOutput.port,
-        files: @escaping () -> ShannonStreamOutputFiles? = { .bundled }
+        files: @escaping () -> ShannonStreamOutputFiles? = { .bundled }, capture: ShannonStreamOutputWindowCapture? = nil
     ) {
         self.defaults = defaults
         self.port = port
         self.files = files
+        self.capture = capture ?? .shared
         self.isOn = Self.isOn(defaults)
     }
 
@@ -96,8 +99,10 @@ public final class ShannonStreamOutput {
         announce()
     }
 
-    /// Says the switch to what follows it: the app's voice call (`.shannonStreamOutputChanged`).
+    /// Says the switch to what follows it: the app's windows, and its voice call and notifications
+    /// (`.shannonStreamOutputChanged`).
     private func announce() {
+        capture.apply(hiding: isOn)
         NotificationCenter.default.post(name: .shannonStreamOutputChanged, object: self, userInfo: [Self.isOnKey: isOn])
     }
 

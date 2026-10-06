@@ -316,6 +316,13 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         XCTAssertEqual(released.post.map(\.key), ["initiative:t1:m1"], "posted once the period ends")
     }
 
+    /// A18 S5: banners wait while 配信用の出力（OBS） is on too (they show conversation text to a screen capture).
+    func testNotificationsAreHeldWhileTheStreamOutputIsOn() {
+        XCTAssertTrue(DesktopNotificationPlan.isHeld(guestCall: false, streamOutputOn: true))
+        XCTAssertTrue(DesktopNotificationPlan.isHeld(guestCall: true, streamOutputOn: false))
+        XCTAssertFalse(DesktopNotificationPlan.isHeld(guestCall: false, streamOutputOn: false))
+    }
+
     func testNotificationBaselineWaitsForARealReadAndPermission() {
         let notice = DesktopNotice(key: "initiative:a", title: "シャノン", body: "b", target: .thread("t"))
         let newer = DesktopNotice(key: "initiative:b", title: "シャノン", body: "c", target: .thread("t"))

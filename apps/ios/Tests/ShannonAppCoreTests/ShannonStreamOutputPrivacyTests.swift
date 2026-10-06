@@ -90,6 +90,45 @@ final class ShannonStreamOutputPrivacyTests: XCTestCase {
         XCTAssertFalse(output.isOn)
     }
 
+    // MARK: Screen capture
+
+    func testTheAppsWindowsAreLeftOutOfScreenCaptureWhileItIsOnButHerDesktopBodyIsNot() {
+        let talk = NSWindow(contentRect: .init(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled], backing: .buffered, defer: true)
+        let alreadyHidden = NSWindow(contentRect: .init(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled], backing: .buffered, defer: true)
+        alreadyHidden.sharingType = .none
+        let body = ShannonDesktopBodyPanel(contentRect: .init(x: 0, y: 0, width: 100, height: 100), styleMask: [.borderless], backing: .buffered, defer: true)
+        talk.isReleasedWhenClosed = false
+        alreadyHidden.isReleasedWhenClosed = false
+        body.isReleasedWhenClosed = false
+        XCTAssertFalse(ShannonStreamOutputWindowCapture.hides(isDesktopBody: true))
+        XCTAssertTrue(ShannonStreamOutputWindowCapture.hides(isDesktopBody: false))
+
+        let capture = ShannonStreamOutputWindowCapture()
+        capture.windows = { [talk, alreadyHidden, body] }
+        let output = ShannonStreamOutput(defaults: UserDefaults(suiteName: "stream-output-\(UUID().uuidString)")!, port: 0, capture: capture)
+        output.setOn(true)
+        defer { output.setOn(false) }
+        XCTAssertTrue(capture.isHiding)
+        XCTAssertEqual(talk.sharingType, .none)
+        XCTAssertEqual(body.sharingType, .readOnly, "her desktop body stays capturable")
+        // A window opened while it is on is covered when it comes on screen.
+        let settings = NSWindow(contentRect: .init(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled], backing: .buffered, defer: true)
+        settings.isReleasedWhenClosed = false
+        NotificationCenter.default.post(name: NSWindow.didChangeOcclusionStateNotification, object: settings)
+        XCTAssertEqual(settings.sharingType, .none)
+
+        output.setOn(false)
+        XCTAssertFalse(capture.isHiding)
+        XCTAssertEqual(talk.sharingType, .readOnly)
+        XCTAssertEqual(settings.sharingType, .readOnly)
+        XCTAssertEqual(alreadyHidden.sharingType, .none, "a window that was hidden before stays hidden")
+        // Off: a new window is left alone.
+        let later = NSWindow(contentRect: .init(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled], backing: .buffered, defer: true)
+        later.isReleasedWhenClosed = false
+        NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: later)
+        XCTAssertEqual(later.sharingType, .readOnly)
+    }
+
     private final class Heard: @unchecked Sendable {
         var values: [Bool] = []
     }
