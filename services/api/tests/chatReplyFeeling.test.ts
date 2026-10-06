@@ -657,8 +657,10 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
     // says she reached out, so the `[ボクが自分からしたこと]` block is in none of them); and on the prompt-cache branch
     // (2026-10-06, Syzygy ADR-0003 principle 4), whose model requests carry her prompt in layers (`ShannonPromptLayers`):
     // `systemPrompt` is her identity alone, and the shared state and everything after it are `turnContext`. With each
-    // request's layers joined back into `systemPrompt` (`promptOf`) the trace is b61f391a… again: no text changed.
-    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('0cb946e1f22c2d75712fdbdf9d63e9daa90aa2597c07d21e9097504c311a352c');
+    // request's layers joined back into `systemPrompt` (`promptOf`) the trace is b61f391a… again: no text changed (0cb946e1…);
+    // and on the body-1b branch (2026-10-06, Syzygy ADR-0005 owner answer 7), whose capability line about her body ends
+    // 「体は自分のもの。触れられ方は自分で受け取る。」: every system prompt of these four turns is 22 characters longer, nothing else.
+    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('29ef5a91d2b09d59dc8ab39f95b03eface81139d06851404c38c53a2eff12025');
     for (const request of off.seen.requests) expect(request).not.toHaveProperty('offerReplyFeeling');
     // What 7e227e6 does with these four turns: a cue is 0.52 and a mood, no cue is nothing, and nothing lingers for days.
     expect(off.h.state().lingering).toMatchObject([{ kind: 'sulky', span: 'mood', strength: 0.52 }]);
