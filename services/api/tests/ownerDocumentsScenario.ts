@@ -1,3 +1,4 @@
+import type { AutonomyReachOuts } from '../src/autonomyLoopReachOutStep.js';
 import { AutonomyToolResults } from '../src/autonomyLoopToolStep.js';
 import { digest, type ScenarioCall } from './autonomyLoopKillSwitchScenario.js';
 import { FakeAether } from './fakeAetherServer.js';
@@ -31,6 +32,40 @@ export async function ownTimeWithTools(flag: string | undefined, extra: Partial<
       { thought: '休みます。', steps: [{ action: 'rest', resumeInMinutes: 120, reason: 'ここまで' }] },
     ];
     await runUntilIdle(harness.loop);
+    const calls = harness.model.calls.map(call => ({ kind: callKind(call), digest: digest(`${call.system}\n---\n${call.prompt}`) }));
+    harness.store.close();
+    return calls;
+  } finally {
+    await fake.stop();
+  }
+}
+
+/**
+ * The same session, longer: after her tools she reads a public page and writes a note about it, drafts a story, and speaks up
+ * about what she wrote. Every kind of prompt her own time sends with the switch off (thinking, note, draft, message) is digested;
+ * the digests of a10fdedd are in `ownerDocumentsOwnTime.test.ts`.
+ */
+export async function ownTimeFullDay(flag: string | undefined): Promise<ScenarioCall[]> {
+  const fake = new FakeAether();
+  try {
+    const access = await fake.access();
+    fake.ownerDocument('来月の計画', '湖のほとりの小さな宿に泊まる。');
+    const note = fake.put({ title: '駅のメモ', body: '夕方の駅は、音から書くとよさそう。', projectIds: [FOLDER], tags: [], type: 'note' });
+    const said: string[] = [];
+    const reachOuts: AutonomyReachOuts = { sentOn: () => said.length, lastSentAt: () => null, audience: () => null, say: (_scope, input) => { said.push(input.text); return 'sent'; } };
+    const harness = loopHarness({
+      sessions: true, aether: access, toolResults: new AutonomyToolResults(), reachOuts, environment: OWN_TIME_PRICES,
+      ...(flag === undefined ? {} : { loopEnvironment: { SHANNON_AUTONOMY_OWNER_DOCUMENTS: flag } }),
+    });
+    harness.model.plans = [
+      { thought: '自分のフォルダを探します。', steps: [{ action: 'tool', name: 'aether.search', input: { query: '駅', scope: 'shannonFolder' } }] },
+      { thought: '読みます。', steps: [{ action: 'tool', name: 'aether.read', input: { documentId: note.id } }] },
+      { thought: '外も読みます。', steps: [{ action: 'read', url: 'https://example.org/station' }, { action: 'note' }] },
+      { thought: '書きます。', steps: [{ action: 'draft', idea: '誰もいない駅に残された傘の話' }] },
+      { thought: '話します。', steps: [{ action: 'reach_out', reason: 'share' }] },
+      { thought: '休みます。', steps: [{ action: 'rest', resumeInMinutes: 120, reason: 'ここまで' }] },
+    ];
+    await runUntilIdle(harness.loop, 40);
     const calls = harness.model.calls.map(call => ({ kind: callKind(call), digest: digest(`${call.system}\n---\n${call.prompt}`) }));
     harness.store.close();
     return calls;

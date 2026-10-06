@@ -7,7 +7,7 @@ import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import { toolSessionMemory } from '../src/shannonToolTypes.js';
 import { offeredTools } from '../src/shannonTools.js';
-import { ownTimeWithTools, OWN_TIME_PRICES } from './ownerDocumentsScenario.js';
+import { ownTimeFullDay, ownTimeWithTools, OWN_TIME_PRICES } from './ownerDocumentsScenario.js';
 import { FakeAether } from './fakeAetherServer.js';
 import { loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
 
@@ -21,6 +21,11 @@ afterEach(async () => { await Promise.all(servers.splice(0).map(server => server
 
 /** `ownerDocumentsScenario.ts` run on a10fdedd (the commit before), with the flag unset, `off`, `On` and `on`: all four equal. */
 const OWN_TIME_AT_A10FDEDD = [['think', '6226278233e39c92'], ['think', '1faff08ce417ecb3'], ['think', '3a1a5ce0540cca3f'], ['think', 'f9cb79957eb8404c']];
+/** `ownTimeFullDay` on a10fdedd: her tools, then a note, a draft and a message of hers; the same with the flag unset, `off` and `on` there. */
+const FULL_DAY_AT_A10FDEDD = [
+  ['think', 'fc7c0d375915ce41'], ['think', '6c50b1b6d37584fd'], ['think', '7ec6855733e08835'], ['note', '2977210b0f7b5e1c'], ['think', 'd1bbc8f5a63bb549'],
+  ['draft', '3162903bd56a2e60'], ['think', '953d19b568a648dd'], ['reach_out', '09597eda74b05e3c'], ['think', 'b5f9fb6265c1b2b0'],
+];
 const rest = { action: 'rest', resumeInMinutes: 120, reason: 'ここまで' };
 
 async function ownTime(flag: string | undefined = 'on', options: Partial<LoopHarnessOptions> = {}) {
@@ -45,6 +50,15 @@ describe('the owner\'s documents in her own time: switched off, nothing changes'
     // Switched on, every thinking prompt lists the two tools, so none is the old one.
     const on = await ownTimeWithTools('on');
     expect(on.every(call => !OWN_TIME_AT_A10FDEDD.some(([, digest]) => digest === call.digest))).toBe(true);
+  });
+
+  it('sends byte for byte a10fdedd\'s note, draft and message prompts too, and with the switch on only the thinking prompts change', async () => {
+    for (const flag of [undefined, 'off', 'On', 'yes']) {
+      expect((await ownTimeFullDay(flag)).map(call => [call.kind, call.digest]), String(flag)).toEqual(FULL_DAY_AT_A10FDEDD);
+    }
+    const on = (await ownTimeFullDay('on')).map(call => [call.kind, call.digest]);
+    expect(on.filter(([kind]) => kind !== 'think')).toEqual(FULL_DAY_AT_A10FDEDD.filter(([kind]) => kind !== 'think'));
+    expect(on.filter(([kind], index) => kind === 'think' && FULL_DAY_AT_A10FDEDD[index]![1] === on[index]![1])).toEqual([]);
   });
 
   it('reads `on` only, as the owner\'s context reads `off` only', () => {
