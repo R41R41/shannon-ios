@@ -64,3 +64,7 @@ Switch: `SHANNON_PREDICTION` (default on). `off` gives stage 1b exactly: at the 
 - **γ = 0.61**, Rutledge, Skandali, Dayan & Dolan 2014 (PNAS 111:12252), forgetting factor per trial, 0.61 ± 0.30 over participants. Range used for fitting: 0.31–0.91 (`eventForgettingRange`); outside it needs the owner's approval. **Open (要確認): whether ± 0.30 is the SD or the SEM.** If it is the SEM, the range for fitting is narrower than recorded here.
 - **No table for any part** under `on`, with no automatic joy on a head pat (ADR-0005 owner answer 6). Her stance is the outcome of key `gesture.part.who` (domain `body_stance`); a touch she is not asked about carries her stance for the key within the learned episode; she is told the closeness and her past stances on the part (owner alone only); her memory keeps the part.
 - **Calibration** of γ (inside its range), w_δ and the stance scoring will come from production records once stage 2 has run; nothing here was fitted to production rows.
+
+## Next: a faster stance (proposal)
+
+How fast her stance is known is how fast her face can move under stage 2. The proposal to let the fast classifier jev judge the stance and feeling first, with luna writing the line, and to make one appraisal circuit with a context catalog for every surface, is in [`docs/design/appraisal-circuit-proposal.md`](../design/appraisal-circuit-proposal.md). It is not built.
