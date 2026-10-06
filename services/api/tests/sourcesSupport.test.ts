@@ -12,6 +12,9 @@ describe('tests/support/sources.ts', () => {
     expect(files.every(path => path.startsWith(apiSourceRoot) && path.endsWith('.ts'))).toBe(true);
     const names = apiSourceNames();
     expect(new Set(names).size).toBe(names.length);
+    // The scan is recursive: files in subfolders are found too, so a flat scan cannot pass on the floor alone.
+    const nested = files.filter(path => path.slice(apiSourceRoot.length + 1).includes('/'));
+    expect(nested.length).toBeGreaterThanOrEqual(1);
   });
 
   it('finds a file by basename, by extension-less or .js name, by a source-root path and by a repository path', () => {
