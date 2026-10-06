@@ -3,6 +3,7 @@ import {
   type ReplyEmotion, type ShannonEmotion, type ShannonExpressiveEmotion, type ShannonMessageEmotion,
 } from '@shannon/cognition';
 import type { VoiceTurnDecision } from './voiceDecision.js';
+import { voicedAffect } from './voiceDecisionContract.js';
 import { waitingDirectionFor, waitingPhraseFor } from './voiceWaitingCue.js';
 
 /** The quiet face of a call with no owner state (友人も一緒): the baseline mood. */
@@ -39,7 +40,8 @@ export function voicePlanResponse(
     solutionWantedProbability: decision.solutionWantedProbability,
     conversationClass: decision.conversationClass,
     latencyClass: decision.latencyClass,
-    affect: emotion?.primary ?? decision.affect,
+    // An app decodes `affect` strictly: a kind newer than its vocabulary is voiced with its nearest older one.
+    affect: emotion ? voicedAffect(emotion.primary) : decision.affect,
     affectIntensity: emotion?.intensity ?? decision.affectIntensity,
     delivery: emotion ? deliveryForEmotion(emotion, decision.delivery) : decision.delivery,
     ...(emotion ? { emotion: planEmotion(emotion), ...deriveShannonFace(mood, emotion), ...(kind ? { kind } : {}) } : {}),

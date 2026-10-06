@@ -25,7 +25,7 @@ const LOW_ENERGY = new Set<ShannonEmotionKind>([
 const NEGATIVE = new Set<ShannonEmotionKind>([
   'cuteAngry', 'seriousAnger', 'annoyed', 'indignant', 'frustrated', 'jealous', 'sulky',
   'leftOut', 'lonely', 'sad', 'disappointed', 'hurt', 'anxious', 'regret', 'helpless',
-  'lamenting', 'panic', 'blocked', 'tired', 'apologetic',
+  'lamenting', 'panic', 'blocked', 'tired', 'apologetic', 'uncomfortable',
 ]);
 const POSITIVE = new Set<ShannonEmotionKind>([
   'bright', 'playful', 'happy', 'fun', 'excited', 'ecstatic', 'relief', 'pride', 'gratitude', 'hope', 'affectionate',
@@ -45,6 +45,7 @@ const REACTION = new Set<ShannonEmotionKind>([
 const MOOD_LIKE = new Set<ShannonEmotionKind>([
   'happy', 'excited', 'ecstatic', 'pride', 'gratitude', 'affectionate', 'tender',
   'seriousAnger', 'annoyed', 'indignant', 'frustrated', 'jealous', 'sulky', 'leftOut', 'lonely', 'lightPossessive', 'hurt',
+  'uncomfortable',
 ]);
 
 /**

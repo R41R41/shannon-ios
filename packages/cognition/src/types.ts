@@ -27,6 +27,8 @@ export const SHANNON_EMOTION_KINDS = [
   'surprised', 'shocked', 'stunned', 'speechless', 'confused', 'panic', 'scream',
   'focused', 'determined', 'cautious', 'urgent', 'blocked', 'retrying', 'triumphant', 'tired', 'sleepy',
   'gentle', 'relaxed', 'content', 'quietCompanion', 'tender', 'apologetic',
+  // 気持ち悪い・いや (Syzygy ADR-0005, owner answer 2 of 2026-10-05): a kind she may choose, never one that is set for her.
+  'uncomfortable',
 ] as const;
 
 export type ShannonEmotionKind = typeof SHANNON_EMOTION_KINDS[number];

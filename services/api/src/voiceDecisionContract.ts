@@ -10,8 +10,22 @@ export const VOICE_SKILLS = [
 ] as const;
 
 export type VoiceSkill = typeof VOICE_SKILLS[number];
-export const VOICE_AFFECTS = SHANNON_EMOTION_KINDS;
-export type VoiceAffect = ShannonEmotionKind;
+/**
+ * The voice's affects: every kind of hers except those added after the apps fixed their voice vocabulary
+ * (`ShannonVoiceAffectDTO` decodes `affect` strictly, so a newer name would fail a whole voice plan on an app from
+ * before it). `uncomfortable` (2026-10-06) is not offered to the voice decision; a turn whose feeling is
+ * `uncomfortable` is voiced with its nearest older kind (`voicedAffect`).
+ */
+export type VoiceAffect = Exclude<ShannonEmotionKind, 'uncomfortable'>;
+export const VOICE_AFFECTS: readonly VoiceAffect[] = Object.freeze(
+  SHANNON_EMOTION_KINDS.filter((kind): kind is VoiceAffect => kind !== 'uncomfortable'),
+);
+const VOICED_AS: Readonly<Record<Exclude<ShannonEmotionKind, VoiceAffect>, VoiceAffect>> = Object.freeze({
+  // The same face (annoyed) and the nearest delivery the apps know.
+  uncomfortable: 'annoyed',
+});
+/** The affect a voice plan carries for a kind of hers: the kind itself, or for a kind the apps cannot decode, its nearest older one. */
+export const voicedAffect = (kind: ShannonEmotionKind): VoiceAffect => kind === 'uncomfortable' ? VOICED_AS[kind] : kind;
 export type VoiceDelivery = 'conversational' | 'quick' | 'gentle' | 'focused' | 'energetic';
 export type VoiceConversationClass = 'no_response' | 'greeting' | 'direct' | 'skill_simple' | 'skill_complex';
 export type VoiceLatencyClass = 'under_1s' | 'under_3s' | 'under_10s' | 'over_10s';

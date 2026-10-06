@@ -5,6 +5,7 @@ import {
   JevVoiceDecisionGateway,
   LocalVoiceDecisionGateway,
   OpenAIVoiceDecisionGateway,
+  VOICE_AFFECTS,
   VOICE_SKILLS,
 } from '../src/voiceDecision.js';
 import { voicePlanResponse } from '../src/voiceEmotionPlan.js';
@@ -127,6 +128,18 @@ describe('Jev voice decision routing', () => {
     }, emotion);
     expect(plan.waitingPhrase).toBe('うん、ちゃんと聞いています。');
     expect(plan.waitingPerformance).toEqual({ affect: 'caring', intensity: 0.5, delivery: 'gentle' });
+  });
+
+  it('voices a kind newer than the apps\' fixed voice vocabulary with its nearest older one, and keeps the kind itself', async () => {
+    const decision = await new LocalVoiceDecisionGateway().decide({
+      scopeKey: 'owner-a', transcript: 'ねえ', participantMode: 'owner', requestedLocation: false, hasFreshLocation: false,
+    });
+    const emotion = resolveShannonEmotionState({ provisionalPrimary: 'uncomfortable', provisionalIntensity: 0.6, transcript: '', now: '2026-10-06T00:00:00.000Z' });
+    expect(emotion.primary).toBe('uncomfortable');
+    // An app decodes `affect` strictly (`ShannonVoiceAffectDTO`); `kind` is text it reads leniently.
+    expect(voicePlanResponse(decision, emotion, undefined, { ownerAlone: true })).toMatchObject({ affect: 'annoyed', expression: 'annoyed', kind: 'uncomfortable' });
+    expect(VOICE_AFFECTS).not.toContain('uncomfortable');
+    expect(VOICE_AFFECTS).toContain('annoyed');
   });
 
   it('does not delay an emergency answer with an acknowledgement', async () => {
