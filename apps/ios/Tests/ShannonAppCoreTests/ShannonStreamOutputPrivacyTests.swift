@@ -90,6 +90,34 @@ final class ShannonStreamOutputPrivacyTests: XCTestCase {
         XCTAssertFalse(output.isOn)
     }
 
+    // MARK: Her messages through his earphones
+
+    func testHerMessagesForHimAloneAreNotSaidThroughHisEarphonesWhileItIsOn() {
+        let suite = "stream-listening-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: ShannonPrivateListeningModel.speaksDefaultsKey)
+        let wired = ShannonAudioOutput(id: "Wired Headphones", name: "ヘッドホン", kind: .wiredHeadphones)
+        let model = ShannonPrivateListeningModel(
+            client: nil, monitor: FakeRouteMonitor(outputs: [wired]), defaults: defaults, kind: .mac, runsInBackground: true,
+            ownerActivity: { nil }, sleep: { _ in })
+        XCTAssertTrue(model.speaksNow)
+        XCTAssertTrue(model.reachOuts.stillPrivate())
+
+        // Left on at launch: from the start.
+        model.followStreamOutput(isOn: { true })
+        XCTAssertTrue(model.othersPresent)
+        XCTAssertFalse(model.speaksNow, "a stream records the app's sound whatever the output")
+        XCTAssertFalse(model.reachOuts.stillPrivate(), "and the answer to one is not listened for")
+        XCTAssertEqual(model.status, .othersPresent)
+
+        NotificationCenter.default.post(name: .shannonStreamOutputChanged, object: nil, userInfo: [ShannonStreamOutput.isOnKey: false])
+        XCTAssertFalse(model.othersPresent)
+        XCTAssertTrue(model.speaksNow)
+        NotificationCenter.default.post(name: .shannonStreamOutputChanged, object: nil, userInfo: [ShannonStreamOutput.isOnKey: true])
+        XCTAssertFalse(model.speaksNow)
+    }
+
     // MARK: Screen capture
 
     func testTheAppsWindowsAreLeftOutOfScreenCaptureWhileItIsOnButHerDesktopBodyIsNot() {
