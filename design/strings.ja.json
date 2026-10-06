@@ -3222,6 +3222,55 @@
       "note": "カメラが許可されていないとき。"
     },
     {
+      "key": "desktop.stream.title",
+      "text": "配信用の出力（OBS）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyMenuSection.swift",
+      "only": "apple",
+      "note": "Mac の配信用の出力（A18 S5、desktop.stream-output）。設定 › すがた の区画の見出しとその入切、メニューバー。Windows のトレイと同じ言葉（electron/main.ts、2026-10-06 に読んだ）。"
+    },
+    {
+      "key": "desktop.stream.copyURL",
+      "text": "配信用の URL をコピー",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyMenuSection.swift",
+      "only": "apple",
+      "note": "メニューバーと 設定 › すがた。出している間だけ押せる。Windows のトレイと同じ言葉。"
+    },
+    {
+      "key": "desktop.stream.explanation",
+      "text": "入れると、この Mac の中だけの URL（http://127.0.0.1:41760/stream.html）に、背景が透明のシャノンが出ます。OBS のブラウザソースに、その URL を入れてください。デスクトップの体と同じ体で、同じ表情・しぐさをします。出るのは姿だけで、言葉・吹き出し・カメラの絵は出ません。入れている間は、ほかの人が見聞きしている場として扱います（部屋を見ない、あなただけへの一言を出さない）。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/StreamOutput/ShannonStreamOutputSettingsSection.swift",
+      "only": "apple",
+      "note": "同じ区画の説明。入れている間の扱いは body-contract の Audience（配信中は others）。"
+    },
+    {
+      "key": "desktop.stream.live",
+      "text": "出しています。OBS のブラウザソースの URL: {url}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/StreamOutput/ShannonStreamOutputSettingsSection.swift",
+      "only": "apple",
+      "note": "出している間の状態。"
+    },
+    {
+      "key": "desktop.stream.starting",
+      "text": "準備しています…",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/StreamOutput/ShannonStreamOutputSettingsSection.swift",
+      "only": "apple",
+      "note": "待ち受けを始めている間。"
+    },
+    {
+      "key": "desktop.stream.portTaken",
+      "text": "配信用の出力を始められませんでした。ポート {port} を、ほかのアプリ（古い Mac 版など）が使っているかもしれません。そのアプリを終えてから、もう一度入れてください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/StreamOutput/ShannonStreamOutput.swift",
+      "only": "apple",
+      "note": "待ち受けられなかったとき（入切は切に戻る。Windows と同じ）。"
+    },
+    {
+      "key": "desktop.stream.unavailable",
+      "text": "このビルドには配信用のページが入っていないため、配信用の出力は使えません。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/StreamOutput/ShannonStreamOutput.swift",
+      "only": "apple",
+      "note": "体のページか配信用のページが無いとき。"
+    },
+    {
       "key": "folder.host.section",
       "text": "シャノン専用フォルダ",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
