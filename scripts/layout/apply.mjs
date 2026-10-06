@@ -270,20 +270,25 @@ function planWave(wave, options) {
 
   // Prose that names an old path: rewritten with --rewrite-mentions, listed otherwise.
   const mentions = new Map();
+  const dataRewrites = new Map();
   if (renames.size) {
     const pattern = new RegExp(`${SOURCE_ROOT.replace(/[/.]/gu, '\\$&')}/[A-Za-z0-9_/]+\\.ts`, 'gu');
     for (const path of before) {
-      if (path === MOVES_PATH || !PROSE_EXTENSIONS.has(extname(path)) || path === corePath) continue;
+      if (path === MOVES_PATH || path === corePath) continue;
+      if (!PROSE_EXTENSIONS.has(extname(path)) && !(config.pathDataFiles ?? []).includes(path)) continue;
       const text = rewrites.get(path) ?? readFileSync(absolutePath(path), 'utf8');
       if (!text.includes(SOURCE_ROOT)) continue;
       const hits = [...text.matchAll(pattern)].filter(match => renames.has(match[0]));
       if (!hits.length) continue;
-      mentions.set(path, hits.length);
-      if (options.rewriteMentions) rewrites.set(path, text.replace(pattern, match => renames.get(match) ?? match));
+      // A path-data file (moves.json `pathDataFiles`) names files that a check verifies, like the core map: always rewritten.
+      const data = (config.pathDataFiles ?? []).includes(path);
+      if (data) dataRewrites.set(path, hits.length);
+      else mentions.set(path, hits.length);
+      if (data || options.rewriteMentions) rewrites.set(path, text.replace(pattern, match => renames.get(match) ?? match));
     }
   }
 
-  return { wave, renames, skipped, rewrites, specifierCount, coreChanges, coreSize: coreAfter.size, mentions };
+  return { wave, renames, skipped, rewrites, specifierCount, coreChanges, coreSize: coreAfter.size, mentions, dataRewrites };
 }
 
 function applyPlan(plan) {
@@ -313,6 +318,9 @@ function report(plan, dryRun) {
   console.log(`Wave ${plan.wave} (${config.waves[String(plan.wave)]}): ${verb} ${plan.renames.size} files, ${dryRun ? 'would rewrite' : 'rewrote'} ${plan.specifierCount} specifiers in ${plan.rewrites.size - (plan.coreChanges ? 1 : 0)} files, ${plan.coreChanges} core-map entries; core set unchanged (${plan.coreSize} files).`);
   for (const [from, to] of plan.renames) console.log(`  ${from} -> ${to}`);
   if (plan.skipped.length) console.log(`  skipped: ${plan.skipped.length} (${plan.skipped.filter(line => !line.includes('already at')).join('; ') || 'already in place'})`);
+  if (plan.dataRewrites.size) {
+    console.log(`  path data rewritten: ${[...plan.dataRewrites].map(([path, count]) => `${path} (${count})`).join(', ')}`);
+  }
   if (plan.mentions.size) {
     const total = [...plan.mentions.values()].reduce((sum, count) => sum + count, 0);
     console.log(`  ${total} mentions of moved paths in ${plan.mentions.size} files ${plan.rewriteMentions ? 'rewritten' : 'left as they are (--rewrite-mentions rewrites them)'}: ${[...plan.mentions.keys()].join(', ')}`);

@@ -48,8 +48,9 @@ function repository({ coreEntries = [], moves }) {
     'services/api/tests/a.test.ts': "import { a } from '../src/a.js';\nvi.mock('../src/b.js');\nconst source = new URL('../src/c.ts', import.meta.url);\nconst folder = new URL('../src/', import.meta.url);\nexport { a, source, folder };\n",
     'packages/tool/src/reader.ts': "import { c } from '../../../services/api/src/c.js';\nexport const read = c;\n",
     'docs/notes.md': 'See services/api/src/b.ts for b.\n',
+    'docs/evidence.json': '{ "evidence": ["services/api/src/b.ts#b"] }\n',
     'scripts/layout/moves.json': JSON.stringify({
-      schemaVersion: 1, sourceRoot: 'services/api/src', entries: ['server.ts'], minimumCoreEntries: 2,
+      schemaVersion: 1, sourceRoot: 'services/api/src', entries: ['server.ts'], minimumCoreEntries: 2, pathDataFiles: ['docs/evidence.json'],
       waves: { 1: 'first', 2: 'second' }, moves,
     }, null, 2),
   };
@@ -103,6 +104,8 @@ check('a wave moves its files with git and rewrites every specifier that leads t
   // The core map follows the moved file; prose is listed, not rewritten.
   assert.match(repo.read('services/api/src/autonomyCore.ts'), /'services\/api\/src\/mind\/x\/a\.ts',/u);
   assert.equal(repo.read('docs/notes.md'), 'See services/api/src/b.ts for b.\n');
+  // A path-data file names files a check verifies: it is rewritten like the core map.
+  assert.equal(repo.read('docs/evidence.json'), '{ "evidence": ["services/api/src/infra/y/b.ts#b"] }\n');
   assert.match(result.stdout, /mentions of moved paths in 1 files left as they are/u);
 });
 

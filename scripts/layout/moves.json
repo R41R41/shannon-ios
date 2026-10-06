@@ -13,6 +13,10 @@
     "worldWorker.ts"
   ],
   "entriesWhy": "Run by a systemd unit (deploy/azure), the Agent Host plist (deploy/macos) or a services/api/package.json script; they stay at the src root.",
+  "pathDataFiles": [
+    "docs/product/feature-matrix.json"
+  ],
+  "pathDataFilesWhy": "Their services/api/src paths are evidence a check verifies (scripts/check-product-spec.mjs), so a wave rewrites them like the core map.",
   "waves": {
     "1": "contracts/, integrations/*, infra/ops",
     "2": "mind/memory, mind/recall, mind/sleep, mind/prediction, mind/emotion, and infra/sqlite with the memory stores",
