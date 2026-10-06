@@ -1,8 +1,9 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { AutonomyModelError } from '../src/mind/action/ownTime/autonomyTextModel.js';
+import { apiSourceFilesNamed } from './support/sources.js';
 import { FULL_PLAN, FakeModel, FakeReader, FakeShowing, STORY_BODY, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'shannon-autonomy-loop-'));
@@ -388,11 +389,13 @@ describe('activity loop: a single runner', () => {
   });
 
   it('has no way to start another runner, process, or copy of itself', async () => {
-    const { readFileSync, readdirSync } = await import('node:fs');
-    const sources = readdirSync(join(import.meta.dirname, '../src')).filter(name => /^autonomyLoop|^autonomyWorker|^autonomyReader|^autonomyShowing|^autonomyTextModel|^study/u.test(name));
-    expect(sources.length).toBeGreaterThanOrEqual(9);
-    for (const name of sources) {
-      const source = readFileSync(join(import.meta.dirname, '../src', name), 'utf8');
+    const { readFileSync } = await import('node:fs');
+    const sources = apiSourceFilesNamed(/^autonomyLoop|^autonomyWorker|^autonomyReader|^autonomyShowing|^autonomyTextModel|^study/u);
+    // 31 today; the floor leaves room for a later merge or split, and still fails on a scan that finds little.
+    expect(sources.length).toBeGreaterThanOrEqual(25);
+    for (const path of sources) {
+      const name = basename(path);
+      const source = readFileSync(path, 'utf8');
       expect(source, name).not.toMatch(/child_process|worker_threads|node:cluster|new Worker\(|(?<![.\w])(?:spawn|fork|exec(?:File|Sync)?)\(/u);
       expect(source, name).not.toMatch(/node:fs|writeFile|appendFile|mkdir/u);
     }

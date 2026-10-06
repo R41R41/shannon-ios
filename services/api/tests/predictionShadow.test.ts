@@ -14,6 +14,7 @@ import { PredictionShadow, decidedFeelingOutcome, predictionShadowEnabled } from
 import { foldOutcomes, readMind } from '../src/mind/prediction/predictionShadowFold.js';
 import { PREDICTION_SOURCE_ID, PREDICTION_SYMBOL, SQLitePredictionStore, ensurePredictionSchema } from '../src/mind/prediction/store/predictionStore.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
+import { apiSourcePath } from './support/sources.js';
 
 /**
  * Stage 1 of Syzygy ADR-0006 (影): the taps change nothing, the record holds no words, forgetting recomputes, and the
@@ -119,7 +120,7 @@ describe('the prediction shadow changes nothing', () => {
 
   it('is listed among the core paths of emotion', () => {
     for (const path of ['packages/cognition/src/prediction.ts', 'packages/cognition/src/predictionDomains.ts', 'packages/cognition/src/affectDynamics.ts',
-      'services/api/src/predictionStore.ts', 'services/api/src/predictionShadow.ts', 'services/api/src/predictionShadowFold.ts', 'services/api/src/predictionShadowReadings.ts']) expect(SHANNON_CORE_PATHS.emotion).toContain(path);
+      ...['predictionStore.ts', 'predictionShadow.ts', 'predictionShadowFold.ts', 'predictionShadowReadings.ts'].map(apiSourcePath)]) expect(SHANNON_CORE_PATHS.emotion).toContain(path);
   });
 });
 

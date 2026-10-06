@@ -2,7 +2,7 @@
 
 Policy: `SYZYGY-BRANCH-001`
 
-Revision: 2026-09-12
+Revision: 2026-10-07
 
 ## Baseline and naming
 
@@ -32,3 +32,17 @@ Every non-main branch or worktree is one of:
 - `unknown`: ownership or outcome is unclear; do not delete it until audited.
 
 Prunable or detached entries are never deleted merely because Git labels them stale. Audit containment, dirty files, owner, and exact commit first.
+
+## Replay, then rebase or merge: the code-layout waves
+
+The API sources move into folders in six waves (Syzygy ADR-0008 §6, `docs/architecture.md` "Code layout (target)"). A wave renames many files at once, and a branch that predates it would meet modify/delete conflicts and imports of paths that no longer exist. A branch that is older than a wave on `main` therefore replays the script on its own tip before it takes `main`. Each wave lands on `main` as one commit whose message starts with `Layout wave N`.
+
+1. Commit or stash the branch's work, untracked files included (`git stash -u`). `scripts/layout/apply.mjs` works on tracked files only: it refuses uncommitted changes, refuses to move a file git does not track, and refuses while untracked code sits under `services/api`, `scripts` or `packages`.
+2. A branch older than Step 0 (it has no `services/api/tests/support/sources.ts`) first takes Step 0 from `main`: merge the Step 0 commits, or check out `services/api/tests/support/` and `main`'s rewritten tests and adapt its own. Its tests must find sources through that helper before any wave, because the script cannot rewrite a test that reads a source by a flat path.
+3. Look at which waves `main` has: `git log --oneline --grep '^Layout wave' origin/main`.
+4. On the branch tip, take `scripts/layout/` (and `scripts/check-api-layers.mjs` with its JSON files) from `main` if the branch does not have them (`git checkout origin/main -- scripts/layout scripts/check-api-layers.mjs scripts/api-layers.json scripts/api-layers-baseline.json`), and commit that alone.
+5. Replay the waves `main` has: `node scripts/layout/apply.mjs --through N` (or `--wave N` for one). It moves the branch's copies of the files, rewrites every relative specifier in the branch's code (imports of every kind, `vi.mock`, `new URL(…, import.meta.url)`), tests included, and updates its `autonomyCore.ts`; a file the branch added and `moves.json` does not list stays where it is. It does not rewrite a source path written any other way (a `readFileSync('../src/x.ts')`, a `'services/api/src/x.ts'` literal, a `join(…, '../src', name)`): a new test of the branch that reads sources must use `tests/support/sources.ts`, and the wave's report lists remaining mentions of moved paths in prose. Commit the result as "Replay layout waves 1–N".
+6. Then take `main`: merging `origin/main` is the simplest, since both sides now made the same renames and the same rewrites, so only real edits conflict. A branch that must stay linear rebases instead (`git rebase origin/main`): git follows its older commits across the renames by rename detection, and the replay commit keeps only the rewrites of the branch's own files. `autonomyCore.ts` changes too much in a wave for rename detection: if the branch edited it, take `main`'s version and re-apply the branch's own lines.
+7. Run `node scripts/check-api-layers.mjs` and move any new file of the branch into its folder (add it to `moves.json` when it belongs to a later wave), then the usual gates.
+
+The script is idempotent: a wave already applied moves nothing and rewrites nothing, so replaying it twice is harmless. A wave that would change the set of core files fails before it touches the disk.

@@ -2,7 +2,7 @@
 
 Owner decision 2026-10-02: 「イヤホンをつないでいるとき（ボクにしか聞こえないとき）は、いつでも話しかけていい」.
 
-"Privately listening" means that the sound of one of the owner's own apps comes out of something only he can hear. The app decides it; the server is told. The vocabulary and bounds are in `services/api/src/privateListeningContract.ts`, the routes in `privateListeningRoutes.ts`, the store in `privateListeningStore.ts`, and the contract test is `services/api/tests/privateListening.test.ts`.
+"Privately listening" means that the sound of one of the owner's own apps comes out of something only he can hear. The app decides it; the server is told. The vocabulary and bounds are in `services/api/src/contracts/privateListeningContract.ts`, the routes in `privateListeningRoutes.ts`, the store in `privateListeningStore.ts`, and the contract test is `services/api/tests/privateListening.test.ts`.
 
 Everything here is additive: routes and tables are only added, and two columns (`private_listening.speaks`, `reach_out_deliveries.surface`) are added to tables that already exist. One thing an existing route answers changes, and only while an app is privately listening: what her body is told about a message she started on her own (see [Her body](#her-body)).
 

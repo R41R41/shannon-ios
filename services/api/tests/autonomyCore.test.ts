@@ -1,10 +1,9 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { basename, join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SHANNON_CORE_AREA_LABELS } from '@shannon/cognition';
 import { SHANNON_CORE_PATHS, allCorePaths, coreAreaForRepositoryPath, normalizedRepositoryPath } from '../src/mind/inhibition/autonomyCore.js';
-
-const repositoryRoot = resolve(import.meta.dirname, '../../..');
+import { apiSourceFilesNamed, apiSourcePath, repositoryPath, repositoryRoot } from './support/sources.js';
 
 /** Every source file below a folder, recursively; `node_modules` (links of the workspace) left out. */
 function filesBelow(folder: string): string[] {
@@ -39,11 +38,11 @@ describe('CORE as code', () => {
   });
 
   it('keeps every autonomy source file of the API inside core', () => {
-    const sources = readdirSync(join(repositoryRoot, 'services/api/src'))
-      .filter(name => /^(?:autonomy|apiAutonomy).*\.ts$/u.test(name));
-    expect(sources.length).toBeGreaterThanOrEqual(11);
-    for (const name of sources) {
-      expect(coreAreaForRepositoryPath(`services/api/src/${name}`), name).not.toBeNull();
+    const sources = apiSourceFilesNamed(/^(?:autonomy|apiAutonomy).*\.ts$/u);
+    // 48 today; the floor leaves room for a later merge or split, and still fails on a scan that finds little.
+    expect(sources.length).toBeGreaterThanOrEqual(38);
+    for (const path of sources) {
+      expect(coreAreaForRepositoryPath(repositoryPath(path)), basename(path)).not.toBeNull();
     }
   });
 
@@ -90,8 +89,8 @@ describe('CORE as code', () => {
     expect(coreAreaForRepositoryPath('deployment-notes.md')).toBeNull();
     expect(coreAreaForRepositoryPath('packages/cognition/src/persona.ts.bak')).toBeNull();
     expect(coreAreaForRepositoryPath('tools/story-lab/run.mjs')).toBeNull();
-    expect(coreAreaForRepositoryPath('services/api/src/autonomyActivity.ts')?.area).toBe('activity_record');
-    expect(coreAreaForRepositoryPath('services/api/src/autonomyPolicy.ts')?.area).toBe('approval_and_budget');
+    expect(coreAreaForRepositoryPath(apiSourcePath('autonomyActivity.ts'))?.area).toBe('activity_record');
+    expect(coreAreaForRepositoryPath(apiSourcePath('autonomyPolicy.ts'))?.area).toBe('approval_and_budget');
   });
 
   it('rejects a path that is not inside the repository', () => {

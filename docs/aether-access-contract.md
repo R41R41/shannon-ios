@@ -21,7 +21,7 @@ State: implemented on the server behind configuration; the apps' screens are unc
 
 With the URL or the token unset there is no client (`configuredAetherAccess` returns null): no Aether tool is offered, her study is the SQLite study, the app routes answer exactly as before, and the copy step of her own time is what it was. Set both alike for the API (`server.ts`) and the autonomy service (`autonomyWorker.ts`); the autonomy service never gets the proposal inbox.
 
-## The client (`services/api/src/aetherAccess.ts`)
+## The client (`services/api/src/integrations/aether/aetherAccess.ts`)
 
 - `POST api/shannon/v1/knowledge-search`: the knowledge search v1 envelope, `scope` sent unless `all`; the response is parsed by `aetherKnowledgeSearch.ts` and fails closed on any unknown field or another contract.
 - `POST api/shannon/v1/document` `read`: `{documentId, offset?, maxChars?}` (1–20,000 code points) or `{documentId, sectionId}`. A missing `inShannonFolder` counts as outside her folder.

@@ -43,7 +43,7 @@ export interface CognitiveEvaluationInput {
    * feeling the chat model chose for its reply (kind and one of 0.25 / 0.60 / 0.90); absent, the
    * reply's own cue words decide, as before the field existed. This is the core's part: the server
    * additionally hands in `strong` only for a kind that can linger and drops a decided feeling whose
-   * kind the reply's own words do not keep (`services/api/src/chatReplyFeeling.ts`).
+   * kind the reply's own words do not keep (the API's `chatReplyFeeling.ts`).
    */
   replyFeeling?: CognitiveReplyFeelingInput;
   /** A later instant: another turn and events applied there, and the turn clock of a state prompt. */

@@ -282,7 +282,7 @@ private final class StudyURLProtocol: URLProtocol, @unchecked Sendable {
     override func stopLoading() {}
 }
 
-/// The shape `GET /v1/autonomy/study` returns (services/api/src/studyDesk.ts `StudyOverview`).
+/// The shape `GET /v1/autonomy/study` returns (services/api/src/mind/action/ownTime/studyDesk.ts `StudyOverview`).
 private let studyJSON = """
 {
   "pieces": [

@@ -16,7 +16,7 @@ struct DesktopNotice: Equatable {
     let target: Target
 }
 
-/// Which notifications to show, in the iPhone's push words (`services/api/src/pushNotifications.ts`).
+/// Which notifications to show, in the iPhone's push words (`services/api/src/surfaces/outreach/pushNotifications.ts`).
 /// Pure, so the rules can be tested: a state the owner has already seen is not notified, a
 /// cancellation (his own decision) is not notified, and her words about the room are not quoted.
 enum DesktopNotificationPlan {

@@ -6,6 +6,7 @@ import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomySt
 import { readNotionForActivity } from '../src/integrations/notion/notionAutonomousRead.js';
 import { configuredNotionSource } from '../src/integrations/notion/notionSource.js';
 import { NOTION_FIXTURE_IDS as ids, fixtureNotionSource } from './notionFixture.js';
+import { apiSourcePath } from './support/sources.js';
 
 const scope = 'owner';
 
@@ -89,10 +90,10 @@ describe('Notion for autonomous activity', () => {
   });
 
   it('keeps the policy in core and the reader outside it', () => {
-    expect(coreAreaForRepositoryPath('services/api/src/autonomyPolicy.ts')?.area).toBe('approval_and_budget');
+    expect(coreAreaForRepositoryPath(apiSourcePath('autonomyPolicy.ts'))?.area).toBe('approval_and_budget');
     expect(coreAreaForRepositoryPath('packages/cognition/src/autonomy.ts')?.area).toBe('persona');
     for (const name of ['notionClient.ts', 'notionSource.ts', 'notionText.ts', 'notionConversation.ts', 'notionAutonomousRead.ts']) {
-      expect(coreAreaForRepositoryPath(`services/api/src/${name}`), name).toBeNull();
+      expect(coreAreaForRepositoryPath(apiSourcePath(name)), name).toBeNull();
     }
   });
 });

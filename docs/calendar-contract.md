@@ -1,7 +1,7 @@
 # Calendar contract: what is coming up for the owner
 
 Status: implemented on the server (2026-10-02). The apps that send it are built against this document.
-Schema version: `1`. Source: `services/api/src/calendarContract.ts`, `calendarRoutes.ts`, `upcomingStore.ts`, `ownerUpcoming.ts`.
+Schema version: `1`. Source: `services/api/src/contracts/calendarContract.ts`, `calendarRoutes.ts`, `upcomingStore.ts`, `ownerUpcoming.ts`.
 
 Owner decision (2026-10-02): Shannon should know what is coming up for the owner, so that she can answer "what is on today?" and, in her own time, speak up about something that is near. The apps read the calendar on the owner's device and send a bounded snapshot. **The server never reads a calendar service and never writes a calendar.**
 

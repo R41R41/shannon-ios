@@ -2,7 +2,7 @@
 
 How the operational status of the legacy platform runtime (Discord, Minecraft, scheduled posts; another repository, the same VM) reaches the owner's desktop management window. The runtime **pushes a snapshot** to this API with the platform bridge credential; the desktop **reads the latest snapshot** from this API with its device token. The desktop never connects to the legacy runtime, and this API never calls it.
 
-This document and the contract tests `services/api/tests/ops.test.ts` and `opsCommands.test.ts` are what the reporter and the desktop client are built against. The vocabulary and bounds are in `services/api/src/opsContract.ts`; the routes are in `serverOpsRoutes.ts`; the table is in `opsStore.ts`.
+This document and the contract tests `services/api/tests/ops.test.ts` and `opsCommands.test.ts` are what the reporter and the desktop client are built against. The vocabulary and bounds are in `services/api/src/contracts/opsContract.ts`; the routes are in `serverOpsRoutes.ts`; the table is in `opsStore.ts`.
 
 Everything here is additive. No existing route, table, or prompt wording changed.
 
@@ -159,7 +159,7 @@ Added 2026-10-05 (coordinator task taken over from Voyager, approved by the owne
 
 The same summary is written once to the service log at startup, as one line that begins with `Shannon self-diagnosis `.
 
-**Names, counts, a hash and booleans only.** No credential, endpoint, path or token; model names only after validation. An integration is `true` or `false`. A model is the name its gateway resolved, reported only when it matches the model-name rule of the chat model (`[A-Za-z0-9._:-]{1,100}`) and is not credential-shaped (the `looksSecret` guard, or an unbroken run of 32 or more letters, digits and `_` that holds both a letter and a digit); otherwise it is `null`. This matters for names the server does not itself validate, such as `SHANNON_JEV_MODEL`. The code is `services/api/src/serverSelfDiagnosis.ts`; the contract test, which seeds fake secrets into every credential and endpoint variable and asserts that none of them comes back, is `services/api/tests/serverSelfDiagnosis.test.ts`.
+**Names, counts, a hash and booleans only.** No credential, endpoint, path or token; model names only after validation. An integration is `true` or `false`. A model is the name its gateway resolved, reported only when it matches the model-name rule of the chat model (`[A-Za-z0-9._:-]{1,100}`) and is not credential-shaped (the `looksSecret` guard, or an unbroken run of 32 or more letters, digits and `_` that holds both a letter and a digit); otherwise it is `null`. This matters for names the server does not itself validate, such as `SHANNON_JEV_MODEL`. The code is `services/api/src/infra/ops/serverSelfDiagnosis.ts`; the contract test, which seeds fake secrets into every credential and endpoint variable and asserts that none of them comes back, is `services/api/tests/serverSelfDiagnosis.test.ts`.
 
 ```json
 {
@@ -192,7 +192,7 @@ The same summary is written once to the service log at startup, as one line that
 }
 ```
 
-(The values are an example. The tool list is whatever `services/api/src/shannonTools.ts` holds; `count` is always the length of `names`.)
+(The values are an example. The tool list is whatever `services/api/src/mind/tools/shannonTools.ts` holds; `count` is always the length of `names`.)
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -234,7 +234,7 @@ The same summary is written once to the service log at startup, as one line that
 
 The owner's desktop may ask the legacy runtime to start or stop a service, start or stop a Minecraft server, or run a schedule now. The direction is the same as in stage 1: the desktop writes a command to this API with its device token; the legacy runtime **polls, claims, performs and reports** with the bridge credential. This API never calls the runtime, the desktop never does, and nothing on this path carries text: a command is a closed `type` and one `target`, and an outcome is a closed `outcome` and `code`.
 
-The vocabulary, the allowlist and the bounds are in `services/api/src/opsCommandContract.ts`; the routes are in `serverOpsCommandRoutes.ts`; the record is in `opsCommandStore.ts`; the contract test is `services/api/tests/opsCommands.test.ts`. Stage 1 clients and reporters work unchanged.
+The vocabulary, the allowlist and the bounds are in `services/api/src/contracts/opsCommandContract.ts`; the routes are in `serverOpsCommandRoutes.ts`; the record is in `opsCommandStore.ts`; the contract test is `services/api/tests/opsCommands.test.ts`. Stage 1 clients and reporters work unchanged.
 
 ### Kill switch
 

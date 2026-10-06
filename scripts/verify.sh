@@ -33,6 +33,10 @@ run_cognition_eval() {
 
 run_architecture() {
   "$node_bin" scripts/check-architecture.mjs
+  # The folder rules of the API sources (Syzygy ADR-0008 §6), enforced since wave 5 of the layout: a violation that is not
+  # in scripts/api-layers-baseline.json fails (the baseline only shrinks). The layout script and the check have tests of their own.
+  "$node_bin" --test scripts/check-api-layers.test.mjs scripts/layout/apply.test.mjs
+  "$node_bin" scripts/check-api-layers.mjs --enforce
 }
 
 run_product_spec() {

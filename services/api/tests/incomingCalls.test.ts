@@ -22,6 +22,7 @@ import { SQLiteReachOutSpeaker } from '../src/surfaces/outreach/reachOutDelivery
 import { SQLiteReachOutReports } from '../src/surfaces/outreach/store/reachOutReports.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { APNsVoipPushSender, createConfiguredVoipPushSender, type VoipPushResult, type VoipPushSender, type VoipPushTarget } from '../src/surfaces/outreach/voipPushSender.js';
+import { readApiSource } from './support/sources.js';
 
 const scope = 'owner';
 const START = '2026-10-03T03:00:00.000Z';
@@ -664,7 +665,7 @@ describe('the APNs sender', () => {
   });
 
   it('keeps her words and the key out of every source file that sends or logs', () => {
-    const source = (name: string) => readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8');
+    const source = (name: string) => readApiSource(name);
     // The push body is built in one place, from identifiers and a time.
     expect(source('incomingCallContract.ts')).not.toMatch(/content|text:/u);
     expect(source('voipPushSender.ts')).not.toMatch(/console\.(log|warn|error)\([^)]*(privateKey|deviceToken|keyFile)/u);

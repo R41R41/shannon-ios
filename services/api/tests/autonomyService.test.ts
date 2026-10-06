@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, normalize } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -12,6 +12,7 @@ import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyServi
 import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
+import { readApiSource } from './support/sources.js';
 
 const scope = 'owner';
 const directory = mkdtempSync(join(tmpdir(), 'shannon-autonomy-service-'));
@@ -291,7 +292,7 @@ describe('daily budget and the request to raise it', () => {
     expect(message).toContain('1,300円');
     expect(message).toContain('あと250円');
     expect(message).not.toMatch(/あなた|所有者|だよ。|るよ。/u);
-    const source = readFileSync(join(import.meta.dirname, '../src/autonomyAnnouncer.ts'), 'utf8');
+    const source = readApiSource('autonomyAnnouncer.ts');
     expect(source).not.toMatch(/'[^'\n]*(?:あなた|だよ。|てね。)[^'\n]*'/u);
   });
 });

@@ -29,6 +29,7 @@ import type { BodyPresence } from '../src/surfaces/body/shannonBody.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
 import { promptOf } from './modelPrompt.js';
+import { apiSourceNames, importedModules, readApiSource } from './support/sources.js';
 
 const scope = 'owner';
 const START = '2026-10-02T01:00:00.000Z';
@@ -687,7 +688,7 @@ describe('the frame is never kept', () => {
   });
 
   it('has a table with identifiers, timestamps, an outcome and a code, and modules that reach no other store', () => {
-    const source = (name: string) => readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8');
+    const source = (name: string) => readApiSource(name);
     const table = source('bodyLookStore.ts').match(/CREATE TABLE IF NOT EXISTS body_looks \(([\s\S]*?)\n\s*\);/u)![1]!;
     const columns = table.split('\n').map(line => line.trim().split(/\s+/u)[0]!).filter(Boolean);
     expect(columns).toEqual(['look_id', 'scope_key', 'device_id', 'thread_id', 'requested_at', 'expires_at', 'day_key', 'owner_asked',
@@ -696,14 +697,14 @@ describe('the frame is never kept', () => {
     expect(source('bodyLookStore.ts').match(/CREATE TABLE/gu)).toHaveLength(1);
 
     // Modules a frame passes through: what they import, and that none of them opens a file, a database, or a log.
-    const imports = (name: string) => [...source(name).matchAll(/from '([^']+)'/gu)].map(match => match[1]!);
+    const imports = (name: string) => importedModules(name);
     expect(imports('bodyLookContract.ts')).toEqual([]);
-    expect(imports('bodyLook.ts').sort()).toEqual(['./bodyLookContract.js', './bodyLookLines.js', './bodyLookStore.js', './bodyLookTurnWait.js', './bodyLookVision.js', '@shannon/cognition', 'node:crypto']);
+    expect(imports('bodyLook.ts').sort()).toEqual(['@shannon/cognition', 'bodyLookContract.ts', 'bodyLookLines.ts', 'bodyLookStore.ts', 'bodyLookTurnWait.ts', 'bodyLookVision.ts', 'node:crypto']);
     // The wait for a voice turn to be stored knows a Talk and his words, and imports nothing.
     expect(imports('bodyLookTurnWait.ts')).toEqual([]);
     expect(source('bodyLookTurnWait.ts')).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync|BodyLookImage|base64/u);
-    expect(imports('bodyLookVision.ts').sort()).toEqual(['./bodyLookContract.js', './chatModelSupport.js', './llmUsage.js', '@shannon/cognition']);
-    expect(imports('apiBodyRoutes.ts').sort()).toEqual(['./apiAppLookRoutes.js', './apiValidation.js', './appLookContract.js', './bodyContract.js', './bodyLook.js', './bodyLookContract.js', './bodyReaction.js', './bodyReactionContract.js', './contracts.js', './shannonBody.js']);
+    expect(imports('bodyLookVision.ts').sort()).toEqual(['@shannon/cognition', 'bodyLookContract.ts', 'chatModelSupport.ts', 'llmUsage.ts']);
+    expect(imports('apiBodyRoutes.ts').sort()).toEqual(['apiAppLookRoutes.ts', 'apiValidation.ts', 'appLookContract.ts', 'bodyContract.ts', 'bodyLook.ts', 'bodyLookContract.ts', 'bodyReaction.ts', 'bodyReactionContract.ts', 'contracts.ts', 'shannonBody.ts']);
     for (const name of ['bodyLookContract.ts', 'bodyLook.ts', 'bodyLookVision.ts', 'apiBodyRoutes.ts']) {
       expect(source(name), name).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync/u);
     }
@@ -714,16 +715,17 @@ describe('the frame is never kept', () => {
     // Three places start a look. In a conversation: the text chat turn, and (owner decision 2026-10-02) the owner's voice turn,
     // through the one module `voiceRoomLook.ts`. In her own time (stage 2): one gated step of the activity loop, which the gate
     // knows as the domain `room_look`. The other voice routes and the platform bridge have no path to it.
-    const sourceDirectory = new URL('../src/', import.meta.url);
-    const callers = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts') && /\.turnLooks\.turn\(|this\.body\.turn\(|offerRoomLook: true/u.test(source(name)));
+    const names = apiSourceNames();
+    expect(names.length).toBeGreaterThanOrEqual(300);
+    const callers = names.filter(name => /\.turnLooks\.turn\(|this\.body\.turn\(|offerRoomLook: true/u.test(source(name)));
     // The chat turn asks `conversationLooks.ts`, which passes every turn to her body first (and then, for a turn from an app, to `appLook.ts`).
     expect(callers.sort()).toEqual(['apiKernel.ts', 'bodyLook.ts', 'conversationLooks.ts']);
-    const voiceCallers = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts') && /\.voiceTurn\(/u.test(source(name)));
+    const voiceCallers = names.filter(name => /\.voiceTurn\(/u.test(source(name)));
     expect(voiceCallers.sort()).toEqual(['voiceRoomLook.ts']);
-    const openers = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts') && /looks\.open\(|store\.open\(/u.test(source(name)));
+    const openers = names.filter(name => /looks\.open\(|store\.open\(/u.test(source(name)));
     // `appLook.ts` opens a look through the owner's app into its own table (`app_looks`), never into `body_looks`.
     expect(openers.sort()).toEqual(['appLook.ts', 'bodyLook.ts', 'bodyLookActivity.ts']);
-    const aware = readdirSync(sourceDirectory).filter(file => /^(?:autonomyLoop|autonomyPolicy|autonomyWorker|apiVoice|apiLiveVoice|platformBridge|voice)/u.test(file))
+    const aware = names.filter(file => /^(?:autonomyLoop|autonomyPolicy|autonomyWorker|apiVoice|apiLiveVoice|platformBridge|voice)/u.test(file))
       .filter(name => /bodyLook|roomLook|RoomLook/u.test(source(name)));
     expect(aware.sort()).toEqual(['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyLoopThinkStep.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts',
       'voiceAppLook.ts', 'voiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRoomLook.ts']);
@@ -743,7 +745,7 @@ describe('the frame is never kept', () => {
     ]);
     expect(source('bodyLookActivityStore.ts')).not.toMatch(/BLOB|image|frame_/iu);
     // The one module that sends a frame for her own activity: no store, no file, no log, and never the conversation key.
-    expect(imports('bodyLookActivityVision.ts').sort()).toEqual(['./autonomyLoopPrompts.js', './autonomyModels.js', './autonomyTextModel.js', './bodyLookVision.js']);
+    expect(imports('bodyLookActivityVision.ts').sort()).toEqual(['autonomyLoopPrompts.ts', 'autonomyModels.ts', 'autonomyTextModel.ts', 'bodyLookVision.ts']);
     expect(source('bodyLookActivityVision.ts')).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync|OPENAI_API_KEY|environment\.GEMINI_API_KEY|recordLlmUsage/u);
     // The answer of a look is not passed to the speaker, the store, or the activity record.
     const service = source('bodyLook.ts');

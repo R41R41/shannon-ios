@@ -241,7 +241,7 @@ final class ShannonAutonomyTests: XCTestCase {
     }
 }
 
-/// The shape `GET /v1/autonomy` returns (services/api/src/autonomyService.ts `AutonomyOverview`).
+/// The shape `GET /v1/autonomy` returns (services/api/src/mind/action/ownTime/autonomyService.ts `AutonomyOverview`).
 private let overviewJSON = """
 {
   "control": { "state": "active", "enabled": true, "paused": false, "changedAt": null },

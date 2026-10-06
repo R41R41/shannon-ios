@@ -1,12 +1,13 @@
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { OPS_COMMAND_LIMITS, OPS_COMMAND_REPORT_CODES, OPS_SERVICE_START_ALLOWED, OPS_SERVICE_STOP_ALLOWED } from '../src/contracts/opsCommandContract.js';
 import { OPS_LIMITS, opsIngestEnabled, opsSecretLike, validatedOpsSnapshot } from '../src/contracts/opsContract.js';
 import { SQLiteOpsStore } from '../src/infra/ops/store/opsStore.js';
 import { createOpsRoute, isOpsPath, OPS_READ_PATH, OPS_SNAPSHOT_PATH } from '../src/infra/ops/serverOpsRoutes.js';
+import { apiSourceFile, apiSourceFiles, apiSourcePath, readApiSource, resolvedImports } from './support/sources.js';
 
 const BRIDGE_TOKEN = 'b'.repeat(40);
 const DEVICE_TOKEN = 'device-token-of-the-desktop';
@@ -127,7 +128,7 @@ describe('authentication', () => {
   });
 
   it('is hooked before device authentication with the device store as the only reader credential', () => {
-    const server = readFileSync(resolve(import.meta.dirname, '../src/server.ts'), 'utf8');
+    const server = readApiSource('server.ts');
     expect(server.indexOf('if (isOpsPath(url.pathname))')).toBeGreaterThan(0);
     expect(server.indexOf('if (isOpsPath(url.pathname))')).toBeLessThan(server.indexOf('const principal = deviceAuth'));
     expect(server).toContain('device: authorization => deviceAuth ? deviceAuth.authenticate(authorization)');
@@ -447,20 +448,22 @@ describe('SHANNON_PLATFORM_OPS_INGEST', () => {
 });
 
 describe('the snapshot stays out of every prompt', () => {
-  const sourceRoot = resolve(import.meta.dirname, '../src');
   const cognitionRoot = resolve(import.meta.dirname, '../../../packages/cognition/src');
   const owners = new Set(['opsContract.ts', 'opsStore.ts', 'serverOpsRoutes.ts', 'opsCommandContract.ts', 'opsCommandStore.ts', 'serverOpsCommandRoutes.ts']);
   const markers = /opsStore|opsContract|serverOpsRoutes|ops_snapshots|OpsSnapshot|SQLiteOpsStore|opsReadResponse|opsCommand|OpsCommand|ops_commands|OPS_COMMAND|serverOpsCommandRoutes/u;
 
   it('is referenced by the ops files and the server entry point only', () => {
-    const referencing = readdirSync(sourceRoot).filter(name => name.endsWith('.ts') && !owners.has(name)
-      && markers.test(readFileSync(join(sourceRoot, name), 'utf8')));
+    const files = apiSourceFiles();
+    expect(files.length).toBeGreaterThanOrEqual(300);
+    const referencing = files.filter(path => !owners.has(basename(path)) && markers.test(readFileSync(path, 'utf8'))).map(path => basename(path));
     expect(referencing).toEqual(['server.ts']);
+    for (const name of owners) expect(apiSourceFile(name), name).toBeTruthy();
+    expect(readdirSync(cognitionRoot).length).toBeGreaterThanOrEqual(30);
     expect(readdirSync(cognitionRoot).filter(name => markers.test(readFileSync(join(cognitionRoot, name), 'utf8')))).toEqual([]);
   });
 
   it('is never handed to the kernel, a worker or the platform bridge by the server', () => {
-    const server = readFileSync(join(sourceRoot, 'server.ts'), 'utf8');
+    const server = readApiSource('server.ts');
     const uses = server.split('\n').filter(line => /\bopsStore\b/u.test(line) && !line.startsWith('import ')).map(line => line.trim());
     expect(uses).toEqual([
       'const opsStore = new SQLiteOpsStore(configuredDatabasePath());',
@@ -469,22 +472,24 @@ describe('the snapshot stays out of every prompt', () => {
     ]);
     expect(server.split('\n').filter(line => /\bopsRoute\b/u.test(line))).toHaveLength(2);
     // Stage 2 adds the kill switch to the route's dependencies and nothing else.
-    expect(server.split('\n').filter(line => /opsCommand/iu.test(line)).map(line => line.trim())).toEqual([
-      "import { opsCommandsEnabled } from './opsCommandContract.js';",
+    // The import is compared without its specifier, which names a folder; where it leads is checked as a resolved path.
+    expect(server.split('\n').filter(line => /opsCommand/iu.test(line)).map(line => line.trim().replace(/ from '[^']+';$/u, " from '…';"))).toEqual([
+      "import { opsCommandsEnabled } from '…';",
       'commandsEnabled: () => opsCommandsEnabled(process.env),',
     ]);
+    expect(resolvedImports('server.ts')).toContain(apiSourcePath('opsCommandContract.ts'));
   });
 
   it('imports nothing that builds a prompt or calls a model', () => {
+    const allowed = ['node:http', 'node:sqlite', 'node:crypto', '@shannon/cognition', ...['apiAuth.ts', 'apiValidation.ts', 'opsContract.ts',
+      'opsStore.ts', 'serverHttp.ts', 'sqliteStoreContext.ts', 'opsCommandContract.ts', 'opsCommandStore.ts',
+      'serverOpsCommandRoutes.ts'].map(apiSourcePath)];
     for (const name of owners) {
-      const imports = [...readFileSync(join(sourceRoot, name), 'utf8').matchAll(/from '([^']+)'/gu)].map(match => match[1]);
-      for (const source of imports) {
-        expect(['node:http', 'node:sqlite', 'node:crypto', '@shannon/cognition', './apiAuth.js', './apiValidation.js', './opsContract.js',
-          './opsStore.js', './serverHttp.js', './sqliteStoreContext.js', './opsCommandContract.js', './opsCommandStore.js',
-          './serverOpsCommandRoutes.js']).toContain(source);
-      }
+      const imports = resolvedImports(name);
+      expect(imports.length, name).toBeGreaterThan(0);
+      for (const source of imports) expect(allowed, `${name} imports ${source}`).toContain(source);
     }
-    expect(readFileSync(join(sourceRoot, 'opsContract.ts'), 'utf8')).toContain("import { looksSecret } from '@shannon/cognition';");
+    expect(readApiSource('opsContract.ts')).toContain("import { looksSecret } from '@shannon/cognition';");
   });
 });
 
