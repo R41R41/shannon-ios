@@ -3206,6 +3206,286 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
       "only": "apple",
       "note": "カメラが許可されていないとき。"
+    },
+    {
+      "key": "folder.host.section",
+      "text": "シャノン専用フォルダ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。設定 › 専用フォルダ の区画の見出し（Windows の設定と同じ言葉）。"
+    },
+    {
+      "key": "folder.host.explanation",
+      "text": "シャノンが自分のものとして使ってよい、この Mac の中の場所です。いまは中を一覧・検索・読むことだけができます。書き換えたり、フォルダの外に触れたり、プログラムを動かしたりはできません。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。区画の説明（A18 S2、読むだけ）。"
+    },
+    {
+      "key": "folder.host.state",
+      "text": "状態",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。状態の見出し。"
+    },
+    {
+      "key": "folder.host.stateUnset",
+      "text": "まだ選んでいません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。フォルダを選ぶ前。"
+    },
+    {
+      "key": "folder.host.stateRunning",
+      "text": "使えます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。選んであり、止めていない。"
+    },
+    {
+      "key": "folder.host.statePaused",
+      "text": "一時停止中",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。この Mac の側で止めている。"
+    },
+    {
+      "key": "folder.host.stateError",
+      "text": "使えません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。選んだフォルダを開けない。"
+    },
+    {
+      "key": "folder.host.place",
+      "text": "場所",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。選んだフォルダの場所の見出し。"
+    },
+    {
+      "key": "folder.host.choose",
+      "text": "フォルダを選ぶ…",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。フォルダを選ぶボタン。"
+    },
+    {
+      "key": "folder.host.choosePrompt",
+      "text": "このフォルダを使う",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostModel.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。フォルダを選ぶパネルの決定ボタン。"
+    },
+    {
+      "key": "folder.host.chooseMessage",
+      "text": "シャノン専用フォルダにするフォルダを選んでください（空のフォルダか、前に専用フォルダにしたフォルダ）。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostModel.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。フォルダを選ぶパネルの説明。"
+    },
+    {
+      "key": "folder.host.notEmpty",
+      "text": "空のフォルダか、前にシャノン専用フォルダにしたフォルダを選んでください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostModel.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。持ち主のファイルが入っていて目印の無いフォルダを選んだ時。"
+    },
+    {
+      "key": "folder.host.notAFolder",
+      "text": "フォルダを選んでください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostModel.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。フォルダでないものを選んだ時。"
+    },
+    {
+      "key": "folder.host.cannotMark",
+      "text": "フォルダに目印を置けませんでした。別のフォルダを選んでください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostModel.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。空のフォルダに .shannon/folder.json を置けなかった時。"
+    },
+    {
+      "key": "folder.host.bookmarkFailed",
+      "text": "選んであるフォルダを開けません。もう一度フォルダを選んでください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostModel.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。覚えていたフォルダを起動時に開けなかった時（folder_not_configured）。"
+    },
+    {
+      "key": "folder.host.pause",
+      "text": "一時停止する",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。この Mac の側で止める（localStop）。"
+    },
+    {
+      "key": "folder.host.resume",
+      "text": "一時停止を解除",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。止めたのを戻す。"
+    },
+    {
+      "key": "folder.host.pausedNote",
+      "text": "止めている間は、シャノンはこのフォルダを使えません。止めていることは本体にも伝わります。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。一時停止中の説明。"
+    },
+    {
+      "key": "folder.host.open",
+      "text": "フォルダを開く",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。Finder で開く。"
+    },
+    {
+      "key": "folder.host.check",
+      "text": "動作を確かめる",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。自分で確かめるボタン。"
+    },
+    {
+      "key": "folder.host.checkFolder",
+      "text": "フォルダを開ける",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostModel.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。確かめる項目。"
+    },
+    {
+      "key": "folder.host.checkList",
+      "text": "中を一覧できる",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostModel.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。確かめる項目。"
+    },
+    {
+      "key": "folder.host.checkRegistered",
+      "text": "この Mac が登録されている",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostModel.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。確かめる項目（本体のフォルダの登録）。"
+    },
+    {
+      "key": "folder.host.checkServer",
+      "text": "本体とつながっている",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostModel.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。確かめる項目。"
+    },
+    {
+      "key": "folder.host.checkOK",
+      "text": "確かめました。シャノンはこのフォルダを使えます。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。確かめた結果（全部よい）。"
+    },
+    {
+      "key": "folder.host.checkFailed",
+      "text": "使えないところがあります。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。確かめた結果（どれかがだめ）。"
+    },
+    {
+      "key": "folder.host.forget",
+      "text": "使うのをやめる",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。選んだフォルダを忘れる。フォルダと中身は消えない。"
+    },
+    {
+      "key": "folder.host.forgetConfirm",
+      "text": "このフォルダを、シャノン専用フォルダとして使うのをやめますか？フォルダと中のファイルは消えません。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。やめる前の確認（Windows と同じ言葉）。"
+    },
+    {
+      "key": "folder.host.connected",
+      "text": "本体につながっています（{label}のフォルダとして）。シャノンが一覧・検索・読むと、下の記録に出ます。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。つながっている時。label は本体が返す名前（Mac）。"
+    },
+    {
+      "key": "folder.host.notRegistered",
+      "text": "この Mac は、まだ本体に専用フォルダの端末として登録されていません。登録に使う端末 ID: {deviceId}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。binding が host を返さない時。"
+    },
+    {
+      "key": "folder.host.notPaired",
+      "text": "この Mac は本体とつながっていません。設定 › 接続 でつないでください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。端末のトークンが無い時。"
+    },
+    {
+      "key": "folder.host.offline",
+      "text": "本体に届きません。少しあとで、もう一度つなぎます。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。通信できない時。"
+    },
+    {
+      "key": "folder.host.waiting",
+      "text": "本体へつなぎに行くところです。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。まだ一度も聞いていない時。"
+    },
+    {
+      "key": "folder.host.log",
+      "text": "この Mac で行った操作の記録（新しい順、{count}件）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。中身を残さない記録（folder-activity.jsonl）の見出し。"
+    },
+    {
+      "key": "folder.host.logList",
+      "text": "一覧を見た",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。記録の操作名。"
+    },
+    {
+      "key": "folder.host.logRead",
+      "text": "読んだ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。記録の操作名。"
+    },
+    {
+      "key": "folder.host.logSearch",
+      "text": "探した",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。記録の操作名。"
+    },
+    {
+      "key": "folder.host.logRefused",
+      "text": "断った: {code}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。記録の、断った時の添え書き。"
+    },
+    {
+      "key": "folder.host.menuRunning",
+      "text": "専用フォルダ：使えます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostMenuSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。メニューバーの区画の一行目。"
+    },
+    {
+      "key": "folder.host.menuPaused",
+      "text": "専用フォルダ：一時停止中",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostMenuSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ（A18 S2）。メニューバーの区画の一行目。"
     }
   ]
 }

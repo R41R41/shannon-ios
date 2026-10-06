@@ -114,7 +114,7 @@ export function toolRefusal(decision: Pick<AutonomyDecision, 'reason' | 'explana
     case 'disabled': return refused('自分から動く仕組みがサーバーで切られている', 'ライ氏が仕組みを入れたあと');
     case 'budget_exhausted': return toolFailure('limit', decision.explanation, { retryable: false, refusal: { why: '今日の予算が残っていない', wouldWork: '明日か、ライ氏が予算を足したあと' } });
     case 'access_limit': return toolFailure('limit', decision.explanation, { retryable: false, refusal: { why: '今日の回数の上限に達した', wouldWork: '明日' } });
-    case 'unknown_host': return toolFailure('unavailable', decision.explanation, { retryable: false, refusal: { why: 'PCのフォルダを受け持つ端末が登録されていない', wouldWork: 'ライ氏がPCを登録したあと' } });
+    case 'unknown_host': return toolFailure('unavailable', decision.explanation, { retryable: false, refusal: { why: 'PCやMacのフォルダを受け持つ端末が登録されていない', wouldWork: 'ライ氏がPCやMacを登録したあと' } });
     case 'malformed_request': return toolFailure('invalid_input', decision.explanation, { retryable: false, refusal: { why: '依頼の形かパスが決まりに合わない', wouldWork: '決まりに合うパスや入力で呼び直す' } });
     default: return refused('決められた範囲の外', 'ライ氏に提案して承認をもらう');
   }

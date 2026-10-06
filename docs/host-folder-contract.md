@@ -1,10 +1,10 @@
-# Host folder contract (v2: her own folder, read and edit; v1 copies unchanged)
+# Host folder contract (v2: her own folder, read and edit; v1 copies unchanged; the Mac beside the PC)
 
 What the device that works in Shannon's own folder must send and may read. Her folder is one folder the owner chose on the owner's Windows PC or Mac (Syzygy ADR-0002: a free domain, `host_folder`). The process that touches the folder lives in another repository and has no network and no token; the desktop application's main process, paired like any other device, pulls work from this server and hands it over. This document and the contract tests `services/api/tests/autonomyHostFolder.test.ts` (v1) and `services/api/tests/hostFolderOperations.test.ts` (v2) are what that side is built against. The bounds and codes are in `services/api/src/autonomyHostFolderPath.ts` and `services/api/src/hostFolderOperations.ts`.
 
 **v2 (owner decision 2026-10-05)** gives Shannon full tools over her own folder, from every surface (text chat, voice, her own time): list, search, read, create, update, rename, move, delete. Deleting or overwriting never destroys anything: the device first moves the old file into the trash inside her folder (`.shannon/trash/`). Files the owner placed in the folder may be read freely; editing or deleting them keeps the original in the trash like any other file. Everything in v2 is additive: a v1 device (no `protocol` field in its claim) is handed exactly what it was handed before, and the v1 routes, fields, and codes keep their meaning.
 
-The contract in one paragraph: a tool call (from a conversation with the owner, or a step of her own time) **queues an operation** for her folder. The one device bound to that host holds a **long-poll claim** open (`POST /v1/autonomy/host-steps/claim`, up to 25 s), receives the operation about a second after it was queued, carries it out inside the folder, and **reports** an outcome, a code, and for reading operations a bounded **result** (`POST /v1/autonomy/host-steps/{id}/report`). The tool waits a few seconds for that report; when the device has not polled in the last 40 s the tool fails at once with 「PCのフォルダはいま見られない」 and nothing is queued. The server never calls the device and never sees the folder.
+The contract in one paragraph: a tool call (from a conversation with the owner, or a step of her own time) **queues an operation** for her folder. The one device bound to that host holds a **long-poll claim** open (`POST /v1/autonomy/host-steps/claim`, up to 25 s), receives the operation about a second after it was queued, carries it out inside the folder, and **reports** an outcome, a code, and for reading operations a bounded **result** (`POST /v1/autonomy/host-steps/{id}/report`). The tool waits a few seconds for that report; when the device has not polled in the last 40 s the tool fails at once with 「PCやMacのフォルダはいま見られない」 and nothing is queued. The server never calls the device and never sees the folder.
 
 ## Who decides what
 
@@ -39,7 +39,20 @@ The gate (`authorizeAutonomousAction`) accepts a `host_folder` request in two fo
 
 - A host name is 1–40 characters of `a-z`, `0-9`, `-`, starting with a letter or digit. An entry with another name, or a `deviceId` in another shape, is ignored.
 - An unreadable value registers nothing. With no bound device the copy step is never planned and every claim answers `403`.
-- The Mac is registered the same way: another entry with the Mac application's device id. Nothing else is specific to a platform on the server.
+- The Mac is registered the same way: another entry with the Mac application's device id (`owner-mac` by convention). Nothing else is specific to a platform on the server.
+- With several bound hosts, a copy goes to the first registered host that can take one (see [Two hosts](#two-hosts-a18)).
+
+### Binding: `GET /v1/autonomy/host-steps/binding?scopeKey=owner`
+
+A paired device asks which host it is bound to, so that an application does not need to know its host's name (A18). Response `200`: `{ "host": "owner-mac", "label": "Mac" }`, or `{ "host": null }` when this device is not registered for any host. `label` is the name she and the owner say (`owner-mac` 「Mac」, `owner-windows` 「WindowsのPC」, otherwise the host's own name). A caller with no device (a fixed token, a local caller) gets `403 HOST_NOT_BOUND`. Nothing is recorded and presence is not touched.
+
+### Two hosts (A18)
+
+Owner decisions of 2026-10-06, effective only while two or more hosts have a bound device; with one host nothing below changes.
+
+- **Names.** The `host` field of every folder tool lists the hosts with their labels (「owner-windows（WindowsのPC）、owner-mac（Mac）」) and says how one is chosen.
+- **Choosing when none is named.** The hosts whose device can take this operation now (present, not stopped on its side, and listing the operation) are counted. One: it is used. Two or more: nothing is queued; she is told both are connected and asks the owner which (in her own time she names one). None: the first host whose device answered (stopped, or unable to do the operation) is used, otherwise the first registered; the call then fails with that host's reason (「PCやMacのフォルダはいま見られない」 and so on).
+- **v1 copies.** A host whose device's last v2 claim did not list `write` (the Mac application reads only in A18 S2) is never planned a copy; a host whose device has not made a v2 claim keeps v1's meaning.
 - Revoking the device (`POST /v1/devices`) stops it at authentication. Removing or changing the entry needs a restart of both services.
 - With several bound hosts, a copy goes to the first registered host that does not have that version of the piece yet.
 
@@ -198,7 +211,7 @@ Everything below is new in v2. Routes, registration, transport, authentication, 
 | `protocol` | `2` | yes, for v2 | Without it the claim is a v1 claim: no wait, only `write` steps, and none of the fields below is accepted. |
 | `operations` | array of operation names | yes, for v2 | What this device can carry out. The server hands out only these, and a tool call for an operation the present device did not list fails at once (`unsupported_operation`). Unknown names are `400`. |
 | `waitSeconds` | integer, 0–25 | no (default 0) | **Long-poll.** With nothing to hand out, the server holds the request open up to this long and answers as soon as a step is queued (in practice within about a second). `0` answers at once. |
-| `localStop` | boolean | no (default false) | The owner's stop switch **on the device** is on. The server answers `{ "step": null }` at once, hands out nothing, and every tool call fails with 「ライ氏がPCの側で止めている」 until a claim says `false`. |
+| `localStop` | boolean | no (default false) | The owner's stop switch **on the device** is on. The server answers `{ "step": null }` at once, hands out nothing, and every tool call fails with 「ライ氏がPCやMacの側でフォルダの操作を止めている」 until a claim says `false`. |
 
 Response `200`: `{ "step": <step> | null }`, as in v1. A v2 step always carries `operation`, `id`, `expiresAt`, and the fields of its operation:
 
@@ -222,8 +235,8 @@ Response `200`: `{ "step": <step> | null }`, as in v1. A v2 step always carries 
 
 ### Presence and the local stop switch
 
-- A host is **present** while its bound device has a claim open, or made one in the last **40 s**. A tool call for a host that is not present fails at once with failure `unavailable` and the words 「PCのフォルダはいま見られない（PCが起きていないか、体のアプリが動いていない）」. Nothing is queued, so nothing runs later by surprise.
-- While the last claim said `localStop: true`, a tool call fails at once with 「ライ氏がPCの側でフォルダの操作を止めている」. Nothing is queued.
+- A host is **present** while its bound device has a claim open, or made one in the last **40 s**. A tool call for a host that is not present fails at once with failure `unavailable` and the words 「PCやMacのフォルダはいま見られない（PCやMacが起きていないか、体のアプリが動いていない）」. Nothing is queued, so nothing runs later by surprise.
+- While the last claim said `localStop: true`, a tool call fails at once with 「ライ氏がPCやMacの側でフォルダの操作を止めている」. Nothing is queued.
 - If the local stop switch is turned on while a step is held, the device does not carry it out and reports `refused` / `stopped_locally`.
 - The server's stop switch (pause) stops the steps of **her own time** (they are not handed out; queued ones wait) but not the steps of a **conversation** with the owner: those are his own requests, made while he is talking to her.
 - Presence is stored per host (table `autonomy_host_presence`), so the activity-loop process sees the same presence as the API process.
@@ -237,7 +250,7 @@ Response `200`: `{ "step": <step> | null }`, as in v1. A v2 step always carries 
 | Her own time | 60 s | 30 s | 10 s |
 | v1 copy | `SHANNON_AUTONOMY_HOST_STEP_LEASE_SECONDS` (300 s) | — | as v1 |
 
-- A tool that stops waiting returns failure `timeout` (「PCから時間内に返事が来なかった」). For a step that changes something (`create`, `update`, `move`, `delete`) it adds that it is unknown whether the change happened. It does **not** retry by itself.
+- A tool that stops waiting returns failure `timeout` (「PCやMacから時間内に返事が来なかった」). For a step that changes something (`create`, `update`, `move`, `delete`) it adds that it is unknown whether the change happened. It does **not** retry by itself.
 - A report that arrives after the tool stopped waiting but before `expiresAt` is still accepted and recorded; its result is discarded.
 - A lease that runs out without a report is closed as `expired` and recorded as failed, as in v1. A step is never handed out twice.
 
@@ -287,7 +300,7 @@ Paths are relative to her folder with `/` separators and already passed the serv
 | `changed_since_read` | 読んだあとで中身が変わっていた |
 | `folder_full` | フォルダの容量か数の上限に達した |
 | `protected_path` | 触れてはいけない場所だった |
-| `stopped_locally` | PCの側で止められていた |
+| `stopped_locally` | PCやMacの側で止められていた |
 
 A v1 step never receives these from a v1 device; the server accepts them for every step.
 
@@ -317,11 +330,23 @@ The v1 rules apply to every path, with these additions, checked by the server be
 5. While its own stop switch is on: claim with `localStop: true` at most every 15 s, run nothing, and report a held step as `stopped_locally`.
 6. Keep its append-only local log.
 
+## The Mac application (A18 S2)
+
+The Mac app (`apps/ios/Sources/ShannonAppCore/Features/FolderHost/`) is a v2 device built against this document, read-only for now.
+
+- **Host.** It asks `GET /v1/autonomy/host-steps/binding` and claims for the host returned; with none it claims nothing and 設定 › 専用フォルダ shows the device id to register.
+- **Claim.** `protocol: 2`, `operations: ["list", "read", "search"]`, `waitSeconds: 25`, `localStop`. It never lists `write`, so it is never handed a v1 copy and, while it is the only host, none is planned.
+- **Token.** The claim client holds the device token; the part that reads the folder (an actor) is handed only a folder and a step and never sees the token or the network.
+- **Fence.** The server's lexical rules again (tested against the server's own recorded cases, `services/api/tests/fixtures/host-folder-paths-v1/cases.json`); every segment `lstat`ed, a link anywhere is `link_refused`; `.shannon` in any case, width or Unicode normalization, and anything that is the same directory on disk, is `protected_path`; a package (a bundle Finder shows as one file) is listed as a file and never entered; a Finder alias or a package is never text; the real path must stay inside the real folder (`outside_folder`); a file is opened with `O_NOFOLLOW`, must be the file that was checked, and is refused (`link_refused`) when it has another hard link.
+- **Bounds.** As above: 256 KiB per read and at most the 640 KiB report cap once escaped; files over 1 MiB are `too_large`; search stops at 50 hits, 500 files, 8 MiB or 2 s.
+- **Folder.** The owner chooses it in 設定 › 専用フォルダ: an empty folder gets the marker `.shannon/folder.json`; a folder that has it (the Electron app's 「デスクトップ/シャノン用」) is taken as it is; a folder with other files and no marker is refused. It is kept as an app-scoped security-scoped bookmark, made again when stale; when it cannot be opened every step is refused with `folder_not_configured`.
+- **Running.** While a folder is chosen the app keeps claiming without a window (under `ProcessInfo.beginActivity`), stays in the menu bar, and keeps the append-only, content-free log `Application Support/Shannon/folder-activity.jsonl` (time, operation, path, outcome, code, a count; at 128 KiB the file is renamed whole to `folder-activity.1.jsonl` and a new one begins).
+
 ## Not built
 
 - **Restoring from the trash** by her. The trash is the device's and behind its fence; the owner restores by hand.
 - **`append`, `mkdir` as operations of their own, and `usage`.** The device has them; v2 does not queue them (`create` and `move` make parent folders).
 - **Binary files.** Listed by name only; never read, written, or searched.
 - **An owner route that lists the queue.** The owner sees every operation and its outcome in the activity record.
-- **Mac specifics.** The mechanism is the same; the Mac application needs its own host entry and its own resident process.
+- **Writing from the Mac.** The Mac application (A18 S2) claims `list`, `read`, `search` only; `create`, `update`, `move`, `delete` and v1 copies follow in S3. Opening the application at login is S4. See [The Mac application](#the-mac-application-a18-s2).
 - **A dedicated rate limit** for these routes. A long-poll device makes about two requests a minute while idle.

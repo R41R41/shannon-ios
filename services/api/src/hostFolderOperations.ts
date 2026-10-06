@@ -101,6 +101,11 @@ export class HostFolderOperations {
     return Object.keys(this.config.places.hostDevices ?? {});
   }
 
+  /** The host a paired device is bound to (the first registered, should one device be named twice), or null. */
+  boundHostOf(deviceId: string): string | null {
+    return Object.entries(this.config.places.hostDevices ?? {}).find(([, bound]) => bound === deviceId)?.[0] ?? null;
+  }
+
   /** Whether a tool call for this host could be handed to its device now. */
   presence(scopeKey: string, host: string, operation?: HostOperation): 'present' | 'not_bound' | 'offline' | 'stopped' | 'unsupported' {
     // Only this scope; every scope is swept by the API process's timer.

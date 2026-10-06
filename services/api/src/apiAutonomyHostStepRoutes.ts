@@ -1,13 +1,15 @@
 import type { ApiRequest, ApiResponse } from './contracts.js';
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
 import type { HostFolderDesk } from './autonomyHostFolderDesk.js';
-import { HOST_FOLDER_LIMITS, isHostStepCode } from './autonomyHostFolderPath.js';
+import { HOST_FOLDER_LIMITS, hostFolderLabel, isHostStepCode } from './autonomyHostFolderPath.js';
 import { HOST_RESULT_LIMITS, validHostOperationResult } from './hostFolderOperationResults.js';
 import { HOST_CLAIM_MAXIMUM_WAIT_SECONDS, type HostFolderOperations } from './hostFolderOperations.js';
 import { HOST_OPERATIONS } from './hostFolderOperationsStore.js';
 
 export const HOST_STEP_ROUTE_PREFIX = '/v1/autonomy/host-steps';
 export const HOST_STEP_CLAIM_PATH = `${HOST_STEP_ROUTE_PREFIX}/claim`;
+/** `GET`: the host bound to the calling device, so that an app does not have to know its host's name (A18). */
+export const HOST_STEP_BINDING_PATH = `${HOST_STEP_ROUTE_PREFIX}/binding`;
 export const HOST_STEP_REPORT_PATH = /^\/v1\/autonomy\/host-steps\/([0-9a-f-]{36})\/report$/u;
 /** A v2 report may carry a read of 256 KiB of text (escaped); every other body keeps the server's 64 KiB. */
 export function hostStepRequestBytes(path: string): number | undefined {
@@ -26,6 +28,13 @@ const DEVICE_OPERATIONS: readonly string[] = Object.freeze(['write', ...HOST_OPE
  * for it; nothing a device sends reaches the activity record, her memory, or her study.
  */
 export function dispatchHostStepRequest(request: ApiRequest, folder: HostFolderDesk, operations: HostFolderOperations): ApiResponse | Promise<ApiResponse> {
+  if (request.path === HOST_STEP_BINDING_PATH && request.method === 'GET') {
+    if (!validScopeKey(request.query?.get('scopeKey'))) return badRequest('scopeKey is required');
+    // Only a paired device has a binding; a fixed-token or local caller is refused as on the other routes.
+    if (!request.deviceId) return notBound();
+    const host = operations.boundHostOf(request.deviceId);
+    return { status: 200, body: host ? { host, label: hostFolderLabel(host) } : { host: null } };
+  }
   if (request.method !== 'POST') return { status: 404, body: { error: 'NOT_FOUND' } };
   if (!objectBody(request.body)) return badRequest('JSON object body is required');
   const scopeKey = request.body.scopeKey;

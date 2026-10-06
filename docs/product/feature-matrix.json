@@ -3997,9 +3997,13 @@
           "reason": "PC のフォルダに置く機能。iPhone では、結果を「したことの記録」で読む。"
         },
         "macos": {
-          "status": "planned",
-          "branch": "未定",
-          "note": "取り決めは docs/host-folder-contract.md にある。Mac の SwiftUI のアプリには、まだ無い。"
+          "status": "partial",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostModel.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostRoot.swift"
+          ],
+          "note": "A18 S2（2026-10-06）：選ぶ・止める・確かめる・やめる・操作の記録・メニューバーに残る、はある。シャノンが使えるのは一覧・検索・読むだけで、書く（S3）とログイン時に開く・Electron 版の廃止（S4）はまだ。"
         },
         "windows": {
           "status": "yes",
@@ -4024,9 +4028,13 @@
           "reason": "フォルダは PC の中。iPhone では、したことの記録で読む。"
         },
         "macos": {
-          "status": "planned",
-          "branch": "codex/shannon/own-study-and-folder-tools",
-          "note": "サーバーで作業中。Mac の SwiftUI のアプリには専用フォルダがまだ無い（desktop.folder-host）。"
+          "status": "partial",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostOperations.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostWorker.swift",
+            "services/api/src/shannonFolderTools.ts"
+          ],
+          "note": "A18 S1・S2（2026-10-06）：Mac のフォルダを folder.list・folder.search・folder.read で使える（取り決め v2、binding の道、2 台の時の選び方）。作る・書き換える・移す・消すは S3。"
         },
         "windows": {
           "status": "planned",

@@ -4,7 +4,7 @@ import { ROOM_LOOK_GUARD, roomLookGuard } from './autonomyHostFolderPath.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import type { SecretCheck } from './conversationSecrets.js';
 import type { HostFolderOperations } from './hostFolderOperations.js';
-import { folderExecutors } from './shannonFolderTools.js';
+import { folderExecutors, folderToolForHosts } from './shannonFolderTools.js';
 import { minecraftExecutors, minecraftToolOffered, type MinecraftRequestPort } from './shannonMinecraftTools.js';
 import { aetherExecutors } from './shannonAetherTools.js';
 import { aetherStudyTool, studyExecutors } from './shannonStudyTools.js';
@@ -73,7 +73,9 @@ export class ShannonToolRunner {
       : tool.domain === 'minecraft_body' ? minecraftToolOffered(this.minecraft, tool, scopeKey)
         : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true && this.aetherFor(scopeKey)
           : tool.name.startsWith('aether') ? this.aetherFor(scopeKey) : true);
-    return this.aether.study && (scopeKey === undefined || this.aether.study.covers(scopeKey)) ? tools.map(aetherStudyTool) : tools;
+    const hosts = this.folder.boundHosts();
+    const named = hosts.length > 1 ? tools.map(tool => folderToolForHosts(tool, hosts)) : tools;
+    return this.aether.study && (scopeKey === undefined || this.aether.study.covers(scopeKey)) ? named.map(aetherStudyTool) : named;
   }
 
   /**

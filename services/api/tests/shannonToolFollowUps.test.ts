@@ -226,7 +226,7 @@ describe('the trace of one call', () => {
     expect(study.names).toEqual(['物語「名脇役のハッチを叩いて」（下書き、id: piece-0001）']);
     const created = toolTraceCall('study.create', JSON.stringify({ kind: 'note', title: '試し', body: '本文' }), toolOk('メモ「試し」を書斎に書いた。\nid: piece-0002'), undefined);
     expect(created).toEqual({ tool: 'study.create', target: '試し', ok: true, note: 'id: piece-0002' });
-    expect(toolTraceCall('folder.list', '{}', toolFailure('unavailable', 'PCのフォルダはいま見られない。'), undefined)).toEqual({ tool: 'folder.list', ok: false, failure: 'unavailable' });
+    expect(toolTraceCall('folder.list', '{}', toolFailure('unavailable', 'PCやMacのフォルダはいま見られない。'), undefined)).toEqual({ tool: 'folder.list', ok: false, failure: 'unavailable' });
     const secret = { carries: (text: string) => text.includes('内緒') };
     expect(toolTraceCall('folder.create', JSON.stringify({ path: '内緒の計画.md', content: 'x' }), toolOk('作った。'), secret).target).toBe('（伏せた）');
     expect(toolTraceCall('folder.create', JSON.stringify({ path: 'a.md', content: 'x' }), toolOk('作った。'), null).target).toBe('（伏せた）');
