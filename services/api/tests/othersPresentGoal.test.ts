@@ -95,8 +95,9 @@ describe('the owner\'s current goal with other people present', () => {
     // Re-recorded on the body-1b branch (2026-10-06): her capability line about her body gained 「体は自分のもの。触れられ方は
     // 自分で受け取る。」 (Syzygy ADR-0005, owner answer 7), 22 characters of her identity (43c88ae5f79056f1 alone); and on the Mac
     // folder branch (2026-10-06, A18, owner approval) the `own_folder` line names the PC or the Mac, 33 more (6644836be1aa54fd
-    // alone). Nothing else changed: with both lines as before, the fingerprint is f985777ad5061000 again.
-    expect(fingerprint(alone)).toBe('81990bce01279119');
+    // alone). Nothing else changed: with both lines as before, the fingerprint is f985777ad5061000 again. On the S3 branch
+    // (A18 S3) the `own_folder` line drops its note that the Mac's folder is only read: 81990bce01279119 with the note.
+    expect(fingerprint(alone)).toBe('5776c6948507cd9c');
 
     const others = await chat('人格の改善はどう進める？', { audience: 'others' });
     expect(others).not.toContain('current_goal=');
@@ -114,7 +115,8 @@ describe('the owner\'s current goal with other people present', () => {
     // text gives the fingerprint recorded before (9abf82a6f2f2e74f); nothing was added or left out.
     // Re-recorded on the body-1b branch (2026-10-06) for the same 22 characters of her capability line (911bc31030d3e769 alone),
     // and on the Mac folder branch for the 33 of the `own_folder` line (bb34c77bdba7c1ca alone); 1732f2014cc3eeb7 before both.
-    expect(fingerprint(alone)).toBe('eabeaf61971fc368');
+    // On the S3 branch (A18 S3) that line drops its note that the Mac's folder is only read: eabeaf61971fc368 with the note.
+    expect(fingerprint(alone)).toBe('891f915e25710768');
 
     const companion = await voice('前に話した人格の改善のこと覚えてる？', true);
     expect(companion).toContain('[Current cognitive context');
