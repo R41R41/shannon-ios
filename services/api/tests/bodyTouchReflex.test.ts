@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SHANNON_TEMPERAMENT, SHANNON_TOUCH_FEELINGS } from '@shannon/cognition';
 import type { BodyReactionAnswer } from '../src/bodyReactionContract.js';
@@ -8,6 +9,7 @@ import {
 } from '../src/bodyReactionPrompt.js';
 import { BODY_TOUCH_REFLEX_PARTS, BODY_TOUCH_STANCES } from '../src/bodyTouchReflex.js';
 import { BODY_TOUCH_PART_WORDS } from '../src/bodyTouchWords.js';
+import { PredictionShadow } from '../src/predictionShadow.js';
 import { START, reactionHarness, scope } from './bodyReactionHarness.js';
 import { promptOf } from './modelPrompt.js';
 
@@ -35,7 +37,9 @@ describe('the parts where only the reflex moves her', () => {
 
 /** The old-shape day: every type, regions and none, both audiences, a silent answer, a failed model, and the finished events. */
 async function oldShapeDay(stage2: boolean) {
-  const harness = await reactionHarness({ stage2 });
+  // Stage 2 learns in a prediction record (without one it runs as stage 1b): an in-memory one, its work done at once.
+  const prediction = stage2 ? new PredictionShadow({ database: new DatabaseSync(':memory:'), createsSchema: true, defer: task => task(), log: () => {} }) : null;
+  const harness = await reactionHarness({ stage2, ...(prediction ? { prediction } : {}) });
   const answers: unknown[] = [];
   // Every type, regions and none, both audiences, a silent answer, a failed model, and the finished events.
   const script: Array<[Record<string, unknown>, Record<string, unknown>]> = [
@@ -81,7 +85,9 @@ describe('a touch in the old shape (touch vocabulary 1)', () => {
     expect(day.calls.every(call => call.stance === true)).toBe(true);
     // Recorded on the stage-2 branch (2026-10-06) for the owner's approval of stage 2: no table, the startle, and her stance as the
     // outcome (none here: the script's answers carry no stance, so only the startle and the feeling she chose move her).
-    expect(digest(day)).toBe('a722223ce39ef36e62fee1a6333e14d75d4db8b0bbd01e7e6794e08db4640af8');
+    // a722223c… at bec4ad1b, recorded without a prediction record; re-recorded after review items 4 and 5: stage 2 now needs
+    // the record (here an in-memory one), and an old-shape touch whose stance is not welcome or fine is told without favour.
+    expect(digest(day)).toBe('8606cfd25da80eaf4ed9074a085e80feb9ff8e29c02d094f15b092edeaecb106');
   });
 
   it('is asked with the answer of before, without a stance; a touch that names its part is asked its stance too', async () => {

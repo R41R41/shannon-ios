@@ -83,6 +83,12 @@ const reflexPhrase = (touch: ShannonTouch): string | undefined =>
     : touch.kind === 'pet' ? (touch.resting ? REFLEX_PHRASES.rest : REFLEX_PHRASES.stroke)
     : touch.kind === 'poke' ? REFLEX_PHRASES.poke : touch.kind === 'tickle' ? REFLEX_PHRASES.tickle : undefined;
 
+/**
+ * Stage 2: a touch that names no part, told without favour when her stance is not known or was neither welcome nor fine
+ * (`touch.factual`): stroking is being stroked and holding hands is her hand being held. The other kinds are factual already.
+ */
+const FACTUAL_DONE: Readonly<Partial<Record<ShannonTouchKind, string>>> = Object.freeze({ pet: 'なでられた', holdHand: '手を握られた' });
+
 /** The share of the distance to the row's mood one touch covers, and the most any one touch moves a mood value. */
 export const SHANNON_TOUCH_MOOD_RATE = 0.18;
 export const SHANNON_TOUCH_MOOD_STEP = 0.08;
@@ -116,7 +122,8 @@ export function isReflexTouch(touch: Pick<ShannonTouch, 'reflexPart'>): boolean 
 /** The touch in the state's words: the table's, or on a part where her body flinches first, that part (首をつつかれた, 胸に触れられた). */
 function touchDone(touch: ShannonTouch): string {
   const phrase = isReflexTouch(touch) ? reflexPhrase(touch) : undefined;
-  return phrase ? `${touch.reflexPart}${phrase}` : SHANNON_TOUCH_FEELINGS[touch.kind].done;
+  if (phrase) return `${touch.reflexPart}${phrase}`;
+  return (touch.factual ? FACTUAL_DONE[touch.kind] : undefined) ?? SHANNON_TOUCH_FEELINGS[touch.kind].done;
 }
 
 /** Why she feels it, in the stored state's words. Shown to the owner as the cause of 「いま」. */
@@ -133,7 +140,8 @@ export function touchTarget(touch: Pick<ShannonTouch, 'ownerAlone'>): string {
 /** Whether a stored feeling came from a touch (its cause is one of the table's own wordings). */
 export function isTouchFeeling(emotion: Pick<ShannonExpressiveEmotion, 'cause'> | undefined): boolean {
   return emotion !== undefined && (SHANNON_TOUCH_KINDS.some(kind => emotion.cause.includes(SHANNON_TOUCH_FEELINGS[kind].done))
-    || Object.values(REFLEX_PHRASES).some(phrase => emotion.cause.includes(phrase)));
+    || Object.values(REFLEX_PHRASES).some(phrase => emotion.cause.includes(phrase))
+    || Object.values(FACTUAL_DONE).some(phrase => emotion.cause.includes(phrase)));
 }
 
 /**

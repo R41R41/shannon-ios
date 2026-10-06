@@ -7,7 +7,7 @@ import { reflexPartWord, type BodyTouchStance } from './bodyTouchReflex.js';
 import { TouchPredictions, stanceOutcome, type TouchPrediction, type TouchPredictionRecord } from './bodyTouchPrediction.js';
 
 export { touchPredictionEnabled } from './bodyTouchPrediction.js';
-import { bodyTouchPartWord } from './bodyTouchWords.js';
+import { bodyTouchPartWord, bodyTouchRegionWord } from './bodyTouchWords.js';
 import type { PredictionShadow } from './predictionShadow.js';
 
 /**
@@ -106,13 +106,14 @@ export class BodyTouches {
       const carried = options.awaitsStance ? null : this.predictions!.carried(scopeKey, prediction.key, at);
       // Felt, not learned: only a stance she gives is an outcome.
       if (carried !== null) prediction = { ...prediction, outcome: this.predictions!.felt(prediction, carried) };
-      // The part names the cause of a feeling (頭をなでられた): factual words, no favour read into the verb.
-      const partWord = touch.part ? bodyTouchPartWord(touch.part) : undefined;
+      // The part, else the region, names the cause of a feeling (頭をなでられた): her stance is not known yet, so factual words,
+      // no favour read into the verb; with neither, `factual`.
+      const partWord = touch.part ? bodyTouchPartWord(touch.part) : touch.region ? bodyTouchRegionWord(touch.region) : undefined;
       snapshot = stateStore.apply(scopeKey, { type: 'body-touched', touch: {
         kind: touch.type, countInWindow: receipt.burst.count, ownerAlone: touch.audience === 'owner',
         ...(touch.durationMs !== undefined ? { durationMs: touch.durationMs } : {}),
         ...(touch.strength !== undefined ? { strength: touch.strength } : {}),
-        ...(partWord ? { reflexPart: partWord, ...(touch.gesture === 'rest' ? { resting: true } : {}) } : {}),
+        ...(partWord ? { reflexPart: partWord, ...(touch.gesture === 'rest' ? { resting: true } : {}) } : { factual: true }),
         appraisal: { startle: prediction.startle, ...(prediction.outcome ? { outcome: prediction.outcome } : {}) },
       } });
       this.predictions!.compared(scopeKey, snapshot, at);
@@ -158,6 +159,9 @@ export class BodyTouches {
     }
     const snapshot = stateStore.apply(scopeKey, { type: 'touch-appraised', outcome });
     predictions.compared(scopeKey, snapshot, at);
+    // Her stance is known now: the memory of the burst is worded by it (favour only when she took it as welcome or fine).
+    const burst = this.dependencies.store.burst(scopeKey, felt.burst.id);
+    if (burst) this.remember(scopeKey, burst);
     return { outcome, snapshot };
   }
 
@@ -197,8 +201,11 @@ export class BodyTouches {
   /** A failure here loses the memory of one touch, never the answer or the feeling. */
   private remember(scopeKey: string, burst: StoredTouchBurst): void {
     try {
-      // Stage 2 keeps the touched part in the memory (首をつつかれた); stage 1b words it as it did.
-      this.dependencies.experiences?.write(scopeKey, touchExperience(burst, { parts: this.stage2 }));
+      // Stage 2 keeps the touched part in the memory (首をつつかれた) and words a burst with favour only when every stance she
+      // gave in it was welcome or fine; stage 1b words it as it did.
+      const favour = this.stage2 && this.dependencies.experiences ? this.dependencies.store.burstStances(scopeKey, burst.id) : [];
+      this.dependencies.experiences?.write(scopeKey, touchExperience(burst, this.stage2
+        ? { parts: true, favour: favour.length > 0 && favour.every(stance => stance === 'welcome' || stance === 'fine') } : {}));
     } catch (error) { this.reportError(error); }
   }
 }

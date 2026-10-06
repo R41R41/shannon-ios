@@ -742,6 +742,7 @@ Syzygy ADR-0006 stage 2, candidate B (owner approval 2026-10-06; ADR-0005 owner 
 - **A touch she is not asked about** (a plain event, a late or failed model) is felt with the stance she gave for the same key within the episode she has learned (the boundary from her own gaps), against what she expects now, and is not learned again: only a stance she gives is an outcome, so one refusal followed by ten plain pokes stays one refusal. Without one, only the startle moved her.
 - **What she is told, with the owner alone only**: their closeness (「ライ氏との親密さ: 0.42（経験で育つ気質。0〜1）」) and how she took touches on this part before (「これまで首に触れられた時のボクの受け取り: いや 2回、拒む 1回（新しい順に …）」, or that it is the first time). Facts, no rule. With others present, neither.
 - **Her memory** keeps the part every touch of the burst named, in factual words (「ライ氏に首をつつかれた」); `body_touch_bursts.part` is added.
+- **Words of favour** (「頭をなでてもらった」「手をつないでもらった」) only for a touch in the old shape (iPhone, Mac) that she took as `welcome` or `fine`. While her stance is not known, and for any other stance, the cause of her feeling and the memory of the burst tell it factually: by its region (「頭をなでられた」「頭に触れられた」) or, with none, 「なでられた」「手を握られた」「触れられた」.
 
 ### Next, outside this server
 

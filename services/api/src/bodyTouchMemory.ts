@@ -47,11 +47,14 @@ const seconds = (milliseconds: number) => milliseconds >= 60_000 ? `${Math.round
 
 /**
  * The memory in her own words. Fixed wording from the kind and the numbers, plus what she said. With `parts` (Syzygy
- * ADR-0006 stage 2) the part every touch of the burst named is kept, in factual words (首をつつかれた, 頭をなでられた).
+ * ADR-0006 stage 2) the part every touch of the burst named is kept, in factual words (首をつつかれた, 頭をなでられた), and a
+ * burst that names no part keeps words of favour (頭をなでてもらった) only with `favour`: every stance she gave in it was
+ * welcome or fine. Otherwise, and while none is known, it is told factually (頭に触れられた, 触れられた).
  */
-export function touchExperienceSummary(burst: StoredTouchBurst, options: { parts?: boolean } = {}): string {
+export function touchExperienceSummary(burst: StoredTouchBurst, options: { parts?: boolean; favour?: boolean } = {}): string {
   const part = options.parts && burst.part ? touchDetailPhrase(burst.type, { part: burst.part }, 'done') : null;
-  const done = part ?? burstTouchPhrase(burst.type, burst, 'memory', SHANNON_TOUCH_FEELINGS[burst.type].done);
+  const neutral = options.parts && !options.favour;
+  const done = part ?? burstTouchPhrase(burst.type, neutral ? { ...burst, reflex: true } : burst, 'memory', SHANNON_TOUCH_FEELINGS[burst.type].done);
   const amount = [
     burst.count >= 5 ? `たくさん、${burst.count}回` : burst.count > 1 ? `${burst.count}回` : '',
     burst.totalDurationMs >= 1_000 ? `合わせて${seconds(burst.totalDurationMs)}` : '',
@@ -75,7 +78,7 @@ export function touchEvidence(burstId: string): string {
   return `body-touch-${letters || 'unknown'}`;
 }
 
-export function touchExperience(burst: StoredTouchBurst, options: { parts?: boolean } = {}): TouchExperience {
+export function touchExperience(burst: StoredTouchBurst, options: { parts?: boolean; favour?: boolean } = {}): TouchExperience {
   const shannonReply = burst.said.join(' ');
   // The fixed wording is ordinary; only her own words can make it something to protect.
   const decision = classifySensitivity(shannonReply);

@@ -160,7 +160,13 @@ export class BodyReactions {
       const prediction = felt?.prediction;
       const settled = felt && prediction ? this.settle(scopeKey, felt, decision) : null;
       // Under stage 2 every named part is worded factually (頭をなでられた); under stage 1b only the parts where her body flinches first.
-      const reflexPart = prediction ? (request.touch.part ? bodyTouchPartWord(request.touch.part) : undefined) : reflexPartWord(request.touch.part);
+      // A touch in the old shape keeps its words of favour (頭をなでてもらった) only when she took it as welcome or fine; otherwise,
+      // and while her stance is unknown, it is told factually by its region (頭をなでられた) or, without one, by `factual`.
+      const favour = decision?.stance === 'welcome' || decision?.stance === 'fine';
+      const reflexPart = prediction
+        ? (request.touch.part ? bodyTouchPartWord(request.touch.part) : !favour && request.touch.region ? bodyTouchRegionWord(request.touch.region) : undefined)
+        : reflexPartWord(request.touch.part);
+      const factual = prediction !== undefined && !request.touch.part && !request.touch.region && !favour;
       // On a part where her body flinches first the table gave her no feeling, only the reflex: the feeling she chose is
       // her face afterwards also when she stays silent (the body shows `mood` after its flinch). Under stage 2 that holds for
       // every part (no table moves her). Elsewhere under stage 1b, as before, a silent answer leaves the feeling of the touch.
@@ -174,6 +180,7 @@ export class BodyReactions {
         ...(request.touch.strength !== undefined ? { strength: request.touch.strength } : {}),
         // On such a part her chosen feeling is as strong as the reflex was felt, and its cause names the part (首をつつかれた).
         ...(reflexPart ? { reflexPart, ...(request.touch.gesture === 'rest' ? { resting: true } : {}) } : {}),
+        ...(factual ? { factual: true } : {}),
       };
       // The feeling of her line is resolved as the feeling of any reply is: from her own words and the stored state.
       const resolved = resolveReplyEmotion({

@@ -328,6 +328,12 @@ export class SQLiteBodyReactionStore {
     return rows.flatMap(row => isBodyTouchStance(row.stance) ? [{ burstId: row.burst_id, stance: row.stance }] : []);
   }
 
+  /** Stage 2: the stances she gave on the touches of one burst. */
+  burstStances(scopeKey: string, burstId: string): BodyTouchStance[] {
+    return (this.database.prepare('SELECT stance FROM body_touch_outcomes WHERE scope_key = ? AND burst_id = ? AND stance IS NOT NULL')
+      .all(scopeKey, burstId) as unknown as Array<{ stance: string }>).flatMap(row => isBodyTouchStance(row.stance) ? [row.stance] : []);
+  }
+
   /** The burst a touch id was counted in. */
   burstOfTouch(scopeKey: string, touchId: string): StoredTouchBurst | null {
     const row = this.database.prepare('SELECT burst_id FROM body_touches WHERE scope_key = ? AND touch_id = ?').get(scopeKey, touchId) as unknown as { burst_id: string } | undefined;

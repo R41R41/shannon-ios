@@ -273,6 +273,33 @@ describe('what she is told and what she remembers', () => {
     for (const prompt of w.speaker.prompts) expect(prompt).toContain(`- ${SHANNON_TEMPERAMENT}`);
   });
 
+  it('words an old-shape touch with favour only when she took it as welcome or fine (iPhone and Mac send that shape)', async () => {
+    const refused = await world();
+    refused.decide('refuse', 'indignant', true);
+    await refused.said({ type: 'pet', region: 'head' });
+    expect(refused.state().expressiveEmotion?.cause).toContain('頭をなでられた');
+    expect(refused.state().expressiveEmotion?.cause).not.toContain('もらった');
+    expect(refused.memories.at(-1)!.summary).not.toContain('もらった');
+    const partless = await world();
+    partless.decide('dislike', 'uncomfortable', true);
+    await partless.said({ type: 'pet' });
+    expect(partless.state().expressiveEmotion?.cause).toContain('なでられた');
+    expect(partless.memories.at(-1)!.summary).not.toContain('もらった');
+    const welcomed = await world();
+    welcomed.decide('welcome', 'happy', true);
+    await welcomed.said({ type: 'pet', region: 'head' });
+    expect(welcomed.state().expressiveEmotion?.cause).toContain('頭をなでてもらった');
+    expect(welcomed.memories.at(-1)!.summary).toContain('頭をなでてもらった');
+  });
+
+  it('words the surprise of a touch whose stance is not known yet without favour', async () => {
+    const w = await world();
+    await w.events({ id: 'first-pat', type: 'pet', audience: 'owner', occurredAt: w.clock.at });
+    expect(w.state().expressiveEmotion?.primary).toBe('surprised');
+    expect(w.state().expressiveEmotion?.cause).toContain('なでられた');
+    expect(w.memories.at(-1)!.summary).not.toContain('もらった');
+  });
+
   it('keeps the touched part in the memory of the touch', async () => {
     const w = await world();
     w.decide('dislike', 'uncomfortable');

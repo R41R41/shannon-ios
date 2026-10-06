@@ -238,6 +238,11 @@ export interface ShannonTouch {
   /** The touch stayed without moving (touch vocabulary 2 `gesture: rest`). Read only to word a touch on such a part (胸に触れられた). */
   resting?: boolean;
   /**
+   * Stage 2: name the touch in factual words, without favour (なでられた, not なでてもらった), for a touch that names no part:
+   * her stance is not known yet, or it was neither welcome nor fine.
+   */
+  factual?: boolean;
+  /**
    * Syzygy ADR-0006 stage 2 (`SHANNON_PREDICTION`, on by default): what the prediction layer says of this touch. Present,
    * the table is read for no part: the startle moves arousal, and a known stance moves her by its prediction error
    * (`touchAppraisal.ts`). Absent: stage 1b exactly (the table, or the reflex on a part where her body flinches first).
