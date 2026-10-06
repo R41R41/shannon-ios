@@ -52,6 +52,7 @@ webView.loadFileURL(folder.appendingPathComponent("embed.html"), allowingReadAcc
 | `setTouchEnabled(true / false)` | 触れるようにするか。 |
 | `setFrameStats(true / false)` | 1 秒あたりのコマ数を、5 秒おきに知らせるか（既定は切）。 |
 | `setBody('human' / 'eyes')` | 体を選ぶ。`human` = 人の姿、`eyes` = 目だけ（水色の目が 2 つだけのシャノン。iOS の Waterlight Eye と同じ動き）。初めての体は読み終えるまで前の体のまま、切り替わると `body` が届く（もう出している体を頼んでも、必ず `body` が届く）。体の切り替えと描く面の作り直しは 1 つずつ順に行い、その最中に来た `setBody` は記録して、終わったときにいちばん新しく頼まれた体へ揃えてから `body` で答える（`contextLost` のすぐあとに頼んでも、絵を 2 つ同時には作らない）。表情・気分・会話の様子は引き継ぐ。最初から目だけで始めるときは `embed.html?body=eyes` を開く（`loading` もその体の分で進む）。 |
+| `partAt(x, y)` | 画面の中のその点（CSS のピクセル）が、いま描いている姿のどの部位か。`{ part, region, side?, carriable }` を返す（絵の外・透明な所なら `null`）。触れ合いは始めない。`part`・`region`・`side` は下の「体の語彙 2」と同じ言葉。`carriable` は、Windows と同じ決まりで「そこを押して引っぱったら運んでよいか」（顔＝おでこ・頬・顔と、`other`＝ブーツなどだけ）。目だけの体では、目の上とそのすぐそばが `face`。2026-10-06、Mac の窓が押した瞬間に運ぶかどうかを決めるために足した。 |
 | `version` | `{ version, builtAt, modelUpdatedAt }`。 |
 
 ### 目だけの体（`eyes`）のとき

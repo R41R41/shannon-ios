@@ -298,10 +298,10 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.deletingLastPathComponent().appendingPathComponent("NOTICE.txt").path))
         let version = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("version.json"))) as? [String: Any]
         XCTAssertEqual(version?["modelUpdatedAt"] as? String, "2026-10-06T02:07:35.221Z")
-        // The build of 2026-10-06 02:19: her eyes alone (`setBody`, `embed.html?body=eyes`), switches and rebuilds on one
-        // ordered path, touch vocabulary 2 (ADR-0005 phase 1c), the model of 02:07 (her blinking fixed), and the kind
-        // `uncomfortable` shown with the `annoyed` face.
-        XCTAssertEqual(version?["version"] as? String, "0.1.0+202610060219")
+        // The build of 2026-10-06 03:40: her eyes alone (`setBody`, `embed.html?body=eyes`), switches and rebuilds on one
+        // ordered path, touch vocabulary 2 (ADR-0005 phase 1c), the model of 02:07 (her blinking fixed), the kind
+        // `uncomfortable` shown with the `annoyed` face, and `partAt` (the part at a point, for the Mac's carry).
+        XCTAssertEqual(version?["version"] as? String, "0.1.0+202610060340")
         let files = version?["files"] as? [String] ?? []
         XCTAssertTrue(files.contains("model-eyes/Shannon_Eyes_v2.moc3"))
         XCTAssertTrue(files.contains("model/Shannon.moc3"))
