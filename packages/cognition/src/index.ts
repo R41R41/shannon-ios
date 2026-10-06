@@ -185,6 +185,8 @@ export {
   type PredictionQuery,
   type PredictionUpdate,
 } from './prediction.js';
+// Syzygy ADR-0008 stage 1: the value table estimates the noise and volatility of a cell as a key here does.
+export { keyNoiseVolatility, noteInnovation, type Cause, type KeyState } from './predictionDomains.js';
 export {
   SHANNON_AFFECT_COEFFICIENTS,
   SHANNON_AFFECT_DYNAMICS,

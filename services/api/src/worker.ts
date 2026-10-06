@@ -22,7 +22,7 @@ const platformSummaries = new PlatformConversationSummarizer(peopleStore, new Pl
 const impressions = new ImpressionUpdater(store, store, store.impressionStore(), createConfiguredImpressionAnalyzer(process.env, store), store,
   { people: peopleStore, timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo' });
 // Syzygy ADR-0008 stage 1: after each sleep batch, the ledgers' nightly pass (expiry, delayed credit, retention); never fails the batch.
-const valueNight = valueSleep({ predictions: store.predictionLedger(), choices: store.choiceLedger() });
+const valueNight = valueSleep({ predictions: store.predictionLedger(), choices: store.choiceLedger(), values: store.valueVersions() });
 const worker = new ShannonBackgroundWorker(store, store, store, createConfiguredSleepMemoryAnalyzer(process.env, store), {
   timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo',
   sleepHour: parseInteger(process.env.SHANNON_SLEEP_HOUR, 3),

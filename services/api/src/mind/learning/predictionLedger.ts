@@ -19,6 +19,7 @@ import {
 import { ownerDay } from '../../companionPresence.js';
 import { LockWaitMeter, loggedFailure, tableExists, underWriteLock } from '../../infra/sqlite/lockWaits.js';
 import { ChoiceLedger, choiceLedgerEnabled } from './choiceLedger.js';
+import { ValueVersions } from './valueTable.js';
 import { PREDICTIONS_TABLE, SQLitePredictionLedger, type LedgerSourceKind, type StoredPrediction } from './store/sqlitePredictionLedger.js';
 
 export type { LedgerSourceKind, StoredPrediction } from './store/sqlitePredictionLedger.js';
@@ -298,5 +299,7 @@ export function configuredPredictionLedger(
   const ledger = new PredictionLedger({ database, createsSchema: false });
   // Her choices share the connection and the queue: a prediction settled before a report is seen by its settlement.
   const choices = choiceLedgerEnabled(environment) ? new ChoiceLedger({ database, createsSchema: false }) : null;
+  // V at choice time is read from the value table's active version on the same connection.
+  if (choices) choices.readValuesFrom(new ValueVersions({ database, createsSchema: false }).reader);
   return { ledger, choices, close: () => { ledger.flushLockWaits(); choices?.flushLockWaits(); if (database.isOpen) database.close(); } };
 }

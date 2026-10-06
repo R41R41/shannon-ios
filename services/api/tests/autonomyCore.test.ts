@@ -55,6 +55,7 @@ describe('CORE as code', () => {
       'services/api/src/mind/inhibition/': 'approval_and_budget',
       'services/api/src/infra/models/jev/': 'response_path',
       'services/api/src/surfaces/voice/': 'response_path',
+      'services/api/src/infra/http/': 'response_path',
       'services/api/src/infra/sqlite/': 'memory',
     };
     for (const [folder, area] of Object.entries(expected)) {
@@ -63,6 +64,11 @@ describe('CORE as code', () => {
       expect(files.length, folder).toBeGreaterThan(0);
       for (const file of files) expect(coreAreaForRepositoryPath(relative(repositoryRoot, file))?.area, file).toBe(area);
     }
+  });
+
+  it('keeps the value table\'s command line inside core', () => {
+    expect(coreAreaForRepositoryPath('services/api/scripts/shannon-values.ts')?.area).toBe('approval_and_budget');
+    expect(coreAreaForRepositoryPath('scripts/shannon-values.sh')?.area).toBe('deployment');
   });
 
   it('matches files exactly and directories by prefix, ignoring case', () => {

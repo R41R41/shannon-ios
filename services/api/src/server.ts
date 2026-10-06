@@ -15,6 +15,7 @@ import { startToolTraceSweep } from './shannonToolTraceSweep.js';
 import { createConfiguredChatModel } from './chatModel.js';
 import { configuredVoiceDecision } from './mind/inhibition/tracedVoiceDecision.js';
 import { storyReacted, toolCallChoice, touchLedger } from './mind/learning/predictionLedgerTaps.js';
+import { createValuesRoute, isValuesPath, ownerValueRecorder } from './infra/http/learningRoutes.js';
 import { configuredAuthPepper, SQLiteDeviceAuthStore } from './deviceAuth.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
 import { ShannonMemoryService } from './memoryService.js';
@@ -209,6 +210,11 @@ const moodHistoryReader = new SQLiteMoodHistoryReader(configuredDatabasePath());
 const moodHistoryRoute = createMoodHistoryRoute({
   reader: moodHistoryReader, now, enabled: () => moodHistoryEnabled(process.env), ownerScopeKey: shannonNowOwnerScope(process.env),
 });
+// Her value table for the owner (docs/cognition-ledger-contract.md): view, rollback and resume, each control in the activity record.
+const valuesRoute = createValuesRoute({
+  values: persistentStore.valueVersions(), calibration: scopeKey => predictionLedger?.calibration(scopeKey) ?? null, now, ownerScopeKey: shannonNowOwnerScope(process.env),
+  choices: scopeKey => choiceLedger?.store.counts(scopeKey) ?? {}, record: ownerValueRecorder(autonomyStore.activity, autonomyConfig),
+});
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 const bodyUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
@@ -284,6 +290,10 @@ const server = createServer(async (request, response) => {
     }
     if (url.pathname === MOOD_HISTORY_PATH) {
       moodHistoryRoute(request, response, principal);
+      return;
+    }
+    if (isValuesPath(url.pathname)) {
+      await valuesRoute(request, response, principal, url.pathname);
       return;
     }
     if (

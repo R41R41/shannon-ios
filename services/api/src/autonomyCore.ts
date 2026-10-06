@@ -247,6 +247,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/agentHostConfig.ts',
     // Syzygy ADR-0008 stage 1 (抑制系): one content-free trace per decision, and the gateway wrapper that writes it.
     'services/api/src/mind/inhibition/',
+    // Syzygy ADR-0008 stage 1: the owner's controls of her value table on the server's command line.
+    'services/api/scripts/shannon-values.ts',
   ]),
   activity_record: Object.freeze([
     'services/api/src/autonomyActivity.ts',
@@ -297,6 +299,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/infra/models/jev/',
     // Routes of her voice surface moved out of `server.ts` (Syzygy ADR-0008 §6, surfaces/voice).
     'services/api/src/surfaces/voice/',
+    // Syzygy ADR-0008 stage 1: the owner's view and controls of her value table.
+    'services/api/src/infra/http/',
   ]),
   deployment: Object.freeze([
     'deploy/',

@@ -168,6 +168,21 @@ A choice of hers, recorded when the gate allowed it and settled once by her thre
 
 **The nightly pass** (`mind/sleep/valueSleep.ts`), after each sleep batch per scope in the background worker: `PredictionLedger.maintain` (expiry, forgetting, 90-day retention, recompute, the calibration line), then `ChoiceLedger.sleep` (settling what waited, lost reports, 90-day retention), and one line `Shannon value sleep: expired=… predictions_pruned=… settled=… choices_pruned=…`. Its failure is logged and never fails the batch. It calls no model.
 
-## Values and mood (steps 5–7)
+## Value table (`shannon_value_versions`, `shannon_value_cells`, step 5)
 
-Designed in the stage-1 plan (Syzygy `notes/adr0008-stage1-plan.md`) and written here as each step lands: `shannon_value_versions`, `shannon_value_cells`; the mood exit boundedAffectStep(core, attractor + w_δ·δ + w_E·V, u) for every settled choice that is not stale (override 1).
+What a choice in a kind of moment has been worth to her (ADR-0008 §3 価値表), as versions she can be rolled back to (§2 answer 1).
+
+- **Cells** (`packages/learning/src/valueTable.ts`): a Gaussian per cell on five levels, root → family (`reach_out`) → choice (`reach_out.wonder`) → choice × band → choice × band × presence. Each settled choice teaches every cell of its path with the Kalman update of ADR-0006 (U′ = U + volatility·Δt in days, k = U′/(U′ + N)); noise and volatility per cell from its own innovations as a prediction key's are (`keyNoiseVolatility`), held toward its parent's. A new cell starts from its parent's mean with the variance between its siblings plus their mean uncertainty, or 1/3 (the reward's scale) while it has fewer than three; the root starts at mean 0, variance 1/3. V is read from the most specific cell with at least one outcome. A cell keeps `n`, `mean`, `uncertainty`, `noise`, `volatility`, `last_at` and the means of W, S, G and the cost.
+- **Versions** (`packages/learning/src/versions.ts`, `mind/learning/valueTable.ts`). A version is a fold of all settled choices in the order they were settled (`evidence_from`, `evidence_to` are places in that order), with the formula (`r1`) and its weights; `cost_unit_yen` stays empty while the cost weight is 0. One version is active per scope, and a choice records the id of the version it read V from (`value_version`; `initial` for the root cell before the first version).
+  - Nightly (`valueSleep`): a new version (`made_by` `sleep`) when something new was settled, unless the active version is frozen. Folded outside the lock, written under it.
+  - Rollback (owner): a new active version (`owner_rollback`) with the cells of an earlier one, by default the newest version that learned from less than the active one (so a second rollback goes further back), and frozen: until resume, what is settled after it is not used (no nightly version). Its cells, and so every V read from it, are identical to the earlier version's.
+  - Resume (owner): a new active version (`owner_resume`) from all the evidence again.
+  - Retention: nightly versions 30 days unless active; the owner's are kept (override 5).
+- **Owner controls** (the app's button is stage 5):
+  - `GET /v1/autonomy/values` (a paired device of the owner's scope, `SHANNON_OWNER_SCOPE_KEY`): the versions, the active version's cells, whether it is frozen, the calibration of her predictions and her choices by status. `POST /v1/autonomy/values/rollback` (`{ "versionId"?: string }`) and `POST /v1/autonomy/values/resume` answer the same view; errors `VALUES_NO_ACTIVE_VERSION`, `VALUES_NO_EARLIER_VERSION`, `VALUES_NOT_FROZEN` (409), `VALUES_VERSION_NOT_FOUND` (404), `VALUES_DISABLED` (403, the choice ledger off). `infra/http/learningRoutes.ts`.
+  - `scripts/shannon-values.sh show|rollback [--version ID]|resume [--scope S] [--database PATH]` on the server, the same controls.
+  - Each control is written to the activity record as an owner action (`kind` control, `actor` owner, `tool` `values.rollback` or `values.resume`, the new version's id as its detail).
+
+## Mood (step 7)
+
+Designed in the stage-1 plan (Syzygy `notes/adr0008-stage1-plan.md`) and written here when it lands: the mood exit boundedAffectStep(core, attractor + w_δ·δ + w_E·V, u) for every settled choice that is not stale (override 1), and the value facts lines.

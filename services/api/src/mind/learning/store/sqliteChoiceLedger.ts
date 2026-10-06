@@ -98,8 +98,8 @@ const round = (value: number) => Math.round(value * 1e6) / 1e6;
 
 export function checkedChoice(row: StoredChoice): StoredChoice {
   if (!(CHOICE_SURFACES as readonly string[]).includes(row.surface) || !['step', 'tool_call'].includes(row.sourceKind)) throw new Error('CHOICE_VOCABULARY');
-  if (![row.choice, row.context, row.valueVersion, row.expectedLevel].every(value => PREDICTION_SYMBOL.test(value))) throw new Error('CHOICE_SYMBOL');
-  if (![row.choiceId, row.sourceId].every(value => PREDICTION_SOURCE_ID.test(value))) throw new Error('CHOICE_IDENTIFIER');
+  if (![row.choice, row.context, row.expectedLevel].every(value => PREDICTION_SYMBOL.test(value))) throw new Error('CHOICE_SYMBOL');
+  if (![row.choiceId, row.sourceId, row.valueVersion].every(value => PREDICTION_SOURCE_ID.test(value))) throw new Error('CHOICE_IDENTIFIER');
   if (!Number.isFinite(Date.parse(row.chosenAt))) throw new Error('CHOICE_TIME');
   if (![row.expected, row.expectedSd, row.expectedNoise, row.costYen].every(Number.isFinite)) throw new Error('CHOICE_NUMBER');
   return { ...row, expected: round(row.expected), expectedSd: round(row.expectedSd), expectedNoise: round(row.expectedNoise), costYen: round(row.costYen), chosenAt: new Date(Date.parse(row.chosenAt)).toISOString() };
@@ -178,6 +178,13 @@ export class SQLiteChoiceLedger {
 
   pruneBefore(scopeKey: string, before: string): number {
     return Number(this.database.prepare('DELETE FROM shannon_choices WHERE scope_key = ? AND chosen_at < ?').run(scopeKey, before).changes);
+  }
+
+  /** How many choices of a scope are pending, settled and void. */
+  counts(scopeKey: string): Record<string, number> {
+    const counts: Record<string, number> = { pending: 0, settled: 0, void: 0 };
+    for (const row of this.database.prepare('SELECT status, COUNT(*) AS n FROM shannon_choices WHERE scope_key = ? GROUP BY status').all(scopeKey) as Array<{ status: string; n: number }>) counts[row.status] = Number(row.n);
+    return counts;
   }
 
   scopes(): string[] {

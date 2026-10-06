@@ -44,6 +44,7 @@ import { DecisionTraces, decisionTracesEnabled } from './mind/inhibition/decisio
 import { jevUsageRow } from './infra/models/jev/jevUsage.js';
 import { PredictionLedger, predictionLedgerEnabled } from './mind/learning/predictionLedger.js';
 import { ChoiceLedger, choiceLedgerEnabled } from './mind/learning/choiceLedger.js';
+import { ValueVersions } from './mind/learning/valueTable.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
@@ -85,6 +86,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   private readonly traces: DecisionTraces | null;
   private readonly ledger: PredictionLedger | null;
   private readonly choices: ChoiceLedger | null;
+  private readonly values: ValueVersions | null;
 
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
@@ -106,6 +108,9 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     this.choices = choicesOn ? new ChoiceLedger({
       database: this.context.database, createsSchema: true, ...(options.cognitionDefer ? { defer: options.cognitionDefer } : {}),
     }) : null;
+    // The value table: a choice reads V from its active version (step 5).
+    this.values = choicesOn ? new ValueVersions({ database: this.context.database, createsSchema: true }) : null;
+    if (this.values) this.choices!.readValuesFrom(this.values.reader);
     this.companion = new SQLiteCompanionRepository(this.context, (scopeKey, state, at, event) => {
       recordMoodPoint(this.context.database, moodHistory, scopeKey, state, at, this.context.emotionTiming());
       this.shadow?.stateWritten(scopeKey, state, at, event);
@@ -208,6 +213,8 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   toolTraceScopes() { return selectToolTraceScopes(this.context.database); }
   pruneToolTraces(before: string) { this.context.transaction(() => pruneToolTraces(this.context.database, before)); }
   impressionStore() { return this.personImpressions; }
+  /** The value table's versions on this store's connection (Syzygy ADR-0008), or null while the choice ledger is switched off. */
+  valueVersions(): ValueVersions | null { return this.values; }
   /** The choice ledger on this store's connection (Syzygy ADR-0008), or null while it is switched off. */
   choiceLedger(): ChoiceLedger | null { return this.choices; }
   /** The prediction ledger on this store's connection (Syzygy ADR-0008), or null while it is switched off. */
@@ -228,7 +235,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   dailyUserMessages(scopeKey: string, startAt: string, endAt: string): readonly DailyUserMessage[] { return this.jobs.dailyUserMessages(scopeKey, startAt, endAt); }
   applySleepOutcome(job: ClaimedBackgroundJob, workerId: string, completedAt: string, outcome: SleepConsolidationOutcome) { return this.jobs.applySleepOutcome(job, workerId, completedAt, outcome); }
   pendingBackgroundJobCount() { return this.jobs.pendingBackgroundJobCount(); }
-  close() { this.traces?.flushLockWaits(); this.ledger?.flushLockWaits(); this.choices?.flushLockWaits(); this.context.close(); }
+  close() { this.traces?.flushLockWaits(); this.ledger?.flushLockWaits(); this.choices?.flushLockWaits(); this.values?.flushLockWaits(); this.context.close(); }
 }
 
 export function configuredDatabasePath(environment: Readonly<Record<string, string | undefined>> = process.env): string {

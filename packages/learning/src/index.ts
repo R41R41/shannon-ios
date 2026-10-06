@@ -59,3 +59,26 @@ export {
   type Settlement,
   type ValueRead,
 } from './reward.js';
+export {
+  VALUE_LEVELS,
+  VALUE_SCALE_VARIANCE,
+  createValueTable,
+  foldValues,
+  learnValue,
+  valueCells,
+  valueOf,
+  valuePath,
+  type ValueCell,
+  type ValueEvidence,
+  type ValueLevel,
+  type ValueTable,
+} from './valueTable.js';
+export {
+  NIGHTLY_VERSION_RETENTION_DAYS,
+  nightlyDecision,
+  rollbackTarget,
+  versionsToPrune,
+  type NightlyDecision,
+  type ValueVersionMaker,
+  type ValueVersionRecord,
+} from './versions.js';

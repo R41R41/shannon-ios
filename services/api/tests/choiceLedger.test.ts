@@ -131,7 +131,7 @@ describe('a choice of hers', () => {
     expect(choice('show')).toMatchObject({ status: 'pending' });
     night('owner', new Date(START + 15 * DAY).toISOString());
     expect(choice('show')).toMatchObject({ status: 'settled', serve: 0, settleCode: 'story' });
-    expect(lines.at(-1)).toMatch(/^Shannon value sleep: expired=2 predictions_pruned=0 settled=1 choices_pruned=0$/u);
+    expect(lines.at(-1)).toMatch(/^Shannon value sleep: expired=2 predictions_pruned=0 settled=1 choices_pruned=0 version=none versions_pruned=0$/u);
     night('owner', new Date(START + 200 * DAY).toISOString());
     expect(choices.rows('owner')).toEqual([]);
     // A pass that fails is logged and never thrown at the sleep batch.
