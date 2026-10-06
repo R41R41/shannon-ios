@@ -61,8 +61,19 @@ public actor ShannonFolderHostRunner {
                 let held = now().timeIntervalSince(asked)
                 return Turn(link: link, delay: max(0, ShannonFolderHostWire.shortestClaimSeconds - held), entry: nil)
             }
-            let report = await worker.perform(step, stopped: await stopped())
-            try await transport.report(id: step.id, report)
+            // A step in hand is carried out (or, once the owner paused, refused `stopped_locally`) and reported even when this
+            // turn is cancelled meanwhile (the pause restarts the loop): the server hears what became of it and need not wait
+            // for its lease to run out.
+            let delivered = await Task { [worker, transport] () -> Result<ShannonFolderHostReport, Error> in
+                let report = await worker.perform(step, stopped: await stopped())
+                do {
+                    try await transport.report(id: step.id, report)
+                    return .success(report)
+                } catch {
+                    return .failure(error)
+                }
+            }.value
+            let report = try delivered.get()
             return Turn(link: link, delay: 0, entry: ShannonFolderHostLogEntry(step: step, report: report, at: now()))
         } catch ShannonFolderHostTransportError.notPaired {
             binding = nil

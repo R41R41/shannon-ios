@@ -286,6 +286,17 @@ final class ShannonFolderHostTests: XCTestCase {
         XCTAssertEqual(caught.entry?.code, "stopped_locally")
         XCTAssertNil(caught.entry?.count)
 
+        // Paused while the step was on its way: the loop is restarted (its turn cancelled), and the step is still reported.
+        transport.reports.removeAll()
+        transport.claimHold = .milliseconds(300)
+        let paused = Answers([false, true])
+        let cancelled = Task { await runner.turn { await paused.next() } }
+        try await Task.sleep(for: .milliseconds(50))
+        cancelled.cancel()
+        _ = await cancelled.value
+        XCTAssertEqual(transport.reports.map(\.1), [.refused(.init(.stoppedLocally))])
+        transport.claimHold = nil
+
         transport.failure = ShannonFolderHostTransportError.notBound
         let unbound = await runner.turn { false }
         XCTAssertEqual(unbound.link, .notRegistered)
@@ -421,20 +432,26 @@ private final class FakeTransport: ShannonFolderHostTransport, @unchecked Sendab
     var step: ShannonFolderHostStep?
     var failure: Error?
     private(set) var claims: [ShannonFolderHostClaimRequest] = []
-    private(set) var reports: [(String, ShannonFolderHostReport)] = []
+    var reports: [(String, ShannonFolderHostReport)] = []
 
     func binding() async throws -> ShannonFolderHostBinding {
         if let failure { throw failure }
         return .init(host: "owner-mac", label: "Mac")
     }
 
+    /// Holds the claim this long first, as a long-poll does; a cancelled wait ends early.
+    var claimHold: Duration?
+
     func claim(_ request: ShannonFolderHostClaimRequest) async throws -> ShannonFolderHostStep? {
         if let failure { throw failure }
         claims.append(request)
+        if let claimHold { try? await Task.sleep(for: claimHold) }
         return step
     }
 
     func report(id: String, _ report: ShannonFolderHostReport) async throws {
+        // A real request is cancelled with its task.
+        if Task.isCancelled { throw CancellationError() }
         reports.append((id, report))
     }
 }
