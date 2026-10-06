@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SHANNON_STANCE_OUTCOME, SHANNON_TEMPERAMENT } from '@shannon/cognition';
@@ -13,7 +16,8 @@ import { MINUTE, SECOND, reactionHarness, scope } from './bodyReactionHarness.js
  * outcome of key gesture.part.who and its prediction error moves her. Stage 1b under `SHANNON_PREDICTION=off` is pinned
  * by the stage-1b tests (`bodyTouchReflex.test.ts` and the others, which run with the switch off).
  */
-afterEach(() => { vi.unstubAllEnvs(); });
+const directories: string[] = [];
+afterEach(() => { vi.unstubAllEnvs(); for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
 
 async function world(options: { record?: boolean } = {}) {
   const database = new DatabaseSync(':memory:');
@@ -163,6 +167,72 @@ describe('her stance is the outcome', () => {
     const before = w.state().emotion.valence;
     await w.said({ type: 'pet', part: 'head', region: 'head', gesture: 'stroke' });
     expect(w.state().emotion.valence).toBeGreaterThan(before);
+  });
+});
+
+describe('the request path with a real record (deferred, as in production)', () => {
+  async function deferredWorld(config: { deadlineMilliseconds?: number } = {}) {
+    const directory = mkdtempSync(join(tmpdir(), 'shannon-stage2-'));
+    directories.push(directory);
+    const database = new DatabaseSync(join(directory, 'shannon.sqlite'));
+    const queue: Array<() => void> = [];
+    const record = new PredictionShadow({ database, createsSchema: true, defer: task => { queue.push(task); }, log: () => {} });
+    const harness = await reactionHarness({ stage2: true, prediction: record, config });
+    const rows = () => new SQLitePredictionStore(database, { createSchema: false }).rows(scope).filter(row => row.domain === 'body_stance');
+    const flush = () => { while (queue.length) queue.shift()!(); };
+    return { ...harness, record, rows, flush, queue, database };
+  }
+
+  it('writes nothing in the request: her stance is learned after the caller, and her feeling moved already', async () => {
+    const w = await deferredWorld();
+    w.speaker.decision = { say: false, text: '', feeling: 'happy', stance: 'welcome' };
+    const before = w.state().emotion.valence;
+    await w.said({ type: 'pet', part: 'head', region: 'head', gesture: 'stroke' });
+    expect(w.state().emotion.valence).toBeGreaterThan(before);
+    expect(w.rows()).toHaveLength(0);
+    expect(w.queue.length).toBeGreaterThan(0);
+    w.flush();
+    expect(w.rows().map(row => row.outcome)).toEqual([SHANNON_STANCE_OUTCOME.welcome]);
+  });
+
+  it('gives up at the deadline with only the startle, learns nothing, and keeps nothing the late answer says', async () => {
+    const w = await deferredWorld({ deadlineMilliseconds: 50 });
+    w.speaker.delayMilliseconds = 400;
+    w.speaker.decision = { say: true, text: '遅い返事', feeling: 'happy', stance: 'welcome' };
+    const before = w.state().emotion;
+    const answer = (await w.react({ type: 'poke', part: 'neck', region: 'body', gesture: 'poke' }, {})).body as { status: string };
+    expect(answer.status).toBe('quiet');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    w.flush();
+    expect(w.rows()).toHaveLength(0);
+    expect(w.state().emotion.valence).toBe(before.valence);
+    expect(w.state().emotion.arousal).toBeGreaterThan(before.arousal);
+  }, 30_000);
+
+  it('answers a replayed request with the stored answer and learns its stance once', async () => {
+    const w = await deferredWorld();
+    w.speaker.decision = { say: true, text: 'もう。', feeling: 'annoyed', stance: 'dislike' };
+    const request = { id: 'replayed-1', touch: { type: 'poke', durationMs: 300, ongoing: false, part: 'cheek', region: 'face', gesture: 'poke' }, audience: 'owner', occurredAt: w.clock.at };
+    const first = await w.send('POST', '/v1/body/reactions', request);
+    const second = await w.send('POST', '/v1/body/reactions', request);
+    expect(second.body).toEqual(first.body);
+    w.flush();
+    expect(w.rows()).toHaveLength(1);
+    expect(w.speaker.calls).toHaveLength(1);
+  });
+
+  it('takes concurrent touches each once, with her own stance each, and records them all after the caller', async () => {
+    const w = await deferredWorld();
+    w.speaker.delayMilliseconds = 20;
+    w.speaker.script = call => ({ say: false, text: '', feeling: 'neutral', stance: call % 2 ? 'fine' : 'unsure' });
+    const answers = await Promise.all(Array.from({ length: 5 }, (_, index) =>
+      w.send('POST', '/v1/body/reactions', { id: `together-${index}`, touch: { type: 'pet', durationMs: 900, ongoing: true, part: 'hair', region: 'head', gesture: 'stroke' }, audience: 'owner', occurredAt: w.clock.at })));
+    expect(answers.every(answer => answer.status === 200)).toBe(true);
+    expect(w.rows()).toHaveLength(0);
+    w.flush();
+    expect(w.rows()).toHaveLength(5);
+    expect(new Set(w.rows().map(row => row.sourceId)).size).toBe(1);
+    w.database.close();
   });
 });
 

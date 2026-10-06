@@ -210,6 +210,7 @@ export function ensurePredictionSchema(database: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS shannon_prediction_outcomes_scope ON shannon_prediction_outcomes (scope_key, seq);
     CREATE INDEX IF NOT EXISTS shannon_prediction_outcomes_source ON shannon_prediction_outcomes (scope_key, source_id);
+    CREATE INDEX IF NOT EXISTS shannon_prediction_outcomes_key ON shannon_prediction_outcomes (scope_key, domain, key, seq);
     CREATE TABLE IF NOT EXISTS shannon_prediction_shadow (
       comparison_id INTEGER PRIMARY KEY AUTOINCREMENT,
       scope_key TEXT NOT NULL,

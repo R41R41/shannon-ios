@@ -1,7 +1,6 @@
 import {
   SHANNON_STANCE_OUTCOME,
   createPredictionModel,
-  observeOutcome,
   predictOutcome,
   relativeUncertainty,
   unexpectedness,
@@ -41,7 +40,7 @@ export function touchPredictionEnabled(environment: Readonly<Record<string, stri
 export const BODY_STANCE_DOMAIN = 'body_stance';
 
 /** The record stage 2 learns in: the prediction shadow's, read and written at once. */
-export type TouchPredictionRecord = Pick<PredictionShadow, 'predict' | 'recent' | 'learnNow' | 'stanceCompared'>;
+export type TouchPredictionRecord = Pick<PredictionShadow, 'predict' | 'recent' | 'learnLater' | 'stanceCompared'>;
 
 /** The gesture a touch in the old shape means: holding is the hand's; elsewhere a hand resting there. */
 function gestureOf(touch: Pick<TouchRecord, 'type' | 'gesture' | 'part'>): BodyTouchGesture {
@@ -99,20 +98,24 @@ export class TouchPredictions {
     return gap >= 0 && gap <= recent.boundaryMs ? recent.outcome : null;
   }
 
-  /** Learns the stance as the outcome of the touch's key, at once. Returns its error and how unexpected it was. */
+  /**
+   * A stance she gave: felt now against what she expects at this moment (a read), and learned as the outcome of the key
+   * after the caller (`learnLater`): no write in the touch's request.
+   */
   learn(scopeKey: string, prediction: TouchPrediction, burstId: string, stance: number, at: string, state: CompanionStateSnapshot): ShannonTouchOutcome {
-    const draft = outcome(BODY_STANCE_DOMAIN, prediction.key, stance, prediction.context, {}, 'touch', burstId, at);
-    const folded = this.record?.learnNow(scopeKey, draft, state) ?? null;
-    if (folded && folded.error !== null && folded.unexpected !== null) return { error: folded.error, unexpected: folded.unexpected };
-    // No record: the empty prior, learning nothing.
-    const update = observeOutcome(createPredictionModel(), { domain: BODY_STANCE_DOMAIN, key: prediction.key, at: Date.parse(at), context: prediction.context, outcome: stance });
-    return { error: update.error, unexpected: unexpectedness(update) };
+    const now = this.record?.predict(scopeKey, { domain: BODY_STANCE_DOMAIN, key: prediction.key, at: Date.parse(at), context: prediction.context });
+    const outcome = this.felt(now ? { ...prediction, expectation: now.expectation, uncertainty: now.uncertainty, noise: now.noise } : prediction, stance);
+    this.record?.learnLater(scopeKey, outcome_(prediction, burstId, stance, at), state);
+    return outcome;
   }
 
   compared(scopeKey: string, after: CompanionStateSnapshot, at: string): void {
     this.record?.stanceCompared(scopeKey, after, at);
   }
 }
+
+const outcome_ = (prediction: TouchPrediction, burstId: string, stance: number, at: string) =>
+  outcome(BODY_STANCE_DOMAIN, prediction.key, stance, prediction.context, {}, 'touch', burstId, at);
 
 /** Her stance as the outcome on the valence scale. */
 export const stanceOutcome = (stance: BodyTouchStance): number => SHANNON_STANCE_OUTCOME[stance];

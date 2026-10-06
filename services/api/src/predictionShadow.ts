@@ -194,8 +194,10 @@ export class PredictionShadow implements AutonomyPredictionTap {
   }
 
   /**
-   * Stage 2 (`SHANNON_PREDICTION`): what she expects of a key now, read at once from the record (never deferred: the
-   * touch needs it before she reacts). Null when the record is not there or cannot be read; it never fails the touch.
+   * Stage 2 (`SHANNON_PREDICTION`): what she expects of a key now. The one read a touch needs before she reacts, so it is
+   * done at once, and it is a read only: the cached mind is brought up to the table by folding the rows that arrived since
+   * (a cold fold happens once per process, and every state write already warms it after the caller). It takes no lock and
+   * writes nothing. Null when the record is not there or cannot be read; it never fails the touch.
    */
   predict(scopeKey: string, query: PredictionQuery): Prediction | null {
     let prediction: Prediction | null = null;
@@ -203,7 +205,7 @@ export class PredictionShadow implements AutonomyPredictionTap {
     return prediction;
   }
 
-  /** Stage 2: the newest outcome of a key, with the episode boundary she has learned; null when there is none. */
+  /** Stage 2: the newest outcome of a key (one indexed read), with the episode boundary she has learned; null when there is none. */
   recent(scopeKey: string, domain: string, key: string): { outcome: number; at: number; boundaryMs: number } | null {
     let recent: { outcome: number; at: number; boundaryMs: number } | null = null;
     this.guard(() => {
@@ -214,22 +216,17 @@ export class PredictionShadow implements AutonomyPredictionTap {
   }
 
   /**
-   * Stage 2: learns one outcome at once and returns what was expected of it (the error, the uncertainty, the noise),
-   * or null when it could not be recorded. A touch's stance is learned here, not deferred: its error moves her feeling.
+   * Stage 2: learns a stance she gave, after the caller (`defer`), as every other tap does: the daily maintenance, the write
+   * lock and the insert never run in the touch's request. Her feeling has already moved by the error read before it.
    */
-  learnNow(scopeKey: string, draft: PredictionOutcomeDraft, state: CompanionStateSnapshot): FoldedOutcome | null {
-    let folded: FoldedOutcome | null = null;
-    this.guard(() => {
+  learnLater(scopeKey: string, draft: PredictionOutcomeDraft, state: CompanionStateSnapshot): void {
+    this.later(() => {
       this.maintain(scopeKey, draft.observedAt, state);
-      this.within(scopeKey, () => {
-        folded = this.record(scopeKey, draft);
-        this.log(outcomeLine(draft.domain, draft.key, folded, null));
-      });
+      this.within(scopeKey, () => { this.log(outcomeLine(draft.domain, draft.key, this.record(scopeKey, draft), null)); });
     });
-    return folded;
   }
 
-  /** Stage 2: the comparison after a touch's stance moved her feeling (`after` is the state as written). */
+  /** Stage 2: the comparison after a touch moved her (`after` is the state as written), after the caller. */
   stanceCompared(scopeKey: string, after: CompanionStateSnapshot, at: string): void {
     this.later(() => this.within(scopeKey, () => { this.compare(scopeKey, 'touch', after, at); }));
   }

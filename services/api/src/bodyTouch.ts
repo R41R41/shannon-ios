@@ -73,7 +73,7 @@ export class BodyTouches {
 
   constructor(private readonly dependencies: BodyTouchDependencies) {
     const record = dependencies.prediction;
-    this.predictions = new TouchPredictions(record?.predict && record.recent && record.learnNow && record.stanceCompared ? record as TouchPredictionRecord : null);
+    this.predictions = new TouchPredictions(record?.predict && record.recent && record.learnLater && record.stanceCompared ? record as TouchPredictionRecord : null);
     this.reportError = dependencies.reportError ?? (error => console.error('Shannon touch memory failed', error instanceof Error ? error.message : 'unknown'));
   }
 
