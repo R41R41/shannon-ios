@@ -53,6 +53,7 @@ describe('CORE as code', () => {
       'services/api/src/mind/learning/': 'emotion',
       'services/api/src/mind/inhibition/': 'approval_and_budget',
       'services/api/src/infra/models/jev/': 'response_path',
+      'services/api/src/surfaces/voice/': 'response_path',
       'services/api/src/infra/sqlite/': 'memory',
     };
     for (const [folder, area] of Object.entries(expected)) {

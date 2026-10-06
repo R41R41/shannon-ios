@@ -1,6 +1,6 @@
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer } from 'node:http';
 import { handleDeviceManagement, handlePushRegistration } from './serverDeviceRoutes.js';
-import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readBytes, readJson, sendJson, VoiceRequestAllowances } from './serverHttp.js';
+import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readJson, sendJson, VoiceRequestAllowances } from './serverHttp.js';
 import { bearerAuthorized, configuredApiToken, configuredAuthMode } from './apiAuth.js';
 import { handleVoiceVisionSnapshot } from './serverVoiceVisionRoute.js';
 import { createPairingRoute } from './serverPairingRoute.js';
@@ -15,7 +15,7 @@ import { startToolTraceSweep } from './shannonToolTraceSweep.js';
 import { createConfiguredChatModel } from './chatModel.js';
 import { configuredVoiceDecision } from './mind/inhibition/tracedVoiceDecision.js';
 import { storyReacted, touchLedger } from './mind/learning/predictionLedgerTaps.js';
-import { configuredAuthPepper, SQLiteDeviceAuthStore, type ShannonDevicePrincipal } from './deviceAuth.js';
+import { configuredAuthPepper, SQLiteDeviceAuthStore } from './deviceAuth.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
 import { ShannonMemoryService } from './memoryService.js';
 import { SQLiteWorldStore } from './worldStore.js';
@@ -33,13 +33,8 @@ import {
   createConfiguredVoyagerCatalog,
   createConfiguredVoyagerDestination,
 } from './organize.js';
-import {
-  createConfiguredVoiceTranscriber,
-  normalizedVoiceMimeType,
-  parsedVoiceDurationSeconds,
-  SHANNON_VOICE_MAXIMUM_BYTES,
-  VoiceTranscriptionError,
-} from './voiceTranscription.js';
+import { createConfiguredVoiceTranscriber } from './voiceTranscription.js';
+import { createVoiceTranscriptionRoute } from './surfaces/voice/transcriptionRoute.js';
 import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeRequest, isPlatformBridgePath } from './serverPlatformBridgeRoute.js';
 import { SQLitePersonIdentityStore } from './personIdentity.js';
 import { SQLitePeopleMemoryStore } from './peopleMemoryStore.js';
@@ -214,7 +209,7 @@ const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 const bodyUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
 const voiceAllowances = new VoiceRequestAllowances();
-const activeVoiceScopes = new Set<string>();
+const handleVoiceTranscription = createVoiceTranscriptionRoute({ transcriber: voiceTranscriber, allowances: voiceAllowances });
 const geminiSpeechRoute = createGeminiSpeechRoute(
   process.env, persistentStore, (deviceId) => voiceAllowances.consumeSpeech(deviceId),
 );
@@ -434,66 +429,6 @@ function shutdown(): void {
     persistentStore.close();
     process.exitCode = 0;
   });
-}
-
-async function handleVoiceTranscription(
-  request: IncomingMessage,
-  response: ServerResponse,
-  principal: ShannonDevicePrincipal | null,
-): Promise<void> {
-  if (request.method !== 'POST') {
-    sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
-    return;
-  }
-  if (!principal) {
-    sendJson(response, 403, { error: 'PAIRED_DEVICE_REQUIRED' });
-    return;
-  }
-  if (!voiceTranscriber) {
-    sendJson(response, 503, { error: 'VOICE_NOT_CONFIGURED', message: '音声入力は現在利用できません。' });
-    return;
-  }
-  if (!voiceAllowances.consumeControl(principal.deviceId)) {
-    sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
-    return;
-  }
-  if (activeVoiceScopes.has(principal.scopeKey)) {
-    sendJson(response, 429, { error: 'BUSY', message: 'いまの音声を聞き取っています。少しお待ちください。' });
-    return;
-  }
-
-  activeVoiceScopes.add(principal.scopeKey);
-  try {
-    const mimeType = normalizedVoiceMimeType(request.headers['content-type']);
-    const durationSeconds = parsedVoiceDurationSeconds(request.headers['x-shannon-audio-duration-ms']);
-    const audio = await readBytes(request, SHANNON_VOICE_MAXIMUM_BYTES);
-    const result = await voiceTranscriber.transcribe({
-      scopeKey: principal.scopeKey,
-      audio,
-      mimeType,
-      durationSeconds,
-    });
-    sendJson(response, 200, result);
-  } catch (error) {
-    if (error instanceof VoiceTranscriptionError) {
-      console.warn('Shannon voice transcription failed', {
-        code: error.code,
-        upstreamStatus: error.upstreamStatus,
-        upstreamCode: error.upstreamCode,
-      });
-      const status = error.code === 'VOICE_DAILY_BUDGET_EXHAUSTED' ? 429
-        : error.code === 'VOICE_TRANSCRIPTION_FAILED' ? 502
-          : 400;
-      const message = error.code === 'VOICE_DAILY_BUDGET_EXHAUSTED'
-        ? '今日は音声入力を十分使いました。テキスト入力は引き続き使えます。'
-        : '音声を文字にできませんでした。もう一度お試しください。';
-      sendJson(response, status, { error: error.code, message });
-      return;
-    }
-    throw error;
-  } finally {
-    activeVoiceScopes.delete(principal.scopeKey);
-  }
 }
 
 process.once('SIGINT', shutdown);

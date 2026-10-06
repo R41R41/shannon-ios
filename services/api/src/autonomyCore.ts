@@ -293,6 +293,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/serverPlatformBridgeRoute.ts',
     // Syzygy ADR-0008 stage 1: the Jev client's call count and price.
     'services/api/src/infra/models/jev/',
+    // Routes of her voice surface moved out of `server.ts` (Syzygy ADR-0008 §6, surfaces/voice).
+    'services/api/src/surfaces/voice/',
   ]),
   deployment: Object.freeze([
     'deploy/',
