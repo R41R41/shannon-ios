@@ -42,7 +42,7 @@ describe('the prediction layer as a touch meets it', () => {
 
 describe('the bounded step (candidate B)', () => {
   it('moves valence the share 1 − γ toward attractor + w_δ δ and arousal toward its attractor raised by u', () => {
-    const next = appraiseTouch(calm, { error: 0.5, unexpected: 0.4 });
+    const next = appraiseTouch(calm, { error: 0.5, expectation: 0, unexpected: 0.4 });
     expect(next.valence).toBeCloseTo(gamma * calm.valence + (1 - gamma) * (SHANNON_MOOD_BASELINE.valence + 0.5), 12);
     expect(next.arousal).toBeCloseTo(gamma * calm.arousal + (1 - gamma) * (SHANNON_MOOD_BASELINE.arousal + (1 - SHANNON_MOOD_BASELINE.arousal) * 0.4), 12);
     expect(next.openness).toBe(calm.openness);
@@ -50,9 +50,20 @@ describe('the bounded step (candidate B)', () => {
     expect(touchImpact({ error: 1.6 })).toBe(1);
   });
 
+  it('holds what she expects (w_E = 0.35/0.80 × w_δ, Rutledge et al. 2014): a familiar welcome keeps her warm, a familiar refusal cool', () => {
+    expect(SHANNON_AFFECT_DYNAMICS.expectationWeight).toBeCloseTo(0.4375, 12);
+    // The review's case: joy carried over from chat (0.8), then a pat she expects to welcome and does.
+    const warm = appraiseTouch({ ...calm, valence: 0.8 }, { error: 0, expectation: 1, unexpected: 0 });
+    expect(warm.valence).toBeCloseTo(gamma * 0.8 + (1 - gamma) * 0.4375, 12);
+    expect(warm.valence).toBeGreaterThan(0.6);
+    let cool = calm;
+    for (let index = 0; index < 30; index += 1) cool = appraiseTouch(cool, { error: 0, expectation: -1, unexpected: 0 });
+    expect(cool.valence).toBeCloseTo(-0.4375, 6);
+  });
+
   it('never pins: a hundred fully unexpected refusals in a row stay inside the scale and off its end', () => {
     let emotion = calm;
-    for (let index = 0; index < 100; index += 1) emotion = appraiseTouch(emotion, { error: -2, unexpected: 1 });
+    for (let index = 0; index < 100; index += 1) emotion = appraiseTouch(emotion, { error: -2, expectation: -1, unexpected: 1 });
     expect(emotion.valence).toBeGreaterThanOrEqual(-1);
     expect(emotion.arousal).toBeLessThanOrEqual(1);
   });
@@ -88,7 +99,7 @@ describe('a touch under stage 2', () => {
   it('moves her by a stance carried from earlier in the episode, and keeps the feeling she chose then', () => {
     const store = new InMemoryCompanionStateStore(() => NOW);
     const before = store.snapshot('owner');
-    const after = store.apply('owner', { type: 'body-touched', touch: pat({ startle: 0.05, outcome: { error: 0.4, unexpected: 0.5 } }) });
+    const after = store.apply('owner', { type: 'body-touched', touch: pat({ startle: 0.05, outcome: { error: 0.4, expectation: 0, unexpected: 0.5 } }) });
     expect(after.emotion.valence).toBeGreaterThan(before.emotion.valence);
     expect(after.expressiveEmotion).toEqual(before.expressiveEmotion);
   });
@@ -96,8 +107,8 @@ describe('a touch under stage 2', () => {
   it('applies her decided stance as its own event', () => {
     const store = new InMemoryCompanionStateStore(() => NOW);
     const before = store.snapshot('owner');
-    const after = store.apply('owner', { type: 'touch-appraised', outcome: { error: -0.8, unexpected: 0.9 } });
-    expect(after.emotion).toEqual(appraiseTouch(before.emotion, { error: -0.8, unexpected: 0.9 }));
+    const after = store.apply('owner', { type: 'touch-appraised', outcome: { error: -0.8, expectation: 0, unexpected: 0.9 } });
+    expect(after.emotion).toEqual(appraiseTouch(before.emotion, { error: -0.8, expectation: 0, unexpected: 0.9 }));
     expect(after.emotion.valence).toBeLessThan(before.emotion.valence);
   });
 });

@@ -57,7 +57,12 @@ export const SHANNON_AFFECT_DYNAMICS = Object.freeze({
   /** Per √(awake ms): the stationary band σ/√(2θ) equals the current `settledBelow` (0.15). */
   sigma: BAND * Math.sqrt(2 * THETA),
   attractor: SHANNON_MOOD_BASELINE,
-  expectationWeight: 1,
+  /**
+   * w_E, the expectation's weight, in the same units as w_δ: w_δ × (w_EV / w_RPE) = 0.35 / 0.80 of Rutledge et al.'s 2014
+   * fMRI experiment (z-scored happiness; as reported by Daswani & Leike 2015). 要確認 against the paper's own table. An
+   * expected good outcome holds her valence up, an expected bad one holds it down, while the error alone fades with habit.
+   */
+  expectationWeight: 0.35 / 0.8,
   errorWeight: 1,
   /**
    * γ, the forgetting factor per event of Rutledge, Skandali, Dayan & Dolan 2014 (PNAS 111:12252): 0.61 ± 0.30 over
@@ -121,9 +126,11 @@ export const SHANNON_AFFECT_COEFFICIENTS: readonly AffectCoefficient[] = Object.
     initial: 'stationary band σ/√(2θ) = 0.15 (the current settledBelow)', kind: 'matched', fit: 'residuals of the same stretches' },
   { symbol: 'attractor', meaning: 'where the mood returns', source: 'Kuppens et al. 2010', literature: '—',
     initial: 'current baseline (0, 0.30, 0.35); valence moves by w_δ × mood', kind: 'matched', fit: 'her long mean, very slowly' },
-  { symbol: 'w_E, w_δ', meaning: 'weights of expectation and prediction error', source: 'Rutledge, Skandali, Dayan & Dolan 2014',
-    // 要確認: "both positive, with individual differences" is the ADR's reading of the source and has not been checked.
-    literature: 'both positive, individual differences', initial: '1 and 1: an unexpected strong (0.90) appraisal is an impulse of 0.90',
+  { symbol: 'w_E, w_δ', meaning: 'weights of expectation and prediction error', source: 'Rutledge, Skandali, Dayan & Dolan 2014 (weights as reported by Daswani & Leike 2015)',
+    // 要確認: w_CR 0.52, w_EV 0.35, w_RPE 0.80 (z-scored) are taken from Daswani & Leike's report of the fMRI experiment, not yet
+    // from the paper's own table; "both positive, EV lower than RPE" is the paper's statement.
+    literature: 'both positive, w_EV < w_RPE; fMRI experiment w_EV 0.35, w_RPE 0.80 (z-scored)',
+    initial: 'w_δ 1 (an unexpected strong 0.90 appraisal is an impulse of 0.90); w_E = w_δ × 0.35/0.80 = 0.4375',
     kind: 'matched', fit: 'regression on the feelings she decided (reply feelings, touches)', verify: '要確認' },
   { symbol: 'γ', meaning: 'forgetting factor per event: the share 1 − γ an outcome moves valence and arousal toward its target', source: 'Rutledge, Skandali, Dayan & Dolan 2014',
     // 要確認: whether the ± 0.30 the range is built from is the SD or the SEM over participants.
@@ -328,6 +335,11 @@ export interface AffectOutcome {
   unexpected?: number;
   /** γ for this step, when a fit inside `eventForgettingRange` is tried; absent: `eventForgetting`. */
   forgetting?: number;
+  /**
+   * The expectation is her standing appraisal of what happened (a touch: how she expects to take it), not a choice of hers:
+   * w_E × expectation joins the valence target (Rutledge's EV term) but not the trace, whose strength is the error alone.
+   */
+  held?: boolean;
 }
 
 /**
@@ -348,7 +360,8 @@ export function boundedAffectStep(core: ShannonEmotion, target: number, unexpect
 export function impulseAffect(state: AffectDynamicsState, outcome: AffectOutcome): { state: AffectDynamicsState; impulse: number } {
   const error = finite(outcome.error);
   const impulse = clamp(C.errorWeight * error + (outcome.chosen ? C.expectationWeight * finite(outcome.expectation) : 0), -1, 1);
-  const core = boundedAffectStep(state.core, attractor(state.mood).valence + impulse, finite(outcome.unexpected), outcome.forgetting ?? C.eventForgetting);
+  const held = outcome.held && !outcome.chosen ? C.expectationWeight * finite(outcome.expectation) : 0;
+  const core = boundedAffectStep(state.core, attractor(state.mood).valence + impulse + held, finite(outcome.unexpected), outcome.forgetting ?? C.eventForgetting);
   const recalled = state.traces.find(trace => trace.key === outcome.key);
   let traces = state.traces.filter(trace => trace !== recalled);
   if (recalled) traces = [...traces, reconsolidateTrace(recalled, impulse, outcome.learningRate, state.awakeMs)];

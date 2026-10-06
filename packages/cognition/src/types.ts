@@ -261,6 +261,8 @@ export interface ShannonTouchAppraisal {
 export interface ShannonTouchOutcome {
   /** Her stance as an outcome − what she expected, on the valence scale. */
   error: number;
+  /** What she expected of the touch, on the valence scale: held as her appraisal (w_E × expectation, Rutledge's EV term). */
+  expectation: number;
   /** How improbable the stance was under her prediction, 0–1. */
   unexpected: number;
 }

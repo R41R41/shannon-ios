@@ -284,7 +284,7 @@ describe('the comparison record', () => {
     const comparisons = w.shadow!.comparisons(scope);
     expect(comparisons.map(item => item.tap)).toEqual(['touch']);
     expect(comparisons.every(item => item.dynamics === SHANNON_AFFECT_STEP)).toBe(true);
-    w.apply({ type: 'touch-appraised', outcome: { error: 0.4, unexpected: 0.5 } });
+    w.apply({ type: 'touch-appraised', outcome: { error: 0.4, expectation: 0.2, unexpected: 0.5 } });
     expect(w.shadow!.comparisons(scope)).toHaveLength(1);
   });
 });

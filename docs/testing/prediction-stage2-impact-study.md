@@ -60,7 +60,7 @@ Arousal under B is still about .2 above the old dynamics on the replayed day (me
 
 Switch: `SHANNON_PREDICTION` (default on). `off` gives stage 1b exactly: at the stage-2 commit `bodyTouchReflex.test.ts` still records f8a35ecb… with the switch off, and every stage-1b body test runs with it off.
 
-- **The rule** (`affectDynamics.ts` `boundedAffectStep`, `touchAppraisal.ts`): at an outcome valence moves the share 1 − γ toward attractor + w_δ·δ, arousal the share 1 − γ toward a₀ + (1 − a₀)·u. The trace and the strength of the feeling she chose are |w_δ·δ|. When a touch arrives, before her stance, arousal rises (never falls) by the same step with u = the startle U/(U + N). The shadow's new dynamics use the same rule for every valence outcome.
+- **The rule** (`affectDynamics.ts` `boundedAffectStep`, `touchAppraisal.ts`): at an outcome valence moves the share 1 − γ toward attractor + w_δ·δ + w_E·E, arousal the share 1 − γ toward a₀ + (1 − a₀)·u. For a touch, E is what she expected of it, held as her standing appraisal (review of 2026-10-06, below). The trace and the strength of the feeling she chose are |w_δ·δ|. When a touch arrives, before her stance, arousal rises (never falls) by the same step with u = the startle U/(U + N). The shadow's new dynamics use the same rule for every valence outcome.
 - **γ = 0.61**, Rutledge, Skandali, Dayan & Dolan 2014 (PNAS 111:12252), forgetting factor per trial, 0.61 ± 0.30 over participants. Range used for fitting: 0.31–0.91 (`eventForgettingRange`); outside it needs the owner's approval. **Open (要確認): whether ± 0.30 is the SD or the SEM.** If it is the SEM, the range for fitting is narrower than recorded here.
 - **No table for any part** under `on`, with no automatic joy on a head pat (ADR-0005 owner answer 6). Her stance is the outcome of key `gesture.part.who` (domain `body_stance`); a touch she is not asked about carries her stance for the key within the learned episode; she is told the closeness and her past stances on the part (owner alone only); her memory keeps the part.
 - **Calibration** of γ (inside its range), w_δ and the stance scoring will come from production records once stage 2 has run; nothing here was fitted to production rows.
@@ -68,3 +68,21 @@ Switch: `SHANNON_PREDICTION` (default on). `off` gives stage 1b exactly: at the 
 ## Next: a faster stance (proposal)
 
 How fast her stance is known is how fast her face can move under stage 2. The proposal to let the fast classifier jev judge the stance and feeling first, with luna writing the line, and to make one appraisal circuit with a context catalog for every surface, is in [`docs/design/appraisal-circuit-proposal.md`](../design/appraisal-circuit-proposal.md). It is not built.
+
+## The expectation term (review of 2026-10-06)
+
+The review found that without Rutledge's expected-value term an expected outcome pulls her valence toward neutral: a familiar welcome pat took her from 0.8 (joy carried over from chat) to 0.49. Rutledge et al. (2014) model momentary happiness with an EV term beside the RPE term, both positive, EV lower than RPE. The weights of their fMRI experiment (z-scored happiness), as reported by Daswani & Leike (2015), are w_CR 0.52, w_EV 0.35, w_RPE 0.80. **要確認** against the paper's own table. Scaled as w_δ was (w_δ = 1 stands for w_RPE), **w_E = 0.35 / 0.80 = 0.4375** (`SHANNON_AFFECT_DYNAMICS.expectationWeight`). In Rutledge's task the EV term belongs to a chosen gamble; a touch is not her choice, but its expectation is her standing appraisal of such a touch (as expectations carry momentary well-being in learning tasks: Blain & Rutledge 2020), so for a touch it joins the valence target (`held`) and not the memory trace, whose strength stays the error alone. A reply's feeling (stage 3) is left as it is. B0 below is B as first built, without E.
+
+| | B (with E) | B0 (no E) |
+| --- | --- | --- |
+| Familiar welcome after chat joy (v 0.8): v after it / after 5 more | **0.66** / 0.45 | 0.49 / 0.04 |
+| Familiar refusal from 0: v after it / after 5 more | −0.17 / **−0.42** | 0.00 / −0.01 |
+| 20 pats in a row (fine): strength at pats 1 / 10 / 20 (habituation) | .50 / .01 / .00 | .50 / .01 / .00 |
+| … valence after pats 1 / 5 / 20 | .20 / .42 / .21 (held at w_E × 0.5) | .20 / .27 / −.01 |
+| Long random run: share \|v\| ≥ .95 / a ≥ .95; flood of welcomes v ≥ .95 | 0.2% / 0; 0% | 0.1% / 0; 0% |
+| Mood loop at f = 1.763: max \|mood\| | .74 | .74 |
+| Neck poke → dislike → refuse: valence | .16 → −.22 → −.54 | −.03 → −.40 → −.65 |
+| Stage-1 day: max \|v\|, mean a | .60, .58 | .59, .58 |
+| γ = .31 / .61 / .91: 20th-pat v; day max \|v\| | .23 / .23 / .24; .78 / .60 / .30 | .01 / .01 / .06; .78 / .59 / .30 |
+
+Habituation of what she feels (the error and its strength), the bounds and the mood loop are unchanged; what changes is that a known pleasant touch keeps her warm and a known unpleasant one keeps her cool, instead of both returning her to neutral.

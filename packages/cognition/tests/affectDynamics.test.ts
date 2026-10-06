@@ -93,7 +93,11 @@ describe('momentary impulses and mood', () => {
     expect(impulseAffect(start, { key: 'reply_feeling:owner', error: 0, learningRate: 0.5 }).impulse).toBe(0);
     // w_E applies only where a prediction preceded a choice of hers.
     expect(impulseAffect(start, { key: 'reply:k', error: 0, expectation: 0.4, learningRate: 0.5 }).impulse).toBe(0);
-    expect(impulseAffect(start, { key: 'reply:k', error: 0, expectation: 0.4, chosen: true, learningRate: 0.5 }).impulse).toBeCloseTo(0.4, 12);
+    expect(impulseAffect(start, { key: 'reply:k', error: 0, expectation: 0.4, chosen: true, learningRate: 0.5 }).impulse).toBeCloseTo(0.4 * 0.35 / 0.8, 12);
+    // Held as her appraisal (a touch): it joins the valence target, not the trace.
+    const held = impulseAffect(start, { key: 'touch:k', error: 0, expectation: 0.8, held: true, learningRate: 0.5 });
+    expect(held.impulse).toBe(0);
+    expect(held.state.core.valence).toBeGreaterThan(impulseAffect(start, { key: 'touch:k', error: 0, learningRate: 0.5 }).state.core.valence);
     // Surprise raises arousal either way, by the bounded step (stage 2, candidate B): the share 1 − γ toward its attractor raised by u.
     const gamma = SHANNON_AFFECT_DYNAMICS.eventForgetting;
     const surprised = impulseAffect(start, { key: 'k', error: -0.5, learningRate: 0.5, unexpected: 0.8 }).state.core;

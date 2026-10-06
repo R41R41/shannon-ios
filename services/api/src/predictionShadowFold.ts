@@ -67,7 +67,12 @@ export function foldOutcome(mind: ShadowMind, row: PredictionOutcomeDraft): Fold
   let impulse: number | null = null;
   const unexpected = unexpectedness(update);
   if (domain.valence) {
-    const felt = impulseAffect(mind.dynamics, { key: `${row.domain}:${row.key}`, error: update.error, learningRate: update.learningRate, unexpected });
+    // A touch's outcome is her appraisal of it: its expectation is held (w_E, Rutledge's EV term), as in `touchAppraisal.ts`.
+    const held = row.domain === 'touch' || row.domain === 'body_stance';
+    const felt = impulseAffect(mind.dynamics, {
+      key: `${row.domain}:${row.key}`, error: update.error, learningRate: update.learningRate, unexpected,
+      ...(held ? { expectation: update.expectation, held: true } : {}),
+    });
     mind.dynamics = felt.state;
     impulse = felt.impulse;
   }

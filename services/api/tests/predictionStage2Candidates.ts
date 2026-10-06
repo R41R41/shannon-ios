@@ -71,7 +71,7 @@ import { SQLiteShannonStore } from '../src/sqliteStore.js';
  * `pnpm exec tsx tests/predictionStage2Candidates.ts` in services/api to print the report.
  */
 
-export const CANDIDATES = ['current', 'A', 'B', 'Btanh', 'C'] as const;
+export const CANDIDATES = ['current', 'A', 'B', 'B0', 'Btanh', 'C'] as const;
 export type Candidate = typeof CANDIDATES[number];
 
 /** Rutledge et al. 2014: forgetting factor per trial, mean 0.61 (SD 0.30) over participants. */
@@ -232,9 +232,14 @@ export function observe(mind: CandidateMind, event: Event): Felt | null {
         arousal: clamp(state.core.arousal + STAGE1_SURPRISE_WEIGHT * Math.abs(update.error), 0, 1),
       };
       mind.dynamics = remember({ ...state, core, mood: state.mood + D.moodRate * (update.error - state.mood) }, traceKey, impact, update.learningRate);
-    } else if (mind.candidate === 'B') {
-      // B is now the rule of `affectDynamics.ts` itself (stage 2).
-      const felt = impulseAffect(state, { key: traceKey, error: update.error, learningRate: update.learningRate, unexpected, forgetting: gamma });
+    } else if (mind.candidate === 'B' || mind.candidate === 'B0') {
+      // B is the rule of `affectDynamics.ts` itself (stage 2): a touch's expectation is held (w_E, Rutledge's EV term).
+      // B0 is B as first built, without it (review of 2026-10-06).
+      const held = mind.candidate === 'B' && event.domain !== 'reply_feeling';
+      const felt = impulseAffect(state, {
+        key: traceKey, error: update.error, learningRate: update.learningRate, unexpected, forgetting: gamma,
+        ...(held ? { expectation: update.expectation, held: true } : {}),
+      });
       impact = felt.impulse;
       mind.dynamics = felt.state;
     } else if (mind.candidate === 'Btanh') {
@@ -447,6 +452,25 @@ function computeSensitive() {
   });
 }
 
+/**
+ * 8. The review's case (2026-10-06): joy carried over from chat (valence 0.8), then a pat she knows well and welcomes; and a
+ * touch she knows she refuses, repeated. Each after a history of the same stance on the key, so the error is near 0.
+ */
+function computeExpectedStances() {
+  return each(candidate => {
+    const run = (stance: Stance, start: number) => {
+      const mind = createMind(candidate);
+      for (let index = 0; index < 30; index += 1) pat(mind, index * 40_000, stance, 'stroke.head.owner');
+      mind.dynamics = { ...mind.dynamics, core: { ...mind.dynamics.core, valence: start } };
+      const felt = pat(mind, 30 * 40_000, stance, 'stroke.head.owner');
+      const after = [felt.after.valence];
+      for (let index = 1; index <= 5; index += 1) after.push(pat(mind, (30 + index) * 40_000, stance, 'stroke.head.owner').after.valence);
+      return { error: felt.error, first: after[0]!, fifth: after[5]! };
+    };
+    return { welcomeFrom08: run('welcome', 0.8), refuseFrom0: run('refuse', 0) };
+  });
+}
+
 // ---------------------------------------------------------------- the stage-1 day, old against new
 
 const SCOPE = 'owner';
@@ -597,6 +621,12 @@ export function report(): string {
       lines.push(`          ${tap.padEnd(13)} n=${part.n} old v ${f2(part.oldValence)} new v ${f2(part.valence)} max|v| ${part.maxAbsValence.toFixed(2)} old a ${part.oldArousal.toFixed(2)} new a ${part.arousal.toFixed(2)} max a ${part.maxArousal.toFixed(2)} mood ${f2(part.mood)}`);
     }
   }
+  const held = expectedStances();
+  lines.push('', '8. Familiar stances: a welcome after chat joy (v 0.8) and a refusal from 0: δ, v after it, v after 5 more');
+  for (const candidate of CANDIDATES) {
+    const item = held[candidate];
+    lines.push(`  ${candidate.padEnd(7)} welcome δ ${f2(item.welcomeFrom08.error)} v ${f2(item.welcomeFrom08.first)} → ${f2(item.welcomeFrom08.fifth)} | refuse δ ${f2(item.refuseFrom0.error)} v ${f2(item.refuseFrom0.first)} → ${f2(item.refuseFrom0.fifth)}`);
+  }
   lines.push('', 'B across γ = mean ± SD: first-pat v, peak v, 20th v | day max|v|, mean a, max a, mean|Δv|');
   for (const item of gammaSensitivity()) {
     lines.push(`  γ=${item.gamma.toFixed(2)} ${f2(item.firstValence)} ${f2(item.peakValence)} ${f2(item.twentiethValence)} | ${item.dayMaxAbsValence.toFixed(2)} ${item.dayMeanArousal.toFixed(2)} ${item.dayMaxArousal.toFixed(2)} ${item.dayMeanAbsDeltaValence.toFixed(2)}`);
@@ -619,5 +649,6 @@ export const sensitive = once(computeSensitive);
 export const dayTrajectory = once(computeDayTrajectory);
 export const gammaSensitivity = once(computeGammaSensitivity);
 export const shadowDay = once(computeShadowDay);
+export const expectedStances = once(computeExpectedStances);
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) console.log(report());

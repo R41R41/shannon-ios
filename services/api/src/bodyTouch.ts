@@ -1,4 +1,4 @@
-import { memoryControlFor, type CompanionStateSnapshot, type CompanionStateStore } from '@shannon/cognition';
+import { memoryControlFor, type CompanionStateSnapshot, type CompanionStateStore, type ShannonTouchOutcome } from '@shannon/cognition';
 import { BODY_LIMITS } from './bodyContract.js';
 import { BODY_REACTION_LIMITS } from './bodyReactionContract.js';
 import type { SQLiteBodyReactionStore, StoredTouchBurst, TouchRecord } from './bodyReactionStore.js';
@@ -144,13 +144,13 @@ export class BodyTouches {
    * felt the same way and not learned. Returns the outcome, or null when nothing moved her (stage 1b, a stance already
    * carried at arrival, none known: only the startle moved her).
    */
-  settle(scopeKey: string, felt: FeltTouch, stance: BodyTouchStance | null): { outcome: { error: number; unexpected: number }; snapshot: CompanionStateSnapshot } | null {
+  settle(scopeKey: string, felt: FeltTouch, stance: BodyTouchStance | null): { outcome: ShannonTouchOutcome; snapshot: CompanionStateSnapshot } | null {
     const prediction = felt.prediction;
     const predictions = this.predictions;
     if (!this.stage2 || !predictions || !prediction || prediction.outcome) return null;
     const at = this.dependencies.now();
     const { stateStore } = this.dependencies;
-    let outcome: { error: number; unexpected: number };
+    let outcome: ShannonTouchOutcome;
     if (stance !== null) outcome = predictions.learn(scopeKey, prediction, felt.burst.id, stanceOutcome(stance), at, stateStore.snapshot(scopeKey));
     else {
       const carried = predictions.carried(scopeKey, prediction.key, at);

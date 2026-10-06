@@ -34,10 +34,15 @@ export function startleArousal(emotion: ShannonEmotion, startle: number): Shanno
   return { ...emotion, arousal: Math.max(emotion.arousal, stepped.arousal) };
 }
 
-/** The appraisal's step: valence the share 1 − γ toward (attractor + w_δ × error), arousal toward its attractor raised by u. */
+/**
+ * The appraisal's step: valence the share 1 − γ toward (attractor + w_δ × error + w_E × expectation), arousal toward its
+ * attractor raised by u. With the expectation (Rutledge et al. 2014's EV term) a familiar welcome keeps her warm and a
+ * familiar refusal keeps her cool, while the error, and so the strength of what she feels, fades with habit.
+ */
 export function appraiseTouch(emotion: ShannonEmotion, outcome: ShannonTouchOutcome): ShannonEmotion {
-  const { attractor, errorWeight } = SHANNON_AFFECT_DYNAMICS;
-  const stepped = boundedAffectStep(emotion, attractor.valence + errorWeight * clamp(outcome.error, -2, 2), outcome.unexpected);
+  const { attractor, errorWeight, expectationWeight } = SHANNON_AFFECT_DYNAMICS;
+  const target = attractor.valence + errorWeight * clamp(outcome.error, -2, 2) + expectationWeight * clamp(outcome.expectation, -1, 1);
+  const stepped = boundedAffectStep(emotion, target, outcome.unexpected);
   return { ...stepped, openness: emotion.openness };
 }
 

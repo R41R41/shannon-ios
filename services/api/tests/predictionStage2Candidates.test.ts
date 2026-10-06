@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { SHANNON_AFFECT_DYNAMICS } from '@shannon/cognition';
 import {
   CANDIDATES,
   RUTLEDGE_GAMMA,
   dayTrajectory,
+  expectedStances,
   extinction,
   firstAndHundredth,
   gammaSensitivity,
@@ -53,7 +55,9 @@ describe('ADR-0006 stage 2 study: how the impact of a touch is applied', { timeo
   it('habituates in valence under B: the first pat moves her most, the twentieth hardly at all; C stays where her appraisal is', () => {
     const pats = habituation();
     for (let index = 1; index < 10; index += 1) expect(Math.abs(pats.B[index]!.impact)).toBeLessThan(Math.abs(pats.B[index - 1]!.impact));
-    expect(pats.B[19]!.valence).toBeLessThan(pats.B[1]!.valence - 0.2);
+    // What is left after habit is the expectation she holds (w_E × 0.5, Rutledge's EV term), not neutral: B0 (no E) fell to 0.
+    expect(pats.B[19]!.valence).toBeCloseTo(SHANNON_AFFECT_DYNAMICS.expectationWeight * 0.5, 1);
+    expect(Math.abs(pats.B0[19]!.valence)).toBeLessThan(0.05);
     expect(pats.C[19]!.valence).toBeGreaterThan(0.45);
     // A moves no core value itself: what moves is the mood's pull and her ordinary fluctuation (the band).
     expect(Math.max(...pats.A.map(item => Math.abs(item.valence)))).toBeLessThan(0.15);
@@ -71,6 +75,14 @@ describe('ADR-0006 stage 2 study: how the impact of a touch is applied', { timeo
       expect(result[candidate].reinstated).toBeGreaterThan(result[candidate].beforeReminder);
       expect(result[candidate].afterExtinction).toBeCloseTo(result.current.afterExtinction, 9);
     }
+  });
+
+  it('holds a familiar welcome warm and a familiar refusal cool (the E term), where B0 pulled both to neutral', () => {
+    const held = expectedStances();
+    expect(held.B.welcomeFrom08.first).toBeGreaterThan(0.6);
+    expect(held.B0.welcomeFrom08.first).toBeLessThan(0.5);
+    expect(held.B.refuseFrom0.fifth).toBeLessThan(-0.35);
+    expect(held.B.refuseFrom0.fifth).toBeGreaterThan(-0.45);
   });
 
   it('keeps the mood loop stable at the edge of the f condition, for every candidate', () => {

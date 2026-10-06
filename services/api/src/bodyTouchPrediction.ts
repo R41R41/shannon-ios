@@ -88,7 +88,7 @@ export class TouchPredictions {
   /** How a stance outcome is felt against what she expects, without learning anything (a carried stance). */
   felt(prediction: TouchPrediction, stance: number): ShannonTouchOutcome {
     const error = stance - prediction.expectation;
-    return { error, unexpected: unexpectedness({ error, uncertainty: prediction.uncertainty, noise: prediction.noise }) };
+    return { error, expectation: prediction.expectation, unexpected: unexpectedness({ error, uncertainty: prediction.uncertainty, noise: prediction.noise }) };
   }
 
   /** The stance she gave for this key within the episode she has learned (her newest learned outcome), or null. */
