@@ -6,6 +6,46 @@ public enum ShannonBodyAudience: String, Codable, Equatable, Sendable {
     case others
 }
 
+/// Touch vocabulary 2 (`docs/body-contract.md`, "The signal"): the number the server says on `PUT /v1/body/capabilities`
+/// and on presence. Its fields go only to a server that said 2 or more, because a server from before them refuses an
+/// unknown field with `400`. A server that says nothing is the old one.
+public enum ShannonBodyTouchVocabulary {
+    /// What a server that says nothing speaks: `type`, `region` and the numbers, exactly as before.
+    public static let unsaid = 1
+    /// The first vocabulary with `part`, `side`, `gesture`, `input` and `reflex`.
+    public static let detailed = 2
+
+    /// The number a server said, or `unsaid` for a server (or an answer) that says none.
+    public static func said(_ value: Int?) -> Int { max(unsaid, value ?? unsaid) }
+
+    /// The vocabulary-2 fields of one touch, as they go on the wire: each a word of the server's list, or absent.
+    public struct Fields: Codable, Equatable, Sendable {
+        public var part: String?
+        public var side: String?
+        public var gesture: String?
+        public var input: String?
+        public var reflex: String?
+
+        public init(_ detail: ShannonLive2DTouch.Detail) {
+            part = detail.part?.rawValue
+            side = detail.side?.rawValue
+            gesture = detail.gesture?.rawValue
+            input = detail.input?.rawValue
+            reflex = detail.reflex?.rawValue
+        }
+
+        public init(part: String? = nil, side: String? = nil, gesture: String? = nil, input: String? = nil, reflex: String? = nil) {
+            self.part = part
+            self.side = side
+            self.gesture = gesture
+            self.input = input
+            self.reflex = reflex
+        }
+
+        public static let none = Fields()
+    }
+}
+
 /// One finished touch, as `POST /v1/body/events` takes it. Facts only: there is no text field.
 public struct ShannonBodyTouchEventDTO: Codable, Equatable, Sendable {
     public let id: String
@@ -16,6 +56,13 @@ public struct ShannonBodyTouchEventDTO: Codable, Equatable, Sendable {
     public let strength: Double
     /// Which part was touched; left out when not known.
     public let region: String?
+    /// Touch vocabulary 2, each left out when the page did not say it. Kept from the page; `sent(touchVocabulary:)` decides
+    /// what leaves the device. The old fields above are always sent as they are: where they disagree, the server keeps them.
+    public private(set) var part: String?
+    public private(set) var side: String?
+    public private(set) var gesture: String?
+    public private(set) var input: String?
+    public private(set) var reflex: String?
 
     public init(touch: ShannonLive2DTouch, audience: ShannonBodyAudience) {
         id = touch.id
@@ -25,6 +72,20 @@ public struct ShannonBodyTouchEventDTO: Codable, Equatable, Sendable {
         durationMs = touch.durationMs
         strength = touch.strength
         region = touch.sentRegion?.rawValue
+        detail = .init(touch.detail)
+    }
+
+    public var detail: ShannonBodyTouchVocabulary.Fields {
+        get { .init(part: part, side: side, gesture: gesture, input: input, reflex: reflex) }
+        set { (part, side, gesture, input, reflex) = (newValue.part, newValue.side, newValue.gesture, newValue.input, newValue.reflex) }
+    }
+
+    /// This touch as a server of that vocabulary takes it: below 2, exactly what was sent before vocabulary 2 existed.
+    public func sent(touchVocabulary: Int) -> Self {
+        guard touchVocabulary < ShannonBodyTouchVocabulary.detailed else { return self }
+        var old = self
+        old.detail = .none
+        return old
     }
 }
 
@@ -63,11 +124,22 @@ public struct ShannonBodyReactionRequestDTO: Codable, Equatable, Sendable {
         public let strength: Double
         public let ongoing: Bool
         public let region: String?
+        /// Touch vocabulary 2, as on the event (`ShannonBodyTouchEventDTO`).
+        public fileprivate(set) var part: String?
+        public fileprivate(set) var side: String?
+        public fileprivate(set) var gesture: String?
+        public fileprivate(set) var input: String?
+        public fileprivate(set) var reflex: String?
+
+        public var detail: ShannonBodyTouchVocabulary.Fields {
+            get { .init(part: part, side: side, gesture: gesture, input: input, reflex: reflex) }
+            set { (part, side, gesture, input, reflex) = (newValue.part, newValue.side, newValue.gesture, newValue.input, newValue.reflex) }
+        }
     }
 
     public var scopeKey: String
     public let id: String
-    public let touch: Touch
+    public private(set) var touch: Touch
     public let audience: ShannonBodyAudience
     public let occurredAt: String
 
@@ -77,8 +149,17 @@ public struct ShannonBodyReactionRequestDTO: Codable, Equatable, Sendable {
         self.touch = Touch(
             type: touch.kind.rawValue, durationMs: touch.durationMs, strength: touch.strength, ongoing: touch.ongoing,
             region: touch.sentRegion?.rawValue)
+        self.touch.detail = .init(touch.detail)
         self.audience = audience
         occurredAt = touch.occurredAt
+    }
+
+    /// This request as a server of that vocabulary takes it: below 2, exactly what was sent before vocabulary 2 existed.
+    public func sent(touchVocabulary: Int) -> Self {
+        guard touchVocabulary < ShannonBodyTouchVocabulary.detailed else { return self }
+        var old = self
+        old.touch.detail = .none
+        return old
     }
 }
 
@@ -126,7 +207,9 @@ public struct ShannonBodyRefusal: Error, Equatable, Sendable {
 /// touch, reports finished touches, and asks whether she says something. It never reads
 /// `GET /v1/body/presence`, answers no look, and reports no delivery of her own messages.
 public protocol ShannonBodyServing: Sendable {
-    func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws
+    /// Answers the touch vocabulary the server said (`ShannonBodyTouchVocabulary.said`).
+    @discardableResult
+    func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws -> Int
     func sendBodyTouches(scopeKey: String, events: [ShannonBodyTouchEventDTO]) async throws
     func askBodyReaction(_ request: ShannonBodyReactionRequestDTO) async throws -> ShannonBodyReactionAnswerDTO
 }
@@ -160,7 +243,8 @@ public enum ShannonBodyRegistration {
 }
 
 extension ShannonAPIClient: ShannonBodyServing, ShannonBodyCallReporting {
-    public func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws {
+    @discardableResult
+    public func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws -> Int {
         let connection = currentConnection()
         var request = bodyRequest(path: "/v1/body/capabilities", method: "PUT", connection: connection)
         request.httpBody = try JSONEncoder().encode(TouchBodyCapabilitiesDTO(
@@ -170,7 +254,7 @@ extension ShannonAPIClient: ShannonBodyServing, ShannonBodyCallReporting {
             flags: [ShannonBodyRegistration.touchOnlyFlag: true],
             surface: ShannonBodyRegistration.surface
         ))
-        _ = try await bodyData(for: request)
+        return ShannonBodyTouchVocabulary.said(inAnswer: try await bodyData(for: request))
     }
 
     public func sendBodyTouches(scopeKey: String, events: [ShannonBodyTouchEventDTO]) async throws {
@@ -237,4 +321,15 @@ private struct BodyEventsDTO<Event: Encodable>: Encodable {
 
 private struct BodyErrorDTO: Decodable {
     let error: String?
+}
+
+private struct TouchVocabularyDTO: Decodable {
+    let touchVocabulary: Int?
+}
+
+extension ShannonBodyTouchVocabulary {
+    /// The number in an answer of `PUT /v1/body/capabilities`; an answer that says none (or cannot be read) is the old server.
+    static func said(inAnswer answer: Data) -> Int {
+        said((try? JSONDecoder().decode(TouchVocabularyDTO.self, from: answer))?.touchVocabulary)
+    }
 }

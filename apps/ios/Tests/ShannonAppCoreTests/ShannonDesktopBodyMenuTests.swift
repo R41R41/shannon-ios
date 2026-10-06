@@ -69,14 +69,15 @@ private final class FakeDesktopBodyServer: ShannonDesktopBodyServing, @unchecked
     var heard = true
     var presenceReads = 0
 
-    func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws {
+    func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws -> Int {
         if appRegistrationFails { throw URLError(.timedOut) }
+        return 1
     }
     func bodyPresence(scopeKey: String, etag: String?, audience: ShannonBodyAudience?) async throws -> (ShannonDesktopBodyPresenceDTO, heardAsBody: Bool) {
         presenceReads += 1
         return (ShannonDesktopBodyPresenceDTO(etag: "3f9a1c0b7d2e4a68"), heard)
     }
-    func registerDesktopBody(scopeKey: String, expressions: [String], gestures: [String], camera: Bool) async throws {}
+    func registerDesktopBody(scopeKey: String, expressions: [String], gestures: [String], camera: Bool) async throws -> Int { 1 }
     func sendBodyEvents(scopeKey: String, events: [ShannonDesktopBodyEventDTO]) async throws {}
     func bodyInitiatives(scopeKey: String) async throws -> ShannonInitiativeInboxDTO { ShannonInitiativeInboxDTO(unreadCount: 0, messages: []) }
     func reportReachOut(scopeKey: String, id: String, outcome: String) async throws {}

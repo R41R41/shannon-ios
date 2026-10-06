@@ -45,10 +45,13 @@ public struct ShannonDesktopBodyPresenceDTO: Decodable, Equatable, Sendable {
     public let look: Look?
     public let reachOut: ReachOut?
     public let ownerCallElsewhere: Elsewhere?
+    /// Touch vocabulary 2 (`docs/body-contract.md`, "The signal"): on every answer, `unchanged` too; absent from an older server.
+    public let touchVocabulary: Int?
 
     public init(
         etag: String, pollAfterSeconds: Int? = 10, unchanged: Bool? = nil, mood: Mood? = nil, doing: String? = nil,
-        study: Study? = nil, look: Look? = nil, reachOut: ReachOut? = nil, ownerCallElsewhere: Elsewhere? = nil
+        study: Study? = nil, look: Look? = nil, reachOut: ReachOut? = nil, ownerCallElsewhere: Elsewhere? = nil,
+        touchVocabulary: Int? = nil
     ) {
         self.etag = etag
         self.pollAfterSeconds = pollAfterSeconds
@@ -59,6 +62,7 @@ public struct ShannonDesktopBodyPresenceDTO: Decodable, Equatable, Sendable {
         self.look = look
         self.reachOut = reachOut
         self.ownerCallElsewhere = ownerCallElsewhere
+        self.touchVocabulary = touchVocabulary
     }
 }
 
@@ -71,6 +75,12 @@ public struct ShannonDesktopBodyEventDTO: Encodable, Equatable, Sendable {
     public var durationMs: Int?
     public var strength: Double?
     public var region: String?
+    /// Touch vocabulary 2, already decided for the server by `ShannonBodyTouchEventDTO.sent(touchVocabulary:)`.
+    public var part: String?
+    public var side: String?
+    public var gesture: String?
+    public var input: String?
+    public var reflex: String?
     public var minutesAway: Int?
 
     public init(id: String, type: String, audience: ShannonBodyAudience, occurredAt: String, minutesAway: Int? = nil) {
@@ -86,6 +96,7 @@ public struct ShannonDesktopBodyEventDTO: Encodable, Equatable, Sendable {
         durationMs = touch.durationMs
         strength = touch.strength
         region = touch.region
+        (part, side, gesture, input, reflex) = (touch.part, touch.side, touch.gesture, touch.input, touch.reflex)
     }
 }
 
@@ -138,7 +149,9 @@ public struct ShannonBodyLookResponseDTO: Decodable, Equatable, Sendable {
 /// Her desktop body's routes. `presence` says whether the server heard the request as the body's.
 public protocol ShannonDesktopBodyServing: ShannonBodyServing {
     func bodyPresence(scopeKey: String, etag: String?, audience: ShannonBodyAudience?) async throws -> (ShannonDesktopBodyPresenceDTO, heardAsBody: Bool)
-    func registerDesktopBody(scopeKey: String, expressions: [String], gestures: [String], camera: Bool) async throws
+    /// Answers the touch vocabulary the server said (`ShannonBodyTouchVocabulary.said`).
+    @discardableResult
+    func registerDesktopBody(scopeKey: String, expressions: [String], gestures: [String], camera: Bool) async throws -> Int
     func sendBodyEvents(scopeKey: String, events: [ShannonDesktopBodyEventDTO]) async throws
     func bodyInitiatives(scopeKey: String) async throws -> ShannonInitiativeInboxDTO
     func reportReachOut(scopeKey: String, id: String, outcome: String) async throws
@@ -172,7 +185,8 @@ public struct ShannonDesktopBodyClient: ShannonDesktopBodyServing {
         return (try JSONDecoder().decode(ShannonDesktopBodyPresenceDTO.self, from: data), heard)
     }
 
-    public func registerDesktopBody(scopeKey: String, expressions: [String], gestures: [String], camera: Bool) async throws {
+    @discardableResult
+    public func registerDesktopBody(scopeKey: String, expressions: [String], gestures: [String], camera: Bool) async throws -> Int {
         let connection = api.currentConnection()
         var request = request(path: "/v1/body/capabilities", method: "PUT", connection: connection)
         request.httpBody = try JSONEncoder().encode(Capabilities(
@@ -180,7 +194,7 @@ public struct ShannonDesktopBodyClient: ShannonDesktopBodyServing {
             expressions: ShannonBodyRegistration.identifiers(expressions, limit: 64),
             gestures: ShannonBodyRegistration.identifiers(gestures, limit: 32),
             flags: ["camera": camera], surface: "mac"))
-        _ = try await send(request)
+        return ShannonBodyTouchVocabulary.said(inAnswer: try await send(request).0)
     }
 
     public func sendBodyEvents(scopeKey: String, events: [ShannonDesktopBodyEventDTO]) async throws {
@@ -230,7 +244,8 @@ public struct ShannonDesktopBodyClient: ShannonDesktopBodyServing {
 
     // MARK: The touch routes, as the touch coordinator uses them
 
-    public func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws {
+    @discardableResult
+    public func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws -> Int {
         try await registerDesktopBody(scopeKey: scopeKey, expressions: expressions, gestures: gestures, camera: await camera())
     }
 
