@@ -34,14 +34,22 @@ final class ShannonBodyTests: XCTestCase {
             "水色の目が 2 つだけのシャノンです（水の光の目と同じ動き）。表情と、聞いている・考えている・話しているは、目の形と動きで伝えます。")
         XCTAssertTrue(ShannonLive2DBody.human.hasCharacterRig)
         XCTAssertFalse(ShannonLive2DBody.eyes.hasCharacterRig)
-        // Her eyes alone are only poked: the settings do not offer stroking, tickling or holding hands there.
+        // Her eyes alone are only poked, as her face: the settings do not offer stroking, tickling or holding hands there.
         XCTAssertEqual(ShannonBodyCopy.settingsExplanation(body: .human), ShannonBodyCopy.settingsExplanation)
         XCTAssertEqual(
             ShannonBodyCopy.settingsExplanation(body: .eyes),
-            "目だけのときは、目のあたりを軽くつつけます（なでる・くすぐる・手をつなぐは、ありません）。"
+            "目だけのときは、目のあたりを軽くつつけます。顔に触れたことになります（なでる・くすぐる・手をつなぐは、ありません）。"
                 + "「体に起きたことをシャノンに伝える」がオフの間は、この端末の中で動くだけで、何も送りません。"
-                + "オンにすると、触れた種類・長さ・強さ・時刻だけがシャノンに届き、気持ちが動いて、ひとこと返すことがあります。カメラは使いません。"
+                + "オンにすると、触れた場所・触れ方・長さ・強さ・時刻と、体が身を引いたかどうかだけがシャノンに届き、気持ちが動いて、ひとこと返すことがあります。カメラは使いません。"
                 + ShannonBodyCopy.touchOnThisDevice)
+        // Her whole figure, as the page of touch vocabulary 2 takes a touch (embed/README.md, 「体の語彙 2」): a press
+        // moved back and forth anywhere strokes or tickles, held still it rests (the hand: holding hands), and the
+        // parts she may not want touched make her draw back a little. No hover and no carry on this page.
+        XCTAssertEqual(
+            ShannonBodyCopy.settingsExplanation(body: .human),
+            "Live2Dの姿は指で触れられます。軽く叩くと「つつく」、押したまま往復させると「なでる」（速く動かすと「くすぐる」）、"
+                + "押したまま止めると「触れたまま」（手なら「手をつなぐ」）です。首・胸・腰・脚・スカートに触れると、体が少し身を引きます。"
+                + ShannonGeneratedStrings.settingsFigureTouchPrivacy + ShannonBodyCopy.touchOnThisDevice)
         // The Mac also says who a touch reaches as (A15); the iPhone adds nothing.
 #if os(macOS)
         XCTAssertEqual(ShannonBodyCopy.touchOnThisDevice, ShannonGeneratedStrings.settingsFigureTouchMac)

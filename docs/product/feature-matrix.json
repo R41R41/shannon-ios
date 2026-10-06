@@ -2827,7 +2827,7 @@
       "id": "touch.tell-shannon",
       "area": "touch",
       "title": "体に起きたことをシャノンに伝える",
-      "description": "設定が入のとき、触れた種類・長さ・強さ・時刻だけを本体へ送る。シャノンがひとこと返すことがある。",
+      "description": "設定が入のとき、触れた場所・触れ方・長さ・強さ・時刻と、体が身を引いたかどうかだけを本体へ送る。シャノンがひとこと返すことがある。",
       "surfaces": {
         "ios": {
           "status": "yes",
@@ -2842,7 +2842,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#shannonBodyAttachment",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift#reportsTouch"
           ],
-          "note": "設定 › すがた の「体に起きたことをシャノンに伝える」（既定は切）。入のとき、触れた種類・長さ・強さ・時刻だけが届き、返事は姿の近くの吹き出し（A15）。 Mac ではふだん相手は所有者ひとりで、音声会話を「友人も一緒」にしている間とそのあと 5 分は、ほかの人もいるものとして届く（A16）。説明にそう書いた（settings.figure.touchMac）。"
+          "note": "設定 › すがた の「体に起きたことをシャノンに伝える」（既定は切）。入のとき、触れた場所・触れ方・長さ・強さ・時刻と、体が身を引いたかどうかだけが届き、返事は姿の近くの吹き出し（A15）。 Mac ではふだん相手は所有者ひとりで、音声会話を「友人も一緒」にしている間とそのあと 5 分は、ほかの人もいるものとして届く（A16）。説明にそう書いた（settings.figure.touchMac）。"
         },
         "windows": {
           "status": "yes",
