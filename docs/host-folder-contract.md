@@ -330,11 +330,23 @@ The v1 rules apply to every path, with these additions, checked by the server be
 5. While its own stop switch is on: claim with `localStop: true` at most every 15 s, run nothing, and report a held step as `stopped_locally`.
 6. Keep its append-only local log.
 
+## The Mac application (A18 S2)
+
+The Mac app (`apps/ios/Sources/ShannonAppCore/Features/FolderHost/`) is a v2 device built against this document, read-only for now.
+
+- **Host.** It asks `GET /v1/autonomy/host-steps/binding` and claims for the host returned; with none it claims nothing and 設定 › 専用フォルダ shows the device id to register.
+- **Claim.** `protocol: 2`, `operations: ["list", "read", "search"]`, `waitSeconds: 25`, `localStop`. It never lists `write`, so it is never handed a v1 copy and, while it is the only host, none is planned.
+- **Token.** The claim client holds the device token; the part that reads the folder (an actor) is handed only a folder and a step and never sees the token or the network.
+- **Fence.** The server's lexical rules again (tested against the server's own recorded cases, `services/api/tests/fixtures/host-folder-paths-v1/cases.json`); every segment `lstat`ed, a link anywhere is `link_refused`; `.shannon` in any case, width or Unicode normalization, and anything that is the same directory on disk, is `protected_path`; a package (a bundle Finder shows as one file) is listed as a file and never entered; a Finder alias or a package is never text; the real path must stay inside the real folder (`outside_folder`); a file is opened with `O_NOFOLLOW` and must be the file that was checked.
+- **Bounds.** As above: 256 KiB per read and at most the 640 KiB report cap once escaped; files over 1 MiB are `too_large`; search stops at 50 hits, 500 files, 8 MiB or 2 s.
+- **Folder.** The owner chooses it in 設定 › 専用フォルダ: an empty folder gets the marker `.shannon/folder.json`; a folder that has it (the Electron app's 「デスクトップ/シャノン用」) is taken as it is; a folder with other files and no marker is refused. It is kept as an app-scoped security-scoped bookmark, made again when stale; when it cannot be opened every step is refused with `folder_not_configured`.
+- **Running.** While a folder is chosen the app keeps claiming without a window (under `ProcessInfo.beginActivity`), stays in the menu bar, and keeps the append-only, content-free log `Application Support/Shannon/folder-activity.jsonl` (time, operation, path, outcome, code, a count).
+
 ## Not built
 
 - **Restoring from the trash** by her. The trash is the device's and behind its fence; the owner restores by hand.
 - **`append`, `mkdir` as operations of their own, and `usage`.** The device has them; v2 does not queue them (`create` and `move` make parent folders).
 - **Binary files.** Listed by name only; never read, written, or searched.
 - **An owner route that lists the queue.** The owner sees every operation and its outcome in the activity record.
-- **Writing from the Mac.** The Mac application (A18 S2) claims `list`, `read`, `search` only; `create`, `update`, `move`, `delete` and v1 copies follow in S3. Opening the application at login is S4.
+- **Writing from the Mac.** The Mac application (A18 S2) claims `list`, `read`, `search` only; `create`, `update`, `move`, `delete` and v1 copies follow in S3. Opening the application at login is S4. See [The Mac application](#the-mac-application-a18-s2).
 - **A dedicated rate limit** for these routes. A long-poll device makes about two requests a minute while idle.

@@ -14,7 +14,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | 画面 | ○ ある | △ 一部 | × ない | — 当てはまらない | 予定 | ？ 不明 |
 |---|---:|---:|---:|---:|---:|---:|
 | iOS | 119 | 3 | 9 | 12 | 2 | 0 |
-| macOS | 125 | 3 | 9 | 2 | 6 | 0 |
+| macOS | 125 | 5 | 9 | 2 | 4 | 0 |
 | Windows | 72 | 21 | 41 | 6 | 4 | 1 |
 
 ## 構成（入口）（`structure`）
@@ -457,10 +457,10 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
-| `folder.tools` | **専用フォルダを道具で使う**【デスクトップの追加】 シャノンが自分の専用フォルダ（Windows の PC と Mac）を読み・直す（道具。上書きの前に屑かごへ。取り決めは docs/host-folder-contract.md の v2）。 | — | 予定 | 予定 |
+| `folder.tools` | **専用フォルダを道具で使う**【デスクトップの追加】 シャノンが自分の専用フォルダ（Windows の PC と Mac）を読み・直す（道具。上書きの前に屑かごへ。取り決めは docs/host-folder-contract.md の v2）。 | — | △ | 予定 |
 
 - `folder.tools` iOS（—）: フォルダは PC の中。iPhone では、したことの記録で読む。
-- `folder.tools` macOS（予定）: ブランチ `codex/shannon/own-study-and-folder-tools`。サーバーで作業中。Mac の SwiftUI のアプリには専用フォルダがまだ無い（desktop.folder-host）。
+- `folder.tools` macOS（△）: A18 S1・S2（2026-10-06）：Mac のフォルダを folder.list・folder.search・folder.read で使える（取り決め v2、binding の道、2 台の時の選び方）。作る・書き換える・移す・消すは S3。
 - `folder.tools` Windows（予定）: ブランチ `codex/shannon/own-study-and-folder-tools`。サーバーで作業中。Windows のフォルダの仕組みを取り決めの v2（読む・直す・待ち受け）にする必要がある（体のスレッド）。
 
 ## デスクトップだけのもの（`desktop`）
@@ -474,7 +474,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `desktop.open-at-login` | **PC の起動時に開く**【デスクトップの追加】 起動したときに、自動で開く。 | — | × | ○ |
 | `desktop.stream-output` | **配信用の出力（OBS）**【デスクトップの追加】 この PC の中の URL に、背景が透明のシャノンを出す。入れている間は、ほかの人が聞いている場として扱う。 | — | 予定 | ○ |
 | `desktop.stream-output-body` | **配信用の出力も、選んだ体で出す**【デスクトップの追加】 配信用の出力（OBS）のシャノンは、デスクトップの体と同じ体（人の姿／目だけ）で出る。所有者の決定（2026-10-05）。 | — | 予定 | ○ |
-| `desktop.folder-host` | **シャノン専用フォルダ**【デスクトップの追加】 シャノンが自分のものとして使ってよい、この PC の中のフォルダ。選ぶ・止める・確かめる・やめる・操作の記録。 | — | 予定 | ○ |
+| `desktop.folder-host` | **シャノン専用フォルダ**【デスクトップの追加】 シャノンが自分のものとして使ってよい、この PC の中のフォルダ。選ぶ・止める・確かめる・やめる・操作の記録。 | — | △ | ○ |
 | `desktop.pc-presence` | **PC の様子への反応**【デスクトップの追加】 カーソルを目で追う。PC が操作されないと眠る。席を外した・戻ったを感じる。 | — | △ | ○ |
 | `desktop.pose-check` | **表情としぐさを確認する**【デスクトップの追加】 表情 33 種としぐさ 14 種を、1 つずつ出して確かめる。 | × | × | ○ |
 | `desktop.development` | **開発の作業場**【デスクトップの追加】 プロジェクト、実行先、モデル、ファイル、コマンドの履歴、差分、Git、ビルドの結果を、1 つの画面で見る。GitHub のリポジトリを足す。 | × | ○ | × |
@@ -494,7 +494,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `desktop.stream-output-body` macOS（予定）: ブランチ `未定`。配信用の出力を Mac へ移すとき（desktop.stream-output）に一緒に入れる。
 - `desktop.stream-output-body` Windows（○）: 体のスレッドの知らせ（2026-10-05）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。
 - `desktop.folder-host` iOS（—）: PC のフォルダに置く機能。iPhone では、結果を「したことの記録」で読む。
-- `desktop.folder-host` macOS（予定）: ブランチ `未定`。取り決めは docs/host-folder-contract.md にある。Mac の SwiftUI のアプリには、まだ無い。
+- `desktop.folder-host` macOS（△）: A18 S2（2026-10-06）：選ぶ・止める・確かめる・やめる・操作の記録・メニューバーに残る、はある。シャノンが使えるのは一覧・検索・読むだけで、書く（S3）とログイン時に開く・Electron 版の廃止（S4）はまだ。
 - `desktop.pc-presence` iOS（—）: PC だけのもの。
 - `desktop.pc-presence` macOS（△）: 席を外した（操作が無くて 10 分、または画面のロック・スクリーンセーバー・スリープ）と戻ったを感じて ownerAway／ownerReturned を送り、外している間は眠そうにし、戻ると手を振る。カーソルを目で追うのは、体のページに視線を渡す呼び出しが無いため、まだ無い（体のページの変更が要る。shannon-desktop）。A17。
 - `desktop.menu-shortcuts` iOS（—）: iPhone にはメニューバーが無い。
