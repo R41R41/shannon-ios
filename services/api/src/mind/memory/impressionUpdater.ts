@@ -18,6 +18,7 @@ import { MemoryWithholding } from './memoryVisibility.js';
 import { personMemoryId } from './peopleMemory.js';
 import type { PeopleMemoryStore } from './store/peopleMemoryStore.js';
 import { platformSummaryId } from '../../surfaces/platform/platformPeople.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /** What the background model is shown for one person and one turn. */
 export interface ImpressionAnalysisInput {
@@ -79,7 +80,7 @@ export class ImpressionUpdater {
       timeZone?: string; people?: PeopleMemoryStore;
     } = {},
   ) {
-    this.environment = options.environment ?? process.env;
+    this.environment = options.environment ?? serverEnvironment();
   }
 
   private get timeZone(): string { return this.options.timeZone ?? 'Asia/Tokyo'; }

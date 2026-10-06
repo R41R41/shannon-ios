@@ -1,3 +1,4 @@
+import { serverEnvironment } from '../infra/config/serverEnvironment.js';
 /**
  * The wire contract of the owner's upcoming calendar (`docs/calendar-contract.md`).
  *
@@ -113,7 +114,7 @@ export function validatedCalendarHours(raw: string | null | undefined): number |
 }
 
 /** Stopping calendar ingestion needs only this variable and a restart, not a deployment. Unset means on. */
-export function calendarIngestEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function calendarIngestEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return !['off', 'false', '0', 'disabled'].includes(environment.SHANNON_CALENDAR_INGEST?.trim().toLowerCase() ?? '');
 }
 

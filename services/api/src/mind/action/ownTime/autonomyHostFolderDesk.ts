@@ -1,11 +1,11 @@
 import type { AutonomyActivityEntry } from '../../inhibition/store/autonomyActivity.js';
-import { autonomyDayKey, type AutonomyConfig } from '../../inhibition/autonomyBudget.js';
+import { autonomyDayKey, type AutonomyConfig } from '../../inhibition/inhibitionPorts.js';
 import {
   HOST_FOLDER_LIMITS, HOST_STEP_CODES, ROOM_LOOK_GUARD, copyableStudyPiece, roomLookGuard, hostStepContentDigest, studyCopyContent, studyCopyPath,
   type HostStepCode,
 } from './autonomyHostFolderPath.js';
 import type { HostStep, HostStepStatus } from './store/autonomyHostFolderSteps.js';
-import type { AutonomousActionRequest } from '../../inhibition/autonomyPolicy.js';
+import type { AutonomousActionRequest } from '../../inhibition/inhibitionPorts.js';
 import type { ActionReport, RecordedDecision } from './autonomyService.js';
 import type { SQLiteAutonomyStore } from './store/autonomyStore.js';
 import { STUDY_KIND_LABEL, type StudyPiece, type StudyPieceKind } from './store/studyStore.js';

@@ -1,3 +1,4 @@
+import { serverEnvironment } from '../infra/config/serverEnvironment.js';
 /**
  * Looking at the room through the camera of her body (owner decision, Syzygy ADR-0002
  * addendum 2026-10-02; prose in `docs/body-contract.md`, "Looking at the room").
@@ -180,7 +181,7 @@ function dailyCount(value: string | undefined): number {
 }
 
 /** Switching looks off needs only `SHANNON_BODY_LOOK=off` and a restart, not a deployment. */
-export function configuredBodyLook(environment: Readonly<Record<string, string | undefined>> = process.env): BodyLookConfig {
+export function configuredBodyLook(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): BodyLookConfig {
   return {
     enabled: !['off', 'false', '0', 'disabled'].includes(environment.SHANNON_BODY_LOOK?.trim().toLowerCase() ?? ''),
     perHour: boundedLimit(environment.SHANNON_BODY_LOOK_PER_HOUR, BODY_LOOK_LIMITS.perHour, 60),

@@ -1,5 +1,6 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { BODY_LOOK_BASE64_CHARACTERS, validatedBodyLookResult, type BodyLookImage, type RoomLookChoice } from './bodyLookContract.js';
+import { serverEnvironment } from '../infra/config/serverEnvironment.js';
 
 /**
  * Looking through the camera of the app the owner is talking through (owner decision 2026-10-02:
@@ -142,7 +143,7 @@ export interface AppLookConfig {
 }
 
 /** Switching app looks off needs only `SHANNON_APP_LOOK=off` and a restart, not a deployment. */
-export function configuredAppLook(environment: Readonly<Record<string, string | undefined>> = process.env): AppLookConfig {
+export function configuredAppLook(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): AppLookConfig {
   const seconds = Number(environment.SHANNON_APP_LOOK_MIN_INTERVAL_SECONDS?.trim());
   return {
     enabled: !['off', 'false', '0', 'disabled'].includes(environment.SHANNON_APP_LOOK?.trim().toLowerCase() ?? ''),

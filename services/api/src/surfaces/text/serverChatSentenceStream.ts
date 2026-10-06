@@ -7,6 +7,7 @@ import {
 } from './chatSentenceStream.js';
 import type { ApiRequest, ApiResponse, ChatStreamLine } from '../../contracts/contracts.js';
 import { startStream, writeEvent } from '../voice/serverLiveVoiceStreamRoute.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * `kernel.dispatch` for the generic route, answering an opted-in `/v1/chat` turn as NDJSON.
@@ -22,7 +23,7 @@ export async function dispatchWithChatSentences(
   kernel: { dispatch(request: ApiRequest): Promise<ApiResponse> },
   response: ServerResponse,
   request: ApiRequest,
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): Promise<ApiResponse | null> {
   if (!chatSentenceStreamRequested(request.path, request.body)) return kernel.dispatch(request);
 

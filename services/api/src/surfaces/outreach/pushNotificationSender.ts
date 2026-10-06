@@ -7,6 +7,7 @@ import type {
   PushNotificationSender,
   SQLitePushNotificationStore,
 } from './pushNotifications.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export interface APNsSenderOptions {
   keyId: string;
@@ -101,7 +102,7 @@ export class DisabledPushNotificationSender implements PushNotificationSender {
 }
 
 export function createConfiguredPushNotificationSender(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): PushNotificationSender {
   const keyFile = environment.SHANNON_APNS_PRIVATE_KEY_FILE?.trim();
   const keyId = environment.SHANNON_APNS_KEY_ID?.trim();

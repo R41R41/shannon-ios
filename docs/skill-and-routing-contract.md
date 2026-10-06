@@ -81,6 +81,10 @@ A trace never holds the owner's words, a tool's input or a heading's text. Jev's
 
 `coreAreaForRepositoryPath` (`autonomyCore.ts`) takes a file listed by name before a directory that contains it, and a deeper directory before a shallower one. Whether a path is core never changes; only a file listed by name inside another area's directory changes area (`CORE_AREA_OVERRIDES` in `autonomyCore.test.ts`, which checks every tracked file against the rule before stage 2). Stage 2 uses it for `packages/learning/src/difficultyPolicy.ts`, which is the response path's, not emotion's, although `packages/learning/` is emotion's.
 
+## Structural refactoring (ADR-0008 §10)
+
+Each stage's exit criteria include structural refactoring. For stage 2: `process.env` is read only in `infra/config/serverEnvironment.ts`, `wiring/` and the entry files (every other module's default is `serverEnvironment()`, the live `process.env`, so nothing changed: `serverEnvironment.test.ts`), and a part of the mind reaches another through its window, `ports.ts` or `<component>Ports.ts` (`mind/inhibition/inhibitionPorts.ts`: the budget and the gate; not the disclosure gate or the secrets, which her own time must not open). The folder-rule baseline (`scripts/api-layers-baseline.json`) went from 364 to 287 entries; `environment-in-config` has none.
+
 ## The switched-off proof
 
 `services/api/tests/stage2SwitchedOff.test.ts` runs twelve scenarios (text: tools offered, the schedule, tasks and Notion projections, a forced web search, others present, two turns, a tool round; voice: a greeting, tools, the schedule, a companion present) through the API kernel with the real OpenAI adapter and the real Jev voice gateway over a capturing fetch, and digests every provider and Jev request with random ids taken out. The digests (`tests/fixtures/stage2-switched-off-v1.json`) were recorded on ca7cf519 itself, before any stage-2 code, and are never regenerated for a stage-2 change. Every later step runs the scenarios with the stage-2 wiring built from `SHANNON_ADR8_STAGE2=off` and must send the same bytes, and no other Jev request.

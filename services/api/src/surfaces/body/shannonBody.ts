@@ -191,7 +191,7 @@ export class ShannonBody {
     this.touches = new BodyTouches({
       store: reactionStore, stateStore: dependencies.stateStore, experiences: dependencies.reactions?.experiences ?? null,
       enabled: config.enabled && this.ingestEnabled, now: dependencies.now, ...(dependencies.reactions?.prediction !== undefined ? { prediction: dependencies.reactions.prediction } : {}), ledger: dependencies.reactions?.ledger ?? null,
-      stage2: dependencies.reactions?.stage2 ?? touchPredictionEnabled(process.env), // ADR-0006 stage 2: `SHANNON_PREDICTION`
+      stage2: dependencies.reactions?.stage2 ?? touchPredictionEnabled(), // ADR-0006 stage 2: `SHANNON_PREDICTION`
     });
     this.reactions = new BodyReactions({
       store: reactionStore, touches: this.touches, stateStore: dependencies.stateStore, conversationStore: dependencies.conversationStore,

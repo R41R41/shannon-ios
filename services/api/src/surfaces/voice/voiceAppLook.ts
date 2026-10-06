@@ -5,6 +5,7 @@ import {
 import { asksToLook, type BodyLookVoiceTurn } from '../body/bodyLook.js';
 import type { VoiceLooks } from '../body/conversationLooks.js';
 import { VOICE_ROOM_LOOK_READY_PROMPT, voiceRoomLookPrompt, voiceRoomLookTurn, type VoiceRoomLookTurn } from './voiceRoomLook.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export type { VoiceLooks } from '../body/conversationLooks.js';
 
@@ -57,7 +58,7 @@ const NO_ASK = () => ({});
 const viaBody = (turn: VoiceRoomLookTurn, guard: string): VoiceLookTurn =>
   ({ prompt: turn.prompt || guard, open: turn.open, cutOff: turn.cutOff, ask: NO_ASK });
 
-export function voiceLookTurn(looks: VoiceLooks | undefined, turn: Turn, environment: Readonly<Record<string, string | undefined>> = process.env): VoiceLookTurn {
+export function voiceLookTurn(looks: VoiceLooks | undefined, turn: Turn, environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): VoiceLookTurn {
   // Her body first, always: its bookkeeping runs on every voice turn, whoever looks.
   const body = voiceRoomLookTurn(looks?.body, turn, environment);
   // He shared a photo himself: the turn is about what he showed her, and carries its description.

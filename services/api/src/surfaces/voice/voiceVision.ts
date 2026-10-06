@@ -5,6 +5,7 @@ import {
   stableScopeIdentifier,
   validModel,
 } from '../../infra/models/chatModelSupport.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export type ShannonVisionMimeType = 'image/jpeg' | 'image/png';
 
@@ -111,7 +112,7 @@ export class VoiceVisionError extends Error {
 }
 
 export function createConfiguredVoiceVisionGateway(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): VoiceVisionGateway | null {
   const apiKey = environment.OPENAI_API_KEY?.trim();
   if (!apiKey) return null;

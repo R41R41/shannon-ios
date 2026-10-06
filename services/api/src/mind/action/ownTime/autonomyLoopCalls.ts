@@ -1,4 +1,4 @@
-import { yenFromUsd } from '../../inhibition/autonomyBudget.js';
+import { yenFromUsd } from '../../inhibition/inhibitionPorts.js';
 import { parsedModelObject, type AutonomyPrompt } from './autonomyLoopPrompts.js';
 import type { StepDependencies } from './autonomyLoopSteps.js';
 import { autonomyModelCostUsd, type AutonomyModelPurpose } from './autonomyModels.js';

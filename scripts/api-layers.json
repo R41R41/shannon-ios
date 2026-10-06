@@ -13,11 +13,11 @@
     {
       "id": "mind-via-ports",
       "kind": "imports",
-      "description": "A part of the mind reaches another part only through that part's ports.ts.",
+      "description": "A part of the mind reaches another part only through that part's window: ports.ts, or <component>Ports.ts (Syzygy ADR-0008 §10, so that basenames stay unique, e.g. inhibitionPorts.ts).",
       "from": ["mind/**"],
       "to": ["mind/**"],
       "crossComponent": true,
-      "toExcept": ["mind/*/ports.ts", "mind/action/*/ports.ts"]
+      "toExcept": ["mind/*/ports.ts", "mind/action/*/ports.ts", "mind/*/*Ports.ts", "mind/action/*/*Ports.ts"]
     },
     {
       "id": "sqlite-in-stores",
@@ -46,10 +46,10 @@
     {
       "id": "integrations-outside-mind",
       "kind": "imports",
-      "description": "An integration does not import the mind, except a part's ports.ts (contracts/ is open to everyone).",
+      "description": "An integration does not import the mind, except a part's window, ports.ts or <component>Ports.ts (contracts/ is open to everyone).",
       "from": ["integrations/**"],
       "to": ["mind/**"],
-      "toExcept": ["mind/*/ports.ts", "mind/action/*/ports.ts"]
+      "toExcept": ["mind/*/ports.ts", "mind/action/*/ports.ts", "mind/*/*Ports.ts", "mind/action/*/*Ports.ts"]
     },
     {
       "id": "wiring-from-entries",
@@ -62,7 +62,7 @@
     {
       "id": "environment-in-config",
       "kind": "token",
-      "description": "process.env is read only in infra/config, wiring and the entry files (a ratchet: the baseline lists today's readers).",
+      "description": "process.env is read only in infra/config (serverEnvironment.ts), wiring and the entry files; every other module takes its settings as a parameter that defaults to serverEnvironment() (none left in the baseline since Syzygy ADR-0008 stage 2).",
       "pattern": "\\bprocess\\.env\\b",
       "allowIn": ["infra/config/**", "wiring/**", "*.ts"]
     },

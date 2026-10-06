@@ -1,4 +1,4 @@
-import type { AutonomyConfig } from '../../inhibition/autonomyBudget.js';
+import type { AutonomyConfig } from '../../inhibition/inhibitionPorts.js';
 import { HOST_STEP_CODES, type HostStepCode } from './autonomyHostFolderPath.js';
 import type { ClaimedHostStep, HostFolderDesk } from './autonomyHostFolderDesk.js';
 import { resultFacts, type HostOperationResult } from './hostFolderOperationResults.js';

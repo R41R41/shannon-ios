@@ -1,3 +1,4 @@
+import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
 /**
  * Cadence and bounds of the activity loop (Syzygy ADR-0002 step 3). Like the rest of the
  * autonomy configuration these come from the deployment environment and nothing Shannon
@@ -68,7 +69,7 @@ const DEFAULT_READING_SEEDS = Object.freeze([
   { title: 'Wikipedia「短編小説」', url: 'https://ja.wikipedia.org/wiki/短編小説' },
 ]);
 
-export function configuredAutonomyLoop(environment: Readonly<Record<string, string | undefined>> = process.env): AutonomyLoopConfig {
+export function configuredAutonomyLoop(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): AutonomyLoopConfig {
   const cyclesPerDay = integer(environment.SHANNON_AUTONOMY_CYCLES_PER_DAY, 1, 24, 4);
   return Object.freeze({
     scopeKey: environment.SHANNON_OWNER_SCOPE_KEY?.trim() || 'owner',
@@ -99,12 +100,12 @@ export function configuredAutonomyLoop(environment: Readonly<Record<string, stri
 }
 
 /** `on` only: unset, `off`, or anything mistyped leaves her own time without the owner's documents. */
-export function ownerDocumentsEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function ownerDocumentsEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return environment.SHANNON_AUTONOMY_OWNER_DOCUMENTS?.trim() === 'on';
 }
 
 /** `sessions` when unset or named; any other value is the fixed cycles, so a mistyped kill switch still switches sessions off. */
-export function autonomyPacing(environment: Readonly<Record<string, string | undefined>> = process.env): 'sessions' | 'cycles' {
+export function autonomyPacing(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): 'sessions' | 'cycles' {
   const value = environment.SHANNON_AUTONOMY_PACING?.trim();
   return !value || value === 'sessions' ? 'sessions' : 'cycles';
 }

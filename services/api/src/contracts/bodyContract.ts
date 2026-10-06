@@ -2,6 +2,7 @@ import type { ShannonEmotionKind, ShannonExpression, ShannonFeeling } from '@sha
 import {
   BODY_TOUCH_PARTS, BODY_TOUCH_PART_WORDS, isBodySurface, isBodyTouchRegion, type BodySurface, type BodyTouchPart, type BodyTouchRegion,
 } from '../surfaces/body/bodyTouchWords.js';
+import { serverEnvironment } from '../infra/config/serverEnvironment.js';
 
 /**
  * The wire contract between Shannon's mind (this server) and her body (the Live2D
@@ -301,6 +302,6 @@ export function validatedBodyCapabilities(value: Record<string, unknown>): BodyC
 }
 
 /** Stopping body-event ingestion needs only this variable and a restart, not a deployment. */
-export function bodyIngestEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function bodyIngestEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return !['off', 'false', '0', 'disabled'].includes(environment.SHANNON_BODY_INGEST?.trim().toLowerCase() ?? '');
 }

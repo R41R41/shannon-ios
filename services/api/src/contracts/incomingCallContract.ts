@@ -1,3 +1,4 @@
+import { serverEnvironment } from '../infra/config/serverEnvironment.js';
 /**
  * The wire contract of a call from Shannon (`docs/incoming-call-contract.md`, owner decision 2026-10-03).
  *
@@ -95,12 +96,12 @@ export function incomingCallPushBody(payload: IncomingCallPayload): string {
 const OFF = ['off', 'false', '0', 'disabled'];
 
 /** `SHANNON_INCOMING_CALL_MIN_INTERVAL_MINUTES` (0–1440, default 5): the shortest time between two calls of hers, whatever became of the first. */
-export function incomingCallMinimumIntervalMilliseconds(environment: Readonly<Record<string, string | undefined>> = process.env): number {
+export function incomingCallMinimumIntervalMilliseconds(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): number {
   const value = Number(environment.SHANNON_INCOMING_CALL_MIN_INTERVAL_MINUTES?.trim() || Number.NaN);
   return (Number.isFinite(value) && value >= 0 && value <= 24 * 60 ? value : 5) * 60_000;
 }
 
 /** `SHANNON_INCOMING_CALLS=off` is the kill switch: nothing is rung, and the app's settings are told so. Unset means on. */
-export function incomingCallsEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function incomingCallsEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return !OFF.includes(environment.SHANNON_INCOMING_CALLS?.trim().toLowerCase() ?? '');
 }

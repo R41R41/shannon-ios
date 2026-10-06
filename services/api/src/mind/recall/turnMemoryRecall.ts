@@ -22,6 +22,7 @@ import { recallShannonKnowledge, usableKnowledgeFor } from './turnKnowledgeRecal
 import { DisclosureGate } from '../inhibition/memoryDisclosure.js';
 import { conversationStoreOf } from '../memory/memoryVisibility.js';
 import { withRecalledMemories, type TurnCognitiveContext } from '../action/respond/turnCognitiveContext.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export interface TurnMemoryRecallInput {
   scopeKey: string;
@@ -132,7 +133,7 @@ export function withMemorySearchLatency<T extends { latencyClass: 'under_1s' | '
 
 export function createConfiguredTurnMemoryRecall(
   index: MemoryEmbeddingIndex & LlmUsageStore & ShannonKnowledgeStore,
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
   gateway: MemoryModelGateway | null = configuredMemoryModelGateway(environment, index),
 ): TurnMemoryRecall {
   return new ShannonTurnMemoryRecall(new SemanticMemoryRecall(gateway, index, configuredSemanticMemoryConfig(environment)), index);

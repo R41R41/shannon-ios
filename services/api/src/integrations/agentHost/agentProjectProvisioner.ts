@@ -9,6 +9,7 @@ import {
   type AgentProjectProvisioningEvent,
   type ClaimedAgentProjectProvisioning,
 } from '../../mind/action/agentTasks/store/agentProjectProvisioning.js';
+import { processEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export class AgentProjectProvisioner {
   constructor(
@@ -70,7 +71,7 @@ function cloneRepository(repositoryURL: string, destination: string): Promise<vo
     const child = spawn('git', ['clone', '--filter=blob:none', '--', repositoryURL, destination], {
       shell: false,
       stdio: ['ignore', 'ignore', 'pipe'],
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      env: { ...processEnvironment(), GIT_TERMINAL_PROMPT: '0' },
     });
     let errorOutput = '';
     child.stderr.setEncoding('utf8');

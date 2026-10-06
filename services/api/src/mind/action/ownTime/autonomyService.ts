@@ -16,7 +16,7 @@ import { autonomyLoopStatus, type AutonomyLoopStatus } from '../../inhibition/au
 import {
   autonomyBudgetStatus, autonomyDayKey, configuredAutonomy, yenFromUsd,
   type AutonomyBudgetStatus, type AutonomyConfig,
-} from '../../inhibition/autonomyBudget.js';
+} from '../../inhibition/inhibitionPorts.js';
 import {
   autonomyModel, autonomyModelAllowedFor, autonomyModelChoices, autonomyModelCostUsd, isAutonomyModelPurpose,
 } from './autonomyModels.js';
@@ -26,7 +26,7 @@ import { ShannonToolRunner, type ToolAetherPorts } from '../../tools/shannonTool
 import { StudyAether } from './studyAether.js';
 import type { MinecraftRequestPort } from '../../tools/shannonMinecraftTools.js';
 import { resolvePhysicalPath, type AutonomyPathResolver } from '../../inhibition/autonomyPaths.js';
-import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyDecision } from '../../inhibition/autonomyPolicy.js';
+import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyDecision } from '../../inhibition/inhibitionPorts.js';
 import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './store/autonomyProposals.js';
 import type { PursuitDraft, PursuitRejection } from '../../self/autonomyPursuits.js';
 import { autonomyPacing } from './autonomyLoopConfig.js';

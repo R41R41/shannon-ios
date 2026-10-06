@@ -7,6 +7,7 @@ import { usableReplaySummary, visibleReplayMessages, type VisibleMessage } from 
 import { conversationSecrets, type SecretCheck } from '../inhibition/conversationSecrets.js';
 import { UNLINKED_TURN, maskedTraceCalls, toolTracePrompt, traceLabel, type ToolTraceRecord } from '../tools/shannonToolTrace.js';
 import { shannonTool } from '../tools/shannonTools.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * How much of a thread is replayed to the reply model. The window is a character budget, not a
@@ -75,7 +76,7 @@ export function voiceReplayRule(budgetCharacters = REPLAY_BUDGET_DEFAULT): Repla
 }
 
 /** `SHANNON_CONVERSATION_REPLAY_CHARACTERS` and `SHANNON_VOICE_REPLAY_CHARACTERS`, each held to 2,000…60,000. */
-export function replayBudgets(environment: Readonly<Record<string, string | undefined>> = process.env): { text: number; voice: number } {
+export function replayBudgets(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): { text: number; voice: number } {
   return {
     text: boundedBudget(environment.SHANNON_CONVERSATION_REPLAY_CHARACTERS),
     voice: boundedBudget(environment.SHANNON_VOICE_REPLAY_CHARACTERS),
@@ -88,7 +89,7 @@ function boundedBudget(value: string | undefined): number {
   return Math.min(REPLAY_BUDGET_MAXIMUM, Math.max(REPLAY_BUDGET_MINIMUM, Math.trunc(parsed)));
 }
 
-export function replayRule(channel: 'text' | 'voice', environment: Readonly<Record<string, string | undefined>> = process.env): ReplayRule {
+export function replayRule(channel: 'text' | 'voice', environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): ReplayRule {
   const budgets = replayBudgets(environment);
   return channel === 'text' ? textReplayRule(budgets.text) : voiceReplayRule(budgets.voice);
 }
@@ -203,7 +204,7 @@ export interface ToolTraceReader {
  */
 export function conversationReplay(
   channel: 'text' | 'voice', state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadId: string,
-  present: MemoryAudience, environment: Readonly<Record<string, string | undefined>> = process.env, tools?: ToolTraceReader,
+  present: MemoryAudience, environment: Readonly<Record<string, string | undefined>> = serverEnvironment(), tools?: ToolTraceReader,
   /** Only what may be shown to anyone (a turn someone other than the owner wrote): no summary, no marked message. */
   openOnly = false,
 ): ConversationReplay {

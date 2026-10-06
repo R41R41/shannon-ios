@@ -6,6 +6,7 @@ import {
   notionArchived, notionParent, notionRecord, notionSimpleProperties, notionTitle, notionUrl, renderNotionBlocks,
   type NotionBlockNode, type NotionParent,
 } from './notionText.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * Bounded, read-only view of the owner's Notion: what the integration was shared, and
@@ -277,7 +278,7 @@ export class DisconnectedNotionSource implements NotionSource {
  * A root list that is set but holds no valid id leaves nothing readable.
  */
 export function configuredNotionSource(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
   overrides: { fetch?: typeof fetch; now?: () => number; sleep?: (milliseconds: number) => Promise<void>; log?: (line: string) => void } = {},
 ): NotionSource {
   const token = usableNotionToken(environment.SHANNON_NOTION_TOKEN);

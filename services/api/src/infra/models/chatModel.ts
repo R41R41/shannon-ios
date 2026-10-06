@@ -35,6 +35,7 @@ import {
   stableScopeIdentifier,
   validModel,
 } from './chatModelSupport.js';
+import { serverEnvironment } from '../config/serverEnvironment.js';
 export { AGENT_TASK_INSTRUCTIONS, agentTaskInstructions } from './chatModelSupport.js';
 
 export type ShannonChatMode = 'openai' | 'local-stub';
@@ -468,7 +469,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
 }
 
 export function createConfiguredChatModel(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
   usageStore?: LlmUsageStore,
 ): ShannonChatModel {
   const apiKey = environment.OPENAI_API_KEY?.trim();

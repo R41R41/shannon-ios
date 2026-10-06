@@ -17,6 +17,7 @@ import type { TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.j
 import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
 import { platformImpressionLines } from '../../mind/recall/impressionRecall.js';
 import { bindingFor, composedPlatformBridgeConfiguration, sharedAudienceHeader } from './platformBridgeBindings.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export const SHANNON_PLATFORM_TURN_PATH = '/v1/platform/turns';
 export const SHANNON_PLATFORM_CONTEXT_PATH = '/v1/platform/context';
@@ -278,7 +279,7 @@ function actorDenied(): PlatformBridgeError {
 }
 
 export function configuredPlatformBridge(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): PlatformBridgeConfiguration | null {
   const token = environment.SHANNON_PLATFORM_BRIDGE_TOKEN?.trim() ?? '';
   const scopeKey = environment.SHANNON_PLATFORM_BRIDGE_SCOPE_KEY?.trim() ?? '';

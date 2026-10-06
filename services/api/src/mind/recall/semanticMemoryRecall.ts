@@ -3,6 +3,7 @@ import { DisclosureGate } from '../inhibition/memoryDisclosure.js';
 import type { MemoryModelGateway } from './memoryModels.js';
 import { conversationStoreOf, MemoryWithholding } from '../memory/memoryVisibility.js';
 import { cosineSimilarity, type MemoryEmbeddingIndex, type StoredEmbeddingCandidate } from '../memory/store/sqliteMemoryEmbeddings.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export interface SemanticMemoryConfig {
   enabled: boolean;
@@ -140,7 +141,7 @@ export class SemanticMemoryRecall {
 }
 
 export function configuredSemanticMemoryConfig(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): SemanticMemoryConfig {
   const integer = (value: string | undefined, fallback: number, minimum: number, maximum: number) => {
     const parsed = Number(value);

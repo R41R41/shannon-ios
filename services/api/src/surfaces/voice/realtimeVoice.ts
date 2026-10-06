@@ -1,3 +1,4 @@
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 export interface RealtimeVoiceCallRequest {
   sdp: string;
   instructions: string;
@@ -371,13 +372,13 @@ function configuredReasoningEffort(value: string | undefined): 'low' | 'medium' 
 }
 
 export function configuredVoiceEngine(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): ShannonVoiceEngine {
   return environment.SHANNON_VOICE_ENGINE?.trim().toLowerCase() === 'live' ? 'live' : 'realtime';
 }
 
 export function configuredRealtimeDailyAllowanceSeconds(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): number {
   const value = environment.SHANNON_VOICE_REALTIME_DAILY_MINUTES?.trim();
   if (!value) return SHANNON_REALTIME_DEFAULT_DAILY_ALLOWANCE_SECONDS;

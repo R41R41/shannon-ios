@@ -1,3 +1,4 @@
+import { serverEnvironment } from '../infra/config/serverEnvironment.js';
 /**
  * The wire contract of private listening (`docs/private-listening-contract.md`, owner decision 2026-10-02).
  *
@@ -98,7 +99,7 @@ export function validatedPrivateReachOutReport(body: Record<string, unknown>): {
 const OFF = ['off', 'false', '0', 'disabled'];
 
 /** `SHANNON_PRIVATE_LISTENING=off` refuses every report and treats nobody as privately listening. Unset means on. */
-export function privateListeningEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function privateListeningEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return !OFF.includes(environment.SHANNON_PRIVATE_LISTENING?.trim().toLowerCase() ?? '');
 }
 
@@ -106,12 +107,12 @@ export function privateListeningEnabled(environment: Readonly<Record<string, str
  * `SHANNON_PRIVATE_LISTENING_REACH_OUTS=off` keeps the state and stops the speaking: no app is offered a message,
  * a claim is refused, and her body is told about every message as before. `SHANNON_PRIVATE_LISTENING=off` does the same.
  */
-export function privateReachOutsEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function privateReachOutsEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return privateListeningEnabled(environment) && !OFF.includes(environment.SHANNON_PRIVATE_LISTENING_REACH_OUTS?.trim().toLowerCase() ?? '');
 }
 
 /** `SHANNON_PRIVATE_LISTENING_LISTEN_SECONDS` (0–30, default 8). Zero: the app speaks and does not listen. */
-export function privateReachOutListenSeconds(environment: Readonly<Record<string, string | undefined>> = process.env): number {
+export function privateReachOutListenSeconds(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): number {
   const value = Number(environment.SHANNON_PRIVATE_LISTENING_LISTEN_SECONDS?.trim() || Number.NaN);
   return Number.isInteger(value) && value >= 0 && value <= PRIVATE_REACH_OUT_LIMITS.maximumListenSeconds ? value : PRIVATE_REACH_OUT_LIMITS.listenSeconds;
 }

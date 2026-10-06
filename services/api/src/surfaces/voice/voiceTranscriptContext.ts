@@ -1,5 +1,6 @@
 import type { VoiceTurnDecision } from '../../mind/selectors/voiceDecision.js';
 import type { UserUtterance } from '../../mind/action/respond/conversationCommands.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export function transcriptNeedsInterpretation(decision: VoiceTurnDecision, utterance?: UserUtterance): boolean {
   // Old clients retain their literal-command contract. New ASR clients fail closed
@@ -14,7 +15,7 @@ export function transcriptNeedsInterpretation(decision: VoiceTurnDecision, utter
  */
 export function transcriptTrust(decision: Pick<VoiceTurnDecision, 'transcriptReliabilityProbability'>, utterance?: UserUtterance): 'reliable' | 'uncertain' | 'unknown' {
   if (utterance?.source === 'typed' || utterance?.source === 'camera') return 'reliable';
-  const configured = Number(process.env.SHANNON_VOICE_TRANSCRIPT_RELIABILITY_THRESHOLD ?? '0.85');
+  const configured = Number(serverEnvironment().SHANNON_VOICE_TRANSCRIPT_RELIABILITY_THRESHOLD ?? '0.85');
   const threshold = Number.isFinite(configured) && configured >= 0 && configured <= 1 ? configured : 0.85;
   const score = decision.transcriptReliabilityProbability;
   if (score === undefined) return utterance?.source === 'speech' ? 'unknown' : 'reliable';

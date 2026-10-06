@@ -1,4 +1,5 @@
 import { SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from '@shannon/cognition';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * The emotion timing this process runs with. Core: emotion.
@@ -24,7 +25,7 @@ const NAMES = [
   'SHANNON_EMOTION_LINGERING_HALF_LIFE_HOURS', 'SHANNON_EMOTION_LINGERING_MAX_WALL_DAYS', 'SHANNON_EMOTION_EASED_HOLD_MINUTES',
 ] as const;
 
-export function emotionTiming(environment: Readonly<Record<string, string | undefined>> = process.env): ShannonEmotionTiming {
+export function emotionTiming(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): ShannonEmotionTiming {
   const key = NAMES.map(name => environment[name] ?? '').join('\n');
   if (cached?.key === key) return cached.timing;
   // A value that is not a positive number inside its bounds is ignored: the table's own value stands.

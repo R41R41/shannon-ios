@@ -1,6 +1,7 @@
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../../infra/models/chatModel.js';
 import type { ApiResponse, ChatRequest, ChatResponse, ChatSentenceFallback, ChatSentenceSink, ChatStreamLine } from '../../contracts/contracts.js';
 import { ChatSentenceSplitter, splitChatSentences } from './chatSentenceSplitter.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * `stream: "sentences"` on `POST /v1/chat` (docs/chat-stream-contract.md).
@@ -18,7 +19,7 @@ export function validChatStream(value: unknown): value is undefined | 'sentences
 }
 
 /** `SHANNON_CHAT_STREAM_EARLY=off` sends every turn's lines only after the turn is complete. A restart applies it. */
-export function chatStreamEarlyEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function chatStreamEarlyEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return !['off', 'false', '0', 'disabled'].includes(environment.SHANNON_CHAT_STREAM_EARLY?.trim().toLowerCase() ?? '');
 }
 

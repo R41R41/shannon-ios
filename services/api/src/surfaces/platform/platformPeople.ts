@@ -18,6 +18,7 @@ import type { PeopleMemoryStore, PersonMemoryItem, RememberedPerson } from '../.
 import { extractPromiseCaptures } from '../../mind/memory/prospectiveMemory.js';
 import { extractExplicitMemoryProposals } from '../../mind/sleep/sleepConsolidation.js';
 import { cleanPersonName } from '../voice/voiceGuestNames.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export type PlatformConversationKind = 'dm' | 'group' | 'channel';
 export type PlatformSourceKind = 'person' | 'bot' | 'system';
@@ -75,7 +76,7 @@ export function platformConversationLabel(platform: string, title: string): stri
 }
 
 /** Stopping non-owner ingestion needs only this variable and a restart, not a deployment. */
-export function platformPeopleEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function platformPeopleEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return !['off', 'false', '0', 'disabled'].includes(environment.SHANNON_PLATFORM_PEOPLE_INGEST?.trim().toLowerCase() ?? '');
 }
 

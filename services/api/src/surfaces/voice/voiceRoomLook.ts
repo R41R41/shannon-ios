@@ -2,6 +2,7 @@ import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { ROOM_LOOK_UNAVAILABLE_REASON, asksToLook, type BodyLookUnavailable, type BodyLookVoiceTurn } from '../body/bodyLook.js';
 import { APP_LOOK_ROUTER } from '../../contracts/appLookContract.js';
 import type { VoiceDecisionInput, VoiceTurnDecision } from '../../contracts/voiceDecisionContract.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * One look at the room from a voice conversation with the owner (owner decision 2026-10-02:
@@ -21,7 +22,7 @@ import type { VoiceDecisionInput, VoiceTurnDecision } from '../../contracts/voic
  */
 type Environment = Readonly<Record<string, string | undefined>>;
 
-export function voiceRoomLookEnabled(environment: Environment = process.env): boolean {
+export function voiceRoomLookEnabled(environment: Environment = serverEnvironment()): boolean {
   return !['off', 'false', '0', 'disabled'].includes(environment.SHANNON_VOICE_ROOM_LOOK?.trim().toLowerCase() ?? '');
 }
 
@@ -223,7 +224,7 @@ const cannot = (reason: VoiceRoomLookUnavailable): VoiceRoomLookTurn => ({ ...NO
 export function voiceRoomLookTurn(
   looks: { voiceTurn(scopeKey: string, at: string, audience: unknown): BodyLookVoiceTurn } | undefined,
   turn: { scopeKey: string; threadId?: string; turnId?: string; transcript: string; at: string; audience: 'owner' | 'others'; decision: VoiceTurnDecision; uncertain: boolean },
-  environment: Environment = process.env,
+  environment: Environment = serverEnvironment(),
 ): VoiceRoomLookTurn {
   if (!looks || !voiceRoomLookEnabled(environment)) return NO_LOOK;
   // Every voice turn passes here, as every text turn passes `BodyLooks.turn`: a turn other people hear withdraws an open look.

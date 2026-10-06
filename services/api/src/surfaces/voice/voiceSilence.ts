@@ -2,6 +2,7 @@ import type {
   VoiceDecisionInput, VoiceSilenceCategory, VoiceTurnDecision, VoiceTurnFacts,
 } from '../../contracts/voiceDecisionContract.js';
 import { ADDRESS_EVIDENCE, guestAddressDecision, type GuestAddressReason } from './voiceGuestCall.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * When she should not answer in a call with the owner (owner decision 2026-10-02): speech that is
@@ -31,7 +32,7 @@ export type VoiceSilenceVerdict =
 type Environment = Readonly<Record<string, string | undefined>>;
 
 /** The rules in force. Empty: the kill switch is on. */
-export function voiceSilenceRules(environment: Environment = process.env): ReadonlySet<VoiceSilenceRule> {
+export function voiceSilenceRules(environment: Environment = serverEnvironment()): ReadonlySet<VoiceSilenceRule> {
   const value = environment.SHANNON_VOICE_SILENCE_RULES?.trim().toLowerCase() ?? '';
   if (['', 'on', 'true', '1', 'yes', 'enabled', 'all'].includes(value)) return new Set(RULE_CATEGORIES);
   if (['off', 'false', '0', 'no', 'disabled', 'none'].includes(value)) return new Set();
@@ -271,7 +272,7 @@ function answered(decision: VoiceTurnDecision): VoiceTurnDecision {
 export function settleOwnerVoiceTurn(
   decision: VoiceTurnDecision,
   turn: { transcript: string; facts?: VoiceTurnFacts; uncertain: boolean },
-  environment: Environment = process.env,
+  environment: Environment = serverEnvironment(),
 ): VoiceTurnDecision {
   const rules = voiceSilenceRules(environment);
   if (!turn.facts || !rules.size) {

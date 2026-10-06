@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
+import { serverEnvironment } from '../config/serverEnvironment.js';
 
 const minimumTokenLength = 32;
 
@@ -6,7 +7,7 @@ export type ShannonApiAuthMode = 'none' | 'fixed' | 'paired';
 
 export function configuredAuthMode(
   host: string,
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): ShannonApiAuthMode {
   const explicit = environment.SHANNON_AUTH_MODE?.trim().toLowerCase();
   if (explicit) {

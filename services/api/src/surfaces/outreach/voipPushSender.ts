@@ -2,6 +2,7 @@ import { createPrivateKey } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { incomingCallPushBody, type IncomingCallPayload, type VoipEnvironment } from '../../contracts/incomingCallContract.js';
 import { parseReason, postHTTP2, signAPNsProviderToken } from './pushNotificationSender.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * Sends the one VoIP push that rings the owner's iPhone (`incomingCallContract.ts`).
@@ -103,7 +104,7 @@ export class DisabledVoipPushSender implements VoipPushSender {
  * ready. What went wrong is logged as a code, never a value.
  */
 export function createConfiguredVoipPushSender(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
   options: { transport?: APNsTransport; warn?: (code: string) => void } = {},
 ): VoipPushSender {
   const keyFile = environment.SHANNON_APNS_PRIVATE_KEY_FILE?.trim();

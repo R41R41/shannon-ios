@@ -1,5 +1,5 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
-import { autonomyDayKey, yenFromUsd } from '../../inhibition/autonomyBudget.js';
+import { autonomyDayKey, yenFromUsd } from '../../inhibition/inhibitionPorts.js';
 import { storyNotes } from './autonomyLoopPlan.js';
 import { heldForOthers, unmarkedOnly } from './autonomyLoopProvenance.js';
 import {
@@ -12,7 +12,7 @@ import { REACH_OUT_HELD_TOOL, conversationInProgress } from './autonomyLoopReach
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './store/autonomyLoopState.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
 import { autonomyModelCostUsd } from './autonomyModels.js';
-import { AUTONOMY_CALL_DOMAIN, AUTONOMY_CALL_TOOL } from '../../inhibition/autonomyPolicy.js';
+import { AUTONOMY_CALL_DOMAIN, AUTONOMY_CALL_TOOL } from '../../inhibition/inhibitionPorts.js';
 import { AutonomyModelError, resolveAutonomyModel } from './autonomyTextModel.js';
 import { STUDY_STATUS_LABEL } from './store/studyStore.js';
 

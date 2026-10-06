@@ -3,6 +3,7 @@ import {
   SHANNON_EMOTION_KINDS, classifySensitivity, peopleAudience,
   type MemoryAudience, type MemoryDisclosure, type ShannonEmotionKind,
 } from '@shannon/cognition';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * Impressions: what Shannon has noticed, over separate turns, about how a person talks to her or
@@ -110,11 +111,11 @@ const integer = (value: string | undefined, fallback: number, minimum: number, m
 };
 
 /** `SHANNON_IMPRESSIONS=off` (also `false`, `0`, `disabled`): nothing is read into a prompt and nothing is updated. */
-export function impressionsEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function impressionsEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return !['off', 'false', '0', 'disabled'].includes(environment.SHANNON_IMPRESSIONS?.trim().toLowerCase() ?? '');
 }
 
-export function impressionConfig(environment: Readonly<Record<string, string | undefined>> = process.env): ImpressionConfig {
+export function impressionConfig(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): ImpressionConfig {
   const fraction = Number(environment.SHANNON_IMPRESSIONS_BUDGET_FRACTION?.trim());
   return Object.freeze({
     promptLines: integer(environment.SHANNON_IMPRESSIONS_PROMPT_LINES, 4, 1, 8),

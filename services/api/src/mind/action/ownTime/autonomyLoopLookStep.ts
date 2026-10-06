@@ -1,4 +1,4 @@
-import { autonomyDayKey, yenFromUsd } from '../../inhibition/autonomyBudget.js';
+import { autonomyDayKey, yenFromUsd } from '../../inhibition/inhibitionPorts.js';
 import { roomLookNotePrompt } from './autonomyLoopPrompts.js';
 import type { AutonomyLoopCycle } from './store/autonomyLoopState.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';

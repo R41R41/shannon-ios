@@ -4,6 +4,7 @@ import {
   BODY_LIMITS, BODY_TOUCH_DETAIL_FIELDS, BODY_TOUCH_EVENT_TYPES, touchDetailDigest, validatedTouchDetail, type BodyAudience, type BodyTouchDetail,
 } from './bodyContract.js';
 import { isBodyTouchRegion, type BodyTouchRegion } from '../surfaces/body/bodyTouchWords.js';
+import { serverEnvironment } from '../infra/config/serverEnvironment.js';
 
 /**
  * When she is touched (`docs/body-contract.md`): the wire contract of `POST /v1/body/reactions`
@@ -161,7 +162,7 @@ const boundedInteger = (value: string | undefined, fallback: number, minimum: nu
 };
 
 /** Stopping reactions needs only `SHANNON_BODY_REACTIONS=off` and a restart, not a deployment. */
-export function configuredBodyReactions(environment: Readonly<Record<string, string | undefined>> = process.env): BodyReactionConfig {
+export function configuredBodyReactions(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): BodyReactionConfig {
   return {
     enabled: !OFF.includes(environment.SHANNON_BODY_REACTIONS?.trim().toLowerCase() ?? ''),
     listenSeconds: boundedInteger(environment.SHANNON_BODY_REACTION_LISTEN_SECONDS, BODY_REACTION_LIMITS.listenSecondsDefault, 0, BODY_REACTION_LIMITS.listenSecondsMaximum),

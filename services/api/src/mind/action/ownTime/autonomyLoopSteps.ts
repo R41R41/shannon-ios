@@ -1,5 +1,5 @@
 import type { ShannonAutonomyDomainId } from '@shannon/cognition';
-import type { AutonomyConfig } from '../../inhibition/autonomyBudget.js';
+import type { AutonomyConfig } from '../../inhibition/inhibitionPorts.js';
 import type { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import { callModel, paidCall } from './autonomyLoopCalls.js';
 import { prepareFolderCopy } from './autonomyLoopFolderStep.js';
@@ -19,7 +19,7 @@ import { prepareThinking } from './autonomyLoopThinkStep.js';
 import { heldForOthers, markEarly, sessionMarked, shownLater, unmarkedOnly, unmarkedPursuits } from './autonomyLoopProvenance.js';
 import { prepareToolStep, type AutonomyToolResults } from './autonomyLoopToolStep.js';
 import type { AutonomyModelPurpose } from './autonomyModels.js';
-import { AUTONOMY_CALL_DOMAIN, type AutonomousActionRequest, type AutonomyDecision } from '../../inhibition/autonomyPolicy.js';
+import { AUTONOMY_CALL_DOMAIN, type AutonomousActionRequest, type AutonomyDecision } from '../../inhibition/inhibitionPorts.js';
 import type { AutonomyPublicReader } from './autonomyReader.js';
 import type { ShannonAutonomyService } from './autonomyService.js';
 import type { ShowingOutcome, StudyShowing } from './autonomyShowing.js';

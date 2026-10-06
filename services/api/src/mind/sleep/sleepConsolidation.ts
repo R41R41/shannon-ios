@@ -18,6 +18,7 @@ import {
   utcMonthKey,
   type LlmUsageStore,
 } from '../../infra/models/llmUsage.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 import {
   EXPLICIT_FACT_PATTERNS,
@@ -260,7 +261,7 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
 }
 
 export function createConfiguredSleepMemoryAnalyzer(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
   usageStore?: LlmUsageStore,
 ): SleepMemoryAnalyzer {
   const apiKey = environment.OPENAI_API_KEY?.trim();

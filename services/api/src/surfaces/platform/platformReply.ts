@@ -9,6 +9,7 @@ import {
 } from './platformBridge.js';
 import { platformDisplayName, type PlatformConversationKind } from './platformPeople.js';
 import { keepOwnerPlatformTurn, platformTextTurnInput, rememberPlatformPerson } from './platformSurface.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * `POST /v1/platform/reply` (`docs/platform-people-contract.md`, "Replies"). A platform runtime (the Shannon-dev Discord
@@ -58,7 +59,7 @@ export interface PlatformReplyResponse {
 }
 
 /** `SHANNON_PLATFORM_REPLY` must say on: the route makes a paid model call per message. */
-export function platformReplyEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function platformReplyEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return ['on', 'true', '1', 'enabled'].includes(environment.SHANNON_PLATFORM_REPLY?.trim().toLowerCase() ?? '');
 }
 

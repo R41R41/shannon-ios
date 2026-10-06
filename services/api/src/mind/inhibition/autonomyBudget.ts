@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { SHANNON_AUTONOMY_DAILY_BUDGET_YEN } from '@shannon/cognition';
 import { ownerDay } from '../emotion/companionPresence.js';
 import { configuredAutonomyModelPrices, type AutonomyModelPrices } from '../action/ownTime/autonomyModels.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * Server-side configuration of bounded autonomy. Nothing Shannon can write through
@@ -57,7 +58,7 @@ export interface AutonomyConfig {
 const SERVICE_REPOSITORY_ROOT = resolve(fileURLToPath(new URL('../../../../../', import.meta.url)));
 
 export function configuredAutonomy(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
   runtime: { databasePath?: string } = {},
 ): AutonomyConfig {
   const roots = (value: string | undefined) => (value ?? '').split(delimiter).map(item => item.trim()).filter(Boolean);

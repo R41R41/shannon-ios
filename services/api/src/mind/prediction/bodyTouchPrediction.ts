@@ -14,6 +14,7 @@ import type { TouchRecord } from '../../surfaces/body/store/bodyReactionStore.js
 import type { BodyTouchStance } from '../../surfaces/body/bodyTouchReflex.js';
 import type { PredictionShadow } from './predictionShadow.js';
 import { outcome } from './predictionShadowReadings.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * Stage 2 of Syzygy ADR-0006 (the body): a touch is predicted, and her stance is its outcome. Core: emotion.
@@ -34,7 +35,7 @@ import { outcome } from './predictionShadowReadings.js';
  * `SHANNON_PREDICTION=off` switches stage 2 off: stage 1b exactly (the table, the reflex on the parts where her body
  * flinches first, the stage-1 shadow tap).
  */
-export function touchPredictionEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function touchPredictionEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return !['off', 'false', '0', 'disabled', 'no', 'none'].includes(environment.SHANNON_PREDICTION?.trim().toLowerCase() ?? '');
 }
 

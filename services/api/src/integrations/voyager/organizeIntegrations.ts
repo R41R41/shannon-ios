@@ -23,6 +23,7 @@ import {
   projectionItems,
   requiredBounded,
 } from './organizeSupport.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export interface OrganizeExtractor {
   readonly mode: string;
@@ -116,7 +117,7 @@ export class OpenAIOrganizeExtractor implements OrganizeExtractor {
   }
 }
 
-export function createConfiguredOrganizeExtractor(environment: Readonly<Record<string, string | undefined>> = process.env): OrganizeExtractor {
+export function createConfiguredOrganizeExtractor(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): OrganizeExtractor {
   const apiKey = environment.OPENAI_API_KEY?.trim();
   if (!apiKey) return new LocalOrganizeExtractor();
   const model = environment.SHANNON_ORGANIZE_MODEL?.trim() || environment.SHANNON_LLM_MODEL?.trim() || 'gpt-5.6-luna';
@@ -269,14 +270,14 @@ export class HttpVoyagerTaskDestination implements VoyagerTaskDestination {
   }
 }
 
-export function createConfiguredVoyagerDestination(environment: Readonly<Record<string, string | undefined>> = process.env): VoyagerTaskDestination {
+export function createConfiguredVoyagerDestination(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): VoyagerTaskDestination {
   const endpoint = environment.SHANNON_VOYAGER_INTEGRATION_URL?.trim();
   const token = environment.SHANNON_VOYAGER_INTEGRATION_TOKEN?.trim();
   const workspaceId = environment.SHANNON_VOYAGER_WORKSPACE_ID?.trim();
   return endpoint && token && workspaceId ? new HttpVoyagerTaskDestination({ endpoint, token, workspaceId }) : new DisabledVoyagerTaskDestination();
 }
 
-export function createConfiguredVoyagerCatalog(environment: Readonly<Record<string, string | undefined>> = process.env): VoyagerCatalog {
+export function createConfiguredVoyagerCatalog(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): VoyagerCatalog {
   const applyEndpoint = environment.SHANNON_VOYAGER_INTEGRATION_URL?.trim();
   const token = environment.SHANNON_VOYAGER_INTEGRATION_TOKEN?.trim();
   const workspaceId = environment.SHANNON_VOYAGER_WORKSPACE_ID?.trim();

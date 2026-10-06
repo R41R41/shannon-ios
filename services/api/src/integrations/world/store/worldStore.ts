@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { chmodSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { configuredGithubRepositories } from '../githubReleases.js';
+import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
 
 const MAX_TRIAL_SUBSCRIPTIONS = 3;
 const MAX_ACTIVE_SUBSCRIPTIONS = 10;
@@ -419,12 +420,12 @@ export class SQLiteWorldStore {
       { id: 'cao:news', kind: 'rss', title: '内閣府', url: 'https://www.cao.go.jp/rss/news.rdf', query: null, intervalMinutes: 1440, nextRunAt: now },
       { id: 'digital:news', kind: 'rss', title: 'デジタル庁・報道発表／政策', url: 'https://www.digital.go.jp/rss/news.xml', query: 'categories:報道発表|政策', intervalMinutes: 720, nextRunAt: now },
     ];
-    const blueskyQuery = process.env.SHANNON_BLUESKY_QUERY?.trim();
+    const blueskyQuery = serverEnvironment().SHANNON_BLUESKY_QUERY?.trim();
     if (blueskyQuery) sources.push({
       id: 'bluesky:interest', kind: 'bluesky', title: 'Bluesky', url: 'https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts',
       query: blueskyQuery, intervalMinutes: 360, nextRunAt: now,
     });
-    for (const repo of configuredGithubRepositories(process.env.SHANNON_GITHUB_REPOS ?? '')) {
+    for (const repo of configuredGithubRepositories(serverEnvironment().SHANNON_GITHUB_REPOS ?? '')) {
       sources.push({
         id: `github:${repo}`, kind: 'github', title: `GitHub・${repo}`, url: `https://api.github.com/repos/${repo}/releases`,
         query: repo, intervalMinutes: 720, nextRunAt: now,

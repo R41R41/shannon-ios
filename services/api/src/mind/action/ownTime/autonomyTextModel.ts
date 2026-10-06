@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { AUTONOMY_DEFAULT_MODEL, AUTONOMY_MODELS, autonomyModel, autonomyModelAllowedFor, type AutonomyModel, type AutonomyModelPurpose } from './autonomyModels.js';
 import { responseUsage } from '../../../infra/models/llmUsage.js';
+import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
 
 /**
  * The model adapters of Shannon's own activity, behind one interface.
@@ -220,7 +221,7 @@ export class AutonomyModelRouter implements AutonomyTextModel {
 /** The dedicated key of a provider, or null. Never the conversation key, and never a copy of it. */
 export function dedicatedAutonomyCredential(
   provider: AutonomyModelProvider,
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): string | null {
   const key = environment[AUTONOMY_CREDENTIAL_VARIABLES[provider]]?.trim();
   if (!key) return null;
@@ -229,7 +230,7 @@ export function dedicatedAutonomyCredential(
 }
 
 export function configuredAutonomyTextModel(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
   fetcher?: typeof fetch,
   log?: (line: string) => void,
 ): AutonomyModelRouter {

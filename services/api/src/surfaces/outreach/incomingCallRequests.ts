@@ -6,6 +6,7 @@ import type { SQLiteIncomingCallStore } from './store/incomingCallStore.js';
 import { privateReachOutsEnabled } from '../../contracts/privateListeningContract.js';
 import type { PrivateListener } from '../body/store/privateListeningStore.js';
 import type { SQLiteReachOutClaims } from './store/reachOutClaims.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * Her loop's side of a call (`autonomyLoopPhoneStep.ts`): the facts she chooses with, and asking for the call.
@@ -100,7 +101,7 @@ export class IncomingCallRequests implements AutonomyPhone {
  * Whether the server may ring, as far as the environment says: the kill switch, the claim mechanism, and the three
  * values APNs needs with a key file that exists. The key is not read here; the API process reads it.
  */
-export function incomingCallsConfigured(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function incomingCallsConfigured(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   if (!incomingCallsEnabled(environment) || !privateReachOutsEnabled(environment)) return false;
   const keyFile = environment.SHANNON_APNS_PRIVATE_KEY_FILE?.trim();
   return Boolean(environment.SHANNON_APNS_KEY_ID?.trim() && environment.SHANNON_APNS_TEAM_ID?.trim() && keyFile && existsSync(keyFile));

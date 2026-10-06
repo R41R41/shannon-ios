@@ -1,3 +1,4 @@
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 /**
  * The one list of Shannon's tools (Syzygy ADR-0003 stage 1: one tool registry and one gate).
  *
@@ -327,7 +328,7 @@ export function toolSummary(tool: Pick<ShannonToolDefinition, 'name'>): string {
 }
 
 /** `SHANNON_OWN_TOOLS=off` offers no tool on any surface; every request and prompt is then what it was before the tools. */
-export function ownToolsEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function ownToolsEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return !['off', 'false', '0', 'disabled', 'no', 'none'].includes(environment.SHANNON_OWN_TOOLS?.trim().toLowerCase() ?? '');
 }
 

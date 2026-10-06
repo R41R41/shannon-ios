@@ -17,6 +17,7 @@ import { roomLookAnswer, roomLookRouterQuestions, roomLookRouterSchema } from '.
 import { lookSelfAnswer } from '../../contracts/appLookContract.js';
 import { localTurnSilence, openAIReplyInstruction, replyRequiredQuestion, routerTurnState } from '../../surfaces/voice/voiceSilence.js';
 import { fallbackWaitingDirection, jevWaitingQuestions } from '../../surfaces/voice/voiceWaitingCue.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export {
   VOICE_AFFECTS, VOICE_SKILLS,
@@ -296,7 +297,7 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
 }
 
 export function createConfiguredVoiceDecisionGateway(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
   usageStore?: LlmUsageStore,
   /** The fetch the Jev client uses; decision traces pass one that counts the calls (`infra/models/jev/jevClient.ts`). */
   jevFetcher?: typeof fetch,

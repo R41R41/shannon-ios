@@ -1,6 +1,6 @@
 import type { AetherAccess } from '../../integrations/aether/aetherAccess.js';
 import type { OthersTextCheck } from '../inhibition/aetherShownText.js';
-import type { AutonomousActionRequest } from '../inhibition/autonomyPolicy.js';
+import type { AutonomousActionRequest } from '../inhibition/inhibitionPorts.js';
 import type { SecretCheck } from '../inhibition/conversationSecrets.js';
 import type { ToolCallContext } from '../inhibition/shannonToolGate.js';
 import type { ToolInput } from './shannonToolInput.js';

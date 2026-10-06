@@ -1,6 +1,7 @@
 import { BODY_REACTION_SCHEMA, BODY_REACTION_SCHEMA_WITH_STANCE, parsedBodyReaction, type BodyReactionDecision } from './bodyReactionPrompt.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageEvent } from '../../infra/models/llmUsage.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * Deciding and speaking, fast: the one model call of a reaction. It uses the provider, the
@@ -82,7 +83,7 @@ export class OpenAIBodyReactionSpeaker implements BodyReactionSpeaker {
 
 /** Uses the conversation model and its key. Without a key she feels and remembers a touch and stays quiet. */
 export function createConfiguredBodyReactionSpeaker(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
   usageStore?: OpenAIBodyReactionSpeakerOptions['usageStore'],
 ): BodyReactionSpeaker | null {
   const apiKey = environment.OPENAI_API_KEY?.trim();

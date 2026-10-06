@@ -168,6 +168,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/inhibition/autonomyCore.ts',
     'services/api/src/mind/inhibition/autonomyPaths.ts',
     'services/api/src/mind/inhibition/autonomyPolicy.ts',
+    // The window other parts of the mind import the gate and the budget through (Syzygy ADR-0008 §10).
+    'services/api/src/mind/inhibition/inhibitionPorts.ts',
     'services/api/src/mind/inhibition/autonomyBudget.ts',
     'services/api/src/mind/action/ownTime/autonomyModels.ts',
     'services/api/src/mind/action/ownTime/store/autonomyStore.ts',

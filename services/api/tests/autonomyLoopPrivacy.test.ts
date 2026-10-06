@@ -574,7 +574,12 @@ describe('what reaches the prompts of her own activity', () => {
       'autonomyBudget.ts', 'autonomyLoopConfig.ts', 'autonomyLoopPlan.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopState.ts',
       'autonomyLoopSteps.ts', 'autonomyLoopStepText.ts', 'autonomyModels.ts', 'autonomyPolicy.ts', 'autonomyReader.ts', 'autonomyService.ts',
       'autonomyShowing.ts', 'autonomyStore.ts', 'autonomyTextModel.ts', 'studyStore.ts',
+      // Syzygy ADR-0008 §10: the inhibition part's window (it re-exports the budget and the gate and nothing else, held below),
+      // and the one reader of the environment (no store).
+      'inhibitionPorts.ts', 'serverEnvironment.ts',
     ]);
+    expect(imports('inhibitionPorts.ts').sort()).toEqual(['autonomyBudget.ts', 'autonomyPolicy.ts']);
+    expect(imports('serverEnvironment.ts')).toEqual([]);
     for (const name of loopSources) {
       for (const imported of imports(name)) expect(allowed.has(imported), `${name} imports ${imported}`).toBe(true);
       // The loop itself still builds no state or memory projection: what it is given of the owner's arrives as one finished section.
@@ -623,7 +628,7 @@ describe('what reaches the prompts of her own activity', () => {
     // no prompt, no persona, and no file system, and the text of a step has a single source.
     const folderAllowed = new Set([
       'node:crypto', 'node:sqlite', 'autonomyActivity.ts', 'autonomyBudget.ts', 'autonomyHostFolderPath.ts', 'autonomyHostFolderSteps.ts',
-      'autonomyPolicy.ts', 'autonomyService.ts', 'autonomyStore.ts', 'studyStore.ts',
+      'autonomyPolicy.ts', 'autonomyService.ts', 'autonomyStore.ts', 'studyStore.ts', 'inhibitionPorts.ts',
     ]);
     for (const name of ['autonomyHostFolderDesk.ts', 'autonomyHostFolderPath.ts', 'autonomyHostFolderSteps.ts']) {
       for (const imported of imports(name)) expect(folderAllowed.has(imported), `${name} imports ${imported}`).toBe(true);

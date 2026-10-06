@@ -11,6 +11,7 @@ import {
 import { DisclosureGate } from '../inhibition/memoryDisclosure.js';
 import { localDayKey } from '../memory/memoryProjection.js';
 import { MemoryWithholding } from '../memory/memoryVisibility.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export const IMPRESSION_HEADER = '[人についての印象 — ボクがやりとりを重ねて気づいてきたこと]';
 /** The one fixed line. The impressions themselves are data she accumulated, not rules. */
@@ -228,7 +229,7 @@ export function recallImpressions(
   store: ConversationStore, state: CompanionStateSnapshot,
   input: { scopeKey: string; message: string; occurredAt: string; channel: string; present: MemoryAudience; timeZone?: string },
   recent: readonly ShannonExperience[] = [],
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): ImpressionRecall {
   if (!impressionsEnabled(environment)) return NOTHING;
   const source = store.impressionStore?.();
@@ -253,7 +254,7 @@ export function recallImpressions(
 export function ownerImpressionLines(
   store: ConversationStore, state: CompanionStateSnapshot, scopeKey: string,
   options: { at: string; topic?: string; present?: MemoryAudience; timeZone?: string; maximum?: number } ,
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): readonly string[] {
   const source = impressionsEnabled(environment) ? store.impressionStore?.() : undefined;
   if (!source) return [];
@@ -270,7 +271,7 @@ export function ownerImpressionLines(
 export function platformImpressionLines(
   store: ConversationStore, state: CompanionStateSnapshot, scopeKey: string,
   options: { personIds: readonly string[]; present: MemoryAudience; at: string },
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): readonly string[] {
   const source = impressionsEnabled(environment) && options.personIds.length ? store.impressionStore?.() : undefined;
   if (!source) return [];

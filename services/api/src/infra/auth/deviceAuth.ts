@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { serverEnvironment } from '../config/serverEnvironment.js';
 
 const PAIRING_LIFETIME_MS = 30 * 60_000;
 const DEVICE_LIFETIME_MS = 365 * 24 * 60 * 60_000;
@@ -265,7 +266,7 @@ function deviceRecord(row: DeviceRow): Readonly<ShannonDeviceRecord> {
 }
 
 export function configuredAuthPepper(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): string {
   const value = environment.SHANNON_AUTH_PEPPER?.trim() ?? '';
   if (value.length < 32) throw new Error('SHANNON_AUTH_PEPPER must contain at least 32 characters');

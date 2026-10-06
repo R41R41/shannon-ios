@@ -1,6 +1,7 @@
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
+import { processEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export interface AgentHostProject {
   key: string;
@@ -24,7 +25,7 @@ export interface AgentHostConfig {
   heartbeatIntervalMs: number;
 }
 
-export function loadAgentHostConfig(environment: NodeJS.ProcessEnv = process.env): AgentHostConfig {
+export function loadAgentHostConfig(environment: NodeJS.ProcessEnv = processEnvironment()): AgentHostConfig {
   const token = environment.SHANNON_AGENT_HOST_TOKEN?.trim() ?? '';
   if (token.length < 32) throw new Error('SHANNON_AGENT_HOST_TOKEN must contain at least 32 characters');
 

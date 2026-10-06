@@ -45,6 +45,7 @@ import { jevUsageRow } from '../models/jev/jevUsage.js';
 import { PredictionLedger, predictionLedgerEnabled } from '../../mind/learning/predictionLedger.js';
 import { ChoiceLedger, choiceLedgerEnabled } from '../../mind/learning/choiceLedger.js';
 import { ValueVersions } from '../../mind/learning/valueTable.js';
+import { serverEnvironment } from '../config/serverEnvironment.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../../../data/shannon.sqlite', import.meta.url)));
 
@@ -90,12 +91,12 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
 
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
-    const moodHistory = options.leavesMoodHistory ? null : options.moodHistory === undefined ? moodHistoryRecording(process.env) : options.moodHistory;
+    const moodHistory = options.leavesMoodHistory ? null : options.moodHistory === undefined ? moodHistoryRecording(serverEnvironment()) : options.moodHistory;
     // After each write of her state, a point of her mood from the state as written, at the instant it was reduced at, and the
     // prediction shadow's tap on the same write (ADR-0006 stage 1); neither changes the state.
-    const shadowOn = !options.leavesMoodHistory && (options.predictionShadow ?? predictionShadowEnabled(process.env));
+    const shadowOn = !options.leavesMoodHistory && (options.predictionShadow ?? predictionShadowEnabled(serverEnvironment()));
     // Syzygy ADR-0008 stage 1: the prediction ledger, its daily maintenance and its forgetting after each committed state write.
-    const ledgerOn = !options.leavesMoodHistory && (options.predictionLedger ?? predictionLedgerEnabled(process.env));
+    const ledgerOn = !options.leavesMoodHistory && (options.predictionLedger ?? predictionLedgerEnabled(serverEnvironment()));
     this.shadow = shadowOn ? new PredictionShadow({
       database: this.context.database, createsSchema: true, timing: () => this.context.emotionTiming(),
       // After the response and after the caller's transaction: no turn, touch or worker waits for the shadow.
@@ -104,7 +105,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     this.ledger = ledgerOn ? new PredictionLedger({
       database: this.context.database, createsSchema: true, ...(options.cognitionDefer ? { defer: options.cognitionDefer } : {}),
     }) : null;
-    const choicesOn = !options.leavesMoodHistory && (options.choiceLedger ?? choiceLedgerEnabled(process.env));
+    const choicesOn = !options.leavesMoodHistory && (options.choiceLedger ?? choiceLedgerEnabled(serverEnvironment()));
     this.choices = choicesOn ? new ChoiceLedger({
       database: this.context.database, createsSchema: true, ...(options.cognitionDefer ? { defer: options.cognitionDefer } : {}),
     }) : null;
@@ -137,7 +138,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     this.shannonKnowledge = new SQLiteShannonKnowledgeStore(this.context.database, operation => this.context.transaction(operation));
     this.personImpressions = new SQLiteImpressionStore(this.context.database, operation => this.context.transaction(operation));
     // Syzygy ADR-0008 stage 1: one content-free trace per decision, kept 30 days; switched off, no table and no row.
-    const tracesOn = !options.leavesMoodHistory && (options.decisionTraces ?? decisionTracesEnabled(process.env));
+    const tracesOn = !options.leavesMoodHistory && (options.decisionTraces ?? decisionTracesEnabled(serverEnvironment()));
     this.traces = tracesOn ? new DecisionTraces({
       database: this.context.database, createsSchema: true, now: () => this.context.now(), ...(options.cognitionDefer ? { defer: options.cognitionDefer } : {}),
     }) : null;
@@ -238,6 +239,6 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   close() { this.traces?.flushLockWaits(); this.ledger?.flushLockWaits(); this.choices?.flushLockWaits(); this.values?.flushLockWaits(); this.context.close(); }
 }
 
-export function configuredDatabasePath(environment: Readonly<Record<string, string | undefined>> = process.env): string {
+export function configuredDatabasePath(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): string {
   return environment.SHANNON_DATABASE_PATH?.trim() || DEFAULT_DATABASE_PATH;
 }

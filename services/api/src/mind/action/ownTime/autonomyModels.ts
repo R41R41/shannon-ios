@@ -1,4 +1,5 @@
 import { estimatedOpenAICostUsd, type ResponseUsage } from '../../../infra/models/llmUsage.js';
+import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
 
 /**
  * The models Shannon may choose for her own activity, per purpose (Syzygy ADR-0002).
@@ -76,7 +77,7 @@ export type AutonomyModelPrices = Readonly<Record<string, { input: number; outpu
 
 /** Owner-configured prices: `{"gemini-3.8-flash":{"input":0.3,"output":2.5}}` (USD per million tokens). */
 export function configuredAutonomyModelPrices(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): AutonomyModelPrices {
   const raw = environment.SHANNON_AUTONOMY_MODEL_PRICES_JSON?.trim();
   if (!raw) return Object.freeze({});

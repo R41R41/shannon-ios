@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { AutonomyActivityRecord } from '../../../inhibition/store/autonomyActivity.js';
-import { roundYen } from '../../../inhibition/autonomyBudget.js';
+import { roundYen } from '../../../inhibition/inhibitionPorts.js';
 import { AutonomyHostFolderSteps } from './autonomyHostFolderSteps.js';
 import { HostFolderOperationsStore } from './hostFolderOperationsStore.js';
 import { AutonomyLoopState } from './autonomyLoopState.js';

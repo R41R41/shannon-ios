@@ -2,6 +2,7 @@ import { SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_OWNER_NAME, SHANN
 import { BODY_LOOK_LIMITS, type BodyLookImage } from '../../contracts/bodyLookContract.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageEvent } from '../../infra/models/llmUsage.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * Seeing: the one model call of a look. The frame goes to the conversation model provider
@@ -121,7 +122,7 @@ export class OpenAIRoomLookViewer implements RoomLookViewer {
 
 /** Uses the conversation model and its key. Without a key there is no viewer and a look is never offered. */
 export function createConfiguredRoomLookViewer(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
   usageStore?: OpenAIRoomLookViewerOptions['usageStore'],
 ): RoomLookViewer | null {
   const apiKey = environment.OPENAI_API_KEY?.trim();

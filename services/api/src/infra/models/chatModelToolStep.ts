@@ -1,6 +1,7 @@
 import type { ProviderFunctionCall, ShannonModelToolSession, ToolCallOutcome } from './chatModelTools.js';
 import { providerToolName, type ShannonToolDefinition } from '../../mind/tools/shannonTools.js';
 import { MINIMUM_CALL_MILLISECONDS, TOOL_CALL_CAP_MILLISECONDS } from '../../mind/action/respond/turnDeadline.js';
+import { serverEnvironment } from '../config/serverEnvironment.js';
 
 /**
  * The calls of one model step (one response that asks for tools), run together where that is safe (Syzygy ADR-0003
@@ -25,7 +26,7 @@ import { MINIMUM_CALL_MILLISECONDS, TOOL_CALL_CAP_MILLISECONDS } from '../../min
  * `SHANNON_PARALLEL_TOOLS=off` runs every call alone, one after the other, as before this change, and a text turn
  * asks the model for one call at a time again (`parallel_tool_calls: false`).
  */
-export function parallelToolsEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function parallelToolsEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return !['off', 'false', '0', 'disabled', 'no', 'none'].includes(environment.SHANNON_PARALLEL_TOOLS?.trim().toLowerCase() ?? '');
 }
 

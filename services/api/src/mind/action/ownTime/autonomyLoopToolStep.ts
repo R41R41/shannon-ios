@@ -1,6 +1,6 @@
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './store/autonomyLoopState.js';
 import type { PreparedStep, StepDependencies, StepResult } from './autonomyLoopSteps.js';
-import type { AutonomyDecision } from '../../inhibition/autonomyPolicy.js';
+import type { AutonomyDecision } from '../../inhibition/inhibitionPorts.js';
 import { markEarly, sessionMarked, unlistedIn } from './autonomyLoopProvenance.js';
 import { toolGateRequest, toolRefusal } from '../../inhibition/shannonToolGate.js';
 import { neutralMarkers, toolSessionMemory, type ToolSessionMemory } from '../../tools/shannonToolTypes.js';

@@ -4,6 +4,7 @@ import {
   type AetherSearchScope, type AetherSectionHit,
 } from './aetherKnowledgeSearch.js';
 import { FileAetherProposalStore } from './aetherProposal.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * Shannon's client of Aether (Syzygy contract `syzygy.aether-shannon-access.v1`, `contracts/aether-shannon/` in the hub;
@@ -88,7 +89,7 @@ type Environment = Readonly<Record<string, string | undefined>>;
 type Fetch = (input: string, init: RequestInit) => Promise<Response>;
 
 /** The client when both variables are set and the address is http(s); otherwise null (Aether is not configured). */
-export function configuredAetherAccess(environment: Environment = process.env, fetcher: Fetch = fetch): AetherAccess | null {
+export function configuredAetherAccess(environment: Environment = serverEnvironment(), fetcher: Fetch = fetch): AetherAccess | null {
   const address = environment.SHANNON_AETHER_API_URL?.trim();
   const token = environment.SHANNON_AETHER_SHANNON_TOKEN?.trim();
   if (!address || !token) return null;

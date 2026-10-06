@@ -698,12 +698,14 @@ describe('the frame is never kept', () => {
 
     // Modules a frame passes through: what they import, and that none of them opens a file, a database, or a log.
     const imports = (name: string) => importedModules(name);
-    expect(imports('bodyLookContract.ts')).toEqual([]);
+    // The one reader of the environment (Syzygy ADR-0008 §10), which opens nothing.
+    expect(imports('bodyLookContract.ts')).toEqual(['serverEnvironment.ts']);
+    expect(imports('serverEnvironment.ts')).toEqual([]);
     expect(imports('bodyLook.ts').sort()).toEqual(['@shannon/cognition', 'bodyLookContract.ts', 'bodyLookLines.ts', 'bodyLookStore.ts', 'bodyLookTurnWait.ts', 'bodyLookVision.ts', 'node:crypto']);
     // The wait for a voice turn to be stored knows a Talk and his words, and imports nothing.
     expect(imports('bodyLookTurnWait.ts')).toEqual([]);
     expect(source('bodyLookTurnWait.ts')).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync|BodyLookImage|base64/u);
-    expect(imports('bodyLookVision.ts').sort()).toEqual(['@shannon/cognition', 'bodyLookContract.ts', 'chatModelSupport.ts', 'llmUsage.ts']);
+    expect(imports('bodyLookVision.ts').sort()).toEqual(['@shannon/cognition', 'bodyLookContract.ts', 'chatModelSupport.ts', 'llmUsage.ts', 'serverEnvironment.ts']);
     expect(imports('apiBodyRoutes.ts').sort()).toEqual(['apiAppLookRoutes.ts', 'apiValidation.ts', 'appLookContract.ts', 'bodyContract.ts', 'bodyLook.ts', 'bodyLookContract.ts', 'bodyReaction.ts', 'bodyReactionContract.ts', 'contracts.ts', 'shannonBody.ts']);
     for (const name of ['bodyLookContract.ts', 'bodyLook.ts', 'bodyLookVision.ts', 'apiBodyRoutes.ts']) {
       expect(source(name), name).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync/u);

@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline';
+import { processEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export type CodexRequestID = number | string;
 
@@ -71,7 +72,7 @@ export class CodexAppServerClient implements CodexAppServerConnection {
     const args = [...(this.options.args ?? ['app-server', '--stdio'])];
     const child = spawn(this.options.executable, args, {
       cwd: this.options.cwd,
-      env: this.options.environment ?? process.env,
+      env: this.options.environment ?? processEnvironment(),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.process = child;

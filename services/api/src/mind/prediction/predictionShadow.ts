@@ -20,6 +20,7 @@ import { MOOD_HISTORY_LIMITS } from '../../contracts/moodHistoryContract.js';
 import { createShadowMind, foldOutcome, foldOutcomes, readMind, type FoldedOutcome, type ShadowMind } from './predictionShadowFold.js';
 import { dayBand, decidedFeelingOutcome, line, newReading, oldReading, outcome, outcomeLine, ownerFeatures } from './predictionShadowReadings.js';
 import { SQLitePredictionStore, checkedDraft, type PredictionOutcomeDraft, type ShadowComparison } from './store/predictionStore.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export { dayBand, decidedFeelingOutcome, ownerFeatures } from './predictionShadowReadings.js';
 
@@ -51,7 +52,7 @@ export { dayBand, decidedFeelingOutcome, ownerFeatures } from './predictionShado
  *
  * The log line and the store hold symbols and numbers only. `SHANNON_PREDICTION_SHADOW=off` switches it all off.
  */
-export function predictionShadowEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function predictionShadowEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return !['off', 'false', '0', 'disabled', 'no', 'none'].includes(environment.SHANNON_PREDICTION_SHADOW?.trim().toLowerCase() ?? '');
 }
 

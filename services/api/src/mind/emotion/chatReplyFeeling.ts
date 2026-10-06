@@ -1,5 +1,6 @@
 import { SHANNON_EMOTION_KINDS, isMoodLikeEmotion, isShannonEmotionKind, type ShannonEmotionKind } from '@shannon/cognition';
 import { AFFECT_INTENSITY_STEPS, affectIntensityOf, type AffectIntensityStep } from '../selectors/voiceDecisionValues.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
  * The feeling of a text reply, decided by the model that wrote it. Core: emotion.
@@ -35,7 +36,7 @@ import { AFFECT_INTENSITY_STEPS, affectIntensityOf, type AffectIntensityStep } f
  */
 
 /** The switch. Unset is on; a restart applies it. */
-export function chatFeelingStrengthEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function chatFeelingStrengthEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return !['off', 'false', '0', 'disabled', 'no', 'none'].includes(environment.SHANNON_CHAT_FEELING_STRENGTH?.trim().toLowerCase() ?? '');
 }
 
@@ -75,7 +76,7 @@ strengthは三段階。subtle=その場かぎりのかすかな気持ち。moder
 
 /** What a turn asks of the model: the field, only for a turn the owner alone reads, and only while the switch is on. */
 export function replyFeelingOffer(
-  alone: boolean, environment: Readonly<Record<string, string | undefined>> = process.env,
+  alone: boolean, environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): { offerReplyFeeling?: true } {
   return alone && chatFeelingStrengthEnabled(environment) ? { offerReplyFeeling: true } : {};
 }
@@ -97,7 +98,7 @@ export function parsedReplyFeeling(value: unknown): ChatReplyFeeling | undefined
 export function decidedReplyFeeling(
   completion: { replyFeeling?: ChatReplyFeeling },
   alone: boolean,
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): { decided?: { primary: string; intensity: number } } {
   const feeling = alone && chatFeelingStrengthEnabled(environment) ? completion.replyFeeling : undefined;
   if (!feeling || !isShannonEmotionKind(feeling.kind) || feeling.kind === 'neutral') return {};

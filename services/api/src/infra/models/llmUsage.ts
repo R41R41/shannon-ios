@@ -1,3 +1,4 @@
+import { serverEnvironment } from '../config/serverEnvironment.js';
 /**
  * `memory` is response-path recall; `memory_background` shares the monthly background budget with `sleep`. `jev` is only a row
  * of the summary, counted from the decision traces (Syzygy ADR-0008 stage 1): `llm_usage_events` and its CHECK never hold it,
@@ -67,7 +68,7 @@ export function responseUsage(value: unknown): ResponseUsage {
 export function estimatedOpenAICostUsd(
   model: string,
   usage: ResponseUsage,
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): number {
   const configuredInput = positiveNumber(environment.SHANNON_LLM_INPUT_USD_PER_MILLION);
   const configuredOutput = positiveNumber(environment.SHANNON_LLM_OUTPUT_USD_PER_MILLION);
@@ -92,7 +93,7 @@ export const CACHED_INPUT_PRICE_SHARE = 0.1;
 export function estimatedOpenAICostWithCacheUsd(
   model: string,
   usage: ResponseUsage,
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): number {
   const full = estimatedOpenAICostUsd(model, { ...usage, inputTokens: 1_000_000, outputTokens: 0 }, environment);
   const cachedPrice = positiveNumber(environment.SHANNON_LLM_CACHED_INPUT_USD_PER_MILLION) ?? full * CACHED_INPUT_PRICE_SHARE;
@@ -105,7 +106,7 @@ export function utcMonthKey(date = new Date()): string {
 }
 
 export function configuredBackgroundBudgetUsd(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): number {
   const value = positiveNumber(environment.SHANNON_BACKGROUND_LLM_MONTHLY_BUDGET_USD);
   return value ?? 0.5;

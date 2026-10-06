@@ -1,4 +1,4 @@
-import { autonomyDayKey, yenFromUsd } from '../../inhibition/autonomyBudget.js';
+import { autonomyDayKey, yenFromUsd } from '../../inhibition/inhibitionPorts.js';
 import { storyNotes } from './autonomyLoopPlan.js';
 import {
   AUTONOMY_REACH_OUT_MAXIMUM_CHARACTERS, REACH_OUT_REASON_LABEL, parsedModelObject, reachOutPrompt,
@@ -9,7 +9,7 @@ import { heldForOthers, unmarkedOnly } from './autonomyLoopProvenance.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './store/autonomyLoopState.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
 import { autonomyModelCostUsd } from './autonomyModels.js';
-import { AUTONOMY_REACH_OUT_TOOL } from '../../inhibition/autonomyPolicy.js';
+import { AUTONOMY_REACH_OUT_TOOL } from '../../inhibition/inhibitionPorts.js';
 import { AutonomyModelError, resolveAutonomyModel } from './autonomyTextModel.js';
 import { STUDY_STATUS_LABEL } from './store/studyStore.js';
 
