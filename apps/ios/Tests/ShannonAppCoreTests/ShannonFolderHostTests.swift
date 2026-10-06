@@ -224,6 +224,11 @@ final class ShannonFolderHostTests: XCTestCase {
         transport.failure = ShannonFolderHostTransportError.notBound
         let unbound = await runner.turn { false }
         XCTAssertEqual(unbound.link, .notRegistered)
+        // A server without the binding route (404) is not asked again every few seconds.
+        transport.failure = ShannonFolderHostTransportError.rejected(status: 404)
+        let older = await runner.turn { false }
+        XCTAssertEqual(older.link, .offline)
+        XCTAssertEqual(older.delay, 60)
     }
 
     func testTheWireIsWhatTheServerContractTestsSendAndAccept() async throws {

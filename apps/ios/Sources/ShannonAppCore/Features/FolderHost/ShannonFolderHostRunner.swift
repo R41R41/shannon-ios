@@ -68,6 +68,9 @@ public actor ShannonFolderHostRunner {
             return Turn(link: .notRegistered, delay: 60, entry: nil)
         } catch is CancellationError {
             return Turn(link: .waiting, delay: 0, entry: nil)
+        } catch ShannonFolderHostTransportError.rejected {
+            // The server answered but refused (an older server without the binding route answers 404): no fast retries.
+            return Turn(link: .offline, delay: 60, entry: nil)
         } catch {
             // On a network error the device waits 1–5 seconds and tries again.
             return Turn(link: .offline, delay: Double.random(in: 1...5), entry: nil)
