@@ -228,6 +228,14 @@ final class ShannonFolderHostTests: XCTestCase {
         XCTAssertEqual(transport.claims.last, ShannonFolderHostClaimRequest(scopeKey: "owner", host: "owner-mac", localStop: true))
         XCTAssertEqual(transport.claims.last?.waitSeconds, 0)
 
+        // An empty claim that came back at once is not repeated at once; one the server held is.
+        let quick = await runner.turn { false }
+        XCTAssertEqual(quick.delay, ShannonFolderHostWire.shortestClaimSeconds, accuracy: 0.2)
+        let clock = TickingClock(step: 25)
+        let held = ShannonFolderHostRunner(transport: transport, worker: worker, now: { clock.next() })
+        let afterHold = await held.turn { false }
+        XCTAssertEqual(afterHold.delay, 0)
+
         // The step was handed out just as the owner pressed the stop switch: it is not run.
         transport.step = ShannonFolderHostStep(id: "8c1f3f3e-1d6c-4a51-8b1e-6f2b8b0a4c21", operation: "list", relativePath: "")
         let answers = Answers([false, true])
@@ -339,6 +347,20 @@ private final class FakeBookmarks: ShannonFolderBookmarking, @unchecked Sendable
     private(set) var stops = 0
     func startAccessing(_ folder: URL) -> Bool { starts += 1; return true }
     func stopAccessing(_ folder: URL) { stops += 1 }
+}
+
+/// Each look is `step` seconds after the one before.
+private final class TickingClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current = Date(timeIntervalSince1970: 0)
+    private let step: TimeInterval
+    init(step: TimeInterval) { self.step = step }
+    func next() -> Date {
+        lock.lock()
+        defer { lock.unlock() }
+        current = current.addingTimeInterval(step)
+        return current
+    }
 }
 
 private actor Answers {

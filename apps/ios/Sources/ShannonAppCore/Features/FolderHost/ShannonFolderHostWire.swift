@@ -8,6 +8,9 @@ public enum ShannonFolderHostWire {
     public static let protocolVersion = 2
     /// A long-poll: the server holds the claim open up to this long.
     public static let waitSeconds = 25
+    /// The shortest wait before claiming again, the lower end of the contract's 1–5 s after a network error. A claim that
+    /// comes back empty sooner than this (a server that does not hold it, a hold cut short) is not repeated at once.
+    public static let shortestClaimSeconds: Double = 1
     /// While the owner's stop switch on this Mac is on, it claims (with `localStop`) at most this often.
     public static let stoppedClaimSeconds: Double = 15
 }

@@ -54,8 +54,11 @@ public actor ShannonFolderHostRunner {
             self.binding = binding
             let stop = await stopped()
             let link = ShannonFolderHostLink.connected(host: host, label: binding.label, stopped: stop)
+            let asked = now()
             guard let step = try await transport.claim(ShannonFolderHostClaimRequest(scopeKey: "owner", host: host, localStop: stop)) else {
-                return Turn(link: link, delay: stop ? ShannonFolderHostWire.stoppedClaimSeconds : 0, entry: nil)
+                if stop { return Turn(link: link, delay: ShannonFolderHostWire.stoppedClaimSeconds, entry: nil) }
+                let held = now().timeIntervalSince(asked)
+                return Turn(link: link, delay: max(0, ShannonFolderHostWire.shortestClaimSeconds - held), entry: nil)
             }
             let report = await worker.perform(step, stopped: await stopped())
             try await transport.report(id: step.id, report)
