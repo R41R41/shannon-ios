@@ -197,6 +197,22 @@ final class ShannonFolderHostTests: XCTestCase {
         XCTAssertEqual(written, .refused(.init(.unsupportedOperation)))
     }
 
+    @MainActor
+    func testChoosingTheSameFolderAgainKeepsItsAccessBalanced() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "shannon-folder-\(UUID().uuidString)"))
+        let fake = FakeBookmarks(folder: folder)
+        let model = ShannonFolderHostModel(bookmarks: ShannonFolderBookmarkStore(defaults: defaults, bookmarking: fake), defaults: defaults,
+                                           log: ShannonFolderHostActivityLog(fileURL: base.appendingPathComponent("log.jsonl")))
+        model.choose(folder)
+        model.choose(folder)
+        model.choose(folder)
+        XCTAssertEqual(model.folder, folder)
+        XCTAssertEqual(fake.starts - fake.stops, 1)
+        model.stopUsing()
+        XCTAssertEqual(fake.starts, fake.stops)
+        XCTAssertFalse(model.isChosen)
+    }
+
     // MARK: The loop and the wire
 
     func testTheLocalStopClaimsWithLocalStopAndRefusesAStepThatArrivesAsItTurnsOn() async throws {
@@ -319,8 +335,10 @@ private final class FakeBookmarks: ShannonFolderBookmarking, @unchecked Sendable
         return (folder, stale)
     }
 
-    func startAccessing(_ folder: URL) -> Bool { true }
-    func stopAccessing(_ folder: URL) {}
+    private(set) var starts = 0
+    private(set) var stops = 0
+    func startAccessing(_ folder: URL) -> Bool { starts += 1; return true }
+    func stopAccessing(_ folder: URL) { stops += 1 }
 }
 
 private actor Answers {

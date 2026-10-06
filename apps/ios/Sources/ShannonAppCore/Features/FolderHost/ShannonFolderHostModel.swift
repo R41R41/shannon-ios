@@ -104,7 +104,6 @@ public final class ShannonFolderHostModel {
             problem = ShannonGeneratedStrings.folderHostBookmarkFailed
             return
         }
-        if let folder, folder != url { bookmarks.stopAccessing(folder) }
         check = nil
         restore()
     }
@@ -162,7 +161,11 @@ public final class ShannonFolderHostModel {
 
     // MARK: The loop
 
+    /// Every access `restore` opens is closed once: the folder open now is closed before the bookmark is opened again, also
+    /// when the owner chose the same folder again.
     private func restore() {
+        if let folder { bookmarks.stopAccessing(folder) }
+        folder = nil
         isChosen = bookmarks.isChosen
         switch bookmarks.restore() {
         case .none:

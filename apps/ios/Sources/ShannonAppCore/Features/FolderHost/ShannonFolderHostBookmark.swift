@@ -55,6 +55,7 @@ public struct ShannonFolderBookmarkStore: @unchecked Sendable {
         defaults.set(try bookmarking.bookmark(for: folder), forKey: Self.defaultsKey)
     }
 
+    /// A `.folder` result has started security-scoped access once; the caller balances it with one `stopAccessing`.
     public func restore() -> Restored {
         guard let data = defaults.data(forKey: Self.defaultsKey) else { return .none }
         guard let resolved = try? bookmarking.resolve(data), bookmarking.startAccessing(resolved.folder) else { return .failed }
