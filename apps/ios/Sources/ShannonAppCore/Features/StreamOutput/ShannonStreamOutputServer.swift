@@ -9,7 +9,10 @@ final class ShannonStreamOutputServer: @unchecked Sendable {
     enum State: Equatable, Sendable {
         case starting
         case listening(port: UInt16)
-        case failed(String)
+        /// `portTaken`: another process (the Electron app, another build of this one) holds the port.
+        case failed(reason: String, portTaken: Bool)
+        /// The listener let the port go (it reached `.cancelled`, or never held it): a new one may take it now.
+        case stopped
     }
 
     private let queue = DispatchQueue(label: "shannon.stream-output")
@@ -49,6 +52,12 @@ final class ShannonStreamOutputServer: @unchecked Sendable {
         }
     }
 
+    /// The address is in use: the error a listener gives for a port another socket holds.
+    static func isPortTaken(_ error: Error) -> Bool {
+        if case let .posix(code) = error as? NWError { return code == .EADDRINUSE }
+        return (error as NSError).domain == NSPOSIXErrorDomain && (error as NSError).code == Int(EADDRINUSE)
+    }
+
     func start() {
         queue.async { self.open() }
     }
@@ -71,14 +80,17 @@ final class ShannonStreamOutputServer: @unchecked Sendable {
         guard listener == nil, !stopped else { return }
         stateChanged(.starting)
         let parameters = NWParameters.tcp
-        parameters.allowLocalEndpointReuse = true
+        // Never shared: a second listener on the same port (another build, the old Electron app) fails as taken.
+        parameters.allowLocalEndpointReuse = false
         parameters.acceptLocalOnly = true
         parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: requestedPort) ?? .any)
         let listener: NWListener
         do {
             listener = try NWListener(using: parameters)
         } catch {
-            stateChanged(.failed(String(describing: error)))
+            stopped = true
+            stateChanged(.failed(reason: String(describing: error), portTaken: Self.isPortTaken(error)))
+            stateChanged(.stopped)
             return
         }
         self.listener = listener
@@ -91,13 +103,13 @@ final class ShannonStreamOutputServer: @unchecked Sendable {
                 self.boundPort = port
                 self.startKeepAlive()
                 self.stateChanged(.listening(port: port))
-            case let .failed(error):
+            case let .failed(error), let .waiting(error):
+                // Said, and closed; `.cancelled` follows and says the port is free again.
+                self.stateChanged(.failed(reason: String(describing: error), portTaken: Self.isPortTaken(error)))
                 self.close()
-                self.stateChanged(.failed(String(describing: error)))
-            case let .waiting(error):
-                // The port is taken (another app, or the old Electron app still running): said, and closed.
-                self.close()
-                self.stateChanged(.failed(String(describing: error)))
+            case .cancelled:
+                self.listener = nil
+                self.stateChanged(.stopped)
             default:
                 break
             }
@@ -105,14 +117,18 @@ final class ShannonStreamOutputServer: @unchecked Sendable {
         listener.start(queue: queue)
     }
 
+    /// Cancels the listener; its `.cancelled` says `.stopped` (at once when there is none).
     private func close() {
+        let first = !stopped
         stopped = true
         keepAlive?.cancel()
         keepAlive = nil
-        listener?.newConnectionHandler = nil
-        listener?.stateUpdateHandler = nil
-        listener?.cancel()
-        listener = nil
+        if let listener {
+            listener.newConnectionHandler = nil
+            listener.cancel()
+        } else if first {
+            stateChanged(.stopped)
+        }
         for connection in viewers.values {
             connection.send(content: ShannonStreamOutputHTTP.lastChunk, isComplete: true, completion: .contentProcessed { _ in connection.cancel() })
         }

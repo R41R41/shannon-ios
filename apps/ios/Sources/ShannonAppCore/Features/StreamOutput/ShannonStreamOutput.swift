@@ -44,6 +44,13 @@ public final class ShannonStreamOutput {
     @ObservationIgnored private let port: UInt16
     @ObservationIgnored private let files: () -> ShannonStreamOutputFiles?
     @ObservationIgnored private var server: ShannonStreamOutputServer?
+    @ObservationIgnored private var serverToken: UUID?
+    /// Listeners told to stop that have not let the port go yet: a new one waits for them, so that turning it off and
+    /// on again never meets its own old listener (the port is not shared; `allowLocalEndpointReuse` is off).
+    @ObservationIgnored private var stopping: [UUID: ShannonStreamOutputServer] = [:]
+    @ObservationIgnored private var opensWhenStopped = false
+    /// How long a stopping listener is waited for before it is given up on.
+    @ObservationIgnored var stopWait: Duration = .seconds(3)
     /// The port it listens on while live (the stream's port; another only in tests).
     @ObservationIgnored private(set) var listeningPort: UInt16?
     @ObservationIgnored private var started = false
@@ -125,11 +132,18 @@ public final class ShannonStreamOutput {
             fail(ShannonGeneratedStrings.desktopStreamUnavailable)
             return
         }
+        guard stopping.isEmpty else {
+            opensWhenStopped = true
+            state = .starting
+            return
+        }
         let snapshot = ShannonStreamOutputSnapshot(body: ShannonLive2DStage.shared.streamBody)
+        let token = UUID()
         let server = ShannonStreamOutputServer(port: port, files: files, snapshot: snapshot) { [weak self] state in
-            Task { @MainActor in self?.serverChanged(state) }
+            Task { @MainActor in self?.serverChanged(state, token: token) }
         }
         self.server = server
+        serverToken = token
         server.start()
         // Her body follows the owner's choice wherever it is made (the stage follows it the same way).
         bodyObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
@@ -140,24 +154,44 @@ public final class ShannonStreamOutput {
     }
 
     private func close() {
-        server?.stop()
+        opensWhenStopped = false
+        if let server, let serverToken {
+            stopping[serverToken] = server
+            server.stop()
+            let wait = stopWait
+            Task { [weak self] in
+                try? await Task.sleep(for: wait)
+                self?.serverChanged(.stopped, token: serverToken)
+            }
+        }
         server = nil
+        serverToken = nil
         listeningPort = nil
         if let bodyObserver { NotificationCenter.default.removeObserver(bodyObserver) }
         bodyObserver = nil
         ShannonLive2DDesktopLink.shared.streamMirror = nil
     }
 
-    private func serverChanged(_ state: ShannonStreamOutputServer.State) {
-        guard isOn, server != nil else { return }
+    private func serverChanged(_ state: ShannonStreamOutputServer.State, token: UUID) {
+        if state == .stopped {
+            guard stopping.removeValue(forKey: token) != nil else { return }
+            if stopping.isEmpty, opensWhenStopped, isOn {
+                opensWhenStopped = false
+                open()
+            }
+            return
+        }
+        guard isOn, token == serverToken else { return }
         switch state {
         case .starting: self.state = .starting
         case let .listening(port):
             listeningPort = port
             self.state = .live
-        case let .failed(reason):
+        case let .failed(reason, portTaken):
             NSLog("[ShannonStream] the stream output could not listen: %@", reason)
-            fail(ShannonGeneratedStrings.desktopStreamPortTaken(port: String(port)))
+            fail(portTaken ? ShannonGeneratedStrings.desktopStreamPortTaken(port: String(port)) : ShannonGeneratedStrings.desktopStreamFailed)
+        case .stopped:
+            break
         }
     }
 

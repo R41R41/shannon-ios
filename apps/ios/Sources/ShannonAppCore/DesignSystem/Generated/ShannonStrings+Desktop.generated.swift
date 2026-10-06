@@ -51,7 +51,9 @@ extension ShannonGeneratedStrings {
     /// `desktop.stream.starting`
     public static let desktopStreamStarting = "準備しています…"
     /// `desktop.stream.portTaken`
-    public static func desktopStreamPortTaken(port: String) -> String { "配信用の出力を始められませんでした。ポート \(port) を、ほかのアプリ（古い Mac 版など）が使っているかもしれません。そのアプリを終えてから、もう一度入れてください。" }
+    public static func desktopStreamPortTaken(port: String) -> String { "配信用の出力を始められませんでした。ポート \(port) を、ほかのアプリ（古い Mac 版や、別のビルドのシャノン）が使っています。そのアプリを終えてから、もう一度入れてください。" }
+    /// `desktop.stream.failed`
+    public static let desktopStreamFailed = "配信用の出力を始められませんでした。もう一度入れてください。続くときは、Mac を再起動してから試してください。"
     /// `desktop.stream.unavailable`
     public static let desktopStreamUnavailable = "このビルドには配信用のページが入っていないため、配信用の出力は使えません。"
     /// `desktop.stream.callHeld`

@@ -255,6 +255,55 @@ final class ShannonStreamOutputTests: XCTestCase {
         withExtendedLifetime(body) {}
     }
 
+    func testAPortHeldByAnotherListenerIsSaidToBeTakenAndNeverShared() async throws {
+        XCTAssertTrue(ShannonStreamOutputServer.isPortTaken(NWError.posix(.EADDRINUSE)))
+        XCTAssertFalse(ShannonStreamOutputServer.isPortTaken(NWError.posix(.EACCES)))
+        let firstStates = StateBox()
+        let first = ShannonStreamOutputServer(port: 0, files: files(), snapshot: .init()) { firstStates.append($0) }
+        first.start()
+        defer { first.stop() }
+        let port = try await firstStates.port()
+        // Another build of the app, or the old Electron app, on the same port.
+        let secondStates = StateBox()
+        let second = ShannonStreamOutputServer(port: port, files: files(), snapshot: .init()) { secondStates.append($0) }
+        second.start()
+        let taken = await secondStates.wait { if case .failed(_, true) = $0 { true } else { false } }
+        XCTAssertTrue(taken, "the second listener is refused the port")
+        let released = await secondStates.wait { $0 == .stopped }
+        XCTAssertTrue(released)
+    }
+
+    @MainActor
+    func testTurningItOffAndOnAgainWaitsForItsOldListenerAndTellsATakenPortApart() async throws {
+        // A free port: one the system gives, let go again.
+        let probeStates = StateBox()
+        let probe = ShannonStreamOutputServer(port: 0, files: files(), snapshot: .init()) { probeStates.append($0) }
+        probe.start()
+        let port = try await probeStates.port()
+        probe.stop()
+        let probeReleased = await probeStates.wait { $0 == .stopped }
+        XCTAssertTrue(probeReleased)
+
+        let output = ShannonStreamOutput(
+            defaults: UserDefaults(suiteName: "stream-output-\(UUID().uuidString)")!, port: port, capture: ShannonStreamOutputWindowCapture())
+        output.setOn(true)
+        for _ in 0..<200 where output.state != .live { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(output.state, .live)
+        output.setOn(false)
+        output.setOn(true)
+        for _ in 0..<300 where output.state != .live { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(output.state, .live, "the new listener waited for the old one to let the port go")
+        XCTAssertEqual(output.listeningPort, port)
+
+        // Held by another listener: said as taken, and the switch goes back off.
+        let other = ShannonStreamOutput(
+            defaults: UserDefaults(suiteName: "stream-output-\(UUID().uuidString)")!, port: port, capture: ShannonStreamOutputWindowCapture())
+        other.setOn(true)
+        for _ in 0..<300 where other.isOn { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(other.state, .failed(ShannonGeneratedStrings.desktopStreamPortTaken(port: String(port))))
+        output.setOn(false)
+    }
+
     // MARK: Over a socket
 
     @MainActor
@@ -343,12 +392,20 @@ private final class StateBox: @unchecked Sendable {
         lock.withLock { states.append(state) }
     }
 
+    func wait(for wanted: @Sendable (ShannonStreamOutputServer.State) -> Bool) async -> Bool {
+        for _ in 0..<300 {
+            if lock.withLock({ states.contains(where: wanted) }) { return true }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return false
+    }
+
     func port() async throws -> UInt16 {
         for _ in 0..<200 {
             let current = lock.withLock { states }
             for state in current {
                 if case let .listening(port) = state { return port }
-                if case let .failed(reason) = state { throw NSError(domain: "stream", code: 1, userInfo: [NSLocalizedDescriptionKey: reason]) }
+                if case let .failed(reason, _) = state { throw NSError(domain: "stream", code: 1, userInfo: [NSLocalizedDescriptionKey: reason]) }
             }
             try await Task.sleep(for: .milliseconds(10))
         }

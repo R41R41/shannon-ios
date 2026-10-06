@@ -3258,10 +3258,17 @@
     },
     {
       "key": "desktop.stream.portTaken",
-      "text": "配信用の出力を始められませんでした。ポート {port} を、ほかのアプリ（古い Mac 版など）が使っているかもしれません。そのアプリを終えてから、もう一度入れてください。",
+      "text": "配信用の出力を始められませんでした。ポート {port} を、ほかのアプリ（古い Mac 版や、別のビルドのシャノン）が使っています。そのアプリを終えてから、もう一度入れてください。",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/StreamOutput/ShannonStreamOutput.swift",
       "only": "apple",
       "note": "待ち受けられなかったとき（入切は切に戻る。Windows と同じ）。"
+    },
+    {
+      "key": "desktop.stream.failed",
+      "text": "配信用の出力を始められませんでした。もう一度入れてください。続くときは、Mac を再起動してから試してください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/StreamOutput/ShannonStreamOutput.swift",
+      "only": "apple",
+      "note": "ポートが使われている以外の理由で待ち受けられなかったとき（入切は切に戻る）。"
     },
     {
       "key": "desktop.stream.unavailable",
