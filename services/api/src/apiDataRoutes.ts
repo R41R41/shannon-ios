@@ -3,7 +3,7 @@ import type { AetherProposalStore } from './integrations/aether/aetherProposal.j
 import type { TurnBackgroundService } from './mind/sleep/backgroundUpdates.js';
 import type { ConversationStore } from './mind/memory/store/conversationStore.js';
 import type { ApiRequest, ApiResponse, StateEventRequest } from './contracts/contracts.js';
-import type { InitiativeInbox } from './initiativeStore.js';
+import type { InitiativeInbox } from './surfaces/outreach/store/initiativeStore.js';
 import type { KnowledgeAnswer, KnowledgeStore } from './mind/memory/store/knowledgeStore.js';
 import type { MemoryDashboard, ShannonMemoryStore } from './mind/memory/memoryService.js';
 import { dispatchPersonRequest } from './apiPersonRoutes.js';

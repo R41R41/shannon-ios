@@ -5,7 +5,7 @@ import {
   createConfiguredOpenAITranscriptionGateway,
   OpenAITranscriptionGateway,
 } from '../src/openaiTranscriptionSession.js';
-import { createGeminiLiveRoute } from '../src/serverGeminiLiveRoute.js';
+import { createGeminiLiveRoute } from '../src/surfaces/voice/serverGeminiLiveRoute.js';
 
 const secret = 'ek_synthetic_client_secret_value';
 

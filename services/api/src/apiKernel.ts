@@ -12,9 +12,9 @@ export { agentTaskPromptProjection } from './apiPromptProjection.js';
 import { dispatchAgentRequest } from './apiAgentRoutes.js';
 import { dispatchDataRequest } from './apiDataRoutes.js';
 import { dispatchOrganizeRequest } from './apiOrganizeRoutes.js';
-import { dispatchVoiceTurn } from './apiVoiceTurns.js';
+import { dispatchVoiceTurn } from './surfaces/voice/apiVoiceTurns.js';
 import { dispatchPreferenceRequest } from './apiPreferenceRoutes.js';
-import { dispatchLiveVoiceRequest, realtimeVoiceSessionProjection, type LiveVoiceStreamObserver, type VoiceParticipantMode } from './apiLiveVoice.js';
+import { dispatchLiveVoiceRequest, realtimeVoiceSessionProjection, type LiveVoiceStreamObserver, type VoiceParticipantMode } from './surfaces/voice/apiLiveVoice.js';
 import {
   badRequest,
   objectBody,
@@ -38,7 +38,7 @@ import type { ApiRequest, ApiResponse, ChatRequest, StateEventRequest } from './
 import { ShannonMemoryService, type MemoryAction, type ShannonMemoryStore } from './mind/memory/memoryService.js';
 import { dispatchConversationRead } from './apiConversationRead.js';
 import type { KnowledgeStore } from './mind/memory/store/knowledgeStore.js';
-import type { InitiativeInbox } from './initiativeStore.js';
+import type { InitiativeInbox } from './surfaces/outreach/store/initiativeStore.js';
 import type { AetherContextReader } from './integrations/aether/aetherContext.js';
 import { DisabledAetherProposalStore, type AetherProposalStore } from './integrations/aether/aetherProposal.js';
 import {
@@ -72,9 +72,9 @@ import {
   type CognitiveIntentStore,
 } from './cognitiveIntent.js';
 import { createInMemoryAutonomyService, type ShannonAutonomyService } from './autonomyService.js';
-import { dispatchBodyRequest, isBodyRoute } from './apiBodyRoutes.js';
+import { dispatchBodyRequest, isBodyRoute } from './surfaces/body/apiBodyRoutes.js';
 import { CALENDAR_UPCOMING_PATH, dispatchCalendarRequest, localOwnerUpcoming, type OwnerUpcoming } from './calendarRoutes.js';
-import { ShannonBody, type ShannonBodyOptions } from './shannonBody.js';
+import { ShannonBody, type ShannonBodyOptions } from './surfaces/body/shannonBody.js';
 import {
   DisabledVoyagerTaskDestination,
   DisabledVoyagerCatalog,
@@ -88,9 +88,9 @@ import {
   type VoyagerCatalog,
   type VoyagerTaskProjection,
 } from './integrations/voyager/organize.js';
-import { InMemoryVoiceIdentityStore, type ShannonVoiceIdentityStore } from './voiceIdentity.js';
-import { OwnOutreach, type OwnOutreachReader } from './ownOutreach.js';
-import { voiceSessionCalls } from './ownerCallElsewhere.js';
+import { InMemoryVoiceIdentityStore, type ShannonVoiceIdentityStore } from './surfaces/voice/voiceIdentity.js';
+import { OwnOutreach, type OwnOutreachReader } from './surfaces/outreach/ownOutreach.js';
+import { voiceSessionCalls } from './surfaces/voice/ownerCallElsewhere.js';
 import {
   NO_LOOK, answerTextCommand, beginTextTurn, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type TextTurnInput, type TextTurnResult,
 } from './apiTextTurn.js';

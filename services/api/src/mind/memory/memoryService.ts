@@ -16,7 +16,7 @@ import { configuredBackgroundBudgetUsd, type LlmUsageReader, type LlmUsageSummar
 import { commitmentDeadline } from '../../commitmentTime.js';
 import { SNOOZE_MILLISECONDS } from '../../commitmentInitiative.js';
 import type { CommitmentSleepReview } from '../sleep/sleepCommitmentReview.js';
-import type { InitiativeEvaluationReader, InitiativeEvaluationSummary } from '../../initiativeStore.js';
+import type { InitiativeEvaluationReader, InitiativeEvaluationSummary } from '../../surfaces/outreach/store/initiativeStore.js';
 import type { DailyMindFocus, DailyMindReader } from '../../dailyMind.js';
 import { isImpressionMemoryId, mutateOwnerImpression, ownerImpressionItems } from './impressionViews.js';
 

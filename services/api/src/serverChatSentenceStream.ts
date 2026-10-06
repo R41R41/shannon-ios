@@ -6,7 +6,7 @@ import {
   sameChatStreamLine,
 } from './chatSentenceStream.js';
 import type { ApiRequest, ApiResponse, ChatStreamLine } from './contracts/contracts.js';
-import { startStream, writeEvent } from './serverLiveVoiceStreamRoute.js';
+import { startStream, writeEvent } from './surfaces/voice/serverLiveVoiceStreamRoute.js';
 
 /**
  * `kernel.dispatch` for the generic route, answering an opted-in `/v1/chat` turn as NDJSON.

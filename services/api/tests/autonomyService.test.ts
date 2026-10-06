@@ -10,7 +10,7 @@ import { SQLiteAutonomyAnnouncer, budgetRequestMessage } from '../src/autonomyAn
 import { configuredAutonomy, type AutonomyConfig } from '../src/autonomyBudget.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
-import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
+import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { readApiSource } from './support/sources.js';
 

@@ -8,15 +8,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { BODY_LIMITS } from '../src/contracts/bodyContract.js';
-import { SQLiteBodyStore } from '../src/bodyStore.js';
+import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
 import type { ShannonDevicePrincipal } from '../src/deviceAuth.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
-import { SQLiteIncomingCallStore } from '../src/incomingCallStore.js';
-import { OWNER_CALL_LIMITS, OWNER_IN_CALL_ELSEWHERE, SQLiteOwnerCallFacts, ownerCallElsewhereEnabled } from '../src/ownerCallElsewhere.js';
-import { SQLitePrivateListeningStore } from '../src/privateListeningStore.js';
-import { createGeminiLiveRoute } from '../src/serverGeminiLiveRoute.js';
-import { createLiveVoiceStreamRoute } from '../src/serverLiveVoiceStreamRoute.js';
-import type { BodyPresence } from '../src/shannonBody.js';
+import { SQLiteIncomingCallStore } from '../src/surfaces/outreach/store/incomingCallStore.js';
+import { OWNER_CALL_LIMITS, OWNER_IN_CALL_ELSEWHERE, SQLiteOwnerCallFacts, ownerCallElsewhereEnabled } from '../src/surfaces/voice/ownerCallElsewhere.js';
+import { SQLitePrivateListeningStore } from '../src/surfaces/body/store/privateListeningStore.js';
+import { createGeminiLiveRoute } from '../src/surfaces/voice/serverGeminiLiveRoute.js';
+import { createLiveVoiceStreamRoute } from '../src/surfaces/voice/serverLiveVoiceStreamRoute.js';
+import type { BodyPresence } from '../src/surfaces/body/shannonBody.js';
 
 /**
  * Production, 2026-10-05 10:34Z: the owner was in a voice call with her on his iPhone; the desktop body's wake listener

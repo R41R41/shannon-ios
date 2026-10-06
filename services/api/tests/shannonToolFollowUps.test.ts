@@ -10,7 +10,7 @@ import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import type { HostFolderOperations, HostOperationRequest, HostRunOutcome } from '../src/hostFolderOperations.js';
 import { ShannonToolRunner } from '../src/shannonToolRunner.js';
-import { ShannonBody } from '../src/shannonBody.js';
+import { ShannonBody } from '../src/surfaces/body/shannonBody.js';
 import { asksToConfirmToolAction, confirms, conversationTools } from '../src/shannonToolSession.js';
 import { ToolAudienceWatch } from '../src/shannonToolAudience.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/turnDeadline.js';

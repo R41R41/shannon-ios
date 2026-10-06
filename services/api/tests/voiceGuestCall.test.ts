@@ -7,10 +7,10 @@ import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import {
   VOICE_CALL_SUMMARY_HEADING, VOICE_CALL_SUMMARY_PATH, acceptedSummary, fallbackVoiceCallSummary,
-} from '../src/apiVoiceCallSummary.js';
+} from '../src/surfaces/voice/apiVoiceCallSummary.js';
 import {
   guestAddressDecision, guestCallHistory, validatedGuestCallContext, type GuestCallTurn,
-} from '../src/voiceGuestCall.js';
+} from '../src/surfaces/voice/voiceGuestCall.js';
 import { promptOf } from './modelPrompt.js';
 
 const at = '2026-10-01T03:00:00.000Z';

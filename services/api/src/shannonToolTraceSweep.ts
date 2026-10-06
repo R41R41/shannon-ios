@@ -2,7 +2,7 @@ import { isMemoryEvidenceVisible, type CompanionStateSnapshot } from '@shannon/c
 import { conversationSecrets } from './conversationSecrets.js';
 import type { ConversationStore, ShannonExperience } from './mind/memory/store/conversationStore.js';
 import { MemoryWithholding } from './mind/memory/memoryVisibility.js';
-import { saidKey } from './bodyLookTurnWait.js';
+import { saidKey } from './surfaces/body/bodyLookTurnWait.js';
 import { UNLINKED_TURN, maskedTraceCalls, saidDigest, type ToolTraceCall, type ToolTraceRecord } from './shannonToolTrace.js';
 import { TOOL_FOLLOW_UP_MILLISECONDS, TOOL_TRACE_RETENTION_MILLISECONDS, type ToolTraceStore } from './shannonToolTurns.js';
 

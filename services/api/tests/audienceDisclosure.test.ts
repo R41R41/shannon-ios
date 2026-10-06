@@ -11,12 +11,12 @@ import { MemoryEmbeddingWorker } from '../src/mind/memory/memoryEmbeddingWorker.
 import { DeterministicMemoryModelGateway } from '../src/mind/recall/memoryModels.js';
 import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
 import { usableThreadSummary, visibleConversationHistory } from '../src/mind/memory/memoryVisibility.js';
-import { configuredPlatformBridge, PlatformBridgeService, platformBridgeThreadId } from '../src/platformBridge.js';
+import { configuredPlatformBridge, PlatformBridgeService, platformBridgeThreadId } from '../src/surfaces/platform/platformBridge.js';
 import { DEFAULT_SEMANTIC_MEMORY_CONFIG, SemanticMemoryRecall } from '../src/mind/recall/semanticMemoryRecall.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { prepareTurnCognitiveContext } from '../src/turnCognitiveContext.js';
 import { ShannonTurnMemoryRecall } from '../src/mind/recall/turnMemoryRecall.js';
-import { ownerSaysCompanionPresent, speakTimePrivacyCheck } from '../src/voiceCompanionPresence.js';
+import { ownerSaysCompanionPresent, speakTimePrivacyCheck } from '../src/surfaces/voice/voiceCompanionPresence.js';
 import { promptOf } from './modelPrompt.js';
 
 const at = '2026-10-02T03:00:00.000Z';

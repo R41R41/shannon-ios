@@ -8,9 +8,9 @@ import {
   BODY_TOUCH_GESTURES, BODY_TOUCH_INPUTS, BODY_TOUCH_REFLEXES, BODY_TOUCH_SIDES, BODY_TOUCH_VOCABULARY, isImpossibleTouch, validatedBodyEvents, type BodyEvent,
 } from '../src/contracts/bodyContract.js';
 import { bodyReactionContentHash, validatedBodyReactionRequest, type BodyReactionAnswer, type BodyReactionRequest } from '../src/contracts/bodyReactionContract.js';
-import { BODY_REACTION_OWN_RULE } from '../src/bodyReactionPrompt.js';
-import { BODY_TOUCH_PARTS } from '../src/bodyTouchWords.js';
-import type { BodyIngestReceipt, BodyPresence } from '../src/shannonBody.js';
+import { BODY_REACTION_OWN_RULE } from '../src/surfaces/body/bodyReactionPrompt.js';
+import { BODY_TOUCH_PARTS } from '../src/surfaces/body/bodyTouchWords.js';
+import type { BodyIngestReceipt, BodyPresence } from '../src/surfaces/body/shannonBody.js';
 import { START, reactionHarness, scope } from './bodyReactionHarness.js';
 
 // Stage 1b exactly, kept under SHANNON_PREDICTION=off (Syzygy ADR-0006 stage 2: `bodyTouchStage2.test.ts`).

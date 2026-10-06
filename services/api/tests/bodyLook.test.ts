@@ -10,22 +10,22 @@ import { ShannonAutonomyService, createInMemoryAutonomyService } from '../src/au
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import {
   BODY_LOOK_SEEN_SUMMARY, ROOM_LOOK_OFFER_PROMPT, asksToLook, bodyLookNotSeenSummary, type BodyLookMessage,
-} from '../src/bodyLook.js';
+} from '../src/surfaces/body/bodyLook.js';
 import {
   BODY_LOOK_BASE64_CHARACTERS, BODY_LOOK_LIMITS, BODY_LOOK_REFUSAL_CODES, BODY_LOOK_REQUEST_BYTES,
   bodyLookResultId, configuredBodyLook, jpegSize, validatedBodyLookResult, type BodyLookConfig,
 } from '../src/contracts/bodyLookContract.js';
-import { SQLiteBodyLookSpeaker } from '../src/bodyLookDelivery.js';
-import { bodyLookNotSeenLine } from '../src/bodyLookLines.js';
-import { SQLiteBodyLookStore } from '../src/bodyLookStore.js';
-import { OpenAIRoomLookViewer, roomLookInstructions, type RoomLookViewRequest, type RoomLookViewer } from '../src/bodyLookVision.js';
+import { SQLiteBodyLookSpeaker } from '../src/surfaces/body/store/bodyLookDelivery.js';
+import { bodyLookNotSeenLine } from '../src/surfaces/body/bodyLookLines.js';
+import { SQLiteBodyLookStore } from '../src/surfaces/body/store/bodyLookStore.js';
+import { OpenAIRoomLookViewer, roomLookInstructions, type RoomLookViewRequest, type RoomLookViewer } from '../src/surfaces/body/bodyLookVision.js';
 import { bodyLookRequestBytes } from '../src/bodyLookWiring.js';
-import { SQLiteBodyStore } from '../src/bodyStore.js';
+import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
 import { OpenAIResponsesChatModel, type ShannonChatModel, type ShannonChatModelRequest, type ShannonChatModelResult } from '../src/chatModel.js';
 import { InMemoryConversationStore, type StoredConversationMessage } from '../src/mind/memory/store/conversationStore.js';
-import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
+import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import type { LlmUsageEvent } from '../src/llmUsage.js';
-import type { BodyPresence } from '../src/shannonBody.js';
+import type { BodyPresence } from '../src/surfaces/body/shannonBody.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
 import { promptOf } from './modelPrompt.js';

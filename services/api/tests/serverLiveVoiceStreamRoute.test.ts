@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ShannonApiKernel } from '../src/apiKernel.js';
 import type { ShannonDevicePrincipal } from '../src/deviceAuth.js';
-import { createLiveVoiceStreamRoute, SpokenSentenceSegmenter } from '../src/serverLiveVoiceStreamRoute.js';
+import { createLiveVoiceStreamRoute, SpokenSentenceSegmenter } from '../src/surfaces/voice/serverLiveVoiceStreamRoute.js';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

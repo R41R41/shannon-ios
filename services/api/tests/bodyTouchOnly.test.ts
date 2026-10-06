@@ -3,12 +3,12 @@ import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { BODY_LIMITS } from '../src/contracts/bodyContract.js';
 import { configuredBodyLook } from '../src/contracts/bodyLookContract.js';
-import { SQLiteBodyLookStore } from '../src/bodyLookStore.js';
-import type { RoomLookViewer } from '../src/bodyLookVision.js';
-import { SQLiteBodyStore } from '../src/bodyStore.js';
-import { BODY_TOUCH_ONLY_FLAG, isFullBody, isTouchOnlyBody } from '../src/bodyTouchOnly.js';
+import { SQLiteBodyLookStore } from '../src/surfaces/body/store/bodyLookStore.js';
+import type { RoomLookViewer } from '../src/surfaces/body/bodyLookVision.js';
+import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
+import { BODY_TOUCH_ONLY_FLAG, isFullBody, isTouchOnlyBody } from '../src/surfaces/body/bodyTouchOnly.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
-import type { BodyPresence } from '../src/shannonBody.js';
+import type { BodyPresence } from '../src/surfaces/body/shannonBody.js';
 import { promptOf } from './modelPrompt.js';
 
 const scope = 'owner';

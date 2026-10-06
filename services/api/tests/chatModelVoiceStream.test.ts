@@ -7,7 +7,7 @@ import {
 } from '../src/chatModel.js';
 import { VOICE_RESPONSE_TIMEOUT_MILLISECONDS, type VoiceStreamBounds } from '../src/chatModelVoiceStream.js';
 import type { LlmUsageEvent } from '../src/llmUsage.js';
-import { completeSpokenSentences } from '../src/spokenSentences.js';
+import { completeSpokenSentences } from '../src/surfaces/voice/spokenSentences.js';
 
 const encoder = new TextEncoder();
 const request: ShannonVoiceModelRequest = {

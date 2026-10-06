@@ -1,10 +1,10 @@
 import { configuredBodyReactions } from './contracts/bodyReactionContract.js';
-import { createConfiguredBodyReactionSpeaker } from './bodyReactionModel.js';
-import { SQLiteBodyReactionStore } from './bodyReactionStore.js';
-import { SQLiteTouchExperiences } from './bodyTouchMemory.js';
+import { createConfiguredBodyReactionSpeaker } from './surfaces/body/bodyReactionModel.js';
+import { SQLiteBodyReactionStore } from './surfaces/body/store/bodyReactionStore.js';
+import { SQLiteTouchExperiences } from './surfaces/body/store/bodyTouchMemory.js';
 import { touchPredictionEnabled } from './mind/prediction/bodyTouchPrediction.js';
 import type { LlmUsageEvent } from './llmUsage.js';
-import type { ShannonBodyOptions } from './shannonBody.js';
+import type { ShannonBodyOptions } from './surfaces/body/shannonBody.js';
 
 /**
  * What the API process gives the kernel for a touch: the three small tables, the switch and

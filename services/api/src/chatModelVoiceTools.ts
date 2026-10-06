@@ -3,7 +3,7 @@ import {
   withToolRounds, type ShannonModelToolSession,
 } from './chatModelTools.js';
 import { streamedVoiceReply, type VoiceStreamBounds } from './chatModelVoiceStream.js';
-import { completeSpokenSentences } from './spokenSentences.js';
+import { completeSpokenSentences } from './surfaces/voice/spokenSentences.js';
 import { PartialAnswerError, RoundTimer } from './turnDeadline.js';
 
 /**

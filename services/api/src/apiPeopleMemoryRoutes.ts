@@ -2,14 +2,14 @@ import {
   SENSITIVITY_CATEGORY_LABELS, describeAudience, memoryControlFor, type CompanionStateStore,
 } from '@shannon/cognition';
 import { badRequest, objectBody, validBoundedString, validScopeKey } from './apiValidation.js';
-import { acceptedSummary } from './apiVoiceCallSummary.js';
+import { acceptedSummary } from './surfaces/voice/apiVoiceCallSummary.js';
 import type { ShannonChatModel } from './chatModel.js';
 import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import { audiencePeople, personMemoryId, placeLabel, type CallSummarizer, type PeopleMemory } from './mind/memory/peopleMemory.js';
 import type { PersonCall, PersonMemoryItem, RememberedPerson } from './mind/memory/store/peopleMemoryStore.js';
-import { platformDisplayName } from './platformPeople.js';
-import { GUEST_CALL_SUMMARY_TURNS, validatedGuestCallTurns } from './voiceGuestCall.js';
-import { cleanPersonName, personNameKey } from './voiceGuestNames.js';
+import { platformDisplayName } from './surfaces/platform/platformPeople.js';
+import { GUEST_CALL_SUMMARY_TURNS, validatedGuestCallTurns } from './surfaces/voice/voiceGuestCall.js';
+import { cleanPersonName, personNameKey } from './surfaces/voice/voiceGuestNames.js';
 import { mutatePersonImpression, personImpressionViews } from './mind/memory/impressionViews.js';
 import type { ImpressionSource } from './mind/memory/impressions.js';
 

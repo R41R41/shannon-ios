@@ -7,7 +7,7 @@ import {
 } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { SHANNON_CORE_PATHS } from '../src/autonomyCore.js';
-import { SQLiteBodyStore } from '../src/bodyStore.js';
+import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
 import { OpenAIResponsesChatModel, type ShannonChatModel, type ShannonChatModelRequest, type ShannonChatModelResult } from '../src/chatModel.js';
 import { parseStructuredTurn } from '../src/chatModelSupport.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';

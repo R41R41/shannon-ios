@@ -9,7 +9,7 @@
  *
  * Owner-only and paired-device-only; nothing here is written, and nothing here is in a prompt.
  */
-import type { BodySurface, BodyTouchRegion } from '../bodyTouchWords.js';
+import type { BodySurface, BodyTouchRegion } from '../surfaces/body/bodyTouchWords.js';
 
 export const SHANNON_NOW_PATH = '/v1/shannon/now';
 export const SHANNON_NOW_SCHEMA_VERSION = 1;

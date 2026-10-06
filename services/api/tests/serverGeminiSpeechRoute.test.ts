@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ShannonDevicePrincipal } from '../src/deviceAuth.js';
 import {
   SpeechScopeConcurrencyLimiter, createGeminiSpeechRoute, refuseSpeech, streamSpeech,
-} from '../src/serverGeminiSpeechRoute.js';
+} from '../src/surfaces/voice/serverGeminiSpeechRoute.js';
 import { GeminiSpeechError } from '../src/geminiSpeech.js';
 
 describe('Gemini speech scope concurrency', () => {

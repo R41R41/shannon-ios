@@ -10,7 +10,7 @@ import { InMemoryConversationStore } from '../src/mind/memory/store/conversation
 import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
 import { applyExplicitCommitmentCommand, resolveCommitmentCommand } from '../src/commitmentCommands.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
+import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModelRequest } from '../src/chatModel.js';

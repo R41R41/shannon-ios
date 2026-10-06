@@ -13,7 +13,7 @@ import { extractExplicitUserIntent, type CognitiveIntentStore } from './cognitiv
 import { presentCompanionState, resolveReplyEmotion } from './mind/emotion/companionPresence.js';
 import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse } from './contracts/contracts.js';
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, type ConversationCapabilityContext, type NotionTurnReader } from './conversationCapabilities.js';
-import type { ConversationLookTurn } from './conversationLooks.js';
+import type { ConversationLookTurn } from './surfaces/body/conversationLooks.js';
 import { executeConversationCommand } from './conversationCommands.js';
 import {
   buildConversationOrchestrationPrompt, observeConversationTurn, recordConversationReceipt, type ConversationOrchestrationStore,
@@ -23,12 +23,12 @@ import type { ConversationStore, ShannonExperience } from './mind/memory/store/c
 import type { DailyMindReader } from './dailyMind.js';
 import { companionIdentityPrompt, type KnowledgeStore, type LayeredIdentityPrompt } from './mind/memory/store/knowledgeStore.js';
 import { isOrganizeCommand, type OrganizeExtractor, type OrganizeStore, type VoyagerCatalog } from './integrations/voyager/organize.js';
-import type { OwnOutreach } from './ownOutreach.js';
+import type { OwnOutreach } from './surfaces/outreach/ownOutreach.js';
 import type { OwnerUpcoming } from './mind/memory/ownerUpcoming.js';
 import type { PeopleMemory } from './mind/memory/peopleMemory.js';
-import { heardByEveryoneHere } from './platformPeople.js';
+import { heardByEveryoneHere } from './surfaces/platform/platformPeople.js';
 import type { PersonIdentityStore } from './mind/memory/store/personIdentity.js';
-import type { ShannonBody } from './shannonBody.js';
+import type { ShannonBody } from './surfaces/body/shannonBody.js';
 import type { ConversationToolServer } from './shannonToolSession.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import { TurnDeadline } from './turnDeadline.js';

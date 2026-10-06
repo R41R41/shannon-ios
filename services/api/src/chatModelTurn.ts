@@ -19,7 +19,7 @@ import {
   stableScopeIdentifier,
 } from './chatModelSupport.js';
 import { APP_LOOK_SCHEMA } from './contracts/appLookContract.js';
-import { MINECRAFT_INTENT_SCHEMA } from './minecraftIntent.js';
+import { MINECRAFT_INTENT_SCHEMA } from './surfaces/minecraft/minecraftIntent.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, asksForParallelCalls, providerFunctionTools, toolInstructions } from './chatModelTools.js';
 
 /**

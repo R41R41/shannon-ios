@@ -1,6 +1,6 @@
 import type { PlaceSearchContext, ShannonPlace } from './integrations/places/placeDiscovery.js';
 import type { ChatReplyFeeling } from './mind/emotion/chatReplyFeeling.js';
-import type { MinecraftIntent } from './minecraftIntent.js';
+import type { MinecraftIntent } from './surfaces/minecraft/minecraftIntent.js';
 import {
   estimatedOpenAICostUsd,
   responseUsage,
@@ -17,7 +17,7 @@ import {
   streamedVoiceReply,
   type VoiceStreamBounds,
 } from './chatModelVoiceStream.js';
-import { completeSpokenSentences } from './spokenSentences.js';
+import { completeSpokenSentences } from './surfaces/voice/spokenSentences.js';
 import { chatTurnRequestBody, chatTurnResult, offersTools, parsedChatTurn, precedingReplyMessage, turnContextMessage } from './chatModelTurn.js';
 import { streamedVoiceToolTurn } from './chatModelVoiceTools.js';
 import { ChatSentenceSplitter } from './chatSentenceSplitter.js';

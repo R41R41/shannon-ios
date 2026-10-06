@@ -17,7 +17,7 @@ import { localDayKey } from './memoryProjection.js';
 import { MemoryWithholding } from './memoryVisibility.js';
 import { personMemoryId } from './peopleMemory.js';
 import type { PeopleMemoryStore } from './store/peopleMemoryStore.js';
-import { platformSummaryId } from '../../platformPeople.js';
+import { platformSummaryId } from '../../surfaces/platform/platformPeople.js';
 
 /** What the background model is shown for one person and one turn. */
 export interface ImpressionAnalysisInput {

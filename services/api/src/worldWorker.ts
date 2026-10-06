@@ -11,14 +11,14 @@ import { parseHackerNewsItems, parseHackerNewsTopIds } from './integrations/worl
 import { parseArxivFeed, prepareArxivQuery } from './integrations/world/arxiv.js';
 import { parseGithubReleases } from './integrations/world/githubReleases.js';
 import { isPrivateOrReservedAddress } from './integrations/world/ipSafety.js';
-import { SQLiteInitiativeStore } from './initiativeStore.js';
-import { nextInitiativeDelayMilliseconds } from './initiativeSchedule.js';
+import { SQLiteInitiativeStore } from './surfaces/outreach/store/initiativeStore.js';
+import { nextInitiativeDelayMilliseconds } from './surfaces/outreach/initiativeSchedule.js';
 import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './dailyMind.js';
 import {
   createConfiguredPushNotificationSender,
   deliverPendingPushNotifications,
   SQLitePushNotificationStore,
-} from './pushNotifications.js';
+} from './surfaces/outreach/pushNotifications.js';
 
 const databasePath = configuredDatabasePath();
 const nowISOString = () => new Date().toISOString();

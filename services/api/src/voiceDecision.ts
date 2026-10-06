@@ -12,10 +12,10 @@ import {
   directChoiceValue, noulValue, optionalPositiveInteger, optionalProbability,
   normalizedConversationClass, probabilityValue, selectedSkills, shouldRespondToTurn,
 } from './voiceDecisionValues.js';
-import { roomLookAnswer, roomLookRouterQuestions, roomLookRouterSchema } from './voiceRoomLook.js';
+import { roomLookAnswer, roomLookRouterQuestions, roomLookRouterSchema } from './surfaces/voice/voiceRoomLook.js';
 import { lookSelfAnswer } from './contracts/appLookContract.js';
-import { localTurnSilence, openAIReplyInstruction, replyRequiredQuestion, routerTurnState } from './voiceSilence.js';
-import { fallbackWaitingDirection, jevWaitingQuestions } from './voiceWaitingCue.js';
+import { localTurnSilence, openAIReplyInstruction, replyRequiredQuestion, routerTurnState } from './surfaces/voice/voiceSilence.js';
+import { fallbackWaitingDirection, jevWaitingQuestions } from './surfaces/voice/voiceWaitingCue.js';
 
 export {
   VOICE_AFFECTS, VOICE_SKILLS,

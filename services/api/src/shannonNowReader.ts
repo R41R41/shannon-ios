@@ -1,8 +1,8 @@
-import { isTouchOnlyBody } from './bodyTouchOnly.js';
-import { bodySurfaceMark, isBodySurface, isBodyTouchRegion, touchPartPhrase } from './bodyTouchWords.js';
+import { isTouchOnlyBody } from './surfaces/body/bodyTouchOnly.js';
+import { bodySurfaceMark, isBodySurface, isBodyTouchRegion, touchPartPhrase } from './surfaces/body/bodyTouchWords.js';
 import { DatabaseSync } from 'node:sqlite';
 import { SHANNON_TOUCH_KINDS } from '@shannon/cognition';
-import { REACH_OUT_SOURCE_PREFIX, reachOutOfSource } from './reachOutDelivery.js';
+import { REACH_OUT_SOURCE_PREFIX, reachOutOfSource } from './surfaces/outreach/reachOutDelivery.js';
 import {
   SHANNON_NOW_LIMITS, type ShannonNowBody, type ShannonNowDelivery, type ShannonNowLook, type ShannonNowReachOut, type ShannonNowTouch,
 } from './contracts/shannonNowContract.js';

@@ -1,4 +1,4 @@
-import { validatedVoiceDeviceContext } from '../../voiceDeviceContext.js';
+import { validatedVoiceDeviceContext } from '../../surfaces/voice/voiceDeviceContext.js';
 
 export interface ShannonPlace {
   name: string;

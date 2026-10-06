@@ -14,13 +14,13 @@ import { REACH_OUT_REASONS, REACH_OUT_REASON_LABEL, reachOutPrompt, thinkingProm
 import { REACH_OUT_HELD_TOOL, REACH_OUT_TOOL, type AutonomyUpcoming } from '../src/autonomyLoopReachOutStep.js';
 import { AUTONOMY_REACH_OUT_TOOL, authorizeAutonomousAction } from '../src/autonomyPolicy.js';
 import { BODY_LIMITS } from '../src/contracts/bodyContract.js';
-import { SQLiteBodyStore } from '../src/bodyStore.js';
-import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
-import { SQLitePushNotificationStore } from '../src/pushNotifications.js';
-import { REACH_OUT_OTHERS_AUDIENCE, SQLiteReachOutSpeaker, reachOutOfSource } from '../src/reachOutDelivery.js';
-import type { BodyPresence } from '../src/shannonBody.js';
+import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
+import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
+import { SQLitePushNotificationStore } from '../src/surfaces/outreach/pushNotifications.js';
+import { REACH_OUT_OTHERS_AUDIENCE, SQLiteReachOutSpeaker, reachOutOfSource } from '../src/surfaces/outreach/reachOutDelivery.js';
+import type { BodyPresence } from '../src/surfaces/body/shannonBody.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { speakTimePrivacyCheck } from '../src/voiceCompanionPresence.js';
+import { speakTimePrivacyCheck } from '../src/surfaces/voice/voiceCompanionPresence.js';
 import { FakeModel, FakeShowing, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'shannon-reach-out-'));

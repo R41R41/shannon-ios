@@ -1,13 +1,13 @@
 import { memoryControlFor, type CompanionStateSnapshot, type CompanionStateStore, type ShannonTouchOutcome } from '@shannon/cognition';
 import { BODY_LIMITS } from '../../contracts/bodyContract.js';
 import { BODY_REACTION_LIMITS } from '../../contracts/bodyReactionContract.js';
-import type { SQLiteBodyReactionStore, StoredTouchBurst, TouchRecord } from '../../bodyReactionStore.js';
-import { touchExperience, type TouchExperienceWriter } from '../../bodyTouchMemory.js';
-import { reflexPartWord, type BodyTouchStance } from '../../bodyTouchReflex.js';
+import type { SQLiteBodyReactionStore, StoredTouchBurst, TouchRecord } from '../../surfaces/body/store/bodyReactionStore.js';
+import { touchExperience, type TouchExperienceWriter } from '../../surfaces/body/store/bodyTouchMemory.js';
+import { reflexPartWord, type BodyTouchStance } from '../../surfaces/body/bodyTouchReflex.js';
 import { TouchPredictions, stanceOutcome, type TouchPrediction, type TouchPredictionRecord } from '../prediction/bodyTouchPrediction.js';
 
 export { touchPredictionEnabled } from '../prediction/bodyTouchPrediction.js';
-import { bodyTouchPartWord, bodyTouchRegionWord } from '../../bodyTouchWords.js';
+import { bodyTouchPartWord, bodyTouchRegionWord } from '../../surfaces/body/bodyTouchWords.js';
 import type { PredictionShadow } from '../prediction/predictionShadow.js';
 
 /**

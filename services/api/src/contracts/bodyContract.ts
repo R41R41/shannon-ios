@@ -1,7 +1,7 @@
 import type { ShannonEmotionKind, ShannonExpression, ShannonFeeling } from '@shannon/cognition';
 import {
   BODY_TOUCH_PARTS, BODY_TOUCH_PART_WORDS, isBodySurface, isBodyTouchRegion, type BodySurface, type BodyTouchPart, type BodyTouchRegion,
-} from '../bodyTouchWords.js';
+} from '../surfaces/body/bodyTouchWords.js';
 
 /**
  * The wire contract between Shannon's mind (this server) and her body (the Live2D

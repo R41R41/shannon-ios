@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { SQLiteDeviceAuthStore, ShannonDevicePrincipal } from './deviceAuth.js';
-import type { SQLitePushNotificationStore } from './pushNotifications.js';
-import type { APNsEnvironment } from './pushNotifications.js';
+import type { SQLitePushNotificationStore } from './surfaces/outreach/pushNotifications.js';
+import type { APNsEnvironment } from './surfaces/outreach/pushNotifications.js';
 import { sendJson } from './serverHttp.js';
 
 export interface ServerDeviceRouteDependencies {

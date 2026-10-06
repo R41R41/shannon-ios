@@ -11,7 +11,7 @@ import {
   PlatformBridgeService,
   platformBridgeThreadId,
   type PlatformBridgeConfiguration,
-} from '../src/platformBridge.js';
+} from '../src/surfaces/platform/platformBridge.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 
 const now = () => '2026-09-17T12:00:00.000Z';

@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { validatedBodyCapabilities, validatedBodyEvents } from '../src/contracts/bodyContract.js';
 import { bodyReactionContentHash, validatedBodyReactionRequest, type BodyReactionRequest } from '../src/contracts/bodyReactionContract.js';
-import { bodyTouchLine } from '../src/bodyReactionPrompt.js';
-import type { StoredTouchBurst } from '../src/bodyReactionStore.js';
-import { touchExperienceSummary } from '../src/bodyTouchMemory.js';
-import { addColumnOnce } from '../src/bodyStore.js';
+import { bodyTouchLine } from '../src/surfaces/body/bodyReactionPrompt.js';
+import type { StoredTouchBurst } from '../src/surfaces/body/store/bodyReactionStore.js';
+import { touchExperienceSummary } from '../src/surfaces/body/store/bodyTouchMemory.js';
+import { addColumnOnce } from '../src/surfaces/body/store/bodyStore.js';
 import {
   BODY_SURFACES, BODY_TOUCH_PARTS, BODY_TOUCH_PART_WORDS, BODY_TOUCH_REGIONS, bodyPlace, bodySurfaceMark, bodyTouchPartWord, bodyWhere, burstTouchPhrase,
   isBodyTouchPart, touchPartPhrase,
-} from '../src/bodyTouchWords.js';
+} from '../src/surfaces/body/bodyTouchWords.js';
 import { START, reactionHarness, scope } from './bodyReactionHarness.js';
 import { promptOf } from './modelPrompt.js';
 

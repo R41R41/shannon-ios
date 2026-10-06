@@ -4,7 +4,7 @@ import {
 } from '@shannon/cognition';
 import type { VoiceTurnDecision } from '../../voiceDecision.js';
 import { voicedAffect } from '../../contracts/voiceDecisionContract.js';
-import { waitingDirectionFor, waitingPhraseFor } from '../../voiceWaitingCue.js';
+import { waitingDirectionFor, waitingPhraseFor } from '../../surfaces/voice/voiceWaitingCue.js';
 
 /** The quiet face of a call with no owner state (友人も一緒): the baseline mood. */
 const BASELINE_MOOD: ShannonEmotion = { valence: 0, arousal: 0.3, openness: 0.35 };

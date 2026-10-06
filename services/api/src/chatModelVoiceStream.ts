@@ -1,6 +1,6 @@
 import { errorDetail, parseJson } from './chatModelSupport.js';
 import { responseSSEEvents } from './chatModelStream.js';
-import { completeSpokenSentences } from './spokenSentences.js';
+import { completeSpokenSentences } from './surfaces/voice/spokenSentences.js';
 import { functionCallsOf } from './chatModelTools.js';
 
 /** Bounds of one streamed voice reply. A long reply has no total limit, only these. */

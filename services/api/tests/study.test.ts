@@ -9,7 +9,7 @@ import { autonomyDayLog, autonomyDayPhrases, autonomyLoopStatus } from '../src/a
 import { summarizeAutonomyDay, type AutonomyActivityEntry } from '../src/autonomyActivity.js';
 import { SQLiteStudyShowing, studyShowingMessage } from '../src/autonomyShowing.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
+import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import type { StudyOverview, StudyPieceDetail } from '../src/studyDesk.js';
 import { FULL_PLAN, STORY_BODY, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';

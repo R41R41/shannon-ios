@@ -7,11 +7,11 @@ import {
   BODY_DOING, BODY_EVENT_TYPES, BODY_LIMITS, BODY_NUDGE_SCENES, BODY_TOUCH_GESTURES, BODY_TOUCH_INPUTS, BODY_TOUCH_REFLEXES, BODY_TOUCH_SIDES,
   BODY_TOUCH_VOCABULARY, bodyIngestEnabled, isBodyGameEvent, type BodyNudge,
 } from '../src/contracts/bodyContract.js';
-import { BODY_TOUCH_PARTS, bodyTouchPartWord } from '../src/bodyTouchWords.js';
+import { BODY_TOUCH_PARTS, bodyTouchPartWord } from '../src/surfaces/body/bodyTouchWords.js';
 import { BODY_LOOK_LIMITS, BODY_LOOK_REFUSAL_CODES, BODY_LOOK_REQUEST_BYTES } from '../src/contracts/bodyLookContract.js';
-import { bodyNudgeCandidates } from '../src/bodyNudges.js';
-import { SQLiteBodyStore } from '../src/bodyStore.js';
-import { bodyDoing, type BodyIngestReceipt, type BodyNudges, type BodyPresence } from '../src/shannonBody.js';
+import { bodyNudgeCandidates } from '../src/surfaces/body/bodyNudges.js';
+import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
+import { bodyDoing, type BodyIngestReceipt, type BodyNudges, type BodyPresence } from '../src/surfaces/body/shannonBody.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { FULL_PLAN, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 import { promptOf } from './modelPrompt.js';

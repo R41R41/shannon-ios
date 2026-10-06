@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import type { AutonomyRoomLooks } from '../src/autonomyLoopLookStep.js';
 import { followUpPrompt, rethinkExtras } from '../src/autonomyLoopObservePrompts.js';
 import { draftPrompt, notePrompt, reachOutPrompt, revisePrompt, roomLookNotePrompt, thinkingPrompt } from '../src/autonomyLoopPrompts.js';
-import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
-import { SQLiteReachOutSpeaker } from '../src/reachOutDelivery.js';
+import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
+import { SQLiteReachOutSpeaker } from '../src/surfaces/outreach/reachOutDelivery.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { FULL_PLAN, FakeModel, FakeShowing, callKind, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
 

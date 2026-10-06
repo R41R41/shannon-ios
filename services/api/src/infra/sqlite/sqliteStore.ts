@@ -19,7 +19,7 @@ import type {
   RealtimeVoiceReservationStore,
   RealtimeVoiceSessionReservation,
   RealtimeVoiceSessionReservationRequest,
-} from '../../realtimeVoice.js';
+} from '../../surfaces/voice/realtimeVoice.js';
 import type { KnowledgeAnswer, KnowledgeRevision, KnowledgeSource, KnowledgeStore, LayeredIdentityPrompt, PersonalityProfile } from '../../mind/memory/store/knowledgeStore.js';
 import { SQLiteBackgroundJobRepository } from './sqliteBackgroundJobRepository.js';
 import { SQLiteCompanionRepository } from './sqliteCompanionRepository.js';

@@ -4,7 +4,7 @@ import { LocalVoiceDecisionGateway, JevVoiceDecisionGateway, VOICE_SKILLS } from
 import type { VoiceDecisionInput } from '../src/voiceDecision.js';
 import type { ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { InMemoryOrganizeStore } from '../src/integrations/voyager/organize.js';
-import { transcriptNeedsInterpretation } from '../src/voiceTranscriptContext.js';
+import { transcriptNeedsInterpretation } from '../src/surfaces/voice/voiceTranscriptContext.js';
 import { promptOf } from './modelPrompt.js';
 
 const at = '2026-09-28T12:00:00.000Z';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextInitiativeDelayMilliseconds } from '../src/initiativeSchedule.js';
+import { nextInitiativeDelayMilliseconds } from '../src/surfaces/outreach/initiativeSchedule.js';
 
 describe('initiative decision cadence', () => {
   it('waits until 07:00 Tokyo after a successful daily initiative', () => {

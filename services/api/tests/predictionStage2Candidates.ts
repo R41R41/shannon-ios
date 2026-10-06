@@ -29,7 +29,7 @@ import {
   type ShannonEmotionKind,
   type ShannonTouchKind,
 } from '@shannon/cognition';
-import { SQLiteBodyReactionStore } from '../src/bodyReactionStore.js';
+import { SQLiteBodyReactionStore } from '../src/surfaces/body/store/bodyReactionStore.js';
 import { BodyTouches } from '../src/mind/emotion/bodyTouch.js';
 import { shadowNoiseSeed } from '../src/mind/prediction/predictionShadowFold.js';
 import { SQLitePredictionStore, type ShadowComparison, type StoredPredictionOutcome } from '../src/mind/prediction/store/predictionStore.js';

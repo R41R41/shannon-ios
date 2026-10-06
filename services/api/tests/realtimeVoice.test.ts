@@ -8,7 +8,7 @@ import {
   realtimeVoiceJapanDayKey,
   RealtimeVoiceError,
   SHANNON_REALTIME_DEFAULT_DAILY_ALLOWANCE_SECONDS,
-} from '../src/realtimeVoice.js';
+} from '../src/surfaces/voice/realtimeVoice.js';
 
 const offer = [
   'v=0',

@@ -8,7 +8,7 @@ import type { ReachOutFacts } from '../src/autonomyLoopObservations.js';
 import { observeStep } from '../src/autonomyLoopObserve.js';
 import type { StepDependencies } from '../src/autonomyLoopSteps.js';
 import { SHANNON_CORE_PATHS } from '../src/autonomyCore.js';
-import { SQLiteBodyReactionStore } from '../src/bodyReactionStore.js';
+import { SQLiteBodyReactionStore } from '../src/surfaces/body/store/bodyReactionStore.js';
 import { BodyTouches } from '../src/mind/emotion/bodyTouch.js';
 import { PredictionShadow, decidedFeelingOutcome, predictionShadowEnabled } from '../src/mind/prediction/predictionShadow.js';
 import { foldOutcomes, readMind } from '../src/mind/prediction/predictionShadowFold.js';

@@ -8,7 +8,7 @@ import {
   type ShannonVoiceIdentityMode,
   type ShannonVoiceIdentityStore,
   voiceIdentityResponse,
-} from './voiceIdentity.js';
+} from './surfaces/voice/voiceIdentity.js';
 
 export function dispatchPreferenceRequest(request: ApiRequest, dependencies: {
   chatModel: ShannonChatModel;

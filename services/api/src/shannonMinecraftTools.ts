@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { withMinecraftBodyCapability } from '@shannon/cognition';
-import type { MinecraftBodyRequests } from './minecraftBodyRequests.js';
+import type { MinecraftBodyRequests } from './surfaces/minecraft/minecraftBodyRequests.js';
 import { stringInput } from './shannonToolInput.js';
 import type { ToolExecutor } from './shannonToolTypes.js';
 import { toolFailure, toolOk, type ShannonToolDefinition } from './shannonTools.js';

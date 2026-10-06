@@ -5,7 +5,7 @@ import {
   type RealtimeVoiceReservationStore,
   type RealtimeVoiceSessionReservation,
   type RealtimeVoiceSessionReservationRequest,
-} from '../../realtimeVoice.js';
+} from '../../surfaces/voice/realtimeVoice.js';
 import type { SQLiteStoreContext } from './sqliteStoreContext.js';
 
 /** The retired realtime voice allowance ledger (migration compatibility only), kept apart from the companion state. */

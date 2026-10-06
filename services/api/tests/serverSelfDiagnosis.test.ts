@@ -9,7 +9,7 @@ import { createConfiguredChatModel } from '../src/chatModel.js';
 import { configuredNotionSource } from '../src/integrations/notion/notionSource.js';
 import { SQLiteOpsStore } from '../src/infra/ops/store/opsStore.js';
 import { createConfiguredVoyagerCatalog } from '../src/integrations/voyager/organize.js';
-import { configuredPlatformBridge } from '../src/platformBridge.js';
+import { configuredPlatformBridge } from '../src/surfaces/platform/platformBridge.js';
 import { createOpsRoute, OPS_READ_PATH } from '../src/infra/ops/serverOpsRoutes.js';
 import {
   createServerSelfDiagnosis, deployedRevision, personaHash, personaHashSource, reportableModelName, type SelfDiagnosisSources,
@@ -17,7 +17,7 @@ import {
 import { SHANNON_TOOLS, offeredTools } from '../src/shannonTools.js';
 import { createConfiguredVoiceDecisionGateway } from '../src/voiceDecision.js';
 import { createConfiguredVoiceTranscriber } from '../src/voiceTranscription.js';
-import { createConfiguredVoiceVisionGateway } from '../src/voiceVision.js';
+import { createConfiguredVoiceVisionGateway } from '../src/surfaces/voice/voiceVision.js';
 import { readApiSource } from './support/sources.js';
 
 const START = '2026-10-05T12:00:00.000Z';

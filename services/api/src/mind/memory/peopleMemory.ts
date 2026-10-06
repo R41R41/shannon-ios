@@ -15,8 +15,8 @@ import type { PeopleMemoryStore, PersonCall, PersonMemoryItem, RememberedPerson 
 import { extractPromiseCaptures } from './prospectiveMemory.js';
 import { extractExplicitMemoryProposals } from '../sleep/sleepConsolidation.js';
 import type { LabelledRecallCandidate } from '../../turnCognitiveContext.js';
-import type { GuestCallTurn } from '../../voiceGuestCall.js';
-import { establishedGuestName, personNameKey } from '../../voiceGuestNames.js';
+import type { GuestCallTurn } from '../../surfaces/voice/voiceGuestCall.js';
+import { establishedGuestName, personNameKey } from '../../surfaces/voice/voiceGuestNames.js';
 import { ownerPeoplePrompt, type VisiblePersonItem } from './peopleMemoryPrompts.js';
 
 /** Recall and memory-control identifier of a person memory item. */

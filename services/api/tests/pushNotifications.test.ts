@@ -3,14 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
+import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import { SQLiteAgentTaskStore } from '../src/agentTaskStore.js';
 import {
   createConfiguredPushNotificationSender,
   deliverPendingPushNotifications,
   SQLitePushNotificationStore,
   type PushNotificationSender,
-} from '../src/pushNotifications.js';
+} from '../src/surfaces/outreach/pushNotifications.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
 import { SQLiteTestFlightDeliveryStore } from '../src/integrations/testflight/store/testflightDeliveryStore.js';

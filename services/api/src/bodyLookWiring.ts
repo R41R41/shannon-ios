@@ -1,14 +1,14 @@
-import type { AppLookOptions } from './appLook.js';
+import type { AppLookOptions } from './surfaces/body/appLook.js';
 import { appLookRequestBytes, configuredAppLook } from './contracts/appLookContract.js';
-import { SQLiteAppLookSpeaker } from './appLookDelivery.js';
-import { SQLiteAppLookStore } from './appLookStore.js';
-import type { BodyLookOptions } from './bodyLook.js';
-import { SQLiteBodyLookActivityStore } from './bodyLookActivityStore.js';
-import { createConfiguredActivityRoomLookViewer } from './bodyLookActivityVision.js';
+import { SQLiteAppLookSpeaker } from './surfaces/body/store/appLookDelivery.js';
+import { SQLiteAppLookStore } from './surfaces/body/store/appLookStore.js';
+import type { BodyLookOptions } from './surfaces/body/bodyLook.js';
+import { SQLiteBodyLookActivityStore } from './surfaces/body/store/bodyLookActivityStore.js';
+import { createConfiguredActivityRoomLookViewer } from './surfaces/body/bodyLookActivityVision.js';
 import { BODY_LOOK_REQUEST_BYTES, bodyLookResultId, configuredBodyLook } from './contracts/bodyLookContract.js';
-import { SQLiteBodyLookSpeaker } from './bodyLookDelivery.js';
-import { SQLiteBodyLookStore } from './bodyLookStore.js';
-import { createConfiguredRoomLookViewer } from './bodyLookVision.js';
+import { SQLiteBodyLookSpeaker } from './surfaces/body/store/bodyLookDelivery.js';
+import { SQLiteBodyLookStore } from './surfaces/body/store/bodyLookStore.js';
+import { createConfiguredRoomLookViewer } from './surfaces/body/bodyLookVision.js';
 import type { LlmUsageEvent } from './llmUsage.js';
 
 /**
