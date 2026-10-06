@@ -26,6 +26,15 @@ enum ShannonDesktopDevelopmentLayout {
     static func showsChangeNavigator(availableWidth: CGFloat) -> Bool {
         availableWidth >= changeNavigatorThreshold
     }
+
+    /// A shown navigator stays until the width is this far below its threshold, so that a width at the
+    /// threshold cannot switch the arrangement back and forth.
+    static let hysteresis: CGFloat = 24
+
+    /// Whether the wide arrangement is shown at `width`, given the one shown now (nil before the first reading).
+    static func showsWide(width: CGFloat, threshold: CGFloat, showingWide: Bool?) -> Bool {
+        showingWide == true ? width >= threshold - hysteresis : width >= threshold
+    }
 }
 
 struct ShannonDesktopReviewChange: Equatable, Identifiable {
