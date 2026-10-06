@@ -31,6 +31,10 @@ export { withToolCapabilityLines } from './shannonAetherTools.js';
  * line of the owner's (a turn someone else wrote on a platform), so his guarded matters are left out of what she reads
  * rather than marked.
  *
+ * `ownerAlone: 'shared'` is the owner's own turn that others can read (app text marked `others`, his turn in a shared
+ * platform conversation; owner decision 2026-10-06): like `'others'`, except that while nothing is offered it gets nothing
+ * and is told nothing, exactly as `false`.
+ *
  * Text offers them in every turn the owner alone reads (unless it forces a web search). Voice offers them when the
  * words are about her writing or her folder (`asksAboutOwnThings`) or ask for a memo without naming Aether, and to the follow-ups of such a talk
  * (`voiceToolOffer`), so that an ordinary spoken turn keeps its speed. `ownerAlone: 'others'` is the owner's own call
@@ -40,7 +44,7 @@ export { withToolCapabilityLines } from './shannonAetherTools.js';
  * and replayed to her later turns with the owner alone (`conversationWindow.ts`).
  */
 export function conversationTools(
-  autonomy: { tools?: ShannonToolRunner } | undefined, scopeKey: string, surface: 'text' | 'voice', ownerAlone: boolean | 'others' | 'guests',
+  autonomy: { tools?: ShannonToolRunner } | undefined, scopeKey: string, surface: 'text' | 'voice', ownerAlone: boolean | 'others' | 'guests' | 'shared',
   server: Partial<ConversationToolServer>,
   /** The owner's message this turn answers, `${threadId}\n${words}`: a retry of it does not write the same piece twice. */
   turn: string,
@@ -62,9 +66,9 @@ export function conversationTools(
   if (!offer) return {};
   // What the client said is not enough: what the server knows of others present vetoes the offer, and she is told so. Only
   // her Aether reading tools stay, held by the gate to 「シャノン用フォルダ」 (owner decision 2026-10-06, Syzygy ADR-0007).
-  const othersPresent = ownerAlone === 'others' || ownerAlone === 'guests' || server.audience.othersKnown(scopeKey);
+  const othersPresent = ownerAlone === 'others' || ownerAlone === 'guests' || ownerAlone === 'shared' || server.audience.othersKnown(scopeKey);
   const audience = othersPresent ? 'others' as const : 'owner_alone' as const;
-  if (othersPresent && !runner.offered(surface, 'others', scopeKey).some(tool => !options.withoutDomains?.includes(tool.domain))) return ownerAlone === 'guests' ? {} : { toolsWithheld: true };
+  if (othersPresent && !runner.offered(surface, 'others', scopeKey).some(tool => !options.withoutDomains?.includes(tool.domain))) return ownerAlone === 'guests' || ownerAlone === 'shared' ? {} : { toolsWithheld: true };
   // Words that could not be trusted write nothing: an uncertain turn reads only. With no score at all (the router fell
   // back), a write waits for his explicit yes to a reply of hers that asked for it (「はい、お願いします」).
   // His answer to her question where a memo goes (「書斎に」) is such a yes too.

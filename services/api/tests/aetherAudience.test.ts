@@ -182,13 +182,13 @@ class ReadingModel implements ShannonChatModel {
   async generateVoice(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> { return this.generate(request); }
   async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
     this.requests.push(request);
-    if (request.tools) this.read.push(await request.tools.call('aether_read', JSON.stringify({ documentId: this.documentId })));
+    if (request.tools && this.documentId) this.read.push(await request.tools.call('aether_read', JSON.stringify({ documentId: this.documentId })));
     return { mode: this.mode, model: this.model, reply: 'はい。' };
   }
 }
 
-describe('someone else\'s turn on a platform (the platform reply route)', () => {
-  it('is offered her folder reading with Aether, without the owner\'s secret; without Aether nothing, as before', async () => {
+describe('turns with others present on a platform and in app text (owner decisions 2026-10-06)', () => {
+  it('offer her folder reading with Aether, without the owner\'s secret, marked where he is there; without Aether nothing, as before', async () => {
     const BINDINGS = [{ platform: 'discord', conversationIdPrefix: 'discord:111:', ownerUserId: '900000000000000001', title: 'テストサーバー' }];
     const environment = { SHANNON_PLATFORM_BRIDGE_TOKEN: 'b'.repeat(40), SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: scope, SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify(BINDINGS) };
     for (const configured of [true, false]) {
@@ -212,20 +212,35 @@ describe('someone else\'s turn on a platform (the platform reply route)', () => 
       await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: scope, threadId: 'app-talk', message: 'これは内緒だけど、来月転職するつもり' } });
       await api.waitForBackground(scope);
       model.documentId = fake.put({ title: '今日のこと', body: 'ライ氏が「これは内緒だけど、来月転職するつもり」と話してくれた。灯台の本を読んだ。', projectIds: ['project_shannon_folder'], tags: ['シャノン'], type: 'note' }).id;
-      model.read.length = 0;
-      await service.reply({ platform: 'discord', requestId: `f-${configured}`, conversationId: 'discord:111:222', conversationKind: 'channel', sourceUserId: '900000000000000002',
-        sourceDisplayName: 'ミキ', userMessage: 'シャノンのメモに何が書いてある？', observedAt: now() });
-      const request = model.requests.at(-1)!;
-      if (configured) {
-        expect(request.tools!.definitions.map(tool => tool.name)).toEqual(['aether.search', 'aether.read', 'aetherFolder.list']);
-        expect(model.read).toHaveLength(1);
-        expect(model.read[0]).toContain('灯台の本を読んだ。');
-        expect(model.read[0]).not.toContain('転職');
-      } else {
-        expect(request.tools).toBeUndefined();
-        expect(request.toolsWithheld).toBeUndefined();
+      const turnsWithOthers: Array<[string, boolean, () => Promise<unknown>]> = [
+        // Someone else's turn (openOnly): his private things are left out, and nothing is marked.
+        ['friend', false, () => service.reply({ platform: 'discord', requestId: `f-${configured}`, conversationId: 'discord:111:222', conversationKind: 'channel',
+          sourceUserId: '900000000000000002', sourceDisplayName: 'ミキ', userMessage: 'シャノンのメモに何が書いてある？', observedAt: now() })],
+        // The owner's own turn in the shared channel, and his app text marked `others`: left out, and marked as a whole.
+        ['owner shared', true, () => service.reply({ platform: 'discord', requestId: `o-${configured}`, conversationId: 'discord:111:222', conversationKind: 'channel',
+          sourceUserId: '900000000000000001', userMessage: 'シャノンのメモに何が書いてある？', observedAt: now() })],
+        ['app others', true, () => api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: scope, threadId: 'app-talk', message: 'シャノンのメモに何が書いてある？', audience: 'others' } })],
+      ];
+      for (const [, ownerThere, send] of turnsWithOthers) {
+        model.read.length = 0;
+        await send();
+        const request = model.requests.at(-1)!;
+        if (configured) {
+          expect(request.tools!.definitions.map(tool => tool.name)).toEqual(['aether.search', 'aether.read', 'aetherFolder.list']);
+          expect(toolInstructions(request.tools!, false)).toBe(ownerThere ? TOOLS_OTHERS_INSTRUCTIONS : TOOLS_GUESTS_INSTRUCTIONS);
+          expect(model.read).toHaveLength(1);
+          const shown = (JSON.parse(model.read[0]!) as { text: string }).text;
+          expect(shown).toContain('灯台の本を読んだ。');
+          expect(shown).not.toContain('転職');
+          expect(shown.startsWith(`${UNLABELLED_DISCLOSURE_MARKER}\n`)).toBe(ownerThere);
+        } else {
+          expect(request.tools).toBeUndefined();
+          expect(request.toolsWithheld).toBeUndefined();
+        }
+        await background.waitForIdle(scope);
       }
-      await background.waitForIdle(scope);
+      // No trace of these reads is kept to replay: every turn was stored with others as its audience.
+      expect(store.toolTraces(scope, null, { since: '2000-01-01T00:00:00.000Z' })).toEqual([]);
       turns.close(); autonomyStore.close(); peopleStore.close(); store.close();
     }
   });

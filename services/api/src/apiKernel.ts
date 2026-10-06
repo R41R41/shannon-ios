@@ -390,8 +390,9 @@ export class ShannonApiKernel {
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message,
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...conversationTools(this.autonomy, body.scopeKey, 'text',
-        // Someone else's turn on a platform that offers it: her Aether reading tools (owner decision 2026-10-06).
-        audience.alone || (surface?.guestFolderReading ? 'guests' : false), this.toolServer, `${threadId}\n${message}`, deadline, undefined,
+        // With others present, her Aether reading tools (owner decisions 2026-10-06): the owner's own turn (app text marked
+        // `others`, his turn in a shared platform conversation) as 'shared', someone else's as 'guests'.
+        audience.alone || (!surface ? 'shared' : !surface.othersFolderReading ? false : surface.openOnly ? 'guests' : 'shared'), this.toolServer, `${threadId}\n${message}`, deadline, undefined,
         // Game chat asks her Minecraft body through the turn's intent, not through her tools.
         surface && !surface.minecraftTools ? { withoutDomains: ['minecraft_body'], ...(surface.openOnly ? { openOnly: true } : {}) } : {}),
       ...(body.webSearch === true || placeSkill ? { useWebSearch: true } : {}),
