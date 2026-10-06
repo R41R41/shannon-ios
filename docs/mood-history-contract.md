@@ -2,7 +2,7 @@
 
 One read for the owner's own apps (iPhone, Mac, Windows): how Shannon's mood went over the last hours or days, so that a screen can draw its trend. Decided by the owner on 2026-10-05; until then the Windows body app kept such a record on the PC by itself.
 
-The vocabulary and bounds are in `services/api/src/moodHistoryContract.ts`; the recorder is `moodHistory.ts`; the read is `moodHistoryReader.ts` and `serverMoodHistoryRoute.ts`. The contract test is `services/api/tests/moodHistory.test.ts`, and the fixture `services/api/tests/fixtures/mood-history-v1/response.json` is the answer for its deterministic day (regenerate it with `SHANNON_WRITE_FIXTURES=1` only when the contract changes on purpose).
+The vocabulary and bounds are in `services/api/src/contracts/moodHistoryContract.ts`; the recorder is `moodHistory.ts`; the read is `moodHistoryReader.ts` and `serverMoodHistoryRoute.ts`. The contract test is `services/api/tests/moodHistory.test.ts`, and the fixture `services/api/tests/fixtures/mood-history-v1/response.json` is the answer for its deterministic day (regenerate it with `SHANNON_WRITE_FIXTURES=1` only when the contract changes on purpose).
 
 Everything here is additive: one new table, one new route, no existing route, prompt or computation changed.
 

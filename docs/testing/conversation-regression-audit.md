@@ -42,16 +42,16 @@ private production conversations.
 
 Three code-level causes are independently visible:
 
-1. `services/api/src/apiLiveVoice.ts` selects a slim persona prompt for owner turns
+1. `services/api/src/surfaces/voice/apiLiveVoice.ts` selects a slim persona prompt for owner turns
    without `conversation_memory`. Neither this prompt nor the core identity prompt
    guarantees definitions of the three suite products. Selecting an internal skill
    can incidentally provide a product name, but that is not a product identity contract.
-2. `services/api/src/voiceDecisionContract.ts` mandatory patterns recognize
+2. `services/api/src/contracts/voiceDecisionContract.ts` mandatory patterns recognize
    `aether`/`voyager` and generic note/task words, but not `エーテル`/`ボイジャー`.
-   `services/api/src/conversationCapabilities.ts` applies another Latin/task-word gate
+   `services/api/src/mind/action/respond/conversationCapabilities.ts` applies another Latin/task-word gate
    before reading Voyager. In the live audit, Jev correctly chose `voyager_tasks`
    for a Japanese-name schedule lookup, but the downstream task reader was never called.
-3. The mandatory `最新` pattern selects `current_web`; `services/api/src/chatModel.ts`
+3. The mandatory `最新` pattern selects `current_web`; `services/api/src/infra/models/chatModel.ts`
    forces a web tool call for that selection. An internal development-status question
    can therefore go to external search before the app identity is resolved. In the
    synthetic latest-status probe, only `current_web` was selected and neither internal

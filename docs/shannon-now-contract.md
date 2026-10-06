@@ -1,6 +1,6 @@
 # 「シャノンのいま」 contract (v1)
 
-One read for the owner's own app: how Shannon is right now, as far as the server already knows it. The iPhone screen 「ようす › シャノンのいま」 is built against this document and the contract test `services/api/tests/shannonNow.test.ts`. The vocabulary and bounds are in `services/api/src/shannonNowContract.ts`; the route is `serverShannonNowRoute.ts`; the queries are in `shannonNowReader.ts`.
+One read for the owner's own app: how Shannon is right now, as far as the server already knows it. The iPhone screen 「ようす › シャノンのいま」 is built against this document and the contract test `services/api/tests/shannonNow.test.ts`. The vocabulary and bounds are in `services/api/src/contracts/shannonNowContract.ts`; the route is `serverShannonNowRoute.ts`; the queries are in `shannonNowReader.ts`.
 
 Everything here is additive. No existing route, table, or prompt wording changed, and no table was added.
 

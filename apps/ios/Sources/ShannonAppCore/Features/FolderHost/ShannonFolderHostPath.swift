@@ -60,7 +60,7 @@ public enum ShannonFolderHostLimits {
     public static let markerFile = "folder.json"
 }
 
-/// The server's path rules by spelling alone (`hostFolderPath` in `services/api/src/autonomyHostFolderPath.ts`), so the Mac
+/// The server's path rules by spelling alone (`hostFolderPath` in `services/api/src/mind/action/ownTime/autonomyHostFolderPath.ts`), so the Mac
 /// checks again exactly what the server checked. `services/api/tests/fixtures/host-folder-paths-v1/cases.json` is the oracle
 /// both sides are tested against. The real location is checked afterwards (`ShannonFolderHostRoot`).
 public enum ShannonFolderHostPath {

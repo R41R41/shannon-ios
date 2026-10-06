@@ -59,7 +59,7 @@ the sleep batch, or knowledge consolidation. They live only in `person_memory_it
 ## The disclosure rule
 
 One pure function, `disclosureDecision(disclosure, present)` in `packages/cognition/src/disclosure.ts`, decides it for
-every path. `DisclosureGate` in `services/api/src/memoryDisclosure.ts` resolves an item's label (stored label, then the
+every path. `DisclosureGate` in `services/api/src/mind/inhibition/memoryDisclosure.ts` resolves an item's label (stored label, then the
 owner's control) and calls it; text chat, owner voice, 「友人も一緒」 and the platform context route all build their
 prompt through it. `prepareTurnCognitiveContext` and the semantic recall stage take `present` as a required argument,
 so a new path cannot be added without stating who is present.
@@ -85,7 +85,7 @@ each protected profile line, the owner side of a replayed protected turn, the in
 today's focus. Alone with the owner nothing is marked.
 
 **Self-check block.** Added once to the prompt whenever anyone else can hear (`speakTimePrivacyCheck` in
-`services/api/src/voiceCompanionPresence.ts`; the platform projection carries the same check in Japanese):
+`services/api/src/surfaces/voice/voiceCompanionPresence.ts`; the platform projection carries the same check in Japanese):
 
 ```text
 [Speak-time privacy check — other people can hear this reply]

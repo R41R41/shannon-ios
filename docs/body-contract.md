@@ -1,6 +1,6 @@
 # Body contract (v1)
 
-What Shannon's body must send and may read. The body is the Live2D desktop application on the owner's Windows PC (facial expressions, idle gestures, shoulders, tears; it can be streamed through OBS). Her mind is this server. The body lives in another repository; this document and the contract test `services/api/tests/body.test.ts` are what it is built against. The vocabulary and bounds are in `services/api/src/bodyContract.ts`.
+What Shannon's body must send and may read. The body is the Live2D desktop application on the owner's Windows PC (facial expressions, idle gestures, shoulders, tears; it can be streamed through OBS). Her mind is this server. The body lives in another repository; this document and the contract test `services/api/tests/body.test.ts` are what it is built against. The vocabulary and bounds are in `services/api/src/contracts/bodyContract.ts`.
 
 Everything here is additive: routes and tables are only added. Two changes of 2026-10-02 alter what an existing message does: a touch event now moves her feeling and is remembered (see [When she is touched](#when-she-is-touched)), and her capability description gained one line about her body (since 2026-10-06 ending 「体は自分のもの。触れられ方は自分で受け取る。」, Syzygy ADR-0005 owner answer 7). A change of 2026-10-05 alters one more: `callStarted` / `callEnded` from a body that only feels touch are stored instead of answering `ignored` / `touch_only`, and her voice requests may be refused with `409 OWNER_IN_CALL_ELSEWHERE` (see [When the owner is in a call elsewhere](#when-the-owner-is-in-a-call-elsewhere)).
 
@@ -304,11 +304,11 @@ Limits the body must respect (the server cannot see what the body shows):
 - At most `maximumPerHour` (2) and `maximumPerDay` (10), counted by the body over everything it shows from this route.
 - A nudge is not a conversation turn. Do not send it to `/v1/chat`, and do not report it as an event.
 
-The lines are a **seed set of five, one per scene, awaiting the owner's review** (`services/api/src/bodyNudges.ts`). `packages/cognition` holds no canonical list of short lines, so they were written in the voice of the existing fixed sentences (ボク, ライ氏, です・ます). Persona is core: changing or adding a line is the owner's decision.
+The lines are a **seed set of five, one per scene, awaiting the owner's review** (`services/api/src/surfaces/body/bodyNudges.ts`). `packages/cognition` holds no canonical list of short lines, so they were written in the voice of the existing fixed sentences (ボク, ライ氏, です・ます). Persona is core: changing or adding a line is the owner's decision.
 
 ## Looking at the room
 
-Owner decision (Syzygy ADR-0002 addendum, 2026-10-02). Shannon may take **one look** at the room through the body's camera: one JPEG frame, only while her window is visible. Stage 1: in a conversation with the owner alone, by text or, since 2026-10-02, by voice (see [A look in a voice call](#a-look-in-a-voice-call)). Stage 2: also in her own time, with no count a day since 2026-10-03 (see [A look in her own time](#a-look-in-her-own-time)). The server asks through `presence`; the body answers with `POST /v1/body/looks/{id}`. `services/api/src/bodyLookContract.ts` holds the bounds, `bodyLook.ts` the rules.
+Owner decision (Syzygy ADR-0002 addendum, 2026-10-02). Shannon may take **one look** at the room through the body's camera: one JPEG frame, only while her window is visible. Stage 1: in a conversation with the owner alone, by text or, since 2026-10-02, by voice (see [A look in a voice call](#a-look-in-a-voice-call)). Stage 2: also in her own time, with no count a day since 2026-10-03 (see [A look in her own time](#a-look-in-her-own-time)). The server asks through `presence`; the body answers with `POST /v1/body/looks/{id}`. `services/api/src/contracts/bodyLookContract.ts` holds the bounds, `bodyLook.ts` the rules.
 
 ### Order of one look
 
@@ -362,7 +362,7 @@ Stage 2. Her activity loop may ask for a look too. There is no count a day (owne
 
 ### A look through the app
 
-Added 2026-10-02 (owner: 「アプリからも、これ見れる？って言ったら、シャノンが興味を持てばカメラで見てほしい」). **Nothing changes for the body.** The iPhone and Mac apps can be her eyes for the turn they send; this section is their contract (`services/api/src/appLookContract.ts`, `appLook.ts`).
+Added 2026-10-02 (owner: 「アプリからも、これ見れる？って言ったら、シャノンが興味を持てばカメラで見てほしい」). **Nothing changes for the body.** The iPhone and Mac apps can be her eyes for the turn they send; this section is their contract (`services/api/src/contracts/appLookContract.ts`, `appLook.ts`).
 
 1. A turn states what the app's camera can do now. `POST /v1/chat` and `POST /v1/voice/…/delegations` accept an optional top-level field:
 
@@ -508,7 +508,7 @@ When the existing apps show it, without a change to them: the Mac app reads `GET
 
 ## When she is touched
 
-Owner decision 2026-10-02 (「触ったり動かしたりしたのがバックエンドに届いてほしい。頭をなでたら『えへへ、なんですかライ氏？』のように反応できるように」), Syzygy ADR-0003 reflex layer. A touch reaches her mind: her **feeling moves**, she **remembers** it, and she **may say one line** — or stay silent and leave it to the face and gesture the body already shows. If the owner **answers her line aloud**, a conversation begins and only then is her line part of the conversation history. `services/api/src/bodyReactionContract.ts` holds the bounds, `bodyReaction.ts` the rules, and `services/api/tests/bodyReaction.test.ts` / `bodyReactionMemory.test.ts` the behaviour.
+Owner decision 2026-10-02 (「触ったり動かしたりしたのがバックエンドに届いてほしい。頭をなでたら『えへへ、なんですかライ氏？』のように反応できるように」), Syzygy ADR-0003 reflex layer. A touch reaches her mind: her **feeling moves**, she **remembers** it, and she **may say one line** — or stay silent and leave it to the face and gesture the body already shows. If the owner **answers her line aloud**, a conversation begins and only then is her line part of the conversation history. `services/api/src/contracts/bodyReactionContract.ts` holds the bounds, `bodyReaction.ts` the rules, and `services/api/tests/bodyReaction.test.ts` / `bodyReactionMemory.test.ts` the behaviour.
 
 ### `POST /v1/body/reactions`
 
@@ -616,7 +616,7 @@ After a `said` answer the body listens for `listenSeconds`.
 
 ## Which part, and on which surface
 
-Owner decisions 2026-10-03 (「触った部位によって反応してほしい」「撫でたのか、つついたのかも」「どこで触ったのかも伝えたい」). Two optional facts, both closed vocabularies, both additive: a body that sends neither is told about exactly as before, and the server accepts the old and the new shapes side by side. `services/api/src/bodyTouchWords.ts` holds the words.
+Owner decisions 2026-10-03 (「触った部位によって反応してほしい」「撫でたのか、つついたのかも」「どこで触ったのかも伝えたい」). Two optional facts, both closed vocabularies, both additive: a body that sends neither is told about exactly as before, and the server accepts the old and the new shapes side by side. `services/api/src/surfaces/body/bodyTouchWords.ts` holds the words.
 
 - **`region`**: the part that was touched, at the same level as `type` on an event (`{ id, type, audience, occurredAt, durationMs?, strength?, region? }`) and as `touch.region` on a reaction request. `head` 頭, `face` 頬, `side` 脇, `hand` 手, `body` 体.
 - **`surface`**: where the body is, at the top level of `PUT /v1/body/capabilities`. It is read for the device that sends a touch.
@@ -645,7 +645,7 @@ Idempotency: `region` is part of an event's and a reaction's content only when i
 
 ## Touch vocabulary 2
 
-Added 2026-10-06 (Syzygy ADR-0005 and its owner answers of 2026-10-05; phase 1a of the body-touch design). Five optional facts of a touch, beside `type` and `region`, on an event of a touch type and inside `touch` of a reaction request. `services/api/src/bodyContract.ts` holds the lists and the check, `bodyTouchWords.ts` the words of a part, and `services/api/tests/bodyTouchVocabulary.test.ts` the behaviour.
+Added 2026-10-06 (Syzygy ADR-0005 and its owner answers of 2026-10-05; phase 1a of the body-touch design). Five optional facts of a touch, beside `type` and `region`, on an event of a touch type and inside `touch` of a reaction request. `services/api/src/contracts/bodyContract.ts` holds the lists and the check, `bodyTouchWords.ts` the words of a part, and `services/api/tests/bodyTouchVocabulary.test.ts` the behaviour.
 
 **Phase 1a stored these facts; phase 1b (2026-10-06) reads them in two places.** The reaction prompt tells her the part, the side, the gesture and what her body did, and a `part` where her body flinches first (neck, chest, waist, leg, skirt) moves her by the reflex alone instead of the table, with her own judgement of the touch as the reaction's `stance`: see [Where only the reflex moves her](#where-only-the-reflex-moves-her). Everything else is as in phase 1a: on any other part her feeling follows `type` and how often (the table), and the `[体に起きたこと]` block and the memory of a touch still come from `type` and `region`. A touch in the old shape is told, felt and answered exactly as before.
 
@@ -725,7 +725,7 @@ Each of the five is part of an event's and a reaction's content **only when it i
 
 ### Where only the reflex moves her
 
-Phase 1b (Syzygy ADR-0005 decisions 1, 2, 4 and 5; owner answers 1, 2 and 7 of 2026-10-05; 「シャノンに任せる」). Server only; no field and no route changed. `services/api/src/bodyTouchReflex.ts` holds the parts and the stances, `bodyTouch.ts` and `touchEmotion.ts` the reflex, `bodyReactionPrompt.ts` her words, and `services/api/tests/bodyTouchReflex.test.ts` the behaviour.
+Phase 1b (Syzygy ADR-0005 decisions 1, 2, 4 and 5; owner answers 1, 2 and 7 of 2026-10-05; 「シャノンに任せる」). Server only; no field and no route changed. `services/api/src/surfaces/body/bodyTouchReflex.ts` holds the parts and the stances, `bodyTouch.ts` and `touchEmotion.ts` the reflex, `bodyReactionPrompt.ts` her words, and `services/api/tests/bodyTouchReflex.test.ts` the behaviour.
 
 - **The parts**: `neck`, `chest`, `waist`, `leg`, `skirt` (the "not wanted" group of the table above). For a touch that names one of them, by a reaction request or a plain event, the touch → feeling table is not read. Only the reflex moves her: the startle the table already has for an unexpected touch (its first poke, `surprised`), the same at every count, strength and length felt as for any touch; of the mood only arousal, and only upward (by at most the 0.08 of any touch); pleasantness and openness are not moved. Stroking there does not please her, and poking there does not make her sulk: nothing is decided for her either way. The cause names the part with the verb of the gesture, as the reaction prompt does (「ライ氏に首をつつかれた」, 「胸をなでられた」, 「胸に触れられた」 for a touch that rests). `holdHand` on such a part (with `gesture: rest`; holding is the hand's alone) is a hand resting there: she is told 「胸に触れられている」 and its cause is 「胸に触れられた」, never hand-holding.
 - **What she is told** (reaction prompt, every touch that names a `part`): the part with its side from her own view and the gesture, as one phrase (「首をつつかれた」「左の脚をなでられている」「胸に触れられている」; `input: hover` adds 「なぞるように」); what her body did, when it reported it (`reflex: flinch` 「思わず小さく身を引いた」, `avoid` 「思わず身をそらした」); and one line: 「どう受け取るかは自分で決める。受け入れても、戸惑っても、嫌がっても、拒んでもよい。」 Nothing says how such a touch should feel, nothing forbids anything, and there is no sexual vocabulary. With other people present the rule for the room applies as before. A touch without a `part` gets the prompt of before, word for word.
@@ -737,7 +737,7 @@ Phase 1b (Syzygy ADR-0005 decisions 1, 2, 4 and 5; owner answers 1, 2 and 7 of 2
 
 ### Stage 2: her stance moves her (ADR-0006)
 
-Syzygy ADR-0006 stage 2, candidate B (owner approval 2026-10-06; ADR-0005 owner answers 4 and 6). Server only; no field and no route changed. On under `SHANNON_PREDICTION` (default) while the prediction record exists (`SHANNON_PREDICTION_SHADOW` on); `off`, or no record (with a warning at start), gives everything above exactly. `packages/cognition/src/touchAppraisal.ts` holds the step, `services/api/src/bodyTouchPrediction.ts` the key and the learning, and `services/api/tests/bodyTouchStage2.test.ts` the behaviour.
+Syzygy ADR-0006 stage 2, candidate B (owner approval 2026-10-06; ADR-0005 owner answers 4 and 6). Server only; no field and no route changed. On under `SHANNON_PREDICTION` (default) while the prediction record exists (`SHANNON_PREDICTION_SHADOW` on); `off`, or no record (with a warning at start), gives everything above exactly. `packages/cognition/src/touchAppraisal.ts` holds the step, `services/api/src/mind/prediction/bodyTouchPrediction.ts` the key and the learning, and `services/api/tests/bodyTouchStage2.test.ts` the behaviour.
 
 - **No table for any part.** A pat on the head no longer pleases her by itself. When a touch arrives, only the startle moves her: arousal rises by how unsure she was of what such a touch is for her (the relative uncertainty of key gesture.part.who; a first touch startles, a known one hardly does). The only feeling a touch brings by itself is surprise, as strong as the startle, and only when the startle stands out of her ordinary fluctuation.
 - **Her stance is the outcome.** Every reaction asks her `stance`, also of a touch in the old shape. It is learned at once as the outcome of the key, and its prediction error moves her valence and arousal by the bounded step: the share 1 − γ (γ = 0.61, Rutledge et al. 2014) toward attractor + error + w_E × what she expected (w_E = 0.4375, the same paper's EV weight relative to its RPE weight), so nothing pins at ±1, a familiar welcome keeps her warm and a familiar refusal keeps her cool. The feeling she chose becomes her feeling (also when she stays silent), as strongly as her stance was unexpected (|error|). Taken the same way again and again, a touch moves her less (habituation); an unexpected one moves her again.
@@ -762,7 +762,7 @@ PUT /v1/body/capabilities
 { "scopeKey": "owner", "expressions": ["joyful", "…"], "gestures": ["wave", "…"], "flags": { "touchOnly": true } }
 ```
 
-`flags.touchOnly: true` (`services/api/src/bodyTouchOnly.ts`) says: this device feels touch and is nothing
+`flags.touchOnly: true` (`services/api/src/surfaces/body/bodyTouchOnly.ts`) says: this device feels touch and is nothing
 else of a body. With it the device may use two routes exactly as the desktop body does, with the same
 fields, limits, idempotency and audience rules:
 
@@ -801,7 +801,7 @@ What the phone does:
 
 ## Her desktop body inside an app
 
-Added 2026-10-06 (roadmap A17, `services/api/src/desktopBodyIdentity.ts`). The Mac app shows her standing on the desktop in a window of its own. That window is her **full body** (presence reads, who can see her, looks at the room, what it did with her messages, touches, who is at the Mac), while the app itself stays **one of the owner's apps** (Talk, his voice calls, private listening, the app look). The server's rules tell these apart by device (a full body's call is never "a call elsewhere" and its voice may be refused; an app's call quiets her other bodies and is never refused; a body's read of `/v1/initiatives` leaves out what an app says through his earphones), and one paired device cannot be both. So the body part speaks for a device of its own:
+Added 2026-10-06 (roadmap A17, `services/api/src/surfaces/body/desktopBodyIdentity.ts`). The Mac app shows her standing on the desktop in a window of its own. That window is her **full body** (presence reads, who can see her, looks at the room, what it did with her messages, touches, who is at the Mac), while the app itself stays **one of the owner's apps** (Talk, his voice calls, private listening, the app look). The server's rules tell these apart by device (a full body's call is never "a call elsewhere" and its voice may be refused; an app's call quiets her other bodies and is never refused; a body's read of `/v1/initiatives` leaves out what an app says through his earphones), and one paired device cannot be both. So the body part speaks for a device of its own:
 
 - A request with the header `X-Shannon-Body: desktop` on a body route (`/v1/body/*`; the app look's `/v1/app/looks/{id}` is not one and stays the app's) or on `GET /v1/initiatives` is taken as coming from the device `<deviceId>.desktop-body`, derived from the paired device of its token.
 - Every other request, and every request without the header, is the app's exactly as before. A voice request with the header is still the app's.
