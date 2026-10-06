@@ -29,11 +29,20 @@ importers:
         specifier: workspace:*
         version: link:../cognition
 
+  packages/learning:
+    dependencies:
+      '@shannon/cognition':
+        specifier: workspace:*
+        version: link:../cognition
+
   services/api:
     dependencies:
       '@shannon/cognition':
         specifier: workspace:*
         version: link:../../packages/cognition
+      '@shannon/learning':
+        specifier: workspace:*
+        version: link:../../packages/learning
 
 packages:
 

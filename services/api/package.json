@@ -22,6 +22,7 @@
     "migrate:study-to-aether": "tsx --env-file-if-exists=../../.env scripts/migrate-study-to-aether.ts"
   },
   "dependencies": {
-    "@shannon/cognition": "workspace:*"
+    "@shannon/cognition": "workspace:*",
+    "@shannon/learning": "workspace:*"
   }
 }

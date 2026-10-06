@@ -27,7 +27,8 @@ run_api() {
 run_cognition_eval() {
   "$node_bin" node_modules/typescript/bin/tsc -p packages/cognition/tsconfig.json --noEmit
   "$node_bin" node_modules/typescript/bin/tsc -p packages/evaluation/tsconfig.json --noEmit
-  "$node_bin" node_modules/vitest/vitest.mjs run packages/cognition/tests packages/evaluation/tests
+  "$node_bin" node_modules/typescript/bin/tsc -p packages/learning/tsconfig.json --noEmit
+  "$node_bin" node_modules/vitest/vitest.mjs run packages/cognition/tests packages/evaluation/tests packages/learning/tests
 }
 
 run_architecture() {

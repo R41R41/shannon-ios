@@ -22,6 +22,7 @@ const productionSources = [
   ...filesBelow('apps/macos-app/ShannonDesk', new Set(['.swift'])),
   ...filesBelow('services/api/src', new Set(['.ts'])),
   ...filesBelow('packages/cognition/src', new Set(['.ts'])),
+  ...filesBelow('packages/learning/src', new Set(['.ts'])),
 ];
 
 for (const path of productionSources) {

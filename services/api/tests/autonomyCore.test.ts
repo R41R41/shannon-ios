@@ -1,10 +1,19 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SHANNON_CORE_AREA_LABELS } from '@shannon/cognition';
 import { SHANNON_CORE_PATHS, allCorePaths, coreAreaForRepositoryPath, normalizedRepositoryPath } from '../src/autonomyCore.js';
 
 const repositoryRoot = resolve(import.meta.dirname, '../../..');
+
+/** Every source file below a folder, recursively; `node_modules` (links of the workspace) left out. */
+function filesBelow(folder: string): string[] {
+  return readdirSync(folder, { withFileTypes: true }).flatMap(entry => {
+    if (entry.name === 'node_modules') return [];
+    const path = join(folder, entry.name);
+    return entry.isDirectory() ? filesBelow(path) : [path];
+  });
+}
 
 describe('CORE as code', () => {
   it('covers the nine core areas of ADR-0002, each with at least one path', () => {
@@ -35,6 +44,18 @@ describe('CORE as code', () => {
     expect(sources.length).toBeGreaterThanOrEqual(11);
     for (const name of sources) {
       expect(coreAreaForRepositoryPath(`services/api/src/${name}`), name).not.toBeNull();
+    }
+  });
+
+  it('keeps the folders of Syzygy ADR-0008 inside core, every file below them included', () => {
+    const expected: Record<string, string> = {
+      'packages/learning/': 'emotion',
+    };
+    for (const [folder, area] of Object.entries(expected)) {
+      expect(coreAreaForRepositoryPath(folder)?.area, folder).toBe(area);
+      const files = filesBelow(join(repositoryRoot, folder));
+      expect(files.length, folder).toBeGreaterThan(0);
+      for (const file of files) expect(coreAreaForRepositoryPath(relative(repositoryRoot, file))?.area, file).toBe(area);
     }
   });
 

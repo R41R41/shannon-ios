@@ -74,6 +74,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // Syzygy ADR-0006 stage 2: a touch's startle and her stance's prediction error move her (`SHANNON_PREDICTION`).
     'packages/cognition/src/touchAppraisal.ts',
     'services/api/src/bodyTouchPrediction.ts',
+    // Syzygy ADR-0008 stage 1: the pure package of the prediction ledger, calibration, reward, values and the mood exit.
+    'packages/learning/',
   ]),
   authentication: Object.freeze([
     'services/api/src/apiAuth.ts',

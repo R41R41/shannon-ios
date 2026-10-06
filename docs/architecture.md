@@ -50,7 +50,7 @@ For a newly created thread without an explicit title, the first successful user/
 
 SQLite schema v8 adds `conversation_threads.title_origin` (`pending`, `automatic`, or `manual`). Migration preserves all existing titles as manual because older rows have no edit provenance. Only newly created untitled threads are eligible for automatic naming. The migration is additive and runs inside the existing restart-safe migration transaction.
 
-Emotion and memory updates affect the next reply after they commit. Prediction-error processing is not part of v1.
+Emotion and memory updates affect the next reply after they commit. Prediction errors are processed (Syzygy ADR-0006: in stage 2 a touch's prediction error moves her feeling; Syzygy ADR-0008 stage 1 adds the prediction ledger, calibration and, in its later steps, value tables that change her choices from outcomes; `docs/cognition-ledger-contract.md`). No model weights are trained.
 
 ## Canonical identity
 
@@ -789,8 +789,8 @@ The distributor records every automatic check in the production SQLite database.
 
 ## Deferred by design
 
-- per-user LoRA or fine-tuning
-- prediction-error training
+- per-user LoRA, fine-tuning, or any other training of model weights (value tables that change her choices from outcomes are allowed: Syzygy ADR-0008)
+- action threads: actions run in parallel under the same self, gate, record and budget (Syzygy ADR-0002 addendum 2026-10-07; not replication, built in stage 4 of ADR-0008)
 - applying a source-code change without the owner's approval (proposing one is allowed; see Bounded autonomy)
 - the Windows device side of folder contract v2 (built by the body thread against `docs/host-folder-contract.md`; until then her folder tools answer that the device does not support the operation), the Azure workspace (ADR-0002 step 4), and proposals she raises from the loop (step 5)
 - reading the owner's shared Notion from the loop: the optional interface exists, the `notion_read` domain is added by the Notion source
