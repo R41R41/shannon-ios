@@ -17,7 +17,7 @@ This file is the contract. The pure parts are in `packages/learning` (`@shannon/
 | 5 | Value table, versions, CLI and owner route | not yet |
 | 6 | Scenario suite v1 and a baseline report | in place (`packages/evaluation/src/reach/cognitionLedger.ts`, `services/api/tests/reach/reachCognition.ts`; `scripts/reach-measures.sh run --only cog.`) |
 | 7a | Value facts in her thinking prompt | in place (`packages/learning/src/valueFacts.ts`, `wiring/cognitionLedgerTaps.ts` `valueFactsReader`; tests `valueFacts.test.ts`, `autonomyLoopKillSwitch.test.ts`); shown to the owner before deployment (override 4) |
-| 7b | Reward mood | not yet |
+| 7b | Reward mood, with the hourly safeguard | in place (`packages/learning/src/choiceAppraisal.ts`, `packages/cognition` `choice-appraised`, `mind/emotion/rewardMood.ts`, wiring `startRewardMood`; tests `rewardMood.test.ts`, `cog.mood-jitter` v2); shown to the owner before deployment (override 4) |
 
 Until step 7 nothing here changes a prompt, a reply, her feeling or a step of hers: the tables are written and read by nothing that acts. Step 7a gives her thinking prompt the value facts; step 7b lets settled choices move her mood.
 
@@ -213,6 +213,16 @@ Eight model-free scenarios in the reach suite (`docs/testing/reach-measures-runb
 - **Never with anyone else present.** The loop is handed one function (`valueFactsReader`); it reads who is around from what the server knows of her body and gives nothing while others may see or hear her.
 - **Switch.** `SHANNON_VALUE_FACTS=off` (or the choice ledger off): the function is not handed and every prompt is byte for byte what it was (`autonomyLoopKillSwitch.test.ts`, also with the function answering nothing).
 
-## Mood (step 7)
+## Reward mood (step 7b)
 
-Designed in the stage-1 plan (Syzygy `notes/adr0008-stage1-plan.md`) and written here when it lands: the mood exit boundedAffectStep(core, attractor + w_δ·δ + w_E·V, u) for every settled choice that is not stale (override 1), and the value facts lines.
+Every settled choice of hers moves her mood (owner override 1), once, through `choice-appraised` (`packages/cognition`): the bounded step of ADR-0006 stage 2 (`appraiseTouch`, γ 0.61, w_δ 1, w_E 0.4375) with δ = r − V as the error, V as the expectation and u, valence the share 1 − γ toward attractor + w_δ·δ + w_E·V, arousal toward its attractor raised by u.
+
+- **Where.** In the API process only (`server.ts` starts `startRewardMood`, `wiring/cognitionLedgerWiring.ts`; every 30 seconds): the loop's process writes her state only through the awake clock. `mind/emotion/rewardMood.ts` is handed functions, not stores.
+- **Once.** A choice is claimed before it is applied (`mood_claimed_at`, `mood_code`, `mood_step` in one `UPDATE … WHERE mood_claimed_at IS NULL`), so two connections never apply it twice.
+- **Never.** A choice that is not `moodEligible` (`stale`, `story_expired`, `inherited_expired`, `*_expired`, void, lost) is claimed `ineligible`; one settled longer ago than the episode she has learned (`episodeBoundaryMs` of the ADR-0006 record) is claimed `stale`. Neither moves her.
+- **Rate safeguard (coordinator, 2026-10-07; pending the owner's review).** The summed |valence step| of choice appraisals within any rolling hour is at most the stationary band (σ/√(2θ) = 0.15). A choice whose step would pass it moves her only the share that is left (`applied_capped`, the event's `share`); once nothing is left a choice is claimed `rate_capped` and moves nothing. Every such choice stays settled and is learned from by the value table. Without it, twenty surprising choices in ten minutes moved valence 0.285 in the simulation; with it, 0.15 (`cog.mood-jitter` v2, `jitter.rate_cap`).
+- **Switch.** `SHANNON_REWARD_MOOD=off` (or the choice ledger off): nothing is started and her state is exactly what it was (`rewardMood.test.ts`).
+
+## Mood codes
+
+`applied`, `applied_capped`, `stale`, `ineligible`, `rate_capped` (`shannon_choices.mood_code`); `mood_step` is the step an applied claim moved valence by (what the safeguard sums).

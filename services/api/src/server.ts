@@ -13,7 +13,7 @@ import { createConfiguredTurnMemoryRecall } from './mind/recall/turnMemoryRecall
 import { DurableBackgroundDispatcher } from './mind/sleep/backgroundUpdates.js';
 import { startToolTraceSweep } from './mind/tools/shannonToolTraceSweep.js';
 import { createConfiguredChatModel } from './infra/models/chatModel.js';
-import { configuredVoiceDecision } from './wiring/cognitionLedgerWiring.js';
+import { configuredVoiceDecision, startRewardMood } from './wiring/cognitionLedgerWiring.js';
 import { storyReacted, toolCallChoice, touchLedger } from './wiring/cognitionLedgerTaps.js';
 import { createValuesRoute, isValuesPath, ownerValueRecorder } from './infra/http/learningRoutes.js';
 import { configuredAuthPepper, SQLiteDeviceAuthStore } from './infra/auth/deviceAuth.js';
@@ -109,6 +109,8 @@ const autonomy = new ShannonAutonomyService({
   ...(predictionLedger ? { storyReacted: (scopeKey, pieceId, reaction, at) => storyReacted(predictionLedger, scopeKey, pieceId, reaction, at, choiceLedger) } : {}) });
 // Her tool calls in conversations are choices too (data for stage 2, no effect).
 if (choiceLedger) autonomy.tools.observeChoices(toolCallChoice(choiceLedger), now);
+// Step 7b (SHANNON_REWARD_MOOD): settled choices of hers move her mood once each, here only, within the hourly safeguard.
+const rewardMood = startRewardMood(process.env, { choices: choiceLedger, shadow: persistentStore.predictionShadow(), state: persistentStore }, now);
 // Her folder's operations (docs/host-folder-contract.md): stale ones are closed and results pruned also when no device or tool calls.
 const stopFolderMaintenance = autonomy.folderOperations.startMaintenance();
 // What her tools did in conversations (shannonToolTrace.ts): retention, forgetting and secrets reach stored traces too.
@@ -424,6 +426,7 @@ function shutdown(): void {
     peopleMemoryStore.close();
     stopFolderMaintenance();
     stopToolTraceSweep();
+    rewardMood.stop();
     autonomyAnnouncer.close();
     bodyStore.close();
     minecraft.close(); platformBridge?.close?.();

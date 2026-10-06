@@ -86,6 +86,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/learning/valueTable.ts',
     // Syzygy ADR-0008 stage 1: the nightly pass of the ledgers (expiry, delayed credit, retention).
     'services/api/src/mind/sleep/valueSleep.ts',
+    // Syzygy ADR-0008 stage 1, step 7b: settled choices of hers move her mood (the emotion source).
+    'services/api/src/mind/emotion/rewardMood.ts',
     // Syzygy ADR-0008 stage 1: the wiring that hands the ledgers their connections and the parts their taps, and their shared vocabulary.
     'services/api/src/wiring/cognitionLedgerWiring.ts',
     'services/api/src/wiring/cognitionLedgerTaps.ts',

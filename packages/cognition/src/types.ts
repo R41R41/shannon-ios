@@ -300,6 +300,8 @@ export type CompanionStateEvent =
   | { type: 'body-touched'; touch: ShannonTouch }
   /** Stage 2: her stance on a touch became known (she decided it): its prediction error moves valence and arousal. */
   | { type: 'touch-appraised'; outcome: ShannonTouchOutcome }
+  /** Syzygy ADR-0008 stage 1, step 7b: a settled choice of hers moves her mood by the same bounded step (error δ = r − V, expectation V, u), `share` of it (the hourly safeguard). */
+  | { type: 'choice-appraised'; outcome: ShannonTouchOutcome; share?: number }
   /** She was awake at this moment and nothing else happened: advances her awake clock. Carries no content. */
   | { type: 'awake-observed' }
   /** The owner apologised or said something kind: what she holds against him underneath eases. */

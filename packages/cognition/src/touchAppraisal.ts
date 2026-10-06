@@ -46,6 +46,16 @@ export function appraiseTouch(emotion: ShannonEmotion, outcome: ShannonTouchOutc
   return { ...stepped, openness: emotion.openness };
 }
 
+/**
+ * Syzygy ADR-0008 stage 1, step 7b: a settled choice of hers, by the same step as a touch's stance (δ = r − V as the error,
+ * V as the expectation, u), taken only `share` of the way (0–1; the hourly rate safeguard of `@shannon/learning`).
+ */
+export function appraiseChoice(emotion: ShannonEmotion, outcome: ShannonTouchOutcome, share = 1): ShannonEmotion {
+  const stepped = appraiseTouch(emotion, outcome);
+  const part = clamp(share, 0, 1);
+  return { ...emotion, valence: emotion.valence + part * (stepped.valence - emotion.valence), arousal: emotion.arousal + part * (stepped.arousal - emotion.arousal) };
+}
+
 /** How strongly she feels the touch: |w_δ × error|, never past the scale. */
 export function touchImpact(outcome: Pick<ShannonTouchOutcome, 'error'>): number {
   return clamp(Math.abs(SHANNON_AFFECT_DYNAMICS.errorWeight * outcome.error), 0, 1);

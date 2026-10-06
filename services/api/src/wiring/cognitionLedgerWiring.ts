@@ -1,4 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
+import { createAffectDynamics, episodeBoundaryMs, type CompanionStateEvent, type CompanionStateSnapshot } from '@shannon/cognition';
+import { cognitionLedgerSwitches } from '@shannon/learning';
+import { RewardMood } from '../mind/emotion/rewardMood.js';
+import type { PredictionShadow } from '../mind/prediction/predictionShadow.js';
 import type { DecisionTraceWriter } from '../contracts/decisionTraceContract.js';
 import type { VoiceDecisionGateway } from '../contracts/voiceDecisionContract.js';
 import { countedJevFetch } from '../infra/models/jev/jevClient.js';
@@ -55,4 +59,35 @@ export function configuredVoiceDecision(
   if (!write) return createConfiguredVoiceDecisionGateway(environment, usageStore);
   const inner = createConfiguredVoiceDecisionGateway(environment, usageStore, countedJevFetch());
   return new TracedVoiceDecisionGateway(inner, write, { usdPerJevCall: jevUsdPerCall(environment) });
+}
+
+/**
+ * Step 7b (`SHANNON_REWARD_MOOD`, and the choice ledger): in the API process, every 30 seconds, settled choices of hers are
+ * claimed once and appraised (`mind/emotion/rewardMood.ts`). Returns how to stop it; switched off, nothing is started.
+ */
+export function startRewardMood(
+  environment: Readonly<Record<string, string | undefined>>,
+  parts: {
+    choices: ChoiceLedger | null; shadow: Pick<PredictionShadow, 'mind'> | null;
+    state: { snapshot(scopeKey: string): CompanionStateSnapshot; apply(scopeKey: string, event: CompanionStateEvent): CompanionStateSnapshot };
+  },
+  now: () => string, options: { intervalMs?: number; log?: (line: string) => void } = {},
+): { mood: RewardMood | null; stop(): void } {
+  const choices = parts.choices;
+  if (!cognitionLedgerSwitches(environment).rewardMood || !choices) return { mood: null, stop: () => undefined };
+  const fallback = episodeBoundaryMs(createAffectDynamics().boundary);
+  const mood = new RewardMood({
+    claims: {
+      scopes: () => choices.store.unclaimedScopes(),
+      unclaimed: scopeKey => choices.store.unclaimed(scopeKey),
+      claim: (scopeKey, choiceId, code, at, step) => choices.store.claimMood(scopeKey, choiceId, code, at, step),
+      stepsSince: (scopeKey, since) => choices.store.moodStepsSince(scopeKey, since),
+    },
+    state: parts.state,
+    boundaryMs: scopeKey => { try { return parts.shadow ? episodeBoundaryMs(parts.shadow.mind(scopeKey).dynamics.boundary) : fallback; } catch { return fallback; } },
+    now, log: options.log ?? (line => console.log(line)),
+  });
+  const timer = setInterval(() => { mood.pump(); }, options.intervalMs ?? 30_000);
+  timer.unref();
+  return { mood, stop: () => clearInterval(timer) };
 }

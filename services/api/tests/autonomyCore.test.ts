@@ -60,6 +60,7 @@ describe('CORE as code', () => {
       'services/api/src/mind/learning/store/sqliteValueTable.ts': 'emotion',
       'services/api/src/mind/learning/valueTable.ts': 'emotion',
       'services/api/src/mind/sleep/valueSleep.ts': 'emotion',
+      'services/api/src/mind/emotion/rewardMood.ts': 'emotion',
       'services/api/src/wiring/cognitionLedgerWiring.ts': 'emotion',
       'services/api/src/wiring/cognitionLedgerTaps.ts': 'emotion',
       'services/api/src/contracts/cognitionLedgerContract.ts': 'emotion',

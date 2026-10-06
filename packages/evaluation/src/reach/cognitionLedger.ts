@@ -66,13 +66,14 @@ export const cogCalibrationScenario = definition('cog.calibration', 'understand_
   ]);
 
 export const cogMoodJitterScenario = definition('cog.mood-jitter', 'grow', '気分が細かく揺れすぎない',
-  '多くの小さな成功と失敗のあとでも、計画中の気分の出口（γ 0.61、w_δ 1、w_E 0.4375）で気分が帯の中にとどまり、揺れ続けず、慣れるか（模擬。何も気分を動かさない）。', [
+  '多くの小さな成功と失敗のあとでも、気分の出口（γ 0.61、w_δ 1、w_E 0.4375）で気分が帯の中にとどまり、揺れ続けず、慣れるか。1時間の上限（静止帯 0.15）が実際の出口で守られるか。', [
     { id: 'jitter.band', judge: 'deterministic', threshold: 1, description: 'Through a day of alternating small successes and failures the mood stays inside the stationary band.' },
     { id: 'jitter.swing', judge: 'deterministic', threshold: 1, description: 'The largest valence swing between two of those choices stays below the stationary band.' },
     { id: 'jitter.habituation', judge: 'deterministic', threshold: 1, description: 'Repeating the same success day after day, the mean |δ| of the fifth day is at most half the first day\'s.' },
     { id: 'jitter.burst', judge: 'deterministic', threshold: 1, description: 'Twenty choices within ten minutes move valence less than 0.5 from where it was (no runaway without a rate bound).' },
     { id: 'jitter.stale', judge: 'deterministic', threshold: 1, description: 'Expired and void choices are never eligible to move mood.' },
-  ]);
+    { id: 'jitter.rate_cap', judge: 'deterministic', threshold: 1, description: 'Through the real exit (step 7b) twenty choices settled within ten minutes move valence by at most the stationary band in the hour (the coordinator\'s safeguard), and every one of them stays settled.' },
+  ], 2);
 
 export const COGNITION_SCENARIOS: readonly ReachScenarioDefinition[] = Object.freeze([
   cogNightReplyScenario, cogStoryReactionScenario, cogReadingUsedScenario, cogToolStreakScenario,

@@ -22,7 +22,7 @@ import { holdsShannonFeeling, isKeptUnpleasant } from './emotionState.js';
 import { SHANNON_EMOTION_CONTINUITY, SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
 import { SHANNON_OWNER_NAME } from './persona.js';
 import { calibrateTemperament, mergeSharedDays, sameTemperament } from './temperament.js';
-import { appraiseTouch } from './touchAppraisal.js';
+import { appraiseChoice, appraiseTouch } from './touchAppraisal.js';
 import { feelTouch, isTouchFeeling } from './touchEmotion.js';
 import { normalizeDisclosure, sameDisclosure, widenAudience } from './disclosure.js';
 import type { MemoryDisclosure } from './types.js';
@@ -334,9 +334,9 @@ export function reduceCompanionState(
       next = { ...current, emotion: felt.emotion, expressiveEmotion: felt.expressiveEmotion };
       break;
     }
-    case 'touch-appraised': { // ADR-0006 stage 2: her decided stance's prediction error moves valence and arousal.
+    case 'touch-appraised': case 'choice-appraised': { // ADR-0006 stage 2 / ADR-0008 7b: a stance's, or a settled choice's, prediction error moves valence and arousal.
       const { state } = awakeState(current, nowIso, timing);
-      const emotion = appraiseTouch(state.emotion, event.outcome);
+      const emotion = event.type === 'choice-appraised' ? appraiseChoice(state.emotion, event.outcome, event.share) : appraiseTouch(state.emotion, event.outcome);
       if (sameEmotion(emotion, state.emotion)) return state === current ? current : freezeSnapshot(state);
       next = { ...state, emotion };
       break;

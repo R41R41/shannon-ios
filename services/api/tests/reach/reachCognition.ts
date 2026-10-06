@@ -16,6 +16,7 @@ import { ownerValueRecorder } from '../../src/infra/http/learningRoutes.js';
 import type { StoredChoice } from '../../src/mind/learning/choiceLedger.js';
 import { ledgerPredictionTap, storyReacted, toolCallChoice, valueFactsReader, type Presence } from '../../src/wiring/cognitionLedgerTaps.js';
 import { valueSleep } from '../../src/mind/sleep/valueSleep.js';
+import { startRewardMood } from '../../src/wiring/cognitionLedgerWiring.js';
 import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
 
 /**
@@ -335,11 +336,25 @@ function moodJitter(): ReturnType<typeof outcome> {
     for (let index = 0; index < 20; index += 1) burst.step('note', jst(0, 10, index / 2), index % 3 ? 'done' : 'failed');
     const burstPoints = simulatedMood(burst.choices.rows(SCOPE));
     const burstMove = Math.max(...burstPoints.map(point => Math.abs(point.valence - attractor)));
+    // The real exit (step 7b) with the hourly safeguard: twenty surprising choices settled within ten minutes, pumped together.
+    const capped = new CognitionWorld();
+    for (let index = 0; index < 20; index += 1) capped.message(jst(0, 10, index / 2), 'wonder', index % 4 !== 0);
+    const startValence = capped.store.snapshot(SCOPE).emotion.valence;
+    const exit = startRewardMood({}, { choices: capped.choices, shadow: capped.store.predictionShadow(), state: capped.store }, () => jst(0, 10, 10), { intervalMs: 3_600_000, log: () => undefined });
+    const pumped = exit.mood!.pump();
+    exit.stop();
+    const cappedRows = capped.choices.rows(SCOPE);
+    const cappedSteps = cappedRows.reduce((sum, row) => sum + (row.moodStep ?? 0), 0);
+    const cappedMove = Math.abs(capped.store.snapshot(SCOPE).emotion.valence - startValence);
+    capped.close();
     const ineligible = [...alternating.choices.rows(SCOPE), ...habit.choices.rows(SCOPE)].filter(row => row.status !== 'settled' || ['stale', 'story_expired', 'inherited_expired', 'reported_expired'].includes(row.settleCode ?? ''));
     return outcome(cogMoodJitterScenario, {
       'jitter.band': maxMood <= band, 'jitter.swing': maxSwing <= band, 'jitter.habituation': meanDelta[4]! <= meanDelta[0]! / 2,
       'jitter.burst': burstMove < 0.5, 'jitter.stale': ineligible.every(row => !moodEligible(row)),
+      'jitter.rate_cap': cappedSteps <= band + 1e-9 && cappedMove <= band + 1e-9 && cappedRows.every(row => row.status === 'settled')
+        && pumped.applied + pumped.applied_capped + pumped.rate_capped === 20,
     }, {
+      cappedSteps: Math.round(cappedSteps * 1e6) / 1e6, cappedMove: Math.round(cappedMove * 1e6) / 1e6, cappedApplied: pumped.applied, cappedPartly: pumped.applied_capped, cappedOut: pumped.rate_capped,
       band: round(band), maxMood: round(maxMood), maxSwing: round(maxSwing), meanDeltaDay1: round(meanDelta[0]!), meanDeltaDay5: round(meanDelta[4]!), burstMove: round(burstMove),
       gamma: SHANNON_AFFECT_DYNAMICS.eventForgetting, errorWeight: SHANNON_AFFECT_DYNAMICS.errorWeight, expectationWeight: SHANNON_AFFECT_DYNAMICS.expectationWeight,
     }, 130);

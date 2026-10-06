@@ -92,3 +92,12 @@ export {
   valueFactLine,
   valueFactsSection,
 } from './valueFacts.js';
+export {
+  REWARD_MOOD_WINDOW_MS,
+  choiceAppraisalOutcome,
+  choiceMoodStep,
+  rewardMoodCap,
+  rewardMoodDecision,
+  type AppraisableChoice,
+  type RewardMoodCode,
+} from './choiceAppraisal.js';

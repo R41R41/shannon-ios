@@ -216,6 +216,7 @@ export {
 // Syzygy ADR-0006 stage 2: a touch's startle and her stance's prediction error move her feeling (`SHANNON_PREDICTION`).
 export {
   SHANNON_STANCE_OUTCOME,
+  appraiseChoice,
   appraiseTouch,
   isFeltStartle,
   startleArousal,

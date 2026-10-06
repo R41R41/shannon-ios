@@ -51,6 +51,8 @@ export interface StoredChoice extends ChoiceDraft {
   /** Step 7 (reward mood): when, and with which closed code, it moved her mood; null until then. */
   moodClaimedAt: string | null;
   moodCode: string | null;
+  /** How far its appraisal moved valence, when it was applied. */
+  moodStep?: number | null;
 }
 
 export function ensureChoiceLedgerSchema(database: DatabaseSync): void {
@@ -84,14 +86,19 @@ export function ensureChoiceLedgerSchema(database: DatabaseSync): void {
       settled_at TEXT,
       settle_seq INTEGER,
       mood_claimed_at TEXT,
-      mood_code TEXT
+      mood_code TEXT,
+      mood_step REAL
     );
     CREATE INDEX IF NOT EXISTS shannon_choices_scope ON shannon_choices (scope_key, chosen_at);
     CREATE INDEX IF NOT EXISTS shannon_choices_status ON shannon_choices (scope_key, status);
     CREATE INDEX IF NOT EXISTS shannon_choices_subject ON shannon_choices (scope_key, subject_kind, subject_id);
     CREATE INDEX IF NOT EXISTS shannon_choices_settled ON shannon_choices (scope_key, settle_seq);
     CREATE TABLE IF NOT EXISTS shannon_choice_ledger_seq (scope_key TEXT PRIMARY KEY, last_seq INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS shannon_choices_mood ON shannon_choices (scope_key, mood_claimed_at);
   `);
+  // Added with step 7b: how far a choice's appraisal moved valence (the rate safeguard sums it).
+  const columns = (database.prepare("PRAGMA table_info('shannon_choices')").all() as Array<{ name: string }>).map(column => column.name);
+  if (!columns.includes('mood_step')) database.exec('ALTER TABLE shannon_choices ADD COLUMN mood_step REAL');
 }
 
 const round = (value: number) => Math.round(value * 1e6) / 1e6;
@@ -180,6 +187,34 @@ export class SQLiteChoiceLedger {
     return Number(this.database.prepare('DELETE FROM shannon_choices WHERE scope_key = ? AND chosen_at < ?').run(scopeKey, before).changes);
   }
 
+  /** Step 7b: settled choices whose mood was not yet claimed, in the order they were settled. */
+  unclaimed(scopeKey: string, limit = 50): StoredChoice[] {
+    return (this.database.prepare("SELECT * FROM shannon_choices WHERE scope_key = ? AND status = 'settled' AND mood_claimed_at IS NULL ORDER BY settle_seq LIMIT ?")
+      .all(scopeKey, limit) as Array<Record<string, unknown>>).map(parsed);
+  }
+
+  /** Scopes with settled choices whose mood was not yet claimed. */
+  unclaimedScopes(): string[] {
+    return (this.database.prepare("SELECT DISTINCT scope_key FROM shannon_choices WHERE status = 'settled' AND mood_claimed_at IS NULL").all() as Array<{ scope_key: string }>).map(row => row.scope_key);
+  }
+
+  /**
+   * Claims a choice's mood once (any connection): true for the one claim that changed the row. An applied claim carries the
+   * step it moves valence by, in the same statement, so the rate safeguard of another connection sees it at once.
+   */
+  claimMood(scopeKey: string, choiceId: string, code: string, at: string, step: number | null): boolean {
+    if (!PREDICTION_SYMBOL.test(code)) throw new Error('CHOICE_SYMBOL');
+    return Number(this.database.prepare('UPDATE shannon_choices SET mood_claimed_at = ?, mood_code = ?, mood_step = ? WHERE scope_key = ? AND choice_id = ? AND mood_claimed_at IS NULL')
+      .run(new Date(Date.parse(at)).toISOString(), code, step === null ? null : round(Math.abs(step)), scopeKey, choiceId).changes) > 0;
+  }
+
+  /** The summed steps of appraisals applied since an instant (the rate safeguard). */
+  moodStepsSince(scopeKey: string, since: string): number {
+    const row = this.database.prepare("SELECT COALESCE(SUM(mood_step), 0) AS total FROM shannon_choices WHERE scope_key = ? AND mood_code IN ('applied', 'applied_capped') AND mood_claimed_at >= ?")
+      .get(scopeKey, since) as { total: number };
+    return Number(row.total);
+  }
+
   /** How many choices of a scope are pending, settled and void. */
   counts(scopeKey: string): Record<string, number> {
     const counts: Record<string, number> = { pending: 0, settled: 0, void: 0 };
@@ -202,6 +237,6 @@ function parsed(row: Record<string, unknown>): StoredChoice {
     expectedLevel: String(row.expected_level), status: String(row.status) as ChoiceStatus, success: nullable(row.success),
     subjectKind: text(row.subject_kind), subjectId: text(row.subject_id), world: nullable(row.world), serve: nullable(row.serve), growth: nullable(row.growth),
     costYen: Number(row.cost_yen), reward: nullable(row.reward), delta: nullable(row.delta), unexpected: nullable(row.unexpected),
-    settleCode: text(row.settle_code), settledAt: text(row.settled_at), moodClaimedAt: text(row.mood_claimed_at), moodCode: text(row.mood_code),
+    settleCode: text(row.settle_code), settledAt: text(row.settled_at), moodClaimedAt: text(row.mood_claimed_at), moodCode: text(row.mood_code), moodStep: nullable(row.mood_step),
   };
 }
