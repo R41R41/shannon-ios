@@ -86,6 +86,12 @@ export interface StepDependencies {
   prediction?: AutonomyPredictionTap;
   /** Syzygy ADR-0008 stage 1: writes one content-free trace of a thought of hers; returns nothing. Absent (switched off), nothing is written. */
   trace?: DecisionTraceWriter;
+  /**
+   * Syzygy ADR-0008 stage 1, step 7a: the 「これまでの手応え」 section for the choices offered in a thought (closed choice names in,
+   * one finished section of facts out), or null (no facts, or anyone else may be present). Absent (`SHANNON_VALUE_FACTS=off`):
+   * every prompt is what it was.
+   */
+  valueFacts?: (scopeKey: string, offered: readonly string[], at: string) => string | null;
 }
 
 /** The adapters of one domain. A step allowed for a domain can reach nothing else. */

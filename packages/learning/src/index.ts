@@ -84,3 +84,11 @@ export {
   type ValueVersionMaker,
   type ValueVersionRecord,
 } from './versions.js';
+export {
+  VALUE_FACTS_HEADER,
+  VALUE_FACTS_MAXIMUM_LINES,
+  VALUE_FACT_CHOICES,
+  valueFactCell,
+  valueFactLine,
+  valueFactsSection,
+} from './valueFacts.js';

@@ -213,7 +213,11 @@ export function pursuitLines(pursuits: readonly ShannonPursuit[], maximum = 12):
 }
 
 /** Thinking: choose what to do next from her own ledger and study. */
-export function thinkingPrompt(materials: ThinkingMaterials, extras?: ThinkingExtras | null): AutonomyPrompt {
+/**
+ * `valueFacts` (Syzygy ADR-0008 stage 1, step 7a): the 「これまでの手応え」 section the server counted, placed last so what comes
+ * before it is unchanged (the provider's cache prefix). Absent, the prompt is byte for byte what it was.
+ */
+export function thinkingPrompt(materials: ThinkingMaterials, extras?: ThinkingExtras | null, valueFacts?: string | null): AutonomyPrompt {
   // No limit a day is `Infinity`: the action is offered and no count is named.
   const reachOuts = Math.max(0, Math.trunc(materials.reachOut?.remaining ?? 0));
   const upcoming = reachOuts > 0 ? upcomingLines(materials.upcoming ?? []) : [];
@@ -243,6 +247,7 @@ export function thinkingPrompt(materials: ThinkingMaterials, extras?: ThinkingEx
       ...(ownerContext ? [ownerContext] : []),
       ...(extras?.sections ?? []),
       ...(extras?.closing ?? []),
+      ...(valueFacts ? [valueFacts] : []),
     ].join('\n\n'),
   };
 }

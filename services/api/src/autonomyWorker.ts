@@ -34,7 +34,8 @@ import { ownToolsEnabled } from './mind/tools/shannonTools.js';
 import { configuredDatabasePath } from './infra/sqlite/sqliteStore.js';
 import { configuredPredictionShadow } from './mind/prediction/predictionShadow.js';
 import { configuredDecisionTraces, configuredPredictionLedger } from './wiring/cognitionLedgerWiring.js';
-import { ledgerPredictionTap, presenceOf } from './wiring/cognitionLedgerTaps.js';
+import { ledgerPredictionTap, presenceOf, valueFactsReader } from './wiring/cognitionLedgerTaps.js';
+import { cognitionLedgerSwitches } from '@shannon/learning';
 
 /**
  * Entry of the activity loop (Syzygy ADR-0002 step 3): its own process, so the API,
@@ -124,6 +125,9 @@ const decisionTraces = configuredDecisionTraces(process.env, databasePath);
 // the loop is handed functions beside the shadow's (opened at a message, a call, a story shown, a page read; settled by what
 // followed). SHANNON_PREDICTION_LEDGER=off (and SHANNON_PREDICTION_SHADOW=off) opens nothing and the loop's tap is the shadow's alone.
 const predictionLedger = configuredPredictionLedger(process.env, databasePath);
+// Step 7a (SHANNON_VALUE_FACTS): her thinking is handed one function that answers the 「これまでの手応え」 section, never a store;
+// it gives nothing while anyone else may see or hear her.
+const valueFacts = cognitionLedgerSwitches(process.env).valueFacts && predictionLedger?.values ? valueFactsReader(predictionLedger.values, observer.body) : null;
 const shadowTap = shadow ? { reachOut: (...args: Parameters<typeof shadow.reachOut>) => shadow.reachOut(...args) } : null;
 const loop = new ShannonAutonomyLoop({
   store, service, config, loop: loopConfig, model: configuredAutonomyTextModel(process.env, undefined, line => console.log(line)),
@@ -140,6 +144,7 @@ const loop = new ShannonAutonomyLoop({
   ...(shadowTap ? { prediction: predictionLedger ? ledgerPredictionTap(predictionLedger.ledger, shadowTap, predictionLedger.choices
     ? { ledger: predictionLedger.choices, presence: (scopeKey: string, at: string) => presenceOf(observer.body(scopeKey, at)) } : null) : shadowTap } : {}),
   ...(decisionTraces ? { trace: decisionTraces.traces.writer } : {}),
+  ...(valueFacts ? { valueFacts } : {}),
   // Content-free: a step kind and a closed reason code.
   log: line => console.log(`Shannon autonomy step: ${line.replace(/[^a-z0-9_:., -]/giu, '_').slice(0, 300)}`),
 });

@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { CALL_ANSWER_OUTCOME, STORY_REACTION_OUTCOME } from '@shannon/learning';
+import { CALL_ANSWER_OUTCOME, STORY_REACTION_OUTCOME, valueFactsSection } from '@shannon/learning';
 import { PREDICTION_SYMBOL, dayBand, type TouchLedger } from '../contracts/cognitionLedgerContract.js';
 import type { AutonomyPredictionTap, ReachOutFacts } from '../mind/action/ownTime/store/autonomyLoopObservations.js';
 import type { ChoiceLedger } from '../mind/learning/choiceLedger.js';
 import type { PredictionLedger } from '../mind/learning/predictionLedger.js';
+import type { ValueVersions } from '../mind/learning/valueTable.js';
 
 export type { TouchLedger } from '../contracts/cognitionLedgerContract.js';
 
@@ -150,5 +151,19 @@ export function touchLedger(ledger: LedgerPort): TouchLedger {
       try { return ledger.open(scopeKey, { domain: 'body_stance', key: touch.key, context: touch.context, sourceKind: 'touch', sourceId: touch.burstId }, at); } catch { return null; }
     },
     settle: (scopeKey, predictionId, stance, at) => { try { ledger.settle(scopeKey, predictionId, stance, at); } catch { /* never fails a touch */ } },
+  };
+}
+
+/**
+ * Step 7a: the value facts her thinking is handed (`SHANNON_VALUE_FACTS`). Read from the active version for the moment she is
+ * in (the quarter of the day and who is around); never while anyone else may see or hear her (guests or others present).
+ */
+export function valueFactsReader(
+  values: Pick<ValueVersions, 'activeCells'>, body: (scopeKey: string, at: string) => Pick<ReachOutFacts, 'windowVisible' | 'owner' | 'others'>,
+): (scopeKey: string, offered: readonly string[], at: string) => string | null {
+  return (scopeKey, offered, at) => {
+    const around = body(scopeKey, at);
+    if (around.others) return null;
+    return valueFactsSection(values.activeCells(scopeKey), offered, `${dayBand(at)}.${presenceOf(around)}`);
   };
 }

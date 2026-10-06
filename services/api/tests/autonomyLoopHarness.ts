@@ -150,6 +150,8 @@ export interface LoopHarnessOptions {
   trace?: DecisionTraceWriter;
   /** Syzygy ADR-0008 stage 1: told the owner's reaction to a story; absent, as with `SHANNON_PREDICTION_LEDGER=off`. */
   storyReacted?: AutonomyServiceDependencies['storyReacted'];
+  /** Syzygy ADR-0008 stage 1, step 7a: the value facts of a thought; absent, as with `SHANNON_VALUE_FACTS=off`. */
+  valueFacts?: (scopeKey: string, offered: readonly string[], at: string) => string | null;
 }
 
 export function loopHarness(options: LoopHarnessOptions = {}) {
@@ -190,6 +192,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     ...(options.ownerContext ? { ownerContext: options.ownerContext } : {}), ...(options.log ? { log: options.log } : {}),
     ...(options.toolResults ? { toolResults: options.toolResults } : {}),
     ...(options.prediction ? { prediction: options.prediction } : {}), ...(options.trace ? { trace: options.trace } : {}),
+    ...(options.valueFacts ? { valueFacts: options.valueFacts } : {}),
   });
   const loop = newLoop('runner-a');
   const entries = () => service.activityDays(scope, 30).flatMap(day => day.entries);

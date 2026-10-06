@@ -16,9 +16,10 @@ This file is the contract. The pure parts are in `packages/learning` (`@shannon/
 | 4 | Choice ledger, reward settlement, nightly pass, tool-call choices | in place (`packages/learning/src/reward.ts`, `mind/learning/{choiceLedger,rewardSettlement}.ts`, `mind/sleep/valueSleep.ts`; tests `reward.test.ts`, `choiceLedger.test.ts`) |
 | 5 | Value table, versions, CLI and owner route | not yet |
 | 6 | Scenario suite v1 and a baseline report | in place (`packages/evaluation/src/reach/cognitionLedger.ts`, `services/api/tests/reach/reachCognition.ts`; `scripts/reach-measures.sh run --only cog.`) |
-| 7 | Effects: 7a value facts, 7b reward mood | not yet; shown to the owner before deployment (override 4) |
+| 7a | Value facts in her thinking prompt | in place (`packages/learning/src/valueFacts.ts`, `wiring/cognitionLedgerTaps.ts` `valueFactsReader`; tests `valueFacts.test.ts`, `autonomyLoopKillSwitch.test.ts`); shown to the owner before deployment (override 4) |
+| 7b | Reward mood | not yet |
 
-Until step 7 nothing here changes a prompt, a reply, her feeling or a step of hers: the tables are written and read by nothing that acts.
+Until step 7 nothing here changes a prompt, a reply, her feeling or a step of hers: the tables are written and read by nothing that acts. Step 7a gives her thinking prompt the value facts; step 7b lets settled choices move her mood.
 
 ## Owner overrides (2026-10-07)
 
@@ -201,6 +202,16 @@ Eight model-free scenarios in the reach suite (`docs/testing/reach-measures-runb
 | `cog.mood-jitter` | The planned step-7 exit (`impulseAffect`, chosen: γ 0.61, w_δ 1, w_E 0.4375, u), simulated over the settled choices: through a day of alternating small successes and failures the mood stays inside the stationary band and no swing between two choices exceeds it; repeating one success, the mean \|δ\| of the fifth day is at most half the first's; twenty mixed choices in ten minutes move valence less than 0.5; expired and void choices are never eligible (`moodEligible`). |
 
 **Mood eligibility** (`packages/learning/src/reward.ts`, `moodEligible`): a settled choice with a δ, except those credited only because time ran out (`stale`, `story_expired`, `inherited_expired`, `<code>_expired` when a linked prediction expired). A choice whose linked prediction settles later by a scored expiry (`story_reacted`, `reading_used`) waits for it. Staleness against the learned episode boundary is judged by the exit itself in step 7.
+
+## Value facts (step 7a)
+
+`[これまでの手応え]（サーバーが数えた事実）` (`packages/learning/src/valueFacts.ts`): what the active version holds for the choices offered in this thought, for the moment she is in.
+
+- **Where.** Last in her thinking prompt, after the session facts, as its own section: everything before it is unchanged, so the provider's cache prefix stays. No rule or line is added to the system prompt.
+- **Which lines.** Only choices offered in this thought (her messages and calls by reason when they are offered, showing, drafting, revising, reading, Notion, notes, looking, copying, putting away, her registry tools), in a fixed order (messages, calls, a second call, show, draft, revise, read, Notion, note, look, jot, copy, put away, then tools by name), at most 8 lines, and only where a cell has at least one settled choice at the choice level or below. The cell is the most specific one for the moment: choice × band × presence, else × band, else the choice as a whole.
+- **What a line says.** Facts only: `- 話しかける・いま何をしているか気になった（夜・ひとり）: +0.24 ±0.00（7回。世界0.15／ライ氏0.43／成長0.28／費用2円）` — V, its spread √U, the count, and the means of W, S, G and the cost (recorded, not subtracted). No advice.
+- **Never with anyone else present.** The loop is handed one function (`valueFactsReader`); it reads who is around from what the server knows of her body and gives nothing while others may see or hear her.
+- **Switch.** `SHANNON_VALUE_FACTS=off` (or the choice ledger off): the function is not handed and every prompt is byte for byte what it was (`autonomyLoopKillSwitch.test.ts`, also with the function answering nothing).
 
 ## Mood (step 7)
 

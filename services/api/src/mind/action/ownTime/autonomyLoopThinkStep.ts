@@ -152,7 +152,9 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
     ...(extras ?? { rules: [] }), actions: `${extras?.actions ?? ''}${tooling.actions}`, examples: `${extras?.examples ?? ''}${tooling.examples}`,
     sections: [...(extras?.sections ?? []), ...tooling.sections], ownTools: true,
   } : extras);
-  const priced = (reserveYen?: number) => paidCall(dependencies, cycle.scopeKey, 'planning', thinkingPrompt(materials, withTools(extrasWith(reserveYen))), session ? loop.sessionThinkOutputTokens : OUTPUT_TOKENS);
+  // Syzygy ADR-0008 stage 1, step 7a: what the server counted for the choices offered now, last in the prompt; none while switched off.
+  const counted = !dependencies.valueFacts ? null : valueFactsFor(dependencies, cycle.scopeKey, at, offeredChoices(materials, phone?.offered === true, tooling ? offeredOwnTools(dependencies, cycle.scopeKey).map(tool => tool.name) : []));
+  const priced = (reserveYen?: number) => paidCall(dependencies, cycle.scopeKey, 'planning', thinkingPrompt(materials, withTools(extrasWith(reserveYen)), counted), session ? loop.sessionThinkOutputTokens : OUTPUT_TOKENS);
   // In a session she is told what the gate reserves for a thought: the estimate of this very prompt, priced once without that line.
   const first = priced();
   const estimated = first && session ? priced(first.estimatedCostYen) : first;
@@ -255,6 +257,23 @@ function traceThought(
       relatedId: cycle.id, at: started.at,
     });
   } catch { /* a trace never stops a thought */ }
+}
+
+/** The closed names of the choices this thought offers, for the value facts (Syzygy ADR-0008 stage 1, step 7a). */
+function offeredChoices(materials: ReturnType<typeof thinkingMaterials>, call: boolean, tools: readonly string[]): string[] {
+  const reasons = ['share', 'wonder', 'upcoming', 'saw'];
+  return [
+    ...(materials.reachOut ? reasons.map(reason => `reach_out.${reason}`) : []), ...(call ? reasons.map(reason => `call.${reason}`) : []),
+    'show', 'draft', 'revise', ...(materials.remainingReads > 0 ? ['read'] : []), ...(materials.notionAvailable ? ['notion'] : []),
+    ...(materials.unnotedReadings.length ? ['note'] : []), ...(materials.lookAvailable ? ['look'] : []), ...(materials.folderAvailable ? ['copy'] : []),
+    'put_away', ...tools.map(name => `tool.${name}`),
+  ];
+}
+
+/** The value facts for this thought, or null: switched off, nothing counted yet, anyone else present, or not readable just now. */
+function valueFactsFor(dependencies: StepDependencies, scopeKey: string, at: string, offered: readonly string[]): string | null {
+  if (!dependencies.valueFacts) return null;
+  try { return dependencies.valueFacts(scopeKey, offered, at); } catch { return null; }
 }
 
 /** The owner's context for this thought, or null: switched off, not wired, nothing there, or not readable just now. */

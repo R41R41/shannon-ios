@@ -8,8 +8,8 @@ import { scoredCheck, type ReachCheckResult, type ReachScenarioDefinition } from
  * `cog.mood-jitter` judges the mood exit of step 7 before it exists (owner override 1): the planned bounded step is
  * simulated over the δ, V and u the ledger settled; nothing applies it to her state.
  */
-const definition = (id: string, need: ReachScenarioDefinition['need'], measure: string, description: string, checks: ReachScenarioDefinition['checks']): ReachScenarioDefinition =>
-  Object.freeze<ReachScenarioDefinition>({ schemaVersion: 1, id, version: 1, need, measure, description, checks, limits: { wallMilliseconds: 2 * 60_000, maximumSteps: 2_000 } });
+const definition = (id: string, need: ReachScenarioDefinition['need'], measure: string, description: string, checks: ReachScenarioDefinition['checks'], version = 1): ReachScenarioDefinition =>
+  Object.freeze<ReachScenarioDefinition>({ schemaVersion: 1, id, version, need, measure, description, checks, limits: { wallMilliseconds: 2 * 60_000, maximumSteps: 2_000 } });
 
 export const cogNightReplyScenario = definition('cog.night-reply', 'understand_people', '見込みの当たり方',
   '夜の話しかけに返事がなく夕方にはある日々のあと、返事の見込みと話しかけの価値が時間帯で分かれるか。', [
@@ -17,7 +17,9 @@ export const cogNightReplyScenario = definition('cog.night-reply', 'understand_p
     { id: 'prediction.evening_high', judge: 'deterministic', threshold: 1, description: 'The last evening message was opened expecting a reply above 0.7.' },
     { id: 'calibration.skill', judge: 'deterministic', threshold: 0.5, description: 'Skill of the reply predictions over the domain prior is positive (score: κ, clamped).' },
     { id: 'value.night_below_evening', judge: 'deterministic', threshold: 1, description: 'After the nightly version, V of a night message is below V of an evening one.' },
-  ]);
+    { id: 'facts.given', judge: 'deterministic', threshold: 1, description: 'Her next thought alone with him is given the 「これまでの手応え」 section: header and 1 to 8 lines of facts, the night line below the evening one.' },
+    { id: 'facts.not_with_others', judge: 'deterministic', threshold: 1, description: 'With anyone else present no value facts are given.' },
+  ], 2);
 
 export const cogStoryReactionScenario = definition('cog.story-reaction', 'grow', '作って、直して、良くなる',
   '見せた物語への感想が、見せた選択と直前の推敲に遅れて届くか。14日反応がなければ0で、気分に使わない期限切れになるか。', [

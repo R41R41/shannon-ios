@@ -32,7 +32,7 @@ export function configuredDecisionTraces(
 /** For a process that holds no store of the API (the activity loop): its own connection, or null under the switches. */
 export function configuredPredictionLedger(
   environment: Readonly<Record<string, string | undefined>>, databasePath: string,
-): { ledger: PredictionLedger; choices: ChoiceLedger | null; close(): void } | null {
+): { ledger: PredictionLedger; choices: ChoiceLedger | null; values: ValueVersions | null; close(): void } | null {
   if (!predictionLedgerEnabled(environment)) return null;
   const database = new DatabaseSync(databasePath);
   database.exec(PRAGMAS);
@@ -40,8 +40,9 @@ export function configuredPredictionLedger(
   // Her choices share the connection and the queue: a prediction settled before a report is seen by its settlement.
   const choices = choiceLedgerEnabled(environment) ? new ChoiceLedger({ database, createsSchema: false }) : null;
   // V at choice time is read from the value table's active version on the same connection.
-  if (choices) choices.readValuesFrom(new ValueVersions({ database, createsSchema: false }).reader);
-  return { ledger, choices, close: () => { ledger.flushLockWaits(); choices?.flushLockWaits(); if (database.isOpen) database.close(); } };
+  const values = choices ? new ValueVersions({ database, createsSchema: false }) : null;
+  if (choices && values) choices.readValuesFrom(values.reader);
+  return { ledger, choices, values, close: () => { ledger.flushLockWaits(); choices?.flushLockWaits(); if (database.isOpen) database.close(); } };
 }
 
 /**

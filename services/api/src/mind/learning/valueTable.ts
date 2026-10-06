@@ -114,6 +114,13 @@ export class ValueVersions {
     return { active, frozen: active?.frozen ?? false, versions: this.store.versions(scopeKey).slice(-30), cells: active ? this.cellsOf(active.versionId) : [] };
   }
 
+  /** The active version's cells (for the value facts of her thinking); none while there is no version. */
+  activeCells(scopeKey: string): ValueCell[] {
+    if (!this.ready()) return [];
+    const id = this.store.activeId(scopeKey);
+    return id ? this.cellsOf(id) : [];
+  }
+
   lockWaits() { return this.meter.summary(); }
 
   flushLockWaits(): void { this.meter.flush(); }

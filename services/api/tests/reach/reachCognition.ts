@@ -14,7 +14,7 @@ import { configuredAutonomy } from '../../src/mind/inhibition/autonomyBudget.js'
 import { SQLiteAutonomyStore } from '../../src/mind/action/ownTime/store/autonomyStore.js';
 import { ownerValueRecorder } from '../../src/infra/http/learningRoutes.js';
 import type { StoredChoice } from '../../src/mind/learning/choiceLedger.js';
-import { ledgerPredictionTap, storyReacted, toolCallChoice, type Presence } from '../../src/wiring/cognitionLedgerTaps.js';
+import { ledgerPredictionTap, storyReacted, toolCallChoice, valueFactsReader, type Presence } from '../../src/wiring/cognitionLedgerTaps.js';
 import { valueSleep } from '../../src/mind/sleep/valueSleep.js';
 import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
 
@@ -73,6 +73,11 @@ class CognitionWorld {
     } });
   }
 
+  /** The value facts her thought would be handed now (step 7a), through the same reader the loop is handed. */
+  facts(offered: readonly string[], at: string): string | null {
+    return valueFactsReader(this.values, () => ({ windowVisible: true, owner: this.presence === 'away' ? 'away' : 'returned', others: this.presence === 'others' }))(SCOPE, offered, at);
+  }
+
   night(at: string): void {
     valueSleep({ predictions: this.predictions, choices: this.choices, values: this.values, log: () => undefined })(SCOPE, at);
   }
@@ -119,10 +124,17 @@ function nightReply(): ReturnType<typeof outcome> {
     const skill = world.predictions.calibration(SCOPE).domains.find(item => item.domain === 'reply')?.skill ?? null;
     const valueNight = world.values.reader(SCOPE, 'reach_out.wonder', 'night.alone');
     const valueEvening = world.values.reader(SCOPE, 'reach_out.wonder', 'evening.alone');
+    const facts = world.facts(['reach_out.wonder', 'read', 'draft'], jst(11, 2));
+    const nightFact = facts?.split('\n')[1] ?? '';
+    world.presence = 'others';
+    const withOthers = world.facts(['reach_out.wonder'], jst(11, 2));
     return outcome(cogNightReplyScenario, {
       'prediction.night_low': night.expectation < 0.3, 'prediction.evening_high': evening.expectation > 0.7,
       'calibration.skill': skill === null ? 0 : Math.max(0, Math.min(1, 0.5 + skill / 2)),
       'value.night_below_evening': valueNight.mean < valueEvening.mean,
+      'facts.given': Boolean(facts) && facts!.split('\n').length >= 2 && facts!.split('\n').length <= 9 && facts!.startsWith('[これまでの手応え]（サーバーが数えた事実）')
+        && nightFact.includes('（夜・ひとり）') && Number(/: ([+−][\d.]+)/u.exec(nightFact)?.[1]?.replace('−', '-')) < valueEvening.mean,
+      'facts.not_with_others': withOthers === null,
     }, { nightExpectation: round(night.expectation), eveningExpectation: round(evening.expectation), replySkill: round(skill ?? 0), valueNight: round(valueNight.mean), valueEvening: round(valueEvening.mean) }, 22);
   } finally { world.close(); }
 }
@@ -347,4 +359,41 @@ export function cognitionDrivers(): Record<string, () => ReachDriver> {
     [cogCalibrationScenario.id]: () => driver(calibrationRun),
     [cogMoodJitterScenario.id]: () => driver(moodJitter),
   };
+}
+
+/**
+ * Real examples of the 「これまでの手応え」 section from scenario data (for the owner's review before deployment, override 4):
+ * a week of her own time with messages, readings, notes, drafts, a showing and tool calls, then the sections three
+ * thoughts would be handed.
+ */
+export function valueFactExamples(): Array<{ moment: string; section: string | null }> {
+  const world = new CognitionWorld();
+  try {
+    const offered = ['reach_out.share', 'reach_out.wonder', 'show', 'draft', 'revise', 'read', 'note', 'tool.study.search', 'tool.aether.search'];
+    const sink = toolCallChoice(world.choices);
+    for (let day = 0; day < 7; day += 1) {
+      world.message(jst(day, 1), 'wonder', day % 3 === 0);
+      world.message(jst(day, 20), 'wonder', day % 4 !== 0);
+      world.message(jst(day, 13), 'share', day % 2 === 0);
+      const reading = `reading-${day}`;
+      world.step('read', jst(day, 10), 'done', { during: tap => tap.read(SCOPE, { id: reading, source: 'public' }, jst(day, 10)) });
+      if (day % 2 === 0) world.step('note', jst(day, 10, 30), 'done', { during: tap => tap.noted(SCOPE, reading, jst(day, 10, 30)) });
+      world.step('draft', jst(day, 15), day === 3 ? 'failed' : 'done', { pieceId: `piece-${day}` });
+      world.step('revise', jst(day, 16), 'done', { pieceId: `piece-${day}` });
+      if (day % 2 === 1) {
+        world.step('show', jst(day, 17), 'done', { pieceId: `piece-${day}`, during: tap => tap.shown(SCOPE, { id: `piece-${day}`, revised: true }, jst(day, 17)) });
+        storyReacted(world.predictions, SCOPE, `piece-${day}`, day === 1 ? 'more' : 'like', jst(day, 21), world.choices);
+      }
+      sink(SCOPE, { tool: 'study.search', surface: 'text', audience: 'owner_alone', ok: day !== 5 }, jst(day, 14));
+      world.night(jst(day, 23));
+    }
+    world.night(jst(9, 3));
+    const examples = [
+      { moment: '深夜2時・ひとり', at: jst(10, 2), presence: 'alone' as Presence },
+      { moment: '夜20時・ひとり', at: jst(10, 20), presence: 'alone' as Presence },
+      { moment: '昼13時・ライ氏は離席', at: jst(10, 13), presence: 'away' as Presence },
+      { moment: '夜20時・ほかの人がいる', at: jst(10, 20), presence: 'others' as Presence },
+    ];
+    return examples.map(example => { world.presence = example.presence; return { moment: example.moment, section: world.facts(offered, example.at) }; });
+  } finally { world.close(); }
 }

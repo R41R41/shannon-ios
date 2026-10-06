@@ -184,6 +184,30 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
     }
   });
 
+  it('sends byte for byte the same prompts when the value facts give nothing, and with them only adds them last to a thought (Syzygy ADR-0008 step 7a)', async () => {
+    const none = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-facts-none-'));
+    const some = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-facts-'));
+    const offered: string[][] = [];
+    const block = '[これまでの手応え]（サーバーが数えた事実）\n- 公開ページを読む（昼・ひとり）: +0.30 ±0.20（4回。世界0.10／ライ氏0.00／成長0.80／費用0円）';
+    try {
+      expect((await agenticDay(none, { ...CAP_OF_78C3493, valueFacts: (_scopeKey, list) => { offered.push([...list]); return null; } })).map(call => [call.kind, call.digest]))
+        .toEqual(AGENTIC_DAY_AT_78C3493);
+      expect(offered.length).toBeGreaterThan(0);
+      expect(offered.every(list => list.includes('read') && list.every(name => /^[a-z_]+(?:\.[a-z_.]+)?$/u.test(name)))).toBe(true);
+      const withFacts = await agenticDay(some, { ...CAP_OF_78C3493, valueFacts: () => block });
+      const prompts = withFacts.map(call => call.kind);
+      expect(prompts).toEqual(AGENTIC_DAY_AT_78C3493.map(([kind]) => kind));
+      // Only thoughts change; every other prompt is the commit before's.
+      withFacts.forEach((call, index) => {
+        if (call.kind === 'think') expect(call.digest).not.toBe(AGENTIC_DAY_AT_78C3493[index]![1]);
+        else expect(call.digest).toBe(AGENTIC_DAY_AT_78C3493[index]![1]);
+      });
+    } finally {
+      rmSync(none, { recursive: true, force: true });
+      rmSync(some, { recursive: true, force: true });
+    }
+  });
+
   it('builds byte for byte the prompts of the commit before from every prompt builder', () => {
     expect(builderDigests()).toEqual(BUILDERS_AT_78C3493);
   });
