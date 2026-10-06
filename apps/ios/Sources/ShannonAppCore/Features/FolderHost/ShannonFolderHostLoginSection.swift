@@ -3,21 +3,34 @@ import Observation
 import ServiceManagement
 import SwiftUI
 
+/// `SMAppService.Status`, as the login item reads it.
+public enum ShannonLoginItemStatus: Sendable, Equatable { case enabled, requiresApproval, notRegistered, notFound }
+
 /// The app as a login item (`SMAppService.mainApp`). A protocol so the default and the owner's choice are tested without
 /// registering anything.
 @MainActor
 public protocol ShannonLoginItemService: AnyObject {
-    var isEnabled: Bool { get }
-    var needsApproval: Bool { get }
+    var status: ShannonLoginItemStatus { get }
     func register() throws
     func unregister() throws
+}
+
+extension ShannonLoginItemService {
+    var isEnabled: Bool { status == .enabled }
+    var needsApproval: Bool { status == .requiresApproval }
 }
 
 @MainActor
 public final class ShannonMainAppLoginItem: ShannonLoginItemService {
     public init() {}
-    public var isEnabled: Bool { SMAppService.mainApp.status == .enabled }
-    public var needsApproval: Bool { SMAppService.mainApp.status == .requiresApproval }
+    public var status: ShannonLoginItemStatus {
+        switch SMAppService.mainApp.status {
+        case .enabled: .enabled
+        case .requiresApproval: .requiresApproval
+        case .notRegistered: .notRegistered
+        default: .notFound
+        }
+    }
     public func register() throws { try SMAppService.mainApp.register() }
     public func unregister() throws { try SMAppService.mainApp.unregister() }
 }
@@ -25,12 +38,17 @@ public final class ShannonMainAppLoginItem: ShannonLoginItemService {
 /// 「Mac にログインした時に開く」 (roadmap A18 S4; Windows 「PC の起動時に開く」). Default: on while a folder is chosen,
 /// off otherwise. Her folder is hosted only while the app runs, and choosing a folder is the owner saying he wants it hosted
 /// (owner decision 2026-10-06: while a folder is chosen the app stays and keeps hosting), so after a restart she can still
-/// use it; without a folder the app is not started behind his back. Once the owner sets the switch, his choice holds.
+/// use it; without a folder the app is not started behind his back. Once the owner sets the switch, his choice holds, also
+/// when he sets it in System Settings: the app remembers what it last set, and finds it undone there (registered then,
+/// `.notRegistered` now; or the other way round, enabled now) before it applies anything, so it never registers again
+/// what he turned off.
 @MainActor
 @Observable
 public final class ShannonDesktopLoginItem {
     public static let shared = ShannonDesktopLoginItem()
     public static let choiceKey = "ShannonOpenAtLoginChoice"
+    /// What the app last set: true registered, false unregistered (absent before it set anything).
+    public static let appliedKey = "ShannonOpenAtLoginApplied"
 
     public private(set) var isOn = false
     public private(set) var needsApproval = false
@@ -51,6 +69,7 @@ public final class ShannonDesktopLoginItem {
     /// Follows the folder: called whenever a folder is chosen or let go.
     public func apply(folderChosen: Bool) {
         self.folderChosen = folderChosen
+        takeSystemSettingsChoice()
         sync(ownerChoice ?? folderChosen)
     }
 
@@ -62,7 +81,23 @@ public final class ShannonDesktopLoginItem {
 
     /// Reads the system's state again (it can be changed in System Settings).
     public func refresh() {
+        takeSystemSettingsChoice()
         update(isOn: service.isEnabled, needsApproval: service.needsApproval, failed: failed)
+    }
+
+    /// A change made in System Settings (or anywhere but here) since the app last set the item is the owner's choice.
+    /// `.notFound` (the app not where macOS looks, a development build) says nothing about him.
+    private func takeSystemSettingsChoice() {
+        guard let applied = defaults.object(forKey: Self.appliedKey) as? Bool else { return }
+        let status = service.status
+        let choice: Bool? = switch (applied, status) {
+        case (true, .notRegistered): false
+        case (false, .enabled): true
+        default: nil
+        }
+        guard let choice else { return }
+        defaults.set(choice, forKey: Self.choiceKey)
+        defaults.set(choice, forKey: Self.appliedKey)
     }
 
     private func sync(_ wanted: Bool) {
@@ -74,6 +109,7 @@ public final class ShannonDesktopLoginItem {
                 failed = true
             }
         }
+        if !failed { defaults.set(wanted, forKey: Self.appliedKey) }
         update(isOn: service.isEnabled, needsApproval: service.needsApproval, failed: failed)
     }
 
