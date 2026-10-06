@@ -22,11 +22,11 @@ import { OpenAIRoomLookViewer, roomLookInstructions, type RoomLookViewRequest, t
 import { bodyLookRequestBytes } from '../src/bodyLookWiring.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { OpenAIResponsesChatModel, type ShannonChatModel, type ShannonChatModelRequest, type ShannonChatModelResult } from '../src/chatModel.js';
-import { InMemoryConversationStore, type StoredConversationMessage } from '../src/conversationStore.js';
+import { InMemoryConversationStore, type StoredConversationMessage } from '../src/mind/memory/store/conversationStore.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import type { LlmUsageEvent } from '../src/llmUsage.js';
 import type { BodyPresence } from '../src/shannonBody.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
 import { promptOf } from './modelPrompt.js';
 import { apiSourceNames, importedModules, readApiSource } from './support/sources.js';

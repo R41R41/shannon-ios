@@ -8,7 +8,7 @@ import { migrateAgentTasks } from '../src/agentTaskPersistenceSupport.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLiteReachOutReports } from '../src/reachOutReports.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { reachUsageReport, weekKey } from './reach/reachUsageReport.js';
 import { liveEstimate, runReachSuite, scriptedDrivers, writeReachReport } from './reach/reachSuite.js';
 

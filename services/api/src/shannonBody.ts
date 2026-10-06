@@ -16,7 +16,7 @@ import { BodyReactions } from './bodyReaction.js';
 import { BODY_REACTION_TOOL, configuredBodyReactions, type BodyReactionConfig } from './contracts/bodyReactionContract.js';
 import type { BodyReactionSpeaker } from './bodyReactionModel.js';
 import { SQLiteBodyReactionStore } from './bodyReactionStore.js';
-import { BodyTouches, touchPredictionEnabled, type BodyTouchDependencies } from './bodyTouch.js';
+import { BodyTouches, touchPredictionEnabled, type BodyTouchDependencies } from './mind/emotion/bodyTouch.js';
 import { BODY_TOUCH_ONLY_FLAG, isFullBody, isTouchOnlyBody } from './bodyTouchOnly.js';
 import { desktopBodyDeviceId, isDesktopBodyDeviceId } from './desktopBodyIdentity.js';
 import { bodyPlace, bodySurfaceMark, factualTouchPhrase, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
@@ -26,9 +26,9 @@ import { OWNER_CALL_LIMITS, OwnerCalls, type OwnerCallDependencies, type OwnerCa
 import type { TouchExperienceWriter } from './bodyTouchMemory.js';
 import { gameDeathExperience, type GameExperienceWriter } from './gameBodyMemory.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './bodyStore.js';
-import { ownerDay, presentCompanionState } from './companionPresence.js';
-import { emotionTiming } from './emotionTiming.js';
-import type { ConversationStore } from './conversationStore.js';
+import { ownerDay, presentCompanionState } from './mind/emotion/companionPresence.js';
+import { emotionTiming } from './mind/emotion/emotionTiming.js';
+import type { ConversationStore } from './mind/memory/store/conversationStore.js';
 import type { ReachOutReportResult, SQLiteReachOutReports } from './reachOutReports.js';
 
 /**

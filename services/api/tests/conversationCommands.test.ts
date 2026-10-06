@@ -7,8 +7,8 @@ import { InMemoryOrganizeStore } from '../src/integrations/voyager/organize.js';
 import { SQLiteOrganizeStore } from '../src/integrations/voyager/store/organizePersistence.js';
 import { FileAetherProposalStore } from '../src/integrations/aether/aetherProposal.js';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import { extractProspectiveMemories } from '../src/prospectiveMemory.js';
-import { reconcileSleepOutcome, reviewCommitments } from '../src/sleepCommitmentReview.js';
+import { extractProspectiveMemories } from '../src/mind/memory/prospectiveMemory.js';
+import { reconcileSleepOutcome, reviewCommitments } from '../src/mind/sleep/sleepCommitmentReview.js';
 import { resolveCommitmentCommand } from '../src/commitmentCommands.js';
 import { InMemoryAgentTaskStore } from '../src/agentTaskStore.js';
 

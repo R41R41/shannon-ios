@@ -6,7 +6,7 @@ import { BODY_REACTION_LIMITS, type BodyReactionAnswer } from './contracts/bodyR
 import { BODY_TOUCH_MIXED, isBodySurface, isBodyTouchPart, isBodyTouchRegion, type BodySurface, type BodyTouchPart, type BodyTouchRegion } from './bodyTouchWords.js';
 import { addColumnOnce } from './bodyStore.js';
 import { BODY_TOUCH_STANCES, isBodyTouchStance, isReflexPart, type BodyTouchStance } from './bodyTouchReflex.js';
-import { secureDatabaseFiles } from './sqliteStoreContext.js';
+import { secureDatabaseFiles } from './infra/sqlite/sqliteStoreContext.js';
 
 /**
  * What a touch leaves behind, in three additive tables:

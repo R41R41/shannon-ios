@@ -7,18 +7,18 @@ import { OWNER_AUDIENCE, SHANNON_MINECRAFT_BODY_CAPABILITY, groupAudience } from
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
-import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
+import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
 import { MinecraftBodyRequests } from '../src/minecraftBodyRequests.js';
 import { OwnOutreach, type OwnOutreachReader } from '../src/ownOutreach.js';
 import { conversationCapabilityContext } from '../src/conversationCapabilities.js';
 import { SQLiteSurfaceTurnLog } from '../src/minecraftTurnStore.js';
-import { SQLitePeopleMemoryStore } from '../src/peopleMemoryStore.js';
+import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemoryStore.js';
 import { PlatformBridgeError, PlatformBridgeService, configuredPlatformBridge, platformBridgeThreadId } from '../src/platformBridge.js';
 import { PlatformPeople } from '../src/platformPeople.js';
 import { PLATFORM_REPLY_LIMITS, PlatformReplyService, SHANNON_PLATFORM_REPLY_PATH, platformReplyEnabled } from '../src/platformReply.js';
 import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeReply, isPlatformBridgePath } from '../src/serverPlatformBridgeRoute.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { promptOf } from './modelPrompt.js';
 import { readApiSource } from './support/sources.js';
 

@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { REACH_OUT_SOURCE_PREFIX, reachOutOfSource } from './reachOutDelivery.js';
-import { secureDatabaseFiles } from './sqliteStoreContext.js';
+import { secureDatabaseFiles } from './infra/sqlite/sqliteStoreContext.js';
 
 /**
  * Which surface speaks one message she started on her own (`docs/private-listening-contract.md`).

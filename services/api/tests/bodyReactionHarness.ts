@@ -6,10 +6,10 @@ import type { BodyReactionSpeakRequest, BodyReactionSpeaker } from '../src/bodyR
 import type { BodyReactionDecision } from '../src/bodyReactionPrompt.js';
 import { SQLiteBodyReactionStore } from '../src/bodyReactionStore.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
-import type { BodyTouchDependencies } from '../src/bodyTouch.js';
+import type { BodyTouchDependencies } from '../src/mind/emotion/bodyTouch.js';
 import type { TouchExperienceWriter } from '../src/bodyTouchMemory.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { InMemoryConversationStore, type ConversationStore } from '../src/conversationStore.js';
+import { InMemoryConversationStore, type ConversationStore } from '../src/mind/memory/store/conversationStore.js';
 
 export const scope = 'owner';
 export const START = '2026-10-02T06:00:00.000Z';

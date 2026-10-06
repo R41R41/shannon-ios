@@ -2,11 +2,11 @@ import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
 import { CALENDAR_SCHEMA_VERSION, CALENDAR_UPCOMING_PATH, validatedCalendarHours, validatedCalendarSnapshot } from './contracts/calendarContract.js';
 import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import type { CompanionStateStore } from '@shannon/cognition';
-import { OwnerUpcoming } from './ownerUpcoming.js';
-import { SQLiteUpcomingStore } from './upcomingStore.js';
+import { OwnerUpcoming } from './mind/memory/ownerUpcoming.js';
+import { SQLiteUpcomingStore } from './mind/memory/store/upcomingStore.js';
 
 export { CALENDAR_UPCOMING_PATH } from './contracts/calendarContract.js';
-export type { OwnerUpcoming } from './ownerUpcoming.js';
+export type { OwnerUpcoming } from './mind/memory/ownerUpcoming.js';
 
 /** For a kernel that was given none (local runs, tests): snapshots in memory, promises from the kernel's own state. */
 export function localOwnerUpcoming(stateStore: CompanionStateStore, now: () => string): OwnerUpcoming {

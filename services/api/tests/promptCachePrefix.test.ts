@@ -6,7 +6,7 @@ import { SHIRITORI_TURNS, ShiritoriGame } from '../../../packages/evaluation/src
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModelRequest } from '../src/chatModel.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { ScriptedShiritoriModel } from './reach/reachConversation.js';
 
 vi.setConfig({ testTimeout: 120_000 });

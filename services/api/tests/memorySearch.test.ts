@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
-import { ShannonMemoryService } from '../src/memoryService.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { prepareTurnCognitiveContext } from '../src/turnCognitiveContext.js';
 
 const at = '2026-09-30T03:00:00.000Z';

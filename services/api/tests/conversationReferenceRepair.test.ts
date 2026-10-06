@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { executeConversationCommand } from '../src/conversationCommands.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { InMemoryOrganizeStore } from '../src/integrations/voyager/organize.js';
 import type { AetherProposalInput, AetherProposalStore } from '../src/integrations/aether/aetherProposal.js';
-import { extractProspectiveMemories } from '../src/prospectiveMemory.js';
+import { extractProspectiveMemories } from '../src/mind/memory/prospectiveMemory.js';
 import { commitmentDeadline } from '../src/commitmentTime.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 
 const at = '2026-09-24T12:00:00.000Z';

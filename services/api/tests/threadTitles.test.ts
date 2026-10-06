@@ -3,11 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { DurableBackgroundDispatcher } from '../src/backgroundUpdates.js';
+import { DurableBackgroundDispatcher } from '../src/mind/sleep/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import type { ChatResponse } from '../src/contracts/contracts.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 
 const cleanup: Array<() => void> = [];
 afterEach(() => { for (const close of cleanup.splice(0)) close(); });

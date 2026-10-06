@@ -10,7 +10,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import { BODY_LIMITS } from '../src/contracts/bodyContract.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import type { ShannonDevicePrincipal } from '../src/deviceAuth.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { SQLiteIncomingCallStore } from '../src/incomingCallStore.js';
 import { OWNER_CALL_LIMITS, OWNER_IN_CALL_ELSEWHERE, SQLiteOwnerCallFacts, ownerCallElsewhereEnabled } from '../src/ownerCallElsewhere.js';
 import { SQLitePrivateListeningStore } from '../src/privateListeningStore.js';

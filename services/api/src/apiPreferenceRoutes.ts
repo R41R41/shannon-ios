@@ -1,4 +1,4 @@
-import type { TurnBackgroundService } from './backgroundUpdates.js';
+import type { TurnBackgroundService } from './mind/sleep/backgroundUpdates.js';
 import type { ShannonChatModel } from './chatModel.js';
 import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';

@@ -1,5 +1,5 @@
 import type { CompanionStateStore, ShannonActionReceipt } from '@shannon/cognition';
-import type { ConversationStore, StoredConversationMessage } from './conversationStore.js';
+import type { ConversationStore, StoredConversationMessage } from './mind/memory/store/conversationStore.js';
 import type { OrganizeSession, OrganizeStore } from './integrations/voyager/organize.js';
 import type { AetherProposalStore } from './integrations/aether/aetherProposal.js';
 import type { AgentTask, AgentTaskStore } from './agentTaskStore.js';
@@ -10,10 +10,10 @@ import {
 } from './conversationReference.js';
 import { aetherNoteRequest, asksWhichPlace, memoRequestContent, type AetherNoteRequest } from './memoPlace.js';
 import { TOOL_FOLLOW_UP_MILLISECONDS } from './shannonToolTurns.js';
-import { ShannonMemoryService } from './memoryService.js';
-import { forgetCitedMemories } from './memoryForgetCommand.js';
+import { ShannonMemoryService } from './mind/memory/memoryService.js';
+import { forgetCitedMemories } from './mind/memory/memoryForgetCommand.js';
 import type { CognitiveIntentStore } from './cognitiveIntent.js';
-import type { TurnMemoryRecall } from './turnMemoryRecall.js';
+import type { TurnMemoryRecall } from './mind/recall/turnMemoryRecall.js';
 import { resolveReminderReply } from './reminderReply.js';
 
 export interface UserUtterance {

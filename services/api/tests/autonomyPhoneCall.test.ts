@@ -17,7 +17,7 @@ import { SQLitePrivateListeningStore } from '../src/privateListeningStore.js';
 import { SQLiteReachOutClaims } from '../src/reachOutClaims.js';
 import { SQLiteReachOutSpeaker } from '../src/reachOutDelivery.js';
 import { SQLiteReachOutReports } from '../src/reachOutReports.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import type { IncomingCallPayload } from '../src/contracts/incomingCallContract.js';
 import type { VoipPushResult, VoipPushSender, VoipPushTarget } from '../src/voipPushSender.js';
 import { FakeModel, FakeShowing, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';

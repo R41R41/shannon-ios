@@ -5,12 +5,12 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildCompanionStatePrompt, InMemoryCompanionStateStore } from '@shannon/cognition';
-import { captureImmediateExplicitMemory, consolidateSleepMemory, LocalRuleSleepMemoryAnalyzer } from '../src/sleepConsolidation.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
-import { TurnRefinementProcessor } from '../src/backgroundUpdates.js';
-import { ShannonMemoryService } from '../src/memoryService.js';
-import { usableThreadSummary, visibleConversationHistory } from '../src/memoryVisibility.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { captureImmediateExplicitMemory, consolidateSleepMemory, LocalRuleSleepMemoryAnalyzer } from '../src/mind/sleep/sleepConsolidation.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import { TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
+import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
+import { usableThreadSummary, visibleConversationHistory } from '../src/mind/memory/memoryVisibility.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 
 const at = '2026-09-25T01:00:00.000Z';
 const dirs: string[] = [];

@@ -6,8 +6,8 @@ import {
   extractPromiseCaptures,
   extractProspectiveMemories,
   requestsExactTimeAlert,
-} from '../src/prospectiveMemory.js';
-import { captureImmediateExplicitMemory } from '../src/sleepConsolidation.js';
+} from '../src/mind/memory/prospectiveMemory.js';
+import { captureImmediateExplicitMemory } from '../src/mind/sleep/sleepConsolidation.js';
 
 // Thursday 2026-09-24 10:00 in Tokyo.
 const at = '2026-09-24T01:00:00.000Z';

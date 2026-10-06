@@ -3,7 +3,7 @@ import {
   OWNER_AUDIENCE, holdsFeelingThroughTouch, presentShannonFeeling, presentShannonMood, touchCause, touchFeeling, touchImpact, touchTarget,
   type CompanionStateSnapshot, type CompanionStateStore,
 } from '@shannon/cognition';
-import { emotionTiming, resolveReplyEmotion } from './companionPresence.js';
+import { emotionTiming, resolveReplyEmotion } from './mind/emotion/companionPresence.js';
 import { BODY_LIMITS, isImpossibleTouch } from './contracts/bodyContract.js';
 import {
   BODY_REACTION_LIMITS, bodyReactionContentHash, validBodyReactionId,
@@ -14,9 +14,9 @@ import { BODY_TOUCH_PHRASES, asksStance, bodyReactionPrompt, boundedReactionText
 import { reflexPartWord } from './bodyTouchReflex.js';
 import { bodyTouchPartWord, bodyTouchRegionWord, touchDetailPhrase, type BodySurface } from './bodyTouchWords.js';
 import type { ReactionLine, SQLiteBodyReactionStore } from './bodyReactionStore.js';
-import type { BodyTouches, FeltTouch } from './bodyTouch.js';
-import type { ConversationStore } from './conversationStore.js';
-import { visibleReplayMessages } from './memoryVisibility.js';
+import type { BodyTouches, FeltTouch } from './mind/emotion/bodyTouch.js';
+import type { ConversationStore } from './mind/memory/store/conversationStore.js';
+import { visibleReplayMessages } from './mind/memory/memoryVisibility.js';
 
 /**
  * When she is touched: the reflex from a touch to her answer (Syzygy ADR-0003, reflex layer).

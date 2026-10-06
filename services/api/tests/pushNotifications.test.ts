@@ -11,7 +11,7 @@ import {
   SQLitePushNotificationStore,
   type PushNotificationSender,
 } from '../src/pushNotifications.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
 import { SQLiteTestFlightDeliveryStore } from '../src/integrations/testflight/store/testflightDeliveryStore.js';
 

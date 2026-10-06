@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SHANNON_STANCE_OUTCOME, SHANNON_TEMPERAMENT, shannonTemperament } from '@shannon/cognition';
 import type { BodyReactionDecision } from '../src/bodyReactionPrompt.js';
 import type { TouchExperience, TouchExperienceWriter } from '../src/bodyTouchMemory.js';
-import { touchPredictionEnabled, touchPredictionKey } from '../src/bodyTouchPrediction.js';
-import { PredictionShadow } from '../src/predictionShadow.js';
-import { SQLitePredictionStore } from '../src/predictionStore.js';
+import { touchPredictionEnabled, touchPredictionKey } from '../src/mind/prediction/bodyTouchPrediction.js';
+import { PredictionShadow } from '../src/mind/prediction/predictionShadow.js';
+import { SQLitePredictionStore } from '../src/mind/prediction/store/predictionStore.js';
 import { MINUTE, SECOND, reactionHarness, scope } from './bodyReactionHarness.js';
 
 /**

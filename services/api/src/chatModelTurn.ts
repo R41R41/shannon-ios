@@ -1,6 +1,6 @@
 import { placeSearchInstructions, placeSearchSchema } from './integrations/places/placeDiscovery.js';
 import type { ShannonChatModelRequest, ShannonChatModelResult } from './chatModel.js';
-import { REPLY_FEELING_INSTRUCTIONS, REPLY_FEELING_SCHEMA } from './chatReplyFeeling.js';
+import { REPLY_FEELING_INSTRUCTIONS, REPLY_FEELING_SCHEMA } from './mind/emotion/chatReplyFeeling.js';
 import {
   ATTACHMENT_SAFETY_INSTRUCTIONS,
   GENERATED_ARTIFACT_INSTRUCTIONS,

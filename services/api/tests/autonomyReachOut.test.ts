@@ -19,7 +19,7 @@ import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLitePushNotificationStore } from '../src/pushNotifications.js';
 import { REACH_OUT_OTHERS_AUDIENCE, SQLiteReachOutSpeaker, reachOutOfSource } from '../src/reachOutDelivery.js';
 import type { BodyPresence } from '../src/shannonBody.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { speakTimePrivacyCheck } from '../src/voiceCompanionPresence.js';
 import { FakeModel, FakeShowing, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
 

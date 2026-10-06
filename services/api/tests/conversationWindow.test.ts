@@ -8,11 +8,11 @@ import { OpenAIResponsesChatModel, type ShannonChatModelRequest, type ShannonVoi
 import {
   REPLAY_BUDGET_DEFAULT, REPLAY_BUDGET_MAXIMUM, REPLAY_BUDGET_MINIMUM, REPLAY_MAXIMUM_MESSAGES, REPLAY_SUMMARY_CHARACTERS,
   conversationReplay, isWindowBoundary, replayBudgets, replayWindow, stableHeadFor, textReplayRule, voiceReplayRule, type ReplayRule,
-} from '../src/conversationWindow.js';
+} from '../src/mind/recall/conversationWindow.js';
 import { earlierConversationSummaryInstructions } from '../src/chatModelSupport.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
-import { visibleConversationHistory } from '../src/memoryVisibility.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import { visibleConversationHistory } from '../src/mind/memory/memoryVisibility.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { LocalVoiceDecisionGateway, type VoiceDecisionInput } from '../src/voiceDecision.js';
 import { promptOf } from './modelPrompt.js';
 

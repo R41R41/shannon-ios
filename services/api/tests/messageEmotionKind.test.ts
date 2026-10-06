@@ -4,9 +4,9 @@ import { InMemoryCompanionStateStore, SHANNON_EMOTION_KINDS, createShannonMessag
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { chatSentenceStreamLines } from '../src/chatSentenceStream.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
-import { parseMessageMetadata } from '../src/sqliteStoreCodecs.js';
-import { storedVoiceFace } from '../src/voiceEmotionPlan.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import { parseMessageMetadata } from '../src/infra/sqlite/sqliteStoreCodecs.js';
+import { storedVoiceFace } from '../src/mind/emotion/voiceEmotionPlan.js';
 
 // Owner decision 2026-10-05: `messageEmotion` (and the owner's voice plan) carry the reply's own feeling as an optional
 // `kind`, so an app can show a finer icon. It is additive: the face is unchanged and an older client ignores the field.

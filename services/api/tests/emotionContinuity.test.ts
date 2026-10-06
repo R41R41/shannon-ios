@@ -8,15 +8,15 @@ import {
   type CompanionStateSnapshot,
 } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { configuredAwakeClock } from '../src/autonomyAwakeClock.js';
-import { TurnRefinementProcessor } from '../src/backgroundUpdates.js';
+import { configuredAwakeClock } from '../src/mind/emotion/autonomyAwakeClock.js';
+import { TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
 import { SHANNON_CORE_PATHS } from '../src/autonomyCore.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
-import { emotionTiming } from '../src/emotionTiming.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import { emotionTiming } from '../src/mind/emotion/emotionTiming.js';
 import type { BodyPresence } from '../src/shannonBody.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { promptOf } from './modelPrompt.js';
 import { apiSourceNames, apiSourcePath, importedModules, readApiSource } from './support/sources.js';
 

@@ -8,7 +8,7 @@ import {
   VOICE_AFFECTS,
   VOICE_SKILLS,
 } from '../src/voiceDecision.js';
-import { voicePlanResponse } from '../src/voiceEmotionPlan.js';
+import { voicePlanResponse } from '../src/mind/emotion/voiceEmotionPlan.js';
 
 function jevAnswers(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {

@@ -2,9 +2,9 @@ import { createOwnerContext } from './autonomyOwnerContext.js';
 import type { AutonomyOwnerContext } from './autonomyLoopOwnerContext.js';
 import { SQLiteDailyMindStore } from './dailyMind.js';
 import { sqliteOwnerSnapshot } from './ownerUpcomingWiring.js';
-import { PeopleMemory } from './peopleMemory.js';
-import { SQLitePeopleMemoryStore } from './peopleMemoryStore.js';
-import { SQLiteShannonStore } from './sqliteStore.js';
+import { PeopleMemory } from './mind/memory/peopleMemory.js';
+import { SQLitePeopleMemoryStore } from './mind/memory/store/peopleMemoryStore.js';
+import { SQLiteShannonStore } from './infra/sqlite/sqliteStore.js';
 
 /**
  * What the activity loop's process opens to read the owner's context (owner decision 2026-10-02, Syzygy ADR-0003).

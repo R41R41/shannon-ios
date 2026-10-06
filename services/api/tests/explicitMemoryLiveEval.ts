@@ -1,4 +1,4 @@
-import { OpenAISleepMemoryAnalyzer } from '../src/sleepConsolidation.js';
+import { OpenAISleepMemoryAnalyzer } from '../src/mind/sleep/sleepConsolidation.js';
 import { EXPLICIT_MEMORY_DIALOGUE_CASES } from './explicitMemoryDialogueCases.js';
 
 const apiKey = process.env.OPENAI_API_KEY?.trim();

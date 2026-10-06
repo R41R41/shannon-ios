@@ -4,7 +4,7 @@ import {
   PersonIdentityError,
   type PersonIdentityStore,
   type PersonPlatform,
-} from './personIdentity.js';
+} from './mind/memory/store/personIdentity.js';
 
 export interface ApiPersonRouteDependencies {
   personIdentities: PersonIdentityStore;

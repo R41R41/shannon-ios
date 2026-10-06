@@ -1,7 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
+import { configuredDatabasePath, SQLiteShannonStore } from './infra/sqlite/sqliteStore.js';
 import { discoverFeedLinks, SQLiteWorldStore, type WorldItemInput, type WorldSource } from './integrations/world/store/worldStore.js';
 import { summarizeJmaForecast } from './integrations/world/jmaForecast.js';
 import { parseSyndicationFeed } from './integrations/world/syndicationFeed.js';

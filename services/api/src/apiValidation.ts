@@ -2,7 +2,7 @@ import type { CompanionStateEvent } from '@shannon/cognition';
 import type { AgentCommandType, AgentPlanItem, HostAgentEvent } from './agentTaskStore.js';
 import type { ShannonChatAttachment, ShannonWebSource } from './chatModel.js';
 import type { ApiResponse } from './contracts/contracts.js';
-import type { MemoryAction } from './memoryService.js';
+import type { MemoryAction } from './mind/memory/memoryService.js';
 import type { VoyagerTaskProjection } from './integrations/voyager/organize.js';
 
 export function objectBody(value: unknown): value is Record<string, unknown> {

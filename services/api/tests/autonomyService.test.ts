@@ -11,7 +11,7 @@ import { configuredAutonomy, type AutonomyConfig } from '../src/autonomyBudget.j
 import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { readApiSource } from './support/sources.js';
 
 const scope = 'owner';

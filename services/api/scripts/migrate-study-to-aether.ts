@@ -21,7 +21,7 @@
 import { aetherStudyScope, configuredAetherAccess } from '../src/integrations/aether/aetherAccess.js';
 import { autonomyDayKey, configuredAutonomy } from '../src/autonomyBudget.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
-import { configuredDatabasePath } from '../src/sqliteStore.js';
+import { configuredDatabasePath } from '../src/infra/sqlite/sqliteStore.js';
 import { DatabaseSync } from 'node:sqlite';
 import { applyMigration, migrationPlan, migrationReport, readOnlyMigrationPlan } from '../src/studyMigration.js';
 

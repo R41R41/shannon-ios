@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { downsampleMoodPoints, moodHistoryPoint, type SQLiteMoodHistoryReader } from './moodHistoryReader.js';
+import { downsampleMoodPoints, moodHistoryPoint, type SQLiteMoodHistoryReader } from './mind/emotion/store/moodHistoryReader.js';
 import { MOOD_HISTORY_LIMITS, MOOD_HISTORY_SCHEMA_VERSION, type MoodHistoryResponse } from './contracts/moodHistoryContract.js';
 import { consumeDeviceAllowance, sendJson } from './serverHttp.js';
 

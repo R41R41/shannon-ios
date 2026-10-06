@@ -6,9 +6,9 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import { executeConversationCommand } from '../src/conversationCommands.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { nextInitiativeDelayMilliseconds } from '../src/initiativeSchedule.js';
-import { extractProspectiveMemories } from '../src/prospectiveMemory.js';
+import { extractProspectiveMemories } from '../src/mind/memory/prospectiveMemory.js';
 import { resolveReminderReply } from '../src/reminderReply.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
 
 const directories: string[] = [];

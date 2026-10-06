@@ -10,7 +10,7 @@ import { summarizeAutonomyDay, type AutonomyActivityEntry } from '../src/autonom
 import { SQLiteStudyShowing, studyShowingMessage } from '../src/autonomyShowing.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import type { StudyOverview, StudyPieceDetail } from '../src/studyDesk.js';
 import { FULL_PLAN, STORY_BODY, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 import { promptOf } from './modelPrompt.js';

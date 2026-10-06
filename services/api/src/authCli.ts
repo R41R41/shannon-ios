@@ -1,5 +1,5 @@
 import { configuredAuthPepper, SQLiteDeviceAuthStore } from './deviceAuth.js';
-import { configuredDatabasePath } from './sqliteStore.js';
+import { configuredDatabasePath } from './infra/sqlite/sqliteStore.js';
 
 const command = process.argv[2];
 if (process.env.SHANNON_AUTH_MODE === 'paired' && !process.env.SHANNON_DATABASE_PATH?.trim()) {

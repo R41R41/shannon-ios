@@ -9,7 +9,7 @@ import {
 } from '../src/bodyReactionPrompt.js';
 import { BODY_TOUCH_REFLEX_PARTS, BODY_TOUCH_STANCES } from '../src/bodyTouchReflex.js';
 import { BODY_TOUCH_PART_WORDS } from '../src/bodyTouchWords.js';
-import { PredictionShadow } from '../src/predictionShadow.js';
+import { PredictionShadow } from '../src/mind/prediction/predictionShadow.js';
 import { START, reactionHarness, scope } from './bodyReactionHarness.js';
 import { promptOf } from './modelPrompt.js';
 

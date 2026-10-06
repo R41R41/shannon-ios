@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { secureDatabaseFiles } from './sqliteStoreContext.js';
+import { secureDatabaseFiles } from './infra/sqlite/sqliteStoreContext.js';
 
 /**
  * The hand-off of a look she takes in her own time (stage 2) between two processes.

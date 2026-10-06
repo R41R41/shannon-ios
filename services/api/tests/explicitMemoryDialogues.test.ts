@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractExplicitMemoryProposals } from '../src/sleepConsolidation.js';
+import { extractExplicitMemoryProposals } from '../src/mind/sleep/sleepConsolidation.js';
 import { EXPLICIT_MEMORY_DIALOGUE_CASES } from './explicitMemoryDialogueCases.js';
 
 describe('immediate explicit-memory dialogue coverage', () => {

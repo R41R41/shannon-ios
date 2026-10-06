@@ -1,18 +1,18 @@
 import type { CompanionStateStore } from '@shannon/cognition';
 import type { AetherProposalStore } from './integrations/aether/aetherProposal.js';
-import type { TurnBackgroundService } from './backgroundUpdates.js';
-import type { ConversationStore } from './conversationStore.js';
+import type { TurnBackgroundService } from './mind/sleep/backgroundUpdates.js';
+import type { ConversationStore } from './mind/memory/store/conversationStore.js';
 import type { ApiRequest, ApiResponse, StateEventRequest } from './contracts/contracts.js';
 import type { InitiativeInbox } from './initiativeStore.js';
-import type { KnowledgeAnswer, KnowledgeStore } from './knowledgeStore.js';
-import type { MemoryDashboard, ShannonMemoryStore } from './memoryService.js';
+import type { KnowledgeAnswer, KnowledgeStore } from './mind/memory/store/knowledgeStore.js';
+import type { MemoryDashboard, ShannonMemoryStore } from './mind/memory/memoryService.js';
 import { dispatchPersonRequest } from './apiPersonRoutes.js';
 import { dispatchAutonomyRequest } from './apiAutonomyRoutes.js';
 import type { ShannonAutonomyService } from './autonomyService.js';
-import type { PersonIdentityStore } from './personIdentity.js';
+import type { PersonIdentityStore } from './mind/memory/store/personIdentity.js';
 import type { WorldSubscriptionReader } from './integrations/world/store/worldStore.js';
 import type { CognitiveIntentStatus, CognitiveIntentStore } from './cognitiveIntent.js';
-import { conversationWithCaptures } from './turnCaptures.js';
+import { conversationWithCaptures } from './mind/memory/store/turnCaptures.js';
 import { badRequest, objectBody, validBoundedString, validEvent, validMemoryAction, validScopeKey, validThreadTitle } from './apiValidation.js';
 
 export interface ApiDataRouteDependencies {

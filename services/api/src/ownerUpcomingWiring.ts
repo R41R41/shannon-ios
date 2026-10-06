@@ -1,8 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { restoreCompanionState, type CompanionStateSnapshot } from '@shannon/cognition';
 import { calendarIngestEnabled } from './contracts/calendarContract.js';
-import { OwnerUpcoming, type UpcomingTaskCatalog } from './ownerUpcoming.js';
-import { SQLiteUpcomingStore } from './upcomingStore.js';
+import { OwnerUpcoming, type UpcomingTaskCatalog } from './mind/memory/ownerUpcoming.js';
+import { SQLiteUpcomingStore } from './mind/memory/store/upcomingStore.js';
 
 /**
  * What each process gives the projection of the owner's upcoming items.

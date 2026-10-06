@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { OpsCommandStore } from './opsCommandStore.js';
 import type { OpsSnapshot } from '../../../contracts/opsContract.js';
-import { secureDatabaseFiles } from '../../../sqliteStoreContext.js';
+import { secureDatabaseFiles } from '../../sqlite/sqliteStoreContext.js';
 
 export interface StoredOpsSnapshot {
   snapshot: OpsSnapshot;

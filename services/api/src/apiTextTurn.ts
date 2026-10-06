@@ -5,12 +5,12 @@ import type { AetherContextReader } from './integrations/aether/aetherContext.js
 import type { AetherProposalStore } from './integrations/aether/aetherProposal.js';
 import type { AgentTaskStore } from './agentTaskStore.js';
 import type { ShannonAutonomyService } from './autonomyService.js';
-import type { CompletedTurn, TurnBackgroundService } from './backgroundUpdates.js';
+import type { CompletedTurn, TurnBackgroundService } from './mind/sleep/backgroundUpdates.js';
 import type { ChatAudienceTurn } from './chatAudience.js';
 import type { ShannonChatAttachment, ShannonChatModel, ShannonChatModelResult } from './chatModel.js';
 import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
 import { extractExplicitUserIntent, type CognitiveIntentStore } from './cognitiveIntent.js';
-import { presentCompanionState, resolveReplyEmotion } from './companionPresence.js';
+import { presentCompanionState, resolveReplyEmotion } from './mind/emotion/companionPresence.js';
 import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse } from './contracts/contracts.js';
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, type ConversationCapabilityContext, type NotionTurnReader } from './conversationCapabilities.js';
 import type { ConversationLookTurn } from './conversationLooks.js';
@@ -19,20 +19,20 @@ import {
   buildConversationOrchestrationPrompt, observeConversationTurn, recordConversationReceipt, type ConversationOrchestrationStore,
 } from './conversationOrchestration.js';
 import { prepareConversationOrganize } from './integrations/voyager/conversationOrganize.js';
-import type { ConversationStore, ShannonExperience } from './conversationStore.js';
+import type { ConversationStore, ShannonExperience } from './mind/memory/store/conversationStore.js';
 import type { DailyMindReader } from './dailyMind.js';
-import { companionIdentityPrompt, type KnowledgeStore, type LayeredIdentityPrompt } from './knowledgeStore.js';
+import { companionIdentityPrompt, type KnowledgeStore, type LayeredIdentityPrompt } from './mind/memory/store/knowledgeStore.js';
 import { isOrganizeCommand, type OrganizeExtractor, type OrganizeStore, type VoyagerCatalog } from './integrations/voyager/organize.js';
 import type { OwnOutreach } from './ownOutreach.js';
-import type { OwnerUpcoming } from './ownerUpcoming.js';
-import type { PeopleMemory } from './peopleMemory.js';
+import type { OwnerUpcoming } from './mind/memory/ownerUpcoming.js';
+import type { PeopleMemory } from './mind/memory/peopleMemory.js';
 import { heardByEveryoneHere } from './platformPeople.js';
-import type { PersonIdentityStore } from './personIdentity.js';
+import type { PersonIdentityStore } from './mind/memory/store/personIdentity.js';
 import type { ShannonBody } from './shannonBody.js';
 import type { ConversationToolServer } from './shannonToolSession.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import { TurnDeadline } from './turnDeadline.js';
-import type { TurnMemoryRecall } from './turnMemoryRecall.js';
+import type { TurnMemoryRecall } from './mind/recall/turnMemoryRecall.js';
 
 /**
  * The first half of one text turn of the conversation kernel (`ShannonApiKernel.textTurn`): orchestration, a fixed

@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { touchDetailDigest, type BodyAudience, type BodyCapabilities, type BodyEvent, type BodyEventType } from './contracts/bodyContract.js';
 import { BODY_TOUCH_ONLY_FLAG } from './bodyTouchOnly.js';
 import { isBodySurface, isBodyTouchRegion, type BodySurface } from './bodyTouchWords.js';
-import { secureDatabaseFiles } from './sqliteStoreContext.js';
+import { secureDatabaseFiles } from './infra/sqlite/sqliteStoreContext.js';
 
 /**
  * What the body reported and what it says it can express. Both tables are additive

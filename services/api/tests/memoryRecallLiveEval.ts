@@ -9,11 +9,11 @@ import { OWNER_AUDIENCE } from '@shannon/cognition';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MemoryEmbeddingWorker } from '../src/memoryEmbeddingWorker.js';
-import { SemanticMemoryRecall, configuredSemanticMemoryConfig } from '../src/semanticMemoryRecall.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { MemoryEmbeddingWorker } from '../src/mind/memory/memoryEmbeddingWorker.js';
+import { SemanticMemoryRecall, configuredSemanticMemoryConfig } from '../src/mind/recall/semanticMemoryRecall.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { prepareTurnCognitiveContext } from '../src/turnCognitiveContext.js';
-import { ShannonTurnMemoryRecall, configuredMemoryModelGateway } from '../src/turnMemoryRecall.js';
+import { ShannonTurnMemoryRecall, configuredMemoryModelGateway } from '../src/mind/recall/turnMemoryRecall.js';
 import { memoryRecallEvaluationCases, syntheticHistory } from './memoryRecallEvaluationCases.js';
 
 if (!process.env.OPENAI_API_KEY?.trim()) throw new Error('OPENAI_API_KEY is required for the live memory-recall evaluation');

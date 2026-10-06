@@ -6,11 +6,11 @@ import { normalizeKnowledgeDraft, type KnowledgeDraft } from '@shannon/cognition
 import { afterEach, describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
-import { ShannonKnowledgeConsolidator, type KnowledgeAnalyzer, type KnowledgeOperation } from '../src/knowledgeConsolidation.js';
-import { DeterministicMemoryModelGateway } from '../src/memoryModels.js';
-import { SemanticMemoryRecall } from '../src/semanticMemoryRecall.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
-import { ShannonTurnMemoryRecall } from '../src/turnMemoryRecall.js';
+import { ShannonKnowledgeConsolidator, type KnowledgeAnalyzer, type KnowledgeOperation } from '../src/mind/sleep/knowledgeConsolidation.js';
+import { DeterministicMemoryModelGateway } from '../src/mind/recall/memoryModels.js';
+import { SemanticMemoryRecall } from '../src/mind/recall/semanticMemoryRecall.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
+import { ShannonTurnMemoryRecall } from '../src/mind/recall/turnMemoryRecall.js';
 import { promptOf } from './modelPrompt.js';
 
 const at = '2026-09-30T03:00:00.000Z';

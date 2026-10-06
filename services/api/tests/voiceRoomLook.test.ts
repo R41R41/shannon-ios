@@ -11,7 +11,7 @@ import { SQLiteBodyLookStore } from '../src/bodyLookStore.js';
 import type { RoomLookViewRequest, RoomLookViewer } from '../src/bodyLookVision.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import type { BodyPresence } from '../src/shannonBody.js';
 import {
   JevVoiceDecisionGateway, LocalVoiceDecisionGateway, OpenAIVoiceDecisionGateway, VOICE_SKILLS,

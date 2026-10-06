@@ -12,11 +12,11 @@ import {
   type MemoryDisclosure,
 } from '@shannon/cognition';
 import { DisclosureGate } from './memoryDisclosure.js';
-import { localDayKey } from './memoryProjection.js';
-import { personMemoryId } from './peopleMemory.js';
-import type { PeopleMemoryStore, PersonMemoryItem, RememberedPerson } from './peopleMemoryStore.js';
-import { extractPromiseCaptures } from './prospectiveMemory.js';
-import { extractExplicitMemoryProposals } from './sleepConsolidation.js';
+import { localDayKey } from './mind/memory/memoryProjection.js';
+import { personMemoryId } from './mind/memory/peopleMemory.js';
+import type { PeopleMemoryStore, PersonMemoryItem, RememberedPerson } from './mind/memory/store/peopleMemoryStore.js';
+import { extractPromiseCaptures } from './mind/memory/prospectiveMemory.js';
+import { extractExplicitMemoryProposals } from './mind/sleep/sleepConsolidation.js';
 import { cleanPersonName } from './voiceGuestNames.js';
 
 export type PlatformConversationKind = 'dm' | 'group' | 'channel';

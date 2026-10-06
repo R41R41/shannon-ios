@@ -1,5 +1,5 @@
 import type { ShannonConversationItem } from '../../chatModel.js';
-import type { StoredConversationMessage } from '../../conversationStore.js';
+import type { StoredConversationMessage } from '../../mind/memory/store/conversationStore.js';
 import type {
   OrganizeItem,
   OrganizeOperation,

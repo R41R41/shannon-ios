@@ -8,7 +8,7 @@ import { AutonomyLoopState } from './autonomyLoopState.js';
 import { AutonomyProposalLedger } from './autonomyProposals.js';
 import { AutonomyPursuitLedger } from './autonomyPursuits.js';
 import { OwnerInformedMarks } from './ownerInformedMarks.js';
-import { secureDatabaseFiles } from './sqliteStoreContext.js';
+import { secureDatabaseFiles } from './infra/sqlite/sqliteStoreContext.js';
 import { StudyStore } from './studyStore.js';
 
 /**

@@ -4,14 +4,14 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { PeopleMemoryOverview } from '../src/apiPeopleMemoryRoutes.js';
-import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
+import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { SQLitePeopleMemoryStore } from '../src/peopleMemoryStore.js';
-import { SQLitePersonIdentityStore } from '../src/personIdentity.js';
+import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemoryStore.js';
+import { SQLitePersonIdentityStore } from '../src/mind/memory/store/personIdentity.js';
 import { configuredPlatformBridge, PlatformBridgeError, PlatformBridgeService, platformBridgeThreadId } from '../src/platformBridge.js';
 import { DEFAULT_PLATFORM_PEOPLE_LIMITS, PlatformPeople, platformPeopleEnabled } from '../src/platformPeople.js';
 import { PlatformConversationSummarizer, acceptedPlatformSummary } from '../src/platformPeopleSummaries.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { promptOf } from './modelPrompt.js';
 
 const fixtures = join(import.meta.dirname, 'fixtures/platform-people-v1');

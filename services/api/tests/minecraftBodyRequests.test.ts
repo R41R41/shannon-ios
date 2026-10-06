@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
-import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
+import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
 import { MINECRAFT_TOOL_INSTRUCTIONS, toolInstructions } from '../src/chatModelTools.js';
 import { BODY_GAME_SOURCE, SQLiteGameExperiences } from '../src/gameBodyMemory.js';
@@ -16,11 +16,11 @@ import { MINECRAFT_REQUEST_LIMITS, MINECRAFT_REQUEST_PATHS, validClaim, validPro
 import { MinecraftBodyRequests, requestExperienceSummary } from '../src/minecraftBodyRequests.js';
 import type { MinecraftIntent } from '../src/minecraftIntent.js';
 import { SQLiteMinecraftTurnLog } from '../src/minecraftTurnStore.js';
-import { SQLitePeopleMemoryStore } from '../src/peopleMemoryStore.js';
+import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemoryStore.js';
 import { minecraftBodyRoute } from '../src/serverMinecraftBodyRoute.js';
 import { asksAboutMinecraftBody } from '../src/shannonToolSession.js';
 import { toolSessionMemory } from '../src/shannonToolTypes.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { promptOf } from './modelPrompt.js';
 
 const DEVICE = 'minebot-dev';

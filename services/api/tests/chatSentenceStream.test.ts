@@ -6,15 +6,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLocalApiKernel, type ShannonApiKernel } from '../src/apiKernel.js';
-import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
+import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
 import { CHAT_SENTENCE_MAXIMUM_LENGTH } from '../src/chatSentenceSplitter.js';
 import { chatSentenceStreamLines } from '../src/chatSentenceStream.js';
 import type { ApiResponse, ChatResponse, ChatStreamLine } from '../src/contracts/contracts.js';
-import { ShannonMemoryService } from '../src/memoryService.js';
+import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
 import { dispatchWithChatSentences } from '../src/serverChatSentenceStream.js';
 import { readJson, sendJson } from '../src/serverHttp.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { fixtureNotionSource } from './notionFixture.js';
 import { promptOf } from './modelPrompt.js';
 

@@ -3,7 +3,7 @@ import type { CompanionStateStore } from '@shannon/cognition';
 import { CONVERSATION_TOOL_CALLS, type ShannonModelToolSession, type ToolCallOutcome } from './chatModelTools.js';
 import type { OthersTextCheck } from './aetherShownText.js';
 import { conversationSecrets, othersSecrets, type SecretCheck } from './conversationSecrets.js';
-import type { ConversationStore, StoredConversationMessage } from './conversationStore.js';
+import type { ConversationStore, StoredConversationMessage } from './mind/memory/store/conversationStore.js';
 import { ToolAudienceWatch, type ToolAudienceSource } from './shannonToolAudience.js';
 import type { ShannonToolRunner } from './shannonToolRunner.js';
 import { toolTraceCall } from './shannonToolTrace.js';

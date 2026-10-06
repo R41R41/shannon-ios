@@ -5,16 +5,16 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { disclosureDecision, groupAudience } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { conversationReplay, openItems } from '../src/conversationWindow.js';
-import { ShannonTurnMemoryRecall } from '../src/turnMemoryRecall.js';
-import type { SemanticMemoryRecall } from '../src/semanticMemoryRecall.js';
+import { conversationReplay, openItems } from '../src/mind/recall/conversationWindow.js';
+import { ShannonTurnMemoryRecall } from '../src/mind/recall/turnMemoryRecall.js';
+import type { SemanticMemoryRecall } from '../src/mind/recall/semanticMemoryRecall.js';
 import { extractExplicitUserIntent } from '../src/cognitiveIntent.js';
 import { prepareTurnCognitiveContext } from '../src/turnCognitiveContext.js';
 import { minecraftBodyRoute } from '../src/serverMinecraftBodyRoute.js';
 import type { MinecraftBody } from '../src/minecraftBody.js';
 import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.js';
 import { withoutGuardedEntries } from '../src/apiTextTurn.js';
-import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
+import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
 import { LocalStubChatModel } from '../src/chatModel.js';
 import { GAME_DISCLOSURE, GAME_REQUEST_DISCLOSURE } from '../src/gameBodyMemory.js';
 import { MINECRAFT_BODY_LIMITS } from '../src/contracts/minecraftBodyContract.js';
@@ -23,7 +23,7 @@ import { MINECRAFT_TURN_ALLOWANCE, MinecraftTurnAllowance } from '../src/minecra
 import { SQLiteSurfaceTurnLog } from '../src/minecraftTurnStore.js';
 import { PLATFORM_REPLY_LIMITS } from '../src/platformReply.js';
 import { createMinecraftBodyWiring, gameBodyMayCall } from '../src/serverMinecraftBodyWiring.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { readApiSource } from './support/sources.js';
 
 /** The review of 2026-10-06 of the Minecraft body branch: S1, S3, S4, N2 and N5 at their units. */

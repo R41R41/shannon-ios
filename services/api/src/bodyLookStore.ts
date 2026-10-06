@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import type { BodyLookCode } from './contracts/bodyLookContract.js';
-import { secureDatabaseFiles } from './sqliteStoreContext.js';
+import { secureDatabaseFiles } from './infra/sqlite/sqliteStoreContext.js';
 
 /**
  * One row per look: who was asked, when, and how it ended. Identifiers, timestamps, an

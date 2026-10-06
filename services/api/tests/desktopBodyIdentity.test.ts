@@ -8,7 +8,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import { BODY_LIMITS, BODY_TOUCH_EVENT_TYPES } from '../src/contracts/bodyContract.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { isFullBody } from '../src/bodyTouchOnly.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { SQLiteOwnerCallFacts } from '../src/ownerCallElsewhere.js';
 import {
   DESKTOP_BODY_HEADER, DESKTOP_BODY_HEADER_VALUE, desktopBodyDeviceId, desktopBodyMaySpeakOn, mayHaveDesktopBody, namesDesktopBody, requestDeviceId,

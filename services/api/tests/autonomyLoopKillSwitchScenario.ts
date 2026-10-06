@@ -6,7 +6,7 @@ import { followUpPrompt, rethinkExtras } from '../src/autonomyLoopObservePrompts
 import { draftPrompt, notePrompt, reachOutPrompt, revisePrompt, roomLookNotePrompt, thinkingPrompt } from '../src/autonomyLoopPrompts.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLiteReachOutSpeaker } from '../src/reachOutDelivery.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { FULL_PLAN, FakeModel, FakeShowing, callKind, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
 
 /**

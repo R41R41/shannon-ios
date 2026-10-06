@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { REACH_OUT_DELIVERY_OUTCOMES, REACH_OUT_APP_SURFACES, type ReachOutAppSurface, type ReachOutDeliveryOutcome, type ReachOutFacts } from './autonomyLoopObservations.js';
-import { secureDatabaseFiles } from './sqliteStoreContext.js';
+import { secureDatabaseFiles } from './infra/sqlite/sqliteStoreContext.js';
 
 /**
  * What her body says it did with a message she started on her own (`docs/body-contract.md`,

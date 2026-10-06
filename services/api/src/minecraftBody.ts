@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { SHANNON_OWNER_NAME, shannonIdentityPrompt, type CompanionClock, type CompanionStateStore } from '@shannon/cognition';
-import type { CompletedTurn, TurnBackgroundService } from './backgroundUpdates.js';
+import type { CompletedTurn, TurnBackgroundService } from './mind/sleep/backgroundUpdates.js';
 import type { TextTurnInput, TextTurnResult } from './apiKernel.js';
 import type { ShannonChatModel } from './chatModel.js';
-import type { ConversationStore, ShannonExperience } from './conversationStore.js';
+import type { ConversationStore, ShannonExperience } from './mind/memory/store/conversationStore.js';
 import { keepOwnerPlatformTurn, platformTextTurnInput, rememberPlatformPerson } from './platformSurface.js';
 import {
   MINECRAFT_BODY_LIMITS, MINECRAFT_PLATFORM, MinecraftBodyError, minecraftBridgeConfiguration, minecraftConversationId, minecraftSourceUserId,
@@ -16,7 +16,7 @@ import { MINECRAFT_INTENT_GOAL_CHARACTERS } from './minecraftIntent.js';
 import { minecraftBodyStateBlock, type MinecraftBodyState } from './minecraftBodyState.js';
 import { MinecraftTurnAllowance } from './minecraftTurnAllowance.js';
 import { PlatformBridgeError, PlatformBridgeService, platformBridgeThreadId, type PlatformAudiencePolicy } from './platformBridge.js';
-import type { PeopleMemoryStore } from './peopleMemoryStore.js';
+import type { PeopleMemoryStore } from './mind/memory/store/peopleMemoryStore.js';
 import { PlatformPeople, platformPeopleEnabled } from './platformPeople.js';
 
 /**

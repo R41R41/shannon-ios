@@ -4,12 +4,12 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createLocalApiKernel, type ShannonApiKernel } from '../src/apiKernel.js';
-import { TurnRefinementProcessor } from '../src/backgroundUpdates.js';
+import { TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
 import { SQLiteCognitiveIntentStore } from '../src/cognitiveIntent.js';
 import { conversationCapabilityPrompt } from '../src/conversationCapabilities.js';
-import { EXACT_TIME_DECLINED, EXACT_TIME_NOTE } from '../src/prospectiveMemory.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
-import type { TurnCaptureView } from '../src/turnCaptures.js';
+import { EXACT_TIME_DECLINED, EXACT_TIME_NOTE } from '../src/mind/memory/prospectiveMemory.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
+import type { TurnCaptureView } from '../src/mind/memory/store/turnCaptures.js';
 
 const directories: string[] = [];
 afterEach(() => directories.splice(0).forEach(path => rmSync(path, { recursive: true, force: true })));

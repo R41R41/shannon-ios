@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { InMemoryVoiceIdentityStore } from '../src/voiceIdentity.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
 import type { WorldSubscription } from '../src/integrations/world/store/worldStore.js';
 import { promptOf } from './modelPrompt.js';

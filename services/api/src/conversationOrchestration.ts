@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { ShannonActionReceipt } from '@shannon/cognition';
 import type { AgentTask } from './agentTaskStore.js';
 import type { ShannonConversationItem } from './chatModel.js';
-import type { StoredConversationMessage } from './conversationStore.js';
+import type { StoredConversationMessage } from './mind/memory/store/conversationStore.js';
 
 export type ConversationActionKind = 'inspect' | 'implement' | 'update' | 'complete' | 'other';
 export type ConversationActionStatus = 'pending' | 'proposed' | 'active' | 'paused' | 'completed' | 'failed' | 'cancelled';

@@ -3,10 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { TurnRefinementProcessor } from '../src/backgroundUpdates.js';
-import { ShannonMemoryService } from '../src/memoryService.js';
-import { consolidateSleepMemory, LocalRuleSleepMemoryAnalyzer } from '../src/sleepConsolidation.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
+import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
+import { consolidateSleepMemory, LocalRuleSleepMemoryAnalyzer } from '../src/mind/sleep/sleepConsolidation.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 
 const directories: string[] = [];
 afterEach(() => directories.splice(0).forEach(path => rmSync(path, { recursive: true, force: true })));

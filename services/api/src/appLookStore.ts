@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import type { AppLookCamera, AppLookClient, AppLookCode } from './contracts/appLookContract.js';
 import type { BodyLookOutcome } from './bodyLookStore.js';
-import { secureDatabaseFiles } from './sqliteStoreContext.js';
+import { secureDatabaseFiles } from './infra/sqlite/sqliteStoreContext.js';
 
 /**
  * One row per look through an app's camera: who was asked, when, with which camera, and how it ended.

@@ -9,14 +9,14 @@ import { createGeminiSpeechRoute } from './serverGeminiSpeechRoute.js';
 import { createGeminiLiveRoute } from './serverGeminiLiveRoute.js';
 import { createLiveVoiceStreamRoute } from './serverLiveVoiceStreamRoute.js';
 import { createLocalApiKernel } from './apiKernel.js';
-import { createConfiguredTurnMemoryRecall } from './turnMemoryRecall.js';
-import { DurableBackgroundDispatcher } from './backgroundUpdates.js';
+import { createConfiguredTurnMemoryRecall } from './mind/recall/turnMemoryRecall.js';
+import { DurableBackgroundDispatcher } from './mind/sleep/backgroundUpdates.js';
 import { startToolTraceSweep } from './shannonToolTraceSweep.js';
 import { createConfiguredChatModel } from './chatModel.js';
 import { createConfiguredVoiceDecisionGateway } from './voiceDecision.js';
 import { configuredAuthPepper, SQLiteDeviceAuthStore, type ShannonDevicePrincipal } from './deviceAuth.js';
-import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
-import { ShannonMemoryService } from './memoryService.js';
+import { configuredDatabasePath, SQLiteShannonStore } from './infra/sqlite/sqliteStore.js';
+import { ShannonMemoryService } from './mind/memory/memoryService.js';
 import { SQLiteWorldStore } from './integrations/world/store/worldStore.js';
 import { SQLiteInitiativeStore } from './initiativeStore.js';
 import { FileAetherContextReader } from './integrations/aether/aetherContext.js';
@@ -40,8 +40,8 @@ import {
   VoiceTranscriptionError,
 } from './voiceTranscription.js';
 import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeRequest, isPlatformBridgePath } from './serverPlatformBridgeRoute.js';
-import { SQLitePersonIdentityStore } from './personIdentity.js';
-import { SQLitePeopleMemoryStore } from './peopleMemoryStore.js';
+import { SQLitePersonIdentityStore } from './mind/memory/store/personIdentity.js';
+import { SQLitePeopleMemoryStore } from './mind/memory/store/peopleMemoryStore.js';
 import { VOICE_CALL_MEMORY_PATH } from './apiPeopleMemoryRoutes.js';
 import { SQLiteCognitiveIntentStore } from './cognitiveIntent.js';
 import { SQLiteConversationOrchestrationStore } from './conversationOrchestrationPersistence.js';
@@ -71,7 +71,7 @@ import { SHANNON_NOW_PATH, shannonNowEnabled, shannonNowOwnerScope } from './con
 import { SQLiteShannonNowReader } from './shannonNowReader.js';
 import { createShannonNowRoute } from './serverShannonNowRoute.js';
 import { MOOD_HISTORY_PATH, moodHistoryEnabled } from './contracts/moodHistoryContract.js';
-import { SQLiteMoodHistoryReader } from './moodHistoryReader.js';
+import { SQLiteMoodHistoryReader } from './mind/emotion/store/moodHistoryReader.js';
 import { createMoodHistoryRoute } from './serverMoodHistoryRoute.js';
 import { createPrivateListeningRoute } from './serverPrivateListeningRoute.js';
 import { createIncomingCallRoute, type IncomingCallRoute } from './serverIncomingCallRoute.js';

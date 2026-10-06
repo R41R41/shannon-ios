@@ -1,7 +1,7 @@
 import {
   UNKNOWN_GUEST_PRESENCE, disclosureDecision, memoryControlFor, resolveDisclosure, type CompanionStateSnapshot, type DisclosureDecision, type MemoryDisclosure,
 } from '@shannon/cognition';
-import type { ConversationStore } from './conversationStore.js';
+import type { ConversationStore } from './mind/memory/store/conversationStore.js';
 
 /**
  * What a write of hers from a conversation must not repeat (ADR-0002; owner decision 2026-10-05): items the owner

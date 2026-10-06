@@ -20,7 +20,7 @@ import { PrivateReachOuts } from '../src/privateReachOuts.js';
 import { SQLiteReachOutClaims } from '../src/reachOutClaims.js';
 import { SQLiteReachOutSpeaker } from '../src/reachOutDelivery.js';
 import { SQLiteReachOutReports } from '../src/reachOutReports.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { APNsVoipPushSender, createConfiguredVoipPushSender, type VoipPushResult, type VoipPushSender, type VoipPushTarget } from '../src/voipPushSender.js';
 import { readApiSource } from './support/sources.js';
 

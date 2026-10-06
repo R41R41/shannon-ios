@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
-import { ownerDay, presentCompanionState, sharedTimeEvent } from '../src/companionPresence.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import { ownerDay, presentCompanionState, sharedTimeEvent } from '../src/mind/emotion/companionPresence.js';
 import { promptOf } from './modelPrompt.js';
 
 const at = '2026-10-02T03:00:00.000Z';

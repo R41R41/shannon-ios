@@ -1,13 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CompanionClock, CompanionStateStore } from '@shannon/cognition';
-import type { TurnBackgroundService } from './backgroundUpdates.js';
+import type { TurnBackgroundService } from './mind/sleep/backgroundUpdates.js';
 import type { ShannonChatModel } from './chatModel.js';
-import type { ConversationStore } from './conversationStore.js';
+import type { ConversationStore } from './mind/memory/store/conversationStore.js';
 import type { ShannonDevicePrincipal } from './deviceAuth.js';
 import { MinecraftBody, type MinecraftConversation } from './minecraftBody.js';
 import { MINECRAFT_BODY_LIMITS, MINECRAFT_BODY_TURN_PATH, MinecraftBodyError, configuredMinecraftBody, type MinecraftBodyConfiguration } from './contracts/minecraftBodyContract.js';
 import { SQLiteMinecraftTurnLog } from './minecraftTurnStore.js';
-import type { PeopleMemoryStore } from './peopleMemoryStore.js';
+import type { PeopleMemoryStore } from './mind/memory/store/peopleMemoryStore.js';
 import { platformPeopleEnabled } from './platformPeople.js';
 import { consumeDeviceAllowance, sendJson } from './serverHttp.js';
 import { closedSignal } from './apiAutonomyHostStepRoutes.js';

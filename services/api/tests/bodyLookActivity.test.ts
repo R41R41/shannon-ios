@@ -24,10 +24,10 @@ import type { RoomLookViewRequest, RoomLookViewer } from '../src/bodyLookVision.
 import { closeBodyLookStores, configuredBodyLookOptions } from '../src/bodyLookWiring.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { ownerDay } from '../src/companionPresence.js';
+import { ownerDay } from '../src/mind/emotion/companionPresence.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import type { BodyPresence } from '../src/shannonBody.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 import { promptOf } from './modelPrompt.js';
 import { readApiSource } from './support/sources.js';

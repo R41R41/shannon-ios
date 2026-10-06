@@ -17,7 +17,7 @@ import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/turnDeadline.js';
 import { toolTraceCall, toolTracePrompt, traceLabel } from '../src/shannonToolTrace.js';
 import { TOOL_FOLLOW_UP_MILLISECONDS } from '../src/shannonToolTurns.js';
 import { toolFailure, toolOk } from '../src/shannonTools.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { promptOf } from './modelPrompt.js';
 
 /**

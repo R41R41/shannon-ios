@@ -6,8 +6,8 @@ import {
   type CompanionStateStore,
 } from '@shannon/cognition';
 import { agentTaskPromptProjection } from './apiPromptProjection.js';
-import { presentCompanionState } from './companionPresence.js';
-import { emotionTiming } from './emotionTiming.js';
+import { presentCompanionState } from './mind/emotion/companionPresence.js';
+import { emotionTiming } from './mind/emotion/emotionTiming.js';
 export { agentTaskPromptProjection } from './apiPromptProjection.js';
 import { dispatchAgentRequest } from './apiAgentRoutes.js';
 import { dispatchDataRequest } from './apiDataRoutes.js';
@@ -30,14 +30,14 @@ import {
   validVoyagerTaskProjection,
   validatedChatAttachments,
 } from './apiValidation.js';
-import { BackgroundUpdateCoordinator, type TurnBackgroundService } from './backgroundUpdates.js';
+import { BackgroundUpdateCoordinator, type TurnBackgroundService } from './mind/sleep/backgroundUpdates.js';
 import { LocalStubChatModel, type ShannonChatModel } from './chatModel.js';
 import { LocalVoiceDecisionGateway, type VoiceDecisionGateway } from './voiceDecision.js';
-import { InMemoryConversationStore, type ConversationStore } from './conversationStore.js';
+import { InMemoryConversationStore, type ConversationStore } from './mind/memory/store/conversationStore.js';
 import type { ApiRequest, ApiResponse, ChatRequest, StateEventRequest } from './contracts/contracts.js';
-import { ShannonMemoryService, type MemoryAction, type ShannonMemoryStore } from './memoryService.js';
+import { ShannonMemoryService, type MemoryAction, type ShannonMemoryStore } from './mind/memory/memoryService.js';
 import { dispatchConversationRead } from './apiConversationRead.js';
-import type { KnowledgeStore } from './knowledgeStore.js';
+import type { KnowledgeStore } from './mind/memory/store/knowledgeStore.js';
 import type { InitiativeInbox } from './initiativeStore.js';
 import type { AetherContextReader } from './integrations/aether/aetherContext.js';
 import { DisabledAetherProposalStore, type AetherProposalStore } from './integrations/aether/aetherProposal.js';
@@ -54,15 +54,15 @@ import { chatAudienceTurn } from './chatAudience.js';
 import { validChatStream } from './chatSentenceStream.js';
 import { conversationToolServer, type ConversationToolServer } from './shannonToolSession.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from './turnDeadline.js';
-import type { TurnMemoryRecall } from './turnMemoryRecall.js';
+import type { TurnMemoryRecall } from './mind/recall/turnMemoryRecall.js';
 import { type NotionTurnReader } from './conversationCapabilities.js';
 import { WAITING_TESTFLIGHT_DASHBOARD, type TestFlightDeliveryReader } from './integrations/testflight/store/testflightDeliveryStore.js';
 import { dispatchPeopleMemoryRequest } from './apiPeopleMemoryRoutes.js';
-import { PeopleMemory } from './peopleMemory.js';
-import { SQLitePeopleMemoryStore, type PeopleMemoryStore } from './peopleMemoryStore.js';
+import { PeopleMemory } from './mind/memory/peopleMemory.js';
+import { SQLitePeopleMemoryStore, type PeopleMemoryStore } from './mind/memory/store/peopleMemoryStore.js';
 import type { DailyMindReader } from './dailyMind.js';
 import type { WorldSubscriptionReader } from './integrations/world/store/worldStore.js';
-import { SQLitePersonIdentityStore, type PersonIdentityStore } from './personIdentity.js';
+import { SQLitePersonIdentityStore, type PersonIdentityStore } from './mind/memory/store/personIdentity.js';
 import {
   InMemoryConversationOrchestrationStore,
   type ConversationOrchestrationStore,
@@ -95,13 +95,13 @@ import {
   NO_LOOK, answerTextCommand, beginTextTurn, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type TextTurnInput, type TextTurnResult,
 } from './apiTextTurn.js';
 import { randomUUID } from 'node:crypto';
-import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from './companionPresence.js';
+import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from './mind/emotion/companionPresence.js';
 import { generateChatTurn, withSentenceStream } from './chatSentenceStream.js';
 import { conversationTools, toolTraceReader, turnWroteHerOwnThings } from './shannonToolSession.js';
 import { withToolCapabilityLines } from './shannonAetherTools.js';
 import { withCapabilitySources } from './conversationCapabilities.js';
-import { usableThreadSummary } from './memoryVisibility.js';
-import { conversationReplay } from './conversationWindow.js';
+import { usableThreadSummary } from './mind/memory/memoryVisibility.js';
+import { conversationReplay } from './mind/recall/conversationWindow.js';
 import { recordConversationProposal } from './conversationOrchestration.js';
 import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
 import { isExplicitVoyagerUpdateRequest } from './integrations/voyager/organize.js';

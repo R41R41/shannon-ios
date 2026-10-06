@@ -8,7 +8,7 @@ import { mayRetryThought } from '../src/autonomyLoopPacing.js';
 import { OWNER_CONTEXT_HEADER, OWNER_CONTEXT_WRITING_HEADER, ownerPrivateRule } from '../src/autonomyLoopOwnerContext.js';
 import { salvagedModelObject } from '../src/autonomyLoopPrompts.js';
 import { createOwnerContext } from '../src/autonomyOwnerContext.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SESSION_FACTS_HEADER, sessionFactsSection, type SessionFacts } from '../src/autonomyLoopSessionPrompts.js';
 import { AutonomyModelError, type AutonomyTextRequest, type AutonomyTextResult } from '../src/autonomyTextModel.js';
 import { planFromThought } from '../src/autonomyLoopPlan.js';

@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import {
   INCOMING_CALL_LIMITS, INCOMING_CALL_OUTCOMES, type IncomingCallOutcome, type IncomingCallRegistration, type IncomingCallState, type VoipEnvironment,
 } from './contracts/incomingCallContract.js';
-import { secureDatabaseFiles } from './sqliteStoreContext.js';
+import { secureDatabaseFiles } from './infra/sqlite/sqliteStoreContext.js';
 
 /**
  * The VoIP push tokens of the owner's iPhones, and the calls the server placed (`incomingCallContract.ts`).

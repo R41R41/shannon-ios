@@ -12,7 +12,7 @@ import { BODY_LOOK_LIMITS, BODY_LOOK_REFUSAL_CODES, BODY_LOOK_REQUEST_BYTES } fr
 import { bodyNudgeCandidates } from '../src/bodyNudges.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { bodyDoing, type BodyIngestReceipt, type BodyNudges, type BodyPresence } from '../src/shannonBody.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { FULL_PLAN, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 import { promptOf } from './modelPrompt.js';
 

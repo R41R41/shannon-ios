@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
 import { SQLiteCognitiveIntentStore, extractExplicitUserIntent } from '../src/cognitiveIntent.js';
 import { SQLiteAgentTaskStore } from '../src/agentTaskStore.js';

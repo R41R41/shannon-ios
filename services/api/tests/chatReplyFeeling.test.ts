@@ -14,12 +14,12 @@ import { chatTurnRequestBody } from '../src/chatModelTurn.js';
 import {
   REPLY_FEELING_INSTRUCTIONS, REPLY_FEELING_SCHEMA, chatFeelingStrengthEnabled, decidedReplyFeeling, parsedReplyFeeling,
   replyFeelingOffer, type ChatReplyFeeling,
-} from '../src/chatReplyFeeling.js';
+} from '../src/mind/emotion/chatReplyFeeling.js';
 import { ChatReplyStreamDecoder } from '../src/chatReplyStreamDecoder.js';
 import type { ChatStreamLine } from '../src/contracts/contracts.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
-import { emotionTiming } from '../src/emotionTiming.js';
-import { storedVoiceFace } from '../src/voiceEmotionPlan.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import { emotionTiming } from '../src/mind/emotion/emotionTiming.js';
+import { storedVoiceFace } from '../src/mind/emotion/voiceEmotionPlan.js';
 import { AFFECT_INTENSITY_STEPS, affectIntensityOf, affectIntensityValue } from '../src/voiceDecisionValues.js';
 import { GOLDEN_BASE } from './chatModelGoldenCases.js';
 import { promptOf } from './modelPrompt.js';

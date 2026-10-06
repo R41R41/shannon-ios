@@ -3,7 +3,7 @@ import {
   deriveShannonFace, livingLingering, presentShannonFeeling,
   type CompanionStateSnapshot, type ShannonEmotionKind, type ShannonEmotionTiming, type ShannonExpressiveEmotion,
 } from '@shannon/cognition';
-import { emotionTiming } from './emotionTiming.js';
+import { emotionTiming } from './mind/emotion/emotionTiming.js';
 import { consumeDeviceAllowance, sendJson } from './serverHttp.js';
 import {
   SHANNON_NOW_LIMITS, SHANNON_NOW_SCHEMA_VERSION,

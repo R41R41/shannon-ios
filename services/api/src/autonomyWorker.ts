@@ -1,7 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { aetherStudyScope, configuredAetherAccess } from './integrations/aether/aetherAccess.js';
 import { SQLiteAutonomyAnnouncer } from './autonomyAnnouncer.js';
-import { configuredAwakeClock } from './autonomyAwakeClock.js';
+import { configuredAwakeClock } from './mind/emotion/autonomyAwakeClock.js';
 import { moodHistoryRecording } from './contracts/moodHistoryContract.js';
 import { autonomyDayKey, configuredAutonomy } from './autonomyBudget.js';
 import { ShannonAutonomyLoop } from './autonomyLoop.js';
@@ -19,7 +19,7 @@ import { SQLiteBodyLookActivityStore } from './bodyLookActivityStore.js';
 import { configuredBodyLook } from './contracts/bodyLookContract.js';
 import { SQLiteBodyLookStore } from './bodyLookStore.js';
 import { SQLiteBodyStore } from './bodyStore.js';
-import { ownerDay } from './companionPresence.js';
+import { ownerDay } from './mind/emotion/companionPresence.js';
 import { notionLoopReader } from './integrations/notion/notionLoopReader.js';
 import { configuredNotionSource } from './integrations/notion/notionSource.js';
 import { configuredOwnerUpcoming, sqliteOwnerSnapshot } from './ownerUpcomingWiring.js';
@@ -31,8 +31,8 @@ import { SQLitePrivateListeningStore } from './privateListeningStore.js';
 import { SQLiteReachOutClaims } from './reachOutClaims.js';
 import { SQLiteReachOutReports, reachOutBodyFacts } from './reachOutReports.js';
 import { ownToolsEnabled } from './shannonTools.js';
-import { configuredDatabasePath } from './sqliteStore.js';
-import { configuredPredictionShadow } from './predictionShadow.js';
+import { configuredDatabasePath } from './infra/sqlite/sqliteStore.js';
+import { configuredPredictionShadow } from './mind/prediction/predictionShadow.js';
 
 /**
  * Entry of the activity loop (Syzygy ADR-0002 step 3): its own process, so the API,

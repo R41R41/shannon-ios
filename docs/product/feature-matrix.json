@@ -551,14 +551,14 @@
         "ios": {
           "status": "yes",
           "evidence": [
-            "services/api/src/chatReplyFeeling.ts"
+            "services/api/src/mind/emotion/chatReplyFeeling.ts"
           ],
           "note": "サーバーと認知の変更。画面の変更は無い。"
         },
         "macos": {
           "status": "yes",
           "evidence": [
-            "services/api/src/chatReplyFeeling.ts"
+            "services/api/src/mind/emotion/chatReplyFeeling.ts"
           ],
           "note": "サーバーと認知の変更。画面の変更は無い。"
         },

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { memoryIdentifier } from '@shannon/cognition';
 import { OpenAIDailyMindModel, SQLiteDailyMindStore, type DailyMindModel } from '../src/dailyMind.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
 import type { WorldItem } from '../src/integrations/world/store/worldStore.js';
 

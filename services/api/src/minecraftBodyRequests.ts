@@ -9,7 +9,7 @@ import {
   type ClaimedMinecraftRequest, type MinecraftProgressPhase, type MinecraftRequestOrigin, type MinecraftRequestProgress,
   type MinecraftRequestResult, type MinecraftRequestState, type MinecraftRequestView,
 } from './contracts/minecraftBodyRequestContract.js';
-import { secureDatabaseFiles } from './sqliteStoreContext.js';
+import { secureDatabaseFiles } from './infra/sqlite/sqliteStoreContext.js';
 
 /**
  * Requests to her Minecraft body (phase 4, `docs/minecraft-body-contract.md`): one queue on the server, filled by her

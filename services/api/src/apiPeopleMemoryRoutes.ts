@@ -5,13 +5,13 @@ import { badRequest, objectBody, validBoundedString, validScopeKey } from './api
 import { acceptedSummary } from './apiVoiceCallSummary.js';
 import type { ShannonChatModel } from './chatModel.js';
 import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
-import { audiencePeople, personMemoryId, placeLabel, type CallSummarizer, type PeopleMemory } from './peopleMemory.js';
-import type { PersonCall, PersonMemoryItem, RememberedPerson } from './peopleMemoryStore.js';
+import { audiencePeople, personMemoryId, placeLabel, type CallSummarizer, type PeopleMemory } from './mind/memory/peopleMemory.js';
+import type { PersonCall, PersonMemoryItem, RememberedPerson } from './mind/memory/store/peopleMemoryStore.js';
 import { platformDisplayName } from './platformPeople.js';
 import { GUEST_CALL_SUMMARY_TURNS, validatedGuestCallTurns } from './voiceGuestCall.js';
 import { cleanPersonName, personNameKey } from './voiceGuestNames.js';
-import { mutatePersonImpression, personImpressionViews } from './impressionViews.js';
-import type { ImpressionSource } from './impressions.js';
+import { mutatePersonImpression, personImpressionViews } from './mind/memory/impressionViews.js';
+import type { ImpressionSource } from './mind/memory/impressions.js';
 
 export const VOICE_CALL_MEMORY_PATH = '/v1/voice/gemini/cascade/calls';
 export const VOICE_CALL_DISCARD_PATH = '/v1/voice/gemini/cascade/calls/discard';

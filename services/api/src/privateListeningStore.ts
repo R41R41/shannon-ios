@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { PRIVATE_LISTENING_KINDS, PRIVATE_LISTENING_LIMITS, type PrivateListeningKind } from './contracts/privateListeningContract.js';
-import { secureDatabaseFiles } from './sqliteStoreContext.js';
+import { secureDatabaseFiles } from './infra/sqlite/sqliteStoreContext.js';
 
 /**
  * Which of the owner's apps say that only he can hear them now (`privateListeningContract.ts`).

@@ -10,10 +10,10 @@ import {
 } from '@shannon/cognition';
 import { voiceHistoryProjection } from './apiPromptProjection.js';
 import type { CognitiveIntentStore } from './cognitiveIntent.js';
-import type { ConversationStore } from './conversationStore.js';
+import type { ConversationStore } from './mind/memory/store/conversationStore.js';
 import type { DailyMindReader } from './dailyMind.js';
-import type { KnowledgeStore } from './knowledgeStore.js';
-import { visibleConversationHistory } from './memoryVisibility.js';
+import type { KnowledgeStore } from './mind/memory/store/knowledgeStore.js';
+import { visibleConversationHistory } from './mind/memory/memoryVisibility.js';
 import { temporaryGuestVoiceInstructions, voiceConversationInstructions } from './voiceConversationInstructions.js';
 
 export type VoiceParticipantMode = 'owner' | 'guest';

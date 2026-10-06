@@ -7,7 +7,7 @@ import { SQLiteBodyLookStore } from '../src/bodyLookStore.js';
 import type { RoomLookViewer } from '../src/bodyLookVision.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { BODY_TOUCH_ONLY_FLAG, isFullBody, isTouchOnlyBody } from '../src/bodyTouchOnly.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import type { BodyPresence } from '../src/shannonBody.js';
 import { promptOf } from './modelPrompt.js';
 

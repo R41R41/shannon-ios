@@ -4,11 +4,11 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
+import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
 import { chatAudienceTurn } from '../src/chatAudience.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
-import { ShannonMemoryService } from '../src/memoryService.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { fixtureNotionSource } from './notionFixture.js';
 import { promptOf } from './modelPrompt.js';
 

@@ -4,12 +4,12 @@ import {
 } from '@shannon/cognition';
 import { OWNER_CONTEXT_HEADER, OWNER_CONTEXT_SECRET_MARK, OWNER_CONTEXT_WRITING_HEADER, type AutonomyOwnerContext, type OwnerContextBlock } from './autonomyLoopOwnerContext.js';
 import type { ShannonConversationItem } from './chatModel.js';
-import type { ConversationStore } from './conversationStore.js';
-import { replayWindow } from './conversationWindow.js';
+import type { ConversationStore } from './mind/memory/store/conversationStore.js';
+import { replayWindow } from './mind/recall/conversationWindow.js';
 import type { DailyMindReader } from './dailyMind.js';
 import { DisclosureGate } from './memoryDisclosure.js';
-import { visibleReplayMessages } from './memoryVisibility.js';
-import type { PeopleMemory } from './peopleMemory.js';
+import { visibleReplayMessages } from './mind/memory/memoryVisibility.js';
+import type { PeopleMemory } from './mind/memory/peopleMemory.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 
 /**

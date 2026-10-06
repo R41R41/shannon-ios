@@ -1,16 +1,16 @@
 import { setTimeout as delay } from 'node:timers/promises';
-import { ShannonBackgroundWorker } from './backgroundWorker.js';
-import { createConfiguredSleepMemoryAnalyzer } from './sleepConsolidation.js';
-import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
-import { MemoryEmbeddingWorker } from './memoryEmbeddingWorker.js';
-import { configuredMemoryModelGateway } from './turnMemoryRecall.js';
-import { createConfiguredKnowledgeAnalyzer, ShannonKnowledgeConsolidator } from './knowledgeConsolidation.js';
-import { usableKnowledgeFor } from './turnKnowledgeRecall.js';
-import { SQLitePeopleMemoryStore } from './peopleMemoryStore.js';
+import { ShannonBackgroundWorker } from './mind/sleep/backgroundWorker.js';
+import { createConfiguredSleepMemoryAnalyzer } from './mind/sleep/sleepConsolidation.js';
+import { configuredDatabasePath, SQLiteShannonStore } from './infra/sqlite/sqliteStore.js';
+import { MemoryEmbeddingWorker } from './mind/memory/memoryEmbeddingWorker.js';
+import { configuredMemoryModelGateway } from './mind/recall/turnMemoryRecall.js';
+import { createConfiguredKnowledgeAnalyzer, ShannonKnowledgeConsolidator } from './mind/sleep/knowledgeConsolidation.js';
+import { usableKnowledgeFor } from './mind/recall/turnKnowledgeRecall.js';
+import { SQLitePeopleMemoryStore } from './mind/memory/store/peopleMemoryStore.js';
 import { PlatformPeople } from './platformPeople.js';
 import { createConfiguredPlatformSummaryWriter, PlatformConversationSummarizer } from './platformPeopleSummaries.js';
-import { ConversationReplaySummarizer, createConfiguredReplaySummaryWriter } from './conversationReplaySummary.js';
-import { createConfiguredImpressionAnalyzer, ImpressionUpdater } from './impressionUpdater.js';
+import { ConversationReplaySummarizer, createConfiguredReplaySummaryWriter } from './mind/memory/conversationReplaySummary.js';
+import { createConfiguredImpressionAnalyzer, ImpressionUpdater } from './mind/memory/impressionUpdater.js';
 
 const store = new SQLiteShannonStore({ path: configuredDatabasePath(), now: () => new Date().toISOString() });
 const knowledge = new ShannonKnowledgeConsolidator(store, store, store, createConfiguredKnowledgeAnalyzer(process.env, store), store);

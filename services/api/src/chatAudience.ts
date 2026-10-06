@@ -7,11 +7,11 @@ import {
   type CompanionStateSnapshot,
   type MemoryAudience,
 } from '@shannon/cognition';
-import type { PresentedCompanionState } from './companionPresence.js';
+import type { PresentedCompanionState } from './mind/emotion/companionPresence.js';
 import type { ChatResponse } from './contracts/contracts.js';
 import type { ConversationCapabilitySelection } from './conversationCapabilities.js';
-import type { ConversationStore } from './conversationStore.js';
-import { identityOnly, type LayeredIdentityPrompt } from './knowledgeStore.js';
+import type { ConversationStore } from './mind/memory/store/conversationStore.js';
+import { identityOnly, type LayeredIdentityPrompt } from './mind/memory/store/knowledgeStore.js';
 import { DisclosureGate, sharedDailyFocus } from './memoryDisclosure.js';
 import { speakTimePrivacyCheck } from './voiceCompanionPresence.js';
 

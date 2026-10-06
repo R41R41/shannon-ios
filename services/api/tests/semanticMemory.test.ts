@@ -6,12 +6,12 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
-import { MemoryEmbeddingWorker } from '../src/memoryEmbeddingWorker.js';
-import { DeterministicMemoryModelGateway, OpenAIMemoryModelGateway } from '../src/memoryModels.js';
-import { DEFAULT_SEMANTIC_MEMORY_CONFIG, SemanticMemoryRecall, type SemanticMemoryConfig } from '../src/semanticMemoryRecall.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { MemoryEmbeddingWorker } from '../src/mind/memory/memoryEmbeddingWorker.js';
+import { DeterministicMemoryModelGateway, OpenAIMemoryModelGateway } from '../src/mind/recall/memoryModels.js';
+import { DEFAULT_SEMANTIC_MEMORY_CONFIG, SemanticMemoryRecall, type SemanticMemoryConfig } from '../src/mind/recall/semanticMemoryRecall.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { prepareTurnCognitiveContext } from '../src/turnCognitiveContext.js';
-import { ShannonTurnMemoryRecall, withMemorySearchLatency } from '../src/turnMemoryRecall.js';
+import { ShannonTurnMemoryRecall, withMemorySearchLatency } from '../src/mind/recall/turnMemoryRecall.js';
 import type { VoiceTurnDecision } from '../src/voiceDecision.js';
 
 const at = '2026-09-30T03:00:00.000Z';

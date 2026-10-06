@@ -7,7 +7,7 @@ import { chatAudienceTurn } from '../src/chatAudience.js';
 import { heldForOthers, noteProvenance } from '../src/autonomyLoopProvenance.js';
 import type { AutonomyReachOuts } from '../src/autonomyLoopReachOutStep.js';
 import { AutonomyToolResults } from '../src/autonomyLoopToolStep.js';
-import type { ConversationStore } from '../src/conversationStore.js';
+import type { ConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { toolSessionMemory } from '../src/shannonToolTypes.js';
 import type { ToolAudience } from '../src/shannonTools.js';
 import { OWN_TIME_PRICES } from './ownerDocumentsScenario.js';

@@ -1,7 +1,7 @@
 import { badRequest, validScopeKey } from './apiValidation.js';
-import { presentCompanionState } from './companionPresence.js';
+import { presentCompanionState } from './mind/emotion/companionPresence.js';
 import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
-import { conversationWithCaptures, type ConversationCaptureDependencies } from './turnCaptures.js';
+import { conversationWithCaptures, type ConversationCaptureDependencies } from './mind/memory/store/turnCaptures.js';
 
 /** `GET /v1/conversation`: one Talk with what each turn took in, and her current state. Moved out of the kernel unchanged. */
 export function dispatchConversationRead(request: ApiRequest, dependencies: ConversationCaptureDependencies & { now: () => string }): ApiResponse | undefined {

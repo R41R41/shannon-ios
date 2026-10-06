@@ -9,11 +9,11 @@ import { observeStep } from '../src/autonomyLoopObserve.js';
 import type { StepDependencies } from '../src/autonomyLoopSteps.js';
 import { SHANNON_CORE_PATHS } from '../src/autonomyCore.js';
 import { SQLiteBodyReactionStore } from '../src/bodyReactionStore.js';
-import { BodyTouches } from '../src/bodyTouch.js';
-import { PredictionShadow, decidedFeelingOutcome, predictionShadowEnabled } from '../src/predictionShadow.js';
-import { foldOutcomes, readMind } from '../src/predictionShadowFold.js';
-import { PREDICTION_SOURCE_ID, PREDICTION_SYMBOL, SQLitePredictionStore, ensurePredictionSchema } from '../src/predictionStore.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { BodyTouches } from '../src/mind/emotion/bodyTouch.js';
+import { PredictionShadow, decidedFeelingOutcome, predictionShadowEnabled } from '../src/mind/prediction/predictionShadow.js';
+import { foldOutcomes, readMind } from '../src/mind/prediction/predictionShadowFold.js';
+import { PREDICTION_SOURCE_ID, PREDICTION_SYMBOL, SQLitePredictionStore, ensurePredictionSchema } from '../src/mind/prediction/store/predictionStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { apiSourcePath } from './support/sources.js';
 
 /**

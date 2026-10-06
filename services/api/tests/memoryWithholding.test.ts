@@ -6,18 +6,18 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildCompanionStatePrompt, InMemoryCompanionStateStore, type CompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { TurnRefinementProcessor } from '../src/backgroundUpdates.js';
+import { TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
-import { InMemoryConversationStore, type ConversationStore } from '../src/conversationStore.js';
-import { MemoryEmbeddingWorker } from '../src/memoryEmbeddingWorker.js';
-import { DeterministicMemoryModelGateway } from '../src/memoryModels.js';
-import { ShannonMemoryService } from '../src/memoryService.js';
-import { usableThreadSummary, visibleConversationHistory } from '../src/memoryVisibility.js';
-import { SemanticMemoryRecall } from '../src/semanticMemoryRecall.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { InMemoryConversationStore, type ConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import { MemoryEmbeddingWorker } from '../src/mind/memory/memoryEmbeddingWorker.js';
+import { DeterministicMemoryModelGateway } from '../src/mind/recall/memoryModels.js';
+import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
+import { usableThreadSummary, visibleConversationHistory } from '../src/mind/memory/memoryVisibility.js';
+import { SemanticMemoryRecall } from '../src/mind/recall/semanticMemoryRecall.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { prepareTurnCognitiveContext } from '../src/turnCognitiveContext.js';
-import { usableKnowledgeFor } from '../src/turnKnowledgeRecall.js';
-import { ShannonTurnMemoryRecall } from '../src/turnMemoryRecall.js';
+import { usableKnowledgeFor } from '../src/mind/recall/turnKnowledgeRecall.js';
+import { ShannonTurnMemoryRecall } from '../src/mind/recall/turnMemoryRecall.js';
 
 // Synthetic data only. Times are spaced so "before the forget" is unambiguous.
 const minute = (value: number) => new Date(Date.UTC(2026, 8, 20, 0, value)).toISOString();

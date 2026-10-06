@@ -7,15 +7,15 @@ import {
   type CompanionStateStore,
   type MemoryAudience,
 } from '@shannon/cognition';
-import { resolveReplyEmotion } from './companionPresence.js';
+import { resolveReplyEmotion } from './mind/emotion/companionPresence.js';
 import { DisclosureGate, sharedProfilePrompt } from './memoryDisclosure.js';
 import {
   platformConversationLabel, platformPeopleEnabled,
   type PlatformConversationKind, type PlatformPeople, type PlatformSourceKind,
 } from './platformPeople.js';
-import type { TurnBackgroundService } from './backgroundUpdates.js';
-import type { ConversationStore } from './conversationStore.js';
-import { platformImpressionLines } from './impressionRecall.js';
+import type { TurnBackgroundService } from './mind/sleep/backgroundUpdates.js';
+import type { ConversationStore } from './mind/memory/store/conversationStore.js';
+import { platformImpressionLines } from './mind/recall/impressionRecall.js';
 import { bindingFor, composedPlatformBridgeConfiguration, sharedAudienceHeader } from './platformBridgeBindings.js';
 
 export const SHANNON_PLATFORM_TURN_PATH = '/v1/platform/turns';

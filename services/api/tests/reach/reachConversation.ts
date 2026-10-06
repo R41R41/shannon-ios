@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { createLocalApiKernel } from '../../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../../src/chatModel.js';
 import { estimatedOpenAICostWithCacheUsd, type LlmUsageEvent, type LlmUsageStore } from '../../src/llmUsage.js';
-import { SQLiteShannonStore } from '../../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
 import {
   SHIRITORI_TURNS, ShiritoriGame, carried, judgeShiritori, sameReading, scriptedShiritoriReply, shiritoriScenario, shiritoriScriptInputs,
   type ReachDriver, type ReachStop,

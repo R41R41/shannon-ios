@@ -6,12 +6,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore, OWNER_AUDIENCE } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { PeopleMemoryOverview } from '../src/apiPeopleMemoryRoutes.js';
-import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
+import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
-import { visibleConversationHistory } from '../src/memoryVisibility.js';
-import { SQLitePeopleMemoryStore } from '../src/peopleMemoryStore.js';
-import { SQLitePersonIdentityStore } from '../src/personIdentity.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import { visibleConversationHistory } from '../src/mind/memory/memoryVisibility.js';
+import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemoryStore.js';
+import { SQLitePersonIdentityStore } from '../src/mind/memory/store/personIdentity.js';
 import { establishedGuestName, personNameKey } from '../src/voiceGuestNames.js';
 import { promptOf } from './modelPrompt.js';
 
