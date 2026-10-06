@@ -69,18 +69,24 @@ export interface SittingTouches {
 
 export class BodyTouches {
   private readonly reportError: (error: unknown) => void;
-  private readonly predictions: TouchPredictions;
+  private readonly predictions: TouchPredictions | null;
 
   constructor(private readonly dependencies: BodyTouchDependencies) {
     const record = dependencies.prediction;
-    this.predictions = new TouchPredictions(record?.predict && record.recent && record.learnLater && record.stanceCompared ? record as TouchPredictionRecord : null);
+    const usable = record?.predict && record.recent && record.learnLater && record.stanceCompared ? record as TouchPredictionRecord : null;
+    this.predictions = usable ? new TouchPredictions(usable) : null;
+    // Stage 2 learns in the prediction record. Without it (`SHANNON_PREDICTION_SHADOW=off`, a kernel without SQLite) every
+    // touch would meet the same empty prior, the same startle and the same surprise: touches run as stage 1b instead.
+    if (dependencies.stage2 && !usable && dependencies.enabled) {
+      console.warn('Shannon touch prediction (ADR-0006 stage 2) has no prediction record: touches run as stage 1b. Set SHANNON_PREDICTION=off or switch the prediction record on.');
+    }
     this.reportError = dependencies.reportError ?? (error => console.error('Shannon touch memory failed', error instanceof Error ? error.message : 'unknown'));
   }
 
   get enabled(): boolean { return this.dependencies.enabled; }
 
-  /** Whether stage 2 of ADR-0006 moves her (`SHANNON_PREDICTION`). */
-  get stage2(): boolean { return this.dependencies.stage2 === true; }
+  /** Whether stage 2 of ADR-0006 moves her: `SHANNON_PREDICTION` on and a prediction record to learn in. */
+  get stage2(): boolean { return this.dependencies.stage2 === true && this.predictions !== null; }
 
   /** Feels and remembers one touch. Null while touches are switched off. */
   observe(scopeKey: string, touch: TouchRecord, options: ObserveOptions = {}): FeltTouch | null {
@@ -96,10 +102,10 @@ export class BodyTouches {
     if (receipt.fresh && age <= BODY_REACTION_LIMITS.feelingFreshMilliseconds && age >= -BODY_LIMITS.eventFutureSkewMilliseconds && this.stage2) {
       // Syzygy ADR-0006 stage 2: no table for any part. The startle (how unsure she was of such a touch), and the stance she
       // took for the same key earlier in this episode when there is one and she is not about to be asked.
-      prediction = this.predictions.expect(scopeKey, touch, at);
-      const carried = options.awaitsStance ? null : this.predictions.carried(scopeKey, prediction.key, at);
+      prediction = this.predictions!.expect(scopeKey, touch, at);
+      const carried = options.awaitsStance ? null : this.predictions!.carried(scopeKey, prediction.key, at);
       // Felt, not learned: only a stance she gives is an outcome.
-      if (carried !== null) prediction = { ...prediction, outcome: this.predictions.felt(prediction, carried) };
+      if (carried !== null) prediction = { ...prediction, outcome: this.predictions!.felt(prediction, carried) };
       // The part names the cause of a feeling (頭をなでられた): factual words, no favour read into the verb.
       const partWord = touch.part ? bodyTouchPartWord(touch.part) : undefined;
       snapshot = stateStore.apply(scopeKey, { type: 'body-touched', touch: {
@@ -109,7 +115,7 @@ export class BodyTouches {
         ...(partWord ? { reflexPart: partWord, ...(touch.gesture === 'rest' ? { resting: true } : {}) } : {}),
         appraisal: { startle: prediction.startle, ...(prediction.outcome ? { outcome: prediction.outcome } : {}) },
       } });
-      if (prediction.outcome) this.predictions.compared(scopeKey, snapshot, at);
+      if (prediction.outcome) this.predictions!.compared(scopeKey, snapshot, at);
     } else if (receipt.fresh && age <= BODY_REACTION_LIMITS.feelingFreshMilliseconds && age >= -BODY_LIMITS.eventFutureSkewMilliseconds) {
       // Syzygy ADR-0005 stage 1b: on a part where her body flinches first only the reflex moves her, not the table.
       const reflexPart = reflexPartWord(touch.part);
@@ -139,18 +145,19 @@ export class BodyTouches {
    */
   settle(scopeKey: string, felt: FeltTouch, stance: BodyTouchStance | null): { outcome: { error: number; unexpected: number }; snapshot: CompanionStateSnapshot } | null {
     const prediction = felt.prediction;
-    if (!this.stage2 || !prediction || prediction.outcome) return null;
+    const predictions = this.predictions;
+    if (!this.stage2 || !predictions || !prediction || prediction.outcome) return null;
     const at = this.dependencies.now();
     const { stateStore } = this.dependencies;
     let outcome: { error: number; unexpected: number };
-    if (stance !== null) outcome = this.predictions.learn(scopeKey, prediction, felt.burst.id, stanceOutcome(stance), at, stateStore.snapshot(scopeKey));
+    if (stance !== null) outcome = predictions.learn(scopeKey, prediction, felt.burst.id, stanceOutcome(stance), at, stateStore.snapshot(scopeKey));
     else {
-      const carried = this.predictions.carried(scopeKey, prediction.key, at);
+      const carried = predictions.carried(scopeKey, prediction.key, at);
       if (carried === null) return null;
-      outcome = this.predictions.felt(prediction, carried);
+      outcome = predictions.felt(prediction, carried);
     }
     const snapshot = stateStore.apply(scopeKey, { type: 'touch-appraised', outcome });
-    this.predictions.compared(scopeKey, snapshot, at);
+    predictions.compared(scopeKey, snapshot, at);
     return { outcome, snapshot };
   }
 

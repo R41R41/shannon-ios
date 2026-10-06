@@ -27,8 +27,8 @@ import { outcome } from './predictionShadowReadings.js';
  *   gave for the same key within the episode she has learned (§2.5: the boundary from her own gaps), against what she
  *   expects now, and is not learned again: one refusal followed by ten plain pokes is one refusal, not eleven (a carried
  *   stance learned as new evidence would harden the expectation and flatten her feeling). Without one, only the startle.
- * - Without the record (`SHANNON_PREDICTION_SHADOW=off`, or a kernel without SQLite) every touch is met with the empty
- *   prior: nothing is learned, so there is no habituation, and nothing is kept.
+ * - Stage 2 needs the record: without it (`SHANNON_PREDICTION_SHADOW=off`, or a kernel without SQLite) touches run as
+ *   stage 1b and a warning says so (`bodyTouch.ts`).
  *
  * `SHANNON_PREDICTION=off` switches stage 2 off: stage 1b exactly (the table, the reflex on the parts where her body
  * flinches first, the stage-1 shadow tap).
@@ -73,14 +73,15 @@ export interface TouchPrediction {
 }
 
 export class TouchPredictions {
-  constructor(private readonly record: TouchPredictionRecord | null) {}
+  constructor(private readonly record: TouchPredictionRecord) {}
 
   /** The key, and the startle before she has taken the touch. */
   expect(scopeKey: string, touch: TouchRecord, at: string): TouchPrediction {
     const key = touchPredictionKey(touch);
     const context = touch.surface ?? 'unknown';
     const query = { domain: BODY_STANCE_DOMAIN, key, at: Date.parse(at), context } as const;
-    const prediction: Prediction = this.record?.predict(scopeKey, query) ?? predictOutcome(createPredictionModel(), query);
+    // A record that cannot be read now meets the empty prior for this touch (never a failed touch).
+    const prediction: Prediction = this.record.predict(scopeKey, query) ?? predictOutcome(createPredictionModel(), query);
     return { key, context, startle: relativeUncertainty(prediction), expectation: prediction.expectation, uncertainty: prediction.uncertainty, noise: prediction.noise };
   }
 
@@ -92,7 +93,7 @@ export class TouchPredictions {
 
   /** The stance she gave for this key within the episode she has learned (her newest learned outcome), or null. */
   carried(scopeKey: string, key: string, at: string): number | null {
-    const recent = this.record?.recent(scopeKey, BODY_STANCE_DOMAIN, key) ?? null;
+    const recent = this.record.recent(scopeKey, BODY_STANCE_DOMAIN, key);
     if (!recent) return null;
     const gap = Date.parse(at) - recent.at;
     return gap >= 0 && gap <= recent.boundaryMs ? recent.outcome : null;
@@ -103,14 +104,14 @@ export class TouchPredictions {
    * after the caller (`learnLater`): no write in the touch's request.
    */
   learn(scopeKey: string, prediction: TouchPrediction, burstId: string, stance: number, at: string, state: CompanionStateSnapshot): ShannonTouchOutcome {
-    const now = this.record?.predict(scopeKey, { domain: BODY_STANCE_DOMAIN, key: prediction.key, at: Date.parse(at), context: prediction.context });
+    const now = this.record.predict(scopeKey, { domain: BODY_STANCE_DOMAIN, key: prediction.key, at: Date.parse(at), context: prediction.context });
     const outcome = this.felt(now ? { ...prediction, expectation: now.expectation, uncertainty: now.uncertainty, noise: now.noise } : prediction, stance);
-    this.record?.learnLater(scopeKey, outcome_(prediction, burstId, stance, at), state);
+    this.record.learnLater(scopeKey, outcome_(prediction, burstId, stance, at), state);
     return outcome;
   }
 
   compared(scopeKey: string, after: CompanionStateSnapshot, at: string): void {
-    this.record?.stanceCompared(scopeKey, after, at);
+    this.record.stanceCompared(scopeKey, after, at);
   }
 }
 

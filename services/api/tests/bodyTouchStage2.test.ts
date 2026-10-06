@@ -159,14 +159,16 @@ describe('her stance is the outcome', () => {
     expect(unknown.uncertainty / (unknown.uncertainty + unknown.noise)).toBeGreaterThan(owner.uncertainty / (owner.uncertainty + owner.noise));
   });
 
-  it('meets every touch with the empty prior when there is no record: nothing is learned or kept', async () => {
+  it('falls back to stage 1b, and says so, when there is no prediction record to learn in', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const w = await world({ record: false });
+    expect(warn.mock.calls.some(call => String(call[0]).includes('touches run as stage 1b'))).toBe(true);
     w.decide('welcome', 'happy');
-    await w.said({ type: 'pet', part: 'head', region: 'head', gesture: 'stroke' });
-    w.advance(40 * SECOND);
-    const before = w.state().emotion.valence;
-    await w.said({ type: 'pet', part: 'head', region: 'head', gesture: 'stroke' });
-    expect(w.state().emotion.valence).toBeGreaterThan(before);
+    await w.said({ type: 'pet', region: 'head' });
+    // Stage 1b: no stance asked of a touch in the old shape, and the table's feeling.
+    expect(w.speaker.calls[0]!.stance).toBeUndefined();
+    expect(w.speaker.prompts[0]).not.toContain('親密さ');
+    warn.mockRestore();
   });
 });
 
