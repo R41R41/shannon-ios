@@ -153,7 +153,7 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
     sections: [...(extras?.sections ?? []), ...tooling.sections], ownTools: true,
   } : extras);
   // Syzygy ADR-0008 stage 1, step 7a: what the server counted for the choices offered now, last in the prompt; none while switched off.
-  const counted = !dependencies.valueFacts ? null : valueFactsFor(dependencies, cycle.scopeKey, at, offeredChoices(materials, phone?.offered === true, tooling ? offeredOwnTools(dependencies, cycle.scopeKey).map(tool => tool.name) : []));
+  const counted = !dependencies.valueFacts ? null : valueFactsFor(dependencies, cycle.scopeKey, at, offeredChoices(materials, phone?.offered === true, tooling ? offeredOwnTools(dependencies, cycle.scopeKey).map(tool => tool.name) : [], { followUp: again && rethink.followUp !== null, jot: again && rethink.jot }));
   const priced = (reserveYen?: number) => paidCall(dependencies, cycle.scopeKey, 'planning', thinkingPrompt(materials, withTools(extrasWith(reserveYen)), counted), session ? loop.sessionThinkOutputTokens : OUTPUT_TOKENS);
   // In a session she is told what the gate reserves for a thought: the estimate of this very prompt, priced once without that line.
   const first = priced();
@@ -260,10 +260,11 @@ function traceThought(
 }
 
 /** The closed names of the choices this thought offers, for the value facts (Syzygy ADR-0008 stage 1, step 7a). */
-function offeredChoices(materials: ReturnType<typeof thinkingMaterials>, call: boolean, tools: readonly string[]): string[] {
+function offeredChoices(materials: ReturnType<typeof thinkingMaterials>, call: boolean, tools: readonly string[], rethought: { followUp: boolean; jot: boolean }): string[] {
   const reasons = ['share', 'wonder', 'upcoming', 'saw'];
   return [
-    ...(materials.reachOut ? reasons.map(reason => `reach_out.${reason}`) : []), ...(call ? reasons.map(reason => `call.${reason}`) : []),
+    ...(materials.reachOut ? reasons.map(reason => `reach_out.${reason}`) : []), ...(rethought.followUp ? ['follow_up'] : []), ...(rethought.jot ? ['jot'] : []),
+    ...(call ? reasons.map(reason => `call.${reason}`) : []),
     'show', 'draft', 'revise', ...(materials.remainingReads > 0 ? ['read'] : []), ...(materials.notionAvailable ? ['notion'] : []),
     ...(materials.unnotedReadings.length ? ['note'] : []), ...(materials.lookAvailable ? ['look'] : []), ...(materials.folderAvailable ? ['copy'] : []),
     'put_away', ...tools.map(name => `tool.${name}`),

@@ -88,6 +88,8 @@ export {
   VALUE_FACTS_HEADER,
   VALUE_FACTS_MAXIMUM_LINES,
   VALUE_FACT_CHOICES,
+  VALUE_FACT_KINDS,
+  VALUE_FACT_SPREAD_FLOOR,
   valueFactCell,
   valueFactLine,
   valueFactsSection,

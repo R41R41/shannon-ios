@@ -76,14 +76,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/prediction/bodyTouchPrediction.ts',
     // Syzygy ADR-0008 stage 1: the pure package of the prediction ledger, calibration, reward, values and the mood exit.
     'packages/learning/',
-    // Syzygy ADR-0008 stage 1: the prediction ledger, its store, and where predictions are opened and settled.
-    'services/api/src/mind/learning/choiceLedger.ts',
-    'services/api/src/mind/learning/predictionLedger.ts',
-    'services/api/src/mind/learning/rewardSettlement.ts',
-    'services/api/src/mind/learning/store/sqliteChoiceLedger.ts',
-    'services/api/src/mind/learning/store/sqlitePredictionLedger.ts',
-    'services/api/src/mind/learning/store/sqliteValueTable.ts',
-    'services/api/src/mind/learning/valueTable.ts',
+    // Syzygy ADR-0008 stage 1: the learning part (prediction and choice ledgers, settlement, value table, their stores): every file below.
+    'services/api/src/mind/learning/',
     // Syzygy ADR-0008 stage 1: the nightly pass of the ledgers (expiry, delayed credit, retention).
     'services/api/src/mind/sleep/valueSleep.ts',
     // Syzygy ADR-0008 stage 1, step 7b: settled choices of hers move her mood (the emotion source).
@@ -312,8 +306,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/surfaces/platform/platformReply.ts',
     'services/api/src/surfaces/platform/serverPlatformBridgeRoute.ts',
     // Syzygy ADR-0008 stage 1: the Jev client's call count and price.
-    'services/api/src/infra/models/jev/jevClient.ts',
-    'services/api/src/infra/models/jev/jevUsage.ts',
+    'services/api/src/infra/models/jev/',
     // Routes of her voice surface moved out of `server.ts` (Syzygy ADR-0008 §6, surfaces/voice).
     'services/api/src/surfaces/voice/transcriptionRoute.ts',
     // Syzygy ADR-0008 stage 1: the owner's view and controls of her value table.

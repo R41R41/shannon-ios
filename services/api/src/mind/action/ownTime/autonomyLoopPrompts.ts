@@ -212,8 +212,9 @@ export function pursuitLines(pursuits: readonly ShannonPursuit[], maximum = 12):
     .map(item => `- (${item.id}) ${pursuitKindLabel(item.kind)}${item.status === 'resting' ? '・休ませ中' : ''}: ${oneLine(item.title, 80)} ／ なぜ: ${oneLine(item.why, 120)}`);
 }
 
-/** Thinking: choose what to do next from her own ledger and study. */
 /**
+ * Thinking: choose what to do next from her own ledger and study.
+ *
  * `valueFacts` (Syzygy ADR-0008 stage 1, step 7a): the 「これまでの手応え」 section the server counted, placed last so what comes
  * before it is unchanged (the provider's cache prefix). Absent, the prompt is byte for byte what it was.
  */

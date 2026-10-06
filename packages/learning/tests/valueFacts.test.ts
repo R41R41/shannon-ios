@@ -32,4 +32,16 @@ describe('the value facts', () => {
     expect(section.split('\n')).toHaveLength(9);
     expect(section).not.toMatch(/すべき|しよう|おすすめ/u);
   });
+
+  it('give every kind of choice one line before any kind gets a second, and never show a spread below ±0.01', () => {
+    const offered = ['reach_out.share', 'reach_out.wonder', 'reach_out.upcoming', 'reach_out.saw', 'follow_up', 'call.share', 'call.wonder', 'show', 'draft', 'revise', 'read', 'notion', 'note', 'jot', 'look', 'tool.study.search'];
+    const many = valueCells(foldValues(offered.flatMap((choice, index) => Array.from({ length: 4 }, (_, repeat) => evidence(choice, 'night.alone', 0.3, index * 10 + repeat)))));
+    const lines = valueFactsSection(many, offered, 'night.alone')!.split('\n').slice(1);
+    expect(lines).toHaveLength(8);
+    for (const label of ['話しかける', '電話をかける', '物語', '公開ページを読む', 'メモを書く', '部屋を見る', '道具']) expect(lines.some(line => line.startsWith(`- ${label}`)), label).toBe(true);
+    // The second round goes to the first kinds, in order.
+    expect(lines.filter(line => line.startsWith('- 話しかける')).length).toBe(2);
+    expect(lines.every(line => !line.includes('±0.00'))).toBe(true);
+  });
 });
+

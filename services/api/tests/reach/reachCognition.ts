@@ -55,10 +55,10 @@ class CognitionWorld {
   }
 
   /** One step of hers through the loop's tap: chosen, its predictions opened by `during`, reported. Returns its choice row. */
-  step(kind: string, at: string, outcome: 'done' | 'failed', extras: { reason?: 'share' | 'wonder'; call?: boolean; pieceId?: string; during?: (tap: ReturnType<CognitionWorld['tap']>, stepId: string) => void } = {}): StoredChoice | undefined {
+  step(kind: string, at: string, outcome: 'done' | 'failed', extras: { reason?: 'share' | 'wonder'; call?: boolean; tool?: string; pieceId?: string; during?: (tap: ReturnType<CognitionWorld['tap']>, stepId: string) => void } = {}): StoredChoice | undefined {
     const tap = this.tap();
     const stepId = `step-${this.steps += 1}`;
-    tap.chose(SCOPE, { stepId, kind, ...(extras.reason ? { reason: extras.reason } : {}), ...(extras.call ? { call: true } : {}) }, at);
+    tap.chose(SCOPE, { stepId, kind, ...(extras.reason ? { reason: extras.reason } : {}), ...(extras.call ? { call: true } : {}), ...(extras.tool ? { tool: extras.tool } : {}) }, at);
     extras.during?.(tap, stepId);
     tap.reported(SCOPE, { stepId, outcome, costYen: 2, ...(extras.pieceId ? { pieceId: extras.pieceId } : {}) }, at);
     return this.store.choiceLedger()?.rows(SCOPE).find(row => row.sourceId === stepId);
@@ -420,7 +420,7 @@ export function cognitionDrivers(): Record<string, () => ReachDriver> {
 export function valueFactExamples(): Array<{ moment: string; section: string | null }> {
   const world = new CognitionWorld();
   try {
-    const offered = ['reach_out.share', 'reach_out.wonder', 'show', 'draft', 'revise', 'read', 'note', 'tool.study.search', 'tool.aether.search'];
+    const offered = ['reach_out.share', 'reach_out.wonder', 'show', 'draft', 'revise', 'read', 'note', 'look', 'tool.study.search', 'tool.aether.search'];
     const sink = toolCallChoice(world.choices);
     for (let day = 0; day < 7; day += 1) {
       world.message(jst(day, 1), 'wonder', day % 3 === 0);
@@ -435,7 +435,10 @@ export function valueFactExamples(): Array<{ moment: string; section: string | n
         world.step('show', jst(day, 17), 'done', { pieceId: `piece-${day}`, during: tap => tap.shown(SCOPE, { id: `piece-${day}`, revised: true }, jst(day, 17)) });
         storyReacted(world.predictions, SCOPE, `piece-${day}`, day === 1 ? 'more' : 'like', jst(day, 21), world.choices);
       }
-      sink(SCOPE, { tool: 'study.search', surface: 'text', audience: 'owner_alone', ok: day !== 5 }, jst(day, 14));
+      // Her own tool steps are choices; the owner's requests in a conversation are data only and never show here.
+      world.step('tool', jst(day, 14), day !== 5 ? 'done' : 'failed', { tool: 'study.search' });
+      sink(SCOPE, { tool: 'aether.search', surface: 'text', audience: 'owner_alone', ok: true }, jst(day, 14, 30));
+      if (day % 3 === 0) world.step('look', jst(day, 18), 'done');
       world.night(jst(day, 23));
     }
     world.night(jst(9, 3));

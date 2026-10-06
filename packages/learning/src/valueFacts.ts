@@ -15,22 +15,24 @@ export const VALUE_FACTS_MAXIMUM_LINES = 8;
 
 const REASONS = Object.freeze({ share: '面白かったことを伝えたい', wonder: 'いま何をしているか気になった', upcoming: '近い予定が気になった', saw: '見たことを話したい' });
 
-/** The fixed order of the lines, and how each choice is named. A tool is named by its registry name, after these. */
-export const VALUE_FACT_CHOICES: ReadonlyArray<readonly [string, string]> = Object.freeze([
-  ...Object.entries(REASONS).map(([reason, label]) => [`reach_out.${reason}`, `話しかける・${label}`] as const),
-  ...Object.entries(REASONS).map(([reason, label]) => [`call.${reason}`, `電話をかける・${label}`] as const),
-  ['follow_up', 'もう一度話しかける'],
-  ['show', '物語を見せる'],
-  ['draft', '物語の下書きを書く'],
-  ['revise', '物語を直す'],
-  ['read', '公開ページを読む'],
-  ['notion', 'Notionを読む'],
-  ['note', 'メモを書く'],
-  ['look', '部屋を見る'],
-  ['jot', '書き留める'],
-  ['copy', 'フォルダに写す'],
-  ['put_away', '作品をしまう'],
+/**
+ * The kinds of choice, in their fixed order, and how each choice is named. A tool is named by its registry name. Lines are
+ * chosen kind by kind: every kind with a fact gets one line before any kind gets a second, within the eight.
+ */
+export const VALUE_FACT_KINDS: ReadonlyArray<readonly [string, ReadonlyArray<readonly [string, string]>]> = Object.freeze([
+  ['messages', [...Object.entries(REASONS).map(([reason, label]) => [`reach_out.${reason}`, `話しかける・${label}`] as const), ['follow_up', 'もう一度話しかける'] as const]],
+  ['calls', Object.entries(REASONS).map(([reason, label]) => [`call.${reason}`, `電話をかける・${label}`] as const)],
+  ['stories', [['show', '物語を見せる'], ['draft', '物語の下書きを書く'], ['revise', '物語を直す'], ['put_away', '作品をしまう']]],
+  ['reading', [['read', '公開ページを読む'], ['notion', 'Notionを読む']]],
+  ['notes', [['note', 'メモを書く'], ['jot', '書き留める'], ['copy', 'フォルダに写す']]],
+  ['look', [['look', '部屋を見る']]],
 ] as const);
+
+/** Every named choice in the fixed order (tools after them). */
+export const VALUE_FACT_CHOICES: ReadonlyArray<readonly [string, string]> = Object.freeze(VALUE_FACT_KINDS.flatMap(([, choices]) => choices));
+
+/** The spread is never shown below this, so a narrow one does not read as certainty. */
+export const VALUE_FACT_SPREAD_FLOOR = 0.01;
 
 const BAND = Object.freeze<Record<string, string>>({ night: '夜', morning: '朝', afternoon: '昼', evening: '夕方' });
 const PRESENCE = Object.freeze<Record<string, string>>({ alone: 'ひとり', away: 'ライ氏は離席', unknown: '様子不明', others: 'ほかの人がいる' });
@@ -59,22 +61,28 @@ export function valueFactCell(cells: readonly ValueCell[], choice: string, conte
 
 /** One line of fact. */
 export function valueFactLine(label: string, cell: ValueCell): string {
-  return `- ${label}${moment(cell)}: ${signed(cell.mean)} ±${fixed(Math.sqrt(Math.max(0, cell.uncertainty)))}`
+  return `- ${label}${moment(cell)}: ${signed(cell.mean)} ±${fixed(Math.max(VALUE_FACT_SPREAD_FLOOR, Math.sqrt(Math.max(0, cell.uncertainty))))}`
     + `（${cell.n}回。世界${fixed(cell.world)}／ライ氏${fixed(cell.serve)}／成長${fixed(cell.growth)}／費用${Math.round(cell.costYen)}円）`;
 }
 
-/** The section for the choices offered, in the fixed order, or null when there is no fact to give. */
+/**
+ * The section for the choices offered, or null when there is no fact to give. Lines are picked round by round, one per kind
+ * that has a fact (messages, calls, stories, reading, notes, looking, tools), until eight, and shown in the fixed order.
+ */
 export function valueFactsSection(cells: readonly ValueCell[], offered: readonly string[], context: string): string | null {
   const wanted = new Set(offered);
-  const named = [
-    ...VALUE_FACT_CHOICES.filter(([choice]) => wanted.has(choice)),
-    ...[...wanted].filter(choice => choice.startsWith('tool.')).sort().map(choice => [choice, `道具「${choice.slice('tool.'.length)}」を使う`] as const),
-  ];
-  const lines: string[] = [];
-  for (const [choice, label] of named) {
-    if (lines.length >= VALUE_FACTS_MAXIMUM_LINES) break;
-    const cell = valueFactCell(cells, choice, context);
-    if (cell) lines.push(valueFactLine(label, cell));
+  const tools = [...wanted].filter(choice => choice.startsWith('tool.')).sort().map(choice => [choice, `道具「${choice.slice('tool.'.length)}」を使う`] as const);
+  const kinds = [...VALUE_FACT_KINDS.map(([, choices]) => choices), tools].map(choices => choices
+    .filter(([choice]) => wanted.has(choice))
+    .flatMap(([choice, label]) => { const cell = valueFactCell(cells, choice, context); return cell ? [{ choice, line: valueFactLine(label, cell) }] : []; }));
+  const picked = new Set<string>();
+  for (let round = 0; picked.size < VALUE_FACTS_MAXIMUM_LINES && kinds.some(kind => kind.length > round); round += 1) {
+    for (const kind of kinds) {
+      if (picked.size >= VALUE_FACTS_MAXIMUM_LINES) break;
+      const fact = kind[round];
+      if (fact) picked.add(fact.choice);
+    }
   }
+  const lines = kinds.flat().filter(fact => picked.has(fact.choice)).map(fact => fact.line);
   return lines.length ? [VALUE_FACTS_HEADER, ...lines].join('\n') : null;
 }

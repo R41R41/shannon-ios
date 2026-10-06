@@ -47,18 +47,15 @@ describe('CORE as code', () => {
   });
 
   it('keeps the package and the files of Syzygy ADR-0008 stage 1 inside core', () => {
-    const learning = filesBelow(join(repositoryRoot, 'packages/learning'));
-    expect(learning.length).toBeGreaterThan(0);
-    for (const file of learning) expect(coreAreaForRepositoryPath(relative(repositoryRoot, file))?.area, file).toBe('emotion');
+    // Whole folders, so a file added there later is core at once.
+    for (const [folder, area] of [['packages/learning', 'emotion'], ['services/api/src/mind/learning', 'emotion'], ['services/api/src/infra/models/jev', 'response_path']] as const) {
+      const files = filesBelow(join(repositoryRoot, folder));
+      expect(files.length, folder).toBeGreaterThan(0);
+      for (const file of files) expect(coreAreaForRepositoryPath(relative(repositoryRoot, file))?.area, file).toBe(area);
+      expect(coreAreaForRepositoryPath(`${folder}/someFutureFile.ts`)?.area, folder).toBe(area);
+    }
     // Listed file by file: the folders they sit in are shared with the files the layout waves move there.
     const expected: Record<string, string> = {
-      'services/api/src/mind/learning/choiceLedger.ts': 'emotion',
-      'services/api/src/mind/learning/predictionLedger.ts': 'emotion',
-      'services/api/src/mind/learning/rewardSettlement.ts': 'emotion',
-      'services/api/src/mind/learning/store/sqliteChoiceLedger.ts': 'emotion',
-      'services/api/src/mind/learning/store/sqlitePredictionLedger.ts': 'emotion',
-      'services/api/src/mind/learning/store/sqliteValueTable.ts': 'emotion',
-      'services/api/src/mind/learning/valueTable.ts': 'emotion',
       'services/api/src/mind/sleep/valueSleep.ts': 'emotion',
       'services/api/src/mind/emotion/rewardMood.ts': 'emotion',
       'services/api/src/wiring/cognitionLedgerWiring.ts': 'emotion',
@@ -68,8 +65,6 @@ describe('CORE as code', () => {
       'services/api/src/mind/inhibition/decisionTraces.ts': 'approval_and_budget',
       'services/api/src/mind/inhibition/store/sqliteDecisionTraces.ts': 'approval_and_budget',
       'services/api/src/mind/inhibition/tracedVoiceDecision.ts': 'approval_and_budget',
-      'services/api/src/infra/models/jev/jevClient.ts': 'response_path',
-      'services/api/src/infra/models/jev/jevUsage.ts': 'response_path',
       'services/api/src/surfaces/voice/transcriptionRoute.ts': 'response_path',
       'services/api/src/infra/http/learningRoutes.ts': 'response_path',
       'services/api/src/infra/sqlite/lockWaits.ts': 'memory',

@@ -39,7 +39,7 @@ HTML files under `docs/archive/` are design history and operational evidence. Th
 - `apps/ios-app`: signed iOS application shell and Xcode project.
 - `services/api`: HTTPS API, SQLite persistence, workers, Agent Host bridge, Aether projection, and tests.
 - `packages/cognition`: pure prompt/state transitions without database, timer, or network ownership.
-- `packages/learning`: pure parts of Syzygy ADR-0008 stage 1 (switches, prediction ledger and calibration, and in later steps reward, values and the mood exit), without database, timer, network or environment; `exports: ./src/index.ts`. A new workspace package needs its `node_modules` link on the VM (a one-time `pnpm install --offline`).
+- `packages/learning`: pure parts of Syzygy ADR-0008 stage 1 (switches, prediction ledger and calibration, reward and settlement rules, the value table and its versions, the value facts, the mood exit and its safeguards), without database, timer, network or environment; `exports: ./src/index.ts`. A new workspace package needs its `node_modules` link on the VM (a one-time `pnpm install --offline`).
 - `services/api/src/mind/<part>/` and `services/api/src/infra/<layer>/`: the target layout of Syzygy ADR-0008 §6. New code of a part goes there from the start (`mind/learning`, `mind/inhibition`, `infra/models/jev`, `infra/sqlite`); existing flat files move only through the scripted layout track. Each folder is mapped to its core area in `autonomyCore.ts`.
 - `deploy/azure`: production service templates.
 - `deploy/macos`: Mac Agent Host launch configuration.

@@ -8,7 +8,7 @@ import type { CompanionStateSnapshot } from '@shannon/cognition';
  * forgetting is reconciled and predictions older than 90 days go (`PredictionLedger.maintain`); then choices that waited are
  * settled (delayed credit), lost reports are voided and choices older than 90 days go (`ChoiceLedger.sleep`); then the value
  * table writes a version from what was settled, unless the owner froze it (`ValueVersions.nightly`). Its failure is
- * logged and never fails the batch. It calls no model.
+ * logged and never fails anything else. It calls no model.
  */
 /** The parts of the learning part it runs, as functions it is handed (`mind/learning`; wired by the worker). */
 export interface ValueSleepParts {

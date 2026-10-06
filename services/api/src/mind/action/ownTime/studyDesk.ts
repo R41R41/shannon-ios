@@ -8,6 +8,9 @@ import {
   type StudyPiece, type StudyPieceKind, type StudyPieceStatus, type StudyReaction, type StudyRejection, type StudySource,
 } from './store/studyStore.js';
 
+/** What is told after the owner reacted to a story: the piece and the reaction's enum, never his comment. */
+export type StudyReactionTap = (scopeKey: string, pieceId: string, reaction: StudyReaction, at: string) => void;
+
 /**
  * The owner's side of Shannon's study: reading what she is willing to show, leaving a
  * reaction, and asking her to put a piece away. Nothing here changes her text.
@@ -20,8 +23,6 @@ import {
  * what Aether has (`overviewFresh`, `pieceFresh`), and a card and a reaction name the Aether document and version
  * (`aetherDocumentId`, `aetherVersion`; additive, the apps may ignore them). A piece may be named by its id or its document.
  */
-/** What is told after the owner reacted to a story: the piece and the reaction's enum, never his comment. */
-export type StudyReactionTap = (scopeKey: string, pieceId: string, reaction: StudyReaction, at: string) => void;
 
 export interface StudyPieceCard {
   id: string;
