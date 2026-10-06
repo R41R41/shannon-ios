@@ -88,7 +88,8 @@ case "$target" in
   cognition-eval) run_fast; run_cognition_eval ;;
   ios) run_fast; run_ios ;;
   app) run_fast; run_app ;;
-  mac) run_fast; run_macos_app ;;
+  # The restored-inspector launch smoke caught the build 145 launch crash; `mac` and `all` run it.
+  mac) run_fast; run_macos_launch_smoke ;;
   mac-smoke) run_fast; run_macos_launch_smoke ;;
   mac-release) run_release_macos_app ;;
   release) run_release_app ;;
@@ -99,7 +100,8 @@ case "$target" in
     run_cognition_eval
     run_ios
     run_app
-    run_macos_app
+    # As `mac`: the restored-inspector launch smoke (it needs an unlocked screen).
+    run_macos_launch_smoke
     run_release_runner
     ;;
   *)

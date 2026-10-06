@@ -646,6 +646,18 @@ struct ShannonDesktopDevelopmentWorkspaceTests {
     }
 
     @Test
+    func aShownNavigatorStaysNearItsThreshold() {
+        let threshold = ShannonDesktopDevelopmentLayout.taskNavigatorThreshold
+        // Before the first reading and while compact: the threshold itself decides.
+        #expect(!ShannonDesktopDevelopmentLayout.showsWide(width: threshold - 1, threshold: threshold, showingWide: nil))
+        #expect(ShannonDesktopDevelopmentLayout.showsWide(width: threshold, threshold: threshold, showingWide: false))
+        // Once shown, a width just under the threshold keeps it; a clearly narrower one folds it.
+        #expect(ShannonDesktopDevelopmentLayout.showsWide(width: threshold - 10, threshold: threshold, showingWide: true))
+        #expect(!ShannonDesktopDevelopmentLayout.showsWide(
+            width: threshold - ShannonDesktopDevelopmentLayout.hysteresis - 1, threshold: threshold, showingWide: true))
+    }
+
+    @Test
     func reviewChangesKeepLatestEntryPerFile() throws {
         var task = ShannonAgentTaskFixtures.completed()
         task.changes = [

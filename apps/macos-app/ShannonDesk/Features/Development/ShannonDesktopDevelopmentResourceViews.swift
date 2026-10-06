@@ -10,23 +10,26 @@ struct DevelopmentFilesPane: View {
     let load: (String, ShannonAgentWorkspaceResourceKind) -> Void
 
     var body: some View {
-        GeometryReader { proxy in
+        Group {
             if paths.isEmpty {
                 ContentUnavailableView(
                     "ファイルを取得できません",
                     systemImage: "folder.badge.questionmark",
                     description: Text("Agent Hostへ接続すると、プロジェクトのファイルが表示されます。")
                 )
-            } else if ShannonDesktopDevelopmentLayout.showsChangeNavigator(availableWidth: proxy.size.width) {
-                HSplitView {
-                    fileNavigator.frame(minWidth: 210, idealWidth: 270, maxWidth: 360)
-                    resourceDetail.frame(minWidth: 360)
-                }
             } else {
-                VStack(spacing: 0) {
-                    compactPicker
-                    Divider()
-                    resourceDetail
+                DesktopWidthAdaptive(threshold: ShannonDesktopDevelopmentLayout.changeNavigatorThreshold) {
+                    HStack(spacing: 0) {
+                        fileNavigator.frame(width: 270)
+                        Divider()
+                        resourceDetail.frame(minWidth: 360)
+                    }
+                } compact: {
+                    VStack(spacing: 0) {
+                        compactPicker
+                        Divider()
+                        resourceDetail
+                    }
                 }
             }
         }
@@ -84,23 +87,26 @@ struct DevelopmentChangesPane: View {
     let load: (String, ShannonAgentWorkspaceResourceKind) -> Void
 
     var body: some View {
-        GeometryReader { proxy in
+        Group {
             if changes.isEmpty {
                 ContentUnavailableView(
                     "レビューできる差分はありません",
                     systemImage: "doc.text.magnifyingglass",
                     description: Text("コードが変更されると、ファイルごとの内容がここに表示されます。")
                 )
-            } else if ShannonDesktopDevelopmentLayout.showsChangeNavigator(availableWidth: proxy.size.width) {
-                HSplitView {
-                    changeList.frame(minWidth: 190, idealWidth: 240, maxWidth: 320)
-                    changeDetail.frame(minWidth: 360)
-                }
             } else {
-                VStack(spacing: 0) {
-                    compactPicker
-                    Divider()
-                    changeDetail
+                DesktopWidthAdaptive(threshold: ShannonDesktopDevelopmentLayout.changeNavigatorThreshold) {
+                    HStack(spacing: 0) {
+                        changeList.frame(width: 240)
+                        Divider()
+                        changeDetail.frame(minWidth: 360)
+                    }
+                } compact: {
+                    VStack(spacing: 0) {
+                        compactPicker
+                        Divider()
+                        changeDetail
+                    }
                 }
             }
         }
@@ -171,6 +177,7 @@ private struct DevelopmentWorkspaceResourceDetail: View {
     let state: ShannonDesktopWorkspaceResourceState
     var fallback: String?
     let retry: () -> Void
+    @State private var viewport = CGSize.zero
 
     init(
         path: String?,
@@ -221,29 +228,27 @@ private struct DevelopmentWorkspaceResourceDetail: View {
                     .padding(ShannonDesktopSpacing.small)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            GeometryReader { proxy in
-                ScrollView([.horizontal, .vertical]) {
-                    Group {
-                        if content.isEmpty {
-                            Text(kind == .diff ? "このファイルには行単位の差分がありません。" : "空のファイルです。")
-                                .foregroundStyle(.secondary)
-                                .padding(ShannonDesktopSpacing.large)
-                        } else if kind == .diff {
-                            DevelopmentDiffText(diff: content)
-                                .padding(.vertical, ShannonDesktopSpacing.small)
-                        } else {
-                            Text(content)
-                                .font(.shannonDesktop(.caption).monospaced())
-                                .textSelection(.enabled)
-                                .padding(ShannonDesktopSpacing.medium)
-                        }
+            ScrollView([.horizontal, .vertical]) {
+                Group {
+                    if content.isEmpty {
+                        Text(kind == .diff ? "このファイルには行単位の差分がありません。" : "空のファイルです。")
+                            .foregroundStyle(.secondary)
+                            .padding(ShannonDesktopSpacing.large)
+                    } else if kind == .diff {
+                        DevelopmentDiffText(diff: content)
+                            .padding(.vertical, ShannonDesktopSpacing.small)
+                    } else {
+                        Text(content)
+                            .font(.shannonDesktop(.caption).monospaced())
+                            .textSelection(.enabled)
+                            .padding(ShannonDesktopSpacing.medium)
                     }
-                    .frame(
-                        minWidth: proxy.size.width,
-                        minHeight: proxy.size.height,
-                        alignment: .topLeading
-                    )
                 }
+                .frame(minWidth: viewport.width, minHeight: viewport.height, alignment: .topLeading)
+            }
+            // The visible size is read beside the scroll view, not by a reader around it (see DesktopWidthAdaptive).
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                if size != viewport { viewport = size }
             }
         }
     }
@@ -342,5 +347,33 @@ private struct DevelopmentDiffText: View {
         if line.hasPrefix("+") && !line.hasPrefix("+++") { return .shannonSuccess.opacity(0.10) }
         if line.hasPrefix("-") && !line.hasPrefix("---") { return .shannonDanger.opacity(0.10) }
         return .clear
+    }
+}
+
+/// Shows `wide` from `threshold` points of width and `compact` below it.
+///
+/// On macOS 26 the sidebar and the inspector float over the detail column and give it safe-area insets
+/// (252 and 286 points by default). 開発 pinned its panes to the visible width with a `GeometryReader`, and
+/// its `HSplitView` extends under both overlays and pads its panes by those insets through AppKit
+/// constraints. With the inspector restored at launch the pinned width and those constraints disagreed on
+/// every pass, and AppKit asked for another Update Constraints pass until the window threw (TestFlight
+/// build 145); either pinning was enough. So the panes are a SwiftUI `HStack` that takes its natural size,
+/// and the width is read with `onGeometryChange` on the container. `scripts/check-architecture.mjs` and
+/// `scripts/smoke-macos-inspector-launch.sh` keep it so.
+struct DesktopWidthAdaptive<Wide: View, Compact: View>: View {
+    let threshold: CGFloat
+    @ViewBuilder let wide: () -> Wide
+    @ViewBuilder let compact: () -> Compact
+    @State private var showsWide: Bool?
+
+    var body: some View {
+        Group {
+            if showsWide == true { wide() } else { compact() }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            let next = ShannonDesktopDevelopmentLayout.showsWide(width: width, threshold: threshold, showingWide: showsWide)
+            if next != showsWide { showsWide = next }
+        }
     }
 }

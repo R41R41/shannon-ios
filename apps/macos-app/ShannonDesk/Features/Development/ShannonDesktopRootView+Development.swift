@@ -7,22 +7,19 @@ extension ShannonDesktopRootView {
         VStack(spacing: 0) {
             developmentStatusBar
             Divider()
-            GeometryReader { proxy in
-                if ShannonDesktopDevelopmentLayout.showsTaskNavigator(availableWidth: proxy.size.width) {
-                    HSplitView {
-                        developmentTaskList
-                            .frame(minWidth: 200, idealWidth: 240, maxWidth: 300)
-                        developmentWorkspace
-                            .frame(minWidth: 360)
-                    }
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                } else {
-                    VStack(spacing: 0) {
-                        developmentCompactTaskBar
-                        Divider()
-                        developmentWorkspace
-                    }
-                    .frame(width: proxy.size.width, height: proxy.size.height)
+            DesktopWidthAdaptive(threshold: ShannonDesktopDevelopmentLayout.taskNavigatorThreshold) {
+                HStack(spacing: 0) {
+                    developmentTaskList
+                        .frame(width: 240)
+                    Divider()
+                    developmentWorkspace
+                        .frame(minWidth: 360)
+                }
+            } compact: {
+                VStack(spacing: 0) {
+                    developmentCompactTaskBar
+                    Divider()
+                    developmentWorkspace
                 }
             }
         }

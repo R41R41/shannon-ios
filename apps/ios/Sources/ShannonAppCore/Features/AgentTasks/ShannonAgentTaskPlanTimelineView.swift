@@ -246,13 +246,11 @@ struct AgentTaskPlanTimelineView: View {
 
     /// Track below a node; it draws in once that step is complete.
     private func connector(completed: Bool) -> some View {
-        GeometryReader { proxy in
-            let line = Path { path in
-                path.move(to: CGPoint(x: proxy.size.width / 2, y: 3))
-                path.addLine(to: CGPoint(x: proxy.size.width / 2, y: proxy.size.height + 9))
-            }
-            line.stroke(palette.divider, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-            line.trim(from: 0, to: completed ? 1 : 0)
+        ZStack {
+            AgentTaskPlanConnectorLine()
+                .stroke(palette.divider, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            AgentTaskPlanConnectorLine()
+                .trim(from: 0, to: completed ? 1 : 0)
                 .stroke(palette.success, style: StrokeStyle(lineWidth: 2, lineCap: .round))
         }
         .frame(width: nodeSize)
@@ -306,5 +304,16 @@ struct AgentTaskPlanTimelineView: View {
             label += "。" + details.joined(separator: "。")
         }
         return label
+    }
+}
+
+/// The track between two steps: down the middle of its frame, reaching 9 points into the next node.
+/// A shape is given its frame, so no GeometryReader is needed (scripts/check-architecture.mjs).
+private struct AgentTaskPlanConnectorLine: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY + 3))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY + 9))
+        return path
     }
 }

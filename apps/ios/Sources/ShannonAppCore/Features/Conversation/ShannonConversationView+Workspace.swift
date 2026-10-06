@@ -128,7 +128,11 @@ extension ShannonConversationView {
                 case .scroll:
                     messageList(palette)
                 case .dialogue:
+#if os(iOS)
                     dialogueStage(palette)
+#else
+                    messageList(palette)
+#endif
                 }
             }
 

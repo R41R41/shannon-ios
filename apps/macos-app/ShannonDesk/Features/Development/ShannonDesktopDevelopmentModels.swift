@@ -26,6 +26,18 @@ enum ShannonDesktopDevelopmentLayout {
     static func showsChangeNavigator(availableWidth: CGFloat) -> Bool {
         availableWidth >= changeNavigatorThreshold
     }
+
+    /// A shown navigator stays until the width is this far below its threshold, so that a width at the
+    /// threshold cannot switch the arrangement back and forth. 24 points covers what the switch itself can
+    /// take from the width: a legacy (always shown) scroller of about 16 points appearing in a pane, plus a
+    /// divider and a little rounding. Down to the threshold minus 24 the wide panes still fit (696 points
+    /// for a 240-point list and a 360-point workspace, 656 for a 270-point list and a 360-point detail).
+    static let hysteresis: CGFloat = 24
+
+    /// Whether the wide arrangement is shown at `width`, given the one shown now (nil before the first reading).
+    static func showsWide(width: CGFloat, threshold: CGFloat, showingWide: Bool?) -> Bool {
+        showingWide == true ? width >= threshold - hysteresis : width >= threshold
+    }
 }
 
 struct ShannonDesktopReviewChange: Equatable, Identifiable {

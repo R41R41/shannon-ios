@@ -134,6 +134,80 @@ for (const path of swiftFiles.filter(path => projectPath(path).startsWith('apps/
   }
 }
 
+// On macOS 26 the sidebar and the inspector float over the detail column and give it safe-area insets.
+// An HSplitView/VSplitView extends under them and pads its panes through AppKit constraints, and a
+// GeometryReader that sizes content to the visible width fought those constraints: with the inspector
+// restored at launch the window asked for another Update Constraints pass on every pass and threw
+// (TestFlight build 145, 2026-10-06). In code compiled for the Mac (the Mac app, and the shared package
+// outside iPhone-only branches): panes are SwiftUI stacks; a GeometryReader stays only inside a
+// background or overlay; a size is read with onGeometryChange and never drives `.frame(width:/height:)`
+// (DesktopWidthAdaptive). scripts/smoke-macos-inspector-launch.sh checks the running app.
+
+/** The Swift source with comments and string literals blanked, line breaks kept. */
+function swiftCode(text) {
+  return text
+    .replace(/"""[\s\S]*?"""/gu, match => match.replace(/[^\n]/gu, ' '))
+    .replace(/\/\*[\s\S]*?\*\//gu, match => match.replace(/[^\n]/gu, ' '))
+    .replace(/\/\/.*$/gmu, '')
+    .replace(/"(?:\\.|[^"\\\n])*"/gu, '""');
+}
+
+/** Blanks the branches compiled for the iPhone only (`#if os(iOS)`, `#if canImport(UIKit)`). */
+function macCompiledCode(code) {
+  const branches = [];
+  return code.split('\n').map(line => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('#if')) branches.push(/^#if\s+(os\(iOS\)|canImport\(UIKit\))\s*$/u.test(trimmed));
+    else if (trimmed.startsWith('#elseif') || trimmed.startsWith('#else')) { if (branches.length) branches[branches.length - 1] = false; }
+    else if (trimmed.startsWith('#endif')) branches.pop();
+    return branches.some(Boolean) ? '' : line;
+  }).join('\n');
+}
+
+const macCompiledSwift = swiftFiles.filter(path =>
+  projectPath(path).startsWith('apps/macos-app/') || projectPath(path).startsWith('apps/ios/Sources/ShannonAppCore/'));
+for (const path of macCompiledSwift) {
+  const code = macCompiledCode(swiftCode(source(path)));
+  const lineOf = offset => code.slice(0, offset).split('\n').length;
+  const where = offset => `${projectPath(path)}:${lineOf(offset)}`;
+
+  for (const match of code.matchAll(/\b[HV]SplitView\b/gu)) {
+    fail(`${where(match.index)} uses an AppKit split view inside SwiftUI; use an HStack/VStack of panes (DesktopWidthAdaptive)`);
+  }
+
+  // Every open brace or parenthesis remembers whether it opens a background or an overlay.
+  const openers = [];
+  for (let index = 0; index < code.length; index += 1) {
+    const character = code[index];
+    if (character === '{' || character === '(') {
+      const before = code.slice(Math.max(0, index - 80), index);
+      const decorates = character === '('
+        ? /\.(background|overlay)\s*$/u.test(before)
+        : /\.(background|overlay)\s*(\([^()]*\))?\s*$/u.test(before);
+      openers.push(decorates);
+    } else if (character === '}' || character === ')') {
+      openers.pop();
+    } else if (code.startsWith('GeometryReader', index) && !/\w/u.test(code[index - 1] ?? '')) {
+      if (!openers.some(Boolean)) {
+        fail(`${where(index)} sizes content with a GeometryReader; read the size with onGeometryChange (DesktopWidthAdaptive)`);
+      }
+      index += 'GeometryReader'.length - 1;
+    }
+  }
+
+  // A size read with onGeometryChange informs content; it never sets the frame AppKit then constrains.
+  const measured = new Set();
+  for (const match of code.matchAll(/onGeometryChange\s*\([^)]*\)\s*\{[^}]*\}\s*action:\s*\{([^}]*)\}/gu)) {
+    for (const assignment of match[1].matchAll(/\b(\w+)\s*=(?!=)/gu)) measured.add(assignment[1]);
+  }
+  for (const name of measured) {
+    const drives = new RegExp(String.raw`\.frame\([^)]*\b(width|height):\s*[^,)]*\b${name}\b`, 'gu');
+    for (const match of code.matchAll(drives)) {
+      fail(`${where(match.index)} sets a frame from ${name}, a size read with onGeometryChange; let the view take its size instead`);
+    }
+  }
+}
+
 const macProject = source(resolve(root, 'apps/macos-app/ShannonDesk.xcodeproj/project.pbxproj'));
 for (const path of filesBelow('apps/macos-app/ShannonDesk', new Set(['.swift']))) {
   if (!macProject.includes(basename(path))) fail(`${projectPath(path)} is missing from the generated Mac project`);

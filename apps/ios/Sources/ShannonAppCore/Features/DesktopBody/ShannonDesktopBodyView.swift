@@ -4,6 +4,25 @@ import SwiftUI
 /// What her desktop window draws: her figure (the one Live2D web view, moved here by the stage), her words above her,
 /// and the camera's state at her feet. The window itself is transparent and borderless; nothing here takes the
 /// pointer except her figure (`ShannonDesktopBodyWindowController` lets every other click through).
+/// Her window's two parts: her words above, and the stage at the bottom, `stageHeight` high (less only when the
+/// window is lower). The stage never moves: a line taller than the room above her spills upward out of the words'
+/// area instead of pushing the stage down, so the window controller's mask and grip zones (`stageRect`) stay true.
+struct ShannonDesktopBodyColumn<Words: View, Stage: View>: View {
+    let stageHeight: CGFloat
+    @ViewBuilder let words: () -> Words
+    @ViewBuilder let stage: () -> Stage
+
+    var body: some View {
+        VStack(spacing: 0) {
+            words()
+                .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .bottom)
+            stage()
+                .frame(maxWidth: .infinity, maxHeight: stageHeight)
+                .layoutPriority(1)
+        }
+    }
+}
+
 struct ShannonDesktopBodyView: View {
     let model: ShannonDesktopBody
     let hostID: UUID
@@ -17,24 +36,28 @@ struct ShannonDesktopBodyView: View {
     private static let layout = ShannonLive2DLayout(mode: .full, contained: true)
 
     var body: some View {
-        GeometryReader { geometry in
-            let stageHeight = ShannonDesktopBodyGeometry.stageRect(in: geometry.size, scale: model.scale).height
-            VStack(spacing: 0) {
-                words(width: geometry.size.width)
-                    .frame(width: geometry.size.width, height: max(0, geometry.size.height - stageHeight), alignment: .bottom)
-                ZStack(alignment: .bottom) {
-                    if !showsLive2D {
-                        ShannonWaterlightEyeView(expression: .calm, size: min(geometry.size.width * 0.5, stageHeight * 0.4), allowsTracking: false)
-                            .frame(maxHeight: .infinity)
-                    }
-                    // Only while she is shown: a hidden window gives the figure back to the app's other places.
-                    if model.isShown, ShannonLive2DStage.isAvailable {
-                        ShannonLive2DHostView(hostID: hostID, priority: .desktop, layout: Self.layout, touchEnabled: true)
-                            .opacity(showsLive2D ? 1 : 0)
-                    }
-                    cameraMark
+        // Sized from her scale, not read from a GeometryReader around the Live2D host (see DesktopWidthAdaptive):
+        // her window is made at this size (`ShannonDesktopBodyGeometry.windowSize`).
+        let scale = ShannonDesktopBodyGeometry.clampScale(model.scale)
+        let stageHeight = (ShannonDesktopBodyGeometry.stageHeight * scale).rounded()
+        ShannonDesktopBodyColumn(stageHeight: stageHeight) {
+            words
+        } stage: {
+            ZStack(alignment: .bottom) {
+                if !showsLive2D {
+                    ShannonWaterlightEyeView(
+                        expression: .calm,
+                        size: min(max(ShannonDesktopBodyGeometry.minimumWidth, ShannonDesktopBodyGeometry.baseWidth * scale) * 0.5, stageHeight * 0.4),
+                        allowsTracking: false
+                    )
+                    .frame(maxHeight: .infinity)
                 }
-                .frame(width: geometry.size.width, height: stageHeight)
+                // Only while she is shown: a hidden window gives the figure back to the app's other places.
+                if model.isShown, ShannonLive2DStage.isAvailable {
+                    ShannonLive2DHostView(hostID: hostID, priority: .desktop, layout: Self.layout, touchEnabled: true)
+                        .opacity(showsLive2D ? 1 : 0)
+                }
+                cameraMark
             }
         }
         .accessibilityElement(children: .contain)
@@ -43,7 +66,7 @@ struct ShannonDesktopBodyView: View {
 
     /// Her words, above her head: one of her messages, a line of a moment, what she said about the room, or her line
     /// for a touch. VoiceOver reads a line her voice does not say.
-    private func words(width: CGFloat) -> some View {
+    private var words: some View {
         let palette = ShannonPalette.resolve(colorScheme)
         let line = model.touch.line ?? model.line
         return Group {
@@ -61,7 +84,8 @@ struct ShannonDesktopBodyView: View {
                             .stroke(palette.divider.opacity(0.62), lineWidth: 0.7)
                     }
                     .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
-                    .frame(maxWidth: max(160, width - 2 * ShannonDesktopSpacing.large))
+                    // Within the window's own width, whatever her scale asked for: the column proposes it.
+                    .padding(.horizontal, ShannonDesktopSpacing.large)
                     .padding(.bottom, ShannonDesktopSpacing.small)
                     .accessibilityLabel("シャノン：\(line.text)")
                     .transition(.opacity)
