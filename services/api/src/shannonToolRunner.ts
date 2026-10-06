@@ -8,7 +8,7 @@ import { folderExecutors } from './shannonFolderTools.js';
 import { minecraftExecutors, minecraftToolOffered, type MinecraftRequestPort } from './shannonMinecraftTools.js';
 import { aetherExecutors } from './shannonAetherTools.js';
 import { aetherStudyTool, studyExecutors } from './shannonStudyTools.js';
-import { authorizeToolCall, authorizeToolInput, gatedAether } from './shannonToolGate.js';
+import { authorizeToolCall, authorizeToolInput, gatedAether, shownAetherCall } from './shannonToolGate.js';
 import type { StudyAether } from './studyAether.js';
 import { validToolInput } from './shannonToolInput.js';
 import type { PreparedToolCall, ToolExecutionContext, ToolExecutor } from './shannonToolTypes.js';
@@ -114,7 +114,8 @@ export class ShannonToolRunner {
     try {
       // Aether as this call may reach it: the gate narrows it with anyone else present and in her own time.
       const prepared = executor(checked.input, this.aether.access && this.aetherFor(context.scopeKey) ? { ...context, aether: gatedAether(this.aether.access, context) } : context);
-      return 'run' in prepared ? { tool, prepared } : { tool, result: prepared };
+      // With anyone else present, what she read reaches the model without the owner's private things.
+      return 'run' in prepared ? { tool, prepared: shownAetherCall(tool, prepared, context) } : { tool, result: prepared };
     } catch {
       return { tool, result: toolFailure('failed', 'うまく準備できなかった。', { retryable: true }) };
     }

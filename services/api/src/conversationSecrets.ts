@@ -1,4 +1,6 @@
-import { memoryControlFor, type CompanionStateSnapshot, type MemoryDisclosure } from '@shannon/cognition';
+import {
+  UNKNOWN_GUEST_PRESENCE, disclosureDecision, memoryControlFor, resolveDisclosure, type CompanionStateSnapshot, type DisclosureDecision, type MemoryDisclosure,
+} from '@shannon/cognition';
 import type { ConversationStore } from './conversationStore.js';
 
 /**
@@ -54,11 +56,38 @@ export function conversationSecrets(state: CompanionStateSnapshot, conversations
   // Forgotten or rejected itself, from a forgotten or rejected turn, or quoting what such an item quoted.
   const gone = (item: typeof items[number]) => forgotten(state, item.id) || forgotten(state, item.source) || quotesGone(item.evidence);
   const goneTurns = new Set(items.filter(item => forgotten(state, item.id)).map(item => item.source).filter((value): value is string => Boolean(value)));
-  const texts = [
+  return runCheck([
     ...items.filter(item => keptSecret(item.disclosure) || gone(item)).flatMap(item => item.texts),
     ...conversations.experienceCandidates(scopeKey)
       .filter(turn => keptSecret(turn.disclosure) || forgotten(state, turn.id) || goneTurns.has(turn.id)).map(turn => turn.userMessage),
+  ]);
+}
+
+/**
+ * What of the owner's may not reach the model as it is while anyone else can see or hear the reply, as a check of free
+ * text (owner decision 2026-10-06, Syzygy ADR-0007: what she reads of 「シャノン用フォルダ」 in front of others, `aetherShownText.ts`).
+ * It is the rule memory follows for such a turn (`disclosureDecision`), judged for an unnamed guest, the strictest presence:
+ * `withheld` is everything `conversationSecrets` holds and every fact, relationship, promise or turn of his withheld for that
+ * presence; `guarded` every one guarded for it (his other personal matters, which memory gives such a turn marked). The
+ * words of a turn are his words only, as in `conversationSecrets`.
+ */
+export function othersSecrets(state: CompanionStateSnapshot, conversations: Pick<ConversationStore, 'experienceCandidates'>, scopeKey: string): { withheld: SecretCheck; guarded: SecretCheck } {
+  const decided = (id: string, disclosure: MemoryDisclosure | undefined): DisclosureDecision =>
+    disclosureDecision(resolveDisclosure(state, id, disclosure), UNKNOWN_GUEST_PRESENCE);
+  const items = [
+    ...state.userFacts.map(item => ({ decision: decided(item.id, item.disclosure), texts: [item.statement, item.evidence ?? ''] })),
+    ...state.relationships.map(item => ({ decision: decided(item.id, item.disclosure), texts: [item.statement, item.evidence ?? ''] })),
+    ...state.prospectiveMemories.map(item => ({ decision: decided(item.id, item.disclosure), texts: [item.summary, item.evidence ?? ''] })),
+    ...conversations.experienceCandidates(scopeKey).map(turn => ({ decision: decided(turn.id, turn.disclosure), texts: [turn.userMessage] })),
   ];
+  const texts = (decision: DisclosureDecision) => items.filter(item => item.decision === decision).flatMap(item => item.texts);
+  const secrets = conversationSecrets(state, conversations, scopeKey);
+  const withheld = runCheck(texts('withheld'));
+  return { withheld: { carries: text => secrets.carries(text) || withheld.carries(text) }, guarded: runCheck(texts('guarded')) };
+}
+
+/** The check of `SECRET_RUN` runs over these texts (see `conversationSecrets`). */
+function runCheck(texts: readonly string[]): SecretCheck {
   const runs = new Set<string>();
   const whole = new Set<string>();
   for (const text of texts) {
