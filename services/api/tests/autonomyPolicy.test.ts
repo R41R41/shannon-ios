@@ -116,6 +116,17 @@ describe('authorizeAutonomousAction: the rule table of ADR-0002', () => {
     expect(result.explanation.length).toBeGreaterThan(0);
   });
 
+  it('refuses outright, in a session that read the owner\'s documents, anything that reaches someone else (ADR-0007)', () => {
+    for (const domain of ['aether_study', 'outreach', 'owner_message', 'vm_workspace']) {
+      expect(decide({ domain, reachesOthers: true, ...(domain === 'vm_workspace' ? { paths: ['/srv/shannon-workspace/tools/post.mjs'] } : {}) }, { ownerInformed: true }))
+        .toMatchObject({ decision: 'forbidden', reason: 'owner_informed', domain: 'outreach' });
+    }
+    // Before the switches: no approval can lift it, and the rest of what she does is decided as before.
+    expect(decide({ domain: 'outreach', reachesOthers: true }, { ownerInformed: true, paused: true })).toMatchObject({ decision: 'forbidden', reason: 'owner_informed' });
+    expect(decide({ domain: 'aether_study' }, { ownerInformed: true })).toMatchObject({ decision: 'allow', reason: 'free_domain' });
+    expect(decide({ domain: 'outreach', reachesOthers: true })).toMatchObject({ decision: 'needs_approval', reason: 'reaches_others' });
+  });
+
   it('covers every domain of the vocabulary with its rule', () => {
     const expected = { free: 'allow', approval: 'needs_approval', forbidden: 'forbidden' } as const;
     const requests: Record<string, Partial<AutonomousActionRequest>> = {
