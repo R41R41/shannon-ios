@@ -74,7 +74,7 @@ export class BodyTouches {
         kind: touch.type, countInWindow: receipt.burst.count, ownerAlone: touch.audience === 'owner',
         ...(touch.durationMs !== undefined ? { durationMs: touch.durationMs } : {}),
         ...(touch.strength !== undefined ? { strength: touch.strength } : {}),
-        ...(reflexPart ? { reflexPart } : {}),
+        ...(reflexPart ? { reflexPart, ...(touch.gesture === 'rest' ? { resting: true } : {}) } : {}),
       } });
       // The shadow is handed what was felt and returns nothing (it never fails the touch). A touch moved only by the
       // reflex has no appraisal of the table to learn from: its outcome is her own stance, kept in the result table.

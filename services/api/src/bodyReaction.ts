@@ -162,7 +162,7 @@ export class BodyReactions {
         kind: request.touch.type, countInWindow: felt.burst.count, ownerAlone: request.audience === 'owner', durationMs: request.touch.durationMs,
         ...(request.touch.strength !== undefined ? { strength: request.touch.strength } : {}),
         // On such a part her chosen feeling is as strong as the reflex was felt, and its cause names the part (首をつつかれた).
-        ...(reflexPart ? { reflexPart } : {}),
+        ...(reflexPart ? { reflexPart, ...(request.touch.gesture === 'rest' ? { resting: true } : {}) } : {}),
       };
       // The feeling of her line is resolved as the feeling of any reply is: from her own words and the stored state.
       const resolved = resolveReplyEmotion({

@@ -221,11 +221,15 @@ describe('a part where her body flinches first: the reflex alone (Syzygy ADR-000
 
   it('names the part as the cause, keeps it a feeling from a touch, and gives way to the next touch', () => {
     expect(touchCause(touch('poke', 1, { reflexPart: '首' }))).toBe('ライ氏に首をつつかれた');
-    expect(touchCause(touch('pet', 2, { reflexPart: '胸' }))).toBe('ライ氏に胸をさわられた（続けて2回目）');
+    // The verbs of the reaction prompt, by gesture: a stroke, and a touch that rests.
+    expect(touchCause(touch('pet', 2, { reflexPart: '胸' }))).toBe('ライ氏に胸をなでられた（続けて2回目）');
+    expect(touchCause(touch('pet', 1, { reflexPart: '胸', resting: true }))).toBe('ライ氏に胸に触れられた');
+    expect(touchCause(touch('pet', 1, { resting: true }))).toBe('ライ氏に頭をなでてもらった');
     expect(touchCause(touch('tickle', 1, { reflexPart: '腰', ownerAlone: false }))).toBe('腰をくすぐられた');
     expect(touchCause(touch('carry', 1, { reflexPart: 'スカート' }))).toBe('ライ氏に持ち上げて運ばれた');
     const startled = touched(fresh(), touch('pet', 1, { reflexPart: '胸' }));
-    expect(startled.expressiveEmotion).toMatchObject({ primary: 'surprised', target: 'ライ氏', cause: 'ライ氏に胸をさわられた' });
+    expect(startled.expressiveEmotion).toMatchObject({ primary: 'surprised', target: 'ライ氏', cause: 'ライ氏に胸をなでられた' });
+    expect(isTouchFeeling(touched(fresh(), touch('pet', 1, { reflexPart: '脚', resting: true })).expressiveEmotion)).toBe(true);
     expect(isTouchFeeling(startled.expressiveEmotion)).toBe(true);
     expect(touched(startled, touch('holdHand'), later(1)).expressiveEmotion!.primary).toBe('shy');
   });

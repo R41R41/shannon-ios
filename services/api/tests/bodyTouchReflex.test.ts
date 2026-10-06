@@ -160,7 +160,7 @@ describe('how she takes it is her own answer, never a table', () => {
       await harness.events({ id: `e-${index}`, type: 'pet', audience: 'owner', occurredAt: harness.clock.at, durationMs: 5_000, strength: 1, region: 'body', part, gesture: 'stroke' });
     }
     // Five strokes in a row would please her by the table; here they only startled her.
-    expect(harness.state().expressiveEmotion).toMatchObject({ primary: 'surprised', cause: 'ライ氏にスカートをさわられた（続けて5回目）' });
+    expect(harness.state().expressiveEmotion).toMatchObject({ primary: 'surprised', cause: 'ライ氏にスカートをなでられた（続けて5回目）' });
     expect(harness.state().emotion.valence).toBe(before.emotion.valence);
     expect(harness.state().emotion.openness).toBe(before.emotion.openness);
     // A stroke on the head in the new shape is felt by the table, as a pat always was.

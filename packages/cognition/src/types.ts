@@ -234,6 +234,8 @@ export interface ShannonTouch {
    * (`SHANNON_TOUCH_REFLEX`), and how she takes the touch is her own judgement. Absent: the table, as before.
    */
   reflexPart?: string;
+  /** The touch stayed without moving (touch vocabulary 2 `gesture: rest`). Read only to word a touch on such a part (胸に触れられた). */
+  resting?: boolean;
 }
 
 export interface CompanionStateSnapshot {

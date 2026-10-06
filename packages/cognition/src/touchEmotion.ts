@@ -68,10 +68,14 @@ export const SHANNON_TOUCH_FEELINGS: Readonly<Record<ShannonTouchKind, ShannonTo
  */
 export const SHANNON_TOUCH_REFLEX: ShannonTouchFeelingStep = SHANNON_TOUCH_FEELINGS.poke.steps[0]!;
 
-/** How a touch on such a part is named as the cause of the reflex (首をつつかれた); carrying and holding keep the table's own words. */
-const REFLEX_VERBS: Readonly<Partial<Record<ShannonTouchKind, string>>> = Object.freeze({
-  pet: 'さわられた', poke: 'つつかれた', tickle: 'くすぐられた',
-});
+/**
+ * How a touch on such a part is named as the cause of the reflex, with the verbs the reaction prompt uses for the gesture
+ * (`touchDetailPhrase`): 首をなでられた, 胸に触れられた (a touch that rests), 腰をつつかれた, 脚をくすぐられた. Carrying keeps the table's words.
+ */
+const REFLEX_PHRASES = Object.freeze({ stroke: 'をなでられた', rest: 'に触れられた', poke: 'をつつかれた', tickle: 'をくすぐられた' });
+const reflexPhrase = (touch: ShannonTouch): string | undefined =>
+  touch.kind === 'pet' ? (touch.resting ? REFLEX_PHRASES.rest : REFLEX_PHRASES.stroke)
+    : touch.kind === 'poke' ? REFLEX_PHRASES.poke : touch.kind === 'tickle' ? REFLEX_PHRASES.tickle : undefined;
 
 /** The share of the distance to the row's mood one touch covers, and the most any one touch moves a mood value. */
 export const SHANNON_TOUCH_MOOD_RATE = 0.18;
@@ -103,10 +107,10 @@ export function isReflexTouch(touch: Pick<ShannonTouch, 'reflexPart'>): boolean 
   return typeof touch.reflexPart === 'string' && touch.reflexPart.length > 0;
 }
 
-/** The touch in the state's words: the table's, or on a part where her body flinches first, that part (首をつつかれた). */
+/** The touch in the state's words: the table's, or on a part where her body flinches first, that part (首をつつかれた, 胸に触れられた). */
 function touchDone(touch: ShannonTouch): string {
-  const verb = isReflexTouch(touch) ? REFLEX_VERBS[touch.kind] : undefined;
-  return verb ? `${touch.reflexPart}を${verb}` : SHANNON_TOUCH_FEELINGS[touch.kind].done;
+  const phrase = isReflexTouch(touch) ? reflexPhrase(touch) : undefined;
+  return phrase ? `${touch.reflexPart}${phrase}` : SHANNON_TOUCH_FEELINGS[touch.kind].done;
 }
 
 /** Why she feels it, in the stored state's words. Shown to the owner as the cause of 「いま」. */
@@ -123,7 +127,7 @@ export function touchTarget(touch: Pick<ShannonTouch, 'ownerAlone'>): string {
 /** Whether a stored feeling came from a touch (its cause is one of the table's own wordings). */
 export function isTouchFeeling(emotion: Pick<ShannonExpressiveEmotion, 'cause'> | undefined): boolean {
   return emotion !== undefined && (SHANNON_TOUCH_KINDS.some(kind => emotion.cause.includes(SHANNON_TOUCH_FEELINGS[kind].done))
-    || Object.values(REFLEX_VERBS).some(verb => emotion.cause.includes(`を${verb}`)));
+    || Object.values(REFLEX_PHRASES).some(phrase => emotion.cause.includes(phrase)));
 }
 
 /**
