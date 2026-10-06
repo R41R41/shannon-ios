@@ -190,6 +190,17 @@ describe('what she reads of her folder in front of others', () => {
       // An ordinary sentence that only shares a short word of it (病院) stays.
       expect(textForOthers('病院の前を通った。', separated)).toBe('病院の前を通った。');
     }
+    // The whole sentences stay beside the finer fragments: a clause under four characters does not let the sentence through.
+    for (const [secret, folder] of [['来月、手術。病院は東大病院', '来月、手術。'], ['来月 手術。病院は東大病院', '来月 手術。']] as const) {
+      const whole = { withheld: runCheckOf([secret]), guarded: runCheckOf([]), openOnly: true };
+      expect(textForOthers(`${folder}灯台を見た。`, whole)).toBe(`灯台を見た。\n${LEFT_OUT_LINE}`);
+    }
+    // An emoji with a variation selector, a joiner or a modifier cuts cleanly (❤️, 👨‍⚕️, 👍🏽).
+    for (const secret of ['来月に手術❤️病院は東大病院', '来月に手術👨‍⚕️病院は東大病院', '来月に手術👍🏽病院は東大病院']) {
+      const emoji = { withheld: runCheckOf([secret]), guarded: runCheckOf([]), openOnly: true };
+      expect(textForOthers('病院は東大病院。灯台を見た。', emoji)).toBe(`灯台を見た。\n${LEFT_OUT_LINE}`);
+      expect(textForOthers('来月に手術❤️。灯台を見た。', emoji)).toBe(`灯台を見た。\n${LEFT_OUT_LINE}`);
+    }
     // A sentence of a secret in hiragana alone is matched too; only short filler of a secret is skipped.
     const hiragana = { withheld: runCheckOf(['うつになった。そうなんだ。病院は東大病院']), guarded: runCheckOf([]), openOnly: true };
     expect(textForOthers('ライ氏はうつになった。灯台を見た。', hiragana)).toBe(`灯台を見た。\n${LEFT_OUT_LINE}`);

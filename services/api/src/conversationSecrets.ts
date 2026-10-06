@@ -99,26 +99,31 @@ export function othersSecrets(state: CompanionStateSnapshot, conversations: Pick
 }
 
 /**
- * Each fragment of these texts of at least `SHORT_MINIMUM` characters, matched whole inside what is checked (a sentence
- * of the folder text). A fragment is cut after 。！？!?｡．, at 、，, line breaks, emoji, and whitespace next to a
- * character outside ASCII (so 「来月に手術 病院は東大病院」 gives 「来月に手術」; ASCII words are not cut apart), then
- * compacted as a run is, with a leading 「ユーザーは」 style subject removed. A short fragment of hiragana alone (at most
+ * Each sentence and each fragment of these texts of at least `SHORT_MINIMUM` characters, matched whole inside what is
+ * checked (a sentence of the folder text). A sentence is cut after 。！？!? and at line breaks (「来月、手術。」 gives
+ * 「来月手術」); a fragment, kept beside it, is also cut after ｡．, at 、，, emoji, and whitespace next to a character
+ * outside ASCII (so 「来月に手術 病院は東大病院」 gives 「来月に手術」; ASCII words are not cut apart, and an ASCII-only
+ * text is not cut at `.`). Both are compacted as a run is, with a leading 「ユーザーは」 style subject removed. On both
+ * sides, variation selectors, the zero-width joiner and skin-tone modifiers are removed first (`withoutEmojiParts`),
+ * so an emoji such as ❤️ or 👨‍⚕️ cuts cleanly and leaves nothing on the next fragment. A short fragment of hiragana alone (at most
  * `FILLER_MAXIMUM` characters, 「そうなんだ」) is filler and skipped; a longer one (「うつになった」) is matched like any other.
  */
 const FILLER_MAXIMUM = 5;
+const SENTENCE_CUT = /(?<=[。！？!?])|\n/u;
 const FRAGMENT_CUT = /(?<=[。！？!?｡．])|[、，,\n]|\p{Extended_Pictographic}|(?<=[^\x00-\x7F])\s+|\s+(?=[^\x00-\x7F])/u;
+const withoutEmojiParts = (text: string) => text.replace(/[\uFE0E\uFE0F\u200D\u{1F3FB}-\u{1F3FF}]/gu, '');
 
 function sentenceCheck(texts: readonly string[]): SecretCheck {
   const sentences = new Set<string>();
-  for (const text of texts) {
-    for (const sentence of text.split(FRAGMENT_CUT)) {
+  for (const text of texts.map(withoutEmojiParts)) {
+    for (const sentence of [...text.split(SENTENCE_CUT), ...text.split(FRAGMENT_CUT)]) {
       const words = compact(sentence.trim().replace(SUBJECT, ''));
       if (words.length >= SHORT_MINIMUM && !(words.length <= FILLER_MAXIMUM && /^[\p{Script=Hiragana}ー]+$/u.test(words))) sentences.add(words);
     }
   }
   return {
     carries(text: string): boolean {
-      const candidate = compact(text);
+      const candidate = compact(withoutEmojiParts(text));
       for (const words of sentences) if (candidate.includes(words)) return true;
       return false;
     },
