@@ -206,8 +206,13 @@ export function sessionFacts(
     ...(input.thinkReserveYen !== undefined ? { thinkReserveYen: input.thinkReserveYen } : {}),
     ...(input.openStories >= input.maximumOpenStories ? { studyFull: input.openStories } : {}),
     previous: previous?.endedAt && previous.endCode
-      ? { endedClock: clock(previous.endedAt, config.timeZone), code: previous.endCode, ...(previous.restReason ? { reason: previous.restReason } : {}) } : null,
+      // The reason a marked session gave, in her words, is not given to a session that is not marked (ADR-0007, option a).
+      ? { endedClock: clock(previous.endedAt, config.timeZone), code: previous.endCode, ...(previous.restReason && reasonShown(store, cycle, previous.cycleId) ? { reason: previous.restReason } : {}) } : null,
   };
+}
+
+function reasonShown(store: StepDependencies['store'], cycle: Pick<AutonomyLoopCycle, 'id'>, previousId: string): boolean {
+  try { return !store.informed.sessionInformedAt(previousId) || store.informed.sessionInformedAt(cycle.id) !== null; } catch { return false; }
 }
 
 export function clock(at: string, timeZone: string): string {

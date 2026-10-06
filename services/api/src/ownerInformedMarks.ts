@@ -75,6 +75,11 @@ export class OwnerInformedMarks {
     }
   }
 
+  /** Whether anything of this scope is marked at all: while nothing is, no prompt needs to be looked through. */
+  any(scopeKey: string): boolean {
+    return Boolean(this.database.prepare('SELECT 1 AS found FROM owner_informed_documents WHERE scope_key = ? LIMIT 1').get(scopeKey));
+  }
+
   /** Whether a document is marked: by its own id, by the piece of her study it is, or by the Aether document a piece is. */
   marked(scopeKey: string, documentId: string): boolean {
     const id = documentId.startsWith(AETHER_DOCUMENT_PREFIX) ? decodeURIComponent(documentId.slice(AETHER_DOCUMENT_PREFIX.length)) : documentId;

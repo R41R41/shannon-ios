@@ -65,21 +65,25 @@ export function thinkingMaterials(
     reachOut?: { remaining: number; upcoming: readonly PromptUpcoming[] } | null;
     /** What she wrote down after an unanswered message is among her notes; only while that mechanism is on. */
     ownNotes?: boolean;
+    /** Which notes and stories this session may be given (`unmarkedOnly`, ADR-0007); absent, every one. */
+    keep?: (piece: StudyPiece) => boolean;
+    /** Which pursuits this session may be given (`unmarkedPursuits`, ADR-0007); absent, every one. */
+    keepPursuit?: (pursuit: ShannonPursuit) => boolean;
   },
 ): ThinkingMaterials {
   const pieces = store.study.list(scopeKey);
-  const stories = pieces.filter(piece => piece.kind === 'story' && piece.status !== 'put_away');
+  const stories = pieces.filter(piece => piece.kind === 'story' && piece.status !== 'put_away' && (input.keep?.(piece) ?? true));
   return {
     localTime: input.localTime,
     remainingYen: input.remainingYen,
     remainingReads: input.remainingReads,
     maximumSteps: input.maximumSteps,
-    pursuits: store.pursuits.list(scopeKey, input.at),
+    pursuits: input.keepPursuit ? store.pursuits.list(scopeKey, input.at).filter(input.keepPursuit) : store.pursuits.list(scopeKey, input.at),
     stories: stories.map(piece => ({
       id: piece.id, title: piece.title, statusLabel: STUDY_STATUS_LABEL[piece.status], version: piece.version,
       characters: piece.body.length, lastChange: store.study.versions(scopeKey, piece.id).at(-1)?.changeNote ?? '',
     })),
-    notes: storyNotes(store, scopeKey, undefined, 6, input.ownNotes === true),
+    notes: storyNotes(store, scopeKey, undefined, 6, input.ownNotes === true, input.keep),
     unnotedReadings: store.loop.unnotedReadings(scopeKey).map(reading => ({ id: reading.id, title: reading.title, url: reading.url })),
     feedback: stories.flatMap(piece => store.study.pendingFeedback(scopeKey, piece.id).map(feedback => ({
       pieceId: piece.id, pieceTitle: piece.title, version: feedback.version,

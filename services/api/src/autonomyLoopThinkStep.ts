@@ -11,6 +11,7 @@ import { reasonedPlan, thinkingMaterials, type ReasonedThought } from './autonom
 import { salvagedModelObject, thinkingPrompt, type ThinkingExtras } from './autonomyLoopPrompts.js';
 import { phoneThinking, withPhone, type PhoneThinking } from './autonomyLoopPhoneStep.js';
 import { reachOutsRemaining } from './autonomyLoopReachOutStep.js';
+import { unmarkedOnly, unmarkedPursuits } from './autonomyLoopProvenance.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import { offeredOwnTools, toolThinking } from './autonomyLoopToolStep.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
@@ -115,7 +116,7 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
     readingSeeds: loop.readingSeeds, notionAvailable: dependencies.notion !== undefined,
     // The v1 copy step only while her study is Shannon's (Syzygy ADR-0007 revised: with Aether, stories are never put in the PC folder).
     folderAvailable: !service.studyAether?.covers(cycle.scopeKey) && service.folder.available(cycle.scopeKey, at),
-    lookAvailable: lookNow && !rethink.looked, ownNotes: agentic,
+    lookAvailable: lookNow && !rethink.looked, ownNotes: agentic, keep: unmarkedOnly(dependencies, cycle), keepPursuit: unmarkedPursuits(dependencies, cycle),
     reachOut: reachOuts > 0 ? { remaining: reachOuts, upcoming: upcomingLines(dependencies, cycle.scopeKey, at) } : null,
   });
   // The phone: the facts of the moment, and the action while she may use it. Nothing while he has not switched calls on.

@@ -1,6 +1,7 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { autonomyDayKey, yenFromUsd } from './autonomyBudget.js';
 import { storyNotes } from './autonomyLoopPlan.js';
+import { unmarkedOnly } from './autonomyLoopProvenance.js';
 import {
   AUTONOMY_REACH_OUT_MAXIMUM_CHARACTERS, REACH_OUT_REASON_LABEL, parsedModelObject, reachOutPrompt,
   type ReachOutReason, type ThinkingExtras,
@@ -162,8 +163,10 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
   if (!reason || reason === 'follow_up' || !reachOuts?.sayByPhone || !callAvailable(dependencies, cycle.scopeKey, at)) return null;
   const others = reachOuts.audience(cycle.scopeKey, at);
   // The same materials as a message of hers, by the same reasons: nothing to be about means nothing to say.
-  const notes = reason === 'share' ? storyNotes(store, cycle.scopeKey, undefined, 12).filter(note => !note.seen).slice(0, 4) : [];
-  const stories = reason === 'share' ? store.study.list(cycle.scopeKey).filter(piece => piece.kind === 'story' && piece.status !== 'put_away').slice(0, 3)
+  // What she wrote after reading the owner's is given only to a marked session, and never with anyone else present (ADR-0007).
+  const shown = unmarkedOnly(dependencies, cycle, others !== null);
+  const notes = reason === 'share' ? storyNotes(store, cycle.scopeKey, undefined, 12, false, shown).filter(note => !note.seen).slice(0, 4) : [];
+  const stories = reason === 'share' ? store.study.list(cycle.scopeKey).filter(piece => piece.kind === 'story' && piece.status !== 'put_away' && shown(piece)).slice(0, 3)
     .map(piece => ({ title: piece.title, statusLabel: STUDY_STATUS_LABEL[piece.status] })) : [];
   const items = reason === 'upcoming' ? upcoming?.lines(cycle.scopeKey, at, others ? 'others' : 'owner') ?? [] : [];
   const seen = reason === 'saw' ? store.study.list(cycle.scopeKey)

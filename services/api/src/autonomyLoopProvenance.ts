@@ -1,4 +1,5 @@
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
+import { STUDY_DOCUMENT_PREFIX } from './ownerInformedMarks.js';
 import type { StepDependencies, StepResult } from './autonomyLoopSteps.js';
 
 /**
@@ -25,6 +26,28 @@ export function noteProvenance(dependencies: Pick<StepDependencies, 'store'>, cy
   const wrote = [...(documents?.wrote ?? []), ...(WRITING_STEPS.has(step.kind) && link ? [link] : [])];
   if (wrote.length) marks.markDocuments(cycle.scopeKey, wrote, cycle.id, at);
   marks.markPursuits(cycle.scopeKey, since, at);
+}
+
+/**
+ * Which pieces of her study a prompt of this session may carry (owner decision 2026-10-06, option a): a session that is not
+ * marked is given nothing marked, so a story or a message of an unmarked session cannot retell what she wrote after reading
+ * the owner's. A marked session is given everything as before; opening a marked piece on purpose (`study.read`, `aether.read`,
+ * revising it) marks the session. With anyone else present (`others`) nothing marked is given, whatever the session. While
+ * nothing is marked, nothing is looked up and every prompt is what it was. A mark that cannot be read counts as a mark.
+ */
+export function unmarkedOnly(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id' | 'scopeKey'>, others = false): (piece: { id: string }) => boolean {
+  const marks = dependencies.store.informed;
+  if (!marks.any(cycle.scopeKey) || (!others && marks.sessionInformedAt(cycle.id))) return () => true;
+  return piece => { try { return !marks.marked(cycle.scopeKey, `${STUDY_DOCUMENT_PREFIX}${piece.id}`); } catch { return false; } };
+}
+
+/** The same for her pursuits: a pursuit created or changed in a marked session is not given to a session that is not marked. */
+export function unmarkedPursuits(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id' | 'scopeKey'>): (pursuit: { id: string }) => boolean {
+  const marks = dependencies.store.informed;
+  let informed: ReadonlySet<string>;
+  try { informed = marks.informedPursuits(cycle.scopeKey); } catch { return () => false; }
+  if (!informed.size || marks.sessionInformedAt(cycle.id)) return () => true;
+  return pursuit => !informed.has(pursuit.id);
 }
 
 /**

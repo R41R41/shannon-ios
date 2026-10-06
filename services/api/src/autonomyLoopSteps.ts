@@ -16,7 +16,7 @@ import { storyNotes, withNoteAfterReading } from './autonomyLoopPlan.js';
 import { AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, revisePrompt } from './autonomyLoopPrompts.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import { prepareThinking } from './autonomyLoopThinkStep.js';
-import { heldForOthers } from './autonomyLoopProvenance.js';
+import { heldForOthers, unmarkedOnly, unmarkedPursuits } from './autonomyLoopProvenance.js';
 import { prepareToolStep, type AutonomyToolResults } from './autonomyLoopToolStep.js';
 import type { AutonomyModelPurpose } from './autonomyModels.js';
 import { AUTONOMY_CALL_DOMAIN, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
@@ -245,7 +245,7 @@ function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, s
   const { store, service } = dependencies;
   const reading = (step.readingId ? store.loop.reading(cycle.scopeKey, step.readingId) : null) ?? store.loop.unnotedReadings(cycle.scopeKey)[0] ?? null;
   if (!reading || reading.notedAt || !reading.text) return null;
-  const pursuit = reading.pursuitId ? store.pursuits.get(cycle.scopeKey, reading.pursuitId) : null;
+  const pursuit = reading.pursuitId ? shownPursuit(dependencies, cycle, store.pursuits.get(cycle.scopeKey, reading.pursuitId)) : null;
   const call = paidCall(dependencies, cycle.scopeKey, 'research_reading', notePrompt({ pursuit, reading, ...ownerWriting(dependencies, cycle.scopeKey, at, `${pursuit?.title ?? ''} ${reading.title}`) }), OUTPUT_TOKENS.note);
   if (!call) return null;
   return {
@@ -285,9 +285,9 @@ function prepareDraft(dependencies: StepDependencies, cycle: AutonomyLoopCycle, 
   const { store } = dependencies;
   // In a session she is told when her study has no room for another story, and a draft that could not be kept is not paid for.
   if (sessionOf(dependencies, cycle) && openStories(dependencies, cycle.scopeKey) >= STUDY_LIMITS.openStories) return null;
-  const pursuit = step.pursuitId ? store.pursuits.get(cycle.scopeKey, step.pursuitId) : null;
+  const pursuit = step.pursuitId ? shownPursuit(dependencies, cycle, store.pursuits.get(cycle.scopeKey, step.pursuitId)) : null;
   const call = paidCall(dependencies, cycle.scopeKey, 'prose', draftPrompt({
-    idea: step.intent ?? '', pursuit, notes: storyNotes(store, cycle.scopeKey, step.pursuitId, 5), ...ownerWriting(dependencies, cycle.scopeKey, at, `${step.intent ?? ''} ${pursuit?.title ?? ''}`),
+    idea: step.intent ?? '', pursuit, notes: storyNotes(store, cycle.scopeKey, step.pursuitId, 5, false, unmarkedOnly(dependencies, cycle)), ...ownerWriting(dependencies, cycle.scopeKey, at, `${step.intent ?? ''} ${pursuit?.title ?? ''}`),
   }), OUTPUT_TOKENS.draft);
   if (!call) return null;
   return {
@@ -329,7 +329,7 @@ function prepareRevision(dependencies: StepDependencies, cycle: AutonomyLoopCycl
   const call = paidCall(dependencies, cycle.scopeKey, 'prose', revisePrompt({
     aim: step.intent ?? '', piece: { title: piece.title, body: piece.body, version: piece.version },
     feedback: feedback.map(item => ({ reactionLabel: STUDY_REACTION_LABEL[item.reaction], comment: item.comment, version: item.version })),
-    notes: storyNotes(store, cycle.scopeKey, piece.pursuitId, 3), ...ownerWriting(dependencies, cycle.scopeKey, at, `${step.intent ?? ''} ${piece.title}`),
+    notes: storyNotes(store, cycle.scopeKey, piece.pursuitId, 3, false, unmarkedOnly(dependencies, cycle)), ...ownerWriting(dependencies, cycle.scopeKey, at, `${step.intent ?? ''} ${piece.title}`),
   }), OUTPUT_TOKENS.revise);
   if (!call) return null;
   const seen = piece.readableVersion !== null;
@@ -346,7 +346,8 @@ function prepareRevision(dependencies: StepDependencies, cycle: AutonomyLoopCycl
       const pushed = adapters.aether?.covers(cycle.scopeKey) ? await aetherStep(() => adapters.aether!.update(cycle.scopeKey, piece, { title: clip(title, 80), body, changeNote: change }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'revise', piece.id, String(piece.version)), signal)) : null;
       if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: '物語を直しましたが、Aetherの書斎に書けませんでした。', reasonCode: pushed.reasonCode };
       return {
-        outcome: 'done', usage, link: `shannon-study://${piece.id}`,
+        // Revising a marked piece is opening it on purpose: the session is marked (ADR-0007).
+        outcome: 'done', usage, link: `shannon-study://${piece.id}`, documents: { read: [`shannon-study://${piece.id}`] },
         summary: seen ? `物語「${clip(piece.title, 60)}」を直しました（第${piece.version + 1}稿）。` : `物語の下書きを直しました（第${piece.version + 1}稿）。まだ見せていません。`,
         commit: (_remaining, commitAt) => {
           const revised = store.study.revise(cycle.scopeKey, piece.id, { title, body, changeNote: change, model: call.model }, commitAt);
@@ -409,6 +410,11 @@ function ownerWriting(dependencies: StepDependencies, scopeKey: string, at: stri
   let block: string | null = null;
   try { block = dependencies.ownerContext.forWriting(scopeKey, at, topic)?.section ?? null; } catch { block = null; }
   return { ownerInformed: true, ...(block ? { ownerContext: block } : {}) };
+}
+
+/** A pursuit as a prompt of this session may name it: not one marked, in a session that is not (ADR-0007). */
+function shownPursuit<T extends { id: string }>(dependencies: StepDependencies, cycle: AutonomyLoopCycle, pursuit: T | null): T | null {
+  return pursuit && unmarkedPursuits(dependencies, cycle)(pursuit) ? pursuit : null;
 }
 
 /**
