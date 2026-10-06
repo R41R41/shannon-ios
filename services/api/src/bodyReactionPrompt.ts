@@ -1,5 +1,5 @@
 import {
-  SHANNON_EMOTION_KINDS, SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_OWNER_NAME, isShannonEmotionKind,
+  SHANNON_EMOTION_KINDS, SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_OWNER_NAME, isShannonEmotionKind, shannonTemperament,
   type ShannonEmotionKind, type ShannonExpressiveEmotion, type ShannonTouchKind,
 } from '@shannon/cognition';
 import type { BodyAudience } from './bodyContract.js';
@@ -39,6 +39,13 @@ export interface BodyReactionPromptInput {
   at: string;
   /** Where the touched body is, as its device registered; absent, the wording is what it was. */
   surface?: BodySurface;
+  /** Syzygy ADR-0006 stage 2: her stance is asked of every touch (under stage 1b only of a touch that names its part). */
+  asksStance?: boolean;
+  /**
+   * Stage 2, with the owner alone only: their closeness (`temperament.closeness`, 0–1) and how she took touches on this
+   * part before, newest first (empty: the first time). Facts, not rules.
+   */
+  history?: { closeness: number; part?: string; stances?: readonly BodyTouchStance[] };
 }
 
 /** A touch while it is going on, and once it is over. */
@@ -69,6 +76,18 @@ export function bodyTouchLine(touch: BodyReactionTouch, audience: BodyAudience):
 
 /** What her body did by itself on the spot, as the body reported it (touch vocabulary 2). Nothing for `none` or no report. */
 const REFLEX_LINES = Object.freeze({ flinch: '思わず小さく身を引いた', avoid: '思わず身をそらした' });
+
+/** The five ways of taking a touch, in her words (the labels of the schema). */
+export const BODY_TOUCH_STANCE_WORDS: Readonly<Record<BodyTouchStance, string>> = Object.freeze({
+  welcome: 'うれしい', fine: 'かまわない', unsure: '戸惑う', dislike: 'いや', refuse: '拒む',
+});
+
+/** 「これまで首に触れられた時のボクの受け取り: いや 2回、拒む 1回」, or that it is the first time. */
+export function stanceHistoryLine(part: string, stances: readonly BodyTouchStance[]): string {
+  if (!stances.length) return `${part}に触れられて${SHANNON_FIRST_PERSON}が受け取りを決めるのは、これが初めて`;
+  const counts = BODY_TOUCH_STANCES.map(stance => [stance, stances.filter(item => item === stance).length] as const).filter(([, count]) => count > 0);
+  return `これまで${part}に触れられた時の${SHANNON_FIRST_PERSON}の受け取り: ${counts.map(([stance, count]) => `${BODY_TOUCH_STANCE_WORDS[stance]} ${count}回`).join('、')}（新しい順に ${stances.slice(0, 3).map(stance => BODY_TOUCH_STANCE_WORDS[stance]).join('・')}）`;
+}
 
 /** Whether a touch names its part (touch vocabulary 2): only then is she asked how she took it. A touch in the old shape is asked as before. */
 export const asksStance = (touch: Pick<BodyReactionTouch, 'part'>): boolean => touch.part !== undefined;
@@ -110,6 +129,11 @@ export function bodyReactionPrompt(input: BodyReactionPromptInput): string {
       ...(input.touch.reflex === 'flinch' || input.touch.reflex === 'avoid' ? [`- 体: ${REFLEX_LINES[input.touch.reflex]}`] : []),
       `- ${feeling}`,
       `- この場: ${input.audience === 'owner' ? `${SHANNON_OWNER_NAME}と二人だけ` : 'ほかの人もいる'}`,
+      // Stage 2, the owner alone only: facts of the relationship and of her own past, no rule of how to take them.
+      ...(input.history && input.audience === 'owner' ? [
+        `- ${SHANNON_OWNER_NAME}との親密さ: ${input.history.closeness.toFixed(2)}（経験で育つ気質。0〜1）`,
+        ...(input.history.part !== undefined && input.history.stances ? [`- ${stanceHistoryLine(input.history.part, input.history.stances)}`] : []),
+      ] : []),
     ].join('\n'),
     [
       '[さっきからの体のこと]',
@@ -121,7 +145,9 @@ export function bodyReactionPrompt(input: BodyReactionPromptInput): string {
       '[いまの会話]（直前の数行。続きとして自然なら踏まえてよい）',
       ...conversation.map(item => `${item.role === 'user' ? SHANNON_OWNER_NAME : SHANNON_FIRST_PERSON}: ${clip(item.content, BODY_REACTION_LIMITS.contextCharacters)}`),
     ].join('\n')] : []),
-    ['[決め方]', ...BODY_REACTION_RULES.map(rule => `- ${rule}`), ...(asksStance(input.touch) ? [`- ${BODY_REACTION_OWN_RULE}`] : []),
+    // Her temperament, from the one persona source (`shannonTemperament`; owner decision "a" and scope (a), 2026-10-06): the
+    // touch prompt carries no identity block, so it states it once here, worded for who is there. Outside the stage-2 switch.
+    ['[決め方]', ...BODY_REACTION_RULES.map(rule => `- ${rule}`), `- ${shannonTemperament(input.audience === 'owner' ? 'owner' : 'others')}`, ...(input.asksStance || asksStance(input.touch) ? [`- ${BODY_REACTION_OWN_RULE}`] : []),
       ...(input.audience === 'others' ? [`- ${BODY_REACTION_OTHERS_RULE}`] : [])].join('\n'),
   ].join('\n\n');
 }

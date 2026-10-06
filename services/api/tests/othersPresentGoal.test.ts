@@ -97,8 +97,9 @@ describe('the owner\'s current goal with other people present', () => {
     // folder branch (2026-10-06, A18, owner approval) the `own_folder` line names the PC or the Mac, 33 more (6644836be1aa54fd
     // alone). Nothing else changed: with both lines as before, the fingerprint is f985777ad5061000 again. On the S3 branch
     // (A18 S3, owner approval) the `own_folder` line drops its note that the Mac's folder is only read: 81990bce01279119 with
-    // the note. Recomputed after merging main 97b52985: unchanged.
-    expect(fingerprint(alone)).toBe('5776c6948507cd9c');
+    // the note. Recomputed after merging main 97b52985: unchanged. On the stage-2 branch (2026-10-06, owner decision "a") her
+    // body line gained her temperament (9c61cf2910b8466e); with scope (a) it moved to her persona: 5776c6948507cd9c without it.
+    expect(fingerprint(alone)).toBe('89239154af689e83');
 
     const others = await chat('人格の改善はどう進める？', { audience: 'others' });
     expect(others).not.toContain('current_goal=');
@@ -117,7 +118,9 @@ describe('the owner\'s current goal with other people present', () => {
     // Re-recorded on the body-1b branch (2026-10-06) for the same 22 characters of her capability line (911bc31030d3e769 alone),
     // and on the Mac folder branch for the 33 of the `own_folder` line (bb34c77bdba7c1ca alone); 1732f2014cc3eeb7 before both.
     // On the S3 branch (A18 S3) that line drops its note that the Mac's folder is only read: eabeaf61971fc368 with the note.
-    expect(fingerprint(alone)).toBe('891f915e25710768');
+    // On the stage-2 branch (owner decision "a") the body line gained her temperament (74a4ca961d8d1a66); with scope (a) it
+    // moved to her persona: 891f915e25710768 without it.
+    expect(fingerprint(alone)).toBe('a3209b96faf9eff5');
 
     const companion = await voice('前に話した人格の改善のこと覚えてる？', true);
     expect(companion).toContain('[Current cognitive context');

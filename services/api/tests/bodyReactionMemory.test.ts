@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { memoryWithholdingRules, ownerSpoke } from '@shannon/cognition';
 import { BODY_REACTION_LIMITS } from '../src/bodyReactionContract.js';
 import { SQLiteTouchExperiences, touchEvidence, touchExperienceSummary, touchWhen } from '../src/bodyTouchMemory.js';
@@ -9,6 +9,10 @@ import { ShannonMemoryService } from '../src/memoryService.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { HEHE, MINUTE, SECOND, START, reactionHarness, scope } from './bodyReactionHarness.js';
 import { promptOf } from './modelPrompt.js';
+
+// Stage 1b exactly, kept under SHANNON_PREDICTION=off (Syzygy ADR-0006 stage 2: `bodyTouchStage2.test.ts`).
+beforeEach(() => { vi.stubEnv('SHANNON_PREDICTION', 'off'); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 const directories: string[] = [];
 afterEach(() => { directories.splice(0).forEach(directory => rmSync(directory, { recursive: true, force: true })); });
@@ -389,7 +393,9 @@ describe('remembering a touch', () => {
       'part', 'side', 'gesture', 'reflex']);
     expect(columns('body_touch_bursts')).toEqual(['scope_key', 'burst_id', 'touch_type', 'started_at', 'last_at', 'touch_count', 'total_duration_ms', 'others', 'said_json', 'region', 'surface',
       // Stage 1b (2026-10-06): a flag, 1 once a touch of the burst was on a part where her body flinches first.
-      'reflex']);
+      'reflex',
+      // Syzygy ADR-0006 stage 2 (2026-10-06): the finer part, a closed word, as `region`.
+      'part']);
     // Stage 1b, the result table: closed words, identifiers and a time, never her words.
     expect(columns('body_touch_outcomes')).toEqual(['scope_key', 'touch_id', 'burst_id', 'audience', 'stance', 'feeling', 'said', 'decided_at']);
     expect(JSON.stringify(database.prepare('SELECT * FROM body_touch_outcomes').all())).not.toMatch(/アルパカ|覚えました|えへへ/u);

@@ -22,6 +22,7 @@ import { holdsShannonFeeling, isKeptUnpleasant } from './emotionState.js';
 import { SHANNON_EMOTION_CONTINUITY, SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
 import { SHANNON_OWNER_NAME } from './persona.js';
 import { calibrateTemperament, mergeSharedDays, sameTemperament } from './temperament.js';
+import { appraiseTouch } from './touchAppraisal.js';
 import { feelTouch, isTouchFeeling } from './touchEmotion.js';
 import { normalizeDisclosure, sameDisclosure, widenAudience } from './disclosure.js';
 import type { MemoryDisclosure } from './types.js';
@@ -317,15 +318,27 @@ export function reduceCompanionState(
       const felt = feelTouch(state, event.touch, nowIso, timing);
       if (timing.clock === 'awake') {
         // A feeling that was held through the touch is left exactly as stored; only the mood moved.
-        const feeling = felt.expressiveEmotion === state.expressiveEmotion ? null
+        const feeling = !felt.expressiveEmotion || felt.expressiveEmotion === state.expressiveEmotion ? null
           : committedFeeling(state, felt.expressiveEmotion, awakeMs, nowIso, timing);
         if (!feeling && sameEmotion(felt.emotion, state.emotion)) return state === current ? current : freezeSnapshot(state);
         next = { ...state, emotion: felt.emotion, ...feeling };
         break;
       }
+      if (!felt.expressiveEmotion) { // Stage 2: no feeling brought and none held: only the mood moves.
+        if (sameEmotion(felt.emotion, current.emotion)) return current;
+        next = { ...current, emotion: felt.emotion };
+        break;
+      }
       if (sameEmotion(felt.emotion, current.emotion) && current.expressiveEmotion
         && sameShannonExpressiveEmotion(felt.expressiveEmotion, current.expressiveEmotion)) return current;
       next = { ...current, emotion: felt.emotion, expressiveEmotion: felt.expressiveEmotion };
+      break;
+    }
+    case 'touch-appraised': { // ADR-0006 stage 2: her decided stance's prediction error moves valence and arousal.
+      const { state } = awakeState(current, nowIso, timing);
+      const emotion = appraiseTouch(state.emotion, event.outcome);
+      if (sameEmotion(emotion, state.emotion)) return state === current ? current : freezeSnapshot(state);
+      next = { ...state, emotion };
       break;
     }
     case 'feeling-eased': {

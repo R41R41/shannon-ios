@@ -52,6 +52,8 @@ export interface ShadowComparison {
   tap: string;
   old: { valence: number; arousal: number; openness: number; present: number };
   next: { valence: number; arousal: number; openness: number; present: number; mood: number; awakeMs: number; boundaryMs: number };
+  /** Which step the new dynamics took (`SHANNON_AFFECT_STEP`); absent for a row stage 1 wrote. */
+  dynamics?: string;
 }
 
 interface OutcomeRow {
@@ -93,6 +95,15 @@ export class SQLitePredictionStore {
       expectation: nullable(row.expectation), uncertainty: nullable(row.uncertainty), error: nullable(row.error),
       learningRate: nullable(row.learning_rate), cause: nullable(row.cause),
     }));
+  }
+
+  /** Stage 2: the newest outcome of a key, and when it was observed; null when the key has none. */
+  latest(scopeKey: string, domain: string, key: string): { outcome: number; observedAt: string } | null {
+    const row = this.database.prepare(`
+      SELECT outcome, observed_at FROM shannon_prediction_outcomes WHERE scope_key = ? AND domain = ? AND key = ? AND outcome IS NOT NULL
+      ORDER BY seq DESC LIMIT 1
+    `).get(scopeKey, domain, key) as unknown as { outcome: number; observed_at: string } | undefined;
+    return row ? { outcome: Number(row.outcome), observedAt: row.observed_at } : null;
   }
 
   /** How many rows a scope has and its newest `seq`: enough to see whether another process wrote or deleted. */
@@ -145,10 +156,10 @@ export class SQLitePredictionStore {
     const { old, next } = comparison;
     this.database.prepare(`
       INSERT INTO shannon_prediction_shadow
-        (scope_key, recorded_at, tap, old_valence, old_arousal, old_openness, old_present, new_valence, new_arousal, new_openness, new_present, new_mood, new_awake_ms, new_boundary_ms)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (scope_key, recorded_at, tap, old_valence, old_arousal, old_openness, old_present, new_valence, new_arousal, new_openness, new_present, new_mood, new_awake_ms, new_boundary_ms, new_dynamics)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(scopeKey, comparison.at, comparison.tap, ...[old.valence, old.arousal, old.openness, old.present, next.valence, next.arousal, next.openness,
-      next.present, next.mood, next.awakeMs, next.boundaryMs].map(value => rounded(value)));
+      next.present, next.mood, next.awakeMs, next.boundaryMs].map(value => rounded(value)), comparison.dynamics ?? null);
   }
 
   comparisons(scopeKey: string, since = ''): ShadowComparison[] {
@@ -162,6 +173,7 @@ export class SQLitePredictionStore {
         valence: Number(row.new_valence), arousal: Number(row.new_arousal), openness: Number(row.new_openness), present: Number(row.new_present),
         mood: Number(row.new_mood), awakeMs: Number(row.new_awake_ms), boundaryMs: Number(row.new_boundary_ms),
       },
+      ...(typeof row.new_dynamics === 'string' ? { dynamics: row.new_dynamics } : {}),
     }));
   }
 
@@ -201,6 +213,7 @@ export function ensurePredictionSchema(database: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS shannon_prediction_outcomes_scope ON shannon_prediction_outcomes (scope_key, seq);
     CREATE INDEX IF NOT EXISTS shannon_prediction_outcomes_source ON shannon_prediction_outcomes (scope_key, source_id);
+    CREATE INDEX IF NOT EXISTS shannon_prediction_outcomes_key ON shannon_prediction_outcomes (scope_key, domain, key, seq);
     CREATE TABLE IF NOT EXISTS shannon_prediction_shadow (
       comparison_id INTEGER PRIMARY KEY AUTOINCREMENT,
       scope_key TEXT NOT NULL,
@@ -212,6 +225,9 @@ export function ensurePredictionSchema(database: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS shannon_prediction_shadow_scope_time ON shannon_prediction_shadow (scope_key, recorded_at);
   `);
+  // Added 2026-10-06 (ADR-0006 stage 2): which step the new dynamics took; empty on the rows stage 1 wrote.
+  const columns = (database.prepare("PRAGMA table_info('shannon_prediction_shadow')").all() as unknown as Array<{ name: string }>).map(column => column.name);
+  if (!columns.includes('new_dynamics')) database.exec('ALTER TABLE shannon_prediction_shadow ADD COLUMN new_dynamics TEXT');
 }
 
 /** The draft as it will be stored (validated, features rounded, instant normalised): what a fold must use. */

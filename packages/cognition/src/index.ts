@@ -22,11 +22,14 @@ export {
   SHANNON_ONE_LINE_VOICE,
   SHANNON_OWNER_NAME,
   SHANNON_SUITE_PRODUCTS,
+  SHANNON_TEMPERAMENT,
   mentionsSuiteProduct,
   shannonPersonaPrompt,
+  shannonTemperament,
   shannonSuitePrompt,
   suiteProductPattern,
   type ShannonAudience,
+  type ShannonPersonaOptions,
   type ShannonSuiteProductId,
 } from './persona.js';
 export {
@@ -169,7 +172,9 @@ export {
   isPredictionDomain,
   observeOutcome,
   predictOutcome,
+  relativeUncertainty,
   scaleVariance,
+  unexpectedness,
   transformedOutcome,
   type Prediction,
   type PredictionDomain,
@@ -183,7 +188,9 @@ export {
 export {
   SHANNON_AFFECT_COEFFICIENTS,
   SHANNON_AFFECT_DYNAMICS,
+  SHANNON_AFFECT_STEP,
   advanceAffect,
+  boundedAffectStep,
   createAffectDynamics,
   deterministicNormal,
   episodeBoundaryMs,
@@ -204,6 +211,17 @@ export {
   type EmotionalTrace,
   type EpisodeBoundaryModel,
 } from './affectDynamics.js';
+// Syzygy ADR-0006 stage 2: a touch's startle and her stance's prediction error move her feeling (`SHANNON_PREDICTION`).
+export {
+  SHANNON_STANCE_OUTCOME,
+  appraiseTouch,
+  isFeltStartle,
+  startleArousal,
+  touchImpact,
+  type ShannonTouchAppraisal,
+  type ShannonTouchOutcome,
+  type ShannonTouchStance,
+} from './touchAppraisal.js';
 export { isMeaningfulInterest, filterMeaningfulInterests } from './interests.js';
 export {
   deriveResonantInterest,

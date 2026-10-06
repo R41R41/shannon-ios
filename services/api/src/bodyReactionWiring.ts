@@ -2,6 +2,7 @@ import { configuredBodyReactions } from './bodyReactionContract.js';
 import { createConfiguredBodyReactionSpeaker } from './bodyReactionModel.js';
 import { SQLiteBodyReactionStore } from './bodyReactionStore.js';
 import { SQLiteTouchExperiences } from './bodyTouchMemory.js';
+import { touchPredictionEnabled } from './bodyTouchPrediction.js';
 import type { LlmUsageEvent } from './llmUsage.js';
 import type { ShannonBodyOptions } from './shannonBody.js';
 
@@ -19,7 +20,8 @@ export function configuredBodyReactionOptions(
   const store = new SQLiteBodyReactionStore(databasePath);
   const experiences = new SQLiteTouchExperiences(databasePath);
   opened.push(store, experiences);
-  return { store, experiences, config: configuredBodyReactions(environment), speaker: createConfiguredBodyReactionSpeaker(environment, usageStore), prediction };
+  return { store, experiences, config: configuredBodyReactions(environment), speaker: createConfiguredBodyReactionSpeaker(environment, usageStore), prediction,
+    stage2: touchPredictionEnabled(environment) };
 }
 
 const opened: Array<{ close(): void }> = [];

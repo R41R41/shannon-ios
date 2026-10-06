@@ -306,7 +306,7 @@ async function completeLiveVoiceDelegation(
   // The slim path drops owner state, never the identity: persona, suite roles and capabilities stay.
   // The full profile block is for the owner alone; otherwise the disclosed block in the turn context stands in.
   const identity = temporaryGuest ? identityOnly(shannonIdentityPrompt('guest')) : selectedSkills.has('conversation_memory') && alone
-    ? dependencies.knowledgeStore?.promptProjectionParts(scopeKey) ?? companionIdentityPrompt(captured) : identityOnly(shannonIdentityPrompt('owner'));
+    ? dependencies.knowledgeStore?.promptProjectionParts(scopeKey) ?? companionIdentityPrompt(captured) : identityOnly(shannonIdentityPrompt('owner', { othersPresent: !alone }));
   const basePrompt = temporaryGuest
     ? [identity.identity, voiceConversationInstructions(true, false, false), temporaryGuestVoiceInstructions].join('\n\n')
     : [dependencies.autonomy?.identityProjection(scopeKey, identity.identity) ?? identity.identity, voiceConversationInstructions(true)].join('\n\n');

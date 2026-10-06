@@ -16,7 +16,7 @@ import { BodyReactions } from './bodyReaction.js';
 import { BODY_REACTION_TOOL, configuredBodyReactions, type BodyReactionConfig } from './bodyReactionContract.js';
 import type { BodyReactionSpeaker } from './bodyReactionModel.js';
 import { SQLiteBodyReactionStore } from './bodyReactionStore.js';
-import { BodyTouches, type BodyTouchDependencies } from './bodyTouch.js';
+import { BodyTouches, touchPredictionEnabled, type BodyTouchDependencies } from './bodyTouch.js';
 import { BODY_TOUCH_ONLY_FLAG, isFullBody, isTouchOnlyBody } from './bodyTouchOnly.js';
 import { desktopBodyDeviceId, isDesktopBodyDeviceId } from './desktopBodyIdentity.js';
 import { bodyPlace, bodySurfaceMark, factualTouchPhrase, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
@@ -55,7 +55,7 @@ export interface ShannonBodyOptions {
   /** `SHANNON_AUTONOMY_MAX_FOLLOW_UPS` above zero. Off, no report is taken and no presence read is noted for the loop. Unset means on. */
   reachOutReportsEnabled?: boolean;
   /** When she is touched (`bodyReaction.ts`): its tables, switch and timings, the fast model, and where a touch becomes an experience. */
-  reactions?: { store?: SQLiteBodyReactionStore; config?: Partial<BodyReactionConfig>; speaker?: BodyReactionSpeaker | null; experiences?: TouchExperienceWriter | null; prediction?: BodyTouchDependencies['prediction'] };
+  reactions?: { store?: SQLiteBodyReactionStore; config?: Partial<BodyReactionConfig>; speaker?: BodyReactionSpeaker | null; experiences?: TouchExperienceWriter | null; prediction?: BodyTouchDependencies['prediction']; stage2?: BodyTouchDependencies['stage2'] };
   /**
    * Whether the owner is in a call on another device (`ownerCallElsewhere.ts`): `enabled` is `SHANNON_OWNER_CALL_ELSEWHERE`
    * (unset means on); `surface` says which app a device is (default: her body's registration only).
@@ -190,7 +190,8 @@ export class ShannonBody {
     const config = { ...configuredBodyReactions({}), ...dependencies.reactions?.config };
     this.touches = new BodyTouches({
       store: reactionStore, stateStore: dependencies.stateStore, experiences: dependencies.reactions?.experiences ?? null,
-      enabled: config.enabled && this.ingestEnabled, now: dependencies.now, prediction: dependencies.reactions?.prediction ?? null,
+      enabled: config.enabled && this.ingestEnabled, now: dependencies.now, ...(dependencies.reactions?.prediction !== undefined ? { prediction: dependencies.reactions.prediction } : {}),
+      stage2: dependencies.reactions?.stage2 ?? touchPredictionEnabled(process.env), // ADR-0006 stage 2: `SHANNON_PREDICTION`
     });
     this.reactions = new BodyReactions({
       store: reactionStore, touches: this.touches, stateStore: dependencies.stateStore, conversationStore: dependencies.conversationStore,

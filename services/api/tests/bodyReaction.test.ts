@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SHANNON_ONE_LINE_VOICE, currentShannonEmotion, presentShannonFeeling, presentShannonMood } from '@shannon/cognition';
 import {
   BODY_REACTION_LIMITS, bodyReactionContentHash, configuredBodyReactions, validatedBodyReactionRequest, type BodyReactionAnswer,
@@ -9,6 +9,10 @@ import {
 } from '../src/bodyReactionPrompt.js';
 import type { LlmUsageEvent } from '../src/llmUsage.js';
 import { FakeSpeaker, HEHE, MINUTE, SECOND, START, reactionHarness, scope } from './bodyReactionHarness.js';
+
+// Stage 1b exactly, kept under SHANNON_PREDICTION=off (Syzygy ADR-0006 stage 2: `bodyTouchStage2.test.ts`).
+beforeEach(() => { vi.stubEnv('SHANNON_PREDICTION', 'off'); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 const valid = { id: 'r-1', touch: { type: 'pet', durationMs: 1_500, ongoing: true }, audience: 'owner', occurredAt: START };
 

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { shannonTemperament } from '@shannon/cognition';
 import { join } from 'node:path';
 import type { AutonomyRoomLooks } from '../src/autonomyLoopLookStep.js';
 import { followUpPrompt, rethinkExtras } from '../src/autonomyLoopObservePrompts.js';
@@ -14,13 +15,26 @@ import { FULL_PLAN, FakeModel, FakeShowing, callKind, loopHarness, runUntilIdle,
  * owner's context existed (78c3493), unchanged, and on that commit with only the owner-approved default of the
  * day's budget (1,000 → 2,000 yen) and the wording of one forbidden item changed; `autonomyLoopKillSwitch.test.ts`
  * holds the digests of both runs.
- * Identifiers are random, so they are replaced before a prompt is digested; nothing else is.
+ * Identifiers are random, so they are replaced before a prompt is digested. Her temperament joined her persona after both
+ * commits (owner decision "a", scope (a), 2026-10-06): a prompt that carries her persona must carry it exactly once, and it is
+ * taken out before digesting, so the digests of 78c3493 and a10fdedd still prove that nothing else changed. Nothing else is.
  */
 const MINUTE = 60_000;
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gu;
 
+const PERSONA_HEADER = '[シャノンの人格]';
+const TEMPERAMENT_LINES = [`\n- ${shannonTemperament('owner')}`, `\n- ${shannonTemperament('others')}`];
+
+/** The text without her temperament line; a text with her persona must have the line once (it is still pinned that way). */
+export function withoutTemperament(text: string): string {
+  if (!text.includes(PERSONA_HEADER)) return text;
+  const found = TEMPERAMENT_LINES.reduce((count, line) => count + (text.split(line).length - 1), 0);
+  if (found !== text.split(PERSONA_HEADER).length - 1) throw new Error('KILL_SWITCH_TEMPERAMENT_LINE_MISSING');
+  return TEMPERAMENT_LINES.reduce((rest, line) => rest.split(line).join(''), text);
+}
+
 export function digest(text: string): string {
-  return createHash('sha256').update(text.replace(UUID, 'ID')).digest('hex').slice(0, 16);
+  return createHash('sha256').update(withoutTemperament(text).replace(UUID, 'ID')).digest('hex').slice(0, 16);
 }
 
 export interface ScenarioCall { kind: string; digest: string }

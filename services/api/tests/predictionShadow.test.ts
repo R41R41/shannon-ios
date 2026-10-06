@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { predictOutcome, resolveShannonEmotionState, type CompanionStateEvent, type ShannonEmotionKind, type ShannonTouchKind } from '@shannon/cognition';
+import { SHANNON_AFFECT_STEP, predictOutcome, resolveShannonEmotionState, type CompanionStateEvent, type ShannonEmotionKind, type ShannonTouchKind } from '@shannon/cognition';
 import type { ReachOutFacts } from '../src/autonomyLoopObservations.js';
 import { observeStep } from '../src/autonomyLoopObserve.js';
 import type { StepDependencies } from '../src/autonomyLoopSteps.js';
@@ -277,7 +277,28 @@ describe('the taps', () => {
   });
 });
 
+describe('the comparison record', () => {
+  it('says which step the new dynamics took, and writes one comparison for one touch event', async () => {
+    const w = world({ shadow: true });
+    w.touch('pet', 'head');
+    const comparisons = w.shadow!.comparisons(scope);
+    expect(comparisons.map(item => item.tap)).toEqual(['touch']);
+    expect(comparisons.every(item => item.dynamics === SHANNON_AFFECT_STEP)).toBe(true);
+    w.apply({ type: 'touch-appraised', outcome: { error: 0.4, expectation: 0.2, unexpected: 0.5 } });
+    expect(w.shadow!.comparisons(scope)).toHaveLength(1);
+  });
+});
+
 describe('the current and the new dynamics over one day', () => {
+  it('gives the same trajectory every time a scripted day runs: the noise is seeded by what and when, never by a random burst id', () => {
+    const first = world({ shadow: true });
+    const second = world({ shadow: true });
+    day(first);
+    day(second);
+    const strip = (items: ReturnType<NonNullable<typeof first.shadow>['comparisons']>) => items.map(item => ({ ...item }));
+    expect(strip(second.shadow!.comparisons(scope))).toEqual(strip(first.shadow!.comparisons(scope)));
+  });
+
   it('reports how far the two trajectories differ', () => {
     const w = world({ shadow: true });
     day(w);

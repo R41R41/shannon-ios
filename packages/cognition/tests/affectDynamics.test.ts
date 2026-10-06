@@ -93,9 +93,35 @@ describe('momentary impulses and mood', () => {
     expect(impulseAffect(start, { key: 'reply_feeling:owner', error: 0, learningRate: 0.5 }).impulse).toBe(0);
     // w_E applies only where a prediction preceded a choice of hers.
     expect(impulseAffect(start, { key: 'reply:k', error: 0, expectation: 0.4, learningRate: 0.5 }).impulse).toBe(0);
-    expect(impulseAffect(start, { key: 'reply:k', error: 0, expectation: 0.4, chosen: true, learningRate: 0.5 }).impulse).toBeCloseTo(0.4, 12);
-    // Surprise raises arousal either way.
-    expect(impulseAffect(start, { key: 'k', error: -0.5, learningRate: 0.5 }).state.core.arousal).toBeCloseTo(SHANNON_MOOD_BASELINE.arousal + 0.5, 12);
+    expect(impulseAffect(start, { key: 'reply:k', error: 0, expectation: 0.4, chosen: true, learningRate: 0.5 }).impulse).toBeCloseTo(0.4 * 0.35 / 0.8, 12);
+    // Held as her appraisal (a touch): it joins the valence target, not the trace.
+    const held = impulseAffect(start, { key: 'touch:k', error: 0, expectation: 0.8, held: true, learningRate: 0.5 });
+    expect(held.impulse).toBe(0);
+    expect(held.state.core.valence).toBeGreaterThan(impulseAffect(start, { key: 'touch:k', error: 0, learningRate: 0.5 }).state.core.valence);
+    // Surprise raises arousal either way, by the bounded step (stage 2, candidate B): the share 1 − γ toward its attractor raised by u.
+    const gamma = SHANNON_AFFECT_DYNAMICS.eventForgetting;
+    const surprised = impulseAffect(start, { key: 'k', error: -0.5, learningRate: 0.5, unexpected: 0.8 }).state.core;
+    const a0 = SHANNON_MOOD_BASELINE.arousal;
+    expect(surprised.arousal).toBeCloseTo(gamma * start.core.arousal + (1 - gamma) * (a0 + (1 - a0) * 0.8), 12);
+    expect(surprised.valence).toBeCloseTo(gamma * start.core.valence + (1 - gamma) * (SHANNON_MOOD_BASELINE.valence - 0.5), 12);
+  });
+
+  it('never pins valence or arousal at the ends of the scale: each step is a weighted average of points on it (stage 2)', () => {
+    let state = advanceAffect(createAffectDynamics(), 0, 'first');
+    const values: number[][] = [];
+    for (let index = 1; index <= 2_000; index += 1) {
+      state = advanceAffect(state, index * 10_000, `flood:${index}`);
+      // The worst case: an error of +2 that is fully unexpected, every ten seconds.
+      state = impulseAffect(state, { key: `k${index % 3}`, error: 2, learningRate: 0.5, unexpected: 1 }).state;
+      values.push([state.core.valence, state.core.arousal]);
+    }
+    for (const [valence, arousal] of values) {
+      expect(valence).toBeLessThanOrEqual(1);
+      expect(arousal).toBeLessThanOrEqual(1);
+    }
+    // With nothing unexpected, arousal returns toward its attractor instead of staying up.
+    const calm = impulseAffect(state, { key: 'k', error: 0, learningRate: 0.5, unexpected: 0 }).state.core.arousal;
+    expect(calm).toBeLessThan(state.core.arousal);
   });
 
   it('keeps the mood loop stable: with f = 1 one round shrinks every deviation, and a long run of good outcomes converges', () => {
@@ -208,7 +234,7 @@ describe('the coefficient table (ADR-0006 §2.6)', () => {
       expect(row.literature.length, row.symbol).toBeGreaterThan(0);
       expect(row.initial.length, row.symbol).toBeGreaterThan(0);
     }
-    expect(SHANNON_AFFECT_COEFFICIENTS.filter(row => row.verify === '要確認').map(row => row.symbol)).toEqual(['θ', 'w_E, w_δ', 'α, kernel']);
+    expect(SHANNON_AFFECT_COEFFICIENTS.filter(row => row.verify === '要確認').map(row => row.symbol)).toEqual(['θ', 'w_E, w_δ', 'γ', 'α, kernel']);
     expect(SHANNON_AFFECT_COEFFICIENTS.find(row => row.symbol === 'openness')!.kind).toBe('assumption');
     expect(SHANNON_AFFECT_DYNAMICS.moodTilt).toBe(1);
     expect(Math.exp(-SHANNON_AFFECT_DYNAMICS.theta * 2 * HOUR)).toBeCloseTo(0.4, 12);

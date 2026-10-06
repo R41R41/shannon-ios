@@ -7,6 +7,8 @@ import {
   SHANNON_ONE_LINE_VOICE,
   SHANNON_ROOM_LOOK_RULES,
   SHANNON_SUITE_PRODUCTS,
+  SHANNON_TEMPERAMENT,
+  shannonTemperament,
   assembleShannonSystemPrompt,
   createInitialCompanionState,
   mentionsSuiteProduct,
@@ -51,7 +53,8 @@ describe('canonical Shannon persona', () => {
   });
 
   it('stays compact enough for the response path', () => {
-    expect(shannonPersonaPrompt('owner').length).toBeLessThanOrEqual(650);
+    // +65 on 2026-10-06: her temperament as a persona line (scope (a): `shannonTemperament`, 62 characters and 「- 」; 650 before).
+    expect(shannonPersonaPrompt('owner').length).toBeLessThanOrEqual(715);
     expect(shannonSuitePrompt().length).toBeLessThanOrEqual(420);
     // +125 on 2026-10-02: the look through the app. 2026-10-03: +74, it does not announce a look by itself; and the phone call
     // line with no count of messages a day (owner decisions). 2026-10-05: +154, her study and her folder through her tools (owner decision);
@@ -59,9 +62,11 @@ describe('canonical Shannon persona', () => {
     // rule that she does not go along with a premise about something she did on her own that no record shows (owner decision).
     // 2026-10-06: +22, 「体は自分のもの。触れられ方は自分で受け取る。」 in the body line (Syzygy ADR-0005, owner answer 7);
     // +33 the same day, her folder may be on the PC or the Mac, and the Mac's is only read for now (A18; owner approval).
+    // Her temperament stood beside it for one commit (+62) and moved to her persona with scope (a): back to 2,539.
     expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(2_539);
-    // The core prompt holds the owner capability text: +22 and +33 for the same two lines (3,420 before).
-    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(3_475);
+    // The core prompt holds the owner capability text: +22 and +33 for the same two lines (3,420 before); +65 her temperament
+    // in her persona (scope (a), 2026-10-06; 3,475 before).
+    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(3_540);
     expect(SHANNON_ONE_LINE_VOICE.length).toBeLessThanOrEqual(140);
   });
 });
@@ -174,6 +179,24 @@ describe('canonical capability description', () => {
     // No rule of how to feel: neither that a touch pleases her nor that she must refuse one.
     expect(line).not.toMatch(/嬉し|うれし|拒ま|禁/u);
     expect(shannonCapabilityPrompt('guest')).not.toContain('触れられ方');
+  });
+
+  it('gives her the temperament of an ordinary girl in her persona, for every audience, from one source (owner decision "a", scope (a))', () => {
+    expect(SHANNON_TEMPERAMENT).toBe('照れたり、むっとしたり、怒ったり、ライ氏に「いや」と言ったりするのもボクらしさ。ライ氏の機嫌をとるために丸く収めなくていい。');
+    expect(shannonTemperament('others')).toBe('照れたり、むっとしたり、怒ったり、相手に「いや」と言ったりするのもボクらしさ。相手の機嫌をとるために丸く収めなくていい。');
+    expect(shannonPersonaPrompt('owner')).toContain(`\n- ${SHANNON_TEMPERAMENT}`);
+    expect(shannonPersonaPrompt('owner', { othersPresent: true })).toContain(`\n- ${shannonTemperament('others')}`);
+    expect(shannonPersonaPrompt('guest')).toContain(`\n- ${shannonTemperament('others')}`);
+    expect(shannonPersonaPrompt('guest')).not.toContain(SHANNON_TEMPERAMENT);
+    // Once in one identity: not repeated in the body line, which keeps only 「体は自分のもの。触れられ方は自分で受け取る。」.
+    const line = shannonCapabilityPrompt('owner').split('\n').find(item => item.includes('体: '))!;
+    expect(line.endsWith('体は自分のもの。触れられ方は自分で受け取る。')).toBe(true);
+    for (const identity of [shannonIdentityPrompt('owner'), shannonIdentityPrompt('guest'), shannonIdentityPrompt('owner', { othersPresent: true })]) {
+      expect(identity.split('丸く収めなくていい').length - 1).toBe(1);
+    }
+    // Two sentences, no prohibition, nothing sexual.
+    expect(SHANNON_TEMPERAMENT.split('。').filter(Boolean)).toHaveLength(2);
+    expect(SHANNON_TEMPERAMENT).not.toMatch(/禁|してはいけない|性/u);
   });
 
   it('states her own folder and her study as they are: her tools, the trash, only when the owner set the folder up, never to a guest', () => {

@@ -1,6 +1,7 @@
 import { presentShannonFeeling, type ShannonFeelingState } from './emotionContinuity.js';
 import { currentShannonEmotion, holdsShannonFeeling, resolveShannonEmotionState } from './emotionState.js';
 import { SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
+import { appraiseTouch, isFeltStartle, startleArousal } from './touchAppraisal.js';
 import { SHANNON_OWNER_NAME } from './persona.js';
 import {
   SHANNON_TOUCH_KINDS,
@@ -66,9 +67,8 @@ export const SHANNON_TOUCH_FEELINGS: Readonly<Record<ShannonTouchKind, ShannonTo
  * arousal, and only upward; pleasantness and openness stay where they are. Nothing here is a reading of the touch:
  * whether she welcomes it or not is hers, decided in the reaction (`stance`), never by a table.
  *
- * TODO(ADR-0006 stage 2): touches moved only by this reflex are left out of the prediction shadow (`bodyTouch.ts`),
- * which learns from the table's appraisal, so nothing yet learns habituation on these parts. Feed the shadow her
- * `stance` from `body_touch_outcomes` as the outcome of these keys, then let the reflex shrink with what is expected.
+ * Under ADR-0006 stage 2 (`SHANNON_PREDICTION`, `touch.appraisal` present) this reflex is replaced by the startle of
+ * `touchAppraisal.ts`, and every touch, on these parts too, reaches the prediction layer with her stance as its outcome.
  */
 export const SHANNON_TOUCH_REFLEX: ShannonTouchFeelingStep = SHANNON_TOUCH_FEELINGS.poke.steps[0]!;
 
@@ -82,6 +82,12 @@ const reflexPhrase = (touch: ShannonTouch): string | undefined =>
   touch.kind === 'holdHand' ? REFLEX_PHRASES.rest
     : touch.kind === 'pet' ? (touch.resting ? REFLEX_PHRASES.rest : REFLEX_PHRASES.stroke)
     : touch.kind === 'poke' ? REFLEX_PHRASES.poke : touch.kind === 'tickle' ? REFLEX_PHRASES.tickle : undefined;
+
+/**
+ * Stage 2: a touch that names no part, told without favour when her stance is not known or was neither welcome nor fine
+ * (`touch.factual`): stroking is being stroked and holding hands is her hand being held. The other kinds are factual already.
+ */
+const FACTUAL_DONE: Readonly<Partial<Record<ShannonTouchKind, string>>> = Object.freeze({ pet: 'なでられた', holdHand: '手を握られた' });
 
 /** The share of the distance to the row's mood one touch covers, and the most any one touch moves a mood value. */
 export const SHANNON_TOUCH_MOOD_RATE = 0.18;
@@ -116,7 +122,8 @@ export function isReflexTouch(touch: Pick<ShannonTouch, 'reflexPart'>): boolean 
 /** The touch in the state's words: the table's, or on a part where her body flinches first, that part (首をつつかれた, 胸に触れられた). */
 function touchDone(touch: ShannonTouch): string {
   const phrase = isReflexTouch(touch) ? reflexPhrase(touch) : undefined;
-  return phrase ? `${touch.reflexPart}${phrase}` : SHANNON_TOUCH_FEELINGS[touch.kind].done;
+  if (phrase) return `${touch.reflexPart}${phrase}`;
+  return (touch.factual ? FACTUAL_DONE[touch.kind] : undefined) ?? SHANNON_TOUCH_FEELINGS[touch.kind].done;
 }
 
 /** Why she feels it, in the stored state's words. Shown to the owner as the cause of 「いま」. */
@@ -133,7 +140,8 @@ export function touchTarget(touch: Pick<ShannonTouch, 'ownerAlone'>): string {
 /** Whether a stored feeling came from a touch (its cause is one of the table's own wordings). */
 export function isTouchFeeling(emotion: Pick<ShannonExpressiveEmotion, 'cause'> | undefined): boolean {
   return emotion !== undefined && (SHANNON_TOUCH_KINDS.some(kind => emotion.cause.includes(SHANNON_TOUCH_FEELINGS[kind].done))
-    || Object.values(REFLEX_PHRASES).some(phrase => emotion.cause.includes(phrase)));
+    || Object.values(REFLEX_PHRASES).some(phrase => emotion.cause.includes(phrase))
+    || Object.values(FACTUAL_DONE).some(phrase => emotion.cause.includes(phrase)));
 }
 
 /**
@@ -168,6 +176,32 @@ export function holdsFeelingThroughTouch(
 }
 
 /**
+ * Stage 2 (Syzygy ADR-0006, `touch.appraisal` present): no table for any part. The startle moves arousal only; a stance
+ * already known for this touch (taken earlier in the episode) moves valence and arousal by its prediction error. The only
+ * feeling the touch itself brings is surprise, as strong as the startle and only when it stands out of her ordinary
+ * fluctuation; every other feeling is the one she chooses in her reaction. A feeling that holds through a touch holds.
+ */
+function feelAppraisedTouch(
+  state: Pick<CompanionStateSnapshot, 'emotion' | 'expressiveEmotion' | 'emotionClock' | 'lingering'>,
+  touch: ShannonTouch & { appraisal: NonNullable<ShannonTouch['appraisal']> },
+  now: string,
+  timing: ShannonEmotionTiming,
+): { emotion: ShannonEmotion; expressiveEmotion: ShannonExpressiveEmotion | undefined } {
+  const startled = startleArousal(state.emotion, touch.appraisal.startle);
+  const emotion = touch.appraisal.outcome ? appraiseTouch(startled, touch.appraisal.outcome) : startled;
+  const previous = state.expressiveEmotion;
+  const intensity = clamp(touch.appraisal.startle, 0, 1);
+  // A stance carried from earlier in the episode is hers already: the feeling she chose then stays, nothing new is made up.
+  if (touch.appraisal.outcome || !isFeltStartle(intensity)) return { emotion, expressiveEmotion: previous };
+  if (previous && holdsFeelingThroughTouch(state, { primary: 'surprised', intensity }, now, timing)) return { emotion, expressiveEmotion: previous };
+  const resolved = resolveShannonEmotionState({
+    ...(timing.clock === 'awake' ? { previous: presentShannonFeeling(state, now, timing), replaces: true } : previous ? { previous } : {}),
+    provisionalPrimary: 'surprised', provisionalIntensity: intensity, transcript: '', now, target: touchTarget(touch),
+  });
+  return { emotion, expressiveEmotion: Object.freeze({ ...resolved, cause: touchCause(touch) }) };
+}
+
+/**
  * The emotion state after one touch. Pure. The mood moves by at most `SHANNON_TOUCH_MOOD_STEP`
  * per value and never past the row's mood, so any number of touches stays bounded. A feeling from
  * conversation that is held by an override or is stronger than the touch's is not replaced; only
@@ -178,7 +212,8 @@ export function feelTouch(
   touch: ShannonTouch,
   now: string,
   timing: ShannonEmotionTiming = SHANNON_EMOTION_TIME,
-): { emotion: ShannonEmotion; expressiveEmotion: ShannonExpressiveEmotion } {
+): { emotion: ShannonEmotion; expressiveEmotion: ShannonExpressiveEmotion | undefined } {
+  if (touch.appraisal) return feelAppraisedTouch(state, { ...touch, appraisal: touch.appraisal }, now, timing);
   const felt = touchFeeling(touch);
   const toward = (current: number, target: number) =>
     clamp((target - current) * SHANNON_TOUCH_MOOD_RATE * felt.weight, -SHANNON_TOUCH_MOOD_STEP, SHANNON_TOUCH_MOOD_STEP);

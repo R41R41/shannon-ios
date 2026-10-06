@@ -6,6 +6,7 @@ import type { BodyReactionSpeakRequest, BodyReactionSpeaker } from '../src/bodyR
 import type { BodyReactionDecision } from '../src/bodyReactionPrompt.js';
 import { SQLiteBodyReactionStore } from '../src/bodyReactionStore.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
+import type { BodyTouchDependencies } from '../src/bodyTouch.js';
 import type { TouchExperienceWriter } from '../src/bodyTouchMemory.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { InMemoryConversationStore, type ConversationStore } from '../src/conversationStore.js';
@@ -69,6 +70,10 @@ export interface ReactionHarnessOptions {
   experiences?: TouchExperienceWriter | null;
   /** Leaves the body unregistered: the device is then not her body. */
   unregistered?: boolean;
+  /** Syzygy ADR-0006 stage 2 for touches; absent: `SHANNON_PREDICTION` (on unless stubbed off). */
+  stage2?: boolean;
+  /** The prediction record (stage 2 learns her stances in it); absent: none, every touch meets the empty prior. */
+  prediction?: BodyTouchDependencies['prediction'];
 }
 
 export async function reactionHarness(options: ReactionHarnessOptions = {}) {
@@ -85,7 +90,8 @@ export async function reactionHarness(options: ReactionHarnessOptions = {}) {
     stateStore, conversationStore, chatModel, autonomy,
     body: {
       store: bodyStore, ingestEnabled: options.ingestEnabled ?? true,
-      reactions: { store: reactionStore, speaker, config: options.config ?? {}, experiences: options.experiences ?? null },
+      reactions: { store: reactionStore, speaker, config: options.config ?? {}, experiences: options.experiences ?? null,
+        ...(options.stage2 !== undefined ? { stage2: options.stage2 } : {}), ...(options.prediction !== undefined ? { prediction: options.prediction } : {}) },
     },
   });
   const advance = (milliseconds: number) => { clock.at = new Date(Date.parse(clock.at) + milliseconds).toISOString(); };

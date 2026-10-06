@@ -1,7 +1,12 @@
 import { DatabaseSync } from 'node:sqlite';
 import {
+  SHANNON_AFFECT_STEP,
+  episodeBoundaryMs,
+  predictOutcome,
   restoreCompanionState,
   touchFeeling,
+  type Prediction,
+  type PredictionQuery,
   type CompanionStateEvent,
   type CompanionStateSnapshot,
   type ShannonEmotionTiming,
@@ -173,8 +178,8 @@ export class PredictionShadow implements AutonomyPredictionTap {
     this.later(() => {
       this.maintain(scopeKey, at, state);
       if (event?.type === 'memory-control-upserted' || event?.type === 'memory-transaction') this.reconcile(scopeKey, state);
-      // The touch tap records a touch with its own comparison.
-      if (event?.type === 'body-touched') return;
+      // A touch records its own comparison (the stage-1b tap, or stage 2's after the touch and after her stance): one per event.
+      if (event?.type === 'body-touched' || event?.type === 'touch-appraised') return;
       this.within(scopeKey, () => {
         const feeling = event?.type === 'expressive-emotion-updated' ? decidedFeelingOutcome(event.emotion) : null;
         if (feeling !== null) {
@@ -187,6 +192,47 @@ export class PredictionShadow implements AutonomyPredictionTap {
         this.moodComparison(scopeKey, state, at);
       });
     });
+  }
+
+  /**
+   * Stage 2 (`SHANNON_PREDICTION`): what she expects of a key now. The one read a touch needs before she reacts, so it is
+   * done at once, and it is a read only: the cached mind is brought up to the table by folding the rows that arrived since
+   * (a cold fold happens once per process, and every state write already warms it after the caller). It takes no lock and
+   * writes nothing. Null when the record is not there or cannot be read; it never fails the touch.
+   */
+  predict(scopeKey: string, query: PredictionQuery): Prediction | null {
+    let prediction: Prediction | null = null;
+    this.guard(() => { prediction = predictOutcome(this.sync(scopeKey).mind.model, query); });
+    return prediction;
+  }
+
+  /** Stage 2: the newest outcome of a key (one indexed read), with the episode boundary she has learned; null when there is none. */
+  recent(scopeKey: string, domain: string, key: string): { outcome: number; at: number; boundaryMs: number } | null {
+    let recent: { outcome: number; at: number; boundaryMs: number } | null = null;
+    this.guard(() => {
+      const latest = this.store.latest(scopeKey, domain, key);
+      if (latest) recent = { outcome: latest.outcome, at: Date.parse(latest.observedAt), boundaryMs: episodeBoundaryMs(this.sync(scopeKey).mind.dynamics.boundary) };
+    });
+    return recent;
+  }
+
+  /**
+   * Stage 2: learns a stance she gave, after the caller (`defer`), as every other tap does: the daily maintenance, the write
+   * lock and the insert never run in the touch's request. Her feeling has already moved by the error read before it.
+   * `remembered` is asked when the write runs: a source the owner had her forget meanwhile (while the model was deciding)
+   * is not written, so it never feeds a prediction until the daily reconciliation.
+   */
+  learnLater(scopeKey: string, draft: PredictionOutcomeDraft, state: CompanionStateSnapshot, remembered: () => boolean = () => true): void {
+    this.later(() => {
+      if (!remembered()) return;
+      this.maintain(scopeKey, draft.observedAt, state);
+      this.within(scopeKey, () => { this.log(outcomeLine(draft.domain, draft.key, this.record(scopeKey, draft), null)); });
+    });
+  }
+
+  /** Stage 2: the comparison after a touch moved her (`after` is the state as written), after the caller. */
+  stanceCompared(scopeKey: string, after: CompanionStateSnapshot, at: string): void {
+    this.later(() => this.within(scopeKey, () => { this.compare(scopeKey, 'touch', after, at); }));
   }
 
   /** Deletes the rows of these sources and recomputes. Returns how many rows went. */
@@ -255,7 +301,7 @@ export class PredictionShadow implements AutonomyPredictionTap {
 
   private compare(scopeKey: string, tap: string, state: CompanionStateSnapshot, at: string): ShadowComparison {
     const next = readMind(this.sync(scopeKey).mind, at);
-    const comparison: ShadowComparison = { at: new Date(Date.parse(at)).toISOString(), tap, old: oldReading(state, at, this.timing()), next: newReading(next) };
+    const comparison: ShadowComparison = { at: new Date(Date.parse(at)).toISOString(), tap, old: oldReading(state, at, this.timing()), next: newReading(next), dynamics: SHANNON_AFFECT_STEP };
     this.store.addComparison(scopeKey, comparison);
     return comparison;
   }
