@@ -5,6 +5,12 @@ import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
 import { baselineFrom, compareWithBaseline, componentOf, globRegExp, violations } from './check-api-layers.mjs';
 
+// Without node_modules (no typescript) the tests are skipped, and say so, rather than failing the fast lane.
+let typescriptFound = true;
+try { await import('typescript'); } catch { typescriptFound = false; }
+const skip = typescriptFound ? false : 'the typescript package cannot be found (no node_modules)';
+const check = (name, body) => test(name, { skip }, body);
+
 const directories = [];
 after(() => { for (const directory of directories) rmSync(directory, { recursive: true, force: true }); });
 
@@ -30,7 +36,7 @@ const config = {
   ],
 };
 
-test('globs: one segment, any depth, and module names', () => {
+check('globs: one segment, any depth, and module names', () => {
   assert.ok(globRegExp('mind/**').test('mind/memory/store/a.ts'));
   assert.ok(!globRegExp('mind/**').test('surfaces/text/a.ts'));
   assert.ok(globRegExp('**/store/**').test('mind/memory/store/a.ts'));
@@ -46,7 +52,7 @@ test('globs: one segment, any depth, and module names', () => {
   assert.equal(componentOf('wiring/a.ts'), 'wiring');
 });
 
-test('checks the projected layout: a flat file is judged at its target, and resolved imports of every kind count', () => {
+check('checks the projected layout: a flat file is judged at its target, and resolved imports of every kind count', () => {
   const root = tree({
     'src/server.ts': "import { a } from './a.js';\nconst port = process.env.PORT;\n",
     'src/a.ts': "import type { B } from './b.js';\nexport const later = () => import('./c.js');\nexport { d } from './d.js';\n",
@@ -83,7 +89,7 @@ test('checks the projected layout: a flat file is judged at its target, and reso
   assert.ok(actual.includes('sqlite-in-stores: b.ts'));
 });
 
-test('the baseline only shrinks: new violations are reported, fixed ones are dropped', () => {
+check('the baseline only shrinks: new violations are reported, fixed ones are dropped', () => {
   const before = [{ rule: 'r', from: 'a.ts', to: 'b.ts' }, { rule: 'r', from: 'c.ts', to: 'd.ts' }];
   const baseline = baselineFrom(before, 'test');
   assert.deepEqual(baseline.violations, { r: ['a.ts -> b.ts', 'c.ts -> d.ts'] });

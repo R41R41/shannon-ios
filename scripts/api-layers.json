@@ -69,10 +69,10 @@
     {
       "id": "own-time-without-private-stores",
       "kind": "imports",
-      "description": "Her own time (mind/action/ownTime) opens no conversation store (the companion store and its repositories), memory, recall, emotion, conversation model or conversational surface. The one reader of the owner's context, autonomyOwnerContext.ts, reads through the conversation's entry points and is the exception (AGENTS.md, Bounded autonomy).",
+      "description": "Her own time (mind/action/ownTime) opens no conversation store (the companion store and its repositories), memory, recall, emotion, conversation response path (mind/action/respond: dailyMind, turnCognitiveContext), disclosure gate, conversation model, HTTP layer or conversational surface (text, voice, platform), as autonomyLoopPrivacy.test.ts allows the loop modules. The one reader of the owner's context, autonomyOwnerContext.ts, reads through the conversation's entry points and is the exception (AGENTS.md, Bounded autonomy).",
       "from": ["mind/action/ownTime/**"],
       "fromExcept": ["**/autonomyOwnerContext.ts"],
-      "to": ["mind/memory/**", "mind/recall/**", "mind/emotion/**", "infra/sqlite/sqliteStore.ts", "infra/sqlite/*Repository.ts", "infra/models/chatModel*.ts", "surfaces/text/**", "surfaces/voice/**", "wiring/**"]
+      "to": ["mind/memory/**", "mind/recall/**", "mind/emotion/**", "mind/action/respond/**", "**/memoryDisclosure.ts", "infra/sqlite/sqliteStore.ts", "infra/sqlite/*Repository.ts", "infra/models/chatModel*.ts", "infra/http/**", "surfaces/text/**", "surfaces/voice/**", "surfaces/platform/**", "wiring/**"]
     },
     {
       "id": "owner-context-through-wiring",

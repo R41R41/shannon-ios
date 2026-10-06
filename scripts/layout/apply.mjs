@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Moves the API sources into the folders of Syzygy ADR-0008 §6, one wave at a time, and changes nothing else.
 //
-//   node scripts/layout/apply.mjs --wave N [--dry-run] [--allow-dirty] [--rewrite-mentions]
+//   node scripts/layout/apply.mjs --wave N [--dry-run] [--allow-dirty] [--allow-untracked] [--rewrite-mentions]
 //   node scripts/layout/apply.mjs --through N [--dry-run] …   (waves 1..N in order, for replaying on a branch)
 //
 // For each file of the wave in scripts/layout/moves.json it runs `git mv` (the basename never changes), then rewrites
@@ -9,13 +9,22 @@
 // dynamic imports, `vi.mock('…')`, and `new URL('…', import.meta.url)`. It rewrites the moved paths in
 // `autonomyCore.ts` (the core map, CORE as code) and fails, before touching the disk, unless the set of core files is
 // the same before and after. It is idempotent: a file already at its target is skipped, so a branch can replay a wave
-// on its tip. With --rewrite-mentions it also rewrites `services/api/src/<old path>` in prose (docs, comments); by
-// default it only lists them. Changes are staged, never committed.
+// on its tip. With --rewrite-mentions it also rewrites `services/api/src/<old path>` in prose (docs, comments, Swift,
+// plists); by default it only lists them. It works on tracked files only: it refuses to move an untracked file and,
+// unless --allow-untracked, to run while untracked code sits under the API, scripts or packages. Changes are staged,
+// never committed.
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, posix, relative, resolve, sep } from 'node:path';
-import ts from 'typescript';
+
+let ts;
+try {
+  ts = (await import('typescript')).default;
+} catch {
+  console.error('apply.mjs: the typescript package cannot be found; run `pnpm install` (or link node_modules) first.');
+  process.exit(1);
+}
 
 const toPosix = path => path.split(sep).join('/');
 
@@ -28,17 +37,20 @@ const config = JSON.parse(readFileSync(movesFile, 'utf8'));
 const SOURCE_ROOT = config.sourceRoot;
 const MOVES_PATH = toPosix(relative(root, movesFile));
 const CODE_EXTENSIONS = new Set(['.ts', '.mts', '.cts', '.tsx', '.js', '.mjs', '.cjs']);
-const PROSE_EXTENSIONS = new Set(['.md', '.json', '.ts', '.mjs', '.js', '.sh', '.example', '.service', '.yml', '.yaml', '.txt']);
+const PROSE_EXTENSIONS = new Set(['.md', '.json', '.ts', '.mjs', '.js', '.sh', '.example', '.service', '.yml', '.yaml', '.txt', '.swift', '.plist']);
+// Folders whose untracked code a wave would have to rewrite but could not stage: a wave refuses while any exists.
+const UNTRACKED_GUARDED = ['services/api/src/', 'services/api/tests/', 'services/api/scripts/', 'scripts/', 'packages/'];
 
 const repoPath = absolute => toPosix(relative(root, absolute));
 const absolutePath = path => resolve(root, path);
 
 function parseArguments(argv) {
-  const options = { dryRun: false, allowDirty: false, rewriteMentions: false, waves: [] };
+  const options = { dryRun: false, allowDirty: false, allowUntracked: false, rewriteMentions: false, waves: [] };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === '--dry-run') options.dryRun = true;
     else if (argument === '--allow-dirty') options.allowDirty = true;
+    else if (argument === '--allow-untracked') options.allowUntracked = true;
     else if (argument === '--rewrite-mentions') options.rewriteMentions = true;
     else if (argument === '--root' || argument === '--moves') index += 1;
     else if (argument === '--wave' || argument === '--through') {
@@ -55,10 +67,14 @@ function git(...args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8' });
 }
 
-/** Every file git knows or would add (tracked, and untracked but not ignored), as repository paths. */
-function repositoryFiles() {
-  return git('ls-files', '-z', '--cached', '--others', '--exclude-standard').split('\0').filter(Boolean)
-    .filter(path => existsSync(absolutePath(path)));
+/** Every file git tracks, as repository paths. A wave reads, moves and rewrites these and nothing else. */
+function trackedFiles() {
+  return git('ls-files', '-z', '--cached').split('\0').filter(Boolean).filter(path => existsSync(absolutePath(path)));
+}
+
+/** Untracked, not ignored files, as repository paths. */
+function untrackedFiles() {
+  return git('ls-files', '-z', '--others', '--exclude-standard').split('\0').filter(Boolean);
 }
 
 function filesBelow(directory) {
@@ -161,6 +177,7 @@ function planWave(wave, options) {
     if (located.get(entry) !== `${SOURCE_ROOT}/${entry}`) throw new Error(`Entry file ${entry} is not at the root of ${SOURCE_ROOT}`);
     if (config.moves[entry]) throw new Error(`moves.json moves the entry file ${entry}`);
   }
+  const tracked = new Set(trackedFiles());
   const renames = new Map();
   const skipped = [];
   for (const [name, move] of Object.entries(config.moves)) {
@@ -171,11 +188,12 @@ function planWave(wave, options) {
     if (!current) { skipped.push(`${name}: not in this tree`); continue; }
     if (current === target) { skipped.push(`${name}: already at ${move.to}`); continue; }
     if (existsSync(absolutePath(target))) throw new Error(`${target} already exists; cannot move ${current} there`);
+    if (!tracked.has(current)) throw new Error(`moves.json moves ${current}, which git does not track; commit it first`);
     renames.set(current, target);
   }
 
-  const before = repositoryFiles();
-  const beforeSet = new Set(before);
+  const before = [...tracked];
+  const beforeSet = tracked;
   const after = new Set(before.map(path => renames.get(path) ?? path));
   const moved = path => renames.get(path) ?? path;
 
@@ -193,7 +211,11 @@ function planWave(wave, options) {
         const directory = specifier.value.endsWith('/');
         target = posix.normalize(posix.join(posix.dirname(path), specifier.value));
         if (directory) target = target.replace(/\/?$/u, '/');
-        const newTarget = directory ? target : moved(target);
+        // `new URL('./x.js', import.meta.url)` names the module x.ts is run as: it follows x.ts.
+        const source = /\.(?:m|c)?js$/u.test(target) ? target.replace(/\.(m|c)?js$/u, '.$1ts') : null;
+        const newTarget = directory ? target
+          : renames.has(target) ? moved(target)
+            : source && renames.has(source) ? moved(source).replace(/\.(m|c)?ts$/u, '.$1js') : target;
         if (newPath === path && newTarget === target) continue;
         let written = posix.relative(posix.dirname(newPath), newTarget.replace(/\/$/u, '')) || '.';
         if (!written.startsWith('.')) written = `./${written}`;
@@ -275,11 +297,12 @@ function applyPlan(plan) {
     writeFileSync(absolutePath(destination), text);
     touched.push(destination);
   }
+  // Only tracked files are rewritten (the plan reads nothing else), so every one of them is staged.
   if (touched.length) git('add', '--', ...touched);
   // The same check on the disk as written.
   const located = currentSources();
   const core = readFileSync(absolutePath(located.get(CORE_FILE)), 'utf8');
-  const files = new Set(repositoryFiles());
+  const files = new Set(trackedFiles());
   const covered = coreFiles(coreEntries(core), files);
   const missing = [...covered].filter(path => path.startsWith('(missing)'));
   if (missing.length || covered.size !== plan.coreSize) throw new Error(`After wave ${plan.wave} the core map does not match the files: ${missing.join(', ')}`);
@@ -301,6 +324,12 @@ function main() {
   if (!options.dryRun && !options.allowDirty) {
     const dirty = git('status', '--porcelain', '--untracked-files=no').trim();
     if (dirty) throw new Error(`The working tree has changes; commit or stash them first (or pass --allow-dirty):\n${dirty}`);
+  }
+  const strays = untrackedFiles().filter(path => CODE_EXTENSIONS.has(extname(path)) && UNTRACKED_GUARDED.some(folder => path.startsWith(folder)));
+  if (strays.length && !options.allowUntracked) {
+    const message = `Untracked code would not be rewritten: ${strays.join(', ')}. Commit, stash (git stash -u) or remove it first (or pass --allow-untracked).`;
+    if (options.dryRun) console.warn(`warning: ${message}`);
+    else throw new Error(message);
   }
   for (const wave of options.waves) {
     const plan = planWave(wave, options);

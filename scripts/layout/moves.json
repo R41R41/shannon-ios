@@ -958,7 +958,7 @@
       "why": "Decides whether she should speak"
     },
     "initiativeStore.ts": {
-      "to": "surfaces/outreach/initiativeStore.ts",
+      "to": "surfaces/outreach/store/initiativeStore.ts",
       "wave": 3,
       "why": "Initiative messages and delivery"
     },

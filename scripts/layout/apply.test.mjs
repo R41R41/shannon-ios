@@ -5,6 +5,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { after, test } from 'node:test';
 
+// Without node_modules (no typescript) the tests are skipped, and say so, rather than failing the fast lane.
+let typescriptFound = true;
+try { await import('typescript'); } catch { typescriptFound = false; }
+const skip = typescriptFound ? false : 'the typescript package cannot be found (no node_modules)';
+const check = (name, body) => test(name, { skip }, body);
+
 const script = resolve(import.meta.dirname, 'apply.mjs');
 const directories = [];
 after(() => { for (const directory of directories) rmSync(directory, { recursive: true, force: true }); });
@@ -14,7 +20,7 @@ function repository({ coreEntries = [], moves }) {
   const root = mkdtempSync(join(tmpdir(), 'shannon-layout-'));
   directories.push(root);
   const files = {
-    'services/api/src/server.ts': "import { a } from './a.js';\nimport type { B } from './b.js';\nexport const run = () => a;\n",
+    'services/api/src/server.ts': "import { a } from './a.js';\nimport type { B } from './b.js';\nexport const run = () => a;\nexport const worker = new URL('./b.js', import.meta.url);\n",
     'services/api/src/a.ts': [
       "import { b } from './b.js';",
       "export { c } from './c.js';",
@@ -67,7 +73,7 @@ const MOVES = {
   'd.ts': { to: 'mind/x/d.ts', wave: 2 },
 };
 
-test('a wave moves its files with git and rewrites every specifier that leads to them or out of them', () => {
+check('a wave moves its files with git and rewrites every specifier that leads to them or out of them', () => {
   const repo = repository({ moves: MOVES });
   const result = repo.run('--wave', '1');
   assert.equal(result.status, 0, result.stderr);
@@ -86,7 +92,8 @@ test('a wave moves its files with git and rewrites every specifier that leads to
   assert.match(moved, /\/\/ import \{ nothing \} from '\.\/b\.js';/u);
   assert.match(moved, /"from '\.\/b\.js'"/u);
 
-  assert.equal(repo.read('services/api/src/server.ts'), "import { a } from './mind/x/a.js';\nimport type { B } from './infra/y/b.js';\nexport const run = () => a;\n");
+  // A URL to the module x.js follows x.ts.
+  assert.equal(repo.read('services/api/src/server.ts'), "import { a } from './mind/x/a.js';\nimport type { B } from './infra/y/b.js';\nexport const run = () => a;\nexport const worker = new URL('./infra/y/b.js', import.meta.url);\n");
   assert.match(repo.read('services/api/src/old/d.ts'), /from '\.\.\/infra\/y\/b\.js'/u);
   const test = repo.read('services/api/tests/a.test.ts');
   assert.match(test, /from '\.\.\/src\/mind\/x\/a\.js'/u);
@@ -99,7 +106,7 @@ test('a wave moves its files with git and rewrites every specifier that leads to
   assert.match(result.stdout, /mentions of moved paths in 1 files left as they are/u);
 });
 
-test('a wave is idempotent, and the next wave builds on it, also across packages', () => {
+check('a wave is idempotent, and the next wave builds on it, also across packages', () => {
   const repo = repository({ moves: MOVES });
   assert.equal(repo.run('--wave', '1').status, 0);
   repo.git('-c', 'user.name=test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'wave 1');
@@ -116,14 +123,14 @@ test('a wave is idempotent, and the next wave builds on it, also across packages
   assert.match(repo.read('services/api/tests/a.test.ts'), /new URL\('\.\.\/src\/surfaces\/z\/c\.ts'/u);
 });
 
-test('replays every wave up to one on a tree that has none of them', () => {
+check('replays every wave up to one on a tree that has none of them', () => {
   const repo = repository({ moves: MOVES });
   const result = repo.run('--through', '2');
   assert.equal(result.status, 0, result.stderr);
   for (const path of ['mind/x/a.ts', 'infra/y/b.ts', 'surfaces/z/c.ts', 'mind/x/d.ts']) assert.ok(existsSync(join(repo.root, 'services/api/src', path)), path);
 });
 
-test('a dry run touches nothing', () => {
+check('a dry run touches nothing', () => {
   const repo = repository({ moves: MOVES });
   const result = repo.run('--wave', '1', '--dry-run');
   assert.equal(result.status, 0, result.stderr);
@@ -131,7 +138,7 @@ test('a dry run touches nothing', () => {
   assert.equal(repo.git('status', '--porcelain'), '');
 });
 
-test('refuses a move that would change the set of core files, before touching the disk', () => {
+check('refuses a move that would change the set of core files, before touching the disk', () => {
   // A directory entry covers d.ts; moving d.ts out of it would take it out of core.
   const repo = repository({ coreEntries: ['services/api/src/old/'], moves: MOVES });
   assert.equal(repo.run('--wave', '1').status, 0);
@@ -143,7 +150,7 @@ test('refuses a move that would change the set of core files, before touching th
   assert.ok(existsSync(join(repo.root, 'services/api/src/old/d.ts')));
 });
 
-test('refuses to move an entry file, to rename a file, or to run on a tree with changes', () => {
+check('refuses to move an entry file, to rename a file, or to run on a tree with changes', () => {
   const entry = repository({ moves: { 'server.ts': { to: 'infra/server.ts', wave: 1 } } });
   assert.match(entry.run('--wave', '1').stderr, /moves the entry file server\.ts/u);
   const rename = repository({ moves: { 'a.ts': { to: 'mind/x/renamed.ts', wave: 1 } } });
@@ -151,4 +158,25 @@ test('refuses to move an entry file, to rename a file, or to run on a tree with 
   const dirty = repository({ moves: MOVES });
   writeFileSync(join(dirty.root, 'services/api/src/b.ts'), 'export const b = 3;\n');
   assert.match(dirty.run('--wave', '1').stderr, /working tree has changes/u);
+});
+
+check('works on tracked files only: refuses to move an untracked file, and to run beside untracked code', () => {
+  const untrackedMove = repository({ moves: { ...MOVES, 'e.ts': { to: 'mind/x/e.ts', wave: 1 } } });
+  writeFileSync(join(untrackedMove.root, 'services/api/src/e.ts'), 'export const e = 1;\n');
+  const refused = untrackedMove.run('--wave', '1', '--allow-untracked');
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /moves services\/api\/src\/e\.ts, which git does not track/u);
+  assert.equal(untrackedMove.git('status', '--porcelain'), '?? services/api/src/e.ts\n');
+
+  const stray = repository({ moves: MOVES });
+  writeFileSync(join(stray.root, 'services/api/tests/new.test.ts'), "import { b } from '../src/b.js';\n");
+  const result = stray.run('--wave', '1');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Untracked code would not be rewritten: services\/api\/tests\/new\.test\.ts/u);
+  assert.match(stray.run('--wave', '1', '--dry-run').stderr, /warning: Untracked code/u);
+  // With --allow-untracked the wave runs, rewrites and stages tracked files only, and leaves the stray file as it was.
+  const allowed = stray.run('--wave', '1', '--allow-untracked');
+  assert.equal(allowed.status, 0, allowed.stderr);
+  assert.equal(stray.read('services/api/tests/new.test.ts'), "import { b } from '../src/b.js';\n");
+  assert.match(stray.git('status', '--porcelain'), /^\?\? services\/api\/tests\/new\.test\.ts$/mu);
 });

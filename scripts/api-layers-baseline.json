@@ -266,7 +266,9 @@
       "mind/tools/shannonToolTypes.ts -> mind/inhibition/shannonToolGate.ts"
     ],
     "own-time-without-private-stores": [
-      "mind/action/ownTime/autonomySessionView.ts -> mind/emotion/companionPresence.ts"
+      "mind/action/ownTime/autonomySessionView.ts -> mind/emotion/companionPresence.ts",
+      "mind/action/ownTime/autonomyShowing.ts -> mind/action/respond/commitmentInitiative.ts",
+      "mind/action/ownTime/autonomyShowing.ts -> mind/action/respond/initiativeSelection.ts"
     ],
     "sqlite-in-stores": [
       "infra/auth/deviceAuth.ts -> node:sqlite",
@@ -279,7 +281,6 @@
       "mind/prediction/predictionShadow.ts -> node:sqlite",
       "mind/self/autonomyPursuits.ts -> node:sqlite",
       "surfaces/minecraft/minecraftBodyRequests.ts -> node:sqlite",
-      "surfaces/outreach/initiativeStore.ts -> node:sqlite",
       "surfaces/outreach/ownOutreach.ts -> node:sqlite",
       "surfaces/outreach/pushNotifications.ts -> node:sqlite",
       "surfaces/outreach/reachOutDelivery.ts -> node:sqlite",
@@ -302,12 +303,12 @@
       "surfaces/minecraft/serverMinecraftBodyRoute.ts -> surfaces/platform/platformPeople.ts",
       "surfaces/minecraft/store/gameBodyMemory.ts -> surfaces/body/store/bodyTouchMemory.ts",
       "surfaces/outreach/incomingCallRequests.ts -> surfaces/body/store/privateListeningStore.ts",
-      "surfaces/outreach/initiativeStore.ts -> surfaces/body/roomLookSource.ts",
-      "surfaces/outreach/initiativeStore.ts -> surfaces/body/store/bodyLookDelivery.ts",
       "surfaces/outreach/privateReachOuts.ts -> surfaces/body/desktopBodyIdentity.ts",
       "surfaces/outreach/privateReachOuts.ts -> surfaces/body/store/privateListeningStore.ts",
       "surfaces/outreach/pushNotifications.ts -> surfaces/body/roomLookSource.ts",
       "surfaces/outreach/reachOutDelivery.ts -> surfaces/voice/voiceCompanionPresence.ts",
+      "surfaces/outreach/store/initiativeStore.ts -> surfaces/body/roomLookSource.ts",
+      "surfaces/outreach/store/initiativeStore.ts -> surfaces/body/store/bodyLookDelivery.ts",
       "surfaces/platform/platformPeople.ts -> surfaces/voice/voiceGuestNames.ts",
       "surfaces/platform/platformReply.ts -> surfaces/minecraft/minecraftTurnAllowance.ts",
       "surfaces/platform/platformReply.ts -> surfaces/minecraft/store/minecraftTurnStore.ts",
@@ -348,10 +349,10 @@
       "surfaces/minecraft/store/gameBodyMemory.ts -> surfaces/body/store/bodyTouchMemory.ts",
       "surfaces/minecraft/store/minecraftTurnStore.ts -> infra/sqlite/sqliteStoreContext.ts",
       "surfaces/outreach/incomingCallRequests.ts -> surfaces/body/store/privateListeningStore.ts",
-      "surfaces/outreach/initiativeStore.ts -> surfaces/body/store/bodyLookDelivery.ts",
       "surfaces/outreach/privateReachOuts.ts -> surfaces/body/store/privateListeningStore.ts",
       "surfaces/outreach/reachOutDelivery.ts -> mind/action/ownTime/store/autonomyLoopObservations.ts",
       "surfaces/outreach/store/incomingCallStore.ts -> infra/sqlite/sqliteStoreContext.ts",
+      "surfaces/outreach/store/initiativeStore.ts -> surfaces/body/store/bodyLookDelivery.ts",
       "surfaces/outreach/store/reachOutClaims.ts -> infra/sqlite/sqliteStoreContext.ts",
       "surfaces/outreach/store/reachOutReports.ts -> infra/sqlite/sqliteStoreContext.ts",
       "surfaces/outreach/store/reachOutReports.ts -> mind/action/ownTime/store/autonomyLoopObservations.ts",

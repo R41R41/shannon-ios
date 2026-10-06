@@ -15,7 +15,15 @@
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, posix, relative, resolve, sep } from 'node:path';
-import ts from 'typescript';
+
+// TypeScript reads the imports. Without node_modules the check cannot run; it says so and, unless enforcing, passes.
+let ts = null;
+try {
+  ts = (await import('typescript')).default;
+} catch {
+  ts = null;
+}
+export const typescriptAvailable = ts !== null;
 
 const toPosix = path => path.split(sep).join('/');
 
@@ -119,6 +127,7 @@ export function violations({ root, config, moves, layout = 'projected' }) {
       const forbidden = rule.forbiddenPattern ? new RegExp(rule.forbiddenPattern, 'u') : null;
       for (const packageSource of rule.packages) {
         const directory = resolve(root, packageSource);
+        if (!existsSync(directory)) continue; // listed by missingPackages(), so the report says it was not checked
         for (const file of filesBelow(directory)) {
           const from = toPosix(relative(root, file));
           const text = readFileSync(file, 'utf8');
@@ -138,6 +147,12 @@ export function violations({ root, config, moves, layout = 'projected' }) {
   }
   const unique = new Map(found.map(item => [`${item.rule}|${item.from}|${item.to}`, item]));
   return [...unique.values()].sort((a, b) => `${a.rule}|${a.from}|${a.to}`.localeCompare(`${b.rule}|${b.from}|${b.to}`));
+}
+
+/** The packages a package rule names that do not exist yet (they are checked once they do). */
+export function missingPackages({ root, config }) {
+  return config.rules.filter(rule => rule.kind === 'package')
+    .flatMap(rule => rule.packages.filter(path => !existsSync(resolve(root, path))).map(path => ({ rule: rule.id, path })));
 }
 
 const keyOf = item => `${item.from} -> ${item.to}`;
@@ -161,6 +176,11 @@ export function baselineFrom(items, about) {
 function main() {
   const argv = process.argv.slice(2);
   const option = name => argv.includes(name);
+  if (!typescriptAvailable) {
+    console.log('API layers: skipped, the typescript package cannot be found (no node_modules; run `pnpm install`).');
+    if (option('--enforce') || option('--update-baseline')) process.exitCode = 2;
+    return;
+  }
   const layoutIndex = argv.indexOf('--layout');
   const layout = layoutIndex >= 0 ? argv[layoutIndex + 1] : 'projected';
   if (!['projected', 'actual'].includes(layout)) throw new Error('--layout is projected or actual');
@@ -187,6 +207,9 @@ function main() {
   const mode = option('--enforce') ? 'enforcing' : 'report only';
   console.log(`API layers (${layout} layout, ${mode}): ${current.length} violations (${summary}); ${fresh.length} not in the baseline, ${fixed.length} baseline entries fixed.`);
   for (const item of option('--list') ? current : fresh) console.log(`  ${option('--list') && !fresh.includes(item) ? '' : 'new: '}${item.rule}: ${keyOf(item)}`);
+  for (const missing of missingPackages({ root, config })) {
+    console.log(`  note: ${missing.rule}: ${missing.path} does not exist yet, so it was not checked`);
+  }
   if (fixed.length) {
     for (const key of fixed) console.log(`  fixed: ${key.replace('|', ': ')}`);
     console.log('  Run `node scripts/check-api-layers.mjs --update-baseline` to drop the fixed entries.');
