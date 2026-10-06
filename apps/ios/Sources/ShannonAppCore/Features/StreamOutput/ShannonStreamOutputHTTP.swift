@@ -62,6 +62,9 @@ enum ShannonStreamOutputHTTP {
         ["127.0.0.1:\(port)", "localhost:\(port)"]
     }
 
+    /// `Sec-Fetch-Site` values that are served. A request without the header (an older client) is judged by the rest.
+    static let allowedFetchSites: Set<String> = ["none", "same-origin"]
+
     static func route(_ request: Request, port: UInt16, files: ShannonStreamOutputFiles) -> Route {
         // A page of another site that resolved its own name to 127.0.0.1 still says its own name here.
         guard let host = request.headers["host"]?.lowercased(), allowedHosts(port: port).contains(host) else {
@@ -69,6 +72,11 @@ enum ShannonStreamOutputHTTP {
         }
         // Our page sends no Origin for its own reads; another page's reads say where they come from.
         if let origin = request.headers["origin"]?.lowercased(), !allowedHosts(port: port).contains(where: { origin == "http://\($0)" }) {
+            return .refused(status: 403)
+        }
+        // A browser says where a request comes from: OBS's own page loads are `none` or `same-origin`; another site's
+        // page (`cross-site`, or `same-site` from another port of this Mac) is refused even for a plain image or script.
+        if let site = request.headers["sec-fetch-site"]?.lowercased(), !allowedFetchSites.contains(site) {
             return .refused(status: 403)
         }
         guard request.method == "GET" else { return .refused(status: 405) }
@@ -91,9 +99,9 @@ enum ShannonStreamOutputHTTP {
     ]
 
     /// The stream page's own policy: its scripts and styles from here (the Cubism Core needs WebAssembly), its model's
-    /// pictures as blobs, and no connection anywhere but here.
+    /// pictures as blobs, no connection anywhere but here, and never inside another page's frame.
     static let contentSecurityPolicy = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; "
-        + "img-src 'self' blob: data:; connect-src 'self' blob: data:; worker-src 'self' blob:; base-uri 'none'; form-action 'none'"
+        + "img-src 'self' blob: data:; connect-src 'self' blob: data:; worker-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
     static func head(status: Int, contentType: String?, contentLength: Int?, extra: [String] = []) -> Data {
         var lines = ["HTTP/1.1 \(status) \(reasons[status] ?? "Error")"]

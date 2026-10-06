@@ -9,10 +9,13 @@ import XCTest
 final class ShannonStreamOutputTests: XCTestCase {
     private let port: UInt16 = 41760
 
-    private func request(_ path: String, method: String = "GET", host: String? = "127.0.0.1:41760", origin: String? = nil) -> ShannonStreamOutputHTTP.Request {
+    private func request(
+        _ path: String, method: String = "GET", host: String? = "127.0.0.1:41760", origin: String? = nil, site: String? = nil
+    ) -> ShannonStreamOutputHTTP.Request {
         var headers: [String: String] = [:]
         if let host { headers["host"] = host }
         if let origin { headers["origin"] = origin }
+        if let site { headers["sec-fetch-site"] = site }
         return .init(method: method, path: path, headers: headers)
     }
 
@@ -59,6 +62,20 @@ final class ShannonStreamOutputTests: XCTestCase {
             XCTAssertEqual(ShannonStreamOutputHTTP.route(request("/events", origin: origin), port: port, files: files), .refused(status: 403), origin)
         }
         XCTAssertEqual(ShannonStreamOutputHTTP.route(request("/events", origin: "http://127.0.0.1:41760"), port: port, files: files), .events)
+    }
+
+    func testARequestFromAnotherSitesPageIsRefusedByItsFetchSite() {
+        let files = files()
+        // What OBS's browser sends for the page it was given, and for the page's own reads.
+        XCTAssertEqual(ShannonStreamOutputHTTP.route(request("/events", site: "same-origin"), port: port, files: files), .events)
+        guard case .file = ShannonStreamOutputHTTP.route(request("/stream.html", site: "none"), port: port, files: files) else {
+            return XCTFail("the page itself, typed or set as a source")
+        }
+        // Another site's page, also a plain <script> or <img> that sends no Origin; another port of this Mac is same-site.
+        for site in ["cross-site", "same-site", "CROSS-SITE", "unknown"] {
+            XCTAssertEqual(ShannonStreamOutputHTTP.route(request("/assets.js", site: site), port: port, files: files), .refused(status: 403), site)
+        }
+        XCTAssertTrue(ShannonStreamOutputHTTP.contentSecurityPolicy.hasSuffix("frame-ancestors 'none'"))
     }
 
     func testARequestHeadIsReadWhenCompleteAndRefusedWhenMalformedOrLarge() {
