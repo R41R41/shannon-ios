@@ -168,7 +168,7 @@ describe('canonical capability description', () => {
   it('states her own folder and her study as they are: her tools, the trash, only when the owner set the folder up, never to a guest', () => {
     const line = SHANNON_CAPABILITIES.find(item => item.id === 'own_folder')!;
     expect(line.audience).toBe('owner');
-    for (const words of ['用意してくれている時', '一覧・検索・読む', '書き換える', 'ゴミ箱に残る', 'PCが起きていない時は使えない', '写しも置く']) expect(line.text).toContain(words);
+    for (const words of ['用意してくれている時', '一覧・検索・読む', '書き換える', 'ゴミ箱に残る', 'PCやMacが起きていない時は使えない', 'いまは一覧・検索・読むだけ', '写しも置く']) expect(line.text).toContain(words);
     const study = SHANNON_CAPABILITIES.find(item => item.id === 'own_study')!;
     expect(study.audience).toBe('owner');
     for (const words of ['ボクの中に版ごとに残る', '見せていない下書きも自分は読める', '見せるのは自分の時間の手順だけ']) expect(study.text).toContain(words);

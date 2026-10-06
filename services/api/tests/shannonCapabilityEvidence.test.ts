@@ -134,7 +134,7 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
   // (the line says 「用意してくれている時」). In her own time she places copies with the same tools, and while her study is
   // Shannon's also with the v1 copy step (with Aether it is gone: stories live in Aether only, Syzygy ADR-0007 revised).
   // The owner's PC or Mac (A18 S1): a device learns its host from the binding route, two hosts are named in her tools, and a
-  // device that reads only (the Mac app in S2) is never planned a copy. The line still says PC: its words are pinned.
+  // device that reads only (the Mac app in S2) is never planned a copy. The line names both and says the Mac only reads.
   own_folder: () => exists(folderExecutors, prepareFolderCopy, HostFolderDesk.prototype.enqueue, HostFolderDesk.prototype.claim, HostFolderDesk.prototype.report,
     HostFolderOperations.prototype.run, HostFolderOperations.prototype.claim, HostFolderOperations.prototype.report,
     HostFolderOperations.prototype.boundHostOf, HostFolderDesk.prototype.copyHosts, folderToolForHosts)
