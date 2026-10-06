@@ -185,6 +185,54 @@ public struct ShannonLive2DTouch: Equatable, Sendable {
         case head, face, side, hand, body
     }
 
+    /// Touch vocabulary 2 (`docs/body-contract.md`, "Touch vocabulary 2"; the server's `BODY_TOUCH_PARTS`): the finer part.
+    public enum Part: String, CaseIterable, Sendable {
+        case head, hair, forehead, cheek, face, shoulder, arm, hand, belly, side, neck, chest, waist, leg, skirt, other
+    }
+
+    /// Left or right from her own view (`BODY_TOUCH_SIDES`).
+    public enum Side: String, CaseIterable, Sendable {
+        case left, right
+    }
+
+    /// How she was touched (`BODY_TOUCH_GESTURES`).
+    public enum Gesture: String, CaseIterable, Sendable {
+        case stroke, poke, tickle, rest, hold, carry
+    }
+
+    /// Pressed and moved, or only passed over (`BODY_TOUCH_INPUTS`).
+    public enum Input: String, CaseIterable, Sendable {
+        case press, hover
+    }
+
+    /// What her body did by itself on the spot (`BODY_TOUCH_REFLEXES`).
+    public enum Reflex: String, CaseIterable, Sendable {
+        case none, flinch, avoid
+    }
+
+    /// The fields of touch vocabulary 2 as the page said them. A word outside the server's list is never kept.
+    public struct Detail: Equatable, Sendable {
+        public var part: Part?
+        public var side: Side?
+        public var gesture: Gesture?
+        public var input: Input?
+        public var reflex: Reflex?
+        /// The page named a part, also one this app does not know (a newer page): it speaks vocabulary 2 and the
+        /// gesture says nothing of where she was touched.
+        public var namesPart: Bool
+
+        public init(part: Part? = nil, side: Side? = nil, gesture: Gesture? = nil, input: Input? = nil, reflex: Reflex? = nil, namesPart: Bool? = nil) {
+            self.part = part
+            self.side = side
+            self.gesture = gesture
+            self.input = input
+            self.reflex = reflex
+            self.namesPart = namesPart ?? (part != nil)
+        }
+
+        public var isEmpty: Bool { part == nil && side == nil && gesture == nil && input == nil && reflex == nil }
+    }
+
     public let id: String
     public let occurredAt: String
     public let kind: Kind
@@ -193,8 +241,13 @@ public struct ShannonLive2DTouch: Equatable, Sendable {
     public let ongoing: Bool
     /// As the page said. An older page says nothing; `sentRegion` then fills in what the gesture implies.
     public let region: Region?
+    /// Touch vocabulary 2, as the page said it. Sent only to a server that said `touchVocabulary` 2 or more.
+    public let detail: Detail
 
-    public init(id: String, occurredAt: String, kind: Kind, durationMs: Int, strength: Double, ongoing: Bool, region: Region? = nil) {
+    public init(
+        id: String, occurredAt: String, kind: Kind, durationMs: Int, strength: Double, ongoing: Bool, region: Region? = nil,
+        detail: Detail = Detail()
+    ) {
         self.id = id
         self.occurredAt = occurredAt
         self.kind = kind
@@ -202,12 +255,15 @@ public struct ShannonLive2DTouch: Equatable, Sendable {
         self.strength = strength
         self.ongoing = ongoing
         self.region = region
+        self.detail = detail
     }
 
-    /// The part reported to her: the page's own, or, where the gesture leaves no doubt, the gesture's
-    /// (a pet is on the head, a held hand is the hand, a tickle is on the side). A poke without a part stays without one.
+    /// The part reported to her: the page's own, or, from an older page that names no part, what the gesture leaves no doubt
+    /// about (a pet is on the head, a held hand is the hand, a tickle is on the side). A poke without a part stays without one.
+    /// A page that names a `part` (touch vocabulary 2) is never second-guessed: a stroke on her chest is not her head.
     public var sentRegion: Region? {
         if let region { return region }
+        guard !detail.namesPart else { return nil }
         switch kind {
         case .pet: return .head
         case .holdHand: return .hand
@@ -281,7 +337,8 @@ public enum ShannonLive2DMessage: Equatable, Sendable {
                 strength: strength.isFinite ? min(1, max(0, strength)) : 0,
                 ongoing: type == "askReaction" && (touch["ongoing"] as? Bool ?? false),
                 // A part outside the vocabulary (a newer page) is dropped, not the touch.
-                region: (touch["region"] as? String).flatMap(ShannonLive2DTouch.Region.init(rawValue:))
+                region: (touch["region"] as? String).flatMap(ShannonLive2DTouch.Region.init(rawValue:)),
+                detail: Self.detail(touch)
             )
             self = type == "touch" ? .touch(value) : .askReaction(value)
         case "tap":
@@ -292,6 +349,18 @@ public enum ShannonLive2DMessage: Equatable, Sendable {
         default:
             return nil
         }
+    }
+
+    /// Touch vocabulary 2: each word only from its list; a word outside it (a newer page) is dropped, never the touch.
+    private static func detail(_ touch: [String: Any]) -> ShannonLive2DTouch.Detail {
+        func word<T: RawRepresentable>(_ key: String, _: T.Type) -> T? where T.RawValue == String {
+            (touch[key] as? String).flatMap(T.init(rawValue:))
+        }
+        let namesPart = (touch["part"] as? String).map { !$0.isEmpty } ?? false
+        return ShannonLive2DTouch.Detail(
+            part: word("part", ShannonLive2DTouch.Part.self), side: word("side", ShannonLive2DTouch.Side.self),
+            gesture: word("gesture", ShannonLive2DTouch.Gesture.self), input: word("input", ShannonLive2DTouch.Input.self),
+            reflex: word("reflex", ShannonLive2DTouch.Reflex.self), namesPart: namesPart)
     }
 
     static func isIdentifier(_ value: String) -> Bool {

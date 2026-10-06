@@ -51,6 +51,8 @@ extension ShannonDesktopBody {
                 report(plain: "windowShown")
             }
             etag = presence.etag
+            // A fact of the server on every answer, `unchanged` too: her touches carry vocabulary 2 only while it says 2.
+            touch.serverSaid(touchVocabulary: presence.touchVocabulary)
             if presence.unchanged != true { apply(presence) }
             return Double(min(10, max(3, presence.pollAfterSeconds ?? 10)))
         } catch let refusal as ShannonBodyRefusal {
@@ -75,7 +77,9 @@ extension ShannonDesktopBody {
         guard force || registeredCamera != camera else { return }
         let stage = ShannonLive2DStage.shared
         do {
-            try await client.registerDesktopBody(scopeKey: conversation.scopeKey, expressions: stage.expressions, gestures: stage.gestures, camera: camera)
+            let vocabulary = try await client.registerDesktopBody(
+                scopeKey: conversation.scopeKey, expressions: stage.expressions, gestures: stage.gestures, camera: camera)
+            touch.serverSaid(touchVocabulary: vocabulary)
             registeredCamera = camera
         } catch {
             registeredCamera = nil

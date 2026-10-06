@@ -1717,11 +1717,25 @@
       "note": "目だけのとき、映し方の手がかり（読み上げ）。体のページは目だけのとき setLayout の scale と offset だけを使う。"
     },
     {
-      "key": "settings.figure.touchEyes",
-      "text": "目だけのときは、目のあたりを軽くつつけます（なでる・くすぐる・手をつなぐは、ありません）。",
+      "key": "settings.figure.touchHuman",
+      "text": "Live2Dの姿は指で触れられます。軽く叩くと「つつく」（頭や手では、なでる・手をつなぐの始まりになります）、押したまま往復させると「なでる」（速く動かすと「くすぐる」）、押したまま止めると「触れたまま」（手なら「手をつなぐ」）です。首・胸・腰・脚・スカートに触れると、体が少し身を引きます。",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
       "only": "apple",
-      "note": "設定 › すがた の説明の最初の文（目だけのとき）。人の姿のときは「Live2Dの姿は指で触れられます（…）」。"
+      "note": "設定 › すがた の説明の最初の文（人の姿のとき）。iPhone と Mac のトークの姿で同じ。体のページ 0.1.0+202610060134（触れ合いの語彙 2、ADR-0005 の段 1c）の触り方に合わせた（embed/README.md「体の語彙 2」）。このページはいつも押した触れ方（input: press）で、指でなぞるだけの撫で（hover。Windows では頭と髪だけ）は無く、つまんで運ぶも無い。Mac のデスクトップの体の運び方は ShannonDesktopBodyCarry の決まりで、この文には書かない。"
+    },
+    {
+      "key": "settings.figure.touchEyes",
+      "text": "目だけのときは、目のあたりを軽くつつけます。顔に触れたことになります（なでる・くすぐる・手をつなぐは、ありません）。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "設定 › すがた の説明の最初の文（目だけのとき）。人の姿のときは settings.figure.touchHuman。体のページ 0.1.0+202610060134 から、目だけの体の触れ方はいつも part: face（2026-10-06）。"
+    },
+    {
+      "key": "settings.figure.touchPrivacy",
+      "text": "「体に起きたことをシャノンに伝える」がオフの間は、この端末の中で動くだけで、何も送りません。オンにすると、触れた場所・触れ方・長さ・強さ・時刻と、体が身を引いたかどうかだけがシャノンに届き、気持ちが動いて、ひとこと返すことがあります。カメラは使いません。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "設定 › すがた の説明の 2 文目（iPhone と Mac）。前は「触れた種類・長さ・強さ・時刻だけ」。部位（region）は前から送っていた。触れ合いの語彙 2 で部位の細かさ・左右・触り方・身を引いたか（reflex）が加わったので直した（サーバーが touchVocabulary 2 と言ったときだけ送る）。"
     },
     {
       "key": "settings.figure.touchMac",
@@ -3167,10 +3181,10 @@
     },
     {
       "key": "desktop.body.explanation",
-      "text": "シャノンがデスクトップに立ちます。体の外のクリックは後ろの窓へ通り、体をつまんで好きな場所へ運べます。場所と大きさは画面ごとに覚えます。触れたこと・運んだこと・席を外して戻ったことは、「体に起きたことをシャノンに伝える」が入のときだけ届きます。体の窓が出ている間は、Live2D の姿はこちらに出て、トークの横の姿は水の光の目になります。",
+      "text": "シャノンがデスクトップに立ちます。体の外のクリックは後ろの窓へ通ります。顔（おでこ・頬・目・鼻）か足もとを押したまま動かすと、好きな場所へ運べます（ほかの所を押すと、触れたことになります）。場所と大きさは画面ごとに覚えます。触れたこと・運んだこと・席を外して戻ったことは、「体に起きたことをシャノンに伝える」が入のときだけ届きます。体の窓が出ている間は、Live2D の姿はこちらに出て、トークの横の姿は水の光の目になります。",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodySettingsSection.swift",
       "only": "apple",
-      "note": "設定 › すがた › デスクトップの体 の説明。"
+      "note": "設定 › すがた › デスクトップの体 の説明。運べるのは顔（おでこ・頬を含む）と、名前の無い所（ブーツなど）だけ（所有者の決定、2026-10-06。Windows の体と同じ決まり、ShannonDesktopBodyGrip）。Mac の窓は押した時に、体のページの partAt（0.1.0+202610060340 から）にその点の部位を聞いて決める（目と鼻も顔。前髪は頭）。partAt の無い古いページでは、ページから測った所（おでこの真ん中とブーツ）だけで運ぶ。"
     },
     {
       "key": "desktop.body.unsupported",

@@ -14756,6 +14756,50 @@
       }
       return Number.isFinite(u0) ? [u0, v0, u1, v1] : null;
     }
+    /** いま描いている姿で、その点がメッシュの三角形のどれかに入っているか（u・v は opaqueAt と同じ割合）。 */
+    contains(index, u, v) {
+      const matrix = this._modelMatrix;
+      const vertices = this._model.getDrawableVertices(index);
+      const indices = this._model.getDrawableVertexIndices(index);
+      const count = this._model.getDrawableVertexIndexCount(index);
+      const at = (vertex) => [
+        (matrix.transformX(vertices[vertex * 2]) / this.aspect + 1) / 2,
+        (1 - matrix.transformY(vertices[vertex * 2 + 1])) / 2
+      ];
+      for (let triangle = 0; triangle + 2 < count; triangle += 3) {
+        const [ax, ay] = at(indices[triangle]);
+        const [bx, by] = at(indices[triangle + 1]);
+        const [cx, cy] = at(indices[triangle + 2]);
+        const d1 = (u - bx) * (ay - by) - (ax - bx) * (v - by);
+        const d2 = (u - cx) * (by - cy) - (bx - cx) * (v - cy);
+        const d3 = (u - ax) * (cy - ay) - (cx - ax) * (v - ay);
+        const negative = d1 < 0 || d2 < 0 || d3 < 0;
+        const positive = d1 > 0 || d2 > 0 || d3 > 0;
+        if (!(negative && positive)) return true;
+      }
+      return false;
+    }
+    meshAt(ids, u, v) {
+      for (const id of ids) {
+        const index = this.drawables.get(id);
+        if (index !== void 0 && this.contains(index, u, v)) return id;
+      }
+      return null;
+    }
+    drawableAt(u, v, accept) {
+      const orders = this._model.getRenderOrders();
+      let best = null;
+      let bestOrder = -Infinity;
+      for (const [id, index] of this.drawables) {
+        if (!accept(id) || !this._model.getDrawableDynamicFlagIsVisible(index) || this._model.getDrawableOpacity(index) <= 0.01) continue;
+        const order = orders[index];
+        if (order > bestOrder && this.contains(index, u, v)) {
+          best = id;
+          bestOrder = order;
+        }
+      }
+      return best;
+    }
     opaqueAt(u, v) {
       const { gl, canvas } = this;
       const x = Math.floor((SIDE_MARGIN + u) / (1 + 2 * SIDE_MARGIN) * canvas.width);

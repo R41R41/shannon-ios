@@ -219,8 +219,28 @@ public enum ShannonVoiceAffectDTO: String, Codable, Equatable, Sendable {
     case gentle, relaxed, content, quietCompanion, tender, apologetic
 }
 
+public extension ShannonVoiceAffectDTO {
+    /// An affect a newer server names never fails the voice plan (its turn is still spoken): `uncomfortable`
+    /// (気持ち悪い・いや, body stage 1b, Syzygy ADR-0005) is acted as `annoyed`, its nearest; any other unknown name
+    /// as `neutral`.
+    static func known(_ name: String) -> Self? {
+        Self(rawValue: name) ?? (name == ShannonExpressionDTO.uncomfortableName ? .annoyed : nil)
+    }
+
+    init(from decoder: any Decoder) throws {
+        self = Self.known(try decoder.singleValueContainer().decode(String.self)) ?? .neutral
+    }
+}
+
 public enum ShannonVoiceDeliveryDTO: String, Codable, Equatable, Sendable {
     case conversational, quick, gentle, focused, energetic
+}
+
+public extension ShannonVoiceDeliveryDTO {
+    /// A delivery a newer server names is spoken as an ordinary turn rather than failing the plan.
+    init(from decoder: any Decoder) throws {
+        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .conversational
+    }
 }
 
 public enum ShannonVoiceLatencyClassDTO: String, Codable, Equatable, Sendable {
@@ -462,9 +482,9 @@ public struct ShannonVoiceTurnEmotionDTO: Codable, Equatable, Sendable {
 }
 
 public extension ShannonVoicePlanDTO {
-    /// Nil from a server that predates the face, or for a face this build does not know.
+    /// Nil from a server that predates the face, or for a face this build does not know (`uncomfortable` is `annoyed`).
     var face: ShannonFace? {
-        expression.flatMap(ShannonExpressionDTO.init(rawValue:)).map { ShannonFace(expression: $0, feelingName: feeling, kindName: kind) }
+        expression.flatMap(ShannonExpressionDTO.known).map { ShannonFace(expression: $0, feelingName: feeling, kindName: kind) }
     }
 
     var turnEmotion: ShannonVoiceTurnEmotionDTO {

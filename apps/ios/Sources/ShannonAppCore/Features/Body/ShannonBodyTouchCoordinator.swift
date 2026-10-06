@@ -74,6 +74,9 @@ public final class ShannonBodyTouchCoordinator {
     public private(set) var delivery: Delivery = .fine
     /// True while her line is being spoken: her figure is in the speaking phase.
     public private(set) var isSpeaking = false
+    /// The touch vocabulary the server said last (registration, or her desktop body's presence). Until it says 2 or more,
+    /// touches leave the device exactly as before vocabulary 2 existed (`docs/body-contract.md`, "The signal").
+    @ObservationIgnored public private(set) var touchVocabulary = ShannonBodyTouchVocabulary.unsaid
 
     @ObservationIgnored public var environment: Environment
     @ObservationIgnored private let scopeKey: String
@@ -119,6 +122,11 @@ public final class ShannonBodyTouchCoordinator {
         clearLine()
     }
 
+    /// What the server said of touch vocabulary 2 elsewhere (her desktop body's presence): nil is a server that says nothing.
+    public func serverSaid(touchVocabulary value: Int?) {
+        touchVocabulary = ShannonBodyTouchVocabulary.said(value)
+    }
+
     public func clearLine() {
         lineTask?.cancel()
         lineTask = nil
@@ -136,9 +144,12 @@ public final class ShannonBodyTouchCoordinator {
         guard let client, !isFlushing else { return }
         isFlushing = true
         defer { isFlushing = false }
+        // A `400` to a batch with vocabulary-2 fields is asked about once: the server may have been rolled back.
+        var askedAgain = false
         // Touches that arrive while a batch is under way are sent by the next turn of this loop.
         while !pending.isEmpty {
             let batch = pending.map(\.event)
+            var sentDetail = false
             do {
                 // Only a device that registered as a (touch-only) body reports what happened to it.
                 if !registered { try await register(client) }
@@ -147,10 +158,17 @@ public final class ShannonBodyTouchCoordinator {
                     pending.removeAll()
                     return
                 }
-                try await client.sendBodyTouches(scopeKey: scopeKey, events: batch)
+                let sent = batch.map { $0.sent(touchVocabulary: touchVocabulary) }
+                sentDetail = sent.contains { $0.detail != .none }
+                try await client.sendBodyTouches(scopeKey: scopeKey, events: sent)
                 pending.removeAll { item in batch.contains { $0.id == item.event.id } }
                 delivery = .fine
             } catch let refusal as ShannonBodyRefusal {
+                if refusal.status == 400, sentDetail, !askedAgain {
+                    askedAgain = true
+                    // Sent in the old shape if the server no longer says vocabulary 2; otherwise dropped below as before.
+                    if await saysOldVocabularyAgain(client) { continue }
+                }
                 switch refusal.status {
                 case 401:
                     delivery = .notConnected
@@ -200,19 +218,32 @@ public final class ShannonBodyTouchCoordinator {
         if !registered { try await register(client) }
         // Switched off while registering: the question is not asked.
         guard sends else { throw CancellationError() }
+        let sent = request.sent(touchVocabulary: touchVocabulary)
         do {
-            return try await client.askBodyReaction(request)
+            return try await client.askBodyReaction(sent)
         } catch let refusal as ShannonBodyRefusal where refusal.code == "BODY_REACTION_NOT_A_BODY" {
             registered = false
             try await register(client)
-            return try await client.askBodyReaction(request)
+            return try await client.askBodyReaction(request.sent(touchVocabulary: touchVocabulary))
+        } catch let refusal as ShannonBodyRefusal where refusal.status == 400 && sent.touch.detail != .none {
+            // The server may have been rolled back: asked once more in the old shape if it no longer says vocabulary 2.
+            guard await saysOldVocabularyAgain(client) else { throw refusal }
+            return try await client.askBodyReaction(request.sent(touchVocabulary: touchVocabulary))
         }
     }
 
     private func register(_ client: any ShannonBodyServing) async throws {
         let capabilities = environment.capabilities()
-        try await client.registerTouchBody(scopeKey: scopeKey, expressions: capabilities.expressions, gestures: capabilities.gestures)
+        touchVocabulary = try await client.registerTouchBody(
+            scopeKey: scopeKey, expressions: capabilities.expressions, gestures: capabilities.gestures)
         registered = true
+    }
+
+    /// Registers again to hear the server's vocabulary afresh. True when it now says less than 2.
+    private func saysOldVocabularyAgain(_ client: any ShannonBodyServing) async -> Bool {
+        registered = false
+        do { try await register(client) } catch { return false }
+        return touchVocabulary < ShannonBodyTouchVocabulary.detailed
     }
 
     private func show(_ answer: ShannonBodyReactionAnswerDTO, audience: ShannonBodyAudience) {
@@ -221,7 +252,7 @@ public final class ShannonBodyTouchCoordinator {
             environment.express(expression, message?.expression != nil ? message?.feeling : answer.mood?.feeling)
         }
         guard let message, !message.text.isEmpty else { return }
-        let face = message.expression.flatMap(ShannonExpressionDTO.init(rawValue:)).map { ShannonFace(expression: $0, feelingName: message.feeling) }
+        let face = message.expression.flatMap(ShannonExpressionDTO.known).map { ShannonFace(expression: $0, feelingName: message.feeling) }
         // Voice mode, the owner alone, and nothing else holding the sound: the bubble and her voice, then a moment
         // in which he may answer. Otherwise the bubble only.
         let speaks = audience == .owner && environment.speak != nil && !isSpeaking && environment.repliesInVoice()

@@ -34,14 +34,22 @@ final class ShannonBodyTests: XCTestCase {
             "水色の目が 2 つだけのシャノンです（水の光の目と同じ動き）。表情と、聞いている・考えている・話しているは、目の形と動きで伝えます。")
         XCTAssertTrue(ShannonLive2DBody.human.hasCharacterRig)
         XCTAssertFalse(ShannonLive2DBody.eyes.hasCharacterRig)
-        // Her eyes alone are only poked: the settings do not offer stroking, tickling or holding hands there.
+        // Her eyes alone are only poked, as her face: the settings do not offer stroking, tickling or holding hands there.
         XCTAssertEqual(ShannonBodyCopy.settingsExplanation(body: .human), ShannonBodyCopy.settingsExplanation)
         XCTAssertEqual(
             ShannonBodyCopy.settingsExplanation(body: .eyes),
-            "目だけのときは、目のあたりを軽くつつけます（なでる・くすぐる・手をつなぐは、ありません）。"
+            "目だけのときは、目のあたりを軽くつつけます。顔に触れたことになります（なでる・くすぐる・手をつなぐは、ありません）。"
                 + "「体に起きたことをシャノンに伝える」がオフの間は、この端末の中で動くだけで、何も送りません。"
-                + "オンにすると、触れた種類・長さ・強さ・時刻だけがシャノンに届き、気持ちが動いて、ひとこと返すことがあります。カメラは使いません。"
+                + "オンにすると、触れた場所・触れ方・長さ・強さ・時刻と、体が身を引いたかどうかだけがシャノンに届き、気持ちが動いて、ひとこと返すことがあります。カメラは使いません。"
                 + ShannonBodyCopy.touchOnThisDevice)
+        // Her whole figure, as the page of touch vocabulary 2 takes a touch (embed/README.md, 「体の語彙 2」): a press
+        // moved back and forth anywhere strokes or tickles, held still it rests (the hand: holding hands), and the
+        // parts she may not want touched make her draw back a little. No hover and no carry on this page.
+        XCTAssertEqual(
+            ShannonBodyCopy.settingsExplanation(body: .human),
+            "Live2Dの姿は指で触れられます。軽く叩くと「つつく」（頭や手では、なでる・手をつなぐの始まりになります）、押したまま往復させると「なでる」（速く動かすと「くすぐる」）、"
+                + "押したまま止めると「触れたまま」（手なら「手をつなぐ」）です。首・胸・腰・脚・スカートに触れると、体が少し身を引きます。"
+                + ShannonGeneratedStrings.settingsFigureTouchPrivacy + ShannonBodyCopy.touchOnThisDevice)
         // The Mac also says who a touch reaches as (A15); the iPhone adds nothing.
 #if os(macOS)
         XCTAssertEqual(ShannonBodyCopy.touchOnThisDevice, ShannonGeneratedStrings.settingsFigureTouchMac)
@@ -289,10 +297,11 @@ final class ShannonBodyTests: XCTestCase {
         }
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.deletingLastPathComponent().appendingPathComponent("NOTICE.txt").path))
         let version = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("version.json"))) as? [String: Any]
-        XCTAssertEqual(version?["modelUpdatedAt"] as? String, "2026-10-05T06:58:16.654Z")
-        // The build of 2026-10-05 11:01 that carries her eyes alone (`setBody`, `embed.html?body=eyes`), which always
-        // answers `body`, says the body in `contextRestored`, and runs switches and rebuilds on one ordered path.
-        XCTAssertEqual(version?["version"] as? String, "0.1.0+202610051101")
+        XCTAssertEqual(version?["modelUpdatedAt"] as? String, "2026-10-06T02:07:35.221Z")
+        // The build of 2026-10-06 03:40: her eyes alone (`setBody`, `embed.html?body=eyes`), switches and rebuilds on one
+        // ordered path, touch vocabulary 2 (ADR-0005 phase 1c), the model of 02:07 (her blinking fixed), the kind
+        // `uncomfortable` shown with the `annoyed` face, and `partAt` (the part at a point, for the Mac's carry).
+        XCTAssertEqual(version?["version"] as? String, "0.1.0+202610060340")
         let files = version?["files"] as? [String] ?? []
         XCTAssertTrue(files.contains("model-eyes/Shannon_Eyes_v2.moc3"))
         XCTAssertTrue(files.contains("model/Shannon.moc3"))
@@ -1092,6 +1101,224 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertTrue(["iphone", "mac"].contains(ShannonBodyRegistration.surface))
     }
 
+    // MARK: Touch vocabulary 2 (Syzygy ADR-0005 phase 1d)
+
+    func testAPageThatNamesAPartIsNotSecondGuessedByTheGesture() throws {
+        // A stroke on her chest, from a page of vocabulary 2 that left `region` out: never 「頭をなでられた」.
+        let chest = try XCTUnwrap(Self.pageTouch(["type": "pet", "part": "chest", "gesture": "stroke"]))
+        XCTAssertEqual(chest.detail.part, .chest)
+        XCTAssertNil(chest.sentRegion)
+        XCTAssertNil(ShannonBodyTouchEventDTO(touch: chest, audience: .owner).region)
+        XCTAssertNil(ShannonBodyReactionRequestDTO(scopeKey: "owner", touch: chest, audience: .owner).touch.region)
+        // The page's own region is kept as it is, whatever the part (the server decides where they disagree).
+        XCTAssertEqual(try XCTUnwrap(Self.pageTouch(["type": "pet", "part": "chest", "region": "body"])).sentRegion, .body)
+        XCTAssertEqual(try XCTUnwrap(Self.pageTouch(["type": "pet", "part": "neck", "region": "head"])).sentRegion, .head)
+        // A part this app does not know (a newer page) is dropped, and the page still spoke vocabulary 2: no inference either.
+        let newer = try XCTUnwrap(Self.pageTouch(["type": "holdHand", "part": "elbow"]))
+        XCTAssertNil(newer.detail.part)
+        XCTAssertNil(newer.sentRegion)
+    }
+
+    func testWithoutAPartTheGestureNamesTheRegionAsBefore() throws {
+        let kinds: [(String, String?)] = [("pet", "head"), ("holdHand", "hand"), ("tickle", "side"), ("poke", nil)]
+        for (kind, region) in kinds {
+            let touch = try XCTUnwrap(Self.pageTouch(["type": kind]))
+            XCTAssertEqual(touch.sentRegion?.rawValue, region, kind)
+            XCTAssertEqual(touch.detail, .init())
+            // Other vocabulary-2 fields without a part do not stop it.
+            XCTAssertEqual(try XCTUnwrap(Self.pageTouch(["type": kind, "gesture": "rest", "reflex": "none"])).sentRegion?.rawValue, region, kind)
+        }
+        // An empty part names nothing.
+        XCTAssertEqual(try XCTUnwrap(Self.pageTouch(["type": "pet", "part": ""])).sentRegion, .head)
+    }
+
+    func testVocabularyTwoFieldsLeaveOnlyOnceTheServerSaysTwo() async throws {
+        let touch = try XCTUnwrap(Self.pageTouch(
+            ["type": "pet", "region": "body", "part": "waist", "side": "left", "gesture": "stroke", "input": "press", "reflex": "avoid"]))
+        let old: Set<String> = ["type", "durationMs", "strength", "ongoing", "region"]
+        let detail: Set<String> = ["part", "side", "gesture", "input", "reflex"]
+        for (says, expected) in [(nil as Int?, old), (1, old), (2, old.union(detail)), (3, old.union(detail))] {
+            let client = FakeBodyClient()
+            if let says { await client.says(touchVocabulary: says) }
+            let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: .init(
+                reportsTouch: { true }, capabilities: { ([], []) }, express: { _, _ in }))
+            XCTAssertEqual(coordinator.touchVocabulary, 1, "nothing is sent before the server has said its number")
+            await coordinator.handle(.askReaction(touch))?.value
+            await coordinator.handle(.touch(touch))?.value
+            let asks = await client.sentAsks
+            let events = await client.sentEvents
+            let ask = try XCTUnwrap(asks.first)
+            let event = try XCTUnwrap(events.first)
+            let asked = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(ask)) as? [String: Any])
+            XCTAssertEqual(Set((asked["touch"] as? [String: Any] ?? [:]).keys), expected, "reaction, server says \(says.map(String.init) ?? "nothing")")
+            let reported = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(event)) as? [String: Any])
+            XCTAssertEqual(Set(reported.keys), expected.subtracting(["ongoing"]).union(["id", "audience", "occurredAt"]), "event, server says \(says.map(String.init) ?? "nothing")")
+            // The old fields are the same either way.
+            XCTAssertEqual(reported["region"] as? String, "body")
+            XCTAssertEqual(reported["type"] as? String, "pet")
+            if expected.contains("part") {
+                XCTAssertEqual(reported["part"] as? String, "waist")
+                XCTAssertEqual(reported["side"] as? String, "left")
+                XCTAssertEqual(reported["gesture"] as? String, "stroke")
+                XCTAssertEqual(reported["input"] as? String, "press")
+                XCTAssertEqual(reported["reflex"] as? String, "avoid")
+                XCTAssertEqual((asked["touch"] as? [String: Any])?["part"] as? String, "waist")
+            }
+        }
+    }
+
+    func testUnknownWordsFromThePageAreDroppedAndNeverSent() async throws {
+        let touch = try XCTUnwrap(Self.pageTouch(
+            ["type": "poke", "region": "face", "part": "nose", "side": "middle", "gesture": "lick", "input": "stare", "reflex": "faint"]))
+        XCTAssertEqual(touch.detail.part, nil)
+        XCTAssertEqual(touch.detail.side, nil)
+        XCTAssertEqual(touch.detail.gesture, nil)
+        XCTAssertEqual(touch.detail.input, nil)
+        XCTAssertEqual(touch.detail.reflex, nil)
+        // Words of other types are dropped too, and a known word is kept beside unknown ones.
+        let mixed = try XCTUnwrap(Self.pageTouch(["type": "poke", "part": 3, "side": ["left"], "gesture": "poke", "reflex": "Flinch"]))
+        XCTAssertEqual(mixed.detail, .init(gesture: .poke))
+        let client = FakeBodyClient()
+        await client.says(touchVocabulary: 2)
+        let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: .init(
+            reportsTouch: { true }, capabilities: { ([], []) }, express: { _, _ in }))
+        await coordinator.handle(.touch(touch))?.value
+        let events = await client.sentEvents
+        let reported = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(try XCTUnwrap(events.first))) as? [String: Any])
+        XCTAssertEqual(Set(reported.keys), ["id", "type", "audience", "occurredAt", "durationMs", "strength", "region"])
+        // Every word the server's lists hold is known here (`bodyContract.ts`, `bodyTouchWords.ts`).
+        XCTAssertEqual(ShannonLive2DTouch.Part.allCases.map(\.rawValue), [
+            "head", "hair", "forehead", "cheek", "face", "shoulder", "arm", "hand", "belly", "side", "neck", "chest", "waist", "leg", "skirt", "other"])
+        XCTAssertEqual(ShannonLive2DTouch.Side.allCases.map(\.rawValue), ["left", "right"])
+        XCTAssertEqual(ShannonLive2DTouch.Gesture.allCases.map(\.rawValue), ["stroke", "poke", "tickle", "rest", "hold", "carry"])
+        XCTAssertEqual(ShannonLive2DTouch.Input.allCases.map(\.rawValue), ["press", "hover"])
+        XCTAssertEqual(ShannonLive2DTouch.Reflex.allCases.map(\.rawValue), ["none", "flinch", "avoid"])
+    }
+
+    func testAServerRolledBackFromVocabularyTwoIsSentTheOldShape() async throws {
+        let touch = try XCTUnwrap(Self.pageTouch(["type": "pet", "region": "head", "part": "hair", "gesture": "stroke"]))
+        let client = FakeBodyClient()
+        // It said 2 when registered, then was rolled back: it refuses the new fields and, asked again, says nothing.
+        await client.says(touchVocabulary: 2, 1)
+        await client.refuseDetail(true)
+        let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: .init(
+            reportsTouch: { true }, capabilities: { ([], []) }, express: { _, _ in }))
+        await coordinator.handle(.touch(touch))?.value
+        let events = await client.sentEvents
+        XCTAssertEqual(events.map(\.id), [touch.id])
+        XCTAssertEqual(events.first?.detail, ShannonBodyTouchVocabulary.Fields.none)
+        XCTAssertEqual(events.first?.region, "head")
+        XCTAssertEqual(coordinator.delivery, .fine)
+        XCTAssertEqual(coordinator.touchVocabulary, 1)
+        // A reaction to such a server is asked once more in the old shape too.
+        let reacting = FakeBodyClient()
+        await reacting.says(touchVocabulary: 2, 1)
+        await reacting.refuseDetail(true)
+        let asking = ShannonBodyTouchCoordinator(scopeKey: "owner", client: reacting, environment: .init(
+            reportsTouch: { true }, capabilities: { ([], []) }, express: { _, _ in }))
+        await asking.handle(.askReaction(touch))?.value
+        let asks = await reacting.sentAsks
+        XCTAssertEqual(asks.first?.touch.detail, ShannonBodyTouchVocabulary.Fields.none)
+        // A `400` while it still says 2 is dropped as any refused batch is.
+        let still = FakeBodyClient()
+        await still.says(touchVocabulary: 2)
+        await still.refuseDetail(true)
+        let stubborn = ShannonBodyTouchCoordinator(scopeKey: "owner", client: still, environment: .init(
+            reportsTouch: { true }, capabilities: { ([], []) }, express: { _, _ in }))
+        await stubborn.handle(.touch(touch))?.value
+        let stillSent = await still.sentEvents
+        let stillCalls = await still.calls
+        XCTAssertEqual(stillSent, [])
+        XCTAssertEqual(stillCalls.filter { $0 == "register" }.count, 2)
+        XCTAssertEqual(stubborn.delivery, .unsupported)
+        // Her desktop body hears the number on presence as well; a presence without it is the old server.
+        stubborn.serverSaid(touchVocabulary: nil)
+        XCTAssertEqual(stubborn.touchVocabulary, 1)
+        stubborn.serverSaid(touchVocabulary: 2)
+        XCTAssertEqual(stubborn.touchVocabulary, 2)
+    }
+
+    func testHerDesktopBodyCarriesTheFieldsTheTouchWasDecidedWith() throws {
+        let touch = try XCTUnwrap(Self.pageTouch(["type": "tickle", "region": "side", "part": "side", "side": "right", "reflex": "flinch"]))
+        let event = ShannonBodyTouchEventDTO(touch: touch, audience: .owner)
+        let detailed = ShannonDesktopBodyEventDTO(touch: event.sent(touchVocabulary: 2))
+        XCTAssertEqual([detailed.part, detailed.side, detailed.reflex, detailed.gesture], ["side", "right", "flinch", nil])
+        let old = ShannonDesktopBodyEventDTO(touch: event.sent(touchVocabulary: 1))
+        let encoded = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(old)) as? [String: Any])
+        XCTAssertEqual(Set(encoded.keys), ["id", "type", "audience", "occurredAt", "durationMs", "strength", "region"])
+        let presence = try JSONDecoder().decode(ShannonDesktopBodyPresenceDTO.self, from: Data(#"{"etag":"e","unchanged":true,"touchVocabulary":2}"#.utf8))
+        XCTAssertEqual(presence.touchVocabulary, 2)
+        XCTAssertNil(try JSONDecoder().decode(ShannonDesktopBodyPresenceDTO.self, from: Data(#"{"etag":"e"}"#.utf8)).touchVocabulary)
+        // The answer of `PUT /v1/body/capabilities`: the saved registration plus the number, or nothing from an older server.
+        XCTAssertEqual(ShannonBodyTouchVocabulary.said(inAnswer: Data(#"{"expressions":[],"touchVocabulary":2}"#.utf8)), 2)
+        XCTAssertEqual(ShannonBodyTouchVocabulary.said(inAnswer: Data(#"{"expressions":[]}"#.utf8)), 1)
+        XCTAssertEqual(ShannonBodyTouchVocabulary.said(inAnswer: Data()), 1)
+    }
+
+    /// Messages exactly as the bundled page posts them (0.1.0+202610060134 and later, `embed.js`: `touch` on the end of a drag and on a
+    /// poke, `askReaction` at the page's moment; the vocabulary-2 fields spread after `region`, `side` only for a part with two).
+    func testTheBundledPagesTouchesReachTheServerAsItSaysThem() async throws {
+        let id = "3b8f2c1e-6d4a-4f0b-9a7e-2c5d8e1f0a6b"
+        let fixtures = [
+            #"{"type":"askReaction","id":"3b8f2c1e-6d4a-4f0b-9a7e-2c5d8e1f0a6b","touch":{"type":"pet","durationMs":1500,"strength":0.38,"ongoing":true,"region":"body","part":"chest","gesture":"stroke","input":"press","reflex":"flinch"},"occurredAt":"2026-10-06T01:40:00.000Z"}"#,
+            #"{"type":"touch","id":"3b8f2c1e-6d4a-4f0b-9a7e-2c5d8e1f0a6b","occurredAt":"2026-10-06T01:40:02.100Z","touch":{"type":"pet","durationMs":2100,"strength":0.42,"ongoing":false,"region":"body","part":"chest","gesture":"stroke","input":"press","reflex":"flinch"}}"#,
+            #"{"type":"touch","id":"9c1d7a20-4e3b-4b8f-8f61-0d2e5a7c9b13","occurredAt":"2026-10-06T01:41:00.000Z","touch":{"type":"poke","durationMs":0,"strength":0,"ongoing":false,"region":"face","part":"cheek","side":"left","gesture":"poke","input":"press","reflex":"none"}}"#,
+        ]
+        let messages = try fixtures.map { text in
+            try XCTUnwrap(ShannonLive2DMessage(body: try JSONSerialization.jsonObject(with: Data(text.utf8))))
+        }
+        guard case let .askReaction(asked) = messages[0], case let .touch(chest) = messages[1], case let .touch(cheek) = messages[2] else {
+            return XCTFail("the page's messages are read as a question and two touches")
+        }
+        XCTAssertEqual(asked.id, id)
+        XCTAssertTrue(asked.ongoing)
+        XCTAssertEqual(chest.detail, .init(part: .chest, gesture: .stroke, input: .press, reflex: .flinch))
+        XCTAssertEqual(chest.sentRegion, .body, "the page's region, never the head a stroke used to imply")
+        XCTAssertEqual(cheek.detail, .init(part: .cheek, side: .left, gesture: .poke, input: .press, reflex: ShannonLive2DTouch.Reflex.none))
+        for says in [1, 2] {
+            let client = FakeBodyClient()
+            await client.says(touchVocabulary: says)
+            let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: .init(
+                reportsTouch: { true }, capabilities: { ([], []) }, express: { _, _ in }))
+            for message in messages { await coordinator.handle(message)?.value }
+            let asks = await client.sentAsks
+            let events = await client.sentEvents
+            let askedTouch = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: JSONEncoder().encode(try XCTUnwrap(asks.first))) as? [String: Any])["touch"] as? [String: Any]
+            let reported = try events.map { try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) as? [String: Any]) }
+            XCTAssertEqual(reported.map { $0["id"] as? String }, [id, "9c1d7a20-4e3b-4b8f-8f61-0d2e5a7c9b13"])
+            XCTAssertEqual(reported.map { $0["region"] as? String }, ["body", "face"])
+            XCTAssertEqual(askedTouch?["region"] as? String, "body")
+            if says >= 2 {
+                XCTAssertEqual(askedTouch?["part"] as? String, "chest")
+                XCTAssertEqual(askedTouch?["reflex"] as? String, "flinch")
+                XCTAssertEqual(reported[0]["part"] as? String, "chest")
+                XCTAssertEqual(reported[0]["gesture"] as? String, "stroke")
+                XCTAssertEqual(reported[0]["input"] as? String, "press")
+                XCTAssertEqual(reported[0]["reflex"] as? String, "flinch")
+                XCTAssertNil(reported[0]["side"])
+                XCTAssertEqual(reported[1]["part"] as? String, "cheek")
+                XCTAssertEqual(reported[1]["side"] as? String, "left")
+                XCTAssertEqual(reported[1]["reflex"] as? String, "none")
+            } else {
+                // An older server is sent exactly the shape it knows.
+                XCTAssertEqual(Set(askedTouch?.keys ?? [:].keys), ["type", "durationMs", "strength", "ongoing", "region"])
+                for event in reported {
+                    XCTAssertEqual(Set(event.keys), ["id", "type", "audience", "occurredAt", "durationMs", "strength", "region"])
+                }
+            }
+        }
+    }
+
+    private static func pageTouch(_ touch: [String: Any]) -> ShannonLive2DTouch? {
+        var fields: [String: Any] = ["durationMs": 900, "strength": 0.4, "ongoing": false]
+        fields.merge(touch) { $1 }
+        guard case let .touch(value)? = ShannonLive2DMessage(body: [
+            "type": "touch", "id": "v2-\(touch["type"] ?? "")", "occurredAt": "2026-10-06T03:00:00.000Z", "touch": fields,
+        ]) else { return nil }
+        return value
+    }
+
     func testAStudyCardSaysWhetherItAwaitsAReaction() throws {
         let json = #"{"id":"p1","kind":"story","kindLabel":"物語","status":"shown","statusLabel":"見せた","hidden":false,"revising":false,"updatedAt":"2026-10-03T00:00:00.000Z","awaitingReaction":true}"#
         XCTAssertEqual(try JSONDecoder().decode(ShannonStudyPieceCardDTO.self, from: Data(json.utf8)).awaitingReaction, true)
@@ -1163,12 +1390,23 @@ private actor FakeBodyClient: ShannonBodyServing {
     func failNextAsk(_ error: any Error) { askFailure = error }
     func failNextEvents(_ error: any Error) { eventsFailure = error }
 
-    func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws {
+    /// The touch vocabulary each registration answers, in turn (the last one stays); a server from before it says none.
+    private var vocabularies: [Int] = [ShannonBodyTouchVocabulary.unsaid]
+    /// A server from before vocabulary 2: a touch with any of its fields is refused with `400`, as an unknown field is.
+    private var refusesDetail = false
+    private(set) var sentEvents: [ShannonBodyTouchEventDTO] = []
+    private(set) var sentAsks: [ShannonBodyReactionRequestDTO] = []
+
+    func says(touchVocabulary values: Int...) { vocabularies = values }
+    func refuseDetail(_ value: Bool) { refusesDetail = value }
+
+    func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws -> Int {
         calls.append("register")
         if let hook = registerHook {
             registerHook = nil
             await hook()
         }
+        return vocabularies.count > 1 ? vocabularies.removeFirst() : vocabularies[0]
     }
 
     func sendBodyTouches(scopeKey: String, events: [ShannonBodyTouchEventDTO]) async throws {
@@ -1178,6 +1416,8 @@ private actor FakeBodyClient: ShannonBodyServing {
             eventsFailure = nil
             throw error
         }
+        if refusesDetail, events.contains(where: { $0.detail != .none }) { throw ShannonBodyRefusal(status: 400) }
+        sentEvents += events
     }
 
     func askBodyReaction(_ request: ShannonBodyReactionRequestDTO) async throws -> ShannonBodyReactionAnswerDTO {
@@ -1186,6 +1426,8 @@ private actor FakeBodyClient: ShannonBodyServing {
             askFailure = nil
             throw error
         }
+        if refusesDetail, request.touch.detail != .none { throw ShannonBodyRefusal(status: 400) }
+        sentAsks.append(request)
         return answer
     }
 }

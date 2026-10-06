@@ -65,9 +65,9 @@ final class ShannonDesktopBodyTests: XCTestCase {
 
     // MARK: Carrying her
 
-    func testAPressOnHerHeadIsThePagesAtOnce() {
+    func testAPressWhereSheIsNotPickedUpIsThePagesAtOnce() {
         var carry = ShannonDesktopBodyCarry()
-        XCTAssertEqual(carry.down(at: .zero, onHead: true, origin: .zero, time: 0), [.deliverDown])
+        XCTAssertEqual(carry.down(at: .zero, mayCarry: false, origin: .zero, time: 0), [.deliverDown])
         XCTAssertEqual(carry.drag(to: CGPoint(x: 50, y: 0), time: 0.1), [.deliverDrag])
         XCTAssertEqual(carry.up(time: 1), [.deliverUp])
         XCTAssertFalse(carry.isPressed)
@@ -75,14 +75,14 @@ final class ShannonDesktopBodyTests: XCTestCase {
 
     func testAClickElsewhereReachesThePageAsAClick() {
         var carry = ShannonDesktopBodyCarry()
-        XCTAssertEqual(carry.down(at: .zero, onHead: false, origin: .zero, time: 0), [])
+        XCTAssertEqual(carry.down(at: .zero, mayCarry: true, origin: .zero, time: 0), [])
         XCTAssertEqual(carry.drag(to: CGPoint(x: 2, y: 1), time: 0.05), [])
         XCTAssertEqual(carry.up(time: 0.1), [.deliverDown, .deliverUp])
     }
 
-    func testPullingHerByTheBodyCarriesHerAndThePageNeverHearsOfIt() {
+    func testPullingHerByHerFaceOrFeetCarriesHerAndThePageNeverHearsOfIt() {
         var carry = ShannonDesktopBodyCarry()
-        _ = carry.down(at: CGPoint(x: 100, y: 100), onHead: false, origin: CGPoint(x: 10, y: 20), time: 5)
+        _ = carry.down(at: CGPoint(x: 100, y: 100), mayCarry: true, origin: CGPoint(x: 10, y: 20), time: 5)
         XCTAssertEqual(carry.drag(to: CGPoint(x: 110, y: 90), time: 5.1), [.beginCarry, .moveWindow(CGPoint(x: 20, y: 10))])
         XCTAssertTrue(carry.isCarrying)
         XCTAssertEqual(carry.drag(to: CGPoint(x: 300, y: 100), time: 6), [.moveWindow(CGPoint(x: 210, y: 20))])
@@ -91,23 +91,181 @@ final class ShannonDesktopBodyTests: XCTestCase {
 
     func testAPressHeldStillIsThePagesForAHeldHand() {
         var carry = ShannonDesktopBodyCarry()
-        _ = carry.down(at: .zero, onHead: false, origin: .zero, time: 0)
+        _ = carry.down(at: .zero, mayCarry: true, origin: .zero, time: 0)
         XCTAssertEqual(carry.tick(time: 0.1), [])
         XCTAssertEqual(carry.tick(time: 0.3), [.deliverDown])
         XCTAssertEqual(carry.drag(to: CGPoint(x: 40, y: 0), time: 0.5), [.deliverDrag])
         XCTAssertEqual(carry.up(time: 2), [.deliverUp])
         // Moved only after the hold: still the page's.
-        _ = carry.down(at: .zero, onHead: false, origin: .zero, time: 10)
+        _ = carry.down(at: .zero, mayCarry: true, origin: .zero, time: 10)
         XCTAssertEqual(carry.drag(to: CGPoint(x: 1, y: 0), time: 10.4), [.deliverDown, .deliverDrag])
         XCTAssertEqual(carry.cancel(time: 11), [.deliverUp])
     }
 
-    func testHerHeadIsTheTopFifthOfHerFigure() {
-        let figure = CGRect(x: 100, y: 0, width: 200, height: 500)
-        XCTAssertTrue(ShannonDesktopBodyCarry.isOnHead(CGPoint(x: 200, y: 480), figure: figure))
-        XCTAssertFalse(ShannonDesktopBodyCarry.isOnHead(CGPoint(x: 200, y: 250), figure: figure))
-        XCTAssertFalse(ShannonDesktopBodyCarry.isOnHead(CGPoint(x: 105, y: 480), figure: figure))
-        XCTAssertFalse(ShannonDesktopBodyCarry.isOnHead(.zero, figure: .zero))
+    /// Owner decision 2026-10-06, the Windows rule: only her face or what has no named part (her boots) picks her up.
+    func testOnlyHerFaceAndWhatHasNoNamedPartPickHerUp() {
+        let carrying: Set<ShannonLive2DTouch.Part> = [.forehead, .cheek, .face, .other]
+        for part in ShannonLive2DTouch.Part.allCases {
+            XCTAssertEqual(ShannonDesktopBodyGrip.carries(part: part, region: nil), carrying.contains(part), part.rawValue)
+            // A part decides, whatever region stands beside it.
+            XCTAssertEqual(ShannonDesktopBodyGrip.carries(part: part, region: .face), carrying.contains(part), part.rawValue)
+        }
+        // Without a part: only the region `face`; with neither, she is not picked up.
+        for region in ShannonLive2DTouch.Region.allCases {
+            XCTAssertEqual(ShannonDesktopBodyGrip.carries(part: nil, region: region), region == .face, region.rawValue)
+        }
+        XCTAssertFalse(ShannonDesktopBodyGrip.carries(part: nil, region: nil))
+    }
+
+    /// Points where the bundled page names each part (measured with the page in headless Chrome, `full` fitted to the
+    /// stage), in drawing heights: across from the middle, down from the top of the drawing.
+    private static let measured: [(ShannonLive2DTouch.Part?, Double, Double)] = [
+        (.head, 0, 0.10), (.head, 0, 0.15), (.hair, -0.05, 0.20), (.hair, 0.15, 0.30), (.neck, 0.005, 0.21),
+        (.shoulder, -0.05, 0.25), (.chest, 0, 0.25), (.chest, 0, 0.30), (.arm, 0.10, 0.30), (.side, -0.05, 0.30),
+        (.belly, 0, 0.35), (.skirt, 0, 0.40), (.skirt, 0.05, 0.45), (.hand, -0.15, 0.45), (.leg, -0.05, 0.50),
+        (.leg, 0.05, 0.60), (nil, 0.40, 0.50),
+    ]
+
+    func testAPressPicksHerUpOnlyWhereThePageNamesHerFaceOrHerBoots() {
+        for scale in [0.5, 1, 2] {
+            let size = ShannonDesktopBodyGeometry.windowSize(scale: scale, visible: CGRect(x: 0, y: 0, width: 4000, height: 4000))
+            let stage = ShannonDesktopBodyGeometry.stageRect(in: size, scale: scale)
+            func point(_ u: Double, _ v: Double) -> CGPoint {
+                let canvas = ShannonDesktopBodyGrip.canvas(stage.size)
+                return CGPoint(x: stage.midX + u * canvas.height, y: stage.maxY - canvas.top - v * canvas.height)
+            }
+            // Every other part, and empty space beside her, is a touch.
+            for (part, u, v) in Self.measured {
+                XCTAssertFalse(ShannonDesktopBodyGrip.mayCarry(at: point(u, v), stage: stage, body: .human, pageShown: true), "\(part?.rawValue ?? "nothing") at \(scale)")
+            }
+            // Her forehead and her boots pick her up.
+            for (part, u, v) in [(ShannonLive2DTouch.Part.face, -0.004, 0.129), (.other, -0.04, 0.86), (.other, 0.06, 0.86), (.other, -0.02, 0.90)] {
+                XCTAssertEqual(ShannonDesktopBodyGrip.part(at: point(u, v), stage: stage, body: .human), part, "\(part.rawValue) at \(scale)")
+                XCTAssertTrue(ShannonDesktopBodyGrip.mayCarry(at: point(u, v), stage: stage, body: .human, pageShown: true))
+            }
+            // Her eyes alone are her face wherever she is drawn; outside her stage nothing is.
+            XCTAssertTrue(ShannonDesktopBodyGrip.mayCarry(at: CGPoint(x: stage.midX, y: stage.midY), stage: stage, body: .eyes, pageShown: true))
+            XCTAssertFalse(ShannonDesktopBodyGrip.mayCarry(at: CGPoint(x: stage.midX, y: stage.maxY + 10), stage: stage, body: .eyes, pageShown: true))
+            XCTAssertFalse(ShannonDesktopBodyGrip.mayCarry(at: CGPoint(x: stage.midX, y: stage.maxY + 10), stage: stage, body: .human, pageShown: true))
+            // No figure in the window (the page loading or failed, no Live2D, the waterlight eye standing in): she is
+            // carried from anywhere she is drawn, chest and head included, as before there were parts.
+            for (part, u, v) in Self.measured where part != nil {
+                XCTAssertTrue(ShannonDesktopBodyGrip.mayCarry(at: point(u, v), stage: stage, body: .human, pageShown: false), "\(part!.rawValue) without the page at \(scale)")
+            }
+            XCTAssertFalse(ShannonDesktopBodyGrip.mayCarry(at: CGPoint(x: stage.midX, y: stage.maxY + 10), stage: stage, body: .human, pageShown: false))
+        }
+        // Every zone is a part that carries, inside her drawing.
+        for zone in ShannonDesktopBodyGrip.zones {
+            XCTAssertTrue(ShannonDesktopBodyGrip.carries(part: zone.part, region: nil))
+            XCTAssertTrue(zone.box.minY >= 0 && zone.box.maxY <= 1 && abs(zone.box.midX) < 0.3)
+        }
+    }
+
+    // MARK: Asking the page where she was pressed (`partAt`)
+
+    /// A page as the web view runs it: the statement is evaluated by a fake `partAt`, as the bundled page would.
+    @MainActor private final class FakePage {
+        enum Mode { case answers([String: Any]?), missing, fails }
+        var mode: Mode
+        private(set) var scripts: [String] = []
+        init(_ mode: Mode) { self.mode = mode }
+
+        func evaluate(_ script: String) async throws -> Any? {
+            scripts.append(script)
+            switch mode {
+            case .fails: throw URLError(.cannotDecodeContentData)
+            case .missing: return "missing"
+            case let .answers(answer):
+                guard let answer else { return "null" }
+                return String(data: try JSONSerialization.data(withJSONObject: answer), encoding: .utf8)
+            }
+        }
+    }
+
+    @MainActor func testThePagesPartAtDecidesWhereSheIsPickedUp() async {
+        let at = CGPoint(x: 200, y: 96)
+        // The page's own answer wins over the measured zones either way.
+        for (answer, fallback, expected) in [
+            (["part": "face", "region": "face", "carriable": true] as [String: Any], false, true),
+            (["part": "cheek", "region": "face", "side": "left", "carriable": true], false, true),
+            (["part": "other", "region": "body", "carriable": true], false, true),
+            (["part": "head", "region": "head", "carriable": false], true, false),
+            (["part": "chest", "region": "body", "carriable": false], true, false),
+        ] {
+            let page = FakePage(.answers(answer))
+            let decided = await ShannonDesktopBodyGrip.ask(at: at, fallback: fallback, evaluate: page.evaluate)
+            XCTAssertEqual(decided, expected, "\(answer)")
+            XCTAssertEqual(page.scripts.count, 1)
+            XCTAssertTrue(page.scripts[0].contains("partAt(200.0,96.0)"))
+        }
+        // A clear spot is not where she is picked up, whatever the zones say.
+        let clear = await ShannonDesktopBodyGrip.ask(at: at, fallback: true, evaluate: FakePage(.answers(nil)).evaluate)
+        XCTAssertFalse(clear)
+        // An older page without partAt, a failed statement, or an answer of an unknown shape: the zones decide.
+        for fallback in [true, false] {
+            let missing = await ShannonDesktopBodyGrip.ask(at: at, fallback: fallback, evaluate: FakePage(.missing).evaluate)
+            let failed = await ShannonDesktopBodyGrip.ask(at: at, fallback: fallback, evaluate: FakePage(.fails).evaluate)
+            let odd = await ShannonDesktopBodyGrip.ask(at: at, fallback: fallback, evaluate: FakePage(.answers(["part": "face"])).evaluate)
+            XCTAssertEqual([missing, failed, odd], [fallback, fallback, fallback])
+        }
+        XCTAssertEqual(ShannonDesktopBodyGrip.pageAnswer(nil), .unavailable)
+        XCTAssertEqual(ShannonDesktopBodyGrip.pageAnswer(42), .unavailable)
+        XCTAssertEqual(ShannonDesktopBodyGrip.pageAnswer("null"), .clear)
+        XCTAssertEqual(ShannonDesktopBodyGrip.pageAnswer(#"{"part":"face","carriable":true}"#, failed: true), .unavailable)
+    }
+
+    func testAPressHeldForThePagesAnswer() {
+        // Answered carriable before she moves: moving carries her.
+        var carry = ShannonDesktopBodyCarry()
+        XCTAssertEqual(carry.down(at: .zero, grip: .asking(fallback: false), origin: .zero, time: 0), [])
+        XCTAssertTrue(carry.awaitsDecision)
+        XCTAssertEqual(carry.drag(to: CGPoint(x: 2, y: 0), time: 0.01), [])
+        XCTAssertEqual(carry.decided(mayCarry: true), [])
+        XCTAssertFalse(carry.awaitsDecision)
+        XCTAssertEqual(carry.drag(to: CGPoint(x: 10, y: 0), time: 0.05), [.beginCarry, .moveWindow(CGPoint(x: 10, y: 0))])
+        // Answered not carriable: the press is the page's at once, and what follows too.
+        carry = ShannonDesktopBodyCarry()
+        _ = carry.down(at: .zero, grip: .asking(fallback: true), origin: .zero, time: 0)
+        XCTAssertEqual(carry.decided(mayCarry: false), [.deliverDown])
+        XCTAssertEqual(carry.drag(to: CGPoint(x: 10, y: 0), time: 0.05), [.deliverDrag])
+        XCTAssertEqual(carry.up(time: 0.1), [.deliverUp])
+        // Moved before the page answered: the fallback decides, and the late answer changes nothing.
+        carry = ShannonDesktopBodyCarry()
+        _ = carry.down(at: .zero, grip: .asking(fallback: true), origin: .zero, time: 0)
+        XCTAssertEqual(carry.drag(to: CGPoint(x: 10, y: 0), time: 0.02), [.beginCarry, .moveWindow(CGPoint(x: 10, y: 0))])
+        XCTAssertEqual(carry.decided(mayCarry: false), [])
+        XCTAssertTrue(carry.isCarrying)
+        carry = ShannonDesktopBodyCarry()
+        _ = carry.down(at: .zero, grip: .asking(fallback: false), origin: .zero, time: 0)
+        XCTAssertEqual(carry.drag(to: CGPoint(x: 10, y: 0), time: 0.02), [.deliverDown, .deliverDrag])
+        XCTAssertEqual(carry.decided(mayCarry: true), [])
+        XCTAssertFalse(carry.isCarrying)
+        // Released before the answer: a click for the page, and the answer comes to nothing.
+        carry = ShannonDesktopBodyCarry()
+        _ = carry.down(at: .zero, grip: .asking(fallback: true), origin: .zero, time: 0)
+        XCTAssertEqual(carry.up(time: 0.05), [.deliverDown, .deliverUp])
+        XCTAssertEqual(carry.decided(mayCarry: true), [])
+        // Held still past the hold time: the page's, as any press that is not moved.
+        carry = ShannonDesktopBodyCarry()
+        _ = carry.down(at: .zero, grip: .asking(fallback: true), origin: .zero, time: 0)
+        XCTAssertEqual(carry.tick(time: 0.3), [.deliverDown])
+        XCTAssertEqual(carry.decided(mayCarry: true), [])
+    }
+
+    /// The zones belong to one model: bundling another without measuring again fails here (`docs/live2d-embed.md`).
+    @MainActor func testTheCarryZonesWereMeasuredOnTheBundledModel() throws {
+        let folder = try XCTUnwrap(ShannonLive2DStage.embedFolder)
+        let version = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("version.json"))) as? [String: Any]
+        XCTAssertEqual(
+            ShannonDesktopBodyGrip.measuredFor, version?["modelUpdatedAt"] as? String,
+            "The bundled model changed: measure the carry zones again with tools/live2d-grip-probe and update measuredFor.")
+    }
+
+    func testThePageDrawsHerAsTheGripReadsIt() {
+        // `embed.js`, `wa` for `full` with `fit: contain`: in a 400 x 680 page the drawing is 664 high from 14 down.
+        let canvas = ShannonDesktopBodyGrip.canvas(CGSize(width: 400, height: 680))
+        XCTAssertEqual(canvas.height, 664)
+        XCTAssertEqual(canvas.top, 14)
     }
 
     // MARK: Where she is drawn
