@@ -186,6 +186,7 @@ export {
 export {
   SHANNON_AFFECT_COEFFICIENTS,
   SHANNON_AFFECT_DYNAMICS,
+  SHANNON_AFFECT_STEP,
   advanceAffect,
   boundedAffectStep,
   createAffectDynamics,

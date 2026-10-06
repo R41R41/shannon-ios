@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import {
+  SHANNON_AFFECT_STEP,
   episodeBoundaryMs,
   predictOutcome,
   restoreCompanionState,
@@ -177,8 +178,8 @@ export class PredictionShadow implements AutonomyPredictionTap {
     this.later(() => {
       this.maintain(scopeKey, at, state);
       if (event?.type === 'memory-control-upserted' || event?.type === 'memory-transaction') this.reconcile(scopeKey, state);
-      // The touch tap records a touch with its own comparison.
-      if (event?.type === 'body-touched') return;
+      // A touch records its own comparison (the stage-1b tap, or stage 2's after the touch and after her stance): one per event.
+      if (event?.type === 'body-touched' || event?.type === 'touch-appraised') return;
       this.within(scopeKey, () => {
         const feeling = event?.type === 'expressive-emotion-updated' ? decidedFeelingOutcome(event.emotion) : null;
         if (feeling !== null) {
@@ -297,7 +298,7 @@ export class PredictionShadow implements AutonomyPredictionTap {
 
   private compare(scopeKey: string, tap: string, state: CompanionStateSnapshot, at: string): ShadowComparison {
     const next = readMind(this.sync(scopeKey).mind, at);
-    const comparison: ShadowComparison = { at: new Date(Date.parse(at)).toISOString(), tap, old: oldReading(state, at, this.timing()), next: newReading(next) };
+    const comparison: ShadowComparison = { at: new Date(Date.parse(at)).toISOString(), tap, old: oldReading(state, at, this.timing()), next: newReading(next), dynamics: SHANNON_AFFECT_STEP };
     this.store.addComparison(scopeKey, comparison);
     return comparison;
   }

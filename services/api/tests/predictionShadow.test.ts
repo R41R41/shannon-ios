@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { predictOutcome, resolveShannonEmotionState, type CompanionStateEvent, type ShannonEmotionKind, type ShannonTouchKind } from '@shannon/cognition';
+import { SHANNON_AFFECT_STEP, predictOutcome, resolveShannonEmotionState, type CompanionStateEvent, type ShannonEmotionKind, type ShannonTouchKind } from '@shannon/cognition';
 import type { ReachOutFacts } from '../src/autonomyLoopObservations.js';
 import { observeStep } from '../src/autonomyLoopObserve.js';
 import type { StepDependencies } from '../src/autonomyLoopSteps.js';
@@ -274,6 +274,18 @@ describe('the taps', () => {
     expect(decidedFeelingOutcome(make('neutral', 0.5))).toBeNull();
     expect(decidedFeelingOutcome({ ...make('happy', 0.6), continued: true })).toBeNull();
     expect(decidedFeelingOutcome({ ...make('happy', 0.6), cause: 'ライ氏に頭をなでてもらった' })).toBeNull();
+  });
+});
+
+describe('the comparison record', () => {
+  it('says which step the new dynamics took, and writes one comparison for one touch event', async () => {
+    const w = world({ shadow: true });
+    w.touch('pet', 'head');
+    const comparisons = w.shadow!.comparisons(scope);
+    expect(comparisons.map(item => item.tap)).toEqual(['touch']);
+    expect(comparisons.every(item => item.dynamics === SHANNON_AFFECT_STEP)).toBe(true);
+    w.apply({ type: 'touch-appraised', outcome: { error: 0.4, unexpected: 0.5 } });
+    expect(w.shadow!.comparisons(scope)).toHaveLength(1);
   });
 });
 

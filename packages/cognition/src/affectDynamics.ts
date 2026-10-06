@@ -87,6 +87,12 @@ export const SHANNON_AFFECT_DYNAMICS = Object.freeze({
 });
 const C = SHANNON_AFFECT_DYNAMICS;
 
+/**
+ * Which step at an outcome these dynamics take, kept on every comparison the shadow writes (`new_dynamics`): `bounded_b`
+ * is stage 2's candidate B. A row without it was written by stage 1 (w_δ × δ added straight to valence).
+ */
+export const SHANNON_AFFECT_STEP = 'bounded_b';
+
 /** One row of the coefficient table (ADR-0006 §2.6). `kind`: literature value, matched to current behaviour, given by the model, or an assumption. */
 export interface AffectCoefficient {
   symbol: string;

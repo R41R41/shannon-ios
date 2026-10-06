@@ -115,7 +115,7 @@ export class BodyTouches {
         ...(partWord ? { reflexPart: partWord, ...(touch.gesture === 'rest' ? { resting: true } : {}) } : {}),
         appraisal: { startle: prediction.startle, ...(prediction.outcome ? { outcome: prediction.outcome } : {}) },
       } });
-      if (prediction.outcome) this.predictions!.compared(scopeKey, snapshot, at);
+      this.predictions!.compared(scopeKey, snapshot, at);
     } else if (receipt.fresh && age <= BODY_REACTION_LIMITS.feelingFreshMilliseconds && age >= -BODY_LIMITS.eventFutureSkewMilliseconds) {
       // Syzygy ADR-0005 stage 1b: on a part where her body flinches first only the reflex moves her, not the table.
       const reflexPart = reflexPartWord(touch.part);
