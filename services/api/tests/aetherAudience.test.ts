@@ -10,7 +10,7 @@ import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
-import { TOOLS_OTHERS_INSTRUCTIONS, toolInstructions } from '../src/chatModelTools.js';
+import { TOOLS_GUESTS_INSTRUCTIONS, TOOLS_OTHERS_INSTRUCTIONS, toolInstructions } from '../src/chatModelTools.js';
 import { othersSecrets } from '../src/conversationSecrets.js';
 import { SQLitePeopleMemoryStore } from '../src/peopleMemoryStore.js';
 import { PlatformBridgeService, configuredPlatformBridge } from '../src/platformBridge.js';
@@ -77,7 +77,10 @@ describe('a guest-only turn (owner decision 2026-10-06)', () => {
       expect(offered.toolsWithheld).toBeUndefined();
       expect(offered.tools!.definitions.map(tool => tool.name)).toEqual(['aether.search', 'aether.read', 'aetherFolder.list']);
       expect(offered.tools!.definitions.every(tool => tool.effect === 'read')).toBe(true);
-      expect(toolInstructions(offered.tools!, surface === 'voice')).toBe(TOOLS_OTHERS_INSTRUCTIONS);
+      // Said without presuming the owner is there, and without naming his documents.
+      expect(toolInstructions(offered.tools!, surface === 'voice')).toBe(TOOLS_GUESTS_INSTRUCTIONS);
+      expect(TOOLS_GUESTS_INSTRUCTIONS).not.toContain('ライ氏の文書');
+      expect(TOOLS_GUESTS_INSTRUCTIONS).not.toContain('二人だけ');
       expect(await result(offered.tools, 'aether_search', { query: '灯台' })).toMatchObject({ ok: false, failure: 'refused' });
       const found = await result(offered.tools, 'aether_search', { query: '灯台', scope: 'shannonFolder' });
       expect(found.text).toContain(note.id);
@@ -122,6 +125,12 @@ describe('what she reads of her folder in front of others', () => {
     expect(alone.text).not.toContain(LEFT_OUT_LINE);
 
     // The owner with others, and 「友人も一緒」: the secret is left out, his health is marked as memory marks it.
+    expect(toolInstructions(turn('others').tools!, false)).toBe(TOOLS_OTHERS_INSTRUCTIONS);
+    // ADR-0007 revised: an unshown draft may be read with others present; the work itself is still not shown.
+    for (const words of [TOOLS_OTHERS_INSTRUCTIONS, TOOLS_GUESTS_INSTRUCTIONS]) {
+      expect(words).toContain('まだ見せていない下書きも、考える材料にしてよい');
+      expect(words).toContain('作品を人に見せるのはライ氏の承認が要る');
+    }
     for (const offered of [turn('others'), turn('guests', 'voice')]) {
       const text = (await read(offered)).text;
       expect(text).not.toContain('ウォンバット');

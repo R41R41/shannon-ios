@@ -82,6 +82,7 @@ export function conversationTools(
   Object.defineProperty(session, 'deadline', { enumerable: false, value: deadline });
   if (!writes) Object.defineProperty(session, 'writesWithheld', { enumerable: false, value: true });
   if (othersPresent) Object.defineProperty(session, 'othersPresent', { enumerable: false, value: true });
+  if (ownerAlone === 'guests') Object.defineProperty(session, 'guestTurn', { enumerable: false, value: true });
   /** A call of a name this turn does not offer, with the reason that is true for it. */
   const refuse = (providerName: string): string => {
     // As this server has it: without the Aether client an Aether name is a name that does not exist (as before Aether).
