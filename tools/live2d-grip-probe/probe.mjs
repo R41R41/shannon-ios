@@ -5,9 +5,12 @@
 //   1. Serve apps/ios/Sources/ShannonAppCore/Live2D/embed on 127.0.0.1:8766 (python3 -m http.server 8766 --bind 127.0.0.1).
 //   2. Start Chrome: --headless=new --remote-debugging-port=9333 --use-angle=swiftshader --enable-unsafe-swiftshader
 //      --user-data-dir=<a scratch folder>.
-//   3. node probe.mjs 400 680 face.json 0.006 -0.10 0.10 0.105 0.215   (PAUSE=700 for her face: a tap on her head starts
-//      a resting stroke that a later press would end, so each point is pressed twice after a pause and must agree)
-//      node probe.mjs 400 680 boots.json 0.01 -0.15 0.15 0.76 0.99
+//   3. With a page that has `partAt` (0.1.0+202610060340 and later), ask it instead of pressing: no touch is started,
+//      and each point is answered at once.
+//      MODE=partAt node probe.mjs 400 680 face.json 0.006 -0.10 0.10 0.105 0.215
+//      MODE=partAt node probe.mjs 400 680 boots.json 0.01 -0.15 0.15 0.76 0.99
+//      With an older page, leave MODE out: each point is pressed (PAUSE=700 for her face: a tap on her head starts a
+//      resting stroke that a later press would end, so each point is pressed twice after a pause and must agree).
 //   4. python3 zones.py 1 face.json boots.json   (prints the zones as Swift)
 //
 // Usage: node probe.mjs <width> <height> <out.json> [step] [u0 u1 v0 v1 ...]
@@ -77,7 +80,12 @@ const result = await evaluate(`(async () => {
   };
   // A light tap on the head starts a resting stroke that a later press may end: such an answer is not this point's.
   // So a point is asked again after a pause long enough for any episode to end, and kept only when both agree.
+  const asked = (x, y) => {
+    const r = window.shannonBody.partAt(x, y);
+    return r ? (r.part === 'other' ? 'TAP' : r.part) : '';
+  };
   const settled = async (x, y) => {
+    if (${JSON.stringify(process.env.MODE ?? '')} === 'partAt') return asked(x, y);
     const first = await code(x, y);
     await press(1, 1, 5); await wait(${Number(process.env.PAUSE ?? 0)});
     if (!${process.env.PAUSE ? 'true' : 'false'}) return first;

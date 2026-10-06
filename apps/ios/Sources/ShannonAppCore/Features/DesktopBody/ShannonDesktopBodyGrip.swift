@@ -129,19 +129,24 @@ public enum ShannonDesktopBodyGrip {
     /// The `modelUpdatedAt` of the bundled page the zones were measured on. A test holds it equal to the bundled
     /// `version.json`, so that a new model cannot be bundled with zones of the old one (`docs/live2d-embed.md`,
     /// "Updating the page").
-    static let measuredFor = "2026-10-06T02:07:35.221Z"
+    static let measuredFor = "2026-10-06T08:06:16.503Z"
 
-    /// Measured from the bundled page (0.1.0+202610060219; its hit areas are those of the model of 2026-10-06 02:07) with
-    /// `tools/live2d-grip-probe` in a 400 x 680 page, her own sway off: each point pressed once (her face settled with a
-    /// pause between presses, so that the resting stroke a tap on her head starts is never credited to the next point),
-    /// and a point kept only when its eight neighbours (about 4 points apart at 100%) named the same kind or nothing.
-    /// Her face is the middle of her forehead (the eyes and the bangs are her head to the page, and the rest of the face
-    /// is too broken up by them to keep); her boots are below her legs. Measure again when the model changes.
+    /// Measured from the bundled page (0.1.0+202610060827, the model of 2026-10-06 08:06) with `tools/live2d-grip-probe`
+    /// in a 400 x 680 page, her own sway off, by asking its `partAt` at every point (6/1000 of the drawing apart on her
+    /// face, 1/100 on her boots), and keeping a point only when its eight neighbours (about 4 points apart at 100%) named
+    /// the same kind or nothing; pieces of fewer than three points are left out. Her face is the middle of her forehead and
+    /// a few pieces of her cheeks, eyes and nose (the bangs and the eyelids are her head to the page and break the rest
+    /// up); her boots are below her legs. Measure again when the model changes.
     static let zones: [Zone] = [
         Zone(part: .face, box: CGRect(x: -0.0250, y: 0.1200, width: 0.0420, height: 0.0180)),
-        Zone(part: .other, box: CGRect(x: -0.0550, y: 0.8050, width: 0.0300, height: 0.1100)),
+        Zone(part: .face, box: CGRect(x: 0.0170, y: 0.1620, width: 0.0060, height: 0.0180)),
+        Zone(part: .face, box: CGRect(x: -0.0250, y: 0.1680, width: 0.0060, height: 0.0180)),
+        Zone(part: .face, box: CGRect(x: -0.0190, y: 0.1740, width: 0.0060, height: 0.0180)),
+        Zone(part: .face, box: CGRect(x: 0.0110, y: 0.1740, width: 0.0060, height: 0.0180)),
+        Zone(part: .face, box: CGRect(x: -0.0130, y: 0.1800, width: 0.0240, height: 0.0120)),
+        Zone(part: .other, box: CGRect(x: -0.0550, y: 0.7950, width: 0.0300, height: 0.1200)),
         Zone(part: .other, box: CGRect(x: -0.0250, y: 0.8250, width: 0.0100, height: 0.1000)),
-        Zone(part: .other, box: CGRect(x: 0.0450, y: 0.8050, width: 0.0300, height: 0.1100)),
-        Zone(part: .other, box: CGRect(x: 0.0350, y: 0.8550, width: 0.0100, height: 0.0700)),
+        Zone(part: .other, box: CGRect(x: 0.0450, y: 0.7950, width: 0.0300, height: 0.1200)),
+        Zone(part: .other, box: CGRect(x: 0.0350, y: 0.8450, width: 0.0100, height: 0.0800)),
     ]
 }

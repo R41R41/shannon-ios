@@ -14,7 +14,7 @@ import Foundation
 ///   asking for the chosen body again (see `contextRestored`).
 struct ShannonLive2DBodySwitch: Equatable, Sendable {
     /// Foreground seconds a switch may take. A switch builds a model from what the page has already read (the first
-    /// load, which also reads the 27 MB of assets, took about a minute on a busy simulator), so this is generous;
+    /// load, which also reads the 30 MB of assets (27 MB when this was measured), took about a minute on a busy simulator), so this is generous;
     /// shorter than the 90 seconds of a load, so that a stuck choice does not hold her for a minute and a half.
     static let deadlineSeconds = 30
 

@@ -1,13 +1,14 @@
 {
-  "version": "0.1.0+202610060340",
-  "builtAt": "2026-10-06T03:40:29.342Z",
-  "modelUpdatedAt": "2026-10-06T02:07:35.221Z",
+  "version": "0.1.0+202610060827",
+  "builtAt": "2026-10-06T08:27:44.992Z",
+  "modelUpdatedAt": "2026-10-06T08:06:16.503Z",
   "files": [
     "model/Shannon.model3.json",
     "model/Shannon.moc3",
     "model/Shannon.physics3.json",
     "model/Shannon.4096/texture_00.png",
     "model/Shannon.4096/texture_01.png",
+    "model/Shannon.4096/texture_02.png",
     "model-eyes/Shannon_Eyes_v2.model3.json",
     "model-eyes/Shannon_Eyes_v2.moc3",
     "model-eyes/Shannon_Eyes_v2.2048/texture_00.png",
