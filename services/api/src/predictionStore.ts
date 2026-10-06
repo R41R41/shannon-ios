@@ -95,6 +95,15 @@ export class SQLitePredictionStore {
     }));
   }
 
+  /** Stage 2: the newest outcome of a key, and when it was observed; null when the key has none. */
+  latest(scopeKey: string, domain: string, key: string): { outcome: number; observedAt: string } | null {
+    const row = this.database.prepare(`
+      SELECT outcome, observed_at FROM shannon_prediction_outcomes WHERE scope_key = ? AND domain = ? AND key = ? AND outcome IS NOT NULL
+      ORDER BY seq DESC LIMIT 1
+    `).get(scopeKey, domain, key) as unknown as { outcome: number; observed_at: string } | undefined;
+    return row ? { outcome: Number(row.outcome), observedAt: row.observed_at } : null;
+  }
+
   /** How many rows a scope has and its newest `seq`: enough to see whether another process wrote or deleted. */
   shape(scopeKey: string): { count: number; maxSeq: number } {
     const row = this.database.prepare('SELECT COUNT(*) AS count, COALESCE(MAX(seq), 0) AS max_seq FROM shannon_prediction_outcomes WHERE scope_key = ?')

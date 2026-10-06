@@ -43,6 +43,9 @@ const spec = (family: PredictionFamily, lower: number, upper: number, valence: b
  * - `owner_present`: whether he is there (her body reported away or hidden: not a failure of her message).
  * - `touch`: how a touch was received, on the valence scale. Key: kind × part × who may have touched.
  * - `reply_feeling`: how a moment of conversation felt, on the valence scale (the decided feeling's sign × strength).
+ * - `body_stance` (stage 2): how she took a touch, her own stance scored on the valence scale (`touchAppraisal.ts`).
+ *   Key: gesture.part.who (who: `owner`, or `unknown` while others were present). It moves her feeling under
+ *   `SHANNON_PREDICTION` (on by default); the stage-1 `touch` domain keeps the table's appraisal for the shadow under off.
  */
 export const SHANNON_PREDICTION_DOMAINS = Object.freeze({
   reply: spec('bernoulli', 0, 1, false, ['closeness', 'talk']),
@@ -50,6 +53,7 @@ export const SHANNON_PREDICTION_DOMAINS = Object.freeze({
   owner_present: spec('bernoulli', 0, 1, false, []),
   touch: spec('gaussian', -1, 1, true, []),
   reply_feeling: spec('gaussian', -1, 1, true, []),
+  body_stance: spec('gaussian', -1, 1, true, []),
 });
 export type PredictionDomain = keyof typeof SHANNON_PREDICTION_DOMAINS;
 

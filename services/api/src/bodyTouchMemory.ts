@@ -5,7 +5,7 @@ import {
 } from '@shannon/cognition';
 import { BODY_TOUCH_SOURCE } from './bodyReactionContract.js';
 import type { StoredTouchBurst } from './bodyReactionStore.js';
-import { bodyWhere, burstTouchPhrase } from './bodyTouchWords.js';
+import { bodyWhere, burstTouchPhrase, touchDetailPhrase } from './bodyTouchWords.js';
 
 /**
  * A touch as something she remembers. Touches of one kind that follow each other are one
@@ -45,9 +45,13 @@ export function touchWhen(at: string): string {
 
 const seconds = (milliseconds: number) => milliseconds >= 60_000 ? `${Math.round(milliseconds / 60_000)}分ほど` : `${Math.max(1, Math.round(milliseconds / 1_000))}秒ほど`;
 
-/** The memory in her own words. Fixed wording from the kind and the numbers, plus what she said. */
-export function touchExperienceSummary(burst: StoredTouchBurst): string {
-  const done = burstTouchPhrase(burst.type, burst, 'memory', SHANNON_TOUCH_FEELINGS[burst.type].done);
+/**
+ * The memory in her own words. Fixed wording from the kind and the numbers, plus what she said. With `parts` (Syzygy
+ * ADR-0006 stage 2) the part every touch of the burst named is kept, in factual words (首をつつかれた, 頭をなでられた).
+ */
+export function touchExperienceSummary(burst: StoredTouchBurst, options: { parts?: boolean } = {}): string {
+  const part = options.parts && burst.part ? touchDetailPhrase(burst.type, { part: burst.part }, 'done') : null;
+  const done = part ?? burstTouchPhrase(burst.type, burst, 'memory', SHANNON_TOUCH_FEELINGS[burst.type].done);
   const amount = [
     burst.count >= 5 ? `たくさん、${burst.count}回` : burst.count > 1 ? `${burst.count}回` : '',
     burst.totalDurationMs >= 1_000 ? `合わせて${seconds(burst.totalDurationMs)}` : '',
@@ -71,12 +75,12 @@ export function touchEvidence(burstId: string): string {
   return `body-touch-${letters || 'unknown'}`;
 }
 
-export function touchExperience(burst: StoredTouchBurst): TouchExperience {
+export function touchExperience(burst: StoredTouchBurst, options: { parts?: boolean } = {}): TouchExperience {
   const shannonReply = burst.said.join(' ');
   // The fixed wording is ordinary; only her own words can make it something to protect.
   const decision = classifySensitivity(shannonReply);
   return {
-    id: burst.id, observedAt: burst.startedAt, summary: touchExperienceSummary(burst), shannonReply,
+    id: burst.id, observedAt: burst.startedAt, summary: touchExperienceSummary(burst, options), shannonReply,
     disclosure: Object.freeze({
       audience: OWNER_AUDIENCE, sensitivity: decision.sensitivity, ...(decision.category ? { category: decision.category } : {}),
       reason: decision.sensitivity === 'sensitive' ? decision.reason : '体に触れられたこと', decidedBy: 'rule' as const,

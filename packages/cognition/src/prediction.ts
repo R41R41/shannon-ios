@@ -210,6 +210,34 @@ export function observeOutcome(model: PredictionModel, observation: PredictionOb
   };
 }
 
+/**
+ * How unsure she was before an outcome, relative to the outcome's own noise: U / (U + N), the Kalman gain the outcome will
+ * be learned with (Nassar et al. 2012: pupil-linked arousal tracks this relative uncertainty). 1 for a key she knows
+ * nothing about, near 0 for one she knows well. Stage 2 uses it as the startle of a touch, before she has taken it.
+ */
+export function relativeUncertainty(prediction: Pick<Prediction, 'uncertainty' | 'noise'>): number {
+  const total = prediction.uncertainty + prediction.noise;
+  return total > 0 ? Math.min(1, Math.max(0, prediction.uncertainty / total)) : 1;
+}
+
+/**
+ * How improbable an outcome was under her own predictive distribution N(E, U + N): P(|Z| < |δ| / √(U + N)) =
+ * erf(|δ| / √(2(U + N))). 0 for exactly what she expected, toward 1 for what she could not have expected. The role of
+ * Pearce & Hall's (1980) associability and of surprise-linked arousal (Nassar et al. 2012); from the model, no coefficient.
+ */
+export function unexpectedness(update: Pick<PredictionUpdate, 'error' | 'uncertainty' | 'noise'>): number {
+  const total = update.uncertainty + update.noise;
+  if (!(total > 0)) return update.error === 0 ? 0 : 1;
+  return erf(Math.abs(update.error) / Math.sqrt(2 * total));
+}
+
+/** Abramowitz & Stegun 7.1.26 (absolute error below 1.5e-7). */
+function erf(x: number): number {
+  const t = 1 / (1 + 0.3275911 * Math.abs(x));
+  const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return Math.sign(x) * y;
+}
+
 function ensureDomain(model: PredictionModel, name: string, domain: PredictionDomainSpec): DomainState {
   let state = model.domains.get(name);
   if (!state) {

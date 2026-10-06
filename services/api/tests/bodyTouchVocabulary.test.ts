@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BODY_TOUCH_GESTURES, BODY_TOUCH_INPUTS, BODY_TOUCH_REFLEXES, BODY_TOUCH_SIDES, BODY_TOUCH_VOCABULARY, isImpossibleTouch, validatedBodyEvents, type BodyEvent,
 } from '../src/bodyContract.js';
@@ -12,6 +12,10 @@ import { BODY_REACTION_OWN_RULE } from '../src/bodyReactionPrompt.js';
 import { BODY_TOUCH_PARTS } from '../src/bodyTouchWords.js';
 import type { BodyIngestReceipt, BodyPresence } from '../src/shannonBody.js';
 import { START, reactionHarness, scope } from './bodyReactionHarness.js';
+
+// Stage 1b exactly, kept under SHANNON_PREDICTION=off (Syzygy ADR-0006 stage 2: `bodyTouchStage2.test.ts`).
+beforeEach(() => { vi.stubEnv('SHANNON_PREDICTION', 'off'); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 /**
  * Touch vocabulary 2 (Syzygy ADR-0005, phase 1a): optional facts beside `type` and `region`. Nothing about a

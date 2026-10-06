@@ -169,7 +169,9 @@ export {
   isPredictionDomain,
   observeOutcome,
   predictOutcome,
+  relativeUncertainty,
   scaleVariance,
+  unexpectedness,
   transformedOutcome,
   type Prediction,
   type PredictionDomain,
@@ -184,6 +186,7 @@ export {
   SHANNON_AFFECT_COEFFICIENTS,
   SHANNON_AFFECT_DYNAMICS,
   advanceAffect,
+  boundedAffectStep,
   createAffectDynamics,
   deterministicNormal,
   episodeBoundaryMs,
@@ -204,6 +207,17 @@ export {
   type EmotionalTrace,
   type EpisodeBoundaryModel,
 } from './affectDynamics.js';
+// Syzygy ADR-0006 stage 2: a touch's startle and her stance's prediction error move her feeling (`SHANNON_PREDICTION`).
+export {
+  SHANNON_STANCE_OUTCOME,
+  appraiseTouch,
+  isFeltStartle,
+  startleArousal,
+  touchImpact,
+  type ShannonTouchAppraisal,
+  type ShannonTouchOutcome,
+  type ShannonTouchStance,
+} from './touchAppraisal.js';
 export { isMeaningfulInterest, filterMeaningfulInterests } from './interests.js';
 export {
   deriveResonantInterest,

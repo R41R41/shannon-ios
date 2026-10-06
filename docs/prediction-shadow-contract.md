@@ -40,7 +40,7 @@ The current and the new dynamics at one instant, as numbers: `tap` (`touch`, `re
 
 - **The write lock is never held through a fold.** A writer brings its mind up to the table first, outside any transaction (a cold fold of 6,000 rows takes about 0.3 s); under `BEGIN IMMEDIATE` it folds only the rows another process added meanwhile, then inserts. If rows were deleted meanwhile, it lets the lock go and folds again outside (the third attempt may fold under the lock, so that it always ends). A recompute is three steps: delete under the lock, fold outside, then under the lock fold on what arrived and rewrite the derived values that differ; if rows were deleted meanwhile it folds again, and the third time it reads and folds the table under the lock, so a fold made before the table changed is never written back.
 
-- **Recomputable.** Folding the rows in `seq` order from an empty mind gives the same mind and the same derived values. Noise for the new dynamics comes from each row's own identity (domain, key, source id, instant), never from its place in the table or from `Math.random`.
+- **Recomputable.** Folding the rows in `seq` order from an empty mind gives the same mind and the same derived values. Noise for the new dynamics comes from each row's own identity (domain, key, instant; `shadowNoiseSeed`), never from its place in the table, from `Math.random`, or (since stage 2) from the source id: a touch's burst id is a random UUID, so a scripted day used to give a different trajectory on every run.
 - **Forgetting** (owner answer 7). When the owner has her forget something (`memory-control-upserted` or `memory-transaction` with a status other than `active`), every row whose `source_id` is that memory is deleted, everything is folded again, derived values that changed are rewritten, and comparisons from the earliest deleted instant on are deleted. The same reconciliation runs once a day per scope in the API's processes, against the state's memory controls, so a lost deferred task or a time with the switch off is caught up. Restoring the memory does not bring the rows back. Today only a touch's burst can be forgotten this way: no forgetting path names a message of hers (an initiative id) or a reply's feeling, so those rows go by retention.
 - **Retention follows the source** (owner answer 7): `touch` rows the body's 30 days (`BODY_LIMITS.retentionDays`), `reach_out` rows the 14 days of the loop's observations, `awake` rows and comparisons the mood history's 14 days, and `reply_feeling` rows also the mood history's 14 days until stage 3 links each to its turn (then they follow the conversation and its forgetting). Pruned once a day per scope in the API's processes, then recomputed.
 
@@ -59,7 +59,18 @@ Shannon prediction shadow: forgot sources=1 rows=2 recomputed=4 changed=2
 
 `n` outcomes of the key, `e` expectation, `sd` its uncertainty, `y` outcome (both on the domain's scale: ln seconds for `reply_time`), `d` error, `k` learning rate, `c` cause (`+`: a new one), `i` the impulse to valence; `old`/`new` valence, arousal, present feeling and mood; `epi` the learned episode boundary. A line from the activity loop's process carries the comparison only when the state was readable.
 
+## Stage 2: the body (ADR-0006, approved 2026-10-06)
+
+Under `SHANNON_PREDICTION` (default on) the record is no longer only a shadow for touches:
+
+- **Domain `body_stance`**, key `<gesture>.<part or region or unnamed>.<owner|unknown>` (`touchPredictionKey`: the gesture of touch vocabulary 2, or the one an old-shape `type` means; `unknown` while others are present), context the surface. Its outcome is her own stance (`welcome` 1, `fine` 0.5, `unsure` 0, `dislike` −0.5, `refuse` −1: equal-interval scoring, a measurement assumption to be fitted), source `touch` with the burst id, so forgetting the touch forgets it and retention is the body's.
+- **Read and written at once**, not deferred: `predict` (the startle before she reacts is the key's relative uncertainty U/(U+N)), `recent` (the stance she took for the key within the learned episode, carried onto a touch she is not asked about), `learnNow` (her stance learned when she decides; its error and how unexpected it was move her). A failure there leaves only the startle; it never fails the touch. Without the record (`SHANNON_PREDICTION_SHADOW=off`) each touch meets the empty prior and nothing is learned or kept.
+- **The new dynamics take candidate B** for every valence outcome (`affectDynamics.ts`): valence moves the share 1 − γ toward attractor + w_δ δ, arousal the share 1 − γ toward its attractor raised by u = erf(|δ|/√(2(U+N))). γ = 0.61 (Rutledge, Skandali, Dayan & Dolan 2014, 0.61 ± 0.30 over participants; range used 0.31–0.91; **要確認: whether ± 0.30 is the SD or the SEM**). The comparisons therefore show B from stage 2 on; `docs/testing/prediction-stage2-impact-study.md` has the study.
+- The stage-1 `touch` tap (the table's appraisal) runs only under `SHANNON_PREDICTION=off`, where the table moves her.
+
 ## Server switch
+
+`SHANNON_PREDICTION` (default on): stage 2 for touches (above, and [When she is touched](body-contract.md#stage-2-her-stance-moves-her-adr-0006)). `off`, `false`, `0`, `disabled`, `no` or `none` gives stage 1b exactly: the table, the reflex on the parts where her body flinches first, and the stage-1 shadow tap. A restart applies it.
 
 `SHANNON_PREDICTION_SHADOW` (default on). `off`, `false`, `0`, `disabled`, `no` or `none` creates no table, records nothing and logs nothing, in every process. A restart applies it.
 

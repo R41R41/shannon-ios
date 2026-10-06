@@ -231,11 +231,33 @@ export interface ShannonTouch {
   /**
    * Syzygy ADR-0005 stage 1b: the touch landed on a part where her body flinches first (neck, chest, waist, legs, skirt;
    * owner answer 1), given as the word of the part (首). The table is not read for it: only the reflex moves her
-   * (`SHANNON_TOUCH_REFLEX`), and how she takes the touch is her own judgement. Absent: the table, as before.
+   * (`SHANNON_TOUCH_REFLEX`), and how she takes the touch is her own judgement. Absent: the table, as before. Under stage 2
+   * (`appraisal` present) it names any part the body named, for the words of the cause only (頭をなでられた).
    */
   reflexPart?: string;
   /** The touch stayed without moving (touch vocabulary 2 `gesture: rest`). Read only to word a touch on such a part (胸に触れられた). */
   resting?: boolean;
+  /**
+   * Syzygy ADR-0006 stage 2 (`SHANNON_PREDICTION`, on by default): what the prediction layer says of this touch. Present,
+   * the table is read for no part: the startle moves arousal, and a known stance moves her by its prediction error
+   * (`touchAppraisal.ts`). Absent: stage 1b exactly (the table, or the reflex on a part where her body flinches first).
+   */
+  appraisal?: ShannonTouchAppraisal;
+}
+
+/** What the prediction layer says of one touch (stage 2): the startle before it, and the error once her stance is known. */
+export interface ShannonTouchAppraisal {
+  /** Relative uncertainty before the touch, 0–1: how unsure she was of what such a touch is for her. */
+  startle: number;
+  /** Present when her stance for this touch is known now (the one she took earlier in the same episode). */
+  outcome?: ShannonTouchOutcome;
+}
+
+export interface ShannonTouchOutcome {
+  /** Her stance as an outcome − what she expected, on the valence scale. */
+  error: number;
+  /** How improbable the stance was under her prediction, 0–1. */
+  unexpected: number;
 }
 
 export interface CompanionStateSnapshot {
@@ -269,6 +291,8 @@ export type CompanionStateEvent =
   | { type: 'expressive-emotion-updated'; emotion: ShannonExpressiveEmotion }
   /** Her body was touched: moves the continuous mood and the conversational feeling by the one table in `touchEmotion.ts`. */
   | { type: 'body-touched'; touch: ShannonTouch }
+  /** Stage 2: her stance on a touch became known (she decided it): its prediction error moves valence and arousal. */
+  | { type: 'touch-appraised'; outcome: ShannonTouchOutcome }
   /** She was awake at this moment and nothing else happened: advances her awake clock. Carries no content. */
   | { type: 'awake-observed' }
   /** The owner apologised or said something kind: what she holds against him underneath eases. */

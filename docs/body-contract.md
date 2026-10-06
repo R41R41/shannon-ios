@@ -733,6 +733,16 @@ Phase 1b (Syzygy ADR-0005 decisions 1, 2, 4 and 5; owner answers 1, 2 and 7 of 2
 - **The result table** `body_touch_outcomes`: one row per reaction request whose touch was taken in (touch id, burst, audience, stance, chosen feeling, whether she spoke, when), never her words; stance and feeling stay empty without a judgement, the first row of a touch id stands, and a row goes with its touch (`BODY_LIMITS.retentionDays`). The part, side, gesture and reflex are on the touch's own row. Nothing reads it yet: it is the material of her boundaries (phase 3) and of the prediction of ADR-0006.
 - **For the body**: nothing changes on the wire. The physics of the skirt and the after-face of the not-wanted group are the body's own phase 1c; the server moves no physics and asks nothing of it.
 
+### Stage 2: her stance moves her (ADR-0006)
+
+Syzygy ADR-0006 stage 2, candidate B (owner approval 2026-10-06; ADR-0005 owner answers 4 and 6). Server only; no field and no route changed. On under `SHANNON_PREDICTION` (default); `off` gives everything above exactly. `packages/cognition/src/touchAppraisal.ts` holds the step, `services/api/src/bodyTouchPrediction.ts` the key and the learning, and `services/api/tests/bodyTouchStage2.test.ts` the behaviour.
+
+- **No table for any part.** A pat on the head no longer pleases her by itself. When a touch arrives, only the startle moves her: arousal rises by how unsure she was of what such a touch is for her (the relative uncertainty of key gesture.part.who; a first touch startles, a known one hardly does). The only feeling a touch brings by itself is surprise, as strong as the startle, and only when the startle stands out of her ordinary fluctuation.
+- **Her stance is the outcome.** Every reaction asks her `stance`, also of a touch in the old shape. It is learned at once as the outcome of the key, and its prediction error moves her valence and arousal by the bounded step: the share 1 − γ (γ = 0.61, Rutledge et al. 2014) toward attractor + error, so nothing pins at ±1. The feeling she chose becomes her feeling (also when she stays silent), as strongly as her stance was unexpected (|error|). Taken the same way again and again, a touch moves her less (habituation); an unexpected one moves her again.
+- **A touch she is not asked about** (a plain event, a late or failed model) takes the stance she took for the same key within the episode she has learned (the boundary from her own gaps); without one, only the startle moved her.
+- **What she is told, with the owner alone only**: their closeness (「ライ氏との親密さ: 0.42（経験で育つ気質。0〜1）」) and how she took touches on this part before (「これまで首に触れられた時のボクの受け取り: いや 2回、拒む 1回（新しい順に …）」, or that it is the first time). Facts, no rule. With others present, neither.
+- **Her memory** keeps the part every touch of the burst named, in factual words (「ライ氏に首をつつかれた」); `body_touch_bursts.part` is added.
+
 ### Next, outside this server
 
 - **The Live2D body (Windows, and the embed page built from the same acting code)**: find the touched part by the drawn hit-area parts instead of rectangles (on the Live2D side: register the 14 hit-area parts in HitAreas, and decide whether the arm needs one), and send the five fields after seeing `touchVocabulary: 2`. What the body then does differently for the not-wanted group (its flinch, the face it adds afterwards, the skirt physics, when it asks) is a later phase of ADR-0005 and is decided with the owner first.
@@ -875,6 +885,8 @@ A refused or failed request must never stop the body from showing her.
 `SHANNON_OWNER_CALL_ELSEWHERE=off` (same values) removes `ownerCallElsewhere` from presence and refuses nothing with `OWNER_IN_CALL_ELSEWHERE`. Unset means on.
 
 `SHANNON_BODY_REACTIONS=off` (same values) switches off everything a touch does beyond being stored: `POST /v1/body/reactions` answers `403 BODY_REACTIONS_DISABLED`, a touch (by either route) moves no feeling and leaves no memory, and `reactionId` on a voice turn is ignored. Events are stored and shown in the `[体に起きたこと]` block as before. `SHANNON_BODY_INGEST=off` switches reactions off as well. `SHANNON_BODY_REACTION_LISTEN_SECONDS` (default 6, 0–30) sets `listenSeconds`; `SHANNON_BODY_REACTION_DEADLINE_MS` (default 3800, 200–4000) sets when the server gives up waiting for the model.
+
+`SHANNON_PREDICTION=off` (same values) switches off stage 2 of ADR-0006 for touches: see [Stage 2](#stage-2-her-stance-moves-her-adr-0006). Unset means on.
 
 ## Not built
 

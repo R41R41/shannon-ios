@@ -278,6 +278,15 @@ describe('the taps', () => {
 });
 
 describe('the current and the new dynamics over one day', () => {
+  it('gives the same trajectory every time a scripted day runs: the noise is seeded by what and when, never by a random burst id', () => {
+    const first = world({ shadow: true });
+    const second = world({ shadow: true });
+    day(first);
+    day(second);
+    const strip = (items: ReturnType<NonNullable<typeof first.shadow>['comparisons']>) => items.map(item => ({ ...item }));
+    expect(strip(second.shadow!.comparisons(scope))).toEqual(strip(first.shadow!.comparisons(scope)));
+  });
+
   it('reports how far the two trajectories differ', () => {
     const w = world({ shadow: true });
     day(w);

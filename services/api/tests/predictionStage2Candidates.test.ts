@@ -18,8 +18,9 @@ import {
  * (`predictionStage2Candidates.ts`). These tests pin the findings of `docs/` note and print the report; nothing in
  * `src/` reads any of it.
  */
-describe('ADR-0006 stage 2 study: how the impact of a touch is applied', () => {
-  it('reproduces the stage-1 shadow exactly with the current form, and confirms the finding: valence pinned, arousal saturated', () => {
+// Long seeded runs (20,000 outcomes for each candidate): a loaded machine may need more than the default 30 s.
+describe('ADR-0006 stage 2 study: how the impact of a touch is applied', { timeout: 180_000 }, () => {
+  it('reproduces the shadow (now B) exactly, and confirms the stage-1 finding with the stage-1 form: valence pinned, arousal saturated', () => {
     const day = dayTrajectory();
     for (const [index, comparison] of day.comparisons.entries()) {
       const replayed = day.shadowReplay[index]!.next;

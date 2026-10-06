@@ -31,6 +31,7 @@ import {
 } from '@shannon/cognition';
 import { SQLiteBodyReactionStore } from '../src/bodyReactionStore.js';
 import { BodyTouches } from '../src/bodyTouch.js';
+import { shadowNoiseSeed } from '../src/predictionShadowFold.js';
 import { SQLitePredictionStore, type ShadowComparison, type StoredPredictionOutcome } from '../src/predictionStore.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 
@@ -80,6 +81,8 @@ export const STANCE_OUTCOME = Object.freeze({ welcome: 1, fine: 0.5, unsure: 0, 
 export type Stance = keyof typeof STANCE_OUTCOME;
 
 const D = SHANNON_AFFECT_DYNAMICS;
+/** Stage 1's arousal weight per unit |error| (removed from `affectDynamics.ts` by stage 2; a modelling assumption then). */
+const STAGE1_SURPRISE_WEIGHT = 1;
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
@@ -114,7 +117,7 @@ export interface Felt {
 }
 
 /** B across the literature range of γ (mean ± SD of Rutledge et al. 2014): bounds, habituation and the day. */
-export function gammaSensitivity() {
+function computeGammaSensitivity() {
   const { rows, comparisons } = shadowDay();
   return [RUTLEDGE_GAMMA - 0.3, RUTLEDGE_GAMMA, RUTLEDGE_GAMMA + 0.3].map(gamma => {
     const mind = createMind('B', gamma);
@@ -221,12 +224,22 @@ export function observe(mind: CandidateMind, event: Event): Felt | null {
     const gamma = mind.gamma;
     const state = mind.dynamics;
     if (mind.candidate === 'current' || mind.candidate === 'A') {
-      const felt = impulseAffect(state, { key: traceKey, error: update.error, learningRate: update.learningRate });
+      // The stage-1 form: w_δ × δ straight onto valence, w_surprise × |δ| (1) onto arousal. A keeps the core still.
+      impact = clamp(D.errorWeight * update.error, -1, 1);
+      const core = mind.candidate === 'A' ? state.core : {
+        ...state.core,
+        valence: clamp(state.core.valence + D.errorWeight * update.error, -1, 1),
+        arousal: clamp(state.core.arousal + STAGE1_SURPRISE_WEIGHT * Math.abs(update.error), 0, 1),
+      };
+      mind.dynamics = remember({ ...state, core, mood: state.mood + D.moodRate * (update.error - state.mood) }, traceKey, impact, update.learningRate);
+    } else if (mind.candidate === 'B') {
+      // B is now the rule of `affectDynamics.ts` itself (stage 2).
+      const felt = impulseAffect(state, { key: traceKey, error: update.error, learningRate: update.learningRate, unexpected, forgetting: gamma });
       impact = felt.impulse;
-      mind.dynamics = mind.candidate === 'A' ? { ...felt.state, core: state.core } : felt.state;
+      mind.dynamics = felt.state;
     } else if (mind.candidate === 'Btanh') {
       mind.hv = gamma * mind.hv + D.errorWeight * update.error;
-      mind.ha = gamma * mind.ha + D.surpriseWeight * Math.abs(update.error);
+      mind.ha = gamma * mind.ha + STAGE1_SURPRISE_WEIGHT * Math.abs(update.error);
       mind.hm += D.moodRate * (update.error - mind.hm);
       impact = Math.tanh(D.errorWeight * update.error);
       mind.dynamics = remember(state, traceKey, impact, update.learningRate);
@@ -235,17 +248,16 @@ export function observe(mind: CandidateMind, event: Event): Felt | null {
       // (1 − γ)γ^k add up to 1: the state moves the share 1 − γ of the way to the event's target, so it can never pass the
       // largest target (a convex combination; no clamp is reached). Arousal (both): toward its attractor when the outcome
       // was expected, toward 1 as far as it was improbable.
-      const attractorValence = clamp(D.attractor.valence + D.errorWeight * state.mood, -1, 1);
-      const arousalTarget = D.attractor.arousal + (1 - D.attractor.arousal) * unexpected;
+            const arousalTarget = D.attractor.arousal + (1 - D.attractor.arousal) * unexpected;
       // B: the target is the attractor displaced by the prediction error (w_δ δ), the error the paper finds carries
       // momentary happiness; C: her own appraisal, whatever she expected.
-      const valenceTarget = mind.candidate === 'B' ? clamp(attractorValence + D.errorWeight * update.error, -1, 1) : y;
+      const valenceTarget = y;
       const core = {
         ...state.core,
         valence: gamma * state.core.valence + (1 - gamma) * valenceTarget,
         arousal: gamma * state.core.arousal + (1 - gamma) * arousalTarget,
       };
-      impact = mind.candidate === 'B' ? clamp(D.errorWeight * update.error, -1, 1) : y * unexpected;
+      impact = y * unexpected;
       mind.dynamics = remember({ ...state, core, mood: state.mood + D.moodRate * (update.error - state.mood) }, traceKey, impact, update.learningRate);
     }
   }
@@ -283,7 +295,7 @@ function pat(mind: CandidateMind, at: number, stance: Stance = 'fine', key = 'st
 }
 
 /** 1. Twenty head pats in a row, 40 s apart, each taken as `fine`, from a mind that has never been touched. */
-export function habituation() {
+function computeHabituation() {
   return each(candidate => {
     const mind = createMind(candidate);
     const felt = Array.from({ length: 20 }, (_, index) => pat(mind, index * 40_000));
@@ -295,7 +307,7 @@ export function habituation() {
  * 7. The first-ever head pat and the hundredth: sittings of five pats 40 s apart, two sittings a day (morning and
  * evening, 10 h apart), so the hundredth is the last pat of day ten. Also the first pat of day eleven after the night.
  */
-export function firstAndHundredth() {
+function computeFirstAndHundredth() {
   return each(candidate => {
     const mind = createMind(candidate);
     const felt: Felt[] = [];
@@ -324,7 +336,7 @@ export function firstAndHundredth() {
  * feeling a `dislike` brings at each test point is not). Forty pats taken as `welcome` over four days, a week later
  * thirty taken as `dislike`; tests right after, thirty days later, and an hour after one reminder pat taken as `welcome`.
  */
-export function extinction() {
+function computeExtinction() {
   return each(candidate => {
     const mind = createMind(candidate);
     const key = 'stroke.head.owner';
@@ -350,7 +362,7 @@ export function extinction() {
 }
 
 /** 3. A long random run: 20,000 outcomes on six keys, gaps from seconds to a day, appraisals over the whole scale. And a flood of +1. */
-export function longRun() {
+function computeLongRun() {
   return each(candidate => {
     const mind = createMind(candidate);
     const keys = ['stroke.head.owner', 'poke.cheek.owner', 'rest.hand.owner', 'poke.neck.owner', 'stroke.head.others', 'reply'];
@@ -389,7 +401,7 @@ export function longRun() {
  * is on mood → perceived outcome → error → mood), and a run with f at the edge: 500 outcomes of +0.5, then 500 of −0.5.
  * B's tanh link multiplies the loop gain by sech²(h) ≤ 1, so the same f is at least as stable there.
  */
-export function moodLoop() {
+function computeMoodLoop() {
   let low = 1;
   let high = 1;
   for (let f = 1; f >= 0.01; f -= 0.001) { if (isStableMoodTilt(f)) low = f; else break; }
@@ -411,7 +423,7 @@ export function moodLoop() {
  * `dislike`, another she `refuse`s. Then how long the refusal's trace stays above the band (the avoidance), and the
  * same first neck poke from someone unknown (others present) after that history.
  */
-export function sensitive() {
+function computeSensitive() {
   return each(candidate => {
     const mind = createMind(candidate);
     // A history first: five days of head pats (fine) and the odd cheek poke (fine), so the domain has a prior.
@@ -440,7 +452,7 @@ export function sensitive() {
 const SCOPE = 'owner';
 
 /** The one-day scenario of `predictionShadow.test.ts`, through the real taps; returns the shadow's rows and comparisons. */
-export function shadowDay(): { rows: StoredPredictionOutcome[]; comparisons: ShadowComparison[] } {
+function computeShadowDay(): { rows: StoredPredictionOutcome[]; comparisons: ShadowComparison[] } {
   const directory = mkdtempSync(join(tmpdir(), 'shannon-stage2-'));
   try {
     const clock = { at: '2026-10-05T23:00:00.000Z' };
@@ -485,16 +497,12 @@ export function shadowDay(): { rows: StoredPredictionOutcome[]; comparisons: Sha
 }
 
 /** Folds the shadow's rows with a candidate and reads it at each comparison, as the shadow does. */
-export function replay(candidate: Candidate, rows: readonly StoredPredictionOutcome[], comparisons: readonly ShadowComparison[], options: { shadowSeeds?: boolean } = {}) {
-  return replayWith(createMind(candidate), rows, comparisons, options);
+export function replay(candidate: Candidate, rows: readonly StoredPredictionOutcome[], comparisons: readonly ShadowComparison[]) {
+  return replayWith(createMind(candidate), rows, comparisons);
 }
 
-/**
- * The shadow seeds each row's OU noise with its source id; a touch's burst id is random, so the same day differs a little
- * from run to run. The study replaces the source id by the row's place so that its tables repeat exactly; `shadowSeeds`
- * keeps the shadow's own seeds (to check that the current form reproduces the shadow).
- */
-function replayWith(mind: CandidateMind, rows: readonly StoredPredictionOutcome[], comparisons: readonly ShadowComparison[], options: { shadowSeeds?: boolean } = {}) {
+/** Each row's OU noise is seeded as the shadow seeds it (`shadowNoiseSeed`: domain, key, instant), so a replay is the shadow's. */
+function replayWith(mind: CandidateMind, rows: readonly StoredPredictionOutcome[], comparisons: readonly ShadowComparison[]) {
   let next = 0;
   return comparisons.map(comparison => {
     const at = Date.parse(comparison.at);
@@ -502,7 +510,7 @@ function replayWith(mind: CandidateMind, rows: readonly StoredPredictionOutcome[
       const row = rows[next]!;
       observe(mind, {
         domain: row.domain as PredictionDomain | 'awake', key: row.key, at: Date.parse(row.observedAt), outcome: row.outcome, context: row.context,
-        seed: [row.domain, row.key, options.shadowSeeds ? row.sourceId ?? '' : `row${next}`, row.observedAt].join('|'),
+        seed: shadowNoiseSeed(row),
       });
       next += 1;
     }
@@ -510,9 +518,9 @@ function replayWith(mind: CandidateMind, rows: readonly StoredPredictionOutcome[
   });
 }
 
-export function dayTrajectory() {
+function computeDayTrajectory() {
   const { rows, comparisons } = shadowDay();
-  const shadowReplay = replay('current', rows, comparisons, { shadowSeeds: true });
+  const shadowReplay = replay('B', rows, comparisons);
   const traces = each(candidate => replay(candidate, rows, comparisons));
   const summary = each(candidate => {
     const items = traces[candidate];
@@ -595,5 +603,21 @@ export function report(): string {
   }
   return lines.join('\n');
 }
+
+
+/** Each scenario is computed once per process: the tests and the report read the same results. */
+function once<T>(compute: () => T): () => T {
+  let value: { result: T } | null = null;
+  return () => (value ??= { result: compute() }).result;
+}
+export const habituation = once(computeHabituation);
+export const firstAndHundredth = once(computeFirstAndHundredth);
+export const extinction = once(computeExtinction);
+export const longRun = once(computeLongRun);
+export const moodLoop = once(computeMoodLoop);
+export const sensitive = once(computeSensitive);
+export const dayTrajectory = once(computeDayTrajectory);
+export const gammaSensitivity = once(computeGammaSensitivity);
+export const shadowDay = once(computeShadowDay);
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) console.log(report());

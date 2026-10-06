@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SHANNON_TOUCH_FEELINGS } from '@shannon/cognition';
 import type { BodyReactionAnswer } from '../src/bodyReactionContract.js';
 import { OpenAIBodyReactionSpeaker } from '../src/bodyReactionModel.js';
@@ -10,6 +10,10 @@ import { BODY_TOUCH_REFLEX_PARTS, BODY_TOUCH_STANCES } from '../src/bodyTouchRef
 import { BODY_TOUCH_PART_WORDS } from '../src/bodyTouchWords.js';
 import { START, reactionHarness, scope } from './bodyReactionHarness.js';
 import { promptOf } from './modelPrompt.js';
+
+// Stage 1b exactly, kept under SHANNON_PREDICTION=off (Syzygy ADR-0006 stage 2: `bodyTouchStage2.test.ts`).
+beforeEach(() => { vi.stubEnv('SHANNON_PREDICTION', 'off'); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 /**
  * Syzygy ADR-0005 stage 1b (owner answers of 2026-10-05; coordinator note of 2026-10-06: 「シャノンに任せる」). On the parts

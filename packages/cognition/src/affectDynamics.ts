@@ -10,9 +10,14 @@ import type { ShannonEmotion } from './types.js';
  *   (DynAffect: Kuppens, Oravecz & Tuerlinckx 2010; Oravecz et al. 2011): dx = θ(attractor − x)dt + σ dW. It stays
  *   in the stationary band σ/√(2θ), which is also where a feeling counts as settled. Openness keeps the same form:
  *   no published dynamic model exists for it, so that is a modelling assumption (owner answer 5).
- * - Momentary impulses (§2.2, Rutledge et al. 2014): at an outcome, w_δ × prediction error to valence and
- *   w_δ × |error| (surprise) to arousal; w_E × expectation when a prediction preceded a choice of hers. The
- *   paper's forgetting factor is the OU return between events, so it is not a coefficient of its own.
+ * - Momentary impulses (§2.2, Rutledge et al. 2014), stage 2's bounded step (candidate B of
+ *   `docs/testing/prediction-stage2-impact-study.md`, owner approval 2026-10-06): one outcome is one step of Rutledge's
+ *   recency-weighted sum with their forgetting factor γ, normalised so that its weights (1 − γ)γ^k add up to one.
+ *   Valence moves the share 1 − γ of the way to (attractor + w_δ × error, + w_E × expectation when a prediction preceded
+ *   a choice of hers); arousal the share 1 − γ of the way to (its attractor + (1 − attractor) × u), u how improbable the
+ *   outcome was under her own prediction (`unexpectedness`). A weighted average of points on the scale never leaves it
+ *   and never passes its largest target: stage 1 added w_δ × error straight to valence, which pinned it at ±1 and held
+ *   arousal at 1 (ADR-0006 「段 3 の前に決めること」 1). The OU return still runs between events.
  * - Mood (§2.3, Eldar & Niv 2015): mood ← mood + η_m (error − mood), and a perceived outcome is outcome × f^mood.
  *   The attractor of valence moves by w_δ × mood. f is fixed at 1 in this stage (owner answer 6).
  * - Emotional memory (§2.4): a trace per key, strength × (1 + t/τ)^(−ψ) on the awake clock (Wickelgren 1974,
@@ -54,8 +59,13 @@ export const SHANNON_AFFECT_DYNAMICS = Object.freeze({
   attractor: SHANNON_MOOD_BASELINE,
   expectationWeight: 1,
   errorWeight: 1,
-  /** Arousal impulse per unit of |error|: the same weight as valence's (modelling assumption). */
-  surpriseWeight: 1,
+  /**
+   * γ, the forgetting factor per event of Rutledge, Skandali, Dayan & Dolan 2014 (PNAS 111:12252): 0.61 ± 0.30 over
+   * participants. 要確認: whether ± 0.30 is the SD or the SEM. The literature range used for fitting is that mean ± 0.30
+   * (`eventForgettingRange`); a value outside it needs the owner's approval (ADR-0006 owner answer 4).
+   */
+  eventForgetting: 0.61,
+  eventForgettingRange: Object.freeze([0.31, 0.91] as const),
   moodRate: SHANNON_EMOTION_CONTINUITY.moodColour,
   moodHalfLifeMs: SHANNON_EMOTION_TIME.moodHalfLifeMs,
   moodTilt: 1,
@@ -109,8 +119,12 @@ export const SHANNON_AFFECT_COEFFICIENTS: readonly AffectCoefficient[] = Object.
     // 要確認: "both positive, with individual differences" is the ADR's reading of the source and has not been checked.
     literature: 'both positive, individual differences', initial: '1 and 1: an unexpected strong (0.90) appraisal is an impulse of 0.90',
     kind: 'matched', fit: 'regression on the feelings she decided (reply feelings, touches)', verify: '要確認' },
-  { symbol: 'w_surprise', meaning: 'arousal per unit |error|', source: 'ADR-0006 §2.2 (surprise to arousal)', literature: 'none',
-    initial: 'equal to w_δ', kind: 'assumption', fit: 'with w_δ' },
+  { symbol: 'γ', meaning: 'forgetting factor per event: the share 1 − γ an outcome moves valence and arousal toward its target', source: 'Rutledge, Skandali, Dayan & Dolan 2014',
+    // 要確認: whether the ± 0.30 the range is built from is the SD or the SEM over participants.
+    literature: '0.61 ± 0.30 over participants (range used: 0.31–0.91)', initial: '0.61', kind: 'literature',
+    fit: 'inside 0.31–0.91 from the feelings she decided after touches and replies', verify: '要確認' },
+  { symbol: 'u', meaning: 'how improbable an outcome was under her own prediction: erf(|δ| / √(2(U + N)))', source: 'Pearce & Hall 1980 (associability); Nassar et al. 2012 (surprise and arousal)',
+    literature: '—', initial: 'from the prediction', kind: 'model', fit: '—' },
   { symbol: 'η_m', meaning: 'how fast mood moves', source: 'Eldar & Niv 2015', literature: 'estimated per person',
     initial: '0.3 per outcome (the current moodColour) and decay at the current mood half-life of 90 awake min', kind: 'matched', fit: 'mood history' },
   { symbol: 'f', meaning: 'mood tilt of perceived outcomes', source: 'Eldar & Niv 2015', literature: 'near 1, individual differences',
@@ -304,24 +318,37 @@ export interface AffectOutcome {
   chosen?: boolean;
   /** The learning rate of that prediction: how far a recalled trace is rewritten. */
   learningRate: number;
+  /** How improbable the outcome was under her prediction (`unexpectedness`), 0–1. Absent: no surprise is known (0). */
+  unexpected?: number;
+  /** γ for this step, when a fit inside `eventForgettingRange` is tried; absent: `eventForgetting`. */
+  forgetting?: number;
+}
+
+/**
+ * The bounded step of one outcome (stage 2, candidate B): valence the share 1 − γ toward `target`, arousal the share
+ * 1 − γ toward its attractor raised by u. Pure; openness is left as it is.
+ */
+export function boundedAffectStep(core: ShannonEmotion, target: number, unexpected: number, gamma: number = C.eventForgetting): ShannonEmotion {
+  const u = clamp(finite(unexpected), 0, 1);
+  const g = clamp(gamma, 0, 1);
+  return {
+    ...core,
+    valence: clamp(g * core.valence + (1 - g) * clamp(target, -1, 1), -1, 1),
+    arousal: clamp(g * core.arousal + (1 - g) * (C.attractor.arousal + (1 - C.attractor.arousal) * u), 0, 1),
+  };
 }
 
 /** The impulses of one outcome at the current instant (call `advanceAffect` first). Returns the state and the impulse. */
 export function impulseAffect(state: AffectDynamicsState, outcome: AffectOutcome): { state: AffectDynamicsState; impulse: number } {
   const error = finite(outcome.error);
-  const impulse = C.errorWeight * error + (outcome.chosen ? C.expectationWeight * finite(outcome.expectation) : 0);
-  const core = {
-    ...state.core,
-    valence: clamp(state.core.valence + impulse, -1, 1),
-    arousal: clamp(state.core.arousal + C.surpriseWeight * Math.abs(error), 0, 1),
-  };
+  const impulse = clamp(C.errorWeight * error + (outcome.chosen ? C.expectationWeight * finite(outcome.expectation) : 0), -1, 1);
+  const core = boundedAffectStep(state.core, attractor(state.mood).valence + impulse, finite(outcome.unexpected), outcome.forgetting ?? C.eventForgetting);
   const recalled = state.traces.find(trace => trace.key === outcome.key);
   let traces = state.traces.filter(trace => trace !== recalled);
   if (recalled) traces = [...traces, reconsolidateTrace(recalled, impulse, outcome.learningRate, state.awakeMs)];
   else if (Math.abs(impulse) >= stationaryBand()) {
-    const value = clamp(impulse, -1, 1);
-    const consolidated = Math.abs(value) >= C.consolidatedFrom;
-    traces = [...traces, { key: outcome.key, value, encodedAwakeMs: state.awakeMs, exponent: exponentFor(value, consolidated), consolidated }];
+    const consolidated = Math.abs(impulse) >= C.consolidatedFrom;
+    traces = [...traces, { key: outcome.key, value: impulse, encodedAwakeMs: state.awakeMs, exponent: exponentFor(impulse, consolidated), consolidated }];
   }
   return {
     state: { ...state, core, mood: state.mood + C.moodRate * (error - state.mood), traces: living(traces, state.awakeMs) },

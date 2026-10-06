@@ -1,7 +1,11 @@
 import { DatabaseSync } from 'node:sqlite';
 import {
+  episodeBoundaryMs,
+  predictOutcome,
   restoreCompanionState,
   touchFeeling,
+  type Prediction,
+  type PredictionQuery,
   type CompanionStateEvent,
   type CompanionStateSnapshot,
   type ShannonEmotionTiming,
@@ -187,6 +191,47 @@ export class PredictionShadow implements AutonomyPredictionTap {
         this.moodComparison(scopeKey, state, at);
       });
     });
+  }
+
+  /**
+   * Stage 2 (`SHANNON_PREDICTION`): what she expects of a key now, read at once from the record (never deferred: the
+   * touch needs it before she reacts). Null when the record is not there or cannot be read; it never fails the touch.
+   */
+  predict(scopeKey: string, query: PredictionQuery): Prediction | null {
+    let prediction: Prediction | null = null;
+    this.guard(() => { prediction = predictOutcome(this.sync(scopeKey).mind.model, query); });
+    return prediction;
+  }
+
+  /** Stage 2: the newest outcome of a key, with the episode boundary she has learned; null when there is none. */
+  recent(scopeKey: string, domain: string, key: string): { outcome: number; at: number; boundaryMs: number } | null {
+    let recent: { outcome: number; at: number; boundaryMs: number } | null = null;
+    this.guard(() => {
+      const latest = this.store.latest(scopeKey, domain, key);
+      if (latest) recent = { outcome: latest.outcome, at: Date.parse(latest.observedAt), boundaryMs: episodeBoundaryMs(this.sync(scopeKey).mind.dynamics.boundary) };
+    });
+    return recent;
+  }
+
+  /**
+   * Stage 2: learns one outcome at once and returns what was expected of it (the error, the uncertainty, the noise),
+   * or null when it could not be recorded. A touch's stance is learned here, not deferred: its error moves her feeling.
+   */
+  learnNow(scopeKey: string, draft: PredictionOutcomeDraft, state: CompanionStateSnapshot): FoldedOutcome | null {
+    let folded: FoldedOutcome | null = null;
+    this.guard(() => {
+      this.maintain(scopeKey, draft.observedAt, state);
+      this.within(scopeKey, () => {
+        folded = this.record(scopeKey, draft);
+        this.log(outcomeLine(draft.domain, draft.key, folded, null));
+      });
+    });
+    return folded;
+  }
+
+  /** Stage 2: the comparison after a touch's stance moved her feeling (`after` is the state as written). */
+  stanceCompared(scopeKey: string, after: CompanionStateSnapshot, at: string): void {
+    this.later(() => this.within(scopeKey, () => { this.compare(scopeKey, 'touch', after, at); }));
   }
 
   /** Deletes the rows of these sources and recomputes. Returns how many rows went. */

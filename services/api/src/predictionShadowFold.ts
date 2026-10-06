@@ -11,6 +11,7 @@ import {
   type AffectDynamicsState,
   type AffectProjection,
   type PredictionModel,
+  unexpectedness,
 } from '@shannon/cognition';
 import type { PredictionDerived, PredictionOutcomeDraft } from './predictionStore.js';
 
@@ -20,7 +21,8 @@ import type { PredictionDerived, PredictionOutcomeDraft } from './predictionStor
  * values, which is what lets the store recompute after forgetting.
  *
  * Each row advances the dynamics to its instant (its awake clock, sleep, the OU step with noise from the row's own
- * identity, never from its place in the table). A row with an outcome is then learned by its prediction domain; an
+ * identity, never from its place in the table). The identity is the domain, the key and the instant, not the source id:
+ * a touch's burst id is a random UUID, so seeding by it gave a scripted day a different trajectory on every run. A row with an outcome is then learned by its prediction domain; an
  * outcome on the valence scale is first perceived through the mood (f = 1 in this stage, so unchanged) and its error
  * moves her feeling. An `awake` row is an instant she was awake, with nothing to learn.
  */
@@ -34,11 +36,18 @@ export interface FoldedOutcome extends PredictionDerived {
   outcome: number | null;
   /** The impulse to valence, for an outcome on the valence scale. */
   impulse: number | null;
+  /** How improbable the outcome was under the prediction (`unexpectedness`), 0–1. Not stored: derived again on a fold. */
+  unexpected: number | null;
   newCause: boolean;
   count: number;
 }
 
-const NOTHING: FoldedOutcome = Object.freeze({ outcome: null, expectation: null, uncertainty: null, error: null, learningRate: null, cause: null, impulse: null, newCause: false, count: 0 });
+const NOTHING: FoldedOutcome = Object.freeze({ outcome: null, expectation: null, uncertainty: null, error: null, learningRate: null, cause: null, impulse: null, unexpected: null, newCause: false, count: 0 });
+
+/** The OU noise seed of a row: what it is and when, never a random id or its place in the table. */
+export function shadowNoiseSeed(row: Pick<PredictionOutcomeDraft, 'domain' | 'key' | 'observedAt'>): string {
+  return [row.domain, row.key, row.observedAt].join('|');
+}
 
 export function createShadowMind(): ShadowMind {
   return { model: createPredictionModel(), dynamics: createAffectDynamics() };
@@ -48,7 +57,7 @@ export function createShadowMind(): ShadowMind {
 export function foldOutcome(mind: ShadowMind, row: PredictionOutcomeDraft): FoldedOutcome {
   const at = Date.parse(row.observedAt);
   if (!Number.isFinite(at)) return NOTHING;
-  mind.dynamics = advanceAffect(mind.dynamics, at, [row.domain, row.key, row.sourceId ?? '', row.observedAt].join('|'));
+  mind.dynamics = advanceAffect(mind.dynamics, at, shadowNoiseSeed(row));
   if (row.outcome === null || !isPredictionDomain(row.domain)) return NOTHING;
   const domain = SHANNON_PREDICTION_DOMAINS[row.domain];
   const outcome = domain.valence ? perceivedOutcome(row.outcome, mind.dynamics.mood) : row.outcome;
@@ -56,14 +65,15 @@ export function foldOutcome(mind: ShadowMind, row: PredictionOutcomeDraft): Fold
     domain: row.domain, key: row.key, at, context: row.context, features: row.features, outcome, arousal: mind.dynamics.core.arousal,
   });
   let impulse: number | null = null;
+  const unexpected = unexpectedness(update);
   if (domain.valence) {
-    const felt = impulseAffect(mind.dynamics, { key: `${row.domain}:${row.key}`, error: update.error, learningRate: update.learningRate });
+    const felt = impulseAffect(mind.dynamics, { key: `${row.domain}:${row.key}`, error: update.error, learningRate: update.learningRate, unexpected });
     mind.dynamics = felt.state;
     impulse = felt.impulse;
   }
   return {
     outcome: update.outcome, expectation: update.expectation, uncertainty: update.uncertainty, error: update.error, learningRate: update.learningRate,
-    cause: update.cause, impulse, newCause: update.newCause, count: update.count,
+    cause: update.cause, impulse, unexpected, newCause: update.newCause, count: update.count,
   };
 }
 
