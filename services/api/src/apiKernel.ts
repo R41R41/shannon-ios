@@ -97,7 +97,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from './companionPresence.js';
 import { generateChatTurn, withSentenceStream } from './chatSentenceStream.js';
-import { conversationTools, toolTraceReader } from './shannonToolSession.js';
+import { conversationTools, toolTraceReader, turnWroteHerOwnThings } from './shannonToolSession.js';
 import { withToolCapabilityLines } from './shannonAetherTools.js';
 import { withCapabilitySources } from './conversationCapabilities.js';
 import { usableThreadSummary } from './memoryVisibility.js';
@@ -381,6 +381,12 @@ export class ShannonApiKernel {
     const priorThreadSummary = surface?.openOnly ? undefined : usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId, audience.present);
     const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
     // Her Minecraft body's and Aether's capability lines, in her identity, exactly when this turn's tools include them (`withToolCapabilityLines`).
+    const toolOffer = conversationTools(this.autonomy, body.scopeKey, 'text',
+      // With others present, her Aether reading tools (owner decisions 2026-10-06): the owner's own turn (app text marked
+      // `others`, his turn in a shared platform conversation) as 'shared', someone else's as 'guests'.
+      audience.alone || (!surface ? 'shared' : !surface.othersFolderReading ? false : surface.openOnly ? 'guests' : 'shared'), this.toolServer, `${threadId}\n${message}`, deadline, undefined,
+      // Game chat asks her Minecraft body through the turn's intent, not through her tools.
+      surface && !surface.minecraftTools ? { withoutDomains: ['minecraft_body'], ...(surface.openOnly ? { openOnly: true } : {}) } : {});
     const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withToolCapabilityLines({
       // Her fixed identity first, what she knows of the owner next, and the turn's context with the replay (`chatModelTurn.ts`).
       scopeKey: body.scopeKey, systemPrompt: layered.systemPrompt, ...(layered.profilePrompt ? { profilePrompt: layered.profilePrompt } : {}),
@@ -389,19 +395,15 @@ export class ShannonApiKernel {
         .request([layered.turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n')),
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message,
-      ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...conversationTools(this.autonomy, body.scopeKey, 'text',
-        // With others present, her Aether reading tools (owner decisions 2026-10-06): the owner's own turn (app text marked
-        // `others`, his turn in a shared platform conversation) as 'shared', someone else's as 'guests'.
-        audience.alone || (!surface ? 'shared' : !surface.othersFolderReading ? false : surface.openOnly ? 'guests' : 'shared'), this.toolServer, `${threadId}\n${message}`, deadline, undefined,
-        // Game chat asks her Minecraft body through the turn's intent, not through her tools.
-        surface && !surface.minecraftTools ? { withoutDomains: ['minecraft_body'], ...(surface.openOnly ? { openOnly: true } : {}) } : {}),
+      ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,
       ...(body.webSearch === true || placeSkill ? { useWebSearch: true } : {}),
       ...(surface?.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}),
       // A surface's conversation has its own fixed title.
       generateThreadTitle: surface ? false : this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
     }));
     const reply = completion.outOfTime ? completion.reply : placeSkillReply(withCapabilitySources(completion, capability), placeSkill);
-    const suppressAgentTaskProposal = !audience.alone || Boolean(surface) || isExplicitVoyagerUpdateRequest(message);
+    // A turn that wrote with her own tools has done the request itself: no agent task for it (`turnWroteHerOwnThings`).
+    const suppressAgentTaskProposal = !audience.alone || Boolean(surface) || isExplicitVoyagerUpdateRequest(message) || turnWroteHerOwnThings(toolOffer.tools);
     // Her feeling for this reply, from state already in hand; it is stored after the response.
     const { messageEmotion, expressiveEmotion } = resolveTextReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt }, completion, audience.alone);
     const response: ChatResponse = {
