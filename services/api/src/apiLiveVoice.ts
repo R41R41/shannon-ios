@@ -377,7 +377,9 @@ async function completeLiveVoiceDelegation(
     scopeKey, systemPrompt: basePrompt, ...(identity.profile ? { profilePrompt: identity.profile } : {}), ...replayed,
     // What she said when she was touched is what he is answering: it directly precedes his words, in every mode, as context only.
     ...(reactionLine ? { precedingReply: reactionLine } : {}),
-    message: transcript, ...conversationTools(dependencies.autonomy, scopeKey, 'voice', temporaryGuest ? false : alone || 'others', dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline,
+    message: transcript, ...conversationTools(dependencies.autonomy, scopeKey, 'voice',
+      // 「友人も一緒」: her Aether reading tools (owner decision 2026-10-06); a client that predates people memory, none.
+      temporaryGuest ? !legacyGuest && 'guests' : alone || 'others', dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline,
       { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }),
     useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,

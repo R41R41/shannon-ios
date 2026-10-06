@@ -67,6 +67,12 @@ export interface TextTurnSurface {
   /** Only what may be shown to anyone: every memory entry marked 【機微 is left out (`withoutGuardedEntries`). */
   openOnly?: boolean;
   /**
+   * A turn with others present is offered her Aether reading tools, held to 「シャノン用フォルダ」, and nothing else (owner
+   * decisions 2026-10-06, Syzygy ADR-0007): the owner's own turn as `'shared'`, someone else's (`openOnly`) as `'guests'`
+   * (`conversationTools`). Without it such a turn has no tools (her Minecraft body's game chat keeps its own rule).
+   */
+  othersFolderReading?: boolean;
+  /**
    * Whether the turn is told what she did on her own to reach the owner (`ownOutreach.ts`), by the same audience rules as
    * `/v1/chat` (others present: times only). Each surface decides: her Minecraft body yes on the owner's own turns (owner
    * decision 2026-10-06), never on anyone else's; a platform reply no.

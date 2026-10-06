@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AetherAccessError, HttpAetherAccess, type AetherAccess, aetherIdempotencyKey, configuredAetherAccess, configuredAetherPorts } from '../src/aetherAccess.js';
-import { SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_MINECRAFT_BODY_CAPABILITY, shannonCapabilityPrompt } from '@shannon/cognition';
+import { SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_MINECRAFT_BODY_CAPABILITY, UNLABELLED_DISCLOSURE_MARKER, shannonCapabilityPrompt } from '@shannon/cognition';
 import { withToolCapabilityLines } from '../src/shannonAetherTools.js';
 import { FileAetherProposalStore } from '../src/aetherProposal.js';
 import { configuredAutonomy } from '../src/autonomyBudget.js';
@@ -31,6 +31,8 @@ import { prepareStep } from '../src/autonomyLoopSteps.js';
 
 const scope = 'owner';
 const STORY = `雨の日の図書館で、だれも借りない本が一冊だけ光っていた。${'ページをめくる音が、静かな部屋に少しずつ広がっていく。'.repeat(4)}`;
+/** With others present a conversation's call carries what of the owner's must not be shown; here nothing is (`aetherAudience.test.ts` tests it). */
+const NOTHING_PRIVATE = Object.freeze({ withheld: { carries: () => false }, guarded: { carries: () => false }, openOnly: false });
 const servers: FakeAether[] = [];
 const directories: string[] = [];
 afterEach(async () => {
@@ -50,7 +52,7 @@ async function harness(options: { aether?: boolean; proposals?: boolean } = {}) 
   const service = new ShannonAutonomyService({ store, config: configuredAutonomy({}), now: () => clock.at, aether: { access, proposals } });
   const memory = toolSessionMemory('thread-1\nお願い');
   const call = (name: string, input: unknown, audience: ToolAudience = 'owner_alone', surface: ToolSurface = 'text') =>
-    service.tools.call(name, JSON.stringify(input), { scopeKey: scope, surface, audience, memory });
+    service.tools.call(name, JSON.stringify(input), { scopeKey: scope, surface, audience, memory, ...(audience === 'others' ? { othersText: NOTHING_PRIVATE } : {}) });
   const api = createLocalApiKernel(() => clock.at, { autonomy: service });
   const get = (path: string) => api.dispatch({ method: 'GET', path, query: new URLSearchParams({ scopeKey: scope }) });
   const post = (path: string, body: Record<string, unknown>) => api.dispatch({ method: 'POST', path, body: { scopeKey: scope, ...body } });
@@ -156,7 +158,8 @@ describe('who may read what (owner decision 2026-10-06, enforced at the gate)', 
     const owners = fake.ownerDocument('ライ氏の仕様メモ', '鍵となる言葉: 灯台。ライ氏だけの話。');
     const mine = fake.put({ title: 'ボクの灯台メモ', body: '灯台の光の数え方。', projectIds: ['project_shannon_folder'], tags: ['シャノン'], type: 'note' });
     const now = () => '2026-10-06T01:00:00.000Z';
-    const others = conversationTools(service, scope, 'text', true, { audience: { othersKnown: () => true, noteOthers: () => undefined }, now }, 'thread\n灯台のメモある？', new TurnDeadline(TEXT_TURN_DEADLINE)).tools!;
+    // The server says what of the owner's must not be shown (here nothing; `aetherAudience.test.ts` tests it): without that the read fails closed.
+    const others = conversationTools(service, scope, 'text', true, { audience: { othersKnown: () => true, noteOthers: () => undefined }, othersText: () => NOTHING_PRIVATE, now }, 'thread\n灯台のメモある？', new TurnDeadline(TEXT_TURN_DEADLINE)).tools!;
     const text = (output: string) => (JSON.parse(output) as { text: string }).text;
     // One call at a time: the session hands the runner the audience the turn has, so the gate holds it to her folder.
     expect(JSON.parse(await others.call('aether_search', JSON.stringify({ query: '灯台' })))).toMatchObject({ ok: false, failure: 'refused' });
@@ -174,6 +177,18 @@ describe('who may read what (owner decision 2026-10-06, enforced at the gate)', 
     expect(text(outputs[1]!)).toContain('灯台の光の数え方');
     expect(text(outputs[2]!)).toContain(mine.id);
     expect(text(outputs[2]!)).not.toContain(owners.id);
+    // Each of the parallel reads is filtered on its own: what the owner keeps to himself is left out of both, and both are marked.
+    const keeps = { withheld: { carries: (value: string) => value.includes('数え方') }, guarded: { carries: () => false }, openOnly: false };
+    const filtered = conversationTools(service, scope, 'text', true, { audience: { othersKnown: () => true, noteOthers: () => undefined }, othersText: () => keeps, now }, 'thread\n灯台のメモある？', new TurnDeadline(TEXT_TURN_DEADLINE)).tools!;
+    const both = (await runToolStep([
+      { callId: 'd1', name: 'aether_read', arguments: JSON.stringify({ documentId: mine.id }) },
+      { callId: 'd2', name: 'aether_search', arguments: JSON.stringify({ query: '灯台', scope: 'shannonFolder' }) },
+    ], filtered, { used: 0, toolsOff: false }, { parallel: true }) as { type: string; output?: string }[]).filter(item => item.type === 'function_call_output').map(item => item.output!);
+    expect(both).toHaveLength(2);
+    for (const output of both) {
+      expect(output).not.toContain('数え方');
+      expect(text(output).startsWith(`${UNLABELLED_DISCLOSURE_MARKER}\n`)).toBe(true);
+    }
     // Only reads are offered with others present, so that request may ask for several calls; with the owner alone her
     // Aether writes are offered and count as writes, so it asks for one at a time.
     expect(asksForParallelCalls(others.definitions)).toBe(true);

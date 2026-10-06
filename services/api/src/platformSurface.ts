@@ -25,11 +25,16 @@ const OTHERS_SPEAK_TIME_CHECK = speakTimePrivacyCheck.split('\n').filter(line =>
  * - the owner in a conversation bound `owner-private` is the owner alone: exactly the app's owner turn (his profile,
  *   tools by the app's owner-alone rule, his feeling moves);
  * - the owner in a shared conversation: everyone there is present (the conversation's group audience); her identity
- *   without his profile, the speak-time check, no owner reads (notes, tasks, Notion, calendar), no tools; his turn is
- *   kept in the platform thread as his (`speaker: owner`) with that audience;
+ *   without his profile, the speak-time check, no owner reads (notes, tasks, Notion, calendar); his turn is kept in the
+ *   platform thread as his (`speaker: owner`) with that audience. Where the surface asks for it (`othersFolderReading`,
+ *   the platform reply route) it is offered her Aether reading tools inside 「シャノン用フォルダ」 and nothing else, what she
+ *   reads marked as a whole for the speak-time check (owner decision 2026-10-06); otherwise no tools;
  * - anyone else: their audience (the conversation as a whole, or that person alone in a DM), her guest identity, what
  *   she remembers of the people there. In a DM or a shared conversation alike (owner decision 2026-10-06), only what may
  *   be shown to anyone: no protected line of his, none of her pursuits, and no rule that he may release one (`openOnly`).
+ *   Where the surface asks for it (`othersFolderReading`) such a turn is offered her Aether reading tools inside
+ *   「シャノン用フォルダ」 and nothing else (owner decision 2026-10-06), with his guarded matters left out of what she
+ *   reads; her Minecraft body's game chat does not ask for it.
  */
 export function platformAudienceTurn(policy: PlatformAudiencePolicy): ChatAudienceTurn {
   if (policy.gate.ownerOnly) return chatAudienceTurn('owner')!;
@@ -76,6 +81,8 @@ export interface PlatformSurfaceTurn {
   minecraftTools?: boolean;
   /** Whether the surface tells the owner's turns what she did on her own (`TextTurnSurface.ownOutreach`): her Minecraft body yes, a platform reply no. */
   ownOutreach: boolean;
+  /** A turn with others present is offered her Aether reading tools (`TextTurnSurface.othersFolderReading`): a platform reply yes, game chat no. */
+  othersFolderReading?: boolean;
   store(turn: CompletedTurn): ShannonExperience | null;
 }
 
@@ -90,6 +97,7 @@ export function platformTextTurnInput(turn: PlatformSurfaceTurn): TextTurnInput 
       ...(turn.minecraftTools ? { minecraftTools: true } : {}),
       // Where the owner is not there to release a protected line of his (someone else's DM), none is given.
       openOnly: !turn.policy.ownerPresent,
+      ...(turn.othersFolderReading ? { othersFolderReading: true } : {}),
       // Her own outreach is the owner's matter: told only on his own turn, never to anyone else who writes (guest identity).
       ownOutreach: turn.ownOutreach && turn.policy.ownerWrote,
       store: completed => turn.store(completed),

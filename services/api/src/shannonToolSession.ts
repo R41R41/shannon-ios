@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { CompanionStateStore } from '@shannon/cognition';
 import { CONVERSATION_TOOL_CALLS, type ShannonModelToolSession, type ToolCallOutcome } from './chatModelTools.js';
-import { conversationSecrets, type SecretCheck } from './conversationSecrets.js';
+import type { OthersTextCheck } from './aetherShownText.js';
+import { conversationSecrets, othersSecrets, type SecretCheck } from './conversationSecrets.js';
 import type { ConversationStore, StoredConversationMessage } from './conversationStore.js';
 import { ToolAudienceWatch, type ToolAudienceSource } from './shannonToolAudience.js';
 import type { ShannonToolRunner } from './shannonToolRunner.js';
@@ -21,6 +22,18 @@ export { withToolCapabilityLines } from './shannonAetherTools.js';
  *
  * With anyone else present only her Aether reading tools are offered (when Aether is configured), with the audience
  * `others`, so the gate holds them to 「シャノン用フォルダ」 (owner decision 2026-10-06); without them nothing is offered.
+ * What she reads there reaches the model without the owner's private things (`aetherShownText.ts`, `othersText`).
+ *
+ * `ownerAlone: 'guests'` is a turn the owner did not speak or write (owner decision 2026-10-06, Syzygy ADR-0007): a friend
+ * in 「友人も一緒」, someone else on a platform. It is offered the same Aether reading tools and nothing else; while they
+ * are not offered (Aether not configured) it gets nothing and nothing is said about it, exactly as `false`. Its calls
+ * are kept in no trace: its turn is never stored in the owner's Talk. `openOnly`: nobody present may release a protected
+ * line of the owner's (a turn someone else wrote on a platform), so his guarded matters are left out of what she reads
+ * rather than marked.
+ *
+ * `ownerAlone: 'shared'` is the owner's own turn that others can read (app text marked `others`, his turn in a shared
+ * platform conversation; owner decision 2026-10-06): like `'others'`, except that while nothing is offered it gets nothing
+ * and is told nothing, exactly as `false`.
  *
  * Text offers them in every turn the owner alone reads (unless it forces a web search). Voice offers them when the
  * words are about her writing or her folder (`asksAboutOwnThings`) or ask for a memo without naming Aether, and to the follow-ups of such a talk
@@ -31,7 +44,7 @@ export { withToolCapabilityLines } from './shannonAetherTools.js';
  * and replayed to her later turns with the owner alone (`conversationWindow.ts`).
  */
 export function conversationTools(
-  autonomy: { tools?: ShannonToolRunner } | undefined, scopeKey: string, surface: 'text' | 'voice', ownerAlone: boolean | 'others',
+  autonomy: { tools?: ShannonToolRunner } | undefined, scopeKey: string, surface: 'text' | 'voice', ownerAlone: boolean | 'others' | 'guests' | 'shared',
   server: Partial<ConversationToolServer>,
   /** The owner's message this turn answers, `${threadId}\n${words}`: a retry of it does not write the same piece twice. */
   turn: string,
@@ -40,7 +53,7 @@ export function conversationTools(
   /** A spoken turn: how far its words can be trusted (`transcriptTrust`), and the client's utterance id. */
   voice: { trust: 'reliable' | 'uncertain' | 'unknown'; utteranceId?: string } = { trust: 'reliable' },
   /** A surface that has its own way to a domain (her Minecraft body's game chat asks it through the turn's intent). */
-  options: { withoutDomains?: readonly string[] } = {},
+  options: { withoutDomains?: readonly string[]; openOnly?: boolean } = {},
 ): { tools?: ShannonModelToolSession; toolsWithheld?: true } {
   const runner = autonomy?.tools;
   // Without what the server knows of the audience, nothing is offered (and nothing said about it).
@@ -53,9 +66,9 @@ export function conversationTools(
   if (!offer) return {};
   // What the client said is not enough: what the server knows of others present vetoes the offer, and she is told so. Only
   // her Aether reading tools stay, held by the gate to 「シャノン用フォルダ」 (owner decision 2026-10-06, Syzygy ADR-0007).
-  const othersPresent = ownerAlone === 'others' || server.audience.othersKnown(scopeKey);
+  const othersPresent = ownerAlone === 'others' || ownerAlone === 'guests' || ownerAlone === 'shared' || server.audience.othersKnown(scopeKey);
   const audience = othersPresent ? 'others' as const : 'owner_alone' as const;
-  if (othersPresent && !runner.offered(surface, 'others', scopeKey).some(tool => !options.withoutDomains?.includes(tool.domain))) return { toolsWithheld: true };
+  if (othersPresent && !runner.offered(surface, 'others', scopeKey).some(tool => !options.withoutDomains?.includes(tool.domain))) return ownerAlone === 'guests' || ownerAlone === 'shared' ? {} : { toolsWithheld: true };
   // Words that could not be trusted write nothing: an uncertain turn reads only. With no score at all (the router fell
   // back), a write waits for his explicit yes to a reply of hers that asked for it (「はい、お願いします」).
   // His answer to her question where a memo goes (「書斎に」) is such a yes too.
@@ -65,13 +78,15 @@ export function conversationTools(
   const definitions = runner.offered(surface, audience, scopeKey)
     .filter(tool => (writes || tool.effect === 'read') && !options.withoutDomains?.includes(tool.domain));
   if (!definitions.length) return {};
-  const trace = server.turns?.open(scopeKey, threadId, words, offer === 'asked', voice.utteranceId);
+  const trace = ownerAlone === 'guests' ? undefined : server.turns?.open(scopeKey, threadId, words, offer === 'asked', voice.utteranceId);
   const memory = toolSessionMemory(createHash('sha256').update(`${scopeKey}\n${turn}`).digest('hex'));
   let check: SecretCheck | null | undefined;
+  let others: OthersTextCheck | null | undefined;
   const session = { definitions, maximumCalls: CONVERSATION_TOOL_CALLS } as unknown as ShannonModelToolSession;
   Object.defineProperty(session, 'deadline', { enumerable: false, value: deadline });
   if (!writes) Object.defineProperty(session, 'writesWithheld', { enumerable: false, value: true });
   if (othersPresent) Object.defineProperty(session, 'othersPresent', { enumerable: false, value: true });
+  if (ownerAlone === 'guests') Object.defineProperty(session, 'guestTurn', { enumerable: false, value: true });
   /** A call of a name this turn does not offer, with the reason that is true for it. */
   const refuse = (providerName: string): string => {
     // As this server has it: without the Aether client an Aether name is a name that does not exist (as before Aether).
@@ -92,8 +107,12 @@ export function conversationTools(
     // Read once a turn; a list that could not be read is tried again at the next call.
     if (!check) { try { check = server.secrets?.(scopeKey); } catch { check = null; } }
     const secrets = check;
+    // With anyone else present: what of the owner's must not reach the model from what she reads, read the same way. It is
+    // read before the call is awaited, so each of a step's parallel calls is handed its own check and filtered by it.
+    if (othersPresent && !others) { try { others = server.othersText?.(scopeKey, options.openOnly === true) ?? null; } catch { others = null; } }
     const result = await runner.call(tool?.name ?? providerName.slice(0, 80), argumentsJson, {
-      scopeKey, surface, audience, memory, threadId, ...(secrets !== undefined ? { secrets } : {}), ...(timeMilliseconds !== undefined ? { timeMilliseconds } : {}),
+      scopeKey, surface, audience, memory, threadId, ...(secrets !== undefined ? { secrets } : {}), ...(others !== undefined ? { othersText: others } : {}),
+      ...(timeMilliseconds !== undefined ? { timeMilliseconds } : {}),
     }, signal);
     return { output: toolResultForModel(result), note: () => trace?.called(toolTraceCall(tool?.name ?? providerName.slice(0, 80), argumentsJson, result, secrets)) };
   };
@@ -196,6 +215,8 @@ export function toolTraceReader(server: Partial<ConversationToolServer> | undefi
 export interface ConversationToolServer {
   audience: Pick<ToolAudienceWatch, 'othersKnown' | 'noteOthers'>;
   secrets: (scopeKey: string) => SecretCheck | null;
+  /** With anyone else present: what of the owner's must not reach the model from what she reads of Aether (`aetherShownText.ts`). */
+  othersText: (scopeKey: string, openOnly: boolean) => OthersTextCheck | null;
   /** The tool calls of each turn until it is stored, their traces after, and which Talks are in a talk about her things. */
   turns: ToolTurnLog;
   /** The newest message of a Talk, for a reply of hers that asked him to confirm. */
@@ -214,6 +235,7 @@ export function conversationToolServer(
   return {
     audience: new ToolAudienceWatch(body, now),
     secrets: scopeKey => { try { return conversationSecrets(stateStore.snapshot(scopeKey), conversations, scopeKey); } catch { return null; } },
+    othersText: (scopeKey, openOnly) => { try { return { ...othersSecrets(stateStore.snapshot(scopeKey), conversations, scopeKey), openOnly }; } catch { return null; } },
     turns: new ToolTurnLog(traces, now),
     lastMessage: (scopeKey, threadId) => (conversations.recentMessages?.(scopeKey, threadId, 1) ?? conversations.conversationHistory(scopeKey, threadId).slice(-1)).at(-1),
     now,

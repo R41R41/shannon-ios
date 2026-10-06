@@ -1,4 +1,5 @@
 import type { AetherAccess } from './aetherAccess.js';
+import type { OthersTextCheck } from './aetherShownText.js';
 import type { AutonomousActionRequest } from './autonomyPolicy.js';
 import type { SecretCheck } from './conversationSecrets.js';
 import type { ToolCallContext } from './shannonToolGate.js';
@@ -53,6 +54,12 @@ export interface ToolExecutionContext extends ToolCallContext {
   threadId?: string;
   /** Aether as this call may reach it, set by the runner from the gate (`gatedAether`); absent while Aether is not configured. */
   aether?: AetherAccess;
+  /**
+   * In a conversation with anyone else present: what of the owner's must not reach the model from what she reads of Aether
+   * (`aetherShownText.ts`, applied by the gate's `shownAetherCall`); `null` or absent there: it could not be read, and
+   * nothing read is given. Not used with the owner alone or in her own time.
+   */
+  othersText?: OthersTextCheck | null;
 }
 
 export type ToolExecutor = (input: ToolInput, context: ToolExecutionContext) => PreparedToolCall | ToolResult;

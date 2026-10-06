@@ -389,9 +389,12 @@ export class ShannonApiKernel {
         .request([layered.turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n')),
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message,
-      ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...conversationTools(this.autonomy, body.scopeKey, 'text', audience.alone, this.toolServer, `${threadId}\n${message}`, deadline, undefined,
+      ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...conversationTools(this.autonomy, body.scopeKey, 'text',
+        // With others present, her Aether reading tools (owner decisions 2026-10-06): the owner's own turn (app text marked
+        // `others`, his turn in a shared platform conversation) as 'shared', someone else's as 'guests'.
+        audience.alone || (!surface ? 'shared' : !surface.othersFolderReading ? false : surface.openOnly ? 'guests' : 'shared'), this.toolServer, `${threadId}\n${message}`, deadline, undefined,
         // Game chat asks her Minecraft body through the turn's intent, not through her tools.
-        surface && !surface.minecraftTools ? { withoutDomains: ['minecraft_body'] } : {}),
+        surface && !surface.minecraftTools ? { withoutDomains: ['minecraft_body'], ...(surface.openOnly ? { openOnly: true } : {}) } : {}),
       ...(body.webSearch === true || placeSkill ? { useWebSearch: true } : {}),
       ...(surface?.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}),
       // A surface's conversation has its own fixed title.

@@ -1,6 +1,8 @@
 import { AetherAccessError, type AetherAccess } from './aetherAccess.js';
+import { resultForOthers } from './aetherShownText.js';
 import type { AutonomousActionRequest, AutonomyDecision } from './autonomyPolicy.js';
 import type { ToolInput } from './shannonToolInput.js';
+import type { PreparedToolCall, ToolExecutionContext } from './shannonToolTypes.js';
 import { toolFailure, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface } from './shannonTools.js';
 
 /**
@@ -20,6 +22,8 @@ import { toolFailure, type ShannonToolDefinition, type ToolAudience, type ToolRe
  *    searched and read only while the owner alone can see or hear the reply. With anyone else present, and in her own time
  *    (whose gate domain is her study, not his documents), a search must name her folder or her study (`authorizeToolInput`)
  *    and the executor is handed a client that refuses everything outside her folder (`gatedAether`), whatever it asks.
+ *    With anyone else present in a conversation, what she read reaches the model without the owner's private things
+ *    (`shownAetherCall`; owner decision 2026-10-06).
  */
 export interface ToolCallContext {
   scopeKey: string;
@@ -77,6 +81,20 @@ export function gatedAether(access: AetherAccess, context: Pick<ToolCallContext,
     update: (input, signal) => access.update(input, signal),
     delete: (input, signal) => access.delete(input, signal),
   } satisfies AetherAccess);
+}
+
+/**
+ * An Aether reading call in a conversation with anyone else present: its result as the model may see it there, without
+ * what the owner told her alone (`resultForOthers`, `aetherShownText.ts`). A check that is missing is one that could not
+ * be read: nothing read is given (fail closed). The owner alone and her own time are returned as they are.
+ */
+export function shownAetherCall(tool: ShannonToolDefinition, prepared: PreparedToolCall, context: Pick<ToolExecutionContext, 'audience' | 'surface' | 'othersText'>): PreparedToolCall {
+  const check = context.othersText ?? null;
+  if (!tool.name.startsWith('aether') || tool.effect !== 'read' || context.audience !== 'others' || context.surface === 'autonomy') return prepared;
+  return { ...prepared, run: async signal => {
+    const run = await prepared.run(signal);
+    return { ...run, result: resultForOthers(run.result, check) };
+  } };
 }
 
 /** What `authorizeAutonomousAction` is asked for one call in her own time. */
