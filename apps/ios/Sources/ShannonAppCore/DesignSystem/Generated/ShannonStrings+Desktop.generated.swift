@@ -49,7 +49,7 @@ extension ShannonGeneratedStrings {
     /// `desktop.stream.keepBodyShown`
     public static let desktopStreamKeepBodyShown = "配信している間は、デスクトップの体を出したままにしてください。配信のシャノンの気分・様子・表情は、デスクトップの体が受け取ったものです（体を隠していると新しくなりません）。触れたときの反応は、配信には映りません。"
     /// `desktop.stream.whileOn`
-    public static let desktopStreamWhileOn = "入れている間は、このアプリの窓（トーク・作業・設定・通話）が画面の取り込みに映らず、通知は切ってから出ます。イヤホンでの一言も伝えません。デスクトップの体の窓は映ります。"
+    public static let desktopStreamWhileOn = "入れている間は、このアプリの窓（トーク・作業・設定・通話）をスクリーンショットや古い取り込み方から外します。ただし OBS の画面全体のキャプチャには映ることがあります。OBS では、ブラウザソース（http://127.0.0.1:41760/stream.html）だけを取り込み、要るときはウインドウやアプリを指定して取り込んでください。配信中は、トーク・作業・設定を閉じておくと安心です。通知は切ってから出ます。イヤホンでの一言も伝えません。デスクトップの体の窓は映ります。"
     /// `desktop.stream.live`
     public static func desktopStreamLive(url: String) -> String { "出しています。OBS のブラウザソースの URL: \(url)" }
     /// `desktop.stream.starting`
