@@ -228,6 +228,12 @@ export interface ShannonTouch {
   countInWindow: number;
   /** False when someone other than the owner may have been the one touching. Absent: the owner. */
   ownerAlone?: boolean;
+  /**
+   * Syzygy ADR-0005 stage 1b: the touch landed on a part where her body flinches first (neck, chest, waist, legs, skirt;
+   * owner answer 1), given as the word of the part (首). The table is not read for it: only the reflex moves her
+   * (`SHANNON_TOUCH_REFLEX`), and how she takes the touch is her own judgement. Absent: the table, as before.
+   */
+  reflexPart?: string;
 }
 
 export interface CompanionStateSnapshot {
