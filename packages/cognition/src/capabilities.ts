@@ -64,10 +64,11 @@ export const SHANNON_CAPABILITIES = Object.freeze([
     text: 'Notion: 共有されたページを読む（読むだけ）。' },
   { id: 'own_study', audience: 'owner',
     text: '自分の書斎: ボクのメモと物語（ボクの中に版ごとに残る）を、会話でも自分の時間でも道具で一覧・検索・読む・書く・直す・しまう・ゴミ箱に入れて戻す。見せていない下書きも自分は読める。見せるのは自分の時間の手順だけ。' },
-  // Her folder on the owner's PC or Mac (contract v2; the Mac app reads only until A18 S3; owner approval of 2026-10-06 for
-  // the wording). Its words are in prompts whose digests are pinned (chatReplyFeeling, othersPresentGoal).
+  // Her folder on the owner's PC or Mac (contract v2; the Mac app reads it since A18 S2 and changes it since S3; 「PCやMac」 approved by
+  // the owner on 2026-10-06, dropping the Mac's read-only note awaits his approval). Its words are in prompts whose digests are pinned
+  // (chatReplyFeeling, othersPresentGoal).
   { id: 'own_folder', audience: 'owner',
-    text: '自分のフォルダ: ライ氏がPCやMacに用意してくれている時、道具で中を一覧・検索・読む（ライ氏のファイルも）・作る・書き換える・移す・消す（テキストだけ。前の中身はフォルダ内のゴミ箱に残る）。PCやMacが起きていない時は使えない（Macのフォルダは、いまは一覧・検索・読むだけ）。自分の時間には写しも置く。' },
+    text: '自分のフォルダ: ライ氏がPCやMacに用意してくれている時、道具で中を一覧・検索・読む（ライ氏のファイルも）・作る・書き換える・移す・消す（テキストだけ。前の中身はフォルダ内のゴミ箱に残る）。PCやMacが起きていない時は使えない。自分の時間には写しも置く。' },
   { id: 'voyager_tasks', audience: 'owner',
     text: 'Voyager: タスクを検索して読む。「〜をタスクにして」「整理して」でタスク案を作り、確認カードで選ばれた分だけ反映される。' },
   { id: 'agent_tasks', audience: 'owner',
