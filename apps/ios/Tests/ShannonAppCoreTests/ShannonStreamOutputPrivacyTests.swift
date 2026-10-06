@@ -60,6 +60,37 @@ final class ShannonStreamOutputPrivacyTests: XCTestCase {
         call.end()
     }
 
+    func testAnOwnerReplyStillPlayingStopsWhenTheStreamOutputIsTurnedOn() async throws {
+        var streaming = false
+        let call = ShannonDesktopVoiceCall()
+        call.streamOutputIsOn = { streaming }
+        call.attach(conversation: ShannonConversationModel.designPreview(), menuBar: nil)
+        call.start(threadID: nil)
+        call.workspace.connectionRequestID = nil
+        await settle()
+        // An owner reply that has fully arrived and is being played: its task waits for the playback to end. A switch
+        // alone does not cut such a reply (`switchParticipantMode` interrupts only one still being generated).
+        var ledger = ShannonPendingVoiceTurns()
+        ledger.append(rawText: "明日の予定は？", text: "明日の予定は？", source: .speech)
+        let batch = try XCTUnwrap(ledger.batch())
+        try call.session.responseDelivery.complete(
+            .init(threadId: "thread", model: "test", reply: "明日は歯医者です。"), batch: batch, ledger: &ledger)
+        XCTAssertNotNil(call.session.responseDelivery.response)
+        call.session.phase = .speaking
+        let playing = Task<Void, Never> { try? await Task.sleep(for: .seconds(60)) }
+        call.session.responseTask = playing
+        call.session.responseGenerationID = UUID()
+
+        streaming = true
+        NotificationCenter.default.post(name: .shannonStreamOutputChanged, object: nil, userInfo: [ShannonStreamOutput.isOnKey: true])
+        XCTAssertTrue(playing.isCancelled, "her voice for him alone is cut")
+        XCTAssertNil(call.session.responseTask)
+        XCTAssertNil(call.session.responseGenerationID)
+        XCTAssertEqual(call.session.playbackLevel, 0)
+        XCTAssertEqual(call.session.participantMode, .guest)
+        call.end()
+    }
+
     func testACallIsReportedAsHeardByOthersWhileTheStreamOutputIsOn() {
         XCTAssertEqual(ShannonVoiceWorkspaceState.callAudience(.owner, streamOutputOn: true), .others)
         XCTAssertEqual(ShannonVoiceWorkspaceState.callAudience(.guest, streamOutputOn: true), .others)

@@ -34,6 +34,10 @@ extension ShannonDesktopVoiceCall {
     func streamOutputTurnedOn() {
         guard isShown, session.participantMode == .owner else { return }
         ShannonVoiceDiagnostics.shared.record("gemini.session.stream_output.guest")
+        // An owner reply that has fully arrived is not cut by a switch (only one still being generated is); here it is
+        // stopped too, generated or playing: the stream may be recording her voice, and that reply was for him alone.
+        // What was said of it stays in his history, as when he speaks over her.
+        session.interruptResponse()
         switchParticipant(to: .guest)
     }
 }
