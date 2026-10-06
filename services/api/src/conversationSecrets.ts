@@ -99,14 +99,18 @@ export function othersSecrets(state: CompanionStateSnapshot, conversations: Pick
 }
 
 /**
- * Each sentence of these texts (cut after 。！？!? and at line breaks, compacted as a run is, a leading 「ユーザーは」 style
- * subject removed) of at least `SHORT_MINIMUM` characters, matched whole. A sentence of hiragana alone is filler, as
- * a run of it is, and skipped.
+ * Each fragment of these texts of at least `SHORT_MINIMUM` characters, matched whole inside what is checked (a sentence
+ * of the folder text). A fragment is cut after 。！？!?｡．, at 、，, line breaks, emoji, and whitespace next to a
+ * character outside ASCII (so 「来月に手術 病院は東大病院」 gives 「来月に手術」; ASCII words are not cut apart), then
+ * compacted as a run is, with a leading 「ユーザーは」 style subject removed. A fragment of hiragana alone is filler, as a
+ * run of it is, and skipped.
  */
+const FRAGMENT_CUT = /(?<=[。！？!?｡．])|[、，,\n]|\p{Extended_Pictographic}|(?<=[^\x00-\x7F])\s+|\s+(?=[^\x00-\x7F])/u;
+
 function sentenceCheck(texts: readonly string[]): SecretCheck {
   const sentences = new Set<string>();
   for (const text of texts) {
-    for (const sentence of text.split(/(?<=[。！？!?])|\n/u)) {
+    for (const sentence of text.split(FRAGMENT_CUT)) {
       const words = compact(sentence.trim().replace(SUBJECT, ''));
       if (words.length >= SHORT_MINIMUM && !/^[\p{Script=Hiragana}ー]+$/u.test(words)) sentences.add(words);
     }

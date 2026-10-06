@@ -183,6 +183,13 @@ describe('what she reads of her folder in front of others', () => {
     expect(textForOthers('来月に手術。病院は東大病院で入院予定。', crossing)).toBe(LEFT_OUT_LINE);
     // An ordinary short sentence that is no sentence of a secret stays, even with words in common (「来月に」).
     expect(textForOthers('来月に旅行。来月に手術。灯台を見た。', crossing)).toBe(`来月に旅行。灯台を見た。\n${LEFT_OUT_LINE}`);
+    // A secret written with another separator is cut there too: a space, an emoji, 、 (review of 2c95adff).
+    for (const secret of ['来月に手術 病院は東大病院', '来月に手術🏥病院は東大病院', '来月に手術、病院は東大病院', '来月に手術．病院は東大病院']) {
+      const separated = { withheld: runCheckOf([secret]), guarded: runCheckOf([]), openOnly: true };
+      expect(textForOthers('ライ氏は来月に手術。灯台を見た。', separated)).toBe(`灯台を見た。\n${LEFT_OUT_LINE}`);
+      // An ordinary sentence that only shares a short word of it (病院) stays.
+      expect(textForOthers('病院の前を通った。', separated)).toBe('病院の前を通った。');
+    }
   });
 });
 
