@@ -117,4 +117,30 @@ describe('a session that is not marked', () => {
     voice.state.others = false;
     expect(await worded(prepareReachOut)).toContain(SENTINEL.note);
   });
+
+  it('is not given the title or the address of a shared Notion page read in a marked session and not yet written up', async () => {
+    const notion = { read: async () => ({ title: 'SENTINEL-NOTION-TITLE', url: 'https://www.notion.so/SENTINEL-NOTION-URL', text: '白ウサギの話。' }) };
+    const harness = loopHarness({ sessions: true, notion, environment: OWN_TIME_PRICES });
+    const session = async (plans: unknown[]) => {
+      harness.advance(3 * HOUR);
+      harness.model.plans = [...plans];
+      await runUntilIdle(harness.loop, 40);
+      return harness.store.loop.sessions.latestClosed(scope)!.cycleId;
+    };
+    // The note after it does not come out, so the page stays unwritten.
+    harness.model.replies.note = { title: '', body: '' };
+    const reading = await session([{ thought: 'Notionを読みます。', steps: [{ action: 'notion', query: 'ウサカテ' }] }, { thought: '休みます。', steps: [rest] }]);
+    delete harness.model.replies.note;
+    expect(harness.store.informed.sessionInformedAt(reading)).not.toBeNull();
+    // Inside the marked session, the page is there to write up.
+    expect(harness.model.prompts('think').at(-1)).toContain('SENTINEL-NOTION-TITLE');
+    const calls = harness.model.calls.length;
+    const unmarked = await session([{ thought: '休みます。', steps: [rest] }]);
+    expect(harness.store.informed.sessionInformedAt(unmarked)).toBeNull();
+    for (const call of harness.model.calls.slice(calls)) expect(`${call.system}\n${call.prompt}`).not.toMatch(/SENTINEL-NOTION/u);
+    // Nor can it plan a note of it: the page is not among what it knows, so nothing of it is written in an unmarked session.
+    const writing = await session([{ thought: 'メモにします。', steps: [{ action: 'note' }] }, { thought: '休みます。', steps: [rest] }]);
+    expect(harness.store.informed.sessionInformedAt(writing)).toBeNull();
+    expect(harness.store.study.list(scope).some(piece => piece.kind === 'note')).toBe(false);
+  });
 });

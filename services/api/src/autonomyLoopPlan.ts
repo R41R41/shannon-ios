@@ -69,6 +69,8 @@ export function thinkingMaterials(
     keep?: (piece: StudyPiece) => boolean;
     /** Which pursuits this session may be given (`unmarkedPursuits`, ADR-0007); absent, every one. */
     keepPursuit?: (pursuit: ShannonPursuit) => boolean;
+    /** Which pages read but not written up this session may be given (a marked Notion page is not, ADR-0007); absent, every one. */
+    keepReading?: (readingId: string) => boolean;
   },
 ): ThinkingMaterials {
   const pieces = store.study.list(scopeKey);
@@ -84,7 +86,7 @@ export function thinkingMaterials(
       characters: piece.body.length, lastChange: store.study.versions(scopeKey, piece.id).at(-1)?.changeNote ?? '',
     })),
     notes: storyNotes(store, scopeKey, undefined, 6, input.ownNotes === true, input.keep),
-    unnotedReadings: store.loop.unnotedReadings(scopeKey).map(reading => ({ id: reading.id, title: reading.title, url: reading.url })),
+    unnotedReadings: store.loop.unnotedReadings(scopeKey).filter(reading => input.keepReading?.(reading.id) ?? true).map(reading => ({ id: reading.id, title: reading.title, url: reading.url })),
     feedback: stories.flatMap(piece => store.study.pendingFeedback(scopeKey, piece.id).map(feedback => ({
       pieceId: piece.id, pieceTitle: piece.title, version: feedback.version,
       reactionLabel: STUDY_REACTION_LABEL[feedback.reaction], comment: feedback.comment,

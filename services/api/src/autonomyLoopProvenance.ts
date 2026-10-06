@@ -1,5 +1,5 @@
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
-import { STUDY_DOCUMENT_PREFIX } from './ownerInformedMarks.js';
+import { READING_DOCUMENT_PREFIX, STUDY_DOCUMENT_PREFIX } from './ownerInformedMarks.js';
 import type { StepDependencies, StepResult } from './autonomyLoopSteps.js';
 
 /**
@@ -57,6 +57,13 @@ export function unlistedIn(dependencies: Pick<StepDependencies, 'store'>, cycle:
   const marks = dependencies.store.informed;
   if (!marks.any(cycle.scopeKey) || marks.sessionInformedAt(cycle.id)) return null;
   return documentId => { try { return marks.marked(cycle.scopeKey, documentId); } catch { return true; } };
+}
+
+/** The same for pages she read and has not written up: a marked Notion page's title and address are not given (ADR-0007). */
+export function unmarkedReadings(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id' | 'scopeKey'>): (readingId: string) => boolean {
+  let unlisted: ((documentId: string) => boolean) | null;
+  try { unlisted = unlistedIn(dependencies, cycle); } catch { return () => false; }
+  return unlisted ? readingId => !unlisted!(`${READING_DOCUMENT_PREFIX}${readingId}`) : () => true;
 }
 
 /** The same for her pursuits: a pursuit created or changed in a marked session is not given to a session that is not marked. */
