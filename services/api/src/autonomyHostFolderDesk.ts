@@ -66,9 +66,21 @@ export class HostFolderDesk {
     return Object.keys(this.config.places.hostDevices ?? {});
   }
 
-  /** True while a bound host exists and today's count has room: the only time a copy is planned. */
+  /**
+   * The hosts a copy may be planned for: bound, and not a device whose last v2 claim left `write` out (the Mac app
+   * reads only, A18 S2). A host whose device has not made a v2 claim yet keeps v1's meaning.
+   */
+  copyHosts(scopeKey: string): readonly string[] {
+    const devices = this.config.places.hostDevices ?? {};
+    return this.boundHosts().filter(host => {
+      const seen = this.store.hostOperations.presence(scopeKey, host);
+      return !seen || seen.deviceId !== devices[host] || seen.operations.includes('write');
+    });
+  }
+
+  /** True while a host can take a copy and today's count has room: the only time a copy is planned. */
   available(scopeKey: string, at: string): boolean {
-    return this.boundHosts().length > 0
+    return this.copyHosts(scopeKey).length > 0
       && this.store.hostSteps.queuedOn(scopeKey, autonomyDayKey(at, this.config)) < this.config.maximumHostFolderWritesPerDay;
   }
 
@@ -78,7 +90,7 @@ export class HostFolderDesk {
     const named = pieceId ? this.store.study.get(scopeKey, pieceId) : null;
     const seen = this.roomLook(scopeKey);
     for (const piece of pieceId ? (named ? [named] : []) : this.store.study.list(scopeKey)) {
-      const host = this.boundHosts().find(name => !this.store.hostSteps.hasCopy(scopeKey, name, piece.id, piece.version));
+      const host = this.copyHosts(scopeKey).find(name => !this.store.hostSteps.hasCopy(scopeKey, name, piece.id, piece.version));
       const draft = host ? this.draft(piece, seen) : null;
       if (host && draft) {
         return { host, pieceId: piece.id, pieceVersion: piece.version, kind: piece.kind, kindLabel: STUDY_KIND_LABEL[piece.kind], title: piece.title, relativePath: draft.relativePath };
@@ -92,6 +104,7 @@ export class HostFolderDesk {
     return this.store.transaction(() => {
       const dayKey = autonomyDayKey(at, this.config);
       if (!this.boundHosts().includes(copy.host)) throw new Error('HOST_STEP_HOST_NOT_BOUND');
+      if (!this.copyHosts(scopeKey).includes(copy.host)) throw new Error('HOST_STEP_HOST_CANNOT_WRITE');
       if (this.store.hostSteps.queuedOn(scopeKey, dayKey) >= this.config.maximumHostFolderWritesPerDay) throw new Error('HOST_STEP_DAILY_LIMIT');
       const piece = this.store.study.get(scopeKey, copy.pieceId);
       const draft = piece && piece.version === copy.pieceVersion ? this.draft(piece, this.roomLook(scopeKey)) : null;

@@ -1,13 +1,13 @@
-import { HOST_STEP_CODES, hostFolderPath, hostStepContentDigest, type HostStepCode } from './autonomyHostFolderPath.js';
+import { HOST_STEP_CODES, hostFolderLabel, hostFolderPath, hostStepContentDigest, type HostStepCode } from './autonomyHostFolderPath.js';
 import type { ListResult, ReadResult, SearchResult, WriteResult } from './hostFolderOperationResults.js';
 import type { HostFolderOperations, HostRunOutcome } from './hostFolderOperations.js';
 import type { HostOperation } from './hostFolderOperationsStore.js';
 import { numberInput, stringInput, type ToolInput } from './shannonToolInput.js';
 import { neutralMarkers, type ToolExecutionContext, type ToolExecutor, type ToolRun } from './shannonToolTypes.js';
-import { toolFailure, toolOk, type ToolFailureKind, type ToolResult, type ToolSurface } from './shannonTools.js';
+import { toolFailure, toolOk, type ShannonToolDefinition, type ToolFailureKind, type ToolResult, type ToolSurface } from './shannonTools.js';
 
 /**
- * The folder tools (`folder.*` in `shannonTools.ts`): her own folder on the owner's PC, through the v2 operations
+ * The folder tools (`folder.*` in `shannonTools.ts`): her own folder on the owner's PC or Mac, through the v2 operations
  * of `docs/host-folder-contract.md`. Every call goes through `HostFolderOperations.run`, which queues it for the bound
  * device only while that device is present, and waits a few seconds. Paths are checked here by spelling (the device
  * checks the real location); content she writes is text she wrote in this call, nothing else.
@@ -25,13 +25,27 @@ const SEARCH_LIMIT = 20;
  * coordinator's decision of 2026-10-05 that text never goes into a file; anything else of hers may go to her folder freely.
  */
 export function folderExecutors(operations: HostFolderOperations, roomLook: (scopeKey: string) => (text: string) => boolean = () => () => false): Readonly<Record<string, ToolExecutor>> {
-  /** The host she means: the one she named, or the only one there is. */
-  const hostOf = (input: ToolInput): string | ToolResult => {
+  /**
+   * The host she means: the one she named, or the only one there is. With several and none named (A18, owner decision
+   * 2026-10-06): the one whose device can take this operation now; with more than one such, she asks the owner which.
+   * With none, the first whose device answered (stopped on its side, or unable to do it), else the first: its run says why.
+   */
+  const hostOf = (input: ToolInput, context: ToolExecutionContext, operation: HostOperation): string | ToolResult => {
     const hosts = operations.boundHosts();
     const named = stringInput(input, 'host')?.trim();
-    if (!hosts.length) return toolFailure('unavailable', 'ボクのフォルダを受け持つPCが、まだ登録されていない。', { retryable: false, refusal: { why: 'PCの登録がない', wouldWork: 'ライ氏がPCを登録したあと' } });
-    if (named) return hosts.includes(named) ? named : toolFailure('invalid_input', `そのPCはない（${hosts.join('、')}）。`, { retryable: false });
-    return hosts.length === 1 ? hosts[0]! : toolFailure('invalid_input', `PCが${hosts.length}台ある。host に ${hosts.join('、')} のどれかを書く。`, { retryable: false });
+    if (!hosts.length) return toolFailure('unavailable', 'ボクのフォルダを受け持つPCやMacが、まだ登録されていない。', { retryable: false, refusal: { why: 'PCやMacの登録がない', wouldWork: 'ライ氏がPCやMacを登録したあと' } });
+    if (named) return hosts.includes(named) ? named : toolFailure('invalid_input', `そのPCやMacはない（${hostNames(hosts)}）。`, { retryable: false });
+    if (hosts.length === 1) return hosts[0]!;
+    const presence = new Map(hosts.map(name => [name, operations.presence(context.scopeKey, name, operation)] as const));
+    const reachable = hosts.filter(name => presence.get(name) === 'present');
+    if (reachable.length === 1) return reachable[0]!;
+    if (reachable.length > 1) {
+      const ask = context.surface === 'autonomy' ? 'host にどちらかを書く' : 'どちらのフォルダか、ライ氏に聞いてから host に書く';
+      return toolFailure('invalid_input', `${hostNames(reachable)}の両方につながっている。${ask}。`, {
+        retryable: false, refusal: { why: 'どちらのフォルダか決まっていない', wouldWork: `host に ${reachable.join(' か ')} を書く` },
+      });
+    }
+    return hosts.find(name => presence.get(name) === 'stopped' || presence.get(name) === 'unsupported') ?? hosts[0]!;
   };
   const pathOf = (input: ToolInput, key: string, kind: 'file' | 'entry' | 'folder'): string | ToolResult => {
     const checked = hostFolderPath(stringInput(input, key)?.trim().replace(/^\.\//u, '') ?? (kind === 'folder' ? '' : undefined), kind);
@@ -40,7 +54,7 @@ export function folderExecutors(operations: HostFolderOperations, roomLook: (sco
 
   const call = (tool: string, operation: HostOperation, kind: 'file' | 'entry' | 'folder', build: (path: string, input: ToolInput, context: ToolExecutionContext, host: string) => Record<string, unknown>,
     describe: (path: string) => string, toKey?: 'to' | 'newName'): ToolExecutor => (input, context) => {
-    const host = hostOf(input);
+    const host = hostOf(input, context, operation);
     if (typeof host !== 'string') return host;
     const path = pathOf(input, 'path', kind);
     if (typeof path !== 'string') return path;
@@ -116,11 +130,11 @@ function runResult(outcome: HostRunOutcome, operation: HostOperation, target: { 
     ...(queued && context.surface !== 'autonomy' ? { recordedElsewhere: true as const } : {}),
   });
   switch (outcome.kind) {
-    case 'not_bound': return failed(toolFailure('unavailable', 'そのPCは登録されていない。', { retryable: false, refusal: { why: 'PCの登録がない', wouldWork: 'ライ氏がPCを登録したあと' } }), 'not_bound');
-    case 'offline': return failed(toolFailure('unavailable', 'PCのフォルダはいま見られない（PCが起きていないか、体のアプリが動いていない）。', { retryable: true }), 'device_offline');
-    case 'stopped': return failed(toolFailure('refused', 'ライ氏がPCの側でフォルダの操作を止めている。', { retryable: false, refusal: { why: 'PCの側の止めるスイッチが入っている', wouldWork: 'ライ氏がスイッチを切ったあと' } }), 'stopped_locally');
-    case 'unsupported': return failed(toolFailure('unavailable', 'PCの体のアプリが、まだこの操作に対応していない。', { retryable: false }), 'unsupported_operation');
-    case 'timeout': return failed(toolFailure('timeout', `PCから時間内に返事が来なかった。${writes && outcome.handedOut ? 'できたかどうかは分からないので、やり直す前に folder.list で確かめる。' : ''}`, { retryable: !writes }), 'timeout');
+    case 'not_bound': return failed(toolFailure('unavailable', 'そのPCやMacは登録されていない。', { retryable: false, refusal: { why: 'PCやMacの登録がない', wouldWork: 'ライ氏がPCやMacを登録したあと' } }), 'not_bound');
+    case 'offline': return failed(toolFailure('unavailable', 'PCやMacのフォルダはいま見られない（PCやMacが起きていないか、体のアプリが動いていない）。', { retryable: true }), 'device_offline');
+    case 'stopped': return failed(toolFailure('refused', 'ライ氏がPCやMacの側でフォルダの操作を止めている。', { retryable: false, refusal: { why: 'PCやMacの側の止めるスイッチが入っている', wouldWork: 'ライ氏がスイッチを切ったあと' } }), 'stopped_locally');
+    case 'unsupported': return failed(toolFailure('unavailable', 'PCやMacの体のアプリが、まだこの操作に対応していない。', { retryable: false }), 'unsupported_operation');
+    case 'timeout': return failed(toolFailure('timeout', `PCやMacから時間内に返事が来なかった。${writes && outcome.handedOut ? 'できたかどうかは分からないので、やり直す前に folder.list で確かめる。' : ''}`, { retryable: !writes }), 'timeout');
     case 'failed': case 'refused': return failed(toolFailure(failureKind(outcome.code), `できなかった（${HOST_STEP_CODES[outcome.code]}）。`, { retryable: outcome.code === 'io_error' }), outcome.code);
     case 'done': break;
   }
@@ -148,6 +162,22 @@ function runResult(outcome: HostRunOutcome, operation: HostOperation, target: { 
     result: toolOk(text), record: { summary: `${place}で「${target.path || 'いちばん上'}」を扱いました。`, outcome: 'done' },
     ...(context.surface !== 'autonomy' ? { recordedElsewhere: true as const } : {}),
   };
+}
+
+/**
+ * A folder tool as offered while several hosts are registered (A18): its `host` names them with the names she and the
+ * owner say, and says how one is chosen. With one host the tool is offered exactly as it is.
+ */
+export function folderToolForHosts(tool: ShannonToolDefinition, hosts: readonly string[]): ShannonToolDefinition {
+  const property = tool.input.properties.host;
+  if (tool.domain !== 'host_folder' || hosts.length < 2 || !property) return tool;
+  const description = `どのフォルダか（${hostNames(hosts)}）。ふだんは書かない（つながっているのが1台ならそれを使う。両方つながっている時は、どちらかライ氏に聞いてから書く）`;
+  return Object.freeze({ ...tool, input: Object.freeze({ ...tool.input, properties: Object.freeze({ ...tool.input.properties, host: Object.freeze({ ...property, description }) }) }) });
+}
+
+/** 「owner-windows（WindowsのPC）、owner-mac（Mac）」: the names she writes, with the names she and the owner say. */
+export function hostNames(hosts: readonly string[]): string {
+  return hosts.map(host => (hostFolderLabel(host) === host ? host : `${host}（${hostFolderLabel(host)}）`)).join('、');
 }
 
 function failureKind(code: HostStepCode): ToolFailureKind {

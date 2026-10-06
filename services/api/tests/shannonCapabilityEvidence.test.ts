@@ -13,7 +13,7 @@ import { ShannonAutonomyLoop } from '../src/autonomyLoop.js';
 import { prepareFolderCopy } from '../src/autonomyLoopFolderStep.js';
 import { HttpAetherAccess, configuredAetherAccess } from '../src/aetherAccess.js';
 import { aetherExecutors } from '../src/shannonAetherTools.js';
-import { folderExecutors } from '../src/shannonFolderTools.js';
+import { folderExecutors, folderToolForHosts } from '../src/shannonFolderTools.js';
 import { authorizeToolInput, gatedAether } from '../src/shannonToolGate.js';
 import { StudyAether } from '../src/studyAether.js';
 import { prepareRoomLook } from '../src/autonomyLoopLookStep.js';
@@ -133,8 +133,11 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
   // every overwrite and delete goes to the trash on the device. Without a registered device there is no folder
   // (the line says 「用意してくれている時」). In her own time she places copies with the same tools, and while her study is
   // Shannon's also with the v1 copy step (with Aether it is gone: stories live in Aether only, Syzygy ADR-0007 revised).
+  // The owner's PC or Mac (A18 S1): a device learns its host from the binding route, two hosts are named in her tools, and a
+  // device that reads only (the Mac app in S2) is never planned a copy. The line still says PC: its words are pinned.
   own_folder: () => exists(folderExecutors, prepareFolderCopy, HostFolderDesk.prototype.enqueue, HostFolderDesk.prototype.claim, HostFolderDesk.prototype.report,
-    HostFolderOperations.prototype.run, HostFolderOperations.prototype.claim, HostFolderOperations.prototype.report)
+    HostFolderOperations.prototype.run, HostFolderOperations.prototype.claim, HostFolderOperations.prototype.report,
+    HostFolderOperations.prototype.boundHostOf, HostFolderDesk.prototype.copyHosts, folderToolForHosts)
     && ['list', 'search', 'read', 'create', 'update', 'rename', 'move', 'delete'].every(verb => offeredTools('text', 'owner_alone').some(tool => tool.name === `folder.${verb}`))
     && offeredTools('autonomy', 'owner_alone').some(tool => tool.name === 'folder.create')
     && Object.keys(configuredAutonomy({}).places.hostDevices ?? {}).length === 0,

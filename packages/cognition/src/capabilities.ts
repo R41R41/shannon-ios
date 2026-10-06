@@ -63,6 +63,8 @@ export const SHANNON_CAPABILITIES = Object.freeze([
     text: 'Notion: 共有されたページを読む（読むだけ）。' },
   { id: 'own_study', audience: 'owner',
     text: '自分の書斎: ボクのメモと物語（ボクの中に版ごとに残る）を、会話でも自分の時間でも道具で一覧・検索・読む・書く・直す・しまう・ゴミ箱に入れて戻す。見せていない下書きも自分は読める。見せるのは自分の時間の手順だけ。' },
+  // Her folder on the owner's PC or Mac (contract v2; the Mac app reads only until A18 S3). The line still says PC: its words
+  // are in prompts whose digests are pinned (chatReplyFeeling, othersPresentGoal), so they change with those records.
   { id: 'own_folder', audience: 'owner',
     text: '自分のフォルダ: ライ氏がPCに用意してくれている時、道具で中を一覧・検索・読む（ライ氏のファイルも）・作る・書き換える・移す・消す（テキストだけ。前の中身はフォルダ内のゴミ箱に残る）。PCが起きていない時は使えない。自分の時間には写しも置く。' },
   { id: 'voyager_tasks', audience: 'owner',

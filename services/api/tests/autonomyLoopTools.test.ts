@@ -68,7 +68,7 @@ describe('her tools as steps of her own time', () => {
     const harness = sessions({ toolResults: new AutonomyToolResults(), environment: { SHANNON_AUTONOMY_HOST_FOLDERS_JSON: '{"owner-windows":{"deviceId":"0123456789abcdef"}}' } });
     harness.model.plans = [{ thought: 'フォルダを見ます。', steps: [{ action: 'tool', name: 'folder.list', input: { path: 'notes' } }] }, { thought: '休みます。', steps: [rest] }];
     await runUntilIdle(harness.loop);
-    expect(harness.model.prompts('think')[1]).toContain('PCのフォルダはいま見られない');
+    expect(harness.model.prompts('think')[1]).toContain('PCやMacのフォルダはいま見られない');
     const decision = harness.entries().find(entry => entry.kind === 'decision' && entry.tool === 'folder.list')!;
     expect(decision).toMatchObject({ domain: 'host_folder', outcome: 'allowed' });
     expect(harness.entries().find(entry => entry.kind === 'action' && entry.relatedId === decision.id)).toMatchObject({ outcome: 'failed', reasonCode: 'device_offline' });

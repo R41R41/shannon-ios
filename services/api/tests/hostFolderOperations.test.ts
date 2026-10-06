@@ -64,7 +64,7 @@ describe('her folder through her tools (contract v2)', () => {
     const result = await call('folder.list', {});
     expect(Date.now() - started).toBeLessThan(500);
     expect(result).toMatchObject({ ok: false, failure: 'unavailable', retryable: true });
-    expect(result.text).toContain('PCのフォルダはいま見られない');
+    expect(result.text).toContain('PCやMacのフォルダはいま見られない');
     expect(store.hostOperations.leased(scope, HOST)).toBeNull();
     expect(entries()).toEqual([expect.objectContaining({ domain: 'conversation', tool: 'folder.list', outcome: 'failed', reasonCode: 'device_offline' })]);
   });
@@ -123,7 +123,7 @@ describe('her folder through her tools (contract v2)', () => {
   it('says the device side is stopped, or cannot do the operation, without queuing anything', async () => {
     const { call, claim } = harness();
     expect((await claim({ localStop: true })).body).toEqual({ step: null });
-    expect(await call('folder.read', { path: 'a.md' })).toMatchObject({ ok: false, failure: 'refused', text: expect.stringContaining('PCの側') });
+    expect(await call('folder.read', { path: 'a.md' })).toMatchObject({ ok: false, failure: 'refused', text: expect.stringContaining('PCやMacの側') });
     await claim({ operations: ['write', 'list'] });
     expect(await call('folder.read', { path: 'a.md' })).toMatchObject({ ok: false, failure: 'unavailable', text: expect.stringContaining('対応していない') });
   });

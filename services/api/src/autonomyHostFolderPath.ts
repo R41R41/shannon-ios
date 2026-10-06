@@ -41,9 +41,19 @@ export const HOST_STEP_CODES = Object.freeze({
   changed_since_read: '読んだあとで中身が変わっていた',
   folder_full: 'フォルダの容量か数の上限に達した',
   protected_path: '触れてはいけない場所だった',
-  stopped_locally: 'PCの側で止められていた',
+  stopped_locally: 'PCやMacの側で止められていた',
 } as const);
 export type HostStepCode = keyof typeof HOST_STEP_CODES;
+
+/**
+ * A name for a host she and the owner can say (A18): `owner-mac` is 「Mac」, `owner-windows` 「WindowsのPC」. A name that
+ * says neither is used as it is.
+ */
+export function hostFolderLabel(host: string): string {
+  if (/(?:^|-)(?:mac|macbook|imac)(?:-|$)/u.test(host)) return 'Mac';
+  if (/(?:^|-)(?:windows|win|pc)(?:-|$)/u.test(host)) return 'WindowsのPC';
+  return host;
+}
 
 export function isHostStepCode(value: unknown): value is HostStepCode {
   return typeof value === 'string' && Object.hasOwn(HOST_STEP_CODES, value);
