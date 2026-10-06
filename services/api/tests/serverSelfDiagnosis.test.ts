@@ -86,7 +86,9 @@ function sources(environment: Record<string, string>, overrides: Partial<SelfDia
 /** The registry as a server has it while her own time may not read the owner's documents (SHANNON_AUTONOMY_OWNER_DOCUMENTS unset). */
 const REGISTRY = SHANNON_TOOLS.filter(tool => tool.domain !== 'owner_documents_read');
 const BEFORE_AETHER = REGISTRY.filter(tool => !tool.name.startsWith('aether'));
-const configured = () => ({ ...SECRETS, ...MODELS, SHANNON_AUTONOMY_ENABLED: 'true' });
+/** A PC and a Mac bound to her folder, as in production (2026-10-06): her folder's tools are counted only with one bound. */
+const HOSTS = JSON.stringify({ 'owner-windows': { deviceId: '0123456789abcdef' }, 'owner-mac': { deviceId: 'fedcba9876543210' } });
+const configured = () => ({ ...SECRETS, ...MODELS, SHANNON_AUTONOMY_ENABLED: 'true', SHANNON_AUTONOMY_HOST_FOLDERS_JSON: HOSTS });
 
 describe('the self-diagnosis', () => {
   it('has the documented shape, with the models the configuration resolved', () => {
@@ -205,6 +207,16 @@ describe('the self-diagnosis', () => {
         expect(diagnosis.tools.offered[surface][audience]).toBe(offeredTools(surface, audience, tool => !tool.name.startsWith('aether') && tool.domain !== 'owner_documents_read').length);
       }
     }
+    // With no PC or Mac bound her folder's tools are named but not offered, as `ShannonToolRunner.offered` decides it.
+    const unbound = createServerSelfDiagnosis(sources({ ...configured(), SHANNON_AUTONOMY_HOST_FOLDERS_JSON: '' })).read().tools;
+    expect(unbound.names).toEqual(diagnosis.tools.names);
+    const folderTools = BEFORE_AETHER.filter(tool => tool.domain === 'host_folder').length;
+    expect(folderTools).toBe(8);
+    for (const surface of ['text', 'voice', 'autonomy'] as const) {
+      expect(unbound.offered[surface]).toEqual({ owner_alone: diagnosis.tools.offered[surface].owner_alone - folderTools, others: diagnosis.tools.offered[surface].others });
+    }
+    // A folder path without a device binds nothing.
+    expect(createServerSelfDiagnosis(sources({ ...configured(), SHANNON_AUTONOMY_HOST_FOLDERS_JSON: JSON.stringify({ 'owner-windows': 'C:\\Shannon' }) })).read().tools).toEqual(unbound);
     const off = createServerSelfDiagnosis(sources({ ...configured(), SHANNON_OWN_TOOLS: 'off' })).read().tools;
     expect(off).toEqual({
       enabled: false, count: 0, names: [],

@@ -70,7 +70,7 @@ const ALL_SURFACES: readonly ToolSurface[] = Object.freeze(['text', 'voice', 'au
 const OWNER_ALONE: readonly ToolAudience[] = Object.freeze(['owner_alone']);
 
 const id = { type: 'string', description: 'どれのことか。書斎のものの id（study.list や study.search の結果の「id: …」）か、その題名。題名でよいが、同じ題名が二つある時は id を書く', maxLength: 100, minLength: 1 } as const;
-const host = { type: 'string', description: 'どのPCのフォルダか。ふだんは書かない（1台だけならそれを使う）', maxLength: 40 } as const;
+const host = { type: 'string', description: 'どのPCやMacのフォルダか。ふだんは書かない（1台だけならそれを使う）', maxLength: 40 } as const;
 const path = (description: string) => ({ type: 'string', description, maxLength: 240 } as const);
 
 /** What one call may write into a file in her own time; a conversation's call is shorter (`CONVERSATION_WRITE_CHARACTERS`). */
@@ -79,7 +79,12 @@ export const FOLDER_WRITE_CHARACTERS = 6_000;
 const STUDY = '書斎（ボク自身の場所。ボクが書くメモと物語の下書きが、版ごとに残っている。正本はシャノンのデータベース）';
 /** Said by every study tool that takes `id`: a title works too (2026-10-05, Build 138: she could not read a piece she knew only by its title). */
 const BY_TITLE = 'id の代わりに題名でもよい。';
-const FOLDER = 'ライ氏のPCにあるボク専用のフォルダ';
+/**
+ * Her folder on the owner's PC or Mac (A18). The owner calls it 「シャノン用フォルダ」 too, the name of her folder in Aether
+ * (2026-10-06: 「Macのシャノン用フォルダに何がある?」 matched no tool, and she called none), so `folder.list` says they differ.
+ */
+const FOLDER = 'ライ氏のPCやMacにあるボク専用のフォルダ';
+const FOLDER_NAME = 'ライ氏はこれも「シャノン用フォルダ」と呼ぶことがある（Aetherのシャノン用フォルダとは別の場所）。';
 const SECRET_LINE = 'ライ氏に内緒と言われたこと、忘れてと頼まれたことは書かない。';
 
 function tool(definition: Omit<ShannonToolDefinition, 'cost' | 'audiences' | 'surfaces'>): ShannonToolDefinition {
@@ -182,7 +187,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
     description: `${STUDY}のゴミ箱から1つ戻す。${BY_TITLE}`,
     input: schema({ id }, ['id']) }),
   tool({ name: 'folder.list', domain: 'host_folder', effect: 'read',
-    description: `${FOLDER}の中の一覧を見る。ライ氏が置いたファイルも見える。PCが起きていない時は見られない。`,
+    description: `${FOLDER}の中の一覧を見る。ライ氏が置いたファイルも見える。PCやMacが起きていない時は見られない。${FOLDER_NAME}`,
     input: schema({ path: path('見るフォルダ。書かなければいちばん上'), recursive: { type: 'boolean', description: '下のフォルダの中まで見るか' }, host }) }),
   tool({ name: 'folder.search', domain: 'host_folder', effect: 'read',
     description: `${FOLDER}で、ファイルの名前とテキストの中身から言葉を探す（2秒で打ち切る）。`,

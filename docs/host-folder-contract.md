@@ -50,7 +50,8 @@ A paired device asks which host it is bound to, so that an application does not 
 
 Owner decisions of 2026-10-06, effective only while two or more hosts have a bound device; with one host nothing below changes.
 
-- **Names.** The `host` field of every folder tool lists the hosts with their labels (「owner-windows（WindowsのPC）、owner-mac（Mac）」) and says how one is chosen.
+- **Names.** The `host` field of every folder tool lists the hosts with their labels (「owner-windows（WindowsのPC）、owner-mac（Mac）」) and says how one is chosen: the one the owner names (the Mac or the PC), else none.
+- **Her words for it** (2026-10-06, after 「Macのシャノン用フォルダに何がある?」 called no tool). With one host or more, the folder tools describe 「ライ氏のPCやMacにあるボク専用のフォルダ」; `folder.list` says the owner may call it 「シャノン用フォルダ」 too, a different place from her Aether folder; and while they are offered her tool instructions say to use `folder_*` for it, with the host he names. With her Aether tools offered as well, 「Aether」 means `aetherFolder_*`, and 「シャノン用フォルダ」 alone is asked about in one line.
 - **Choosing when none is named.** The hosts whose device can take this operation now (present, not stopped on its side, and listing the operation) are counted. One: it is used. Two or more: nothing is queued; she is told both are connected and asks the owner which (in her own time she names one). None: the first host whose device answered (stopped, or unable to do the operation) is used, otherwise the first registered; the call then fails with that host's reason (「PCやMacのフォルダはいま見られない」 and so on).
 - **v1 copies.** A host whose device's last v2 claim did not list `write` (the Mac application reads only in A18 S2) is never planned a copy; a host whose device has not made a v2 claim keeps v1's meaning.
 - Revoking the device (`POST /v1/devices`) stops it at authentication. Removing or changing the entry needs a restart of both services.

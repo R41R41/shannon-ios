@@ -1,11 +1,16 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { dispatchHostStepRequest } from '../src/apiAutonomyHostStepRoutes.js';
 import { configuredAutonomy } from '../src/autonomyBudget.js';
 import { hostFolderLabel, hostFolderPath } from '../src/autonomyHostFolderPath.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { chatTurnRequestBody } from '../src/chatModelTurn.js';
+import { FOLDER_OR_AETHER_INSTRUCTIONS, HOST_FOLDER_TOOL_INSTRUCTIONS, toolInstructions } from '../src/chatModelTools.js';
 import type { ApiRequest, ApiResponse } from '../src/contracts.js';
+import { conversationToolServer, conversationTools } from '../src/shannonToolSession.js';
+import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/turnDeadline.js';
+import { FakeAether } from './fakeAetherServer.js';
 import { toolSessionMemory } from '../src/shannonToolTypes.js';
 import { SHANNON_TOOLS, type ToolSurface } from '../src/shannonTools.js';
 
@@ -22,10 +27,14 @@ const MAC_DEVICE = 'fedcba9876543210';
 const READING = ['list', 'read', 'search'];
 const ALL = ['write', 'list', 'read', 'search', 'create', 'update', 'move', 'delete'];
 
-function harness(hosts: Record<string, { deviceId: string }> = { [WINDOWS]: { deviceId: WINDOWS_DEVICE }, [MAC]: { deviceId: MAC_DEVICE } }) {
+const servers: FakeAether[] = [];
+afterEach(async () => { await Promise.all(servers.splice(0).map(server => server.stop())); });
+
+function harness(hosts: Record<string, { deviceId: string }> = { [WINDOWS]: { deviceId: WINDOWS_DEVICE }, [MAC]: { deviceId: MAC_DEVICE } },
+  aether: Awaited<ReturnType<FakeAether['access']>> | null = null) {
   const store = new SQLiteAutonomyStore(':memory:');
   const service = new ShannonAutonomyService({
-    store, now: () => new Date().toISOString(),
+    store, now: () => new Date().toISOString(), ...(aether ? { aether: { access: aether, proposals: null } } : {}),
     config: configuredAutonomy({ SHANNON_AUTONOMY_ENABLED: 'true', SHANNON_AUTONOMY_HOST_FOLDERS_JSON: JSON.stringify(hosts) }),
   });
   const memory = toolSessionMemory();
@@ -121,6 +130,65 @@ describe('her folder on the Mac beside the Windows PC (A18 S1)', () => {
     expect(await call('folder.list', { host: MAC })).toMatchObject({ ok: true });
     await named;
     expect(await call('folder.list', { host: 'owner-ipad' })).toMatchObject({ ok: false, failure: 'invalid_input' });
+  });
+});
+
+describe('a text turn with the Windows PC and the Mac bound (production, 2026-10-06)', () => {
+  /**
+   * The owner typed 「Macのシャノン用フォルダに何がある?」 and she called no tool: her folder's tools said only 「ライ氏のPC」,
+   * and 「シャノン用フォルダ」 was only ever the name of her Aether folder. The turn offers them, and they say the Mac.
+   */
+  const turn = async (withAether: boolean, message = 'Macのシャノン用フォルダに何がある?') => {
+    let access = null;
+    if (withAether) { const fake = new FakeAether(); servers.push(fake); access = await fake.access(); }
+    const h = harness(undefined, access);
+    await h.claim(WINDOWS, WINDOWS_DEVICE, ALL);
+    await h.claim(MAC, MAC_DEVICE, READING);
+    const server = conversationToolServer(null, { snapshot: () => ({}) as never }, { experienceCandidates: () => [], conversationHistory: () => [], recentMessages: () => [] }, () => new Date().toISOString());
+    const offer = conversationTools(h.service, scope, 'text', true, server, `thread\n${message}`, new TurnDeadline(TEXT_TURN_DEADLINE));
+    const body = chatTurnRequestBody('model', { scopeKey: scope, systemPrompt: 'identity', history: [], message, tools: offer.tools } as never, undefined);
+    return { offer, body: body as { instructions: string; tools: Array<{ name: string; description: string; parameters: { properties: Record<string, { description?: string }> } }>; tool_choice?: unknown } };
+  };
+
+  it('offers every folder tool, describes the folder as on the PC or the Mac, and tells the host by the name he says', async () => {
+    const { offer, body } = await turn(false);
+    const folder = body.tools.filter(tool => tool.name.startsWith('folder_'));
+    expect(folder.map(tool => tool.name)).toEqual(['folder_list', 'folder_search', 'folder_read', 'folder_create', 'folder_update', 'folder_rename', 'folder_move', 'folder_delete']);
+    expect(body.tool_choice).toBe('auto');
+    for (const tool of folder) {
+      expect(tool.description).toContain('ライ氏のPCやMacにあるボク専用のフォルダ');
+      expect(tool.parameters.properties.host!.description).toContain('owner-windows（WindowsのPC）、owner-mac（Mac）');
+      expect(tool.parameters.properties.host!.description).toContain('ライ氏がMacかPCを言ったら、そのフォルダの名前を書く');
+    }
+    const list = folder.find(tool => tool.name === 'folder_list')!;
+    expect(list.description).toContain('PCやMacが起きていない時は見られない');
+    expect(list.description).toContain('「シャノン用フォルダ」と呼ぶことがある（Aetherのシャノン用フォルダとは別の場所）');
+    // Without her Aether tools the line names no Aether tool.
+    const instructions = toolInstructions(offer.tools!, false);
+    expect(instructions).toContain('ライ氏のPCやMacにある自分のフォルダ');
+    expect(instructions).toContain(HOST_FOLDER_TOOL_INSTRUCTIONS);
+    expect(instructions).not.toContain(FOLDER_OR_AETHER_INSTRUCTIONS);
+    expect(body.instructions).toContain(HOST_FOLDER_TOOL_INSTRUCTIONS);
+  });
+
+  it('with her Aether tools too: tells the two 「シャノン用フォルダ」 apart, after the Aether line', async () => {
+    const { offer, body } = await turn(true, 'Mac のシャノン用フォルダを、フォルダの道具で一覧して');
+    expect(body.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(['folder_list', 'aetherFolder_list']));
+    const instructions = toolInstructions(offer.tools!, false);
+    expect(instructions).toContain(`${HOST_FOLDER_TOOL_INSTRUCTIONS}${FOLDER_OR_AETHER_INSTRUCTIONS}`);
+    expect(instructions.indexOf(HOST_FOLDER_TOOL_INSTRUCTIONS)).toBeGreaterThan(instructions.indexOf('Aetherの道具もある。'));
+    // A spoken turn whose words could not be trusted keeps its read-only line last.
+    const withheld = Object.defineProperty({ definitions: offer.tools!.definitions }, 'writesWithheld', { value: true });
+    expect(toolInstructions(withheld as never, true).endsWith('送ったと言わない。')).toBe(true);
+  });
+
+  it('with one host, names no host in the tool, and the line still says which tools are her PC or Mac folder', async () => {
+    const one = harness({ [WINDOWS]: { deviceId: WINDOWS_DEVICE } });
+    const server = conversationToolServer(null, { snapshot: () => ({}) as never }, { experienceCandidates: () => [], conversationHistory: () => [], recentMessages: () => [] }, () => new Date().toISOString());
+    const offer = conversationTools(one.service, scope, 'text', true, server, 'thread\nPCのフォルダに何がある?', new TurnDeadline(TEXT_TURN_DEADLINE));
+    const list = offer.tools!.definitions.find(tool => tool.name === 'folder.list')!;
+    expect((list.input.properties.host as { description: string }).description).toBe('どのPCやMacのフォルダか。ふだんは書かない（1台だけならそれを使う）');
+    expect(toolInstructions(offer.tools!, false)).toContain(HOST_FOLDER_TOOL_INSTRUCTIONS);
   });
 });
 
