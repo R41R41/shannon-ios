@@ -65,6 +65,10 @@ export const SHANNON_TOUCH_FEELINGS: Readonly<Record<ShannonTouchKind, ShannonTo
  * number. It is the same for every touch there, however often (habituation is ADR-0006's). Of the mood it moves only
  * arousal, and only upward; pleasantness and openness stay where they are. Nothing here is a reading of the touch:
  * whether she welcomes it or not is hers, decided in the reaction (`stance`), never by a table.
+ *
+ * TODO(ADR-0006 stage 2): touches moved only by this reflex are left out of the prediction shadow (`bodyTouch.ts`),
+ * which learns from the table's appraisal, so nothing yet learns habituation on these parts. Feed the shadow her
+ * `stance` from `body_touch_outcomes` as the outcome of these keys, then let the reflex shrink with what is expected.
  */
 export const SHANNON_TOUCH_REFLEX: ShannonTouchFeelingStep = SHANNON_TOUCH_FEELINGS.poke.steps[0]!;
 
