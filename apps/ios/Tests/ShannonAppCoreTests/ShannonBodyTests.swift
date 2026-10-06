@@ -297,10 +297,11 @@ final class ShannonBodyTests: XCTestCase {
         }
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.deletingLastPathComponent().appendingPathComponent("NOTICE.txt").path))
         let version = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("version.json"))) as? [String: Any]
-        XCTAssertEqual(version?["modelUpdatedAt"] as? String, "2026-10-05T06:58:16.654Z")
-        // The build of 2026-10-06 01:34: her eyes alone (`setBody`, `embed.html?body=eyes`), switches and rebuilds on one
-        // ordered path, and touch vocabulary 2 (`part`, `side`, `gesture`, `input`, `reflex`; ADR-0005 phase 1c).
-        XCTAssertEqual(version?["version"] as? String, "0.1.0+202610060134")
+        XCTAssertEqual(version?["modelUpdatedAt"] as? String, "2026-10-06T02:07:35.221Z")
+        // The build of 2026-10-06 02:19: her eyes alone (`setBody`, `embed.html?body=eyes`), switches and rebuilds on one
+        // ordered path, touch vocabulary 2 (ADR-0005 phase 1c), the model of 02:07 (her blinking fixed), and the kind
+        // `uncomfortable` shown with the `annoyed` face.
+        XCTAssertEqual(version?["version"] as? String, "0.1.0+202610060219")
         let files = version?["files"] as? [String] ?? []
         XCTAssertTrue(files.contains("model-eyes/Shannon_Eyes_v2.moc3"))
         XCTAssertTrue(files.contains("model/Shannon.moc3"))
@@ -1254,7 +1255,7 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(ShannonBodyTouchVocabulary.said(inAnswer: Data()), 1)
     }
 
-    /// Messages exactly as the bundled page 0.1.0+202610060134 posts them (`embed.js`: `touch` on the end of a drag and on a
+    /// Messages exactly as the bundled page posts them (0.1.0+202610060134 and later, `embed.js`: `touch` on the end of a drag and on a
     /// poke, `askReaction` at the page's moment; the vocabulary-2 fields spread after `region`, `side` only for a part with two).
     func testTheBundledPagesTouchesReachTheServerAsItSaysThem() async throws {
         let id = "3b8f2c1e-6d4a-4f0b-9a7e-2c5d8e1f0a6b"
