@@ -92,7 +92,7 @@ describe('a marked session', () => {
     markFirstThought();
     harness.model.plans = [{ thought: '書きます。', steps: [{ action: 'tool', name: 'folder.create', input: { path: 'notes/宿.md', content: '下調べ。' } }] }, { thought: '休みます。', steps: [rest()] }];
     await runUntilIdle(harness.loop);
-    expect(harness.model.prompts('think')[1]).toContain('PCのフォルダに書かない');
+    expect(harness.model.prompts('think')[1]).toContain('PCやMacのフォルダに書かない');
     expect(harness.entries().some(entry => entry.tool === 'folder.create')).toBe(false);
   });
 
@@ -118,7 +118,7 @@ describe('a marked session', () => {
       { thought: '休みます。', steps: [rest()] },
     ];
     await runUntilIdle(harness.loop);
-    expect(harness.model.prompts('think')[1]).toContain('ライ氏の文書やNotionを読んだこの時間には、PCのフォルダに書かない');
+    expect(harness.model.prompts('think')[1]).toContain('ライ氏の文書やNotionを読んだこの時間には、PCやMacのフォルダに書かない');
     expect(harness.entries().some(entry => entry.tool === 'folder.create')).toBe(false);
     const at = harness.clock.at;
     const marked = harness.store.study.create(scope, { kind: 'note', title: '宿のメモ', body: '静かな宿のこと。' }, at);
@@ -127,6 +127,26 @@ describe('a marked session', () => {
     expect(harness.service.folder.nextCopy(scope, at, marked.id)).toBeNull();
     for (const host of ['owner-windows', 'owner-mac']) {
       expect(() => harness.service.folder.enqueue(scope, { host, pieceId: marked.id, pieceVersion: marked.version }, at)).toThrow('HOST_STEP_PIECE_NOT_COPYABLE');
+    }
+  });
+
+  it('refuses every change to her folder on the Mac in a marked session, now that the Mac writes (A18 S3)', async () => {
+    const hosts = '{"owner-windows":{"deviceId":"0123456789abcdef"},"owner-mac":{"deviceId":"fedcba9876543210"}}';
+    const changes: Array<[string, Record<string, unknown>]> = [
+      ['folder.update', { host: 'owner-mac', path: 'notes/宿.md', content: '下調べ。' }],
+      ['folder.rename', { host: 'owner-mac', path: 'notes/宿.md', newName: '宿2.md' }],
+      ['folder.move', { host: 'owner-mac', path: 'notes/宿.md', to: 'old/宿.md' }],
+      ['folder.delete', { host: 'owner-mac', path: 'notes/宿.md' }],
+      ['folder.create', { path: 'notes/宿.md', content: '下調べ。' }],
+    ];
+    for (const [name, input] of changes) {
+      const { harness, markFirstThought } = await ownTime({ environment: { SHANNON_AUTONOMY_HOST_FOLDERS_JSON: hosts } }, false);
+      markFirstThought();
+      harness.model.plans = [{ thought: '直します。', steps: [{ action: 'tool', name, input }] }, { thought: '休みます。', steps: [rest()] }];
+      await runUntilIdle(harness.loop);
+      expect(harness.model.prompts('think')[1], name).toContain(`${name}: できなかった（refused）`);
+      expect(harness.entries().some(entry => entry.tool === name), name).toBe(false);
+      expect(harness.store.hostOperations.leased(scope, 'owner-mac'), name).toBeNull();
     }
   });
 

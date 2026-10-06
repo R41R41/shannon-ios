@@ -124,6 +124,49 @@ describe('her folder on the Mac beside the Windows PC (A18 S1)', () => {
   });
 });
 
+describe('her folder on the Mac, changed (A18 S3)', () => {
+  const MAC_OPERATIONS = ['list', 'read', 'search', 'create', 'update', 'move', 'delete'];
+
+  it('hands a change to the Mac, still never plans it a v1 copy, and asks which folder when both can change', async () => {
+    const { store, service, call, claim, route } = harness();
+    const at = new Date().toISOString();
+    store.study.create(scope, { kind: 'note', title: '駅のこと', body: '夕方の駅は光が低い。' }, at);
+    await claim(MAC, MAC_DEVICE, MAC_OPERATIONS);
+    // The Mac lists every change but not `write`: no copy is planned for it (Syzygy ADR-0007).
+    expect(service.folder.copyHosts(scope)).toEqual([WINDOWS]);
+    // Only the Mac is there: a create goes to it.
+    const answered = (async () => {
+      for (;;) {
+        const step = ((await claim(MAC, MAC_DEVICE, MAC_OPERATIONS, 3)).body as { step: Record<string, unknown> | null }).step;
+        if (!step) continue;
+        expect(step).toMatchObject({ operation: 'create', relativePath: 'notes/宿.md', content: '下調べ。', bytes: 12 });
+        await route({ method: 'POST', path: `/v1/autonomy/host-steps/${step.id as string}/report`, body: { scopeKey: scope, outcome: 'done', result: { sha256: 'a'.repeat(64) } } }, MAC_DEVICE);
+        return step;
+      }
+    })();
+    expect(await call('folder.create', { path: 'notes/宿.md', content: '下調べ。' })).toMatchObject({ ok: true });
+    await answered;
+    // Both can change: she asks; named, it goes where she said.
+    await claim(WINDOWS, WINDOWS_DEVICE, ALL);
+    await claim(MAC, MAC_DEVICE, MAC_OPERATIONS);
+    const both = await call('folder.delete', { path: 'notes/宿.md' });
+    expect(both).toMatchObject({ ok: false, failure: 'invalid_input' });
+    expect(both.text).toContain('ライ氏に聞いて');
+    // A Mac that still reads only (S2) is not chosen for a change while the PC can make it.
+    await claim(MAC, MAC_DEVICE, READING);
+    const toWindows = (async () => {
+      for (;;) {
+        const step = ((await claim(WINDOWS, WINDOWS_DEVICE, ALL, 3)).body as { step: Record<string, unknown> | null }).step;
+        if (!step) continue;
+        await route({ method: 'POST', path: `/v1/autonomy/host-steps/${step.id as string}/report`, body: { scopeKey: scope, outcome: 'done', result: { trashedAs: '.shannon/trash/1_notes_宿.md' } } }, WINDOWS_DEVICE);
+        return step;
+      }
+    })();
+    expect(await call('folder.delete', { path: 'notes/宿.md' })).toMatchObject({ ok: true });
+    expect((await toWindows).operation).toBe('delete');
+  });
+});
+
 describe('the path rules as shared cases (the Mac app checks its own rule against the same file)', () => {
   it('matches every recorded case', () => {
     const fixture = JSON.parse(readFileSync(new URL('./fixtures/host-folder-paths-v1/cases.json', import.meta.url), 'utf8')) as {
