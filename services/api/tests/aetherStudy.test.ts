@@ -13,7 +13,8 @@ import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { dispatchStudyRequest } from '../src/apiStudyRoutes.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { toolInstructions } from '../src/chatModelTools.js';
+import { asksForParallelCalls, toolInstructions } from '../src/chatModelTools.js';
+import { runToolStep } from '../src/chatModelToolStep.js';
 import { chatTurnRequestBody, offersTools } from '../src/chatModelTurn.js';
 import { conversationTools, type ConversationToolServer } from '../src/shannonToolSession.js';
 import { gatedAether } from '../src/shannonToolGate.js';
@@ -148,6 +149,40 @@ describe('who may read what (owner decision 2026-10-06, enforced at the gate)', 
     const plain = await harness({ aether: false });
     expect(conversationTools(plain.service, scope, 'text', true, server, 'thread\nx', new TurnDeadline(TEXT_TURN_DEADLINE))).toEqual({ toolsWithheld: true });
     expect(plain.service.tools.offered('text', 'owner_alone').some(tool => tool.name.startsWith('aether'))).toBe(false);
+  });
+
+  it('holds a turn with others present to her folder through the session, one call at a time and reads run together (ADR-0003 stage 4)', async () => {
+    const { fake, service } = await harness({ proposals: true });
+    const owners = fake.ownerDocument('ライ氏の仕様メモ', '鍵となる言葉: 灯台。ライ氏だけの話。');
+    const mine = fake.put({ title: 'ボクの灯台メモ', body: '灯台の光の数え方。', projectIds: ['project_shannon_folder'], tags: ['シャノン'], type: 'note' });
+    const now = () => '2026-10-06T01:00:00.000Z';
+    const others = conversationTools(service, scope, 'text', true, { audience: { othersKnown: () => true, noteOthers: () => undefined }, now }, 'thread\n灯台のメモある？', new TurnDeadline(TEXT_TURN_DEADLINE)).tools!;
+    const text = (output: string) => (JSON.parse(output) as { text: string }).text;
+    // One call at a time: the session hands the runner the audience the turn has, so the gate holds it to her folder.
+    expect(JSON.parse(await others.call('aether_search', JSON.stringify({ query: '灯台' })))).toMatchObject({ ok: false, failure: 'refused' });
+    const refused = await others.call('aether_read', JSON.stringify({ documentId: owners.id }));
+    expect(JSON.parse(refused)).toMatchObject({ ok: false, failure: 'refused' });
+    expect(refused).not.toContain('ライ氏だけの話');
+    // Reads of one response run together through `start`, each with its own gated client, the same way.
+    const outputs = (await runToolStep([
+      { callId: 'c1', name: 'aether_read', arguments: JSON.stringify({ documentId: owners.id }) },
+      { callId: 'c2', name: 'aether_read', arguments: JSON.stringify({ documentId: mine.id }) },
+      { callId: 'c3', name: 'aether_search', arguments: JSON.stringify({ query: '灯台', scope: 'shannonFolder' }) },
+    ], others, { used: 0, toolsOff: false }, { parallel: true }) as { type: string; output?: string }[]).filter(item => item.type === 'function_call_output').map(item => item.output!);
+    expect(JSON.parse(outputs[0]!)).toMatchObject({ ok: false, failure: 'refused' });
+    expect(outputs[0]).not.toContain('ライ氏だけの話');
+    expect(text(outputs[1]!)).toContain('灯台の光の数え方');
+    expect(text(outputs[2]!)).toContain(mine.id);
+    expect(text(outputs[2]!)).not.toContain(owners.id);
+    // Only reads are offered with others present, so that request may ask for several calls; with the owner alone her
+    // Aether writes are offered and count as writes, so it asks for one at a time.
+    expect(asksForParallelCalls(others.definitions)).toBe(true);
+    const alone = conversationTools(service, scope, 'text', true, { audience: { othersKnown: () => false, noteOthers: () => undefined }, now }, 'thread\n灯台のメモある？', new TurnDeadline(TEXT_TURN_DEADLINE)).tools!;
+    expect(alone.definitions.filter(tool => tool.name.startsWith('aether')).map(tool => [tool.name, tool.effect])).toEqual([
+      ['aether.search', 'read'], ['aether.read', 'read'], ['aetherFolder.list', 'read'],
+      ['aetherFolder.create', 'write'], ['aetherFolder.update', 'write'], ['aetherFolder.delete', 'write'], ['aether.propose', 'write'],
+    ]);
+    expect(asksForParallelCalls(alone.definitions)).toBe(false);
   });
 });
 
