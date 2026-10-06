@@ -1,4 +1,3 @@
-import type { BodySurface } from './bodyTouchWords.js';
 import { randomUUID } from 'node:crypto';
 import {
   OWNER_AUDIENCE, holdsFeelingThroughTouch, presentShannonFeeling, presentShannonMood, touchCause, touchFeeling, touchTarget,
@@ -11,7 +10,9 @@ import {
   type BodyReactionAnswer, type BodyReactionConfig, type BodyReactionRequest,
 } from './bodyReactionContract.js';
 import type { BodyReactionSpeaker } from './bodyReactionModel.js';
-import { BODY_TOUCH_PHRASES, bodyReactionPrompt, boundedReactionText, type BodyReactionDecision } from './bodyReactionPrompt.js';
+import { BODY_TOUCH_PHRASES, asksStance, bodyReactionPrompt, boundedReactionText, type BodyReactionDecision } from './bodyReactionPrompt.js';
+import { reflexPartWord } from './bodyTouchReflex.js';
+import { touchDetailPhrase, type BodySurface } from './bodyTouchWords.js';
 import type { ReactionLine, SQLiteBodyReactionStore } from './bodyReactionStore.js';
 import type { BodyTouches, FeltTouch } from './bodyTouch.js';
 import type { ConversationStore } from './conversationStore.js';
@@ -140,24 +141,33 @@ export class BodyReactions {
         id: request.id, type: request.touch.type, audience: request.audience, occurredAt: request.occurredAt,
         durationMs: request.touch.durationMs, ...(request.touch.strength !== undefined ? { strength: request.touch.strength } : {}),
         ...(request.touch.region !== undefined ? { region: request.touch.region } : {}), ...(surface ? { surface } : {}),
-        // Touch vocabulary 2: stored with the touch, as sent; nothing reads it for the feeling or the words yet.
+        // Touch vocabulary 2, as sent: stored with the touch, and since stage 1b read for the reflex (`part`) and her words.
         ...(request.touch.part !== undefined ? { part: request.touch.part } : {}), ...(request.touch.side !== undefined ? { side: request.touch.side } : {}),
         ...(request.touch.gesture !== undefined ? { gesture: request.touch.gesture } : {}), ...(request.touch.reflex !== undefined ? { reflex: request.touch.reflex } : {}),
       }) : null;
       const timely = age <= BODY_REACTION_LIMITS.requestMaximumAgeMilliseconds;
       const decision = felt && timely ? await this.decide(scopeKey, request, felt, at, startedAt, surface) : null;
-      if (!felt || !decision?.say) return this.finished(scopeKey, this.quiet(request.id, stateStore.snapshot(scopeKey), at), at, null);
+      // The result table (Syzygy ADR-0005 stage 1b): how she took the touch, or nothing when she gave no judgement in time.
+      if (felt) this.outcome(scopeKey, request, felt, decision);
+      const reflexPart = reflexPartWord(request.touch.part);
+      // On a part where her body flinches first the table gave her no feeling, only the reflex: the feeling she chose is
+      // her face afterwards also when she stays silent (the body shows `mood` after its flinch). Elsewhere, as before,
+      // a silent answer leaves the feeling of the touch.
+      const ownFeeling = decision !== null && reflexPart !== undefined && decision.feeling !== 'neutral';
+      if (!felt || !decision || (!decision.say && !ownFeeling)) return this.finished(scopeKey, this.quiet(request.id, stateStore.snapshot(scopeKey), at), at, null);
 
       const saidAt = this.dependencies.now();
       const before = stateStore.snapshot(scopeKey);
       const touched = {
         kind: request.touch.type, countInWindow: felt.burst.count, ownerAlone: request.audience === 'owner', durationMs: request.touch.durationMs,
         ...(request.touch.strength !== undefined ? { strength: request.touch.strength } : {}),
+        // On such a part her chosen feeling is as strong as the reflex was felt, and its cause names the part (首をつつかれた).
+        ...(reflexPart ? { reflexPart } : {}),
       };
       // The feeling of her line is resolved as the feeling of any reply is: from her own words and the stored state.
       const resolved = resolveReplyEmotion({
         snapshot: before, userMessage: '', reply: decision.text, now: saidAt, replaces: true,
-        // As strongly as the touch is felt (the one table), not as strongly as whatever she felt before it.
+        // As strongly as the touch is felt (the one table, or the reflex), not as strongly as whatever she felt before it.
         decided: { primary: decision.feeling, intensity: touchFeeling(touched).intensity },
       });
       // A feeling from conversation that the touch did not replace is not replaced by her line about the touch either.
@@ -166,6 +176,7 @@ export class BodyReactions {
         type: 'expressive-emotion-updated',
         emotion: { ...resolved.expressiveEmotion, cause: touchCause(touched), target: touchTarget(touched) },
       });
+      if (!decision.say) return this.finished(scopeKey, this.quiet(request.id, after, saidAt), saidAt, null);
       const answer: BodyReactionAnswer = {
         schemaVersion: 1, id: request.id, status: 'said',
         message: {
@@ -181,7 +192,9 @@ export class BodyReactions {
         // The answer is stored: nothing after it may change what the body is told.
         try { touches.said(scopeKey, felt.burst.id, decision.text, request.audience === 'others'); } catch { /* the line is then not in the memory of the touch */ }
         try {
-          this.dependencies.record(scopeKey, { summary: `体に触れられて（${BODY_TOUCH_PHRASES[request.touch.type].done}）、ひとこと返しました。`, outcome: 'done' });
+          // The part and gesture when the body named them (胸に触れられた), so the record never says 頭 of a touch elsewhere.
+          const phrase = touchDetailPhrase(request.touch.type, request.touch, 'done') ?? BODY_TOUCH_PHRASES[request.touch.type].done;
+          this.dependencies.record(scopeKey, { summary: `体に触れられて（${phrase}）、ひとこと返しました。`, outcome: 'done' });
         } catch { /* the answer stands without its record line */ }
       }
       return stored;
@@ -216,7 +229,8 @@ export class BodyReactions {
     const remaining = Math.max(0, config.deadlineMilliseconds - (performance.now() - startedAt));
     const deadline = new Promise<typeof LATE>(resolve => { timer = setTimeout(() => resolve(LATE), remaining); });
     try {
-      const decision = await Promise.race([speaker.decide({ scopeKey, prompt, signal: abort.signal }).catch(() => null), deadline]);
+      const stance = asksStance(request.touch);
+      const decision = await Promise.race([speaker.decide({ scopeKey, prompt, signal: abort.signal, ...(stance ? { stance } : {}) }).catch(() => null), deadline]);
       if (decision !== LATE) {
         // Whatever the speaker returns, her line is one short sentence, and no words means silence.
         const text = decision?.say ? boundedReactionText(decision.text) : '';
@@ -228,6 +242,19 @@ export class BodyReactions {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * One row of the result table for a touch she was asked about. A failure loses the row, never the answer. Without a
+   * decision (deadline, no model, a late request) the stance stays empty: only the reflex moved her, and nothing of hers is made up.
+   */
+  private outcome(scopeKey: string, request: BodyReactionRequest, felt: FeltTouch, decision: BodyReactionDecision | null): void {
+    try {
+      this.dependencies.store.recordOutcome(scopeKey, {
+        touchId: request.id, burstId: felt.burst.id, audience: request.audience,
+        stance: decision?.stance ?? null, feeling: decision ? decision.feeling : null, said: decision?.say === true, decidedAt: this.dependencies.now(),
+      });
+    } catch { /* the answer stands without its row */ }
   }
 
   /** The last lines of the Talk, only while a conversation with the owner alone is in progress. */

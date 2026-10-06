@@ -18,7 +18,8 @@ export const BODY_TOUCH_EVENT_TYPES = ['pet', 'tickle', 'poke', 'carry', 'holdHa
  * Touch vocabulary 2 (Syzygy ADR-0005; `docs/body-contract.md`, "Touch vocabulary 2"): the optional finer facts of
  * a touch, beside `type` and `region`, which keep their meaning. The server says the number on
  * `PUT /v1/body/capabilities` and on presence; a body sends these fields only once it has seen it, because a server
- * from before them refuses an unknown field with `400`. Facts only: nothing here changes a feeling or a prompt yet.
+ * from before them refuses an unknown field with `400`. Facts only. Since stage 1b the reaction prompt tells her them, and a
+ * `part` of `BODY_TOUCH_REFLEX_PARTS` (`bodyTouchReflex.ts`) moves her by the reflex alone instead of the table.
  */
 export const BODY_TOUCH_VOCABULARY = 2;
 /** Left or right from her own view, not the screen's. */

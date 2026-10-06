@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import type { ShannonTouchKind } from '@shannon/cognition';
+import { isShannonEmotionKind, type ShannonEmotionKind, type ShannonTouchKind } from '@shannon/cognition';
 import type { BodyAudience, BodyTouchGesture, BodyTouchReflex, BodyTouchSide } from './bodyContract.js';
 import { BODY_REACTION_LIMITS, type BodyReactionAnswer } from './bodyReactionContract.js';
 import { BODY_TOUCH_MIXED, isBodySurface, isBodyTouchRegion, type BodySurface, type BodyTouchPart, type BodyTouchRegion } from './bodyTouchWords.js';
 import { addColumnOnce } from './bodyStore.js';
+import { BODY_TOUCH_STANCES, isBodyTouchStance, type BodyTouchStance } from './bodyTouchReflex.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 
 /**
@@ -15,6 +16,9 @@ import { secureDatabaseFiles } from './sqliteStoreContext.js';
  *   is the id of the experience she recalls it by.
  * - `body_reactions`: the answer given for a reaction id, and her line while it waits for
  *   the owner's spoken answer. A line that is not answered never enters a conversation.
+ * - `body_touch_outcomes` (Syzygy ADR-0005 stage 1b, the result table): for each touch she was asked about, how she
+ *   took it (`stance`), the feeling she chose and whether she spoke, without her words. The part, side, gesture and
+ *   reflex are on the touch's own row.
  * Closed vocabulary, numbers, identifiers and her own words only: nothing from a microphone.
  */
 export interface TouchRecord {
@@ -27,7 +31,7 @@ export interface TouchRecord {
   /** Which part was touched, and on which surface her body was; absent when the body did not say. */
   region?: BodyTouchRegion;
   surface?: BodySurface;
-  /** Touch vocabulary 2, as the body sent it: kept on the touch's own row only, read by nothing yet. */
+  /** Touch vocabulary 2, as the body sent it, kept on the touch's own row. `part` decides whether only the reflex moves her (stage 1b). */
   part?: BodyTouchPart;
   side?: BodyTouchSide;
   gesture?: BodyTouchGesture;
@@ -66,6 +70,21 @@ export interface TouchReceipt {
 }
 
 export type ReactionLinkState = 'none' | 'pending' | 'linked' | 'stored' | 'dropped';
+
+/**
+ * One row of the result table: what came of a touch she was asked about. `stance` and `feeling` are null when she gave
+ * no judgement (the deadline passed, no model, a late request, a touch in the old shape that was not asked for one):
+ * only the reflex then moved her, and nothing is filled in for her. Closed vocabulary only; never her words.
+ */
+export interface TouchOutcome {
+  touchId: string;
+  burstId: string;
+  audience: BodyAudience;
+  stance: BodyTouchStance | null;
+  feeling: ShannonEmotionKind | null;
+  said: boolean;
+  decidedAt: string;
+}
 
 export interface StoredReaction {
   id: string;
@@ -166,6 +185,18 @@ export class SQLiteBodyReactionStore {
         PRIMARY KEY (scope_key, reaction_id)
       );
       CREATE INDEX IF NOT EXISTS body_reactions_scope_created ON body_reactions (scope_key, created_at);
+      CREATE TABLE IF NOT EXISTS body_touch_outcomes (
+        scope_key TEXT NOT NULL,
+        touch_id TEXT NOT NULL,
+        burst_id TEXT NOT NULL,
+        audience TEXT NOT NULL CHECK (audience IN ('owner', 'others')),
+        stance TEXT CHECK (stance IS NULL OR stance IN (${BODY_TOUCH_STANCES.map(stance => `'${stance}'`).join(', ')})),
+        feeling TEXT,
+        said INTEGER NOT NULL DEFAULT 0 CHECK (said IN (0, 1)),
+        decided_at TEXT NOT NULL,
+        PRIMARY KEY (scope_key, touch_id)
+      );
+      CREATE INDEX IF NOT EXISTS body_touch_outcomes_scope_decided ON body_touch_outcomes (scope_key, decided_at);
     `);
     // Added 2026-10-03: the touched part and the surface, on a touch and on its burst.
     for (const table of ['body_touches', 'body_touch_bursts']) {
@@ -291,6 +322,26 @@ export class SQLiteBodyReactionStore {
     });
   }
 
+  /** Keeps what came of a touch she was asked about, once: the first outcome of a touch id stands. */
+  recordOutcome(scopeKey: string, outcome: TouchOutcome): void {
+    this.database.prepare(`
+      INSERT OR IGNORE INTO body_touch_outcomes (scope_key, touch_id, burst_id, audience, stance, feeling, said, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(scopeKey, outcome.touchId, outcome.burstId, outcome.audience, outcome.stance, outcome.feeling, outcome.said ? 1 : 0, outcome.decidedAt);
+  }
+
+  /** The outcome kept for a touch id, or null. */
+  outcome(scopeKey: string, touchId: string): TouchOutcome | null {
+    const row = this.database.prepare('SELECT * FROM body_touch_outcomes WHERE scope_key = ? AND touch_id = ?').get(scopeKey, touchId) as unknown as {
+      touch_id: string; burst_id: string; audience: string; stance: string | null; feeling: string | null; said: number; decided_at: string;
+    } | undefined;
+    if (!row) return null;
+    return {
+      touchId: row.touch_id, burstId: row.burst_id, audience: row.audience as BodyAudience,
+      stance: isBodyTouchStance(row.stance) ? row.stance : null, feeling: row.feeling !== null && isShannonEmotionKind(row.feeling) ? row.feeling : null,
+      said: Number(row.said) === 1, decidedAt: row.decided_at,
+    };
+  }
+
   /** Starts a reaction once. `existing` is what an earlier request with this id left. */
   begin(scopeKey: string, reactionId: string, deviceId: string, contentHash: string, audience: BodyAudience, at: string): { started: true } | { started: false; existing: StoredReaction } {
     const inserted = this.database.prepare(`
@@ -368,6 +419,10 @@ export class SQLiteBodyReactionStore {
     this.database.prepare('DELETE FROM body_touch_bursts WHERE scope_key = ? AND last_at < ?').run(scopeKey, old);
     this.database.prepare(`
       DELETE FROM body_touches WHERE scope_key = ? AND (received_at < ? OR burst_id NOT IN (SELECT burst_id FROM body_touch_bursts WHERE scope_key = ?))
+    `).run(scopeKey, old, scopeKey);
+    // An outcome is kept as long as its touch, never longer (the retention of the record it came from, ADR-0006 answer 7).
+    this.database.prepare(`
+      DELETE FROM body_touch_outcomes WHERE scope_key = ? AND (decided_at < ? OR touch_id NOT IN (SELECT touch_id FROM body_touches WHERE scope_key = ?))
     `).run(scopeKey, old, scopeKey);
   }
 

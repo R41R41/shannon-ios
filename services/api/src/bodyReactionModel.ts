@@ -1,4 +1,4 @@
-import { BODY_REACTION_SCHEMA, parsedBodyReaction, type BodyReactionDecision } from './bodyReactionPrompt.js';
+import { BODY_REACTION_SCHEMA, BODY_REACTION_SCHEMA_WITH_STANCE, parsedBodyReaction, type BodyReactionDecision } from './bodyReactionPrompt.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from './chatModelSupport.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageEvent } from './llmUsage.js';
 
@@ -14,6 +14,8 @@ export interface BodyReactionSpeakRequest {
   prompt: string;
   /** Aborted when the answer is given up at the deadline. */
   signal: AbortSignal;
+  /** True for a touch that names its part: she is also asked how she took it (`stance`). Absent: the answer of before. */
+  stance?: boolean;
 }
 
 export interface BodyReactionSpeaker {
@@ -53,7 +55,7 @@ export class OpenAIBodyReactionSpeaker implements BodyReactionSpeaker {
           instructions: request.prompt,
           input: [{ role: 'user', content: 'いま、体に触れられました。' }],
           reasoning: { effort: 'none' },
-          text: { verbosity: 'low', format: { type: 'json_schema', name: 'shannon_body_reaction', strict: true, schema: BODY_REACTION_SCHEMA } },
+          text: { verbosity: 'low', format: { type: 'json_schema', name: 'shannon_body_reaction', strict: true, schema: request.stance ? BODY_REACTION_SCHEMA_WITH_STANCE : BODY_REACTION_SCHEMA } },
           max_output_tokens: 160,
           store: false,
           prompt_cache_key: stableScopeIdentifier(request.scopeKey),

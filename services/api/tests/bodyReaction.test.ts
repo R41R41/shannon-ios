@@ -446,6 +446,36 @@ describe('the deadline', () => {
     expect(now()).toBe(START);
   });
 
+  it('on a part where her body flinches first, lets only the reflex move her when the model is late, and keeps the stance empty (stage 1b)', async () => {
+    const { said, speaker, state, reactionStore, events } = await reactionHarness({ config: { deadlineMilliseconds: 25 } });
+    speaker.delayMilliseconds = 90;
+    speaker.decision = { say: true, text: 'くすぐったいです。', feeling: 'giggle', stance: 'welcome' };
+    const before = state();
+    const neck = { type: 'poke', durationMs: 200, ongoing: false, region: 'body', part: 'neck', gesture: 'poke', reflex: 'flinch' };
+    const answer = await said(neck);
+    expect(answer).toMatchObject({ status: 'quiet', message: null, mood: { expression: 'surprised' } });
+    // Only the reflex: surprise, a little more awake, and nothing pleasant or unpleasant.
+    expect(state().expressiveEmotion).toMatchObject({ primary: 'surprised', cause: 'ライ氏に首をつつかれた' });
+    expect(state().emotion.valence).toBe(before.emotion.valence);
+    expect(state().emotion.openness).toBe(before.emotion.openness);
+    expect(state().emotion.arousal).toBeGreaterThan(before.emotion.arousal);
+    // The result table has the touch, and no stance or feeling of hers was made up for it.
+    expect(reactionStore.outcome(scope, 'touch-1')).toMatchObject({ touchId: 'touch-1', stance: null, feeling: null, said: false, audience: 'owner' });
+    await new Promise(resolve => setTimeout(resolve, 110));
+    expect(speaker.completedLate).toBe(1);
+    // The late answer changes nothing, nor do the same request again and the finished touch: the stance stays as it was.
+    expect(state().expressiveEmotion?.primary).toBe('surprised');
+    expect(await said(neck, { id: 'touch-1', occurredAt: START })).toEqual(answer);
+    await events({ id: 'touch-1', type: 'poke', audience: 'owner', occurredAt: START, durationMs: 300, region: 'body', part: 'neck', gesture: 'poke', reflex: 'flinch' });
+    expect(reactionStore.outcome(scope, 'touch-1')).toMatchObject({ stance: null, feeling: null, said: false });
+    // A judgement she made in time stays too: the first outcome of a touch id stands.
+    speaker.delayMilliseconds = 0;
+    speaker.decision = { say: false, text: '', feeling: 'uncomfortable', stance: 'dislike' };
+    await said({ ...neck, part: 'chest', gesture: 'poke' }, { id: 'chest-1' });
+    await events({ id: 'chest-1', type: 'poke', audience: 'owner', occurredAt: START, durationMs: 300, region: 'body', part: 'chest', gesture: 'poke', reflex: 'flinch' });
+    expect(reactionStore.outcome(scope, 'chest-1')).toMatchObject({ stance: 'dislike', feeling: 'uncomfortable', said: false });
+  });
+
   it('answers in time when the model is fast', async () => {
     const { said, speaker } = await reactionHarness({ config: { deadlineMilliseconds: 200 } });
     speaker.delayMilliseconds = 5;
