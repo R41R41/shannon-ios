@@ -89,17 +89,18 @@ const observer = {
 // The owner's upcoming items: calendar snapshots, promises with a due time, and the task snapshot the API process keeps. No Voyager credential here.
 const ownerState = sqliteOwnerSnapshot(databasePath);
 const ownerUpcoming = configuredOwnerUpcoming(process.env, databasePath, { snapshot: ownerState.read, now });
+const loopConfig = configuredAutonomyLoop(process.env);
 const service = new ShannonAutonomyService({
   store, config, now, announcer, roomLooks: (scopeKey, at) => looks.counts(scopeKey, at),
   reachOuts: (scopeKey, at) => ({ today: reachOuts.sentOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutsPerDay }),
   reachOutFollowUps: (scopeKey, at) => ({ today: reachOuts.followUpsOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutFollowUpsPerDay }),
   calls: (scopeKey, at) => callGateContext(phone, scopeKey, at),
   // Her study's text in Aether when it is configured (Syzygy ADR-0007); the proposal inbox is the conversation's, never her own time's.
-  aether: { access: configuredAetherAccess(process.env), studyScopeKey: aetherStudyScope(process.env) },
+  // The owner's documents only while SHANNON_AUTONOMY_OWNER_DOCUMENTS=on (owner decision 2026-10-06, ADR-0007).
+  aether: { access: configuredAetherAccess(process.env), studyScopeKey: aetherStudyScope(process.env), ownerDocuments: loopConfig.ownerDocuments },
 });
 // Read-only Notion, only when the owner connected it; without a token the loop never plans a Notion step.
 const notion = notionLoopReader(configuredNotionSource(process.env, { log: line => console.log(line) }));
-const loopConfig = configuredAutonomyLoop(process.env);
 // What she may see of the owner's in her own time (owner decision 2026-10-02, ADR-0003): one bounded block, read through the
 // conversation's memory entry points. SHANNON_AUTONOMY_OWNER_CONTEXT=off opens none of it and every prompt is what it was.
 const ownerContext = loopConfig.ownerContext

@@ -74,18 +74,22 @@ function buildStudyExecutors(store: SQLiteAutonomyStore, now: () => string, aeth
    * `aether` the write goes to Aether first; what Aether refused writes nothing here, and what it took is linked in `apply`.
    */
   const write = (summary: string, text: string, record: string, apply: () => StudyPiece | StudyRejection,
-    options: { link?: string; newId?: true; aether?: { scopeKey: string; push: (signal?: AbortSignal) => Promise<AetherWriteResult | null> } } = {}): PreparedToolCall => ({
+    options: { link?: string; newId?: true; text?: true; aether?: { scopeKey: string; push: (signal?: AbortSignal) => Promise<AetherWriteResult | null> } } = {}): PreparedToolCall => ({
     summary, run: async signal => {
       let pushed: AetherWriteResult | null = null;
       try { pushed = options.aether && aether ? await options.aether.push(signal) : null; } catch (error) {
         return { result: aetherToolFailure(error), record: { summary: 'Aetherの書斎に書こうとしましたが、できませんでした。', outcome: 'failed', reasonCode: `aether_${aetherErrorCode(error).toLowerCase()}` } };
       }
+      // A write of her words (`text`) names the piece it wrote, for the provenance mark of her own time; filled in by `apply`.
+      const wrote: string[] = [];
       return {
         result: toolOk(text), record: { summary: record, outcome: 'done', ...(options.link ? { link: options.link } : {}) },
+        ...(options.text ? { documents: { wrote } } : {}),
         apply: () => {
           const outcome = apply();
           if (typeof outcome === 'string') throw new Error(outcome);
           if (pushed && aether && options.aether) aether.commit(options.aether.scopeKey, outcome, pushed);
+          wrote.push(`shannon-study://${outcome.id}`, ...(pushed ? [pushed.documentId] : []));
           return options.newId ? `id: ${outcome.id}` : undefined;
         },
       };
@@ -136,6 +140,7 @@ function buildStudyExecutors(store: SQLiteAutonomyStore, now: () => string, aeth
           '版の一覧:', ...versions.map(item => `- 第${item.version}稿（${item.createdAt.slice(0, 10)}）: ${clip(item.changeNote, 120)}`),
         ].join('\n')),
         record: { summary: `書斎の${recordLabel(found)}を読みました。`, outcome: 'done', link: `shannon-study://${found.id}` },
+        documents: { read: [`shannon-study://${found.id}`] },
       }));
     },
     'study.create': (input, context) => {
@@ -165,7 +170,7 @@ function buildStudyExecutors(store: SQLiteAutonomyStore, now: () => string, aeth
           const created = store.study.create(context.scopeKey, { kind, title, body, ...(changeNote ? { changeNote } : {}), ...(pursuitId ? { pursuitId } : {}) }, now());
           if (typeof created !== 'string' && context.memory.turnKey) remember(context.memory.turnKey, created.id, title);
           return created;
-        }, { newId: true, ...(aether ? { aether: { scopeKey: context.scopeKey, push: signal => aether.create(context.scopeKey, { kind, title: title.replace(/\s+/gu, ' ').trim(), body: body.trim(), ...(changeNote ? { changeNote } : {}) }, key(context, 'study.create', input), signal) } } : {}) });
+        }, { newId: true, text: true, ...(aether ? { aether: { scopeKey: context.scopeKey, push: signal => aether.create(context.scopeKey, { kind, title: title.replace(/\s+/gu, ' ').trim(), body: body.trim(), ...(changeNote ? { changeNote } : {}) }, key(context, 'study.create', input), signal) } } : {}) });
     },
     'study.update': (input, context) => {
       const found = piece(context, input);
@@ -284,7 +289,7 @@ function buildStudyExecutors(store: SQLiteAutonomyStore, now: () => string, aeth
     return write(`書斎の${STUDY_KIND_LABEL[found.kind]}を直します。`,
       `${done}（第${found.version + 1}稿）。${found.kind === 'story' ? '物語は下書きに戻った。ライ氏は見せた版を読み続ける。' : ''}`,
       `書斎の${recordLabel(found)}を直しました（第${found.version + 1}稿）。`,
-      () => store.study.revise(context.scopeKey, found.id, change, now()), { link: `shannon-study://${found.id}`, ...(aether ? { aether: {
+      () => store.study.revise(context.scopeKey, found.id, change, now()), { link: `shannon-study://${found.id}`, text: true, ...(aether ? { aether: {
         scopeKey: context.scopeKey,
         push: (signal?: AbortSignal) => aether.update(context.scopeKey, found, { body: change.body.trim(), changeNote: change.changeNote, ...(change.title ? { title: change.title.replace(/\s+/gu, ' ').trim() } : {}) }, key(context, `study.revise:${found.version}`, input), signal),
       } } : {}) });

@@ -23,7 +23,7 @@ export type AutonomyDecisionKind = 'allow' | 'needs_approval' | 'forbidden';
 
 export type AutonomyReasonCode =
   | 'free_domain'
-  | 'approval_domain' | 'core_path' | 'production_area' | 'outside_own_area' | 'reaches_others'
+  | 'approval_domain' | 'core_path' | 'production_area' | 'outside_own_area' | 'reaches_others' | 'owner_informed'
   | 'forbidden_domain' | 'spending' | 'self_replication' | 'impersonation' | 'private_content'
   | 'disabled' | 'paused' | 'budget_exhausted' | 'access_limit'
   | 'unknown_domain' | 'unknown_host' | 'unknown_model' | 'workspace_not_configured'
@@ -103,6 +103,11 @@ export interface AutonomyPolicyContext {
    * There is no count of calls a day: the budget bounds them.
    */
   calls?: { available: boolean };
+  /**
+   * The session of her own time open now has read one of the owner's documents or a shared Notion page (the provenance mark,
+   * owner decision 2026-10-06, Syzygy ADR-0007): until it rests, nothing reaches anyone but the owner, not even with approval.
+   */
+  ownerInformed?: boolean;
 }
 
 /** The tool name of a message she starts on her own from her own activity (話しかける). */
@@ -143,6 +148,9 @@ export function authorizeAutonomousAction(request: AutonomousActionRequest, cont
     return refuse('forbidden', 'private_content', 'private_content_in_work', '内緒と言われたことを作品やメモに書くことになるため、実行しません。');
   }
   if (request.spendsMoney) return refuse('forbidden', 'spending', 'spending', 'モデル・APIの予算以外でお金がかかるため、実行しません。');
+  if (request.reachesOthers && context.ownerInformed) {
+    return refuse('forbidden', 'owner_informed', 'outreach', '持ち主の文書を読んだ時間のうちは、持ち主以外の人に届くことはしません。');
+  }
   const domain = autonomyDomain(request.domain);
   if (!domain) return refuse('forbidden', 'unknown_domain', 'unknown', '決められた範囲のどれにも当たらないため、実行しません。');
   const domainId = domain.id as ShannonAutonomyDomainId;

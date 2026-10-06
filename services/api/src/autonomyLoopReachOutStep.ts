@@ -5,11 +5,13 @@ import {
   type PromptUpcoming, type ReachOutReason,
 } from './autonomyLoopPrompts.js';
 import { agenticLoop, observeReachOut, ownerRepliedAt } from './autonomyLoopObserve.js';
+import { heldForOthers } from './autonomyLoopProvenance.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
 import { autonomyModelCostUsd } from './autonomyModels.js';
 import { AUTONOMY_REACH_OUT_TOOL } from './autonomyPolicy.js';
 import { AutonomyModelError, resolveAutonomyModel } from './autonomyTextModel.js';
+import { STUDY_DOCUMENT_PREFIX } from './ownerInformedMarks.js';
 import { STUDY_STATUS_LABEL } from './studyStore.js';
 
 /**
@@ -81,9 +83,11 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
   const reason = step.reason;
   if (!reason || reason === 'follow_up' || !reachOuts || reachOutsRemaining(dependencies, cycle.scopeKey, at) < 1) return null;
   const others = reachOuts.audience(cycle.scopeKey, at);
+  // With anyone else present, what she wrote after reading the owner's documents is not material for a message (ADR-0007).
+  const shown = (piece: { id: string }) => others === null || !store.informed.marked(cycle.scopeKey, `${STUDY_DOCUMENT_PREFIX}${piece.id}`);
   // Each reason has its own material, and nothing to be about means nothing to say.
-  const notes = reason === 'share' ? storyNotes(store, cycle.scopeKey, undefined, 12).filter(note => !note.seen).slice(0, 4) : [];
-  const stories = reason === 'share' ? store.study.list(cycle.scopeKey).filter(piece => piece.kind === 'story' && piece.status !== 'put_away').slice(0, 3)
+  const notes = reason === 'share' ? storyNotes(store, cycle.scopeKey, undefined, 12, false, shown).filter(note => !note.seen).slice(0, 4) : [];
+  const stories = reason === 'share' ? store.study.list(cycle.scopeKey).filter(piece => piece.kind === 'story' && piece.status !== 'put_away' && shown(piece)).slice(0, 3)
     .map(piece => ({ title: piece.title, statusLabel: STUDY_STATUS_LABEL[piece.status] })) : [];
   const items = reason === 'upcoming' ? upcoming?.lines(cycle.scopeKey, at, others ? 'others' : 'owner') ?? [] : [];
   // What she saw in this cycle: her own note of that look, never a frame.
@@ -137,6 +141,8 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
       if (agentic && (conversationInProgress(dependencies, cycle.scopeKey, writeAt) || ownerRepliedAt(dependencies, cycle.scopeKey, performAt))) {
         return { outcome: 'failed', usage, summary: `話している最中なので、話しかけませんでした（理由: ${label}）。`, reasonCode: 'conversation_in_progress' };
       }
+      // Someone else may have come while she wrote it: in a session that read the owner's documents she holds it.
+      if (heldForOthers(dependencies, cycle, writeAt)) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, reasonCode: 'others_present', summary: `ほかの人がいるので、話しかけるのをやめておきました（理由: ${label}）。` };
       let delivery: ReturnType<AutonomyReachOuts['say']>;
       try {
         delivery = adapters.reachOuts.say(cycle.scopeKey, { reason, text, dayKey: autonomyDayKey(writeAt, config), maximumPerDay: config.maximumReachOutsPerDay }, writeAt);

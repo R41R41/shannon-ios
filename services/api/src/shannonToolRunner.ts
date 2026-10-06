@@ -42,13 +42,15 @@ export interface ToolAetherPorts {
   study?: StudyAether | null;
   /** The owner's proposal inbox (`AETHER_SHANNON_PROPOSAL_DIR`), for `aether.propose`. */
   proposals?: AetherProposalStore | null;
+  /** Her own time may read the owner's documents (`SHANNON_AUTONOMY_OWNER_DOCUMENTS=on`, the autonomy service only); absent, `ownerDocs.*` do not exist. */
+  ownerDocuments?: boolean;
 }
 
 export class ShannonToolRunner {
   private readonly executors: Readonly<Record<string, ToolExecutor>>;
 
   constructor(
-    store: SQLiteAutonomyStore,
+    private readonly store: SQLiteAutonomyStore,
     private readonly folder: HostFolderOperations,
     private readonly recorder: ToolRecorder,
     now: () => string,
@@ -113,7 +115,9 @@ export class ShannonToolRunner {
     if (secret) return { tool, result: secret };
     try {
       // Aether as this call may reach it: the gate narrows it with anyone else present and in her own time.
-      const prepared = executor(checked.input, this.aether.access && this.aetherFor(context.scopeKey) ? { ...context, aether: gatedAether(this.aether.access, context) } : context);
+      // With anyone else present, what she wrote after reading the owner's documents is not read either (ADR-0007).
+      const informed = (documentId: string) => this.store.informed.marked(context.scopeKey, documentId);
+      const prepared = executor(checked.input, this.aether.access && this.aetherFor(context.scopeKey) ? { ...context, aether: gatedAether(this.aether.access, context, informed) } : context);
       // With anyone else present, what she read reaches the model without the owner's private things.
       return 'run' in prepared ? { tool, prepared: shownAetherCall(tool, prepared, context) } : { tool, result: prepared };
     } catch {

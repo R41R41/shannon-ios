@@ -4,6 +4,7 @@ import { observeStep, sentBeforeStop } from './autonomyLoopObserve.js';
 import { closeSession, fitsSession, idleBefore, mayRetryThought, nothingDone, ownerTalking, restMilliseconds, sessionBound, sessionOf, startSessionIfDue } from './autonomyLoopPacing.js';
 import { REACH_OUT_REASON_LABEL } from './autonomyLoopPrompts.js';
 import type { AutonomySession, SessionEndCode } from './autonomyLoopSessions.js';
+import { noteProvenance } from './autonomyLoopProvenance.js';
 import type { AutonomyLoopCycle, AutonomyLoopReadiness, AutonomyLoopStep, AutonomyPlannedStep } from './autonomyLoopState.js';
 import { toolRefusalLine } from './autonomyLoopToolStep.js';
 import { adaptersFor, prepareStep, unpreparedCode, type PreparedStep, type StepCommit, type StepDependencies, type StepResult } from './autonomyLoopSteps.js';
@@ -253,6 +254,8 @@ export class ShannonAutonomyLoop {
           ...(link ? { link } : {}), ...(result.tool ? { tool: result.tool } : {}), ...(usage ? { usage } : {}),
           ...(result.reasonCode ? { reasonCode: result.reasonCode } : {}),
         });
+        // What it read of the owner's marks the session, and what a marked session writes is marked (ADR-0007); ids only.
+        noteProvenance(this.dependencies, cycle, row.step, result, link, at);
         // What the step led to, as facts; when it is worth thinking about, she thinks again before going on.
         const rethought = this.observed(cycle, row, {
           outcome: result.outcome, ...(result.observed ? { observed: result.observed } : {}),

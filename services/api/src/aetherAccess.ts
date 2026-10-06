@@ -28,6 +28,8 @@ export type AetherAccessErrorCode =
   | 'UNAUTHORIZED' | 'UNAVAILABLE' | 'TIMEOUT' | 'CONTRACT_MISMATCH'
   /** Not from Aether: the gate refused a document outside her folder while someone else may see or hear (`gatedAether`). */
   | 'OUTSIDE_AUDIENCE'
+  /** Not from Aether: with anyone else present, a document she wrote after reading the owner's (`ownerInformedMarks.ts`, ADR-0007). */
+  | 'OWNER_INFORMED'
   /** Not from Aether: a study document longer than Shannon reads whole (`STUDY_AETHER_SYNC.readCharacters`); never adopted cut short. */
   | 'TOO_LONG';
 

@@ -43,9 +43,9 @@ export interface ReasonedThought extends Thought {
 /** The actions a thinking reply may name. */
 export const PLANNABLE_ACTIONS = ['read', 'notion', 'note', 'draft', 'revise', 'ready', 'put_away', 'copy', 'look', 'follow_up', 'jot', 'reach_out', 'call', 'tool'] as const;
 
-export function storyNotes(store: SQLiteAutonomyStore, scopeKey: string, pursuitId?: string, limit = 6, own = false): PromptNote[] {
+export function storyNotes(store: SQLiteAutonomyStore, scopeKey: string, pursuitId?: string, limit = 6, own = false, keep: (piece: StudyPiece) => boolean = () => true): PromptNote[] {
   // What she wrote down after an unanswered message is for her own thinking (`own`), never material for a story or a message.
-  const notes = store.study.list(scopeKey).filter(piece => piece.kind === 'note' && piece.status !== 'put_away' && (own || piece.origin !== 'reach_out'));
+  const notes = store.study.list(scopeKey).filter(piece => piece.kind === 'note' && piece.status !== 'put_away' && (own || piece.origin !== 'reach_out') && keep(piece));
   // Notes written for the same pursuit come first; the rest follow by recency.
   const ordered = pursuitId ? [...notes.filter(note => note.pursuitId === pursuitId), ...notes.filter(note => note.pursuitId !== pursuitId)] : notes;
   return ordered.slice(0, limit).map(note => ({

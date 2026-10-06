@@ -7,6 +7,7 @@ import { HostFolderOperationsStore } from './hostFolderOperationsStore.js';
 import { AutonomyLoopState } from './autonomyLoopState.js';
 import { AutonomyProposalLedger } from './autonomyProposals.js';
 import { AutonomyPursuitLedger } from './autonomyPursuits.js';
+import { OwnerInformedMarks } from './ownerInformedMarks.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 import { StudyStore } from './studyStore.js';
 
@@ -64,6 +65,8 @@ export class SQLiteAutonomyStore {
   /** Her study and the activity loop's journal share this connection, so a step and its record commit together. */
   readonly study: StudyStore;
   readonly loop: AutonomyLoopState;
+  /** What she wrote after reading the owner's documents or a shared Notion page, and the sessions that read them (`ownerInformedMarks.ts`). */
+  readonly informed: OwnerInformedMarks;
   /** Work queued for her folder on the owner's machines. */
   readonly hostSteps: AutonomyHostFolderSteps;
   /** v2 operations in her folder, and the presence of each host's device. */
@@ -125,6 +128,7 @@ export class SQLiteAutonomyStore {
     this.proposals = new AutonomyProposalLedger(this.database);
     this.study = new StudyStore(this.database);
     this.loop = new AutonomyLoopState(this.database);
+    this.informed = new OwnerInformedMarks(this.database);
     this.hostSteps = new AutonomyHostFolderSteps(this.database);
     this.hostOperations = new HostFolderOperationsStore(this.database);
     secureDatabaseFiles(path);

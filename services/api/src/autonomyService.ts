@@ -65,7 +65,7 @@ export interface AutonomyServiceDependencies {
   /** Her Minecraft body's request queue (phase 4, `docs/minecraft-body-contract.md`). Only the API process has it; her own time never asks her body. */
   minecraftBody?: MinecraftRequestPort | null;
   /** Aether (Syzygy ADR-0007 revised): her study's text and her Aether folder, and the owner's proposal inbox; absent, none of it. */
-  aether?: Pick<ToolAetherPorts, 'access' | 'proposals'> & { studyScopeKey?: string };
+  aether?: Pick<ToolAetherPorts, 'access' | 'proposals' | 'ownerDocuments'> & { studyScopeKey?: string };
 }
 
 export interface RecordedDecision extends AutonomyDecision {
@@ -121,7 +121,7 @@ export class ShannonAutonomyService {
     this.folder = new HostFolderDesk(this.store, this.config, this.now, this);
     this.folderOperations = new HostFolderOperations(this.store, this.config, this.now, this, this.folder);
     this.tools = new ShannonToolRunner(this.store, this.folderOperations, this, this.now, undefined, dependencies.minecraftBody ?? null,
-      { access: dependencies.aether?.access ?? null, study: this.studyAether, proposals: dependencies.aether?.proposals ?? null });
+      { access: dependencies.aether?.access ?? null, study: this.studyAether, proposals: dependencies.aether?.proposals ?? null, ownerDocuments: dependencies.aether?.ownerDocuments === true });
   }
 
   // MARK: The gate
@@ -156,7 +156,8 @@ export class ShannonAutonomyService {
       } } : {}),
       ...(reachOuts ? { reachOuts } : {}),
       ...(followUps ? { reachOutFollowUps: followUps } : {}),
-      ...(calls ? { calls } : {}),
+      // A session that read the owner's documents reaches nobody else (ADR-0007), while her own time may read them at all.
+      ...(calls ? { calls } : {}), ...(this.dependencies.aether?.ownerDocuments && this.store.informed.openSessionInformed(scopeKey) ? { ownerInformed: true } : {}),
     });
     const declared = request && typeof request === 'object' ? request : {} as Partial<AutonomousActionRequest>;
     const entry = this.store.activity.append(scopeKey, dayKey, at, {

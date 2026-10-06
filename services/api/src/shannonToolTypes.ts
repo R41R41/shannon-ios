@@ -20,6 +20,18 @@ export interface ToolRun {
   apply?: () => string | void;
   /** The call was already written to the activity record where it closed (a folder operation from a conversation). */
   recordedElsewhere?: true;
+  /** For the provenance mark of her own time (`autonomyLoopProvenance.ts`). A write's ids are added by `apply`. */
+  documents?: ToolDocuments;
+}
+
+/**
+ * What a call or a step read and wrote, by id (an Aether document id, `shannon-study://<piece id>`, `autonomy-reading://<id>`),
+ * and whether it read something of the owner's (`informs`). Never text.
+ */
+export interface ToolDocuments {
+  informs?: true;
+  read?: readonly string[];
+  wrote?: readonly string[];
 }
 
 export interface PreparedToolCall {

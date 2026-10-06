@@ -93,7 +93,7 @@ export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyL
       const line = () => neutralMarkers(`- ${tool.name}: ${run.result.ok ? '' : `できなかった（${run.result.failure}）。`}${run.result.text}${added ? `\n${added}` : ''}${run.result.refusal ? `（${run.result.refusal.why}。${run.result.refusal.wouldWork}）` : ''}`);
       return {
         outcome: run.result.ok ? 'done' : 'failed', summary: run.record.summary, tool: tool.name,
-        ...(run.record.link ? { link: run.record.link } : {}),
+        ...(run.record.link ? { link: run.record.link } : {}), ...(run.documents ? { documents: run.documents } : {}),
         ...(run.result.ok ? {} : { reasonCode: run.record.reasonCode ?? run.result.failure ?? 'failed' }),
         ...(run.apply && run.result.ok ? { commit: () => { added = run.apply!() || undefined; } } : {}),
         // She is told the result only once it and its record are saved; otherwise what is true of it.

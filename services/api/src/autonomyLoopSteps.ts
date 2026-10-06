@@ -16,6 +16,7 @@ import { storyNotes, withNoteAfterReading } from './autonomyLoopPlan.js';
 import { AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, revisePrompt } from './autonomyLoopPrompts.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import { prepareThinking } from './autonomyLoopThinkStep.js';
+import { heldForOthers } from './autonomyLoopProvenance.js';
 import { prepareToolStep, type AutonomyToolResults } from './autonomyLoopToolStep.js';
 import type { AutonomyModelPurpose } from './autonomyModels.js';
 import { AUTONOMY_CALL_DOMAIN, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
@@ -24,6 +25,8 @@ import type { ShannonAutonomyService } from './autonomyService.js';
 import type { ShowingOutcome, StudyShowing } from './autonomyShowing.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import type { AutonomyTextModel } from './autonomyTextModel.js';
+import { READING_DOCUMENT_PREFIX } from './ownerInformedMarks.js';
+import type { ToolDocuments } from './shannonToolTypes.js';
 import { aetherStep, studyWriteKey, type StudyAether } from './studyAether.js';
 import { STUDY_LIMITS, STUDY_REACTION_LABEL } from './studyStore.js';
 
@@ -122,6 +125,8 @@ export interface StepResult {
   reasonCode?: string;
   /** What followed a message she sent in this step, as closed facts; kept as the step's observation. */
   observed?: ReachOutFacts;
+  /** What it read and wrote, by id, for the provenance mark (`autonomyLoopProvenance.ts`); a write's ids may be added by `commit`. */
+  documents?: ToolDocuments;
   /** Writes of the step's product; runs inside the reporting transaction. */
   commit?: (remaining: readonly AutonomyPlannedStep[], at: string) => StepCommit | void;
   /**
@@ -163,7 +168,8 @@ export function prepareStep(dependencies: StepDependencies, cycle: AutonomyLoopC
     // With her study in Aether there are no copies to the folder on the owner's PC (Syzygy ADR-0007 revised: stories live in Aether only).
     case 'copy': return dependencies.service.studyAether?.covers(cycle.scopeKey) ? null : prepareFolderCopy(dependencies, cycle, step, at);
     case 'look': return prepareRoomLook(dependencies, cycle, at);
-    case 'reach_out': return step.call ? preparePhoneCall(dependencies, cycle, step, at)
+    // In a session marked by what she read of the owner's, she does not speak up while anyone else may see or hear (ADR-0007).
+    case 'reach_out': return heldForOthers(dependencies, cycle, at) ? null : step.call ? preparePhoneCall(dependencies, cycle, step, at)
       : step.reason === 'follow_up' ? prepareFollowUp(dependencies, cycle, step, at) : prepareReachOut(dependencies, cycle, step, at);
     case 'jot': return prepareJot(dependencies, cycle, step, at);
     case 'rest': return prepareRest(dependencies, cycle, step);
@@ -216,11 +222,17 @@ function prepareNotion(dependencies: StepDependencies, cycle: AutonomyLoopCycle,
       try {
         const page = await adapters.notion.read({ query, signal });
         if (!page) return { outcome: 'failed', summary: '共有されたNotionに、探しているページは見つかりませんでした。' };
+        // A shared Notion page is the owner's (owner decision 5, ADR-0007): the session is marked, and so is the reading her note comes from.
+        const wrote: string[] = [];
         return {
-          outcome: 'done', summary: `Notionの「${clip(page.title, 80)}」を読みました。`,
-          commit: (remaining, at) => ({ plan: withNoteAfterReading(remaining, dependencies.store.loop.addReading(cycle.scopeKey, {
-            url: page.url, title: page.title, text: page.text.slice(0, 6_000), links: [], ...(step.pursuitId ? { pursuitId: step.pursuitId } : {}),
-          }, at).id) }),
+          outcome: 'done', summary: `Notionの「${clip(page.title, 80)}」を読みました。`, documents: { informs: true, wrote },
+          commit: (remaining, at) => {
+            const reading = dependencies.store.loop.addReading(cycle.scopeKey, {
+              url: page.url, title: page.title, text: page.text.slice(0, 6_000), links: [], ...(step.pursuitId ? { pursuitId: step.pursuitId } : {}),
+            }, at);
+            wrote.push(`${READING_DOCUMENT_PREFIX}${reading.id}`);
+            return { plan: withNoteAfterReading(remaining, reading.id) };
+          },
         };
       } catch {
         return { outcome: 'failed', summary: 'Notionのページを読めませんでした。' };
@@ -252,7 +264,7 @@ function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, s
       const pushed = adapters.aether?.covers(cycle.scopeKey) ? await aetherStep(() => adapters.aether!.create(cycle.scopeKey, { kind: 'note', title: clip(title, 80), body: body.slice(0, STUDY_LIMITS.noteBody).trim() }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'note', reading.id), signal)) : null;
       if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: 'メモを書きましたが、Aetherのシャノン用フォルダに置けませんでした。', reasonCode: pushed.reasonCode };
       return {
-        outcome: 'done', usage, summary: `メモ「${clip(title, 60)}」を書斎に書きました。`,
+        outcome: 'done', usage, summary: `メモ「${clip(title, 60)}」を書斎に書きました。`, documents: { read: [`${READING_DOCUMENT_PREFIX}${reading.id}`] },
         commit: (_remaining, commitAt) => {
           const piece = store.study.create(cycle.scopeKey, {
             kind: 'note', title, body: body.slice(0, STUDY_LIMITS.noteBody), sources: [{ title: clip(reading.title, 160) || reading.url, url: reading.url }],

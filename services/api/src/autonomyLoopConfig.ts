@@ -55,6 +55,11 @@ export interface AutonomyLoopConfig {
   ownerContext: boolean;
   /** Characters of that context in a thinking prompt; a message of hers gets half. */
   ownerContextCharacters: number;
+  /**
+   * Her own time may search and read the owner's Aether documents for one of her pursuits (owner decision 2026-10-06, Syzygy
+   * ADR-0007; tools `ownerDocs.*`). Off unless `SHANNON_AUTONOMY_OWNER_DOCUMENTS=on`.
+   */
+  ownerDocuments: boolean;
 }
 
 const DEFAULT_READING_SEEDS = Object.freeze([
@@ -89,7 +94,13 @@ export function configuredAutonomyLoop(environment: Readonly<Record<string, stri
     planReasoning: !environment.SHANNON_AUTONOMY_PLAN_REASONING?.trim() || environment.SHANNON_AUTONOMY_PLAN_REASONING.trim() === 'low' ? 'low' as const : 'default' as const,
     ownerContext: environment.SHANNON_AUTONOMY_OWNER_CONTEXT?.trim() !== 'off',
     ownerContextCharacters: integer(environment.SHANNON_AUTONOMY_OWNER_CONTEXT_CHARACTERS, 400, 8_000, 2_400),
+    ownerDocuments: ownerDocumentsEnabled(environment),
   });
+}
+
+/** `on` only: unset, `off`, or anything mistyped leaves her own time without the owner's documents. */
+export function ownerDocumentsEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+  return environment.SHANNON_AUTONOMY_OWNER_DOCUMENTS?.trim() === 'on';
 }
 
 /** `sessions` when unset or named; any other value is the fixed cycles, so a mistyped kill switch still switches sessions off. */
