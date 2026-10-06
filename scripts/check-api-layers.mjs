@@ -3,6 +3,7 @@
 //
 //   node scripts/check-api-layers.mjs                    report: new violations, and baseline entries now fixed (exit 0)
 //   node scripts/check-api-layers.mjs --enforce          the same, and exit 1 on a violation that is not in the baseline
+//                                                        (verify.sh runs this since layout wave 5)
 //   node scripts/check-api-layers.mjs --update-baseline  drop fixed entries from the baseline (it only shrinks)
 //                                     --update-baseline --accept-new   also add today's new violations (a decision)
 //   --layout projected (default) | actual                where a file is taken to be: its target in moves.json, or where it is
@@ -177,8 +178,9 @@ function main() {
   const argv = process.argv.slice(2);
   const option = name => argv.includes(name);
   if (!typescriptAvailable) {
+    // Skipped, also when enforcing: the fast lane runs without node_modules, and the API gate (tsc, tests) needs them anyway.
     console.log('API layers: skipped, the typescript package cannot be found (no node_modules; run `pnpm install`).');
-    if (option('--enforce') || option('--update-baseline')) process.exitCode = 2;
+    if (option('--update-baseline')) process.exitCode = 2;
     return;
   }
   const layoutIndex = argv.indexOf('--layout');
