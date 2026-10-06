@@ -16,6 +16,8 @@ final class ShannonLive2DDesktopLink {
     /// the figure this stands for "the app is active" (the window stays when the app is hidden, and is not seen when
     /// covered or locked), so the page draws only while someone could see her.
     var windowSeen = true
+    /// The stream output (roadmap A18 S5, Mac): every call of her figure, while it listens; nil otherwise.
+    var streamMirror: (@MainActor (ShannonLive2DCommand) -> Void)?
 }
 
 extension ShannonLive2DStage {
@@ -43,4 +45,14 @@ extension ShannonLive2DStage {
 
     /// Whether her desktop window is the place that shows the figure now.
     public var desktopShowsFigure: Bool { frontIsDesktop }
+
+    /// The body the stream page shows: the one her desktop body takes (the owner's choice, or her eyes alone while her
+    /// window is small), as on Windows (`desktop.stream-output-body`), and never one the bundled page does not have.
+    var streamBody: ShannonLive2DBody { ShannonLive2DBodyPolicy.effective(wantedBody, offered: Self.bundledBodies) }
+
+    /// Gives a call of her figure to the stream output (Mac), whatever the app's own page does with it: the stream page
+    /// draws her also while no window of the app shows her.
+    func mirror(_ command: ShannonLive2DCommand) {
+        ShannonLive2DDesktopLink.shared.streamMirror?(command)
+    }
 }

@@ -68,6 +68,8 @@ public final class ShannonDesktopBody {
     @ObservationIgnored public private(set) var touch = ShannonBodyTouchCoordinator()
     @ObservationIgnored var voice: ShannonBodyVoice?
     @ObservationIgnored var audienceRule = ShannonBodyAudienceRule(defaults: .standard)
+    /// 配信用の出力（OBS）: while it is on, others may be watching (A18 S5).
+    @ObservationIgnored var streamOutput = ShannonStreamOutput.shared
     @ObservationIgnored var away = ShannonDesktopBodyAway()
     @ObservationIgnored var nudgeClock = ShannonDesktopBodyNudgeClock()
     @ObservationIgnored let macState = ShannonDesktopBodyMacState()
@@ -166,20 +168,22 @@ public final class ShannonDesktopBody {
         ShannonDesktopBodyLookRules.registersCamera(cameraAllowed: cameraAllowed, permission: cameraPermission, hasCamera: hasCamera)
     }
 
-    /// Who could see or hear her: 「友人も一緒」 on the Mac's call, and the minutes after it, are others.
+    /// Who could see or hear her: 「友人も一緒」 on the Mac's call, and the minutes after it, are others; so is the time
+    /// the stream output is on (a stream is live, `docs/body-contract.md`, "Audience").
     var audience: ShannonBodyAudience {
         let held = audienceRule.othersUntil
         audienceRule.observe(othersMayBeListening: voiceCall?.session.othersMayBeListening ?? false, at: Date())
         // Written only when the hold moved (it is kept across a relaunch); every read of presence asks for it.
         if audienceRule.othersUntil != held { audienceRule.save(to: .standard) }
-        return audienceRule.audience(at: Date())
+        return ShannonStreamOutput.audience(streamOutputOn: streamOutput.othersPresent, held: audienceRule.audience(at: Date()))
     }
 
     /// The camera's state at her feet.
     public var cameraState: ShannonAppLookVisibleState {
         ShannonDesktopBodyCameraState.make(
             cameraAllowed: cameraAllowed, permission: cameraPermission, hasCamera: hasCamera,
-            othersPresent: audienceRule.audience(at: Date()) == .others, isCapturing: isCapturing)
+            othersPresent: ShannonStreamOutput.audience(streamOutputOn: streamOutput.othersPresent, held: audienceRule.audience(at: Date())) == .others,
+            isCapturing: isCapturing)
     }
 
     /// 「いまは小さいので、目だけで出ています。」 while it applies.

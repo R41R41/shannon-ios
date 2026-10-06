@@ -64,6 +64,7 @@ extension ShannonLive2DStage {
 
     /// A body the page has not shown yet is loaded first; until the page says `body`, the other one stays.
     public func setBody(_ value: ShannonLive2DBody) {
+        mirror(.setBody(streamBody))
         // Every change of any setting of the app arrives here: only a change of this one is news.
         guard value != bodySwitch.chosen else { return }
         dispatch(.chose(value))
