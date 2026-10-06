@@ -73,6 +73,19 @@ describe('a marked session', () => {
     expect(harness.entries().some(entry => entry.tool === 'folder.create')).toBe(false);
   });
 
+  it('never copies a marked piece into her folder, from any session, so it cannot be read back unmarked', async () => {
+    const { harness } = await ownTime({ environment: { SHANNON_AUTONOMY_HOST_FOLDERS_JSON: '{"owner-windows":{"deviceId":"0123456789abcdef"}}' } }, false);
+    const at = harness.clock.at;
+    const marked = harness.store.study.create(scope, { kind: 'note', title: '宿のメモ', body: '静かな宿のこと。' }, at);
+    if (typeof marked === 'string') throw new Error(marked);
+    harness.store.informed.markDocuments(scope, [`shannon-study://${marked.id}`], 'earlier', at);
+    expect(harness.service.folder.nextCopy(scope, at, marked.id)).toBeNull();
+    expect(() => harness.service.folder.enqueue(scope, { host: 'owner-windows', pieceId: marked.id, pieceVersion: marked.version }, at)).toThrow('HOST_STEP_PIECE_NOT_COPYABLE');
+    const plain = harness.store.study.create(scope, { kind: 'note', title: '駅のメモ', body: '夕方の駅のこと。' }, at);
+    if (typeof plain === 'string') throw new Error(plain);
+    expect(harness.service.folder.nextCopy(scope, at)).toMatchObject({ pieceId: plain.id });
+  });
+
   it('holds a message whose words were written while someone came in', async () => {
     const said: string[] = [];
     const state = { others: false };

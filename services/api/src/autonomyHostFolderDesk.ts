@@ -78,6 +78,8 @@ export class HostFolderDesk {
     const named = pieceId ? this.store.study.get(scopeKey, pieceId) : null;
     const seen = this.roomLook(scopeKey);
     for (const piece of pieceId ? (named ? [named] : []) : this.store.study.list(scopeKey)) {
+      // What she wrote after reading the owner's never goes into a file, where a later session could read it back unmarked (ADR-0007).
+      if (this.informed(scopeKey, piece.id)) continue;
       const host = this.boundHosts().find(name => !this.store.hostSteps.hasCopy(scopeKey, name, piece.id, piece.version));
       const draft = host ? this.draft(piece, seen) : null;
       if (host && draft) {
@@ -85,6 +87,11 @@ export class HostFolderDesk {
       }
     }
     return null;
+  }
+
+  /** A piece marked by the provenance mark (`ownerInformedMarks.ts`); one that cannot be read counts as marked. */
+  private informed(scopeKey: string, pieceId: string): boolean {
+    try { return this.store.informed.marked(scopeKey, `shannon-study://${pieceId}`); } catch { return true; }
   }
 
   /** Queues the copy. Everything is read again here, so what leaves is the piece as it is when the step is recorded. */
@@ -95,7 +102,7 @@ export class HostFolderDesk {
       if (this.store.hostSteps.queuedOn(scopeKey, dayKey) >= this.config.maximumHostFolderWritesPerDay) throw new Error('HOST_STEP_DAILY_LIMIT');
       const piece = this.store.study.get(scopeKey, copy.pieceId);
       const draft = piece && piece.version === copy.pieceVersion ? this.draft(piece, this.roomLook(scopeKey)) : null;
-      if (!piece || !draft) throw new Error('HOST_STEP_PIECE_NOT_COPYABLE');
+      if (!piece || !draft || this.informed(scopeKey, piece.id)) throw new Error('HOST_STEP_PIECE_NOT_COPYABLE');
       if (this.store.hostSteps.hasCopy(scopeKey, copy.host, piece.id, piece.version)) throw new Error('HOST_STEP_ALREADY_QUEUED');
       return this.store.hostSteps.enqueue(scopeKey, { host: copy.host, dayKey, pieceId: piece.id, pieceVersion: piece.version, ...draft }, at);
     });
