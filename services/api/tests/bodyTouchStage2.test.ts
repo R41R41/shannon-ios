@@ -25,7 +25,8 @@ async function world(options: { record?: boolean } = {}) {
   const decide = (stance: BodyReactionDecision['stance'], feeling: BodyReactionDecision['feeling'] = 'neutral', say = false) => {
     harness.speaker.decision = { say, text: say ? 'もう、ライ氏。' : '', feeling, ...(stance ? { stance } : {}) };
   };
-  return { ...harness, record, rows, decide, memories };
+  const apply = (event: Parameters<typeof harness.stateStore.apply>[1]) => harness.stateStore.apply(scope, event);
+  return { ...harness, record, rows, decide, memories, apply };
 }
 
 describe('the switch', () => {
@@ -98,16 +99,37 @@ describe('her stance is the outcome', () => {
     expect(startles.at(-1)!).toBeLessThan(startles[0]!);
   });
 
-  it('carries her stance onto touches she is not asked about in the same episode, and not across a long gap', async () => {
+  it('feels her stance on touches she is not asked about in the same episode without learning it again, and not across a long gap', async () => {
     const w = await world();
     w.decide('dislike', 'annoyed');
     await w.said({ type: 'poke', part: 'cheek', region: 'face', gesture: 'poke' });
+    const before = w.state().emotion.valence;
     w.advance(20 * SECOND);
     await w.events({ id: 'poke-2', type: 'poke', audience: 'owner', occurredAt: w.clock.at, region: 'face', part: 'cheek', gesture: 'poke' });
-    expect(w.rows().map(row => row.outcome)).toEqual([SHANNON_STANCE_OUTCOME.dislike, SHANNON_STANCE_OUTCOME.dislike]);
+    // Felt: her valence moves by the carried dislike against what she expects now.
+    expect(w.state().emotion.valence).not.toBe(before);
+    // Not learned: only the stance she gave is an outcome.
+    expect(w.rows().map(row => row.outcome)).toEqual([SHANNON_STANCE_OUTCOME.dislike]);
+    // Hours later the episode is over: nothing is carried, only the startle (arousal) moves her.
     w.advance(6 * 60 * MINUTE);
+    await w.apply({ type: 'awake-observed' });
+    const late = w.state().emotion.valence;
     await w.events({ id: 'poke-3', type: 'poke', audience: 'owner', occurredAt: w.clock.at, region: 'face', part: 'cheek', gesture: 'poke' });
-    expect(w.rows()).toHaveLength(2);
+    expect(w.state().emotion.valence).toBeCloseTo(late, 9);
+  });
+
+  it('learns one refusal followed by ten plain pokes as one refusal: the expectation does not harden, so she still feels them', async () => {
+    const w = await world();
+    w.decide('refuse', 'indignant', true);
+    await w.said({ type: 'poke', part: 'neck', region: 'body', gesture: 'poke' });
+    const expected = () => w.record!.predict(scope, { domain: 'body_stance', key: 'poke.neck.owner', at: Date.parse(w.clock.at), context: 'unknown' })!.expectation;
+    const afterRefusal = expected();
+    for (let index = 0; index < 10; index += 1) {
+      w.advance(15 * SECOND);
+      await w.events({ id: `plain-${index}`, type: 'poke', audience: 'owner', occurredAt: w.clock.at, region: 'body', part: 'neck', gesture: 'poke' });
+    }
+    expect(w.rows()).toHaveLength(1);
+    expect(expected()).toBeCloseTo(afterRefusal, 9);
   });
 
   it('does not stay pinned: a neck poke, a stroke there she dislikes, one she refuses', async () => {

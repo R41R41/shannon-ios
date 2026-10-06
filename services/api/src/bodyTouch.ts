@@ -98,7 +98,8 @@ export class BodyTouches {
       // took for the same key earlier in this episode when there is one and she is not about to be asked.
       prediction = this.predictions.expect(scopeKey, touch, at);
       const carried = options.awaitsStance ? null : this.predictions.carried(scopeKey, prediction.key, at);
-      if (carried !== null) prediction = { ...prediction, outcome: this.predictions.learn(scopeKey, prediction, receipt.burst.id, carried, at, before) };
+      // Felt, not learned: only a stance she gives is an outcome.
+      if (carried !== null) prediction = { ...prediction, outcome: this.predictions.felt(prediction, carried) };
       // The part names the cause of a feeling (頭をなでられた): factual words, no favour read into the verb.
       const partWord = touch.part ? bodyTouchPartWord(touch.part) : undefined;
       snapshot = stateStore.apply(scopeKey, { type: 'body-touched', touch: {
@@ -131,18 +132,23 @@ export class BodyTouches {
   }
 
   /**
-   * Stage 2: her reaction to a touch is decided. Her stance (or, without one, the stance she took for the same key in this
-   * episode) is learned as the outcome, and its prediction error moves her valence and arousal. Returns the outcome, or
-   * null when nothing was learned (stage 1b, a stance already carried, none known: only the startle moved her).
+   * Stage 2: her reaction to a touch is decided. Her stance is learned as the outcome, and its prediction error moves her
+   * valence and arousal. Without a stance (a late or failed model) the stance she gave for the same key in this episode is
+   * felt the same way and not learned. Returns the outcome, or null when nothing moved her (stage 1b, a stance already
+   * carried at arrival, none known: only the startle moved her).
    */
   settle(scopeKey: string, felt: FeltTouch, stance: BodyTouchStance | null): { outcome: { error: number; unexpected: number }; snapshot: CompanionStateSnapshot } | null {
     const prediction = felt.prediction;
     if (!this.stage2 || !prediction || prediction.outcome) return null;
     const at = this.dependencies.now();
-    const score = stance !== null ? stanceOutcome(stance) : this.predictions.carried(scopeKey, prediction.key, at);
-    if (score === null) return null;
     const { stateStore } = this.dependencies;
-    const outcome = this.predictions.learn(scopeKey, prediction, felt.burst.id, score, at, stateStore.snapshot(scopeKey));
+    let outcome: { error: number; unexpected: number };
+    if (stance !== null) outcome = this.predictions.learn(scopeKey, prediction, felt.burst.id, stanceOutcome(stance), at, stateStore.snapshot(scopeKey));
+    else {
+      const carried = this.predictions.carried(scopeKey, prediction.key, at);
+      if (carried === null) return null;
+      outcome = this.predictions.felt(prediction, carried);
+    }
     const snapshot = stateStore.apply(scopeKey, { type: 'touch-appraised', outcome });
     this.predictions.compared(scopeKey, snapshot, at);
     return { outcome, snapshot };

@@ -22,10 +22,12 @@ import { outcome } from './predictionShadowReadings.js';
  *   means and its region); who is `owner` when he is alone with her, else `unknown` (her body cannot tell who touched
  *   her, ADR-0005 decision 6). Context: the surface her body was on.
  * - Before she reacts: the startle is the relative uncertainty of that key (`relativeUncertainty`).
- * - Her stance (the reaction's `stance`, `SHANNON_STANCE_OUTCOME`) is learned as the outcome, at once, in the same record
- *   the shadow keeps (`shannon_prediction_outcomes`, domain `body_stance`, source: the touch's burst, so forgetting the
- *   touch forgets it and recomputes). A touch she is not asked about takes the stance she took for the same key within
- *   the episode she has learned (§2.5: the boundary from her own gaps); without one, only the startle moves her.
+ * - Her stance (the reaction's `stance`, `SHANNON_STANCE_OUTCOME`) is learned as the outcome in the same record the shadow
+ *   keeps (`shannon_prediction_outcomes`, domain `body_stance`, source: the touch's burst, so forgetting the touch forgets
+ *   it and recomputes). Only a stance she gave is an outcome. A touch she is not asked about is felt with the stance she
+ *   gave for the same key within the episode she has learned (§2.5: the boundary from her own gaps), against what she
+ *   expects now, and is not learned again: one refusal followed by ten plain pokes is one refusal, not eleven (a carried
+ *   stance learned as new evidence would harden the expectation and flatten her feeling). Without one, only the startle.
  * - Without the record (`SHANNON_PREDICTION_SHADOW=off`, or a kernel without SQLite) every touch is met with the empty
  *   prior: nothing is learned, so there is no habituation, and nothing is kept.
  *
@@ -63,6 +65,10 @@ export interface TouchPrediction {
   key: string;
   context: string;
   startle: number;
+  /** What she expected of the key when the touch arrived (valence scale), its uncertainty and the outcome noise. */
+  expectation: number;
+  uncertainty: number;
+  noise: number;
   /** Set when the touch's stance is already known (carried from earlier in the episode): nothing more is learned for it. */
   outcome?: ShannonTouchOutcome;
 }
@@ -76,10 +82,16 @@ export class TouchPredictions {
     const context = touch.surface ?? 'unknown';
     const query = { domain: BODY_STANCE_DOMAIN, key, at: Date.parse(at), context } as const;
     const prediction: Prediction = this.record?.predict(scopeKey, query) ?? predictOutcome(createPredictionModel(), query);
-    return { key, context, startle: relativeUncertainty(prediction) };
+    return { key, context, startle: relativeUncertainty(prediction), expectation: prediction.expectation, uncertainty: prediction.uncertainty, noise: prediction.noise };
   }
 
-  /** The stance outcome she took for this key within the episode she has learned, or null. */
+  /** How a stance outcome is felt against what she expects, without learning anything (a carried stance). */
+  felt(prediction: TouchPrediction, stance: number): ShannonTouchOutcome {
+    const error = stance - prediction.expectation;
+    return { error, unexpected: unexpectedness({ error, uncertainty: prediction.uncertainty, noise: prediction.noise }) };
+  }
+
+  /** The stance she gave for this key within the episode she has learned (her newest learned outcome), or null. */
   carried(scopeKey: string, key: string, at: string): number | null {
     const recent = this.record?.recent(scopeKey, BODY_STANCE_DOMAIN, key) ?? null;
     if (!recent) return null;
