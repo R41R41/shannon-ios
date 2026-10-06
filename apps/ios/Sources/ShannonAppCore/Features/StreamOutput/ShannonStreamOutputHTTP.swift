@@ -16,7 +16,7 @@ enum ShannonStreamOutputHTTP {
     static let maximumConnections = 16
     /// A request head must arrive within this many seconds.
     static let requestSeconds = 10.0
-    /// A file must be taken within this many seconds (the largest, the model, is 27 MB over loopback).
+    /// A file must be taken within this many seconds (the largest, the model, is about 30 MB over loopback).
     static let answerSeconds = 60.0
     /// A watching page that leaves more than this unread is let go (an event is well under 1 kB).
     static let maximumBacklogBytes = 256 * 1024
