@@ -61,6 +61,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // A touch as an input to the one emotion state: the touch → feeling table, and the one entrance that applies it.
     'packages/cognition/src/touchEmotion.ts',
     'services/api/src/bodyTouch.ts',
+    // Syzygy ADR-0005 stage 1b: the parts where only the reflex moves her, and the vocabulary of how she took a touch.
+    'services/api/src/bodyTouchReflex.ts',
     // Syzygy ADR-0006: the prediction layer and the new dynamics of her feeling, their record, and the shadow taps of stage 1.
     'packages/cognition/src/prediction.ts',
     'packages/cognition/src/predictionDomains.ts',

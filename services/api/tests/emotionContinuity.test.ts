@@ -607,7 +607,9 @@ describe('(l) the kill switch SHANNON_EMOTION_CLOCK=wall', () => {
 describe('the emotion source stays core', () => {
   it('lists the new modules among the paths that need the owner\'s approval', () => {
     for (const path of ['packages/cognition/src/emotionTime.ts', 'packages/cognition/src/emotionContinuity.ts',
-      'services/api/src/emotionTiming.ts', 'services/api/src/autonomyAwakeClock.ts']) {
+      'services/api/src/emotionTiming.ts', 'services/api/src/autonomyAwakeClock.ts',
+      // Syzygy ADR-0005 stage 1b: where only the reflex moves her (not the table), beside the table and its one entrance.
+      'packages/cognition/src/touchEmotion.ts', 'services/api/src/bodyTouch.ts', 'services/api/src/bodyTouchReflex.ts']) {
       expect(SHANNON_CORE_PATHS.emotion).toContain(path);
     }
   });

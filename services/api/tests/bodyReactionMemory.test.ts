@@ -387,7 +387,12 @@ describe('remembering a touch', () => {
     expect(columns('body_touches')).toEqual(['scope_key', 'touch_id', 'touch_type', 'audience', 'occurred_at', 'received_at', 'duration_ms', 'strength', 'burst_id', 'region', 'surface',
       // Touch vocabulary 2 (added 2026-10-06): closed words only.
       'part', 'side', 'gesture', 'reflex']);
-    expect(columns('body_touch_bursts')).toEqual(['scope_key', 'burst_id', 'touch_type', 'started_at', 'last_at', 'touch_count', 'total_duration_ms', 'others', 'said_json', 'region', 'surface']);
+    expect(columns('body_touch_bursts')).toEqual(['scope_key', 'burst_id', 'touch_type', 'started_at', 'last_at', 'touch_count', 'total_duration_ms', 'others', 'said_json', 'region', 'surface',
+      // Stage 1b (2026-10-06): a flag, 1 once a touch of the burst was on a part where her body flinches first.
+      'reflex']);
+    // Stage 1b, the result table: closed words, identifiers and a time, never her words.
+    expect(columns('body_touch_outcomes')).toEqual(['scope_key', 'touch_id', 'burst_id', 'audience', 'stance', 'feeling', 'said', 'decided_at']);
+    expect(JSON.stringify(database.prepare('SELECT * FROM body_touch_outcomes').all())).not.toMatch(/アルパカ|覚えました|えへへ/u);
     database.close();
   });
 });

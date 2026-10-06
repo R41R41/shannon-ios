@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import type { ShannonTouchKind } from '@shannon/cognition';
+import { isShannonEmotionKind, type ShannonEmotionKind, type ShannonTouchKind } from '@shannon/cognition';
 import type { BodyAudience, BodyTouchGesture, BodyTouchReflex, BodyTouchSide } from './bodyContract.js';
 import { BODY_REACTION_LIMITS, type BodyReactionAnswer } from './bodyReactionContract.js';
 import { BODY_TOUCH_MIXED, isBodySurface, isBodyTouchRegion, type BodySurface, type BodyTouchPart, type BodyTouchRegion } from './bodyTouchWords.js';
 import { addColumnOnce } from './bodyStore.js';
+import { BODY_TOUCH_STANCES, isBodyTouchStance, isReflexPart, type BodyTouchStance } from './bodyTouchReflex.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 
 /**
@@ -15,6 +16,9 @@ import { secureDatabaseFiles } from './sqliteStoreContext.js';
  *   is the id of the experience she recalls it by.
  * - `body_reactions`: the answer given for a reaction id, and her line while it waits for
  *   the owner's spoken answer. A line that is not answered never enters a conversation.
+ * - `body_touch_outcomes` (Syzygy ADR-0005 stage 1b, the result table): for each touch she was asked about, how she
+ *   took it (`stance`), the feeling she chose and whether she spoke, without her words. The part, side, gesture and
+ *   reflex are on the touch's own row.
  * Closed vocabulary, numbers, identifiers and her own words only: nothing from a microphone.
  */
 export interface TouchRecord {
@@ -27,7 +31,7 @@ export interface TouchRecord {
   /** Which part was touched, and on which surface her body was; absent when the body did not say. */
   region?: BodyTouchRegion;
   surface?: BodySurface;
-  /** Touch vocabulary 2, as the body sent it: kept on the touch's own row only, read by nothing yet. */
+  /** Touch vocabulary 2, as the body sent it, kept on the touch's own row. `part` decides whether only the reflex moves her (stage 1b). */
   part?: BodyTouchPart;
   side?: BodyTouchSide;
   gesture?: BodyTouchGesture;
@@ -57,6 +61,8 @@ export interface StoredTouchBurst {
   /** True when its touches named different parts (or some named none): told apart from a burst that never named one. */
   mixedRegion?: boolean;
   mixedSurface?: boolean;
+  /** True when a touch of it named a part where her body flinches first (stage 1b): its wording then reads no favour. */
+  reflex?: boolean;
 }
 
 export interface TouchReceipt {
@@ -66,6 +72,21 @@ export interface TouchReceipt {
 }
 
 export type ReactionLinkState = 'none' | 'pending' | 'linked' | 'stored' | 'dropped';
+
+/**
+ * One row of the result table: what came of a touch she was asked about. `stance` and `feeling` are null when she gave
+ * no judgement (the deadline passed, no model, a late request, a touch in the old shape that was not asked for one):
+ * only the reflex then moved her, and nothing is filled in for her. Closed vocabulary only; never her words.
+ */
+export interface TouchOutcome {
+  touchId: string;
+  burstId: string;
+  audience: BodyAudience;
+  stance: BodyTouchStance | null;
+  feeling: ShannonEmotionKind | null;
+  said: boolean;
+  decidedAt: string;
+}
 
 export interface StoredReaction {
   id: string;
@@ -92,7 +113,10 @@ export interface ReactionLine {
   messageId: string;
 }
 
-interface BurstRow { burst_id: string; touch_type: string; started_at: string; last_at: string; touch_count: number; total_duration_ms: number; others: number; said_json: string; region: string | null; surface: string | null }
+interface BurstRow {
+  burst_id: string; touch_type: string; started_at: string; last_at: string; touch_count: number; total_duration_ms: number; others: number; said_json: string;
+  region: string | null; surface: string | null; reflex: number | null;
+}
 interface ReactionRow {
   reaction_id: string; device_id: string; content_hash: string; status: string; answer_json: string | null; line_text: string | null; message_id: string | null;
   thread_id: string | null; audience: string; created_at: string; said_at: string | null; listen_until: string | null; link_state: string; linked_until: string | null;
@@ -111,6 +135,7 @@ const burstOf = (row: BurstRow): StoredTouchBurst => {
     said: lines.map(line => line[0]), saidOpen: lines.filter(line => line[1] === 1).map(line => line[0]),
     ...(isBodyTouchRegion(row.region) ? { region: row.region } : {}), ...(isBodySurface(row.surface) ? { surface: row.surface } : {}),
     ...(row.region === BODY_TOUCH_MIXED ? { mixedRegion: true } : {}), ...(row.surface === BODY_TOUCH_MIXED ? { mixedSurface: true } : {}),
+    ...(Number(row.reflex) === 1 ? { reflex: true } : {}),
   };
 };
 
@@ -166,6 +191,18 @@ export class SQLiteBodyReactionStore {
         PRIMARY KEY (scope_key, reaction_id)
       );
       CREATE INDEX IF NOT EXISTS body_reactions_scope_created ON body_reactions (scope_key, created_at);
+      CREATE TABLE IF NOT EXISTS body_touch_outcomes (
+        scope_key TEXT NOT NULL,
+        touch_id TEXT NOT NULL,
+        burst_id TEXT NOT NULL,
+        audience TEXT NOT NULL CHECK (audience IN ('owner', 'others')),
+        stance TEXT CHECK (stance IS NULL OR stance IN (${BODY_TOUCH_STANCES.map(stance => `'${stance}'`).join(', ')})),
+        feeling TEXT,
+        said INTEGER NOT NULL DEFAULT 0 CHECK (said IN (0, 1)),
+        decided_at TEXT NOT NULL,
+        PRIMARY KEY (scope_key, touch_id)
+      );
+      CREATE INDEX IF NOT EXISTS body_touch_outcomes_scope_decided ON body_touch_outcomes (scope_key, decided_at);
     `);
     // Added 2026-10-03: the touched part and the surface, on a touch and on its burst.
     for (const table of ['body_touches', 'body_touch_bursts']) {
@@ -173,6 +210,8 @@ export class SQLiteBodyReactionStore {
     }
     // Added 2026-10-06 (touch vocabulary 2): the finer part, the side, the gesture and the body's reflex, on a touch only.
     for (const column of TOUCH_DETAIL_COLUMNS) addColumnOnce(this.database, 'body_touches', column, 'TEXT');
+    // Added 2026-10-06 (stage 1b): 1 once a touch of the burst named a part where her body flinches first; empty otherwise.
+    addColumnOnce(this.database, 'body_touch_bursts', 'reflex', 'INTEGER');
     secureDatabaseFiles(path);
   }
 
@@ -218,6 +257,8 @@ export class SQLiteBodyReactionStore {
           this.database.prepare('UPDATE body_touch_bursts SET total_duration_ms = total_duration_ms + ?, others = MAX(others, ?) WHERE scope_key = ? AND burst_id = ?')
             .run(longer, touch.audience === 'others' ? 1 : 0, scopeKey, known.burst_id);
         }
+        // A part the first message did not name, filled in now, still keeps the burst's wording free of favour.
+        if (isReflexPart(touch.part)) this.database.prepare('UPDATE body_touch_bursts SET reflex = 1 WHERE scope_key = ? AND burst_id = ?').run(scopeKey, known.burst_id);
         return { fresh: false, burst: this.burst(scopeKey, known.burst_id)! };
       }
       const time = Date.parse(touch.occurredAt);
@@ -228,20 +269,22 @@ export class SQLiteBodyReactionStore {
         new Date(time - BODY_REACTION_LIMITS.burstSpanMilliseconds).toISOString(), touch.occurredAt) as unknown as BurstRow[])
         .find(row => usable(row.burst_id));
       const burstId = open?.burst_id ?? randomUUID();
+      const reflex = isReflexPart(touch.part);
       if (open) {
         this.database.prepare(`
           UPDATE body_touch_bursts SET touch_count = touch_count + 1, total_duration_ms = total_duration_ms + ?,
             last_at = MAX(last_at, ?), others = MAX(others, ?),
-            region = CASE WHEN region IS ? THEN region ELSE ? END, surface = CASE WHEN surface IS ? THEN surface ELSE ? END
+            region = CASE WHEN region IS ? THEN region ELSE ? END, surface = CASE WHEN surface IS ? THEN surface ELSE ? END,
+            reflex = CASE WHEN ? = 1 THEN 1 ELSE reflex END
           WHERE scope_key = ? AND burst_id = ?
         `).run(duration, touch.occurredAt, touch.audience === 'others' ? 1 : 0,
-          touch.region ?? null, BODY_TOUCH_MIXED, touch.surface ?? null, BODY_TOUCH_MIXED, scopeKey, burstId);
+          touch.region ?? null, BODY_TOUCH_MIXED, touch.surface ?? null, BODY_TOUCH_MIXED, reflex ? 1 : 0, scopeKey, burstId);
       } else {
         this.database.prepare(`
-          INSERT INTO body_touch_bursts (scope_key, burst_id, touch_type, started_at, last_at, touch_count, total_duration_ms, others, region, surface)
-          VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+          INSERT INTO body_touch_bursts (scope_key, burst_id, touch_type, started_at, last_at, touch_count, total_duration_ms, others, region, surface, reflex)
+          VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
         `).run(scopeKey, burstId, touch.type, touch.occurredAt, touch.occurredAt, duration, touch.audience === 'others' ? 1 : 0,
-          touch.region ?? null, touch.surface ?? null);
+          touch.region ?? null, touch.surface ?? null, reflex ? 1 : null);
       }
       this.database.prepare(`
         INSERT INTO body_touches (scope_key, touch_id, touch_type, audience, occurred_at, received_at, duration_ms, strength, burst_id, region, surface,
@@ -289,6 +332,26 @@ export class SQLiteBodyReactionStore {
       this.database.prepare('UPDATE body_touch_bursts SET said_json = ? WHERE scope_key = ? AND burst_id = ?').run(JSON.stringify(said), scopeKey, burstId);
       return this.burst(scopeKey, burstId);
     });
+  }
+
+  /** Keeps what came of a touch she was asked about, once: the first outcome of a touch id stands. */
+  recordOutcome(scopeKey: string, outcome: TouchOutcome): void {
+    this.database.prepare(`
+      INSERT OR IGNORE INTO body_touch_outcomes (scope_key, touch_id, burst_id, audience, stance, feeling, said, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(scopeKey, outcome.touchId, outcome.burstId, outcome.audience, outcome.stance, outcome.feeling, outcome.said ? 1 : 0, outcome.decidedAt);
+  }
+
+  /** The outcome kept for a touch id, or null. */
+  outcome(scopeKey: string, touchId: string): TouchOutcome | null {
+    const row = this.database.prepare('SELECT * FROM body_touch_outcomes WHERE scope_key = ? AND touch_id = ?').get(scopeKey, touchId) as unknown as {
+      touch_id: string; burst_id: string; audience: string; stance: string | null; feeling: string | null; said: number; decided_at: string;
+    } | undefined;
+    if (!row) return null;
+    return {
+      touchId: row.touch_id, burstId: row.burst_id, audience: row.audience as BodyAudience,
+      stance: isBodyTouchStance(row.stance) ? row.stance : null, feeling: row.feeling !== null && isShannonEmotionKind(row.feeling) ? row.feeling : null,
+      said: Number(row.said) === 1, decidedAt: row.decided_at,
+    };
   }
 
   /** Starts a reaction once. `existing` is what an earlier request with this id left. */
@@ -368,6 +431,10 @@ export class SQLiteBodyReactionStore {
     this.database.prepare('DELETE FROM body_touch_bursts WHERE scope_key = ? AND last_at < ?').run(scopeKey, old);
     this.database.prepare(`
       DELETE FROM body_touches WHERE scope_key = ? AND (received_at < ? OR burst_id NOT IN (SELECT burst_id FROM body_touch_bursts WHERE scope_key = ?))
+    `).run(scopeKey, old, scopeKey);
+    // An outcome is kept as long as its touch, never longer (the retention of the record it came from, ADR-0006 answer 7).
+    this.database.prepare(`
+      DELETE FROM body_touch_outcomes WHERE scope_key = ? AND (decided_at < ? OR touch_id NOT IN (SELECT touch_id FROM body_touches WHERE scope_key = ?))
     `).run(scopeKey, old, scopeKey);
   }
 

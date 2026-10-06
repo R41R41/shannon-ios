@@ -3,6 +3,7 @@ import {
   type ReplyEmotion, type ShannonEmotion, type ShannonExpressiveEmotion, type ShannonMessageEmotion,
 } from '@shannon/cognition';
 import type { VoiceTurnDecision } from './voiceDecision.js';
+import { voicedAffect } from './voiceDecisionContract.js';
 import { waitingDirectionFor, waitingPhraseFor } from './voiceWaitingCue.js';
 
 /** The quiet face of a call with no owner state (友人も一緒): the baseline mood. */
@@ -39,7 +40,8 @@ export function voicePlanResponse(
     solutionWantedProbability: decision.solutionWantedProbability,
     conversationClass: decision.conversationClass,
     latencyClass: decision.latencyClass,
-    affect: emotion?.primary ?? decision.affect,
+    // An app decodes `affect` strictly: a kind newer than its vocabulary is voiced with its nearest older one.
+    affect: emotion ? voicedAffect(emotion.primary) : decision.affect,
     affectIntensity: emotion?.intensity ?? decision.affectIntensity,
     delivery: emotion ? deliveryForEmotion(emotion, decision.delivery) : decision.delivery,
     ...(emotion ? { emotion: planEmotion(emotion), ...deriveShannonFace(mood, emotion), ...(kind ? { kind } : {}) } : {}),
@@ -61,7 +63,12 @@ export function voicePlanResponse(
  */
 function planEmotion(emotion: ShannonExpressiveEmotion): Omit<ShannonExpressiveEmotion, 'cause' | 'awakeAt' | 'presentAt' | 'continued' | 'decided' | 'underneath' | 'easedPeak' | 'heights' | 'strengths' | 'placeAbove'> {
   const { cause: _cause, awakeAt: _awakeAt, ...shown } = normalizeShannonExpressiveEmotion(emotion);
-  return shown;
+  // The apps hand `primary` to the body page (`expressEmotion`), whose faces are those of the kinds it was built with: a
+  // newer kind would show no face at all. It is sent as its nearest older kind; her stored feeling keeps its own kind,
+  // and `kind` beside the face names it for a client that knows it.
+  const primary = voicedAffect(shown.primary);
+  const secondary = [...new Set(shown.secondary.map(voicedAffect))].filter(kind => kind !== primary);
+  return { ...shown, primary, secondary };
 }
 
 function waitingPerformanceFor(

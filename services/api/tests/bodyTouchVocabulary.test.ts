@@ -8,13 +8,15 @@ import {
   BODY_TOUCH_GESTURES, BODY_TOUCH_INPUTS, BODY_TOUCH_REFLEXES, BODY_TOUCH_SIDES, BODY_TOUCH_VOCABULARY, isImpossibleTouch, validatedBodyEvents, type BodyEvent,
 } from '../src/bodyContract.js';
 import { bodyReactionContentHash, validatedBodyReactionRequest, type BodyReactionAnswer, type BodyReactionRequest } from '../src/bodyReactionContract.js';
+import { BODY_REACTION_OWN_RULE } from '../src/bodyReactionPrompt.js';
 import { BODY_TOUCH_PARTS } from '../src/bodyTouchWords.js';
 import type { BodyIngestReceipt, BodyPresence } from '../src/shannonBody.js';
 import { START, reactionHarness, scope } from './bodyReactionHarness.js';
 
 /**
  * Touch vocabulary 2 (Syzygy ADR-0005, phase 1a): optional facts beside `type` and `region`. Nothing about a
- * touch in the old shape may change, and the new facts are stored only: no feeling, no prompt, no word reads them.
+ * touch in the old shape may change. Phase 1a stored the new facts only; since phase 1b the reaction prompt tells
+ * her the part, the side and the flinch, and the parts where only the reflex moves her are `bodyTouchReflex.test.ts`.
  */
 const touch = (id: string, extra: Record<string, unknown> = {}) => ({ id, type: 'pet', audience: 'owner', occurredAt: START, durationMs: 1_500, ...extra });
 const detail = { part: 'cheek', side: 'left', gesture: 'stroke', input: 'press', reflex: 'none' };
@@ -265,7 +267,7 @@ describe('touch vocabulary 2: what cannot be a touch', () => {
   });
 });
 
-describe('touch vocabulary 2: stored, and read by nothing else yet', () => {
+describe('touch vocabulary 2: stored, and read by the reaction since stage 1b', () => {
   it('keeps part, side, gesture and reflex on the touch, from an event and from a reaction, and fills in what a later message adds', async () => {
     const { events, send, reactionStore } = await reactionHarness();
     await events(touch('e-1', { type: 'poke', region: 'body', part: 'neck', side: 'left', gesture: 'poke', input: 'press', reflex: 'flinch' }));
@@ -277,7 +279,7 @@ describe('touch vocabulary 2: stored, and read by nothing else yet', () => {
     expect(reactionStore.touchDetail(scope, 'r-1')).toEqual({ part: 'cheek', side: 'right', gesture: 'stroke', reflex: 'none' });
   });
 
-  it('changes no feeling, no answer and no word the reaction model is told', async () => {
+  it('on an ordinary part changes no feeling and no answer; since stage 1b the reaction model is told the part, the side and the flinch', async () => {
     const run = async (extra: Record<string, unknown>) => {
       const harness = await reactionHarness();
       const answers: BodyReactionAnswer[] = [];
@@ -305,7 +307,13 @@ describe('touch vocabulary 2: stored, and read by nothing else yet', () => {
       { part: 'side', side: 'left', gesture: 'tickle', reflex: 'flinch' }, { part: 'hand', side: 'left', gesture: 'hold', reflex: 'flinch' },
     ]);
     expect(oldStored).toEqual([{}, {}, {}, {}]);
-    expect(newer.prompts).toEqual(old.prompts);
+    // Stage 1b (Syzygy ADR-0005): the words of the touch name the part and the side, her flinch is told, and one line says
+    // that how she takes it is hers. Nothing else of what she is told changed.
+    const told = (prompt: string) => prompt.replace('左の頬をなでられている', '頬をなでられている').replace('左の頬をつつかれている', '頬をつつかれている')
+      .replace('左の脇をくすぐられている', '脇をくすぐられている').replace('\n- 体: 思わず小さく身を引いた', '').replace(`\n- ${BODY_REACTION_OWN_RULE}`, '');
+    expect(newer.prompts.map(told)).toEqual(old.prompts);
+    expect(newer.prompts.every(prompt => prompt.includes('- 体: 思わず小さく身を引いた') && prompt.includes(BODY_REACTION_OWN_RULE))).toBe(true);
+    expect(old.prompts.some(prompt => prompt.includes(BODY_REACTION_OWN_RULE) || prompt.includes('- 体: '))).toBe(false);
     expect(newer.answers).toEqual(old.answers);
     expect(newer.snapshot).toEqual(old.snapshot);
     expect(newer.chat).toEqual(old.chat);

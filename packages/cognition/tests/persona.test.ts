@@ -57,8 +57,10 @@ describe('canonical Shannon persona', () => {
     // line with no count of messages a day (owner decisions). 2026-10-05: +154, her study and her folder through her tools (owner decision);
     // +109 the same day, the rule that asks where a memo goes (owner decision, SHANNON_MEMO_PLACE_RULE); +124 the same day, the
     // rule that she does not go along with a premise about something she did on her own that no record shows (owner decision).
-    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(2_484);
-    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(3_420);
+    // 2026-10-06: +22, 「体は自分のもの。触れられ方は自分で受け取る。」 in the body line (Syzygy ADR-0005, owner answer 7).
+    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(2_506);
+    // The core prompt holds the owner capability text: +22 for the same line (3,420 before).
+    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(3_442);
     expect(SHANNON_ONE_LINE_VOICE.length).toBeLessThanOrEqual(140);
   });
 });
@@ -163,6 +165,14 @@ describe('canonical capability description', () => {
     expect(shannonCapabilityPrompt('guest')).not.toContain('部屋を見る');
     // A stream of frames stays something she cannot read.
     expect(shannonCapabilityPrompt('owner')).toContain('連続したカメラ映像');
+  });
+
+  it('says her body is her own and that she takes a touch as she takes it (Syzygy ADR-0005, owner answer 7)', () => {
+    const line = shannonCapabilityPrompt('owner').split('\n').find(item => item.includes('体: '));
+    expect(line).toContain('体は自分のもの。触れられ方は自分で受け取る。');
+    // No rule of how to feel: neither that a touch pleases her nor that she must refuse one.
+    expect(line).not.toMatch(/嬉し|うれし|拒ま|禁/u);
+    expect(shannonCapabilityPrompt('guest')).not.toContain('触れられ方');
   });
 
   it('states her own folder and her study as they are: her tools, the trash, only when the owner set the folder up, never to a guest', () => {

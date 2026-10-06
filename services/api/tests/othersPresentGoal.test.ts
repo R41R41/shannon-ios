@@ -92,7 +92,9 @@ describe('the owner\'s current goal with other people present', () => {
     expect(alone).toContain(`current_goal=${goal}`);
     expect(alone).toContain('\n\n[Current intention frame');
     expect(alone).not.toContain('【機微:');
-    expect(fingerprint(alone)).toBe('f985777ad5061000');
+    // Re-recorded on the body-1b branch (2026-10-06): her capability line about her body gained 「体は自分のもの。触れられ方は
+    // 自分で受け取る。」 (Syzygy ADR-0005, owner answer 7), 22 characters of her identity; nothing else changed (f985777ad5061000 before).
+    expect(fingerprint(alone)).toBe('43c88ae5f79056f1');
 
     const others = await chat('人格の改善はどう進める？', { audience: 'others' });
     expect(others).not.toContain('current_goal=');
@@ -108,7 +110,8 @@ describe('the owner\'s current goal with other people present', () => {
     // Re-recorded on the prompt-cache branch (2026-10-06): the shared state now opens the turn's context, after the fixed
     // voice instructions (Syzygy ADR-0003 principle 4). Put back between her identity and those instructions, the same
     // text gives the fingerprint recorded before (9abf82a6f2f2e74f); nothing was added or left out.
-    expect(fingerprint(alone)).toBe('1732f2014cc3eeb7');
+    // Re-recorded on the body-1b branch (2026-10-06) for the same 22 characters of her capability line (1732f2014cc3eeb7 before).
+    expect(fingerprint(alone)).toBe('911bc31030d3e769');
 
     const companion = await voice('前に話した人格の改善のこと覚えてる？', true);
     expect(companion).toContain('[Current cognitive context');

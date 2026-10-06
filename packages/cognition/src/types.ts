@@ -27,6 +27,8 @@ export const SHANNON_EMOTION_KINDS = [
   'surprised', 'shocked', 'stunned', 'speechless', 'confused', 'panic', 'scream',
   'focused', 'determined', 'cautious', 'urgent', 'blocked', 'retrying', 'triumphant', 'tired', 'sleepy',
   'gentle', 'relaxed', 'content', 'quietCompanion', 'tender', 'apologetic',
+  // 気持ち悪い・いや (Syzygy ADR-0005, owner answer 2 of 2026-10-05): a kind she may choose, never one that is set for her.
+  'uncomfortable',
 ] as const;
 
 export type ShannonEmotionKind = typeof SHANNON_EMOTION_KINDS[number];
@@ -226,6 +228,14 @@ export interface ShannonTouch {
   countInWindow: number;
   /** False when someone other than the owner may have been the one touching. Absent: the owner. */
   ownerAlone?: boolean;
+  /**
+   * Syzygy ADR-0005 stage 1b: the touch landed on a part where her body flinches first (neck, chest, waist, legs, skirt;
+   * owner answer 1), given as the word of the part (首). The table is not read for it: only the reflex moves her
+   * (`SHANNON_TOUCH_REFLEX`), and how she takes the touch is her own judgement. Absent: the table, as before.
+   */
+  reflexPart?: string;
+  /** The touch stayed without moving (touch vocabulary 2 `gesture: rest`). Read only to word a touch on such a part (胸に触れられた). */
+  resting?: boolean;
 }
 
 export interface CompanionStateSnapshot {

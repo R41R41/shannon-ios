@@ -157,8 +157,9 @@ describe('autonomy wording while the loop runs', () => {
     expect(withAutonomyRunning(shannonIdentityPrompt('guest'))).toBe(shannonIdentityPrompt('guest'));
     expect(withAutonomyRunning('関係のない文')).toBe('関係のない文');
     // The running wording still fits the response-path budget of the capability block (2026-10-05: +154, her tools; +109, where a memo goes; +124, no going along with a false premise about her own actions).
-    expect(withAutonomyRunning(shannonCapabilityPrompt('owner')).length).toBeLessThanOrEqual(2_498);
-    expect(running.length).toBeLessThanOrEqual(3_434);
+    // 2026-10-06: +22, her body line (Syzygy ADR-0005, owner answer 7; 2,498 before).
+    expect(withAutonomyRunning(shannonCapabilityPrompt('owner')).length).toBeLessThanOrEqual(2_520);
+    expect(running.length).toBeLessThanOrEqual(3_456); // +22 the same day (3,434 before).
   });
 });
 

@@ -86,6 +86,8 @@ const FACE_BY_EMOTION: Readonly<Record<ShannonEmotionKind, ShannonFace>> = Objec
   tired: face('sleepy'), sleepy: face('sleepy'),
   gentle: face('tender'), relaxed: face('calm'), content: face('calm'), quietCompanion: face('calm'),
   tender: face('tender'), apologetic: APOLOGETIC,
+  // No artwork of its own (owner answer 2 of 2026-10-05: the nearest face there is).
+  uncomfortable: face('annoyed'),
 });
 
 export function faceForEmotionKind(kind: ShannonEmotionKind): ShannonFace {

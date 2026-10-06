@@ -3,6 +3,7 @@ import { BODY_LIMITS } from './bodyContract.js';
 import { BODY_REACTION_LIMITS } from './bodyReactionContract.js';
 import type { SQLiteBodyReactionStore, StoredTouchBurst, TouchRecord } from './bodyReactionStore.js';
 import { touchExperience, type TouchExperienceWriter } from './bodyTouchMemory.js';
+import { reflexPartWord } from './bodyTouchReflex.js';
 import type { PredictionShadow } from './predictionShadow.js';
 
 /**
@@ -67,13 +68,17 @@ export class BodyTouches {
     let snapshot = before;
     const age = Date.parse(at) - Date.parse(touch.occurredAt);
     if (receipt.fresh && age <= BODY_REACTION_LIMITS.feelingFreshMilliseconds && age >= -BODY_LIMITS.eventFutureSkewMilliseconds) {
+      // Syzygy ADR-0005 stage 1b: on a part where her body flinches first only the reflex moves her, not the table.
+      const reflexPart = reflexPartWord(touch.part);
       snapshot = stateStore.apply(scopeKey, { type: 'body-touched', touch: {
         kind: touch.type, countInWindow: receipt.burst.count, ownerAlone: touch.audience === 'owner',
         ...(touch.durationMs !== undefined ? { durationMs: touch.durationMs } : {}),
         ...(touch.strength !== undefined ? { strength: touch.strength } : {}),
+        ...(reflexPart ? { reflexPart, ...(touch.gesture === 'rest' ? { resting: true } : {}) } : {}),
       } });
-      // The shadow is handed what was felt and returns nothing (it never fails the touch).
-      this.dependencies.prediction?.touch(scopeKey, {
+      // The shadow is handed what was felt and returns nothing (it never fails the touch). A touch moved only by the
+      // reflex has no appraisal of the table to learn from: its outcome is her own stance, kept in the result table.
+      if (!reflexPart) this.dependencies.prediction?.touch(scopeKey, {
         burstId: receipt.burst.id, kind: touch.type, audience: touch.audience, count: receipt.burst.count,
         ...(touch.region ? { region: touch.region } : {}), ...(touch.surface ? { surface: touch.surface } : {}),
         ...(touch.strength !== undefined ? { strength: touch.strength } : {}), ...(touch.durationMs !== undefined ? { durationMs: touch.durationMs } : {}),
@@ -81,6 +86,11 @@ export class BodyTouches {
     }
     this.remember(scopeKey, receipt.burst);
     return { fresh: receipt.fresh, burst: receipt.burst, snapshot };
+  }
+
+  /** What touch vocabulary 2 kept for a touch id (its part, side, gesture, reflex); null for an id never counted. */
+  detail(scopeKey: string, touchId: string): ReturnType<SQLiteBodyReactionStore['touchDetail']> {
+    return this.dependencies.store.touchDetail(scopeKey, touchId);
   }
 
   /** She said a line because of this burst: it becomes part of the memory. */

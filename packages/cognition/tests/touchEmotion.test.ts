@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SHANNON_EMOTION_CARRY_THRESHOLD, SHANNON_EMOTION_TIME, SHANNON_TOUCH_FEELINGS, SHANNON_TOUCH_KINDS, SHANNON_TOUCH_MOOD_STEP,
+  SHANNON_EMOTION_CARRY_THRESHOLD, SHANNON_EMOTION_TIME, SHANNON_TOUCH_FEELINGS, SHANNON_TOUCH_KINDS, SHANNON_TOUCH_MOOD_STEP, SHANNON_TOUCH_REFLEX,
   carriedShannonEmotion, createInitialCompanionState, currentShannonEmotion, faceForEmotionKind, feelTouch, isShannonEmotionKind,
   isShannonTouchKind, isTouchFeeling, keepsFeelingThroughTouch, presentShannonMood, reduceCompanionState, touchCause, touchFeeling,
   type CompanionStateSnapshot, type ShannonTouch, type ShannonTouchKind,
@@ -182,5 +182,68 @@ describe('body-touched in the one emotion state', () => {
     expect(feelTouch(state, touch('holdHand', 2, { strength: 0.4 }), START)).toEqual(first);
     expect(state.emotion).toEqual(fresh().emotion);
     expect(touched(fresh(), touch('pet', 1, { ownerAlone: false })).expressiveEmotion).toMatchObject({ target: '触れた人', cause: '頭をなでてもらった' });
+  });
+});
+
+describe('a part where her body flinches first: the reflex alone (Syzygy ADR-0005 stage 1b)', () => {
+  const PARTS = ['首', '胸', '腰', '脚', 'スカート'];
+  const reflex = (kind: ShannonTouchKind, count = 1, extra: Partial<ShannonTouch> = {}) => touch(kind, count, { reflexPart: '首', ...extra });
+
+  it('moves no pleasantness: valence and openness stay, arousal only rises, for every part, way of touching and count', () => {
+    for (const reflexPart of PARTS) {
+      for (const kind of SHANNON_TOUCH_KINDS) {
+        let state = fresh();
+        for (let count = 1; count <= 12; count += 1) {
+          const after = touched(state, touch(kind, count, { reflexPart, strength: 1, durationMs: 600_000 }), later(count));
+          expect(after.emotion.valence).toBe(state.emotion.valence);
+          expect(after.emotion.openness).toBe(state.emotion.openness);
+          expect(after.emotion.arousal).toBeGreaterThanOrEqual(state.emotion.arousal);
+          expect(after.emotion.arousal - state.emotion.arousal).toBeLessThanOrEqual(SHANNON_TOUCH_MOOD_STEP + 1e-9);
+          state = after;
+        }
+      }
+    }
+  });
+
+  it('is the table\'s own startle at every count, never a row of the table: no joy from a stroke, no sulk from pokes', () => {
+    expect(SHANNON_TOUCH_REFLEX).toBe(SHANNON_TOUCH_FEELINGS.poke.steps[0]);
+    for (const kind of SHANNON_TOUCH_KINDS) {
+      for (const count of [1, 3, 6, 40]) expect(touchFeeling(reflex(kind, count)).step).toBe(SHANNON_TOUCH_REFLEX);
+    }
+    const stroked = [1, 2, 3, 4, 5, 6].reduce((state, count) => touched(state, reflex('pet', count), later(count)), fresh());
+    expect(stroked.expressiveEmotion!.primary).toBe('surprised');
+    const poked = [1, 2, 3, 4, 5].reduce((state, count) => touched(state, reflex('poke', count), later(count)), fresh());
+    expect(poked.expressiveEmotion!.primary).toBe('surprised');
+    expect(poked.emotion.valence).toBe(fresh().emotion.valence);
+    // Firmness and length are felt as for any touch.
+    expect(touchFeeling(reflex('poke', 1, { strength: 1 })).intensity).toBeGreaterThan(touchFeeling(reflex('poke', 1, { strength: 0 })).intensity);
+  });
+
+  it('names the part as the cause, keeps it a feeling from a touch, and gives way to the next touch', () => {
+    expect(touchCause(touch('poke', 1, { reflexPart: '首' }))).toBe('ライ氏に首をつつかれた');
+    // The verbs of the reaction prompt, by gesture: a stroke, and a touch that rests.
+    expect(touchCause(touch('pet', 2, { reflexPart: '胸' }))).toBe('ライ氏に胸をなでられた（続けて2回目）');
+    expect(touchCause(touch('pet', 1, { reflexPart: '胸', resting: true }))).toBe('ライ氏に胸に触れられた');
+    expect(touchCause(touch('pet', 1, { resting: true }))).toBe('ライ氏に頭をなでてもらった');
+    expect(touchCause(touch('tickle', 1, { reflexPart: '腰', ownerAlone: false }))).toBe('腰をくすぐられた');
+    expect(touchCause(touch('carry', 1, { reflexPart: 'スカート' }))).toBe('ライ氏に持ち上げて運ばれた');
+    // A hand resting on such a part is not hand-holding: no favour in the words.
+    expect(touchCause(touch('holdHand', 1, { reflexPart: '胸', resting: true }))).toBe('ライ氏に胸に触れられた');
+    expect(touchCause(touch('holdHand', 1, { reflexPart: '腰' }))).toBe('ライ氏に腰に触れられた');
+    expect(touchCause(touch('holdHand'))).toBe('ライ氏に手をつないでもらった');
+    const startled = touched(fresh(), touch('pet', 1, { reflexPart: '胸' }));
+    expect(startled.expressiveEmotion).toMatchObject({ primary: 'surprised', target: 'ライ氏', cause: 'ライ氏に胸をなでられた' });
+    expect(isTouchFeeling(touched(fresh(), touch('pet', 1, { reflexPart: '脚', resting: true })).expressiveEmotion)).toBe(true);
+    expect(isTouchFeeling(startled.expressiveEmotion)).toBe(true);
+    expect(touched(startled, touch('holdHand'), later(1)).expressiveEmotion!.primary).toBe('shy');
+  });
+
+  it('leaves a touch without a part exactly as the table has it', () => {
+    for (const kind of SHANNON_TOUCH_KINDS) {
+      for (const count of [1, 3, 6]) {
+        expect(touchFeeling(touch(kind, count, { reflexPart: '' }))).toEqual(touchFeeling(touch(kind, count)));
+        expect(touched(fresh(), touch(kind, count, { reflexPart: undefined }))).toEqual(touched(fresh(), touch(kind, count)));
+      }
+    }
   });
 });

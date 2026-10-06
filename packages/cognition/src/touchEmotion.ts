@@ -59,6 +59,30 @@ export const SHANNON_TOUCH_FEELINGS: Readonly<Record<ShannonTouchKind, ShannonTo
   ]) }),
 });
 
+/**
+ * The reflex of a touch on a part where her body flinches first (Syzygy ADR-0005 decision 2, stage 1b of its design):
+ * the startle the table already has for an unexpected touch, its first poke (`surprised`), reused rather than a new
+ * number. It is the same for every touch there, however often (habituation is ADR-0006's). Of the mood it moves only
+ * arousal, and only upward; pleasantness and openness stay where they are. Nothing here is a reading of the touch:
+ * whether she welcomes it or not is hers, decided in the reaction (`stance`), never by a table.
+ *
+ * TODO(ADR-0006 stage 2): touches moved only by this reflex are left out of the prediction shadow (`bodyTouch.ts`),
+ * which learns from the table's appraisal, so nothing yet learns habituation on these parts. Feed the shadow her
+ * `stance` from `body_touch_outcomes` as the outcome of these keys, then let the reflex shrink with what is expected.
+ */
+export const SHANNON_TOUCH_REFLEX: ShannonTouchFeelingStep = SHANNON_TOUCH_FEELINGS.poke.steps[0]!;
+
+/**
+ * How a touch on such a part is named as the cause of the reflex, with the verbs the reaction prompt uses for the gesture
+ * (`touchDetailPhrase`): 首をなでられた, 胸に触れられた (a touch that rests, also `holdHand` there), 腰をつつかれた, 脚をくすぐられた. Carrying keeps the table's words.
+ */
+const REFLEX_PHRASES = Object.freeze({ stroke: 'をなでられた', rest: 'に触れられた', poke: 'をつつかれた', tickle: 'をくすぐられた' });
+const reflexPhrase = (touch: ShannonTouch): string | undefined =>
+  // `holdHand` on such a part is a hand resting there (holding is the hand's alone): not hand-holding, and no favour.
+  touch.kind === 'holdHand' ? REFLEX_PHRASES.rest
+    : touch.kind === 'pet' ? (touch.resting ? REFLEX_PHRASES.rest : REFLEX_PHRASES.stroke)
+    : touch.kind === 'poke' ? REFLEX_PHRASES.poke : touch.kind === 'tickle' ? REFLEX_PHRASES.tickle : undefined;
+
 /** The share of the distance to the row's mood one touch covers, and the most any one touch moves a mood value. */
 export const SHANNON_TOUCH_MOOD_RATE = 0.18;
 export const SHANNON_TOUCH_MOOD_STEP = 0.08;
@@ -73,20 +97,32 @@ export function isShannonTouchKind(value: unknown): value is ShannonTouchKind {
 export function touchFeeling(touch: ShannonTouch): { done: string; step: ShannonTouchFeelingStep; weight: number; intensity: number } {
   const row = SHANNON_TOUCH_FEELINGS[touch.kind];
   const count = Math.max(1, Math.trunc(clamp(touch.countInWindow, 1, 9_999)));
-  const chosen = [...row.steps].reverse().find(item => count >= item.fromCount) ?? row.steps[0]!;
+  // On a part where her body flinches first, the reflex alone: no row, no step by count.
+  const chosen = isReflexTouch(touch) ? SHANNON_TOUCH_REFLEX : [...row.steps].reverse().find(item => count >= item.fromCount) ?? row.steps[0]!;
   const strength = clamp(touch.strength ?? 0.5, 0, 1);
   const lasting = clamp((touch.durationMs ?? 0) / 10_000, 0, 1);
   return {
-    done: row.done, step: chosen,
+    done: touchDone(touch), step: chosen,
     weight: 0.7 + strength * 0.3 + lasting * 0.3,
     intensity: clamp(chosen.intensity + (strength - 0.5) * 0.16 + lasting * 0.08, 0.3, 0.9),
   };
 }
 
+/** Whether only the reflex moves her for this touch (a part where her body flinches first). */
+export function isReflexTouch(touch: Pick<ShannonTouch, 'reflexPart'>): boolean {
+  return typeof touch.reflexPart === 'string' && touch.reflexPart.length > 0;
+}
+
+/** The touch in the state's words: the table's, or on a part where her body flinches first, that part (首をつつかれた, 胸に触れられた). */
+function touchDone(touch: ShannonTouch): string {
+  const phrase = isReflexTouch(touch) ? reflexPhrase(touch) : undefined;
+  return phrase ? `${touch.reflexPart}${phrase}` : SHANNON_TOUCH_FEELINGS[touch.kind].done;
+}
+
 /** Why she feels it, in the stored state's words. Shown to the owner as the cause of 「いま」. */
 export function touchCause(touch: ShannonTouch): string {
   const count = Math.max(1, Math.trunc(clamp(touch.countInWindow, 1, 9_999)));
-  return `${touch.ownerAlone === false ? '' : `${SHANNON_OWNER_NAME}に`}${SHANNON_TOUCH_FEELINGS[touch.kind].done}${count > 1 ? `（続けて${count}回目）` : ''}`;
+  return `${touch.ownerAlone === false ? '' : `${SHANNON_OWNER_NAME}に`}${touchDone(touch)}${count > 1 ? `（続けて${count}回目）` : ''}`;
 }
 
 /** Whom the feeling is toward: the owner, unless someone else may have been the one touching. */
@@ -96,7 +132,8 @@ export function touchTarget(touch: Pick<ShannonTouch, 'ownerAlone'>): string {
 
 /** Whether a stored feeling came from a touch (its cause is one of the table's own wordings). */
 export function isTouchFeeling(emotion: Pick<ShannonExpressiveEmotion, 'cause'> | undefined): boolean {
-  return emotion !== undefined && SHANNON_TOUCH_KINDS.some(kind => emotion.cause.includes(SHANNON_TOUCH_FEELINGS[kind].done));
+  return emotion !== undefined && (SHANNON_TOUCH_KINDS.some(kind => emotion.cause.includes(SHANNON_TOUCH_FEELINGS[kind].done))
+    || Object.values(REFLEX_PHRASES).some(phrase => emotion.cause.includes(phrase)));
 }
 
 /**
@@ -145,7 +182,13 @@ export function feelTouch(
   const felt = touchFeeling(touch);
   const toward = (current: number, target: number) =>
     clamp((target - current) * SHANNON_TOUCH_MOOD_RATE * felt.weight, -SHANNON_TOUCH_MOOD_STEP, SHANNON_TOUCH_MOOD_STEP);
-  const emotion: ShannonEmotion = {
+  // The reflex wakes her up and moves nothing pleasant or unpleasant: arousal only rises, valence and openness stay.
+  const reflex = isReflexTouch(touch);
+  const emotion: ShannonEmotion = reflex ? {
+    valence: state.emotion.valence,
+    arousal: clamp(state.emotion.arousal + Math.max(0, toward(state.emotion.arousal, felt.step.mood.arousal)), 0, 1),
+    openness: state.emotion.openness,
+  } : {
     valence: clamp(state.emotion.valence + toward(state.emotion.valence, felt.step.mood.valence), -1, 1),
     arousal: clamp(state.emotion.arousal + toward(state.emotion.arousal, felt.step.mood.arousal), 0, 1),
     openness: clamp(state.emotion.openness + toward(state.emotion.openness, felt.step.mood.openness), 0, 1),

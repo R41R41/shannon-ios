@@ -6,9 +6,11 @@ import {
   createShannonMessageEmotion,
   deriveShannonFace,
   faceForEmotionKind,
+  isMoodLikeEmotion,
   messageEmotionForOthers,
   messageEmotionKind,
   resolveReplyEmotion,
+  shannonEmotionSign,
   type ShannonExpressiveEmotion,
 } from '../src/index.js';
 
@@ -58,5 +60,21 @@ describe('the kind with others present (coordinator decision 2026-10-05)', () =>
     expect(messageEmotionForOthers(emotion)).toEqual(face);
     const quiet = createShannonMessageEmotion(MOOD);
     expect(messageEmotionForOthers(quiet)).toBe(quiet);
+  });
+});
+
+describe('uncomfortable, 気持ち悪い・いや (Syzygy ADR-0005, owner answer 2 of 2026-10-05)', () => {
+  it('is a kind of hers with the nearest face there is, unpleasant, and a mood she may keep toward the owner', () => {
+    expect(SHANNON_EMOTION_KINDS).toContain('uncomfortable');
+    expect(faceForEmotionKind('uncomfortable')).toEqual({ expression: 'annoyed' });
+    expect(shannonEmotionSign('uncomfortable')).toBe(-1);
+    expect(isMoodLikeEmotion('uncomfortable')).toBe(true);
+    expect(createShannonMessageEmotion(MOOD, feeling('uncomfortable'))).toMatchObject({ expression: 'annoyed', kind: 'uncomfortable' });
+  });
+
+  it('is never read from her words: only a feeling she chooses names it', () => {
+    for (const text of ['気持ち悪いです。', 'いやです、やめてください。', 'うわ、ぞわっとしました。']) {
+      expect(reply(text).kind).not.toBe('uncomfortable');
+    }
   });
 });
