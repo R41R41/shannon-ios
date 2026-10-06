@@ -19,7 +19,8 @@ import { SQLiteBodyReactionStore } from './bodyReactionStore.js';
 import { BodyTouches, type BodyTouchDependencies } from './bodyTouch.js';
 import { BODY_TOUCH_ONLY_FLAG, isFullBody, isTouchOnlyBody } from './bodyTouchOnly.js';
 import { desktopBodyDeviceId, isDesktopBodyDeviceId } from './desktopBodyIdentity.js';
-import { bodyPlace, bodySurfaceMark, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
+import { bodyPlace, bodySurfaceMark, factualTouchPhrase, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
+import { isReflexPart } from './bodyTouchReflex.js';
 import { ConversationLooks } from './conversationLooks.js';
 import { OWNER_CALL_LIMITS, OwnerCalls, type OwnerCallDependencies, type OwnerCallElsewhere, type OwnerCallSurface } from './ownerCallElsewhere.js';
 import type { TouchExperienceWriter } from './bodyTouchMemory.js';
@@ -258,6 +259,21 @@ export class ShannonBody {
   }
 
   /**
+   * Whether a touch event of the `[体に起きたこと]` block is told factually (体に触れられた) rather than in its usual words
+   * (Syzygy ADR-0005 stage 1b): touch vocabulary 2 kept a part for its id (`body_touches`, the same id), and it is a part
+   * where her body flinches first, or it is a hand resting anywhere but the hand. A touch without such a row (the old
+   * shape) is told as it always was.
+   */
+  private factualTouch(scopeKey: string, event: StoredBodyEvent): boolean {
+    if (event.type !== 'pet' && event.type !== 'holdHand') return false;
+    try {
+      const part = this.touches.detail(scopeKey, event.id)?.part;
+      if (!part) return false;
+      return isReflexPart(part) || (event.type === 'holdHand' && part !== 'hand');
+    } catch { return false; }
+  }
+
+  /**
    * A stored touch reaches her feeling and her memory, whoever was around (owner decision 2026-10-02). An id a
    * reaction request already counted only brings that touch's duration up to date. After the store's own
    * transaction, so no two connections write at once; a failure loses the feeling of one touch, never the receipt.
@@ -311,22 +327,24 @@ export class ShannonBody {
         return surfaces.get(event.deviceId);
       };
       // One line per way of touching, part and surface: a count never puts one touch's part or place on another's.
-      const groups = new Map<string, { latest: StoredBodyEvent; count: number }>();
+      const groups = new Map<string, { latest: StoredBodyEvent; count: number; factual: boolean }>();
       for (const event of this.store.recent(scopeKey, 'owner', since, 100)) {
         if (!CONTEXT_PHRASE[event.type] || Date.parse(event.occurredAt) > time) continue;
-        const key = `${event.type}\u0000${event.region ?? ''}\u0000${surfaceOf(event) ?? ''}`;
+        const factual = this.factualTouch(scopeKey, event);
+        const key = `${event.type}\u0000${event.region ?? ''}\u0000${surfaceOf(event) ?? ''}${factual ? '\u0000factual' : ''}`;
         const group = groups.get(key);
-        if (group) group.count += 1; else groups.set(key, { latest: event, count: 1 });
+        if (group) group.count += 1; else groups.set(key, { latest: event, count: 1, factual });
       }
       const shown = [...groups.values()].slice(0, BODY_LIMITS.contextEvents);
       if (!shown.length) return '';
       // One surface is named in the heading. Several — also a touch on the phone beside 「席へ戻った」 from the PC —
       // and the heading names none, with each touch saying where.
       const mixed = new Set(shown.map(({ latest }) => surfaceOf(latest) ?? '')).size > 1;
-      const lines = shown.map(({ latest, count }) => {
+      const lines = shown.map(({ latest, count, factual }) => {
         const minutes = Math.floor((time - Date.parse(latest.occurredAt)) / 60_000);
         const touch = BODY_TOUCH_EVENT_TYPES.find(type => type === latest.type);
-        const phrase = (touch && touchPartPhrase(touch, latest.region, 'done')) ?? CONTEXT_PHRASE[latest.type]!(latest);
+        const phrase = (touch && factual ? factualTouchPhrase(touch, latest.region, 'done') : null)
+          ?? (touch && touchPartPhrase(touch, latest.region, 'done')) ?? CONTEXT_PHRASE[latest.type]!(latest);
         return `- ${minutes < 1 ? 'たったいま、' : `${minutes}分前に`}${phrase}${count > 1 ? `（${count}回）` : ''}${mixed && touch ? bodySurfaceMark(surfaceOf(latest)) : ''}`;
       });
       const place = mixed ? `${SHANNON_FIRST_PERSON}の体` : bodyPlace(surfaceOf(shown[0]!.latest));

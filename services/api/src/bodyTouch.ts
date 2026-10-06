@@ -88,6 +88,11 @@ export class BodyTouches {
     return { fresh: receipt.fresh, burst: receipt.burst, snapshot };
   }
 
+  /** What touch vocabulary 2 kept for a touch id (its part, side, gesture, reflex); null for an id never counted. */
+  detail(scopeKey: string, touchId: string): ReturnType<SQLiteBodyReactionStore['touchDetail']> {
+    return this.dependencies.store.touchDetail(scopeKey, touchId);
+  }
+
   /** She said a line because of this burst: it becomes part of the memory. */
   said(scopeKey: string, burstId: string, text: string, others: boolean): void {
     const burst = this.dependencies.store.addSaid(scopeKey, burstId, text, others);

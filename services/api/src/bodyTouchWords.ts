@@ -91,6 +91,16 @@ const REFLEX_BURST: Partial<Record<ShannonTouchKind, { ongoing: string; done: st
 });
 
 /**
+ * Stroking or a hand resting, told factually as being touched (体に触れられた; 触れられた without a region), for a touch on a
+ * part where her body flinches first or a hand resting anywhere but the hand. Null for the gestures whose words are
+ * already factual (poking, tickling, carrying): the caller keeps them.
+ */
+export function factualTouchPhrase(type: ShannonTouchKind, region: BodyTouchRegion | null | undefined, form: 'ongoing' | 'done' | 'memory'): string | null {
+  const neutral = REFLEX_BURST[type];
+  return neutral ? `${region ? `${PART[region]}に` : ''}${neutral[form]}` : null;
+}
+
+/**
  * The phrase for a burst: its part when every touch named the same one, the part-less wording when they
  * differed, and `legacy` (the wording from before parts existed) when no touch ever named one. A burst with a touch
  * on a part where her body flinches first (`reflex`) never takes a wording of favour: see `REFLEX_BURST`.
@@ -98,8 +108,8 @@ const REFLEX_BURST: Partial<Record<ShannonTouchKind, { ongoing: string; done: st
 export function burstTouchPhrase(
   type: ShannonTouchKind, burst: { region?: BodyTouchRegion; mixedRegion?: boolean; reflex?: boolean }, form: 'ongoing' | 'done' | 'memory', legacy: string,
 ): string {
-  const neutral = burst.reflex ? REFLEX_BURST[type] : undefined;
-  if (neutral) return `${burst.region ? `${PART[burst.region]}に` : ''}${neutral[form]}`;
+  const neutral = burst.reflex ? factualTouchPhrase(type, burst.region, form) : null;
+  if (neutral) return neutral;
   return touchPartPhrase(type, burst.region, form) ?? (burst.mixedRegion ? PARTLESS[type]?.[form] : undefined) ?? legacy;
 }
 

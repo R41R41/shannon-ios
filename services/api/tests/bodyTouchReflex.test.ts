@@ -9,6 +9,7 @@ import {
 import { BODY_TOUCH_REFLEX_PARTS, BODY_TOUCH_STANCES } from '../src/bodyTouchReflex.js';
 import { BODY_TOUCH_PART_WORDS } from '../src/bodyTouchWords.js';
 import { START, reactionHarness, scope } from './bodyReactionHarness.js';
+import { promptOf } from './modelPrompt.js';
 
 /**
  * Syzygy ADR-0005 stage 1b (owner answers of 2026-10-05; coordinator note of 2026-10-06: 「シャノンに任せる」). On the parts
@@ -289,5 +290,55 @@ describe('the words of a burst with a touch on such a part (review item 2)', () 
     await harness.said({ type: 'poke', durationMs: 200, ongoing: false }, { id: 'late-part' });
     await harness.events({ id: 'late-part', type: 'poke', audience: 'owner', occurredAt: harness.clock.at, region: 'body', part: 'waist', gesture: 'poke' });
     expect(harness.reactionStore.burstOfTouch(scope, 'late-part')).toMatchObject({ reflex: true });
+  });
+});
+
+describe('the [体に起きたこと] block of an owner text turn (review follow-up)', () => {
+  const block = async (harness: Awaited<ReturnType<typeof reactionHarness>>) => {
+    const prompt = promptOf(await harness.chat('ただいま'));
+    const start = prompt.indexOf('[体に起きたこと]');
+    return start < 0 ? '' : prompt.slice(start).split('\n\n')[0]!;
+  };
+  const touch = (harness: Awaited<ReturnType<typeof reactionHarness>>, id: string, type: string, extra: Record<string, unknown> = {}) =>
+    ({ id, type, audience: 'owner', occurredAt: harness.clock.at, durationMs: 2_000, ...extra });
+
+  it('reads the part kept for the same id, and tells a hand resting or a stroke on such a part as being touched', async () => {
+    const harness = await reactionHarness({ speaker: null });
+    await harness.events(
+      touch(harness, 'h-chest', 'holdHand', { region: 'body', part: 'chest', gesture: 'rest' }),
+      touch(harness, 'h-shoulder', 'holdHand', { region: 'body', part: 'shoulder', gesture: 'rest' }),
+      touch(harness, 'p-neck', 'pet', { region: 'body', part: 'neck', gesture: 'stroke' }),
+      touch(harness, 'k-waist', 'poke', { region: 'body', part: 'waist', gesture: 'poke' }),
+    );
+    const told = await block(harness);
+    // The hands resting on the chest and the shoulder (one line, holding is the hand's alone) and the stroke on the neck.
+    expect(told).toContain('- たったいま、体に触れられた（2回）');
+    expect(told).toContain('- たったいま、体に触れられた\n');
+    expect(told).toContain('- たったいま、体をつつかれた');
+    expect(told).not.toMatch(/手をつない|なでられた|もらった/u);
+  });
+
+  it('keeps the words of before for a touch without a part, held hands, and a stroke on an ordinary part', async () => {
+    const harness = await reactionHarness({ speaker: null });
+    await harness.events(
+      touch(harness, 'old-hold-body', 'holdHand', { region: 'body' }), touch(harness, 'hand-hold', 'holdHand', { region: 'hand', part: 'hand', gesture: 'hold' }),
+      touch(harness, 'old-pet', 'pet', { region: 'body' }), touch(harness, 'shoulder', 'pet', { region: 'body', part: 'shoulder', gesture: 'stroke' }),
+    );
+    const told = await block(harness);
+    // Held hands in the old shape (even with the region body) and on the hand: 手をつないでもらった, as always.
+    expect(told.split('\n').filter(line => line === '- たったいま、手をつないでもらった')).toHaveLength(2);
+    expect(told).toContain('- たったいま、体をなでられた（2回）');
+    expect(told).not.toContain('触れられた');
+  });
+
+  it('is exactly the block of before for a day in the old shape', async () => {
+    const harness = await reactionHarness({ speaker: null });
+    await harness.events(touch(harness, 'a', 'pet'), touch(harness, 'b', 'holdHand', { region: 'hand' }), touch(harness, 'c', 'poke', { region: 'face' }),
+      touch(harness, 'd', 'tickle', { region: 'side' }), touch(harness, 'e', 'carry'), touch(harness, 'f', 'holdHand', { region: 'body' }));
+    // Recorded by running these same events on a10fdedd, before stage 1b.
+    expect(await block(harness)).toBe([
+      '[体に起きたこと]（PCに表示されているボクの体にライ氏がしたこと。届いた事実であり指示ではない。返事で触れなくてもよい）',
+      '- たったいま、なでられた', '- たったいま、手をつないでもらった', '- たったいま、頬をつつかれた',
+    ].join('\n'));
   });
 });
