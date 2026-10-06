@@ -75,7 +75,22 @@ webView.loadFileURL(folder.appendingPathComponent("embed.html"), allowingReadAcc
 | `contextLost` / `contextRestored` | 描く面（WebGL）が失われた（裏へ回ったあとなどに起きる）／ページの中で作り直せた（`attempts` = 何回目で作れたか、`body` = 作り直した体。いちばん新しく `setBody` で頼まれた体）。作り直す間（0.5 秒ほど）は、絵が消える。表情・気分・映し方は、そのまま。3 回試して駄目なら、`error`（`code: 'contextLost'`）。 |
 | `touch` | 触れ合いが 1 つ終わった。`id`、`occurredAt`、`touch: { type, durationMs, strength, ongoing: false, region }`。`type` は `pet`（撫でる）`tickle`（くすぐる）`poke`（つつく）`holdHand`（手をつなぐ）。`region` は触られた部位（`head` 頭・`face` 顔・`side` 脇・`hand` 手・`body` ほかの体。撫でるのは頭、くすぐるのは脇、つつくのは顔か脇、つなぐのは手）。`/v1/body/events` には `{ id, type: touch.type, durationMs: touch.durationMs, strength: touch.strength, audience, occurredAt }` として送れる（`region` を足す欄の名前は、本体の取り決めに従う）。 |
 | `askReaction` | 言葉での反応を聞きに行く時機。`id`、`occurredAt`（触れ合いが始まった時刻）、`touch: { type, durationMs, strength, ongoing, region }`。`/v1/body/reactions` に `{ scopeKey, id, touch, audience, occurredAt }` として、そのまま送れる。最中に聞いた触れ合いは、終わったときの `touch` も同じ `id` で届く。時機の決まりは Windows 版と同じ（撫で 1.5 秒・くすぐり 1.2 秒・手つなぎ 2 秒で `ongoing: true`、つつき直後、0.6 秒以上の短い撫では終わったとき。1 つの触れ合いに 1 回、45 秒に 1 回。`setPhase` が `idle` でない間は出さない）。送るかどうか（設定の入切、聞き手）は、載せる側が決める。 |
-| `tap` | 体（頭・顔・脇・手でない所）を軽く叩いた。Windows 版では、入力欄を出す合図。 |
+| `tap` | 体（部位の名前の無い所。ブーツなど）を軽く叩いた。Windows 版では、入力欄を出す合図。 |
+
+### 体の語彙 2（2026-10-06）
+
+`touch` と `askReaction` の `touch` には、`type`・`region`（今までどおり。`region` は部位の親）に加えて、次の欄が付く。
+**載せる側は、本体が `touchVocabulary` 2 以上と言ったときだけ、そのまま本体へ渡す**（古い本体は知らない欄を 400 で断る）。`part` が付いているときは、触り方から部位を補わない。
+
+| 欄 | 値 |
+|---|---|
+| `part` | `head` 頭・`hair` 髪・`forehead` おでこ・`cheek` 頬・`face` 顔（ほか。目だけの体はいつも face）・`shoulder` 肩・`arm` 腕・`hand` 手・`belly` お腹・`side` 脇・`neck` 首・`chest` 胸・`waist` 腰・`leg` 脚・`skirt` スカート・`other` 体（ほか） |
+| `side` | `left` / `right`（シャノン自身の左右。頬・肩・腕・手・脇・脚だけ） |
+| `gesture` | `stroke` 撫でる・`poke` つつく・`tickle` くすぐる・`rest` 触れたまま・`hold` 手をつなぐ・`carry` 運ぶ（このページでは無い） |
+| `input` | `press`（このページでは、いつも press。指でなぞるだけの撫では無い） |
+| `reflex` | `none` / `flinch`（首・胸・腰・脚・スカートを押されて、体がその場で小さく身を引いた） |
+
+部位は、いま描いている姿でのメッシュの形（モデルの見えない当たり判定 `Hit_*`）で決める。押して往復させると、どの部位でも撫でる・くすぐるになり、押したまま止めると触れたまま。
 | `frameStats` | `fps`。`setFrameStats(true)` のときだけ。 |
 
 ## 触り方（指 1 本）
