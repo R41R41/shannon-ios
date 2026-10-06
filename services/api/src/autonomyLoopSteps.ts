@@ -16,7 +16,7 @@ import { storyNotes, withNoteAfterReading } from './autonomyLoopPlan.js';
 import { AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, revisePrompt } from './autonomyLoopPrompts.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import { prepareThinking } from './autonomyLoopThinkStep.js';
-import { heldForOthers, markEarly, sessionMarked, unmarkedOnly, unmarkedPursuits } from './autonomyLoopProvenance.js';
+import { heldForOthers, markEarly, sessionMarked, shownLater, unmarkedOnly, unmarkedPursuits } from './autonomyLoopProvenance.js';
 import { prepareToolStep, type AutonomyToolResults } from './autonomyLoopToolStep.js';
 import type { AutonomyModelPurpose } from './autonomyModels.js';
 import { AUTONOMY_CALL_DOMAIN, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
@@ -376,8 +376,10 @@ function prepareShowing(dependencies: StepDependencies, cycle: AutonomyLoopCycle
       const ready = store.transaction(() => store.study.markReady(cycle.scopeKey, piece.id, at));
       if (typeof ready === 'string') return { outcome: 'failed', summary: '物語を「見せてもいい」にできませんでした。' };
       const revised = store.study.versions(cycle.scopeKey, piece.id).length > 1 && Boolean(piece.shownAt);
-      let told: ShowingOutcome;
-      try { told = adapters.showing.tell(cycle.scopeKey, { id: piece.id, title: ready.title, version: ready.version, revised }, at); } catch { told = 'unavailable'; }
+      let told: ShowingOutcome | 'others_present';
+      // A story written after reading the owner's is not named in the Talk while anyone else may see it: told later (ADR-0007).
+      if (shownLater(dependencies, cycle, piece.id, at)) told = 'others_present';
+      else try { told = adapters.showing.tell(cycle.scopeKey, { id: piece.id, title: ready.title, version: ready.version, revised }, at); } catch { told = 'unavailable'; }
       const sent = told === 'sent' || told === 'already-told';
       return {
         outcome: 'done', link: `shannon-study://${piece.id}`, tool: sent ? 'study.show' : 'study.ready',
@@ -437,8 +439,9 @@ export function openStories(dependencies: Pick<StepDependencies, 'store'>, scope
   return dependencies.store.study.list(scopeKey).filter(piece => piece.kind === 'story' && (piece.status === 'draft' || piece.status === 'ready')).length;
 }
 
-function waitingReason(outcome: ShowingOutcome): string {
+function waitingReason(outcome: ShowingOutcome | 'others_present'): string {
   switch (outcome) {
+    case 'others_present': return 'ほかの人がいるため';
     case 'quiet-hours': return '夜の静かな時間のため';
     case 'recent-conversation': return '話している最中のため';
     case 'today-is-enough': return '今日はもう一度話しかけたため';

@@ -66,6 +66,19 @@ export function unmarkedReadings(dependencies: Pick<StepDependencies, 'store'>, 
   return unlisted ? readingId => !unlisted!(`${READING_DOCUMENT_PREFIX}${readingId}`) : () => true;
 }
 
+/**
+ * Telling the owner in the Talk that a story is ready names it: a marked story, or one shown from a marked session, is told later
+ * while anyone else may see or hear her body. Who is there, unreadable, counts as someone; a loop that cannot know tells as before.
+ */
+export function shownLater(dependencies: Pick<StepDependencies, 'store' | 'reachOuts'>, cycle: Pick<AutonomyLoopCycle, 'id' | 'scopeKey'>, pieceId: string, at: string): boolean {
+  if (!dependencies.reachOuts) return false;
+  const marks = dependencies.store.informed;
+  let marked = true;
+  try { marked = marks.sessionInformedAt(cycle.id) !== null || marks.marked(cycle.scopeKey, `${STUDY_DOCUMENT_PREFIX}${pieceId}`); } catch { marked = true; }
+  if (!marked) return false;
+  try { return dependencies.reachOuts.audience(cycle.scopeKey, at) !== null; } catch { return true; }
+}
+
 /** The same for her pursuits: a pursuit created or changed in a marked session is not given to a session that is not marked. */
 export function unmarkedPursuits(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id' | 'scopeKey'>): (pursuit: { id: string }) => boolean {
   const marks = dependencies.store.informed;

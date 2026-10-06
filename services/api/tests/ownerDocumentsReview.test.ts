@@ -109,6 +109,35 @@ describe('a marked session', () => {
   });
 });
 
+describe('telling the owner a marked story is ready', () => {
+  it('waits while anyone else may see her words, starts no step meanwhile, and tells once they are gone', async () => {
+    const state = { others: true };
+    const reachOuts: AutonomyReachOuts = {
+      sentOn: () => 0, lastSentAt: () => null, say: () => 'sent', audience: () => (state.others ? { instructions: '[ほかの人がいる場]', marker: '【機微】' } : null),
+    };
+    const { harness } = await ownTime({ reachOuts }, false);
+    const at = harness.clock.at;
+    const story = harness.store.study.create(scope, { kind: 'story', title: 'SENTINEL-STORY-TITLE', body: '湖のほとりの宿の話。'.repeat(12) }, at);
+    if (typeof story === 'string') throw new Error(story);
+    harness.store.informed.markDocuments(scope, [`shannon-study://${story.id}`], 'earlier', at);
+    harness.model.plans = [{ thought: '見せます。', steps: [{ action: 'ready', pieceId: story.id }] }, { thought: '休みます。', steps: [rest()] }];
+    await runUntilIdle(harness.loop);
+    expect(harness.showing.told).toEqual([]);
+    expect(harness.store.study.get(scope, story.id)?.status).toBe('ready');
+    expect(harness.entries().some(entry => entry.tool === 'study.ready' && entry.summary.includes('ほかの人がいるため'))).toBe(true);
+    // While someone is there, no showing step is started for it.
+    harness.advance(60 * 60_000);
+    const before = harness.entries().length;
+    expect(await runUntilIdle(harness.loop)).not.toContain('stepped');
+    expect(harness.entries().filter(entry => entry.kind === 'action' && (entry.tool === 'study.show' || entry.tool === 'study.ready'))).toHaveLength(1);
+    expect(harness.entries().length).toBe(before);
+    state.others = false;
+    harness.advance(60 * 60_000);
+    await runUntilIdle(harness.loop);
+    expect(harness.showing.told.map(piece => piece.id)).toEqual([story.id]);
+  });
+});
+
 describe('a second call and a phone call of a marked session', () => {
   it('are held when someone comes in while their words are written, and go when nobody does', async () => {
     const said: string[] = [];
