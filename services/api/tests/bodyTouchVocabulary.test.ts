@@ -6,8 +6,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BODY_TOUCH_GESTURES, BODY_TOUCH_INPUTS, BODY_TOUCH_REFLEXES, BODY_TOUCH_SIDES, BODY_TOUCH_VOCABULARY, isImpossibleTouch, validatedBodyEvents, type BodyEvent,
-} from '../src/bodyContract.js';
-import { bodyReactionContentHash, validatedBodyReactionRequest, type BodyReactionAnswer, type BodyReactionRequest } from '../src/bodyReactionContract.js';
+} from '../src/contracts/bodyContract.js';
+import { bodyReactionContentHash, validatedBodyReactionRequest, type BodyReactionAnswer, type BodyReactionRequest } from '../src/contracts/bodyReactionContract.js';
 import { BODY_REACTION_OWN_RULE } from '../src/bodyReactionPrompt.js';
 import { BODY_TOUCH_PARTS } from '../src/bodyTouchWords.js';
 import type { BodyIngestReceipt, BodyPresence } from '../src/shannonBody.js';

@@ -10,7 +10,7 @@ import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
 import { CHAT_SENTENCE_MAXIMUM_LENGTH } from '../src/chatSentenceSplitter.js';
 import { chatSentenceStreamLines } from '../src/chatSentenceStream.js';
-import type { ApiResponse, ChatResponse, ChatStreamLine } from '../src/contracts.js';
+import type { ApiResponse, ChatResponse, ChatStreamLine } from '../src/contracts/contracts.js';
 import { ShannonMemoryService } from '../src/memoryService.js';
 import { dispatchWithChatSentences } from '../src/serverChatSentenceStream.js';
 import { readJson, sendJson } from '../src/serverHttp.js';

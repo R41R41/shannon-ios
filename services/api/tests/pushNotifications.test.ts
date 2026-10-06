@@ -12,8 +12,8 @@ import {
   type PushNotificationSender,
 } from '../src/pushNotifications.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
-import { SQLiteWorldStore } from '../src/worldStore.js';
-import { SQLiteTestFlightDeliveryStore } from '../src/testflightDeliveryStore.js';
+import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
+import { SQLiteTestFlightDeliveryStore } from '../src/integrations/testflight/store/testflightDeliveryStore.js';
 
 const directories: string[] = [];
 afterEach(() => directories.splice(0).forEach(directory => rmSync(directory, { recursive: true, force: true })));

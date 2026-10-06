@@ -8,7 +8,7 @@ import {
   type MemoryAudience,
 } from '@shannon/cognition';
 import type { PresentedCompanionState } from './companionPresence.js';
-import type { ChatResponse } from './contracts.js';
+import type { ChatResponse } from './contracts/contracts.js';
 import type { ConversationCapabilitySelection } from './conversationCapabilities.js';
 import type { ConversationStore } from './conversationStore.js';
 import { identityOnly, type LayeredIdentityPrompt } from './knowledgeStore.js';

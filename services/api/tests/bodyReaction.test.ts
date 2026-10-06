@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SHANNON_ONE_LINE_VOICE, currentShannonEmotion, presentShannonFeeling, presentShannonMood } from '@shannon/cognition';
 import {
   BODY_REACTION_LIMITS, bodyReactionContentHash, configuredBodyReactions, validatedBodyReactionRequest, type BodyReactionAnswer,
-} from '../src/bodyReactionContract.js';
+} from '../src/contracts/bodyReactionContract.js';
 import { OpenAIBodyReactionSpeaker, createConfiguredBodyReactionSpeaker } from '../src/bodyReactionModel.js';
 import {
   BODY_REACTION_OTHERS_RULE, BODY_REACTION_RULES, BODY_REACTION_SCHEMA, BODY_TOUCH_PHRASES, bodyTouchLine, boundedReactionText, parsedBodyReaction,

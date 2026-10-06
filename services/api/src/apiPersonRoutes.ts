@@ -1,4 +1,4 @@
-import type { ApiRequest, ApiResponse } from './contracts.js';
+import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import { badRequest, objectBody, validBoundedString, validScopeKey } from './apiValidation.js';
 import {
   PersonIdentityError,

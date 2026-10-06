@@ -1,4 +1,4 @@
-import { INCOMING_CALL_LIMITS, type IncomingCallOutcome, type IncomingCallRegistration } from './incomingCallContract.js';
+import { INCOMING_CALL_LIMITS, type IncomingCallOutcome, type IncomingCallRegistration } from './contracts/incomingCallContract.js';
 import type { IncomingCall, SQLiteIncomingCallStore } from './incomingCallStore.js';
 import type { ClaimedReachOut, SQLiteReachOutClaims } from './reachOutClaims.js';
 import type { VoipPushSender } from './voipPushSender.js';

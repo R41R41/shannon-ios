@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { PRIVATE_LISTENING_KINDS, PRIVATE_LISTENING_LIMITS, type PrivateListeningKind } from './privateListeningContract.js';
+import { PRIVATE_LISTENING_KINDS, PRIVATE_LISTENING_LIMITS, type PrivateListeningKind } from './contracts/privateListeningContract.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 
 /**

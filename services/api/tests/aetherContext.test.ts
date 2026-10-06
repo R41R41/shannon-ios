@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { FileAetherContextReader } from '../src/aetherContext.js';
+import { FileAetherContextReader } from '../src/integrations/aether/aetherContext.js';
 
 const directories: string[] = [];
 afterEach(() => { while (directories.length) rmSync(directories.pop()!, { recursive: true, force: true }); });

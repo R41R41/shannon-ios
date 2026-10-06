@@ -1,4 +1,4 @@
-import type { AetherAccess } from '../src/aetherAccess.js';
+import type { AetherAccess } from '../src/integrations/aether/aetherAccess.js';
 import { autonomyDayKey, configuredAutonomy, type AutonomyConfig } from '../src/autonomyBudget.js';
 import { ShannonAutonomyLoop, type AutonomyLoopTick } from '../src/autonomyLoop.js';
 import { configuredAutonomyLoop, type AutonomyLoopConfig } from '../src/autonomyLoopConfig.js';

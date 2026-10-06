@@ -4,7 +4,7 @@ import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelReques
 import { InMemoryVoiceIdentityStore } from '../src/voiceIdentity.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
 import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
-import type { WorldSubscription } from '../src/worldStore.js';
+import type { WorldSubscription } from '../src/integrations/world/store/worldStore.js';
 import { promptOf } from './modelPrompt.js';
 
 class RecordingChatModel implements ShannonChatModel {

@@ -14,7 +14,7 @@ import {
 import {
   BODY_LOOK_BASE64_CHARACTERS, BODY_LOOK_LIMITS, BODY_LOOK_REFUSAL_CODES, BODY_LOOK_REQUEST_BYTES,
   bodyLookResultId, configuredBodyLook, jpegSize, validatedBodyLookResult, type BodyLookConfig,
-} from '../src/bodyLookContract.js';
+} from '../src/contracts/bodyLookContract.js';
 import { SQLiteBodyLookSpeaker } from '../src/bodyLookDelivery.js';
 import { bodyLookNotSeenLine } from '../src/bodyLookLines.js';
 import { SQLiteBodyLookStore } from '../src/bodyLookStore.js';
@@ -27,7 +27,7 @@ import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import type { LlmUsageEvent } from '../src/llmUsage.js';
 import type { BodyPresence } from '../src/shannonBody.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
-import { SQLiteWorldStore } from '../src/worldStore.js';
+import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
 import { promptOf } from './modelPrompt.js';
 
 const scope = 'owner';

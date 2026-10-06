@@ -3,7 +3,7 @@ import { closeSync, existsSync, lstatSync, openSync, readSync, realpathSync } fr
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { DatabaseSync } from 'node:sqlite';
-import type { AgentHostProject } from './agentHostConfig.js';
+import type { AgentHostProject } from './integrations/agentHost/agentHostConfig.js';
 
 export type AgentWorkspaceResourceKind = 'file' | 'diff';
 export type AgentWorkspaceResourceStatus = 'queued' | 'reading' | 'ready' | 'failed';

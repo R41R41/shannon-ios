@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { notionLoopReader } from '../src/notionLoopReader.js';
-import type { NotionSource } from '../src/notionSource.js';
+import { notionLoopReader } from '../src/integrations/notion/notionLoopReader.js';
+import type { NotionSource } from '../src/integrations/notion/notionSource.js';
 
 function source(overrides: Partial<NotionSource> = {}): NotionSource {
   return {

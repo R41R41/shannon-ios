@@ -18,7 +18,7 @@ import { ownerValueRecorder, valuesView } from '../src/infra/http/learningRoutes
 import { PredictionLedger } from '../src/mind/learning/predictionLedger.js';
 import { SQLiteChoiceLedger } from '../src/mind/learning/store/sqliteChoiceLedger.js';
 import { ValueVersions } from '../src/mind/learning/valueTable.js';
-import { shannonNowOwnerScope } from '../src/shannonNowContract.js';
+import { shannonNowOwnerScope } from '../src/contracts/shannonNowContract.js';
 import { configuredDatabasePath } from '../src/sqliteStore.js';
 
 const args = process.argv.slice(2);

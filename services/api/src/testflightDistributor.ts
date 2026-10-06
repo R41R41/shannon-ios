@@ -3,7 +3,7 @@ import { readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { configuredDatabasePath } from './sqliteStore.js';
-import { SQLiteTestFlightDeliveryStore } from './testflightDeliveryStore.js';
+import { SQLiteTestFlightDeliveryStore } from './integrations/testflight/store/testflightDeliveryStore.js';
 
 const appStoreConnectOrigin = 'https://api.appstoreconnect.apple.com';
 

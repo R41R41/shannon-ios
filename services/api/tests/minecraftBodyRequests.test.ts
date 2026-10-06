@@ -11,8 +11,8 @@ import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult 
 import { MINECRAFT_TOOL_INSTRUCTIONS, toolInstructions } from '../src/chatModelTools.js';
 import { BODY_GAME_SOURCE, SQLiteGameExperiences } from '../src/gameBodyMemory.js';
 import { MinecraftBody } from '../src/minecraftBody.js';
-import { configuredMinecraftBody } from '../src/minecraftBodyContract.js';
-import { MINECRAFT_REQUEST_LIMITS, MINECRAFT_REQUEST_PATHS, validClaim, validProgress, validReport } from '../src/minecraftBodyRequestContract.js';
+import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.js';
+import { MINECRAFT_REQUEST_LIMITS, MINECRAFT_REQUEST_PATHS, validClaim, validProgress, validReport } from '../src/contracts/minecraftBodyRequestContract.js';
 import { MinecraftBodyRequests, requestExperienceSummary } from '../src/minecraftBodyRequests.js';
 import type { MinecraftIntent } from '../src/minecraftIntent.js';
 import { SQLiteMinecraftTurnLog } from '../src/minecraftTurnStore.js';

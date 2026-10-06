@@ -1,4 +1,4 @@
-import type { AetherAccess } from './aetherAccess.js';
+import type { AetherAccess } from './integrations/aether/aetherAccess.js';
 import type { OthersTextCheck } from './aetherShownText.js';
 import type { AutonomousActionRequest } from './autonomyPolicy.js';
 import type { SecretCheck } from './conversationSecrets.js';

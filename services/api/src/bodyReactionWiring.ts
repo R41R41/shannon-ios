@@ -1,4 +1,4 @@
-import { configuredBodyReactions } from './bodyReactionContract.js';
+import { configuredBodyReactions } from './contracts/bodyReactionContract.js';
 import { createConfiguredBodyReactionSpeaker } from './bodyReactionModel.js';
 import { SQLiteBodyReactionStore } from './bodyReactionStore.js';
 import { SQLiteTouchExperiences } from './bodyTouchMemory.js';

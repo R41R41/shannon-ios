@@ -14,7 +14,7 @@ import { ShannonMemoryService } from '../src/memoryService.js';
 import { isNewMoodPoint, moodPointOf, type StoredMoodPoint } from '../src/moodHistory.js';
 import {
   MOOD_HISTORY_LIMITS, MOOD_HISTORY_PATH, moodHistoryEnabled, moodHistoryRecording, type MoodHistoryResponse,
-} from '../src/moodHistoryContract.js';
+} from '../src/contracts/moodHistoryContract.js';
 import { SQLiteMoodHistoryReader, downsampleMoodPoints } from '../src/moodHistoryReader.js';
 import { createMoodHistoryRoute, moodHistoryResponse, requestedHours } from '../src/serverMoodHistoryRoute.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';

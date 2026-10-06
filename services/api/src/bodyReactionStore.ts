@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { isShannonEmotionKind, type ShannonEmotionKind, type ShannonTouchKind } from '@shannon/cognition';
-import type { BodyAudience, BodyTouchGesture, BodyTouchReflex, BodyTouchSide } from './bodyContract.js';
-import { BODY_REACTION_LIMITS, type BodyReactionAnswer } from './bodyReactionContract.js';
+import type { BodyAudience, BodyTouchGesture, BodyTouchReflex, BodyTouchSide } from './contracts/bodyContract.js';
+import { BODY_REACTION_LIMITS, type BodyReactionAnswer } from './contracts/bodyReactionContract.js';
 import { BODY_TOUCH_MIXED, isBodySurface, isBodyTouchPart, isBodyTouchRegion, type BodySurface, type BodyTouchPart, type BodyTouchRegion } from './bodyTouchWords.js';
 import { addColumnOnce } from './bodyStore.js';
 import { BODY_TOUCH_STANCES, isBodyTouchStance, isReflexPart, type BodyTouchStance } from './bodyTouchReflex.js';

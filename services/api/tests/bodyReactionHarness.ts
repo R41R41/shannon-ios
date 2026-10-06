@@ -1,7 +1,7 @@
 import { InMemoryCompanionStateStore, type CompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { createInMemoryAutonomyService } from '../src/autonomyService.js';
-import type { BodyReactionAnswer, BodyReactionConfig } from '../src/bodyReactionContract.js';
+import type { BodyReactionAnswer, BodyReactionConfig } from '../src/contracts/bodyReactionContract.js';
 import type { BodyReactionSpeakRequest, BodyReactionSpeaker } from '../src/bodyReactionModel.js';
 import type { BodyReactionDecision } from '../src/bodyReactionPrompt.js';
 import { SQLiteBodyReactionStore } from '../src/bodyReactionStore.js';

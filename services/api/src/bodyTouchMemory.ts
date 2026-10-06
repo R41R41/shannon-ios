@@ -3,7 +3,7 @@ import {
   OWNER_AUDIENCE, SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME, SHANNON_TOUCH_FEELINGS, classifySensitivity,
   type MemoryDisclosure,
 } from '@shannon/cognition';
-import { BODY_TOUCH_SOURCE } from './bodyReactionContract.js';
+import { BODY_TOUCH_SOURCE } from './contracts/bodyReactionContract.js';
 import type { StoredTouchBurst } from './bodyReactionStore.js';
 import { bodyWhere, burstTouchPhrase, touchDetailPhrase } from './bodyTouchWords.js';
 

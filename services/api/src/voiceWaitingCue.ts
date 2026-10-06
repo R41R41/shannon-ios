@@ -5,7 +5,7 @@ import {
   type VoiceLatencyClass, type VoiceSkill, type VoiceTurnDecision,
   type VoiceWaitingAffect, type VoiceWaitingDirection, type VoiceWaitingScenario,
   type VoiceWaitingVariant,
-} from './voiceDecisionContract.js';
+} from './contracts/voiceDecisionContract.js';
 
 export const waitingScenarioCriteria: Readonly<Record<VoiceWaitingScenario, string>> = {
   general: 'A useful reply needs a moment, but no more specific category applies.',

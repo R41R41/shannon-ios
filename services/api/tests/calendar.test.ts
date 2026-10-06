@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { CALENDAR_LIMITS, CALENDAR_REQUEST_BYTES, calendarIngestEnabled, calendarRequestBytes } from '../src/calendarContract.js';
+import { CALENDAR_LIMITS, CALENDAR_REQUEST_BYTES, calendarIngestEnabled, calendarRequestBytes } from '../src/contracts/calendarContract.js';
 import { SQLiteDeviceAuthStore } from '../src/deviceAuth.js';
 import { OwnerUpcoming } from '../src/ownerUpcoming.js';
 import { SQLiteUpcomingStore } from '../src/upcomingStore.js';

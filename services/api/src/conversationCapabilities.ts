@@ -1,11 +1,11 @@
 import { mentionsSuiteProduct, suiteProductPattern } from '@shannon/cognition';
-import type { AetherContextReader } from './aetherContext.js';
+import type { AetherContextReader } from './integrations/aether/aetherContext.js';
 import { memoNotForAether } from './memoPlace.js';
-import type { VoyagerCatalog } from './organize.js';
+import type { VoyagerCatalog } from './integrations/voyager/organize.js';
 import { reminderCapabilityBoundary } from './reminderCapability.js';
 import type { ShannonWebSource } from './chatModel.js';
-import { asksAboutNotion, notionTurnProjection } from './notionConversation.js';
-import type { NotionSource } from './notionSource.js';
+import { asksAboutNotion, notionTurnProjection } from './integrations/notion/notionConversation.js';
+import type { NotionSource } from './integrations/notion/notionSource.js';
 import type { OwnerUpcoming } from './ownerUpcoming.js';
 import type { OwnOutreach } from './ownOutreach.js';
 

@@ -5,7 +5,7 @@ import { configuredAutonomy } from '../src/autonomyBudget.js';
 import { hostFolderPath, hostStepContentDigest, roomLookGuard } from '../src/autonomyHostFolderPath.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
-import type { ApiResponse } from '../src/contracts.js';
+import type { ApiResponse } from '../src/contracts/contracts.js';
 import { validHostOperationResult } from '../src/hostFolderOperationResults.js';
 import { toolSessionMemory } from '../src/shannonToolTypes.js';
 import type { ToolSurface } from '../src/shannonTools.js';

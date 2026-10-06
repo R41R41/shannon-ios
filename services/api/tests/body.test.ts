@@ -6,9 +6,9 @@ import type { AutonomyActivityDay, AutonomyActivityEntry } from '../src/autonomy
 import {
   BODY_DOING, BODY_EVENT_TYPES, BODY_LIMITS, BODY_NUDGE_SCENES, BODY_TOUCH_GESTURES, BODY_TOUCH_INPUTS, BODY_TOUCH_REFLEXES, BODY_TOUCH_SIDES,
   BODY_TOUCH_VOCABULARY, bodyIngestEnabled, isBodyGameEvent, type BodyNudge,
-} from '../src/bodyContract.js';
+} from '../src/contracts/bodyContract.js';
 import { BODY_TOUCH_PARTS, bodyTouchPartWord } from '../src/bodyTouchWords.js';
-import { BODY_LOOK_LIMITS, BODY_LOOK_REFUSAL_CODES, BODY_LOOK_REQUEST_BYTES } from '../src/bodyLookContract.js';
+import { BODY_LOOK_LIMITS, BODY_LOOK_REFUSAL_CODES, BODY_LOOK_REQUEST_BYTES } from '../src/contracts/bodyLookContract.js';
 import { bodyNudgeCandidates } from '../src/bodyNudges.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { bodyDoing, type BodyIngestReceipt, type BodyNudges, type BodyPresence } from '../src/shannonBody.js';

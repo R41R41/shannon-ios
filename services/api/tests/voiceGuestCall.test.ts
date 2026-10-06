@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
-import { InMemoryOrganizeStore } from '../src/organize.js';
+import { InMemoryOrganizeStore } from '../src/integrations/voyager/organize.js';
 import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import {

@@ -3,7 +3,7 @@ import {
   type ReplyEmotion, type ShannonEmotion, type ShannonExpressiveEmotion, type ShannonMessageEmotion,
 } from '@shannon/cognition';
 import type { VoiceTurnDecision } from './voiceDecision.js';
-import { voicedAffect } from './voiceDecisionContract.js';
+import { voicedAffect } from './contracts/voiceDecisionContract.js';
 import { waitingDirectionFor, waitingPhraseFor } from './voiceWaitingCue.js';
 
 /** The quiet face of a call with no owner state (友人も一緒): the baseline mood. */

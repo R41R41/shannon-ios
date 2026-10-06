@@ -2,12 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
-import { InMemoryOrganizeStore } from '../src/organize.js';
+import { InMemoryOrganizeStore } from '../src/integrations/voyager/organize.js';
 import {
   JevVoiceDecisionGateway, LocalVoiceDecisionGateway, OpenAIVoiceDecisionGateway, VOICE_SKILLS,
   type VoiceDecisionGateway, type VoiceDecisionInput, type VoiceTurnDecision,
 } from '../src/voiceDecision.js';
-import type { VoiceTurnFacts } from '../src/voiceDecisionContract.js';
+import type { VoiceTurnFacts } from '../src/contracts/voiceDecisionContract.js';
 import {
   VOICE_REPLY_DECISION_LINES, notHisWordsToHer, ownerTurnVerdict, ownerVoiceTurnFacts, settleOwnerVoiceTurn, voiceSilenceRules,
 } from '../src/voiceSilence.js';

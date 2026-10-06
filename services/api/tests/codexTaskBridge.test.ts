@@ -2,15 +2,15 @@ import { mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { AgentHostConfig } from '../src/agentHostConfig.js';
-import { AgentHostStateStore } from '../src/agentHostState.js';
+import type { AgentHostConfig } from '../src/integrations/agentHost/agentHostConfig.js';
+import { AgentHostStateStore } from '../src/integrations/agentHost/agentHostState.js';
 import type {
   CodexAppServerConnection,
   CodexNotification,
   CodexRequestID,
   CodexServerRequest,
-} from '../src/codexAppServerClient.js';
-import { CodexTaskBridge } from '../src/codexTaskBridge.js';
+} from '../src/integrations/agentHost/codexAppServerClient.js';
+import { CodexTaskBridge } from '../src/integrations/agentHost/codexTaskBridge.js';
 import type { ClaimedAgentCommand, HostAgentEvent } from '../src/agentTaskStore.js';
 
 describe('CodexTaskBridge', () => {

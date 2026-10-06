@@ -146,7 +146,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/backgroundWorker.ts',
     'services/api/src/backgroundUpdates.ts',
     // The owner's upcoming items: calendar snapshots from the apps, and the one projection that reaches a prompt.
-    'services/api/src/calendarContract.ts',
+    'services/api/src/contracts/calendarContract.ts',
     'services/api/src/calendarRoutes.ts',
     'services/api/src/upcomingStore.ts',
     'services/api/src/ownerUpcoming.ts',
@@ -200,7 +200,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/shannonStudyTools.ts',
     'services/api/src/shannonFolderTools.ts',
     // Aether (Syzygy ADR-0007 revised): the client of her access and the executors of her Aether tools.
-    'services/api/src/aetherAccess.ts',
+    'services/api/src/integrations/aether/aetherAccess.ts',
     'services/api/src/shannonAetherTools.ts',
     // Her own time reading the owner's documents (ADR-0007, owner decision 2026-10-06): the executors, and the provenance mark
     // that keeps what she wrote after them from anyone else present.
@@ -239,12 +239,12 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/agentTaskPersistence.ts',
     'services/api/src/agentTaskPersistenceSupport.ts',
     'services/api/src/apiAgentRoutes.ts',
-    'services/api/src/codexTaskBridge.ts',
-    'services/api/src/codexTaskCommands.ts',
-    'services/api/src/codexTaskEvents.ts',
-    'services/api/src/codexTaskRuntime.ts',
+    'services/api/src/integrations/agentHost/codexTaskBridge.ts',
+    'services/api/src/integrations/agentHost/codexTaskCommands.ts',
+    'services/api/src/integrations/agentHost/codexTaskEvents.ts',
+    'services/api/src/integrations/agentHost/codexTaskRuntime.ts',
     'services/api/src/agentHost.ts',
-    'services/api/src/agentHostConfig.ts',
+    'services/api/src/integrations/agentHost/agentHostConfig.ts',
     // Syzygy ADR-0008 stage 1 (抑制系): one content-free trace per decision, and the gateway wrapper that writes it.
     'services/api/src/mind/inhibition/',
     // Syzygy ADR-0008 stage 1: the owner's controls of her value table on the server's command line.
@@ -263,7 +263,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/apiLiveVoice.ts',
     'services/api/src/apiVoiceTurns.ts',
     'services/api/src/chatModel.ts',
-    'services/api/src/contracts.ts',
+    'services/api/src/contracts/contracts.ts',
     'services/api/src/turnCognitiveContext.ts',
     'services/api/src/turnMemoryRecall.ts',
     'services/api/src/conversationOrchestration.ts',
@@ -287,7 +287,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/bodyReactionModel.ts',
     // Her Minecraft body's game chat: who may speak as it, the gate and people it goes through, and its delivery note.
     'services/api/src/minecraftBody.ts',
-    'services/api/src/minecraftBodyContract.ts',
+    'services/api/src/contracts/minecraftBodyContract.ts',
     'services/api/src/minecraftIntent.ts',
     'services/api/src/minecraftBodyState.ts',
     'services/api/src/serverMinecraftBodyRoute.ts',
@@ -313,7 +313,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'pnpm-workspace.yaml',
     'services/api/package.json',
     'services/api/src/testflightDistributor.ts',
-    'services/api/src/testflightDeliveryStore.ts',
+    'services/api/src/integrations/testflight/store/testflightDeliveryStore.ts',
     'apps/ios-app/ShannonApp.xcodeproj/',
     'apps/macos-app/ShannonDesk.xcodeproj/',
     'Shannon.xcworkspace/',

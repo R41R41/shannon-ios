@@ -1,4 +1,4 @@
-import { AetherAccessError, type AetherAccess } from './aetherAccess.js';
+import { AetherAccessError, type AetherAccess } from './integrations/aether/aetherAccess.js';
 import { resultForOthers } from './aetherShownText.js';
 import type { AutonomousActionRequest, AutonomyDecision } from './autonomyPolicy.js';
 import type { ToolInput } from './shannonToolInput.js';

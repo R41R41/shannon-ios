@@ -13,7 +13,7 @@ import { planFromThought } from '../src/autonomyLoopPlan.js';
 import { REACH_OUT_REASONS, REACH_OUT_REASON_LABEL, reachOutPrompt, thinkingPrompt, type PromptUpcoming } from '../src/autonomyLoopPrompts.js';
 import { REACH_OUT_HELD_TOOL, REACH_OUT_TOOL, type AutonomyUpcoming } from '../src/autonomyLoopReachOutStep.js';
 import { AUTONOMY_REACH_OUT_TOOL, authorizeAutonomousAction } from '../src/autonomyPolicy.js';
-import { BODY_LIMITS } from '../src/bodyContract.js';
+import { BODY_LIMITS } from '../src/contracts/bodyContract.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLitePushNotificationStore } from '../src/pushNotifications.js';

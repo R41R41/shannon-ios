@@ -1,10 +1,10 @@
 import { mentionsSuiteProduct } from '@shannon/cognition';
 import { memoNotForAether } from './memoPlace.js';
-import { wantsPlaceDiscovery } from './placeDiscovery.js';
+import { wantsPlaceDiscovery } from './integrations/places/placeDiscovery.js';
 import {
   explicitWebRequestPattern, internalStatusPattern, mandatorySkillPatterns, VOICE_SKILLS,
   type VoiceConversationClass, type VoiceDecisionInput, type VoiceSkill,
-} from './voiceDecisionContract.js';
+} from './contracts/voiceDecisionContract.js';
 
 export function applyMandatorySkillFloors(
   scores: Record<VoiceSkill, number>,

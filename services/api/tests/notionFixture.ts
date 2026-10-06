@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { configuredNotionSource, type NotionSource } from '../src/notionSource.js';
+import { configuredNotionSource, type NotionSource } from '../src/integrations/notion/notionSource.js';
 
 /**
  * A fake Notion API over the synthetic workspace in `fixtures/notion/workspace.json`.

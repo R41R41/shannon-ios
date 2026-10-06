@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { BODY_LIMITS, BODY_TOUCH_EVENT_TYPES } from '../src/bodyContract.js';
+import { BODY_LIMITS, BODY_TOUCH_EVENT_TYPES } from '../src/contracts/bodyContract.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { isFullBody } from '../src/bodyTouchOnly.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';

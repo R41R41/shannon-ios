@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeJmaForecast } from '../src/jmaForecast.js';
+import { summarizeJmaForecast } from '../src/integrations/world/jmaForecast.js';
 
 describe('JMA forecast summary', () => {
   it('turns the Tokyo short-term forecast into bounded readable Japanese', () => {

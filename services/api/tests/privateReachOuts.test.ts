@@ -11,7 +11,7 @@ import { EARPHONE_GIVEN_UP_MEMORY, EARPHONE_GIVEN_UP_RULE, EARPHONE_NO_ANSWER_LI
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { isFullBody } from '../src/bodyTouchOnly.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
-import { PRIVATE_REACH_OUT_LIMITS, privateReachOutListenSeconds, privateReachOutsEnabled } from '../src/privateListeningContract.js';
+import { PRIVATE_REACH_OUT_LIMITS, privateReachOutListenSeconds, privateReachOutsEnabled } from '../src/contracts/privateListeningContract.js';
 import { dispatchPrivateListeningRequest } from '../src/privateListeningRoutes.js';
 import { SQLitePrivateListeningStore, type PrivateListener } from '../src/privateListeningStore.js';
 import { PrivateReachOuts, chosenSpeaker } from '../src/privateReachOuts.js';

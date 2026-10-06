@@ -2,7 +2,7 @@ import { countedJevFetch, emptyJevProbe, withJevProbe } from '../../infra/models
 import { jevUsdPerCall } from '../../infra/models/jev/jevUsage.js';
 import type { LlmUsageStore } from '../../llmUsage.js';
 import { createConfiguredVoiceDecisionGateway } from '../../voiceDecision.js';
-import type { VoiceDecisionGateway, VoiceDecisionInput, VoiceTurnDecision } from '../../voiceDecisionContract.js';
+import type { VoiceDecisionGateway, VoiceDecisionInput, VoiceTurnDecision } from '../../contracts/voiceDecisionContract.js';
 import type { DecisionTraceDraft, DecisionTraceWriter, TraceAnswer } from './decisionTraceContract.js';
 
 /**

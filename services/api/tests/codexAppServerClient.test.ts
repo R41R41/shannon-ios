@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { CodexAppServerClient } from '../src/codexAppServerClient.js';
+import { CodexAppServerClient } from '../src/integrations/agentHost/codexAppServerClient.js';
 
 describe('CodexAppServerClient', () => {
   it('performs the JSONL handshake and drives the thread/turn lifecycle', async () => {

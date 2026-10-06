@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import {
   INCOMING_CALL_LIMITS, INCOMING_CALL_OUTCOMES, type IncomingCallOutcome, type IncomingCallRegistration, type IncomingCallState, type VoipEnvironment,
-} from './incomingCallContract.js';
+} from './contracts/incomingCallContract.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 
 /**

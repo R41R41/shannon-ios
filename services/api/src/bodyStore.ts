@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { touchDetailDigest, type BodyAudience, type BodyCapabilities, type BodyEvent, type BodyEventType } from './bodyContract.js';
+import { touchDetailDigest, type BodyAudience, type BodyCapabilities, type BodyEvent, type BodyEventType } from './contracts/bodyContract.js';
 import { BODY_TOUCH_ONLY_FLAG } from './bodyTouchOnly.js';
 import { isBodySurface, isBodyTouchRegion, type BodySurface } from './bodyTouchWords.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';

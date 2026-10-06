@@ -6,7 +6,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import { DurableBackgroundDispatcher } from '../src/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
-import type { ChatResponse } from '../src/contracts.js';
+import type { ChatResponse } from '../src/contracts/contracts.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 
 const cleanup: Array<() => void> = [];

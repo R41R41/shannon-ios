@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { OWNER_AUDIENCE, SHANNON_MINECRAFT_BODY_CAPABILITY, groupAudience, type MemoryDisclosure } from '@shannon/cognition';
 import { createLocalApiKernel, type ShannonApiKernelOptions, type TextTurnInput } from '../src/apiKernel.js';
 import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
-import { BODY_EVENT_TYPES, BODY_GAME_EVENT_TYPES } from '../src/bodyContract.js';
+import { BODY_EVENT_TYPES, BODY_GAME_EVENT_TYPES } from '../src/contracts/bodyContract.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';
@@ -16,7 +16,7 @@ import { BODY_GAME_SOURCE, GAME_REQUEST_DISCLOSURE, SQLiteGameExperiences, gameD
 import { MinecraftBody } from '../src/minecraftBody.js';
 import {
   MINECRAFT_BODY_TURN_PATH, MinecraftBodyError, configuredMinecraftBody, minecraftConversationId,
-} from '../src/minecraftBodyContract.js';
+} from '../src/contracts/minecraftBodyContract.js';
 import type { MinecraftIntent } from '../src/minecraftIntent.js';
 import { SQLiteMinecraftTurnLog } from '../src/minecraftTurnStore.js';
 import { SQLitePeopleMemoryStore } from '../src/peopleMemoryStore.js';

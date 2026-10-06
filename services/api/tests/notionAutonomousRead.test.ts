@@ -3,8 +3,8 @@ import { configuredAutonomy } from '../src/autonomyBudget.js';
 import { coreAreaForRepositoryPath } from '../src/autonomyCore.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
-import { readNotionForActivity } from '../src/notionAutonomousRead.js';
-import { configuredNotionSource } from '../src/notionSource.js';
+import { readNotionForActivity } from '../src/integrations/notion/notionAutonomousRead.js';
+import { configuredNotionSource } from '../src/integrations/notion/notionSource.js';
 import { NOTION_FIXTURE_IDS as ids, fixtureNotionSource } from './notionFixture.js';
 
 const scope = 'owner';

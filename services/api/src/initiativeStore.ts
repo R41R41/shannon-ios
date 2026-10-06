@@ -7,7 +7,7 @@ import { commitmentAwaitingTodaySlot, dueCommitmentCandidate } from './commitmen
 import { bodyLookIdOfSource } from './bodyLookDelivery.js';
 import { isRoomLookSource } from './roomLookSource.js';
 import { reachOutOfSource } from './reachOutDelivery.js';
-import { groundedWorldOpening, topicMatchesSource, worldVisibleInterests } from './worldInterestRelevance.js';
+import { groundedWorldOpening, topicMatchesSource, worldVisibleInterests } from './integrations/world/worldInterestRelevance.js';
 import {
   intentInitiativeCandidateIsCurrent,
   intentInitiativeCandidates,

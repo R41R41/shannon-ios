@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { CALENDAR_LIMITS, type CalendarEvent, type CalendarSnapshot } from './calendarContract.js';
+import { CALENDAR_LIMITS, type CalendarEvent, type CalendarSnapshot } from './contracts/calendarContract.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 
 /**

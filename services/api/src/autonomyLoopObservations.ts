@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { BODY_REACH_OUT_DELIVERY_OUTCOMES, type BodyReachOutDeliveryOutcome } from './bodyContract.js';
+import { BODY_REACH_OUT_DELIVERY_OUTCOMES, type BodyReachOutDeliveryOutcome } from './contracts/bodyContract.js';
 
 /**
  * What a step of her own activity led to, kept as facts she can think about (owner decision

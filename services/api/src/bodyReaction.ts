@@ -4,11 +4,11 @@ import {
   type CompanionStateSnapshot, type CompanionStateStore,
 } from '@shannon/cognition';
 import { emotionTiming, resolveReplyEmotion } from './companionPresence.js';
-import { BODY_LIMITS, isImpossibleTouch } from './bodyContract.js';
+import { BODY_LIMITS, isImpossibleTouch } from './contracts/bodyContract.js';
 import {
   BODY_REACTION_LIMITS, bodyReactionContentHash, validBodyReactionId,
   type BodyReactionAnswer, type BodyReactionConfig, type BodyReactionRequest,
-} from './bodyReactionContract.js';
+} from './contracts/bodyReactionContract.js';
 import type { BodyReactionSpeaker } from './bodyReactionModel.js';
 import { BODY_TOUCH_PHRASES, asksStance, bodyReactionPrompt, boundedReactionText, type BodyReactionDecision } from './bodyReactionPrompt.js';
 import { reflexPartWord } from './bodyTouchReflex.js';

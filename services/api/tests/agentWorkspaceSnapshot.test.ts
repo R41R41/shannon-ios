@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { readProject } from '../src/agentWorkspaceSnapshot.js';
+import { readProject } from '../src/integrations/agentHost/agentWorkspaceSnapshot.js';
 
 const directories: string[] = [];
 

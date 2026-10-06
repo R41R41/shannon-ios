@@ -14,7 +14,7 @@ import { SQLiteIncomingCallStore } from '../src/incomingCallStore.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLiteReachOutReports } from '../src/reachOutReports.js';
 import { createShannonNowRoute, shannonNowResponse } from '../src/serverShannonNowRoute.js';
-import { SHANNON_NOW_LIMITS, SHANNON_NOW_PATH, shannonNowEnabled, shannonNowOwnerScope, type ShannonNowResponse } from '../src/shannonNowContract.js';
+import { SHANNON_NOW_LIMITS, SHANNON_NOW_PATH, shannonNowEnabled, shannonNowOwnerScope, type ShannonNowResponse } from '../src/contracts/shannonNowContract.js';
 import { SQLiteShannonNowReader, type ReachOutDeliverySource } from '../src/shannonNowReader.js';
 
 const NOW = '2026-10-03T07:00:00.000Z';

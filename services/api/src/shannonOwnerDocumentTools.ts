@@ -1,4 +1,4 @@
-import { aetherErrorCode, type AetherAccess } from './aetherAccess.js';
+import { aetherErrorCode, type AetherAccess } from './integrations/aether/aetherAccess.js';
 import { AETHER_DOCUMENT_PREFIX } from './ownerInformedMarks.js';
 import { DEFAULT_READ_CHARACTERS, NOT_CONFIGURED, aetherToolFailure, documentText, hitLines } from './shannonAetherTools.js';
 import { numberInput, stringInput } from './shannonToolInput.js';

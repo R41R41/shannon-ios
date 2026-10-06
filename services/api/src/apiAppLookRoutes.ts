@@ -1,8 +1,8 @@
 import type { AppLookAnswer, AppLooks } from './appLook.js';
-import { appLookAnswerId, validatedAppLookResult } from './appLookContract.js';
+import { appLookAnswerId, validatedAppLookResult } from './contracts/appLookContract.js';
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
-import { BODY_SCHEMA_VERSION } from './bodyContract.js';
-import type { ApiRequest, ApiResponse } from './contracts.js';
+import { BODY_SCHEMA_VERSION } from './contracts/bodyContract.js';
+import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 
 /** A fixed-token (local) caller has no paired device. */
 const LOCAL_DEVICE = 'local';

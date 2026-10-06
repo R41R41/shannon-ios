@@ -4,7 +4,7 @@ import { bearerAuthorized } from './apiAuth.js';
 import type { TurnBackgroundService } from './backgroundUpdates.js';
 import type { ConversationStore } from './conversationStore.js';
 import type { ShannonChatModel } from './chatModel.js';
-import { placeReply } from './placeDiscovery.js';
+import { placeReply } from './integrations/places/placeDiscovery.js';
 import {
   configuredPlatformBridge,
   PlatformBridgeError,

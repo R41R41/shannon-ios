@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { BodyReachOutDeliveryOutcome } from './bodyContract.js';
+import type { BodyReachOutDeliveryOutcome } from './contracts/bodyContract.js';
 import type { ShannonDevicePrincipal } from './deviceAuth.js';
 import {
   PRIVATE_LISTENING_LIMITS, PRIVATE_LISTENING_PATH, privateListeningEnabled, privateReachOutListenSeconds, privateReachOutsEnabled,
-} from './privateListeningContract.js';
+} from './contracts/privateListeningContract.js';
 import { dispatchPrivateListeningRequest, type PrivateListeningDependencies } from './privateListeningRoutes.js';
 import { SQLitePrivateListeningStore } from './privateListeningStore.js';
 import { PrivateReachOuts } from './privateReachOuts.js';

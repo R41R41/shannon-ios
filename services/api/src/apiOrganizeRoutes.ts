@@ -1,6 +1,6 @@
-import type { ApiRequest, ApiResponse } from './contracts.js';
-import type { OrganizeDecision, OrganizeStore, VoyagerCatalog, VoyagerTaskDestination } from './organize.js';
-import { OrganizeError } from './organize.js';
+import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
+import type { OrganizeDecision, OrganizeStore, VoyagerCatalog, VoyagerTaskDestination } from './integrations/voyager/organize.js';
+import { OrganizeError } from './integrations/voyager/organize.js';
 import { badRequest, objectBody, validBoundedString, validScopeKey, validVoyagerTaskProjection } from './apiValidation.js';
 
 export interface ApiOrganizeRouteDependencies {

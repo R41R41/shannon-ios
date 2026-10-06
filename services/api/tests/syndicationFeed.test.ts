@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSyndicationFeed } from '../src/syndicationFeed.js';
+import { parseSyndicationFeed } from '../src/integrations/world/syndicationFeed.js';
 
 describe('syndication feed parsing', () => {
   it('normalizes official Japanese RSS metadata and relative links', () => {

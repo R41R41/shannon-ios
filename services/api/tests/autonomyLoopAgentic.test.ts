@@ -15,7 +15,7 @@ import { followUpPrompt, reachOutMemories, reachOutMemoryLine, rethinkExtras } f
 import { planFromThought } from '../src/autonomyLoopPlan.js';
 import { thinkingPrompt } from '../src/autonomyLoopPrompts.js';
 import { AUTONOMY_REACH_OUT_FOLLOW_UP_TOOL, AUTONOMY_REACH_OUT_TOOL, authorizeAutonomousAction } from '../src/autonomyPolicy.js';
-import { BODY_LIMITS } from '../src/bodyContract.js';
+import { BODY_LIMITS } from '../src/contracts/bodyContract.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLitePushNotificationStore } from '../src/pushNotifications.js';

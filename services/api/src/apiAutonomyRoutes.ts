@@ -1,4 +1,4 @@
-import type { ApiRequest, ApiResponse } from './contracts.js';
+import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
 import { HOST_STEP_ROUTE_PREFIX, dispatchHostStepRequest } from './apiAutonomyHostStepRoutes.js';
 import { dispatchStudyRequest } from './apiStudyRoutes.js';

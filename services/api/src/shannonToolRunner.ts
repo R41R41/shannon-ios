@@ -1,5 +1,5 @@
-import type { AetherAccess } from './aetherAccess.js';
-import type { AetherProposalStore } from './aetherProposal.js';
+import type { AetherAccess } from './integrations/aether/aetherAccess.js';
+import type { AetherProposalStore } from './integrations/aether/aetherProposal.js';
 import { ROOM_LOOK_GUARD, roomLookGuard } from './autonomyHostFolderPath.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import type { SecretCheck } from './conversationSecrets.js';

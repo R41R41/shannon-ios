@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { validatedBodyCapabilities, validatedBodyEvents } from '../src/bodyContract.js';
-import { bodyReactionContentHash, validatedBodyReactionRequest, type BodyReactionRequest } from '../src/bodyReactionContract.js';
+import { validatedBodyCapabilities, validatedBodyEvents } from '../src/contracts/bodyContract.js';
+import { bodyReactionContentHash, validatedBodyReactionRequest, type BodyReactionRequest } from '../src/contracts/bodyReactionContract.js';
 import { bodyTouchLine } from '../src/bodyReactionPrompt.js';
 import type { StoredTouchBurst } from '../src/bodyReactionStore.js';
 import { touchExperienceSummary } from '../src/bodyTouchMemory.js';

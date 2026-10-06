@@ -1,5 +1,5 @@
 import { objectBody } from './apiValidation.js';
-import type { VoiceTurnDecision } from './voiceDecisionContract.js';
+import type { VoiceTurnDecision } from './contracts/voiceDecisionContract.js';
 
 /**
  * 「友人も一緒」 call context. The turns live only in the running call on the device and are

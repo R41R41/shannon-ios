@@ -1,12 +1,12 @@
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
-import type { ApiRequest, ApiResponse } from './contracts.js';
+import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import {
   PRIVATE_LISTENING_LIMITS, PRIVATE_LISTENING_PATH, PRIVATE_LISTENING_SCHEMA_VERSION, PRIVATE_REACH_OUT_PREFIX,
   privateReachOutRoute, validatedPrivateListeningReport, validatedPrivateReachOutReport,
-} from './privateListeningContract.js';
+} from './contracts/privateListeningContract.js';
 import type { SQLitePrivateListeningStore } from './privateListeningStore.js';
 import type { PrivateReachOuts } from './privateReachOuts.js';
-import { validCallId } from './incomingCallContract.js';
+import { validCallId } from './contracts/incomingCallContract.js';
 import type { IncomingCalls } from './incomingCalls.js';
 
 export interface PrivateListeningDependencies {

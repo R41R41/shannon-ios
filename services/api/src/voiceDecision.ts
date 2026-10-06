@@ -6,14 +6,14 @@ import {
   type VoiceAffect, type VoiceConversationClass, type VoiceDecisionGateway,
   type VoiceDecisionInput, type VoiceDelivery, type VoiceLatencyClass,
   type VoiceSkill, type VoiceTurnDecision,
-} from './voiceDecisionContract.js';
+} from './contracts/voiceDecisionContract.js';
 import {
   affectIntensityValue, applyMandatorySkillFloors, boundedProbability, choiceValue,
   directChoiceValue, noulValue, optionalPositiveInteger, optionalProbability,
   normalizedConversationClass, probabilityValue, selectedSkills, shouldRespondToTurn,
 } from './voiceDecisionValues.js';
 import { roomLookAnswer, roomLookRouterQuestions, roomLookRouterSchema } from './voiceRoomLook.js';
-import { lookSelfAnswer } from './appLookContract.js';
+import { lookSelfAnswer } from './contracts/appLookContract.js';
 import { localTurnSilence, openAIReplyInstruction, replyRequiredQuestion, routerTurnState } from './voiceSilence.js';
 import { fallbackWaitingDirection, jevWaitingQuestions } from './voiceWaitingCue.js';
 
@@ -22,7 +22,7 @@ export {
   type VoiceAffect, type VoiceConversationClass, type VoiceDecisionGateway,
   type VoiceDecisionInput, type VoiceDelivery, type VoiceLatencyClass,
   type VoiceSkill, type VoiceTurnDecision,
-} from './voiceDecisionContract.js';
+} from './contracts/voiceDecisionContract.js';
 
 export class LocalVoiceDecisionGateway implements VoiceDecisionGateway {
   readonly mode = 'fallback' as const;

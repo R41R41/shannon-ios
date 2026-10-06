@@ -1,9 +1,9 @@
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
-import type { ApiRequest, ApiResponse } from './contracts.js';
+import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import {
   INCOMING_CALL_LIMITS, INCOMING_CALL_PATH, INCOMING_CALL_REGISTRATION_PATH, INCOMING_CALL_SCHEMA_VERSION,
   incomingCallReportRoute, validatedIncomingCallRegistration, validatedIncomingCallReport,
-} from './incomingCallContract.js';
+} from './contracts/incomingCallContract.js';
 import type { IncomingCalls } from './incomingCalls.js';
 
 export interface IncomingCallRouteDependencies {

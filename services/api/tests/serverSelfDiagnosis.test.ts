@@ -6,14 +6,14 @@ import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { shannonCapabilityPrompt, shannonPersonaPrompt } from '@shannon/cognition';
 import { createConfiguredChatModel } from '../src/chatModel.js';
-import { configuredNotionSource } from '../src/notionSource.js';
-import { SQLiteOpsStore } from '../src/opsStore.js';
-import { createConfiguredVoyagerCatalog } from '../src/organize.js';
+import { configuredNotionSource } from '../src/integrations/notion/notionSource.js';
+import { SQLiteOpsStore } from '../src/infra/ops/store/opsStore.js';
+import { createConfiguredVoyagerCatalog } from '../src/integrations/voyager/organize.js';
 import { configuredPlatformBridge } from '../src/platformBridge.js';
-import { createOpsRoute, OPS_READ_PATH } from '../src/serverOpsRoutes.js';
+import { createOpsRoute, OPS_READ_PATH } from '../src/infra/ops/serverOpsRoutes.js';
 import {
   createServerSelfDiagnosis, deployedRevision, personaHash, personaHashSource, reportableModelName, type SelfDiagnosisSources,
-} from '../src/serverSelfDiagnosis.js';
+} from '../src/infra/ops/serverSelfDiagnosis.js';
 import { SHANNON_TOOLS, offeredTools } from '../src/shannonTools.js';
 import { createConfiguredVoiceDecisionGateway } from '../src/voiceDecision.js';
 import { createConfiguredVoiceTranscriber } from '../src/voiceTranscription.js';

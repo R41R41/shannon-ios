@@ -11,7 +11,7 @@ import { ShannonMemoryService } from '../src/memoryService.js';
 import { applyExplicitCommitmentCommand, resolveCommitmentCommand } from '../src/commitmentCommands.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
-import { SQLiteWorldStore } from '../src/worldStore.js';
+import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModelRequest } from '../src/chatModel.js';
 import { promptOf } from './modelPrompt.js';

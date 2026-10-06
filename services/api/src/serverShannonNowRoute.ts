@@ -8,7 +8,7 @@ import { consumeDeviceAllowance, sendJson } from './serverHttp.js';
 import {
   SHANNON_NOW_LIMITS, SHANNON_NOW_SCHEMA_VERSION,
   type ShannonNowFace, type ShannonNowFeeling, type ShannonNowResponse,
-} from './shannonNowContract.js';
+} from './contracts/shannonNowContract.js';
 import type { SQLiteShannonNowReader } from './shannonNowReader.js';
 
 export interface ShannonNowRouteDependencies {

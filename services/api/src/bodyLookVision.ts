@@ -1,5 +1,5 @@
 import { SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_OWNER_NAME, SHANNON_ROOM_LOOK_RULES } from '@shannon/cognition';
-import { BODY_LOOK_LIMITS, type BodyLookImage } from './bodyLookContract.js';
+import { BODY_LOOK_LIMITS, type BodyLookImage } from './contracts/bodyLookContract.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from './chatModelSupport.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageEvent } from './llmUsage.js';
 

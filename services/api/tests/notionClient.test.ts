@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   NOTION_API_VERSION, NOTION_READ_ENDPOINTS, NotionReadClient, NotionReadError, normalizedNotionId, notionReadOperation,
   usableNotionToken, type NotionRequestDiagnostic,
-} from '../src/notionClient.js';
+} from '../src/integrations/notion/notionClient.js';
 import { FIXTURE_TOKEN, NOTION_FIXTURE_IDS, fakeNotion, notionJson } from './notionFixture.js';
 
 const id = NOTION_FIXTURE_IDS.scenario;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groundedWorldOpening, topicMatchesSource } from '../src/worldInterestRelevance.js';
+import { groundedWorldOpening, topicMatchesSource } from '../src/integrations/world/worldInterestRelevance.js';
 import { firstInterest } from '../src/initiativeSelection.js';
 
 describe('world source grounding', () => {

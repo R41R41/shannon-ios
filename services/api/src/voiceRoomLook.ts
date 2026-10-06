@@ -1,7 +1,7 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { ROOM_LOOK_UNAVAILABLE_REASON, asksToLook, type BodyLookUnavailable, type BodyLookVoiceTurn } from './bodyLook.js';
-import { APP_LOOK_ROUTER } from './appLookContract.js';
-import type { VoiceDecisionInput, VoiceTurnDecision } from './voiceDecisionContract.js';
+import { APP_LOOK_ROUTER } from './contracts/appLookContract.js';
+import type { VoiceDecisionInput, VoiceTurnDecision } from './contracts/voiceDecisionContract.js';
 
 /**
  * One look at the room from a voice conversation with the owner (owner decision 2026-10-02:

@@ -5,7 +5,7 @@ import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonTaskProposal, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
-import type { VoiceDecisionInput } from '../src/voiceDecisionContract.js';
+import type { VoiceDecisionInput } from '../src/contracts/voiceDecisionContract.js';
 import { FakeAether } from './fakeAetherServer.js';
 
 /**

@@ -2,13 +2,13 @@ import { randomUUID } from 'node:crypto';
 import {
   APP_LOOK_LIMITS, appLookChoice, availableCamera, configuredAppLook, voiceLookCamera,
   type AppLookAsk, type AppLookCamera, type AppLookClient, type AppLookCode, type AppLookConfig, type AppLookResult,
-} from './appLookContract.js';
+} from './contracts/appLookContract.js';
 import {
   APP_LOOK_OFFER_PROMPT, APP_LOOK_SEEN_SUMMARY, announcedLook, appLookNotSeenLine, lookAnnouncement, appLookNotSeenSummary, appLookUnavailablePrompt, type AppLookUnavailable,
 } from './appLookLines.js';
 import { SQLiteAppLookStore, type AppLookOutcome, type StoredAppLook } from './appLookStore.js';
 import { asksToLook, type BodyLookMessage, type BodyLookSpeaker } from './bodyLook.js';
-import { BODY_LOOK_LIMITS } from './bodyLookContract.js';
+import { BODY_LOOK_LIMITS } from './contracts/bodyLookContract.js';
 import { BODY_LOOK_CUT_OFF_LINE } from './bodyLookLines.js';
 import { VoiceTurnWaits, type TurnWait } from './bodyLookTurnWait.js';
 import type { RoomLookContextLine, RoomLookViewer } from './bodyLookVision.js';

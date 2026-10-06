@@ -34,13 +34,13 @@ import { BackgroundUpdateCoordinator, type TurnBackgroundService } from './backg
 import { LocalStubChatModel, type ShannonChatModel } from './chatModel.js';
 import { LocalVoiceDecisionGateway, type VoiceDecisionGateway } from './voiceDecision.js';
 import { InMemoryConversationStore, type ConversationStore } from './conversationStore.js';
-import type { ApiRequest, ApiResponse, ChatRequest, StateEventRequest } from './contracts.js';
+import type { ApiRequest, ApiResponse, ChatRequest, StateEventRequest } from './contracts/contracts.js';
 import { ShannonMemoryService, type MemoryAction, type ShannonMemoryStore } from './memoryService.js';
 import { dispatchConversationRead } from './apiConversationRead.js';
 import type { KnowledgeStore } from './knowledgeStore.js';
 import type { InitiativeInbox } from './initiativeStore.js';
-import type { AetherContextReader } from './aetherContext.js';
-import { DisabledAetherProposalStore, type AetherProposalStore } from './aetherProposal.js';
+import type { AetherContextReader } from './integrations/aether/aetherContext.js';
+import { DisabledAetherProposalStore, type AetherProposalStore } from './integrations/aether/aetherProposal.js';
 import {
   InMemoryAgentTaskStore,
   type AgentCommandType,
@@ -49,19 +49,19 @@ import {
   type AgentTaskStore,
   type HostAgentEvent,
 } from './agentTaskStore.js';
-import { validatedPlaceSearchOptions } from './placeDiscovery.js';
+import { validatedPlaceSearchOptions } from './integrations/places/placeDiscovery.js';
 import { chatAudienceTurn } from './chatAudience.js';
 import { validChatStream } from './chatSentenceStream.js';
 import { conversationToolServer, type ConversationToolServer } from './shannonToolSession.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from './turnDeadline.js';
 import type { TurnMemoryRecall } from './turnMemoryRecall.js';
 import { type NotionTurnReader } from './conversationCapabilities.js';
-import { WAITING_TESTFLIGHT_DASHBOARD, type TestFlightDeliveryReader } from './testflightDeliveryStore.js';
+import { WAITING_TESTFLIGHT_DASHBOARD, type TestFlightDeliveryReader } from './integrations/testflight/store/testflightDeliveryStore.js';
 import { dispatchPeopleMemoryRequest } from './apiPeopleMemoryRoutes.js';
 import { PeopleMemory } from './peopleMemory.js';
 import { SQLitePeopleMemoryStore, type PeopleMemoryStore } from './peopleMemoryStore.js';
 import type { DailyMindReader } from './dailyMind.js';
-import type { WorldSubscriptionReader } from './worldStore.js';
+import type { WorldSubscriptionReader } from './integrations/world/store/worldStore.js';
 import { SQLitePersonIdentityStore, type PersonIdentityStore } from './personIdentity.js';
 import {
   InMemoryConversationOrchestrationStore,
@@ -87,7 +87,7 @@ import {
   type VoyagerTaskDestination,
   type VoyagerCatalog,
   type VoyagerTaskProjection,
-} from './organize.js';
+} from './integrations/voyager/organize.js';
 import { InMemoryVoiceIdentityStore, type ShannonVoiceIdentityStore } from './voiceIdentity.js';
 import { OwnOutreach, type OwnOutreachReader } from './ownOutreach.js';
 import { voiceSessionCalls } from './ownerCallElsewhere.js';
@@ -104,9 +104,9 @@ import { usableThreadSummary } from './memoryVisibility.js';
 import { conversationReplay } from './conversationWindow.js';
 import { recordConversationProposal } from './conversationOrchestration.js';
 import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
-import { isExplicitVoyagerUpdateRequest } from './organize.js';
-import { optionalPlaceDiscoverySkill, placeSkillReply } from './placeDiscoverySkill.js';
-import type { ChatResponse } from './contracts.js';
+import { isExplicitVoyagerUpdateRequest } from './integrations/voyager/organize.js';
+import { optionalPlaceDiscoverySkill, placeSkillReply } from './integrations/places/placeDiscoverySkill.js';
+import type { ChatResponse } from './contracts/contracts.js';
 export type { TextTurnInput, TextTurnResult, TextTurnSurface } from './apiTextTurn.js';
 export interface ShannonApiKernelOptions {
   chatModel?: ShannonChatModel;

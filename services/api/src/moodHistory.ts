@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import {
   deriveShannonFace, presentShannonFeeling, type CompanionStateSnapshot, type ShannonEmotionTiming,
 } from '@shannon/cognition';
-import { MOOD_HISTORY_LIMITS, type MoodHistoryRecording } from './moodHistoryContract.js';
+import { MOOD_HISTORY_LIMITS, type MoodHistoryRecording } from './contracts/moodHistoryContract.js';
 
 /**
  * The record of her mood over time (`docs/mood-history-contract.md`). Core: emotion.

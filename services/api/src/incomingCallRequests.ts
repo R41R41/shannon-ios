@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import type { AutonomyPhone, PhoneFacts } from './autonomyLoopPhoneStep.js';
-import { INCOMING_CALL_LIMITS, incomingCallMinimumIntervalMilliseconds, incomingCallsEnabled } from './incomingCallContract.js';
+import { INCOMING_CALL_LIMITS, incomingCallMinimumIntervalMilliseconds, incomingCallsEnabled } from './contracts/incomingCallContract.js';
 import type { SQLiteIncomingCallStore } from './incomingCallStore.js';
-import { privateReachOutsEnabled } from './privateListeningContract.js';
+import { privateReachOutsEnabled } from './contracts/privateListeningContract.js';
 import type { PrivateListener } from './privateListeningStore.js';
 import type { SQLiteReachOutClaims } from './reachOutClaims.js';
 
