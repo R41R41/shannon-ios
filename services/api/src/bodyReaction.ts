@@ -12,7 +12,7 @@ import {
 import type { BodyReactionSpeaker } from './bodyReactionModel.js';
 import { BODY_TOUCH_PHRASES, asksStance, bodyReactionPrompt, boundedReactionText, type BodyReactionDecision } from './bodyReactionPrompt.js';
 import { reflexPartWord } from './bodyTouchReflex.js';
-import { bodyTouchPartWord, isBodyTouchPart, touchDetailPhrase, type BodySurface } from './bodyTouchWords.js';
+import { bodyTouchPartWord, bodyTouchRegionWord, touchDetailPhrase, type BodySurface } from './bodyTouchWords.js';
 import type { ReactionLine, SQLiteBodyReactionStore } from './bodyReactionStore.js';
 import type { BodyTouches, FeltTouch } from './bodyTouch.js';
 import type { ConversationStore } from './conversationStore.js';
@@ -242,10 +242,12 @@ export class BodyReactions {
     // Stage 2: she is asked her stance on every touch, and, with the owner alone, told their closeness and how she took
     // touches on this part before (facts only; Syzygy ADR-0005 owner answer 4, ADR-0006 §1 「考える層への渡し方」).
     const stage2 = felt.prediction !== undefined;
+    // The part of touch vocabulary 2, else the old region, each named by its own words (首, 脇, 頬): never a fallback word.
     const part = request.touch.part ?? request.touch.region;
+    const partWord = request.touch.part ? bodyTouchPartWord(request.touch.part) : request.touch.region ? bodyTouchRegionWord(request.touch.region) : undefined;
     const history = stage2 && request.audience === 'owner' ? {
       closeness: felt.snapshot.temperament.closeness,
-      ...(part ? { part: isBodyTouchPart(part) ? bodyTouchPartWord(part) : '体', stances: touches.stances(scopeKey, part, felt.snapshot, at) } : {}),
+      ...(part && partWord ? { part: partWord, stances: touches.stances(scopeKey, part, felt.snapshot, at) } : {}),
     } : undefined;
     const prompt = bodyReactionPrompt({
       ...(stage2 ? { asksStance: true } : {}), ...(history ? { history } : {}),

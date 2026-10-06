@@ -55,6 +55,9 @@ export const bodyTouchPartWord = (part: BodyTouchPart): string => BODY_TOUCH_PAR
 
 const PART: Readonly<Record<BodyTouchRegion, string>> = Object.freeze({ head: '頭', face: '頬', side: '脇', hand: '手', body: '体' });
 
+/** 「脇」「頬」: the word of a region of the old vocabulary, as the touch prompt names it (頬をつつかれた). */
+export const bodyTouchRegionWord = (region: BodyTouchRegion): string => PART[region];
+
 /** The gestures whose wording takes a part. Holding hands already names the hand; being carried has no part. */
 const VERBS: Partial<Record<ShannonTouchKind, { ongoing: string; done: string; memory: string }>> = Object.freeze({
   pet: { ongoing: 'なでられている', done: 'なでられた', memory: 'なでてもらった' },

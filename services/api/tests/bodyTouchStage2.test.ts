@@ -255,6 +255,16 @@ describe('what she is told and what she remembers', () => {
     expect(third).not.toContain('これまで首に');
   });
 
+  it('names an old-shape region by its own word in the history line (脇, 頬), never as 体', async () => {
+    const w = await world();
+    w.decide('unsure');
+    await w.said({ type: 'tickle', region: 'side' });
+    w.advance(MINUTE);
+    await w.said({ type: 'poke', region: 'face', ongoing: false, durationMs: 200 });
+    expect(w.speaker.prompts[0]).toContain('脇に触れられてボクが受け取りを決めるのは、これが初めて');
+    expect(w.speaker.prompts[1]).toContain('頬に触れられてボクが受け取りを決めるのは、これが初めて');
+  });
+
   it('gives every touch reaction her temperament from the one persona source, with others present too', async () => {
     const w = await world();
     w.decide('fine');
