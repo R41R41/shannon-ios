@@ -1,6 +1,7 @@
 #if os(macOS)
 import CryptoKit
 import Foundation
+import Observation
 import XCTest
 @testable import ShannonAppCore
 
@@ -213,6 +214,27 @@ final class ShannonFolderHostTests: XCTestCase {
         XCTAssertFalse(model.isChosen)
     }
 
+    @MainActor
+    func testAnUnchangedPollDoesNotInvalidateTheSettingsPage() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "shannon-folder-\(UUID().uuidString)"))
+        let model = ShannonFolderHostModel(bookmarks: ShannonFolderBookmarkStore(defaults: defaults, bookmarking: FakeBookmarks(folder: folder)),
+                                           defaults: defaults, log: ShannonFolderHostActivityLog(fileURL: base.appendingPathComponent("log.jsonl")))
+        let turn = ShannonFolderHostRunner.Turn(link: .connected(host: "owner-mac", label: "Mac", stopped: false), delay: 0, entry: nil)
+        model.apply(turn)
+        let invalidated = Flag()
+        withObservationTracking {
+            _ = model.link
+            _ = model.deviceID
+            _ = model.recent
+        } onChange: {
+            invalidated.set()
+        }
+        model.apply(turn)
+        XCTAssertFalse(invalidated.value)
+        model.apply(.init(link: .offline, delay: 1, entry: nil))
+        XCTAssertTrue(invalidated.value)
+    }
+
     // MARK: The loop and the wire
 
     func testTheLocalStopClaimsWithLocalStopAndRefusesAStepThatArrivesAsItTurnsOn() async throws {
@@ -347,6 +369,13 @@ private final class FakeBookmarks: ShannonFolderBookmarking, @unchecked Sendable
     private(set) var stops = 0
     func startAccessing(_ folder: URL) -> Bool { starts += 1; return true }
     func stopAccessing(_ folder: URL) { stops += 1 }
+}
+
+private final class Flag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var raised = false
+    var value: Bool { lock.lock(); defer { lock.unlock() }; return raised }
+    func set() { lock.lock(); raised = true; lock.unlock() }
 }
 
 /// Each look is `step` seconds after the one before.

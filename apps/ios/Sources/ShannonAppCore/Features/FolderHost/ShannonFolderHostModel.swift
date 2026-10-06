@@ -201,10 +201,13 @@ public final class ShannonFolderHostModel {
         }
     }
 
-    private func apply(_ turn: ShannonFolderHostRunner.Turn) {
-        if turn.link != .waiting { link = turn.link }
+    /// Observed values are written only when they change: an unchanged poll must not invalidate 設定 (every write of an
+    /// observed property re-renders its views, and the Mac app is guarding against AppKit update-constraint loops).
+    func apply(_ turn: ShannonFolderHostRunner.Turn) {
+        if turn.link != .waiting, turn.link != link { link = turn.link }
         if case .connected = turn.link { lastClaimAt = Date() }
-        deviceID = client?.deviceID
+        let device = client?.deviceID
+        if device != deviceID { deviceID = device }
         if let entry = turn.entry {
             log.append(entry)
             recent.insert(entry, at: 0)
