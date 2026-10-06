@@ -152,6 +152,66 @@ final class ShannonFolderHostWriteTests: XCTestCase {
         XCTAssertEqual(try text("small.md"), "1")
     }
 
+    private func trashNames() -> [String] {
+        (try? FileManager.default.contentsOfDirectory(atPath: folder.appendingPathComponent(".shannon/trash").path)) ?? []
+    }
+
+    private func mode(_ relative: String) throws -> Int {
+        try XCTUnwrap(FileManager.default.attributesOfItem(atPath: folder.appendingPathComponent(relative).path)[.posixPermissions] as? Int)
+    }
+
+    func testUpdateSwapsTheNewTextInAndKeepsTheOriginalsPermissionsAndTags() throws {
+        _ = try create("notes/旅.md", "古い中身")
+        let url = folder.appendingPathComponent("notes/旅.md")
+        try FileManager.default.setAttributes([.posixPermissions: 0o640], ofItemAtPath: url.path)
+        XCTAssertEqual(setxattr(url.path, "org.shannon.test", "印", 3, 0, XATTR_NOFOLLOW), 0)
+        try (url as NSURL).setResourceValue(["旅行"], forKey: .tagNamesKey)
+        let before = try XCTUnwrap(ShannonFolderHostRoot.lstatOf(url.path))
+
+        let trashed = try XCTUnwrap(try update("notes/旅.md", "新しい中身", expected: digest("古い中身")).trashedAs)
+        XCTAssertEqual(try text("notes/旅.md"), "新しい中身")
+        XCTAssertEqual(try mode("notes/旅.md"), 0o640)
+        var mark = [UInt8](repeating: 0, count: 8)
+        XCTAssertEqual(getxattr(url.path, "org.shannon.test", &mark, mark.count, 0, XATTR_NOFOLLOW), 3)
+        XCTAssertEqual(try URL(fileURLWithPath: url.path).resourceValues(forKeys: [.tagNamesKey]).tagNames, ["旅行"])
+        // The original itself (the same file, not a copy) is at the trash name, and nothing else was left there.
+        let original = try XCTUnwrap(ShannonFolderHostRoot.lstatOf(folder.appendingPathComponent(trashed).path))
+        XCTAssertTrue(ShannonFolderHostRoot.same(original, before))
+        XCTAssertEqual(try text(trashed), "古い中身")
+        XCTAssertEqual(trashNames(), [String(trashed.dropFirst(".shannon/trash/".count))])
+    }
+
+    func testAnUpdateThatFailsBeforeTheSwapLeavesTheOriginalInPlaceAndNothingInTheTrash() throws {
+        _ = try create("notes/a.md", "元の中身")
+        // The new text cannot be written: the trash does not take it.
+        let trash = folder.appendingPathComponent(".shannon/trash")
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: trash.path)
+        XCTAssertEqual(refusal { _ = try update("notes/a.md", "新しい中身") }, .ioError)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: trash.path)
+        XCTAssertEqual(try text("notes/a.md"), "元の中身")
+        XCTAssertEqual(trashNames(), [])
+
+        // The swap cannot be made: the folder of the file does not take a change. The new file is taken out again.
+        let notes = folder.appendingPathComponent("notes")
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: notes.path)
+        XCTAssertEqual(refusal { _ = try update("notes/a.md", "新しい中身") }, .ioError)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: notes.path)
+        XCTAssertEqual(try text("notes/a.md"), "元の中身")
+        XCTAssertEqual(trashNames(), [])
+    }
+
+    func testAFilePutThereByAnotherProgramAfterTheReadIsLeftAlone() throws {
+        _ = try create("a.md", "読んだ中身")
+        let root = try root()
+        let read = try root.locate("a.md", kind: .file)
+        // Another program replaces the file (a new file at the same path) after it was read.
+        try Data("ほかのアプリの中身".utf8).write(to: folder.appendingPathComponent("a.md"), options: .atomic)
+        XCTAssertEqual(refusal { _ = try root.replace(read, with: Data("ボクの中身".utf8), now: now) }, .changedSinceRead)
+        XCTAssertEqual(try text("a.md"), "ほかのアプリの中身")
+        XCTAssertEqual(trashNames(), [])
+    }
+
     // MARK: move
 
     func testMoveRenamesAndMovesWithoutOverwritingAndKeepsKinds() throws {

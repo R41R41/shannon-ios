@@ -42,8 +42,9 @@ public enum ShannonFolderHostWrites {
 
     // MARK: update
 
-    /// Replaces a text file: the original goes into the trash first, then the new text is written in its place. With
-    /// `expectedSha256`, a file the owner changed since she read it is left alone (`changed_since_read`).
+    /// Replaces a text file, keeping the original in the trash. The file is never missing at its path: the new text is
+    /// written under the original's trash name and swapped in (`replace`). With `expectedSha256`, a file the owner changed
+    /// since she read it is left alone (`changed_since_read`).
     public static func update(
         _ root: ShannonFolderHostRoot, relativePath: String, content: String?, contentSha256: String?, bytes: Int?,
         expectedSha256: String?, now: Date, quota: Quota = .standard
@@ -63,15 +64,7 @@ public enum ShannonFolderHostWrites {
         if let expectedSha256, expectedSha256.lowercased() != digest(Data(old)) { throw ShannonFolderHostRefusal(.changedSinceRead) }
         let usage = root.usage(stoppingAfter: quota.files)
         guard usage.bytes - old.count + data.count <= quota.bytes else { throw ShannonFolderHostRefusal(.folderFull) }
-        let trashedAs = try root.trash(file.absolute, relative: file.relative, now: now)
-        do {
-            try writeNew(file.absolute, data)
-        } catch {
-            // The original is put back if it can be; it stays in the trash otherwise. Nothing is lost either way.
-            _ = renamex_np(root.path + "/" + trashedAs, file.absolute, UInt32(RENAME_EXCL) | ShannonFolderHostRoot.renameNoLink)
-            throw error
-        }
-        return .init(sha256: digest(data), trashedAs: trashedAs)
+        return .init(sha256: digest(data), trashedAs: try root.replace(file, with: data, now: now))
     }
 
     // MARK: move
@@ -277,6 +270,58 @@ extension ShannonFolderHostRoot {
         }
         return (files, bytes)
     }
+
+    /// `update`'s exchange (`docs/host-folder-contract.md`, 「The Mac application」):
+    /// 1. the new text is written to a new file in `.shannon/trash/`, under the name the original will have there (behind
+    ///    the fence, so never listed or searched), with the original's permissions and, if it has them, its extended
+    ///    attributes (Finder tags among them);
+    /// 2. the two are swapped in one call (`RENAME_SWAP`): the new text is at the path and the original at its trash name.
+    /// The path is never empty. Any failure before the swap removes the new file and leaves the original where it was; after
+    /// the swap the original is in the trash, at the location returned (and so reported and logged as `trashedAs`).
+    func replace(_ file: Located, with data: Data, now: Date) throws(ShannonFolderHostRefusal) -> String {
+        let original = open(file.absolute, O_RDONLY | Self.openNoLink | O_NONBLOCK | O_CLOEXEC)
+        guard original >= 0 else { throw errno == ENOENT ? ShannonFolderHostRefusal(.changedSinceRead) : Self.refusal(errno: errno) }
+        defer { close(original) }
+        var opened = stat()
+        guard fstat(original, &opened) == 0 else { throw ShannonFolderHostRefusal(.ioError, outcome: .failed) }
+        // Not the file that was read: another program put a file there since.
+        guard Self.same(opened, file.status) else { throw ShannonFolderHostRefusal(.changedSinceRead) }
+        let trash = try openTrash()
+        defer { close(trash) }
+        var staged: (name: String, descriptor: Int32)?
+        for name in Self.trashNames(file.relative, now: now) {
+            let descriptor = openat(trash, name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
+            if descriptor >= 0 { staged = (name, descriptor); break }
+            guard errno == EEXIST else { throw Self.refusal(errno: errno) }
+        }
+        guard let staged else { throw ShannonFolderHostRefusal(.ioError, outcome: .failed) }
+        // Extended attributes and ACLs as they are, if they can be copied (a text file may have none); the permissions always.
+        _ = fcopyfile(original, staged.descriptor, nil, copyfile_flags_t(COPYFILE_XATTR | COPYFILE_ACL))
+        let written = fchmod(staged.descriptor, opened.st_mode & 0o777) == 0
+            && ShannonFolderHostWrites.writeAll(staged.descriptor, data) && fsync(staged.descriptor) == 0
+        close(staged.descriptor)
+        guard written else {
+            unlinkat(trash, staged.name, 0)
+            throw ShannonFolderHostRefusal(.ioError, outcome: .failed)
+        }
+        guard renameatx_np(trash, staged.name, AT_FDCWD, file.absolute, UInt32(RENAME_SWAP) | Self.renameNoLink) == 0 else {
+            let code = errno
+            unlinkat(trash, staged.name, 0)
+            throw code == ENOENT ? ShannonFolderHostRefusal(.changedSinceRead) : Self.refusal(errno: code)
+        }
+        // The trash name now holds what was at the path. Another program could have put a file there after the check above:
+        // then that file is put back and her text taken out again. If even that fails, that file stays in the trash, named.
+        var swapped = stat()
+        if fstatat(trash, staged.name, &swapped, AT_SYMLINK_NOFOLLOW) != 0 || !Self.same(swapped, opened) {
+            if renameatx_np(trash, staged.name, AT_FDCWD, file.absolute, UInt32(RENAME_SWAP) | Self.renameNoLink) == 0 {
+                unlinkat(trash, staged.name, 0)
+                throw ShannonFolderHostRefusal(.changedSinceRead)
+            }
+        }
+        return ShannonFolderHostLimits.protectedFolder + "/trash/" + staged.name
+    }
+
+    static func same(_ one: stat, _ other: stat) -> Bool { one.st_dev == other.st_dev && one.st_ino == other.st_ino }
 
     /// Moves a file or a folder into `.shannon/trash/<time>_<path flattened>` and returns that relative location.
     func trash(_ absolute: String, relative: String, now: Date) throws(ShannonFolderHostRefusal) -> String {
