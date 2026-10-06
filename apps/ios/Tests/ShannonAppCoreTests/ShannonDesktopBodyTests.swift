@@ -161,6 +161,97 @@ final class ShannonDesktopBodyTests: XCTestCase {
         }
     }
 
+    // MARK: Asking the page where she was pressed (`partAt`)
+
+    /// A page as the web view runs it: the statement is evaluated by a fake `partAt`, as the bundled page would.
+    @MainActor private final class FakePage {
+        enum Mode { case answers([String: Any]?), missing, fails }
+        var mode: Mode
+        private(set) var scripts: [String] = []
+        init(_ mode: Mode) { self.mode = mode }
+
+        func evaluate(_ script: String) async throws -> Any? {
+            scripts.append(script)
+            switch mode {
+            case .fails: throw URLError(.cannotDecodeContentData)
+            case .missing: return "missing"
+            case let .answers(answer):
+                guard let answer else { return "null" }
+                return String(data: try JSONSerialization.data(withJSONObject: answer), encoding: .utf8)
+            }
+        }
+    }
+
+    @MainActor func testThePagesPartAtDecidesWhereSheIsPickedUp() async {
+        let at = CGPoint(x: 200, y: 96)
+        // The page's own answer wins over the measured zones either way.
+        for (answer, fallback, expected) in [
+            (["part": "face", "region": "face", "carriable": true] as [String: Any], false, true),
+            (["part": "cheek", "region": "face", "side": "left", "carriable": true], false, true),
+            (["part": "other", "region": "body", "carriable": true], false, true),
+            (["part": "head", "region": "head", "carriable": false], true, false),
+            (["part": "chest", "region": "body", "carriable": false], true, false),
+        ] {
+            let page = FakePage(.answers(answer))
+            let decided = await ShannonDesktopBodyGrip.ask(at: at, fallback: fallback, evaluate: page.evaluate)
+            XCTAssertEqual(decided, expected, "\(answer)")
+            XCTAssertEqual(page.scripts.count, 1)
+            XCTAssertTrue(page.scripts[0].contains("partAt(200.0,96.0)"))
+        }
+        // A clear spot is not where she is picked up, whatever the zones say.
+        let clear = await ShannonDesktopBodyGrip.ask(at: at, fallback: true, evaluate: FakePage(.answers(nil)).evaluate)
+        XCTAssertFalse(clear)
+        // An older page without partAt, a failed statement, or an answer of an unknown shape: the zones decide.
+        for fallback in [true, false] {
+            let missing = await ShannonDesktopBodyGrip.ask(at: at, fallback: fallback, evaluate: FakePage(.missing).evaluate)
+            let failed = await ShannonDesktopBodyGrip.ask(at: at, fallback: fallback, evaluate: FakePage(.fails).evaluate)
+            let odd = await ShannonDesktopBodyGrip.ask(at: at, fallback: fallback, evaluate: FakePage(.answers(["part": "face"])).evaluate)
+            XCTAssertEqual([missing, failed, odd], [fallback, fallback, fallback])
+        }
+        XCTAssertEqual(ShannonDesktopBodyGrip.pageAnswer(nil), .unavailable)
+        XCTAssertEqual(ShannonDesktopBodyGrip.pageAnswer(42), .unavailable)
+        XCTAssertEqual(ShannonDesktopBodyGrip.pageAnswer("null"), .clear)
+        XCTAssertEqual(ShannonDesktopBodyGrip.pageAnswer(#"{"part":"face","carriable":true}"#, failed: true), .unavailable)
+    }
+
+    func testAPressHeldForThePagesAnswer() {
+        // Answered carriable before she moves: moving carries her.
+        var carry = ShannonDesktopBodyCarry()
+        XCTAssertEqual(carry.down(at: .zero, grip: .asking(fallback: false), origin: .zero, time: 0), [])
+        XCTAssertTrue(carry.awaitsDecision)
+        XCTAssertEqual(carry.drag(to: CGPoint(x: 2, y: 0), time: 0.01), [])
+        XCTAssertEqual(carry.decided(mayCarry: true), [])
+        XCTAssertFalse(carry.awaitsDecision)
+        XCTAssertEqual(carry.drag(to: CGPoint(x: 10, y: 0), time: 0.05), [.beginCarry, .moveWindow(CGPoint(x: 10, y: 0))])
+        // Answered not carriable: the press is the page's at once, and what follows too.
+        carry = ShannonDesktopBodyCarry()
+        _ = carry.down(at: .zero, grip: .asking(fallback: true), origin: .zero, time: 0)
+        XCTAssertEqual(carry.decided(mayCarry: false), [.deliverDown])
+        XCTAssertEqual(carry.drag(to: CGPoint(x: 10, y: 0), time: 0.05), [.deliverDrag])
+        XCTAssertEqual(carry.up(time: 0.1), [.deliverUp])
+        // Moved before the page answered: the fallback decides, and the late answer changes nothing.
+        carry = ShannonDesktopBodyCarry()
+        _ = carry.down(at: .zero, grip: .asking(fallback: true), origin: .zero, time: 0)
+        XCTAssertEqual(carry.drag(to: CGPoint(x: 10, y: 0), time: 0.02), [.beginCarry, .moveWindow(CGPoint(x: 10, y: 0))])
+        XCTAssertEqual(carry.decided(mayCarry: false), [])
+        XCTAssertTrue(carry.isCarrying)
+        carry = ShannonDesktopBodyCarry()
+        _ = carry.down(at: .zero, grip: .asking(fallback: false), origin: .zero, time: 0)
+        XCTAssertEqual(carry.drag(to: CGPoint(x: 10, y: 0), time: 0.02), [.deliverDown, .deliverDrag])
+        XCTAssertEqual(carry.decided(mayCarry: true), [])
+        XCTAssertFalse(carry.isCarrying)
+        // Released before the answer: a click for the page, and the answer comes to nothing.
+        carry = ShannonDesktopBodyCarry()
+        _ = carry.down(at: .zero, grip: .asking(fallback: true), origin: .zero, time: 0)
+        XCTAssertEqual(carry.up(time: 0.05), [.deliverDown, .deliverUp])
+        XCTAssertEqual(carry.decided(mayCarry: true), [])
+        // Held still past the hold time: the page's, as any press that is not moved.
+        carry = ShannonDesktopBodyCarry()
+        _ = carry.down(at: .zero, grip: .asking(fallback: true), origin: .zero, time: 0)
+        XCTAssertEqual(carry.tick(time: 0.3), [.deliverDown])
+        XCTAssertEqual(carry.decided(mayCarry: true), [])
+    }
+
     /// The zones belong to one model: bundling another without measuring again fails here (`docs/live2d-embed.md`).
     @MainActor func testTheCarryZonesWereMeasuredOnTheBundledModel() throws {
         let folder = try XCTUnwrap(ShannonLive2DStage.embedFolder)

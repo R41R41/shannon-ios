@@ -20,6 +20,8 @@ final class ShannonDesktopBodyWindowController {
     private weak var body: ShannonDesktopBody?
     private var carry = ShannonDesktopBodyCarry()
     private var heldDown: NSEvent?
+    /// The press the page is being asked about; an answer for an earlier press is dropped.
+    private var askedPress = 0
     private var monitor: Any?
     private var hitTask: Task<Void, Never>?
     private var holdTask: Task<Void, Never>?
@@ -218,13 +220,11 @@ final class ShannonDesktopBodyWindowController {
         switch event.type {
         case .leftMouseDown:
             heldDown = event
-            // Only her face or her boots pick her up (`ShannonDesktopBodyGrip`); any other press is a touch at once.
-            let stage = ShannonDesktopBodyGeometry.stageRect(in: panel.frame.size, scale: body?.scale ?? 1)
-            let page = ShannonLive2DStage.shared
-            let pageShown = webView != nil && ShannonLive2DStage.isAvailable && page.status == .ready && page.activeHost == hostID
-            let mayCarry = ShannonDesktopBodyGrip.mayCarry(at: event.locationInWindow, stage: stage, body: page.body, pageShown: pageShown)
-            apply(carry.down(at: NSEvent.mouseLocation, mayCarry: mayCarry, origin: panel.frame.origin, time: event.timestamp), event: event)
-            if mayCarry { waitForHold() }
+            // Only her face or her boots pick her up (`ShannonDesktopBodyGrip`): the page is asked at the point, and the
+            // press is held until it answers; any other press is a touch.
+            let grip = grip(for: event)
+            apply(carry.down(at: NSEvent.mouseLocation, grip: grip, origin: panel.frame.origin, time: event.timestamp), event: event)
+            if grip != .touch { waitForHold() }
         case .leftMouseDragged:
             apply(carry.drag(to: NSEvent.mouseLocation, time: event.timestamp), event: event)
         case .leftMouseUp:
@@ -242,6 +242,29 @@ final class ShannonDesktopBodyWindowController {
             return false
         }
         return true
+    }
+
+    /// What is known of the pressed point. With her figure shown and a page to ask, the page's `partAt` (asked here,
+    /// answered into the held press); the measured zones stand in until it answers, and for a page that cannot.
+    private func grip(for event: NSEvent) -> ShannonDesktopBodyCarry.Grip {
+        let stage = ShannonDesktopBodyGeometry.stageRect(in: panel.frame.size, scale: body?.scale ?? 1)
+        let page = ShannonLive2DStage.shared
+        let pageShown = webView != nil && ShannonLive2DStage.isAvailable && page.status == .ready && page.activeHost == hostID
+        let fallback = ShannonDesktopBodyGrip.mayCarry(at: event.locationInWindow, stage: stage, body: page.body, pageShown: pageShown)
+        guard pageShown, let webView else { return fallback ? .carry : .touch }
+        askedPress += 1
+        let press = askedPress
+        let local = webView.convert(event.locationInWindow, from: nil)
+        let css = CGPoint(x: local.x, y: webView.isFlipped ? local.y : webView.bounds.height - local.y)
+        Task { [weak self, weak webView] in
+            let mayCarry = await ShannonDesktopBodyGrip.ask(at: css, fallback: fallback) { script in
+                guard let webView else { throw CancellationError() }
+                return try await webView.evaluateJavaScriptText(script)
+            }
+            guard let self, self.askedPress == press, let down = self.heldDown else { return }
+            self.apply(self.carry.decided(mayCarry: mayCarry), event: down)
+        }
+        return .asking(fallback: fallback)
     }
 
     private func waitForHold() {
@@ -289,6 +312,18 @@ final class ShannonDesktopBodyWindowController {
         let effects = carry.cancel(time: ProcessInfo.processInfo.systemUptime)
         if let release { apply(effects, event: release) }
         heldDown = nil
+    }
+}
+
+extension WKWebView {
+    /// One statement's text result (nil when it is not text), through the completion handler: the async form traps on a
+    /// result it cannot bridge.
+    @MainActor func evaluateJavaScriptText(_ script: String) async throws -> String? {
+        try await withCheckedThrowingContinuation { continuation in
+            evaluateJavaScript(script) { result, error in
+                if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: result as? String) }
+            }
+        }
     }
 }
 #endif

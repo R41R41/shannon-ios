@@ -9,14 +9,17 @@ import Foundation
 /// hands, belly and sides never pick her up: such a press is the page's at once and stays a touch, and the parts she
 /// may not want touched flinch as the page makes them.
 ///
-/// The window has to decide at the press, before the page has seen it, and the page names a part only once a touch is
-/// under way, and it has no call that says the part at a point. So the part at a point comes from `zones`: where the
-/// bundled page names a part that carries, measured from the page itself (see `zones`), so that the edge of a zone
-/// never touches her head, hair, neck or legs.
+/// The window has to decide at the press, before the page has seen it. It asks the page (`shannonBody.partAt`, pages
+/// since 0.1.0+202610060340), which says without starting a touch whether the point is `carriable` by that rule (her
+/// face, eyes and nose included, and her boots; with her eyes alone, the eyes and just around them). The press is held
+/// until the answer, which comes within a few milliseconds; moved far enough before it, the fallback below decides
+/// (`ShannonDesktopBodyCarry.Grip.asking`). A clear spot (`null`) is not where she is picked up.
 ///
-/// Fallback when no part is known at a point (outside the zones, an unknown body): the page's `region`, if one is
-/// known, and only `face` carries; with neither, she is not picked up and the press is a touch. Her eyes alone are her
-/// face (the page always names `face` for them), so they carry wherever they are drawn.
+/// Fallback, for a page without `partAt` (an older page), an error, or an answer this app cannot read: `zones`, where an
+/// earlier page named a part that carries, measured from the page itself (see `zones`), so that the edge of a zone never
+/// touches her head, hair, neck or legs. Outside them the page's `region`, if one is known, decides (only `face`
+/// carries); with neither, she is not picked up and the press is a touch. Her eyes alone are her face, so they carry
+/// wherever they are drawn. With no figure shown at all she is carried from anywhere (`mayCarry`, `pageShown`).
 public enum ShannonDesktopBodyGrip {
     /// The rule, from what the page names at a point.
     public static func carries(part: ShannonLive2DTouch.Part?, region: ShannonLive2DTouch.Region?) -> Bool {
@@ -41,6 +44,59 @@ public enum ShannonDesktopBodyGrip {
     /// alone, she is picked up wherever she is drawn.
     public static func mayCarry(at point: CGPoint, stage: CGRect, body: ShannonLive2DBody, pageShown: Bool) -> Bool {
         carries(part: part(at: point, stage: stage, body: pageShown ? body : .eyes), region: nil)
+    }
+
+    /// What the page said to `partAt`.
+    public enum PageAnswer: Equatable, Sendable {
+        /// A part of her, and whether she may be picked up there.
+        case part(carriable: Bool)
+        /// A clear spot, or outside her drawing.
+        case clear
+        /// No answer this app can use: no `partAt` (an older page), an error, or a shape it does not know.
+        case unavailable
+    }
+
+    /// One statement for the page, at a point in CSS pixels. It always answers text, so that an older page (no `partAt`)
+    /// or a `null` never meets the web view's handling of `undefined`: "missing", or the answer as JSON ("null" included).
+    public static func partAtScript(x: Double, y: Double) -> String {
+        let number = { (value: Double) in value.isFinite ? String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), value) : "0" }
+        return "(function(){var b=window.shannonBody;if(!b||typeof b.partAt!=='function')return 'missing';"
+            + "var r=b.partAt(\(number(x)),\(number(y)));return JSON.stringify(r===undefined?null:r);})()"
+    }
+
+    /// The page's text, read as an answer.
+    public static func pageAnswer(_ result: Any?, failed: Bool = false) -> PageAnswer {
+        guard !failed, let text = result as? String, text != "missing", let data = text.data(using: .utf8),
+              let value = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else { return .unavailable }
+        if value is NSNull { return .clear }
+        guard let object = value as? [String: Any], let carriable = object["carriable"] as? Bool else { return .unavailable }
+        return .part(carriable: carriable)
+    }
+
+    /// Whether she may be picked up, from the page's answer, or from the fallback when it has none.
+    public static func decision(_ answer: PageAnswer, fallback: Bool) -> Bool {
+        switch answer {
+        case let .part(carriable): carriable
+        case .clear: false
+        case .unavailable: fallback
+        }
+    }
+
+    /// Asks the page at a point (CSS pixels) and decides. `evaluate` runs one statement in the page and answers its
+    /// result; it throws when the page could not run it.
+    @MainActor public static func ask(
+        at css: CGPoint, fallback: Bool, evaluate: @MainActor (String) async throws -> Any?
+    ) async -> Bool {
+        let result: Any?
+        let failed: Bool
+        do {
+            result = try await evaluate(partAtScript(x: css.x, y: css.y))
+            failed = false
+        } catch {
+            result = nil
+            failed = true
+        }
+        return decision(pageAnswer(result, failed: failed), fallback: fallback)
     }
 
     /// The part the page names at a point, where that part carries her; nil elsewhere (which never carries).
