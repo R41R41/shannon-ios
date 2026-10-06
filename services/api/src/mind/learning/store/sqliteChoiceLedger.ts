@@ -101,9 +101,18 @@ export function ensureChoiceLedgerSchema(database: DatabaseSync): void {
   `);
   // Added with step 7b: how far a choice's appraisal moved valence (the rate safeguard sums it).
   const columns = (database.prepare("PRAGMA table_info('shannon_choices')").all() as Array<{ name: string }>).map(column => column.name);
-  if (!columns.includes('mood_step')) database.exec('ALTER TABLE shannon_choices ADD COLUMN mood_step REAL');
+  if (!columns.includes('mood_step')) addColumn(database, 'ALTER TABLE shannon_choices ADD COLUMN mood_step REAL');
   // Added with the warm-up: how many settled choices the cell that answered V had learned from.
-  if (!columns.includes('expected_n')) database.exec('ALTER TABLE shannon_choices ADD COLUMN expected_n INTEGER');
+  if (!columns.includes('expected_n')) addColumn(database, 'ALTER TABLE shannon_choices ADD COLUMN expected_n INTEGER');
+}
+
+/** Another process may add the same column between the look and the ALTER (the API and the loop open it together): that is fine. */
+function addColumn(database: DatabaseSync, statement: string): void {
+  try {
+    database.exec(statement);
+  } catch (error) {
+    if (!(error instanceof Error && /duplicate column/i.test(error.message))) throw error;
+  }
 }
 
 const round = (value: number) => Math.round(value * 1e6) / 1e6;

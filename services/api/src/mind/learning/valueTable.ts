@@ -55,8 +55,12 @@ export class ValueVersions {
     return id ? valueOf(this.cellsOf(id), choice, context, id) : ROOT_VALUE;
   };
 
-  /** The nightly part: a new version from all settled choices, unless frozen, empty or unchanged; then retention. */
-  nightly(scopeKey: string, at: string): { decision: string; versionId?: string; pruned: number } {
+  /**
+   * The nightly part: a new version from all settled choices, unless frozen, empty or unchanged, or a `sleep` version was already
+   * made at or after `notBefore` (today's sleep-hour boundary, owner-local: durable, so a restart later in the day writes none);
+   * then retention.
+   */
+  nightly(scopeKey: string, at: string, notBefore?: string): { decision: string; versionId?: string; pruned: number } {
     if (!this.ready()) return { decision: 'unavailable', pruned: 0 };
     let result: { decision: string; versionId?: string; pruned: number } = { decision: 'empty', pruned: 0 };
     // The fold is made outside the lock; under it, only when nothing was settled or rolled back meanwhile is it written as it is.
@@ -65,7 +69,10 @@ export class ValueVersions {
     underWriteLock(this.options.database, this.meter, ownerDayKey(at), () => {
       const lastSeq = this.choices.lastSeq(scopeKey);
       const active = this.store.active(scopeKey);
-      const decision = nightlyDecision(active, lastSeq);
+      const boundary = notBefore === undefined ? Number.NaN : Date.parse(notBefore);
+      const sleptToday = Number.isFinite(boundary)
+        && this.store.versions(scopeKey).some(version => version.madeBy === 'sleep' && Date.parse(version.createdAt) >= boundary);
+      const decision = nightlyDecision(active, lastSeq, sleptToday);
       result = { decision, pruned: 0 };
       if (decision === 'snapshot') {
         const same = lastSeq === seen.lastSeq && (active?.versionId ?? null) === seen.active;

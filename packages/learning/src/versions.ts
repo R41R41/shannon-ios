@@ -27,11 +27,16 @@ export interface ValueVersionRecord {
 
 export const NIGHTLY_VERSION_RETENTION_DAYS = 30;
 
-export type NightlyDecision = 'snapshot' | 'frozen' | 'unchanged' | 'empty';
+export type NightlyDecision = 'snapshot' | 'frozen' | 'already' | 'unchanged' | 'empty';
 
-/** Whether the nightly pass writes a version: not while frozen, not without evidence, not when nothing new was settled. */
-export function nightlyDecision(active: Pick<ValueVersionRecord, 'frozen' | 'evidenceTo'> | null, lastSeq: number): NightlyDecision {
+/**
+ * Whether the nightly pass writes a version: not while frozen, not when it already wrote one this owner day (`sleptToday`: a
+ * `sleep` version made at or after today's sleep-hour boundary, so a restart later in the day changes nothing), not without
+ * evidence, not when nothing new was settled.
+ */
+export function nightlyDecision(active: Pick<ValueVersionRecord, 'frozen' | 'evidenceTo'> | null, lastSeq: number, sleptToday = false): NightlyDecision {
   if (active?.frozen) return 'frozen';
+  if (sleptToday) return 'already';
   if (lastSeq <= 0) return 'empty';
   if (active && active.evidenceTo >= lastSeq) return 'unchanged';
   return 'snapshot';

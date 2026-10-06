@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { ROOT_VALUE } from '@shannon/learning';
 import type { ReachOutFacts } from '../src/mind/action/ownTime/store/autonomyLoopObservations.js';
 import { ChoiceLedger, choiceLedgerEnabled } from '../src/mind/learning/choiceLedger.js';
+import { ensureChoiceLedgerSchema } from '../src/mind/learning/store/sqliteChoiceLedger.js';
 import { PredictionLedger } from '../src/mind/learning/predictionLedger.js';
 import { ledgerPredictionTap, presenceOf, stepChoice, storyReacted, studyPieceOf, toolCallChoice } from '../src/wiring/cognitionLedgerTaps.js';
 import { valueNightSchedule, valueSleep } from '../src/mind/sleep/valueSleep.js';
@@ -184,15 +185,67 @@ describe('a choice of hers', () => {
 
   it('runs the nightly pass on its own daily trigger from the sleep hour, once a day, whatever the sleep batch did', () => {
     const ran: string[] = [];
-    const nightly = valueNightSchedule({ timeZone: 'Asia/Tokyo', sleepHour: 3, scopes: () => ['owner', 'other'], run: (scopeKey, when) => { ran.push(`${scopeKey}@${when}`); } });
+    const boundaries: string[] = [];
+    const nightly = valueNightSchedule({ timeZone: 'Asia/Tokyo', sleepHour: 3, scopes: () => ['owner', 'other'], run: (scopeKey, when, notBefore) => { ran.push(`${scopeKey}@${when}`); boundaries.push(notBefore); } });
     // 02:59 in Tokyo: not yet.
     expect(nightly('2026-10-07T17:59:00.000Z')).toBe(false);
     expect(nightly('2026-10-07T18:00:00.000Z')).toBe(true);
     expect(nightly('2026-10-07T23:00:00.000Z')).toBe(false);
     expect(nightly('2026-10-08T18:30:00.000Z')).toBe(true);
     expect(ran).toEqual(['owner@2026-10-07T18:00:00.000Z', 'other@2026-10-07T18:00:00.000Z', 'owner@2026-10-08T18:30:00.000Z', 'other@2026-10-08T18:30:00.000Z']);
+    // Handed the instant the owner-local day reached the sleep hour (03:00 in Tokyo), however late the run.
+    expect([...new Set(boundaries)]).toEqual(['2026-10-07T18:00:00.000Z', '2026-10-08T18:00:00.000Z']);
     const failed = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     expect(valueNightSchedule({ timeZone: 'Asia/Tokyo', sleepHour: 3, scopes: () => { throw new Error('x'); }, run: () => undefined })('2026-10-07T18:00:00.000Z')).toBe(false);
     failed.mockRestore();
+  });
+
+  it('writes one value version per owner day across restarts, durably, while the time-based parts may run again', () => {
+    const store = new SQLiteShannonStore({ path: join(directory, `restart-${files += 1}.sqlite`), now: () => '2026-10-06T00:00:00.000Z', predictionLedger: true, choiceLedger: true, cognitionDefer: task => task(), predictionShadowDefer: task => task() });
+    const tap = ledgerPredictionTap(store.predictionLedger()!, { reachOut: () => undefined }, { ledger: store.choiceLedger()!, presence: () => 'alone' });
+    const values = store.valueVersions()!;
+    let steps = 0;
+    const settle = (when: string) => {
+      const stepId = `restart-${steps += 1}`;
+      tap.chose('owner', { stepId, kind: 'note' }, when);
+      tap.reported('owner', { stepId, outcome: 'done', costYen: 0 }, when);
+    };
+    const lines: string[] = [];
+    const night = valueSleep({ predictions: store.predictionLedger(), choices: store.choiceLedger(), values, log: line => lines.push(line) });
+    // A worker start: a new schedule, which keeps nothing of the one before.
+    const worker = () => valueNightSchedule({ timeZone: 'Asia/Tokyo', sleepHour: 3, scopes: () => ['owner'], run: (scopeKey, when, notBefore) => night(scopeKey, when, () => null, notBefore) });
+    const sleptVersions = () => values.store.versions('owner').filter(version => version.madeBy === 'sleep');
+
+    settle('2026-10-06T12:00:00.000Z'); // 21:00 in Tokyo, the day before
+    expect(worker()('2026-10-06T18:30:00.000Z')).toBe(true); // 03:30
+    expect(sleptVersions()).toHaveLength(1);
+    const morning = values.store.activeId('owner');
+
+    settle('2026-10-07T02:00:00.000Z'); // 11:00: a choice settles
+    expect(worker()('2026-10-07T06:00:00.000Z')).toBe(true); // a restart at 15:00 runs the pass again ...
+    expect(sleptVersions()).toHaveLength(1); // ... and writes no new version: V stays as it was this morning
+    expect(values.store.activeId('owner')).toBe(morning);
+    expect(lines.at(-1)).toContain('version=already');
+
+    expect(worker()('2026-10-07T18:30:00.000Z')).toBe(true); // 03:30 the next day
+    expect(sleptVersions()).toHaveLength(2);
+    expect(values.store.activeId('owner')).not.toBe(morning);
+    expect(values.store.active('owner')!.evidenceTo).toBe(2);
+    store.close();
+  });
+
+  it('adds its later columns safely when another process added them between the look and the ALTER', () => {
+    const database = new DatabaseSync(join(directory, `columns-${files += 1}.sqlite`));
+    ensureChoiceLedgerSchema(database);
+    // The other process won the race: the look saw no columns, but they are there by the time of the ALTER.
+    const raced = new Proxy(database, {
+      get(target, property) {
+        if (property === 'prepare') return (sql: string) => (sql.startsWith('PRAGMA table_info') ? { all: () => [] } : target.prepare(sql));
+        const value = Reflect.get(target, property) as unknown;
+        return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+      },
+    });
+    expect(() => ensureChoiceLedgerSchema(raced)).not.toThrow();
+    database.close();
   });
 });

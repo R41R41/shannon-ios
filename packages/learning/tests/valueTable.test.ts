@@ -79,6 +79,8 @@ describe('versions', () => {
     expect(nightlyDecision(version('a', { evidenceTo: 3 }), 3)).toBe('unchanged');
     expect(nightlyDecision(version('a', { evidenceTo: 3 }), 5)).toBe('snapshot');
     expect(nightlyDecision(version('a', { evidenceTo: 3, frozen: true }), 5)).toBe('frozen');
+    expect(nightlyDecision(version('a', { evidenceTo: 3 }), 5, true)).toBe('already');
+    expect(nightlyDecision(version('a', { evidenceTo: 3, frozen: true }), 5, true)).toBe('frozen');
   });
 
   it('rolls back to the newest version that learned from less, and never forward to the one rolled away from', () => {

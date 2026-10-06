@@ -32,7 +32,7 @@ const valueNightly = valueNightSchedule({
     try { for (const scopeKey of store.predictionLedger()?.store.scopes() ?? []) scopes.add(scopeKey); } catch { /* the table may not exist yet */ }
     return [...scopes];
   },
-  run: (scopeKey, at) => valueNight(scopeKey, at, () => store.snapshot(scopeKey)),
+  run: (scopeKey, at, notBefore) => valueNight(scopeKey, at, () => store.snapshot(scopeKey), notBefore),
 });
 const worker = new ShannonBackgroundWorker(store, store, store, createConfiguredSleepMemoryAnalyzer(process.env, store), {
   timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo',
