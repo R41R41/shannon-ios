@@ -146,15 +146,17 @@ const SIDE_WORDS: Readonly<Record<BodyTouchSide, string>> = Object.freeze({ left
 
 /**
  * The part and the gesture of touch vocabulary 2 as one phrase, as she is told them (首をつつかれた／左の頬をなでられている／
- * 胸に触れられた), with the side from her own view. Null without a `part`, and for carrying and holding hands, whose
- * wording names no part: the caller then keeps the wording from `type` and `region`, so a touch in the old shape is
+ * 胸に触れられた), with the side from her own view. `holdHand` on a part other than the hand is a hand resting there.
+ * Null without a `part`, and for carrying and for holding the hand, whose wording names no part: the caller then keeps the wording from `type` and `region`, so a touch in the old shape is
  * told exactly as before. Facts only, in the vocabulary the body sends.
  */
 export function touchDetailPhrase(
   type: ShannonTouchKind, detail: { part?: BodyTouchPart; side?: BodyTouchSide; gesture?: BodyTouchGesture }, form: 'ongoing' | 'done',
 ): string | null {
-  const gesture = detail.gesture ?? TYPE_GESTURE[type];
-  const verb = gesture && type !== 'holdHand' && type !== 'carry' ? GESTURE_VERBS[gesture] : undefined;
-  if (!detail.part || !verb) return null;
+  if (!detail.part) return null;
+  // Held hands keep their own words on the hand; `holdHand` anywhere else is a hand resting there (胸に触れられている).
+  const gesture = type === 'holdHand' ? (detail.part === 'hand' ? undefined : 'rest') : detail.gesture ?? TYPE_GESTURE[type];
+  const verb = gesture && type !== 'carry' ? GESTURE_VERBS[gesture] : undefined;
+  if (!verb) return null;
   return `${detail.side ? SIDE_WORDS[detail.side] : ''}${bodyTouchPartWord(detail.part)}${verb.particle}${verb[form]}`;
 }

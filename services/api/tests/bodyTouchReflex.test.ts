@@ -111,6 +111,26 @@ describe('what she is told of a touch that names its part', () => {
     }
   });
 
+  it('tells a hand resting on such a part as a touch that rests there, never as hand-holding or a favour (review item 4)', async () => {
+    const harness = await reactionHarness();
+    harness.speaker.decision = { say: true, text: 'あの…。', feeling: 'confused', stance: 'unsure' };
+    const answer = await harness.said({ type: 'holdHand', durationMs: 2_000, ongoing: true, region: 'body', part: 'chest', gesture: 'rest', reflex: 'flinch' });
+    const prompt = harness.speaker.prompts[0]!;
+    expect(prompt).toContain('- いま: ライ氏に胸に触れられている（2秒ほど）');
+    expect(prompt).not.toContain('手をつない');
+    expect(answer.status).toBe('said');
+    expect(harness.state().expressiveEmotion).toMatchObject({ primary: 'confused', cause: 'ライ氏に胸に触れられた' });
+    expect(harness.activity().map(entry => entry.summary)).toEqual(['体に触れられて（胸に触れられた）、ひとこと返しました。']);
+    // Without a judgement only the reflex, and its cause says the same.
+    const quiet = await reactionHarness({ speaker: null });
+    await quiet.events({ id: 'h-1', type: 'holdHand', audience: 'owner', occurredAt: START, durationMs: 3_000, region: 'body', part: 'waist', gesture: 'rest' });
+    expect(quiet.state().expressiveEmotion).toMatchObject({ primary: 'surprised', cause: 'ライ氏に腰に触れられた' });
+    // Holding the hand itself keeps its words.
+    harness.advance(60_000);
+    await harness.said({ type: 'holdHand', durationMs: 2_000, ongoing: true, region: 'hand', part: 'hand', gesture: 'hold' });
+    expect(harness.speaker.prompts[1]).toContain('- いま: ライ氏に手をつないでもらっている（2秒ほど）');
+  });
+
   it('with other people present, tells the part and the flinch, and keeps the rule for the room', async () => {
     const harness = await reactionHarness();
     await harness.said(reflexTouch('neck', 'poke'), { audience: 'others' });

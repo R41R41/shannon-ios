@@ -70,11 +70,13 @@ export const SHANNON_TOUCH_REFLEX: ShannonTouchFeelingStep = SHANNON_TOUCH_FEELI
 
 /**
  * How a touch on such a part is named as the cause of the reflex, with the verbs the reaction prompt uses for the gesture
- * (`touchDetailPhrase`): 首をなでられた, 胸に触れられた (a touch that rests), 腰をつつかれた, 脚をくすぐられた. Carrying keeps the table's words.
+ * (`touchDetailPhrase`): 首をなでられた, 胸に触れられた (a touch that rests, also `holdHand` there), 腰をつつかれた, 脚をくすぐられた. Carrying keeps the table's words.
  */
 const REFLEX_PHRASES = Object.freeze({ stroke: 'をなでられた', rest: 'に触れられた', poke: 'をつつかれた', tickle: 'をくすぐられた' });
 const reflexPhrase = (touch: ShannonTouch): string | undefined =>
-  touch.kind === 'pet' ? (touch.resting ? REFLEX_PHRASES.rest : REFLEX_PHRASES.stroke)
+  // `holdHand` on such a part is a hand resting there (holding is the hand's alone): not hand-holding, and no favour.
+  touch.kind === 'holdHand' ? REFLEX_PHRASES.rest
+    : touch.kind === 'pet' ? (touch.resting ? REFLEX_PHRASES.rest : REFLEX_PHRASES.stroke)
     : touch.kind === 'poke' ? REFLEX_PHRASES.poke : touch.kind === 'tickle' ? REFLEX_PHRASES.tickle : undefined;
 
 /** The share of the distance to the row's mood one touch covers, and the most any one touch moves a mood value. */
