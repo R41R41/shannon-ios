@@ -48,7 +48,7 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
   figure of an empty Talk; among equals the one that appeared last. On the iPhone her figure lives in the
   dialogue display since A6: the body screen was folded into it); every other place her figure stands shows the
   Waterlight Eye meanwhile. With no screen showing her, the page is paused at once and the web view is
-  released after 90 seconds (the model holds a large texture in GPU memory); a memory warning with no
+  released after 90 seconds (the model holds its textures in GPU memory: about 150 MB since the model of 2026-10-06 08:06, which added a third 4096×4096 texture); a memory warning with no
   screen showing her releases it immediately. A visible figure is never released by the app.
 - The page is paused (`setPaused`) while the app is not active.
 - Reduce Motion: `setIdle({ gestures: false, sway: 0 })` — she starts no gesture by herself and does not
