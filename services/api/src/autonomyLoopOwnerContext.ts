@@ -73,7 +73,8 @@ export const OWNER_CONTEXT_MESSAGE_MATERIALS = `下の「${OWNER_CONTEXT_TITLE}�
  *
  * By the owner's decision of 2026-10-02 (「ボクのことを物語やメモに書いていい。友達のことも」) the rule for her own writing is a
  * permission: she may write about him and the people he knows, by name, as they are. What stays: secrets go nowhere, what
- * she writes is read by the owner, and showing it to anyone else needs his approval (ADR-0002, unchanged).
+ * she writes is read by the owner, and showing it to anyone else needs his approval (ADR-0002), except reading it aloud in a
+ * conversation with others present (Syzygy ADR-0007 revised, 2026-10-06; `TOOLS_OTHERS_INSTRUCTIONS`).
  * - `thinking`: she may think with it and write about it; secrets nowhere; she reads only pages she was shown.
  * - `story`: a draft or a revision. She may write about him and his people; secrets not.
  * - `note`: the same for a note.

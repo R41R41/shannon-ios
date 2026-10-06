@@ -126,10 +126,10 @@ describe('what she reads of her folder in front of others', () => {
 
     // The owner with others, and 「友人も一緒」: the secret is left out, his health is marked as memory marks it.
     expect(toolInstructions(turn('others').tools!, false)).toBe(TOOLS_OTHERS_INSTRUCTIONS);
-    // ADR-0007 revised: an unshown draft may be read with others present; the work itself is still not shown.
+    // ADR-0007 revised: her works, unshown drafts included, may be read aloud with others present, without his approval first.
     for (const words of [TOOLS_OTHERS_INSTRUCTIONS, TOOLS_GUESTS_INSTRUCTIONS]) {
-      expect(words).toContain('まだ見せていない下書きも、考える材料にしてよい');
-      expect(words).toContain('作品を人に見せるのはライ氏の承認が要る');
+      expect(words).toContain('まだライ氏に見せていない下書きも、ここで読み上げたり話したりしてよい');
+      expect(words).not.toContain('承認');
     }
     for (const offered of [turn('others'), turn('guests', 'voice')]) {
       const text = (await read(offered)).text;
