@@ -84,6 +84,10 @@ final class ShannonFolderHostTests: XCTestCase {
         XCTAssertEqual(refusal { _ = try ShannonFolderHostOperations.read(root, relativePath: "away/secret.md", offset: 0, maxBytes: 100) }, .linkRefused)
         XCTAssertEqual(refusal { _ = try ShannonFolderHostOperations.list(root, relativePath: "away", recursive: false, limit: 10) }, .linkRefused)
 
+        // A hard link to the outside file is the same file under another name: never read, never searched.
+        try FileManager.default.linkItem(at: outside.appendingPathComponent("secret.md"), to: folder.appendingPathComponent("hard.md"))
+        XCTAssertEqual(refusal { _ = try ShannonFolderHostOperations.read(root, relativePath: "hard.md", offset: 0, maxBytes: 100) }, .linkRefused)
+
         // A Finder alias to the outside file, named like a text file.
         let alias = folder.appendingPathComponent("alias.md")
         try URL.writeBookmarkData(try outside.appendingPathComponent("secret.md").bookmarkData(options: .suitableForBookmarkFile), to: alias)
@@ -94,7 +98,7 @@ final class ShannonFolderHostTests: XCTestCase {
         XCTAssertEqual(refusal { _ = try ShannonFolderHostOperations.read(root, relativePath: "Tool.app/Contents/readme.md", offset: 0, maxBytes: 100) }, .notAFolder)
 
         let listed = try ShannonFolderHostOperations.list(root, relativePath: "", recursive: true, limit: 500)
-        XCTAssertEqual(listed.entries.map(\.path), ["Tool.app", "alias.md"])
+        XCTAssertEqual(listed.entries.map(\.path), ["Tool.app", "alias.md", "hard.md"])
         XCTAssertEqual(listed.entries.first?.type, "file")
         let found = try ShannonFolderHostOperations.search(root, query: "secret", relativePath: "", limit: 20)
         XCTAssertEqual(found.hits, [])

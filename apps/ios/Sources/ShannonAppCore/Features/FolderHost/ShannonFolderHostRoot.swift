@@ -6,7 +6,7 @@ import Foundation
 /// the device's to check). Every path the server sends is spelled-checked again, then walked segment by segment with
 /// `lstat`: a link anywhere is refused, `.shannon` in any spelling the disk resolves to it is refused, a package
 /// (a bundle Finder shows as one file) is never entered, and the real path must stay inside the real folder. Files are
-/// opened with `O_NOFOLLOW` and must still be the file that was checked.
+/// opened with `O_NOFOLLOW`, must still be the file that was checked, and must have no other hard link.
 public struct ShannonFolderHostRoot: Sendable {
     /// The folder's real path.
     public let path: String
@@ -73,6 +73,8 @@ public struct ShannonFolderHostRoot: Sendable {
         var opened = stat()
         guard fstat(descriptor, &opened) == 0, opened.st_dev == located.status.st_dev, opened.st_ino == located.status.st_ino,
               Self.kind(opened) == S_IFREG else { throw ShannonFolderHostRefusal(.linkRefused) }
+        // A hard link is the same file as a name somewhere else, perhaps outside her folder: never read.
+        guard opened.st_nlink <= 1 else { throw ShannonFolderHostRefusal(.linkRefused) }
         guard Int(opened.st_size) <= limit else { throw ShannonFolderHostRefusal(.tooLarge) }
         var bytes = [UInt8]()
         bytes.reserveCapacity(Int(opened.st_size))
