@@ -15,7 +15,7 @@ import {
   type ValueVersionMaker,
   type ValueVersionRecord,
 } from '@shannon/learning';
-import { ownerDay } from '../../companionPresence.js';
+import { ownerDay } from '../emotion/companionPresence.js';
 import { LockWaitMeter, tableExists, underWriteLock } from '../../infra/sqlite/lockWaits.js';
 import { SQLiteChoiceLedger } from './store/sqliteChoiceLedger.js';
 import { SQLiteValueTable, VALUE_VERSIONS_TABLE } from './store/sqliteValueTable.js';

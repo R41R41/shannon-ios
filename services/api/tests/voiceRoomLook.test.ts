@@ -1,25 +1,25 @@
 import { randomBytes } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import { createInMemoryAutonomyService } from '../src/autonomyService.js';
-import { ROOM_LOOK_UNAVAILABLE_REASON } from '../src/bodyLook.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { ROOM_LOOK_UNAVAILABLE_REASON } from '../src/surfaces/body/bodyLook.js';
 import { configuredBodyLook, type BodyLookConfig } from '../src/contracts/bodyLookContract.js';
-import { BODY_LOOK_CUT_OFF_LINE, UNOPENED_LINE, bodyLookNotSeenLine } from '../src/bodyLookLines.js';
-import { VoiceTurnWaits } from '../src/bodyLookTurnWait.js';
-import { SQLiteBodyLookStore } from '../src/bodyLookStore.js';
-import type { RoomLookViewRequest, RoomLookViewer } from '../src/bodyLookVision.js';
-import { SQLiteBodyStore } from '../src/bodyStore.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
-import type { BodyPresence } from '../src/shannonBody.js';
+import { BODY_LOOK_CUT_OFF_LINE, UNOPENED_LINE, bodyLookNotSeenLine } from '../src/surfaces/body/bodyLookLines.js';
+import { VoiceTurnWaits } from '../src/surfaces/body/bodyLookTurnWait.js';
+import { SQLiteBodyLookStore } from '../src/surfaces/body/store/bodyLookStore.js';
+import type { RoomLookViewRequest, RoomLookViewer } from '../src/surfaces/body/bodyLookVision.js';
+import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import type { BodyPresence } from '../src/surfaces/body/shannonBody.js';
 import {
   JevVoiceDecisionGateway, LocalVoiceDecisionGateway, OpenAIVoiceDecisionGateway, VOICE_SKILLS,
   type VoiceDecisionGateway, type VoiceDecisionInput,
-} from '../src/voiceDecision.js';
+} from '../src/mind/selectors/voiceDecision.js';
 import {
   VOICE_ROOM_LOOK_READY_PROMPT, asksForLookAloud, lookRequest, voiceRoomLookPrompt, voiceRoomLookTurn, voiceRoomLookUnavailablePrompt,
-} from '../src/voiceRoomLook.js';
+} from '../src/surfaces/voice/voiceRoomLook.js';
 import { promptOf } from './modelPrompt.js';
 
 const scope = 'owner';

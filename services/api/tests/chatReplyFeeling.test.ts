@@ -4,22 +4,22 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   InMemoryCompanionStateStore, SHANNON_EMOTION_KINDS, livingLingering, presentShannonFeeling,
 } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import { SHANNON_CORE_PATHS } from '../src/autonomyCore.js';
-import { SQLiteBodyStore } from '../src/bodyStore.js';
-import { OpenAIResponsesChatModel, type ShannonChatModel, type ShannonChatModelRequest, type ShannonChatModelResult } from '../src/chatModel.js';
-import { parseStructuredTurn } from '../src/chatModelSupport.js';
-import { chatTurnRequestBody } from '../src/chatModelTurn.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { SHANNON_CORE_PATHS } from '../src/mind/inhibition/autonomyCore.js';
+import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
+import { OpenAIResponsesChatModel, type ShannonChatModel, type ShannonChatModelRequest, type ShannonChatModelResult } from '../src/infra/models/chatModel.js';
+import { parseStructuredTurn } from '../src/infra/models/chatModelSupport.js';
+import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';
 import {
   REPLY_FEELING_INSTRUCTIONS, REPLY_FEELING_SCHEMA, chatFeelingStrengthEnabled, decidedReplyFeeling, parsedReplyFeeling,
   replyFeelingOffer, type ChatReplyFeeling,
-} from '../src/chatReplyFeeling.js';
-import { ChatReplyStreamDecoder } from '../src/chatReplyStreamDecoder.js';
+} from '../src/mind/emotion/chatReplyFeeling.js';
+import { ChatReplyStreamDecoder } from '../src/infra/models/chatReplyStreamDecoder.js';
 import type { ChatStreamLine } from '../src/contracts/contracts.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
-import { emotionTiming } from '../src/emotionTiming.js';
-import { storedVoiceFace } from '../src/voiceEmotionPlan.js';
-import { AFFECT_INTENSITY_STEPS, affectIntensityOf, affectIntensityValue } from '../src/voiceDecisionValues.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import { emotionTiming } from '../src/mind/emotion/emotionTiming.js';
+import { storedVoiceFace } from '../src/mind/emotion/voiceEmotionPlan.js';
+import { AFFECT_INTENSITY_STEPS, affectIntensityOf, affectIntensityValue } from '../src/mind/selectors/voiceDecisionValues.js';
 import { GOLDEN_BASE } from './chatModelGoldenCases.js';
 import { promptOf } from './modelPrompt.js';
 
@@ -687,7 +687,7 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
 describe('the emotion source stays core', () => {
   it('lists the module among the paths that need the owner\'s approval, and it holds no state', () => {
     expect(SHANNON_CORE_PATHS.emotion).toContain('services/api/src/chatReplyFeeling.ts');
-    const source = readFileSync(new URL('../src/chatReplyFeeling.ts', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../src/mind/emotion/chatReplyFeeling.ts', import.meta.url), 'utf8');
     expect(source).not.toMatch(/stateStore|\.apply\(|DatabaseSync|new Map|let /u);
   });
 });

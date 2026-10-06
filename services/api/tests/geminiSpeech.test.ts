@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   GoogleGeminiSpeechGateway,
   normalizedSpeechText,
-} from '../src/geminiSpeech.js';
-import type { LlmUsageEvent, LlmUsageStore } from '../src/llmUsage.js';
+} from '../src/infra/models/geminiSpeech.js';
+import type { LlmUsageEvent, LlmUsageStore } from '../src/infra/models/llmUsage.js';
 
 describe('Gemini speech gateway', () => {
   it('keeps the key server-side and requests Shannon Japanese WAV speech', async () => {

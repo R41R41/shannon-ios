@@ -29,11 +29,11 @@ import {
   type ShannonEmotionKind,
   type ShannonTouchKind,
 } from '@shannon/cognition';
-import { SQLiteBodyReactionStore } from '../src/bodyReactionStore.js';
-import { BodyTouches } from '../src/bodyTouch.js';
-import { shadowNoiseSeed } from '../src/predictionShadowFold.js';
-import { SQLitePredictionStore, type ShadowComparison, type StoredPredictionOutcome } from '../src/predictionStore.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteBodyReactionStore } from '../src/surfaces/body/store/bodyReactionStore.js';
+import { BodyTouches } from '../src/mind/emotion/bodyTouch.js';
+import { shadowNoiseSeed } from '../src/mind/prediction/predictionShadowFold.js';
+import { SQLitePredictionStore, type ShadowComparison, type StoredPredictionOutcome } from '../src/mind/prediction/store/predictionStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 
 /**
  * Syzygy ADR-0006 stage 2, study only (「段 3 の前に決めること」 item 1): how the impact of a body touch (its prediction

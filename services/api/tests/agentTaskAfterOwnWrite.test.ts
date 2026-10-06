@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import { configuredAutonomy } from '../src/autonomyBudget.js';
-import { ShannonAutonomyService } from '../src/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonTaskProposal, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
+import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonTaskProposal, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
+import { LocalVoiceDecisionGateway } from '../src/mind/selectors/voiceDecision.js';
 import type { VoiceDecisionInput } from '../src/contracts/voiceDecisionContract.js';
 import { FakeAether } from './fakeAetherServer.js';
 

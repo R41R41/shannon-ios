@@ -4,11 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
-import { migrateAgentTasks } from '../src/agentTaskPersistenceSupport.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
-import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
-import { SQLiteReachOutReports } from '../src/reachOutReports.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { migrateAgentTasks } from '../src/mind/action/agentTasks/store/agentTaskPersistenceSupport.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
+import { SQLiteReachOutReports } from '../src/surfaces/outreach/store/reachOutReports.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { reachUsageReport, weekKey } from './reach/reachUsageReport.js';
 import { liveEstimate, runReachSuite, scriptedDrivers, writeReachReport } from './reach/reachSuite.js';
 

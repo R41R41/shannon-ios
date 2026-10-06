@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { prepareFollowUp } from '../src/autonomyLoopFollowUpStep.js';
-import { preparePhoneCall, type AutonomyPhone } from '../src/autonomyLoopPhoneStep.js';
-import { prepareReachOut, type AutonomyReachOuts } from '../src/autonomyLoopReachOutStep.js';
-import { AutonomyToolResults } from '../src/autonomyLoopToolStep.js';
-import { toolSessionMemory } from '../src/shannonToolTypes.js';
+import { prepareFollowUp } from '../src/mind/action/ownTime/autonomyLoopFollowUpStep.js';
+import { preparePhoneCall, type AutonomyPhone } from '../src/mind/action/ownTime/autonomyLoopPhoneStep.js';
+import { prepareReachOut, type AutonomyReachOuts } from '../src/mind/action/ownTime/autonomyLoopReachOutStep.js';
+import { AutonomyToolResults } from '../src/mind/action/ownTime/autonomyLoopToolStep.js';
+import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import { OWN_TIME_PRICES } from './ownerDocumentsScenario.js';
 import { FakeAether } from './fakeAetherServer.js';
 import { FakeModel, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
@@ -77,7 +77,7 @@ describe('a marked session', () => {
     const reading = harness.store.loop.unnotedReadings(scope)[0]!;
     const cycle = harness.store.loop.startCycle(scope, '2026-10-02', 'activity', [], harness.clock.at);
     // The step is performed and never reported, as when the report fails: what Aether took is marked all the same.
-    const { prepareStep, adaptersFor } = await import('../src/autonomyLoopSteps.js');
+    const { prepareStep, adaptersFor } = await import('../src/mind/action/ownTime/autonomyLoopSteps.js');
     const dependencies = { ...harness, loop: harness.loopConfig, model: harness.model, reader: harness.reader, showing: harness.showing, notion };
     const prepared = prepareStep(dependencies, cycle, { kind: 'note', readingId: reading.id }, harness.clock.at)!;
     await prepared.perform(adaptersFor({ decision: 'allow', domain: 'aether_study' }, dependencies), harness.clock.at);

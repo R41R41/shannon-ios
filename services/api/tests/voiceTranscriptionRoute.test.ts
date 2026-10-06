@@ -2,7 +2,7 @@ import { createServer, request as httpRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createVoiceTranscriptionRoute } from '../src/surfaces/voice/transcriptionRoute.js';
-import { VoiceTranscriptionError, type VoiceTranscriber } from '../src/voiceTranscription.js';
+import { VoiceTranscriptionError, type VoiceTranscriber } from '../src/infra/models/voiceTranscription.js';
 
 /** The transcription route as `server.ts` serves it, moved to `surfaces/voice` unchanged. */
 let server: Server | null = null;

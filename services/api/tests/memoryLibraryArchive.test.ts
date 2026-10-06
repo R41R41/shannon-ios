@@ -2,8 +2,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
-import { ShannonMemoryService } from '../src/memoryService.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
+import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
 
 describe('memory management archive reachability', () => {
   it.each([3, 1000])('keeps forgotten evidence reachable beyond the visible history window (%s)', maximumExperiences => {

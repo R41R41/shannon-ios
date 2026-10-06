@@ -1,4 +1,4 @@
-import type { AutonomyNotionReader } from '../../autonomyLoopSteps.js';
+import type { AutonomyNotionReader } from '../../mind/action/ownTime/autonomyLoopSteps.js';
 import type { NotionSource } from './notionSource.js';
 
 const READ_MILLISECONDS = 10_000;

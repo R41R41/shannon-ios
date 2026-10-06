@@ -3,13 +3,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE } from '@shannon/cognition';
-import { TurnRefinementProcessor } from '../src/backgroundUpdates.js';
-import { conversationReplay } from '../src/conversationWindow.js';
-import { ShannonMemoryService } from '../src/memoryService.js';
-import type { ToolTraceCall } from '../src/shannonToolTrace.js';
-import { sweepToolTraces } from '../src/shannonToolTraceSweep.js';
-import { InMemoryToolTraces, TOOL_TRACE_RETENTION_MILLISECONDS, ToolTurnLog } from '../src/shannonToolTurns.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
+import { conversationReplay } from '../src/mind/recall/conversationWindow.js';
+import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
+import type { ToolTraceCall } from '../src/mind/tools/shannonToolTrace.js';
+import { sweepToolTraces } from '../src/mind/tools/shannonToolTraceSweep.js';
+import { InMemoryToolTraces, TOOL_TRACE_RETENTION_MILLISECONDS, ToolTurnLog } from '../src/mind/tools/shannonToolTurns.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 
 /** Review of 2026-10-05: retention in every scope, forgetting and 「内緒」 reaching stored traces, and turn matching. */
 const at = '2026-10-05T06:00:00.000Z';

@@ -1,13 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ShannonDevicePrincipal } from '../../deviceAuth.js';
-import { readBytes, sendJson, type VoiceRequestAllowances } from '../../serverHttp.js';
+import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
+import { readBytes, sendJson, type VoiceRequestAllowances } from '../../infra/http/serverHttp.js';
 import {
   normalizedVoiceMimeType,
   parsedVoiceDurationSeconds,
   SHANNON_VOICE_MAXIMUM_BYTES,
   VoiceTranscriptionError,
   type VoiceTranscriber,
-} from '../../voiceTranscription.js';
+} from '../../infra/models/voiceTranscription.js';
 
 /**
  * `POST /v1/voice/transcriptions`: a paired device's audio to text, through the configured transcriber and its daily cap

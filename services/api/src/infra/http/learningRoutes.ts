@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { SHANNON_AUTONOMY_SYSTEM_DOMAIN } from '@shannon/cognition';
 import type { CalibrationReport } from '@shannon/learning';
-import type { AutonomyActivityRecord } from '../../autonomyActivity.js';
-import { autonomyDayKey, type AutonomyConfig } from '../../autonomyBudget.js';
+import type { AutonomyActivityRecord } from '../../mind/inhibition/store/autonomyActivity.js';
+import { autonomyDayKey, type AutonomyConfig } from '../../mind/inhibition/autonomyBudget.js';
 import type { ValueVersions, ValuesOwnerError } from '../../mind/learning/valueTable.js';
-import { readJson, sendJson } from '../../serverHttp.js';
+import { readJson, sendJson } from './serverHttp.js';
 
 /**
  * The owner's view and controls of her value table (Syzygy ADR-0008 stage 1 §7; `docs/cognition-ledger-contract.md`).

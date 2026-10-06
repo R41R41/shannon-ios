@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { shannonCapabilityPrompt, shannonIdentityPrompt, shannonPersonaPrompt, shannonSuitePrompt } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { temporaryGuestVoiceInstructions, voiceConversationInstructions } from '../src/voiceConversationInstructions.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
+import { temporaryGuestVoiceInstructions, voiceConversationInstructions } from '../src/surfaces/voice/voiceConversationInstructions.js';
 import { promptOf } from './modelPrompt.js';
 
 class PromptRecorder implements ShannonChatModel {

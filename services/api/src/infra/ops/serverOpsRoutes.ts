@@ -1,12 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { bearerAuthorized } from '../../apiAuth.js';
-import { validScopeKey } from '../../apiValidation.js';
+import { bearerAuthorized } from '../auth/apiAuth.js';
+import { validScopeKey } from '../http/apiValidation.js';
 import { OPS_LIMITS, OPS_SCHEMA_VERSION, validatedOpsSnapshot, type OpsSnapshot } from '../../contracts/opsContract.js';
 import type { OpsCommandAllowed } from '../../contracts/opsCommandContract.js';
 import type { OpsCommand } from './store/opsCommandStore.js';
 import type { SQLiteOpsStore } from './store/opsStore.js';
 import { createOpsCommandRoute, isOpsCommandPath, opsCommandsView } from './serverOpsCommandRoutes.js';
-import { consumeDeviceAllowance, readJson, sendJson } from '../../serverHttp.js';
+import { consumeDeviceAllowance, readJson, sendJson } from '../http/serverHttp.js';
 
 export const OPS_SNAPSHOT_PATH = '/v1/platform/ops/snapshot';
 export const OPS_READ_PATH = '/v1/ops';

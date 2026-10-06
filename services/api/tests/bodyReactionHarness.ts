@@ -1,15 +1,15 @@
 import { InMemoryCompanionStateStore, type CompanionStateStore } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import { createInMemoryAutonomyService } from '../src/autonomyService.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
 import type { BodyReactionAnswer, BodyReactionConfig } from '../src/contracts/bodyReactionContract.js';
-import type { BodyReactionSpeakRequest, BodyReactionSpeaker } from '../src/bodyReactionModel.js';
-import type { BodyReactionDecision } from '../src/bodyReactionPrompt.js';
-import { SQLiteBodyReactionStore } from '../src/bodyReactionStore.js';
-import { SQLiteBodyStore } from '../src/bodyStore.js';
-import type { BodyTouchDependencies } from '../src/bodyTouch.js';
-import type { TouchExperienceWriter } from '../src/bodyTouchMemory.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { InMemoryConversationStore, type ConversationStore } from '../src/conversationStore.js';
+import type { BodyReactionSpeakRequest, BodyReactionSpeaker } from '../src/surfaces/body/bodyReactionModel.js';
+import type { BodyReactionDecision } from '../src/surfaces/body/bodyReactionPrompt.js';
+import { SQLiteBodyReactionStore } from '../src/surfaces/body/store/bodyReactionStore.js';
+import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
+import type { BodyTouchDependencies } from '../src/mind/emotion/bodyTouch.js';
+import type { TouchExperienceWriter } from '../src/surfaces/body/store/bodyTouchMemory.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
+import { InMemoryConversationStore, type ConversationStore } from '../src/mind/memory/store/conversationStore.js';
 
 export const scope = 'owner';
 export const START = '2026-10-02T06:00:00.000Z';

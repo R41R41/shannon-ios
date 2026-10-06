@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { resolveCommitmentCommand } from '../src/commitmentCommands.js';
+import { resolveCommitmentCommand } from '../src/mind/action/respond/commitmentCommands.js';
 import { createInitialCompanionState } from '@shannon/cognition';
-import { notificationBody } from '../src/pushNotificationSender.js';
+import { notificationBody } from '../src/surfaces/outreach/pushNotificationSender.js';
 import { groundedWorldOpening } from '../src/integrations/world/worldInterestRelevance.js';
 
 /**

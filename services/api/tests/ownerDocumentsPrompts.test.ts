@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { preparePhoneCall, type AutonomyPhone } from '../src/autonomyLoopPhoneStep.js';
-import { prepareReachOut, type AutonomyReachOuts } from '../src/autonomyLoopReachOutStep.js';
-import { AutonomyToolResults } from '../src/autonomyLoopToolStep.js';
+import { preparePhoneCall, type AutonomyPhone } from '../src/mind/action/ownTime/autonomyLoopPhoneStep.js';
+import { prepareReachOut, type AutonomyReachOuts } from '../src/mind/action/ownTime/autonomyLoopReachOutStep.js';
+import { AutonomyToolResults } from '../src/mind/action/ownTime/autonomyLoopToolStep.js';
 import { OWN_TIME_PRICES } from './ownerDocumentsScenario.js';
 import { FakeModel, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 

@@ -11,7 +11,7 @@ import type {
   CodexServerRequest,
 } from '../src/integrations/agentHost/codexAppServerClient.js';
 import { CodexTaskBridge } from '../src/integrations/agentHost/codexTaskBridge.js';
-import type { ClaimedAgentCommand, HostAgentEvent } from '../src/agentTaskStore.js';
+import type { ClaimedAgentCommand, HostAgentEvent } from '../src/mind/action/agentTasks/agentTaskStore.js';
 
 describe('CodexTaskBridge', () => {
   it('maps a real task lifecycle, approval, changes, and tests without exposing raw output', async () => {

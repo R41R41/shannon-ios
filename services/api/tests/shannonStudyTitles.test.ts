@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { configuredAutonomy } from '../src/autonomyBudget.js';
-import { ShannonAutonomyService } from '../src/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
-import { toolTraceCall, toolTracePrompt, traceLabel } from '../src/shannonToolTrace.js';
-import { toolSessionMemory } from '../src/shannonToolTypes.js';
-import { shannonTool, type ToolResult } from '../src/shannonTools.js';
+import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
+import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { toolTraceCall, toolTracePrompt, traceLabel } from '../src/mind/tools/shannonToolTrace.js';
+import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
+import { shannonTool, type ToolResult } from '../src/mind/tools/shannonTools.js';
 
 /**
  * Build 138, text chat, 2026-10-05: she wanted to read 『名脇役のハッチを叩いて』 and could not, because study.read took

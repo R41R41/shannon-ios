@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import { commitmentDeadline } from '../src/commitmentTime.js';
+import { commitmentDeadline } from '../src/mind/action/respond/commitmentTime.js';
 import {
   EXACT_TIME_NOTE,
   extractPromiseCaptures,
   extractProspectiveMemories,
   requestsExactTimeAlert,
-} from '../src/prospectiveMemory.js';
-import { captureImmediateExplicitMemory } from '../src/sleepConsolidation.js';
+} from '../src/mind/memory/prospectiveMemory.js';
+import { captureImmediateExplicitMemory } from '../src/mind/sleep/sleepConsolidation.js';
 
 // Thursday 2026-09-24 10:00 in Tokyo.
 const at = '2026-09-24T01:00:00.000Z';

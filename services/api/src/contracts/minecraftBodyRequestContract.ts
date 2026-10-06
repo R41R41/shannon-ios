@@ -1,4 +1,4 @@
-import { MINECRAFT_INTENT_GOAL_CHARACTERS } from '../minecraftIntent.js';
+import { MINECRAFT_INTENT_GOAL_CHARACTERS } from '../surfaces/minecraft/minecraftIntent.js';
 
 /**
  * Phase 4 of her Minecraft body (`docs/minecraft-body-contract.md`, "Requests"): the wire shapes of the request

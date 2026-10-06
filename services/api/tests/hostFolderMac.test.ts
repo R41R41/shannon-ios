@@ -1,18 +1,18 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
-import { dispatchHostStepRequest } from '../src/apiAutonomyHostStepRoutes.js';
-import { configuredAutonomy } from '../src/autonomyBudget.js';
-import { hostFolderLabel, hostFolderPath } from '../src/autonomyHostFolderPath.js';
-import { ShannonAutonomyService } from '../src/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
-import { chatTurnRequestBody } from '../src/chatModelTurn.js';
-import { FOLDER_OR_AETHER_INSTRUCTIONS, HOST_FOLDER_TOOL_INSTRUCTIONS, toolInstructions } from '../src/chatModelTools.js';
+import { dispatchHostStepRequest } from '../src/infra/http/apiAutonomyHostStepRoutes.js';
+import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
+import { hostFolderLabel, hostFolderPath } from '../src/mind/action/ownTime/autonomyHostFolderPath.js';
+import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';
+import { FOLDER_OR_AETHER_INSTRUCTIONS, HOST_FOLDER_TOOL_INSTRUCTIONS, toolInstructions } from '../src/infra/models/chatModelTools.js';
 import type { ApiRequest, ApiResponse } from '../src/contracts/contracts.js';
-import { conversationToolServer, conversationTools } from '../src/shannonToolSession.js';
-import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/turnDeadline.js';
+import { conversationToolServer, conversationTools } from '../src/mind/tools/shannonToolSession.js';
+import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/mind/action/respond/turnDeadline.js';
 import { FakeAether } from './fakeAetherServer.js';
-import { toolSessionMemory } from '../src/shannonToolTypes.js';
-import { SHANNON_TOOLS, type ToolSurface } from '../src/shannonTools.js';
+import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
+import { SHANNON_TOOLS, type ToolSurface } from '../src/mind/tools/shannonTools.js';
 
 /**
  * Roadmap A18 S1: her folder on the Mac beside the one on the Windows PC (`docs/host-folder-contract.md`, 「Two hosts」).

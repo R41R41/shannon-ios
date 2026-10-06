@@ -3,15 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createInitialCompanionState } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import { DurableBackgroundDispatcher } from '../src/backgroundUpdates.js';
-import { ShannonBackgroundWorker } from '../src/backgroundWorker.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { DurableBackgroundDispatcher } from '../src/mind/sleep/backgroundUpdates.js';
+import { ShannonBackgroundWorker } from '../src/mind/sleep/backgroundWorker.js';
 import {
   consolidateUserFacts,
   LocalRuleSleepMemoryAnalyzer,
   OpenAISleepMemoryAnalyzer,
-} from '../src/sleepConsolidation.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+} from '../src/mind/sleep/sleepConsolidation.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -106,7 +106,7 @@ describe('Shannon durable background worker', () => {
       expect.objectContaining({ statement: 'ユーザーはシャノンに結論から話してほしい', confidence: 0.72 }),
     ]);
     expect(snapshot.interests).toContain('エージェント設計');
-    const dashboard = new (await import('../src/memoryService.js')).ShannonMemoryService(
+    const dashboard = new (await import('../src/mind/memory/memoryService.js')).ShannonMemoryService(
       store, store, () => '2026-09-01T10:00:02.000Z',
     ).dashboard('owner-a');
     expect(dashboard.items.find(item => item.kind === 'user-fact')).toMatchObject({

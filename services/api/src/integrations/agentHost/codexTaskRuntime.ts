@@ -1,4 +1,4 @@
-import type { AgentChangeSummary, AgentReasoningEffort, AgentTestResult } from '../../agentTaskStore.js';
+import type { AgentChangeSummary, AgentReasoningEffort, AgentTestResult } from '../../mind/action/agentTasks/agentTaskStore.js';
 import type { AgentHostConfig, AgentHostProject } from './agentHostConfig.js';
 import type { AgentHostStateStore, PersistedAgentSession } from './agentHostState.js';
 import { stringValue } from './codexTaskProjection.js';

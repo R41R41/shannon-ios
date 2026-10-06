@@ -7,16 +7,16 @@ import {
   InMemoryCompanionStateStore, SHANNON_EMOTION_TIME, createInitialCompanionState, livingLingering, presentShannonFeeling,
   type CompanionStateSnapshot,
 } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import { configuredAwakeClock } from '../src/autonomyAwakeClock.js';
-import { TurnRefinementProcessor } from '../src/backgroundUpdates.js';
-import { SHANNON_CORE_PATHS } from '../src/autonomyCore.js';
-import { SQLiteBodyStore } from '../src/bodyStore.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
-import { emotionTiming } from '../src/emotionTiming.js';
-import type { BodyPresence } from '../src/shannonBody.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { configuredAwakeClock } from '../src/mind/emotion/autonomyAwakeClock.js';
+import { TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
+import { SHANNON_CORE_PATHS } from '../src/mind/inhibition/autonomyCore.js';
+import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import { emotionTiming } from '../src/mind/emotion/emotionTiming.js';
+import type { BodyPresence } from '../src/surfaces/body/shannonBody.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { promptOf } from './modelPrompt.js';
 
 // Whole conversations through the kernel on a loaded machine: the default five seconds says nothing about the code.

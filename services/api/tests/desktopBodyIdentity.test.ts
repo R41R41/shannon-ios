@@ -4,16 +4,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { BODY_LIMITS, BODY_TOUCH_EVENT_TYPES } from '../src/contracts/bodyContract.js';
-import { SQLiteBodyStore } from '../src/bodyStore.js';
-import { isFullBody } from '../src/bodyTouchOnly.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
-import { SQLiteOwnerCallFacts } from '../src/ownerCallElsewhere.js';
+import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
+import { isFullBody } from '../src/surfaces/body/bodyTouchOnly.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import { SQLiteOwnerCallFacts } from '../src/surfaces/voice/ownerCallElsewhere.js';
 import {
   DESKTOP_BODY_HEADER, DESKTOP_BODY_HEADER_VALUE, desktopBodyDeviceId, desktopBodyMaySpeakOn, mayHaveDesktopBody, namesDesktopBody, requestDeviceId,
-} from '../src/desktopBodyIdentity.js';
-import type { BodyPresence } from '../src/shannonBody.js';
+} from '../src/surfaces/body/desktopBodyIdentity.js';
+import type { BodyPresence } from '../src/surfaces/body/shannonBody.js';
 
 /**
  * Roadmap A17: the Mac app shows her standing on the desktop. Its desktop window is her full body (who can see her,

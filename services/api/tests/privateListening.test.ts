@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { PRIVATE_LISTENING_LIMITS, privateListeningEnabled, validatedPrivateListeningReport } from '../src/contracts/privateListeningContract.js';
-import { dispatchPrivateListeningRequest } from '../src/privateListeningRoutes.js';
-import { SQLitePrivateListeningStore } from '../src/privateListeningStore.js';
+import { dispatchPrivateListeningRequest } from '../src/surfaces/body/privateListeningRoutes.js';
+import { SQLitePrivateListeningStore } from '../src/surfaces/body/store/privateListeningStore.js';
 
 const scope = 'owner';
 const START = '2026-10-02T03:00:00.000Z';

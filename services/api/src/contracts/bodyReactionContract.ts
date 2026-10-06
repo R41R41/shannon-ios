@@ -3,7 +3,7 @@ import type { ShannonExpression, ShannonFeeling, ShannonTouchKind } from '@shann
 import {
   BODY_LIMITS, BODY_TOUCH_DETAIL_FIELDS, BODY_TOUCH_EVENT_TYPES, touchDetailDigest, validatedTouchDetail, type BodyAudience, type BodyTouchDetail,
 } from './bodyContract.js';
-import { isBodyTouchRegion, type BodyTouchRegion } from '../bodyTouchWords.js';
+import { isBodyTouchRegion, type BodyTouchRegion } from '../surfaces/body/bodyTouchWords.js';
 
 /**
  * When she is touched (`docs/body-contract.md`): the wire contract of `POST /v1/body/reactions`

@@ -4,35 +4,35 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import {
   APP_LOOK_CLIENT_STATES, APP_LOOK_LIMITS, APP_LOOK_REFUSAL_CODES, APP_LOOK_SCHEMA, appLookChoice, appLookClient, appLookRequestBytes,
   configuredAppLook, validatedAppLookResult, voiceLookCamera, type AppLookConfig,
 } from '../src/contracts/appLookContract.js';
-import { SQLiteAppLookSpeaker } from '../src/appLookDelivery.js';
+import { SQLiteAppLookSpeaker } from '../src/surfaces/body/store/appLookDelivery.js';
 import {
   APP_LOOK_OFFER_PROMPT, APP_LOOK_SEEN_SUMMARY, VOICE_APP_LOOK_OFFER_PROMPT, LOOK_NOT_NOW_GUARD, LOOK_NOT_SEEN_GUARD, announcedLook, announcesCameraLook, lookAnnouncement, voiceAppLookOfferPrompt, appLookNotSeenLine, appLookNotSeenSummary,
   appLookUnavailablePrompt, appLookUnavailableReason, voiceAppLookPrompt,
-} from '../src/appLookLines.js';
-import { SQLiteAppLookStore } from '../src/appLookStore.js';
-import { configuredAutonomy } from '../src/autonomyBudget.js';
-import { ShannonAutonomyService, createInMemoryAutonomyService } from '../src/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
-import { ROOM_LOOK_OFFER_PROMPT } from '../src/bodyLook.js';
+} from '../src/surfaces/body/appLookLines.js';
+import { SQLiteAppLookStore } from '../src/surfaces/body/store/appLookStore.js';
+import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
+import { ShannonAutonomyService, createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { ROOM_LOOK_OFFER_PROMPT } from '../src/surfaces/body/bodyLook.js';
 import { BODY_LOOK_REQUEST_BYTES, configuredBodyLook } from '../src/contracts/bodyLookContract.js';
-import { BODY_LOOK_CUT_OFF_LINE } from '../src/bodyLookLines.js';
-import { SQLiteBodyLookStore } from '../src/bodyLookStore.js';
-import { roomLookInstructions, type RoomLookViewRequest, type RoomLookViewer } from '../src/bodyLookVision.js';
-import { bodyLookRequestBytes } from '../src/bodyLookWiring.js';
-import { SQLiteBodyStore } from '../src/bodyStore.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { chatTurnRequestBody } from '../src/chatModelTurn.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
-import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
-import type { BodyPresence } from '../src/shannonBody.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
-import { LocalVoiceDecisionGateway, type VoiceDecisionGateway, type VoiceDecisionInput } from '../src/voiceDecision.js';
-import { roomLookRouterQuestions, roomLookRouterSchema, voiceRoomLookPrompt } from '../src/voiceRoomLook.js';
+import { BODY_LOOK_CUT_OFF_LINE } from '../src/surfaces/body/bodyLookLines.js';
+import { SQLiteBodyLookStore } from '../src/surfaces/body/store/bodyLookStore.js';
+import { roomLookInstructions, type RoomLookViewRequest, type RoomLookViewer } from '../src/surfaces/body/bodyLookVision.js';
+import { bodyLookRequestBytes } from '../src/wiring/bodyLookWiring.js';
+import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
+import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
+import type { BodyPresence } from '../src/surfaces/body/shannonBody.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
+import { LocalVoiceDecisionGateway, type VoiceDecisionGateway, type VoiceDecisionInput } from '../src/mind/selectors/voiceDecision.js';
+import { roomLookRouterQuestions, roomLookRouterSchema, voiceRoomLookPrompt } from '../src/surfaces/voice/voiceRoomLook.js';
 import { promptOf } from './modelPrompt.js';
 
 const scope = 'owner';

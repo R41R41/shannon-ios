@@ -3,7 +3,7 @@ import {
   createConfiguredVoiceVisionGateway,
   OpenAIVoiceVisionGateway,
   VoiceVisionError,
-} from '../src/voiceVision.js';
+} from '../src/surfaces/voice/voiceVision.js';
 
 describe('Shannon voice camera snapshot gateway', () => {
   it('sends one bounded user-approved image to Responses without retaining it', async () => {

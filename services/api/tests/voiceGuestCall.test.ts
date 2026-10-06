@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { InMemoryConversationStore } from '../src/conversationStore.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { InMemoryOrganizeStore } from '../src/integrations/voyager/organize.js';
-import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { LocalVoiceDecisionGateway } from '../src/mind/selectors/voiceDecision.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import {
   VOICE_CALL_SUMMARY_HEADING, VOICE_CALL_SUMMARY_PATH, acceptedSummary, fallbackVoiceCallSummary,
-} from '../src/apiVoiceCallSummary.js';
+} from '../src/surfaces/voice/apiVoiceCallSummary.js';
 import {
   guestAddressDecision, guestCallHistory, validatedGuestCallContext, type GuestCallTurn,
-} from '../src/voiceGuestCall.js';
+} from '../src/surfaces/voice/voiceGuestCall.js';
 import { promptOf } from './modelPrompt.js';
 
 const at = '2026-10-01T03:00:00.000Z';

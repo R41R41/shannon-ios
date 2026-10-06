@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { SQLiteAutonomyStore } from '../../src/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../../src/mind/action/ownTime/store/autonomyStore.js';
 import {
   THREE_TOOLS_NUDGE, THREE_TOOLS_REQUEST, THREE_TOOLS_SEED, judgeThreeTools, stableFingerprint, threeToolsOutcome, threeToolsScenario, threeToolsScriptInputs,
   type ReachDriver, type ReachNoteView, type ReachToolCall, type ReachToolResult, type ReachToolbox,
@@ -135,7 +135,7 @@ export function scriptedThreeToolsDriver(): ReachDriver {
 
 /** The live mode until the registry is on main: nothing runs, nothing is spent. */
 export function pendingRegistryDriver(): ReachDriver {
-  const registry = fileURLToPath(new URL('../../src/shannonToolRunner.ts', import.meta.url));
+  const registry = fileURLToPath(new URL('../../src/mind/tools/shannonToolRunner.ts', import.meta.url));
   return async () => ({
     inputs: threeToolsScriptInputs(),
     pending: existsSync(registry)

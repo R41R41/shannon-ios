@@ -3,13 +3,13 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SHANNON_TEMPERAMENT, SHANNON_TOUCH_FEELINGS, shannonTemperament } from '@shannon/cognition';
 import type { BodyReactionAnswer } from '../src/contracts/bodyReactionContract.js';
-import { OpenAIBodyReactionSpeaker } from '../src/bodyReactionModel.js';
+import { OpenAIBodyReactionSpeaker } from '../src/surfaces/body/bodyReactionModel.js';
 import {
   BODY_REACTION_OWN_RULE, BODY_REACTION_SCHEMA, BODY_REACTION_SCHEMA_WITH_STANCE, parsedBodyReaction,
-} from '../src/bodyReactionPrompt.js';
-import { BODY_TOUCH_REFLEX_PARTS, BODY_TOUCH_STANCES } from '../src/bodyTouchReflex.js';
-import { BODY_TOUCH_PART_WORDS } from '../src/bodyTouchWords.js';
-import { PredictionShadow } from '../src/predictionShadow.js';
+} from '../src/surfaces/body/bodyReactionPrompt.js';
+import { BODY_TOUCH_REFLEX_PARTS, BODY_TOUCH_STANCES } from '../src/surfaces/body/bodyTouchReflex.js';
+import { BODY_TOUCH_PART_WORDS } from '../src/surfaces/body/bodyTouchWords.js';
+import { PredictionShadow } from '../src/mind/prediction/predictionShadow.js';
 import { START, reactionHarness, scope } from './bodyReactionHarness.js';
 import { promptOf } from './modelPrompt.js';
 

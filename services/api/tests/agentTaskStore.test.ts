@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SQLiteAgentTaskStore } from '../src/agentTaskStore.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteAgentTaskStore } from '../src/mind/action/agentTasks/agentTaskStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 
 const temporaryDirectories: string[] = [];
 

@@ -1,5 +1,5 @@
 import { lstatSync, readFileSync } from 'node:fs';
-import { memoNotForAether } from '../../memoPlace.js';
+import { memoNotForAether } from '../../mind/action/respond/memoPlace.js';
 
 export interface AetherContextReader {
   promptFor(scopeKey: string, message: string): string;

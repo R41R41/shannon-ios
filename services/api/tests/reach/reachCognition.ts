@@ -9,14 +9,14 @@ import {
   cogStoryReactionScenario, cogToolStreakScenario, judgedFacts, stableFingerprint,
   type ReachDriver, type ReachScenarioDefinition,
 } from '../../../../packages/evaluation/src/reach/index.js';
-import type { ReachOutFacts } from '../../src/autonomyLoopObservations.js';
-import { configuredAutonomy } from '../../src/autonomyBudget.js';
-import { SQLiteAutonomyStore } from '../../src/autonomyStore.js';
+import type { ReachOutFacts } from '../../src/mind/action/ownTime/store/autonomyLoopObservations.js';
+import { configuredAutonomy } from '../../src/mind/inhibition/autonomyBudget.js';
+import { SQLiteAutonomyStore } from '../../src/mind/action/ownTime/store/autonomyStore.js';
 import { ownerValueRecorder } from '../../src/infra/http/learningRoutes.js';
 import type { StoredChoice } from '../../src/mind/learning/choiceLedger.js';
 import { ledgerPredictionTap, storyReacted, toolCallChoice, type Presence } from '../../src/mind/learning/predictionLedgerTaps.js';
 import { valueSleep } from '../../src/mind/sleep/valueSleep.js';
-import { SQLiteShannonStore } from '../../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
 
 /**
  * The model-free drivers of scenario suite v1 of Syzygy ADR-0008 stage 1 (`packages/evaluation/src/reach/cognitionLedger.ts`).

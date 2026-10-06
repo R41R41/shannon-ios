@@ -1,4 +1,4 @@
-import type { VoiceConversationClass, VoiceLatencyClass, VoiceSkill } from '../src/voiceDecision.js';
+import type { VoiceConversationClass, VoiceLatencyClass, VoiceSkill } from '../src/mind/selectors/voiceDecision.js';
 import type { VoiceSilenceCategory, VoiceTurnFacts } from '../src/contracts/voiceDecisionContract.js';
 
 export interface VoiceDecisionEvaluationCase {

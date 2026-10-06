@@ -1,5 +1,5 @@
-import type { ShannonChatModel, ShannonChatModelResult, ShannonWebSource } from '../../chatModel.js';
-import { appendWebSources } from '../../apiValidation.js';
+import type { ShannonChatModel, ShannonChatModelResult, ShannonWebSource } from '../../infra/models/chatModel.js';
+import { appendWebSources } from '../../infra/http/apiValidation.js';
 import { placeReply, validatedPlaces, type PlaceSearchContext, type ShannonPlace } from './placeDiscovery.js';
 
 export interface PlaceDiscoverySkillResult {

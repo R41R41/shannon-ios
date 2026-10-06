@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { CALL_ANSWER_OUTCOME, STORY_REACTION_OUTCOME } from '@shannon/learning';
-import type { AutonomyPredictionTap, ReachOutFacts } from '../../autonomyLoopObservations.js';
-import { PREDICTION_SYMBOL } from '../../predictionStore.js';
-import { dayBand } from '../../predictionShadowReadings.js';
+import type { AutonomyPredictionTap, ReachOutFacts } from '../action/ownTime/store/autonomyLoopObservations.js';
+import { PREDICTION_SYMBOL } from '../prediction/store/predictionStore.js';
+import { dayBand } from '../prediction/predictionShadowReadings.js';
 import type { ChoiceLedger } from './choiceLedger.js';
 import type { PredictionLedger } from './predictionLedger.js';
 

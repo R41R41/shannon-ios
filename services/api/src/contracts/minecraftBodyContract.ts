@@ -1,7 +1,7 @@
-import { MINECRAFT_INTENT_GOAL_CHARACTERS, type MinecraftIntent } from '../minecraftIntent.js';
-import { validatedMinecraftBodyState, type MinecraftBodyState } from '../minecraftBodyState.js';
-import type { PlatformBridgeBinding, PlatformBridgeConfiguration } from '../platformBridge.js';
-import { composedPlatformBridgeConfiguration } from '../platformBridgeBindings.js';
+import { MINECRAFT_INTENT_GOAL_CHARACTERS, type MinecraftIntent } from '../surfaces/minecraft/minecraftIntent.js';
+import { validatedMinecraftBodyState, type MinecraftBodyState } from '../surfaces/minecraft/minecraftBodyState.js';
+import type { PlatformBridgeBinding, PlatformBridgeConfiguration } from '../surfaces/platform/platformBridge.js';
+import { composedPlatformBridgeConfiguration } from '../surfaces/platform/platformBridgeBindings.js';
 
 /**
  * Shannon's Minecraft body (Minebot), phase 1: the wire contract of a game-chat turn and the server's
@@ -14,7 +14,7 @@ import { composedPlatformBridgeConfiguration } from '../platformBridgeBindings.j
 export const MINECRAFT_BODY_TURN_PATH = '/v1/body/minecraft/turns';
 export const MINECRAFT_PLATFORM = 'minecraft' as const;
 
-export type { MinecraftIntent } from '../minecraftIntent.js';
+export type { MinecraftIntent } from '../surfaces/minecraft/minecraftIntent.js';
 
 export const MINECRAFT_BODY_LIMITS = Object.freeze({
   messageCharacters: 600,

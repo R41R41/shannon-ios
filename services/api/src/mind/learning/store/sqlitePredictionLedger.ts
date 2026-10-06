@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isLedgerDomain, roundedDerived, type LedgerDerived, type LedgerDomain, type LedgerRow, type LedgerStatus } from '@shannon/learning';
-import { PREDICTION_SOURCE_ID, PREDICTION_SYMBOL } from '../../../predictionStore.js';
+import { PREDICTION_SOURCE_ID, PREDICTION_SYMBOL } from '../../prediction/store/predictionStore.js';
 
 /**
  * The table of the prediction ledger (Syzygy ADR-0008 stage 1, `docs/cognition-ledger-contract.md`). Core: emotion.

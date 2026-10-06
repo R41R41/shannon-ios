@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { OpenAIResponsesChatModel } from '../src/chatModel.js';
+import { OpenAIResponsesChatModel } from '../src/infra/models/chatModel.js';
 import {
   CONVERSATION_TOOL_CALLS, CUT_OFF_CALL_NOTE, SKIPPED_FOR_TIME, TIMED_OUT_ROUND_NOTE, TOOLS_GONE_NOTE, TURN_OUT_OF_TIME_LINE, VOICE_SECOND_PHRASE, VOICE_TOOL_OUTPUT_TOKENS,
   functionCallsOf, withToolRounds, type ShannonModelToolSession,
-} from '../src/chatModelTools.js';
-import { streamedVoiceToolTurn } from '../src/chatModelVoiceTools.js';
-import { ChatSentenceSplitter, splitChatSentences } from '../src/chatSentenceSplitter.js';
-import { TEXT_TURN_DEADLINE, TurnDeadline, VOICE_TURN_DEADLINE } from '../src/turnDeadline.js';
-import { CONVERSATION_WRITE_CHARACTERS, FOLDER_WRITE_CHARACTERS, offeredTools } from '../src/shannonTools.js';
-import { chatTurnRequestBody } from '../src/chatModelTurn.js';
-import { shannonTool } from '../src/shannonTools.js';
+} from '../src/infra/models/chatModelTools.js';
+import { streamedVoiceToolTurn } from '../src/infra/models/chatModelVoiceTools.js';
+import { ChatSentenceSplitter, splitChatSentences } from '../src/surfaces/text/chatSentenceSplitter.js';
+import { TEXT_TURN_DEADLINE, TurnDeadline, VOICE_TURN_DEADLINE } from '../src/mind/action/respond/turnDeadline.js';
+import { CONVERSATION_WRITE_CHARACTERS, FOLDER_WRITE_CHARACTERS, offeredTools } from '../src/mind/tools/shannonTools.js';
+import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';
+import { shannonTool } from '../src/mind/tools/shannonTools.js';
 
 const TURN = JSON.stringify({
   reply: '書斎にメモが1つあります。', threadSummary: null, taskDecision: { disposition: 'none', reason: '雑談' }, taskProposal: null, intentPlan: null, artifacts: null,

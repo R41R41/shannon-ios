@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { createInMemoryAutonomyService } from '../src/autonomyService.js';
-import { TOOLS_WITHHELD_INSTRUCTIONS } from '../src/chatModelTools.js';
-import { TEXT_TURN_DEADLINE, TurnDeadline, VOICE_TURN_DEADLINE } from '../src/turnDeadline.js';
-import { chatTurnRequestBody } from '../src/chatModelTurn.js';
-import { OTHERS_HEARD_WINDOW_MILLISECONDS, ToolAudienceWatch } from '../src/shannonToolAudience.js';
-import { asksAboutOwnThings, conversationTools } from '../src/shannonToolSession.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
+import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { TOOLS_WITHHELD_INSTRUCTIONS } from '../src/infra/models/chatModelTools.js';
+import { TEXT_TURN_DEADLINE, TurnDeadline, VOICE_TURN_DEADLINE } from '../src/mind/action/respond/turnDeadline.js';
+import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';
+import { OTHERS_HEARD_WINDOW_MILLISECONDS, ToolAudienceWatch } from '../src/mind/inhibition/shannonToolAudience.js';
+import { asksAboutOwnThings, conversationTools } from '../src/mind/tools/shannonToolSession.js';
 
 /** Which turns are offered her tools: the owner alone, on text always and on voice when the words are about her writing or folder. */
 const at = '2026-10-05T03:00:00.000Z';

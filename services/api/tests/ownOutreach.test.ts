@@ -4,12 +4,12 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { shannonCapabilityPrompt } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { SQLiteIncomingCallStore } from '../src/incomingCallStore.js';
-import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
-import { SQLiteBodyStore } from '../src/bodyStore.js';
-import { SQLiteOwnOutreach, ownOutreachPrompt, saysSheActedOnHerOwn, type OwnOutreachFacts, type OwnOutreachReader } from '../src/ownOutreach.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
+import { SQLiteIncomingCallStore } from '../src/surfaces/outreach/store/incomingCallStore.js';
+import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
+import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
+import { SQLiteOwnOutreach, ownOutreachPrompt, saysSheActedOnHerOwn, type OwnOutreachFacts, type OwnOutreachReader } from '../src/surfaces/outreach/ownOutreach.js';
 import { promptOf } from './modelPrompt.js';
 
 /**

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore, UNLABELLED_DISCLOSURE_MARKER, type ProspectiveMemory } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
-import { conversationCapabilityPrompt } from '../src/conversationCapabilities.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
+import { conversationCapabilityPrompt } from '../src/mind/action/respond/conversationCapabilities.js';
 import { DisabledVoyagerCatalog, HttpVoyagerCatalog, createConfiguredVoyagerCatalog, type VoyagerCatalog } from '../src/integrations/voyager/organize.js';
-import { OwnerUpcoming, UPCOMING_LIMITS, asksAboutSchedule, upcomingWhen } from '../src/ownerUpcoming.js';
-import { SQLiteUpcomingStore } from '../src/upcomingStore.js';
+import { OwnerUpcoming, UPCOMING_LIMITS, asksAboutSchedule, upcomingWhen } from '../src/mind/memory/ownerUpcoming.js';
+import { SQLiteUpcomingStore } from '../src/mind/memory/store/upcomingStore.js';
 import { promptOf } from './modelPrompt.js';
 
 const scope = 'owner';

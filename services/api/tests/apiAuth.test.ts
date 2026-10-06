@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bearerAuthorized, configuredApiToken, configuredAuthMode } from '../src/apiAuth.js';
+import { bearerAuthorized, configuredApiToken, configuredAuthMode } from '../src/infra/auth/apiAuth.js';
 
 describe('device API authentication', () => {
   const token = '0123456789abcdef0123456789abcdef';

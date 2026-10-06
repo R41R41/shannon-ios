@@ -1,4 +1,4 @@
-import type { LlmUsageSummaryRow } from '../../../llmUsage.js';
+import type { LlmUsageSummaryRow } from '../llmUsage.js';
 
 /**
  * Jev's cost (Syzygy ADR-0008 stage 1; owner override 3: the price is left unset). Core: response path.

@@ -9,8 +9,8 @@ import { LockWaitMeter } from '../src/infra/sqlite/lockWaits.js';
 import { checkedTrace, type DecisionTraceDraft } from '../src/mind/inhibition/decisionTraceContract.js';
 import { DecisionTraces, configuredDecisionTraces, decisionTracesEnabled, traceSymbol } from '../src/mind/inhibition/decisionTraces.js';
 import { TracedVoiceDecisionGateway, configuredVoiceDecision } from '../src/mind/inhibition/tracedVoiceDecision.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
-import { JevVoiceDecisionGateway, LocalVoiceDecisionGateway, OpenAIVoiceDecisionGateway, VOICE_SKILLS, type VoiceDecisionInput } from '../src/voiceDecision.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
+import { JevVoiceDecisionGateway, LocalVoiceDecisionGateway, OpenAIVoiceDecisionGateway, VOICE_SKILLS, type VoiceDecisionInput } from '../src/mind/selectors/voiceDecision.js';
 
 /**
  * Decision traces and Jev's call count (Syzygy ADR-0008 stage 1, `docs/cognition-ledger-contract.md`): one content-free row per

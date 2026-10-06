@@ -1,9 +1,9 @@
 import { createServer } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
+import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import {
   handlePlatformBridgePlaces, type PlatformBridgeRouteDependencies,
-} from '../src/serverPlatformBridgeRoute.js';
+} from '../src/surfaces/platform/serverPlatformBridgeRoute.js';
 
 const servers: Array<ReturnType<typeof createServer>> = [];
 afterEach(async () => {

@@ -1,7 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
+import { configuredDatabasePath, SQLiteShannonStore } from './infra/sqlite/sqliteStore.js';
 import { discoverFeedLinks, SQLiteWorldStore, type WorldItemInput, type WorldSource } from './integrations/world/store/worldStore.js';
 import { summarizeJmaForecast } from './integrations/world/jmaForecast.js';
 import { parseSyndicationFeed } from './integrations/world/syndicationFeed.js';
@@ -11,14 +11,14 @@ import { parseHackerNewsItems, parseHackerNewsTopIds } from './integrations/worl
 import { parseArxivFeed, prepareArxivQuery } from './integrations/world/arxiv.js';
 import { parseGithubReleases } from './integrations/world/githubReleases.js';
 import { isPrivateOrReservedAddress } from './integrations/world/ipSafety.js';
-import { SQLiteInitiativeStore } from './initiativeStore.js';
-import { nextInitiativeDelayMilliseconds } from './initiativeSchedule.js';
-import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './dailyMind.js';
+import { SQLiteInitiativeStore } from './surfaces/outreach/store/initiativeStore.js';
+import { nextInitiativeDelayMilliseconds } from './surfaces/outreach/initiativeSchedule.js';
+import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './mind/action/respond/dailyMind.js';
 import {
   createConfiguredPushNotificationSender,
   deliverPendingPushNotifications,
   SQLitePushNotificationStore,
-} from './pushNotifications.js';
+} from './surfaces/outreach/pushNotifications.js';
 
 const databasePath = configuredDatabasePath();
 const nowISOString = () => new Date().toISOString();

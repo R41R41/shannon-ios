@@ -1,4 +1,4 @@
-import type { ShannonWebSource } from '../../chatModel.js';
+import type { ShannonWebSource } from '../../infra/models/chatModel.js';
 import { notionFailureCode, type NotionDatabaseRows, type NotionObjectSummary, type NotionPageText, type NotionSource } from './notionSource.js';
 
 /**

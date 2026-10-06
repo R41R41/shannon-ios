@@ -3,31 +3,31 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE, groupAudience, peopleAudience } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import type { PeopleMemoryOverview } from '../src/apiPeopleMemoryRoutes.js';
-import { BackgroundUpdateCoordinator, DurableBackgroundDispatcher } from '../src/backgroundUpdates.js';
-import { ShannonBackgroundWorker } from '../src/backgroundWorker.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { IMPRESSION_HEADER, IMPRESSION_INSTRUCTION, ownerImpressionLines, recallImpressions } from '../src/impressionRecall.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import type { PeopleMemoryOverview } from '../src/infra/http/apiPeopleMemoryRoutes.js';
+import { BackgroundUpdateCoordinator, DurableBackgroundDispatcher } from '../src/mind/sleep/backgroundUpdates.js';
+import { ShannonBackgroundWorker } from '../src/mind/sleep/backgroundWorker.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
+import { IMPRESSION_HEADER, IMPRESSION_INSTRUCTION, ownerImpressionLines, recallImpressions } from '../src/mind/recall/impressionRecall.js';
 import {
   IMPRESSION_INSTRUCTIONS, ImpressionUpdater, OpenAIImpressionAnalyzer, createConfiguredImpressionAnalyzer,
   type ImpressionAnalysisInput, type ImpressionAnalysisOutput, type ImpressionAnalyzer,
-} from '../src/impressionUpdater.js';
+} from '../src/mind/memory/impressionUpdater.js';
 import {
   OWNER_PERSON_KEY, applyImpressionAnalysis, impressionConfig, impressionMemoryId, impressionsEnabled, similarImpressions,
   type ObservationContext, type PersonImpression,
-} from '../src/impressions.js';
-import type { MemoryDashboard } from '../src/memoryService.js';
-import { ShannonMemoryService } from '../src/memoryService.js';
-import { MemoryWithholding } from '../src/memoryVisibility.js';
-import { withheldTerms } from '../src/impressionViews.js';
+} from '../src/mind/memory/impressions.js';
+import type { MemoryDashboard } from '../src/mind/memory/memoryService.js';
+import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
+import { MemoryWithholding } from '../src/mind/memory/memoryVisibility.js';
+import { withheldTerms } from '../src/mind/memory/impressionViews.js';
 import { memoryWithholdingRules } from '@shannon/cognition';
-import { SQLitePeopleMemoryStore } from '../src/peopleMemoryStore.js';
-import { configuredPlatformBridge, PlatformBridgeService } from '../src/platformBridge.js';
-import { PlatformPeople } from '../src/platformPeople.js';
-import { LocalRuleSleepMemoryAnalyzer } from '../src/sleepConsolidation.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
-import { prepareTurnCognitiveContext } from '../src/turnCognitiveContext.js';
+import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemoryStore.js';
+import { configuredPlatformBridge, PlatformBridgeService } from '../src/surfaces/platform/platformBridge.js';
+import { PlatformPeople } from '../src/surfaces/platform/platformPeople.js';
+import { LocalRuleSleepMemoryAnalyzer } from '../src/mind/sleep/sleepConsolidation.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
+import { prepareTurnCognitiveContext } from '../src/mind/action/respond/turnCognitiveContext.js';
 import { promptOf } from './modelPrompt.js';
 
 const DAY = 86_400_000;

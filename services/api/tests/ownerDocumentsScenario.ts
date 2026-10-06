@@ -1,5 +1,5 @@
-import type { AutonomyReachOuts } from '../src/autonomyLoopReachOutStep.js';
-import { AutonomyToolResults } from '../src/autonomyLoopToolStep.js';
+import type { AutonomyReachOuts } from '../src/mind/action/ownTime/autonomyLoopReachOutStep.js';
+import { AutonomyToolResults } from '../src/mind/action/ownTime/autonomyLoopToolStep.js';
 import { digest, type ScenarioCall } from './autonomyLoopKillSwitchScenario.js';
 import { FakeAether } from './fakeAetherServer.js';
 import { callKind, loopHarness, runUntilIdle, type LoopHarnessOptions } from './autonomyLoopHarness.js';

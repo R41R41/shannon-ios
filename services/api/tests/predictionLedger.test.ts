@@ -5,11 +5,11 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { CompanionStateSnapshot } from '@shannon/cognition';
 import { recomputeLedger, sameDerived } from '@shannon/learning';
-import type { ReachOutFacts } from '../src/autonomyLoopObservations.js';
-import { TouchPredictions } from '../src/bodyTouchPrediction.js';
+import type { ReachOutFacts } from '../src/mind/action/ownTime/store/autonomyLoopObservations.js';
+import { TouchPredictions } from '../src/mind/prediction/bodyTouchPrediction.js';
 import { PredictionLedger, calibrationLine, configuredPredictionLedger, predictionLedgerEnabled } from '../src/mind/learning/predictionLedger.js';
 import { ledgerPredictionTap, storyReacted, touchLedger } from '../src/mind/learning/predictionLedgerTaps.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { loopHarness, scope } from './autonomyLoopHarness.js';
 
 /**

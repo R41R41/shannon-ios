@@ -12,14 +12,14 @@
  * `SHANNON_OWNER_SCOPE_KEY` (or `owner`). Nothing is created: the API makes the tables.
  */
 import { DatabaseSync } from 'node:sqlite';
-import { configuredAutonomy } from '../src/autonomyBudget.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
 import { ownerValueRecorder, valuesView } from '../src/infra/http/learningRoutes.js';
 import { PredictionLedger } from '../src/mind/learning/predictionLedger.js';
 import { SQLiteChoiceLedger } from '../src/mind/learning/store/sqliteChoiceLedger.js';
 import { ValueVersions } from '../src/mind/learning/valueTable.js';
 import { shannonNowOwnerScope } from '../src/contracts/shannonNowContract.js';
-import { configuredDatabasePath } from '../src/sqliteStore.js';
+import { configuredDatabasePath } from '../src/infra/sqlite/sqliteStore.js';
 
 const args = process.argv.slice(2);
 const option = (name: string): string | undefined => {

@@ -1,4 +1,4 @@
-import type { UserFactProposal } from '../src/sleepConsolidation.js';
+import type { UserFactProposal } from '../src/mind/sleep/sleepConsolidation.js';
 
 export interface ExplicitMemoryDialogueCase {
   id: string;

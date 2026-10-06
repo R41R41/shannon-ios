@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { OpenAIResponsesChatModel } from '../src/chatModel.js';
+import { OpenAIResponsesChatModel } from '../src/infra/models/chatModel.js';
 import { GOLDEN_BASE as base, GOLDEN_REQUESTS, GOLDEN_RESPONSES } from './chatModelGoldenCases.js';
-import type { LlmUsageEvent } from '../src/llmUsage.js';
+import type { LlmUsageEvent } from '../src/infra/models/llmUsage.js';
 
 /**
  * The text-chat provider request and the parsed result, recorded from the adapter as it was

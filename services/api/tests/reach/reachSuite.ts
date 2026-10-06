@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { configuredAutonomyTextModel, dedicatedAutonomyCredential, resolveAutonomyModel } from '../../src/autonomyTextModel.js';
-import { createConfiguredChatModel } from '../../src/chatModel.js';
-import { estimatedOpenAICostUsd } from '../../src/llmUsage.js';
+import { configuredAutonomyTextModel, dedicatedAutonomyCredential, resolveAutonomyModel } from '../../src/mind/action/ownTime/autonomyTextModel.js';
+import { createConfiguredChatModel } from '../../src/infra/models/chatModel.js';
+import { estimatedOpenAICostUsd } from '../../src/infra/models/llmUsage.js';
 import {
   COGNITION_SCENARIOS, autonomyDayScenario, buildReachReport, cappedEstimate, compareReachReports, conversationEstimate, estimateTotal,
   isReachReport, pendingEstimate, reachReportMarkdown, runReachScenario, shiritoriScenario, stableFingerprint, threeToolsScenario,

@@ -3,16 +3,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import type { CompletedTurn, TurnBackgroundService } from '../src/backgroundUpdates.js';
-import { InMemoryConversationStore, type ShannonExperience } from '../src/conversationStore.js';
+import type { CompletedTurn, TurnBackgroundService } from '../src/mind/sleep/backgroundUpdates.js';
+import { InMemoryConversationStore, type ShannonExperience } from '../src/mind/memory/store/conversationStore.js';
 import {
   configuredPlatformBridge,
   PlatformBridgeError,
   PlatformBridgeService,
   platformBridgeThreadId,
   type PlatformBridgeConfiguration,
-} from '../src/platformBridge.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+} from '../src/surfaces/platform/platformBridge.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 
 const now = () => '2026-09-17T12:00:00.000Z';
 const temporaryDirectories: string[] = [];

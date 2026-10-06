@@ -7,8 +7,8 @@ import {
   buildConversationOrchestrationPrompt,
   observeConversationTurn,
   recordConversationProposal,
-} from '../src/conversationOrchestration.js';
-import { SQLiteConversationOrchestrationStore } from '../src/conversationOrchestrationPersistence.js';
+} from '../src/mind/action/respond/conversationOrchestration.js';
+import { SQLiteConversationOrchestrationStore } from '../src/mind/action/respond/store/conversationOrchestrationPersistence.js';
 
 const at = '2026-09-28T12:00:00.000Z';
 const directories: string[] = [];

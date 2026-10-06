@@ -14,18 +14,18 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { SHANNON_ONE_LINE_VOICE, looksSecret, shannonCapabilityPrompt, shannonPersonaPrompt, shannonSuitePrompt } from '@shannon/cognition';
-import { configuredAutonomy } from '../../autonomyBudget.js';
-import { ownerDocumentsEnabled } from '../../autonomyLoopConfig.js';
-import { AUTONOMY_MODEL_PURPOSES, AUTONOMY_ROOM_LOOK_MODEL, autonomyModel, type AutonomyModelPurpose } from '../../autonomyModels.js';
-import { dedicatedAutonomyCredential, resolveAutonomyModel } from '../../autonomyTextModel.js';
-import { createConfiguredElevenSpeechGateway } from '../../elevenSpeech.js';
-import { createConfiguredGeminiLiveGateway } from '../../geminiLive.js';
-import { createConfiguredGeminiSpeechGateway } from '../../geminiSpeech.js';
-import { createConfiguredOpenAITranscriptionGateway } from '../../openaiTranscriptionSession.js';
+import { configuredAutonomy } from '../../mind/inhibition/autonomyBudget.js';
+import { ownerDocumentsEnabled } from '../../mind/action/ownTime/autonomyLoopConfig.js';
+import { AUTONOMY_MODEL_PURPOSES, AUTONOMY_ROOM_LOOK_MODEL, autonomyModel, type AutonomyModelPurpose } from '../../mind/action/ownTime/autonomyModels.js';
+import { dedicatedAutonomyCredential, resolveAutonomyModel } from '../../mind/action/ownTime/autonomyTextModel.js';
+import { createConfiguredElevenSpeechGateway } from '../models/elevenSpeech.js';
+import { createConfiguredGeminiLiveGateway } from '../models/geminiLive.js';
+import { createConfiguredGeminiSpeechGateway } from '../models/geminiSpeech.js';
+import { createConfiguredOpenAITranscriptionGateway } from '../models/openaiTranscriptionSession.js';
 import { DisabledVoyagerCatalog, type VoyagerCatalog } from '../../integrations/voyager/organizeIntegrations.js';
 import { shannonNowOwnerScope } from '../../contracts/shannonNowContract.js';
 import { configuredAetherAccess } from '../../integrations/aether/aetherAccess.js';
-import { SHANNON_TOOLS, offeredTools, ownToolsEnabled, type ToolAudience, type ToolSurface } from '../../shannonTools.js';
+import { SHANNON_TOOLS, offeredTools, ownToolsEnabled, type ToolAudience, type ToolSurface } from '../../mind/tools/shannonTools.js';
 
 type Environment = Readonly<Record<string, string | undefined>>;
 

@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { readWorkspaceResource } from '../src/agentWorkspaceResources.js';
-import { InMemoryAgentTaskStore } from '../src/agentTaskStore.js';
+import { readWorkspaceResource } from '../src/mind/action/agentTasks/store/agentWorkspaceResources.js';
+import { InMemoryAgentTaskStore } from '../src/mind/action/agentTasks/agentTaskStore.js';
 
 const directories: string[] = [];
 

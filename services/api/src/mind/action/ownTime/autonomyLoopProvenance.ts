@@ -1,0 +1,99 @@
+import type { AutonomyLoopCycle, AutonomyPlannedStep } from './store/autonomyLoopState.js';
+import { READING_DOCUMENT_PREFIX, STUDY_DOCUMENT_PREFIX } from '../../inhibition/store/ownerInformedMarks.js';
+import type { StepDependencies, StepResult } from './autonomyLoopSteps.js';
+
+/**
+ * The provenance mark in her own time (owner decision 2026-10-06, Syzygy ADR-0007; the store is `ownerInformedMarks.ts`).
+ *
+ * After a step is reported, inside the same transaction: a step that read one of the owner's documents, a shared Notion page,
+ * or a document already marked marks its session; then, while the session is marked, what the step wrote is marked, and so are
+ * the pursuits created or changed since the mark. Only ids and times are written, never a word of what was read.
+ *
+ * A marked session, whatever marked it (his documents or a shared Notion page; owner decision 2026-10-06), does not speak up
+ * while anyone else may see or hear her body (`heldForOthers`), and the gate refuses anything that reaches another person
+ * outright (`ownerInformed` in `authorizeAutonomousAction`). A session that is not marked is not affected.
+ */
+/** Step kinds whose product is text of hers: a note, a story's draft or revision, what she jotted down. */
+const WRITING_STEPS: ReadonlySet<AutonomyPlannedStep['kind']> = new Set(['note', 'draft', 'revise', 'jot']);
+
+export function noteProvenance(dependencies: Pick<StepDependencies, 'store'>, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep, result: StepResult, link: string | undefined, at: string): void {
+  if (result.outcome !== 'done') return;
+  const marks = dependencies.store.informed;
+  const documents = result.documents;
+  if (documents?.informs || (documents?.read ?? []).some(id => marks.marked(cycle.scopeKey, id))) marks.markSession(cycle.id, at);
+  const since = marks.sessionInformedAt(cycle.id);
+  if (!since) return;
+  const wrote = [...(documents?.wrote ?? []), ...(WRITING_STEPS.has(step.kind) && link ? [link] : [])];
+  if (wrote.length) marks.markDocuments(cycle.scopeKey, wrote, cycle.id, at);
+  marks.markPursuits(cycle.scopeKey, since, at);
+}
+
+/** Marks documents a step just put in Aether when its session is marked, before the report (fails closed: an early mark is harmless). */
+export function markEarly(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id' | 'scopeKey'>, documentIds: readonly string[], at: string): void {
+  const marks = dependencies.store.informed;
+  if (documentIds.length && marks.sessionInformedAt(cycle.id)) marks.markDocuments(cycle.scopeKey, documentIds, cycle.id, at);
+}
+
+/** Whether the session is marked; one that cannot be read counts as marked. */
+export function sessionMarked(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id'>): boolean {
+  try { return dependencies.store.informed.sessionInformedAt(cycle.id) !== null; } catch { return true; }
+}
+
+/**
+ * Which pieces of her study a prompt of this session may carry (owner decision 2026-10-06, option a): a session that is not
+ * marked is given nothing marked, so a story or a message of an unmarked session cannot retell what she wrote after reading
+ * the owner's. A marked session is given everything as before; opening a marked piece on purpose (`study.read`, `aether.read`,
+ * revising it) marks the session. With anyone else present (`others`) nothing marked is given, whatever the session. While
+ * nothing is marked, nothing is looked up and every prompt is what it was. A mark that cannot be read counts as a mark.
+ */
+export function unmarkedOnly(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id' | 'scopeKey'>, others = false): (piece: { id: string }) => boolean {
+  const marks = dependencies.store.informed;
+  if (!marks.any(cycle.scopeKey) || (!others && marks.sessionInformedAt(cycle.id))) return () => true;
+  return piece => { try { return !marks.marked(cycle.scopeKey, `${STUDY_DOCUMENT_PREFIX}${piece.id}`); } catch { return false; } };
+}
+
+/** For a listing of her own time: in a session that is not marked, a marked document is left out (null: nothing is). */
+export function unlistedIn(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id' | 'scopeKey'>): ((documentId: string) => boolean) | null {
+  const marks = dependencies.store.informed;
+  if (!marks.any(cycle.scopeKey) || marks.sessionInformedAt(cycle.id)) return null;
+  return documentId => { try { return marks.marked(cycle.scopeKey, documentId); } catch { return true; } };
+}
+
+/** The same for pages she read and has not written up: a marked Notion page's title and address are not given (ADR-0007). */
+export function unmarkedReadings(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id' | 'scopeKey'>): (readingId: string) => boolean {
+  let unlisted: ((documentId: string) => boolean) | null;
+  try { unlisted = unlistedIn(dependencies, cycle); } catch { return () => false; }
+  return unlisted ? readingId => !unlisted!(`${READING_DOCUMENT_PREFIX}${readingId}`) : () => true;
+}
+
+/**
+ * Telling the owner in the Talk that a story is ready names it: a marked story, or one shown from a marked session, is told later
+ * while anyone else may see or hear her body. Who is there, unreadable, counts as someone; a loop that cannot know tells as before.
+ */
+export function shownLater(dependencies: Pick<StepDependencies, 'store' | 'reachOuts'>, cycle: Pick<AutonomyLoopCycle, 'id' | 'scopeKey'>, pieceId: string, at: string): boolean {
+  if (!dependencies.reachOuts) return false;
+  const marks = dependencies.store.informed;
+  let marked = true;
+  try { marked = marks.sessionInformedAt(cycle.id) !== null || marks.marked(cycle.scopeKey, `${STUDY_DOCUMENT_PREFIX}${pieceId}`); } catch { marked = true; }
+  if (!marked) return false;
+  try { return dependencies.reachOuts.audience(cycle.scopeKey, at) !== null; } catch { return true; }
+}
+
+/** The same for her pursuits: a pursuit created or changed in a marked session is not given to a session that is not marked. */
+export function unmarkedPursuits(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id' | 'scopeKey'>): (pursuit: { id: string }) => boolean {
+  const marks = dependencies.store.informed;
+  let informed: ReadonlySet<string>;
+  try { informed = marks.informedPursuits(cycle.scopeKey); } catch { return () => false; }
+  if (!informed.size || marks.sessionInformedAt(cycle.id)) return () => true;
+  return pursuit => !informed.has(pursuit.id);
+}
+
+/**
+ * A message of hers to the owner (a message, a second call, a phone call), in a marked session, while anyone else may see or hear
+ * her body: held. Also with `SHANNON_AUTONOMY_OWNER_DOCUMENTS` off, for a session marked by a shared Notion page (owner decision
+ * 2026-10-06). A session that is not marked is not asked about who is there. Who is there, unreadable, counts as someone.
+ */
+export function heldForOthers(dependencies: Pick<StepDependencies, 'store' | 'reachOuts'>, cycle: Pick<AutonomyLoopCycle, 'id' | 'scopeKey'>, at: string): boolean {
+  if (!dependencies.store.informed.sessionInformedAt(cycle.id)) return false;
+  try { return dependencies.reachOuts?.audience(cycle.scopeKey, at) !== null; } catch { return true; }
+}

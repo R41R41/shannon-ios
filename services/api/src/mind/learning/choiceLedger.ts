@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { ROOT_VALUE, cognitionLedgerSwitches, type ValueRead } from '@shannon/learning';
-import { ownerDay } from '../../companionPresence.js';
+import { ownerDay } from '../emotion/companionPresence.js';
 import { LockWaitMeter, loggedFailure, tableExists, underWriteLock } from '../../infra/sqlite/lockWaits.js';
 import { settlePending } from './rewardSettlement.js';
 import { CHOICES_TABLE, SQLiteChoiceLedger, type ChoiceDraft, type StoredChoice } from './store/sqliteChoiceLedger.js';

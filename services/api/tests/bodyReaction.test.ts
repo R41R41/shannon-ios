@@ -3,11 +3,11 @@ import { SHANNON_ONE_LINE_VOICE, currentShannonEmotion, presentShannonFeeling, p
 import {
   BODY_REACTION_LIMITS, bodyReactionContentHash, configuredBodyReactions, validatedBodyReactionRequest, type BodyReactionAnswer,
 } from '../src/contracts/bodyReactionContract.js';
-import { OpenAIBodyReactionSpeaker, createConfiguredBodyReactionSpeaker } from '../src/bodyReactionModel.js';
+import { OpenAIBodyReactionSpeaker, createConfiguredBodyReactionSpeaker } from '../src/surfaces/body/bodyReactionModel.js';
 import {
   BODY_REACTION_OTHERS_RULE, BODY_REACTION_RULES, BODY_REACTION_SCHEMA, BODY_TOUCH_PHRASES, bodyTouchLine, boundedReactionText, parsedBodyReaction,
-} from '../src/bodyReactionPrompt.js';
-import type { LlmUsageEvent } from '../src/llmUsage.js';
+} from '../src/surfaces/body/bodyReactionPrompt.js';
+import type { LlmUsageEvent } from '../src/infra/models/llmUsage.js';
 import { FakeSpeaker, HEHE, MINUTE, SECOND, START, reactionHarness, scope } from './bodyReactionHarness.js';
 
 // Stage 1b exactly, kept under SHANNON_PREDICTION=off (Syzygy ADR-0006 stage 2: `bodyTouchStage2.test.ts`).

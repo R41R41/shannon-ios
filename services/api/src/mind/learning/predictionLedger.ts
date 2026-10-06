@@ -16,7 +16,7 @@ import {
   type LedgerDomain,
   type LedgerMind,
 } from '@shannon/learning';
-import { ownerDay } from '../../companionPresence.js';
+import { ownerDay } from '../emotion/companionPresence.js';
 import { LockWaitMeter, loggedFailure, tableExists, underWriteLock } from '../../infra/sqlite/lockWaits.js';
 import { ChoiceLedger, choiceLedgerEnabled } from './choiceLedger.js';
 import { ValueVersions } from './valueTable.js';

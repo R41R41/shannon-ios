@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { OpenAIVoicePreviewGateway, SQLiteVoiceIdentityStore } from '../src/voiceIdentity.js';
+import { OpenAIVoicePreviewGateway, SQLiteVoiceIdentityStore } from '../src/surfaces/voice/voiceIdentity.js';
 
 const directories: string[] = [];
 

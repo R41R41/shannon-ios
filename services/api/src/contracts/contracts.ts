@@ -1,5 +1,5 @@
 import type { CompanionStateEvent, CompanionStateSnapshot, ShannonMessageEmotion } from '@shannon/cognition';
-import type { ShannonChatAttachment, ShannonChatMode, ShannonGeneratedArtifact } from '../chatModel.js';
+import type { ShannonChatAttachment, ShannonChatMode, ShannonGeneratedArtifact } from '../infra/models/chatModel.js';
 import type { OrganizeSession } from '../integrations/voyager/organize.js';
 import type { ShannonPlace } from '../integrations/places/placeDiscovery.js';
 

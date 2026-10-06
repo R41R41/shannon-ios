@@ -3,10 +3,10 @@ import {
   autonomyDayScenario, buildReachReport, reachReportMarkdown, runReachScenario, shiritoriScenario, threeToolsScenario,
   type ReachDriver, type ReachScenarioDefinition,
 } from '../../../packages/evaluation/src/reach/index.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
 import { FakeModel } from './autonomyLoopHarness.js';
 import { ThinkingWatch, autonomyDayDriver, scriptedAutonomyDayDriver, scriptedAutonomyModel } from './reach/reachAutonomy.js';
-import { estimatedOpenAICostUsd } from '../src/llmUsage.js';
+import { estimatedOpenAICostUsd } from '../src/infra/models/llmUsage.js';
 import { ReachUsage, ScriptedShiritoriModel, scriptedShiritoriDriver, shiritoriDriver } from './reach/reachConversation.js';
 import { ScriptedThreeToolModel, StubStudyToolbox, pendingRegistryDriver, scriptedThreeToolsDriver, threeToolsDriver } from './reach/reachTools.js';
 

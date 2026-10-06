@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { cognitionLedgerSwitches } from '@shannon/learning';
-import { ownerDay } from '../../companionPresence.js';
+import { ownerDay } from '../emotion/companionPresence.js';
 import { LockWaitMeter, loggedFailure, tableExists, underWriteLock } from '../../infra/sqlite/lockWaits.js';
 import { TRACE_SYMBOL, type DecisionTraceDraft, type DecisionTraceWriter } from './decisionTraceContract.js';
 import { DECISION_TRACES_TABLE, SQLiteDecisionTraces } from './store/sqliteDecisionTraces.js';

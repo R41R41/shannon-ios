@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { closedSignal, dispatchHostStepRequest } from '../src/apiAutonomyHostStepRoutes.js';
-import { configuredAutonomy } from '../src/autonomyBudget.js';
-import { hostFolderPath, hostStepContentDigest, roomLookGuard } from '../src/autonomyHostFolderPath.js';
-import { ShannonAutonomyService } from '../src/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { closedSignal, dispatchHostStepRequest } from '../src/infra/http/apiAutonomyHostStepRoutes.js';
+import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
+import { hostFolderPath, hostStepContentDigest, roomLookGuard } from '../src/mind/action/ownTime/autonomyHostFolderPath.js';
+import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
 import type { ApiResponse } from '../src/contracts/contracts.js';
-import { validHostOperationResult } from '../src/hostFolderOperationResults.js';
-import { toolSessionMemory } from '../src/shannonToolTypes.js';
-import type { ToolSurface } from '../src/shannonTools.js';
+import { validHostOperationResult } from '../src/mind/action/ownTime/hostFolderOperationResults.js';
+import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
+import type { ToolSurface } from '../src/mind/tools/shannonTools.js';
 
 /**
  * Contract v2 of her folder (`docs/host-folder-contract.md`) with a fake device: the long-poll claim, presence, the

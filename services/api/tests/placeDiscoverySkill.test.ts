@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
+import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { combinedPlaceSources, placeSkillReply, runPlaceDiscoverySkill, spokenPlaceReply } from '../src/integrations/places/placeDiscoverySkill.js';
 
 describe('place discovery skill', () => {

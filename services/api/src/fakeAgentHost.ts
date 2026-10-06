@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { ClaimedAgentCommand, HostAgentEvent } from './agentTaskStore.js';
+import type { ClaimedAgentCommand, HostAgentEvent } from './mind/action/agentTasks/agentTaskStore.js';
 
 const baseURL = (process.env.SHANNON_API_BASE_URL ?? 'http://127.0.0.1:4317').replace(/\/$/, '');
 const token = process.env.SHANNON_AGENT_HOST_TOKEN?.trim() ?? '';

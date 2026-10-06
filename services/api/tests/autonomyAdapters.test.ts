@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { configuredAutonomyLoop } from '../src/autonomyLoopConfig.js';
-import { sharesLongPassage } from '../src/autonomyLoopSteps.js';
-import { planFromThought } from '../src/autonomyLoopPlan.js';
-import { BoundedPublicReader, htmlToText, parseRobots, robotsAllows } from '../src/autonomyReader.js';
+import { configuredAutonomyLoop } from '../src/mind/action/ownTime/autonomyLoopConfig.js';
+import { sharesLongPassage } from '../src/mind/action/ownTime/autonomyLoopSteps.js';
+import { planFromThought } from '../src/mind/action/ownTime/autonomyLoopPlan.js';
+import { BoundedPublicReader, htmlToText, parseRobots, robotsAllows } from '../src/mind/action/ownTime/autonomyReader.js';
 import {
   AUTONOMY_CREDENTIAL_VARIABLES, AutonomyModelError, autonomyPromptCacheKey, configuredAutonomyTextModel, dedicatedAutonomyCredential, resolveAutonomyModel,
-} from '../src/autonomyTextModel.js';
+} from '../src/mind/action/ownTime/autonomyTextModel.js';
 
 type FetchCall = { url: string; init: RequestInit };
 

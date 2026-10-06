@@ -1,13 +1,13 @@
-import type { AgentHostHeartbeat, ClaimedAgentCommand, HostAgentEvent } from '../../agentTaskStore.js';
+import type { AgentHostHeartbeat, ClaimedAgentCommand, HostAgentEvent } from '../../mind/action/agentTasks/agentTaskStore.js';
 import type { AgentHostStateStore } from './agentHostState.js';
 import type {
   AgentProjectProvisioningEvent,
   ClaimedAgentProjectProvisioning,
-} from '../../agentProjectProvisioning.js';
+} from '../../mind/action/agentTasks/store/agentProjectProvisioning.js';
 import type {
   AgentWorkspaceResourceEvent,
   ClaimedAgentWorkspaceResource,
-} from '../../agentWorkspaceResources.js';
+} from '../../mind/action/agentTasks/store/agentWorkspaceResources.js';
 
 export class AgentHostBrokerClient {
   constructor(

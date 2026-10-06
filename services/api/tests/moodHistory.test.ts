@@ -5,19 +5,19 @@ import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CompanionStateEvent, ShannonExpressiveEmotion } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import { configuredAwakeClock } from '../src/autonomyAwakeClock.js';
-import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
-import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
-import { emotionTiming } from '../src/emotionTiming.js';
-import { ShannonMemoryService } from '../src/memoryService.js';
-import { isNewMoodPoint, moodPointOf, type StoredMoodPoint } from '../src/moodHistory.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { configuredAwakeClock } from '../src/mind/emotion/autonomyAwakeClock.js';
+import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
+import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
+import { emotionTiming } from '../src/mind/emotion/emotionTiming.js';
+import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
+import { isNewMoodPoint, moodPointOf, type StoredMoodPoint } from '../src/mind/emotion/store/moodHistory.js';
 import {
   MOOD_HISTORY_LIMITS, MOOD_HISTORY_PATH, moodHistoryEnabled, moodHistoryRecording, type MoodHistoryResponse,
 } from '../src/contracts/moodHistoryContract.js';
-import { SQLiteMoodHistoryReader, downsampleMoodPoints } from '../src/moodHistoryReader.js';
-import { createMoodHistoryRoute, moodHistoryResponse, requestedHours } from '../src/serverMoodHistoryRoute.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteMoodHistoryReader, downsampleMoodPoints } from '../src/mind/emotion/store/moodHistoryReader.js';
+import { createMoodHistoryRoute, moodHistoryResponse, requestedHours } from '../src/infra/http/serverMoodHistoryRoute.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -561,7 +561,7 @@ describe('the activity loop\'s process', () => {
       .run(OWNER, at(-40 * DAY));
     raw.close();
     const later = at(30 * DAY);
-    const { configuredOwnerContext } = await import('../src/autonomyOwnerContextWiring.js');
+    const { configuredOwnerContext } = await import('../src/wiring/autonomyOwnerContextWiring.js');
     const owner = configuredOwnerContext(path, { now: () => later, characters: 2_000, timeZone: 'Asia/Tokyo' });
     // It reads the owner's context as the loop does.
     owner.context.forThinking(OWNER, later, '紅茶');

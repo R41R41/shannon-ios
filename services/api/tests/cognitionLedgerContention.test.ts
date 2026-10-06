@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { recomputeLedger, sameDerived } from '@shannon/learning';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 
 /**
  * Five processes write the cognition ledger at once (Syzygy ADR-0008 stage 1, *Writes and locks*): every write lands, no

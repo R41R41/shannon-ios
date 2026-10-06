@@ -6,11 +6,11 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { foldValues, valueCells, valueOf } from '@shannon/learning';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
 import { createValuesRoute, ownerValueRecorder } from '../src/infra/http/learningRoutes.js';
 import { ledgerPredictionTap } from '../src/mind/learning/predictionLedgerTaps.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
-import { configuredAutonomy } from '../src/autonomyBudget.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
+import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 
 /**
  * The value table's versions (Syzygy ADR-0008 stage 1, `docs/cognition-ledger-contract.md`): nightly versions from settled

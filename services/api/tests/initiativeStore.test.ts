@@ -3,12 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
-import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
-import { SQLiteCognitiveIntentStore, extractExplicitUserIntent } from '../src/cognitiveIntent.js';
-import { SQLiteAgentTaskStore } from '../src/agentTaskStore.js';
-import type { DailyMindFocus } from '../src/dailyMind.js';
+import { SQLiteCognitiveIntentStore, extractExplicitUserIntent } from '../src/mind/action/respond/cognitiveIntent.js';
+import { SQLiteAgentTaskStore } from '../src/mind/action/agentTasks/agentTaskStore.js';
+import type { DailyMindFocus } from '../src/mind/action/respond/dailyMind.js';
 
 const directories: string[] = [];
 afterEach(() => directories.splice(0).forEach(directory => rmSync(directory, { recursive: true, force: true })));

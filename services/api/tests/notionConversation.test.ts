@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
-import { conversationCapabilityContext } from '../src/conversationCapabilities.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
+import { conversationCapabilityContext } from '../src/mind/action/respond/conversationCapabilities.js';
 import { NOTION_TURN_BOUNDS, asksAboutNotion, notionSearchPhrases, notionTurnProjection } from '../src/integrations/notion/notionConversation.js';
 import { configuredNotionSource } from '../src/integrations/notion/notionSource.js';
 import { NOTION_FIXTURE_IDS as ids, fakeNotion, fixtureNotionSource, notionJson } from './notionFixture.js';

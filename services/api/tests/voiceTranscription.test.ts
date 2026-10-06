@@ -4,8 +4,8 @@ import {
   normalizedVoiceMimeType,
   parsedVoiceDurationSeconds,
   VoiceTranscriptionError,
-} from '../src/voiceTranscription.js';
-import type { LlmUsageEvent, LlmUsageStore } from '../src/llmUsage.js';
+} from '../src/infra/models/voiceTranscription.js';
+import type { LlmUsageEvent, LlmUsageStore } from '../src/infra/models/llmUsage.js';
 
 describe('server voice transcription', () => {
   it('accepts the iPhone M4A content types and bounds duration', () => {
