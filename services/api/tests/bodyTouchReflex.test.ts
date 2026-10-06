@@ -230,3 +230,44 @@ describe('what bodies read while her feeling is uncomfortable (body thread note,
     expect(await read(ordinary)).toMatchObject({ mood: { expression: 'annoyed', primary: 'uncomfortable' } });
   });
 });
+
+describe('the words of a burst with a touch on such a part (review item 2)', () => {
+  it('remembers and recounts stroking and a resting hand there as being touched, never as a favour', async () => {
+    const memories: string[] = [];
+    const harness = await reactionHarness({ experiences: { write: (_scope, experience) => { memories.push(experience.summary); return true; } } });
+    harness.speaker.decision = { say: false, text: '', feeling: 'confused', stance: 'unsure' };
+    await harness.said(reflexTouch('chest', 'stroke'));
+    expect(memories.at(-1)).toContain('ライ氏に体に触れられた');
+    expect(memories.at(-1)).not.toMatch(/もらった/u);
+    // A burst that also holds an ordinary stroke stays factual once such a touch was in it.
+    harness.advance(20_000);
+    await harness.said({ type: 'pet', durationMs: 1_500, ongoing: true, region: 'body', part: 'shoulder', gesture: 'stroke' });
+    expect(memories.at(-1)).toContain('ライ氏に体に触れられた（2回');
+    expect(harness.speaker.prompts.at(-1)).toContain('- 体に触れられた: この数分で2回目');
+    // A hand resting there, then the burst of held hands it belongs to.
+    harness.advance(60_000);
+    await harness.said({ type: 'holdHand', durationMs: 2_000, ongoing: true, region: 'body', part: 'skirt', gesture: 'rest' });
+    expect(memories.at(-1)).toContain('ライ氏に体に触れられた');
+    expect(memories.at(-1)).not.toContain('手をつない');
+    // Without a region the wording names no part, and never 頭 (the wording of before parts existed).
+    const bare = await reactionHarness({ speaker: null, experiences: { write: (_scope, experience) => { memories.push(experience.summary); return true; } } });
+    await bare.events({ id: 'n-1', type: 'pet', audience: 'owner', occurredAt: START, part: 'neck', gesture: 'stroke' });
+    expect(memories.at(-1)).toContain('ライ氏に触れられた');
+    expect(memories.at(-1)).not.toContain('頭');
+  });
+
+  it('keeps every other burst in the words it had', async () => {
+    const memories: string[] = [];
+    const harness = await reactionHarness({ experiences: { write: (_scope, experience) => { memories.push(experience.summary); return true; } } });
+    await harness.said({ type: 'pet', durationMs: 1_500, ongoing: true, region: 'head', part: 'head', gesture: 'stroke' });
+    expect(memories.at(-1)).toContain('ライ氏に頭をなでてもらった');
+    harness.advance(60_000);
+    await harness.said({ type: 'holdHand', durationMs: 2_000, ongoing: true, region: 'hand', part: 'hand', gesture: 'hold' });
+    expect(memories.at(-1)).toContain('ライ氏に手をつないでもらった');
+    // A finished event that names the part only now still makes the burst factual.
+    harness.advance(60_000);
+    await harness.said({ type: 'poke', durationMs: 200, ongoing: false }, { id: 'late-part' });
+    await harness.events({ id: 'late-part', type: 'poke', audience: 'owner', occurredAt: harness.clock.at, region: 'body', part: 'waist', gesture: 'poke' });
+    expect(harness.reactionStore.burstOfTouch(scope, 'late-part')).toMatchObject({ reflex: true });
+  });
+});

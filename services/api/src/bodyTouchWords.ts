@@ -81,12 +81,25 @@ const PARTLESS: Partial<Record<ShannonTouchKind, { ongoing: string; done: string
 });
 
 /**
+ * A burst in which a touch landed on a part where her body flinches first (Syzygy ADR-0005 stage 1b): stroking and a hand
+ * resting there are told as being touched, factually and with no favour in the verb (not なでてもらった, not 手をつないで
+ * もらった, which read the touch as kindness). Poking, tickling and carrying are already factual and keep their words.
+ */
+const REFLEX_BURST: Partial<Record<ShannonTouchKind, { ongoing: string; done: string; memory: string }>> = Object.freeze({
+  pet: { ongoing: '触れられている', done: '触れられた', memory: '触れられた' },
+  holdHand: { ongoing: '触れられている', done: '触れられた', memory: '触れられた' },
+});
+
+/**
  * The phrase for a burst: its part when every touch named the same one, the part-less wording when they
- * differed, and `legacy` (the wording from before parts existed) when no touch ever named one.
+ * differed, and `legacy` (the wording from before parts existed) when no touch ever named one. A burst with a touch
+ * on a part where her body flinches first (`reflex`) never takes a wording of favour: see `REFLEX_BURST`.
  */
 export function burstTouchPhrase(
-  type: ShannonTouchKind, burst: { region?: BodyTouchRegion; mixedRegion?: boolean }, form: 'ongoing' | 'done' | 'memory', legacy: string,
+  type: ShannonTouchKind, burst: { region?: BodyTouchRegion; mixedRegion?: boolean; reflex?: boolean }, form: 'ongoing' | 'done' | 'memory', legacy: string,
 ): string {
+  const neutral = burst.reflex ? REFLEX_BURST[type] : undefined;
+  if (neutral) return `${burst.region ? `${PART[burst.region]}に` : ''}${neutral[form]}`;
   return touchPartPhrase(type, burst.region, form) ?? (burst.mixedRegion ? PARTLESS[type]?.[form] : undefined) ?? legacy;
 }
 

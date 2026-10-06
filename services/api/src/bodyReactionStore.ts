@@ -5,7 +5,7 @@ import type { BodyAudience, BodyTouchGesture, BodyTouchReflex, BodyTouchSide } f
 import { BODY_REACTION_LIMITS, type BodyReactionAnswer } from './bodyReactionContract.js';
 import { BODY_TOUCH_MIXED, isBodySurface, isBodyTouchRegion, type BodySurface, type BodyTouchPart, type BodyTouchRegion } from './bodyTouchWords.js';
 import { addColumnOnce } from './bodyStore.js';
-import { BODY_TOUCH_STANCES, isBodyTouchStance, type BodyTouchStance } from './bodyTouchReflex.js';
+import { BODY_TOUCH_STANCES, isBodyTouchStance, isReflexPart, type BodyTouchStance } from './bodyTouchReflex.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 
 /**
@@ -61,6 +61,8 @@ export interface StoredTouchBurst {
   /** True when its touches named different parts (or some named none): told apart from a burst that never named one. */
   mixedRegion?: boolean;
   mixedSurface?: boolean;
+  /** True when a touch of it named a part where her body flinches first (stage 1b): its wording then reads no favour. */
+  reflex?: boolean;
 }
 
 export interface TouchReceipt {
@@ -111,7 +113,10 @@ export interface ReactionLine {
   messageId: string;
 }
 
-interface BurstRow { burst_id: string; touch_type: string; started_at: string; last_at: string; touch_count: number; total_duration_ms: number; others: number; said_json: string; region: string | null; surface: string | null }
+interface BurstRow {
+  burst_id: string; touch_type: string; started_at: string; last_at: string; touch_count: number; total_duration_ms: number; others: number; said_json: string;
+  region: string | null; surface: string | null; reflex: number | null;
+}
 interface ReactionRow {
   reaction_id: string; device_id: string; content_hash: string; status: string; answer_json: string | null; line_text: string | null; message_id: string | null;
   thread_id: string | null; audience: string; created_at: string; said_at: string | null; listen_until: string | null; link_state: string; linked_until: string | null;
@@ -130,6 +135,7 @@ const burstOf = (row: BurstRow): StoredTouchBurst => {
     said: lines.map(line => line[0]), saidOpen: lines.filter(line => line[1] === 1).map(line => line[0]),
     ...(isBodyTouchRegion(row.region) ? { region: row.region } : {}), ...(isBodySurface(row.surface) ? { surface: row.surface } : {}),
     ...(row.region === BODY_TOUCH_MIXED ? { mixedRegion: true } : {}), ...(row.surface === BODY_TOUCH_MIXED ? { mixedSurface: true } : {}),
+    ...(Number(row.reflex) === 1 ? { reflex: true } : {}),
   };
 };
 
@@ -204,6 +210,8 @@ export class SQLiteBodyReactionStore {
     }
     // Added 2026-10-06 (touch vocabulary 2): the finer part, the side, the gesture and the body's reflex, on a touch only.
     for (const column of TOUCH_DETAIL_COLUMNS) addColumnOnce(this.database, 'body_touches', column, 'TEXT');
+    // Added 2026-10-06 (stage 1b): 1 once a touch of the burst named a part where her body flinches first; empty otherwise.
+    addColumnOnce(this.database, 'body_touch_bursts', 'reflex', 'INTEGER');
     secureDatabaseFiles(path);
   }
 
@@ -249,6 +257,8 @@ export class SQLiteBodyReactionStore {
           this.database.prepare('UPDATE body_touch_bursts SET total_duration_ms = total_duration_ms + ?, others = MAX(others, ?) WHERE scope_key = ? AND burst_id = ?')
             .run(longer, touch.audience === 'others' ? 1 : 0, scopeKey, known.burst_id);
         }
+        // A part the first message did not name, filled in now, still keeps the burst's wording free of favour.
+        if (isReflexPart(touch.part)) this.database.prepare('UPDATE body_touch_bursts SET reflex = 1 WHERE scope_key = ? AND burst_id = ?').run(scopeKey, known.burst_id);
         return { fresh: false, burst: this.burst(scopeKey, known.burst_id)! };
       }
       const time = Date.parse(touch.occurredAt);
@@ -259,20 +269,22 @@ export class SQLiteBodyReactionStore {
         new Date(time - BODY_REACTION_LIMITS.burstSpanMilliseconds).toISOString(), touch.occurredAt) as unknown as BurstRow[])
         .find(row => usable(row.burst_id));
       const burstId = open?.burst_id ?? randomUUID();
+      const reflex = isReflexPart(touch.part);
       if (open) {
         this.database.prepare(`
           UPDATE body_touch_bursts SET touch_count = touch_count + 1, total_duration_ms = total_duration_ms + ?,
             last_at = MAX(last_at, ?), others = MAX(others, ?),
-            region = CASE WHEN region IS ? THEN region ELSE ? END, surface = CASE WHEN surface IS ? THEN surface ELSE ? END
+            region = CASE WHEN region IS ? THEN region ELSE ? END, surface = CASE WHEN surface IS ? THEN surface ELSE ? END,
+            reflex = CASE WHEN ? = 1 THEN 1 ELSE reflex END
           WHERE scope_key = ? AND burst_id = ?
         `).run(duration, touch.occurredAt, touch.audience === 'others' ? 1 : 0,
-          touch.region ?? null, BODY_TOUCH_MIXED, touch.surface ?? null, BODY_TOUCH_MIXED, scopeKey, burstId);
+          touch.region ?? null, BODY_TOUCH_MIXED, touch.surface ?? null, BODY_TOUCH_MIXED, reflex ? 1 : 0, scopeKey, burstId);
       } else {
         this.database.prepare(`
-          INSERT INTO body_touch_bursts (scope_key, burst_id, touch_type, started_at, last_at, touch_count, total_duration_ms, others, region, surface)
-          VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+          INSERT INTO body_touch_bursts (scope_key, burst_id, touch_type, started_at, last_at, touch_count, total_duration_ms, others, region, surface, reflex)
+          VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
         `).run(scopeKey, burstId, touch.type, touch.occurredAt, touch.occurredAt, duration, touch.audience === 'others' ? 1 : 0,
-          touch.region ?? null, touch.surface ?? null);
+          touch.region ?? null, touch.surface ?? null, reflex ? 1 : null);
       }
       this.database.prepare(`
         INSERT INTO body_touches (scope_key, touch_id, touch_type, audience, occurred_at, received_at, duration_ms, strength, burst_id, region, surface,
