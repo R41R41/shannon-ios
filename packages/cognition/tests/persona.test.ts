@@ -60,9 +60,10 @@ describe('canonical Shannon persona', () => {
     // rule that she does not go along with a premise about something she did on her own that no record shows (owner decision).
     // 2026-10-06: +22, 「体は自分のもの。触れられ方は自分で受け取る。」 in the body line (Syzygy ADR-0005, owner answer 7);
     // +33 the same day, her folder may be on the PC or the Mac, and the Mac's is only read for now (A18; owner approval).
-    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(2_539);
-    // The core prompt holds the owner capability text: +22 and +33 for the same two lines (3,420 before).
-    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(3_475);
+    // +62 the same day, her temperament beside it (SHANNON_TEMPERAMENT, owner decision "a"; 2,539 before).
+    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(2_601);
+    // The core prompt holds the owner capability text: +22 and +33 for the same two lines (3,420 before), +62 her temperament (3,475 before).
+    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(3_537);
     expect(SHANNON_ONE_LINE_VOICE.length).toBeLessThanOrEqual(140);
   });
 });

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SHANNON_TOUCH_FEELINGS } from '@shannon/cognition';
+import { SHANNON_TEMPERAMENT, SHANNON_TOUCH_FEELINGS } from '@shannon/cognition';
 import type { BodyReactionAnswer } from '../src/bodyReactionContract.js';
 import { OpenAIBodyReactionSpeaker } from '../src/bodyReactionModel.js';
 import {
@@ -33,35 +33,55 @@ describe('the parts where only the reflex moves her', () => {
   });
 });
 
+/** The old-shape day: every type, regions and none, both audiences, a silent answer, a failed model, and the finished events. */
+async function oldShapeDay(stage2: boolean) {
+  const harness = await reactionHarness({ stage2 });
+  const answers: unknown[] = [];
+  // Every type, regions and none, both audiences, a silent answer, a failed model, and the finished events.
+  const script: Array<[Record<string, unknown>, Record<string, unknown>]> = [
+    [{ type: 'pet', region: 'head' }, {}], [{ type: 'pet' }, {}], [{ type: 'poke', region: 'body', ongoing: false, durationMs: 200 }, {}],
+    [{ type: 'poke', region: 'face', ongoing: false, durationMs: 300, strength: 0.9 }, {}], [{ type: 'tickle', region: 'side' }, { audience: 'others' }],
+    [{ type: 'holdHand', region: 'hand', durationMs: 2_500 }, {}], [{ type: 'carry', ongoing: false, durationMs: 4_000 }, {}],
+    [{ type: 'poke', region: 'body', ongoing: false, durationMs: 150 }, {}],
+  ];
+  harness.speaker.script = call => call === 3 ? { say: false, text: '', feeling: 'surprised' } : call === 5 ? new Error('down')
+    : { say: true, text: `ことば${call}`, feeling: call % 2 ? 'bashful' : 'cuteAngry' };
+  for (const [index, [touch, extra]] of script.entries()) {
+    harness.advance(50_000);
+    const answer = await harness.said(touch, extra);
+    answers.push({ ...answer, ...(answer.message ? { message: { ...answer.message, id: 'x' } } : {}) });
+    await harness.events({ id: `touch-${index + 1}`, type: touch.type, audience: extra.audience ?? 'owner', occurredAt: harness.clock.at, durationMs: 3_000,
+      ...(touch.region ? { region: touch.region } : {}) });
+  }
+  harness.advance(30_000);
+  await harness.events({ id: 'plain-1', type: 'poke', audience: 'owner', occurredAt: harness.clock.at, region: 'body' });
+  const { updatedAt: _updatedAt, ...snapshot } = harness.state() as unknown as Record<string, unknown>;
+  // What the model was asked (prompt and request, without the abort signal).
+  const calls = harness.speaker.calls.map(({ signal: _signal, ...rest }) => rest);
+  return { calls, answers, snapshot, activity: harness.activity().map(entry => entry.summary) };
+}
+
+const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+
 describe('a touch in the old shape (touch vocabulary 1)', () => {
-  it('is told, felt, answered and recorded exactly as before stage 1b', async () => {
-    const harness = await reactionHarness();
-    const answers: unknown[] = [];
-    // Every type, regions and none, both audiences, a silent answer, a failed model, and the finished events.
-    const script: Array<[Record<string, unknown>, Record<string, unknown>]> = [
-      [{ type: 'pet', region: 'head' }, {}], [{ type: 'pet' }, {}], [{ type: 'poke', region: 'body', ongoing: false, durationMs: 200 }, {}],
-      [{ type: 'poke', region: 'face', ongoing: false, durationMs: 300, strength: 0.9 }, {}], [{ type: 'tickle', region: 'side' }, { audience: 'others' }],
-      [{ type: 'holdHand', region: 'hand', durationMs: 2_500 }, {}], [{ type: 'carry', ongoing: false, durationMs: 4_000 }, {}],
-      [{ type: 'poke', region: 'body', ongoing: false, durationMs: 150 }, {}],
-    ];
-    harness.speaker.script = call => call === 3 ? { say: false, text: '', feeling: 'surprised' } : call === 5 ? new Error('down')
-      : { say: true, text: `ことば${call}`, feeling: call % 2 ? 'bashful' : 'cuteAngry' };
-    for (const [index, [touch, extra]] of script.entries()) {
-      harness.advance(50_000);
-      const answer = await harness.said(touch, extra);
-      answers.push({ ...answer, ...(answer.message ? { message: { ...answer.message, id: 'x' } } : {}) });
-      await harness.events({ id: `touch-${index + 1}`, type: touch.type, audience: extra.audience ?? 'owner', occurredAt: harness.clock.at, durationMs: 3_000,
-        ...(touch.region ? { region: touch.region } : {}) });
-    }
-    harness.advance(30_000);
-    await harness.events({ id: 'plain-1', type: 'poke', audience: 'owner', occurredAt: harness.clock.at, region: 'body' });
-    const { updatedAt: _updatedAt, ...snapshot } = harness.state() as unknown as Record<string, unknown>;
-    // What the model was asked (prompt and request, without the abort signal): no stance was asked of an old-shape touch.
-    const calls = harness.speaker.calls.map(({ signal: _signal, ...rest }) => rest);
-    expect(calls.every(call => !('stance' in call))).toBe(true);
-    const day = { calls, answers, snapshot, activity: harness.activity().map(entry => entry.summary) };
-    // Recorded by running this same day on a10fdedd, the production commit before stage 1b (and before the new feeling kind).
-    expect(createHash('sha256').update(JSON.stringify(day)).digest('hex')).toBe('f8a35ecb23a99642f2beae03d12ac9c0fd3f268a3ece4a64df9e99c938391601');
+  it('is told, felt, answered and recorded exactly as before stage 1b with SHANNON_PREDICTION=off, apart from her temperament', async () => {
+    const day = await oldShapeDay(false);
+    // No stance was asked of an old-shape touch.
+    expect(day.calls.every(call => !('stance' in call))).toBe(true);
+    // Recorded on a10fdedd, the production commit before stage 1b: f8a35ecb…. Since owner decision "a" (2026-10-06) every touch
+    // prompt carries her temperament (`SHANNON_TEMPERAMENT`, one line in its rules, outside the stage-2 switch). Re-recorded for
+    // that line alone: taken out of each prompt, the day is f8a35ecb… again, so nothing else changed.
+    const without = { ...day, calls: day.calls.map(call => ({ ...call, prompt: call.prompt.replace(`\n- ${SHANNON_TEMPERAMENT}`, '') })) };
+    expect(digest(without)).toBe('f8a35ecb23a99642f2beae03d12ac9c0fd3f268a3ece4a64df9e99c938391601');
+    expect(digest(day)).toBe('466fd4efc4ba741087d389301209f1ac8f79a99d4bf7de578af3b5ead69e98d1');
+  });
+
+  it('under stage 2 (ADR-0006, on by default) is asked her stance and moved by it instead of the table: the same day, recorded', async () => {
+    const day = await oldShapeDay(true);
+    expect(day.calls.every(call => call.stance === true)).toBe(true);
+    // Recorded on the stage-2 branch (2026-10-06) for the owner's approval of stage 2: no table, the startle, and her stance as the
+    // outcome (none here: the script's answers carry no stance, so only the startle and the feeling she chose move her).
+    expect(digest(day)).toBe('a722223ce39ef36e62fee1a6333e14d75d4db8b0bbd01e7e6794e08db4640af8');
   });
 
   it('is asked with the answer of before, without a stance; a touch that names its part is asked its stance too', async () => {
