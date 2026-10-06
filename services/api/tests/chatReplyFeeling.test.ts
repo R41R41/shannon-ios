@@ -664,7 +664,7 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
     // only read for now (33 characters longer, 71ac4474… alone). With both lines, every system prompt of these four turns is
     // 55 characters longer and nothing else changed: with the two lines as before, the trace is 0cb946e1… again. On the Mac
     // folder's S3 branch (2026-10-06, A18 S3, owner approval) the `own_folder` line drops its note that the Mac's folder is only
-    // read (21 characters shorter); with that note the trace is 2dd0a8db… again. Recomputed after merging main 97b52985 (its
+    // read (25 characters shorter); with that note the trace is 2dd0a8db… again. Recomputed after merging main 97b52985 (its
     // PC/Mac tool wording is not in these turns): unchanged.
     expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('34e375cd89f041a8bbd712e52a27cdf6234222ddcc8b97f5f5025f8112a8ee6e');
     for (const request of off.seen.requests) expect(request).not.toHaveProperty('offerReplyFeeling');
