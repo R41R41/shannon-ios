@@ -96,7 +96,8 @@ describe('the owner\'s current goal with other people present', () => {
     // 自分で受け取る。」 (Syzygy ADR-0005, owner answer 7), 22 characters of her identity (43c88ae5f79056f1 alone); and on the Mac
     // folder branch (2026-10-06, A18, owner approval) the `own_folder` line names the PC or the Mac, 33 more (6644836be1aa54fd
     // alone). Nothing else changed: with both lines as before, the fingerprint is f985777ad5061000 again. On the S3 branch
-    // (A18 S3) the `own_folder` line drops its note that the Mac's folder is only read: 81990bce01279119 with the note.
+    // (A18 S3, owner approval) the `own_folder` line drops its note that the Mac's folder is only read: 81990bce01279119 with
+    // the note. Recomputed after merging main 97b52985: unchanged.
     expect(fingerprint(alone)).toBe('5776c6948507cd9c');
 
     const others = await chat('人格の改善はどう進める？', { audience: 'others' });
