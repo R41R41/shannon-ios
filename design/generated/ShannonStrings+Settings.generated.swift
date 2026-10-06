@@ -43,7 +43,7 @@ extension ShannonGeneratedStrings {
     /// `settings.figure.layoutOnlyHuman`
     public static let settingsFigureLayoutOnlyHuman = "映し方は、人の姿のときに使えます。目だけのときは、大きさと位置だけを変えられます"
     /// `settings.figure.touchHuman`
-    public static let settingsFigureTouchHuman = "Live2Dの姿は指で触れられます。軽く叩くと「つつく」、押したまま往復させると「なでる」（速く動かすと「くすぐる」）、押したまま止めると「触れたまま」（手なら「手をつなぐ」）です。首・胸・腰・脚・スカートに触れると、体が少し身を引きます。"
+    public static let settingsFigureTouchHuman = "Live2Dの姿は指で触れられます。軽く叩くと「つつく」（頭や手では、なでる・手をつなぐの始まりになります）、押したまま往復させると「なでる」（速く動かすと「くすぐる」）、押したまま止めると「触れたまま」（手なら「手をつなぐ」）です。首・胸・腰・脚・スカートに触れると、体が少し身を引きます。"
     /// `settings.figure.touchEyes`
     public static let settingsFigureTouchEyes = "目だけのときは、目のあたりを軽くつつけます。顔に触れたことになります（なでる・くすぐる・手をつなぐは、ありません）。"
     /// `settings.figure.touchPrivacy`

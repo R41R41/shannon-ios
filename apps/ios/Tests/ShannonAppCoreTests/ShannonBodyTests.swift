@@ -47,7 +47,7 @@ final class ShannonBodyTests: XCTestCase {
         // parts she may not want touched make her draw back a little. No hover and no carry on this page.
         XCTAssertEqual(
             ShannonBodyCopy.settingsExplanation(body: .human),
-            "Live2Dの姿は指で触れられます。軽く叩くと「つつく」、押したまま往復させると「なでる」（速く動かすと「くすぐる」）、"
+            "Live2Dの姿は指で触れられます。軽く叩くと「つつく」（頭や手では、なでる・手をつなぐの始まりになります）、押したまま往復させると「なでる」（速く動かすと「くすぐる」）、"
                 + "押したまま止めると「触れたまま」（手なら「手をつなぐ」）です。首・胸・腰・脚・スカートに触れると、体が少し身を引きます。"
                 + ShannonGeneratedStrings.settingsFigureTouchPrivacy + ShannonBodyCopy.touchOnThisDevice)
         // The Mac also says who a touch reaches as (A15); the iPhone adds nothing.

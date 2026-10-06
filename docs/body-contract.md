@@ -724,7 +724,7 @@ Each of the five is part of an event's and a reaction's content **only when it i
 ### Next, outside this server
 
 - **The Live2D body (Windows, and the embed page built from the same acting code)**: find the touched part by the drawn hit-area parts instead of rectangles (on the Live2D side: register the 14 hit-area parts in HitAreas, and decide whether the arm needs one), and send the five fields after seeing `touchVocabulary: 2`. What the body then does differently for the not-wanted group (its flinch, the face it adds afterwards, the skirt physics, when it asks) is a later phase of ADR-0005 and is decided with the owner first.
-- **The iPhone embed host**: pass `part`, `side`, `gesture`, `input` and `reflex` from the page through as they are, only after `touchVocabulary: 2`; and when the page names a `part`, do not fill in a region from the gesture. `ShannonLive2DProtocol.sentRegion` today fills `head` for any `pet`, `hand` for `holdHand` and `side` for `tickle` when the page names no region; with parts, the page's own `region` is the part's parent, and a missing one must stay missing rather than become 頭.
+- **The iPhone embed host** (done 2026-10-06, phase 1d; see [A body that only feels touch](#a-body-that-only-feels-touch)): it passes `part`, `side`, `gesture`, `input` and `reflex` from the page through as they are, only after `touchVocabulary: 2`. `ShannonLive2DProtocol.sentRegion` fills in `head` for a `pet`, `hand` for a `holdHand` and `side` for a `tickle` only when the page names neither a region nor a `part`; with a `part`, the page's own `region` (the part's parent) is sent, and a missing one stays missing rather than become 頭.
 
 ## A body that only feels touch
 
