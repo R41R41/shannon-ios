@@ -68,8 +68,11 @@ export function conversationSecrets(state: CompanionStateSnapshot, conversations
  * text (owner decision 2026-10-06, Syzygy ADR-0007: what she reads of 「シャノン用フォルダ」 in front of others, `aetherShownText.ts`).
  * It is the rule memory follows for such a turn (`disclosureDecision`), judged for an unnamed guest, the strictest presence:
  * `withheld` is everything `conversationSecrets` holds and every fact, relationship, promise or turn of his withheld for that
- * presence; `guarded` every one guarded for it (his other personal matters, which memory gives such a turn marked). The
- * words of a turn are his words only, as in `conversationSecrets`.
+ * presence; `guarded` every one guarded for it (his other personal matters, which memory gives such a turn marked). A turn
+ * gives its user words whoever spoke them: turns are not filtered by speaker, and a turn without a label (written before
+ * labels) is guarded. A text shorter than a run must appear whole (`SHORT_MINIMUM`), so a short legacy turn such as
+ * 「ありがとう」 can take out, in a turn the owner is not in, a sentence that holds those words; this is left as it is
+ * rather than weaken the check (review N1).
  */
 export function othersSecrets(state: CompanionStateSnapshot, conversations: Pick<ConversationStore, 'experienceCandidates'>, scopeKey: string): { withheld: SecretCheck; guarded: SecretCheck } {
   const decided = (id: string, disclosure: MemoryDisclosure | undefined): DisclosureDecision =>
