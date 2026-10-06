@@ -136,17 +136,23 @@ final class ShannonDesktopBodyTests: XCTestCase {
             }
             // Every other part, and empty space beside her, is a touch.
             for (part, u, v) in Self.measured {
-                XCTAssertFalse(ShannonDesktopBodyGrip.mayCarry(at: point(u, v), stage: stage, body: .human), "\(part?.rawValue ?? "nothing") at \(scale)")
+                XCTAssertFalse(ShannonDesktopBodyGrip.mayCarry(at: point(u, v), stage: stage, body: .human, pageShown: true), "\(part?.rawValue ?? "nothing") at \(scale)")
             }
             // Her forehead and her boots pick her up.
             for (part, u, v) in [(ShannonLive2DTouch.Part.face, -0.004, 0.129), (.other, -0.04, 0.86), (.other, 0.06, 0.86), (.other, -0.02, 0.90)] {
                 XCTAssertEqual(ShannonDesktopBodyGrip.part(at: point(u, v), stage: stage, body: .human), part, "\(part.rawValue) at \(scale)")
-                XCTAssertTrue(ShannonDesktopBodyGrip.mayCarry(at: point(u, v), stage: stage, body: .human))
+                XCTAssertTrue(ShannonDesktopBodyGrip.mayCarry(at: point(u, v), stage: stage, body: .human, pageShown: true))
             }
             // Her eyes alone are her face wherever she is drawn; outside her stage nothing is.
-            XCTAssertTrue(ShannonDesktopBodyGrip.mayCarry(at: CGPoint(x: stage.midX, y: stage.midY), stage: stage, body: .eyes))
-            XCTAssertFalse(ShannonDesktopBodyGrip.mayCarry(at: CGPoint(x: stage.midX, y: stage.maxY + 10), stage: stage, body: .eyes))
-            XCTAssertFalse(ShannonDesktopBodyGrip.mayCarry(at: CGPoint(x: stage.midX, y: stage.maxY + 10), stage: stage, body: .human))
+            XCTAssertTrue(ShannonDesktopBodyGrip.mayCarry(at: CGPoint(x: stage.midX, y: stage.midY), stage: stage, body: .eyes, pageShown: true))
+            XCTAssertFalse(ShannonDesktopBodyGrip.mayCarry(at: CGPoint(x: stage.midX, y: stage.maxY + 10), stage: stage, body: .eyes, pageShown: true))
+            XCTAssertFalse(ShannonDesktopBodyGrip.mayCarry(at: CGPoint(x: stage.midX, y: stage.maxY + 10), stage: stage, body: .human, pageShown: true))
+            // No figure in the window (the page loading or failed, no Live2D, the waterlight eye standing in): she is
+            // carried from anywhere she is drawn, chest and head included, as before there were parts.
+            for (part, u, v) in Self.measured where part != nil {
+                XCTAssertTrue(ShannonDesktopBodyGrip.mayCarry(at: point(u, v), stage: stage, body: .human, pageShown: false), "\(part!.rawValue) without the page at \(scale)")
+            }
+            XCTAssertFalse(ShannonDesktopBodyGrip.mayCarry(at: CGPoint(x: stage.midX, y: stage.maxY + 10), stage: stage, body: .human, pageShown: false))
         }
         // Every zone is a part that carries, inside her drawing.
         for zone in ShannonDesktopBodyGrip.zones {

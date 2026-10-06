@@ -36,8 +36,11 @@ public enum ShannonDesktopBodyGrip {
     }
 
     /// Whether a press at `point` (window coordinates, y up) may pick her up. `stage` is where the page is drawn.
-    public static func mayCarry(at point: CGPoint, stage: CGRect, body: ShannonLive2DBody) -> Bool {
-        carries(part: part(at: point, stage: stage, body: body), region: nil)
+    /// `pageShown`: her Live2D figure is what the window shows. While it is not (the page loading or failed, Live2D not in
+    /// this build, the waterlight eye standing in), there is no figure to touch and no part to name: like her eyes
+    /// alone, she is picked up wherever she is drawn.
+    public static func mayCarry(at point: CGPoint, stage: CGRect, body: ShannonLive2DBody, pageShown: Bool) -> Bool {
+        carries(part: part(at: point, stage: stage, body: pageShown ? body : .eyes), region: nil)
     }
 
     /// The part the page names at a point, where that part carries her; nil elsewhere (which never carries).

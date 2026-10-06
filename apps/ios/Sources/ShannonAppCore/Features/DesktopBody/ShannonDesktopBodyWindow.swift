@@ -220,7 +220,9 @@ final class ShannonDesktopBodyWindowController {
             heldDown = event
             // Only her face or her boots pick her up (`ShannonDesktopBodyGrip`); any other press is a touch at once.
             let stage = ShannonDesktopBodyGeometry.stageRect(in: panel.frame.size, scale: body?.scale ?? 1)
-            let mayCarry = ShannonDesktopBodyGrip.mayCarry(at: event.locationInWindow, stage: stage, body: ShannonLive2DStage.shared.body)
+            let page = ShannonLive2DStage.shared
+            let pageShown = webView != nil && ShannonLive2DStage.isAvailable && page.status == .ready && page.activeHost == hostID
+            let mayCarry = ShannonDesktopBodyGrip.mayCarry(at: event.locationInWindow, stage: stage, body: page.body, pageShown: pageShown)
             apply(carry.down(at: NSEvent.mouseLocation, mayCarry: mayCarry, origin: panel.frame.origin, time: event.timestamp), event: event)
             if mayCarry { waitForHold() }
         case .leftMouseDragged:
