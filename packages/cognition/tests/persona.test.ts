@@ -165,6 +165,14 @@ describe('canonical capability description', () => {
     expect(shannonCapabilityPrompt('owner')).toContain('連続したカメラ映像');
   });
 
+  it('says her body is her own and that she takes a touch as she takes it (Syzygy ADR-0005, owner answer 7)', () => {
+    const line = shannonCapabilityPrompt('owner').split('\n').find(item => item.includes('体: '));
+    expect(line).toContain('体は自分のもの。触れられ方は自分で受け取る。');
+    // No rule of how to feel: neither that a touch pleases her nor that she must refuse one.
+    expect(line).not.toMatch(/嬉し|うれし|拒ま|禁/u);
+    expect(shannonCapabilityPrompt('guest')).not.toContain('触れられ方');
+  });
+
   it('states her own folder and her study as they are: her tools, the trash, only when the owner set the folder up, never to a guest', () => {
     const line = SHANNON_CAPABILITIES.find(item => item.id === 'own_folder')!;
     expect(line.audience).toBe('owner');
