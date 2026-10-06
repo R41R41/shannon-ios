@@ -30,6 +30,9 @@ export const SHANNON_AUTONOMY_DOMAINS = Object.freeze([
   { id: 'thinking', rule: 'free', label: '考える・書く' },
   { id: 'owner_message', rule: 'free', label: '持ち主に見せる' },
   { id: 'owner_call', rule: 'free', label: '持ち主に電話をかける' },
+  // Owner decision 2026-10-06 (Syzygy ADR-0007, 「自分の時間に所有者の文書を読む」; a change of ADR-0002's scope he approved): in her
+  // own time, only while SHANNON_AUTONOMY_OWNER_DOCUMENTS=on, and only for one of her active pursuits. What she writes after it is marked.
+  { id: 'owner_documents_read', rule: 'free', label: '持ち主の文書を読む' },
   { id: 'core', rule: 'approval', label: '基幹部分' },
   { id: 'suite_app_code', rule: 'approval', label: 'Aether・Voyagerのコード' },
   { id: 'owner_content', rule: 'approval', label: '持ち主の文書とタスク' },
