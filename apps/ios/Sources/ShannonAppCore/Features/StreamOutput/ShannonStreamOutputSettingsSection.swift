@@ -25,6 +25,14 @@ public struct ShannonStreamOutputSettingsSection: View {
                 Button(ShannonGeneratedStrings.desktopStreamCopyURL) { model.copyPageURL() }
                     .accessibilityIdentifier("settings-stream-output-copy")
             }
+            // What to keep in mind while it is on (owner decision 2026-10-06): her desktop body shown; what changes.
+            Text(ShannonGeneratedStrings.desktopStreamKeepBodyShown)
+                .font(.shannonDesktop(.caption))
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("settings-stream-output-keep-body")
+            Text(ShannonGeneratedStrings.desktopStreamWhileOn)
+                .font(.shannonDesktop(.caption))
+                .foregroundStyle(.secondary)
         } header: {
             Text(ShannonGeneratedStrings.desktopStreamTitle)
         } footer: {

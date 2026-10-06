@@ -93,7 +93,7 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
   `contain`. Every call of `ShannonLive2DStage+Driving.swift` and the body (`setBody`) is also given to the stream
   (`ShannonLive2DDesktopLink.streamMirror`), whatever the app's own page does with it, and reaches the page as JSON over
   Server-Sent Events (`/events`); the page calls only `express`, `expressEmotion`, `setMood`, `setPresence`, `setPhase`,
-  `setMouthLevel`, `play` and `setBody`. Touch reactions drawn inside the app's page and her words are not in the stream.
+  `setMouthLevel`, `play` and `setBody`. Touch reactions drawn inside the app's page and her words are not in the stream, and the stream's mood, presence and faces come from what drives the app's figure (her desktop body above all): the owner keeps her desktop body shown while streaming (設定 › すがた says so).
   When this folder is updated, `stream.js`'s list of scripts follows `embed.html`'s (a test fails until it does).
 
 ## Her eyes alone (`setBody`)
