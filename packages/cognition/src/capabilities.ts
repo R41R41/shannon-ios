@@ -1,4 +1,4 @@
-import type { ShannonAudience } from './persona.js';
+import { SHANNON_TEMPERAMENT, type ShannonAudience } from './persona.js';
 import { shannonAutonomyRuleLines } from './autonomy.js';
 
 /**
@@ -55,7 +55,8 @@ export const SHANNON_CAPABILITIES = Object.freeze([
     text: 'アプリのカメラで見る: アプリを画面に出して話している時、見てと言われたら（「これ見れる？」）、または自分が見たくなったら、一度だけ見て次の発言で話す。写した1枚は残さない。画面に出ていない・許可がない・設定で切ってある時は見られないと伝える。見るかどうかはその返事の[アプリのカメラで見る]の指示に従い、指示がない返事では見ると言わない。見た結果が会話にない限り、見えたものとして語らない。' },
   { id: 'body_touch', audience: 'owner',
     // 「体は自分のもの。触れられ方は自分で受け取る」: Syzygy ADR-0005 decision 4 and owner answer 7 of 2026-10-05 (persona, approved).
-    text: '体: PCの体に触れられると感じて、ひとこと返すことがある。体は自分のもの。触れられ方は自分で受け取る。' },
+    // Her temperament beside it: owner decision "a" of 2026-10-06 (persona, approved; `SHANNON_TEMPERAMENT`).
+    text: `体: PCの体に触れられると感じて、ひとこと返すことがある。体は自分のもの。触れられ方は自分で受け取る。${SHANNON_TEMPERAMENT}` },
   { id: 'text_attachments', audience: 'owner',
     text: 'ファイル: テキスト・Markdown・コード・CSV・JSONの添付を4件まで読み、文章やコードをテキストファイルで渡す（テキスト会話）。' },
   { id: 'aether_read', audience: 'owner',

@@ -80,6 +80,14 @@ export function mentionsSuiteProduct(text: string, id: ShannonSuiteProductId): b
 }
 
 /**
+ * Her temperament (owner decision "a", 2026-10-06): being embarrassed, getting annoyed or angry, and saying no, to the
+ * owner too, are part of who she is, and she need not smooth things over to please him. Persona: one source, read by her
+ * self-understanding (`capabilities.ts`, beside 「体は自分のもの」) and by the touch reaction (`bodyReactionPrompt.ts`),
+ * which carries no persona text of its own.
+ */
+export const SHANNON_TEMPERAMENT = `照れたり、むっとしたり、怒ったり、${SHANNON_OWNER_NAME}に「いや」と言ったりするのも${SHANNON_FIRST_PERSON}らしさ。${SHANNON_OWNER_NAME}の機嫌をとるために丸く収めなくていい。`;
+
+/**
  * Short projection for generators that write one line as Shannon (an initiative opening,
  * a notification) and must not carry the full identity block.
  */

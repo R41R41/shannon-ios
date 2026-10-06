@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SHANNON_STANCE_OUTCOME } from '@shannon/cognition';
+import { SHANNON_STANCE_OUTCOME, SHANNON_TEMPERAMENT } from '@shannon/cognition';
 import type { BodyReactionDecision } from '../src/bodyReactionPrompt.js';
 import type { TouchExperience, TouchExperienceWriter } from '../src/bodyTouchMemory.js';
 import { touchPredictionEnabled, touchPredictionKey } from '../src/bodyTouchPrediction.js';
@@ -159,6 +159,14 @@ describe('what she is told and what she remembers', () => {
     expect(second).toContain('これまで首に触れられた時のボクの受け取り: いや 1回');
     expect(third).not.toContain('親密さ');
     expect(third).not.toContain('これまで首に');
+  });
+
+  it('gives every touch reaction her temperament from the one persona source, with others present too', async () => {
+    const w = await world();
+    w.decide('fine');
+    await w.said({ type: 'pet' });
+    await w.said({ type: 'poke', part: 'cheek', region: 'face', gesture: 'poke' }, { audience: 'others' });
+    for (const prompt of w.speaker.prompts) expect(prompt).toContain(`- ${SHANNON_TEMPERAMENT}`);
   });
 
   it('keeps the touched part in the memory of the touch', async () => {

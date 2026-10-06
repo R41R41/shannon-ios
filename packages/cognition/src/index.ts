@@ -22,6 +22,7 @@ export {
   SHANNON_ONE_LINE_VOICE,
   SHANNON_OWNER_NAME,
   SHANNON_SUITE_PRODUCTS,
+  SHANNON_TEMPERAMENT,
   mentionsSuiteProduct,
   shannonPersonaPrompt,
   shannonSuitePrompt,

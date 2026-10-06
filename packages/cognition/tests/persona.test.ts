@@ -7,6 +7,7 @@ import {
   SHANNON_ONE_LINE_VOICE,
   SHANNON_ROOM_LOOK_RULES,
   SHANNON_SUITE_PRODUCTS,
+  SHANNON_TEMPERAMENT,
   assembleShannonSystemPrompt,
   createInitialCompanionState,
   mentionsSuiteProduct,
@@ -174,6 +175,15 @@ describe('canonical capability description', () => {
     // No rule of how to feel: neither that a touch pleases her nor that she must refuse one.
     expect(line).not.toMatch(/嬉し|うれし|拒ま|禁/u);
     expect(shannonCapabilityPrompt('guest')).not.toContain('触れられ方');
+  });
+
+  it('gives her the temperament of an ordinary girl beside it, from one source (owner decision "a", 2026-10-06)', () => {
+    const line = shannonCapabilityPrompt('owner').split('\n').find(item => item.includes('体: '))!;
+    expect(line).toContain(`体は自分のもの。触れられ方は自分で受け取る。${SHANNON_TEMPERAMENT}`);
+    expect(SHANNON_TEMPERAMENT).toBe('照れたり、むっとしたり、怒ったり、ライ氏に「いや」と言ったりするのもボクらしさ。ライ氏の機嫌をとるために丸く収めなくていい。');
+    // Two sentences, no prohibition, nothing sexual.
+    expect(SHANNON_TEMPERAMENT.split('。').filter(Boolean)).toHaveLength(2);
+    expect(SHANNON_TEMPERAMENT).not.toMatch(/禁|してはいけない|性/u);
   });
 
   it('states her own folder and her study as they are: her tools, the trash, only when the owner set the folder up, never to a guest', () => {
