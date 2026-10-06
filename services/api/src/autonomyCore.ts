@@ -77,9 +77,16 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // Syzygy ADR-0008 stage 1: the pure package of the prediction ledger, calibration, reward, values and the mood exit.
     'packages/learning/',
     // Syzygy ADR-0008 stage 1: the prediction ledger, its store, and where predictions are opened and settled.
-    'services/api/src/mind/learning/',
+    'services/api/src/mind/learning/choiceLedger.ts',
+    'services/api/src/mind/learning/predictionLedger.ts',
+    'services/api/src/mind/learning/predictionLedgerTaps.ts',
+    'services/api/src/mind/learning/rewardSettlement.ts',
+    'services/api/src/mind/learning/store/sqliteChoiceLedger.ts',
+    'services/api/src/mind/learning/store/sqlitePredictionLedger.ts',
+    'services/api/src/mind/learning/store/sqliteValueTable.ts',
+    'services/api/src/mind/learning/valueTable.ts',
     // Syzygy ADR-0008 stage 1: the nightly pass of the ledgers (expiry, delayed credit, retention).
-    'services/api/src/mind/sleep/',
+    'services/api/src/mind/sleep/valueSleep.ts',
   ]),
   authentication: Object.freeze([
     'services/api/src/apiAuth.ts',
@@ -103,7 +110,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/sqliteStoreCodecs.ts',
     'services/api/src/sqliteMigrations.ts',
     // Syzygy ADR-0008 stage 1: the write lock of the shared file, taken and measured the same way by every cognition writer.
-    'services/api/src/infra/sqlite/',
+    'services/api/src/infra/sqlite/lockWaits.ts',
     'services/api/src/sqliteCompanionRepository.ts',
     'services/api/src/sqliteConversationRepository.ts',
     'services/api/src/sqliteBackgroundJobRepository.ts',
@@ -246,7 +253,10 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/agentHost.ts',
     'services/api/src/integrations/agentHost/agentHostConfig.ts',
     // Syzygy ADR-0008 stage 1 (抑制系): one content-free trace per decision, and the gateway wrapper that writes it.
-    'services/api/src/mind/inhibition/',
+    'services/api/src/mind/inhibition/decisionTraceContract.ts',
+    'services/api/src/mind/inhibition/decisionTraces.ts',
+    'services/api/src/mind/inhibition/store/sqliteDecisionTraces.ts',
+    'services/api/src/mind/inhibition/tracedVoiceDecision.ts',
     // Syzygy ADR-0008 stage 1: the owner's controls of her value table on the server's command line.
     'services/api/scripts/shannon-values.ts',
   ]),
@@ -296,11 +306,12 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/platformReply.ts',
     'services/api/src/serverPlatformBridgeRoute.ts',
     // Syzygy ADR-0008 stage 1: the Jev client's call count and price.
-    'services/api/src/infra/models/jev/',
+    'services/api/src/infra/models/jev/jevClient.ts',
+    'services/api/src/infra/models/jev/jevUsage.ts',
     // Routes of her voice surface moved out of `server.ts` (Syzygy ADR-0008 §6, surfaces/voice).
-    'services/api/src/surfaces/voice/',
+    'services/api/src/surfaces/voice/transcriptionRoute.ts',
     // Syzygy ADR-0008 stage 1: the owner's view and controls of her value table.
-    'services/api/src/infra/http/',
+    'services/api/src/infra/http/learningRoutes.ts',
   ]),
   deployment: Object.freeze([
     'deploy/',

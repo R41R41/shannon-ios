@@ -47,23 +47,32 @@ describe('CORE as code', () => {
     }
   });
 
-  it('keeps the folders of Syzygy ADR-0008 inside core, every file below them included', () => {
+  it('keeps the package and the files of Syzygy ADR-0008 stage 1 inside core', () => {
+    const learning = filesBelow(join(repositoryRoot, 'packages/learning'));
+    expect(learning.length).toBeGreaterThan(0);
+    for (const file of learning) expect(coreAreaForRepositoryPath(relative(repositoryRoot, file))?.area, file).toBe('emotion');
+    // Listed file by file: the folders they sit in are shared with the files the layout waves move there.
     const expected: Record<string, string> = {
-      'packages/learning/': 'emotion',
-      'services/api/src/mind/learning/': 'emotion',
-      'services/api/src/mind/sleep/': 'emotion',
-      'services/api/src/mind/inhibition/': 'approval_and_budget',
-      'services/api/src/infra/models/jev/': 'response_path',
-      'services/api/src/surfaces/voice/': 'response_path',
-      'services/api/src/infra/http/': 'response_path',
-      'services/api/src/infra/sqlite/': 'memory',
+      'services/api/src/mind/learning/choiceLedger.ts': 'emotion',
+      'services/api/src/mind/learning/predictionLedger.ts': 'emotion',
+      'services/api/src/mind/learning/predictionLedgerTaps.ts': 'emotion',
+      'services/api/src/mind/learning/rewardSettlement.ts': 'emotion',
+      'services/api/src/mind/learning/store/sqliteChoiceLedger.ts': 'emotion',
+      'services/api/src/mind/learning/store/sqlitePredictionLedger.ts': 'emotion',
+      'services/api/src/mind/learning/store/sqliteValueTable.ts': 'emotion',
+      'services/api/src/mind/learning/valueTable.ts': 'emotion',
+      'services/api/src/mind/sleep/valueSleep.ts': 'emotion',
+      'services/api/src/mind/inhibition/decisionTraceContract.ts': 'approval_and_budget',
+      'services/api/src/mind/inhibition/decisionTraces.ts': 'approval_and_budget',
+      'services/api/src/mind/inhibition/store/sqliteDecisionTraces.ts': 'approval_and_budget',
+      'services/api/src/mind/inhibition/tracedVoiceDecision.ts': 'approval_and_budget',
+      'services/api/src/infra/models/jev/jevClient.ts': 'response_path',
+      'services/api/src/infra/models/jev/jevUsage.ts': 'response_path',
+      'services/api/src/surfaces/voice/transcriptionRoute.ts': 'response_path',
+      'services/api/src/infra/http/learningRoutes.ts': 'response_path',
+      'services/api/src/infra/sqlite/lockWaits.ts': 'memory',
     };
-    for (const [folder, area] of Object.entries(expected)) {
-      expect(coreAreaForRepositoryPath(folder)?.area, folder).toBe(area);
-      const files = filesBelow(join(repositoryRoot, folder));
-      expect(files.length, folder).toBeGreaterThan(0);
-      for (const file of files) expect(coreAreaForRepositoryPath(relative(repositoryRoot, file))?.area, file).toBe(area);
-    }
+    for (const [file, area] of Object.entries(expected)) expect(coreAreaForRepositoryPath(file)?.area, file).toBe(area);
   });
 
   it('keeps the value table\'s command line inside core', () => {
