@@ -211,6 +211,49 @@ final class ShannonFolderHostWriteTests: XCTestCase {
         XCTAssertEqual(try text(trashed), "x")
     }
 
+    // MARK: Another program swapping a folder for a link after the check
+
+    /// Replaces the folder at `relative` with a link to `outside`, as another program could between the check and the call.
+    private func swapForLink(_ relative: String) throws {
+        let url = folder.appendingPathComponent(relative)
+        try FileManager.default.removeItem(at: url)
+        try FileManager.default.createSymbolicLink(atPath: url.path, withDestinationPath: outside.path)
+    }
+
+    private func outsideIsEmpty() throws -> Bool { try FileManager.default.contentsOfDirectory(atPath: outside.path).isEmpty }
+
+    func testAParentSwappedForALinkAfterTheCheckIsNeverWrittenThrough() throws {
+        let root = try root()
+        // The new file: a link anywhere in the path, not only the last part, is refused.
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("a/b"), withIntermediateDirectories: true)
+        try swapForLink("a")
+        XCTAssertEqual(refusal { try ShannonFolderHostWrites.writeNew(root.path + "/a/b/x.md", Data("x".utf8)) }, .linkRefused)
+        XCTAssertTrue(try outsideIsEmpty())
+
+        // Making the parents: checked while "c" was a folder, a link when the folders are made.
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("c"), withIntermediateDirectories: true)
+        let target = try root.target("c/d/x.md", kind: .file)
+        try swapForLink("c")
+        XCTAssertEqual(refusal { try root.makeParents(target) }, .linkRefused)
+        XCTAssertTrue(try outsideIsEmpty())
+    }
+
+    func testAMoveOrATrashingThroughASwappedFolderIsRefused() throws {
+        let root = try root()
+        try "secret".write(to: outside.appendingPathComponent("s.md"), atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(atPath: folder.appendingPathComponent("away").path, withDestinationPath: outside.path)
+        // Trashing (delete and update) of an entry whose folder became a link: the outside file stays where it is.
+        XCTAssertEqual(refusal { _ = try root.trash(root.path + "/away/s.md", relative: "away/s.md", now: now) }, .linkRefused)
+        XCTAssertEqual(try String(contentsOf: outside.appendingPathComponent("s.md"), encoding: .utf8), "secret")
+        // A trash swapped for a link is never used: the file stays in place.
+        _ = try create("keep.md", "keep")
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent(".shannon/trash"), withIntermediateDirectories: true)
+        try swapForLink(".shannon/trash")
+        XCTAssertEqual(refusal { _ = try ShannonFolderHostWrites.delete(root, relativePath: "keep.md", now: now) }, .linkRefused)
+        XCTAssertEqual(try text("keep.md"), "keep")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: outside.path), ["s.md"])
+    }
+
     // MARK: The worker, the log and the wire
 
     func testTheWorkerChangesTheFolderButNeverTakesAV1Copy() async throws {

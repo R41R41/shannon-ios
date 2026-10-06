@@ -68,7 +68,7 @@ public enum ShannonFolderHostWrites {
             try writeNew(file.absolute, data)
         } catch {
             // The original is put back if it can be; it stays in the trash otherwise. Nothing is lost either way.
-            _ = renamex_np(root.path + "/" + trashedAs, file.absolute, UInt32(RENAME_EXCL))
+            _ = renamex_np(root.path + "/" + trashedAs, file.absolute, UInt32(RENAME_EXCL) | ShannonFolderHostRoot.renameNoLink)
             throw error
         }
         return .init(sha256: digest(data), trashedAs: trashedAs)
@@ -100,8 +100,8 @@ public enum ShannonFolderHostWrites {
         try root.makeParents(target)
         let checked = try root.target(toRelativePath, kind: .entry)
         guard checked.existing == nil else { throw ShannonFolderHostRefusal(.alreadyExists) }
-        guard renamex_np(source.absolute, checked.absolute, UInt32(RENAME_EXCL)) == 0 else {
-            throw errno == EEXIST ? ShannonFolderHostRefusal(.alreadyExists) : ShannonFolderHostRefusal(.ioError, outcome: .failed)
+        guard renamex_np(source.absolute, checked.absolute, UInt32(RENAME_EXCL) | ShannonFolderHostRoot.renameNoLink) == 0 else {
+            throw ShannonFolderHostRoot.refusal(errno: errno)
         }
         return .init()
     }
@@ -127,6 +127,18 @@ public enum ShannonFolderHostWrites {
         return data
     }
 
+    static func writeAll(_ descriptor: Int32, _ data: Data) -> Bool {
+        data.withUnsafeBytes { buffer -> Bool in
+            var offset = 0
+            while offset < buffer.count {
+                let count = write(descriptor, buffer.baseAddress! + offset, buffer.count - offset)
+                if count <= 0 { return false }
+                offset += count
+            }
+            return true
+        }
+    }
+
     static func digest(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
@@ -136,23 +148,12 @@ public enum ShannonFolderHostWrites {
         return name[dot...].lowercased()
     }
 
-    /// A new file, never over anything (`O_EXCL`), never through a link (`O_NOFOLLOW`). A partial file is removed.
+    /// A new file, never over anything (`O_EXCL`), never through a link anywhere in the path (`O_NOFOLLOW_ANY`: a folder
+    /// above it swapped for a link after the check is refused too). A partial file is removed.
     static func writeNew(_ path: String, _ data: Data) throws(ShannonFolderHostRefusal) {
-        let descriptor = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o644)
-        guard descriptor >= 0 else {
-            let exists = errno == EEXIST
-            throw ShannonFolderHostRefusal(exists ? .alreadyExists : .ioError, outcome: exists ? .refused : .failed)
-        }
-        let written = data.withUnsafeBytes { buffer -> Bool in
-            var offset = 0
-            while offset < buffer.count {
-                let count = write(descriptor, buffer.baseAddress! + offset, buffer.count - offset)
-                if count <= 0 { return false }
-                offset += count
-            }
-            return true
-        }
-        let synced = written && fsync(descriptor) == 0
+        let descriptor = open(path, O_WRONLY | O_CREAT | O_EXCL | ShannonFolderHostRoot.openNoLink | O_CLOEXEC, 0o644)
+        guard descriptor >= 0 else { throw ShannonFolderHostRoot.refusal(errno: errno) }
+        let synced = writeAll(descriptor, data) && fsync(descriptor) == 0
         close(descriptor)
         guard synced else {
             unlink(path)
@@ -208,16 +209,50 @@ extension ShannonFolderHostRoot {
     }
 
     /// Makes the missing folders above a target, one at a time, each checked to be a real folder (not a link) inside hers.
+    /// Every folder is made in the folder opened before it (`mkdirat`, then `openat` without following a link), from her
+    /// folder opened with `O_NOFOLLOW_ANY`: a folder swapped for a link by another program is never made through.
     func makeParents(_ target: Target) throws(ShannonFolderHostRefusal) {
+        var parent = try Self.openFolder(path)
+        defer { close(parent) }
         var current = path
         for segment in target.segments.dropLast() {
             current += "/" + segment
-            if mkdir(current, 0o755) != 0, errno != EEXIST { throw ShannonFolderHostRefusal(.ioError, outcome: .failed) }
-            guard let made = Self.lstatOf(current) else { throw ShannonFolderHostRefusal(.ioError, outcome: .failed) }
+            if mkdirat(parent, segment, 0o755) != 0, errno != EEXIST { throw Self.refusal(errno: errno) }
+            var made = stat()
+            guard fstatat(parent, segment, &made, AT_SYMLINK_NOFOLLOW) == 0 else { throw ShannonFolderHostRefusal(.ioError, outcome: .failed) }
             if Self.kind(made) == S_IFLNK { throw ShannonFolderHostRefusal(.linkRefused) }
             guard Self.kind(made) == S_IFDIR, !Self.isPackage(current) else { throw ShannonFolderHostRefusal(.notAFolder) }
+            let next = openat(parent, segment, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard next >= 0 else { throw errno == ENOTDIR ? ShannonFolderHostRefusal(.notAFolder) : Self.refusal(errno: errno) }
+            close(parent)
+            parent = next
         }
         guard let real = Self.realPath(current), Self.isInside(real, root: path) else { throw ShannonFolderHostRefusal(.outsideFolder) }
+    }
+
+    // MARK: No link anywhere
+
+    /// Her folder's path is real (`init` resolves it), so a link anywhere below it is another program's doing, perhaps made
+    /// after the check: every call that writes refuses a link in any part of its path, not only the last (`O_NOFOLLOW_ANY`,
+    /// `RENAME_NOFOLLOW_ANY`, both since macOS 11; the app needs 14). A system that did not know a flag would fail the call
+    /// (`EINVAL`), which is refused like any failure; a call is never repeated without them.
+    static let openNoLink = O_NOFOLLOW_ANY
+    static let renameNoLink = UInt32(RENAME_NOFOLLOW_ANY)
+
+    /// A folder opened for `…at` calls, with no link anywhere in its path.
+    static func openFolder(_ path: String) throws(ShannonFolderHostRefusal) -> Int32 {
+        let descriptor = open(path, O_RDONLY | O_DIRECTORY | openNoLink | O_CLOEXEC)
+        guard descriptor >= 0 else { throw errno == ENOTDIR ? ShannonFolderHostRefusal(.notAFolder) : refusal(errno: errno) }
+        return descriptor
+    }
+
+    /// A failed call: a link met on the way (`ELOOP`) is `link_refused`, something already there `already_exists`.
+    static func refusal(errno code: Int32) -> ShannonFolderHostRefusal {
+        switch code {
+        case ELOOP: ShannonFolderHostRefusal(.linkRefused)
+        case EEXIST: ShannonFolderHostRefusal(.alreadyExists)
+        default: ShannonFolderHostRefusal(.ioError, outcome: .failed)
+        }
     }
 
     /// Files and bytes outside `.shannon` (links not followed, not counted). Stops counting once past the file total.
@@ -245,11 +280,33 @@ extension ShannonFolderHostRoot {
 
     /// Moves a file or a folder into `.shannon/trash/<time>_<path flattened>` and returns that relative location.
     func trash(_ absolute: String, relative: String, now: Date) throws(ShannonFolderHostRefusal) -> String {
-        let fence = path + "/" + ShannonFolderHostLimits.protectedFolder
-        let trash = fence + "/trash"
-        if mkdir(trash, 0o755) != 0, errno != EEXIST { throw ShannonFolderHostRefusal(.ioError, outcome: .failed) }
-        guard let folder = Self.lstatOf(fence), Self.kind(folder) == S_IFDIR,
-              let made = Self.lstatOf(trash), Self.kind(made) == S_IFDIR else { throw ShannonFolderHostRefusal(.ioError, outcome: .failed) }
+        let trash = try openTrash()
+        defer { close(trash) }
+        for name in Self.trashNames(relative, now: now) {
+            if renameatx_np(AT_FDCWD, absolute, trash, name, UInt32(RENAME_EXCL) | Self.renameNoLink) == 0 {
+                return ShannonFolderHostLimits.protectedFolder + "/trash/" + name
+            }
+            guard errno == EEXIST else { throw Self.refusal(errno: errno) }
+        }
+        throw ShannonFolderHostRefusal(.ioError, outcome: .failed)
+    }
+
+    /// `.shannon/trash`, made if missing, opened as a real folder (no link anywhere on the way).
+    func openTrash() throws(ShannonFolderHostRefusal) -> Int32 {
+        let fence = try Self.openFolder(path + "/" + ShannonFolderHostLimits.protectedFolder)
+        defer { close(fence) }
+        if mkdirat(fence, "trash", 0o755) != 0, errno != EEXIST { throw Self.refusal(errno: errno) }
+        var made = stat()
+        guard fstatat(fence, "trash", &made, AT_SYMLINK_NOFOLLOW) == 0 else { throw Self.refusal(errno: errno) }
+        // `openat` with `O_NOFOLLOW | O_DIRECTORY` says only 「not a folder」 for a link: the link is named first.
+        if Self.kind(made) == S_IFLNK { throw ShannonFolderHostRefusal(.linkRefused) }
+        let trash = openat(fence, "trash", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard trash >= 0 else { throw errno == ENOTDIR ? ShannonFolderHostRefusal(.linkRefused) : Self.refusal(errno: errno) }
+        return trash
+    }
+
+    /// The names a trashed entry may take, in order: `<time>_<path flattened>`, then with a number when two would meet.
+    static func trashNames(_ relative: String, now: Date) -> [String] {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(identifier: "UTC")
@@ -258,14 +315,7 @@ extension ShannonFolderHostRoot {
         var flat = relative.replacingOccurrences(of: "/", with: "_")
         // A name of at most 200 bytes, keeping the end (the extension) of a long path.
         while flat.utf8.count > 200 { flat.removeFirst() }
-        for attempt in 1...100 {
-            let name = attempt == 1 ? "\(stamp)_\(flat)" : "\(stamp)-\(attempt)_\(flat)"
-            if renamex_np(absolute, trash + "/" + name, UInt32(RENAME_EXCL)) == 0 {
-                return ShannonFolderHostLimits.protectedFolder + "/trash/" + name
-            }
-            guard errno == EEXIST else { throw ShannonFolderHostRefusal(.ioError, outcome: .failed) }
-        }
-        throw ShannonFolderHostRefusal(.ioError, outcome: .failed)
+        return (1...100).map { $0 == 1 ? "\(stamp)_\(flat)" : "\(stamp)-\($0)_\(flat)" }
     }
 }
 #endif

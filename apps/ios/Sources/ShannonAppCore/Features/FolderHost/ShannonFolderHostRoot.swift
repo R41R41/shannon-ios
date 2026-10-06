@@ -6,7 +6,8 @@ import Foundation
 /// the device's to check). Every path the server sends is spelled-checked again, then walked segment by segment with
 /// `lstat`: a link anywhere is refused, `.shannon` in any spelling the disk resolves to it is refused, a package
 /// (a bundle Finder shows as one file) is never entered, and the real path must stay inside the real folder. Files are
-/// opened with `O_NOFOLLOW`, must still be the file that was checked, and must have no other hard link.
+/// opened with `O_NOFOLLOW_ANY` (no link in any part of the path), must still be the file that was checked, and must have
+/// no other hard link.
 public struct ShannonFolderHostRoot: Sendable {
     /// The folder's real path.
     public let path: String
@@ -64,7 +65,7 @@ public struct ShannonFolderHostRoot: Sendable {
 
     /// The bytes of a located regular file, opened without following a link and checked to be the same file. At most `limit`.
     public func readFile(_ located: Located, limit: Int) throws(ShannonFolderHostRefusal) -> [UInt8] {
-        let descriptor = open(located.absolute, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        let descriptor = open(located.absolute, O_RDONLY | Self.openNoLink | O_NONBLOCK | O_CLOEXEC)
         guard descriptor >= 0 else {
             let link = errno == ELOOP
             throw ShannonFolderHostRefusal(link ? .linkRefused : .ioError, outcome: link ? .refused : .failed)
