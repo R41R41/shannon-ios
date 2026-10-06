@@ -30,6 +30,8 @@ import { prepareStep } from '../src/autonomyLoopSteps.js';
 
 const scope = 'owner';
 const STORY = `雨の日の図書館で、だれも借りない本が一冊だけ光っていた。${'ページをめくる音が、静かな部屋に少しずつ広がっていく。'.repeat(4)}`;
+/** With others present a conversation's call carries what of the owner's must not be shown; here nothing is (`aetherAudience.test.ts` tests it). */
+const NOTHING_PRIVATE = Object.freeze({ withheld: { carries: () => false }, guarded: { carries: () => false }, openOnly: false });
 const servers: FakeAether[] = [];
 const directories: string[] = [];
 afterEach(async () => {
@@ -49,7 +51,7 @@ async function harness(options: { aether?: boolean; proposals?: boolean } = {}) 
   const service = new ShannonAutonomyService({ store, config: configuredAutonomy({}), now: () => clock.at, aether: { access, proposals } });
   const memory = toolSessionMemory('thread-1\nお願い');
   const call = (name: string, input: unknown, audience: ToolAudience = 'owner_alone', surface: ToolSurface = 'text') =>
-    service.tools.call(name, JSON.stringify(input), { scopeKey: scope, surface, audience, memory });
+    service.tools.call(name, JSON.stringify(input), { scopeKey: scope, surface, audience, memory, ...(audience === 'others' ? { othersText: NOTHING_PRIVATE } : {}) });
   const api = createLocalApiKernel(() => clock.at, { autonomy: service });
   const get = (path: string) => api.dispatch({ method: 'GET', path, query: new URLSearchParams({ scopeKey: scope }) });
   const post = (path: string, body: Record<string, unknown>) => api.dispatch({ method: 'POST', path, body: { scopeKey: scope, ...body } });

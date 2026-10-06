@@ -85,12 +85,12 @@ export function gatedAether(access: AetherAccess, context: Pick<ToolCallContext,
 
 /**
  * An Aether reading call in a conversation with anyone else present: its result as the model may see it there, without
- * what the owner told her alone (`resultForOthers`, `aetherShownText.ts`). A call without the check (`othersText`
- * absent: the owner alone, her own time) is returned as it is.
+ * what the owner told her alone (`resultForOthers`, `aetherShownText.ts`). A check that is missing is one that could not
+ * be read: nothing read is given (fail closed). The owner alone and her own time are returned as they are.
  */
 export function shownAetherCall(tool: ShannonToolDefinition, prepared: PreparedToolCall, context: Pick<ToolExecutionContext, 'audience' | 'surface' | 'othersText'>): PreparedToolCall {
-  const check = context.othersText;
-  if (!tool.name.startsWith('aether') || tool.effect !== 'read' || context.audience !== 'others' || context.surface === 'autonomy' || check === undefined) return prepared;
+  const check = context.othersText ?? null;
+  if (!tool.name.startsWith('aether') || tool.effect !== 'read' || context.audience !== 'others' || context.surface === 'autonomy') return prepared;
   return { ...prepared, run: async signal => {
     const run = await prepared.run(signal);
     return { ...run, result: resultForOthers(run.result, check) };

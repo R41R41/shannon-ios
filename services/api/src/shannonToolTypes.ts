@@ -56,8 +56,8 @@ export interface ToolExecutionContext extends ToolCallContext {
   aether?: AetherAccess;
   /**
    * In a conversation with anyone else present: what of the owner's must not reach the model from what she reads of Aether
-   * (`aetherShownText.ts`, applied by the gate's `shownAetherCall`); `null` when it could not be read, and nothing read is
-   * then given. Absent with the owner alone and in her own time.
+   * (`aetherShownText.ts`, applied by the gate's `shownAetherCall`); `null` or absent there: it could not be read, and
+   * nothing read is given. Not used with the owner alone or in her own time.
    */
   othersText?: OthersTextCheck | null;
 }

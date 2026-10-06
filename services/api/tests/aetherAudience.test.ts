@@ -139,12 +139,20 @@ describe('what she reads of her folder in front of others', () => {
     }
   });
 
-  it('gives nothing read while the check cannot be read, and nothing of a text whose secret runs across sentences', async () => {
-    const { turn, note, server } = await harness();
+  it('gives nothing read while the check cannot be read or is missing, and nothing of a text whose secret runs across sentences', async () => {
+    const { turn, note, server, service, contexts } = await harness();
     vi.spyOn(server, 'othersText').mockImplementation(() => null);
     const unreadable = await result(turn('guests', 'text', true).tools, 'aether_read', { documentId: note.id });
     expect(unreadable).toMatchObject({ ok: false, failure: 'unavailable' });
     expect(unreadable.text).not.toContain('灯台');
+
+    // A server that cannot say what must not be shown (no `othersText`) is one whose check could not be read.
+    const partial: Partial<ConversationToolServer> = { audience: server.audience, secrets: server.secrets, now: () => at };
+    const offered = conversationTools(service, scope, 'text', 'others', partial, 'thread\nシャノンのフォルダの灯台のメモを読んで', new TurnDeadline(TEXT_TURN_DEADLINE));
+    const missing = await result(offered.tools, 'aether_read', { documentId: note.id });
+    expect(missing).toMatchObject({ ok: false, failure: 'unavailable' });
+    expect(missing.text).not.toContain('灯台');
+    expect(contexts.at(-1)).toMatchObject({ audience: 'others', othersText: null });
 
     const check = { ...othersSecrets(state as never, { experienceCandidates: () => [] }, scope), openOnly: true };
     expect(textForOthers('灯台の光。紅茶が好きで毎朝ダージリンを飲む。', check)).toBe('灯台の光。紅茶が好きで毎朝ダージリンを飲む。');

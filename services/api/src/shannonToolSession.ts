@@ -105,7 +105,7 @@ export function conversationTools(
       if (!check) { try { check = server.secrets?.(scopeKey); } catch { check = null; } }
       const secrets = check;
       // With anyone else present: what of the owner's must not reach the model from what she reads, read the same way.
-      if (othersPresent && !others) { try { others = server.othersText?.(scopeKey, options.openOnly === true); } catch { others = null; } }
+      if (othersPresent && !others) { try { others = server.othersText?.(scopeKey, options.openOnly === true) ?? null; } catch { others = null; } }
       const result = await runner.call(tool?.name ?? providerName.slice(0, 80), argumentsJson, {
         scopeKey, surface, audience, memory, threadId, ...(secrets !== undefined ? { secrets } : {}), ...(others !== undefined ? { othersText: others } : {}),
         ...(timeMilliseconds !== undefined ? { timeMilliseconds } : {}),
