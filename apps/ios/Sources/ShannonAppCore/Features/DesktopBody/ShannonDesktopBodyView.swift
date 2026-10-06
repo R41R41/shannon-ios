@@ -17,25 +17,29 @@ struct ShannonDesktopBodyView: View {
     private static let layout = ShannonLive2DLayout(mode: .full, contained: true)
 
     var body: some View {
-        GeometryReader { geometry in
-            let stageHeight = ShannonDesktopBodyGeometry.stageRect(in: geometry.size, scale: model.scale).height
-            VStack(spacing: 0) {
-                words(width: geometry.size.width)
-                    .frame(width: geometry.size.width, height: max(0, geometry.size.height - stageHeight), alignment: .bottom)
-                ZStack(alignment: .bottom) {
-                    if !showsLive2D {
-                        ShannonWaterlightEyeView(expression: .calm, size: min(geometry.size.width * 0.5, stageHeight * 0.4), allowsTracking: false)
-                            .frame(maxHeight: .infinity)
-                    }
-                    // Only while she is shown: a hidden window gives the figure back to the app's other places.
-                    if model.isShown, ShannonLive2DStage.isAvailable {
-                        ShannonLive2DHostView(hostID: hostID, priority: .desktop, layout: Self.layout, touchEnabled: true)
-                            .opacity(showsLive2D ? 1 : 0)
-                    }
-                    cameraMark
+        // Sized from her scale, not read from a GeometryReader around the Live2D host (see DesktopWidthAdaptive):
+        // her window is made at this size (`ShannonDesktopBodyGeometry.windowSize`), and when a display is too
+        // low for it the stage keeps its height first and her words take what is left.
+        let scale = ShannonDesktopBodyGeometry.clampScale(model.scale)
+        let width = max(ShannonDesktopBodyGeometry.minimumWidth, (ShannonDesktopBodyGeometry.baseWidth * scale).rounded())
+        let stageHeight = (ShannonDesktopBodyGeometry.stageHeight * scale).rounded()
+        VStack(spacing: 0) {
+            words(width: width)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            ZStack(alignment: .bottom) {
+                if !showsLive2D {
+                    ShannonWaterlightEyeView(expression: .calm, size: min(width * 0.5, stageHeight * 0.4), allowsTracking: false)
+                        .frame(maxHeight: .infinity)
                 }
-                .frame(width: geometry.size.width, height: stageHeight)
+                // Only while she is shown: a hidden window gives the figure back to the app's other places.
+                if model.isShown, ShannonLive2DStage.isAvailable {
+                    ShannonLive2DHostView(hostID: hostID, priority: .desktop, layout: Self.layout, touchEnabled: true)
+                        .opacity(showsLive2D ? 1 : 0)
+                }
+                cameraMark
             }
+            .frame(maxWidth: .infinity, maxHeight: stageHeight)
+            .layoutPriority(1)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(ShannonGeneratedStrings.desktopBodyFigure)

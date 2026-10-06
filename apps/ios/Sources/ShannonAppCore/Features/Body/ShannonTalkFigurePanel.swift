@@ -19,6 +19,8 @@ public struct ShannonTalkFigurePanel: View {
     @AppStorage(ShannonBodyPreference.layoutModeKey) private var layoutModeRawValue = ShannonLive2DLayout.Mode.full.rawValue
     @State private var activity: ShannonDialogueActivity = .idle
     @State private var waterlightReaction = 0
+    /// The figure's size, read beside it: no GeometryReader pins a frame inside the Mac's inspector (DesktopWidthAdaptive).
+    @State private var figureSize = CGSize.zero
     @Environment(ShannonBodyModel.self) private var bodyModel: ShannonBodyModel?
     @Environment(\.colorScheme) private var colorScheme
 
@@ -113,20 +115,21 @@ public struct ShannonTalkFigurePanel: View {
         if usesLive2D {
             ShannonDialogueFigure(face: face, activity: shownActivity)
         } else {
-            GeometryReader { geometry in
-                Button {
-                    waterlightReaction &+= 1
-                } label: {
-                    ShannonWaterlightEyeView(
-                        expression: face.expression, activity: shownActivity,
-                        size: min(geometry.size.width * 0.72, geometry.size.height * 0.8, 280),
-                        reactionTrigger: waterlightReaction, feeling: face.feeling
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(face.accessibilityDescription)
-                .accessibilityHint("触れると表情が変わります")
-                .frame(width: geometry.size.width, height: geometry.size.height)
+            Button {
+                waterlightReaction &+= 1
+            } label: {
+                ShannonWaterlightEyeView(
+                    expression: face.expression, activity: shownActivity,
+                    size: min(figureSize.width * 0.72, figureSize.height * 0.8, 280),
+                    reactionTrigger: waterlightReaction, feeling: face.feeling
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(face.accessibilityDescription)
+            .accessibilityHint("触れると表情が変わります")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                if size != figureSize { figureSize = size }
             }
         }
     }

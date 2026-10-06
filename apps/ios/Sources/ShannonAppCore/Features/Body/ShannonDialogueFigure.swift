@@ -12,6 +12,9 @@ struct ShannonDialogueFigure: View {
 
     @AppStorage(ShannonBodyPreference.layoutModeKey) private var layoutModeRawValue = ShannonLive2DLayout.Mode.full.rawValue
     @State private var hostID = UUID()
+    /// Her stage's size, read beside it. A GeometryReader that pinned a frame around the Live2D host fought AppKit's
+    /// constraints in the Mac's inspector (TestFlight build 145, DesktopWidthAdaptive); the stage simply fills.
+    @State private var stageSize = CGSize.zero
     @Environment(ShannonBodyModel.self) private var bodyModel: ShannonBodyModel?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -31,37 +34,38 @@ struct ShannonDialogueFigure: View {
 
     var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
-        GeometryReader { geometry in
-            ZStack {
-                if !showsLive2D {
-                    ShannonWaterlightEyeView(
-                        expression: face.expression, activity: activity,
-                        size: min(geometry.size.width * 0.62, geometry.size.height * 0.8, 260), feeling: face.feeling
-                    )
-                    .transition(.opacity)
-                }
-                if ShannonLive2DStage.isAvailable {
-                    ShannonLive2DFigure(
-                        hostID: hostID, priority: .dialogue, layout: layout, touchEnabled: true, face: face, activity: activity,
-                        isShowing: showsLive2D,
-                        onLayoutChange: { bodyModel?.figureAdjustment = $0 },
-                        directTouch: true,
-                        onAdjust: { larger in
-                            bodyModel?.figureAdjustment = adjustment.adjusted(scaleBy: larger ? 1.25 : 0.8, movedBy: .zero, in: geometry.size)
-                        }
-                    )
-                }
+        ZStack {
+            if !showsLive2D {
+                ShannonWaterlightEyeView(
+                    expression: face.expression, activity: activity,
+                    size: min(stageSize.width * 0.62, stageSize.height * 0.8, 260), feeling: face.feeling
+                )
+                .transition(.opacity)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: showsLive2D)
-            .overlay(alignment: .top) {
-                if showsLive2D {
-                    ShannonBodyLineBubble(maxWidth: min(340, geometry.size.width - 2 * ShannonSpacing.large))
-                        .padding(.top, ShannonSpacing.small)
-                }
+            if ShannonLive2DStage.isAvailable {
+                ShannonLive2DFigure(
+                    hostID: hostID, priority: .dialogue, layout: layout, touchEnabled: true, face: face, activity: activity,
+                    isShowing: showsLive2D,
+                    onLayoutChange: { bodyModel?.figureAdjustment = $0 },
+                    directTouch: true,
+                    onAdjust: { larger in
+                        bodyModel?.figureAdjustment = adjustment.adjusted(scaleBy: larger ? 1.25 : 0.8, movedBy: .zero, in: stageSize)
+                    }
+                )
             }
-            .overlay(alignment: .bottom) { status(palette) }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+            if size != stageSize { stageSize = size }
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: showsLive2D)
+        .overlay(alignment: .top) {
+            if showsLive2D {
+                ShannonBodyLineBubble(maxWidth: max(0, min(340, stageSize.width - 2 * ShannonSpacing.large)))
+                    .padding(.top, ShannonSpacing.small)
+            }
+        }
+        .overlay(alignment: .bottom) { status(palette) }
 #if DEBUG
         .onAppear { if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewBodyStats") { stage.setFrameStats(true) } }
         .onDisappear { stage.setFrameStats(false) }

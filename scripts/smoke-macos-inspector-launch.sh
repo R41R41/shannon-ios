@@ -27,6 +27,21 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# A locked screen opens no window and runs no display cycle, so every case would pass without being tried.
+if ioreg -n Root -d1 2>/dev/null | grep -q '"CGSSessionScreenIsLocked"=Yes'; then
+  echo "The screen is locked: the launch smoke needs an unlocked session (no window opens otherwise)." >&2
+  exit 3
+fi
+
+# Counts the on-screen windows of a process, so that a case where the window never opened fails.
+cat >"$temporary_directory/window-count.swift" <<'SWIFT'
+import CoreGraphics
+let pid = Int(CommandLine.arguments[1]) ?? 0
+let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+print(windows.filter { ($0[kCGWindowOwnerPID as String] as? Int) == pid && ($0[kCGWindowLayer as String] as? Int) == 0 }.count)
+SWIFT
+swiftc -O -o "$temporary_directory/window-count" "$temporary_directory/window-count.swift"
+
 # The window of TestFlight build 145 that crashed at launch (2026-10-06): the default 1220 × 790 frame,
 # the inspector restored beside 開発, where the sidebar (252) and the inspector (286) overlap the detail.
 window_frame="94 30 1220 790 0 0 1408 851 "
@@ -64,9 +79,15 @@ run_case() {
     fi
   done
 
+  local windows
+  windows="$("$temporary_directory/window-count" "$app_pid")"
   kill -TERM "$app_pid"
   wait "$app_pid" 2>/dev/null || true
   app_pid=""
+  if [[ "$windows" -lt 1 ]]; then
+    echo "ShannonDesk opened no window for the restored $label inspector smoke; the case was not tried." >&2
+    return 1
+  fi
 
   if grep -q "uncaught exception\|Update Constraints in Window" "$output"; then
     echo "ShannonDesk reported an AppKit constraint exception for the restored $label inspector." >&2
@@ -75,7 +96,7 @@ run_case() {
   fi
 }
 
-cases=(development/task development/outline release/task work/task talk/task talk/outline)
+cases=(development/task development/outline release/task work/task talk/task talk/outline talk/figure)
 for item in "${cases[@]}"; do
   run_case "${item%%/*}" "${item##*/}"
 done
