@@ -139,7 +139,7 @@ final class ShannonDesktopBodyTests: XCTestCase {
                 XCTAssertFalse(ShannonDesktopBodyGrip.mayCarry(at: point(u, v), stage: stage, body: .human, pageShown: true), "\(part?.rawValue ?? "nothing") at \(scale)")
             }
             // Her forehead and her boots pick her up.
-            for (part, u, v) in [(ShannonLive2DTouch.Part.face, -0.004, 0.129), (.other, -0.04, 0.86), (.other, 0.06, 0.86), (.other, -0.02, 0.90)] {
+            for (part, u, v) in [(ShannonLive2DTouch.Part.face, -0.004, 0.129), (.face, -0.001, 0.186), (.other, -0.04, 0.86), (.other, 0.06, 0.86), (.other, -0.02, 0.90)] {
                 XCTAssertEqual(ShannonDesktopBodyGrip.part(at: point(u, v), stage: stage, body: .human), part, "\(part.rawValue) at \(scale)")
                 XCTAssertTrue(ShannonDesktopBodyGrip.mayCarry(at: point(u, v), stage: stage, body: .human, pageShown: true))
             }
