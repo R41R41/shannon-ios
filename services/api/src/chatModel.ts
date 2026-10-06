@@ -458,6 +458,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
         include: ['web_search_call.action.sources'],
         max_tool_calls: complex ? 3 : 2,
       } : {}),
+      // Voice still asks for one call at a time (ADR-0003 stage 5 widens stage 4 to voice once its speed is measured).
       ...(tools ? { tools: providerFunctionTools(tools.definitions), tool_choice: 'auto', parallel_tool_calls: false } : {}),
       store: false,
       prompt_cache_key: stableScopeIdentifier(request.scopeKey),
