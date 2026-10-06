@@ -224,6 +224,20 @@ final class ShannonStreamOutputTests: XCTestCase {
         XCTAssertEqual(output.state, .failed(ShannonGeneratedStrings.desktopStreamUnavailable))
     }
 
+    @MainActor
+    func testTheMenuBarItemHasTheSwitchAndTheAddressOnlyWhileItIsOut() {
+        let menuBar = ShannonDesktopMenuBar()
+        menuBar.makesStatusItem = false
+        let body = ShannonDesktopBody()
+        body.streamOutput = ShannonStreamOutput(defaults: UserDefaults(suiteName: "stream-output-\(UUID().uuidString)")!, port: 0)
+        menuBar.register(ShannonDesktopBodyMenuSection(body: body, menuBar: menuBar))
+        let items = menuBar.currentItems()
+        let stream = items.first { $0.title == ShannonGeneratedStrings.desktopStreamTitle }
+        XCTAssertEqual(stream?.state, .off)
+        XCTAssertFalse(items.contains { $0.title == ShannonGeneratedStrings.desktopStreamCopyURL })
+        withExtendedLifetime(body) {}
+    }
+
     // MARK: Over a socket
 
     @MainActor
