@@ -1,9 +1,9 @@
 import SwiftUI
-#if canImport(UIKit)
+// The iPhone's dialogue display. The Mac shows its own Talk, and this stage pins frames with a GeometryReader
+// around the Live2D host, which the Mac must not do (scripts/check-architecture.mjs), so it is iPhone-only.
+#if os(iOS)
 import UIKit
-#elseif canImport(AppKit)
-import AppKit
-#endif
+
 extension ShannonConversationView {
     /// The dialogue display is where her figure lives (decision 2026-10-03: からだ is a display of Talk).
     /// The Live2D form: her figure on top, large and touchable in place, the line of what she feels and
@@ -257,3 +257,4 @@ extension ShannonConversationView {
         }
     }
 }
+#endif

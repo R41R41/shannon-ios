@@ -164,12 +164,8 @@ function macCompiledCode(code) {
   }).join('\n');
 }
 
-// Compiled for the Mac but never shown there: ShannonConversationView is the iPhone app's root.
-const iPhoneOnlyScreens = new Set([
-  'apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Dialogue.swift',
-]);
-const macCompiledSwift = swiftFiles.filter(path => !iPhoneOnlyScreens.has(projectPath(path)) && (
-  projectPath(path).startsWith('apps/macos-app/') || projectPath(path).startsWith('apps/ios/Sources/ShannonAppCore/')));
+const macCompiledSwift = swiftFiles.filter(path =>
+  projectPath(path).startsWith('apps/macos-app/') || projectPath(path).startsWith('apps/ios/Sources/ShannonAppCore/'));
 for (const path of macCompiledSwift) {
   const code = macCompiledCode(swiftCode(source(path)));
   const lineOf = offset => code.slice(0, offset).split('\n').length;
