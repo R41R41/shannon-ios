@@ -223,6 +223,18 @@ describe('the request path with a real record (deferred, as in production)', () 
     expect(w.speaker.calls).toHaveLength(1);
   });
 
+  it('does not learn a stance whose touch the owner had her forget before the write ran', async () => {
+    const w = await deferredWorld();
+    w.speaker.decision = { say: false, text: '', feeling: 'annoyed', stance: 'dislike' };
+    await w.send('POST', '/v1/body/reactions', { id: 'forgotten-1', touch: { type: 'poke', durationMs: 300, ongoing: false, part: 'neck', region: 'body', gesture: 'poke' }, audience: 'owner', occurredAt: w.clock.at });
+    const burst = w.reactionStore.burstOfTouch(scope, 'forgotten-1')!;
+    w.stateStore.apply(scope, { type: 'memory-control-upserted', control: {
+      memoryId: burst.id, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: w.clock.at, changeReason: 'ライ氏が忘れてと言った',
+    } });
+    w.flush();
+    expect(w.rows()).toHaveLength(0);
+  });
+
   it('takes concurrent touches each once, with her own stance each, and records them all after the caller', async () => {
     const w = await deferredWorld();
     w.speaker.delayMilliseconds = 20;
@@ -298,6 +310,21 @@ describe('what she is told and what she remembers', () => {
     expect(w.state().expressiveEmotion?.primary).toBe('surprised');
     expect(w.state().expressiveEmotion?.cause).toContain('なでられた');
     expect(w.memories.at(-1)!.summary).not.toContain('もらった');
+  });
+
+  it('neither learns nor rewrites the memory of a touch forgotten while she was deciding', async () => {
+    const w = await world();
+    w.speaker.script = () => {
+      const burst = w.reactionStore.burstOfTouch(scope, 'touch-1')!;
+      w.stateStore.apply(scope, { type: 'memory-control-upserted', control: {
+        memoryId: burst.id, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: w.clock.at, changeReason: 'ライ氏が忘れてと言った',
+      } });
+      return { say: false, text: '', feeling: 'indignant', stance: 'refuse' };
+    };
+    await w.said({ type: 'poke', part: 'neck', region: 'body', gesture: 'poke' });
+    expect(w.rows()).toHaveLength(0);
+    // Written once when the touch arrived, never rewritten after it was forgotten.
+    expect(w.memories).toHaveLength(1);
   });
 
   it('keeps the touched part in the memory of the touch', async () => {

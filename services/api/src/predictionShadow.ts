@@ -219,9 +219,12 @@ export class PredictionShadow implements AutonomyPredictionTap {
   /**
    * Stage 2: learns a stance she gave, after the caller (`defer`), as every other tap does: the daily maintenance, the write
    * lock and the insert never run in the touch's request. Her feeling has already moved by the error read before it.
+   * `remembered` is asked when the write runs: a source the owner had her forget meanwhile (while the model was deciding)
+   * is not written, so it never feeds a prediction until the daily reconciliation.
    */
-  learnLater(scopeKey: string, draft: PredictionOutcomeDraft, state: CompanionStateSnapshot): void {
+  learnLater(scopeKey: string, draft: PredictionOutcomeDraft, state: CompanionStateSnapshot, remembered: () => boolean = () => true): void {
     this.later(() => {
+      if (!remembered()) return;
       this.maintain(scopeKey, draft.observedAt, state);
       this.within(scopeKey, () => { this.log(outcomeLine(draft.domain, draft.key, this.record(scopeKey, draft), null)); });
     });

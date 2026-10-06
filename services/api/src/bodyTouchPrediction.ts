@@ -103,10 +103,13 @@ export class TouchPredictions {
    * A stance she gave: felt now against what she expects at this moment (a read), and learned as the outcome of the key
    * after the caller (`learnLater`): no write in the touch's request.
    */
-  learn(scopeKey: string, prediction: TouchPrediction, burstId: string, stance: number, at: string, state: CompanionStateSnapshot): ShannonTouchOutcome {
+  learn(
+    scopeKey: string, prediction: TouchPrediction, burstId: string, stance: number, at: string, state: CompanionStateSnapshot,
+    remembered: () => boolean,
+  ): ShannonTouchOutcome {
     const now = this.record.predict(scopeKey, { domain: BODY_STANCE_DOMAIN, key: prediction.key, at: Date.parse(at), context: prediction.context });
     const outcome = this.felt(now ? { ...prediction, expectation: now.expectation, uncertainty: now.uncertainty, noise: now.noise } : prediction, stance);
-    this.record.learnLater(scopeKey, outcome_(prediction, burstId, stance, at), state);
+    this.record.learnLater(scopeKey, outcome_(prediction, burstId, stance, at), state, remembered);
     return outcome;
   }
 

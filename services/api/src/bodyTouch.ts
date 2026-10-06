@@ -151,7 +151,9 @@ export class BodyTouches {
     const at = this.dependencies.now();
     const { stateStore } = this.dependencies;
     let outcome: ShannonTouchOutcome;
-    if (stance !== null) outcome = predictions.learn(scopeKey, prediction, felt.burst.id, stanceOutcome(stance), at, stateStore.snapshot(scopeKey));
+    // Asked when the deferred write runs: a burst the owner had her forget while she was deciding is not learned.
+    const stillRemembered = () => this.remembered(stateStore.snapshot(scopeKey), felt.burst.id);
+    if (stance !== null) outcome = predictions.learn(scopeKey, prediction, felt.burst.id, stanceOutcome(stance), at, stateStore.snapshot(scopeKey), stillRemembered);
     else {
       const carried = predictions.carried(scopeKey, prediction.key, at);
       if (carried === null) return null;
@@ -160,8 +162,9 @@ export class BodyTouches {
     const snapshot = stateStore.apply(scopeKey, { type: 'touch-appraised', outcome });
     predictions.compared(scopeKey, snapshot, at);
     // Her stance is known now: the memory of the burst is worded by it (favour only when she took it as welcome or fine).
+    // A burst the owner had her forget meanwhile keeps its memory as forgetting left it: it is not rewritten.
     const burst = this.dependencies.store.burst(scopeKey, felt.burst.id);
-    if (burst) this.remember(scopeKey, burst);
+    if (burst && this.remembered(snapshot, burst.id)) this.remember(scopeKey, burst);
     return { outcome, snapshot };
   }
 

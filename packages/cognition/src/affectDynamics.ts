@@ -59,7 +59,9 @@ export const SHANNON_AFFECT_DYNAMICS = Object.freeze({
   attractor: SHANNON_MOOD_BASELINE,
   /**
    * w_E, the expectation's weight, in the same units as w_δ: w_δ × (w_EV / w_RPE) = 0.35 / 0.80 of Rutledge et al.'s 2014
-   * fMRI experiment (z-scored happiness; as reported by Daswani & Leike 2015). 要確認 against the paper's own table. An
+   * fMRI experiment (z-scored happiness; as reported by Daswani & Leike 2015). 要確認 against the paper's own table, and 要確認
+   * the choice: for an outcome she did not choose (a touch) the certain-reward weight w_CR ≈ 0.52 (0.65 in w_δ units) is the
+   * closer analogue; 0.4375 is kept for now, inside the paper's range. An
    * expected good outcome holds her valence up, an expected bad one holds it down, while the error alone fades with habit.
    */
   expectationWeight: 0.35 / 0.8,
