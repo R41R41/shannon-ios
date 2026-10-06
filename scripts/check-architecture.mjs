@@ -134,6 +134,29 @@ for (const path of swiftFiles.filter(path => projectPath(path).startsWith('apps/
   }
 }
 
+// On macOS 26 the sidebar and the inspector float over the detail column and give it safe-area insets.
+// An HSplitView/VSplitView extends under them and pads its panes through AppKit constraints, and a
+// GeometryReader that sizes content to the visible width fought those constraints: with the inspector
+// restored at launch the window asked for another Update Constraints pass on every pass and threw
+// (TestFlight build 145, 2026-10-06). Panes are SwiftUI stacks, and a width is read with onGeometryChange
+// (DesktopWidthAdaptive); a GeometryReader stays only as the content of a background or overlay.
+// scripts/smoke-macos-inspector-launch.sh checks the running app.
+for (const path of swiftFiles) {
+  const lines = source(path).split('\n');
+  lines.forEach((line, index) => {
+    const code = line.replace(/\/\/.*$/u, '');
+    if (/\b[HV]SplitView\s*[{(]/u.test(code)) {
+      fail(`${projectPath(path)}:${index + 1} uses an AppKit split view inside SwiftUI; use an HStack/VStack of panes (DesktopWidthAdaptive)`);
+    }
+    if (projectPath(path).startsWith('apps/macos-app/') && /\bGeometryReader\s*\{/u.test(code)) {
+      const previous = lines.slice(0, index).reverse().find(candidate => candidate.trim()) ?? '';
+      if (!/\.(background|overlay)\s*(\(alignment:[^)]*\))?\s*\{\s*$/u.test(previous.trim())) {
+        fail(`${projectPath(path)}:${index + 1} sizes Mac content with a GeometryReader; read the width with onGeometryChange (DesktopWidthAdaptive)`);
+      }
+    }
+  });
+}
+
 const macProject = source(resolve(root, 'apps/macos-app/ShannonDesk.xcodeproj/project.pbxproj'));
 for (const path of filesBelow('apps/macos-app/ShannonDesk', new Set(['.swift']))) {
   if (!macProject.includes(basename(path))) fail(`${projectPath(path)} is missing from the generated Mac project`);

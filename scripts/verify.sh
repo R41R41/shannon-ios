@@ -88,7 +88,8 @@ case "$target" in
   cognition-eval) run_fast; run_cognition_eval ;;
   ios) run_fast; run_ios ;;
   app) run_fast; run_app ;;
-  mac) run_fast; run_macos_app ;;
+  # The restored-inspector launch smoke caught the build 145 launch crash; the Mac target runs it.
+  mac) run_fast; run_macos_launch_smoke ;;
   mac-smoke) run_fast; run_macos_launch_smoke ;;
   mac-release) run_release_macos_app ;;
   release) run_release_app ;;
