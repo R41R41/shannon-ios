@@ -12,6 +12,14 @@ enum ShannonStreamOutputHTTP {
     static let maximumHeadBytes = 8 * 1024
     /// At most this many pages may watch at once (OBS has one or two sources).
     static let maximumViewers = 8
+    /// At most this many requests read or answered at once (the page loads seven files); more are let go unanswered.
+    static let maximumConnections = 16
+    /// A request head must arrive within this many seconds.
+    static let requestSeconds = 10.0
+    /// A file must be taken within this many seconds (the largest, the model, is 27 MB over loopback).
+    static let answerSeconds = 60.0
+    /// A watching page that leaves more than this unread is let go (an event is well under 1 kB).
+    static let maximumBacklogBytes = 256 * 1024
 
     struct Request: Equatable, Sendable {
         let method: String

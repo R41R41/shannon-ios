@@ -283,6 +283,41 @@ final class ShannonStreamOutputTests: XCTestCase {
         XCTAssertTrue(released)
     }
 
+    func testRequestsInProgressAreCappedAndAWatchingPageIsNotOneOfThem() async throws {
+        let states = StateBox()
+        let server = ShannonStreamOutputServer(port: 0, files: files(), snapshot: .init()) { states.append($0) }
+        server.start()
+        defer { server.stop() }
+        let port = try await states.port()
+        // A page that watches leaves the requests' count.
+        let watcher = RawHTTP(port: port)
+        try await watcher.open()
+        defer { watcher.close() }
+        watcher.send("GET /events HTTP/1.1\r\nHost: 127.0.0.1:\(port)\r\n\r\n")
+        _ = try await watcher.read { $0.contains("retry: 1000") }
+        // Peers that connect and say nothing: at most the cap is held, the rest are let go.
+        var idle: [RawHTTP] = []
+        for _ in 0..<(ShannonStreamOutputHTTP.maximumConnections + 4) {
+            let peer = RawHTTP(port: port)
+            try await peer.open()
+            idle.append(peer)
+        }
+        var counts = await server.counts()
+        for _ in 0..<100 where counts.requests < ShannonStreamOutputHTTP.maximumConnections {
+            try await Task.sleep(for: .milliseconds(10))
+            counts = await server.counts()
+        }
+        XCTAssertEqual(counts.requests, ShannonStreamOutputHTTP.maximumConnections)
+        XCTAssertEqual(counts.viewers, 1)
+        idle.forEach { $0.close() }
+        for _ in 0..<200 where counts.requests > 0 {
+            try await Task.sleep(for: .milliseconds(10))
+            counts = await server.counts()
+        }
+        XCTAssertEqual(counts.requests, 0, "a peer that went away is forgotten")
+        XCTAssertEqual(counts.viewers, 1)
+    }
+
     @MainActor
     func testTurningItOffAndOnAgainWaitsForItsOldListenerAndTellsATakenPortApart() async throws {
         // A free port: one the system gives, let go again.

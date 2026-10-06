@@ -22,6 +22,10 @@ final class ShannonStreamOutputServer: @unchecked Sendable {
     private var listener: NWListener?
     private var boundPort: UInt16?
     private var viewers: [ObjectIdentifier: NWConnection] = [:]
+    /// Requests being read or answered (not watching pages), at most `maximumConnections`.
+    private var connections: [ObjectIdentifier: NWConnection] = [:]
+    /// Bytes handed to a watching page's connection and not yet taken by it.
+    private var backlog: [ObjectIdentifier: Int] = [:]
     private var snapshot: ShannonStreamOutputSnapshot
     private var keepAlive: DispatchSourceTimer?
     /// Connections that asked and are being answered (a long file, or a watching page): not cut after 10 seconds.
@@ -133,18 +137,35 @@ final class ShannonStreamOutputServer: @unchecked Sendable {
             connection.send(content: ShannonStreamOutputHTTP.lastChunk, isComplete: true, completion: .contentProcessed { _ in connection.cancel() })
         }
         viewers.removeAll()
+        backlog.removeAll()
+        connections.values.forEach { $0.cancel() }
+        connections.removeAll()
+        answered.removeAll()
     }
 
     private func accept(_ connection: NWConnection) {
-        guard !stopped, Self.isLoopback(connection.endpoint) else {
+        // Not this Mac, stopped, or too many requests at once: let go unanswered.
+        guard !stopped, Self.isLoopback(connection.endpoint),
+              connections.count < ShannonStreamOutputHTTP.maximumConnections else {
             connection.cancel()
             return
         }
+        let id = ObjectIdentifier(connection)
+        connections[id] = connection
+        connection.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .failed, .cancelled: self?.forget(id)
+            default: break
+            }
+        }
         connection.start(queue: queue)
-        // A peer that does not finish its request soon is let go.
-        queue.asyncAfter(deadline: .now() + 10) { [weak self, weak connection] in
-            guard let self, let connection, !self.answered.contains(ObjectIdentifier(connection)) else { return }
-            connection.cancel()
+        // A peer that does not finish its request soon is let go; so is a file that is not taken in time.
+        queue.asyncAfter(deadline: .now() + ShannonStreamOutputHTTP.requestSeconds) { [weak self] in
+            guard let self, !self.answered.contains(id) else { return }
+            self.connections[id]?.cancel()
+        }
+        queue.asyncAfter(deadline: .now() + ShannonStreamOutputHTTP.answerSeconds) { [weak self] in
+            self?.connections[id]?.cancel()
         }
         receive(connection, buffer: Data())
     }
@@ -166,7 +187,8 @@ final class ShannonStreamOutputServer: @unchecked Sendable {
     }
 
     private func answer(_ request: ShannonStreamOutputHTTP.Request, on connection: NWConnection) {
-        answered.insert(ObjectIdentifier(connection))
+        let id = ObjectIdentifier(connection)
+        answered.insert(id)
         switch ShannonStreamOutputHTTP.route(request, port: boundPort ?? requestedPort, files: files) {
         case let .refused(status):
             finish(connection, ShannonStreamOutputHTTP.refusal(status: status))
@@ -181,14 +203,9 @@ final class ShannonStreamOutputServer: @unchecked Sendable {
                 finish(connection, ShannonStreamOutputHTTP.refusal(status: 503))
                 return
             }
-            let id = ObjectIdentifier(connection)
+            // A watching page stays open: it is no longer one of the requests the limits above are for.
+            connections[id] = nil
             viewers[id] = connection
-            connection.stateUpdateHandler = { [weak self] state in
-                switch state {
-                case .failed, .cancelled: self?.drop(id)
-                default: break
-                }
-            }
             var opening = ShannonStreamOutputHTTP.chunk(ShannonStreamOutputHTTP.opening)
             for event in snapshot.opening {
                 if let data = ShannonStreamOutputHTTP.event(event.payload) { opening += ShannonStreamOutputHTTP.chunk(data) }
@@ -199,10 +216,7 @@ final class ShannonStreamOutputServer: @unchecked Sendable {
 
     private func finish(_ connection: NWConnection, _ data: Data) {
         // Completions run on `queue`, where the connection was started.
-        connection.send(content: data, isComplete: true, completion: .contentProcessed { [weak self] _ in
-            connection.cancel()
-            self?.answered.remove(ObjectIdentifier(connection))
-        })
+        connection.send(content: data, isComplete: true, completion: .contentProcessed { _ in connection.cancel() })
     }
 
     private func broadcast(_ event: Data) {
@@ -210,17 +224,41 @@ final class ShannonStreamOutputServer: @unchecked Sendable {
         for id in viewers.keys { send(chunk, to: id) }
     }
 
+    /// A page that does not take what it is sent (frozen, or gone without a word) is let go once its backlog passes the
+    /// bound; it connects again by itself (`retry`) and is told the state afresh.
     private func send(_ data: Data, to id: ObjectIdentifier) {
         guard let connection = viewers[id] else { return }
+        let waiting = (backlog[id] ?? 0) + data.count
+        guard waiting <= ShannonStreamOutputHTTP.maximumBacklogBytes else {
+            connection.cancel()
+            forget(id)
+            return
+        }
+        backlog[id] = waiting
         connection.send(content: data, completion: .contentProcessed { [weak self] error in
-            if error != nil { self?.drop(id) }
+            guard let self else { return }
+            if error != nil {
+                connection.cancel()
+                self.forget(id)
+            } else if let left = self.backlog[id] {
+                self.backlog[id] = max(0, left - data.count)
+            }
         })
     }
 
-    private func drop(_ id: ObjectIdentifier) {
+    /// A connection ended, however it ended.
+    private func forget(_ id: ObjectIdentifier) {
+        connections[id] = nil
+        viewers[id] = nil
+        backlog[id] = nil
         answered.remove(id)
-        guard let connection = viewers.removeValue(forKey: id) else { return }
-        connection.cancel()
+    }
+
+    /// For tests: requests in progress and watching pages.
+    func counts() async -> (requests: Int, viewers: Int) {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume(returning: (self.connections.count, self.viewers.count)) }
+        }
     }
 
     private func startKeepAlive() {
