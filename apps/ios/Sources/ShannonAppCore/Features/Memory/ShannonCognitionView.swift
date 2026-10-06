@@ -242,13 +242,9 @@ struct ShannonCognitiveIntentRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if work.totalPlanSteps > 0 {
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(palette.success.opacity(0.16))
-                        Capsule()
-                            .fill(palette.success)
-                            .frame(width: geometry.size.width * verifiedProgress(work))
-                    }
+                ZStack {
+                    Capsule().fill(palette.success.opacity(0.16))
+                    ShannonLeadingCapsule(fraction: verifiedProgress(work)).fill(palette.success)
                 }
                 .frame(height: 6)
                     .accessibilityLabel("検証済み作業の進捗")
@@ -339,5 +335,16 @@ struct ShannonCognitiveCycleRow: View {
         case "system": "gearshape"
         default: "text.bubble"
         }
+    }
+}
+
+/// A capsule over the leading `fraction` of its frame: a progress bar without a GeometryReader
+/// (scripts/check-architecture.mjs).
+private struct ShannonLeadingCapsule: Shape {
+    let fraction: Double
+
+    func path(in rect: CGRect) -> Path {
+        let width = rect.width * min(1, max(0, fraction))
+        return Capsule().path(in: CGRect(x: rect.minX, y: rect.minY, width: width, height: rect.height))
     }
 }
