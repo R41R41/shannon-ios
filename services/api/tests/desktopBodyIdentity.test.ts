@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { BODY_LIMITS } from '../src/bodyContract.js';
+import { BODY_LIMITS, BODY_TOUCH_EVENT_TYPES } from '../src/bodyContract.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { isFullBody } from '../src/bodyTouchOnly.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
@@ -203,6 +203,52 @@ describe('the Mac app and its desktop body', () => {
     // The Mac app reads no presence; for the Windows desktop and the Mac body alike the Mac call is elsewhere.
     expect((await h.presence(PC)).ownerCallElsewhere?.active).toBe(true);
     expect((await h.presence(MAC_BODY)).ownerCallElsewhere?.active).toBe(true);
+  });
+});
+
+describe('the Mac desktop body and touch vocabulary 2 (ADR-0005 phase 1a)', () => {
+  /** A touch unless it names another type: a touch gets a type and a duration it may override. */
+  const isTouch = (event: Record<string, unknown>) => event.type === undefined || BODY_TOUCH_EVENT_TYPES.some(type => type === event.type);
+  const touches = (deviceId: string, ...events: Record<string, unknown>[]) => (h: ReturnType<typeof harness>) =>
+    h.send('POST', '/v1/body/events', { events: events.map(event => ({ audience: 'owner', occurredAt: START, ...(isTouch(event) ? { type: 'pet', durationMs: 1_500 } : {}), ...event })) }, deviceId);
+
+  it('is told the vocabulary when it registers, and not when its registration is refused', async () => {
+    const h = harness();
+    const put = (body: Record<string, unknown>) => h.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], flags: {}, ...body }, MAC_BODY);
+    const refused = await put({ surface: 'mac', flags: { touchOnly: true } });
+    expect(refused.status).toBe(400);
+    expect(refused.body).not.toHaveProperty('touchVocabulary');
+    expect(await put({ surface: 'mac', flags: { camera: false } })).toMatchObject({ status: 200, body: { touchVocabulary: 2, surface: 'mac' } });
+    expect((await h.presence(MAC_BODY)).touchVocabulary).toBe(2);
+  });
+
+  it('takes its finer touches as a full body, drops a word outside the lists, and answers an impossible one not_a_touch', async () => {
+    const h = await registered();
+    const sent = await touches(MAC_BODY,
+      { id: 'm-hair', region: 'head', part: 'hair', side: 'left', gesture: 'stroke', input: 'hover', reflex: 'none' },
+      { id: 'm-neck', type: 'poke', region: 'body', part: 'neck', gesture: 'poke', input: 'press', reflex: 'flinch' },
+      { id: 'm-later', region: 'face', part: 'eyelash', gesture: 'nuzzle', input: 'press' },
+      { id: 'm-hover-chest', region: 'body', part: 'chest', gesture: 'stroke', input: 'hover' },
+      { id: 'm-call', type: 'callStarted' },
+    )(h);
+    expect(sent.status).toBe(200);
+    expect((sent.body as { results: unknown[] }).results).toEqual([
+      { id: 'm-hair', status: 'stored' }, { id: 'm-neck', status: 'stored' }, { id: 'm-later', status: 'stored' },
+      { id: 'm-hover-chest', status: 'ignored', reason: 'not_a_touch' }, { id: 'm-call', status: 'stored' },
+    ]);
+  });
+
+  it('the Mac app\'s touch-only figure keeps its touch-only rules with the finer fields', async () => {
+    const h = await registered();
+    const sent = await touches(MAC,
+      { id: 'a-cheek', region: 'face', part: 'cheek', side: 'right', gesture: 'stroke', input: 'press' },
+      { id: 'a-hold-skirt', type: 'holdHand', region: 'body', part: 'skirt', gesture: 'hold' },
+      { id: 'a-hidden', type: 'windowHidden' },
+    )(h);
+    expect((sent.body as { results: unknown[] }).results).toEqual([
+      { id: 'a-cheek', status: 'stored' }, { id: 'a-hold-skirt', status: 'ignored', reason: 'not_a_touch' },
+      { id: 'a-hidden', status: 'ignored', reason: 'touch_only' },
+    ]);
   });
 });
 
