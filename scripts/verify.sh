@@ -32,6 +32,10 @@ run_cognition_eval() {
 
 run_architecture() {
   "$node_bin" scripts/check-architecture.mjs
+  # The folder rules of the API sources (Syzygy ADR-0008 §6): report only until wave 5 of the layout, never failing on an
+  # entry of scripts/api-layers-baseline.json. The layout script and the check have tests of their own.
+  "$node_bin" --test scripts/check-api-layers.test.mjs scripts/layout/apply.test.mjs
+  "$node_bin" scripts/check-api-layers.mjs
 }
 
 run_product_spec() {

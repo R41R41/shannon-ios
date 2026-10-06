@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "about": "Folder rules of the API sources (Syzygy ADR-0008 §6), checked by scripts/check-api-layers.mjs on resolved import paths. Globs are relative to services/api/src: `*` is one path segment or part of one, `**` any number of segments. A component is mind/<c> (mind/action/<c> for actions), surfaces/<s>, integrations/<i>, infra/<x>, wiring, contracts, or the entry files at the root. Until wave 5 the check reports and never fails; today's violations are in scripts/api-layers-baseline.json, which may only shrink.",
+  "sourceRoot": "services/api/src",
+  "movesFile": "scripts/layout/moves.json",
+  "baselineFile": "scripts/api-layers-baseline.json",
+  "rules": [
+    {
+      "id": "entries-at-root",
+      "kind": "placement",
+      "description": "Only the entry files (moves.json `entries`: what a systemd unit, the Agent Host plist or a package.json script runs) live at the root of the API sources, and they stay there."
+    },
+    {
+      "id": "mind-via-ports",
+      "kind": "imports",
+      "description": "A part of the mind reaches another part only through that part's ports.ts.",
+      "from": ["mind/**"],
+      "to": ["mind/**"],
+      "crossComponent": true,
+      "toExcept": ["mind/*/ports.ts", "mind/action/*/ports.ts"]
+    },
+    {
+      "id": "sqlite-in-stores",
+      "kind": "imports",
+      "description": "Only a store/ folder, infra/sqlite and wiring open SQLite.",
+      "from": ["**"],
+      "fromExcept": ["**/store/**", "infra/sqlite/**", "wiring/**"],
+      "to": ["node:sqlite"]
+    },
+    {
+      "id": "surfaces-apart",
+      "kind": "imports",
+      "description": "A surface does not import another surface.",
+      "from": ["surfaces/**"],
+      "to": ["surfaces/**"],
+      "crossComponent": true
+    },
+    {
+      "id": "surfaces-without-stores",
+      "kind": "imports",
+      "description": "A surface is handed its stores by wiring; it imports no store of another component and not infra/sqlite (its own store/ folder is its own).",
+      "from": ["surfaces/**"],
+      "to": ["**/store/**", "infra/sqlite/**"],
+      "crossComponent": true
+    },
+    {
+      "id": "integrations-outside-mind",
+      "kind": "imports",
+      "description": "An integration does not import the mind, except a part's ports.ts (contracts/ is open to everyone).",
+      "from": ["integrations/**"],
+      "to": ["mind/**"],
+      "toExcept": ["mind/*/ports.ts", "mind/action/*/ports.ts"]
+    },
+    {
+      "id": "wiring-from-entries",
+      "kind": "imports",
+      "description": "Only the entry files and wiring itself import wiring.",
+      "from": ["**"],
+      "fromExcept": ["*.ts", "wiring/**"],
+      "to": ["wiring/**"]
+    },
+    {
+      "id": "environment-in-config",
+      "kind": "token",
+      "description": "process.env is read only in infra/config, wiring and the entry files (a ratchet: the baseline lists today's readers).",
+      "pattern": "\\bprocess\\.env\\b",
+      "allowIn": ["infra/config/**", "wiring/**", "*.ts"]
+    },
+    {
+      "id": "own-time-without-private-stores",
+      "kind": "imports",
+      "description": "Her own time (mind/action/ownTime) opens no conversation store (the companion store and its repositories), memory, recall, emotion, conversation model or conversational surface. The one reader of the owner's context, autonomyOwnerContext.ts, reads through the conversation's entry points and is the exception (AGENTS.md, Bounded autonomy).",
+      "from": ["mind/action/ownTime/**"],
+      "fromExcept": ["**/autonomyOwnerContext.ts"],
+      "to": ["mind/memory/**", "mind/recall/**", "mind/emotion/**", "infra/sqlite/sqliteStore.ts", "infra/sqlite/*Repository.ts", "infra/models/chatModel*.ts", "surfaces/text/**", "surfaces/voice/**", "wiring/**"]
+    },
+    {
+      "id": "owner-context-through-wiring",
+      "kind": "imports",
+      "description": "The owner's context reaches her own time in one way: the worker opens it through autonomyOwnerContextWiring.ts, which alone imports autonomyOwnerContext.ts.",
+      "from": ["**"],
+      "fromExcept": ["autonomyWorker.ts", "**/autonomyOwnerContextWiring.ts"],
+      "to": ["**/autonomyOwnerContextWiring.ts", "**/autonomyOwnerContext.ts"]
+    },
+    {
+      "id": "own-time-interface",
+      "kind": "imports",
+      "description": "The interface her loop is handed of the owner's context imports nothing but vocabulary.",
+      "from": ["**/autonomyLoopOwnerContext.ts"],
+      "only": ["@shannon/cognition"]
+    },
+    {
+      "id": "awake-clock-narrow",
+      "kind": "imports",
+      "description": "The awake clock (the one write of the loop's process to the companion state) imports its timing, the mood history and their contract, and nothing else; only the autonomy worker imports it.",
+      "from": ["**/autonomyAwakeClock.ts"],
+      "only": ["@shannon/cognition", "node:sqlite", "**/emotionTiming.ts", "**/moodHistory.ts", "**/moodHistoryContract.ts"]
+    },
+    {
+      "id": "awake-clock-from-worker",
+      "kind": "imports",
+      "description": "Only the autonomy worker imports the awake clock.",
+      "from": ["**"],
+      "fromExcept": ["autonomyWorker.ts"],
+      "to": ["**/autonomyAwakeClock.ts"]
+    },
+    {
+      "id": "pure-packages",
+      "kind": "package",
+      "description": "The pure packages hold no database, network, environment or timer: they import only @shannon/* and their own files.",
+      "packages": ["packages/cognition/src", "packages/learning/src", "packages/mind/src"],
+      "allow": ["@shannon/*"],
+      "forbiddenPattern": "\\bprocess\\.env\\b|\\bfetch\\(|\\bset(?:Timeout|Interval)\\("
+    }
+  ]
+}

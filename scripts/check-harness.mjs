@@ -43,6 +43,12 @@ const requiredFiles = [
   'scripts/check-app-icons.mjs',
   'scripts/apply-macos-icon-mask.swift',
   'scripts/check-semantic-role-map.mjs',
+  // The code layout of the API sources (Syzygy ADR-0008 §6): the target map, the script that applies it, and the folder rules.
+  'scripts/layout/moves.json',
+  'scripts/layout/apply.mjs',
+  'scripts/check-api-layers.mjs',
+  'scripts/api-layers.json',
+  'scripts/api-layers-baseline.json',
   'services/api/tests/fixtures/voyager-phase1/minimal-create.request.json',
   'services/api/tests/fixtures/voyager-phase1/minimal-create.result.json',
   'services/api/tests/fixtures/voyager-phase2/projects.response.json',
