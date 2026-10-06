@@ -68,6 +68,13 @@ async function harness(options: { aether?: boolean } = {}) {
 const result = async (session: { call(name: string, argumentsJson: string): Promise<string> } | undefined, name: string, input: unknown) =>
   JSON.parse(await session!.call(name, JSON.stringify(input))) as { ok: boolean; text: string; failure?: string };
 
+/** The run check of `conversationSecrets.ts` over these texts, as `othersSecrets` builds it. */
+function runCheckOf(texts: readonly string[]) {
+  const base = createInitialCompanionState(scope, at);
+  return othersSecrets({ ...base, userFacts: texts.map((statement, index) => ({ id: `t${index}`, statement, confidence: 0.9, observedAt: at, disclosure: { category: 'secret' as const } })) } as never,
+    { experienceCandidates: () => [] }, scope).withheld;
+}
+
 describe('a guest-only turn (owner decision 2026-10-06)', () => {
   it('gets exactly the three reading tools, with the others instruction, and only results inside her folder', async () => {
     const { turn, note, owners, contexts, server } = await harness();
@@ -169,6 +176,9 @@ describe('what she reads of her folder in front of others', () => {
     const check = { ...othersSecrets(state as never, { experienceCandidates: () => [] }, scope), openOnly: true };
     expect(textForOthers('灯台の光。紅茶が好きで毎朝ダージリンを飲む。', check)).toBe('灯台の光。紅茶が好きで毎朝ダージリンを飲む。');
     expect(textForOthers('ウォンバット会の集。まりに毎月出ている。', check)).toBeNull();
+    // A marker put before a guarded sentence must not split a withheld run that crosses into it (review S-1).
+    const crossing = { withheld: runCheckOf(['来月に手術。病院は東大病院']), guarded: runCheckOf(['病院は東大病院で入院予定']), openOnly: false };
+    expect(textForOthers('来月に手術。病院は東大病院で入院予定。', crossing)).toBeNull();
   });
 });
 

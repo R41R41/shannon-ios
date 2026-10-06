@@ -55,14 +55,19 @@ export function resultForOthers(result: ToolResult, check: OthersTextCheck | nul
 export function textForOthers(text: string, check: OthersTextCheck): string | null {
   if (!check.withheld.carries(text) && !check.guarded.carries(text)) return text;
   let removed = false;
+  // What is kept, plain, and as shown (with markers); the last check reads the plain text, whose runs no marker splits (review S-1).
   const lines = text.split('\n').flatMap(line => {
-    const kept = line.split(/(?<=[。！？!?])/u).flatMap(sentence => {
-      if (check.withheld.carries(sentence) || (check.openOnly && check.guarded.carries(sentence))) { removed = true; return []; }
-      return [check.guarded.carries(sentence) ? `${UNLABELLED_DISCLOSURE_MARKER}${sentence}` : sentence];
-    }).join('');
-    return kept.trim() || !line.trim() ? [kept] : [];
+    const kept = line.split(/(?<=[。！？!?])/u).filter(sentence => {
+      const out = check.withheld.carries(sentence) || (check.openOnly && check.guarded.carries(sentence));
+      removed ||= out;
+      return !out;
+    });
+    const plain = kept.join('');
+    return plain.trim() || !line.trim()
+      ? [{ plain, shown: kept.map(sentence => check.guarded.carries(sentence) ? `${UNLABELLED_DISCLOSURE_MARKER}${sentence}` : sentence).join('') }] : [];
   });
-  const shown = lines.join('\n');
-  if (check.withheld.carries(shown) || (check.openOnly && check.guarded.carries(shown))) return null;
+  const plain = lines.map(line => line.plain).join('\n');
+  if (check.withheld.carries(plain) || (check.openOnly && check.guarded.carries(plain))) return null;
+  const shown = lines.map(line => line.shown).join('\n');
   return removed ? `${shown}\n${LEFT_OUT_LINE}` : shown;
 }
