@@ -25,8 +25,11 @@ private final class HeldMoodClient: ShannonYousuServing, @unchecked Sendable {
 
     var heldCount: Int { lock.withLock { held.count } }
 
-    func answer(_ index: Int, with result: Result<ShannonMoodHistoryDTO, Error>) {
-        let continuation = lock.withLock { held[index].answer }
+    func answer(_ index: Int, with result: Result<ShannonMoodHistoryDTO, Error>, file: StaticString = #filePath, line: UInt = #line) {
+        guard let continuation = lock.withLock({ index < held.count ? held[index].answer : nil }) else {
+            XCTFail("No read \(index) is held (\(heldCount) held)", file: file, line: line)
+            return
+        }
         continuation.resume(with: result)
     }
 
@@ -275,9 +278,47 @@ final class ShannonMoodTrendTests: XCTestCase {
     }
 
     @MainActor
-    private func waitForReads(_ client: HeldMoodClient, _ count: Int) async {
-        for _ in 0..<1_000 where client.heldCount < count { await Task.yield() }
-        XCTAssertEqual(client.heldCount, count)
+    private func waitForReads(_ client: HeldMoodClient, _ count: Int, file: StaticString = #filePath, line: UInt = #line) async {
+        let deadline = Date().addingTimeInterval(2)
+        while client.heldCount < count, Date() < deadline { try? await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(client.heldCount, count, file: file, line: line)
+    }
+
+    @MainActor
+    func testAStale403AfterANewerSuccessKeepsTheChart() async {
+        let client = HeldMoodClient()
+        let model = ShannonMoodTrendModel(client: client)
+        let newer = ShannonMoodHistoryDTO(schemaVersion: 1, generatedAt: "2026-10-05T06:00:00.000Z", hours: 24, points: [point("2026-10-05T01:00:00Z", 0.3)], downsampled: false)
+        let first = Task { await model.reload() }
+        await waitForReads(client, 1)
+        let second = Task { await model.reload() }
+        await waitForReads(client, 2)
+        client.answer(1, with: .success(newer))
+        await second.value
+        client.answer(0, with: .failure(ShannonAPIError.rejected(status: 403)))
+        await first.value
+        XCTAssertEqual(model.phase, .loaded)
+        XCTAssertEqual(model.history, newer)
+        XCTAssertNotNil(model.drawing)
+    }
+
+    @MainActor
+    func testACancelledLatestReadLeavesNoSpinner() async {
+        let client = HeldMoodClient()
+        let model = ShannonMoodTrendModel(client: client)
+        let day = ShannonMoodHistoryDTO(schemaVersion: 1, generatedAt: "2026-10-05T06:00:00.000Z", hours: 24, points: [point("2026-10-05T01:00:00Z", 0.3)], downsampled: false)
+        let first = Task { await model.reload() }
+        await waitForReads(client, 1)
+        client.answer(0, with: .success(day))
+        await first.value
+        XCTAssertEqual(model.drawing?.hours, 24)
+        let toHour = Task { await model.choose(hours: 1) }
+        await waitForReads(client, 2)
+        XCTAssertEqual(model.phase, .loading)
+        client.answer(1, with: .failure(CancellationError()))
+        await toHour.value
+        XCTAssertEqual(model.phase, .unreadable)
+        XCTAssertNil(model.drawing)
     }
 
     @MainActor

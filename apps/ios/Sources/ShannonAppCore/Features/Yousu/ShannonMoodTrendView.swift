@@ -44,7 +44,7 @@ public final class ShannonMoodTrendModel {
     public func choose(hours: Int) async {
         guard hours != self.hours else { return }
         self.hours = hours
-        show(nil)
+        show(nil, hours: hours)
         if phase != .hidden { phase = .loading }
         await reload()
     }
@@ -56,13 +56,15 @@ public final class ShannonMoodTrendModel {
         do {
             let answer = try await client.loadShannonMoodHistory(scopeKey: scopeKey, hours: hours)
             guard request == generation else { return }
-            show(answer)
+            show(answer, hours: hours)
             phase = .loaded
         } catch where ShannonOpsModel.isCancellation(error) {
+            // The latest read was cancelled after the switch changed: no spinner left standing.
+            if request == generation, phase == .loading { phase = .unreadable }
             return
         } catch let error as ShannonAPIError where error == .rejected(status: 403) || error == .rejected(status: 404) {
             guard request == generation else { return }
-            show(nil)
+            show(nil, hours: hours)
             phase = .hidden
         } catch {
             guard request == generation else { return }
@@ -74,7 +76,8 @@ public final class ShannonMoodTrendModel {
         }
     }
 
-    private func show(_ answer: ShannonMoodHistoryDTO?) {
+    /// `hours` is the window the answer was read for, captured when the read started.
+    private func show(_ answer: ShannonMoodHistoryDTO?, hours: Int) {
         readAt = Date()
         history = answer
         drawing = answer.map { ShannonMoodTrendDrawing(history: $0, hours: hours, readAt: readAt) }
@@ -289,11 +292,11 @@ struct ShannonMoodTrendPanel: View {
     @AxisContentBuilder
     private func xAxis(labelled: Bool, frame: ShannonMoodTrendDrawing) -> some AxisContent {
         let japanese = Locale(identifier: "ja_JP")
-        if model.hours <= 1 {
+        if frame.hours <= 1 {
             AxisMarks(values: ShannonMoodTrend.quarterHours(from: frame.start, to: frame.now)) { value in
                 xMark(value, labelled: labelled, frame: frame, format: .dateTime.hour().minute().locale(japanese))
             }
-        } else if model.hours <= 24 {
+        } else if frame.hours <= 24 {
             AxisMarks(values: .stride(by: .hour, count: 6)) { value in
                 xMark(value, labelled: labelled, frame: frame, format: .dateTime.hour().locale(japanese))
             }

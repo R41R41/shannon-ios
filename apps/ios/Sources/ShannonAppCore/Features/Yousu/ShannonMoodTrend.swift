@@ -222,6 +222,8 @@ public enum ShannonMoodTrend {
 /// layout pass): the window, the shared reach, the part before the record, each line's drawn steps,
 /// and the words and summary of the true newest point.
 public struct ShannonMoodTrendDrawing: Equatable, Sendable {
+    /// The window the answer was read for (the time marks follow it, not the switch).
+    public let hours: Int
     public let start: Date
     public let now: Date
     public let limit: Double
@@ -232,6 +234,7 @@ public struct ShannonMoodTrendDrawing: Equatable, Sendable {
 
     public init(history: ShannonMoodHistoryDTO, hours: Int, readAt: Date) {
         // The window ends at the server's own time, so a device whose clock is off draws it right.
+        self.hours = hours
         let end = ShannonMoodTrend.windowEnd(history, readAt: readAt)
         let windowStart = end.addingTimeInterval(-Double(hours) * 3600)
         now = end
