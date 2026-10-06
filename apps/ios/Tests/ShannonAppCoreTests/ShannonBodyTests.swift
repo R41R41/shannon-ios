@@ -1092,6 +1092,46 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertTrue(["iphone", "mac"].contains(ShannonBodyRegistration.surface))
     }
 
+    // MARK: Touch vocabulary 2 (Syzygy ADR-0005 phase 1d)
+
+    func testAPageThatNamesAPartIsNotSecondGuessedByTheGesture() throws {
+        // A stroke on her chest, from a page of vocabulary 2 that left `region` out: never 「頭をなでられた」.
+        let chest = try XCTUnwrap(Self.pageTouch(["type": "pet", "part": "chest", "gesture": "stroke"]))
+        XCTAssertEqual(chest.detail.part, .chest)
+        XCTAssertNil(chest.sentRegion)
+        XCTAssertNil(ShannonBodyTouchEventDTO(touch: chest, audience: .owner).region)
+        XCTAssertNil(ShannonBodyReactionRequestDTO(scopeKey: "owner", touch: chest, audience: .owner).touch.region)
+        // The page's own region is kept as it is, whatever the part (the server decides where they disagree).
+        XCTAssertEqual(try XCTUnwrap(Self.pageTouch(["type": "pet", "part": "chest", "region": "body"])).sentRegion, .body)
+        XCTAssertEqual(try XCTUnwrap(Self.pageTouch(["type": "pet", "part": "neck", "region": "head"])).sentRegion, .head)
+        // A part this app does not know (a newer page) is dropped, and the page still spoke vocabulary 2: no inference either.
+        let newer = try XCTUnwrap(Self.pageTouch(["type": "holdHand", "part": "elbow"]))
+        XCTAssertNil(newer.detail.part)
+        XCTAssertNil(newer.sentRegion)
+    }
+
+    func testWithoutAPartTheGestureNamesTheRegionAsBefore() throws {
+        let kinds: [(String, String?)] = [("pet", "head"), ("holdHand", "hand"), ("tickle", "side"), ("poke", nil)]
+        for (kind, region) in kinds {
+            let touch = try XCTUnwrap(Self.pageTouch(["type": kind]))
+            XCTAssertEqual(touch.sentRegion?.rawValue, region, kind)
+            XCTAssertEqual(touch.detail, .init())
+            // Other vocabulary-2 fields without a part do not stop it.
+            XCTAssertEqual(try XCTUnwrap(Self.pageTouch(["type": kind, "gesture": "rest", "reflex": "none"])).sentRegion?.rawValue, region, kind)
+        }
+        // An empty part names nothing.
+        XCTAssertEqual(try XCTUnwrap(Self.pageTouch(["type": "pet", "part": ""])).sentRegion, .head)
+    }
+
+    private static func pageTouch(_ touch: [String: Any]) -> ShannonLive2DTouch? {
+        var fields: [String: Any] = ["durationMs": 900, "strength": 0.4, "ongoing": false]
+        fields.merge(touch) { $1 }
+        guard case let .touch(value)? = ShannonLive2DMessage(body: [
+            "type": "touch", "id": "v2-\(touch["type"] ?? "")", "occurredAt": "2026-10-06T03:00:00.000Z", "touch": fields,
+        ]) else { return nil }
+        return value
+    }
+
     func testAStudyCardSaysWhetherItAwaitsAReaction() throws {
         let json = #"{"id":"p1","kind":"story","kindLabel":"物語","status":"shown","statusLabel":"見せた","hidden":false,"revising":false,"updatedAt":"2026-10-03T00:00:00.000Z","awaitingReaction":true}"#
         XCTAssertEqual(try JSONDecoder().decode(ShannonStudyPieceCardDTO.self, from: Data(json.utf8)).awaitingReaction, true)
