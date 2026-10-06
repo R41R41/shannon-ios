@@ -60,6 +60,9 @@ extension ShannonConversationView {
                 case "admin": openSettings()
                 default: openLink(.ops)
                 }
+                // `-ShannonPreviewMoodHours 1|168`: 気分の推移 opens on that window, for screenshots.
+                let moodHours = UserDefaults.standard.integer(forKey: "ShannonPreviewMoodHours")
+                if ShannonMoodTrend.windows.contains(moodHours) { await yousu.now.moodTrend.choose(hours: moodHours) }
             }
             return
         }

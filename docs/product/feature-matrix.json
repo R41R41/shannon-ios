@@ -2212,7 +2212,7 @@
             "apps/ios/Sources/ShannonAppCore/API/ShannonAPIClient+Yousu.swift#loadShannonMoodHistory",
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift#ShannonMoodTrendModel"
           ],
-          "note": "24 時間と 7 日を読む。403・404 のときは「気分の推移」を出さない。ほかの失敗（500・429・届かない・読み取れない）は区画を残して「読めませんでした」（前に読めた線は残す）。端末の中には記録しない。"
+          "note": "1 時間・24 時間・7 日を読む（1 時間は所有者が足した、2026-10-06）。403・404 のときは「気分の推移」を出さない。ほかの失敗（500・429・届かない・読み取れない）は区画を残して「読めませんでした」（前に読めた線は残す）。端末の中には記録しない。"
         },
         "macos": {
           "status": "yes",
@@ -2236,13 +2236,14 @@
       "id": "yousu.mood-trend",
       "area": "yousu",
       "title": "気分の推移",
-      "description": "気分の記録を、気分の明るさ（実線・青）／元気さ（長い破線・橙）／心の開き（点線・緑）の 3 本の段の線で見る。24時間／7日 の切り替えと凡例。画面に数字は出さない。読み上げは 明るめ／ふつう／低め（所有者の決定、2026-10-05）。",
+      "description": "気分の記録を、気分の明るさ（青）／元気さ（橙）／心の開き（緑）の 3 つの行に分けた小さな段の線で見る。行ごとに、ふつうの帯、ふだんの値からの面、いまの点と、右にいまの言葉（明るめ／高め／ふつう／低め）。縦の幅は 3 行で同じ（±0.6、はみ出すときは 0.1 きざみで広げ、±1 まで）。1時間／24時間／7日 の切り替え。点が数秒おきに続く所は窓の始まりから数えた区切り（1 分・5 分・30 分）ごとに最後の点にまとめる。記録が始まる前の部分は薄く塗り、上の行に「記録なし」。画面に数字は出さない。読み上げは 明るめ／ふつう／低め（所有者の決定、2026-10-05。3 行・1時間・記録なしは 2026-10-06）。",
       "surfaces": {
         "ios": {
           "status": "yes",
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift#ShannonMoodTrendPanel",
-            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift#steps"
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift#steps",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift#bucketed"
           ],
           "note": "シャノン › ようす の、気持ちのカードのすぐ下。"
         },
@@ -2259,7 +2260,7 @@
           "evidence": [
             "shannon-desktop:src/desk/App.tsx"
           ],
-          "note": "13:06 に入った（同じ段の線・線の形・言葉）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。Windows body thread report 2026-10-05。",
+          "note": "13:06 に入った（同じ段の線・線の形・言葉）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。Windows body thread report 2026-10-05。2026-10-06 の形（3 行・1時間・記録なし）が Windows に入ったかは、まだ知らせが無い。",
           "read": "2026-10-05"
         }
       }

@@ -50,7 +50,7 @@ The rule of 「シャノンのいま」 applies: only the owner's own paired dev
 ## `GET /v1/shannon/mood-history`
 
 - `Authorization: Bearer <device token>` of a device paired into the **owner's** scope; the scope is the device's own and a `scopeKey` in the query is ignored.
-- `hours`: optional. Absent: 24. A whole number from 1; more than 336 is read as 336. Apps use 24 and 168.
+- `hours`: optional. Absent: 24. A whole number from 1; more than 336 is read as 336. The iPhone and the Mac use 1, 24 and 168 (1 added by the owner on 2026-10-06).
 - At most 60 reads a minute per device.
 - The connection is `query_only`; the read stores nothing and calls no model.
 

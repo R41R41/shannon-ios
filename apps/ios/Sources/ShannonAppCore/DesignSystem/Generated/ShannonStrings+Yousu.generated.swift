@@ -190,6 +190,8 @@ extension ShannonGeneratedStrings {
     public static let yousuMoodTrendRangeDay = "24時間"
     /// `yousu.moodTrend.range.week`
     public static let yousuMoodTrendRangeWeek = "7日"
+    /// `yousu.moodTrend.range.hour`
+    public static let yousuMoodTrendRangeHour = "1時間"
     /// `yousu.moodTrend.line.valence`
     public static let yousuMoodTrendLineValence = "気分の明るさ"
     /// `yousu.moodTrend.line.arousal`
@@ -210,4 +212,6 @@ extension ShannonGeneratedStrings {
     public static let yousuMoodTrendEmpty = "まだ記録がありません"
     /// `yousu.moodTrend.unreadable`
     public static let yousuMoodTrendUnreadable = "読めませんでした"
+    /// `yousu.moodTrend.unrecorded`
+    public static let yousuMoodTrendUnrecorded = "記録なし"
 }

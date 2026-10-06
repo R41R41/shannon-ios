@@ -99,6 +99,102 @@ final class ShannonMoodTrendTests: XCTestCase {
         XCTAssertEqual(steps.map(\.value), [-0.2, 0.2])
     }
 
+    func testTheSwitchOffersAnHourADayAndAWeek() {
+        XCTAssertEqual(ShannonMoodTrend.windows, [1, 24, 168])
+        XCTAssertEqual(ShannonMoodTrend.bucket(hours: 1), 60)
+        XCTAssertEqual(ShannonMoodTrend.bucket(hours: 24), 5 * 60)
+        XCTAssertEqual(ShannonMoodTrend.bucket(hours: 168), 30 * 60)
+    }
+
+    private func date(_ iso: String) throws -> Date { try XCTUnwrap(ShannonYousuTime.date(iso)) }
+
+    func testTheHourIsMarkedOnTheQuarterHoursOfTheClock() throws {
+        let tokyo = try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo"))
+        // 19:59:42–20:59:42 in Tokyo: 20:00, 20:15, 20:30, 20:45 (not 20:14, 20:29…).
+        let marks = ShannonMoodTrend.quarterHours(from: try date("2026-10-06T10:59:42.000Z"), to: try date("2026-10-06T11:59:42.000Z"), timeZone: tokyo)
+        XCTAssertEqual(marks, try ["11:00", "11:15", "11:30", "11:45"].map { try date("2026-10-06T\($0):00.000Z") })
+        // A zone 45 minutes off the hour still marks its own quarter hours.
+        let nepal = try XCTUnwrap(TimeZone(identifier: "Asia/Kathmandu"))
+        let local = ShannonMoodTrend.quarterHours(from: try date("2026-10-06T11:00:00.000Z"), to: try date("2026-10-06T11:20:00.000Z"), timeZone: nepal)
+        XCTAssertEqual(local, [try date("2026-10-06T11:00:00.000Z"), try date("2026-10-06T11:15:00.000Z")])
+    }
+
+    func testBurstsCollapseIntoBucketsKeepingTheLastPointAtTheBucketStart() throws {
+        // An hour: 1-minute buckets from 05:00. Three points seconds apart become one step at 05:10.
+        let start = try date("2026-10-05T05:00:00.000Z")
+        let now = try date("2026-10-05T06:00:00.000Z")
+        let points = [
+            point("2026-10-05T05:10:05.000Z", 0.1), point("2026-10-05T05:10:20.000Z", 0.5), point("2026-10-05T05:10:40.000Z", 0.2),
+            point("2026-10-05T05:30:00.000Z", -0.3),
+        ]
+        let raw = ShannonMoodTrend.steps(.valence, points: points, windowStart: start, until: now)
+        let hour = ShannonMoodTrend.bucketed(raw, windowStart: start, bucket: ShannonMoodTrend.bucket(hours: 1))
+        XCTAssertEqual(hour, [
+            ShannonMoodStep(start: try date("2026-10-05T05:10:00.000Z"), end: try date("2026-10-05T05:30:00.000Z"), value: 0.2),
+            ShannonMoodStep(start: try date("2026-10-05T05:30:00.000Z"), end: now, value: -0.3),
+        ])
+        // A day: 5-minute buckets from the window's start (not from the hour), so 05:12 and 05:14 share one.
+        let dayStart = try date("2026-10-04T06:02:00.000Z")
+        let day = ShannonMoodTrend.bucketed(
+            ShannonMoodTrend.steps(.valence, points: [point("2026-10-05T05:12:00.000Z", 0.4), point("2026-10-05T05:14:00.000Z", -0.1), point("2026-10-05T05:17:00.000Z", 0.3)], windowStart: dayStart, until: now),
+            windowStart: dayStart, bucket: ShannonMoodTrend.bucket(hours: 24)
+        )
+        XCTAssertEqual(day.map(\.start), [try date("2026-10-05T05:12:00.000Z"), try date("2026-10-05T05:17:00.000Z")])
+        XCTAssertEqual(day.map(\.value), [-0.1, 0.3])
+        XCTAssertEqual(day.last?.end, now)
+        // A week: 30-minute buckets; a point at 05:59 lands at 05:30 and holds until now.
+        let weekStart = try date("2026-09-28T06:00:00.000Z")
+        let week = ShannonMoodTrend.bucketed(
+            ShannonMoodTrend.steps(.valence, points: [point("2026-10-05T05:31:00.000Z", 0.1), point("2026-10-05T05:59:00.000Z", 0.3)], windowStart: weekStart, until: now),
+            windowStart: weekStart, bucket: ShannonMoodTrend.bucket(hours: 168)
+        )
+        XCTAssertEqual(week, [ShannonMoodStep(start: try date("2026-10-05T05:30:00.000Z"), end: now, value: 0.3)])
+        XCTAssertEqual(ShannonMoodTrend.bucketed([], windowStart: start, bucket: 60), [])
+    }
+
+    func testTheCarriedInValueStaysAtTheWindowStartWhenBucketed() throws {
+        let start = try date("2026-10-05T05:00:00.000Z")
+        let now = try date("2026-10-05T06:00:00.000Z")
+        let carry = point("2026-10-04T22:00:00.000Z", 0.3)
+        let steps = ShannonMoodTrend.steps(.valence, points: [point("2026-10-05T05:20:30.000Z", -0.1)], carryIn: carry, windowStart: start, until: now)
+        let drawn = ShannonMoodTrend.bucketed(steps, windowStart: start, bucket: 60)
+        XCTAssertEqual(drawn, [
+            ShannonMoodStep(start: start, end: try date("2026-10-05T05:20:00.000Z"), value: 0.3),
+            ShannonMoodStep(start: try date("2026-10-05T05:20:00.000Z"), end: now, value: -0.1),
+        ])
+        // Alone, it holds across the whole window.
+        let quiet = ShannonMoodTrend.bucketed(ShannonMoodTrend.steps(.valence, points: [], carryIn: carry, windowStart: start, until: now), windowStart: start, bucket: 60)
+        XCTAssertEqual(quiet, [ShannonMoodStep(start: start, end: now, value: 0.3)])
+        // The words still read the true newest point, not the bucket's.
+        let burst = [point("2026-10-05T05:40:01.000Z", 0.5), point("2026-10-05T05:40:30.000Z", -0.3)]
+        XCTAssertEqual(ShannonMoodTrend.latestLevels(burst)?[.valence], .low)
+    }
+
+    func testTheRowsShareOneSymmetricReach() {
+        // Real data moves within about −0.1…0.55: ±0.6.
+        XCTAssertEqual(ShannonMoodTrend.yLimit([point("2026-10-05T01:00:00Z", 0.55), point("2026-10-05T02:00:00Z", -0.1)]), 0.6, accuracy: 0.0001)
+        // Nothing is drawn tighter than ±0.6.
+        XCTAssertEqual(ShannonMoodTrend.yLimit([point("2026-10-05T01:00:00Z", 0.05)]), 0.6, accuracy: 0.0001)
+        XCTAssertEqual(ShannonMoodTrend.yLimit([]), 0.6, accuracy: 0.0001)
+        // The largest distance of any line, rounded up to 0.1: arousal 0.3 + 0.61 → 0.7; exact tenths stay.
+        XCTAssertEqual(ShannonMoodTrend.yLimit([point("2026-10-05T01:00:00Z", 0, 0.91)]), 0.7, accuracy: 0.0001)
+        XCTAssertEqual(ShannonMoodTrend.yLimit([point("2026-10-05T01:00:00Z", -0.7)]), 0.7, accuracy: 0.0001)
+        // The carried-in value counts; never beyond ±1.
+        XCTAssertEqual(ShannonMoodTrend.yLimit([], carryIn: point("2026-10-04T01:00:00Z", -0.84)), 0.9, accuracy: 0.0001)
+        XCTAssertEqual(ShannonMoodTrend.yLimit([point("2026-10-05T01:00:00Z", 1, 1, 1)]), 1, accuracy: 0.0001)
+    }
+
+    func testThePartBeforeTheRecordIsShownOnlyWithoutACarryIn() throws {
+        let start = try date("2026-09-28T06:00:00.000Z")
+        let points = [point("2026-10-05T03:00:00Z", 0.2), point("2026-10-05T01:00:00Z", 0.1), point("not a time", 0.9)]
+        XCTAssertEqual(ShannonMoodTrend.unrecorded(points, windowStart: start), start..<(try date("2026-10-05T01:00:00Z")))
+        // A value from before the window: there is no part before the record.
+        XCTAssertNil(ShannonMoodTrend.unrecorded(points, carryIn: point("2026-09-20T00:00:00Z", 0), windowStart: start))
+        // A first point at the window's start, or no points at all: nothing to shade.
+        XCTAssertNil(ShannonMoodTrend.unrecorded([point("2026-09-28T06:00:00.000Z", 0)], windowStart: start))
+        XCTAssertNil(ShannonMoodTrend.unrecorded([], windowStart: start))
+    }
+
     func testTheSameThreeWordsWithThresholdsAboutPointTwo() {
         XCTAssertEqual(ShannonMoodLevel(deviation: 0.2), .high)
         XCTAssertEqual(ShannonMoodLevel(deviation: 0.19), .normal)

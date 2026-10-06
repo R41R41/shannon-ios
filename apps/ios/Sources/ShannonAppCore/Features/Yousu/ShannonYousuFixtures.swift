@@ -2,7 +2,8 @@ import Foundation
 
 #if DEBUG
 /// Fictional data for design previews and screenshots of 「ようす」: `-ShannonDesignPreview
-/// -ShannonPreviewYousu now|ops|opsStale|opsConfirm|tile`. Never real conversation or
+/// -ShannonPreviewYousu now|ops|opsStale|opsConfirm|tile` (with `-ShannonPreviewMoodHours 1|168` for
+/// the other windows of 気分の推移). Never real conversation or
 /// operational data, and nothing here reaches a server.
 struct ShannonYousuFixtureClient: ShannonYousuServing {
     let stale: Bool
@@ -114,18 +115,23 @@ struct ShannonYousuFixtureClient: ShannonYousuServing {
     func opsReportScope(scopeKey: String) -> String? { nil }
 
     func loadShannonMoodHistory(scopeKey: String, hours: Int) async throws -> ShannonMoodHistoryDTO {
-        // A quiet night, a bright afternoon, a sulky moment, and the evening settling down.
+        // A quiet night, a bright afternoon with a burst of points seconds apart, a sulky moment, and
+        // the evening settling down. The record began a day and a half ago: a week shows the part before it.
+        let window = Double(hours) * 60
+        let first = min(window - 5, 36 * 60)
         let shape: [(Double, Double, Double, Double)] = [
-            (Double(hours) * 60 - 5, 0, 0.3, 0.35), (Double(hours) * 45, 0.05, 0.28, 0.35), (Double(hours) * 30, 0.32, 0.55, 0.5),
-            (Double(hours) * 20, -0.26, 0.4, 0.2), (Double(hours) * 8, 0.1, 0.35, 0.4), (30, 0.28, 0.3, 0.45),
+            (first, 0, 0.3, 0.35), (first * 0.75, 0.05, 0.28, 0.35), (first * 0.5, 0.32, 0.55, 0.5), (first * 0.5 - 0.1, 0.45, 0.6, 0.55),
+            (first * 0.33, -0.08, 0.4, 0.2), (first * 0.13, 0.1, 0.35, 0.4), (min(30, first * 0.05), 0.28, 0.3, 0.45),
         ]
-        let points = shape.map { minutesAgo, valence, arousal, openness in
+        func point(_ minutesAgo: Double, _ valence: Double, _ arousal: Double, _ openness: Double) -> ShannonMoodHistoryDTO.Point {
             ShannonMoodHistoryDTO.Point(
                 at: Self.iso(minutesAgo: minutesAgo), valence: valence, arousal: arousal, openness: openness,
                 mood: .init(expression: "calm", feeling: nil), present: nil
             )
         }
-        return ShannonMoodHistoryDTO(schemaVersion: 1, generatedAt: Self.iso(minutesAgo: 0), hours: hours, points: points, downsampled: false)
+        let points = shape.map { point($0.0, $0.1, $0.2, $0.3) }
+        let carryIn = window - 5 < 36 * 60 ? point(window + 90, 0.02, 0.32, 0.36) : nil
+        return ShannonMoodHistoryDTO(schemaVersion: 1, generatedAt: Self.iso(minutesAgo: 0), hours: hours, points: points, carryIn: carryIn, downsampled: false)
     }
 
     func loadShannonRecentActivity(scopeKey: String) async throws -> ShannonAutonomyActivityDTO {

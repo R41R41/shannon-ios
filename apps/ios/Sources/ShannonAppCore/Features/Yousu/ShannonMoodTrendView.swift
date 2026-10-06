@@ -3,7 +3,7 @@ import Observation
 import OSLog
 import SwiftUI
 
-/// 「気分の推移」: her mood over the last 24 hours or 7 days, read from the server's record.
+/// 「気分の推移」: her mood over the last hour, 24 hours or 7 days, read from the server's record.
 /// Hidden until the first answer, and when the server does not offer it to this device (403,
 /// 404): the iPhone and the Mac keep no record of their own. Any other failure keeps the
 /// section with a quiet 「読めませんでした」, and the next appearance reads again.
@@ -70,13 +70,27 @@ public final class ShannonMoodTrendModel {
     }
 }
 
-/// The section's content: the title with the 24時間／7日 switch, three step lines (solid, long
-/// dash, dotted, so that colour is never the only difference), and the legend. No numbers.
+/// The section's content: the title with the 1時間／24時間／7日 switch, then one row per line
+/// (気分の明るさ／元気さ／心の開き; owner decision 2026-10-06, 「3本を分けて並べる」): the line's name,
+/// a small step chart around its resting value with the band of 「ふつう」, and the word for now.
+/// The rows share the time axis and the vertical reach; only the bottom row is labelled. No numbers.
 struct ShannonMoodTrendPanel: View {
     @Bindable var model: ShannonMoodTrendModel
     let palette: ShannonPalette
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// The width of the top row's chart, read only to decide whether 「記録なし」 fits its part.
+    @State private var chartWidth: CGFloat = 0
+
+    /// What all three rows share for one answer.
+    private struct Frame {
+        let start: Date
+        let now: Date
+        let limit: Double
+        let unrecorded: Range<Date>?
+        /// Where the band of 「ふつう」 starts: after the part before anything was recorded.
+        var recordStart: Date { unrecorded?.upperBound ?? start }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.small) {
@@ -94,15 +108,13 @@ struct ShannonMoodTrendPanel: View {
             switch model.phase {
             case .loaded:
                 if let history = model.history, history.hasMood {
-                    chart(history)
-                    legend
+                    rows(history)
                 } else {
                     quietLine(ShannonGeneratedStrings.yousuMoodTrendEmpty)
                 }
             case .unreadable:
                 if let history = model.history, history.hasMood {
-                    chart(history)
-                    legend
+                    rows(history)
                     Text(ShannonGeneratedStrings.yousuMoodTrendUnreadable)
                         .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
@@ -133,11 +145,13 @@ struct ShannonMoodTrendPanel: View {
     private var rangePicker: some View {
 #if os(macOS)
         ShannonSegmentedChoice(ShannonGeneratedStrings.yousuMoodTrendTitle, selection: hoursSelection, options: [
+            .init(ShannonGeneratedStrings.yousuMoodTrendRangeHour, value: 1),
             .init(ShannonGeneratedStrings.yousuMoodTrendRangeDay, value: 24),
             .init(ShannonGeneratedStrings.yousuMoodTrendRangeWeek, value: 168),
         ])
 #else
         Picker(ShannonGeneratedStrings.yousuMoodTrendTitle, selection: hoursSelection) {
+            Text(ShannonGeneratedStrings.yousuMoodTrendRangeHour).tag(1)
             Text(ShannonGeneratedStrings.yousuMoodTrendRangeDay).tag(24)
             Text(ShannonGeneratedStrings.yousuMoodTrendRangeWeek).tag(168)
         }
@@ -154,82 +168,155 @@ struct ShannonMoodTrendPanel: View {
             .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
     }
 
-    private func chart(_ history: ShannonMoodHistoryDTO) -> some View {
+    private var plotHeight: CGFloat { dynamicTypeSize.isAccessibilitySize ? 64 : 40 }
+
+    /// The three rows, read as one element: 「気分の推移」 and the words of now.
+    private func rows(_ history: ShannonMoodHistoryDTO) -> some View {
         // The window ends at the server's own time, so a phone whose clock is off draws it right.
         let now = ShannonMoodTrend.windowEnd(history, readAt: model.readAt)
         let start = now.addingTimeInterval(-Double(model.hours) * 3600)
-        return Chart {
-            RuleMark(y: .value("ふつう", 0))
-                .foregroundStyle(palette.divider)
-                .lineStyle(StrokeStyle(lineWidth: 1))
-            ForEach(ShannonMoodLine.allCases) { line in
-                let steps = ShannonMoodTrend.steps(line, points: history.points, carryIn: history.carryIn, windowStart: start, until: now)
-                ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
-                    LineMark(x: .value("時刻", max(step.start, start)), y: .value(line.title, step.value), series: .value("線", line.rawValue))
-                        .interpolationMethod(.stepEnd)
-                        .foregroundStyle(color(line))
-                        .lineStyle(stroke(line))
-                }
-                if let last = steps.last {
-                    // The value holds until now: the line reaches the right edge.
-                    LineMark(x: .value("時刻", now), y: .value(line.title, last.value), series: .value("線", line.rawValue))
-                        .interpolationMethod(.stepEnd)
-                        .foregroundStyle(color(line))
-                        .lineStyle(stroke(line))
-                    // The newest point; with only the value carried in from before the window, its value now, at the right edge.
-                    PointMark(x: .value("時刻", history.points.isEmpty ? now : max(last.start, start)), y: .value(line.title, last.value))
-                        .foregroundStyle(color(line))
-                        .symbolSize(36)
-                }
-            }
-        }
-        .chartXScale(domain: start...now)
-        .chartYScale(domain: -1...1)
-        .chartYAxis(.hidden)
-        .chartXAxis {
-            if model.hours > 24 {
-                AxisMarks(values: .stride(by: .day)) { _ in
-                    AxisGridLine().foregroundStyle(palette.divider.opacity(0.5))
-                    AxisValueLabel(format: .dateTime.day().locale(Locale(identifier: "ja_JP")))
-                }
-            } else {
-                AxisMarks(values: .stride(by: .hour, count: 6)) { _ in
-                    AxisGridLine().foregroundStyle(palette.divider.opacity(0.5))
-                    AxisValueLabel(format: .dateTime.hour().locale(Locale(identifier: "ja_JP")))
+        let frame = Frame(
+            start: start, now: now,
+            limit: ShannonMoodTrend.yLimit(history.points, carryIn: history.carryIn),
+            unrecorded: ShannonMoodTrend.unrecorded(history.points, carryIn: history.carryIn, windowStart: start)
+        )
+        let levels = ShannonMoodTrend.latestLevels(history.points, carryIn: history.carryIn)
+        let lines = ShannonMoodLine.allCases
+        return VStack(alignment: .leading, spacing: ShannonSpacing.small) {
+            ForEach(Array(lines.enumerated()), id: \.element) { index, line in
+                let steps = ShannonMoodTrend.bucketed(
+                    ShannonMoodTrend.steps(line, points: history.points, carryIn: history.carryIn, windowStart: start, until: now),
+                    windowStart: start, bucket: ShannonMoodTrend.bucket(hours: model.hours)
+                )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(line.title)
+                        .font(.shannon(.caption))
+                        .foregroundStyle(palette.textSecondary)
+                    HStack(alignment: .top, spacing: ShannonSpacing.small) {
+                        rowChart(line, steps: steps, frame: frame, isTop: index == 0, isBottom: index == lines.count - 1)
+                        word(line, level: levels?[line])
+                    }
                 }
             }
         }
-        .chartLegend(.hidden)
-        .frame(height: dynamicTypeSize.isAccessibilitySize ? 140 : 100)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(ShannonGeneratedStrings.yousuMoodTrendTitle)
         .accessibilityValue(ShannonMoodTrend.summary(history.points, carryIn: history.carryIn) ?? ShannonGeneratedStrings.yousuMoodTrendEmpty)
     }
 
-    /// One row of three; one line each at the larger text sizes.
-    private var legend: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: ShannonSpacing.medium) { legendItems }
-            VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) { legendItems }
+    /// The word of now, in the line's colour. Every word is laid out unseen behind it, so the
+    /// column keeps one width and the three charts stay the same width.
+    private func word(_ line: ShannonMoodLine, level: ShannonMoodLevel?) -> some View {
+        ZStack(alignment: .leading) {
+            ForEach([ShannonMoodLevel.high, .normal, .low], id: \.self) { candidate in
+                Text(candidate.word(for: .valence)).hidden()
+                Text(candidate.word(for: .arousal)).hidden()
+            }
+            if let level {
+                Text(level.word(for: line)).foregroundStyle(color(line))
+            }
         }
-        .accessibilityHidden(true)
+        .font(.shannon(.caption).weight(.semibold))
+        .lineLimit(1)
+        .frame(minHeight: plotHeight)
     }
 
-    @ViewBuilder
-    private var legendItems: some View {
-        ForEach(ShannonMoodLine.allCases) { line in
-            HStack(spacing: ShannonSpacing.extraSmall) {
-                Path { path in
-                    path.move(to: CGPoint(x: 0, y: 4))
-                    path.addLine(to: CGPoint(x: 20, y: 4))
-                }
-                .stroke(color(line), style: stroke(line))
-                .frame(width: 20, height: 8)
-                Text(line.title)
-                    .font(.shannon(.caption))
-                    .foregroundStyle(palette.textSecondary)
-                    .fixedSize()
+    private func rowChart(_ line: ShannonMoodLine, steps: [ShannonMoodStep], frame: Frame, isTop: Bool, isBottom: Bool) -> some View {
+        let tint = color(line)
+        let labelsUnrecorded = isTop && frame.unrecorded.map { part in
+            let window = frame.now.timeIntervalSince(frame.start)
+            return window > 0 && chartWidth * part.upperBound.timeIntervalSince(part.lowerBound) / window >= 44
+        } ?? false
+        return Chart {
+            // The band of 「ふつう」 (±0.2 from rest), from where the record begins.
+            if frame.recordStart < frame.now {
+                RectangleMark(
+                    xStart: .value("時刻", frame.recordStart), xEnd: .value("時刻", frame.now),
+                    yStart: .value("ふつう", -ShannonMoodLevel.threshold), yEnd: .value("ふつう", ShannonMoodLevel.threshold)
+                )
+                .foregroundStyle(palette.textSecondary.opacity(0.08))
             }
+            // Before anything was recorded: shaded, named once in the top row when it is wide enough.
+            if let part = frame.unrecorded {
+                RectangleMark(
+                    xStart: .value("時刻", part.lowerBound), xEnd: .value("時刻", part.upperBound),
+                    yStart: .value("記録なし", -frame.limit), yEnd: .value("記録なし", frame.limit)
+                )
+                .foregroundStyle(palette.textSecondary.opacity(0.12))
+                .annotation(position: .overlay, alignment: .center) {
+                    if labelsUnrecorded {
+                        Text(ShannonGeneratedStrings.yousuMoodTrendUnrecorded)
+                            .font(.shannon(.caption2))
+                            .foregroundStyle(palette.textSecondary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            RuleMark(y: .value("ふつう", 0))
+                .foregroundStyle(palette.textSecondary.opacity(0.5))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+            ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
+                AreaMark(x: .value("時刻", step.start), yStart: .value("ふつう", 0), yEnd: .value(line.title, step.value))
+                    .interpolationMethod(.stepEnd)
+                    .foregroundStyle(tint.opacity(0.18))
+                LineMark(x: .value("時刻", step.start), y: .value(line.title, step.value))
+                    .interpolationMethod(.stepEnd)
+                    .foregroundStyle(tint)
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+            }
+            if let last = steps.last {
+                // The value holds until now: the line reaches the right edge, with a dot on now.
+                AreaMark(x: .value("時刻", frame.now), yStart: .value("ふつう", 0), yEnd: .value(line.title, last.value))
+                    .interpolationMethod(.stepEnd)
+                    .foregroundStyle(tint.opacity(0.18))
+                LineMark(x: .value("時刻", frame.now), y: .value(line.title, last.value))
+                    .interpolationMethod(.stepEnd)
+                    .foregroundStyle(tint)
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+                PointMark(x: .value("時刻", frame.now), y: .value(line.title, last.value))
+                    .foregroundStyle(tint)
+                    .symbolSize(30)
+            }
+        }
+        .chartXScale(domain: frame.start...frame.now)
+        .chartYScale(domain: -frame.limit...frame.limit)
+        .chartYAxis(.hidden)
+        .chartXAxis { xAxis(labelled: isBottom, frame: frame) }
+        .chartLegend(.hidden)
+        .chartPlotStyle { plot in plot.frame(height: plotHeight) }
+        .onGeometryChange(for: CGFloat.self) { proxy in proxy.size.width } action: { width in
+            if isTop { chartWidth = width }
+        }
+    }
+
+    /// Grid lines in every row; times under the bottom row only. 1時間: on the quarter hours
+    /// (「20:15」); 24時間: every 6 hours; 7日: by day. A time too near either edge to be read
+    /// whole is left unlabelled (its grid line stays).
+    @AxisContentBuilder
+    private func xAxis(labelled: Bool, frame: Frame) -> some AxisContent {
+        let japanese = Locale(identifier: "ja_JP")
+        if model.hours <= 1 {
+            AxisMarks(values: ShannonMoodTrend.quarterHours(from: frame.start, to: frame.now)) { value in
+                xMark(value, labelled: labelled, frame: frame, format: .dateTime.hour().minute().locale(japanese))
+            }
+        } else if model.hours <= 24 {
+            AxisMarks(values: .stride(by: .hour, count: 6)) { value in
+                xMark(value, labelled: labelled, frame: frame, format: .dateTime.hour().locale(japanese))
+            }
+        } else {
+            AxisMarks(values: .stride(by: .day)) { value in
+                xMark(value, labelled: labelled, frame: frame, format: .dateTime.day().locale(japanese))
+            }
+        }
+    }
+
+    @AxisMarkBuilder
+    private func xMark(_ value: AxisValue, labelled: Bool, frame: Frame, format: Date.FormatStyle) -> some AxisMark {
+        let margin = frame.now.timeIntervalSince(frame.start) * 0.06
+        AxisGridLine().foregroundStyle(palette.divider.opacity(0.5))
+        if labelled, let date = value.as(Date.self),
+           date.timeIntervalSince(frame.start) >= margin, frame.now.timeIntervalSince(date) >= margin {
+            AxisValueLabel(format: format)
         }
     }
 
@@ -238,14 +325,6 @@ struct ShannonMoodTrendPanel: View {
         case .valence: palette.action
         case .arousal: palette.attention
         case .openness: palette.success
-        }
-    }
-
-    private func stroke(_ line: ShannonMoodLine) -> StrokeStyle {
-        switch line {
-        case .valence: StrokeStyle(lineWidth: 2, lineCap: .round)
-        case .arousal: StrokeStyle(lineWidth: 2, lineCap: .butt, dash: [8, 4])
-        case .openness: StrokeStyle(lineWidth: 2, lineCap: .round, dash: [0.5, 4])
         }
     }
 }

@@ -109,8 +109,71 @@ public struct ShannonMoodStep: Equatable, Sendable {
 }
 
 public enum ShannonMoodTrend {
-    /// The two windows the switch offers, in hours.
-    public static let windows = [24, 168]
+    /// The three windows the switch offers, in hours (1時間／24時間／7日; owner decision 2026-10-06).
+    public static let windows = [1, 24, 168]
+
+    /// How long one drawn step is at least, by window: 1 minute in an hour, 5 minutes in a day,
+    /// 30 minutes in a week. Points written seconds apart would otherwise draw spikes.
+    public static func bucket(hours: Int) -> TimeInterval {
+        switch hours {
+        case ...1: 60
+        case ...24: 5 * 60
+        default: 30 * 60
+        }
+    }
+
+    /// Steps as drawn: the steps are collapsed into buckets counted from the window's start, the
+    /// last step in each bucket is kept and placed at the bucket's start, and each holds until the
+    /// next kept one (the newest until the end of the last step, now). The value carried in at the
+    /// window's start is the first bucket's first step, so it stays there unless a point of the
+    /// window's first bucket replaces it. The words and the summary still read the true newest point.
+    public static func bucketed(_ steps: [ShannonMoodStep], windowStart: Date, bucket: TimeInterval) -> [ShannonMoodStep] {
+        guard bucket > 0, let final = steps.last else { return steps }
+        var kept: [(index: Int, value: Double)] = []
+        for step in steps {
+            let index = max(0, Int((step.start.timeIntervalSince(windowStart) / bucket).rounded(.down)))
+            if let last = kept.last, last.index == index { kept[kept.count - 1].value = step.value } else { kept.append((index, step.value)) }
+        }
+        let starts = kept.map { windowStart.addingTimeInterval(Double($0.index) * bucket) }
+        return kept.enumerated().map { offset, entry in
+            let end = offset + 1 < kept.count ? starts[offset + 1] : max(final.end, starts[offset])
+            return ShannonMoodStep(start: starts[offset], end: end, value: entry.value)
+        }
+    }
+
+    /// The quarter hours of the clock inside the window (「20:15」, 「20:30」…), for the hour's
+    /// time marks: counted from the window's start they would fall on odd minutes.
+    public static func quarterHours(from start: Date, to end: Date, timeZone: TimeZone = .current) -> [Date] {
+        let step: TimeInterval = 15 * 60
+        let offset = Double(timeZone.secondsFromGMT(for: start))
+        var mark = Date(timeIntervalSince1970: ((start.timeIntervalSince1970 + offset) / step).rounded(.up) * step - offset)
+        var marks: [Date] = []
+        while mark <= end {
+            marks.append(mark)
+            mark = mark.addingTimeInterval(step)
+        }
+        return marks
+    }
+
+    /// The vertical reach of the rows, the same for all three: ±0.6, or the largest distance from
+    /// rest in the window rounded up to 0.1 when that is larger, never beyond ±1.
+    public static func yLimit(_ points: [ShannonMoodHistoryDTO.Point], carryIn: ShannonMoodHistoryDTO.Point? = nil) -> Double {
+        let all = points + (carryIn.map { [$0] } ?? [])
+        let largest = all.flatMap { point in ShannonMoodLine.allCases.map { abs($0.deviation(point)) } }.max() ?? 0
+        // The values are rounded to 0.01, so a hair below the next tenth is that tenth.
+        let rounded = (largest * 10 - 1e-6).rounded(.up) / 10
+        return min(1, max(0.6, rounded))
+    }
+
+    /// The part of the window before anything was recorded: from the window's start to the first
+    /// point, when no value was carried in from before the window. Nil when there is no such part.
+    public static func unrecorded(
+        _ points: [ShannonMoodHistoryDTO.Point], carryIn: ShannonMoodHistoryDTO.Point? = nil, windowStart: Date
+    ) -> Range<Date>? {
+        guard carryIn == nil, let first = points.compactMap({ ShannonYousuTime.date($0.at) }).min(), first > windowStart
+        else { return nil }
+        return windowStart..<first
+    }
 
     /// The end of the window: the server's `generatedAt`, or the time of the read when it has none.
     public static func windowEnd(_ history: ShannonMoodHistoryDTO, readAt: Date) -> Date {

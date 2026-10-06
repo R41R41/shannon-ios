@@ -2749,12 +2749,20 @@
       "note": "所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
     },
     {
+      "key": "yousu.moodTrend.range.hour",
+      "text": "1時間",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift",
+      "decided": "2026-10-06",
+      "windowsNow": "（無い）",
+      "note": "区画の右上の切り替えの 1 つ目（1時間／24時間／7日）。所有者が足した（2026-10-06）。1 時間のときの時刻の目盛りは 15 分ごと（「20:15」）。"
+    },
+    {
       "key": "yousu.moodTrend.line.valence",
       "text": "気分の明るさ",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
       "decided": "2026-10-05",
       "windowsNow": "気分の明るさ",
-      "note": "線の名前（valence）。実線、押せるものの青（action）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+      "note": "行の名前（valence）。押せるものの青（action）。2026-10-06 から 3 本を行に分けた（線の形の違いと凡例は無くした）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
     },
     {
       "key": "yousu.moodTrend.line.arousal",
@@ -2762,7 +2770,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
       "decided": "2026-10-05",
       "windowsNow": "元気さ",
-      "note": "線の名前（arousal）。長い破線、橙（attention）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+      "note": "行の名前（arousal）。橙（attention）。2026-10-06 から 3 本を行に分けた（線の形の違いと凡例は無くした）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
     },
     {
       "key": "yousu.moodTrend.line.openness",
@@ -2770,7 +2778,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
       "decided": "2026-10-05",
       "windowsNow": "心の開き",
-      "note": "線の名前（openness）。点線、緑（success）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+      "note": "行の名前（openness）。緑（success）。2026-10-06 から 3 本を行に分けた（線の形の違いと凡例は無くした）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
     },
     {
       "key": "yousu.moodTrend.level.bright",
@@ -2827,6 +2835,14 @@
       "decided": "2026-10-05",
       "windowsNow": "読めませんでした",
       "note": "記録が読めなかったとき（500・429・届かない・読み取れない）。区画と切り替えは残し、次に開いたときに読み直す。403・404 のときは区画を出さない。"
+    },
+    {
+      "key": "yousu.moodTrend.unrecorded",
+      "text": "記録なし",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift",
+      "decided": "2026-10-06",
+      "windowsNow": "（無い）",
+      "note": "窓の始まりから最初の点までの、記録が始まる前の部分（窓の前の点 carryIn が無いとき）。3 つの行すべてで薄く塗り、いちばん上の行の、その部分の真ん中にだけ小さく出す（幅が約 44pt 未満なら出さない）。所有者が「記録の前は薄く示す」を選んだ（2026-10-06。切り詰めない）。"
     },
     {
       "key": "emotion.kind.pride",

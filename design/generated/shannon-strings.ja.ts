@@ -379,6 +379,7 @@ export const shannonStrings = {
   "yousu.moodTrend.title": "気分の推移",
   "yousu.moodTrend.range.day": "24時間",
   "yousu.moodTrend.range.week": "7日",
+  "yousu.moodTrend.range.hour": "1時間",
   "yousu.moodTrend.line.valence": "気分の明るさ",
   "yousu.moodTrend.line.arousal": "元気さ",
   "yousu.moodTrend.line.openness": "心の開き",
@@ -389,6 +390,7 @@ export const shannonStrings = {
   "yousu.moodTrend.summary": "気分の明るさは{valence}、元気さは{arousal}、心の開きは{openness}",
   "yousu.moodTrend.empty": "まだ記録がありません",
   "yousu.moodTrend.unreadable": "読めませんでした",
+  "yousu.moodTrend.unrecorded": "記録なし",
   "emotion.kind.pride": "得意げ",
   "emotion.kind.triumphant": "勝ちほこる",
   "emotion.kind.competitive": "負けず嫌い",
@@ -1181,6 +1183,10 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
     "decided": "2026-10-05",
     "windowsBefore": "7日"
   },
+  "yousu.moodTrend.range.hour": {
+    "decided": "2026-10-06",
+    "windowsBefore": "（無い）"
+  },
   "yousu.moodTrend.line.valence": {
     "decided": "2026-10-05",
     "windowsBefore": "気分の明るさ"
@@ -1220,6 +1226,10 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   "yousu.moodTrend.unreadable": {
     "decided": "2026-10-05",
     "windowsBefore": "読めませんでした"
+  },
+  "yousu.moodTrend.unrecorded": {
+    "decided": "2026-10-06",
+    "windowsBefore": "（無い）"
   },
   "emotion.kind.pride": {
     "decided": "2026-10-05",
