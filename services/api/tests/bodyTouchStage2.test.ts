@@ -24,7 +24,7 @@ async function world(options: { record?: boolean } = {}) {
   const record = options.record === false ? null : new PredictionShadow({ database, createsSchema: true, defer: task => task(), log: () => {} });
   const memories: TouchExperience[] = [];
   const experiences: TouchExperienceWriter = { write: (_scope, experience) => { memories.push(experience); return true; } };
-  const harness = await reactionHarness({ stage2: true, ...(record ? { prediction: record } : {}), experiences });
+  const harness = await reactionHarness({ stage2: true, prediction: record, experiences });
   const rows = () => new SQLitePredictionStore(database, { createSchema: false }).rows(scope).filter(row => row.domain === 'body_stance');
   const decide = (stance: BodyReactionDecision['stance'], feeling: BodyReactionDecision['feeling'] = 'neutral', say = false) => {
     harness.speaker.decision = { say, text: say ? 'もう、ライ氏。' : '', feeling, ...(stance ? { stance } : {}) };
@@ -159,7 +159,7 @@ describe('her stance is the outcome', () => {
     expect(unknown.uncertainty / (unknown.uncertainty + unknown.noise)).toBeGreaterThan(owner.uncertainty / (owner.uncertainty + owner.noise));
   });
 
-  it('falls back to stage 1b, and says so, when there is no prediction record to learn in', async () => {
+  it('falls back to stage 1b, and says so, when the prediction record was configured away', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const w = await world({ record: false });
     expect(warn.mock.calls.some(call => String(call[0]).includes('touches run as stage 1b'))).toBe(true);
@@ -168,6 +168,13 @@ describe('her stance is the outcome', () => {
     // Stage 1b: no stance asked of a touch in the old shape, and the table's feeling.
     expect(w.speaker.calls[0]!.stance).toBeUndefined();
     expect(w.speaker.prompts[0]).not.toContain('親密さ');
+    warn.mockRestore();
+  });
+
+  it('is quiet about it in a kernel built without a record at all', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await reactionHarness({ stage2: true });
+    expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
 });

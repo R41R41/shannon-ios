@@ -91,7 +91,7 @@ export async function reactionHarness(options: ReactionHarnessOptions = {}) {
     body: {
       store: bodyStore, ingestEnabled: options.ingestEnabled ?? true,
       reactions: { store: reactionStore, speaker, config: options.config ?? {}, experiences: options.experiences ?? null,
-        ...(options.stage2 !== undefined ? { stage2: options.stage2 } : {}), ...(options.prediction ? { prediction: options.prediction } : {}) },
+        ...(options.stage2 !== undefined ? { stage2: options.stage2 } : {}), ...(options.prediction !== undefined ? { prediction: options.prediction } : {}) },
     },
   });
   const advance = (milliseconds: number) => { clock.at = new Date(Date.parse(clock.at) + milliseconds).toISOString(); };

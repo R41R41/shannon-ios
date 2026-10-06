@@ -190,7 +190,7 @@ export class ShannonBody {
     const config = { ...configuredBodyReactions({}), ...dependencies.reactions?.config };
     this.touches = new BodyTouches({
       store: reactionStore, stateStore: dependencies.stateStore, experiences: dependencies.reactions?.experiences ?? null,
-      enabled: config.enabled && this.ingestEnabled, now: dependencies.now, prediction: dependencies.reactions?.prediction ?? null,
+      enabled: config.enabled && this.ingestEnabled, now: dependencies.now, ...(dependencies.reactions?.prediction !== undefined ? { prediction: dependencies.reactions.prediction } : {}),
       stage2: dependencies.reactions?.stage2 ?? touchPredictionEnabled(process.env), // ADR-0006 stage 2: `SHANNON_PREDICTION`
     });
     this.reactions = new BodyReactions({

@@ -76,8 +76,9 @@ export class BodyTouches {
     const usable = record?.predict && record.recent && record.learnLater && record.stanceCompared ? record as TouchPredictionRecord : null;
     this.predictions = usable ? new TouchPredictions(usable) : null;
     // Stage 2 learns in the prediction record. Without it (`SHANNON_PREDICTION_SHADOW=off`, a kernel without SQLite) every
-    // touch would meet the same empty prior, the same startle and the same surprise: touches run as stage 1b instead.
-    if (dependencies.stage2 && !usable && dependencies.enabled) {
+    // touch would meet the same empty prior, the same startle and the same surprise: touches run as stage 1b instead. The
+    // warning is for a server whose record was configured away (`null`); a kernel built without one (`undefined`) is quiet.
+    if (dependencies.stage2 && !usable && dependencies.enabled && dependencies.prediction === null) {
       console.warn('Shannon touch prediction (ADR-0006 stage 2) has no prediction record: touches run as stage 1b. Set SHANNON_PREDICTION=off or switch the prediction record on.');
     }
     this.reportError = dependencies.reportError ?? (error => console.error('Shannon touch memory failed', error instanceof Error ? error.message : 'unknown'));
