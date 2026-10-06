@@ -190,6 +190,10 @@ describe('what she reads of her folder in front of others', () => {
       // An ordinary sentence that only shares a short word of it (病院) stays.
       expect(textForOthers('病院の前を通った。', separated)).toBe('病院の前を通った。');
     }
+    // A sentence of a secret in hiragana alone is matched too; only short filler of a secret is skipped.
+    const hiragana = { withheld: runCheckOf(['うつになった。そうなんだ。病院は東大病院']), guarded: runCheckOf([]), openOnly: true };
+    expect(textForOthers('ライ氏はうつになった。灯台を見た。', hiragana)).toBe(`灯台を見た。\n${LEFT_OUT_LINE}`);
+    expect(textForOthers('そうなんだ。灯台を見た。', hiragana)).toBe('そうなんだ。灯台を見た。');
   });
 });
 
