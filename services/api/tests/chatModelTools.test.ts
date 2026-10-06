@@ -7,9 +7,9 @@ import {
 import { streamedVoiceToolTurn } from '../src/chatModelVoiceTools.js';
 import { ChatSentenceSplitter, splitChatSentences } from '../src/chatSentenceSplitter.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline, VOICE_TURN_DEADLINE } from '../src/turnDeadline.js';
-import { CONVERSATION_WRITE_CHARACTERS, FOLDER_WRITE_CHARACTERS, offeredTools } from '../src/shannonTools.js';
+import { CONVERSATION_WRITE_CHARACTERS, FOLDER_WRITE_CHARACTERS, offeredTools } from '../src/mind/tools/shannonTools.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';
-import { shannonTool } from '../src/shannonTools.js';
+import { shannonTool } from '../src/mind/tools/shannonTools.js';
 
 const TURN = JSON.stringify({
   reply: '書斎にメモが1つあります。', threadSummary: null, taskDecision: { disposition: 'none', reason: '雑談' }, taskProposal: null, intentPlan: null, artifacts: null,

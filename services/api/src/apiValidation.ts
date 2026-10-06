@@ -1,5 +1,5 @@
 import type { CompanionStateEvent } from '@shannon/cognition';
-import type { AgentCommandType, AgentPlanItem, HostAgentEvent } from './agentTaskStore.js';
+import type { AgentCommandType, AgentPlanItem, HostAgentEvent } from './mind/action/agentTasks/agentTaskStore.js';
 import type { ShannonChatAttachment, ShannonWebSource } from './chatModel.js';
 import type { ApiResponse } from './contracts/contracts.js';
 import type { MemoryAction } from './mind/memory/memoryService.js';

@@ -15,7 +15,7 @@ import { executeConversationCommand } from '../src/conversationCommands.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import type { HostFolderOperations, HostOperationRequest, HostRunOutcome } from '../src/hostFolderOperations.js';
 import { aetherNoteRequest, answersWithPlace, asksForMemo, asksWhichPlace, memoNotForAether, memoRequestContent } from '../src/memoPlace.js';
-import { ShannonToolRunner } from '../src/shannonToolRunner.js';
+import { ShannonToolRunner } from '../src/mind/tools/shannonToolRunner.js';
 import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
 import type { VoiceDecisionInput } from '../src/contracts/voiceDecisionContract.js';
 import { promptOf } from './modelPrompt.js';

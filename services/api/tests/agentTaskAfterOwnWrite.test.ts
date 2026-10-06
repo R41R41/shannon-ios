@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { configuredAutonomy } from '../src/autonomyBudget.js';
+import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonTaskProposal, ShannonVoiceModelRequest } from '../src/chatModel.js';

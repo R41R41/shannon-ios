@@ -7,7 +7,7 @@ import type { ShannonConversationItem } from './chatModel.js';
 import type { ConversationStore } from './mind/memory/store/conversationStore.js';
 import { replayWindow } from './mind/recall/conversationWindow.js';
 import type { DailyMindReader } from './dailyMind.js';
-import { DisclosureGate } from './memoryDisclosure.js';
+import { DisclosureGate } from './mind/inhibition/memoryDisclosure.js';
 import { visibleReplayMessages } from './mind/memory/memoryVisibility.js';
 import type { PeopleMemory } from './mind/memory/peopleMemory.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';

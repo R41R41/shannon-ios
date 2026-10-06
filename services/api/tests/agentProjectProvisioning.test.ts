@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryAgentTaskStore } from '../src/agentTaskStore.js';
+import { InMemoryAgentTaskStore } from '../src/mind/action/agentTasks/agentTaskStore.js';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import {
   normalizedAgentProjectKey,
   normalizedGitHubRepositoryURL,
-} from '../src/agentProjectProvisioning.js';
+} from '../src/mind/action/agentTasks/store/agentProjectProvisioning.js';
 
 describe('Agent project provisioning', () => {
   it('normalizes GitHub repositories and rejects paths or embedded credentials', () => {

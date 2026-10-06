@@ -48,11 +48,11 @@ import {
   type AgentTask,
   type AgentTaskStore,
   type HostAgentEvent,
-} from './agentTaskStore.js';
+} from './mind/action/agentTasks/agentTaskStore.js';
 import { validatedPlaceSearchOptions } from './integrations/places/placeDiscovery.js';
 import { chatAudienceTurn } from './chatAudience.js';
 import { validChatStream } from './chatSentenceStream.js';
-import { conversationToolServer, type ConversationToolServer } from './shannonToolSession.js';
+import { conversationToolServer, type ConversationToolServer } from './mind/tools/shannonToolSession.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from './turnDeadline.js';
 import type { TurnMemoryRecall } from './mind/recall/turnMemoryRecall.js';
 import { type NotionTurnReader } from './conversationCapabilities.js';
@@ -97,8 +97,8 @@ import {
 import { randomUUID } from 'node:crypto';
 import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from './mind/emotion/companionPresence.js';
 import { generateChatTurn, withSentenceStream } from './chatSentenceStream.js';
-import { conversationTools, toolTraceReader, turnWroteHerOwnThings } from './shannonToolSession.js';
-import { withToolCapabilityLines } from './shannonAetherTools.js';
+import { conversationTools, toolTraceReader, turnWroteHerOwnThings } from './mind/tools/shannonToolSession.js';
+import { withToolCapabilityLines } from './mind/tools/shannonAetherTools.js';
 import { withCapabilitySources } from './conversationCapabilities.js';
 import { usableThreadSummary } from './mind/memory/memoryVisibility.js';
 import { conversationReplay } from './mind/recall/conversationWindow.js';

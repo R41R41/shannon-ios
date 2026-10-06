@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SHANNON_ROOM_LOOK_RULES, buildShannonSeenPrompt, guardedShannonSeenPrompt, shannonCapabilityPrompt } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { configuredAutonomy } from '../src/autonomyBudget.js';
+import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { copyableStudyPiece } from '../src/autonomyHostFolderPath.js';
 import type { AutonomyLoopConfig } from '../src/autonomyLoopConfig.js';
 import { planFromThought } from '../src/autonomyLoopPlan.js';

@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { AutonomyActivityRecord } from './autonomyActivity.js';
-import { roundYen } from './autonomyBudget.js';
+import { AutonomyActivityRecord } from './mind/inhibition/store/autonomyActivity.js';
+import { roundYen } from './mind/inhibition/autonomyBudget.js';
 import { AutonomyHostFolderSteps } from './autonomyHostFolderSteps.js';
 import { HostFolderOperationsStore } from './hostFolderOperationsStore.js';
 import { AutonomyLoopState } from './autonomyLoopState.js';
 import { AutonomyProposalLedger } from './autonomyProposals.js';
 import { AutonomyPursuitLedger } from './autonomyPursuits.js';
-import { OwnerInformedMarks } from './ownerInformedMarks.js';
+import { OwnerInformedMarks } from './mind/inhibition/store/ownerInformedMarks.js';
 import { secureDatabaseFiles } from './infra/sqlite/sqliteStoreContext.js';
 import { StudyStore } from './studyStore.js';
 

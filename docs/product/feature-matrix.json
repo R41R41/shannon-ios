@@ -4046,7 +4046,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostOperations.swift",
             "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostWrites.swift",
             "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostWorker.swift",
-            "services/api/src/shannonFolderTools.ts"
+            "services/api/src/mind/tools/shannonFolderTools.ts"
           ],
           "note": "A18 S1〜S3（2026-10-06）：取り決め v2 の全部の操作（v1 の写しは受けない。ADR-0007）。"
         },

@@ -11,7 +11,7 @@ import { createLiveVoiceStreamRoute } from './surfaces/voice/serverLiveVoiceStre
 import { createLocalApiKernel } from './apiKernel.js';
 import { createConfiguredTurnMemoryRecall } from './mind/recall/turnMemoryRecall.js';
 import { DurableBackgroundDispatcher } from './mind/sleep/backgroundUpdates.js';
-import { startToolTraceSweep } from './shannonToolTraceSweep.js';
+import { startToolTraceSweep } from './mind/tools/shannonToolTraceSweep.js';
 import { createConfiguredChatModel } from './chatModel.js';
 import { createConfiguredVoiceDecisionGateway } from './voiceDecision.js';
 import { configuredAuthPepper, SQLiteDeviceAuthStore, type ShannonDevicePrincipal } from './deviceAuth.js';
@@ -23,7 +23,7 @@ import { FileAetherContextReader } from './integrations/aether/aetherContext.js'
 import { configuredNotionSource } from './integrations/notion/notionSource.js';
 import { configuredAetherPorts } from './integrations/aether/aetherAccess.js';
 import { SQLitePushNotificationStore, type APNsEnvironment } from './surfaces/outreach/pushNotifications.js';
-import { SQLiteAgentTaskStore } from './agentTaskStore.js';
+import { SQLiteAgentTaskStore } from './mind/action/agentTasks/agentTaskStore.js';
 import { SQLiteTestFlightDeliveryStore } from './integrations/testflight/store/testflightDeliveryStore.js';
 import { SQLiteDailyMindStore } from './dailyMind.js';
 import {
@@ -46,7 +46,7 @@ import { VOICE_CALL_MEMORY_PATH } from './apiPeopleMemoryRoutes.js';
 import { SQLiteCognitiveIntentStore } from './cognitiveIntent.js';
 import { SQLiteConversationOrchestrationStore } from './conversationOrchestrationPersistence.js';
 import { SQLiteAutonomyAnnouncer } from './autonomyAnnouncer.js';
-import { configuredAutonomy } from './autonomyBudget.js';
+import { configuredAutonomy } from './mind/inhibition/autonomyBudget.js';
 import { SQLiteStudyShowing } from './autonomyShowing.js';
 import { ShannonAutonomyService } from './autonomyService.js';
 import { SQLiteAutonomyStore } from './autonomyStore.js';

@@ -8,7 +8,7 @@ import {
   type MemoryAudience,
 } from '@shannon/cognition';
 import { resolveReplyEmotion } from '../../mind/emotion/companionPresence.js';
-import { DisclosureGate, sharedProfilePrompt } from '../../memoryDisclosure.js';
+import { DisclosureGate, sharedProfilePrompt } from '../../mind/inhibition/memoryDisclosure.js';
 import {
   platformConversationLabel, platformPeopleEnabled,
   type PlatformConversationKind, type PlatformPeople, type PlatformSourceKind,

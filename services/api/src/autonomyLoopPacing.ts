@@ -1,4 +1,4 @@
-import { autonomyDayKey, yenFromUsd, type AutonomyBudgetStatus } from './autonomyBudget.js';
+import { autonomyDayKey, yenFromUsd, type AutonomyBudgetStatus } from './mind/inhibition/autonomyBudget.js';
 import { ownerLocalTime } from './autonomyLoopCalls.js';
 import { sessionMarked } from './autonomyLoopProvenance.js';
 import { restSummary, type SessionFacts, type TypicalCost } from './autonomyLoopSessionPrompts.js';

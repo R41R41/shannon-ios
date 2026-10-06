@@ -7,7 +7,7 @@ import { SHANNON_AFFECT_STEP, predictOutcome, resolveShannonEmotionState, type C
 import type { ReachOutFacts } from '../src/autonomyLoopObservations.js';
 import { observeStep } from '../src/autonomyLoopObserve.js';
 import type { StepDependencies } from '../src/autonomyLoopSteps.js';
-import { SHANNON_CORE_PATHS } from '../src/autonomyCore.js';
+import { SHANNON_CORE_PATHS } from '../src/mind/inhibition/autonomyCore.js';
 import { SQLiteBodyReactionStore } from '../src/surfaces/body/store/bodyReactionStore.js';
 import { BodyTouches } from '../src/mind/emotion/bodyTouch.js';
 import { PredictionShadow, decidedFeelingOutcome, predictionShadowEnabled } from '../src/mind/prediction/predictionShadow.js';

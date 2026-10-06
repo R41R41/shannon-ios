@@ -1,5 +1,5 @@
 import { SHANNON_AUTONOMY_SYSTEM_DOMAIN, SHANNON_SEEN_LIMITS, type ShannonOwnWork, type ShannonSeenNote } from '@shannon/cognition';
-import { autonomyDayPhrases } from './autonomyDayLog.js';
+import { autonomyDayPhrases } from './mind/inhibition/autonomyDayLog.js';
 import { AUTONOMY_REACH_OUT_MEMORY_MAXIMUM, reachOutMemories, reachOutMemoryLine } from './autonomyLoopObservePrompts.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import { syncedWithin, type StudyAether } from './studyAether.js';

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { autonomyDayKey } from './autonomyBudget.js';
+import { autonomyDayKey } from './mind/inhibition/autonomyBudget.js';
 import { observeStep, sentBeforeStop } from './autonomyLoopObserve.js';
 import { closeSession, fitsSession, idleBefore, mayRetryThought, nothingDone, ownerTalking, restMilliseconds, sessionBound, sessionOf, startSessionIfDue } from './autonomyLoopPacing.js';
 import { REACH_OUT_REASON_LABEL } from './autonomyLoopPrompts.js';

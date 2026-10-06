@@ -12,7 +12,7 @@ import {
 } from '@shannon/cognition';
 import type { ConversationStore, ShannonExperience, StoredConversationMessage } from './store/conversationStore.js';
 import type { ShannonConversationItem } from '../../chatModel.js';
-import { DisclosureGate } from '../../memoryDisclosure.js';
+import { DisclosureGate } from '../inhibition/memoryDisclosure.js';
 
 /** A Shannon reply (or the Shannon side of an experience summary) as the withholding rule sees it. */
 export interface WithholdableReply {

@@ -4,12 +4,12 @@ import { join, normalize } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { SHANNON_AUTONOMY_DOMAINS } from '@shannon/cognition';
 import { autonomyModel } from '../src/autonomyModels.js';
-import { resolvePhysicalPath } from '../src/autonomyPaths.js';
+import { resolvePhysicalPath } from '../src/mind/inhibition/autonomyPaths.js';
 import {
   authorizeAutonomousAction,
   type AutonomousActionRequest,
   type AutonomyPolicyContext,
-} from '../src/autonomyPolicy.js';
+} from '../src/mind/inhibition/autonomyPolicy.js';
 import { apiSourcePath } from './support/sources.js';
 
 const places = {

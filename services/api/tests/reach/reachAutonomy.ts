@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { configuredAutonomy } from '../../src/autonomyBudget.js';
+import { configuredAutonomy } from '../../src/mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyLoop } from '../../src/autonomyLoop.js';
 import { configuredAutonomyLoop } from '../../src/autonomyLoopConfig.js';
 import { ShannonAutonomyService } from '../../src/autonomyService.js';

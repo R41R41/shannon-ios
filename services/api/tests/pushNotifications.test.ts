@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
-import { SQLiteAgentTaskStore } from '../src/agentTaskStore.js';
+import { SQLiteAgentTaskStore } from '../src/mind/action/agentTasks/agentTaskStore.js';
 import {
   createConfiguredPushNotificationSender,
   deliverPendingPushNotifications,

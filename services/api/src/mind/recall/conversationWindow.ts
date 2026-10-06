@@ -4,9 +4,9 @@ import type { ShannonConversationItem } from '../../chatModel.js';
 import { earlierConversationSummaryInstructions } from '../../chatModelSupport.js';
 import type { ConversationStore } from '../memory/store/conversationStore.js';
 import { usableReplaySummary, visibleReplayMessages, type VisibleMessage } from '../memory/memoryVisibility.js';
-import { conversationSecrets, type SecretCheck } from '../../conversationSecrets.js';
-import { UNLINKED_TURN, maskedTraceCalls, toolTracePrompt, traceLabel, type ToolTraceRecord } from '../../shannonToolTrace.js';
-import { shannonTool } from '../../shannonTools.js';
+import { conversationSecrets, type SecretCheck } from '../inhibition/conversationSecrets.js';
+import { UNLINKED_TURN, maskedTraceCalls, toolTracePrompt, traceLabel, type ToolTraceRecord } from '../tools/shannonToolTrace.js';
+import { shannonTool } from '../tools/shannonTools.js';
 
 /**
  * How much of a thread is replayed to the reply model. The window is a character budget, not a

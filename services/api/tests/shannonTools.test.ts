@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialCompanionState } from '@shannon/cognition';
-import { conversationSecrets, type SecretCheck } from '../src/conversationSecrets.js';
-import { configuredAutonomy } from '../src/autonomyBudget.js';
+import { conversationSecrets, type SecretCheck } from '../src/mind/inhibition/conversationSecrets.js';
+import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
-import { authorizeToolCall, toolRefusal } from '../src/shannonToolGate.js';
-import { validToolInput } from '../src/shannonToolInput.js';
-import { similarBodies } from '../src/shannonStudyTools.js';
-import { toolSessionMemory } from '../src/shannonToolTypes.js';
+import { authorizeToolCall, toolRefusal } from '../src/mind/inhibition/shannonToolGate.js';
+import { validToolInput } from '../src/mind/tools/shannonToolInput.js';
+import { similarBodies } from '../src/mind/tools/shannonStudyTools.js';
+import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import {
   CONVERSATION_WRITE_CHARACTERS, SHANNON_TOOLS, TOOL_FAILURE_KINDS, offeredTools, providerToolName, shannonTool, toolFromProviderName, toolResultForModel,
   type ToolResult, type ToolSurface,
-} from '../src/shannonTools.js';
+} from '../src/mind/tools/shannonTools.js';
 
 const scope = 'owner';
 const STORY = `雨の日の図書館で、だれも借りない本が一冊だけ光っていた。${'ページをめくる音が、静かな部屋に少しずつ広がっていく。'.repeat(4)}`;

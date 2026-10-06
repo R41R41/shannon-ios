@@ -2,14 +2,14 @@ import type { CompanionStateStore, ShannonActionReceipt } from '@shannon/cogniti
 import type { ConversationStore, StoredConversationMessage } from './mind/memory/store/conversationStore.js';
 import type { OrganizeSession, OrganizeStore } from './integrations/voyager/organize.js';
 import type { AetherProposalStore } from './integrations/aether/aetherProposal.js';
-import type { AgentTask, AgentTaskStore } from './agentTaskStore.js';
+import type { AgentTask, AgentTaskStore } from './mind/action/agentTasks/agentTaskStore.js';
 import { applyExplicitCommitmentCommand } from './commitmentCommands.js';
 import {
   boundOwnerTurn, contentPreview, containsUnresolvedConversationReference, isBareConversationReference, keepableStatement,
   resolveConversationContent, type ResolvedConversationContent,
 } from './conversationReference.js';
 import { aetherNoteRequest, asksWhichPlace, memoRequestContent, type AetherNoteRequest } from './memoPlace.js';
-import { TOOL_FOLLOW_UP_MILLISECONDS } from './shannonToolTurns.js';
+import { TOOL_FOLLOW_UP_MILLISECONDS } from './mind/tools/shannonToolTurns.js';
 import { ShannonMemoryService } from './mind/memory/memoryService.js';
 import { forgetCitedMemories } from './mind/memory/memoryForgetCommand.js';
 import type { CognitiveIntentStore } from './cognitiveIntent.js';

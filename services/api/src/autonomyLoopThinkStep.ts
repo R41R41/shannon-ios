@@ -1,4 +1,4 @@
-import { autonomyDayKey } from './autonomyBudget.js';
+import { autonomyDayKey } from './mind/inhibition/autonomyBudget.js';
 import { callModel, ownerLocalTime, paidCall } from './autonomyLoopCalls.js';
 import { roomLookAvailable } from './autonomyLoopLookStep.js';
 import { OBSERVATION_RETENTION_DAYS, type ObservedStepKind } from './autonomyLoopObservations.js';

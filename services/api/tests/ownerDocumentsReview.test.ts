@@ -3,7 +3,7 @@ import { prepareFollowUp } from '../src/autonomyLoopFollowUpStep.js';
 import { preparePhoneCall, type AutonomyPhone } from '../src/autonomyLoopPhoneStep.js';
 import { prepareReachOut, type AutonomyReachOuts } from '../src/autonomyLoopReachOutStep.js';
 import { AutonomyToolResults } from '../src/autonomyLoopToolStep.js';
-import { toolSessionMemory } from '../src/shannonToolTypes.js';
+import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import { OWN_TIME_PRICES } from './ownerDocumentsScenario.js';
 import { FakeAether } from './fakeAetherServer.js';
 import { FakeModel, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';

@@ -15,7 +15,7 @@ import {
   appLookUnavailablePrompt, appLookUnavailableReason, voiceAppLookPrompt,
 } from '../src/surfaces/body/appLookLines.js';
 import { SQLiteAppLookStore } from '../src/surfaces/body/store/appLookStore.js';
-import { configuredAutonomy } from '../src/autonomyBudget.js';
+import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyService, createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import { ROOM_LOOK_OFFER_PROMPT } from '../src/surfaces/body/bodyLook.js';

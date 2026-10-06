@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SQLiteAgentTaskStore } from '../src/agentTaskStore.js';
-import type { HostAgentEvent } from '../src/agentTaskStore.js';
+import { SQLiteAgentTaskStore } from '../src/mind/action/agentTasks/agentTaskStore.js';
+import type { HostAgentEvent } from '../src/mind/action/agentTasks/agentTaskStore.js';
 
 const OWNER = 'owner-a';
 const MAC = 'local-mac';

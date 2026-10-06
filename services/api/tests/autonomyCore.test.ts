@@ -2,7 +2,7 @@ import { existsSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SHANNON_CORE_AREA_LABELS } from '@shannon/cognition';
-import { SHANNON_CORE_PATHS, allCorePaths, coreAreaForRepositoryPath, normalizedRepositoryPath } from '../src/autonomyCore.js';
+import { SHANNON_CORE_PATHS, allCorePaths, coreAreaForRepositoryPath, normalizedRepositoryPath } from '../src/mind/inhibition/autonomyCore.js';
 import { apiSourceFilesNamed, apiSourcePath, repositoryPath, repositoryRoot } from './support/sources.js';
 
 describe('CORE as code', () => {

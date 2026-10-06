@@ -18,8 +18,8 @@ import type { MinecraftIntent } from '../src/surfaces/minecraft/minecraftIntent.
 import { SQLiteMinecraftTurnLog } from '../src/surfaces/minecraft/store/minecraftTurnStore.js';
 import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemoryStore.js';
 import { minecraftBodyRoute } from '../src/surfaces/minecraft/serverMinecraftBodyRoute.js';
-import { asksAboutMinecraftBody } from '../src/shannonToolSession.js';
-import { toolSessionMemory } from '../src/shannonToolTypes.js';
+import { asksAboutMinecraftBody } from '../src/mind/tools/shannonToolSession.js';
+import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { promptOf } from './modelPrompt.js';
 

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore, SHANNON_ROOM_LOOK_RULES } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { configuredAutonomy } from '../src/autonomyBudget.js';
+import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyService, createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import {

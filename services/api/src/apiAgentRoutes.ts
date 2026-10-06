@@ -6,20 +6,20 @@ import type {
   AgentTaskStore,
   AgentWorkspaceProjectState,
   HostAgentEvent,
-} from './agentTaskStore.js';
+} from './mind/action/agentTasks/agentTaskStore.js';
 import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import { badRequest, objectBody, validAgentCommandType, validBoundedString, validHostEvents, validPlan, validScopeKey } from './apiValidation.js';
 import {
   normalizedAgentProjectKey,
   normalizedGitHubRepositoryURL,
   type AgentProjectProvisioningEvent,
-} from './agentProjectProvisioning.js';
+} from './mind/action/agentTasks/store/agentProjectProvisioning.js';
 import {
   normalizedResourcePath,
   type AgentWorkspaceResourceEvent,
-} from './agentWorkspaceResources.js';
+} from './mind/action/agentTasks/store/agentWorkspaceResources.js';
 import type { CognitiveIntentStore } from './cognitiveIntent.js';
-import { synchronizeIntentWithAgentTask } from './cognitiveWork.js';
+import { synchronizeIntentWithAgentTask } from './mind/action/agentTasks/cognitiveWork.js';
 
 export interface ApiAgentRouteDependencies {
   agentTasks: AgentTaskStore;

@@ -8,7 +8,7 @@ import {
   IMPRESSION_MEMORY_PREFIX, OWNER_PERSON_KEY, comparable, impressionConfidence, impressionConfig, impressionMemoryId, impressionsEnabled,
   type ImpressionPerson, type ImpressionSource, type PersonImpression,
 } from '../memory/impressions.js';
-import { DisclosureGate } from '../../memoryDisclosure.js';
+import { DisclosureGate } from '../inhibition/memoryDisclosure.js';
 import { localDayKey } from '../memory/memoryProjection.js';
 import { MemoryWithholding } from '../memory/memoryVisibility.js';
 

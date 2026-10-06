@@ -1,4 +1,4 @@
-import type { AutonomyActivityEntry } from '../../autonomyActivity.js';
+import type { AutonomyActivityEntry } from '../../mind/inhibition/store/autonomyActivity.js';
 import type { RecordedDecision, ShannonAutonomyService } from '../../autonomyService.js';
 import {
   notionFailureCode, type NotionDatabaseRows, type NotionObjectSummary, type NotionPageText, type NotionSource,

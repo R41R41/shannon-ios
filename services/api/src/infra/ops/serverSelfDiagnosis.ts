@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { SHANNON_ONE_LINE_VOICE, looksSecret, shannonCapabilityPrompt, shannonPersonaPrompt, shannonSuitePrompt } from '@shannon/cognition';
-import { configuredAutonomy } from '../../autonomyBudget.js';
+import { configuredAutonomy } from '../../mind/inhibition/autonomyBudget.js';
 import { ownerDocumentsEnabled } from '../../autonomyLoopConfig.js';
 import { AUTONOMY_MODEL_PURPOSES, AUTONOMY_ROOM_LOOK_MODEL, autonomyModel, type AutonomyModelPurpose } from '../../autonomyModels.js';
 import { dedicatedAutonomyCredential, resolveAutonomyModel } from '../../autonomyTextModel.js';
@@ -25,7 +25,7 @@ import { createConfiguredOpenAITranscriptionGateway } from '../../openaiTranscri
 import { DisabledVoyagerCatalog, type VoyagerCatalog } from '../../integrations/voyager/organizeIntegrations.js';
 import { shannonNowOwnerScope } from '../../contracts/shannonNowContract.js';
 import { configuredAetherAccess } from '../../integrations/aether/aetherAccess.js';
-import { SHANNON_TOOLS, offeredTools, ownToolsEnabled, type ToolAudience, type ToolSurface } from '../../shannonTools.js';
+import { SHANNON_TOOLS, offeredTools, ownToolsEnabled, type ToolAudience, type ToolSurface } from '../../mind/tools/shannonTools.js';
 
 type Environment = Readonly<Record<string, string | undefined>>;
 

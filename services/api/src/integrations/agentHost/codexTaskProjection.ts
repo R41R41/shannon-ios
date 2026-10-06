@@ -6,7 +6,7 @@ import type {
   AgentReasoningEffort,
   AgentTestResult,
   ClaimedAgentCommand,
-} from '../../agentTaskStore.js';
+} from '../../mind/action/agentTasks/agentTaskStore.js';
 import type { CodexRequestID } from './codexAppServerClient.js';
 import type { ShannonTaskResult } from './codexTaskBridge.js';
 

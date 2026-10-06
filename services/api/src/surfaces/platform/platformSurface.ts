@@ -5,7 +5,7 @@ import { chatAudienceTurn, type ChatAudienceTurn } from '../../chatAudience.js';
 import type { ChatResponse } from '../../contracts/contracts.js';
 import type { ConversationStore, ShannonExperience } from '../../mind/memory/store/conversationStore.js';
 import { identityOnly } from '../../mind/memory/store/knowledgeStore.js';
-import { DisclosureGate, sharedDailyFocus } from '../../memoryDisclosure.js';
+import { DisclosureGate, sharedDailyFocus } from '../../mind/inhibition/memoryDisclosure.js';
 import {
   PlatformBridgeError,
   type PlatformAudiencePolicy, type PlatformBridgeService, type PlatformTurnRequest, type ShannonPlatform,

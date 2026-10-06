@@ -11,7 +11,7 @@ import {
   type MemoryAudience,
   type MemoryDisclosure,
 } from '@shannon/cognition';
-import { DisclosureGate } from '../../memoryDisclosure.js';
+import { DisclosureGate } from '../../mind/inhibition/memoryDisclosure.js';
 import { localDayKey } from '../../mind/memory/memoryProjection.js';
 import { personMemoryId } from '../../mind/memory/peopleMemory.js';
 import type { PeopleMemoryStore, PersonMemoryItem, RememberedPerson } from '../../mind/memory/store/peopleMemoryStore.js';

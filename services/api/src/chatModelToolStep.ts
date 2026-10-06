@@ -1,5 +1,5 @@
 import type { ProviderFunctionCall, ShannonModelToolSession, ToolCallOutcome } from './chatModelTools.js';
-import { providerToolName, type ShannonToolDefinition } from './shannonTools.js';
+import { providerToolName, type ShannonToolDefinition } from './mind/tools/shannonTools.js';
 import { MINIMUM_CALL_MILLISECONDS, TOOL_CALL_CAP_MILLISECONDS } from './turnDeadline.js';
 
 /**

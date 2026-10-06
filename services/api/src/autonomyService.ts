@@ -9,24 +9,24 @@ import {
   type ShannonPursuitLink,
   type ShannonPursuitStatus,
 } from '@shannon/cognition';
-import type { AgentTask, AgentTaskStore } from './agentTaskStore.js';
-import { formatYen, type AutonomyActivityDay, type AutonomyActivityEntry } from './autonomyActivity.js';
+import type { AgentTask, AgentTaskStore } from './mind/action/agentTasks/agentTaskStore.js';
+import { formatYen, type AutonomyActivityDay, type AutonomyActivityEntry } from './mind/inhibition/store/autonomyActivity.js';
 import { DisabledAutonomyAnnouncer, type AutonomyAnnouncer } from './autonomyAnnouncer.js';
-import { autonomyLoopStatus, type AutonomyLoopStatus } from './autonomyDayLog.js';
+import { autonomyLoopStatus, type AutonomyLoopStatus } from './mind/inhibition/autonomyDayLog.js';
 import {
   autonomyBudgetStatus, autonomyDayKey, configuredAutonomy, yenFromUsd,
   type AutonomyBudgetStatus, type AutonomyConfig,
-} from './autonomyBudget.js';
+} from './mind/inhibition/autonomyBudget.js';
 import {
   autonomyModel, autonomyModelAllowedFor, autonomyModelChoices, autonomyModelCostUsd, isAutonomyModelPurpose,
 } from './autonomyModels.js';
 import { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import { HostFolderOperations } from './hostFolderOperations.js';
-import { ShannonToolRunner, type ToolAetherPorts } from './shannonToolRunner.js';
+import { ShannonToolRunner, type ToolAetherPorts } from './mind/tools/shannonToolRunner.js';
 import { StudyAether } from './studyAether.js';
-import type { MinecraftRequestPort } from './shannonMinecraftTools.js';
-import { resolvePhysicalPath, type AutonomyPathResolver } from './autonomyPaths.js';
-import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
+import type { MinecraftRequestPort } from './mind/tools/shannonMinecraftTools.js';
+import { resolvePhysicalPath, type AutonomyPathResolver } from './mind/inhibition/autonomyPaths.js';
+import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyDecision } from './mind/inhibition/autonomyPolicy.js';
 import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './autonomyProposals.js';
 import type { PursuitDraft, PursuitRejection } from './autonomyPursuits.js';
 import { autonomyPacing } from './autonomyLoopConfig.js';

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ShannonActionReceipt } from '@shannon/cognition';
-import type { AgentTask } from './agentTaskStore.js';
+import type { AgentTask } from './mind/action/agentTasks/agentTaskStore.js';
 import type { ShannonConversationItem } from './chatModel.js';
 import type { StoredConversationMessage } from './mind/memory/store/conversationStore.js';
 

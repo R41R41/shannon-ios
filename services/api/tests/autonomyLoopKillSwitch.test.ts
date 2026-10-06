@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ownerPrivateRule, type AutonomyOwnerContext } from '../src/autonomyLoopOwnerContext.js';
 import { draftPrompt, reachOutPrompt, revisePrompt, thinkingPrompt } from '../src/autonomyLoopPrompts.js';
-import { OwnerInformedMarks } from '../src/ownerInformedMarks.js';
+import { OwnerInformedMarks } from '../src/mind/inhibition/store/ownerInformedMarks.js';
 import { agenticDay, builderDigests, plainDay } from './autonomyLoopKillSwitchScenario.js';
 import { loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 

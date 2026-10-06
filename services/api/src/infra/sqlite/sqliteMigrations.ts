@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { BackgroundJobPayload } from '../../mind/sleep/store/backgroundJobStore.js';
-import { migrateAgentTasks } from '../../agentTaskStore.js';
+import { migrateAgentTasks } from '../../mind/action/agentTasks/agentTaskStore.js';
 import { DEFAULT_QUESTION_DEFINITIONS } from '../../mind/memory/store/knowledgeStore.js';
 import { conciseThreadTitle, parseSnapshot, parseTurnPayload } from './sqliteStoreCodecs.js';
 import type { SQLiteCompanionRepository } from './sqliteCompanionRepository.js';

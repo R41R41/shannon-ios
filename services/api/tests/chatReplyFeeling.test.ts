@@ -6,7 +6,7 @@ import {
   InMemoryCompanionStateStore, SHANNON_EMOTION_KINDS, livingLingering, presentShannonFeeling,
 } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { SHANNON_CORE_PATHS } from '../src/autonomyCore.js';
+import { SHANNON_CORE_PATHS } from '../src/mind/inhibition/autonomyCore.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
 import { OpenAIResponsesChatModel, type ShannonChatModel, type ShannonChatModelRequest, type ShannonChatModelResult } from '../src/chatModel.js';
 import { parseStructuredTurn } from '../src/chatModelSupport.js';

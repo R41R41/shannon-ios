@@ -10,7 +10,7 @@ import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { extractProspectiveMemories } from '../src/mind/memory/prospectiveMemory.js';
 import { reconcileSleepOutcome, reviewCommitments } from '../src/mind/sleep/sleepCommitmentReview.js';
 import { resolveCommitmentCommand } from '../src/commitmentCommands.js';
-import { InMemoryAgentTaskStore } from '../src/agentTaskStore.js';
+import { InMemoryAgentTaskStore } from '../src/mind/action/agentTasks/agentTaskStore.js';
 
 const dirs: string[] = [];
 const at = '2026-09-24T12:00:00.000Z';

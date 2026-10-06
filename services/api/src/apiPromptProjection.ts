@@ -1,5 +1,5 @@
-import type { AgentTask } from './agentTaskStore.js';
-import { agentTaskNeedsOwner, agentTaskStateLabel } from './agentTaskVocabulary.js';
+import type { AgentTask } from './mind/action/agentTasks/agentTaskStore.js';
+import { agentTaskNeedsOwner, agentTaskStateLabel } from './mind/action/agentTasks/agentTaskVocabulary.js';
 
 export function voiceHistoryProjection(history: readonly { role: 'user' | 'assistant'; content: string }[]): string {
   const rows = history.slice(-12).map(item => {

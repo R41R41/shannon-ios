@@ -1,6 +1,6 @@
 import type { ShannonPursuit, ShannonPursuitStatus } from '@shannon/cognition';
-import type { AutonomyBudgetStatus } from './autonomyBudget.js';
-import type { AutonomyLoopStatus } from './autonomyDayLog.js';
+import type { AutonomyBudgetStatus } from './mind/inhibition/autonomyBudget.js';
+import type { AutonomyLoopStatus } from './mind/inhibition/autonomyDayLog.js';
 import type { AutonomyModelChoice } from './autonomyModels.js';
 import type { ShannonAgentTaskProposal } from './autonomyProposals.js';
 import type { AutonomySessionView } from './autonomySessionView.js';

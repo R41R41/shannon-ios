@@ -17,7 +17,7 @@ import {
 import { emotionTiming } from './mind/emotion/emotionTiming.js';
 import type { ConversationStore } from './mind/memory/store/conversationStore.js';
 import { MemoryWithholding } from './mind/memory/memoryVisibility.js';
-import { DisclosureGate, sharedProfilePrompt } from './memoryDisclosure.js';
+import { DisclosureGate, sharedProfilePrompt } from './mind/inhibition/memoryDisclosure.js';
 import { recallImpressions } from './mind/recall/impressionRecall.js';
 import { IMPRESSION_MEMORY_PREFIX } from './mind/memory/impressions.js';
 

@@ -3,7 +3,7 @@ import { aetherStudyScope, configuredAetherAccess } from './integrations/aether/
 import { SQLiteAutonomyAnnouncer } from './autonomyAnnouncer.js';
 import { configuredAwakeClock } from './mind/emotion/autonomyAwakeClock.js';
 import { moodHistoryRecording } from './contracts/moodHistoryContract.js';
-import { autonomyDayKey, configuredAutonomy } from './autonomyBudget.js';
+import { autonomyDayKey, configuredAutonomy } from './mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyLoop } from './autonomyLoop.js';
 import { configuredAutonomyLoop } from './autonomyLoopConfig.js';
 import { AutonomyToolResults } from './autonomyLoopToolStep.js';
@@ -30,7 +30,7 @@ import { SQLiteIncomingCallStore } from './surfaces/outreach/store/incomingCallS
 import { SQLitePrivateListeningStore } from './surfaces/body/store/privateListeningStore.js';
 import { SQLiteReachOutClaims } from './surfaces/outreach/store/reachOutClaims.js';
 import { SQLiteReachOutReports, reachOutBodyFacts } from './surfaces/outreach/store/reachOutReports.js';
-import { ownToolsEnabled } from './shannonTools.js';
+import { ownToolsEnabled } from './mind/tools/shannonTools.js';
 import { configuredDatabasePath } from './infra/sqlite/sqliteStore.js';
 import { configuredPredictionShadow } from './mind/prediction/predictionShadow.js';
 

@@ -16,7 +16,7 @@ import {
 } from '@shannon/cognition';
 import { agentTaskPromptProjection } from '../../apiPromptProjection.js';
 import { badRequest, objectBody, validBoundedString, validScopeKey } from '../../apiValidation.js';
-import type { AgentTaskStore } from '../../agentTaskStore.js';
+import type { AgentTaskStore } from '../../mind/action/agentTasks/agentTaskStore.js';
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
 import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
 import type { DailyMindReader } from '../../dailyMind.js';
@@ -59,12 +59,12 @@ import type { VoiceParticipantMode } from './voiceSessionProjection.js';
 import { companionPresentInstructions, ownerSaysCompanionPresent, speakTimePrivacyCheck } from './voiceCompanionPresence.js';
 import { emotionTiming, feelingBeforeTurn, stillFeltLine } from '../../mind/emotion/companionPresence.js';
 import type { PeopleMemory } from '../../mind/memory/peopleMemory.js';
-import { DisclosureGate, sharedDailyFocus } from '../../memoryDisclosure.js';
+import { DisclosureGate, sharedDailyFocus } from '../../mind/inhibition/memoryDisclosure.js';
 import { guestPeoplePrompt } from '../../mind/memory/peopleMemoryPrompts.js';
 import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
-import type { ShannonToolRunner } from '../../shannonToolRunner.js';
-import { conversationTools, toolTraceReader, turnWroteHerOwnThings, withToolCapabilityLines, type ConversationToolServer } from '../../shannonToolSession.js';
+import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
+import { conversationTools, toolTraceReader, turnWroteHerOwnThings, withToolCapabilityLines, type ConversationToolServer } from '../../mind/tools/shannonToolSession.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from '../../turnDeadline.js';
 import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from './ownerCallElsewhere.js';
 

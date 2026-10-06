@@ -14,7 +14,7 @@ import { createOpsRoute, OPS_READ_PATH } from '../src/infra/ops/serverOpsRoutes.
 import {
   createServerSelfDiagnosis, deployedRevision, personaHash, personaHashSource, reportableModelName, type SelfDiagnosisSources,
 } from '../src/infra/ops/serverSelfDiagnosis.js';
-import { SHANNON_TOOLS, offeredTools } from '../src/shannonTools.js';
+import { SHANNON_TOOLS, offeredTools } from '../src/mind/tools/shannonTools.js';
 import { createConfiguredVoiceDecisionGateway } from '../src/voiceDecision.js';
 import { createConfiguredVoiceTranscriber } from '../src/voiceTranscription.js';
 import { createConfiguredVoiceVisionGateway } from '../src/surfaces/voice/voiceVision.js';

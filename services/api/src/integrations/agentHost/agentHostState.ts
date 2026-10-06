@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { HostAgentEvent } from '../../agentTaskStore.js';
-import type { AgentReasoningEffort } from '../../agentTaskStore.js';
+import type { HostAgentEvent } from '../../mind/action/agentTasks/agentTaskStore.js';
+import type { AgentReasoningEffort } from '../../mind/action/agentTasks/agentTaskStore.js';
 
 export interface PersistedAgentSession {
   taskId: string;

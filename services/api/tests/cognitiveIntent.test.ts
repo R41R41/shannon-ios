@@ -9,8 +9,8 @@ import {
   InMemoryCognitiveIntentStore,
   SQLiteCognitiveIntentStore,
 } from '../src/cognitiveIntent.js';
-import { synchronizeIntentWithAgentTask } from '../src/cognitiveWork.js';
-import type { AgentTask } from '../src/agentTaskStore.js';
+import { synchronizeIntentWithAgentTask } from '../src/mind/action/agentTasks/cognitiveWork.js';
+import type { AgentTask } from '../src/mind/action/agentTasks/agentTaskStore.js';
 import type { ShannonChatModelRequest } from '../src/chatModel.js';
 import { promptOf } from './modelPrompt.js';
 

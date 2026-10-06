@@ -1,4 +1,4 @@
-import { autonomyDayKey } from './autonomyBudget.js';
+import { autonomyDayKey } from './mind/inhibition/autonomyBudget.js';
 import { callModel, ownerLocalTime, paidCall } from './autonomyLoopCalls.js';
 import { agenticLoop, followUpsRemaining, observeReachOut, ownerRepliedAt, reachOutChain } from './autonomyLoopObserve.js';
 import { AUTONOMY_FOLLOW_UP_MAXIMUM_CHARACTERS, AUTONOMY_JOT_MAXIMUM_CHARACTERS, followUpPrompt, happenedLines } from './autonomyLoopObservePrompts.js';
@@ -6,7 +6,7 @@ import { heldForOthers } from './autonomyLoopProvenance.js';
 import { REACH_OUT_HELD_TOOL, conversationInProgress } from './autonomyLoopReachOutStep.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
-import { AUTONOMY_REACH_OUT_FOLLOW_UP_TOOL } from './autonomyPolicy.js';
+import { AUTONOMY_REACH_OUT_FOLLOW_UP_TOOL } from './mind/inhibition/autonomyPolicy.js';
 
 /**
  * What she may do after a message of hers got no answer (owner decision 2026-10-02), besides looking

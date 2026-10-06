@@ -1,5 +1,5 @@
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
-import { READING_DOCUMENT_PREFIX, STUDY_DOCUMENT_PREFIX } from './ownerInformedMarks.js';
+import { READING_DOCUMENT_PREFIX, STUDY_DOCUMENT_PREFIX } from './mind/inhibition/store/ownerInformedMarks.js';
 import type { StepDependencies, StepResult } from './autonomyLoopSteps.js';
 
 /**

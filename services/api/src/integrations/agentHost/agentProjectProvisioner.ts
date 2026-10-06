@@ -8,7 +8,7 @@ import {
   normalizedGitHubRepositoryURL,
   type AgentProjectProvisioningEvent,
   type ClaimedAgentProjectProvisioning,
-} from '../../agentProjectProvisioning.js';
+} from '../../mind/action/agentTasks/store/agentProjectProvisioning.js';
 
 export class AgentProjectProvisioner {
   constructor(

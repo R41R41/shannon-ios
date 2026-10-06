@@ -6,7 +6,7 @@ import { codexModelCatalog } from './integrations/agentHost/codexModelCatalog.js
 import { CodexTaskBridge } from './integrations/agentHost/codexTaskBridge.js';
 import { AgentWorkspaceSnapshotReader } from './integrations/agentHost/agentWorkspaceSnapshot.js';
 import { AgentProjectProvisioner } from './integrations/agentHost/agentProjectProvisioner.js';
-import { readWorkspaceResource } from './agentWorkspaceResources.js';
+import { readWorkspaceResource } from './mind/action/agentTasks/store/agentWorkspaceResources.js';
 
 const config = loadAgentHostConfig();
 const state = new AgentHostStateStore(config.stateFile);

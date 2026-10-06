@@ -1,5 +1,5 @@
 import type { ShannonAutonomyDomainId } from '@shannon/cognition';
-import type { AutonomyConfig } from './autonomyBudget.js';
+import type { AutonomyConfig } from './mind/inhibition/autonomyBudget.js';
 import type { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import { callModel, paidCall } from './autonomyLoopCalls.js';
 import { prepareFolderCopy } from './autonomyLoopFolderStep.js';
@@ -19,14 +19,14 @@ import { prepareThinking } from './autonomyLoopThinkStep.js';
 import { heldForOthers, markEarly, sessionMarked, shownLater, unmarkedOnly, unmarkedPursuits } from './autonomyLoopProvenance.js';
 import { prepareToolStep, type AutonomyToolResults } from './autonomyLoopToolStep.js';
 import type { AutonomyModelPurpose } from './autonomyModels.js';
-import { AUTONOMY_CALL_DOMAIN, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
+import { AUTONOMY_CALL_DOMAIN, type AutonomousActionRequest, type AutonomyDecision } from './mind/inhibition/autonomyPolicy.js';
 import type { AutonomyPublicReader } from './autonomyReader.js';
 import type { ShannonAutonomyService } from './autonomyService.js';
 import type { ShowingOutcome, StudyShowing } from './autonomyShowing.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import type { AutonomyTextModel } from './autonomyTextModel.js';
-import { READING_DOCUMENT_PREFIX } from './ownerInformedMarks.js';
-import type { ToolDocuments } from './shannonToolTypes.js';
+import { READING_DOCUMENT_PREFIX } from './mind/inhibition/store/ownerInformedMarks.js';
+import type { ToolDocuments } from './mind/tools/shannonToolTypes.js';
 import { aetherStep, studyWriteKey, type StudyAether } from './studyAether.js';
 import { STUDY_LIMITS, STUDY_REACTION_LABEL } from './studyStore.js';
 

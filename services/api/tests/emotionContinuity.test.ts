@@ -10,7 +10,7 @@ import {
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { configuredAwakeClock } from '../src/mind/emotion/autonomyAwakeClock.js';
 import { TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
-import { SHANNON_CORE_PATHS } from '../src/autonomyCore.js';
+import { SHANNON_CORE_PATHS } from '../src/mind/inhibition/autonomyCore.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';

@@ -7,7 +7,7 @@ import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiative
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
 import { SQLiteCognitiveIntentStore, extractExplicitUserIntent } from '../src/cognitiveIntent.js';
-import { SQLiteAgentTaskStore } from '../src/agentTaskStore.js';
+import { SQLiteAgentTaskStore } from '../src/mind/action/agentTasks/agentTaskStore.js';
 import type { DailyMindFocus } from '../src/dailyMind.js';
 
 const directories: string[] = [];

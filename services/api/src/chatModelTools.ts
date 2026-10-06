@@ -1,5 +1,5 @@
 import { SHANNON_MEMO_PLACE_RULE } from '@shannon/cognition';
-import { providerToolName, type ShannonToolDefinition } from './shannonTools.js';
+import { providerToolName, type ShannonToolDefinition } from './mind/tools/shannonTools.js';
 import { parallelToolsEnabled, runToolStep, type ToolStepState } from './chatModelToolStep.js';
 import {
   MINIMUM_ANSWER_MILLISECONDS, MINIMUM_ROUND_MILLISECONDS, PartialAnswerError, TURN_OUT_OF_TIME_LINE, timedOut, type RoundTime, type TurnDeadline,

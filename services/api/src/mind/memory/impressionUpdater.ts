@@ -12,7 +12,7 @@ import {
   type ImpressionAnalysis, type ImpressionConfig, type ImpressionStore, type PersonImpression,
 } from './impressions.js';
 import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../llmUsage.js';
-import { DisclosureGate } from '../../memoryDisclosure.js';
+import { DisclosureGate } from '../inhibition/memoryDisclosure.js';
 import { localDayKey } from './memoryProjection.js';
 import { MemoryWithholding } from './memoryVisibility.js';
 import { personMemoryId } from './peopleMemory.js';

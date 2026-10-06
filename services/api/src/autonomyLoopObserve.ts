@@ -1,4 +1,4 @@
-import { autonomyDayKey } from './autonomyBudget.js';
+import { autonomyDayKey } from './mind/inhibition/autonomyBudget.js';
 import { reachOutWait } from './autonomyLoopConfig.js';
 import type { ObservedReachOutReason, ReachOutAppSurface, ReachOutCallOutcome, ReachOutDeliveryOutcome, ReachOutFacts, StepObservation } from './autonomyLoopObservations.js';
 import { sessionOf } from './autonomyLoopPacing.js';

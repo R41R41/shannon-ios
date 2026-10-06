@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
-import { formatYen } from './autonomyActivity.js';
+import { formatYen } from './mind/inhibition/store/autonomyActivity.js';
 
 /**
  * Tells the owner about a budget request the way Shannon tells them anything else:

@@ -10,7 +10,7 @@ import {
   type MemoryAudience,
   type MemoryControl,
 } from '@shannon/cognition';
-import { DisclosureGate } from '../../memoryDisclosure.js';
+import { DisclosureGate } from '../inhibition/memoryDisclosure.js';
 import type { PeopleMemoryStore, PersonCall, PersonMemoryItem, RememberedPerson } from './store/peopleMemoryStore.js';
 import { extractPromiseCaptures } from './prospectiveMemory.js';
 import { extractExplicitMemoryProposals } from '../sleep/sleepConsolidation.js';

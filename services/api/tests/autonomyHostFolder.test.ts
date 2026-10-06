@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { normalize } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { configuredAutonomy } from '../src/autonomyBudget.js';
+import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import type { ClaimedHostStep, HostStepReceipt } from '../src/autonomyHostFolderDesk.js';
 import {
   HOST_FOLDER_LIMITS, HOST_STEP_CODES, copyableStudyPiece, hostFolderRelativePath, studyCopyContent, studyCopyPath,
@@ -11,8 +11,8 @@ import { planFromThought } from '../src/autonomyLoopPlan.js';
 import { thinkingPrompt, type ThinkingMaterials } from '../src/autonomyLoopPrompts.js';
 import { prepareStep } from '../src/autonomyLoopSteps.js';
 import { autonomyModel } from '../src/autonomyModels.js';
-import { resolvePhysicalPath } from '../src/autonomyPaths.js';
-import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyPolicyContext } from '../src/autonomyPolicy.js';
+import { resolvePhysicalPath } from '../src/mind/inhibition/autonomyPaths.js';
+import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyPolicyContext } from '../src/mind/inhibition/autonomyPolicy.js';
 import type { StudyPiece } from '../src/studyStore.js';
 import { STORY_BODY, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 

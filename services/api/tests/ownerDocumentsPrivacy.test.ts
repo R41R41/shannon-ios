@@ -8,8 +8,8 @@ import { heldForOthers, noteProvenance } from '../src/autonomyLoopProvenance.js'
 import type { AutonomyReachOuts } from '../src/autonomyLoopReachOutStep.js';
 import { AutonomyToolResults } from '../src/autonomyLoopToolStep.js';
 import type { ConversationStore } from '../src/mind/memory/store/conversationStore.js';
-import { toolSessionMemory } from '../src/shannonToolTypes.js';
-import type { ToolAudience } from '../src/shannonTools.js';
+import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
+import type { ToolAudience } from '../src/mind/tools/shannonTools.js';
 import { OWN_TIME_PRICES } from './ownerDocumentsScenario.js';
 import { FakeAether } from './fakeAetherServer.js';
 import { loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
