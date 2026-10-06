@@ -1,10 +1,10 @@
 import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
-import type { HostFolderDesk } from './autonomyHostFolderDesk.js';
-import { HOST_FOLDER_LIMITS, hostFolderLabel, isHostStepCode } from './autonomyHostFolderPath.js';
-import { HOST_RESULT_LIMITS, validHostOperationResult } from './hostFolderOperationResults.js';
-import { HOST_CLAIM_MAXIMUM_WAIT_SECONDS, type HostFolderOperations } from './hostFolderOperations.js';
-import { HOST_OPERATIONS } from './hostFolderOperationsStore.js';
+import type { HostFolderDesk } from './mind/action/ownTime/autonomyHostFolderDesk.js';
+import { HOST_FOLDER_LIMITS, hostFolderLabel, isHostStepCode } from './mind/action/ownTime/autonomyHostFolderPath.js';
+import { HOST_RESULT_LIMITS, validHostOperationResult } from './mind/action/ownTime/hostFolderOperationResults.js';
+import { HOST_CLAIM_MAXIMUM_WAIT_SECONDS, type HostFolderOperations } from './mind/action/ownTime/hostFolderOperations.js';
+import { HOST_OPERATIONS } from './mind/action/ownTime/store/hostFolderOperationsStore.js';
 
 export const HOST_STEP_ROUTE_PREFIX = '/v1/autonomy/host-steps';
 export const HOST_STEP_CLAIM_PATH = `${HOST_STEP_ROUTE_PREFIX}/claim`;

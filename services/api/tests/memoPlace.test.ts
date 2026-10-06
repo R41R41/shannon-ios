@@ -6,14 +6,14 @@ import { InMemoryCompanionStateStore, SHANNON_MEMO_PLACE_RULE, shannonCapability
 import type { AetherProposalInput, AetherProposalStore } from '../src/integrations/aether/aetherProposal.js';
 import { FileAetherContextReader } from '../src/integrations/aether/aetherContext.js';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { createInMemoryAutonomyService } from '../src/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { TOOLS_READ_ONLY_INSTRUCTIONS, TOOL_INSTRUCTIONS, VOICE_TOOL_INSTRUCTIONS, toolInstructions } from '../src/chatModelTools.js';
 import { asksAboutNotes } from '../src/conversationCapabilities.js';
 import { executeConversationCommand } from '../src/conversationCommands.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
-import type { HostFolderOperations, HostOperationRequest, HostRunOutcome } from '../src/hostFolderOperations.js';
+import type { HostFolderOperations, HostOperationRequest, HostRunOutcome } from '../src/mind/action/ownTime/hostFolderOperations.js';
 import { aetherNoteRequest, answersWithPlace, asksForMemo, asksWhichPlace, memoNotForAether, memoRequestContent } from '../src/memoPlace.js';
 import { ShannonToolRunner } from '../src/mind/tools/shannonToolRunner.js';
 import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';

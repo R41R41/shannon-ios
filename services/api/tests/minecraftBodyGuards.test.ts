@@ -22,7 +22,7 @@ import { requestExperience } from '../src/surfaces/minecraft/minecraftBodyReques
 import { MINECRAFT_TURN_ALLOWANCE, MinecraftTurnAllowance } from '../src/surfaces/minecraft/minecraftTurnAllowance.js';
 import { SQLiteSurfaceTurnLog } from '../src/surfaces/minecraft/store/minecraftTurnStore.js';
 import { PLATFORM_REPLY_LIMITS } from '../src/surfaces/platform/platformReply.js';
-import { createMinecraftBodyWiring, gameBodyMayCall } from '../src/serverMinecraftBodyWiring.js';
+import { createMinecraftBodyWiring, gameBodyMayCall } from '../src/wiring/serverMinecraftBodyWiring.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { readApiSource } from './support/sources.js';
 

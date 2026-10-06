@@ -6,7 +6,7 @@ import {
 } from '@shannon/cognition';
 import { coreAreaForRepositoryPath } from './autonomyCore.js';
 import { fitsAutonomyBudget, type AutonomyPlaces } from './autonomyBudget.js';
-import { hostFolderPath } from '../../autonomyHostFolderPath.js';
+import { hostFolderPath } from '../action/ownTime/autonomyHostFolderPath.js';
 import { isInsideResolvedRoot, relativeToResolvedRoot, type AutonomyPathResolver } from './autonomyPaths.js';
 
 /**

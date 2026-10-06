@@ -1,9 +1,9 @@
-import { dailyCount } from '../../dailyCount.js';
+import { dailyCount } from '../../infra/config/dailyCount.js';
 import { delimiter, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SHANNON_AUTONOMY_DAILY_BUDGET_YEN } from '@shannon/cognition';
 import { ownerDay } from '../emotion/companionPresence.js';
-import { configuredAutonomyModelPrices, type AutonomyModelPrices } from '../../autonomyModels.js';
+import { configuredAutonomyModelPrices, type AutonomyModelPrices } from '../action/ownTime/autonomyModels.js';
 
 /**
  * Server-side configuration of bounded autonomy. Nothing Shannon can write through
@@ -172,4 +172,4 @@ function finite(value: number): number {
   return Number.isFinite(value) ? value : 0;
 }
 
-export { dailyCount } from '../../dailyCount.js';
+export { dailyCount } from '../../infra/config/dailyCount.js';

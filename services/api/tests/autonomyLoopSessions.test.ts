@@ -3,15 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
-import { configuredAutonomyLoop } from '../src/autonomyLoopConfig.js';
-import { mayRetryThought } from '../src/autonomyLoopPacing.js';
-import { OWNER_CONTEXT_HEADER, OWNER_CONTEXT_WRITING_HEADER, ownerPrivateRule } from '../src/autonomyLoopOwnerContext.js';
-import { salvagedModelObject } from '../src/autonomyLoopPrompts.js';
-import { createOwnerContext } from '../src/autonomyOwnerContext.js';
+import { configuredAutonomyLoop } from '../src/mind/action/ownTime/autonomyLoopConfig.js';
+import { mayRetryThought } from '../src/mind/action/ownTime/autonomyLoopPacing.js';
+import { OWNER_CONTEXT_HEADER, OWNER_CONTEXT_WRITING_HEADER, ownerPrivateRule } from '../src/mind/action/ownTime/autonomyLoopOwnerContext.js';
+import { salvagedModelObject } from '../src/mind/action/ownTime/autonomyLoopPrompts.js';
+import { createOwnerContext } from '../src/mind/action/ownTime/autonomyOwnerContext.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { SESSION_FACTS_HEADER, sessionFactsSection, type SessionFacts } from '../src/autonomyLoopSessionPrompts.js';
-import { AutonomyModelError, type AutonomyTextRequest, type AutonomyTextResult } from '../src/autonomyTextModel.js';
-import { planFromThought } from '../src/autonomyLoopPlan.js';
+import { SESSION_FACTS_HEADER, sessionFactsSection, type SessionFacts } from '../src/mind/action/ownTime/autonomyLoopSessionPrompts.js';
+import { AutonomyModelError, type AutonomyTextRequest, type AutonomyTextResult } from '../src/mind/action/ownTime/autonomyTextModel.js';
+import { planFromThought } from '../src/mind/action/ownTime/autonomyLoopPlan.js';
 import { FakeModel, FakeShowing, callKind, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
 
 /**

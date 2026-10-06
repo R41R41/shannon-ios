@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { configuredAutonomyTextModel, dedicatedAutonomyCredential, resolveAutonomyModel } from '../../src/autonomyTextModel.js';
+import { configuredAutonomyTextModel, dedicatedAutonomyCredential, resolveAutonomyModel } from '../../src/mind/action/ownTime/autonomyTextModel.js';
 import { createConfiguredChatModel } from '../../src/chatModel.js';
 import { estimatedOpenAICostUsd } from '../../src/llmUsage.js';
 import {

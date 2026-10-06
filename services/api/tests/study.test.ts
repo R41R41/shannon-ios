@@ -7,11 +7,11 @@ import { shannonCapabilityPrompt, shannonIdentityPrompt } from '@shannon/cogniti
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { autonomyDayLog, autonomyDayPhrases, autonomyLoopStatus } from '../src/mind/inhibition/autonomyDayLog.js';
 import { summarizeAutonomyDay, type AutonomyActivityEntry } from '../src/mind/inhibition/store/autonomyActivity.js';
-import { SQLiteStudyShowing, studyShowingMessage } from '../src/autonomyShowing.js';
+import { SQLiteStudyShowing, studyShowingMessage } from '../src/mind/action/ownTime/autonomyShowing.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import type { StudyOverview, StudyPieceDetail } from '../src/studyDesk.js';
+import type { StudyOverview, StudyPieceDetail } from '../src/mind/action/ownTime/studyDesk.js';
 import { FULL_PLAN, STORY_BODY, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 import { promptOf } from './modelPrompt.js';
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { reasonedPlan } from '../src/autonomyLoopPlan.js';
-import { AutonomyToolResults, plannedToolStep, toolRefusalLine } from '../src/autonomyLoopToolStep.js';
+import { reasonedPlan } from '../src/mind/action/ownTime/autonomyLoopPlan.js';
+import { AutonomyToolResults, plannedToolStep, toolRefusalLine } from '../src/mind/action/ownTime/autonomyLoopToolStep.js';
 import { STORY_BODY, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
 
 /**

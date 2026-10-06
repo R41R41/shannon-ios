@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { createInMemoryAutonomyService } from '../src/autonomyService.js';
+import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
 import { ROOM_LOOK_UNAVAILABLE_REASON } from '../src/surfaces/body/bodyLook.js';
 import { configuredBodyLook, type BodyLookConfig } from '../src/contracts/bodyLookContract.js';
 import { BODY_LOOK_CUT_OFF_LINE, UNOPENED_LINE, bodyLookNotSeenLine } from '../src/surfaces/body/bodyLookLines.js';

@@ -1,6 +1,6 @@
-import { roomLookNotePrompt } from '../../autonomyLoopPrompts.js';
-import { AUTONOMY_ROOM_LOOK_TOKENS, autonomyModel } from '../../autonomyModels.js';
-import { dedicatedAutonomyCredential } from '../../autonomyTextModel.js';
+import { roomLookNotePrompt } from '../../mind/action/ownTime/autonomyLoopPrompts.js';
+import { AUTONOMY_ROOM_LOOK_TOKENS, autonomyModel } from '../../mind/action/ownTime/autonomyModels.js';
+import { dedicatedAutonomyCredential } from '../../mind/action/ownTime/autonomyTextModel.js';
 import { boundedLookMessage, type RoomLookViewRequest, type RoomLookViewer } from './bodyLookVision.js';
 
 /**

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import type { AutonomyPhone, PhoneFacts } from '../../autonomyLoopPhoneStep.js';
+import type { AutonomyPhone, PhoneFacts } from '../../mind/action/ownTime/autonomyLoopPhoneStep.js';
 import { INCOMING_CALL_LIMITS, incomingCallMinimumIntervalMilliseconds, incomingCallsEnabled } from '../../contracts/incomingCallContract.js';
 import type { SQLiteIncomingCallStore } from './store/incomingCallStore.js';
 import { privateReachOutsEnabled } from '../../contracts/privateListeningContract.js';

@@ -6,8 +6,8 @@ import { UNLABELLED_DISCLOSURE_MARKER, createInitialCompanionState } from '@shan
 import { LEFT_OUT_LINE, textForOthers } from '../src/mind/inhibition/aetherShownText.js';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
-import { ShannonAutonomyService } from '../src/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
 import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
 import { TOOLS_GUESTS_INSTRUCTIONS, TOOLS_OTHERS_INSTRUCTIONS, toolInstructions } from '../src/chatModelTools.js';

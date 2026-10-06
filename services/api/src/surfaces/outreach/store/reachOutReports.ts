@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { REACH_OUT_DELIVERY_OUTCOMES, REACH_OUT_APP_SURFACES, type ReachOutAppSurface, type ReachOutDeliveryOutcome, type ReachOutFacts } from '../../../autonomyLoopObservations.js';
+import { REACH_OUT_DELIVERY_OUTCOMES, REACH_OUT_APP_SURFACES, type ReachOutAppSurface, type ReachOutDeliveryOutcome, type ReachOutFacts } from '../../../mind/action/ownTime/store/autonomyLoopObservations.js';
 import { secureDatabaseFiles } from '../../../infra/sqlite/sqliteStoreContext.js';
 
 /**

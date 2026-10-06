@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { UNLABELLED_DISCLOSURE_MARKER } from '@shannon/cognition';
-import { OBSERVED_REACH_OUT_REASONS, type ObservedReachOutReason } from '../../autonomyLoopObservations.js';
-import type { ReachOutReason } from '../../autonomyLoopPrompts.js';
+import { OBSERVED_REACH_OUT_REASONS, type ObservedReachOutReason } from '../../mind/action/ownTime/store/autonomyLoopObservations.js';
+import type { ReachOutReason } from '../../mind/action/ownTime/autonomyLoopPrompts.js';
 import { speakTimePrivacyCheck } from '../voice/voiceCompanionPresence.js';
 
 /**

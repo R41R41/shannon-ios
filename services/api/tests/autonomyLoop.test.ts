@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { AutonomyModelError } from '../src/autonomyTextModel.js';
+import { AutonomyModelError } from '../src/mind/action/ownTime/autonomyTextModel.js';
 import { apiSourceFilesNamed } from './support/sources.js';
 import { FULL_PLAN, FakeModel, FakeReader, FakeShowing, STORY_BODY, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 

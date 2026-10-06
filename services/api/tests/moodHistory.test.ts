@@ -562,7 +562,7 @@ describe('the activity loop\'s process', () => {
       .run(OWNER, at(-40 * DAY));
     raw.close();
     const later = at(30 * DAY);
-    const { configuredOwnerContext } = await import('../src/autonomyOwnerContextWiring.js');
+    const { configuredOwnerContext } = await import('../src/wiring/autonomyOwnerContextWiring.js');
     const owner = configuredOwnerContext(path, { now: () => later, characters: 2_000, timeZone: 'Asia/Tokyo' });
     // It reads the owner's context as the loop does.
     owner.context.forThinking(OWNER, later, '紅茶');

@@ -3,11 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { configuredAutonomy } from '../../src/mind/inhibition/autonomyBudget.js';
-import { ShannonAutonomyLoop } from '../../src/autonomyLoop.js';
-import { configuredAutonomyLoop } from '../../src/autonomyLoopConfig.js';
-import { ShannonAutonomyService } from '../../src/autonomyService.js';
-import { SQLiteAutonomyStore } from '../../src/autonomyStore.js';
-import type { AutonomyTextModel, AutonomyTextRequest, AutonomyTextResult } from '../../src/autonomyTextModel.js';
+import { ShannonAutonomyLoop } from '../../src/mind/action/ownTime/autonomyLoop.js';
+import { configuredAutonomyLoop } from '../../src/mind/action/ownTime/autonomyLoopConfig.js';
+import { ShannonAutonomyService } from '../../src/mind/action/ownTime/autonomyService.js';
+import { SQLiteAutonomyStore } from '../../src/mind/action/ownTime/store/autonomyStore.js';
+import type { AutonomyTextModel, AutonomyTextRequest, AutonomyTextResult } from '../../src/mind/action/ownTime/autonomyTextModel.js';
 import { FakeModel, FakeReader, FakeShowing, STORY_BODY, callKind } from '../autonomyLoopHarness.js';
 import {
   AUTONOMY_DAY_BUDGET_YEN, autonomyDayScenario, judgeAutonomyDay, stableFingerprint, type AutonomyDayEvidence, type ReachDriver,

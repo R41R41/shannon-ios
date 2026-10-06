@@ -15,7 +15,7 @@ import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiative
 import { SQLiteReachOutReports } from '../src/surfaces/outreach/store/reachOutReports.js';
 import { createShannonNowRoute, shannonNowResponse } from '../src/serverShannonNowRoute.js';
 import { SHANNON_NOW_LIMITS, SHANNON_NOW_PATH, shannonNowEnabled, shannonNowOwnerScope, type ShannonNowResponse } from '../src/contracts/shannonNowContract.js';
-import { SQLiteShannonNowReader, type ReachOutDeliverySource } from '../src/shannonNowReader.js';
+import { SQLiteShannonNowReader, type ReachOutDeliverySource } from '../src/mind/self/store/shannonNowReader.js';
 import { readApiSource } from './support/sources.js';
 
 const NOW = '2026-10-03T07:00:00.000Z';

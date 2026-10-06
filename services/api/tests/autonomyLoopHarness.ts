@@ -1,19 +1,19 @@
 import type { AetherAccess } from '../src/integrations/aether/aetherAccess.js';
 import { autonomyDayKey, configuredAutonomy, type AutonomyConfig } from '../src/mind/inhibition/autonomyBudget.js';
-import { ShannonAutonomyLoop, type AutonomyLoopTick } from '../src/autonomyLoop.js';
-import { configuredAutonomyLoop, type AutonomyLoopConfig } from '../src/autonomyLoopConfig.js';
-import type { AutonomyRoomLooks } from '../src/autonomyLoopLookStep.js';
-import type { AutonomyReachOutObserver } from '../src/autonomyLoopObserve.js';
-import type { AutonomyOwnerContext } from '../src/autonomyLoopOwnerContext.js';
-import { callGateContext, type AutonomyPhone } from '../src/autonomyLoopPhoneStep.js';
-import type { AutonomyReachOuts, AutonomyUpcoming } from '../src/autonomyLoopReachOutStep.js';
-import type { AutonomyNotionReader } from '../src/autonomyLoopSteps.js';
-import type { AutonomyToolResults } from '../src/autonomyLoopToolStep.js';
-import type { AutonomyPublicReader, PublicReading } from '../src/autonomyReader.js';
-import { ShannonAutonomyService, type AutonomyServiceDependencies } from '../src/autonomyService.js';
-import type { ShowablePiece, ShowingOutcome, StudyShowing } from '../src/autonomyShowing.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
-import type { AutonomyTextModel, AutonomyTextRequest, AutonomyTextResult } from '../src/autonomyTextModel.js';
+import { ShannonAutonomyLoop, type AutonomyLoopTick } from '../src/mind/action/ownTime/autonomyLoop.js';
+import { configuredAutonomyLoop, type AutonomyLoopConfig } from '../src/mind/action/ownTime/autonomyLoopConfig.js';
+import type { AutonomyRoomLooks } from '../src/mind/action/ownTime/autonomyLoopLookStep.js';
+import type { AutonomyReachOutObserver } from '../src/mind/action/ownTime/autonomyLoopObserve.js';
+import type { AutonomyOwnerContext } from '../src/mind/action/ownTime/autonomyLoopOwnerContext.js';
+import { callGateContext, type AutonomyPhone } from '../src/mind/action/ownTime/autonomyLoopPhoneStep.js';
+import type { AutonomyReachOuts, AutonomyUpcoming } from '../src/mind/action/ownTime/autonomyLoopReachOutStep.js';
+import type { AutonomyNotionReader } from '../src/mind/action/ownTime/autonomyLoopSteps.js';
+import type { AutonomyToolResults } from '../src/mind/action/ownTime/autonomyLoopToolStep.js';
+import type { AutonomyPublicReader, PublicReading } from '../src/mind/action/ownTime/autonomyReader.js';
+import { ShannonAutonomyService, type AutonomyServiceDependencies } from '../src/mind/action/ownTime/autonomyService.js';
+import type { ShowablePiece, ShowingOutcome, StudyShowing } from '../src/mind/action/ownTime/autonomyShowing.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import type { AutonomyTextModel, AutonomyTextRequest, AutonomyTextResult } from '../src/mind/action/ownTime/autonomyTextModel.js';
 
 /** Deterministic stand-ins for the activity loop: no network, no real model, a clock the test moves. */
 export const scope = 'owner';

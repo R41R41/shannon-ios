@@ -7,11 +7,11 @@ import { SHANNON_ROOM_LOOK_RULES, UNLABELLED_DISCLOSURE_MARKER } from '@shannon/
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { autonomyDayLog, autonomyDayPhrases } from '../src/mind/inhibition/autonomyDayLog.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
-import { configuredAutonomyLoop } from '../src/autonomyLoopConfig.js';
-import type { AutonomyRoomLooks } from '../src/autonomyLoopLookStep.js';
-import { planFromThought } from '../src/autonomyLoopPlan.js';
-import { REACH_OUT_REASONS, REACH_OUT_REASON_LABEL, reachOutPrompt, thinkingPrompt, type PromptUpcoming } from '../src/autonomyLoopPrompts.js';
-import { REACH_OUT_HELD_TOOL, REACH_OUT_TOOL, type AutonomyUpcoming } from '../src/autonomyLoopReachOutStep.js';
+import { configuredAutonomyLoop } from '../src/mind/action/ownTime/autonomyLoopConfig.js';
+import type { AutonomyRoomLooks } from '../src/mind/action/ownTime/autonomyLoopLookStep.js';
+import { planFromThought } from '../src/mind/action/ownTime/autonomyLoopPlan.js';
+import { REACH_OUT_REASONS, REACH_OUT_REASON_LABEL, reachOutPrompt, thinkingPrompt, type PromptUpcoming } from '../src/mind/action/ownTime/autonomyLoopPrompts.js';
+import { REACH_OUT_HELD_TOOL, REACH_OUT_TOOL, type AutonomyUpcoming } from '../src/mind/action/ownTime/autonomyLoopReachOutStep.js';
 import { AUTONOMY_REACH_OUT_TOOL, authorizeAutonomousAction } from '../src/mind/inhibition/autonomyPolicy.js';
 import { BODY_LIMITS } from '../src/contracts/bodyContract.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';

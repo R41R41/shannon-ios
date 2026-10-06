@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { touchWhen } from '../body/store/bodyTouchMemory.js';
 import { GAME_REQUEST_DISCLOSURE, gameExperienceId, type GameExperience, type GameExperienceWriter } from './store/gameBodyMemory.js';
-import { HostFolderSignals } from '../../hostFolderOperations.js';
+import { HostFolderSignals } from '../../mind/action/ownTime/hostFolderOperations.js';
 import {
   MINECRAFT_REPORT_CODES, MINECRAFT_REQUEST_LIMITS, OPEN_REQUEST_STATES, gainedWords, requestGoal,
   type ClaimedMinecraftRequest, type MinecraftProgressPhase, type MinecraftRequestOrigin, type MinecraftRequestProgress,

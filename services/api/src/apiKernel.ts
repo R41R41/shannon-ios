@@ -71,7 +71,7 @@ import {
   InMemoryCognitiveIntentStore,
   type CognitiveIntentStore,
 } from './cognitiveIntent.js';
-import { createInMemoryAutonomyService, type ShannonAutonomyService } from './autonomyService.js';
+import { createInMemoryAutonomyService, type ShannonAutonomyService } from './mind/action/ownTime/autonomyService.js';
 import { dispatchBodyRequest, isBodyRoute } from './surfaces/body/apiBodyRoutes.js';
 import { CALENDAR_UPCOMING_PATH, dispatchCalendarRequest, localOwnerUpcoming, type OwnerUpcoming } from './calendarRoutes.js';
 import { ShannonBody, type ShannonBodyOptions } from './surfaces/body/shannonBody.js';

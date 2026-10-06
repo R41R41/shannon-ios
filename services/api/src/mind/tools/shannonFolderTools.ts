@@ -1,7 +1,7 @@
-import { HOST_STEP_CODES, hostFolderLabel, hostFolderPath, hostStepContentDigest, type HostStepCode } from '../../autonomyHostFolderPath.js';
-import type { ListResult, ReadResult, SearchResult, WriteResult } from '../../hostFolderOperationResults.js';
-import type { HostFolderOperations, HostRunOutcome } from '../../hostFolderOperations.js';
-import type { HostOperation } from '../../hostFolderOperationsStore.js';
+import { HOST_STEP_CODES, hostFolderLabel, hostFolderPath, hostStepContentDigest, type HostStepCode } from '../action/ownTime/autonomyHostFolderPath.js';
+import type { ListResult, ReadResult, SearchResult, WriteResult } from '../action/ownTime/hostFolderOperationResults.js';
+import type { HostFolderOperations, HostRunOutcome } from '../action/ownTime/hostFolderOperations.js';
+import type { HostOperation } from '../action/ownTime/store/hostFolderOperationsStore.js';
 import { numberInput, stringInput, type ToolInput } from './shannonToolInput.js';
 import { neutralMarkers, type ToolExecutionContext, type ToolExecutor, type ToolRun } from './shannonToolTypes.js';
 import { toolFailure, toolOk, type ShannonToolDefinition, type ToolFailureKind, type ToolResult, type ToolSurface } from './shannonTools.js';

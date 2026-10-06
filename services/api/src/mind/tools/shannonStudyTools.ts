@@ -1,15 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { aetherErrorCode, type AetherWriteResult } from '../../integrations/aether/aetherAccess.js';
-import type { SQLiteAutonomyStore } from '../../autonomyStore.js';
+import type { SQLiteAutonomyStore } from '../action/ownTime/store/autonomyStore.js';
 import { aetherToolFailure } from './shannonAetherTools.js';
 import { numberInput, stringInput, type ToolInput } from './shannonToolInput.js';
 import { clip, type PreparedToolCall, type ToolExecutionContext, type ToolExecutor, type ToolRun } from './shannonToolTypes.js';
 import { toolFailure, toolOk, type ShannonToolDefinition, type ToolResult } from './shannonTools.js';
-import { studyWriteKey, syncedWithin, type StudyAether } from '../../studyAether.js';
+import { studyWriteKey, syncedWithin, type StudyAether } from '../action/ownTime/studyAether.js';
 import {
   STUDY_KIND_LABEL, STUDY_LIMITS, STUDY_STATUS_LABEL,
   type StudyPiece, type StudyPieceKind, type StudyPieceStatus, type StudyRejection,
-} from '../../studyStore.js';
+} from '../action/ownTime/store/studyStore.js';
 
 /**
  * The study tools (`study.*` in `shannonTools.ts`): her own study, fully server-side and immediate.

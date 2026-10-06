@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { coreAreaForRepositoryPath } from '../src/mind/inhibition/autonomyCore.js';
-import { ShannonAutonomyService } from '../src/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
 import { readNotionForActivity } from '../src/integrations/notion/notionAutonomousRead.js';
 import { configuredNotionSource } from '../src/integrations/notion/notionSource.js';
 import { NOTION_FIXTURE_IDS as ids, fixtureNotionSource } from './notionFixture.js';

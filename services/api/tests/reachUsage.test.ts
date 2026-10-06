@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { migrateAgentTasks } from '../src/mind/action/agentTasks/store/agentTaskPersistenceSupport.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import { SQLiteReachOutReports } from '../src/surfaces/outreach/store/reachOutReports.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';

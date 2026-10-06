@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, normalize } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { SHANNON_AUTONOMY_DOMAINS } from '@shannon/cognition';
-import { autonomyModel } from '../src/autonomyModels.js';
+import { autonomyModel } from '../src/mind/action/ownTime/autonomyModels.js';
 import { resolvePhysicalPath } from '../src/mind/inhibition/autonomyPaths.js';
 import {
   authorizeAutonomousAction,

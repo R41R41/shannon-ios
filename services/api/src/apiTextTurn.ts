@@ -4,7 +4,7 @@ import { agentTaskPromptProjection } from './apiPromptProjection.js';
 import type { AetherContextReader } from './integrations/aether/aetherContext.js';
 import type { AetherProposalStore } from './integrations/aether/aetherProposal.js';
 import type { AgentTaskStore } from './mind/action/agentTasks/agentTaskStore.js';
-import type { ShannonAutonomyService } from './autonomyService.js';
+import type { ShannonAutonomyService } from './mind/action/ownTime/autonomyService.js';
 import type { CompletedTurn, TurnBackgroundService } from './mind/sleep/backgroundUpdates.js';
 import type { ChatAudienceTurn } from './chatAudience.js';
 import type { ShannonChatAttachment, ShannonChatModel, ShannonChatModelResult } from './chatModel.js';

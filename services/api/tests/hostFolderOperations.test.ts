@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { closedSignal, dispatchHostStepRequest } from '../src/apiAutonomyHostStepRoutes.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
-import { hostFolderPath, hostStepContentDigest, roomLookGuard } from '../src/autonomyHostFolderPath.js';
-import { ShannonAutonomyService } from '../src/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { hostFolderPath, hostStepContentDigest, roomLookGuard } from '../src/mind/action/ownTime/autonomyHostFolderPath.js';
+import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
 import type { ApiResponse } from '../src/contracts/contracts.js';
-import { validHostOperationResult } from '../src/hostFolderOperationResults.js';
+import { validHostOperationResult } from '../src/mind/action/ownTime/hostFolderOperationResults.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import type { ToolSurface } from '../src/mind/tools/shannonTools.js';
 

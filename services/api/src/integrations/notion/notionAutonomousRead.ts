@@ -1,5 +1,5 @@
 import type { AutonomyActivityEntry } from '../../mind/inhibition/store/autonomyActivity.js';
-import type { RecordedDecision, ShannonAutonomyService } from '../../autonomyService.js';
+import type { RecordedDecision, ShannonAutonomyService } from '../../mind/action/ownTime/autonomyService.js';
 import {
   notionFailureCode, type NotionDatabaseRows, type NotionObjectSummary, type NotionPageText, type NotionSource,
 } from './notionSource.js';

@@ -16,14 +16,14 @@ import {
 } from '../src/surfaces/body/appLookLines.js';
 import { SQLiteAppLookStore } from '../src/surfaces/body/store/appLookStore.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
-import { ShannonAutonomyService, createInMemoryAutonomyService } from '../src/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { ShannonAutonomyService, createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
 import { ROOM_LOOK_OFFER_PROMPT } from '../src/surfaces/body/bodyLook.js';
 import { BODY_LOOK_REQUEST_BYTES, configuredBodyLook } from '../src/contracts/bodyLookContract.js';
 import { BODY_LOOK_CUT_OFF_LINE } from '../src/surfaces/body/bodyLookLines.js';
 import { SQLiteBodyLookStore } from '../src/surfaces/body/store/bodyLookStore.js';
 import { roomLookInstructions, type RoomLookViewRequest, type RoomLookViewer } from '../src/surfaces/body/bodyLookVision.js';
-import { bodyLookRequestBytes } from '../src/bodyLookWiring.js';
+import { bodyLookRequestBytes } from '../src/wiring/bodyLookWiring.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';

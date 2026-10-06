@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { createInMemoryAutonomyService } from '../src/autonomyService.js';
+import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS } from '../src/chatModelTools.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline, VOICE_TURN_DEADLINE } from '../src/turnDeadline.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';

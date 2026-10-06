@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
-import { ShannonAutonomyService } from '../src/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
 import { CONVERSATION_TOOL_CALLS, CUT_OFF_CALL_NOTE, functionCallsOf, withToolRounds, type ShannonModelToolSession, type ToolCallOutcome } from '../src/chatModelTools.js';
 import { asksForParallelCalls, parallelToolsEnabled } from '../src/chatModelToolStep.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';
-import type { HostFolderOperations, HostOperationRequest, HostRunOutcome } from '../src/hostFolderOperations.js';
+import type { HostFolderOperations, HostOperationRequest, HostRunOutcome } from '../src/mind/action/ownTime/hostFolderOperations.js';
 import { ToolAudienceWatch } from '../src/mind/inhibition/shannonToolAudience.js';
 import { ShannonToolRunner } from '../src/mind/tools/shannonToolRunner.js';
 import { conversationTools } from '../src/mind/tools/shannonToolSession.js';

@@ -1,16 +1,16 @@
 import type { AetherAccess } from '../../integrations/aether/aetherAccess.js';
 import type { AetherProposalStore } from '../../integrations/aether/aetherProposal.js';
-import { ROOM_LOOK_GUARD, roomLookGuard } from '../../autonomyHostFolderPath.js';
-import type { SQLiteAutonomyStore } from '../../autonomyStore.js';
+import { ROOM_LOOK_GUARD, roomLookGuard } from '../action/ownTime/autonomyHostFolderPath.js';
+import type { SQLiteAutonomyStore } from '../action/ownTime/store/autonomyStore.js';
 import type { SecretCheck } from '../inhibition/conversationSecrets.js';
-import type { HostFolderOperations } from '../../hostFolderOperations.js';
+import type { HostFolderOperations } from '../action/ownTime/hostFolderOperations.js';
 import { folderExecutors, folderToolForHosts } from './shannonFolderTools.js';
 import { minecraftExecutors, minecraftToolOffered, type MinecraftRequestPort } from './shannonMinecraftTools.js';
 import { aetherExecutors } from './shannonAetherTools.js';
 import { ownerDocumentExecutors } from './shannonOwnerDocumentTools.js';
 import { aetherStudyTool, studyExecutors } from './shannonStudyTools.js';
 import { authorizeToolCall, authorizeToolInput, gatedAether, shownAetherCall } from '../inhibition/shannonToolGate.js';
-import type { StudyAether } from '../../studyAether.js';
+import type { StudyAether } from '../action/ownTime/studyAether.js';
 import { validToolInput } from './shannonToolInput.js';
 import type { PreparedToolCall, ToolExecutionContext, ToolExecutor } from './shannonToolTypes.js';
 import {

@@ -8,7 +8,7 @@ import type { KnowledgeAnswer, KnowledgeStore } from './mind/memory/store/knowle
 import type { MemoryDashboard, ShannonMemoryStore } from './mind/memory/memoryService.js';
 import { dispatchPersonRequest } from './apiPersonRoutes.js';
 import { dispatchAutonomyRequest } from './apiAutonomyRoutes.js';
-import type { ShannonAutonomyService } from './autonomyService.js';
+import type { ShannonAutonomyService } from './mind/action/ownTime/autonomyService.js';
 import type { PersonIdentityStore } from './mind/memory/store/personIdentity.js';
 import type { WorldSubscriptionReader } from './integrations/world/store/worldStore.js';
 import type { CognitiveIntentStatus, CognitiveIntentStore } from './cognitiveIntent.js';

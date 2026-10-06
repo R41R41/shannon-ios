@@ -9,7 +9,7 @@ import {
   SHANNON_NOW_LIMITS, SHANNON_NOW_SCHEMA_VERSION,
   type ShannonNowFace, type ShannonNowFeeling, type ShannonNowResponse,
 } from './contracts/shannonNowContract.js';
-import type { SQLiteShannonNowReader } from './shannonNowReader.js';
+import type { SQLiteShannonNowReader } from './mind/self/store/shannonNowReader.js';
 
 export interface ShannonNowRouteDependencies {
   reader: Pick<SQLiteShannonNowReader, 'body' | 'looks' | 'touches' | 'reachOuts'>;

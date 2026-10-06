@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME, presentShannonFeeling, type CompanionStateStore } from '@shannon/cognition';
 import type { AutonomyActivityDay } from '../../mind/inhibition/store/autonomyActivity.js';
-import type { AutonomyControlLabel, ShannonAutonomyService } from '../../autonomyService.js';
+import type { AutonomyControlLabel, ShannonAutonomyService } from '../../mind/action/ownTime/autonomyService.js';
 import {
   BODY_LIMITS, BODY_SCHEMA_VERSION, BODY_TOUCH_EVENT_TYPES, BODY_TOUCH_VOCABULARY, isBodyGameEvent, isImpossibleTouch,
   type BodyAudience, type BodyCapabilities, type BodyDoing, type BodyEvent, type BodyEventType, type BodyNudge, type BodyReachOutDeliveryOutcome,

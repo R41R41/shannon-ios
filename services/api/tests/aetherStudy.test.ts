@@ -8,8 +8,8 @@ import { SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_MINECRAFT_BODY_CAPABILITY, UN
 import { withToolCapabilityLines } from '../src/mind/tools/shannonAetherTools.js';
 import { FileAetherProposalStore } from '../src/integrations/aether/aetherProposal.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
-import { ShannonAutonomyService } from '../src/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { dispatchStudyRequest } from '../src/apiStudyRoutes.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/chatModel.js';
@@ -20,14 +20,14 @@ import { conversationTools, type ConversationToolServer } from '../src/mind/tool
 import { gatedAether } from '../src/mind/inhibition/shannonToolGate.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import type { ToolAudience, ToolSurface } from '../src/mind/tools/shannonTools.js';
-import { AETHER_SIDE_CHANGE } from '../src/studyAetherLinks.js';
-import { applyMigration, migrationPlan, migrationReport, readOnlyMigrationPlan } from '../src/studyMigration.js';
-import type { StudyPiece } from '../src/studyStore.js';
+import { AETHER_SIDE_CHANGE } from '../src/mind/action/ownTime/store/studyAetherLinks.js';
+import { applyMigration, migrationPlan, migrationReport, readOnlyMigrationPlan } from '../src/mind/action/ownTime/store/studyMigration.js';
+import type { StudyPiece } from '../src/mind/action/ownTime/store/studyStore.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/turnDeadline.js';
 import { FakeAether, TOKEN } from './fakeAetherServer.js';
 import { STORY_BODY, loopHarness, runUntilIdle } from './autonomyLoopHarness.js';
 import { promptOf } from './modelPrompt.js';
-import { prepareStep } from '../src/autonomyLoopSteps.js';
+import { prepareStep } from '../src/mind/action/ownTime/autonomyLoopSteps.js';
 
 const scope = 'owner';
 const STORY = `雨の日の図書館で、だれも借りない本が一冊だけ光っていた。${'ページをめくる音が、静かな部屋に少しずつ広がっていく。'.repeat(4)}`;

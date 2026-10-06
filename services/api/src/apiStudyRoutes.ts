@@ -1,7 +1,7 @@
 import type { ApiRequest, ApiResponse } from './contracts/contracts.js';
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
-import type { StudyDesk } from './studyDesk.js';
-import { STUDY_LIMITS, STUDY_REACTION_LABEL, type StudyReaction, type StudyRejection } from './studyStore.js';
+import type { StudyDesk } from './mind/action/ownTime/studyDesk.js';
+import { STUDY_LIMITS, STUDY_REACTION_LABEL, type StudyReaction, type StudyRejection } from './mind/action/ownTime/store/studyStore.js';
 
 /**
  * Owner-facing routes of Shannon's study. The owner reads what she is willing to show,

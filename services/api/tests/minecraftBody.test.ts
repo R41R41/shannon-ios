@@ -23,9 +23,9 @@ import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemorySt
 import { configuredPlatformBridge, platformBridgeThreadId } from '../src/surfaces/platform/platformBridge.js';
 import { minecraftBodyRoute } from '../src/surfaces/minecraft/serverMinecraftBodyRoute.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { createInMemoryAutonomyService } from '../src/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
-import type { HostFolderOperations } from '../src/hostFolderOperations.js';
+import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import type { HostFolderOperations } from '../src/mind/action/ownTime/hostFolderOperations.js';
 import { ShannonToolRunner } from '../src/mind/tools/shannonToolRunner.js';
 import { withMinecraftToolLine, type MinecraftRequestPort } from '../src/mind/tools/shannonMinecraftTools.js';
 import type { BodyIngestReceipt, BodyPresence } from '../src/surfaces/body/shannonBody.js';

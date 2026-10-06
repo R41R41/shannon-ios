@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { autonomyDayLog, autonomyDayPhrases } from '../src/mind/inhibition/autonomyDayLog.js';
-import { configuredAutonomyLoop } from '../src/autonomyLoopConfig.js';
-import { AutonomyToolResults } from '../src/autonomyLoopToolStep.js';
-import { ShannonAutonomyService } from '../src/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
+import { configuredAutonomyLoop } from '../src/mind/action/ownTime/autonomyLoopConfig.js';
+import { AutonomyToolResults } from '../src/mind/action/ownTime/autonomyLoopToolStep.js';
+import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import { offeredTools } from '../src/mind/tools/shannonTools.js';
 import { ownTimeFullDay, ownTimeWithTools, OWN_TIME_PRICES } from './ownerDocumentsScenario.js';
