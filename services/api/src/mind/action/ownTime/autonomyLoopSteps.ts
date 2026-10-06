@@ -30,6 +30,9 @@ import { READING_DOCUMENT_PREFIX } from '../../inhibition/store/ownerInformedMar
 import type { ToolDocuments } from '../../tools/shannonToolTypes.js';
 import { aetherStep, studyWriteKey, type StudyAether } from './studyAether.js';
 import { STUDY_LIMITS, STUDY_REACTION_LABEL } from './store/studyStore.js';
+import { clip, hostOf, sharesLongPassage, story, text } from './autonomyLoopStepText.js';
+
+export { sharesLongPassage } from './autonomyLoopStepText.js';
 
 /**
  * The step kinds of the first activity: thinking, reading, note-taking, drafting,
@@ -461,38 +464,4 @@ function waitingReason(outcome: ShowingOutcome | 'others_present'): string {
     case 'reserved-for-commitment': return '今日は約束の声かけを先にするため';
     default: return '今は知らせる場所がないため';
   }
-}
-
-/** True when `body` repeats a run of at least `length` characters of `source`. */
-export function sharesLongPassage(body: string, source: string, length: number): boolean {
-  const compact = (value: string) => value.replace(/\s+/gu, '');
-  const text = compact(body);
-  const original = compact(source);
-  if (text.length < length || original.length < length) return false;
-  const step = Math.max(1, Math.floor(length / 4));
-  for (let index = 0; index + length <= text.length; index += step) {
-    if (original.includes(text.slice(index, index + length))) return true;
-  }
-  return original.includes(text.slice(-length));
-}
-
-function story(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const body = value.replace(/\r\n?/gu, '\n').trim();
-  return body.length >= 100 && body.length <= STUDY_LIMITS.storyBody ? body : null;
-}
-
-function text(value: unknown, maximum: number): string | null {
-  if (typeof value !== 'string') return null;
-  const normalized = value.replace(/\r\n?/gu, '\n').trim();
-  return normalized ? normalized.slice(0, maximum) : null;
-}
-
-function clip(value: string, maximum: number): string {
-  const line = value.replace(/\s+/gu, ' ').trim();
-  return line.length > maximum ? `${line.slice(0, maximum - 1)}…` : line;
-}
-
-function hostOf(url: string): string {
-  try { return new URL(url).hostname; } catch { return '不明な宛先'; }
 }

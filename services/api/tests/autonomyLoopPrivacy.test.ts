@@ -538,7 +538,7 @@ describe('what reaches the prompts of her own activity', () => {
     expect(loopSources.sort()).toEqual([
       'autonomyLoop.ts', 'autonomyLoopCalls.ts', 'autonomyLoopConfig.ts', 'autonomyLoopFolderStep.ts', 'autonomyLoopFollowUpStep.ts', 'autonomyLoopLookStep.ts',
       'autonomyLoopObservations.ts', 'autonomyLoopObserve.ts', 'autonomyLoopObservePrompts.ts', 'autonomyLoopOwnerContext.ts', 'autonomyLoopPacing.ts', 'autonomyLoopPhoneStep.ts', 'autonomyLoopPlan.ts',
-      'autonomyLoopPrompts.ts', 'autonomyLoopProvenance.ts', 'autonomyLoopReachOutStep.ts', 'autonomyLoopSessionPrompts.ts', 'autonomyLoopSessions.ts', 'autonomyLoopState.ts', 'autonomyLoopSteps.ts',
+      'autonomyLoopPrompts.ts', 'autonomyLoopProvenance.ts', 'autonomyLoopReachOutStep.ts', 'autonomyLoopSessionPrompts.ts', 'autonomyLoopSessions.ts', 'autonomyLoopState.ts', 'autonomyLoopStepText.ts', 'autonomyLoopSteps.ts',
       'autonomyLoopThinkStep.ts', 'autonomyLoopToolStep.ts',
     ]);
     const allowed = new Set([
@@ -572,7 +572,7 @@ describe('what reaches the prompts of her own activity', () => {
       // Syzygy ADR-0008 stage 1: the closed vocabulary of a decision trace and the type of the writer the loop is handed; no store.
       'decisionTraceContract.ts',
       'autonomyBudget.ts', 'autonomyLoopConfig.ts', 'autonomyLoopPlan.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopState.ts',
-      'autonomyLoopSteps.ts', 'autonomyModels.ts', 'autonomyPolicy.ts', 'autonomyReader.ts', 'autonomyService.ts',
+      'autonomyLoopSteps.ts', 'autonomyLoopStepText.ts', 'autonomyModels.ts', 'autonomyPolicy.ts', 'autonomyReader.ts', 'autonomyService.ts',
       'autonomyShowing.ts', 'autonomyStore.ts', 'autonomyTextModel.ts', 'studyStore.ts',
     ]);
     for (const name of loopSources) {

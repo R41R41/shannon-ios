@@ -186,6 +186,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/action/ownTime/autonomyLoopConfig.ts',
     'services/api/src/mind/action/ownTime/store/autonomyLoopState.ts',
     'services/api/src/mind/action/ownTime/autonomyLoopSteps.ts',
+    'services/api/src/mind/action/ownTime/autonomyLoopStepText.ts',
     'services/api/src/mind/action/ownTime/autonomyReader.ts',
     'services/api/src/mind/action/ownTime/autonomyShowing.ts',
     'services/api/src/mind/action/ownTime/autonomyTextModel.ts',
