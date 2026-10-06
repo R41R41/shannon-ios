@@ -177,6 +177,8 @@ The SwiftUI Mac app (`ShannonDesk`) hosts her folder, her desktop body and the m
 
 The same steps are shown in 設定 › 専用フォルダ › 古い Mac 版（Electron）.
 
+Its stream output for OBS (A18 S5) is ShannonDesk's 設定 › すがた › 配信用の出力（OBS）, at the same address (`http://127.0.0.1:41760/stream.html`), so an OBS browser source made for the Electron app keeps working. Both use port 41760: while the Electron app runs with its 配信用の出力 on, ShannonDesk cannot take the port and switches its own back off with the reason under the switch. Quit the Electron app first (step 1).
+
 ## Data-preservation checks
 
 For persistence-affecting work, compare before/after evidence for:
