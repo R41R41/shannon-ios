@@ -35,7 +35,7 @@ import { configuredDatabasePath } from './sqliteStore.js';
 import { configuredPredictionShadow } from './predictionShadow.js';
 import { configuredDecisionTraces } from './mind/inhibition/decisionTraces.js';
 import { configuredPredictionLedger } from './mind/learning/predictionLedger.js';
-import { ledgerPredictionTap } from './mind/learning/predictionLedgerTaps.js';
+import { ledgerPredictionTap, presenceOf } from './mind/learning/predictionLedgerTaps.js';
 
 /**
  * Entry of the activity loop (Syzygy ADR-0002 step 3): its own process, so the API,
@@ -137,7 +137,9 @@ const loop = new ShannonAutonomyLoop({
   ...(ownerContext ? { ownerContext: ownerContext.context } : {}),
   // Her tools over her study and her folder (owner decision 2026-10-05); SHANNON_OWN_TOOLS=off offers none and every prompt is what it was.
   ...(ownToolsEnabled() ? { toolResults: new AutonomyToolResults() } : {}),
-  ...(shadowTap ? { prediction: predictionLedger ? ledgerPredictionTap(predictionLedger.ledger, shadowTap) : shadowTap } : {}),
+  // With the choice ledger (SHANNON_CHOICE_LEDGER) each step the gate allowed is a choice of hers, with who was around (closed facts of her body).
+  ...(shadowTap ? { prediction: predictionLedger ? ledgerPredictionTap(predictionLedger.ledger, shadowTap, predictionLedger.choices
+    ? { ledger: predictionLedger.choices, presence: (scopeKey: string, at: string) => presenceOf(observer.body(scopeKey, at)) } : null) : shadowTap } : {}),
   ...(decisionTraces ? { trace: decisionTraces.traces.writer } : {}),
   // Content-free: a step kind and a closed reason code.
   log: line => console.log(`Shannon autonomy step: ${line.replace(/[^a-z0-9_:., -]/giu, '_').slice(0, 300)}`),

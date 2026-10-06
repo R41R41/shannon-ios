@@ -78,6 +78,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'packages/learning/',
     // Syzygy ADR-0008 stage 1: the prediction ledger, its store, and where predictions are opened and settled.
     'services/api/src/mind/learning/',
+    // Syzygy ADR-0008 stage 1: the nightly pass of the ledgers (expiry, delayed credit, retention).
+    'services/api/src/mind/sleep/',
   ]),
   authentication: Object.freeze([
     'services/api/src/apiAuth.ts',

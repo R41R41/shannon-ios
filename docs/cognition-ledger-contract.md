@@ -13,7 +13,7 @@ This file is the contract. The pure parts are in `packages/learning` (`@shannon/
 | 1 | This contract, the instructions, `packages/learning`, core map | in place |
 | 2 | Decision traces, Jev call count | in place (`mind/inhibition/decisionTraces.ts`, `tracedVoiceDecision.ts`, `infra/models/jev/`; tests `decisionTraces.test.ts`) |
 | 3 | Prediction ledger, five new domains, calibration | in place (`packages/learning/src/{predictionLedger,calibration}.ts`, `mind/learning/`; tests `predictionLedger.test.ts`, `cognitionLedgerContention.test.ts`) |
-| 4 | Choice ledger, reward settlement, nightly pass, tool-call choices | not yet |
+| 4 | Choice ledger, reward settlement, nightly pass, tool-call choices | in place (`packages/learning/src/reward.ts`, `mind/learning/{choiceLedger,rewardSettlement}.ts`, `mind/sleep/valueSleep.ts`; tests `reward.test.ts`, `choiceLedger.test.ts`) |
 | 5 | Value table, versions, CLI and owner route | not yet |
 | 6 | Scenario suite v1 and a baseline report | not yet |
 | 7 | Effects: 7a value facts, 7b reward mood | not yet; shown to the owner before deployment (override 4) |
@@ -137,6 +137,37 @@ Per domain, over settled rows with an outcome:
 - **80 % coverage**: the share of outcomes inside the interval, for gaussian domains (null for yes/no domains, whose interval is about the probability).
 - **Skill κ** (Murphy 1973): 1 − Σ(outcome − expectation)² / Σ(outcome − prior)², against the domain prior; null while the reference is 0.
 
-## Choice ledger, values, reward and mood (steps 4–7)
+## Choice ledger and reward (`shannon_choices`, step 4)
 
-Designed in the stage-1 plan (Syzygy `notes/adr0008-stage1-plan.md`) and written here as each step lands: `shannon_choices`, `shannon_value_versions`, `shannon_value_cells`; r = (W + S + G)/3 clamped to [−1, 1] with the cost weight 0 (override 2); δ = r − V with V read at choice time; u = erf(|δ| / √(2(U+N))); the mood exit boundedAffectStep(core, attractor + w_δ·δ + w_E·V, u) for every settled choice that is not stale (override 1).
+A choice of hers, recorded when the gate allowed it and settled once by her three instincts (ADR-0008 §3 報酬系).
+
+| Column | Notes |
+| --- | --- |
+| `choice_id`, `scope_key` | Random id; the scope. |
+| `surface` | `autonomy` (a step of her own time), `text`, `voice` (a tool call of hers in a conversation). |
+| `choice` | Closed: the step kind (`read`, `notion`, `note`, `draft`, `revise`, `show`, `put_away`, `copy`, `look`, `jot`), `reach_out.<reason>`, `call.<reason>`, `follow_up`, `tool.<registry name>`. Thinking and resting are not choices. |
+| `context` | `<band>.<presence>`: the owner-local quarter of the day, and who was around (`alone`, `others`, `away`, `unknown` from what the server knows of her body; in a conversation, its audience). |
+| `source_kind`, `source_id` | `step` and the loop step's id, or `tool_call` and a random id. |
+| `subject_kind`, `subject_id` | What the step made or showed (`study_piece`), for delayed credit; null otherwise. |
+| `chosen_at`, `value_version`, `expected`, `expected_sd`, `expected_noise`, `expected_level` | When, and the value she held then: V, √U, N, the level of the cell that answered, and its version (the root cell, mean 0 and variance 1/3, until step 5). |
+| `status` | `pending`, `settled`, `void` (unscored; moves nothing). |
+| `success` | Her step's own outcome: 1 done, 0 failed; null until reported. |
+| `world`, `serve`, `growth`, `reward`, `delta`, `unexpected` | W, S, G, r, δ = r − V, u = erf(|δ| / √(2(U + N))). |
+| `cost_yen` | What the step cost by the price table (owner override 2: recorded and shown, never subtracted). |
+| `settle_code`, `settled_at`, `settle_seq` | How it was settled (`reported`, `reply`, `call`, `story`, `inherited`, `superseded`, `stale`, `void`, `lost`), when, and its place in the order of settling (the value table folds in that order; `shannon_choice_ledger_seq` keeps the last place given). |
+| `mood_claimed_at`, `mood_code` | Step 7: when and how it moved her mood. Empty until then. |
+
+**Recording.** In her own time the loop hands the tap two closed facts: `chose` once the gate allowed a step (a step it refused, paused or held for the budget is never a choice) and `reported` when the step ended (done, failed, or void when another runner had closed it). `chose` also opens the step's `step_success` prediction; the predictions its step opens (`reply`, `call_answer`, `story_*`, `reading_used`) carry its `choice_id`. In a conversation, a tool call that ran (not one the gate or the turn refused) is a choice made and ended at once (`ShannonToolRunner.observeChoices`): data for stage 2, it changes nothing. In the loop's process the choices share the prediction ledger's connection and queue, so they are recorded only while that ledger is on.
+
+**Settling** (`mind/learning/rewardSettlement.ts`, formulas in `packages/learning/src/reward.ts`). r = (W + S + G)/3 clamped to [−1, 1], equal weights (owner answer 2), cost weight 0 (override 2).
+- W = min(1, Σ kᵢ|δᵢ| / (hi − lo)) over the choice's settled predictions, kᵢ = U/(U + N) of the prediction as opened; 0 with none.
+- G = ½·s + ½·mean κᵢ, κᵢ = 1 − (y − e)² / (y − p)² clamped to [−1, 1] (0 when the prior was exact); G = s with none.
+- S: a message: answered within the wait 1, else 0, void when away, hidden, unwatched or not watched; a call: answered 1, declined or unanswered 0, void when it failed or was not watched to its end; a showing: like 1, more 0.5, unclear 0, and 0 when no reaction came in 14 days (override 5); every other step 0.
+- Delayed credit: the last draft or revision of a piece before it is shown inherits the showing's S (`inherited`); one followed by another draft or revision before any showing gets 0 (`superseded`); one never shown in 14 days gets 0 (`stale`, a modelling assumption).
+- A choice is settled once, as soon as what it is scored by is known: at its report, when the owner reacts to a story, or in the nightly pass. One whose report never came is void after a day (`lost`).
+
+**The nightly pass** (`mind/sleep/valueSleep.ts`), after each sleep batch per scope in the background worker: `PredictionLedger.maintain` (expiry, forgetting, 90-day retention, recompute, the calibration line), then `ChoiceLedger.sleep` (settling what waited, lost reports, 90-day retention), and one line `Shannon value sleep: expired=… predictions_pruned=… settled=… choices_pruned=…`. Its failure is logged and never fails the batch. It calls no model.
+
+## Values and mood (steps 5–7)
+
+Designed in the stage-1 plan (Syzygy `notes/adr0008-stage1-plan.md`) and written here as each step lands: `shannon_value_versions`, `shannon_value_cells`; the mood exit boundedAffectStep(core, attractor + w_δ·δ + w_E·V, u) for every settled choice that is not stale (override 1).

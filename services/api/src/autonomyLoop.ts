@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { autonomyDayKey } from './autonomyBudget.js';
+import { autonomyDayKey, yenFromUsd } from './autonomyBudget.js';
+import { autonomyModelCostUsd } from './autonomyModels.js';
 import { observeStep, sentBeforeStop } from './autonomyLoopObserve.js';
 import { closeSession, fitsSession, idleBefore, mayRetryThought, nothingDone, ownerTalking, restMilliseconds, sessionBound, sessionOf, startSessionIfDue } from './autonomyLoopPacing.js';
 import { REACH_OUT_REASON_LABEL } from './autonomyLoopPrompts.js';
@@ -192,6 +193,10 @@ export class ShannonAutonomyLoop {
     });
     if (!begun) return 'not-leader';
     if (!begun.allowed) return this.refused(cycle, begun.row, plan, ready, begun.decision, at);
+    // Syzygy ADR-0008 stage 1: a step the gate allowed is a choice of hers (write-only, closed values; refused ones never are).
+    this.choice(tap => tap.chose?.(this.scopeKey, {
+      stepId: begun.row.id, kind: current.kind, ...(current.reason ? { reason: current.reason } : {}), ...(current.call ? { call: true } : {}), ...(current.tool ? { tool: current.tool } : {}),
+    }, at));
 
     let result: StepResult;
     try {
@@ -199,7 +204,12 @@ export class ShannonAutonomyLoop {
     } catch {
       result = { outcome: 'failed', summary: '一歩の途中で、うまくいかなくなりました。' };
     }
-    this.report(cycle, begun.row, begun.decision, ready, result, plan, now());
+    const reportedAt = now();
+    const reported = this.report(cycle, begun.row, begun.decision, ready, result, plan, reportedAt);
+    this.choice(tap => tap.reported?.(this.scopeKey, {
+      stepId: begun.row.id, outcome: reported.saved === 'unknown' ? 'void' : reported.saved ? result.outcome : 'failed', costYen: this.costYen(ready, result),
+      ...(/^shannon-study:\/\/[A-Za-z0-9][A-Za-z0-9_:-]{0,119}$/u.test(reported.link ?? '') ? { pieceId: reported.link!.slice('shannon-study://'.length) } : {}),
+    }, reportedAt));
     // Her rest, or the one a bound put in her plan, has closed the session.
     return current.kind === 'rest' && !store.loop.openCycle(this.scopeKey) ? 'cycle-ended' : 'stepped';
   }
@@ -235,14 +245,28 @@ export class ShannonAutonomyLoop {
     return { kind: 'think', again: true, ...(dropped.length ? { dropped } : {}) };
   }
 
+  /** Hands the prediction tap one closed fact about a choice of hers; it never stops a step. */
+  private choice(operation: (tap: NonNullable<StepDependencies['prediction']>) => void): void {
+    const tap = this.dependencies.prediction;
+    if (tap) { try { operation(tap); } catch { /* the ledger never stops a step */ } }
+  }
+
+  /** What a step cost in yen: its model's usage at the price table, or nothing for a free step. */
+  private costYen(prepared: PreparedStep, result: StepResult): number {
+    const paid = prepared.request.paid;
+    if (!paid) return 0;
+    const usd = result.usage ? autonomyModelCostUsd(paid.model, result.usage, this.dependencies.config.modelPrices) : null;
+    return usd === null ? paid.estimatedCostYen : yenFromUsd(usd, this.dependencies.config);
+  }
+
   /** The product, the record entry with its actual cost, and the journal close commit together. */
   private report(
     cycle: AutonomyLoopCycle, row: AutonomyLoopStep, decision: RecordedDecision, prepared: PreparedStep,
     result: StepResult, plan: readonly AutonomyPlannedStep[], at: string,
-  ): void {
+  ): { saved: boolean | 'unknown'; link?: string } {
     const { store, service } = this.dependencies;
     const usage = result.usage && prepared.request.paid ? { ...result.usage, ...(prepared.purpose ? { purpose: prepared.purpose } : {}) } : undefined;
-    const state: { saved: boolean | 'unknown' } = { saved: false };
+    const state: { saved: boolean | 'unknown'; link?: string } = { saved: false };
     try {
       store.transaction(() => {
         // Already closed means another runner took the lease and abandoned it; it is not counted twice.
@@ -250,6 +274,7 @@ export class ShannonAutonomyLoop {
         state.saved = true;
         const committed = (result.commit?.(plan, at) || undefined) as StepCommit | undefined;
         const link = committed?.link ?? result.link;
+        if (link) state.link = link;
         service.recordAction(this.scopeKey, {
           decisionId: decision.activityId, summary: result.summary, outcome: result.outcome,
           ...(link ? { link } : {}), ...(result.tool ? { tool: result.tool } : {}), ...(usage ? { usage } : {}),
@@ -279,6 +304,7 @@ export class ShannonAutonomyLoop {
       } catch { /* left `authorized`; the next tick closes it as abandoned */ }
     }
     try { result.settled?.(state.saved); } catch { /* what she is told next is optional */ }
+    return state;
   }
 
   private refused(

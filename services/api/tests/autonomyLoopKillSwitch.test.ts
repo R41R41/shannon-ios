@@ -7,6 +7,7 @@ import { draftPrompt, reachOutPrompt, revisePrompt, thinkingPrompt } from '../sr
 import { OwnerInformedMarks } from '../src/ownerInformedMarks.js';
 import { checkedTrace, type DecisionTraceDraft } from '../src/mind/inhibition/decisionTraceContract.js';
 import { PredictionLedger } from '../src/mind/learning/predictionLedger.js';
+import { ChoiceLedger } from '../src/mind/learning/choiceLedger.js';
 import { ledgerPredictionTap, storyReacted } from '../src/mind/learning/predictionLedgerTaps.js';
 import { DatabaseSync } from 'node:sqlite';
 import { agenticDay, builderDigests, plainDay } from './autonomyLoopKillSwitchScenario.js';
@@ -155,19 +156,28 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
     const database = new DatabaseSync(join(other, 'kill-switch-agentic.sqlite'));
     database.exec('PRAGMA busy_timeout = 5000;');
     const ledger = new PredictionLedger({ database, createsSchema: true, log: () => undefined });
+    const choices = new ChoiceLedger({ database, createsSchema: true });
     const shadow = { reachOut: vi.fn() };
     try {
       const day = await agenticDay(other, {
-        ...CAP_OF_78C3493, prediction: ledgerPredictionTap(ledger, shadow),
-        storyReacted: (scopeKey, pieceId, reaction, at) => storyReacted(ledger, scopeKey, pieceId, reaction, at),
+        ...CAP_OF_78C3493, prediction: ledgerPredictionTap(ledger, shadow, { ledger: choices, presence: () => 'alone' }),
+        storyReacted: (scopeKey, pieceId, reaction, at) => storyReacted(ledger, scopeKey, pieceId, reaction, at, choices),
       });
       expect(day.map(call => [call.kind, call.digest])).toEqual(AGENTIC_DAY_AT_78C3493);
       await new Promise(resolve => setImmediate(resolve));
       const rows = ledger.rows(scope);
       expect(shadow.reachOut).toHaveBeenCalled();
-      expect(new Set(rows.map(row => row.domain))).toEqual(new Set(['reply', 'reading_used', 'story_reacted', 'story_reaction']));
+      expect(new Set(rows.map(row => row.domain))).toEqual(new Set(['reply', 'reading_used', 'story_reacted', 'story_reaction', 'step_success']));
       expect(rows.filter(row => row.domain === 'reply').every(row => row.status !== 'open')).toBe(true);
       expect(rows.find(row => row.domain === 'story_reaction')).toMatchObject({ status: 'matched', outcome: 1 });
+      // Every step but a thought or a rest is a choice of hers, each linked to its own predictions; the showing was credited.
+      const made = choices.rows(scope);
+      const kinds = day.map(call => call.kind);
+      expect(made.length).toBeGreaterThanOrEqual(kinds.filter(kind => kind !== 'think').length);
+      expect(made.some(row => /^(?:think|rest)$/u.test(row.choice))).toBe(false);
+      expect(rows.filter(row => row.domain !== 'step_success').every(row => made.some(choice => choice.choiceId === row.choiceId))).toBe(true);
+      expect(made.find(row => row.choice === 'show')).toMatchObject({ status: 'settled', serve: 1, settleCode: 'story' });
+      expect(made.filter(row => row.choice.startsWith('reach_out.')).every(row => row.status !== 'pending')).toBe(true);
     } finally {
       database.close();
       rmSync(other, { recursive: true, force: true });

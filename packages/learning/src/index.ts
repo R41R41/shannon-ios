@@ -41,3 +41,21 @@ export {
   type DomainCalibration,
   type ReliabilityBin,
 } from './calibration.js';
+export {
+  REWARD_FORMULA,
+  ROOT_VALUE,
+  choiceFamily,
+  growthScore,
+  predictionSkill,
+  rewardOf,
+  serveRule,
+  serveScore,
+  settle,
+  worldScore,
+  type LinkedPrediction,
+  type RewardFormula,
+  type RewardParts,
+  type ServeRule,
+  type Settlement,
+  type ValueRead,
+} from './reward.js';

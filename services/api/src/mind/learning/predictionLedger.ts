@@ -18,6 +18,7 @@ import {
 } from '@shannon/learning';
 import { ownerDay } from '../../companionPresence.js';
 import { LockWaitMeter, loggedFailure, tableExists, underWriteLock } from '../../infra/sqlite/lockWaits.js';
+import { ChoiceLedger, choiceLedgerEnabled } from './choiceLedger.js';
 import { PREDICTIONS_TABLE, SQLitePredictionLedger, type LedgerSourceKind, type StoredPrediction } from './store/sqlitePredictionLedger.js';
 
 export type { LedgerSourceKind, StoredPrediction } from './store/sqlitePredictionLedger.js';
@@ -290,10 +291,12 @@ export function calibrationLine(day: string, counts: Record<string, number>, rep
 /** For a process that holds no store of the API (the activity loop): its own connection, or null under the switches. */
 export function configuredPredictionLedger(
   environment: Readonly<Record<string, string | undefined>>, databasePath: string,
-): { ledger: PredictionLedger; close(): void } | null {
+): { ledger: PredictionLedger; choices: ChoiceLedger | null; close(): void } | null {
   if (!predictionLedgerEnabled(environment)) return null;
   const database = new DatabaseSync(databasePath);
   database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
   const ledger = new PredictionLedger({ database, createsSchema: false });
-  return { ledger, close: () => { ledger.flushLockWaits(); if (database.isOpen) database.close(); } };
+  // Her choices share the connection and the queue: a prediction settled before a report is seen by its settlement.
+  const choices = choiceLedgerEnabled(environment) ? new ChoiceLedger({ database, createsSchema: false }) : null;
+  return { ledger, choices, close: () => { ledger.flushLockWaits(); choices?.flushLockWaits(); if (database.isOpen) database.close(); } };
 }

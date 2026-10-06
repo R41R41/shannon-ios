@@ -43,6 +43,7 @@ import { PredictionShadow, predictionShadowEnabled } from './predictionShadow.js
 import { DecisionTraces, decisionTracesEnabled } from './mind/inhibition/decisionTraces.js';
 import { jevUsageRow } from './infra/models/jev/jevUsage.js';
 import { PredictionLedger, predictionLedgerEnabled } from './mind/learning/predictionLedger.js';
+import { ChoiceLedger, choiceLedgerEnabled } from './mind/learning/choiceLedger.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
@@ -64,6 +65,8 @@ export interface SQLiteShannonStoreOptions {
   decisionTraces?: boolean;
   /** The prediction ledger (Syzygy ADR-0008 stage 1). Absent: `SHANNON_PREDICTION_LEDGER` and its implications; never with `leavesMoodHistory`. */
   predictionLedger?: boolean;
+  /** The choice ledger (Syzygy ADR-0008 stage 1). Absent: `SHANNON_CHOICE_LEDGER`; never with `leavesMoodHistory`. */
+  choiceLedger?: boolean;
   /** When the cognition ledger's writes run (traces, predictions). Absent: `setImmediate`. Tests may pass one that runs at once. */
   cognitionDefer?: (task: () => void) => void;
 }
@@ -81,6 +84,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   private readonly shadow: PredictionShadow | null;
   private readonly traces: DecisionTraces | null;
   private readonly ledger: PredictionLedger | null;
+  private readonly choices: ChoiceLedger | null;
 
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
@@ -96,6 +100,10 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       defer: options.predictionShadowDefer ?? (task => { setImmediate(task); }),
     }) : null;
     this.ledger = ledgerOn ? new PredictionLedger({
+      database: this.context.database, createsSchema: true, ...(options.cognitionDefer ? { defer: options.cognitionDefer } : {}),
+    }) : null;
+    const choicesOn = !options.leavesMoodHistory && (options.choiceLedger ?? choiceLedgerEnabled(process.env));
+    this.choices = choicesOn ? new ChoiceLedger({
       database: this.context.database, createsSchema: true, ...(options.cognitionDefer ? { defer: options.cognitionDefer } : {}),
     }) : null;
     this.companion = new SQLiteCompanionRepository(this.context, (scopeKey, state, at, event) => {
@@ -200,6 +208,8 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   toolTraceScopes() { return selectToolTraceScopes(this.context.database); }
   pruneToolTraces(before: string) { this.context.transaction(() => pruneToolTraces(this.context.database, before)); }
   impressionStore() { return this.personImpressions; }
+  /** The choice ledger on this store's connection (Syzygy ADR-0008), or null while it is switched off. */
+  choiceLedger(): ChoiceLedger | null { return this.choices; }
   /** The prediction ledger on this store's connection (Syzygy ADR-0008), or null while it is switched off. */
   predictionLedger(): PredictionLedger | null { return this.ledger; }
   /** Decision traces on this store's connection (Syzygy ADR-0008), or null while they are switched off. */
@@ -218,7 +228,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   dailyUserMessages(scopeKey: string, startAt: string, endAt: string): readonly DailyUserMessage[] { return this.jobs.dailyUserMessages(scopeKey, startAt, endAt); }
   applySleepOutcome(job: ClaimedBackgroundJob, workerId: string, completedAt: string, outcome: SleepConsolidationOutcome) { return this.jobs.applySleepOutcome(job, workerId, completedAt, outcome); }
   pendingBackgroundJobCount() { return this.jobs.pendingBackgroundJobCount(); }
-  close() { this.traces?.flushLockWaits(); this.ledger?.flushLockWaits(); this.context.close(); }
+  close() { this.traces?.flushLockWaits(); this.ledger?.flushLockWaits(); this.choices?.flushLockWaits(); this.context.close(); }
 }
 
 export function configuredDatabasePath(environment: Readonly<Record<string, string | undefined>> = process.env): string {

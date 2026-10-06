@@ -47,8 +47,12 @@ export interface ToolAetherPorts {
   ownerDocuments?: boolean;
 }
 
+/** Syzygy ADR-0008 stage 1: a tool call of hers in a conversation that ran, as closed values (data only, no effect). */
+export type ToolCallChoiceSink = (scopeKey: string, call: { tool: string; surface: 'text' | 'voice'; audience: ToolAudience; ok: boolean }, at: string) => void;
+
 export class ShannonToolRunner {
   private readonly executors: Readonly<Record<string, ToolExecutor>>;
+  private choices: { sink: ToolCallChoiceSink; now: () => string } | null = null;
 
   constructor(
     private readonly store: SQLiteAutonomyStore,
@@ -154,8 +158,21 @@ export class ShannonToolRunner {
     return result;
   }
 
+  /** Syzygy ADR-0008 stage 1: told of every conversation call that ran (`SHANNON_CHOICE_LEDGER`); never set, nothing is told. */
+  observeChoices(sink: ToolCallChoiceSink, now: () => string): void { this.choices = { sink, now }; }
+
   /** One call from a conversation: run, commit, record. Never throws. */
   async call(name: string, rawInput: unknown, context: ToolExecutionContext, signal?: AbortSignal): Promise<ToolResult> {
+    const ran: { tool?: string } = {};
+    const result = await this.callOnce(name, rawInput, context, ran, signal);
+    const surface = context.surface;
+    if (this.choices && ran.tool && (surface === 'text' || surface === 'voice')) {
+      try { this.choices.sink(context.scopeKey, { tool: ran.tool, surface, audience: context.audience, ok: result.ok }, this.choices.now()); } catch { /* data only */ }
+    }
+    return result;
+  }
+
+  private async callOnce(name: string, rawInput: unknown, context: ToolExecutionContext, ran: { tool?: string }, signal?: AbortSignal): Promise<ToolResult> {
     const record = (summary: string, outcome: 'done' | 'failed', reasonCode?: string) => {
       try {
         this.recorder.recordConversationAction(context.scopeKey, { summary, tool: name.slice(0, 120), outcome, ...(reasonCode ? { reasonCode } : {}) });
@@ -166,6 +183,7 @@ export class ShannonToolRunner {
       record(`会話の中で道具「${ready.tool?.name ?? '不明'}」を使おうとしましたが、使えませんでした。`, 'failed', ready.result.failure);
       return ready.result;
     }
+    ran.tool = ready.tool.name;
     let run;
     try { run = await ready.prepared.run(signal); } catch {
       record(`会話の中で道具「${ready.tool.name}」を使おうとしましたが、うまくいきませんでした。`, 'failed', 'failed');

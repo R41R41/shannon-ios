@@ -73,6 +73,13 @@ export interface AutonomyPredictionTap {
   shown?(scopeKey: string, piece: { id: string; revised: boolean }, at: string): void;
   read?(scopeKey: string, reading: { id: string; source: 'public' | 'notion' }, at: string): void;
   noted?(scopeKey: string, readingId: string, at: string): void;
+  /**
+   * Syzygy ADR-0008 stage 1 (the choice ledger): a step the gate allowed is a choice of hers, and its report ends it. Closed
+   * values only: the step's kind, its reason, whether it is a call, the registry name of a tool, the step id, what it cost, and
+   * the piece it made or showed. A step the gate refused, paused or held for the budget is never a choice.
+   */
+  chose?(scopeKey: string, step: { stepId: string; kind: string; reason?: ObservedReachOutReason; call?: boolean; tool?: string }, at: string): void;
+  reported?(scopeKey: string, report: { stepId: string; outcome: 'done' | 'failed' | 'void'; costYen: number; pieceId?: string }, at: string): void;
 }
 
 export interface StepObservation {

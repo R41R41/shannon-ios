@@ -51,6 +51,7 @@ describe('CORE as code', () => {
     const expected: Record<string, string> = {
       'packages/learning/': 'emotion',
       'services/api/src/mind/learning/': 'emotion',
+      'services/api/src/mind/sleep/': 'emotion',
       'services/api/src/mind/inhibition/': 'approval_and_budget',
       'services/api/src/infra/models/jev/': 'response_path',
       'services/api/src/surfaces/voice/': 'response_path',

@@ -52,6 +52,7 @@ export function ensurePredictionLedgerSchema(database: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS shannon_predictions_open ON shannon_predictions (scope_key, status, expires_at);
     CREATE INDEX IF NOT EXISTS shannon_predictions_settled ON shannon_predictions (scope_key, outcome_seq);
     CREATE INDEX IF NOT EXISTS shannon_predictions_made ON shannon_predictions (scope_key, made_at);
+    CREATE INDEX IF NOT EXISTS shannon_predictions_choice ON shannon_predictions (scope_key, choice_id);
     CREATE TABLE IF NOT EXISTS shannon_prediction_ledger_seq (
       scope_key TEXT PRIMARY KEY,
       last_seq INTEGER NOT NULL
@@ -94,6 +95,12 @@ export class SQLitePredictionLedger {
   openForSource(scopeKey: string, sourceKind: LedgerSourceKind, sourceId: string, domain: LedgerDomain): StoredPrediction[] {
     return (this.database.prepare(`SELECT ${COLUMNS} FROM shannon_predictions WHERE scope_key = ? AND source_kind = ? AND source_id = ? AND domain = ? AND status = 'open' ORDER BY made_at, prediction_id`)
       .all(scopeKey, sourceKind, sourceId, domain) as Array<Record<string, unknown>>).map(parsed);
+  }
+
+  /** The predictions opened for one choice (Syzygy ADR-0008: what its reward is scored from). */
+  forChoice(scopeKey: string, choiceId: string): StoredPrediction[] {
+    return (this.database.prepare(`SELECT ${COLUMNS} FROM shannon_predictions WHERE scope_key = ? AND choice_id = ? ORDER BY made_at, prediction_id`)
+      .all(scopeKey, choiceId) as Array<Record<string, unknown>>).map(parsed);
   }
 
   /** Open predictions whose time ran out at `at`. */
