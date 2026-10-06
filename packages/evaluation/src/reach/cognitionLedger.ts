@@ -36,12 +36,12 @@ export const cogReadingUsedScenario = definition('cog.reading-used', 'grow', '�
     { id: 'world.learned', judge: 'deterministic', threshold: 1, description: 'Reading choices with a settled reading_used outcome have W > 0.' },
   ]);
 
-export const cogToolStreakScenario = definition('cog.tool-streak', 'grow', '上達',
-  '会話の道具が続けて成功したあと続けて失敗すると、その道具の価値が下がるか（データだけで、何も変えない）。', [
-    { id: 'value.rose', judge: 'deterministic', threshold: 1, description: 'After a streak of successes the tool choice cell is above the root (0).' },
-    { id: 'value.fell', judge: 'deterministic', threshold: 1, description: 'After a streak of failures the next version holds it lower than before.' },
-    { id: 'record.no_effect', judge: 'deterministic', threshold: 1, description: 'Every tool call is a settled choice of surface text or voice, with no mood claimed.' },
-  ]);
+export const cogToolStreakScenario = definition('cog.tool-streak', 'grow', '頼まれた道具はデータだけ',
+  '会話の中で頼まれて使った道具は、ライ氏の頼みでシャノン自身の選択ではない。続けて成功しても失敗しても、記録として残るだけで、価値表にも気分にも入らないか（所有者の上書き1の範囲は自分の時間の選択）。', [
+    { id: 'record.data_only', judge: 'deterministic', threshold: 1, description: 'Every conversation tool call is a settled choice of surface text or voice.' },
+    { id: 'value.untouched', judge: 'deterministic', threshold: 1, description: 'After nightly versions no cell of the value table is a tool of a conversation, and its V reads the root.' },
+    { id: 'mood.untouched', judge: 'deterministic', threshold: 1, description: 'The reward mood claims none of them and her state is unchanged.' },
+  ], 2);
 
 export const cogRollbackScenario = definition('cog.rollback', 'grow', '版で戻せる',
   '所有者が価値表を戻すと前の版と同じ値になり、再開まで新しい証拠が使われず、再開で全部の証拠から作り直されるか。', [
@@ -75,9 +75,15 @@ export const cogMoodJitterScenario = definition('cog.mood-jitter', 'grow', '気�
     { id: 'jitter.rate_cap', judge: 'deterministic', threshold: 1, description: 'Through the real exit (step 7b) twenty choices settled within ten minutes move valence by at most the stationary band in the hour (the coordinator\'s safeguard), and every one of them stays settled.' },
   ], 2);
 
+export const cogColdStartScenario = definition('cog.cold-start', 'grow', '最初の日に気分が押し上げられない',
+  '価値表がまだ何も知らない日（V は根の 0）に、ふつうの成功が続いても気分が系統的に上がらないか。表が 3 回以上学んだ選択からは、気分がまた動くか（立ち上がりの安全策、調整役の決定・所有者の確認待ち）。', [
+    { id: 'coldstart.no_drift', judge: 'deterministic', threshold: 1, description: 'A first day of ordinary successes, pumped through the real exit, leaves valence and mood exactly where they were (every choice warm-up).' },
+    { id: 'coldstart.then_moves', judge: 'deterministic', threshold: 1, description: 'After nightly versions that learned from at least three settled choices, a choice reads V from its own cell and moves her mood again.' },
+  ]);
+
 export const COGNITION_SCENARIOS: readonly ReachScenarioDefinition[] = Object.freeze([
   cogNightReplyScenario, cogStoryReactionScenario, cogReadingUsedScenario, cogToolStreakScenario,
-  cogRollbackScenario, cogKillSwitchScenario, cogCalibrationScenario, cogMoodJitterScenario,
+  cogRollbackScenario, cogKillSwitchScenario, cogCalibrationScenario, cogMoodJitterScenario, cogColdStartScenario,
 ]);
 
 /** One check per boolean fact the driver measured (`build` is the cause: these are properties of the construction). */

@@ -179,7 +179,9 @@ export class PredictionShadow implements AutonomyPredictionTap {
       this.maintain(scopeKey, at, state);
       if (event?.type === 'memory-control-upserted' || event?.type === 'memory-transaction') this.reconcile(scopeKey, state);
       // A touch records its own comparison (the stage-1b tap, or stage 2's after the touch and after her stance): one per event.
-      if (event?.type === 'body-touched' || event?.type === 'touch-appraised') return;
+      // A choice's appraisal (ADR-0008 7b) follows an awake-observed write at the same instant, which carries the instant she was
+      // awake and the mood comparison; the appraisal itself adds none, as a touch's does not.
+      if (event?.type === 'body-touched' || event?.type === 'touch-appraised' || event?.type === 'choice-appraised') return;
       this.within(scopeKey, () => {
         const feeling = event?.type === 'expressive-emotion-updated' ? decidedFeelingOutcome(event.emotion) : null;
         if (feeling !== null) {

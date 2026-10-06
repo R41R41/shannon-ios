@@ -6,7 +6,7 @@ import { REACH_SCENARIOS, runReachSuite, scriptedDrivers } from './reach/reachSu
 describe('the cognition scenarios of the reach suite', () => {
   it('are registered, and pass model-free', async () => {
     expect(COGNITION_SCENARIOS.map(scenario => scenario.id)).toEqual([
-      'cog.night-reply', 'cog.story-reaction', 'cog.reading-used', 'cog.tool-streak', 'cog.rollback', 'cog.kill-switch', 'cog.calibration', 'cog.mood-jitter',
+      'cog.night-reply', 'cog.story-reaction', 'cog.reading-used', 'cog.tool-streak', 'cog.rollback', 'cog.kill-switch', 'cog.calibration', 'cog.mood-jitter', 'cog.cold-start',
     ]);
     for (const scenario of COGNITION_SCENARIOS) expect(REACH_SCENARIOS).toContain(scenario);
     const report = await runReachSuite(scriptedDrivers(), { mode: 'scripted', revision: 'test', only: ['cog.'], now: () => '2026-10-07T00:00:00.000Z' });

@@ -62,7 +62,7 @@ export class ChoiceLedger {
       const value = this.readValue(scopeKey, draft);
       this.write(at, () => this.store.insert({
         ...draft, choiceId, scopeKey, chosenAt: at, valueVersion: value.version, expected: value.mean, expectedSd: Math.sqrt(Math.max(0, value.variance)),
-        expectedNoise: value.noise, expectedLevel: value.level, status: 'pending', success: null, subjectKind: null, subjectId: null, world: null, serve: null,
+        expectedNoise: value.noise, expectedLevel: value.level, expectedN: value.n, status: 'pending', success: null, subjectKind: null, subjectId: null, world: null, serve: null,
         growth: null, costYen: 0, reward: null, delta: null, unexpected: null, settleCode: null, settledAt: null, moodClaimedAt: null, moodCode: null,
       }));
     });

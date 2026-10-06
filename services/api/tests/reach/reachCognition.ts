@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SHANNON_AFFECT_DYNAMICS, advanceAffect, createAffectDynamics, impulseAffect, stationaryBand } from '@shannon/cognition';
 import { cognitionLedgerSwitches, foldValues, moodEligible, valueCells, valueOf } from '@shannon/learning';
 import {
-  cogCalibrationScenario, cogKillSwitchScenario, cogMoodJitterScenario, cogNightReplyScenario, cogReadingUsedScenario, cogRollbackScenario,
+  cogCalibrationScenario, cogColdStartScenario, cogKillSwitchScenario, cogMoodJitterScenario, cogNightReplyScenario, cogReadingUsedScenario, cogRollbackScenario,
   cogStoryReactionScenario, cogToolStreakScenario, judgedFacts, stableFingerprint,
   type ReachDriver, type ReachScenarioDefinition,
 } from '../../../../packages/evaluation/src/reach/index.js';
@@ -187,17 +187,23 @@ function toolStreak(): ReturnType<typeof outcome> {
   const world = new CognitionWorld();
   try {
     const sink = toolCallChoice(world.choices);
+    const before = JSON.stringify(world.store.snapshot(SCOPE).emotion);
     for (let index = 0; index < 10; index += 1) sink(SCOPE, { tool: 'study.search', surface: index % 2 ? 'voice' : 'text', audience: 'owner_alone', ok: true }, jst(0, 14, index));
     world.night(jst(0, 23));
-    const risen = world.values.reader(SCOPE, 'tool.study.search', 'afternoon.alone');
     for (let index = 0; index < 10; index += 1) sink(SCOPE, { tool: 'study.search', surface: 'text', audience: 'owner_alone', ok: false }, jst(1, 14, index));
     world.night(jst(1, 23));
-    const fallen = world.values.reader(SCOPE, 'tool.study.search', 'afternoon.alone');
+    const exit = startRewardMood({}, { choices: world.choices, shadow: world.store.predictionShadow(), state: world.store }, () => jst(1, 14, 12), { intervalMs: 3_600_000, log: () => undefined });
+    const pumped = exit.mood!.pump();
+    exit.stop();
     const rows = world.choices.rows(SCOPE);
+    const cells = world.values.activeCells(SCOPE);
+    const value = world.values.reader(SCOPE, 'tool.study.search', 'afternoon.alone');
     return outcome(cogToolStreakScenario, {
-      'value.rose': risen.mean > 0, 'value.fell': fallen.mean < risen.mean,
-      'record.no_effect': rows.length === 20 && rows.every(row => (row.surface === 'text' || row.surface === 'voice') && row.status === 'settled' && row.moodClaimedAt === null),
-    }, { valueAfterSuccesses: round(risen.mean), valueAfterFailures: round(fallen.mean) }, 20);
+      'record.data_only': rows.length === 20 && rows.every(row => (row.surface === 'text' || row.surface === 'voice') && row.status === 'settled'),
+      'value.untouched': !cells.some(cell => cell.choice.startsWith('tool')) && value.level === 'root',
+      'mood.untouched': Object.values(pumped).every(count => count === 0) && rows.every(row => row.moodClaimedAt === null)
+        && JSON.stringify(world.store.snapshot(SCOPE).emotion) === before,
+    }, { calls: rows.length, toolCells: cells.filter(cell => cell.choice.startsWith('tool')).length, claimed: Object.values(pumped).reduce((sum, count) => sum + count, 0) }, 20);
   } finally { world.close(); }
 }
 
@@ -338,6 +344,9 @@ function moodJitter(): ReturnType<typeof outcome> {
     const burstMove = Math.max(...burstPoints.map(point => Math.abs(point.valence - attractor)));
     // The real exit (step 7b) with the hourly safeguard: twenty surprising choices settled within ten minutes, pumped together.
     const capped = new CognitionWorld();
+    // Past the warm-up: three settled messages and a version, so the burst reads V from a cell that knows the choice.
+    for (let index = 0; index < 3; index += 1) capped.message(jst(0, 9, index), 'wonder', true);
+    capped.values.nightly(SCOPE, jst(0, 9, 30));
     for (let index = 0; index < 20; index += 1) capped.message(jst(0, 10, index / 2), 'wonder', index % 4 !== 0);
     const startValence = capped.store.snapshot(SCOPE).emotion.valence;
     const exit = startRewardMood({}, { choices: capped.choices, shadow: capped.store.predictionShadow(), state: capped.store }, () => jst(0, 10, 10), { intervalMs: 3_600_000, log: () => undefined });
@@ -352,13 +361,39 @@ function moodJitter(): ReturnType<typeof outcome> {
       'jitter.band': maxMood <= band, 'jitter.swing': maxSwing <= band, 'jitter.habituation': meanDelta[4]! <= meanDelta[0]! / 2,
       'jitter.burst': burstMove < 0.5, 'jitter.stale': ineligible.every(row => !moodEligible(row)),
       'jitter.rate_cap': cappedSteps <= band + 1e-9 && cappedMove <= band + 1e-9 && cappedRows.every(row => row.status === 'settled')
-        && pumped.applied + pumped.applied_capped + pumped.rate_capped === 20,
+        && pumped.applied + pumped.applied_capped + pumped.rate_capped === 20 && pumped.warmup === 3,
     }, {
       cappedSteps: Math.round(cappedSteps * 1e6) / 1e6, cappedMove: Math.round(cappedMove * 1e6) / 1e6, cappedApplied: pumped.applied, cappedPartly: pumped.applied_capped, cappedOut: pumped.rate_capped,
       band: round(band), maxMood: round(maxMood), maxSwing: round(maxSwing), meanDeltaDay1: round(meanDelta[0]!), meanDeltaDay5: round(meanDelta[4]!), burstMove: round(burstMove),
       gamma: SHANNON_AFFECT_DYNAMICS.eventForgetting, errorWeight: SHANNON_AFFECT_DYNAMICS.errorWeight, expectationWeight: SHANNON_AFFECT_DYNAMICS.expectationWeight,
     }, 130);
   } finally { alternating.close(); habit.close(); burst.close(); }
+}
+
+function coldStart(): ReturnType<typeof outcome> {
+  const world = new CognitionWorld();
+  try {
+    const start = world.store.snapshot(SCOPE);
+    for (let index = 0; index < 12; index += 1) world.step('note', jst(0, 9, index * 30), 'done');
+    const pumpAt = (at: string) => {
+      const exit = startRewardMood({}, { choices: world.choices, shadow: world.store.predictionShadow(), state: world.store }, () => at, { intervalMs: 3_600_000, log: () => undefined });
+      const counts = exit.mood!.pump();
+      exit.stop();
+      return counts;
+    };
+    const first = pumpAt(jst(0, 15));
+    const afterDay = world.store.snapshot(SCOPE);
+    const drift = Math.abs(afterDay.emotion.valence - start.emotion.valence);
+    const still = JSON.stringify(afterDay.emotion) === JSON.stringify(start.emotion);
+    world.night(jst(0, 23));
+    world.step('note', jst(1, 9), 'done');
+    const second = pumpAt(jst(1, 9, 1));
+    const moved = world.store.snapshot(SCOPE).emotion.valence !== afterDay.emotion.valence;
+    return outcome(cogColdStartScenario, {
+      'coldstart.no_drift': still && first.warmup === 12 && first.applied + first.applied_capped === 0,
+      'coldstart.then_moves': second.applied + second.applied_capped === 1 && moved,
+    }, { firstDayWarmup: first.warmup, firstDayDrift: round(drift), nextDayApplied: second.applied + second.applied_capped }, 13);
+  } finally { world.close(); }
 }
 
 const driver = (run: () => ReturnType<typeof outcome>): ReachDriver => async () => run();
@@ -373,6 +408,7 @@ export function cognitionDrivers(): Record<string, () => ReachDriver> {
     [cogKillSwitchScenario.id]: () => driver(killSwitch),
     [cogCalibrationScenario.id]: () => driver(calibrationRun),
     [cogMoodJitterScenario.id]: () => driver(moodJitter),
+    [cogColdStartScenario.id]: () => driver(coldStart),
   };
 }
 

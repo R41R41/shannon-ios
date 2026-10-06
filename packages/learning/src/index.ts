@@ -93,7 +93,9 @@ export {
   valueFactsSection,
 } from './valueFacts.js';
 export {
+  REWARD_MOOD_WARMUP_N,
   REWARD_MOOD_WINDOW_MS,
+  warmedUp,
   choiceAppraisalOutcome,
   choiceMoodStep,
   rewardMoodCap,

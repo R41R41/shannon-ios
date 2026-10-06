@@ -21,8 +21,10 @@ export interface RewardMoodChoice extends AppraisableChoice { choiceId: string }
 export interface RewardMoodClaims {
   scopes(): readonly string[];
   unclaimed(scopeKey: string): readonly RewardMoodChoice[];
-  /** Claims once; an applied claim carries the appraisal's own step (what the safeguard sums). */
+  /** Claims once; an applied claim carries the step it is expected to make (what the safeguard sums until `recordStep`). */
   claim(scopeKey: string, choiceId: string, code: RewardMoodCode, at: string, step: number | null): boolean;
+  /** The valence change the applied appraisal actually made in the stored state. */
+  recordStep(scopeKey: string, choiceId: string, step: number): void;
   stepsSince(scopeKey: string, since: string): number;
 }
 
@@ -40,7 +42,7 @@ export class RewardMood {
 
   /** Claims and appraises what was settled since; returns the codes it claimed with. Never throws. */
   pump(): Record<RewardMoodCode, number> {
-    const counts: Record<RewardMoodCode, number> = { applied: 0, applied_capped: 0, stale: 0, ineligible: 0, rate_capped: 0 };
+    const counts: Record<RewardMoodCode, number> = { applied: 0, applied_capped: 0, stale: 0, ineligible: 0, warmup: 0, rate_capped: 0 };
     try {
       for (const scopeKey of this.dependencies.claims.scopes()) this.pumpScope(scopeKey, counts);
     } catch (error) {
@@ -58,15 +60,25 @@ export class RewardMood {
     for (const choice of claims.unclaimed(scopeKey)) {
       const at = now();
       const time = Date.parse(at);
-      const before = state.snapshot(scopeKey);
       const outcome = choiceAppraisalOutcome(choice);
+      // What does not depend on her state (ineligible, warm-up, stale) is claimed without touching it.
+      const ahead = rewardMoodDecision({ choice, now: time, boundaryMs, recentSteps: 0, step: 0 });
+      if (ahead.code !== 'applied') {
+        if (claims.claim(scopeKey, choice.choiceId, ahead.code, at, null)) counts[ahead.code] += 1;
+        continue;
+      }
+      // Her state brought to this instant first (the awake clock's fading the appraisal would apply anyway), so the change the
+      // appraisal makes, which the safeguard caps and records, is its own.
+      const before = state.apply(scopeKey, { type: 'awake-observed' });
       const step = choiceMoodStep(before.emotion, outcome);
       const recentSteps = claims.stepsSince(scopeKey, new Date(time - REWARD_MOOD_WINDOW_MS).toISOString());
       const { code, share } = rewardMoodDecision({ choice, now: time, boundaryMs, recentSteps, step });
       // Claimed first: whatever happens next, no choice moves her twice.
       if (!claims.claim(scopeKey, choice.choiceId, code, at, share > 0 ? step * share : null)) continue;
       counts[code] += 1;
-      if (share > 0) state.apply(scopeKey, { type: 'choice-appraised', outcome, ...(share < 1 ? { share } : {}) });
+      if (share <= 0) continue;
+      const after = state.apply(scopeKey, { type: 'choice-appraised', outcome, ...(share < 1 ? { share } : {}) });
+      claims.recordStep(scopeKey, choice.choiceId, Math.abs(after.emotion.valence - before.emotion.valence));
     }
   }
 }

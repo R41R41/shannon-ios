@@ -32,6 +32,8 @@ export interface StoredChoice extends ChoiceDraft {
   expectedSd: number;
   expectedNoise: number;
   expectedLevel: string;
+  /** How many settled choices the cell that answered V had learned from (0 for the root before any version). */
+  expectedN: number;
   status: ChoiceStatus;
   /** The step's own success: 1 done, 0 failed; null until it is reported. */
   success: number | null;
@@ -71,6 +73,7 @@ export function ensureChoiceLedgerSchema(database: DatabaseSync): void {
       expected_sd REAL NOT NULL,
       expected_noise REAL NOT NULL,
       expected_level TEXT NOT NULL,
+      expected_n INTEGER,
       status TEXT NOT NULL,
       success REAL,
       subject_kind TEXT,
@@ -99,6 +102,8 @@ export function ensureChoiceLedgerSchema(database: DatabaseSync): void {
   // Added with step 7b: how far a choice's appraisal moved valence (the rate safeguard sums it).
   const columns = (database.prepare("PRAGMA table_info('shannon_choices')").all() as Array<{ name: string }>).map(column => column.name);
   if (!columns.includes('mood_step')) database.exec('ALTER TABLE shannon_choices ADD COLUMN mood_step REAL');
+  // Added with the warm-up: how many settled choices the cell that answered V had learned from.
+  if (!columns.includes('expected_n')) database.exec('ALTER TABLE shannon_choices ADD COLUMN expected_n INTEGER');
 }
 
 const round = (value: number) => Math.round(value * 1e6) / 1e6;
@@ -108,7 +113,7 @@ export function checkedChoice(row: StoredChoice): StoredChoice {
   if (![row.choice, row.context, row.expectedLevel].every(value => PREDICTION_SYMBOL.test(value))) throw new Error('CHOICE_SYMBOL');
   if (![row.choiceId, row.sourceId, row.valueVersion].every(value => PREDICTION_SOURCE_ID.test(value))) throw new Error('CHOICE_IDENTIFIER');
   if (!Number.isFinite(Date.parse(row.chosenAt))) throw new Error('CHOICE_TIME');
-  if (![row.expected, row.expectedSd, row.expectedNoise, row.costYen].every(Number.isFinite)) throw new Error('CHOICE_NUMBER');
+  if (![row.expected, row.expectedSd, row.expectedNoise, row.costYen, row.expectedN].every(Number.isFinite)) throw new Error('CHOICE_NUMBER');
   return { ...row, expected: round(row.expected), expectedSd: round(row.expectedSd), expectedNoise: round(row.expectedNoise), costYen: round(row.costYen), chosenAt: new Date(Date.parse(row.chosenAt)).toISOString() };
 }
 
@@ -121,10 +126,10 @@ export class SQLiteChoiceLedger {
     const value = checkedChoice(row);
     this.database.prepare(`
       INSERT OR IGNORE INTO shannon_choices (choice_id, scope_key, surface, choice, context, source_kind, source_id, chosen_at, value_version, expected,
-        expected_sd, expected_noise, expected_level, status, cost_yen)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+        expected_sd, expected_noise, expected_level, expected_n, status, cost_yen)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
     `).run(value.choiceId, value.scopeKey, value.surface, value.choice, value.context, value.sourceKind, value.sourceId, value.chosenAt, value.valueVersion,
-      value.expected, value.expectedSd, value.expectedNoise, value.expectedLevel, value.costYen);
+      value.expected, value.expectedSd, value.expectedNoise, value.expectedLevel, Math.max(0, Math.round(value.expectedN)), value.costYen);
   }
 
   /** The step's own outcome, its cost and what it was about; only while it is pending and not yet reported. */
@@ -187,15 +192,18 @@ export class SQLiteChoiceLedger {
     return Number(this.database.prepare('DELETE FROM shannon_choices WHERE scope_key = ? AND chosen_at < ?').run(scopeKey, before).changes);
   }
 
-  /** Step 7b: settled choices whose mood was not yet claimed, in the order they were settled. */
+  /**
+   * Step 7b: settled choices of her own time whose mood was not yet claimed, in the order they were settled. A tool call in a
+   * conversation (surface text or voice) is the owner's request, not her choice: it is data only and never claimed.
+   */
   unclaimed(scopeKey: string, limit = 50): StoredChoice[] {
-    return (this.database.prepare("SELECT * FROM shannon_choices WHERE scope_key = ? AND status = 'settled' AND mood_claimed_at IS NULL ORDER BY settle_seq LIMIT ?")
+    return (this.database.prepare("SELECT * FROM shannon_choices WHERE scope_key = ? AND surface = 'autonomy' AND status = 'settled' AND mood_claimed_at IS NULL ORDER BY settle_seq LIMIT ?")
       .all(scopeKey, limit) as Array<Record<string, unknown>>).map(parsed);
   }
 
   /** Scopes with settled choices whose mood was not yet claimed. */
   unclaimedScopes(): string[] {
-    return (this.database.prepare("SELECT DISTINCT scope_key FROM shannon_choices WHERE status = 'settled' AND mood_claimed_at IS NULL").all() as Array<{ scope_key: string }>).map(row => row.scope_key);
+    return (this.database.prepare("SELECT DISTINCT scope_key FROM shannon_choices WHERE surface = 'autonomy' AND status = 'settled' AND mood_claimed_at IS NULL").all() as Array<{ scope_key: string }>).map(row => row.scope_key);
   }
 
   /**
@@ -213,6 +221,11 @@ export class SQLiteChoiceLedger {
     const row = this.database.prepare("SELECT COALESCE(SUM(mood_step), 0) AS total FROM shannon_choices WHERE scope_key = ? AND mood_code IN ('applied', 'applied_capped') AND mood_claimed_at >= ?")
       .get(scopeKey, since) as { total: number };
     return Number(row.total);
+  }
+
+  /** The valence change an applied appraisal actually made (replaces the step expected at the claim). */
+  recordMoodStep(scopeKey: string, choiceId: string, step: number): void {
+    this.database.prepare('UPDATE shannon_choices SET mood_step = ? WHERE scope_key = ? AND choice_id = ?').run(round(Math.abs(step)), scopeKey, choiceId);
   }
 
   /** How many choices of a scope are pending, settled and void. */
@@ -234,7 +247,7 @@ function parsed(row: Record<string, unknown>): StoredChoice {
     choiceId: String(row.choice_id), scopeKey: String(row.scope_key), surface: String(row.surface) as StoredChoice['surface'], choice: String(row.choice),
     context: String(row.context), sourceKind: String(row.source_kind) as StoredChoice['sourceKind'], sourceId: String(row.source_id), chosenAt: String(row.chosen_at),
     valueVersion: String(row.value_version), expected: Number(row.expected), expectedSd: Number(row.expected_sd), expectedNoise: Number(row.expected_noise),
-    expectedLevel: String(row.expected_level), status: String(row.status) as ChoiceStatus, success: nullable(row.success),
+    expectedLevel: String(row.expected_level), expectedN: Number(row.expected_n ?? 0), status: String(row.status) as ChoiceStatus, success: nullable(row.success),
     subjectKind: text(row.subject_kind), subjectId: text(row.subject_id), world: nullable(row.world), serve: nullable(row.serve), growth: nullable(row.growth),
     costYen: Number(row.cost_yen), reward: nullable(row.reward), delta: nullable(row.delta), unexpected: nullable(row.unexpected),
     settleCode: text(row.settle_code), settledAt: text(row.settled_at), moodClaimedAt: text(row.mood_claimed_at), moodCode: text(row.mood_code), moodStep: nullable(row.mood_step),

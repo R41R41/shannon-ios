@@ -126,7 +126,8 @@ export class ValueVersions {
   flushLockWaits(): void { this.meter.flush(); }
 
   private evidence(scopeKey: string, upTo: number): ValueEvidence[] {
-    return this.choices.settledInOrder(scopeKey, upTo).filter(choice => choice.reward !== null).map(choice => ({
+    // Her own choices only: a tool call in a conversation is the owner's request, recorded as data, never a value.
+    return this.choices.settledInOrder(scopeKey, upTo).filter(choice => choice.reward !== null && choice.surface === 'autonomy').map(choice => ({
       choice: choice.choice, context: choice.context, reward: choice.reward!, world: choice.world ?? 0, serve: choice.serve ?? 0, growth: choice.growth ?? 0,
       costYen: choice.costYen, settledAt: choice.settledAt ?? choice.chosenAt,
     }));

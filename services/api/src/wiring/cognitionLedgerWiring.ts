@@ -81,6 +81,7 @@ export function startRewardMood(
       scopes: () => choices.store.unclaimedScopes(),
       unclaimed: scopeKey => choices.store.unclaimed(scopeKey),
       claim: (scopeKey, choiceId, code, at, step) => choices.store.claimMood(scopeKey, choiceId, code, at, step),
+      recordStep: (scopeKey, choiceId, step) => choices.store.recordMoodStep(scopeKey, choiceId, step),
       stepsSince: (scopeKey, since) => choices.store.moodStepsSince(scopeKey, since),
     },
     state: parts.state,
