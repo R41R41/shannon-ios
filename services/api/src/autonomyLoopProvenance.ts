@@ -52,6 +52,13 @@ export function unmarkedOnly(dependencies: Pick<StepDependencies, 'store'>, cycl
   return piece => { try { return !marks.marked(cycle.scopeKey, `${STUDY_DOCUMENT_PREFIX}${piece.id}`); } catch { return false; } };
 }
 
+/** For a listing of her own time: in a session that is not marked, a marked document is left out (null: nothing is). */
+export function unlistedIn(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id' | 'scopeKey'>): ((documentId: string) => boolean) | null {
+  const marks = dependencies.store.informed;
+  if (!marks.any(cycle.scopeKey) || marks.sessionInformedAt(cycle.id)) return null;
+  return documentId => { try { return marks.marked(cycle.scopeKey, documentId); } catch { return true; } };
+}
+
 /** The same for her pursuits: a pursuit created or changed in a marked session is not given to a session that is not marked. */
 export function unmarkedPursuits(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id' | 'scopeKey'>): (pursuit: { id: string }) => boolean {
   const marks = dependencies.store.informed;

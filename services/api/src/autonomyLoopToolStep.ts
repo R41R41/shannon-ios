@@ -1,7 +1,7 @@
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import type { PreparedStep, StepDependencies, StepResult } from './autonomyLoopSteps.js';
 import type { AutonomyDecision } from './autonomyPolicy.js';
-import { markEarly, sessionMarked } from './autonomyLoopProvenance.js';
+import { markEarly, sessionMarked, unlistedIn } from './autonomyLoopProvenance.js';
 import { toolGateRequest, toolRefusal } from './shannonToolGate.js';
 import { neutralMarkers, toolSessionMemory, type ToolSessionMemory } from './shannonToolTypes.js';
 import { providerToolName, type ShannonToolDefinition } from './shannonTools.js';
@@ -83,6 +83,7 @@ export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyL
   const context = {
     scopeKey: cycle.scopeKey, surface: 'autonomy' as const, audience: 'owner_alone' as const, memory: results.memory(cycle.id),
     informedWrite: (documentIds: readonly string[]) => markEarly(dependencies, cycle, documentIds, dependencies.now?.() ?? cycle.startedAt),
+    ...listing(dependencies, cycle),
   };
   const ready = dependencies.service.tools.prepare(step.tool, step.input ?? {}, context);
   if ('result' in ready) {
@@ -121,6 +122,13 @@ export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyL
       };
     },
   };
+}
+
+/** What a listing of this session leaves out; a mark that cannot be read leaves out everything marked. */
+function listing(dependencies: StepDependencies, cycle: AutonomyLoopCycle): { unlisted?: (documentId: string) => boolean } {
+  let unlisted: ((documentId: string) => boolean) | null;
+  try { unlisted = unlistedIn(dependencies, cycle); } catch { unlisted = () => true; }
+  return unlisted ? { unlisted } : {};
 }
 
 /** Why a call for the owner's documents serves none of her pursuits, or null when it names one she is working on now. */

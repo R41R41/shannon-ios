@@ -145,7 +145,7 @@ describe('a second call and a phone call of a marked session', () => {
 });
 
 describe('what marks a session, and what the gate holds', () => {
-  it('is marked by a search or a listing that shows a marked document, in Aether or in her study', async () => {
+  it('is marked by a search that shows a marked document, and not by a listing, which leaves it out instead', async () => {
     const { fake, harness, closed } = await ownTime();
     const marked = fake.put({ title: '宿のメモ', body: '静かな宿。', projectIds: [FOLDER], tags: ['シャノン'], type: 'note' });
     const plain = fake.put({ title: '駅のメモ', body: '夕方の駅。', projectIds: [FOLDER], tags: ['シャノン'], type: 'note' });
@@ -156,15 +156,29 @@ describe('what marks a session, and what the gate holds', () => {
       await runUntilIdle(harness.loop);
       return harness.store.informed.sessionInformedAt(closed().cycleId) !== null;
     };
+    const lastResult = () => harness.model.prompts('think').at(-1)!;
     expect(await run('aether.search', { query: '駅', scope: 'shannonFolder' })).toBe(false);
     expect(await run('aether.search', { query: '宿', scope: 'shannonFolder' })).toBe(true);
-    expect(await run('aetherFolder.list', {})).toBe(true);
     const note = harness.store.study.create(scope, { kind: 'note', title: '湖のメモ', body: '湖の宿。' }, harness.clock.at);
     if (typeof note === 'string') throw new Error(note);
     harness.store.informed.markDocuments(scope, [`shannon-study://${note.id}`], 'earlier', harness.clock.at);
     expect(await run('study.search', { query: '駅' })).toBe(false);
     expect(await run('study.search', { query: '湖' })).toBe(true);
-    expect(plain.id).toBeTruthy();
+    // A listing does not mark the session: a session that is not marked is not shown what is marked (option (a)).
+    expect(await run('aetherFolder.list', {})).toBe(false);
+    expect(lastResult()).toContain(plain.id);
+    expect(lastResult()).not.toContain(marked.id);
+    expect(await run('study.list', {})).toBe(false);
+    expect(lastResult()).not.toContain(note.id);
+    // A marked session lists everything.
+    const open = async (name: string) => {
+      harness.advance(3 * 60 * 60_000);
+      harness.model.plans = [{ thought: '読みます。', steps: [{ action: 'tool', name: 'study.read', input: { id: note.id } }] }, { thought: '見ます。', steps: [{ action: 'tool', name, input: {} }] }, { thought: '休みます。', steps: [rest()] }];
+      await runUntilIdle(harness.loop);
+      return lastResult();
+    };
+    expect(await open('aetherFolder.list')).toContain(marked.id);
+    expect(await open('study.list')).toContain(note.id);
   });
 
   it('refuses outreach in a marked session, by its domain too; checks the pursuit in the runner; and stores ids as it looks them up', async () => {

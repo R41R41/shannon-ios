@@ -107,11 +107,10 @@ function buildStudyExecutors(store: SQLiteAutonomyStore, now: () => string, aeth
       const limit = numberInput(input, 'limit') ?? 20;
       const all = store.study.list(context.scopeKey, 500, status === 'deleted' ? 'only' : 'exclude')
         .filter(item => (!kind || item.kind === kind) && (!status || status === 'deleted' || item.status === status)
-          && (!query || item.title.toLowerCase().includes(query)));
+          && (!query || item.title.toLowerCase().includes(query)) && !context.unlisted?.(`shannon-study://${item.id}`));
       return immediate('書斎の一覧を見ます。', () => ({
         result: toolOk(all.length ? [`${all.length}件${all.length > limit ? `（新しい順に${limit}件）` : ''}:`, ...all.slice(0, limit).map(pieceLine)].join('\n') : '当てはまるものはない。'),
         record: { summary: '書斎の一覧を見ました。', outcome: 'done' },
-        documents: { read: all.slice(0, limit).map(item => `shannon-study://${item.id}`) },
       }));
     },
     'study.search': (input, context) => {

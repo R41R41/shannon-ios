@@ -77,6 +77,11 @@ export interface ToolExecutionContext extends ToolCallContext {
    * Aether answers, so a write whose report later fails is still marked. Absent in a conversation.
    */
   informedWrite?: (documentIds: readonly string[]) => void;
+  /**
+   * In her own time, in a session that is not marked: a document (Aether id or `shannon-study://<piece>`) that a listing leaves
+   * out, so that listing her things does not mark the session (option (a), ADR-0007). Absent everywhere else.
+   */
+  unlisted?: (documentId: string) => boolean;
 }
 
 export type ToolExecutor = (input: ToolInput, context: ToolExecutionContext) => PreparedToolCall | ToolResult;

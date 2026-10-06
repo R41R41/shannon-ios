@@ -64,13 +64,13 @@ export function aetherExecutors(proposals: AetherProposalStore | null, study: Pi
       };
     })(input, context),
     'aetherFolder.list': (input, context) => reading('Aetherのシャノン用フォルダの一覧を見ます。', async ({ aether }, signal) => {
-      const entries = await aether.list(signal);
+      // In her own time, a session that is not marked does not see what is marked in a listing (and is not marked by one).
+      const entries = (await aether.list(signal)).filter(entry => !context.unlisted?.(entry.documentId));
       return {
         result: toolOk(entries.length ? [`${entries.length}件:`, ...entries.slice(0, 60).map(entry =>
           `- id: ${entry.documentId}｜「${clip(entry.title || '（無題）', 60)}」｜${entry.inStudy ? '書斎' : 'シャノン用フォルダ'}｜第${entry.version}版｜更新 ${entry.updatedAt.slice(0, 10)}`),
         ...(entries.length > 60 ? ['（ほかにもある）'] : [])].join('\n') : 'シャノン用フォルダはまだ空。'),
         record: { summary: `Aetherのシャノン用フォルダの一覧を見ました（${entries.length}件）。`, outcome: 'done' },
-        documents: { read: entries.slice(0, 60).map(entry => entry.documentId) },
       };
     })(input, context),
     'aetherFolder.create': (input, context) => reading('Aetherのシャノン用フォルダに文書を1つ書きます。', async ({ aether }, signal) => {
