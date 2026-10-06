@@ -169,7 +169,7 @@ A choice of hers, recorded when the gate allowed it and settled once by her thre
 - Delayed credit: the last draft or revision of a piece before it is shown inherits the showing's S (`inherited`); one followed by another draft or revision before any showing gets 0 (`superseded`); one never shown in 14 days gets 0 (`stale`, a modelling assumption).
 - A choice is settled once, as soon as what it is scored by is known: at its report, when the owner reacts to a story, or in the nightly pass. One whose report never came is void after a day (`lost`).
 
-**The nightly pass** (`mind/sleep/valueSleep.ts`), after each sleep batch per scope in the background worker: `PredictionLedger.maintain` (expiry, forgetting, 90-day retention, recompute, the calibration line), then `ChoiceLedger.sleep` (settling what waited, lost reports, 90-day retention), and one line `Shannon value sleep: expired=… predictions_pruned=… settled=… choices_pruned=…`. Its failure is logged and never fails the batch. It calls no model.
+**The nightly pass** (`mind/sleep/valueSleep.ts`), once a day per scope on its own trigger in the background worker (`valueNightSchedule`: from `SHANNON_SLEEP_HOUR` in `SHANNON_SLEEP_TIMEZONE`, whether or not a conversation's sleep job ran or succeeded; a restart on the same day runs it again, which changes nothing): `PredictionLedger.maintain` (expiry, forgetting, 90-day retention, recompute, the calibration line), then `ChoiceLedger.sleep` (settling what waited, lost reports, 90-day retention), and one line `Shannon value sleep: expired=… predictions_pruned=… settled=… choices_pruned=…`. Its failure is logged and never fails the batch. It calls no model.
 
 ## Value table (`shannon_value_versions`, `shannon_value_cells`, step 5)
 

@@ -8,7 +8,7 @@ import type { ReachOutFacts } from '../src/mind/action/ownTime/store/autonomyLoo
 import { ChoiceLedger, choiceLedgerEnabled } from '../src/mind/learning/choiceLedger.js';
 import { PredictionLedger } from '../src/mind/learning/predictionLedger.js';
 import { ledgerPredictionTap, presenceOf, stepChoice, storyReacted, studyPieceOf, toolCallChoice } from '../src/wiring/cognitionLedgerTaps.js';
-import { valueSleep } from '../src/mind/sleep/valueSleep.js';
+import { valueNightSchedule, valueSleep } from '../src/mind/sleep/valueSleep.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import { loopHarness, scope } from './autonomyLoopHarness.js';
@@ -180,5 +180,19 @@ describe('a choice of hers', () => {
     tap.reported('owner', { stepId: 's', outcome: 'done', costYen: 0 }, at(1));
     expect(predictions.open).not.toHaveBeenCalled();
     expect(predictions.settleSource).not.toHaveBeenCalled();
+  });
+
+  it('runs the nightly pass on its own daily trigger from the sleep hour, once a day, whatever the sleep batch did', () => {
+    const ran: string[] = [];
+    const nightly = valueNightSchedule({ timeZone: 'Asia/Tokyo', sleepHour: 3, scopes: () => ['owner', 'other'], run: (scopeKey, when) => { ran.push(`${scopeKey}@${when}`); } });
+    // 02:59 in Tokyo: not yet.
+    expect(nightly('2026-10-07T17:59:00.000Z')).toBe(false);
+    expect(nightly('2026-10-07T18:00:00.000Z')).toBe(true);
+    expect(nightly('2026-10-07T23:00:00.000Z')).toBe(false);
+    expect(nightly('2026-10-08T18:30:00.000Z')).toBe(true);
+    expect(ran).toEqual(['owner@2026-10-07T18:00:00.000Z', 'other@2026-10-07T18:00:00.000Z', 'owner@2026-10-08T18:30:00.000Z', 'other@2026-10-08T18:30:00.000Z']);
+    const failed = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(valueNightSchedule({ timeZone: 'Asia/Tokyo', sleepHour: 3, scopes: () => { throw new Error('x'); }, run: () => undefined })('2026-10-07T18:00:00.000Z')).toBe(false);
+    failed.mockRestore();
   });
 });

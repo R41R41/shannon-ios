@@ -11,7 +11,7 @@ import { PlatformPeople } from './surfaces/platform/platformPeople.js';
 import { createConfiguredPlatformSummaryWriter, PlatformConversationSummarizer } from './surfaces/platform/platformPeopleSummaries.js';
 import { ConversationReplaySummarizer, createConfiguredReplaySummaryWriter } from './mind/memory/conversationReplaySummary.js';
 import { createConfiguredImpressionAnalyzer, ImpressionUpdater } from './mind/memory/impressionUpdater.js';
-import { valueSleep } from './mind/sleep/valueSleep.js';
+import { valueNightSchedule, valueSleep } from './mind/sleep/valueSleep.js';
 
 const store = new SQLiteShannonStore({ path: configuredDatabasePath(), now: () => new Date().toISOString() });
 const knowledge = new ShannonKnowledgeConsolidator(store, store, store, createConfiguredKnowledgeAnalyzer(process.env, store), store);
@@ -23,6 +23,17 @@ const impressions = new ImpressionUpdater(store, store, store.impressionStore(),
   { people: peopleStore, timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo' });
 // Syzygy ADR-0008 stage 1: after each sleep batch, the ledgers' nightly pass (expiry, delayed credit, retention); never fails the batch.
 const valueNight = valueSleep({ predictions: store.predictionLedger(), choices: store.choiceLedger(), values: store.valueVersions() });
+// Its own daily trigger at the sleep hour, whether or not a conversation's sleep job ran or succeeded (idempotent per day).
+const valueNightly = valueNightSchedule({
+  timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo', sleepHour: parseInteger(process.env.SHANNON_SLEEP_HOUR, 3),
+  scopes: () => {
+    const scopes = new Set<string>();
+    try { for (const scopeKey of store.choiceLedger()?.store.scopes() ?? []) scopes.add(scopeKey); } catch { /* the table may not exist yet */ }
+    try { for (const scopeKey of store.predictionLedger()?.store.scopes() ?? []) scopes.add(scopeKey); } catch { /* the table may not exist yet */ }
+    return [...scopes];
+  },
+  run: (scopeKey, at) => valueNight(scopeKey, at, () => store.snapshot(scopeKey)),
+});
 const worker = new ShannonBackgroundWorker(store, store, store, createConfiguredSleepMemoryAnalyzer(process.env, store), {
   timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo',
   sleepHour: parseInteger(process.env.SHANNON_SLEEP_HOUR, 3),
@@ -33,9 +44,7 @@ const worker = new ShannonBackgroundWorker(store, store, store, createConfigured
   // All run after a completed sleep batch, inside the shared background budget; none can fail the batch.
   knowledgeConsolidator: { consolidate: async (scopeKey, startAt, endAt) => {
     try { await knowledge.consolidate(scopeKey, startAt, endAt); } finally {
-      try { await platformSummaries.consolidate(scopeKey, startAt, endAt); } finally {
-        try { await impressions.observePlatformPeople(scopeKey, startAt, endAt); } finally { valueNight(scopeKey, new Date().toISOString(), () => store.snapshot(scopeKey)); }
-      }
+      try { await platformSummaries.consolidate(scopeKey, startAt, endAt); } finally { await impressions.observePlatformPeople(scopeKey, startAt, endAt); }
     }
   } },
 });
@@ -55,6 +64,7 @@ process.once('SIGTERM', () => { stopping = true; });
 console.log(`Shannon background worker started (${worker.workerId})`);
 try {
   do {
+    valueNightly(new Date().toISOString());
     const result = await worker.runOnce();
     // Embeddings never block turn refinement or sleep; they run only between idle polls.
     if (result === 'idle' && Date.now() >= nextEmbeddingAt) {

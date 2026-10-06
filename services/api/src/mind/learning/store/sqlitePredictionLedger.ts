@@ -174,6 +174,10 @@ export class SQLitePredictionLedger {
     return { deleted, settled };
   }
 
+  scopes(): string[] {
+    return (this.database.prepare('SELECT DISTINCT scope_key FROM shannon_predictions').all() as Array<{ scope_key: string }>).map(row => row.scope_key);
+  }
+
   counts(scopeKey: string): Record<LedgerStatus, number> {
     const counts: Record<LedgerStatus, number> = { open: 0, matched: 0, expired: 0, void: 0 };
     for (const row of this.database.prepare('SELECT status, COUNT(*) AS n FROM shannon_predictions WHERE scope_key = ? GROUP BY status').all(scopeKey) as Array<{ status: LedgerStatus; n: number }>) {
