@@ -239,6 +239,21 @@ final class ShannonFolderHostTests: XCTestCase {
         XCTAssertTrue(invalidated.value)
     }
 
+    func testTheLocalLogOnlyAddsLinesAndRotatesWholeFilesAtItsSize() throws {
+        let log = ShannonFolderHostActivityLog(fileURL: base.appendingPathComponent("logs/folder-activity.jsonl"), maximumBytes: 1_024)
+        for index in 0..<40 {
+            log.append(.init(at: "2026-10-06T00:00:\(String(format: "%02d", index)).000Z", operation: "read", path: "notes/\(index).md", outcome: "done", code: nil, count: index))
+        }
+        let current = try Data(contentsOf: log.fileURL)
+        let previous = try Data(contentsOf: log.previousURL)
+        XCTAssertLessThanOrEqual(current.count, 1_024)
+        XCTAssertLessThanOrEqual(previous.count, 1_024)
+        XCTAssertEqual(log.recent(limit: 1).first?.count, 39)
+        XCTAssertEqual(log.recent(limit: 5).map(\.count), [39, 38, 37, 36, 35])
+        let text = String(decoding: current + previous, as: UTF8.self)
+        XCTAssertFalse(text.contains("content"))
+    }
+
     // MARK: The loop and the wire
 
     func testTheLocalStopClaimsWithLocalStopAndRefusesAStepThatArrivesAsItTurnsOn() async throws {

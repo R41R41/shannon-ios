@@ -1,4 +1,5 @@
 #if os(macOS)
+import Darwin
 import Foundation
 
 /// How this Mac stands with the server as her folder's device.
@@ -113,30 +114,44 @@ public struct ShannonFolderHostLogEntry: Codable, Equatable, Sendable {
     }
 }
 
-/// `Application Support/Shannon/folder-activity.jsonl`: append-only and content-free. Lines are only ever added.
+/// `Application Support/Shannon/folder-activity.jsonl`: append-only and content-free. Lines are only ever added; at the
+/// size the voice diagnostics log keeps (128 KiB) the file is renamed whole to `folder-activity.1.jsonl` (replacing the one
+/// before) and a new one is started, so no line is ever rewritten and the log stays bounded.
 public struct ShannonFolderHostActivityLog: Sendable {
     public let fileURL: URL
+    public let maximumBytes: Int
 
-    public init(fileURL: URL? = nil) {
+    public init(fileURL: URL? = nil, maximumBytes: Int = 128 * 1_024) {
         let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
         self.fileURL = fileURL ?? root.appendingPathComponent("Shannon/folder-activity.jsonl")
+        self.maximumBytes = max(1_024, maximumBytes)
+    }
+
+    /// The previous file, kept whole after a rotation.
+    public var previousURL: URL {
+        fileURL.deletingPathExtension().appendingPathExtension("1").appendingPathExtension(fileURL.pathExtension)
     }
 
     public func append(_ entry: ShannonFolderHostLogEntry) {
         guard var line = try? JSONEncoder().encode(entry) else { return }
         line.append(0x0A)
         try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let size = ShannonFolderHostRoot.lstatOf(fileURL.path).map({ Int($0.st_size) }), size + line.count > maximumBytes {
+            _ = Darwin.rename(fileURL.path, previousURL.path)
+        }
         let descriptor = open(fileURL.path, O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0o600)
         guard descriptor >= 0 else { return }
         defer { close(descriptor) }
         _ = line.withUnsafeBytes { write(descriptor, $0.baseAddress, $0.count) }
     }
 
-    /// The newest entries first, at most `limit`.
+    /// The newest entries first, at most `limit`, from this file and then the one before.
     public func recent(limit: Int = 50) -> [ShannonFolderHostLogEntry] {
-        guard let data = try? Data(contentsOf: fileURL) else { return [] }
         let decoder = JSONDecoder()
-        return data.split(separator: 0x0A).suffix(limit).reversed().compactMap { try? decoder.decode(ShannonFolderHostLogEntry.self, from: Data($0)) }
+        let lines = [previousURL, fileURL].flatMap { url in
+            ((try? Data(contentsOf: url)) ?? Data()).split(separator: 0x0A)
+        }
+        return lines.suffix(limit).reversed().compactMap { try? decoder.decode(ShannonFolderHostLogEntry.self, from: Data($0)) }
     }
 }
 #endif
