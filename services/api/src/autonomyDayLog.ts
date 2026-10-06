@@ -30,6 +30,8 @@ const STEP_WORDING: readonly { tool: string; code?: string; stem: (count: number
   { tool: 'owner.call', code: 'call_declined', stem: count => `電話を${count}回かけて今は出ないと選ばれ`, plain: count => `電話をかけたが、今は出ないと選ばれた（${count}回）` },
   { tool: 'owner.call', code: 'call_unanswered', stem: count => `電話を${count}回かけて出てもらえず`, plain: count => `電話をかけたが、出てもらえなかった（${count}回）` },
   { tool: 'owner.call', code: 'call_failed', stem: count => `電話を${count}回かけようとしてつながらず`, plain: count => `電話をかけようとしたが、つながらなかった（${count}回）` },
+  // Reading the owner's documents in her own time (ADR-0007): only on a day it happened, so other days read as before.
+  { tool: 'ownerDocs.read', stem: count => `ライ氏の文書を${count}つ読み`, plain: count => `ライ氏の文書を${count}つ読んだ` },
   { tool: 'study.jot', stem: count => `思ったことを${count}つ書き留め`, plain: count => `思ったことを${count}つ書き留めた` },
   // The closing step of a session (`autonomyLoopPacing.ts`); never recorded under the fixed cycles.
   { tool: 'study.rest', stem: count => `${count}回ひと区切りにし`, plain: count => `${count}回ひと区切りにして休んだ` },

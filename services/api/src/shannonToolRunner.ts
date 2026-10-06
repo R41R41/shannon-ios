@@ -7,6 +7,7 @@ import type { HostFolderOperations } from './hostFolderOperations.js';
 import { folderExecutors } from './shannonFolderTools.js';
 import { minecraftExecutors, minecraftToolOffered, type MinecraftRequestPort } from './shannonMinecraftTools.js';
 import { aetherExecutors } from './shannonAetherTools.js';
+import { ownerDocumentExecutors } from './shannonOwnerDocumentTools.js';
 import { aetherStudyTool, studyExecutors } from './shannonStudyTools.js';
 import { authorizeToolCall, authorizeToolInput, gatedAether, shownAetherCall } from './shannonToolGate.js';
 import type { StudyAether } from './studyAether.js';
@@ -61,7 +62,7 @@ export class ShannonToolRunner {
   ) {
     const folderTools = folderExecutors(folder, scopeKey => roomLookGuard(store.study.roomLookTexts(scopeKey, ROOM_LOOK_GUARD.notes)));
     this.executors = Object.freeze({ ...studyExecutors(store, now, aether.study ?? null), ...(aether.study ? withoutStories(store, folderTools, aether.study) : folderTools),
-      ...minecraftExecutors(minecraft), ...aetherExecutors(aether.proposals ?? null, aether.study ?? null) });
+      ...minecraftExecutors(minecraft), ...aetherExecutors(aether.proposals ?? null, aether.study ?? null), ...ownerDocumentExecutors(aether.access ?? null) });
   }
 
   /**
@@ -73,6 +74,7 @@ export class ShannonToolRunner {
     // with the inbox alone (or the token alone) every offer is what it was before Aether access. Only to the owner's scope.
     const tools = offeredTools(surface, audience, tool => tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
       : tool.domain === 'minecraft_body' ? minecraftToolOffered(this.minecraft, tool, scopeKey)
+        : tool.domain === 'owner_documents_read' ? this.ownerDocumentsFor(scopeKey)
         : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true && this.aetherFor(scopeKey)
           : tool.name.startsWith('aether') ? this.aetherFor(scopeKey) : true);
     return this.aether.study && (scopeKey === undefined || this.aether.study.covers(scopeKey)) ? tools.map(aetherStudyTool) : tools;
@@ -86,12 +88,19 @@ export class ShannonToolRunner {
     return Boolean(this.aether.access) && scopeKey !== undefined && (this.aether.study?.covers(scopeKey) ?? false);
   }
 
+  /** Whether her own time may read the owner's documents in this scope: switched on, and her Aether tools exist there. */
+  private ownerDocumentsFor(scopeKey: string | undefined): boolean {
+    return this.aether.ownerDocuments === true && this.aetherFor(scopeKey);
+  }
+
   /**
    * A tool by its name or its provider name, as this server has it: without the Aether client her Aether tools are not
    * there at all, so a call of one is refused and recorded exactly as a call of a name that never existed (as before Aether).
+   * The same holds for `ownerDocs.*` while her own time may not read the owner's documents (as before they existed).
    */
   knownTool(name: string): ShannonToolDefinition | null {
     const tool = toolFromProviderName(name) ?? shannonTool(name);
+    if (tool?.domain === 'owner_documents_read' && !(this.aether.ownerDocuments === true && this.aether.access)) return null;
     return tool && !this.aether.access && (tool.name.startsWith('aether') || tool.domain === 'aether_proposal') ? null : tool;
   }
 
@@ -104,6 +113,9 @@ export class ShannonToolRunner {
     const executor = this.executors[tool.name];
     if ((tool.name.startsWith('aether') || tool.domain === 'aether_proposal') && !this.aetherFor(context.scopeKey)) {
       return { tool, result: toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'Aetherの道具はライ氏のscopeだけ', wouldWork: 'ライ氏との会話か、ボクの時間で使う' } }) };
+    }
+    if (tool.domain === 'owner_documents_read' && !this.ownerDocumentsFor(context.scopeKey)) {
+      return { tool, result: toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'ライ氏の文書は、ライ氏のscopeの自分の時間に、許された時だけ読む', wouldWork: 'ライ氏と二人だけの会話で aether の道具を使う' } }) };
     }
     if (!executor) return { tool, result: toolFailure('not_offered', `${tool.name} はまだ使えない。`, { retryable: false }) };
     // The schema of this surface: in a conversation a write is shorter (`toolForSurface`).

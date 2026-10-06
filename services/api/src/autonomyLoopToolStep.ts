@@ -52,9 +52,11 @@ export class AutonomyToolResults {
   }
 }
 
-/** The tools her thinking may choose now, or none. */
+/** The tools her thinking may choose now, or none. The owner's documents only while her own time may read them (ADR-0007). */
 export function offeredOwnTools(dependencies: StepDependencies, scopeKey: string): readonly ShannonToolDefinition[] {
-  return dependencies.toolResults ? dependencies.service.tools.offered('autonomy', 'owner_alone', scopeKey) : [];
+  if (!dependencies.toolResults) return [];
+  const tools = dependencies.service.tools.offered('autonomy', 'owner_alone', scopeKey);
+  return dependencies.loop.ownerDocuments ? tools : tools.filter(tool => tool.domain !== 'owner_documents_read');
 }
 
 /** The action, its example and the list of tools for the thinking prompt; and what her last calls returned. */
@@ -85,6 +87,12 @@ export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyL
     return null;
   }
   const { tool, prepared } = ready;
+  // Reading the owner's documents serves one of her active pursuits (ADR-0007): she names it, and an unknown or closed one is refused.
+  const unserved = tool.domain === 'owner_documents_read' ? pursuitRefusal(dependencies, cycle.scopeKey, step.input?.pursuitId) : null;
+  if (unserved) {
+    results.add(cycle.id, `- ${tool.name}: できなかった（refused）。${unserved}`);
+    return null;
+  }
   return {
     request: toolGateRequest(tool, prepared.summary, prepared.folder),
     async perform(_adapters, _at, signal): Promise<StepResult> {
@@ -104,6 +112,13 @@ export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyL
       };
     },
   };
+}
+
+/** Why a call for the owner's documents serves none of her pursuits, or null when it names one she is working on now. */
+function pursuitRefusal(dependencies: StepDependencies, scopeKey: string, pursuitId: unknown): string | null {
+  const pursuit = typeof pursuitId === 'string' && pursuitId.trim() ? dependencies.store.pursuits.get(scopeKey, pursuitId.trim()) : null;
+  if (pursuit?.status === 'active') return null;
+  return `${pursuit ? 'その気になっていることは、いま進めていない' : '台帳にない id だった'}。ライ氏の文書は、いま進めている気になっていることのためにだけ読む（pursuitId に台帳の id を書く）。`;
 }
 
 /** A `tool` step of a thinking reply, or why it is not taken, as a closed code. */

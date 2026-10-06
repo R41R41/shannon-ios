@@ -189,7 +189,9 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // Aether (Syzygy ADR-0007 revised): the client of her access and the executors of her Aether tools.
     'services/api/src/aetherAccess.ts',
     'services/api/src/shannonAetherTools.ts',
-    // The provenance mark (ADR-0007, owner decision 2026-10-06): what she wrote after reading the owner's is kept from anyone else present.
+    // Her own time reading the owner's documents (ADR-0007, owner decision 2026-10-06): the executors, and the provenance mark
+    // that keeps what she wrote after them from anyone else present.
+    'services/api/src/shannonOwnerDocumentTools.ts',
     'services/api/src/ownerInformedMarks.ts',
     'services/api/src/autonomyLoopProvenance.ts',
     'services/api/src/hostFolderOperations.ts',

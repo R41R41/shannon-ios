@@ -83,7 +83,9 @@ function sources(environment: Record<string, string>, overrides: Partial<SelfDia
   };
 }
 
-const BEFORE_AETHER = SHANNON_TOOLS.filter(tool => !tool.name.startsWith('aether'));
+/** The registry as a server has it while her own time may not read the owner's documents (SHANNON_AUTONOMY_OWNER_DOCUMENTS unset). */
+const REGISTRY = SHANNON_TOOLS.filter(tool => tool.domain !== 'owner_documents_read');
+const BEFORE_AETHER = REGISTRY.filter(tool => !tool.name.startsWith('aether'));
 const configured = () => ({ ...SECRETS, ...MODELS, SHANNON_AUTONOMY_ENABLED: 'true' });
 
 describe('the self-diagnosis', () => {
@@ -125,8 +127,15 @@ describe('the self-diagnosis', () => {
 
   it('counts her Aether tools only while the Aether client is configured', () => {
     const tools = createServerSelfDiagnosis(sources({ ...configured(), SHANNON_AETHER_API_URL: 'http://127.0.0.1:3007', SHANNON_AETHER_SHANNON_TOKEN: 'fake-token-0015' })).read().tools;
-    expect(tools.names).toEqual(SHANNON_TOOLS.map(tool => tool.name));
-    expect(tools.offered.text).toEqual({ owner_alone: SHANNON_TOOLS.length, others: 3 });
+    expect(tools.names).toEqual(REGISTRY.map(tool => tool.name));
+    expect(tools.offered.text).toEqual({ owner_alone: REGISTRY.length, others: 3 });
+    // The owner's documents in her own time (ADR-0007) are counted only with Aether and SHANNON_AUTONOMY_OWNER_DOCUMENTS=on, on her own time only.
+    const aether = { ...configured(), SHANNON_AETHER_API_URL: 'http://127.0.0.1:3007', SHANNON_AETHER_SHANNON_TOKEN: 'fake-token-0015' };
+    for (const flag of ['off', 'On', 'yes']) expect(createServerSelfDiagnosis(sources({ ...aether, SHANNON_AUTONOMY_OWNER_DOCUMENTS: flag })).read().tools).toEqual(tools);
+    const on = createServerSelfDiagnosis(sources({ ...aether, SHANNON_AUTONOMY_OWNER_DOCUMENTS: 'on' })).read().tools;
+    expect(on.names).toEqual(SHANNON_TOOLS.map(tool => tool.name));
+    expect(on.offered).toEqual({ ...tools.offered, autonomy: { ...tools.offered.autonomy, owner_alone: tools.offered.autonomy.owner_alone + 2 } });
+    expect(createServerSelfDiagnosis(sources({ ...configured(), SHANNON_AUTONOMY_OWNER_DOCUMENTS: 'on' })).read().tools.names.some(name => name.startsWith('ownerDocs.'))).toBe(false);
     // An address without TLS to another machine is not a client.
     expect(createServerSelfDiagnosis(sources({ ...configured(), SHANNON_AETHER_API_URL: 'http://aether.example.org', SHANNON_AETHER_SHANNON_TOKEN: 'fake-token-0015' })).read().tools.offered.text.others).toBe(0);
   });
@@ -193,7 +202,7 @@ describe('the self-diagnosis', () => {
     expect(new Set(diagnosis.tools.names).size).toBe(diagnosis.tools.count);
     for (const surface of ['text', 'voice', 'autonomy'] as const) {
       for (const audience of ['owner_alone', 'others'] as const) {
-        expect(diagnosis.tools.offered[surface][audience]).toBe(offeredTools(surface, audience, tool => !tool.name.startsWith('aether')).length);
+        expect(diagnosis.tools.offered[surface][audience]).toBe(offeredTools(surface, audience, tool => !tool.name.startsWith('aether') && tool.domain !== 'owner_documents_read').length);
       }
     }
     const off = createServerSelfDiagnosis(sources({ ...configured(), SHANNON_OWN_TOOLS: 'off' })).read().tools;
