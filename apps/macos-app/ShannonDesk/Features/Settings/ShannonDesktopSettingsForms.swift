@@ -41,8 +41,10 @@ extension ShannonDesktopRootView {
             case .calendar:
                 ShannonCalendarSharingSettingsSection()
             case .folder:
-                // Her folder on this Mac (A18 S2): chosen, paused, checked and stopped here; she lists, searches and reads it.
+                // Her folder on this Mac (A18 S2, S3): chosen, paused, checked and stopped here; she lists, searches, reads and changes it.
                 ShannonFolderHostSettingsSection()
+                // Opening at login (on by default while a folder is chosen) and retiring the Electron app (A18 S4).
+                ShannonFolderHostLoginSection()
             case .appearance:
                 appearanceSections
             case .ops, .devices, .delivery, .diagnostics, .connection, .sources:

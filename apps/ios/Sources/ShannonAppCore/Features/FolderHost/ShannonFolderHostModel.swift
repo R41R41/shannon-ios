@@ -45,6 +45,8 @@ public final class ShannonFolderHostModel {
     @ObservationIgnored private var loop: Task<Void, Never>?
     @ObservationIgnored private var lastClaimAt: Date?
     @ObservationIgnored private var menuSection: ShannonFolderHostMenuSection?
+    /// Opening at login follows the folder unless the owner chose (A18 S4). Only the running app has one: tests never register.
+    @ObservationIgnored private var loginItem: ShannonDesktopLoginItem?
 
     public init(bookmarks: ShannonFolderBookmarkStore = ShannonFolderBookmarkStore(), defaults: UserDefaults = .standard,
                 log: ShannonFolderHostActivityLog = ShannonFolderHostActivityLog()) {
@@ -68,6 +70,7 @@ public final class ShannonFolderHostModel {
         runner = ShannonFolderHostRunner(transport: client, worker: worker)
         deviceID = client.deviceID
         recent = log.recent()
+        loginItem = .shared
         let section = ShannonFolderHostMenuSection(model: self)
         menuSection = section
         ShannonDesktopMenuBar.shared.register(section)
@@ -126,6 +129,7 @@ public final class ShannonFolderHostModel {
         check = nil
         problem = nil
         link = .waiting
+        loginItem?.apply(folderChosen: false)
         Task { await worker.setFolder(nil) }
         ShannonDesktopMenuBar.shared.refresh()
     }
@@ -179,6 +183,7 @@ public final class ShannonFolderHostModel {
         }
         let chosen = folder
         Task { await worker.setFolder(chosen) }
+        loginItem?.apply(folderChosen: isChosen)
         ShannonDesktopMenuBar.shared.refresh()
         restartLoop()
     }
