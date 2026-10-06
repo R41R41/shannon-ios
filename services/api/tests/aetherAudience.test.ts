@@ -128,6 +128,8 @@ describe('what she reads of her folder in front of others', () => {
       expect(text).toContain(`${UNLABELLED_DISCLOSURE_MARKER}ライ氏は${HEALTH}そうだ。`);
       expect(text).toContain('灯台の光は夜に十二回まわる。');
       expect(text).toContain(LEFT_OUT_LINE);
+      // With him there, all of what she read is unlabelled derived text: marked as a whole, for the speak-time check.
+      expect(text.startsWith(`${UNLABELLED_DISCLOSURE_MARKER}\n`)).toBe(true);
     }
     // Someone else's turn on a platform (openOnly): neither reaches the model, in a read or in a search hit.
     const guest = turn('guests', 'text', true);
@@ -136,6 +138,7 @@ describe('what she reads of her folder in front of others', () => {
       expect(shown.text).not.toContain('ウォンバット');
       expect(shown.text).not.toContain('胃の調子');
       expect(shown.text).toContain('灯台の話をした。');
+      expect(shown.text).not.toContain(UNLABELLED_DISCLOSURE_MARKER);
     }
   });
 

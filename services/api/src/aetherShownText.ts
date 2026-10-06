@@ -14,6 +14,9 @@ import { toolFailure, type ToolResult } from './shannonTools.js';
  * - a sentence that carries one of his other personal matters (guarded) is marked, as memory marks it, where he may
  *   release it (his own turn with others, 「友人も一緒」), and left out where he is not there (`openOnly`, someone
  *   else's turn on a platform), as memory leaves it out there.
+ * - where he may release it, what she read is also, as a whole, derived text with no label of its own, and carries the
+ *   unlabelled marker on a line of its own before it, as such text does in a prompt with him and others (review S2), so
+ *   the speak-time check covers all of it. Where he is not there it carries none: the run filter is the rule there.
  *
  * A sentence is a line, cut after 。！？!?. When what stays still carries something withheld (a run across sentences),
  * nothing of the result is given; nor when the check could not be read (`null`). A sentence that was left out is not
@@ -42,7 +45,9 @@ export function resultForOthers(result: ToolResult, check: OthersTextCheck | nul
   if (!check) return UNREADABLE;
   try {
     const shown = textForOthers(result.text, check);
-    return shown === null ? CARRIES : shown === result.text ? result : { ...result, text: shown };
+    if (shown === null) return CARRIES;
+    const text = check.openOnly ? shown : `${UNLABELLED_DISCLOSURE_MARKER}\n${shown}`;
+    return text === result.text ? result : { ...result, text };
   } catch { return UNREADABLE; }
 }
 
