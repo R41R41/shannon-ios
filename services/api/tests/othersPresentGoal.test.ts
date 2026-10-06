@@ -92,7 +92,9 @@ describe('the owner\'s current goal with other people present', () => {
     expect(alone).toContain(`current_goal=${goal}`);
     expect(alone).toContain('\n\n[Current intention frame');
     expect(alone).not.toContain('【機微:');
-    expect(fingerprint(alone)).toBe('f985777ad5061000');
+    // Re-recorded on the Mac folder branch (2026-10-06, A18, owner approval): the `own_folder` capability line names the PC or
+    // the Mac (f985777ad5061000 with the line as before).
+    expect(fingerprint(alone)).toBe('6644836be1aa54fd');
 
     const others = await chat('人格の改善はどう進める？', { audience: 'others' });
     expect(others).not.toContain('current_goal=');
@@ -107,8 +109,9 @@ describe('the owner\'s current goal with other people present', () => {
     expect(alone).not.toContain('【機微:');
     // Re-recorded on the prompt-cache branch (2026-10-06): the shared state now opens the turn's context, after the fixed
     // voice instructions (Syzygy ADR-0003 principle 4). Put back between her identity and those instructions, the same
-    // text gives the fingerprint recorded before (9abf82a6f2f2e74f); nothing was added or left out.
-    expect(fingerprint(alone)).toBe('1732f2014cc3eeb7');
+    // text gives the fingerprint recorded before (9abf82a6f2f2e74f); nothing was added or left out. Re-recorded again on the
+    // Mac folder branch (2026-10-06, A18): the `own_folder` capability line names the PC or the Mac (1732f2014cc3eeb7 before).
+    expect(fingerprint(alone)).toBe('bb34c77bdba7c1ca');
 
     const companion = await voice('前に話した人格の改善のこと覚えてる？', true);
     expect(companion).toContain('[Current cognitive context');
