@@ -67,5 +67,5 @@ export function textForOthers(text: string, check: OthersTextCheck): string | nu
   // What stays is checked as a whole, plain (no marker inside it splits a run; review S-1).
   const shown = lines.join('\n');
   if (carries(shown)) return null;
-  return removed ? `${shown}\n${LEFT_OUT_LINE}` : shown;
+  return removed ? [shown, LEFT_OUT_LINE].filter(Boolean).join('\n') : shown;
 }

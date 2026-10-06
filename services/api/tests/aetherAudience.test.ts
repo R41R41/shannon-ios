@@ -179,9 +179,10 @@ describe('what she reads of her folder in front of others', () => {
     expect(textForOthers('ウォンバット会の集。まりに毎月出ている。', check)).toBeNull();
     // A marker put before a guarded sentence must not split a withheld run that crosses into it (review S-1).
     const crossing = { withheld: runCheckOf(['来月に手術。病院は東大病院']), guarded: runCheckOf(['病院は東大病院で入院予定']), openOnly: false };
-    // Both sentences of his are left out now (S-2); what stays is checked plain.
-    expect(textForOthers('来月に手術。病院は東大病院で入院予定。', crossing)).toBe(`来月に手術。\n${LEFT_OUT_LINE}`);
-    expect(textForOthers('来月に手術。病院は東大病院で入院予定。', crossing)).not.toContain('東大病院');
+    // Both sentences of his are left out (S-2), and so is the short sentence of his secret, matched whole (「除く」).
+    expect(textForOthers('来月に手術。病院は東大病院で入院予定。', crossing)).toBe(LEFT_OUT_LINE);
+    // An ordinary short sentence that is no sentence of a secret stays, even with words in common (「来月に」).
+    expect(textForOthers('来月に旅行。来月に手術。灯台を見た。', crossing)).toBe(`来月に旅行。灯台を見た。\n${LEFT_OUT_LINE}`);
   });
 });
 
