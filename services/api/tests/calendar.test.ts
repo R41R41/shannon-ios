@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { CALENDAR_LIMITS, CALENDAR_REQUEST_BYTES, calendarIngestEnabled, calendarRequestBytes } from '../src/contracts/calendarContract.js';
-import { SQLiteDeviceAuthStore } from '../src/deviceAuth.js';
+import { SQLiteDeviceAuthStore } from '../src/infra/auth/deviceAuth.js';
 import { OwnerUpcoming } from '../src/mind/memory/ownerUpcoming.js';
 import { SQLiteUpcomingStore } from '../src/mind/memory/store/upcomingStore.js';
 

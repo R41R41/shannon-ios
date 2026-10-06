@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { normalize } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import type { ClaimedHostStep, HostStepReceipt } from '../src/mind/action/ownTime/autonomyHostFolderDesk.js';
 import {

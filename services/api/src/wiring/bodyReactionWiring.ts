@@ -3,7 +3,7 @@ import { createConfiguredBodyReactionSpeaker } from '../surfaces/body/bodyReacti
 import { SQLiteBodyReactionStore } from '../surfaces/body/store/bodyReactionStore.js';
 import { SQLiteTouchExperiences } from '../surfaces/body/store/bodyTouchMemory.js';
 import { touchPredictionEnabled } from '../mind/prediction/bodyTouchPrediction.js';
-import type { LlmUsageEvent } from '../llmUsage.js';
+import type { LlmUsageEvent } from '../infra/models/llmUsage.js';
 import type { ShannonBodyOptions } from '../surfaces/body/shannonBody.js';
 
 /**

@@ -10,12 +10,12 @@ import { FileAetherProposalStore } from '../src/integrations/aether/aetherPropos
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import { dispatchStudyRequest } from '../src/apiStudyRoutes.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { asksForParallelCalls, toolInstructions } from '../src/chatModelTools.js';
-import { runToolStep } from '../src/chatModelToolStep.js';
-import { chatTurnRequestBody, offersTools } from '../src/chatModelTurn.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { dispatchStudyRequest } from '../src/infra/http/apiStudyRoutes.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
+import { asksForParallelCalls, toolInstructions } from '../src/infra/models/chatModelTools.js';
+import { runToolStep } from '../src/infra/models/chatModelToolStep.js';
+import { chatTurnRequestBody, offersTools } from '../src/infra/models/chatModelTurn.js';
 import { conversationTools, type ConversationToolServer } from '../src/mind/tools/shannonToolSession.js';
 import { gatedAether } from '../src/mind/inhibition/shannonToolGate.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
@@ -23,7 +23,7 @@ import type { ToolAudience, ToolSurface } from '../src/mind/tools/shannonTools.j
 import { AETHER_SIDE_CHANGE } from '../src/mind/action/ownTime/store/studyAetherLinks.js';
 import { applyMigration, migrationPlan, migrationReport, readOnlyMigrationPlan } from '../src/mind/action/ownTime/store/studyMigration.js';
 import type { StudyPiece } from '../src/mind/action/ownTime/store/studyStore.js';
-import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/turnDeadline.js';
+import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/mind/action/respond/turnDeadline.js';
 import { FakeAether, TOKEN } from './fakeAetherServer.js';
 import { STORY_BODY, loopHarness, runUntilIdle } from './autonomyLoopHarness.js';
 import { promptOf } from './modelPrompt.js';

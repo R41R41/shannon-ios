@@ -17,7 +17,7 @@ import {
   responseUsage,
   utcMonthKey,
   type LlmUsageStore,
-} from '../../llmUsage.js';
+} from '../../infra/models/llmUsage.js';
 
 import {
   EXPLICIT_FACT_PATTERNS,
@@ -37,7 +37,7 @@ import {
   parseJson,
   parseProposalRows,
 } from './sleepConsolidationRules.js';
-import { classifyRememberRequest, rememberRequestContent } from '../../rememberRequest.js';
+import { classifyRememberRequest, rememberRequestContent } from '../action/respond/rememberRequest.js';
 
 export interface UserFactProposal {
   kind?: 'user-fact' | 'relationship' | 'interest';

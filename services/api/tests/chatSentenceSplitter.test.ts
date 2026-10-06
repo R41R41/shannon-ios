@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHAT_SENTENCE_MAXIMUM_LENGTH, ChatSentenceSplitter, splitChatSentences } from '../src/chatSentenceSplitter.js';
+import { CHAT_SENTENCE_MAXIMUM_LENGTH, ChatSentenceSplitter, splitChatSentences } from '../src/surfaces/text/chatSentenceSplitter.js';
 
 /** Every case is also checked for the two properties the contract states. */
 function split(text: string): string[] {

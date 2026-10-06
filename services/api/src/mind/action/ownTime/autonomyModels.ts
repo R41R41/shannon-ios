@@ -1,4 +1,4 @@
-import { estimatedOpenAICostUsd, type ResponseUsage } from '../../../llmUsage.js';
+import { estimatedOpenAICostUsd, type ResponseUsage } from '../../../infra/models/llmUsage.js';
 
 /**
  * The models Shannon may choose for her own activity, per purpose (Syzygy ADR-0002).

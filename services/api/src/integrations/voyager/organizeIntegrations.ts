@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ShannonConversationItem } from '../../chatModel.js';
+import type { ShannonConversationItem } from '../../infra/models/chatModel.js';
 import type {
   OrganizeItem,
   OrganizeOperation,

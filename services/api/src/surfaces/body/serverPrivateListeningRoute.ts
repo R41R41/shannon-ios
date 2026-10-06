@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { BodyReachOutDeliveryOutcome } from '../../contracts/bodyContract.js';
-import type { ShannonDevicePrincipal } from '../../deviceAuth.js';
+import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
 import {
   PRIVATE_LISTENING_LIMITS, PRIVATE_LISTENING_PATH, privateListeningEnabled, privateReachOutListenSeconds, privateReachOutsEnabled,
 } from '../../contracts/privateListeningContract.js';
@@ -9,7 +9,7 @@ import { SQLitePrivateListeningStore } from './store/privateListeningStore.js';
 import { PrivateReachOuts } from '../outreach/privateReachOuts.js';
 import { SQLiteReachOutClaims } from '../outreach/store/reachOutClaims.js';
 import type { ReachOutReportResult, SQLiteReachOutReports } from '../outreach/store/reachOutReports.js';
-import { bindScope, consumeDeviceAllowance, sendJson } from '../../serverHttp.js';
+import { bindScope, consumeDeviceAllowance, sendJson } from '../../infra/http/serverHttp.js';
 
 /**
  * The HTTP side of private listening. The scope is the device token's own, as on every paired route;

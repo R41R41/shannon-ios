@@ -16,11 +16,11 @@ import type { ConversationStore, TurnPersistenceContext } from '../memory/store/
 import type { ShannonExperience } from '../memory/store/conversationStore.js';
 import type { BackgroundJobStore } from './store/backgroundJobStore.js';
 import { captureImmediateExplicitMemory, type UserFactProposal } from './sleepConsolidation.js';
-import type { ShannonGeneratedArtifact, ShannonTaskDecision } from '../../chatModel.js';
+import type { ShannonGeneratedArtifact, ShannonTaskDecision } from '../../infra/models/chatModel.js';
 import { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert } from '../memory/prospectiveMemory.js';
-import { extractExplicitUserIntent } from '../../cognitiveIntent.js';
+import { extractExplicitUserIntent } from '../action/respond/cognitiveIntent.js';
 import { intentCaptureKey, ownerFacingStatement, turnCaptureId, type TurnCaptureRecord } from '../memory/store/turnCaptures.js';
-import { applyExplicitCommitmentCommand } from '../../commitmentCommands.js';
+import { applyExplicitCommitmentCommand } from '../action/respond/commitmentCommands.js';
 import { sharedTimeEvent } from '../emotion/companionPresence.js';
 import { emotionTiming } from '../emotion/emotionTiming.js';
 

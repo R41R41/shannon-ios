@@ -2,14 +2,14 @@ import { mkdtempSync, readdirSync, rmSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { InMemoryOrganizeStore } from '../src/integrations/voyager/organize.js';
 import { SQLiteOrganizeStore } from '../src/integrations/voyager/store/organizePersistence.js';
 import { FileAetherProposalStore } from '../src/integrations/aether/aetherProposal.js';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { extractProspectiveMemories } from '../src/mind/memory/prospectiveMemory.js';
 import { reconcileSleepOutcome, reviewCommitments } from '../src/mind/sleep/sleepCommitmentReview.js';
-import { resolveCommitmentCommand } from '../src/commitmentCommands.js';
+import { resolveCommitmentCommand } from '../src/mind/action/respond/commitmentCommands.js';
 import { InMemoryAgentTaskStore } from '../src/mind/action/agentTasks/agentTaskStore.js';
 
 const dirs: string[] = [];

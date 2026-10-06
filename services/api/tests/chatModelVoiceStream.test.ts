@@ -4,9 +4,9 @@ import {
   VOICE_MAX_OUTPUT_TOKENS,
   VOICE_REPLY_INSTRUCTIONS,
   type ShannonVoiceModelRequest,
-} from '../src/chatModel.js';
-import { VOICE_RESPONSE_TIMEOUT_MILLISECONDS, type VoiceStreamBounds } from '../src/chatModelVoiceStream.js';
-import type { LlmUsageEvent } from '../src/llmUsage.js';
+} from '../src/infra/models/chatModel.js';
+import { VOICE_RESPONSE_TIMEOUT_MILLISECONDS, type VoiceStreamBounds } from '../src/infra/models/chatModelVoiceStream.js';
+import type { LlmUsageEvent } from '../src/infra/models/llmUsage.js';
 import { completeSpokenSentences } from '../src/surfaces/voice/spokenSentences.js';
 
 const encoder = new TextEncoder();

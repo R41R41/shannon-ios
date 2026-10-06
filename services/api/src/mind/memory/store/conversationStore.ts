@@ -4,9 +4,9 @@ import {
   type MemoryAudience, type MemoryDisclosure, type RecallCandidate, type ShannonMessageEmotion,
 } from '@shannon/cognition';
 import type { MemorySearchHit } from './sqliteMemorySearch.js';
-import type { ShannonConversationItem, ShannonGeneratedArtifact } from '../../../chatModel.js';
-import type { ShannonTaskDecision } from '../../../chatModel.js';
-import { DEFAULT_THREAD_TITLE, initialThreadTitle } from '../../../threadTitle.js';
+import type { ShannonConversationItem, ShannonGeneratedArtifact } from '../../../infra/models/chatModel.js';
+import type { ShannonTaskDecision } from '../../../infra/models/chatModel.js';
+import { DEFAULT_THREAD_TITLE, initialThreadTitle } from '../../../surfaces/text/threadTitle.js';
 import type { ReminderReference, ReminderView, TurnCaptureRecord, TurnCaptureView } from './turnCaptures.js';
 
 /** Threads of the platform bridge (`platformBridgeThreadId`): `platform:<platform>:<32 hex>`. Never the default Talk. */

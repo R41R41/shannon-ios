@@ -3,15 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import {
   extractExplicitUserIntent,
   InMemoryCognitiveIntentStore,
   SQLiteCognitiveIntentStore,
-} from '../src/cognitiveIntent.js';
+} from '../src/mind/action/respond/cognitiveIntent.js';
 import { synchronizeIntentWithAgentTask } from '../src/mind/action/agentTasks/cognitiveWork.js';
 import type { AgentTask } from '../src/mind/action/agentTasks/agentTaskStore.js';
-import type { ShannonChatModelRequest } from '../src/chatModel.js';
+import type { ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { promptOf } from './modelPrompt.js';
 
 const at = '2026-09-25T03:00:00.000Z';

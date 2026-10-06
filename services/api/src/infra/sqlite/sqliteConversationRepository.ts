@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { ShannonConversationItem } from '../../chatModel.js';
+import type { ShannonConversationItem } from '../models/chatModel.js';
 import { normalizeDisclosure } from '@shannon/cognition';
 import {
   boundedRecalledMemoryIds,
@@ -17,7 +17,7 @@ import {
   type TurnPersistenceContext,
 } from '../../mind/memory/store/conversationStore.js';
 import type { ActivityItem } from '../../mind/memory/memoryService.js';
-import { DEFAULT_THREAD_TITLE, initialThreadTitle } from '../../threadTitle.js';
+import { DEFAULT_THREAD_TITLE, initialThreadTitle } from '../../surfaces/text/threadTitle.js';
 import {
   conciseThreadTitle,
   freezeStoredMessage,

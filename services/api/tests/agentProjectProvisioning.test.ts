@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryAgentTaskStore } from '../src/mind/action/agentTasks/agentTaskStore.js';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import {
   normalizedAgentProjectKey,
   normalizedGitHubRepositoryURL,

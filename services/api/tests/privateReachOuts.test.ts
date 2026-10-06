@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { AutonomyLoopObservations } from '../src/mind/action/ownTime/store/autonomyLoopObservations.js';
 import { EARPHONE_GIVEN_UP_MEMORY, EARPHONE_GIVEN_UP_RULE, EARPHONE_NO_ANSWER_LINE, EARPHONE_NO_ANSWER_RULE, reachOutHappenedLines, reachOutMemoryLine, rethinkExtras } from '../src/mind/action/ownTime/autonomyLoopObservePrompts.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';

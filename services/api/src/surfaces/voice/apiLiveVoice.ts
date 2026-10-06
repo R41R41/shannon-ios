@@ -14,23 +14,23 @@ import {
   type CompanionStateStore,
   type MemoryAudience,
 } from '@shannon/cognition';
-import { agentTaskPromptProjection } from '../../apiPromptProjection.js';
-import { badRequest, objectBody, validBoundedString, validScopeKey } from '../../apiValidation.js';
+import { agentTaskPromptProjection } from '../../mind/action/respond/apiPromptProjection.js';
+import { badRequest, objectBody, validBoundedString, validScopeKey } from '../../infra/http/apiValidation.js';
 import type { AgentTaskStore } from '../../mind/action/agentTasks/agentTaskStore.js';
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
 import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
-import type { DailyMindReader } from '../../dailyMind.js';
+import type { DailyMindReader } from '../../mind/action/respond/dailyMind.js';
 import { companionIdentityPrompt, identityOnly, type KnowledgeStore } from '../../mind/memory/store/knowledgeStore.js';
-import type { ShannonChatModel } from '../../chatModel.js';
-import { LocalVoiceDecisionGateway, type VoiceDecisionGateway, type VoiceTurnDecision } from '../../voiceDecision.js';
-import { prepareTurnCognitiveContext } from '../../turnCognitiveContext.js';
+import type { ShannonChatModel } from '../../infra/models/chatModel.js';
+import { LocalVoiceDecisionGateway, type VoiceDecisionGateway, type VoiceTurnDecision } from '../../mind/selectors/voiceDecision.js';
+import { prepareTurnCognitiveContext } from '../../mind/action/respond/turnCognitiveContext.js';
 import { withMemorySearchLatency, type TurnMemoryRecall } from '../../mind/recall/turnMemoryRecall.js';
 import { visibleConversationHistory } from '../../mind/memory/memoryVisibility.js';
 import { conversationReplay } from '../../mind/recall/conversationWindow.js';
-import { executeConversationCommand, spokenCommandAllowed, type ConversationCommandDependencies } from '../../conversationCommands.js';
-import { extractExplicitUserIntent, type CognitiveIntentStore } from '../../cognitiveIntent.js';
-import { recordCompletedCognitiveCycle } from '../../cognitiveCycle.js';
-import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type ConversationReadCapabilities } from '../../conversationCapabilities.js';
+import { executeConversationCommand, spokenCommandAllowed, type ConversationCommandDependencies } from '../../mind/action/respond/conversationCommands.js';
+import { extractExplicitUserIntent, type CognitiveIntentStore } from '../../mind/action/respond/cognitiveIntent.js';
+import { recordCompletedCognitiveCycle } from '../../mind/action/respond/cognitiveCycle.js';
+import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type ConversationReadCapabilities } from '../../mind/action/respond/conversationCapabilities.js';
 import { asksAboutNotion } from '../../integrations/notion/notionConversation.js';
 import type { PersonIdentityStore } from '../../mind/memory/store/personIdentity.js';
 import { voicePlanResponse } from '../../mind/emotion/voiceEmotionPlan.js';
@@ -42,7 +42,7 @@ import {
   recordConversationProposal,
   recordConversationReceipt,
   type ConversationOrchestrationStore,
-} from '../../conversationOrchestration.js';
+} from '../../mind/action/respond/conversationOrchestration.js';
 import { isExplicitVoyagerUpdateRequest } from '../../integrations/voyager/organize.js';
 import {
   validatedVoiceDeviceContext,
@@ -65,7 +65,7 @@ import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
 import { conversationTools, toolTraceReader, turnWroteHerOwnThings, withToolCapabilityLines, type ConversationToolServer } from '../../mind/tools/shannonToolSession.js';
-import { TurnDeadline, VOICE_TURN_DEADLINE } from '../../turnDeadline.js';
+import { TurnDeadline, VOICE_TURN_DEADLINE } from '../../mind/action/respond/turnDeadline.js';
 import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from './ownerCallElsewhere.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {

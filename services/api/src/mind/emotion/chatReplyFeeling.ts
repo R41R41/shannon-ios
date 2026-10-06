@@ -1,5 +1,5 @@
 import { SHANNON_EMOTION_KINDS, isMoodLikeEmotion, isShannonEmotionKind, type ShannonEmotionKind } from '@shannon/cognition';
-import { AFFECT_INTENSITY_STEPS, affectIntensityOf, type AffectIntensityStep } from '../../voiceDecisionValues.js';
+import { AFFECT_INTENSITY_STEPS, affectIntensityOf, type AffectIntensityStep } from '../selectors/voiceDecisionValues.js';
 
 /**
  * The feeling of a text reply, decided by the model that wrote it. Core: emotion.

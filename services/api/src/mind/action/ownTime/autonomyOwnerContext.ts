@@ -3,14 +3,14 @@ import {
   visibleMemoryText, type CompanionStateSnapshot, type MemoryAudience, type MemoryDisclosure,
 } from '@shannon/cognition';
 import { OWNER_CONTEXT_HEADER, OWNER_CONTEXT_SECRET_MARK, OWNER_CONTEXT_WRITING_HEADER, type AutonomyOwnerContext, type OwnerContextBlock } from './autonomyLoopOwnerContext.js';
-import type { ShannonConversationItem } from '../../../chatModel.js';
+import type { ShannonConversationItem } from '../../../infra/models/chatModel.js';
 import type { ConversationStore } from '../../memory/store/conversationStore.js';
 import { replayWindow } from '../../recall/conversationWindow.js';
-import type { DailyMindReader } from '../../../dailyMind.js';
+import type { DailyMindReader } from '../respond/dailyMind.js';
 import { DisclosureGate } from '../../inhibition/memoryDisclosure.js';
 import { visibleReplayMessages } from '../../memory/memoryVisibility.js';
 import type { PeopleMemory } from '../../memory/peopleMemory.js';
-import { prepareTurnCognitiveContext } from '../../../turnCognitiveContext.js';
+import { prepareTurnCognitiveContext } from '../respond/turnCognitiveContext.js';
 
 /**
  * The owner's context for her own activity (owner decision 2026-10-02, Syzygy ADR-0003: 「基本的に全部見ていい」). Core: memory.

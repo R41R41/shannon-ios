@@ -2,12 +2,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import { executeConversationCommand } from '../src/conversationCommands.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { executeConversationCommand } from '../src/mind/action/respond/conversationCommands.js';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import { nextInitiativeDelayMilliseconds } from '../src/surfaces/outreach/initiativeSchedule.js';
 import { extractProspectiveMemories } from '../src/mind/memory/prospectiveMemory.js';
-import { resolveReminderReply } from '../src/reminderReply.js';
+import { resolveReminderReply } from '../src/mind/action/respond/reminderReply.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
 

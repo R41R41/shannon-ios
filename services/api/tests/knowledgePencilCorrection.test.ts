@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
 import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
 import { consolidateSleepMemory, LocalRuleSleepMemoryAnalyzer } from '../src/mind/sleep/sleepConsolidation.js';

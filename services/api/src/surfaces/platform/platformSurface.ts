@@ -1,7 +1,7 @@
 import { shannonIdentityPrompt, guardedShannonSeenPrompt, type CompanionStateSnapshot } from '@shannon/cognition';
 import { turnPersistenceContext, type CompletedTurn } from '../../mind/sleep/backgroundUpdates.js';
-import type { TextTurnInput } from '../../apiKernel.js';
-import { chatAudienceTurn, type ChatAudienceTurn } from '../../chatAudience.js';
+import type { TextTurnInput } from '../../infra/http/apiKernel.js';
+import { chatAudienceTurn, type ChatAudienceTurn } from '../text/chatAudience.js';
 import type { ChatResponse } from '../../contracts/contracts.js';
 import type { ConversationStore, ShannonExperience } from '../../mind/memory/store/conversationStore.js';
 import { identityOnly } from '../../mind/memory/store/knowledgeStore.js';

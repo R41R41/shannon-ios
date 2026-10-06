@@ -1,4 +1,4 @@
-import type { ShannonConversationItem } from '../../chatModel.js';
+import type { ShannonConversationItem } from '../../infra/models/chatModel.js';
 import type { StoredConversationMessage } from '../../mind/memory/store/conversationStore.js';
 import type {
   OrganizeItem,

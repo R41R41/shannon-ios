@@ -14,7 +14,7 @@ import { DisclosureGate } from '../inhibition/memoryDisclosure.js';
 import type { PeopleMemoryStore, PersonCall, PersonMemoryItem, RememberedPerson } from './store/peopleMemoryStore.js';
 import { extractPromiseCaptures } from './prospectiveMemory.js';
 import { extractExplicitMemoryProposals } from '../sleep/sleepConsolidation.js';
-import type { LabelledRecallCandidate } from '../../turnCognitiveContext.js';
+import type { LabelledRecallCandidate } from '../action/respond/turnCognitiveContext.js';
 import type { GuestCallTurn } from '../../surfaces/voice/voiceGuestCall.js';
 import { establishedGuestName, personNameKey } from '../../surfaces/voice/voiceGuestNames.js';
 import { ownerPeoplePrompt, type VisiblePersonItem } from './peopleMemoryPrompts.js';

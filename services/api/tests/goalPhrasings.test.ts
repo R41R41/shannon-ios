@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractExplicitUserIntent } from '../src/cognitiveIntent.js';
+import { extractExplicitUserIntent } from '../src/mind/action/respond/cognitiveIntent.js';
 
 const at = '2026-09-24T01:00:00.000Z';
 const goal = (text: string) => extractExplicitUserIntent(text, 'thread', at);

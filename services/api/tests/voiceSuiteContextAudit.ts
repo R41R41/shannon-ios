@@ -2,12 +2,12 @@
  * SHANNON_AUDIT_LIVE=1 deliberately enables billable Jev/model calls.
  * Run with node --import tsx services/api/tests/voiceSuiteContextAudit.ts.
  */
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { createConfiguredChatModel, type ShannonChatModel, type ShannonChatModelRequest,
-  type ShannonVoiceModelRequest } from '../src/chatModel.js';
+  type ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { createConfiguredVoiceDecisionGateway, LocalVoiceDecisionGateway,
-  type VoiceSkill } from '../src/voiceDecision.js';
-import { VoiceRequestAllowances } from '../src/serverHttp.js';
+  type VoiceSkill } from '../src/mind/selectors/voiceDecision.js';
+import { VoiceRequestAllowances } from '../src/infra/http/serverHttp.js';
 import { promptOf } from './modelPrompt.js';
 
 const cases: Array<{ id: string; transcript: string; skills: VoiceSkill[]; forbidden?: VoiceSkill[] }> = [

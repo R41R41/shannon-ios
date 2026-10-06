@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ShannonApiKernel } from '../../apiKernel.js';
-import type { ShannonDevicePrincipal } from '../../deviceAuth.js';
-import { consumeDeviceAllowance, readBytes, scalarHeader, sendJson } from '../../serverHttp.js';
+import type { ShannonApiKernel } from '../../infra/http/apiKernel.js';
+import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
+import { consumeDeviceAllowance, readBytes, scalarHeader, sendJson } from '../../infra/http/serverHttp.js';
 import { VoiceVisionError, type ShannonVisionMimeType, type VoiceVisionGateway } from './voiceVision.js';
 
 const perDeviceUsage = new Map<string, { startedAt: number; count: number }>();

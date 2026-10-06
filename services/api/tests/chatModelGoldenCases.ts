@@ -1,4 +1,4 @@
-import type { ShannonChatModelRequest } from '../src/chatModel.js';
+import type { ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 
 /** The requests and provider responses that `chatModelGolden.test.ts` holds to their recorded bytes. */
 export const GOLDEN_BASE: ShannonChatModelRequest = { scopeKey: 'owner', systemPrompt: 'system prompt', history: [], message: '聞こえてる？' };

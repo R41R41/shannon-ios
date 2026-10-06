@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { prepareTurnCognitiveContext } from '../src/turnCognitiveContext.js';
+import { prepareTurnCognitiveContext } from '../src/mind/action/respond/turnCognitiveContext.js';
 
 const at = '2026-09-30T03:00:00.000Z';
 const directories: string[] = [];

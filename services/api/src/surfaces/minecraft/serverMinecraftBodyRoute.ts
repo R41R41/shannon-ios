@@ -1,16 +1,16 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CompanionClock, CompanionStateStore } from '@shannon/cognition';
 import type { TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.js';
-import type { ShannonChatModel } from '../../chatModel.js';
+import type { ShannonChatModel } from '../../infra/models/chatModel.js';
 import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
-import type { ShannonDevicePrincipal } from '../../deviceAuth.js';
+import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
 import { MinecraftBody, type MinecraftConversation } from './minecraftBody.js';
 import { MINECRAFT_BODY_LIMITS, MINECRAFT_BODY_TURN_PATH, MinecraftBodyError, configuredMinecraftBody, type MinecraftBodyConfiguration } from '../../contracts/minecraftBodyContract.js';
 import { SQLiteMinecraftTurnLog } from './store/minecraftTurnStore.js';
 import type { PeopleMemoryStore } from '../../mind/memory/store/peopleMemoryStore.js';
 import { platformPeopleEnabled } from '../platform/platformPeople.js';
-import { consumeDeviceAllowance, sendJson } from '../../serverHttp.js';
-import { closedSignal } from '../../apiAutonomyHostStepRoutes.js';
+import { consumeDeviceAllowance, sendJson } from '../../infra/http/serverHttp.js';
+import { closedSignal } from '../../infra/http/apiAutonomyHostStepRoutes.js';
 import type { MinecraftBodyRequests } from './minecraftBodyRequests.js';
 import { MINECRAFT_REQUEST_LIMITS, MINECRAFT_REQUEST_PATHS, validClaim, validProgress, validReport } from '../../contracts/minecraftBodyRequestContract.js';
 

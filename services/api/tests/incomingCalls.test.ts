@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { reachOutHappenedLines, reachOutMemoryLine } from '../src/mind/action/ownTime/autonomyLoopObservePrompts.js';
 import { AutonomyLoopObservations, type ReachOutFacts } from '../src/mind/action/ownTime/store/autonomyLoopObservations.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';

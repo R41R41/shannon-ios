@@ -1,4 +1,4 @@
-import { OpenAIDailyMindModel } from '../src/dailyMind.js';
+import { OpenAIDailyMindModel } from '../src/mind/action/respond/dailyMind.js';
 
 const apiKey = process.env.OPENAI_API_KEY?.trim();
 if (!apiKey) throw new Error('OPENAI_API_KEY is required for the live daily-mind evaluation');

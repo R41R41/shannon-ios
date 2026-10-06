@@ -8,7 +8,7 @@ import {
   type ContextualMemory,
   type ShannonKnowledgeDocument,
 } from '@shannon/cognition';
-import type { LlmUsageStore } from '../../llmUsage.js';
+import type { LlmUsageStore } from '../../infra/models/llmUsage.js';
 import { OpenAIMemoryModelGateway, type MemoryModelGateway } from './memoryModels.js';
 import {
   configuredSemanticMemoryConfig,
@@ -21,7 +21,7 @@ import type { ShannonKnowledgeStore } from '../memory/store/sqliteShannonKnowled
 import { recallShannonKnowledge, usableKnowledgeFor } from './turnKnowledgeRecall.js';
 import { DisclosureGate } from '../inhibition/memoryDisclosure.js';
 import { conversationStoreOf } from '../memory/memoryVisibility.js';
-import { withRecalledMemories, type TurnCognitiveContext } from '../../turnCognitiveContext.js';
+import { withRecalledMemories, type TurnCognitiveContext } from '../action/respond/turnCognitiveContext.js';
 
 export interface TurnMemoryRecallInput {
   scopeKey: string;

@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { bearerAuthorized } from '../../apiAuth.js';
-import { validScopeKey } from '../../apiValidation.js';
+import { bearerAuthorized } from '../auth/apiAuth.js';
+import { validScopeKey } from '../http/apiValidation.js';
 import {
   isOpsCommandReportCode, OPS_COMMAND_LIMITS, OPS_COMMAND_OUTCOMES, opsCommandsAllowed, opsCommandTargetKnown, validatedOpsCommandRequest,
   type OpsCommandAllowed, type OpsCommandOutcome,
@@ -8,7 +8,7 @@ import {
 import type { OpsCommand } from './store/opsCommandStore.js';
 import { OPS_LIMITS, type OpsSnapshot } from '../../contracts/opsContract.js';
 import type { SQLiteOpsStore } from './store/opsStore.js';
-import { consumeDeviceAllowance, readJson, sendJson } from '../../serverHttp.js';
+import { consumeDeviceAllowance, readJson, sendJson } from '../http/serverHttp.js';
 
 export const OPS_COMMANDS_PATH = '/v1/ops/commands';
 export const OPS_COMMAND_CLAIM_PATH = '/v1/platform/ops/commands/claim';

@@ -4,7 +4,7 @@ import {
   parseJson,
   stableScopeIdentifier,
   validModel,
-} from '../../chatModelSupport.js';
+} from '../../infra/models/chatModelSupport.js';
 
 export type ShannonVisionMimeType = 'image/jpeg' | 'image/png';
 

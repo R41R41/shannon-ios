@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isOwnerOnly, type CompanionStateSnapshot, type MemoryAudience } from '@shannon/cognition';
-import type { ShannonConversationItem } from '../../chatModel.js';
-import { earlierConversationSummaryInstructions } from '../../chatModelSupport.js';
+import type { ShannonConversationItem } from '../../infra/models/chatModel.js';
+import { earlierConversationSummaryInstructions } from '../../infra/models/chatModelSupport.js';
 import type { ConversationStore } from '../memory/store/conversationStore.js';
 import { usableReplaySummary, visibleReplayMessages, type VisibleMessage } from '../memory/memoryVisibility.js';
 import { conversationSecrets, type SecretCheck } from '../inhibition/conversationSecrets.js';

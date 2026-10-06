@@ -1,5 +1,5 @@
-import type { VoiceTurnDecision } from '../../voiceDecision.js';
-import type { UserUtterance } from '../../conversationCommands.js';
+import type { VoiceTurnDecision } from '../../mind/selectors/voiceDecision.js';
+import type { UserUtterance } from '../../mind/action/respond/conversationCommands.js';
 
 export function transcriptNeedsInterpretation(decision: VoiceTurnDecision, utterance?: UserUtterance): boolean {
   // Old clients retain their literal-command contract. New ASR clients fail closed

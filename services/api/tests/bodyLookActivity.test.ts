@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SHANNON_ROOM_LOOK_RULES, buildShannonSeenPrompt, guardedShannonSeenPrompt, shannonCapabilityPrompt } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { copyableStudyPiece } from '../src/mind/action/ownTime/autonomyHostFolderPath.js';
 import type { AutonomyLoopConfig } from '../src/mind/action/ownTime/autonomyLoopConfig.js';
@@ -23,7 +23,7 @@ import { SQLiteBodyLookStore } from '../src/surfaces/body/store/bodyLookStore.js
 import type { RoomLookViewRequest, RoomLookViewer } from '../src/surfaces/body/bodyLookVision.js';
 import { closeBodyLookStores, configuredBodyLookOptions } from '../src/wiring/bodyLookWiring.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/chatModel.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { ownerDay } from '../src/mind/emotion/companionPresence.js';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import type { BodyPresence } from '../src/surfaces/body/shannonBody.js';

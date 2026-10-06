@@ -1,5 +1,5 @@
-import { objectBody, validBoundedString } from '../../apiValidation.js';
-import type { UserUtterance } from '../../conversationCommands.js';
+import { objectBody, validBoundedString } from '../../infra/http/apiValidation.js';
+import type { UserUtterance } from '../../mind/action/respond/conversationCommands.js';
 import { validatedGuestCallContext, type GuestCallContext } from './voiceGuestCall.js';
 
 export interface VoiceDeviceContext {

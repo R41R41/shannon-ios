@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { CompanionStateStore } from '@shannon/cognition';
-import { CONVERSATION_TOOL_CALLS, type ShannonModelToolSession, type ToolCallOutcome } from '../../chatModelTools.js';
+import { CONVERSATION_TOOL_CALLS, type ShannonModelToolSession, type ToolCallOutcome } from '../../infra/models/chatModelTools.js';
 import type { OthersTextCheck } from '../inhibition/aetherShownText.js';
 import { conversationSecrets, othersSecrets, type SecretCheck } from '../inhibition/conversationSecrets.js';
 import type { ConversationStore, StoredConversationMessage } from '../memory/store/conversationStore.js';
@@ -10,8 +10,8 @@ import { toolTraceCall } from './shannonToolTrace.js';
 import { InMemoryToolTraces, TOOL_FOLLOW_UP_MILLISECONDS, ToolTurnLog, type ToolTraceStore } from './shannonToolTurns.js';
 import { toolSessionMemory } from './shannonToolTypes.js';
 import { ownToolsEnabled, providerToolName, toolFailure, toolFromProviderName, toolResultForModel, type ShannonToolDefinition } from './shannonTools.js';
-import type { TurnDeadline } from '../../turnDeadline.js';
-import { answersWithPlace, asksForMemo, asksWhichPlace, namesAether } from '../../memoPlace.js';
+import type { TurnDeadline } from '../action/respond/turnDeadline.js';
+import { answersWithPlace, asksForMemo, asksWhichPlace, namesAether } from '../action/respond/memoPlace.js';
 export { withMinecraftToolLine } from './shannonMinecraftTools.js';
 export { withToolCapabilityLines } from './shannonAetherTools.js';
 

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { BODY_LIMITS, BODY_TOUCH_EVENT_TYPES } from '../src/contracts/bodyContract.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
 import { isFullBody } from '../src/surfaces/body/bodyTouchOnly.js';

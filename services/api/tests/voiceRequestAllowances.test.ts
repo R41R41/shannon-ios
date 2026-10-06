@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { VoiceRequestAllowances } from '../src/serverHttp.js';
+import { VoiceRequestAllowances } from '../src/infra/http/serverHttp.js';
 
 describe('voice request allowances', () => {
   it('lets a multi-sentence reply finish after several turns without exhausting the control budget', () => {

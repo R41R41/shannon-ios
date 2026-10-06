@@ -2,7 +2,7 @@ import {
   OpenAIResponsesChatModel,
   type ShannonConversationItem,
   type ShannonTaskDisposition,
-} from '../src/chatModel.js';
+} from '../src/infra/models/chatModel.js';
 
 interface EvalCase {
   id: string;

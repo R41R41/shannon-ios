@@ -1,6 +1,6 @@
 import { BODY_REACTION_SCHEMA, BODY_REACTION_SCHEMA_WITH_STANCE, parsedBodyReaction, type BodyReactionDecision } from './bodyReactionPrompt.js';
-import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../chatModelSupport.js';
-import { estimatedOpenAICostUsd, responseUsage, type LlmUsageEvent } from '../../llmUsage.js';
+import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
+import { estimatedOpenAICostUsd, responseUsage, type LlmUsageEvent } from '../../infra/models/llmUsage.js';
 
 /**
  * Deciding and speaking, fast: the one model call of a reaction. It uses the provider, the

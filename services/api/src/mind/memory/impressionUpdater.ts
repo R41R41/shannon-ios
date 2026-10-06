@@ -3,7 +3,7 @@ import {
   peopleAudience, resolveDisclosure, visibleMemoryText,
   type CompanionStateSnapshot, type CompanionStateStore, type MemoryAudience, type MemoryDisclosure,
 } from '@shannon/cognition';
-import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../chatModelSupport.js';
+import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import type { ConversationStore } from './store/conversationStore.js';
 import { ImpressionEvidenceCheck, usableImpression } from '../recall/impressionRecall.js';
 import {
@@ -11,7 +11,7 @@ import {
   impressionMemoryId, impressionsEnabled,
   type ImpressionAnalysis, type ImpressionConfig, type ImpressionStore, type PersonImpression,
 } from './impressions.js';
-import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../llmUsage.js';
+import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
 import { DisclosureGate } from '../inhibition/memoryDisclosure.js';
 import { localDayKey } from './memoryProjection.js';
 import { MemoryWithholding } from './memoryVisibility.js';

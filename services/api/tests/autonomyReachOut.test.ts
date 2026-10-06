@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { SHANNON_ROOM_LOOK_RULES, UNLABELLED_DISCLOSURE_MARKER } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { autonomyDayLog, autonomyDayPhrases } from '../src/mind/inhibition/autonomyDayLog.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { configuredAutonomyLoop } from '../src/mind/action/ownTime/autonomyLoopConfig.js';

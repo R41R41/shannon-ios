@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import { commitmentDeadline } from '../src/commitmentTime.js';
+import { commitmentDeadline } from '../src/mind/action/respond/commitmentTime.js';
 import {
   EXACT_TIME_NOTE,
   extractPromiseCaptures,

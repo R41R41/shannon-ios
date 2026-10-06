@@ -1,8 +1,8 @@
 import { OWNER_AUDIENCE, type CompanionStateStore } from '@shannon/cognition';
-import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../chatModelSupport.js';
+import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import type { ConversationStore, ReplaySummaryRecord } from './store/conversationStore.js';
 import { REPLAY_SUMMARY_CHARACTERS, nextWindowStart, replayRule, replayWindow, type ReplayRule, type ReplayWindow } from '../recall/conversationWindow.js';
-import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../llmUsage.js';
+import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
 import { MemoryWithholding, visibleReplayMessages } from './memoryVisibility.js';
 
 /** Writes the next replay summary from the previous one and the messages that left the replay window. */

@@ -1,20 +1,20 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { handleDeviceManagement, handlePushRegistration } from './serverDeviceRoutes.js';
-import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readBytes, readJson, sendJson, VoiceRequestAllowances } from './serverHttp.js';
-import { bearerAuthorized, configuredApiToken, configuredAuthMode } from './apiAuth.js';
+import { handleDeviceManagement, handlePushRegistration } from './infra/auth/serverDeviceRoutes.js';
+import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readBytes, readJson, sendJson, VoiceRequestAllowances } from './infra/http/serverHttp.js';
+import { bearerAuthorized, configuredApiToken, configuredAuthMode } from './infra/auth/apiAuth.js';
 import { handleVoiceVisionSnapshot } from './surfaces/voice/serverVoiceVisionRoute.js';
-import { createPairingRoute } from './serverPairingRoute.js';
+import { createPairingRoute } from './infra/auth/serverPairingRoute.js';
 import { createConfiguredVoiceVisionGateway } from './surfaces/voice/voiceVision.js';
 import { createGeminiSpeechRoute } from './surfaces/voice/serverGeminiSpeechRoute.js';
 import { createGeminiLiveRoute } from './surfaces/voice/serverGeminiLiveRoute.js';
 import { createLiveVoiceStreamRoute } from './surfaces/voice/serverLiveVoiceStreamRoute.js';
-import { createLocalApiKernel } from './apiKernel.js';
+import { createLocalApiKernel } from './infra/http/apiKernel.js';
 import { createConfiguredTurnMemoryRecall } from './mind/recall/turnMemoryRecall.js';
 import { DurableBackgroundDispatcher } from './mind/sleep/backgroundUpdates.js';
 import { startToolTraceSweep } from './mind/tools/shannonToolTraceSweep.js';
-import { createConfiguredChatModel } from './chatModel.js';
-import { createConfiguredVoiceDecisionGateway } from './voiceDecision.js';
-import { configuredAuthPepper, SQLiteDeviceAuthStore, type ShannonDevicePrincipal } from './deviceAuth.js';
+import { createConfiguredChatModel } from './infra/models/chatModel.js';
+import { createConfiguredVoiceDecisionGateway } from './mind/selectors/voiceDecision.js';
+import { configuredAuthPepper, SQLiteDeviceAuthStore, type ShannonDevicePrincipal } from './infra/auth/deviceAuth.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './infra/sqlite/sqliteStore.js';
 import { ShannonMemoryService } from './mind/memory/memoryService.js';
 import { SQLiteWorldStore } from './integrations/world/store/worldStore.js';
@@ -25,7 +25,7 @@ import { configuredAetherPorts } from './integrations/aether/aetherAccess.js';
 import { SQLitePushNotificationStore, type APNsEnvironment } from './surfaces/outreach/pushNotifications.js';
 import { SQLiteAgentTaskStore } from './mind/action/agentTasks/agentTaskStore.js';
 import { SQLiteTestFlightDeliveryStore } from './integrations/testflight/store/testflightDeliveryStore.js';
-import { SQLiteDailyMindStore } from './dailyMind.js';
+import { SQLiteDailyMindStore } from './mind/action/respond/dailyMind.js';
 import {
   SQLiteOrganizeStore,
   createConfiguredOrganizeExtractor,
@@ -38,13 +38,13 @@ import {
   parsedVoiceDurationSeconds,
   SHANNON_VOICE_MAXIMUM_BYTES,
   VoiceTranscriptionError,
-} from './voiceTranscription.js';
+} from './infra/models/voiceTranscription.js';
 import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeRequest, isPlatformBridgePath } from './surfaces/platform/serverPlatformBridgeRoute.js';
 import { SQLitePersonIdentityStore } from './mind/memory/store/personIdentity.js';
 import { SQLitePeopleMemoryStore } from './mind/memory/store/peopleMemoryStore.js';
-import { VOICE_CALL_MEMORY_PATH } from './apiPeopleMemoryRoutes.js';
-import { SQLiteCognitiveIntentStore } from './cognitiveIntent.js';
-import { SQLiteConversationOrchestrationStore } from './conversationOrchestrationPersistence.js';
+import { VOICE_CALL_MEMORY_PATH } from './infra/http/apiPeopleMemoryRoutes.js';
+import { SQLiteCognitiveIntentStore } from './mind/action/respond/cognitiveIntent.js';
+import { SQLiteConversationOrchestrationStore } from './mind/action/respond/store/conversationOrchestrationPersistence.js';
 import { SQLiteAutonomyAnnouncer } from './mind/action/ownTime/autonomyAnnouncer.js';
 import { configuredAutonomy } from './mind/inhibition/autonomyBudget.js';
 import { SQLiteStudyShowing } from './mind/action/ownTime/autonomyShowing.js';
@@ -61,18 +61,18 @@ import { opsCommandsEnabled } from './contracts/opsCommandContract.js';
 import { opsIngestEnabled } from './contracts/opsContract.js';
 import { SQLiteOpsStore } from './infra/ops/store/opsStore.js';
 import { createOpsRoute, isOpsPath } from './infra/ops/serverOpsRoutes.js';
-import { dispatchWithChatSentences } from './serverChatSentenceStream.js';
+import { dispatchWithChatSentences } from './surfaces/text/serverChatSentenceStream.js';
 import { CALENDAR_UPCOMING_PATH, calendarRequestBytes } from './contracts/calendarContract.js';
-import { HOST_STEP_CLAIM_PATH, closedSignal, hostStepRequestBytes } from './apiAutonomyHostStepRoutes.js';
+import { HOST_STEP_CLAIM_PATH, closedSignal, hostStepRequestBytes } from './infra/http/apiAutonomyHostStepRoutes.js';
 import { configuredOwnerUpcoming } from './wiring/ownerUpcomingWiring.js';
 import { SQLiteReachOutSpeaker } from './surfaces/outreach/reachOutDelivery.js';
 import { SQLiteReachOutReports } from './surfaces/outreach/store/reachOutReports.js';
 import { SHANNON_NOW_PATH, shannonNowEnabled, shannonNowOwnerScope } from './contracts/shannonNowContract.js';
 import { SQLiteShannonNowReader } from './mind/self/store/shannonNowReader.js';
-import { createShannonNowRoute } from './serverShannonNowRoute.js';
+import { createShannonNowRoute } from './infra/http/serverShannonNowRoute.js';
 import { MOOD_HISTORY_PATH, moodHistoryEnabled } from './contracts/moodHistoryContract.js';
 import { SQLiteMoodHistoryReader } from './mind/emotion/store/moodHistoryReader.js';
-import { createMoodHistoryRoute } from './serverMoodHistoryRoute.js';
+import { createMoodHistoryRoute } from './infra/http/serverMoodHistoryRoute.js';
 import { createPrivateListeningRoute } from './surfaces/body/serverPrivateListeningRoute.js';
 import { createIncomingCallRoute, type IncomingCallRoute } from './surfaces/outreach/serverIncomingCallRoute.js';
 import { SQLiteOwnOutreach } from './surfaces/outreach/ownOutreach.js';

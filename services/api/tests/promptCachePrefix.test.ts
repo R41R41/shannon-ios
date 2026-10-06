@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SHIRITORI_TURNS, ShiritoriGame } from '../../../packages/evaluation/src/reach/index.js';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import type { ShannonChatModelRequest } from '../src/chatModel.js';
-import { chatTurnRequestBody } from '../src/chatModelTurn.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import type { ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
+import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { ScriptedShiritoriModel } from './reach/reachConversation.js';
 

@@ -5,22 +5,22 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   InMemoryCompanionStateStore, SHANNON_EMOTION_KINDS, livingLingering, presentShannonFeeling,
 } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { SHANNON_CORE_PATHS } from '../src/mind/inhibition/autonomyCore.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
-import { OpenAIResponsesChatModel, type ShannonChatModel, type ShannonChatModelRequest, type ShannonChatModelResult } from '../src/chatModel.js';
-import { parseStructuredTurn } from '../src/chatModelSupport.js';
-import { chatTurnRequestBody } from '../src/chatModelTurn.js';
+import { OpenAIResponsesChatModel, type ShannonChatModel, type ShannonChatModelRequest, type ShannonChatModelResult } from '../src/infra/models/chatModel.js';
+import { parseStructuredTurn } from '../src/infra/models/chatModelSupport.js';
+import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';
 import {
   REPLY_FEELING_INSTRUCTIONS, REPLY_FEELING_SCHEMA, chatFeelingStrengthEnabled, decidedReplyFeeling, parsedReplyFeeling,
   replyFeelingOffer, type ChatReplyFeeling,
 } from '../src/mind/emotion/chatReplyFeeling.js';
-import { ChatReplyStreamDecoder } from '../src/chatReplyStreamDecoder.js';
+import { ChatReplyStreamDecoder } from '../src/infra/models/chatReplyStreamDecoder.js';
 import type { ChatStreamLine } from '../src/contracts/contracts.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { emotionTiming } from '../src/mind/emotion/emotionTiming.js';
 import { storedVoiceFace } from '../src/mind/emotion/voiceEmotionPlan.js';
-import { AFFECT_INTENSITY_STEPS, affectIntensityOf, affectIntensityValue } from '../src/voiceDecisionValues.js';
+import { AFFECT_INTENSITY_STEPS, affectIntensityOf, affectIntensityValue } from '../src/mind/selectors/voiceDecisionValues.js';
 import { GOLDEN_BASE } from './chatModelGoldenCases.js';
 import { promptOf } from './modelPrompt.js';
 import { apiSourceFiles, apiSourcePath, readApiSource } from './support/sources.js';

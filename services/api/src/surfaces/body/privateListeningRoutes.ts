@@ -1,4 +1,4 @@
-import { badRequest, objectBody, validScopeKey } from '../../apiValidation.js';
+import { badRequest, objectBody, validScopeKey } from '../../infra/http/apiValidation.js';
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
 import {
   PRIVATE_LISTENING_LIMITS, PRIVATE_LISTENING_PATH, PRIVATE_LISTENING_SCHEMA_VERSION, PRIVATE_REACH_OUT_PREFIX,

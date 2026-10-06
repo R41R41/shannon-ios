@@ -3,17 +3,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore, OWNER_AUDIENCE } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import { OpenAIResponsesChatModel, type ShannonChatModelRequest, type ShannonVoiceModelRequest } from '../src/chatModel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { OpenAIResponsesChatModel, type ShannonChatModelRequest, type ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import {
   REPLAY_BUDGET_DEFAULT, REPLAY_BUDGET_MAXIMUM, REPLAY_BUDGET_MINIMUM, REPLAY_MAXIMUM_MESSAGES, REPLAY_SUMMARY_CHARACTERS,
   conversationReplay, isWindowBoundary, replayBudgets, replayWindow, stableHeadFor, textReplayRule, voiceReplayRule, type ReplayRule,
 } from '../src/mind/recall/conversationWindow.js';
-import { earlierConversationSummaryInstructions } from '../src/chatModelSupport.js';
+import { earlierConversationSummaryInstructions } from '../src/infra/models/chatModelSupport.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { visibleConversationHistory } from '../src/mind/memory/memoryVisibility.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { LocalVoiceDecisionGateway, type VoiceDecisionInput } from '../src/voiceDecision.js';
+import { LocalVoiceDecisionGateway, type VoiceDecisionInput } from '../src/mind/selectors/voiceDecision.js';
 import { promptOf } from './modelPrompt.js';
 
 const at = '2026-10-02T03:00:00.000Z';

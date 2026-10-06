@@ -2,7 +2,7 @@ import {
   deriveShannonFace, faceForEmotionKind, isShannonEmotionKind, messageEmotionKind, normalizeShannonExpressiveEmotion,
   type ReplyEmotion, type ShannonEmotion, type ShannonExpressiveEmotion, type ShannonMessageEmotion,
 } from '@shannon/cognition';
-import type { VoiceTurnDecision } from '../../voiceDecision.js';
+import type { VoiceTurnDecision } from '../selectors/voiceDecision.js';
 import { voicedAffect } from '../../contracts/voiceDecisionContract.js';
 import { waitingDirectionFor, waitingPhraseFor } from '../../surfaces/voice/voiceWaitingCue.js';
 

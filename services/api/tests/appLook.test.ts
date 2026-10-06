@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import {
   APP_LOOK_CLIENT_STATES, APP_LOOK_LIMITS, APP_LOOK_REFUSAL_CODES, APP_LOOK_SCHEMA, appLookChoice, appLookClient, appLookRequestBytes,
   configuredAppLook, validatedAppLookResult, voiceLookCamera, type AppLookConfig,
@@ -25,13 +25,13 @@ import { SQLiteBodyLookStore } from '../src/surfaces/body/store/bodyLookStore.js
 import { roomLookInstructions, type RoomLookViewRequest, type RoomLookViewer } from '../src/surfaces/body/bodyLookVision.js';
 import { bodyLookRequestBytes } from '../src/wiring/bodyLookWiring.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { chatTurnRequestBody } from '../src/chatModelTurn.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
+import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import type { BodyPresence } from '../src/surfaces/body/shannonBody.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { LocalVoiceDecisionGateway, type VoiceDecisionGateway, type VoiceDecisionInput } from '../src/voiceDecision.js';
+import { LocalVoiceDecisionGateway, type VoiceDecisionGateway, type VoiceDecisionInput } from '../src/mind/selectors/voiceDecision.js';
 import { roomLookRouterQuestions, roomLookRouterSchema, voiceRoomLookPrompt } from '../src/surfaces/voice/voiceRoomLook.js';
 import { promptOf } from './modelPrompt.js';
 import { apiSourceNames, readApiSource } from './support/sources.js';

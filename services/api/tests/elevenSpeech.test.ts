@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ElevenSpeechError, ElevenSpeechGateway, validatedElevenTags } from '../src/elevenSpeech.js';
+import { ElevenSpeechError, ElevenSpeechGateway, validatedElevenTags } from '../src/infra/models/elevenSpeech.js';
 
 class FakeSocket {
   readonly sent: string[] = [];

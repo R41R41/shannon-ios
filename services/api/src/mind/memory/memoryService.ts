@@ -12,12 +12,12 @@ import type { ConversationStore, ShannonExperience } from './store/conversationS
 import type { KnowledgeAnswer, KnowledgeStore } from './store/knowledgeStore.js';
 import type { PersonalityProfile } from './store/knowledgeStore.js';
 import type { WorldItem, WorldReader } from '../../integrations/world/store/worldStore.js';
-import { configuredBackgroundBudgetUsd, type LlmUsageReader, type LlmUsageSummaryRow } from '../../llmUsage.js';
-import { commitmentDeadline } from '../../commitmentTime.js';
-import { SNOOZE_MILLISECONDS } from '../../commitmentInitiative.js';
+import { configuredBackgroundBudgetUsd, type LlmUsageReader, type LlmUsageSummaryRow } from '../../infra/models/llmUsage.js';
+import { commitmentDeadline } from '../action/respond/commitmentTime.js';
+import { SNOOZE_MILLISECONDS } from '../action/respond/commitmentInitiative.js';
 import type { CommitmentSleepReview } from '../sleep/sleepCommitmentReview.js';
 import type { InitiativeEvaluationReader, InitiativeEvaluationSummary } from '../../surfaces/outreach/store/initiativeStore.js';
-import type { DailyMindFocus, DailyMindReader } from '../../dailyMind.js';
+import type { DailyMindFocus, DailyMindReader } from '../action/respond/dailyMind.js';
 import { isImpressionMemoryId, mutateOwnerImpression, ownerImpressionItems } from './impressionViews.js';
 
 import {

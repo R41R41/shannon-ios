@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CompanionClock, CompanionStateEvent, CompanionStateSnapshot, CompanionStateStore, ShannonEmotionTiming } from '@shannon/cognition';
 import type { BackgroundJobStore, ClaimedBackgroundJob, DailyUserMessage } from '../../mind/sleep/store/backgroundJobStore.js';
-import type { ShannonConversationItem } from '../../chatModel.js';
+import type { ShannonConversationItem } from '../models/chatModel.js';
 import type {
   ConversationStore,
   ConversationThread,
@@ -13,7 +13,7 @@ import type {
 } from '../../mind/memory/store/conversationStore.js';
 import type { SleepConsolidationOutcome } from '../../mind/sleep/sleepConsolidation.js';
 import type { ActivityItem } from '../../mind/memory/memoryService.js';
-import type { LlmUsageEvent, LlmUsageStore } from '../../llmUsage.js';
+import type { LlmUsageEvent, LlmUsageStore } from '../models/llmUsage.js';
 import type {
   RealtimeVoiceAllowanceStatus,
   RealtimeVoiceReservationStore,

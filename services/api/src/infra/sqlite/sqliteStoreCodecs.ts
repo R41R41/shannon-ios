@@ -1,6 +1,6 @@
 import { isShannonEmotionKind, restoreCompanionState, type CompanionStateSnapshot, type MemoryDisclosure, type ShannonMessageEmotion } from '@shannon/cognition';
 import type { BackgroundJobPayload } from '../../mind/sleep/store/backgroundJobStore.js';
-import type { ShannonGeneratedArtifact, ShannonTaskDecision } from '../../chatModel.js';
+import type { ShannonGeneratedArtifact, ShannonTaskDecision } from '../models/chatModel.js';
 import { boundedRecalledMemoryIds, type ShannonSourceAttribution, type StoredConversationMessage } from '../../mind/memory/store/conversationStore.js';
 import { reminderReference, type ReminderReference } from '../../mind/memory/store/turnCaptures.js';
 

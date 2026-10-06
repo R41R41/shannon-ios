@@ -5,13 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { OWNER_AUDIENCE, SHANNON_MINECRAFT_BODY_CAPABILITY, groupAudience, type MemoryDisclosure } from '@shannon/cognition';
-import { createLocalApiKernel, type ShannonApiKernelOptions, type TextTurnInput } from '../src/apiKernel.js';
+import { createLocalApiKernel, type ShannonApiKernelOptions, type TextTurnInput } from '../src/infra/http/apiKernel.js';
 import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
 import { BODY_EVENT_TYPES, BODY_GAME_EVENT_TYPES } from '../src/contracts/bodyContract.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
-import { chatTurnRequestBody } from '../src/chatModelTurn.js';
-import { parseStructuredTurn } from '../src/chatModelSupport.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/infra/models/chatModel.js';
+import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';
+import { parseStructuredTurn } from '../src/infra/models/chatModelSupport.js';
 import { BODY_GAME_SOURCE, GAME_REQUEST_DISCLOSURE, SQLiteGameExperiences, gameDeathSummary, gameExperienceId } from '../src/surfaces/minecraft/store/gameBodyMemory.js';
 import { MinecraftBody } from '../src/surfaces/minecraft/minecraftBody.js';
 import {

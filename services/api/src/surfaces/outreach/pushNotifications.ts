@@ -2,7 +2,7 @@ import { createPrivateKey, sign } from 'node:crypto';
 import { chmodSync, existsSync, readFileSync } from 'node:fs';
 import { connect } from 'node:http2';
 import { DatabaseSync } from 'node:sqlite';
-import type { ShannonDevicePrincipal } from '../../deviceAuth.js';
+import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
 import { isRoomLookSource, ROOM_LOOK_NOTICE_LINE } from '../body/roomLookSource.js';
 
 export type APNsEnvironment = 'sandbox' | 'production';

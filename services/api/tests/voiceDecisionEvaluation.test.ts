@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LocalVoiceDecisionGateway, VOICE_SKILLS } from '../src/voiceDecision.js';
+import { LocalVoiceDecisionGateway, VOICE_SKILLS } from '../src/mind/selectors/voiceDecision.js';
 import { ownerCallFacts, voiceDecisionEvaluationCases, type VoiceDecisionEvaluationCase } from './voiceDecisionEvaluationCases.js';
 
 describe('voice decision evaluation catalog', () => {

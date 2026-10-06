@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../chatModelSupport.js';
-import { estimatedOpenAICostUsd, responseUsage, type LlmUsageLane, type LlmUsageStore } from '../../llmUsage.js';
+import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
+import { estimatedOpenAICostUsd, responseUsage, type LlmUsageLane, type LlmUsageStore } from '../../infra/models/llmUsage.js';
 
 /** Model operations used by semantic recall and the embedding worker. */
 export interface MemoryModelGateway {

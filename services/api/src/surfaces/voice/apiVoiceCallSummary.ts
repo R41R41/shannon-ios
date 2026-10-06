@@ -1,5 +1,5 @@
-import { badRequest, objectBody, validScopeKey } from '../../apiValidation.js';
-import type { ShannonChatModel } from '../../chatModel.js';
+import { badRequest, objectBody, validScopeKey } from '../../infra/http/apiValidation.js';
+import type { ShannonChatModel } from '../../infra/models/chatModel.js';
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
 import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
 import { GUEST_CALL_SUMMARY_TURNS, validatedGuestCallTurns, type GuestCallTurn } from './voiceGuestCall.js';

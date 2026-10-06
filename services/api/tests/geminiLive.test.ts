@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GoogleGeminiLiveGateway } from '../src/geminiLive.js';
+import { GoogleGeminiLiveGateway } from '../src/infra/models/geminiLive.js';
 
 describe('Gemini Live gateway', () => {
   it('mints a one-use constrained token without returning the permanent key', async () => {

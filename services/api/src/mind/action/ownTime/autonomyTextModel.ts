@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { AUTONOMY_DEFAULT_MODEL, AUTONOMY_MODELS, autonomyModel, autonomyModelAllowedFor, type AutonomyModel, type AutonomyModelPurpose } from './autonomyModels.js';
-import { responseUsage } from '../../../llmUsage.js';
+import { responseUsage } from '../../../infra/models/llmUsage.js';
 
 /**
  * The model adapters of Shannon's own activity, behind one interface.

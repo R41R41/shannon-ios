@@ -7,7 +7,7 @@ import {
   OpenAIVoiceDecisionGateway,
   VOICE_AFFECTS,
   VOICE_SKILLS,
-} from '../src/voiceDecision.js';
+} from '../src/mind/selectors/voiceDecision.js';
 import { voicePlanResponse } from '../src/mind/emotion/voiceEmotionPlan.js';
 
 function jevAnswers(overrides: Record<string, unknown> = {}): Record<string, unknown> {

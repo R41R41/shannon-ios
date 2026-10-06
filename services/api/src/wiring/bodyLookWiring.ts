@@ -9,7 +9,7 @@ import { BODY_LOOK_REQUEST_BYTES, bodyLookResultId, configuredBodyLook } from '.
 import { SQLiteBodyLookSpeaker } from '../surfaces/body/store/bodyLookDelivery.js';
 import { SQLiteBodyLookStore } from '../surfaces/body/store/bodyLookStore.js';
 import { createConfiguredRoomLookViewer } from '../surfaces/body/bodyLookVision.js';
-import type { LlmUsageEvent } from '../llmUsage.js';
+import type { LlmUsageEvent } from '../infra/models/llmUsage.js';
 
 /**
  * What the API process gives the kernel for looking at the room: the small table, the

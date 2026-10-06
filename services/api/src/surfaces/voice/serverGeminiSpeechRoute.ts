@@ -1,14 +1,14 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ShannonDevicePrincipal } from '../../deviceAuth.js';
+import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
 import {
   createConfiguredGeminiSpeechGateway,
   GeminiSpeechError,
   normalizedSpeechText,
-} from '../../geminiSpeech.js';
-import type { LlmUsageStore } from '../../llmUsage.js';
-import type { GeminiSpeechGateway } from '../../geminiSpeech.js';
-import { createConfiguredElevenSpeechGateway, ElevenSpeechError, validatedElevenTags } from '../../elevenSpeech.js';
-import { readJson, sendJson } from '../../serverHttp.js';
+} from '../../infra/models/geminiSpeech.js';
+import type { LlmUsageStore } from '../../infra/models/llmUsage.js';
+import type { GeminiSpeechGateway } from '../../infra/models/geminiSpeech.js';
+import { createConfiguredElevenSpeechGateway, ElevenSpeechError, validatedElevenTags } from '../../infra/models/elevenSpeech.js';
+import { readJson, sendJson } from '../../infra/http/serverHttp.js';
 
 type ConsumeAllowance = (deviceId: string) => boolean;
 

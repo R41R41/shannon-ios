@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { OpenAIResponsesChatModel, VOICE_REPLY_INSTRUCTIONS, createConfiguredChatModel } from '../src/chatModel.js';
-import { chatTurnRequestBody } from '../src/chatModelTurn.js';
-import type { LlmUsageEvent, LlmUsageStore } from '../src/llmUsage.js';
+import { OpenAIResponsesChatModel, VOICE_REPLY_INSTRUCTIONS, createConfiguredChatModel } from '../src/infra/models/chatModel.js';
+import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';
+import type { LlmUsageEvent, LlmUsageStore } from '../src/infra/models/llmUsage.js';
 
 /** The developer message of a turn's own blocks, which follows the history (`chatTurnContextBlocks`). */
 const turnBlocks = (body: { input: Array<{ role?: string; content?: unknown }> }) => String(body.input.find(item => item.role === 'developer')?.content ?? '');

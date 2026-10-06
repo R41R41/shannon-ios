@@ -5,7 +5,7 @@ import {
   type CompanionStateStore,
   type ShannonActionReceipt,
 } from '@shannon/cognition';
-import type { CognitiveIntentStore } from '../../cognitiveIntent.js';
+import type { CognitiveIntentStore } from '../action/respond/cognitiveIntent.js';
 import type { ConversationStore } from './store/conversationStore.js';
 import type { TurnMemoryRecall } from '../recall/turnMemoryRecall.js';
 

@@ -3,10 +3,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
-import { InMemoryCognitiveIntentStore } from '../src/cognitiveIntent.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
+import { InMemoryCognitiveIntentStore } from '../src/mind/action/respond/cognitiveIntent.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { promptOf } from './modelPrompt.js';
 

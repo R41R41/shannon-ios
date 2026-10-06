@@ -1,7 +1,7 @@
 import { SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_OWNER_NAME, SHANNON_ROOM_LOOK_RULES } from '@shannon/cognition';
 import { BODY_LOOK_LIMITS, type BodyLookImage } from '../../contracts/bodyLookContract.js';
-import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../chatModelSupport.js';
-import { estimatedOpenAICostUsd, responseUsage, type LlmUsageEvent } from '../../llmUsage.js';
+import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
+import { estimatedOpenAICostUsd, responseUsage, type LlmUsageEvent } from '../../infra/models/llmUsage.js';
 
 /**
  * Seeing: the one model call of a look. The frame goes to the conversation model provider

@@ -1,4 +1,4 @@
-import { JevVoiceDecisionGateway } from '../src/voiceDecision.js';
+import { JevVoiceDecisionGateway } from '../src/mind/selectors/voiceDecision.js';
 import { settleOwnerVoiceTurn } from '../src/surfaces/voice/voiceSilence.js';
 import { ownerCallFacts, voiceDecisionEvaluationCases } from './voiceDecisionEvaluationCases.js';
 

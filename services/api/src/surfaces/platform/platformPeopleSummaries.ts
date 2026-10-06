@@ -1,5 +1,5 @@
-import { estimatedOpenAICostUsd, configuredBackgroundBudgetUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../llmUsage.js';
-import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../chatModelSupport.js';
+import { estimatedOpenAICostUsd, configuredBackgroundBudgetUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
+import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import type { PeopleMemoryStore } from '../../mind/memory/store/peopleMemoryStore.js';
 import { platformSummaryId, type PlatformPeople } from './platformPeople.js';
 

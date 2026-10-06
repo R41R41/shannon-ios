@@ -8,10 +8,10 @@ import {
   type CompanionClock,
   type CompanionStateStore,
 } from '@shannon/cognition';
-import { voiceHistoryProjection } from '../../apiPromptProjection.js';
-import type { CognitiveIntentStore } from '../../cognitiveIntent.js';
+import { voiceHistoryProjection } from '../../mind/action/respond/apiPromptProjection.js';
+import type { CognitiveIntentStore } from '../../mind/action/respond/cognitiveIntent.js';
 import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
-import type { DailyMindReader } from '../../dailyMind.js';
+import type { DailyMindReader } from '../../mind/action/respond/dailyMind.js';
 import type { KnowledgeStore } from '../../mind/memory/store/knowledgeStore.js';
 import { visibleConversationHistory } from '../../mind/memory/memoryVisibility.js';
 import { temporaryGuestVoiceInstructions, voiceConversationInstructions } from './voiceConversationInstructions.js';

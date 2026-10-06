@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { groundedWorldOpening, topicMatchesSource } from '../src/integrations/world/worldInterestRelevance.js';
-import { firstInterest } from '../src/initiativeSelection.js';
+import { firstInterest } from '../src/mind/action/respond/initiativeSelection.js';
 
 describe('world source grounding', () => {
   it('filters old conversation noise before selecting a focus', () => {

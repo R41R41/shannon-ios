@@ -7,7 +7,7 @@ import { OpenAIBodyReactionSpeaker, createConfiguredBodyReactionSpeaker } from '
 import {
   BODY_REACTION_OTHERS_RULE, BODY_REACTION_RULES, BODY_REACTION_SCHEMA, BODY_TOUCH_PHRASES, bodyTouchLine, boundedReactionText, parsedBodyReaction,
 } from '../src/surfaces/body/bodyReactionPrompt.js';
-import type { LlmUsageEvent } from '../src/llmUsage.js';
+import type { LlmUsageEvent } from '../src/infra/models/llmUsage.js';
 import { FakeSpeaker, HEHE, MINUTE, SECOND, START, reactionHarness, scope } from './bodyReactionHarness.js';
 
 // Stage 1b exactly, kept under SHANNON_PREDICTION=off (Syzygy ADR-0006 stage 2: `bodyTouchStage2.test.ts`).

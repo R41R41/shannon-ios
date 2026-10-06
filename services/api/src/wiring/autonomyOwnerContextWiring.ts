@@ -1,6 +1,6 @@
 import { createOwnerContext } from '../mind/action/ownTime/autonomyOwnerContext.js';
 import type { AutonomyOwnerContext } from '../mind/action/ownTime/autonomyLoopOwnerContext.js';
-import { SQLiteDailyMindStore } from '../dailyMind.js';
+import { SQLiteDailyMindStore } from '../mind/action/respond/dailyMind.js';
 import { sqliteOwnerSnapshot } from './ownerUpcomingWiring.js';
 import { PeopleMemory } from '../mind/memory/peopleMemory.js';
 import { SQLitePeopleMemoryStore } from '../mind/memory/store/peopleMemoryStore.js';

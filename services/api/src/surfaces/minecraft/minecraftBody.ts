@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { SHANNON_OWNER_NAME, shannonIdentityPrompt, type CompanionClock, type CompanionStateStore } from '@shannon/cognition';
 import type { CompletedTurn, TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.js';
-import type { TextTurnInput, TextTurnResult } from '../../apiKernel.js';
-import type { ShannonChatModel } from '../../chatModel.js';
+import type { TextTurnInput, TextTurnResult } from '../../infra/http/apiKernel.js';
+import type { ShannonChatModel } from '../../infra/models/chatModel.js';
 import type { ConversationStore, ShannonExperience } from '../../mind/memory/store/conversationStore.js';
 import { keepOwnerPlatformTurn, platformTextTurnInput, rememberPlatformPerson } from '../platform/platformSurface.js';
 import {

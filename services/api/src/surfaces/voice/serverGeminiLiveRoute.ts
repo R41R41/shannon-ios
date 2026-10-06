@@ -1,15 +1,15 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ShannonApiKernel } from '../../apiKernel.js';
-import type { ShannonDevicePrincipal } from '../../deviceAuth.js';
+import type { ShannonApiKernel } from '../../infra/http/apiKernel.js';
+import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
 import {
   createConfiguredGeminiLiveGateway,
   GeminiLiveError,
-} from '../../geminiLive.js';
+} from '../../infra/models/geminiLive.js';
 import {
   createConfiguredOpenAITranscriptionGateway,
   OpenAITranscriptionError,
-} from '../../openaiTranscriptionSession.js';
-import { readJson, sendJson } from '../../serverHttp.js';
+} from '../../infra/models/openaiTranscriptionSession.js';
+import { readJson, sendJson } from '../../infra/http/serverHttp.js';
 import { OWNER_IN_CALL_ELSEWHERE_RESPONSE } from './ownerCallElsewhere.js';
 
 type ConsumeAllowance = (deviceId: string) => boolean;

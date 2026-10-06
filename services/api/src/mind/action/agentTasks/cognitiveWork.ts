@@ -1,6 +1,6 @@
 import type { ShannonVerifiedWork } from '@shannon/cognition';
 import type { AgentTask } from './agentTaskStore.js';
-import type { CognitiveIntentStore } from '../../../cognitiveIntent.js';
+import type { CognitiveIntentStore } from '../respond/cognitiveIntent.js';
 
 /**
  * Projects durable Agent Host evidence into one explicitly linked objective.

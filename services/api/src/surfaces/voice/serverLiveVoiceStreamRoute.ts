@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ShannonApiKernel } from '../../apiKernel.js';
-import type { ShannonDevicePrincipal } from '../../deviceAuth.js';
-import { bindScope, readJson, sendJson } from '../../serverHttp.js';
+import type { ShannonApiKernel } from '../../infra/http/apiKernel.js';
+import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
+import { bindScope, readJson, sendJson } from '../../infra/http/serverHttp.js';
 import { SpokenSentenceSegmenter } from './spokenSentences.js';
-import { VOICE_CONTENT_FILTERED } from '../../chatModelVoiceStream.js';
+import { VOICE_CONTENT_FILTERED } from '../../infra/models/chatModelVoiceStream.js';
 
 export { SpokenSentenceSegmenter } from './spokenSentences.js';
 

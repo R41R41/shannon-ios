@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
-import { commitmentAwaitingTodaySlot, dueCommitmentCandidate } from '../../../commitmentInitiative.js';
-import { localDateParts, pad } from '../../../initiativeSelection.js';
+import { commitmentAwaitingTodaySlot, dueCommitmentCandidate } from '../respond/commitmentInitiative.js';
+import { localDateParts, pad } from '../respond/initiativeSelection.js';
 import { QUIET_END_HOUR, QUIET_START_HOUR, USER_COOLDOWN_MILLISECONDS } from '../../../surfaces/outreach/store/initiativeStore.js';
 
 /**

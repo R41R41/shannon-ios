@@ -1,12 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ShannonDevicePrincipal } from '../../deviceAuth.js';
+import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
 import { INCOMING_CALL_LIMITS, INCOMING_CALL_PATH, incomingCallsEnabled } from '../../contracts/incomingCallContract.js';
 import { dispatchIncomingCallRequest, type IncomingCallRouteDependencies } from './incomingCallRoutes.js';
 import { IncomingCalls } from './incomingCalls.js';
 import { SQLiteIncomingCallStore } from './store/incomingCallStore.js';
 import { privateReachOutsEnabled } from '../../contracts/privateListeningContract.js';
 import { SQLiteReachOutClaims } from './store/reachOutClaims.js';
-import { bindScope, consumeDeviceAllowance, sendJson } from '../../serverHttp.js';
+import { bindScope, consumeDeviceAllowance, sendJson } from '../../infra/http/serverHttp.js';
 import { createConfiguredVoipPushSender, type VoipPushSender } from './voipPushSender.js';
 
 /**

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { normalizePairingCode, SQLiteDeviceAuthStore } from '../src/deviceAuth.js';
+import { normalizePairingCode, SQLiteDeviceAuthStore } from '../src/infra/auth/deviceAuth.js';
 
 const temporaryDirectories: string[] = [];
 const pepper = 'test-pepper-that-is-longer-than-thirty-two-characters';

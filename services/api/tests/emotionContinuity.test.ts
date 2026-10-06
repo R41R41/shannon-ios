@@ -7,12 +7,12 @@ import {
   InMemoryCompanionStateStore, SHANNON_EMOTION_TIME, createInitialCompanionState, livingLingering, presentShannonFeeling,
   type CompanionStateSnapshot,
 } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { configuredAwakeClock } from '../src/mind/emotion/autonomyAwakeClock.js';
 import { TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
 import { SHANNON_CORE_PATHS } from '../src/mind/inhibition/autonomyCore.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { emotionTiming } from '../src/mind/emotion/emotionTiming.js';
 import type { BodyPresence } from '../src/surfaces/body/shannonBody.js';

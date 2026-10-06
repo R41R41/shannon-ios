@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import { LocalVoiceDecisionGateway, JevVoiceDecisionGateway, VOICE_SKILLS } from '../src/voiceDecision.js';
-import type { VoiceDecisionInput } from '../src/voiceDecision.js';
-import type { ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { LocalVoiceDecisionGateway, JevVoiceDecisionGateway, VOICE_SKILLS } from '../src/mind/selectors/voiceDecision.js';
+import type { VoiceDecisionInput } from '../src/mind/selectors/voiceDecision.js';
+import type { ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { InMemoryOrganizeStore } from '../src/integrations/voyager/organize.js';
 import { transcriptNeedsInterpretation } from '../src/surfaces/voice/voiceTranscriptContext.js';
 import { promptOf } from './modelPrompt.js';

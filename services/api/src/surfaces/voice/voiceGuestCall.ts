@@ -1,4 +1,4 @@
-import { objectBody } from '../../apiValidation.js';
+import { objectBody } from '../../infra/http/apiValidation.js';
 import type { VoiceTurnDecision } from '../../contracts/voiceDecisionContract.js';
 
 /**

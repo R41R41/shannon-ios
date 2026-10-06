@@ -13,7 +13,7 @@ import { parseGithubReleases } from './integrations/world/githubReleases.js';
 import { isPrivateOrReservedAddress } from './integrations/world/ipSafety.js';
 import { SQLiteInitiativeStore } from './surfaces/outreach/store/initiativeStore.js';
 import { nextInitiativeDelayMilliseconds } from './surfaces/outreach/initiativeSchedule.js';
-import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './dailyMind.js';
+import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './mind/action/respond/dailyMind.js';
 import {
   createConfiguredPushNotificationSender,
   deliverPendingPushNotifications,

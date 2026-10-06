@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ChatReplyStreamDecoder } from '../src/chatReplyStreamDecoder.js';
+import { ChatReplyStreamDecoder } from '../src/infra/models/chatReplyStreamDecoder.js';
 
 const REPLY = '  \n「こんにちは。\n」と "引用" \\ と / と\tタブ 🎉👨‍👩‍👧 終わり。 \n\t ';
 const TURN = {

@@ -3,11 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE, groupAudience, peopleAudience } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
-import type { PeopleMemoryOverview } from '../src/apiPeopleMemoryRoutes.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import type { PeopleMemoryOverview } from '../src/infra/http/apiPeopleMemoryRoutes.js';
 import { BackgroundUpdateCoordinator, DurableBackgroundDispatcher } from '../src/mind/sleep/backgroundUpdates.js';
 import { ShannonBackgroundWorker } from '../src/mind/sleep/backgroundWorker.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { IMPRESSION_HEADER, IMPRESSION_INSTRUCTION, ownerImpressionLines, recallImpressions } from '../src/mind/recall/impressionRecall.js';
 import {
   IMPRESSION_INSTRUCTIONS, ImpressionUpdater, OpenAIImpressionAnalyzer, createConfiguredImpressionAnalyzer,
@@ -27,7 +27,7 @@ import { configuredPlatformBridge, PlatformBridgeService } from '../src/surfaces
 import { PlatformPeople } from '../src/surfaces/platform/platformPeople.js';
 import { LocalRuleSleepMemoryAnalyzer } from '../src/mind/sleep/sleepConsolidation.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { prepareTurnCognitiveContext } from '../src/turnCognitiveContext.js';
+import { prepareTurnCognitiveContext } from '../src/mind/action/respond/turnCognitiveContext.js';
 import { promptOf } from './modelPrompt.js';
 
 const DAY = 86_400_000;

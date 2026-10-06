@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import type { AutonomyActivityDay, AutonomyActivityEntry } from '../src/mind/inhibition/store/autonomyActivity.js';
 import {
   BODY_DOING, BODY_EVENT_TYPES, BODY_LIMITS, BODY_NUDGE_SCENES, BODY_TOUCH_GESTURES, BODY_TOUCH_INPUTS, BODY_TOUCH_REFLEXES, BODY_TOUCH_SIDES,

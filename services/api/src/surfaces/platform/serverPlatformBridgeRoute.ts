@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CompanionClock, CompanionStateStore } from '@shannon/cognition';
-import { bearerAuthorized } from '../../apiAuth.js';
+import { bearerAuthorized } from '../../infra/auth/apiAuth.js';
 import type { TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.js';
 import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
-import type { ShannonChatModel } from '../../chatModel.js';
+import type { ShannonChatModel } from '../../infra/models/chatModel.js';
 import { placeReply } from '../../integrations/places/placeDiscovery.js';
 import {
   configuredPlatformBridge,
@@ -13,7 +13,7 @@ import {
   type PlatformBridgeConfiguration,
   PlatformBridgeService,
 } from './platformBridge.js';
-import { readJson, sendJson } from '../../serverHttp.js';
+import { readJson, sendJson } from '../../infra/http/serverHttp.js';
 import type { PeopleMemoryStore } from '../../mind/memory/store/peopleMemoryStore.js';
 import { PlatformPeople, platformPeopleEnabled } from './platformPeople.js';
 import { SQLiteSurfaceTurnLog } from '../minecraft/store/minecraftTurnStore.js';

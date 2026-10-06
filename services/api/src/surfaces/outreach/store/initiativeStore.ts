@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { restoreCompanionState } from '@shannon/cognition';
-import type { DailyMindFocus } from '../../../dailyMind.js';
-import { commitmentAwaitingTodaySlot, dueCommitmentCandidate } from '../../../commitmentInitiative.js';
+import type { DailyMindFocus } from '../../../mind/action/respond/dailyMind.js';
+import { commitmentAwaitingTodaySlot, dueCommitmentCandidate } from '../../../mind/action/respond/commitmentInitiative.js';
 import { bodyLookIdOfSource } from '../../body/store/bodyLookDelivery.js';
 import { isRoomLookSource } from '../../body/roomLookSource.js';
 import { reachOutOfSource } from '../reachOutDelivery.js';
@@ -11,7 +11,7 @@ import { groundedWorldOpening, topicMatchesSource, worldVisibleInterests } from 
 import {
   intentInitiativeCandidateIsCurrent,
   intentInitiativeCandidates,
-} from '../../../initiativeIntentCandidates.js';
+} from '../../../mind/action/respond/initiativeIntentCandidates.js';
 
 import {
   candidateScore,
@@ -28,7 +28,7 @@ import {
   type CandidateRow,
   type CompanionStateShape,
   type RecentWorldSignal,
-} from '../../../initiativeSelection.js';
+} from '../../../mind/action/respond/initiativeSelection.js';
 
 export const QUIET_START_HOUR = 23;
 export const QUIET_END_HOUR = 7;

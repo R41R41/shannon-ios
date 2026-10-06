@@ -1,11 +1,11 @@
 import { UNKNOWN_GUEST_PRESENCE, messageEmotionForOthers, type CompanionStateStore } from '@shannon/cognition';
 import { presentCompanionState, resolveReplyEmotion } from '../../mind/emotion/companionPresence.js';
 import { storedVoiceFace } from '../../mind/emotion/voiceEmotionPlan.js';
-import { objectBody, validScopeKey, validBoundedString, badRequest } from '../../apiValidation.js';
+import { objectBody, validScopeKey, validBoundedString, badRequest } from '../../infra/http/apiValidation.js';
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
 import type { TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.js';
 import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
-import type { ShannonChatModel } from '../../chatModel.js';
+import type { ShannonChatModel } from '../../infra/models/chatModel.js';
 import { dispatchVoiceCallSummary } from './apiVoiceCallSummary.js';
 import { ownerSaysCompanionPresent } from './voiceCompanionPresence.js';
 

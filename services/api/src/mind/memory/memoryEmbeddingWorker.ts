@@ -1,5 +1,5 @@
 import { visibleMemoryText, type CompanionStateStore } from '@shannon/cognition';
-import { configuredBackgroundBudgetUsd, utcMonthKey } from '../../llmUsage.js';
+import { configuredBackgroundBudgetUsd, utcMonthKey } from '../../infra/models/llmUsage.js';
 import type { MemoryModelGateway } from '../recall/memoryModels.js';
 import type { MemoryEmbeddingIndex, PendingEmbeddingSource } from './store/sqliteMemoryEmbeddings.js';
 import { conversationStoreOf, MemoryWithholding } from './memoryVisibility.js';

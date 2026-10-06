@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { closedSignal, dispatchHostStepRequest } from '../src/apiAutonomyHostStepRoutes.js';
+import { closedSignal, dispatchHostStepRequest } from '../src/infra/http/apiAutonomyHostStepRoutes.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { hostFolderPath, hostStepContentDigest, roomLookGuard } from '../src/mind/action/ownTime/autonomyHostFolderPath.js';
 import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';

@@ -5,10 +5,10 @@ import { basename, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CompanionStateEvent, ShannonExpressiveEmotion } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { configuredAwakeClock } from '../src/mind/emotion/autonomyAwakeClock.js';
 import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
-import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
+import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { emotionTiming } from '../src/mind/emotion/emotionTiming.js';
 import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
 import { isNewMoodPoint, moodPointOf, type StoredMoodPoint } from '../src/mind/emotion/store/moodHistory.js';
@@ -16,7 +16,7 @@ import {
   MOOD_HISTORY_LIMITS, MOOD_HISTORY_PATH, moodHistoryEnabled, moodHistoryRecording, type MoodHistoryResponse,
 } from '../src/contracts/moodHistoryContract.js';
 import { SQLiteMoodHistoryReader, downsampleMoodPoints } from '../src/mind/emotion/store/moodHistoryReader.js';
-import { createMoodHistoryRoute, moodHistoryResponse, requestedHours } from '../src/serverMoodHistoryRoute.js';
+import { createMoodHistoryRoute, moodHistoryResponse, requestedHours } from '../src/infra/http/serverMoodHistoryRoute.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { apiSourceFiles, apiSourcePath, readApiSource, resolvedImports } from './support/sources.js';
 

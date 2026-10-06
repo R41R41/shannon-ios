@@ -10,7 +10,7 @@ import {
   type CompanionStateSnapshot,
   type CompanionStateStore,
 } from '@shannon/cognition';
-import type { LlmUsageEvent, LlmUsageStore } from '../../llmUsage.js';
+import type { LlmUsageEvent, LlmUsageStore } from '../models/llmUsage.js';
 import {
   classifyQuestion,
   companionIdentityPrompt,

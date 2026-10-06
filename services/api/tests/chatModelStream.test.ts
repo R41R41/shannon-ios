@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { OpenAIResponsesChatModel } from '../src/chatModel.js';
-import { extractOutputText } from '../src/chatModelSupport.js';
-import type { LlmUsageEvent } from '../src/llmUsage.js';
+import { OpenAIResponsesChatModel } from '../src/infra/models/chatModel.js';
+import { extractOutputText } from '../src/infra/models/chatModelSupport.js';
+import type { LlmUsageEvent } from '../src/infra/models/llmUsage.js';
 import { GOLDEN_BASE as base, GOLDEN_REQUESTS, GOLDEN_RESPONSES } from './chatModelGoldenCases.js';
 
 const at = '2026-10-02T03:00:00.000Z';

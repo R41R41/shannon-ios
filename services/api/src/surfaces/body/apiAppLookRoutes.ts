@@ -1,6 +1,6 @@
 import type { AppLookAnswer, AppLooks } from './appLook.js';
 import { appLookAnswerId, validatedAppLookResult } from '../../contracts/appLookContract.js';
-import { badRequest, objectBody, validScopeKey } from '../../apiValidation.js';
+import { badRequest, objectBody, validScopeKey } from '../../infra/http/apiValidation.js';
 import { BODY_SCHEMA_VERSION } from '../../contracts/bodyContract.js';
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
 

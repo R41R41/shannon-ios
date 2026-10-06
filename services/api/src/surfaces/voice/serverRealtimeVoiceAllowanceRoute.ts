@@ -5,7 +5,7 @@ import {
   SHANNON_REALTIME_MAXIMUM_DAILY_ALLOWANCE_SECONDS,
   type RealtimeVoiceReservationStore,
 } from './realtimeVoice.js';
-import { sendJson } from '../../serverHttp.js';
+import { sendJson } from '../../infra/http/serverHttp.js';
 
 interface AllowancePrincipal {
   readonly scopeKey: string;

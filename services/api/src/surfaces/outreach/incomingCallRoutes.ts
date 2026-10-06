@@ -1,4 +1,4 @@
-import { badRequest, objectBody, validScopeKey } from '../../apiValidation.js';
+import { badRequest, objectBody, validScopeKey } from '../../infra/http/apiValidation.js';
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
 import {
   INCOMING_CALL_LIMITS, INCOMING_CALL_PATH, INCOMING_CALL_REGISTRATION_PATH, INCOMING_CALL_SCHEMA_VERSION,

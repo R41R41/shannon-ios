@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { MemoryEmbeddingWorker } from '../src/mind/memory/memoryEmbeddingWorker.js';
 import { SemanticMemoryRecall, configuredSemanticMemoryConfig } from '../src/mind/recall/semanticMemoryRecall.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { prepareTurnCognitiveContext } from '../src/turnCognitiveContext.js';
+import { prepareTurnCognitiveContext } from '../src/mind/action/respond/turnCognitiveContext.js';
 import { ShannonTurnMemoryRecall, configuredMemoryModelGateway } from '../src/mind/recall/turnMemoryRecall.js';
 import { memoryRecallEvaluationCases, syntheticHistory } from './memoryRecallEvaluationCases.js';
 

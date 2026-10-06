@@ -1,5 +1,5 @@
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
-import { badRequest, objectBody, validScopeKey } from '../../apiValidation.js';
+import { badRequest, objectBody, validScopeKey } from '../../infra/http/apiValidation.js';
 import {
   BODY_REACH_OUT_REPORT_PREFIX, BODY_SCHEMA_VERSION, BODY_TOUCH_VOCABULARY, bodyReachOutReportId, validatedBodyCapabilities, validatedBodyEvents, validatedBodyReachOutReport,
 } from '../../contracts/bodyContract.js';

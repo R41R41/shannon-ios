@@ -2,11 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ShannonDevicePrincipal } from '../src/deviceAuth.js';
+import type { ShannonDevicePrincipal } from '../src/infra/auth/deviceAuth.js';
 import {
   SpeechScopeConcurrencyLimiter, createGeminiSpeechRoute, refuseSpeech, streamSpeech,
 } from '../src/surfaces/voice/serverGeminiSpeechRoute.js';
-import { GeminiSpeechError } from '../src/geminiSpeech.js';
+import { GeminiSpeechError } from '../src/infra/models/geminiSpeech.js';
 
 describe('Gemini speech scope concurrency', () => {
   it('allows one current sentence and one prefetched sentence per scope', () => {

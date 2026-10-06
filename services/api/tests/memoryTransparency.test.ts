@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { assembleShannonSystemPrompt, createInitialCompanionState, reduceCompanionState } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
 import { consolidateSleepMemory } from '../src/mind/sleep/sleepConsolidation.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';

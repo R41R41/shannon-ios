@@ -4,17 +4,17 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore, OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE, UNLABELLED_DISCLOSURE_MARKER } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/apiKernel.js';
+import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { BackgroundUpdateCoordinator, DurableBackgroundDispatcher, TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
 import { ShannonBackgroundWorker } from '../src/mind/sleep/backgroundWorker.js';
-import type { ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
+import type { ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import {
   ConversationReplaySummarizer, OpenAIReplaySummaryWriter, REPLAY_SUMMARY_INSTRUCTIONS, createConfiguredReplaySummaryWriter,
   type ReplaySummaryWriter,
 } from '../src/mind/memory/conversationReplaySummary.js';
 import { InMemoryConversationStore, type ConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { conversationReplay, nextWindowStart, replayRule } from '../src/mind/recall/conversationWindow.js';
-import type { LlmUsageEvent } from '../src/llmUsage.js';
+import type { LlmUsageEvent } from '../src/infra/models/llmUsage.js';
 import { LocalRuleSleepMemoryAnalyzer } from '../src/mind/sleep/sleepConsolidation.js';
 import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
@@ -250,7 +250,7 @@ describe('the replay summary is written off the response path', () => {
       chatModel: { mode: 'openai', model: 'test',
         generate: async request => { textRequests.push(request); return { mode: 'openai', model: 'test', reply: 'はい。' }; },
         generateVoice: async request => { voiceRequests.push(request); return { mode: 'openai', model: 'test', reply: 'はい。' }; } },
-      voiceDecision: { mode: 'jev', model: 'test', decide: async input => ({ ...await new (await import('../src/voiceDecision.js')).LocalVoiceDecisionGateway().decide(input),
+      voiceDecision: { mode: 'jev', model: 'test', decide: async input => ({ ...await new (await import('../src/mind/selectors/voiceDecision.js')).LocalVoiceDecisionGateway().decide(input),
         shouldRespond: true, conversationClass: 'direct' as const, selectedSkills: [] }) } });
     thread(store, 15);
 

@@ -1,4 +1,4 @@
-import { configuredAuthPepper, SQLiteDeviceAuthStore } from './deviceAuth.js';
+import { configuredAuthPepper, SQLiteDeviceAuthStore } from './infra/auth/deviceAuth.js';
 import { configuredDatabasePath } from './infra/sqlite/sqliteStore.js';
 
 const command = process.argv[2];
