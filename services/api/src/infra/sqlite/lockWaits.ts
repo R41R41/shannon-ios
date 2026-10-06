@@ -1,5 +1,16 @@
 import type { DatabaseSync } from 'node:sqlite';
 
+/** The connection a cognition writer is handed (only store/ folders, infra/sqlite and wiring name SQLite itself). */
+export type SqliteConnection = DatabaseSync;
+
+const ownerDayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
+
+/** The owner-local day (Asia/Tokyo) of an instant: the key of a once-a-day pass and of a day's line of lock waits. */
+export function ownerDayKey(at: string): string {
+  const time = Date.parse(at);
+  return ownerDayFormat.format(new Date(Number.isFinite(time) ? time : Date.now()));
+}
+
 /**
  * The write lock of the shared SQLite file, taken the way the ADR-0006 record takes it (`predictionShadow.ts`): whatever can be
  * computed is computed outside, and `BEGIN IMMEDIATE` is held only for the writes. Syzygy ADR-0008 stage 1 measures how long

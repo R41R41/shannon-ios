@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
 import { ROOT_VALUE, cognitionLedgerSwitches, type ValueRead } from '@shannon/learning';
-import { ownerDay } from '../emotion/companionPresence.js';
-import { LockWaitMeter, loggedFailure, tableExists, underWriteLock } from '../../infra/sqlite/lockWaits.js';
+import { LockWaitMeter, loggedFailure, tableExists, underWriteLock, ownerDayKey, type SqliteConnection } from '../../infra/sqlite/lockWaits.js';
 import { settlePending } from './rewardSettlement.js';
 import { CHOICES_TABLE, SQLiteChoiceLedger, type ChoiceDraft, type StoredChoice } from './store/sqliteChoiceLedger.js';
 import { PREDICTIONS_TABLE, SQLitePredictionLedger } from './store/sqlitePredictionLedger.js';
@@ -22,7 +20,7 @@ export type { ChoiceDraft, StoredChoice } from './store/sqliteChoiceLedger.js';
 export const CHOICE_RETENTION_DAYS = 90;
 const DAY = 24 * 60 * 60_000;
 
-export function choiceLedgerEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function choiceLedgerEnabled(environment: Readonly<Record<string, string | undefined>>): boolean {
   return cognitionLedgerSwitches(environment).choiceLedger;
 }
 
@@ -30,7 +28,7 @@ export function choiceLedgerEnabled(environment: Readonly<Record<string, string 
 export type ValueReader = (scopeKey: string, choice: string, context: string) => ValueRead;
 
 export interface ChoiceLedgerOptions {
-  database: DatabaseSync;
+  database: SqliteConnection;
   createsSchema: boolean;
   /** The same queue as the prediction ledger on this connection, so a prediction settled before a report is seen by it. */
   defer?: (task: () => void) => void;
@@ -127,7 +125,7 @@ export class ChoiceLedger {
   }
 
   private write(at: string, operation: () => void): void {
-    underWriteLock(this.options.database, this.meter, ownerDay(at), operation, 'shannon_choice_ledger');
+    underWriteLock(this.options.database, this.meter, ownerDayKey(at), operation, 'shannon_choice_ledger');
   }
 
   private later(operation: () => void): void {

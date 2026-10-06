@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
 import type { CompanionStateEvent, CompanionStateSnapshot } from '@shannon/cognition';
 import {
   LEDGER_DOMAIN_RULES,
@@ -16,10 +15,7 @@ import {
   type LedgerDomain,
   type LedgerMind,
 } from '@shannon/learning';
-import { ownerDay } from '../emotion/companionPresence.js';
-import { LockWaitMeter, loggedFailure, tableExists, underWriteLock } from '../../infra/sqlite/lockWaits.js';
-import { ChoiceLedger, choiceLedgerEnabled } from './choiceLedger.js';
-import { ValueVersions } from './valueTable.js';
+import { LockWaitMeter, loggedFailure, tableExists, underWriteLock, ownerDayKey, type SqliteConnection } from '../../infra/sqlite/lockWaits.js';
 import { PREDICTIONS_TABLE, SQLitePredictionLedger, type LedgerSourceKind, type StoredPrediction } from './store/sqlitePredictionLedger.js';
 
 export type { LedgerSourceKind, StoredPrediction } from './store/sqlitePredictionLedger.js';
@@ -29,7 +25,7 @@ export type { LedgerSourceKind, StoredPrediction } from './store/sqlitePredictio
  *
  * A prediction is opened with an id before its outcome, with what she expected then (from the ledger's own fold of its settled
  * rows, `@shannon/learning`), and settled later: matched, void, or expired. Nothing that acts reads it in this stage: no prompt,
- * state, reply or step changes. The parts that open and settle are handed functions (`predictionLedgerTaps.ts`), never this.
+ * state, reply or step changes. The parts that open and settle are handed functions (`wiring/cognitionLedgerTaps.ts`), never this.
  *
  * Every write is deferred (after the caller and its transaction) and follows the shadow's lock discipline (`predictionShadow.ts`):
  * the fold is brought up to the table outside any transaction, and under `BEGIN IMMEDIATE` only what was settled meanwhile is
@@ -43,7 +39,7 @@ export type { LedgerSourceKind, StoredPrediction } from './store/sqlitePredictio
 export const PREDICTION_LEDGER_RETENTION_DAYS = 90;
 const DAY_MILLISECONDS = 24 * 60 * 60_000;
 
-export function predictionLedgerEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function predictionLedgerEnabled(environment: Readonly<Record<string, string | undefined>>): boolean {
   return cognitionLedgerSwitches(environment).predictionLedger;
 }
 
@@ -57,7 +53,7 @@ export interface LedgerOpening {
 }
 
 export interface PredictionLedgerOptions {
-  database: DatabaseSync;
+  database: SqliteConnection;
   /** Only the API's stores create the tables and maintain them; the activity loop's process writes nothing until they exist. */
   createsSchema: boolean;
   defer?: (task: () => void) => void;
@@ -124,7 +120,7 @@ export class PredictionLedger {
     if (!this.options.createsSchema) return;
     this.later(() => {
       if (event?.type === 'memory-control-upserted' || event?.type === 'memory-transaction') this.reconcile(scopeKey, state);
-      if (this.maintained.get(scopeKey) !== ownerDay(at)) this.maintain(scopeKey, at, state);
+      if (this.maintained.get(scopeKey) !== ownerDayKey(at)) this.maintain(scopeKey, at, state);
     });
   }
 
@@ -149,8 +145,8 @@ export class PredictionLedger {
       }, { catchUp: false });
       if (settledGone) this.refresh(scopeKey);
       if (state) this.reconcile(scopeKey, state);
-      this.maintained.set(scopeKey, ownerDay(at));
-      this.log(calibrationLine(ownerDay(at), this.store.counts(scopeKey), this.calibration(scopeKey)));
+      this.maintained.set(scopeKey, ownerDayKey(at));
+      this.log(calibrationLine(ownerDayKey(at), this.store.counts(scopeKey), this.calibration(scopeKey)));
     });
     return { expired, pruned };
   }
@@ -252,7 +248,7 @@ export class PredictionLedger {
   /** One write transaction, with the fold caught up outside it first (`catchUp`); see the class comment. */
   private within(scopeKey: string, at: string, operation: () => void, options: { catchUp: boolean } = { catchUp: true }): void {
     if (!this.ready()) return;
-    const day = ownerDay(Number.isFinite(Date.parse(at)) ? at : new Date().toISOString());
+    const day = ownerDayKey(Number.isFinite(Date.parse(at)) ? at : new Date().toISOString());
     for (let attempt = 0; ; attempt += 1) {
       if (options.catchUp) this.sync(scopeKey);
       this.locked = attempt < 2;
@@ -287,19 +283,4 @@ export function calibrationLine(day: string, counts: Record<string, number>, rep
   const number = (value: number | null) => (value === null ? '-' : value.toFixed(3));
   const domains = report.domains.map(item => `${item.domain}:n=${item.n},brier=${number(item.brier)},kappa=${number(item.skill)}${item.coverage80 === null ? '' : `,cover=${number(item.coverage80)}`}`);
   return `Shannon prediction ledger: day=${day} ${Object.entries(counts).map(([status, count]) => `${status}=${count}`).join(' ')}${domains.length ? ` ${domains.join(' ')}` : ''}`;
-}
-
-/** For a process that holds no store of the API (the activity loop): its own connection, or null under the switches. */
-export function configuredPredictionLedger(
-  environment: Readonly<Record<string, string | undefined>>, databasePath: string,
-): { ledger: PredictionLedger; choices: ChoiceLedger | null; close(): void } | null {
-  if (!predictionLedgerEnabled(environment)) return null;
-  const database = new DatabaseSync(databasePath);
-  database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
-  const ledger = new PredictionLedger({ database, createsSchema: false });
-  // Her choices share the connection and the queue: a prediction settled before a report is seen by its settlement.
-  const choices = choiceLedgerEnabled(environment) ? new ChoiceLedger({ database, createsSchema: false }) : null;
-  // V at choice time is read from the value table's active version on the same connection.
-  if (choices) choices.readValuesFrom(new ValueVersions({ database, createsSchema: false }).reader);
-  return { ledger, choices, close: () => { ledger.flushLockWaits(); choices?.flushLockWaits(); if (database.isOpen) database.close(); } };
 }

@@ -9,7 +9,7 @@ import { TouchPredictions, stanceOutcome, type TouchPrediction, type TouchPredic
 export { touchPredictionEnabled } from '../prediction/bodyTouchPrediction.js';
 import { bodyTouchPartWord, bodyTouchRegionWord } from '../../surfaces/body/bodyTouchWords.js';
 import type { PredictionShadow } from '../prediction/predictionShadow.js';
-import type { TouchLedger } from '../learning/predictionLedgerTaps.js';
+import type { TouchLedger } from '../../contracts/cognitionLedgerContract.js';
 
 /**
  * A touch reaches her: the one entrance behind both ways a touch arrives, a reaction request
@@ -42,7 +42,7 @@ export interface BodyTouchDependencies {
    * arousal, her stance is the outcome and its prediction error moves her (`bodyTouchPrediction.ts`). False: stage 1b.
    */
   stage2?: boolean;
-  /** Syzygy ADR-0008 stage 1: the prediction ledger's touch port (`predictionLedgerTaps.ts`); absent or null, nothing is opened. */
+  /** Syzygy ADR-0008 stage 1: the prediction ledger's touch port (`contracts/cognitionLedgerContract.ts`, built in `wiring/cognitionLedgerTaps.ts`); absent or null, nothing is opened. */
   ledger?: TouchLedger | null;
 }
 

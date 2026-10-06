@@ -1,9 +1,6 @@
-import { countedJevFetch, emptyJevProbe, withJevProbe } from '../../infra/models/jev/jevClient.js';
-import { jevUsdPerCall } from '../../infra/models/jev/jevUsage.js';
-import type { LlmUsageStore } from '../../infra/models/llmUsage.js';
-import { createConfiguredVoiceDecisionGateway } from '../selectors/voiceDecision.js';
+import { emptyJevProbe, withJevProbe } from '../../infra/models/jev/jevClient.js';
 import type { VoiceDecisionGateway, VoiceDecisionInput, VoiceTurnDecision } from '../../contracts/voiceDecisionContract.js';
-import type { DecisionTraceDraft, DecisionTraceWriter, TraceAnswer } from './decisionTraceContract.js';
+import type { DecisionTraceDraft, DecisionTraceWriter, TraceAnswer } from '../../contracts/decisionTraceContract.js';
 
 /**
  * The voice turn's routing decision, traced (Syzygy ADR-0008 stage 1: 「判断ごとの記録」). Core: approval and budget.
@@ -14,7 +11,7 @@ import type { DecisionTraceDraft, DecisionTraceWriter, TraceAnswer } from './dec
  * `countedJevFetch`), what was decided as closed enums, and Jev's cost when its price is set (`SHANNON_JEV_USD_PER_CALL`;
  * unset, null: 未設定). The transcript, the context and the reply never enter it.
  *
- * With decision traces switched off the configured gateway is returned as it was, with the fetch it had.
+ * With decision traces switched off the configured gateway is used as it was, with the fetch it had (`wiring/cognitionLedgerWiring.ts`).
  */
 export class TracedVoiceDecisionGateway implements VoiceDecisionGateway {
   readonly mode: VoiceDecisionGateway['mode'];
@@ -71,16 +68,4 @@ export function voiceRouteTrace(
     costUsd: !jev ? 0 : usdPerJevCall === null ? null : probe.calls * usdPerJevCall,
     relatedId: null, at,
   };
-}
-
-/**
- * The gateway of the voice turn. With a trace writer, the configured one with a counting Jev fetch, wrapped; without one
- * (`SHANNON_DECISION_TRACES=off`), exactly `createConfiguredVoiceDecisionGateway(environment, usageStore)`.
- */
-export function configuredVoiceDecision(
-  environment: Readonly<Record<string, string | undefined>>, usageStore: LlmUsageStore | undefined, write: DecisionTraceWriter | null,
-): VoiceDecisionGateway {
-  if (!write) return createConfiguredVoiceDecisionGateway(environment, usageStore);
-  const inner = createConfiguredVoiceDecisionGateway(environment, usageStore, countedJevFetch());
-  return new TracedVoiceDecisionGateway(inner, write, { usdPerJevCall: jevUsdPerCall(environment) });
 }

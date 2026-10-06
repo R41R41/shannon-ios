@@ -14,7 +14,7 @@ import { configuredAutonomy } from '../../src/mind/inhibition/autonomyBudget.js'
 import { SQLiteAutonomyStore } from '../../src/mind/action/ownTime/store/autonomyStore.js';
 import { ownerValueRecorder } from '../../src/infra/http/learningRoutes.js';
 import type { StoredChoice } from '../../src/mind/learning/choiceLedger.js';
-import { ledgerPredictionTap, storyReacted, toolCallChoice, type Presence } from '../../src/mind/learning/predictionLedgerTaps.js';
+import { ledgerPredictionTap, storyReacted, toolCallChoice, type Presence } from '../../src/wiring/cognitionLedgerTaps.js';
 import { valueSleep } from '../../src/mind/sleep/valueSleep.js';
 import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
 

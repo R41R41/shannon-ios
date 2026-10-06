@@ -6,9 +6,10 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { countedJevFetch, emptyJevProbe, jevRequestSize, withJevProbe } from '../src/infra/models/jev/jevClient.js';
 import { jevUsageRow, jevUsdPerCall } from '../src/infra/models/jev/jevUsage.js';
 import { LockWaitMeter } from '../src/infra/sqlite/lockWaits.js';
-import { checkedTrace, type DecisionTraceDraft } from '../src/mind/inhibition/decisionTraceContract.js';
-import { DecisionTraces, configuredDecisionTraces, decisionTracesEnabled, traceSymbol } from '../src/mind/inhibition/decisionTraces.js';
-import { TracedVoiceDecisionGateway, configuredVoiceDecision } from '../src/mind/inhibition/tracedVoiceDecision.js';
+import { checkedTrace, type DecisionTraceDraft } from '../src/contracts/decisionTraceContract.js';
+import { DecisionTraces, decisionTracesEnabled, traceSymbol } from '../src/mind/inhibition/decisionTraces.js';
+import { configuredDecisionTraces, configuredVoiceDecision } from '../src/wiring/cognitionLedgerWiring.js';
+import { TracedVoiceDecisionGateway } from '../src/mind/inhibition/tracedVoiceDecision.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { JevVoiceDecisionGateway, LocalVoiceDecisionGateway, OpenAIVoiceDecisionGateway, VOICE_SKILLS, type VoiceDecisionInput } from '../src/mind/selectors/voiceDecision.js';
 

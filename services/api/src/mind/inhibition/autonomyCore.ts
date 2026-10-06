@@ -79,7 +79,6 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // Syzygy ADR-0008 stage 1: the prediction ledger, its store, and where predictions are opened and settled.
     'services/api/src/mind/learning/choiceLedger.ts',
     'services/api/src/mind/learning/predictionLedger.ts',
-    'services/api/src/mind/learning/predictionLedgerTaps.ts',
     'services/api/src/mind/learning/rewardSettlement.ts',
     'services/api/src/mind/learning/store/sqliteChoiceLedger.ts',
     'services/api/src/mind/learning/store/sqlitePredictionLedger.ts',
@@ -87,6 +86,10 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/learning/valueTable.ts',
     // Syzygy ADR-0008 stage 1: the nightly pass of the ledgers (expiry, delayed credit, retention).
     'services/api/src/mind/sleep/valueSleep.ts',
+    // Syzygy ADR-0008 stage 1: the wiring that hands the ledgers their connections and the parts their taps, and their shared vocabulary.
+    'services/api/src/wiring/cognitionLedgerWiring.ts',
+    'services/api/src/wiring/cognitionLedgerTaps.ts',
+    'services/api/src/contracts/cognitionLedgerContract.ts',
   ]),
   authentication: Object.freeze([
     'services/api/src/infra/auth/apiAuth.ts',
@@ -253,7 +256,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/agentHost.ts',
     'services/api/src/integrations/agentHost/agentHostConfig.ts',
     // Syzygy ADR-0008 stage 1 (抑制系): one content-free trace per decision, and the gateway wrapper that writes it.
-    'services/api/src/mind/inhibition/decisionTraceContract.ts',
+    'services/api/src/contracts/decisionTraceContract.ts',
     'services/api/src/mind/inhibition/decisionTraces.ts',
     'services/api/src/mind/inhibition/store/sqliteDecisionTraces.ts',
     'services/api/src/mind/inhibition/tracedVoiceDecision.ts',

@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { CALL_ANSWER_OUTCOME, STORY_REACTION_OUTCOME } from '@shannon/learning';
-import type { AutonomyPredictionTap, ReachOutFacts } from '../action/ownTime/store/autonomyLoopObservations.js';
-import { PREDICTION_SYMBOL } from '../prediction/store/predictionStore.js';
-import { dayBand } from '../prediction/predictionShadowReadings.js';
-import type { ChoiceLedger } from './choiceLedger.js';
-import type { PredictionLedger } from './predictionLedger.js';
+import { PREDICTION_SYMBOL, dayBand, type TouchLedger } from '../contracts/cognitionLedgerContract.js';
+import type { AutonomyPredictionTap, ReachOutFacts } from '../mind/action/ownTime/store/autonomyLoopObservations.js';
+import type { ChoiceLedger } from '../mind/learning/choiceLedger.js';
+import type { PredictionLedger } from '../mind/learning/predictionLedger.js';
+
+export type { TouchLedger } from '../contracts/cognitionLedgerContract.js';
 
 /**
  * Where predictions are opened and settled, and choices recorded (Syzygy ADR-0008 stage 1; `docs/cognition-ledger-contract.md`).
@@ -141,12 +142,6 @@ export function toolCallChoice(choices: ChoicePort): (scopeKey: string, call: { 
       }, call.ok ? 1 : 0, at);
     } catch { /* never fails a turn */ }
   };
-}
-
-/** What a touch's prediction is handed: open one about a burst, match it with her stance, or void it (a carried stance). */
-export interface TouchLedger {
-  open(scopeKey: string, touch: { key: string; context: string; burstId: string }, at: string): string | null;
-  settle(scopeKey: string, predictionId: string, stance: number | null, at: string): void;
 }
 
 export function touchLedger(ledger: LedgerPort): TouchLedger {

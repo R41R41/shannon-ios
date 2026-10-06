@@ -16,10 +16,10 @@ import type { DatabaseSync } from 'node:sqlite';
 export const PREDICTION_OUTCOMES_TABLE = 'shannon_prediction_outcomes';
 export const PREDICTION_SHADOW_TABLE = 'shannon_prediction_shadow';
 
-/** Closed vocabulary values: ASCII letters, digits and `_.:-`, starting with a letter. */
-export const PREDICTION_SYMBOL = /^[A-Za-z][A-Za-z0-9_.:-]{0,95}$/u;
-/** Identifiers of source records. */
-export const PREDICTION_SOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9_:-]{0,119}$/u;
+// The closed vocabularies are shared with the cognition ledger (Syzygy ADR-0008): one source, `contracts/cognitionLedgerContract.ts`.
+import { PREDICTION_SOURCE_ID, PREDICTION_SYMBOL } from '../../../contracts/cognitionLedgerContract.js';
+
+export { PREDICTION_SOURCE_ID, PREDICTION_SYMBOL };
 
 export interface PredictionOutcomeDraft {
   /** A domain of `SHANNON_PREDICTION_DOMAINS`, or `awake` for an instant she was awake with no outcome. */

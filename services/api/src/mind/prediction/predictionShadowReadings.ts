@@ -41,11 +41,8 @@ export function ownerFeatures(state: CompanionStateSnapshot, at: string): Record
   };
 }
 
-/** The owner-local quarter of the day a message went out in. */
-export function dayBand(at: string): 'night' | 'morning' | 'afternoon' | 'evening' {
-  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tokyo', hour: '2-digit', hourCycle: 'h23' }).format(new Date(Date.parse(at) || 0)));
-  return hour < 6 ? 'night' : hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
-}
+/** The owner-local quarter of the day a message went out in (one source with the cognition ledger: `contracts/cognitionLedgerContract.ts`). */
+export { dayBand } from '../../contracts/cognitionLedgerContract.js';
 
 /** The current dynamics at an instant: mood values as stored, and what she feels now signed by its kind (a kind without a sign counts as pleasant). */
 export function oldReading(state: CompanionStateSnapshot, at: string, timing: ShannonEmotionTiming): ShadowComparison['old'] {

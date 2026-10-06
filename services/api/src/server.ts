@@ -13,8 +13,8 @@ import { createConfiguredTurnMemoryRecall } from './mind/recall/turnMemoryRecall
 import { DurableBackgroundDispatcher } from './mind/sleep/backgroundUpdates.js';
 import { startToolTraceSweep } from './mind/tools/shannonToolTraceSweep.js';
 import { createConfiguredChatModel } from './infra/models/chatModel.js';
-import { configuredVoiceDecision } from './mind/inhibition/tracedVoiceDecision.js';
-import { storyReacted, toolCallChoice, touchLedger } from './mind/learning/predictionLedgerTaps.js';
+import { configuredVoiceDecision } from './wiring/cognitionLedgerWiring.js';
+import { storyReacted, toolCallChoice, touchLedger } from './wiring/cognitionLedgerTaps.js';
 import { createValuesRoute, isValuesPath, ownerValueRecorder } from './infra/http/learningRoutes.js';
 import { configuredAuthPepper, SQLiteDeviceAuthStore } from './infra/auth/deviceAuth.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './infra/sqlite/sqliteStore.js';

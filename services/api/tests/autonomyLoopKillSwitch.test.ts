@@ -5,10 +5,10 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { ownerPrivateRule, type AutonomyOwnerContext } from '../src/mind/action/ownTime/autonomyLoopOwnerContext.js';
 import { draftPrompt, reachOutPrompt, revisePrompt, thinkingPrompt } from '../src/mind/action/ownTime/autonomyLoopPrompts.js';
 import { OwnerInformedMarks } from '../src/mind/inhibition/store/ownerInformedMarks.js';
-import { checkedTrace, type DecisionTraceDraft } from '../src/mind/inhibition/decisionTraceContract.js';
+import { checkedTrace, type DecisionTraceDraft } from '../src/contracts/decisionTraceContract.js';
 import { PredictionLedger } from '../src/mind/learning/predictionLedger.js';
 import { ChoiceLedger } from '../src/mind/learning/choiceLedger.js';
-import { ledgerPredictionTap, storyReacted } from '../src/mind/learning/predictionLedgerTaps.js';
+import { ledgerPredictionTap, storyReacted } from '../src/wiring/cognitionLedgerTaps.js';
 import { DatabaseSync } from 'node:sqlite';
 import { agenticDay, builderDigests, plainDay } from './autonomyLoopKillSwitchScenario.js';
 import { loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';

@@ -8,7 +8,7 @@ import type { LlmUsageSummaryRow } from '../llmUsage.js';
  * spend it. The price per call is `SHANNON_JEV_USD_PER_CALL` in USD; unset, a call's cost is unknown (null), and the usage
  * summary shows it as 未設定 (`costUnknown`).
  */
-export function jevUsdPerCall(environment: Readonly<Record<string, string | undefined>> = process.env): number | null {
+export function jevUsdPerCall(environment: Readonly<Record<string, string | undefined>>): number | null {
   const text = environment.SHANNON_JEV_USD_PER_CALL?.trim();
   if (!text) return null;
   const value = Number(text);

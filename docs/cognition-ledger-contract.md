@@ -55,6 +55,8 @@ All default on; `off`, `false`, `0`, `disabled`, `no` or `none` switches one off
 
 All tables live in the same SQLite file and are created with `CREATE TABLE IF NOT EXISTS` by the API's processes only, outside the numbered migrations (schema version unchanged; an older binary ignores them). Writes are fewer than 2,000 rows a day. Every write is deferred (`setImmediate`, after the caller and its transaction) and follows the shadow's lock discipline: anything computed is computed outside the lock, and under `BEGIN IMMEDIATE` only what arrived meanwhile is folded on before the insert. The wait for the lock is measured (`infra/sqlite/lockWaits.ts`), and one log line a day per process gives the count and the p95/p99 of the waits. A separate database file is considered only if p99 exceeds 50 ms. A failure is logged by name and code and swallowed: no reply, touch or step waits for, or fails because of, this record.
 
+**Layout** (ADR-0008 §6 folder rules, `scripts/check-api-layers.mjs --enforce`): the connections of the loop's process and the traced voice gateway are built in `wiring/cognitionLedgerWiring.ts`, and the taps the loop, the study desk, a touch and the tool runner are handed in `wiring/cognitionLedgerTaps.ts`; the shared vocabulary (closed values, the quarter of the day, the touch's port) is `contracts/cognitionLedgerContract.ts` (one source with the ADR-0006 record), the trace vocabulary `contracts/decisionTraceContract.ts`; the nightly pass is handed the ledgers as functions. Only the `store/` folders, `infra/sqlite` and `wiring` name SQLite; the services are handed a connection (`SqliteConnection`).
+
 ## Decision traces (`shannon_decision_traces`, step 2)
 
 One row per decision, content-free (ADR-0008 §3 抑制系: 「判断ごとの記録」, kept apart from the activity record).
@@ -127,7 +129,7 @@ Only an `open` row is settled; a second outcome for the same source is ignored. 
 Shannon prediction ledger: day=2026-10-22 open=1 matched=12 expired=2 void=3 reading_used:n=4,brier=0.188,kappa=0.250 reply:n=9,brier=0.201,kappa=0.105 story_reaction:n=2,brier=0.063,kappa=-,cover=1.000
 ```
 
-**Where it is wired.** Her own time: `autonomyLoopReachOutStep.ts` (sent), `autonomyLoopPhoneStep.ts` (called), `autonomyLoopSteps.ts` (read, noted, shown) and `autonomyLoopObserve.ts` (what followed, through the tap that also feeds the shadow), all through `AutonomyPredictionTap` (`mind/learning/predictionLedgerTaps.ts` builds it in `autonomyWorker.ts`). The API: `StudyDesk.react` (the reaction's enum, after it is stored) and `TouchPredictions` (`expect` opens, `learn` matches, a carried stance is void).
+**Where it is wired.** Her own time: `autonomyLoopReachOutStep.ts` (sent), `autonomyLoopPhoneStep.ts` (called), `autonomyLoopSteps.ts` (read, noted, shown) and `autonomyLoopObserve.ts` (what followed, through the tap that also feeds the shadow), all through `AutonomyPredictionTap` (`wiring/cognitionLedgerTaps.ts` builds it in `autonomyWorker.ts`). The API: `StudyDesk.react` (the reaction's enum, after it is stored) and `TouchPredictions` (`expect` opens, `learn` matches, a carried stance is void).
 
 ### Calibration (`packages/learning/src/calibration.ts`)
 

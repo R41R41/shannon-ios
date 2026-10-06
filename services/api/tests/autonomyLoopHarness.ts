@@ -10,7 +10,7 @@ import type { AutonomyReachOuts, AutonomyUpcoming } from '../src/mind/action/own
 import type { AutonomyNotionReader } from '../src/mind/action/ownTime/autonomyLoopSteps.js';
 import type { AutonomyToolResults } from '../src/mind/action/ownTime/autonomyLoopToolStep.js';
 import type { AutonomyPredictionTap } from '../src/mind/action/ownTime/store/autonomyLoopObservations.js';
-import type { DecisionTraceWriter } from '../src/mind/inhibition/decisionTraceContract.js';
+import type { DecisionTraceWriter } from '../src/contracts/decisionTraceContract.js';
 import type { AutonomyPublicReader, PublicReading } from '../src/mind/action/ownTime/autonomyReader.js';
 import { ShannonAutonomyService, type AutonomyServiceDependencies } from '../src/mind/action/ownTime/autonomyService.js';
 import type { ShowablePiece, ShowingOutcome, StudyShowing } from '../src/mind/action/ownTime/autonomyShowing.js';

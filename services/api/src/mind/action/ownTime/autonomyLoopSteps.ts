@@ -25,7 +25,7 @@ import type { ShannonAutonomyService } from './autonomyService.js';
 import type { ShowingOutcome, StudyShowing } from './autonomyShowing.js';
 import type { SQLiteAutonomyStore } from './store/autonomyStore.js';
 import type { AutonomyTextModel } from './autonomyTextModel.js';
-import type { DecisionTraceWriter } from '../../inhibition/decisionTraceContract.js';
+import type { DecisionTraceWriter } from '../../../contracts/decisionTraceContract.js';
 import { READING_DOCUMENT_PREFIX } from '../../inhibition/store/ownerInformedMarks.js';
 import type { ToolDocuments } from '../../tools/shannonToolTypes.js';
 import { aetherStep, studyWriteKey, type StudyAether } from './studyAether.js';

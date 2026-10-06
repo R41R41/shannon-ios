@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { PREDICTION_SOURCE_ID, PREDICTION_SYMBOL } from '../../prediction/store/predictionStore.js';
+import { PREDICTION_SOURCE_ID, PREDICTION_SYMBOL } from '../../../contracts/cognitionLedgerContract.js';
 
 /**
  * The table of her choices (Syzygy ADR-0008 stage 1, `docs/cognition-ledger-contract.md`, *Choice ledger*). Core: emotion.

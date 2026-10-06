@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { TRACE_IDENTIFIER, checkedTrace, type DecisionTraceDraft, type StoredDecisionTrace, type TraceAnswer } from '../decisionTraceContract.js';
+import { TRACE_IDENTIFIER, checkedTrace, type DecisionTraceDraft, type StoredDecisionTrace, type TraceAnswer } from '../../../contracts/decisionTraceContract.js';
 
-export type { DecisionTraceDraft, StoredDecisionTrace } from '../decisionTraceContract.js';
+export type { DecisionTraceDraft, StoredDecisionTrace } from '../../../contracts/decisionTraceContract.js';
 
 /**
  * The table of decision traces (Syzygy ADR-0008 stage 1, `docs/cognition-ledger-contract.md`). Additive, created when absent

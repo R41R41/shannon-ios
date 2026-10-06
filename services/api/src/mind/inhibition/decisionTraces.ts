@@ -1,12 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
 import { cognitionLedgerSwitches } from '@shannon/learning';
-import { ownerDay } from '../emotion/companionPresence.js';
-import { LockWaitMeter, loggedFailure, tableExists, underWriteLock } from '../../infra/sqlite/lockWaits.js';
-import { TRACE_SYMBOL, type DecisionTraceDraft, type DecisionTraceWriter } from './decisionTraceContract.js';
+import { LockWaitMeter, loggedFailure, tableExists, underWriteLock, ownerDayKey, type SqliteConnection } from '../../infra/sqlite/lockWaits.js';
+import { TRACE_SYMBOL, type DecisionTraceDraft, type DecisionTraceWriter } from '../../contracts/decisionTraceContract.js';
 import { DECISION_TRACES_TABLE, SQLiteDecisionTraces } from './store/sqliteDecisionTraces.js';
 
-export type { DecisionTraceDraft, DecisionTraceWriter, TraceAnswer } from './decisionTraceContract.js';
+export type { DecisionTraceDraft, DecisionTraceWriter, TraceAnswer } from '../../contracts/decisionTraceContract.js';
 export type { StoredDecisionTrace } from './store/sqliteDecisionTraces.js';
 
 /**
@@ -24,12 +22,12 @@ export type { StoredDecisionTrace } from './store/sqliteDecisionTraces.js';
 export const DECISION_TRACE_RETENTION_DAYS = 30;
 const DAY_MILLISECONDS = 24 * 60 * 60_000;
 
-export function decisionTracesEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+export function decisionTracesEnabled(environment: Readonly<Record<string, string | undefined>>): boolean {
   return cognitionLedgerSwitches(environment).decisionTraces;
 }
 
 export interface DecisionTracesOptions {
-  database: DatabaseSync;
+  database: SqliteConnection;
   /** Only the API's stores create the table and prune; the activity loop's process writes nothing until the table exists. */
   createsSchema: boolean;
   /** When the write runs. Default: `setImmediate` (after the caller). Tests may pass one that runs at once. */
@@ -70,7 +68,7 @@ export class DecisionTraces {
       if (!this.options.database.isOpen) return;
       try {
         if (!this.ready()) return;
-        const day = ownerDay(row.at);
+        const day = ownerDayKey(row.at);
         underWriteLock(this.options.database, this.meter, day, () => this.store.insert(traceId, scopeKey, row), 'shannon_decision_trace');
         if (this.options.createsSchema && this.prunedDay !== day) this.prune(row.at);
       } catch (error) { loggedFailure('decision trace', error); }
@@ -96,19 +94,8 @@ export class DecisionTraces {
     try {
       if (!this.ready()) return;
       const before = new Date(Date.parse(at) - DECISION_TRACE_RETENTION_DAYS * DAY_MILLISECONDS).toISOString();
-      underWriteLock(this.options.database, null, ownerDay(at), () => this.store.prune(before), 'shannon_decision_trace');
-      this.prunedDay = ownerDay(at);
+      underWriteLock(this.options.database, null, ownerDayKey(at), () => this.store.prune(before), 'shannon_decision_trace');
+      this.prunedDay = ownerDayKey(at);
     } catch (error) { loggedFailure('decision trace prune', error); }
   }
-}
-
-/** For a process that holds no store of the API (the activity loop): its own connection, or null under the switches. */
-export function configuredDecisionTraces(
-  environment: Readonly<Record<string, string | undefined>>, databasePath: string,
-): { traces: DecisionTraces; close(): void } | null {
-  if (!decisionTracesEnabled(environment)) return null;
-  const database = new DatabaseSync(databasePath);
-  database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
-  const traces = new DecisionTraces({ database, createsSchema: false });
-  return { traces, close: () => { traces.flushLockWaits(); if (database.isOpen) database.close(); } };
 }

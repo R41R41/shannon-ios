@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { ValueCell, ValueLevel, ValueVersionRecord } from '@shannon/learning';
-import { PREDICTION_SOURCE_ID, PREDICTION_SYMBOL } from '../../prediction/store/predictionStore.js';
+import { PREDICTION_SOURCE_ID, PREDICTION_SYMBOL } from '../../../contracts/cognitionLedgerContract.js';
 
 /**
  * The tables of the value table's versions (Syzygy ADR-0008 stage 1, `docs/cognition-ledger-contract.md`). Core: emotion.

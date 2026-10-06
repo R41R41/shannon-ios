@@ -9,7 +9,7 @@ import {
   type ShannonTouchOutcome,
 } from '@shannon/cognition';
 import type { BodyTouchGesture } from '../../contracts/bodyContract.js';
-import type { TouchLedger } from '../learning/predictionLedgerTaps.js';
+import type { TouchLedger } from '../../contracts/cognitionLedgerContract.js';
 import type { TouchRecord } from '../../surfaces/body/store/bodyReactionStore.js';
 import type { BodyTouchStance } from '../../surfaces/body/bodyTouchReflex.js';
 import type { PredictionShadow } from './predictionShadow.js';

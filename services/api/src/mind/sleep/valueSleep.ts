@@ -1,7 +1,4 @@
 import type { CompanionStateSnapshot } from '@shannon/cognition';
-import type { ChoiceLedger } from '../learning/choiceLedger.js';
-import type { PredictionLedger } from '../learning/predictionLedger.js';
-import type { ValueVersions } from '../learning/valueTable.js';
 
 /**
  * The nightly pass of Syzygy ADR-0008 stage 1 (睡眠: 遅れて分かった結果の割り当て; `docs/cognition-ledger-contract.md`). Core: emotion.
@@ -12,10 +9,11 @@ import type { ValueVersions } from '../learning/valueTable.js';
  * table writes a version from what was settled, unless the owner froze it (`ValueVersions.nightly`). Its failure is
  * logged and never fails the batch. It calls no model.
  */
+/** The parts of the learning part it runs, as functions it is handed (`mind/learning`; wired by the worker). */
 export interface ValueSleepParts {
-  predictions: Pick<PredictionLedger, 'maintain'> | null;
-  choices: Pick<ChoiceLedger, 'sleep'> | null;
-  values?: Pick<ValueVersions, 'nightly'> | null;
+  predictions: { maintain(scopeKey: string, at: string, state: CompanionStateSnapshot | null): { expired: number; pruned: number } } | null;
+  choices: { sleep(scopeKey: string, at: string): { settled: number; pruned: number } } | null;
+  values?: { nightly(scopeKey: string, at: string): { decision: string; pruned: number } } | null;
   log?: (line: string) => void;
 }
 

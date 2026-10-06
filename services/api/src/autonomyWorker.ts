@@ -33,9 +33,8 @@ import { SQLiteReachOutReports, reachOutBodyFacts } from './surfaces/outreach/st
 import { ownToolsEnabled } from './mind/tools/shannonTools.js';
 import { configuredDatabasePath } from './infra/sqlite/sqliteStore.js';
 import { configuredPredictionShadow } from './mind/prediction/predictionShadow.js';
-import { configuredDecisionTraces } from './mind/inhibition/decisionTraces.js';
-import { configuredPredictionLedger } from './mind/learning/predictionLedger.js';
-import { ledgerPredictionTap, presenceOf } from './mind/learning/predictionLedgerTaps.js';
+import { configuredDecisionTraces, configuredPredictionLedger } from './wiring/cognitionLedgerWiring.js';
+import { ledgerPredictionTap, presenceOf } from './wiring/cognitionLedgerTaps.js';
 
 /**
  * Entry of the activity loop (Syzygy ADR-0002 step 3): its own process, so the API,

@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import type { DatabaseSync } from 'node:sqlite';
 import {
   REWARD_FORMULA,
   ROOT_VALUE,
@@ -15,8 +14,7 @@ import {
   type ValueVersionMaker,
   type ValueVersionRecord,
 } from '@shannon/learning';
-import { ownerDay } from '../emotion/companionPresence.js';
-import { LockWaitMeter, tableExists, underWriteLock } from '../../infra/sqlite/lockWaits.js';
+import { LockWaitMeter, tableExists, underWriteLock, ownerDayKey, type SqliteConnection } from '../../infra/sqlite/lockWaits.js';
 import { SQLiteChoiceLedger } from './store/sqliteChoiceLedger.js';
 import { SQLiteValueTable, VALUE_VERSIONS_TABLE } from './store/sqliteValueTable.js';
 
@@ -32,7 +30,7 @@ import { SQLiteValueTable, VALUE_VERSIONS_TABLE } from './store/sqliteValueTable
 export type ValuesOwnerError = 'VALUES_NO_ACTIVE_VERSION' | 'VALUES_VERSION_NOT_FOUND' | 'VALUES_NO_EARLIER_VERSION' | 'VALUES_NOT_FROZEN' | 'VALUES_NO_EVIDENCE' | 'VALUES_UNAVAILABLE';
 
 export interface ValueVersionsOptions {
-  database: DatabaseSync;
+  database: SqliteConnection;
   createsSchema: boolean;
   log?: (line: string) => void;
 }
@@ -64,7 +62,7 @@ export class ValueVersions {
     // The fold is made outside the lock; under it, only when nothing was settled or rolled back meanwhile is it written as it is.
     const seen = { lastSeq: this.choices.lastSeq(scopeKey), active: this.store.activeId(scopeKey) };
     const folded = valueCells(foldValues(this.evidence(scopeKey, seen.lastSeq)));
-    underWriteLock(this.options.database, this.meter, ownerDay(at), () => {
+    underWriteLock(this.options.database, this.meter, ownerDayKey(at), () => {
       const lastSeq = this.choices.lastSeq(scopeKey);
       const active = this.store.active(scopeKey);
       const decision = nightlyDecision(active, lastSeq);
@@ -85,7 +83,7 @@ export class ValueVersions {
   rollback(scopeKey: string, at: string, versionId?: string): ValueVersionRecord | ValuesOwnerError {
     if (!this.ready()) return 'VALUES_UNAVAILABLE';
     let result: ValueVersionRecord | ValuesOwnerError = 'VALUES_NO_ACTIVE_VERSION';
-    underWriteLock(this.options.database, this.meter, ownerDay(at), () => {
+    underWriteLock(this.options.database, this.meter, ownerDayKey(at), () => {
       const target = rollbackTarget(this.store.versions(scopeKey), this.store.active(scopeKey), versionId);
       if (typeof target === 'string') { result = target; return; }
       result = this.insert(scopeKey, {
@@ -100,7 +98,7 @@ export class ValueVersions {
   resume(scopeKey: string, at: string): ValueVersionRecord | ValuesOwnerError {
     if (!this.ready()) return 'VALUES_UNAVAILABLE';
     let result: ValueVersionRecord | ValuesOwnerError = 'VALUES_NOT_FROZEN';
-    underWriteLock(this.options.database, this.meter, ownerDay(at), () => {
+    underWriteLock(this.options.database, this.meter, ownerDayKey(at), () => {
       const active = this.store.active(scopeKey);
       if (!active?.frozen) return;
       const lastSeq = this.choices.lastSeq(scopeKey);

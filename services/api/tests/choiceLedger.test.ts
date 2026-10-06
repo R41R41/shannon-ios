@@ -7,7 +7,7 @@ import { ROOT_VALUE } from '@shannon/learning';
 import type { ReachOutFacts } from '../src/mind/action/ownTime/store/autonomyLoopObservations.js';
 import { ChoiceLedger, choiceLedgerEnabled } from '../src/mind/learning/choiceLedger.js';
 import { PredictionLedger } from '../src/mind/learning/predictionLedger.js';
-import { ledgerPredictionTap, presenceOf, stepChoice, storyReacted, studyPieceOf, toolCallChoice } from '../src/mind/learning/predictionLedgerTaps.js';
+import { ledgerPredictionTap, presenceOf, stepChoice, storyReacted, studyPieceOf, toolCallChoice } from '../src/wiring/cognitionLedgerTaps.js';
 import { valueSleep } from '../src/mind/sleep/valueSleep.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
