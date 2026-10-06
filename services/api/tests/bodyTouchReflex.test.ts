@@ -199,3 +199,34 @@ describe('the result table', () => {
     expect(harness.reactionStore.outcome(scope, 'touch-1')).toBeNull();
   });
 });
+
+describe('what bodies read while her feeling is uncomfortable (body thread note, 2026-10-06)', () => {
+  // Older embeds and the older Windows body ignore a kind they do not know and show `expression`: it must be a face they have.
+  const read = async (harness: Awaited<ReturnType<typeof reactionHarness>>) => (await harness.api.dispatch({
+    method: 'GET', path: '/v1/body/presence', query: new URLSearchParams({ scopeKey: scope }), deviceId: 'body-pc',
+  })).body as { mood: { expression: string; feeling?: string; primary: string } };
+
+  it('is annoyed in a spoken answer, its mood, a silent answer\'s mood and presence, on a reflex part and an ordinary one', async () => {
+    const spoken = await reactionHarness();
+    spoken.speaker.decision = { say: true, text: '首はちょっと…。', feeling: 'uncomfortable', stance: 'dislike' };
+    const said = await spoken.said(reflexTouch('neck', 'poke'));
+    expect(said).toMatchObject({ status: 'said', message: { expression: 'annoyed' }, mood: { expression: 'annoyed' } });
+    expect(said.message).not.toHaveProperty('feeling');
+    expect(said.mood).not.toHaveProperty('feeling');
+    expect(spoken.state().expressiveEmotion?.primary).toBe('uncomfortable');
+    expect(await read(spoken)).toMatchObject({ mood: { expression: 'annoyed', primary: 'uncomfortable' } });
+    expect((await read(spoken)).mood).not.toHaveProperty('feeling');
+
+    const silent = await reactionHarness();
+    silent.speaker.decision = { say: false, text: '', feeling: 'uncomfortable', stance: 'dislike' };
+    expect(await silent.said(reflexTouch('skirt', 'stroke'))).toMatchObject({ status: 'quiet', message: null, mood: { expression: 'annoyed' } });
+    expect(await read(silent)).toMatchObject({ mood: { expression: 'annoyed', primary: 'uncomfortable' } });
+
+    const ordinary = await reactionHarness();
+    ordinary.speaker.decision = { say: true, text: 'それはいやです。', feeling: 'uncomfortable', stance: 'dislike' };
+    expect(await ordinary.said({ type: 'pet', durationMs: 1_500, ongoing: true, region: 'face', part: 'cheek', gesture: 'stroke' }))
+      .toMatchObject({ status: 'said', message: { expression: 'annoyed' }, mood: { expression: 'annoyed' } });
+    expect(ordinary.state().expressiveEmotion?.primary).toBe('uncomfortable');
+    expect(await read(ordinary)).toMatchObject({ mood: { expression: 'annoyed', primary: 'uncomfortable' } });
+  });
+});
