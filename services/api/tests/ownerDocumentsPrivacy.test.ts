@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createInitialCompanionState } from '@shannon/cognition';
 import { chatAudienceTurn } from '../src/chatAudience.js';
-import { noteProvenance } from '../src/autonomyLoopProvenance.js';
+import { heldForOthers, noteProvenance } from '../src/autonomyLoopProvenance.js';
 import type { AutonomyReachOuts } from '../src/autonomyLoopReachOutStep.js';
 import { AutonomyToolResults } from '../src/autonomyLoopToolStep.js';
 import type { ConversationStore } from '../src/conversationStore.js';
@@ -168,7 +168,7 @@ describe('what she writes after reading the owner\'s documents', () => {
 });
 
 describe('a note written after reading a shared Notion page', () => {
-  it('is marked whether or not her own time may read the owner\'s documents, and with the switch off nothing else changes', async () => {
+  it('is marked, and its session holds her messages with others present and reaches nobody else, with the switch off too', async () => {
     const notion = { read: async () => ({ title: '登場人物', url: 'https://www.notion.so/p1', text: '白ウサギの話。時計を持って走っている。' }) };
     const { voice, harness, call, session, document, isMarked } = await marked(undefined, { notion });
     let outreach: unknown = null;
@@ -186,8 +186,24 @@ describe('a note written after reading a shared Notion page', () => {
     expect(isMarked(written.id)).toBe(true);
     expect((await call('aether.search', { query: note.title.slice(0, 4), scope: 'shannonFolder' }, 'others')).text).not.toContain(written.id);
     expect((await call('aether.search', { query: note.title.slice(0, 4), scope: 'shannonFolder' }, 'owner_alone')).text).toContain(written.id);
-    // The switch is off: her message is not held, and the gate decides outreach as it always did.
+    // The switch is off, and still (owner decision 2026-10-06): her message is held with someone else present, and outreach is refused.
+    expect(harness.loopConfig.ownerDocuments).toBe(false);
+    expect(voice.said).toEqual([]);
+    expect(outreach).toMatchObject({ decision: 'forbidden', reason: 'owner_informed', domain: 'outreach' });
+    // A message, a second call and a phone call share the one check; alone with him, and in a session that is not marked, she speaks.
+    const open = harness.store.loop.startCycle(scope, '2026-10-02', 'activity', [], harness.clock.at);
+    expect(heldForOthers(harness, open, harness.clock.at)).toBe(false);
+    harness.store.informed.markSession(open.id, harness.clock.at);
+    expect(heldForOthers({ ...harness, reachOuts: voice.reachOuts }, open, harness.clock.at)).toBe(true);
+    voice.state.others = false;
+    expect(heldForOthers({ ...harness, reachOuts: voice.reachOuts }, open, harness.clock.at)).toBe(false);
+    voice.state.others = true;
+    harness.store.loop.endCycle(open.id, 'test', harness.clock.at);
+    const unmarked = await session([
+      { thought: '話しかけます。', steps: [{ action: 'reach_out', reason: 'wonder' }] },
+      { thought: '休みます。', steps: [rest] },
+    ]);
+    expect(harness.store.informed.sessionInformedAt(unmarked)).toBeNull();
     expect(voice.said).toHaveLength(1);
-    expect(outreach).toMatchObject({ decision: 'needs_approval', reason: 'reaches_others' });
   });
 });

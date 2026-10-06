@@ -156,8 +156,8 @@ export class ShannonAutonomyService {
       } } : {}),
       ...(reachOuts ? { reachOuts } : {}),
       ...(followUps ? { reachOutFollowUps: followUps } : {}),
-      // A session that read the owner's documents reaches nobody else (ADR-0007), while her own time may read them at all.
-      ...(calls ? { calls } : {}), ...(this.dependencies.aether?.ownerDocuments && this.store.informed.openSessionInformed(scopeKey) ? { ownerInformed: true } : {}),
+      // A session that read the owner's documents or a shared Notion page reaches nobody else (ADR-0007, owner decisions 2026-10-06).
+      ...(calls ? { calls } : {}), ...(this.store.informed.openSessionInformed(scopeKey) ? { ownerInformed: true } : {}),
     });
     const declared = request && typeof request === 'object' ? request : {} as Partial<AutonomousActionRequest>;
     const entry = this.store.activity.append(scopeKey, dayKey, at, {

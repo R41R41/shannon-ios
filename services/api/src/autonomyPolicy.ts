@@ -105,7 +105,8 @@ export interface AutonomyPolicyContext {
   calls?: { available: boolean };
   /**
    * The session of her own time open now has read one of the owner's documents or a shared Notion page (the provenance mark,
-   * owner decision 2026-10-06, Syzygy ADR-0007): until it rests, nothing reaches anyone but the owner, not even with approval.
+   * owner decisions 2026-10-06, Syzygy ADR-0007; whatever `SHANNON_AUTONOMY_OWNER_DOCUMENTS` says): until it rests, nothing
+   * reaches anyone but the owner, not even with approval.
    */
   ownerInformed?: boolean;
 }
