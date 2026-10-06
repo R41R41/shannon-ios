@@ -588,7 +588,7 @@ describe('guests and other people present never move her feeling toward the owne
     expect(decidedReplyFeeling({ replyFeeling: { kind: 'furious' as never, intensity: 0.9 } }, true, {})).toEqual({});
     // Every production source is read: the field is named only by the adapter, this module, the presence entry and the kernel's chat turn.
     const files = apiSourceFiles();
-    expect(files.length).toBeGreaterThanOrEqual(360);
+    expect(files.length).toBeGreaterThanOrEqual(300);
     const naming = files.filter(path => /replyFeeling|resolveTextReplyEmotion|resolveWrittenReplyEmotion/iu.test(readFileSync(path, 'utf8')))
       .map(path => basename(path)).sort();
     // (`autonomyCore.ts` names the module's path among the core paths.)

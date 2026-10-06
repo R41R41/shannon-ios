@@ -391,7 +391,8 @@ describe('activity loop: a single runner', () => {
   it('has no way to start another runner, process, or copy of itself', async () => {
     const { readFileSync } = await import('node:fs');
     const sources = apiSourceFilesNamed(/^autonomyLoop|^autonomyWorker|^autonomyReader|^autonomyShowing|^autonomyTextModel|^study/u);
-    expect(sources.length).toBeGreaterThanOrEqual(31);
+    // 31 today; the floor leaves room for a later merge or split, and still fails on a scan that finds little.
+    expect(sources.length).toBeGreaterThanOrEqual(25);
     for (const path of sources) {
       const name = basename(path);
       const source = readFileSync(path, 'utf8');

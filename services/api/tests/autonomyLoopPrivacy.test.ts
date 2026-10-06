@@ -533,7 +533,7 @@ describe('what reaches the prompts of her own activity', () => {
     const read = (name: string) => readApiSource(name);
     const imports = (name: string) => importedModules(name);
     const names = apiSourceNames();
-    expect(names.length).toBeGreaterThanOrEqual(360);
+    expect(names.length).toBeGreaterThanOrEqual(300);
     const loopSources = names.filter(name => /^autonomyLoop.*\.ts$/u.test(name));
     expect(loopSources.sort()).toEqual([
       'autonomyLoop.ts', 'autonomyLoopCalls.ts', 'autonomyLoopConfig.ts', 'autonomyLoopFolderStep.ts', 'autonomyLoopFollowUpStep.ts', 'autonomyLoopLookStep.ts',

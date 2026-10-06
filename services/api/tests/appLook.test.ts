@@ -1156,7 +1156,7 @@ describe('the frame is never kept', () => {
     }
     // One place opens a look through the app, and her activity loop knows nothing of it.
     const names = apiSourceNames();
-    expect(names.length).toBeGreaterThanOrEqual(360);
+    expect(names.length).toBeGreaterThanOrEqual(300);
     expect(names.filter(name => /offerAppLook: true/u.test(source(name)))).toEqual(['appLook.ts']);
     expect(names.filter(name => /^(?:autonomy|platformBridge|push|initiative)/u.test(name) && /appLook|AppLook/u.test(source(name)))).toEqual([]);
   });

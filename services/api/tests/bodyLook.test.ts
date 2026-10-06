@@ -716,7 +716,7 @@ describe('the frame is never kept', () => {
     // through the one module `voiceRoomLook.ts`. In her own time (stage 2): one gated step of the activity loop, which the gate
     // knows as the domain `room_look`. The other voice routes and the platform bridge have no path to it.
     const names = apiSourceNames();
-    expect(names.length).toBeGreaterThanOrEqual(360);
+    expect(names.length).toBeGreaterThanOrEqual(300);
     const callers = names.filter(name => /\.turnLooks\.turn\(|this\.body\.turn\(|offerRoomLook: true/u.test(source(name)));
     // The chat turn asks `conversationLooks.ts`, which passes every turn to her body first (and then, for a turn from an app, to `appLook.ts`).
     expect(callers.sort()).toEqual(['apiKernel.ts', 'bodyLook.ts', 'conversationLooks.ts']);

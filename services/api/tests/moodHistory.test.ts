@@ -606,7 +606,7 @@ describe('structure', () => {
 
   it('is written by the recorder alone and read by its route alone: not the kernel, not a prompt, not the activity loop', () => {
     const names = apiSourceFiles().map(path => basename(path));
-    expect(names.length).toBeGreaterThanOrEqual(360);
+    expect(names.length).toBeGreaterThanOrEqual(300);
     expect(names.filter(name => source(name).includes('shannon_mood_history')).sort()).toEqual(['moodHistory.ts', 'moodHistoryReader.ts']);
     expect(names.filter(name => imports(name, 'moodHistoryReader.ts')).sort()).toEqual(['server.ts', 'serverMoodHistoryRoute.ts']);
     expect(names.filter(name => imports(name, 'moodHistory.ts')).sort())

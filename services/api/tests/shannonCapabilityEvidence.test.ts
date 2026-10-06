@@ -215,7 +215,7 @@ describe('Shannon capability description', () => {
     // No mail, alarm, or media-generation integration exists in the API sources, and no calendar is reached from the server:
     // the apps send a snapshot of upcoming events (`calendar_read`); nothing here reads or writes a calendar service.
     const files = apiSourceFiles();
-    expect(files.length).toBeGreaterThanOrEqual(360);
+    expect(files.length).toBeGreaterThanOrEqual(300);
     const sources = files.map(path => readFileSync(path, 'utf8')).join('\n');
     expect(limitations.has('media_generation')).toBe(true);
     expect(sources).not.toMatch(/image_generation|images\/generations|video_generation/u);

@@ -44,7 +44,15 @@ final class ShannonTranscriptionPromptLeakTests: XCTestCase {
 
     func testSwiftVocabularyMatchesTheServerPrompt() throws {
         // The server owns the prompt; the client list must stay in step with it.
-        let server = try String(contentsOfFile: "../../services/api/src/openaiTranscriptionSession.ts", encoding: .utf8)
+        // Found by name anywhere under the API sources, which move into folders (Syzygy ADR-0008 §6).
+        let repository = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let sources = repository.appending(path: "services/api/src")
+        let enumerator = try XCTUnwrap(FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil))
+        let matches = enumerator.compactMap { $0 as? URL }.filter { $0.lastPathComponent == "openaiTranscriptionSession.ts" }
+        XCTAssertEqual(matches.count, 1, "exactly one openaiTranscriptionSession.ts under services/api/src")
+        let server = try String(contentsOf: try XCTUnwrap(matches.first), encoding: .utf8)
         let marker = "const TRANSCRIPTION_PROMPT = '"
         let start = try XCTUnwrap(server.range(of: marker)?.upperBound)
         let end = try XCTUnwrap(server[start...].firstIndex(of: "'"))

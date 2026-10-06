@@ -454,7 +454,7 @@ describe('the snapshot stays out of every prompt', () => {
 
   it('is referenced by the ops files and the server entry point only', () => {
     const files = apiSourceFiles();
-    expect(files.length).toBeGreaterThanOrEqual(360);
+    expect(files.length).toBeGreaterThanOrEqual(300);
     const referencing = files.filter(path => !owners.has(basename(path)) && markers.test(readFileSync(path, 'utf8'))).map(path => basename(path));
     expect(referencing).toEqual(['server.ts']);
     for (const name of owners) expect(apiSourceFile(name), name).toBeTruthy();

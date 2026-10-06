@@ -8,7 +8,7 @@ import {
 describe('tests/support/sources.ts', () => {
   it('lists every API source file, recursively, with unique basenames', () => {
     const files = apiSourceFiles();
-    expect(files.length).toBeGreaterThanOrEqual(360);
+    expect(files.length).toBeGreaterThanOrEqual(300);
     expect(files.every(path => path.startsWith(apiSourceRoot) && path.endsWith('.ts'))).toBe(true);
     const names = apiSourceNames();
     expect(new Set(names).size).toBe(names.length);

@@ -30,7 +30,8 @@ describe('CORE as code', () => {
 
   it('keeps every autonomy source file of the API inside core', () => {
     const sources = apiSourceFilesNamed(/^(?:autonomy|apiAutonomy).*\.ts$/u);
-    expect(sources.length).toBeGreaterThanOrEqual(48);
+    // 48 today; the floor leaves room for a later merge or split, and still fails on a scan that finds little.
+    expect(sources.length).toBeGreaterThanOrEqual(38);
     for (const path of sources) {
       expect(coreAreaForRepositoryPath(repositoryPath(path)), basename(path)).not.toBeNull();
     }

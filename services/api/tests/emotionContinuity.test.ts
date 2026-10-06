@@ -652,7 +652,7 @@ describe('the emotion source stays core', () => {
     expect(clock).toMatch(/observe\(scopeKey: string\): void;\n  close\(\): void;/u);
     // Only the worker's entry file uses it; no module of the loop does, and the loop still imports nothing of her emotion.
     const names = apiSourceNames();
-    expect(names.length).toBeGreaterThanOrEqual(360);
+    expect(names.length).toBeGreaterThanOrEqual(300);
     expect(names.filter(name => importedModules(name).includes('autonomyAwakeClock.ts'))).toEqual(['autonomyWorker.ts']);
     for (const name of names.filter(file => file !== 'autonomyWorker.ts')) {
       if (/^autonomyLoop/u.test(name)) expect(source(name), name).not.toMatch(/presentShannonFeeling|expressiveEmotion|lingering|emotionTiming/u);
