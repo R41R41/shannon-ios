@@ -9,7 +9,7 @@ import type { ShannonToolRunner } from './shannonToolRunner.js';
 import { toolTraceCall } from './shannonToolTrace.js';
 import { InMemoryToolTraces, TOOL_FOLLOW_UP_MILLISECONDS, ToolTurnLog, type ToolTraceStore } from './shannonToolTurns.js';
 import { toolSessionMemory } from './shannonToolTypes.js';
-import { ownToolsEnabled, providerToolName, toolFailure, toolFromProviderName, toolResultForModel } from './shannonTools.js';
+import { ownToolsEnabled, providerToolName, toolFailure, toolFromProviderName, toolResultForModel, type ShannonToolDefinition } from './shannonTools.js';
 import type { TurnDeadline } from './turnDeadline.js';
 import { answersWithPlace, asksForMemo, asksWhichPlace, namesAether } from './memoPlace.js';
 export { withMinecraftToolLine } from './shannonMinecraftTools.js';
@@ -114,6 +114,7 @@ export function conversationTools(
       scopeKey, surface, audience, memory, threadId, ...(secrets !== undefined ? { secrets } : {}), ...(others !== undefined ? { othersText: others } : {}),
       ...(timeMilliseconds !== undefined ? { timeMilliseconds } : {}),
     }, signal);
+    if (result.ok && writesHerOwnThings(definitions.find(item => item.name === tool.name))) WROTE_HER_OWN_THINGS.add(session);
     return { output: toolResultForModel(result), note: () => trace?.called(toolTraceCall(tool?.name ?? providerName.slice(0, 80), argumentsJson, result, secrets)) };
   };
   // Not enumerable: two turns that offer the same tools are the same request (what the model is asked), whoever runs the calls.
@@ -127,6 +128,23 @@ export function conversationTools(
     },
   });
   return { tools: session };
+}
+
+/** The tool sessions of turns in which a write of hers to her own places, or a proposal to the owner's Aether, worked. */
+const WROTE_HER_OWN_THINGS = new WeakSet<object>();
+
+/** A write with her own tools: her study, her Aether folder, her PC or Mac folder, or a proposal to the owner's Aether inbox. */
+function writesHerOwnThings(tool: ShannonToolDefinition | undefined): boolean {
+  return tool?.effect === 'write' && (tool.domain === 'aether_study' || tool.domain === 'host_folder' || tool.domain === 'aether_proposal');
+}
+
+/**
+ * Whether a write with her own tools worked in this turn (`writesHerOwnThings`). Such a turn has done what the owner asked
+ * with her own hands, so the turn proposes no agent task (2026-10-06: after `aetherFolder.create` wrote 「シャノンのやりたいことリスト」
+ * the same reply also proposed a Codex task to write it). A code request in the same words is asked again in the next turn.
+ */
+export function turnWroteHerOwnThings(tools: ShannonModelToolSession | undefined): boolean {
+  return tools !== undefined && WROTE_HER_OWN_THINGS.has(tools);
 }
 
 /**

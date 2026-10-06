@@ -64,7 +64,7 @@ import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
 import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
 import type { ShannonToolRunner } from './shannonToolRunner.js';
-import { conversationTools, toolTraceReader, withToolCapabilityLines, type ConversationToolServer } from './shannonToolSession.js';
+import { conversationTools, toolTraceReader, turnWroteHerOwnThings, withToolCapabilityLines, type ConversationToolServer } from './shannonToolSession.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from './turnDeadline.js';
 import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from './ownerCallElsewhere.js';
 
@@ -373,14 +373,15 @@ async function completeLiveVoiceDelegation(
   observer?.signal?.throwIfAborted();
   const turnPrompt = [turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n');
   const replayed = replay?.request(turnPrompt) ?? { ...(turnPrompt ? { turnContext: turnPrompt } : {}), history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) };
+  const toolOffer = conversationTools(dependencies.autonomy, scopeKey, 'voice',
+    // 「友人も一緒」: her Aether reading tools (owner decision 2026-10-06); a client that predates people memory, none.
+    temporaryGuest ? !legacyGuest && 'guests' : alone || 'others', dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline,
+    { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) });
   const modelRequest = withToolCapabilityLines({ // Her Minecraft body's and Aether's lines, in her identity, exactly when their tools are offered.
     scopeKey, systemPrompt: basePrompt, ...(identity.profile ? { profilePrompt: identity.profile } : {}), ...replayed,
     // What she said when she was touched is what he is answering: it directly precedes his words, in every mode, as context only.
     ...(reactionLine ? { precedingReply: reactionLine } : {}),
-    message: transcript, ...conversationTools(dependencies.autonomy, scopeKey, 'voice',
-      // 「友人も一緒」: her Aether reading tools (owner decision 2026-10-06); a client that predates people memory, none.
-      temporaryGuest ? !legacyGuest && 'guests' : alone || 'others', dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline,
-      { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }),
+    message: transcript, ...toolOffer,
     useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   });
@@ -461,7 +462,8 @@ async function completeLiveVoiceDelegation(
   if (placeSkill?.places.length) {
     uiBlocks = [{ type: 'place_search', places: placeSkill.places }];
   }
-  if (alone && !uncertainTranscript && taskProposal && !isExplicitVoyagerUpdateRequest(transcript)) {
+  // A turn that wrote with her own tools has done the request itself: no agent task for it (`turnWroteHerOwnThings`).
+  if (alone && !uncertainTranscript && taskProposal && !isExplicitVoyagerUpdateRequest(transcript) && !turnWroteHerOwnThings(toolOffer.tools)) {
     if (orchestrationState) {
       orchestrationState = dependencies.conversationOrchestration.save(recordConversationProposal(
         orchestrationState, taskProposal.goal, occurredAt, dependencies.agentTasks.list(scopeKey),
