@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { REWARD_FORMULA, ROOT_VALUE, choiceFamily, growthScore, predictionSkill, rewardOf, serveRule, serveScore, settle, worldScore, type LinkedPrediction } from '../src/index.js';
+import { REWARD_FORMULA, ROOT_VALUE, choiceFamily, moodEligible, growthScore, predictionSkill, rewardOf, serveRule, serveScore, settle, worldScore, type LinkedPrediction } from '../src/index.js';
 
 const linked = (overrides: Partial<LinkedPrediction> = {}): LinkedPrediction => ({
   domain: 'reply', status: 'matched', expectation: 0.5, uncertainty: 0.0833, noise: 0.25, prior: 0.5, outcome: 1, lower: 0, upper: 1, ...overrides,
@@ -61,5 +61,13 @@ describe('the reward of a choice', () => {
     expect(settle({ world: 0, serve: 0, growth: 0 }, { mean: 0, variance: 0.01, noise: 0.01 }).unexpected).toBe(0);
     expect(choiceFamily('tool.study.search')).toBe('tool');
     expect(choiceFamily('draft')).toBe('draft');
+  });
+
+  it('never lets a choice credited only because time ran out, or one without a reward, be eligible for mood', () => {
+    expect(moodEligible({ status: 'settled', settleCode: 'reply', delta: 0.2 })).toBe(true);
+    expect(moodEligible({ status: 'settled', settleCode: 'superseded', delta: -0.1 })).toBe(true);
+    for (const code of ['stale', 'story_expired', 'inherited_expired', 'reported_expired', 'reply_expired']) expect(moodEligible({ status: 'settled', settleCode: code, delta: 0.1 }), code).toBe(false);
+    expect(moodEligible({ status: 'void', settleCode: 'void', delta: null })).toBe(false);
+    expect(moodEligible({ status: 'pending', settleCode: null, delta: null })).toBe(false);
   });
 });

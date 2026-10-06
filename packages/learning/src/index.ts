@@ -42,8 +42,10 @@ export {
   type ReliabilityBin,
 } from './calibration.js';
 export {
+  MOOD_INELIGIBLE_CODES,
   REWARD_FORMULA,
   ROOT_VALUE,
+  moodEligible,
   choiceFamily,
   growthScore,
   predictionSkill,

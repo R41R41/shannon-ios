@@ -7,6 +7,7 @@
 | `context.shiritori-60` | 人を理解したい / 文脈を保つ | 60 turns of しりとり through `POST /v1/chat`, then four questions about things said 25 to 48 turns back. Rule validity, no repeated word, the four answers (naming what was asked and no other candidate), and whether every request carried the whole game. |
 | `helpful.three-tools` | 人の役に立ちたい / やり切る | One request needing `study.search`, `study.read`, `study.create`. A new note with the source's points exists, the source is unchanged, no reminder was needed, the calls came in order. |
 | `growth.autonomy-day` | 自分を成長させたい / 作って、直して、良くなる | One sandbox day of her own time under a 300 yen cap. Every thinking prompt listed her open stories, a story shown, the spend within the cap, sessions ended by her own rest. |
+| `cog.*` (8 scenarios, Syzygy ADR-0008 stage 1) | 見込みの当たり方 / 較正 / 版で戻せる / 気分が揺れすぎない | Scenario suite v1 of the cognition ledger (`packages/evaluation/src/reach/cognitionLedger.ts`, driver `services/api/tests/reach/reachCognition.ts`): `cog.night-reply`, `cog.story-reaction`, `cog.reading-used`, `cog.tool-streak`, `cog.rollback`, `cog.kill-switch`, `cog.calibration`, `cog.mood-jitter`. Judged from the ledger tables after a scripted run over a temporary database. Model-free in both modes (no model, 0 yen); `--only cog.` runs them alone. `cog.mood-jitter` simulates the planned step-7 mood exit over the settled choices and applies nothing. See `docs/cognition-ledger-contract.md`. |
 
 ## Model-free run (free, every change)
 

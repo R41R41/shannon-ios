@@ -15,7 +15,7 @@ This file is the contract. The pure parts are in `packages/learning` (`@shannon/
 | 3 | Prediction ledger, five new domains, calibration | in place (`packages/learning/src/{predictionLedger,calibration}.ts`, `mind/learning/`; tests `predictionLedger.test.ts`, `cognitionLedgerContention.test.ts`) |
 | 4 | Choice ledger, reward settlement, nightly pass, tool-call choices | in place (`packages/learning/src/reward.ts`, `mind/learning/{choiceLedger,rewardSettlement}.ts`, `mind/sleep/valueSleep.ts`; tests `reward.test.ts`, `choiceLedger.test.ts`) |
 | 5 | Value table, versions, CLI and owner route | not yet |
-| 6 | Scenario suite v1 and a baseline report | not yet |
+| 6 | Scenario suite v1 and a baseline report | in place (`packages/evaluation/src/reach/cognitionLedger.ts`, `services/api/tests/reach/reachCognition.ts`; `scripts/reach-measures.sh run --only cog.`) |
 | 7 | Effects: 7a value facts, 7b reward mood | not yet; shown to the owner before deployment (override 4) |
 
 Until step 7 nothing here changes a prompt, a reply, her feeling or a step of hers: the tables are written and read by nothing that acts.
@@ -182,6 +182,23 @@ What a choice in a kind of moment has been worth to her (ADR-0008 §3 価値表)
   - `GET /v1/autonomy/values` (a paired device of the owner's scope, `SHANNON_OWNER_SCOPE_KEY`): the versions, the active version's cells, whether it is frozen, the calibration of her predictions and her choices by status. `POST /v1/autonomy/values/rollback` (`{ "versionId"?: string }`) and `POST /v1/autonomy/values/resume` answer the same view; errors `VALUES_NO_ACTIVE_VERSION`, `VALUES_NO_EARLIER_VERSION`, `VALUES_NOT_FROZEN` (409), `VALUES_VERSION_NOT_FOUND` (404), `VALUES_DISABLED` (403, the choice ledger off). `infra/http/learningRoutes.ts`.
   - `scripts/shannon-values.sh show|rollback [--version ID]|resume [--scope S] [--database PATH]` on the server, the same controls.
   - Each control is written to the activity record as an owner action (`kind` control, `actor` owner, `tool` `values.rollback` or `values.resume`, the new version's id as its detail).
+
+## Scenario suite v1 (step 6)
+
+Eight model-free scenarios in the reach suite (`docs/testing/reach-measures-runbook.md`), each running the real ledgers over a temporary database with a scripted clock and judging the tables afterwards:
+
+| Scenario | What passes |
+| --- | --- |
+| `cog.night-reply` | After ten days of unanswered night messages and answered evening ones, the next night message is opened expecting a reply below 0.3 and the evening one above 0.7; the reply predictions have positive skill over the prior; V of a night message is below an evening one's. |
+| `cog.story-reaction` | A showing that got 「もっと」 is credited S = 0.5 and the last revision before it inherits it (earlier drafts superseded); a story nobody reacted to in 14 days gets S = 0, `story_expired`, not eligible for mood; every text value is closed. |
+| `cog.reading-used` | Noted readings settle `reading_used` = 1, the others expire at 0 after 7 days; reading choices settle after them with W > 0. |
+| `cog.tool-streak` | A streak of successful conversation tool calls raises the tool's cell above 0, a streak of failures lowers it; every call is a settled choice with no mood claimed. |
+| `cog.rollback` | The rollback version's cells and V reads equal the earlier version's; no version while frozen; resume equals a fold of all evidence; both controls are owner entries of the activity record. |
+| `cog.kill-switch` | With `SHANNON_ADR8_STAGE1=off` no stage-1 table exists and every switch reads off; with only the choice ledger off, predictions are kept and no choice is. |
+| `cog.calibration` | With known probabilities (0.8, 0.2), the Brier score of `call_answer` is within 0.03 of the best possible and every reliability bin within 0.15; 65–95 % of story reactions fall in their 80 % interval. |
+| `cog.mood-jitter` | The planned step-7 exit (`impulseAffect`, chosen: γ 0.61, w_δ 1, w_E 0.4375, u), simulated over the settled choices: through a day of alternating small successes and failures the mood stays inside the stationary band and no swing between two choices exceeds it; repeating one success, the mean \|δ\| of the fifth day is at most half the first's; twenty mixed choices in ten minutes move valence less than 0.5; expired and void choices are never eligible (`moodEligible`). |
+
+**Mood eligibility** (`packages/learning/src/reward.ts`, `moodEligible`): a settled choice with a δ, except those credited only because time ran out (`stale`, `story_expired`, `inherited_expired`, `<code>_expired` when a linked prediction expired). A choice whose linked prediction settles later by a scored expiry (`story_reacted`, `reading_used`) waits for it. Staleness against the learned episode boundary is judged by the exit itself in step 7.
 
 ## Mood (step 7)
 

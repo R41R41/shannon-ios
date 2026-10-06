@@ -1,5 +1,5 @@
 import { SHANNON_PREDICTION_DOMAINS } from '@shannon/cognition';
-import { growthScore, serveRule, serveScore, settle, worldScore, type LinkedPrediction } from '@shannon/learning';
+import { LEDGER_DOMAIN_RULES, growthScore, serveRule, serveScore, settle, worldScore, type LinkedPrediction } from '@shannon/learning';
 import type { SQLiteChoiceLedger, StoredChoice } from './store/sqliteChoiceLedger.js';
 import type { SQLitePredictionLedger, StoredPrediction } from './store/sqlitePredictionLedger.js';
 
@@ -40,8 +40,11 @@ export function settlePending(choices: SQLiteChoiceLedger, predictions: SQLitePr
       continue;
     }
     const linked = predictions ? predictions.forChoice(scopeKey, choice.choiceId).map(linkedPrediction) : [];
+    // What it is scored by includes a prediction that will settle later (a reading used, a story reacted to): wait for it.
+    if (linked.some(item => item.status === 'open' && LEDGER_DOMAIN_RULES[item.domain].expiryOutcome !== null)) continue;
     const rule = serveRule(choice.choice);
-    const found = rule === 'inherit' ? inheritedServe(choices, scopeKey, choice, now) : { serve: serveScore(rule, linked), code: SERVE_CODE[rule] };
+    const found = rule === 'inherit' ? inheritedServe(choices, scopeKey, choice, now)
+      : { serve: serveScore(rule, linked), code: linked.some(item => item.status === 'expired') ? (rule === 'show' ? 'story_expired' : `${SERVE_CODE[rule]}_expired`) : SERVE_CODE[rule] };
     if (found.serve === 'pending') continue;
     if (found.serve === null) {
       if (choices.settle(scopeKey, choice.choiceId, null, 'void', at)) settled += 1;
@@ -69,7 +72,8 @@ export function inheritedServe(choices: SQLiteChoiceLedger, scopeKey: string, ch
   if (edit >= 0 && (showing < 0 || edit < showing)) return { serve: 0, code: 'superseded' };
   if (showing >= 0) {
     const shown = later[showing]!;
-    return shown.status === 'pending' || shown.serve === null ? { serve: 'pending', code: 'inherited' } : { serve: shown.serve, code: 'inherited' };
+    if (shown.status === 'pending' || shown.serve === null) return { serve: 'pending', code: 'inherited' };
+    return { serve: shown.serve, code: shown.settleCode === 'story_expired' ? 'inherited_expired' : 'inherited' };
   }
   return now - Date.parse(choice.chosenAt) >= INHERIT_STALE_DAYS * DAY ? { serve: 0, code: 'stale' } : { serve: 'pending', code: 'inherited' };
 }
