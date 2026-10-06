@@ -66,6 +66,27 @@ describe('a marked session', () => {
     expect(harness.store.informed.marked(scope, written.id)).toBe(true);
   });
 
+  it('marks a note of a marked Notion page the moment Aether takes it, also from a session that was not marked', async () => {
+    const notion = { read: async () => ({ title: '登場人物', url: 'https://www.notion.so/p1', text: '白ウサギの話。時計を持って走っている。' }) };
+    const { fake, harness } = await ownTime({ notion });
+    // The page is read in a marked session whose note does not come out, so it stays unwritten; the next session writes it up.
+    harness.model.replies.note = { title: '', body: '' };
+    harness.model.plans = [{ thought: '読みます。', steps: [{ action: 'notion', query: 'ウサカテ' }] }, { thought: '休みます。', steps: [rest()] }];
+    await runUntilIdle(harness.loop);
+    delete harness.model.replies.note;
+    const reading = harness.store.loop.unnotedReadings(scope)[0]!;
+    const cycle = harness.store.loop.startCycle(scope, '2026-10-02', 'activity', [], harness.clock.at);
+    // The step is performed and never reported, as when the report fails: what Aether took is marked all the same.
+    const { prepareStep, adaptersFor } = await import('../src/autonomyLoopSteps.js');
+    const dependencies = { ...harness, loop: harness.loopConfig, model: harness.model, reader: harness.reader, showing: harness.showing, notion };
+    const prepared = prepareStep(dependencies, cycle, { kind: 'note', readingId: reading.id }, harness.clock.at)!;
+    await prepared.perform(adaptersFor({ decision: 'allow', domain: 'aether_study' }, dependencies), harness.clock.at);
+    const written = fake.inFolder().find(document => document.title === '夕方の駅が懐かしい理由')!;
+    expect(written).toBeTruthy();
+    expect(harness.store.informed.marked(scope, written.id)).toBe(true);
+    expect(harness.store.informed.sessionInformedAt(cycle.id)).not.toBeNull();
+  });
+
   it('writes nothing into her folder on his PC or Mac', async () => {
     const { harness, markFirstThought } = await ownTime({ environment: { SHANNON_AUTONOMY_HOST_FOLDERS_JSON: '{"owner-windows":{"deviceId":"0123456789abcdef"}}' } }, false);
     markFirstThought();

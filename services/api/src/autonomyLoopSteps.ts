@@ -264,7 +264,8 @@ function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, s
       // With Aether her note goes to 「シャノン用フォルダ」 first; what Aether refused is not kept here either.
       const pushed = adapters.aether?.covers(cycle.scopeKey) ? await aetherStep(() => adapters.aether!.create(cycle.scopeKey, { kind: 'note', title: clip(title, 80), body: body.slice(0, STUDY_LIMITS.noteBody).trim() }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'note', reading.id), signal)) : null;
       if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: 'メモを書きましたが、Aetherのシャノン用フォルダに置けませんでした。', reasonCode: pushed.reasonCode };
-      if (pushed) markEarly(dependencies, cycle, [pushed.value.documentId], at);
+      // A note of a marked page (a shared Notion page) marks its session and itself the moment Aether has it (ADR-0007).
+      if (pushed) { if (informedReading(dependencies, cycle, reading.id)) dependencies.store.informed.markSession(cycle.id, at); markEarly(dependencies, cycle, [pushed.value.documentId], at); }
       return {
         outcome: 'done', usage, summary: `メモ「${clip(title, 60)}」を書斎に書きました。`, documents: { read: [`${READING_DOCUMENT_PREFIX}${reading.id}`] },
         commit: (_remaining, commitAt) => {
@@ -416,6 +417,11 @@ function ownerWriting(dependencies: StepDependencies, scopeKey: string, at: stri
   let block: string | null = null;
   try { block = dependencies.ownerContext.forWriting(scopeKey, at, topic)?.section ?? null; } catch { block = null; }
   return { ownerInformed: true, ...(block ? { ownerContext: block } : {}) };
+}
+
+/** Whether a page she read is marked (a shared Notion page); one that cannot be read counts as marked. */
+function informedReading(dependencies: StepDependencies, cycle: AutonomyLoopCycle, readingId: string): boolean {
+  try { return dependencies.store.informed.marked(cycle.scopeKey, `${READING_DOCUMENT_PREFIX}${readingId}`); } catch { return true; }
 }
 
 /** A pursuit as a prompt of this session may name it: not one marked, in a session that is not (ADR-0007). */
