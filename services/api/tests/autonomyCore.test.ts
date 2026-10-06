@@ -50,6 +50,9 @@ describe('CORE as code', () => {
   it('keeps the folders of Syzygy ADR-0008 inside core, every file below them included', () => {
     const expected: Record<string, string> = {
       'packages/learning/': 'emotion',
+      'services/api/src/mind/inhibition/': 'approval_and_budget',
+      'services/api/src/infra/models/jev/': 'response_path',
+      'services/api/src/infra/sqlite/': 'memory',
     };
     for (const [folder, area] of Object.entries(expected)) {
       expect(coreAreaForRepositoryPath(folder)?.area, folder).toBe(area);

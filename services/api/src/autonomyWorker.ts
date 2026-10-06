@@ -33,6 +33,7 @@ import { SQLiteReachOutReports, reachOutBodyFacts } from './reachOutReports.js';
 import { ownToolsEnabled } from './shannonTools.js';
 import { configuredDatabasePath } from './sqliteStore.js';
 import { configuredPredictionShadow } from './predictionShadow.js';
+import { configuredDecisionTraces } from './mind/inhibition/decisionTraces.js';
 
 /**
  * Entry of the activity loop (Syzygy ADR-0002 step 3): its own process, so the API,
@@ -115,6 +116,9 @@ const shadow = prediction?.shadow;
 const awakeClock = configuredAwakeClock(databasePath, {
   now, moodHistory: moodHistoryRecording(process.env), ...(shadow ? { awake: (scopeKey: string, at: string) => shadow.awake(scopeKey, at) } : {}),
 });
+// Syzygy ADR-0008 stage 1: one content-free trace per thought of hers. Its own connection writes only `shannon_decision_traces` (once
+// the API has created it); the loop is handed one function. SHANNON_DECISION_TRACES=off opens nothing.
+const decisionTraces = configuredDecisionTraces(process.env, databasePath);
 const loop = new ShannonAutonomyLoop({
   store, service, config, loop: loopConfig, model: configuredAutonomyTextModel(process.env, undefined, line => console.log(line)),
   reader: new BoundedPublicReader({
@@ -127,6 +131,7 @@ const loop = new ShannonAutonomyLoop({
   // Her tools over her study and her folder (owner decision 2026-10-05); SHANNON_OWN_TOOLS=off offers none and every prompt is what it was.
   ...(ownToolsEnabled() ? { toolResults: new AutonomyToolResults() } : {}),
   ...(shadow ? { prediction: { reachOut: (...args: Parameters<typeof shadow.reachOut>) => shadow.reachOut(...args) } } : {}),
+  ...(decisionTraces ? { trace: decisionTraces.traces.writer } : {}),
   // Content-free: a step kind and a closed reason code.
   log: line => console.log(`Shannon autonomy step: ${line.replace(/[^a-z0-9_:., -]/giu, '_').slice(0, 300)}`),
 });
@@ -163,6 +168,7 @@ try {
   try { loop.release(); } catch { /* the lease runs out by itself */ }
   awakeClock.close();
   prediction?.close();
+  decisionTraces?.close();
   ownerContext?.close();
   ownerUpcoming.close();
   ownerState.close();

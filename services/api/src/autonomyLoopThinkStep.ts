@@ -1,5 +1,5 @@
 import { autonomyDayKey } from './autonomyBudget.js';
-import { callModel, ownerLocalTime, paidCall } from './autonomyLoopCalls.js';
+import { callModel, ownerLocalTime, paidCall, type PaidCall } from './autonomyLoopCalls.js';
 import { roomLookAvailable } from './autonomyLoopLookStep.js';
 import { OBSERVATION_RETENTION_DAYS, type ObservedStepKind } from './autonomyLoopObservations.js';
 import { agenticLoop, followUpsRemaining, ownerRepliedAt, reachOutChain, thinkingSteps } from './autonomyLoopObserve.js';
@@ -15,6 +15,7 @@ import { sessionMarked, unmarkedOnly, unmarkedPursuits, unmarkedReadings } from 
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import { offeredOwnTools, toolThinking } from './autonomyLoopToolStep.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
+import { autonomyModelCostUsd } from './autonomyModels.js';
 import { STUDY_LIMITS, STUDY_STATUS_LABEL } from './studyStore.js';
 
 /**
@@ -175,14 +176,17 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
     },
     purpose: 'planning', estimate: call.estimate,
     async perform(adapters, _at, signal) {
+      const started = { at: dependencies.trace ? dependencies.now?.() ?? new Date().toISOString() : '', clock: performance.now() };
       const called = await callModel(adapters, call, signal);
       const { usage, failure } = called;
+      const traced = (outcome: 'ok' | 'error', answers: { steps?: string[]; code?: string }) => traceThought(dependencies, cycle, call, called.usage, started, outcome, answers);
       // In a session a reply cut off at the output ceiling still gives the steps that were written out in full.
       const salvaged = session && !called.reply && called.truncated && called.text ? salvagedModelObject(called.text) : null;
       const reply = called.reply ?? salvaged;
       if (!reply) {
         // Why there is no plan, as a closed code: for her record, for the log, and for her next thought.
         const code = called.truncated ? 'truncated' : failure ? 'model_failed' : 'unparsable';
+        traced('error', { code });
         return {
           outcome: 'failed', usage, reasonCode: noted(code),
           // Under the fixed cycles the two sentences are the ones they were.
@@ -211,6 +215,7 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
       const unplannable = thought.steps.length > 0 ? null
         : salvaged ? 'truncated' : thought.asked === 0 ? 'empty_plan' : thought.dropped.length ? `all_steps_filtered:${[...new Set(thought.dropped)].join(',')}` : null;
       const code = unplannable ?? (salvaged ? 'truncated' : null);
+      traced('ok', { steps: thought.steps.map(item => item.kind), ...(code ? { code: code.split(':')[0]! } : {}) });
       return {
         outcome: 'done', usage, ...(code ? { reasonCode: noted(code) } : {}),
         // In a marked session her thought may retell what she read of the owner's: the record keeps that she thought, not the words.
@@ -230,6 +235,26 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
       };
     },
   };
+}
+
+/**
+ * Syzygy ADR-0008 stage 1: one content-free trace of this thought, through the writer the loop is handed (absent: nothing).
+ * The step kinds she planned and a closed code; the size of the prompt, never its words; the cost by the price table.
+ */
+function traceThought(
+  dependencies: StepDependencies, cycle: AutonomyLoopCycle, call: PaidCall, usage: { inputTokens: number; outputTokens: number } | undefined,
+  started: { at: string; clock: number }, outcome: 'ok' | 'error', answers: { steps?: string[]; code?: string },
+): void {
+  if (!dependencies.trace) return;
+  try {
+    dependencies.trace(cycle.scopeKey, {
+      surface: 'autonomy', decision: 'autonomy_think', decider: 'model', model: call.model, questions: null,
+      contextChars: call.prompt.system.length + call.prompt.prompt.length, latencyMs: performance.now() - started.clock, outcome, fallbackDecider: null,
+      answers: { ...(answers.steps ? { steps: answers.steps } : {}), ...(answers.code ? { code: answers.code } : {}) },
+      costUsd: usage ? autonomyModelCostUsd(call.model, usage, dependencies.config.modelPrices) : null,
+      relatedId: cycle.id, at: started.at,
+    });
+  } catch { /* a trace never stops a thought */ }
 }
 
 /** The owner's context for this thought, or null: switched off, not wired, nothing there, or not readable just now. */

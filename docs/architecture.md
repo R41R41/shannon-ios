@@ -702,6 +702,7 @@ On the iPhone, 「シャノン」 (`Features/ShannonHub`) opens on a card that l
 | Bounded autonomy | `autonomy_activity` (append-only), `autonomy_control`, `autonomy_spend` (append-only), `autonomy_budget_requests`, `autonomy_model_preferences`, `autonomy_pursuits`, `autonomy_proposals`; activity loop: `autonomy_loop_lease`, `autonomy_loop_cycles`, `autonomy_loop_steps`, `autonomy_loop_schedule`, `autonomy_loop_readings`; her folder: `autonomy_host_steps`; her study: `study_pieces`, `study_piece_versions` (versions are not updated), `study_feedback`, `study_aether_links` (insert-only) |
 | Her mood over time | `shannon_mood_history` (coalesced points of the owner's scope, kept 14 days; created outside the numbered migrations; schema version unchanged) |
 | Prediction (shadow, Syzygy ADR-0006 stage 1) | `shannon_prediction_outcomes` (one row per outcome, symbols and numbers only, recomputable in `seq` order), `shannon_prediction_shadow` (current and new trajectory compared); `docs/prediction-shadow-contract.md`; created outside the numbered migrations; schema version unchanged |
+| Decision traces (Syzygy ADR-0008 stage 1) | `shannon_decision_traces` (one content-free row per decision: decider, model, sizes, latency, fallback, closed answers, Jev's cost or null); the `jev` row of the usage summary; `docs/cognition-ledger-contract.md`; created outside the numbered migrations; kept 30 days |
 | Pairing | device pairing records and device tokens |
 
 ## Cognitive Evaluation Harness v0

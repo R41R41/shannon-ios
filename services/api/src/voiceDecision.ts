@@ -305,6 +305,8 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
 export function createConfiguredVoiceDecisionGateway(
   environment: Readonly<Record<string, string | undefined>> = process.env,
   usageStore?: LlmUsageStore,
+  /** The fetch the Jev client uses; decision traces pass one that counts the calls (`infra/models/jev/jevClient.ts`). */
+  jevFetcher?: typeof fetch,
 ): VoiceDecisionGateway {
   const skillThreshold = optionalProbability(
     environment.SHANNON_VOICE_SKILL_THRESHOLD ?? environment.SHANNON_JEV_SKILL_THRESHOLD,
@@ -326,6 +328,7 @@ export function createConfiguredVoiceDecisionGateway(
     timeoutMilliseconds: optionalPositiveInteger(environment.SHANNON_JEV_TIMEOUT_MS) ?? 900,
     skillThreshold,
     fallbackGateway: openAIFallback,
+    ...(jevFetcher ? { fetcher: jevFetcher } : {}),
   });
   if (openAIFallback) return openAIFallback;
   return new LocalVoiceDecisionGateway(skillThreshold);

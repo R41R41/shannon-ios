@@ -1,5 +1,9 @@
-/** `memory` is response-path recall; `memory_background` shares the monthly background budget with `sleep`. */
-export type LlmUsageLane = 'chat' | 'sleep' | 'voice' | 'memory' | 'memory_background';
+/**
+ * `memory` is response-path recall; `memory_background` shares the monthly background budget with `sleep`. `jev` is only a row
+ * of the summary, counted from the decision traces (Syzygy ADR-0008 stage 1): `llm_usage_events` and its CHECK never hold it,
+ * so the `voice` lane the transcription cap counts is untouched.
+ */
+export type LlmUsageLane = 'chat' | 'sleep' | 'voice' | 'memory' | 'memory_background' | 'jev';
 
 export interface LlmUsageEvent {
   scopeKey: string;
@@ -27,6 +31,8 @@ export interface LlmUsageSummaryRow {
   outputTokens: number;
   totalTokens: number;
   estimatedCostUsd: number;
+  /** `jev` only: some calls have no price (`SHANNON_JEV_USD_PER_CALL` unset), so the cost is 未設定 and `estimatedCostUsd` is the known part. */
+  costUnknown?: true;
 }
 
 export interface LlmUsageReader {

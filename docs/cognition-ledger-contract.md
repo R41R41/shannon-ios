@@ -11,7 +11,7 @@ This file is the contract. The pure parts are in `packages/learning` (`@shannon/
 | Step | Content | State |
 | --- | --- | --- |
 | 1 | This contract, the instructions, `packages/learning`, core map | in place |
-| 2 | Decision traces, Jev call count | next |
+| 2 | Decision traces, Jev call count | in place (`mind/inhibition/decisionTraces.ts`, `tracedVoiceDecision.ts`, `infra/models/jev/`; tests `decisionTraces.test.ts`) |
 | 3 | Prediction ledger, five new domains, calibration | next |
 | 4 | Choice ledger, reward settlement, nightly pass, tool-call choices | not yet |
 | 5 | Value table, versions, CLI and owner route | not yet |

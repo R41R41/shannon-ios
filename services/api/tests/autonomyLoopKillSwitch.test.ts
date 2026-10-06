@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { ownerPrivateRule, type AutonomyOwnerContext } from '../src/autonomyLoopOwnerContext.js';
 import { draftPrompt, reachOutPrompt, revisePrompt, thinkingPrompt } from '../src/autonomyLoopPrompts.js';
 import { OwnerInformedMarks } from '../src/ownerInformedMarks.js';
+import { checkedTrace, type DecisionTraceDraft } from '../src/mind/inhibition/decisionTraceContract.js';
 import { agenticDay, builderDigests, plainDay } from './autonomyLoopKillSwitchScenario.js';
 import { loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 
@@ -133,6 +134,17 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
       rmSync(off, { recursive: true, force: true });
       rmSync(on, { recursive: true, force: true });
     }
+  });
+
+  it('sends byte for byte the same prompts with the decision traces of Syzygy ADR-0008 stage 1 attached, and traces every thought', async () => {
+    const other = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-traced-'));
+    const traces: DecisionTraceDraft[] = [];
+    try {
+      const day = await agenticDay(other, { ...CAP_OF_78C3493, trace: (_scopeKey, draft) => { traces.push(checkedTrace(draft)); } });
+      expect(day.map(call => [call.kind, call.digest])).toEqual(AGENTIC_DAY_AT_78C3493);
+      expect(traces).toHaveLength(day.filter(call => call.kind === 'think').length);
+      expect(traces.every(trace => trace.decision === 'autonomy_think' && trace.decider === 'model' && trace.outcome === 'ok' && Array.isArray(trace.answers.steps))).toBe(true);
+    } finally { rmSync(other, { recursive: true, force: true }); }
   });
 
   it('builds byte for byte the prompts of the commit before from every prompt builder', () => {

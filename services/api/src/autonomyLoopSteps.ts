@@ -25,6 +25,7 @@ import type { ShannonAutonomyService } from './autonomyService.js';
 import type { ShowingOutcome, StudyShowing } from './autonomyShowing.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import type { AutonomyTextModel } from './autonomyTextModel.js';
+import type { DecisionTraceWriter } from './mind/inhibition/decisionTraceContract.js';
 import { READING_DOCUMENT_PREFIX } from './ownerInformedMarks.js';
 import type { ToolDocuments } from './shannonToolTypes.js';
 import { aetherStep, studyWriteKey, type StudyAether } from './studyAether.js';
@@ -80,6 +81,8 @@ export interface StepDependencies {
   wait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
   /** Syzygy ADR-0006 stage 1: a write-only tap handed what followed a message of hers; it returns nothing to the loop. */
   prediction?: AutonomyPredictionTap;
+  /** Syzygy ADR-0008 stage 1: writes one content-free trace of a thought of hers; returns nothing. Absent (switched off), nothing is written. */
+  trace?: DecisionTraceWriter;
 }
 
 /** The adapters of one domain. A step allowed for a domain can reach nothing else. */

@@ -9,6 +9,8 @@ import { callGateContext, type AutonomyPhone } from '../src/autonomyLoopPhoneSte
 import type { AutonomyReachOuts, AutonomyUpcoming } from '../src/autonomyLoopReachOutStep.js';
 import type { AutonomyNotionReader } from '../src/autonomyLoopSteps.js';
 import type { AutonomyToolResults } from '../src/autonomyLoopToolStep.js';
+import type { AutonomyPredictionTap } from '../src/autonomyLoopObservations.js';
+import type { DecisionTraceWriter } from '../src/mind/inhibition/decisionTraceContract.js';
 import type { AutonomyPublicReader, PublicReading } from '../src/autonomyReader.js';
 import { ShannonAutonomyService, type AutonomyServiceDependencies } from '../src/autonomyService.js';
 import type { ShowablePiece, ShowingOutcome, StudyShowing } from '../src/autonomyShowing.js';
@@ -142,6 +144,10 @@ export interface LoopHarnessOptions {
   loopEnvironment?: Record<string, string>;
   /** Her registry tools in her own time; absent, as with `SHANNON_OWN_TOOLS=off`, none is offered. */
   toolResults?: AutonomyToolResults;
+  /** Syzygy ADR-0006/0008: the write-only taps of the prediction record; absent, as with their switches off. */
+  prediction?: AutonomyPredictionTap;
+  /** Syzygy ADR-0008 stage 1: the decision trace writer; absent, as with `SHANNON_DECISION_TRACES=off`. */
+  trace?: DecisionTraceWriter;
 }
 
 export function loopHarness(options: LoopHarnessOptions = {}) {
@@ -181,6 +187,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     ...(reachOuts ? { reachOuts } : {}), ...(options.upcoming ? { upcoming: options.upcoming } : {}), ...(options.phone ? { phone: options.phone } : {}),
     ...(options.ownerContext ? { ownerContext: options.ownerContext } : {}), ...(options.log ? { log: options.log } : {}),
     ...(options.toolResults ? { toolResults: options.toolResults } : {}),
+    ...(options.prediction ? { prediction: options.prediction } : {}), ...(options.trace ? { trace: options.trace } : {}),
   });
   const loop = newLoop('runner-a');
   const entries = () => service.activityDays(scope, 30).flatMap(day => day.entries);

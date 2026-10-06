@@ -566,6 +566,8 @@ describe('what reaches the prompts of her own activity', () => {
       './autonomyLoopOwnerContext.js',
       // The closed vocabulary of what her body may report about a message of hers: constants of the wire contract, no store.
       './bodyContract.js',
+      // Syzygy ADR-0008 stage 1: the closed vocabulary of a decision trace and the type of the writer the loop is handed; no store.
+      './mind/inhibition/decisionTraceContract.js',
       './autonomyBudget.js', './autonomyLoopConfig.js', './autonomyLoopPlan.js', './autonomyLoopPrompts.js', './autonomyLoopState.js',
       './autonomyLoopSteps.js', './autonomyModels.js', './autonomyPolicy.js', './autonomyReader.js', './autonomyService.js',
       './autonomyShowing.js', './autonomyStore.js', './autonomyTextModel.js', './studyStore.js',

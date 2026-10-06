@@ -13,7 +13,7 @@ import { createConfiguredTurnMemoryRecall } from './turnMemoryRecall.js';
 import { DurableBackgroundDispatcher } from './backgroundUpdates.js';
 import { startToolTraceSweep } from './shannonToolTraceSweep.js';
 import { createConfiguredChatModel } from './chatModel.js';
-import { createConfiguredVoiceDecisionGateway } from './voiceDecision.js';
+import { configuredVoiceDecision } from './mind/inhibition/tracedVoiceDecision.js';
 import { configuredAuthPepper, SQLiteDeviceAuthStore, type ShannonDevicePrincipal } from './deviceAuth.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
 import { ShannonMemoryService } from './memoryService.js';
@@ -133,7 +133,8 @@ const incomingCallRoute: IncomingCallRoute | null = createIncomingCallRoute(proc
 const ownOutreach = new SQLiteOwnOutreach(configuredDatabasePath());
 const ownerCallFacts = new SQLiteOwnerCallFacts(configuredDatabasePath());
 const chatModel = createConfiguredChatModel(process.env, persistentStore);
-const voiceDecision = createConfiguredVoiceDecisionGateway(process.env, persistentStore);
+// Syzygy ADR-0008 stage 1: one content-free trace per routing decision, and Jev's calls counted. SHANNON_DECISION_TRACES=off: the gateway as it was.
+const voiceDecision = configuredVoiceDecision(process.env, persistentStore, persistentStore.decisionTraces()?.writer ?? null);
 // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
 const notion = configuredNotionSource(process.env, { log: line => console.log(line) });
 minecraft.connect({ stateStore: persistentStore, conversationStore: persistentStore, background: backgroundDispatcher, now, chatModel, peopleStore: peopleMemoryStore, conversation: { textTurn: input => kernel.textTurn(input) } });

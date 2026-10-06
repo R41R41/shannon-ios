@@ -98,6 +98,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/sqliteStoreContext.ts',
     'services/api/src/sqliteStoreCodecs.ts',
     'services/api/src/sqliteMigrations.ts',
+    // Syzygy ADR-0008 stage 1: the write lock of the shared file, taken and measured the same way by every cognition writer.
+    'services/api/src/infra/sqlite/',
     'services/api/src/sqliteCompanionRepository.ts',
     'services/api/src/sqliteConversationRepository.ts',
     'services/api/src/sqliteBackgroundJobRepository.ts',
@@ -239,6 +241,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/codexTaskRuntime.ts',
     'services/api/src/agentHost.ts',
     'services/api/src/agentHostConfig.ts',
+    // Syzygy ADR-0008 stage 1 (抑制系): one content-free trace per decision, and the gateway wrapper that writes it.
+    'services/api/src/mind/inhibition/',
   ]),
   activity_record: Object.freeze([
     'services/api/src/autonomyActivity.ts',
@@ -285,6 +289,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/platformSurface.ts',
     'services/api/src/platformReply.ts',
     'services/api/src/serverPlatformBridgeRoute.ts',
+    // Syzygy ADR-0008 stage 1: the Jev client's call count and price.
+    'services/api/src/infra/models/jev/',
   ]),
   deployment: Object.freeze([
     'deploy/',

@@ -40,6 +40,8 @@ import { ensureMoodHistorySchema, pruneMoodHistory, recordMoodPoint } from './mo
 import { SQLiteRealtimeVoiceRepository } from './sqliteRealtimeVoiceRepository.js';
 import { moodHistoryRecording, type MoodHistoryRecording } from './moodHistoryContract.js';
 import { PredictionShadow, predictionShadowEnabled } from './predictionShadow.js';
+import { DecisionTraces, decisionTracesEnabled } from './mind/inhibition/decisionTraces.js';
+import { jevUsageRow } from './infra/models/jev/jevUsage.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
@@ -57,6 +59,10 @@ export interface SQLiteShannonStoreOptions {
   predictionShadow?: boolean;
   /** When the shadow's work runs. Absent: `setImmediate`. Tests may pass one that runs at once. */
   predictionShadowDefer?: (task: () => void) => void;
+  /** Decision traces (Syzygy ADR-0008 stage 1). Absent: `SHANNON_DECISION_TRACES`; never with `leavesMoodHistory`. */
+  decisionTraces?: boolean;
+  /** When the cognition ledger's writes run (traces, predictions). Absent: `setImmediate`. Tests may pass one that runs at once. */
+  cognitionDefer?: (task: () => void) => void;
 }
 
 export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore, MemoryEmbeddingIndex, ShannonKnowledgeStore {
@@ -70,6 +76,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   private readonly shannonKnowledge: SQLiteShannonKnowledgeStore;
   private readonly personImpressions: SQLiteImpressionStore;
   private readonly shadow: PredictionShadow | null;
+  private readonly traces: DecisionTraces | null;
 
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
@@ -106,6 +113,11 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     this.embeddings = new SQLiteMemoryEmbeddingIndex(this.context.database);
     this.shannonKnowledge = new SQLiteShannonKnowledgeStore(this.context.database, operation => this.context.transaction(operation));
     this.personImpressions = new SQLiteImpressionStore(this.context.database, operation => this.context.transaction(operation));
+    // Syzygy ADR-0008 stage 1: one content-free trace per decision, kept 30 days; switched off, no table and no row.
+    const tracesOn = !options.leavesMoodHistory && (options.decisionTraces ?? decisionTracesEnabled(process.env));
+    this.traces = tracesOn ? new DecisionTraces({
+      database: this.context.database, createsSchema: true, now: () => this.context.now(), ...(options.cognitionDefer ? { defer: options.cognitionDefer } : {}),
+    }) : null;
     secureDatabaseFiles(options.path);
   }
 
@@ -133,7 +145,12 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       scopeKey, dayKey, baseAllowanceSeconds, additionalSeconds, maximumAllowanceSeconds, updatedAt,
     );
   }
-  llmUsageSummary(scopeKey: string, monthKey: string) { return this.companion.llmUsageSummary(scopeKey, monthKey); }
+  llmUsageSummary(scopeKey: string, monthKey: string) {
+    // Jev's calls come from the decision traces, never from `llm_usage_events` (the transcription cap counts its `voice` lane).
+    const jev = this.traces ? jevUsageRow(this.traces.jevMonth(scopeKey, monthKey)) : null;
+    const rows = this.companion.llmUsageSummary(scopeKey, monthKey);
+    return jev ? Object.freeze([...rows, jev]) : rows;
+  }
 
   listThreads(scopeKey: string): readonly ConversationThread[] { return this.conversations.listThreads(scopeKey); }
   threadId(scopeKey: string, threadId?: string) { return this.conversations.threadId(scopeKey, threadId); }
@@ -173,6 +190,8 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   toolTraceScopes() { return selectToolTraceScopes(this.context.database); }
   pruneToolTraces(before: string) { this.context.transaction(() => pruneToolTraces(this.context.database, before)); }
   impressionStore() { return this.personImpressions; }
+  /** Decision traces on this store's connection (Syzygy ADR-0008), or null while they are switched off. */
+  decisionTraces(): DecisionTraces | null { return this.traces; }
   /** The prediction shadow on this store's connection, or null while it is switched off. */
   predictionShadow(): PredictionShadow | null { return this.shadow; }
   events(scopeKey: string): readonly PersistedExperienceEvent[] { return this.conversations.events(scopeKey); }
@@ -187,7 +206,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   dailyUserMessages(scopeKey: string, startAt: string, endAt: string): readonly DailyUserMessage[] { return this.jobs.dailyUserMessages(scopeKey, startAt, endAt); }
   applySleepOutcome(job: ClaimedBackgroundJob, workerId: string, completedAt: string, outcome: SleepConsolidationOutcome) { return this.jobs.applySleepOutcome(job, workerId, completedAt, outcome); }
   pendingBackgroundJobCount() { return this.jobs.pendingBackgroundJobCount(); }
-  close() { this.context.close(); }
+  close() { this.traces?.flushLockWaits(); this.context.close(); }
 }
 
 export function configuredDatabasePath(environment: Readonly<Record<string, string | undefined>> = process.env): string {
