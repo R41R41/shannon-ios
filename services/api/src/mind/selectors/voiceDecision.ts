@@ -1,4 +1,5 @@
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
+import { JevChoiceClient } from '../../infra/models/jev/jevChoice.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageStore } from '../../infra/models/llmUsage.js';
 import {
   emptySkillScores, skillInstructions, VOICE_AFFECTS, VOICE_SKILLS, voiceAffectInstructions,
@@ -175,22 +176,28 @@ export interface JevVoiceDecisionOptions {
   fallbackGateway?: VoiceDecisionGateway;
 }
 
+/**
+ * The voice turn's router on Jev. Its call goes through the one Jev client (`infra/models/jev/jevChoice.ts`, Syzygy ADR-0008
+ * stage 2) with the bytes, headers, timeout and order of reading it always had; the fallback chain (luna, then the local
+ * rules) is its own.
+ */
 export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
   readonly mode = 'jev' as const;
   readonly model: string;
-  private readonly endpoint: string;
-  private readonly timeoutMilliseconds: number;
+  private readonly client: JevChoiceClient;
   private readonly skillThreshold: number;
-  private readonly fetcher: typeof fetch;
   private readonly nowMilliseconds: () => number;
 
   constructor(private readonly options: JevVoiceDecisionOptions) {
-    if (!options.apiKey.trim()) throw new Error('TYPESAFE_API_KEY is required');
-    this.endpoint = options.endpoint ?? 'https://api.typesafe.ai/v1/systemone';
-    this.model = options.model ?? 'jev-latest';
-    this.timeoutMilliseconds = options.timeoutMilliseconds ?? 900;
+    this.client = new JevChoiceClient({
+      apiKey: options.apiKey,
+      ...(options.endpoint !== undefined ? { endpoint: options.endpoint } : {}),
+      ...(options.model !== undefined ? { model: options.model } : {}),
+      ...(options.timeoutMilliseconds !== undefined ? { timeoutMilliseconds: options.timeoutMilliseconds } : {}),
+      ...(options.fetcher !== undefined ? { fetcher: options.fetcher } : {}),
+    });
+    this.model = this.client.model;
     this.skillThreshold = boundedProbability(options.skillThreshold, 0.85);
-    this.fetcher = options.fetcher ?? fetch;
     this.nowMilliseconds = options.nowMilliseconds ?? Date.now;
   }
 
@@ -269,28 +276,14 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
         }],
         ...jevWaitingQuestions,
       ]);
-      const response = await this.fetcher(this.endpoint, {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${this.options.apiKey}`,
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: this.model,
-          state: {
-            utterance: input.transcript.slice(0, 8_000),
-            participant_mode: input.participantMode,
-            requested_location: input.requestedLocation,
-            has_fresh_location: input.hasFreshLocation,
-            recent_context: input.context ?? [],
-            raw_transcript: input.rawTranscript ?? input.transcript, ...routerTurnState(input),
-          },
-          questions,
-        }),
-        signal: AbortSignal.timeout(this.timeoutMilliseconds),
-      });
-      const body = await response.json() as unknown;
-      if (!response.ok) throw new Error(`JEV_RESPONSE_${response.status}`);
+      const body = await this.client.ask({
+        utterance: input.transcript.slice(0, 8_000),
+        participant_mode: input.participantMode,
+        requested_location: input.requestedLocation,
+        has_fresh_location: input.hasFreshLocation,
+        recent_context: input.context ?? [],
+        raw_transcript: input.rawTranscript ?? input.transcript, ...routerTurnState(input),
+      }, questions);
       return parsedJevDecision(body, input, this.skillThreshold, this.nowMilliseconds() - startedAt);
     } catch {
       if (this.options.fallbackGateway) {

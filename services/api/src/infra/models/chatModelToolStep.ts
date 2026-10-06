@@ -112,6 +112,12 @@ export async function runToolStep(
     options.signal.throwIfAborted();
   };
   for (const [index, call] of calls.entries()) {
+    // A meta call of the tool menu (`tool_open`): answered by the session at once; nothing runs, nothing is counted.
+    const meta = session.meta?.(call.name, call.arguments);
+    if (meta !== undefined && meta !== null) {
+      outputs[index] = meta;
+      continue;
+    }
     const tool = offered.get(call.name);
     const alone = !options.parallel || tool?.effect !== 'read';
     if (alone) await settle();

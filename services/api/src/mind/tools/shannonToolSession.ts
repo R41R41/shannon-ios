@@ -9,6 +9,7 @@ import type { ShannonToolRunner } from './shannonToolRunner.js';
 import { toolTraceCall } from './shannonToolTrace.js';
 import { InMemoryToolTraces, TOOL_FOLLOW_UP_MILLISECONDS, ToolTurnLog, type ToolTraceStore } from './shannonToolTurns.js';
 import { toolSessionMemory } from './shannonToolTypes.js';
+import { baseToolSession, startToolMenu, type ToolMenuChooser } from './shannonToolMenu.js';
 import { ownToolsEnabled, providerToolName, toolFailure, toolFromProviderName, toolResultForModel, type ShannonToolDefinition } from './shannonTools.js';
 import type { TurnDeadline } from '../action/respond/turnDeadline.js';
 import { answersWithPlace, asksForMemo, asksWhichPlace, namesAether } from '../action/respond/memoPlace.js';
@@ -144,7 +145,29 @@ function writesHerOwnThings(tool: ShannonToolDefinition | undefined): boolean {
  * the same reply also proposed a Codex task to write it). A code request in the same words is asked again in the next turn.
  */
 export function turnWroteHerOwnThings(tools: ShannonModelToolSession | undefined): boolean {
-  return tools !== undefined && WROTE_HER_OWN_THINGS.has(tools);
+  return tools !== undefined && (WROTE_HER_OWN_THINGS.has(tools) || WROTE_HER_OWN_THINGS.has(baseToolSession(tools)));
+}
+
+/**
+ * Syzygy ADR-0008 stage 2, the tool menu: the tools `conversationTools` would offer this turn, decided the same way and
+ * changing nothing (no trace is opened), as if every write were allowed: the menu may run before a voice turn knows whether its
+ * words can be trusted, and a tool the turn does not offer in the end is never given (`withToolMenu` keeps only offered ones).
+ * Empty when the turn would offer nothing.
+ */
+export function toolMenuCandidates(
+  autonomy: { tools?: ShannonToolRunner } | undefined, scopeKey: string, surface: 'text' | 'voice', ownerAlone: boolean | 'others' | 'guests' | 'shared',
+  server: Partial<ConversationToolServer>, turn: string, options: { withoutDomains?: readonly string[] } = {},
+): readonly ShannonToolDefinition[] {
+  try {
+    const runner = autonomy?.tools;
+    if (!runner || ownerAlone === false || !ownToolsEnabled() || !server.audience) return [];
+    const threadId = turn.slice(0, Math.max(0, turn.indexOf('\n')));
+    const words = turn.slice(turn.indexOf('\n') + 1);
+    const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface), offersAether(runner, scopeKey, surface)) : 'text';
+    if (!offer) return [];
+    const othersPresent = ownerAlone === 'others' || ownerAlone === 'guests' || ownerAlone === 'shared' || server.audience.othersKnown(scopeKey);
+    return runner.offered(surface, othersPresent ? 'others' : 'owner_alone', scopeKey).filter(tool => !options.withoutDomains?.includes(tool.domain));
+  } catch { return []; }
 }
 
 /**
@@ -258,4 +281,15 @@ export function conversationToolServer(
     lastMessage: (scopeKey, threadId) => (conversations.recentMessages?.(scopeKey, threadId, 1) ?? conversations.conversationHistory(scopeKey, threadId).slice(-1)).at(-1),
     now,
   };
+}
+
+export { offerWithMenu, type ToolMenuChooser } from './shannonToolMenu.js';
+
+/** Syzygy ADR-0008 stage 2: the menu question for the tools this turn would offer (`toolMenuCandidates`), or null. */
+export function startTurnToolMenu(
+  chooser: ToolMenuChooser | undefined | null, autonomy: { tools?: ShannonToolRunner } | undefined, scopeKey: string, surface: 'text' | 'voice',
+  ownerAlone: boolean | 'others' | 'guests' | 'shared', server: Partial<ConversationToolServer>, turn: string, options: { withoutDomains?: readonly string[] } = {},
+) {
+  return startToolMenu(chooser, { scopeKey, surface, words: turn.slice(turn.indexOf('\n') + 1) },
+    () => toolMenuCandidates(autonomy, scopeKey, surface, ownerAlone, server, turn, options));
 }

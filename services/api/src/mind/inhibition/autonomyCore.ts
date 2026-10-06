@@ -311,6 +311,11 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/surfaces/voice/transcriptionRoute.ts',
     // Syzygy ADR-0008 stage 1: the owner's view and controls of her value table.
     'services/api/src/infra/http/learningRoutes.ts',
+    // Syzygy ADR-0008 stage 2: the turn's Jev call (the tool menu), the session it narrows, and their wiring.
+    'services/api/src/mind/selectors/toolMenu.ts',
+    'services/api/src/mind/selectors/turnChoices.ts',
+    'services/api/src/mind/tools/shannonToolMenu.ts',
+    'services/api/src/wiring/skillRoutingWiring.ts',
   ]),
   deployment: Object.freeze([
     'deploy/',

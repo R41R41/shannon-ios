@@ -202,9 +202,10 @@ export function documentText(document: AetherDocument): string {
  * while her Aether tools are offered, Aether's (`withAetherAccessCapability`). A request without them is returned as it is,
  * and so is one that searches the web or places: the adapter sends no tools then (`offersTools`, `voiceTools` in `chatModel.ts`).
  */
-export function withToolCapabilityLines<T extends { systemPrompt: string; tools?: { definitions: readonly { name: string }[] }; useWebSearch?: boolean; placeSearch?: unknown }>(request: T): T {
+export function withToolCapabilityLines<T extends { systemPrompt: string; tools?: { definitions: readonly { name: string }[]; menu?: { offered: readonly { name: string }[] } }; useWebSearch?: boolean; placeSearch?: unknown }>(request: T): T {
   if (request.useWebSearch || request.placeSearch) return request;
   const withBody = withMinecraftToolLine(request);
-  return withBody.tools?.definitions.some(tool => tool.name === 'aether.search')
+  // With the tool menu (Syzygy ADR-0008 stage 2) the line follows every tool the turn offers, not only the schemas sent.
+  return (withBody.tools?.menu?.offered ?? withBody.tools?.definitions)?.some(tool => tool.name === 'aether.search')
     ? { ...withBody, systemPrompt: withAetherAccessCapability(withBody.systemPrompt) } : withBody;
 }

@@ -55,9 +55,10 @@ export interface ShannonToolDefinition {
    * The gate domain of `authorizeAutonomousAction` a call from her own time is decided under. `minecraft_body`
    * (phase 4 of `docs/minecraft-body-contract.md`) and `aether_proposal` (a proposal to the owner's Aether inbox) exist only
    * in conversations, so the autonomy gate never sees them. Her Aether reading and her Aether folder are `aether_study`; reading
-   * the owner's documents in her own time is `owner_documents_read` (ADR-0007, owner decision 2026-10-06).
+   * the owner's documents in her own time is `owner_documents_read` (ADR-0007, owner decision 2026-10-06). `meta` is never a
+   * registry tool: it is `tool_open` of the tool menu (Syzygy ADR-0008 stage 2, `shannonToolMenu.ts`), which runs nothing.
    */
-  domain: 'aether_study' | 'host_folder' | 'minecraft_body' | 'aether_proposal' | 'owner_documents_read';
+  domain: 'aether_study' | 'host_folder' | 'minecraft_body' | 'aether_proposal' | 'owner_documents_read' | 'meta';
   effect: 'read' | 'write';
   /** `none`: no model or paid API is called by the tool itself. */
   cost: 'none';

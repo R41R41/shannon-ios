@@ -1,6 +1,7 @@
 import { SHANNON_MEMO_PLACE_RULE } from '@shannon/cognition';
 import { providerToolName, type ShannonToolDefinition } from '../../mind/tools/shannonTools.js';
-import { parallelToolsEnabled, runToolStep, type ToolStepState } from './chatModelToolStep.js';
+import { toolMenuInstructions } from '../../mind/tools/shannonToolMenu.js';
+import { asksForParallelCalls, parallelToolsEnabled, runToolStep, type ToolStepState } from './chatModelToolStep.js';
 import {
   MINIMUM_ANSWER_MILLISECONDS, MINIMUM_ROUND_MILLISECONDS, PartialAnswerError, TURN_OUT_OF_TIME_LINE, timedOut, type RoundTime, type TurnDeadline,
 } from '../../mind/action/respond/turnDeadline.js';
@@ -36,6 +37,13 @@ export interface ShannonModelToolSession {
   readonly guestTurn?: boolean;
   /** The result for a call of a name this turn does not offer, recorded as refused. Absent: a fixed `not_offered`. */
   readonly refuse?: (providerName: string) => string;
+  /**
+   * Syzygy ADR-0008 stage 2, the tool menu (`shannonToolMenu.ts`): every tool the turn offers, of which `definitions` holds the
+   * schemas sent now. Absent: `definitions` is every tool offered, as before the menu.
+   */
+  readonly menu?: { readonly offered: readonly ShannonToolDefinition[] };
+  /** A meta call the session answers itself (`tool_open`): its output, or null for a name that is not one. Runs nothing. */
+  readonly meta?: (providerName: string, argumentsJson: string) => string | null;
 }
 
 /** One call's result as the model reads it, and the note of it in the turn's trace, written when called. */
@@ -97,15 +105,18 @@ export const FOLDER_OR_AETHER_INSTRUCTIONS = 'Aetherのシャノン用フォル�
 
 /** The instructions that go with the tools a request offers. */
 export function toolInstructions(session: ShannonModelToolSession, voice: boolean): string {
-  if (session.othersPresent) return session.guestTurn ? TOOLS_GUESTS_INSTRUCTIONS : TOOLS_OTHERS_INSTRUCTIONS;
+  // With the tool menu, the lines follow every tool the turn offers (not only the schemas sent), and the menu itself is listed.
+  const definitions = session.menu?.offered ?? session.definitions;
+  const menu = session.menu ? `\n${toolMenuInstructions(session.menu.offered)}` : '';
+  if (session.othersPresent) return `${session.guestTurn ? TOOLS_GUESTS_INSTRUCTIONS : TOOLS_OTHERS_INSTRUCTIONS}${menu}`;
   const base = voice ? VOICE_TOOL_INSTRUCTIONS : TOOL_INSTRUCTIONS;
-  const minecraft = session.definitions.some(tool => tool.domain === 'minecraft_body') ? `\n${MINECRAFT_TOOL_INSTRUCTIONS}` : '';
+  const minecraft = definitions.some(tool => tool.domain === 'minecraft_body') ? `\n${MINECRAFT_TOOL_INSTRUCTIONS}` : '';
   // Keyed to the Aether client being configured (`aether.search` is offered only then), never to the proposal inbox alone.
-  const offersAether = session.definitions.some(tool => tool.name === 'aether.search');
+  const offersAether = definitions.some(tool => tool.name === 'aether.search');
   const aether = offersAether ? `\n${AETHER_TOOL_INSTRUCTIONS}` : '';
-  const folder = session.definitions.some(tool => tool.domain === 'host_folder')
+  const folder = definitions.some(tool => tool.domain === 'host_folder')
     ? `\n${HOST_FOLDER_TOOL_INSTRUCTIONS}${offersAether ? FOLDER_OR_AETHER_INSTRUCTIONS : ''}` : '';
-  return session.writesWithheld ? `${base}${minecraft}${aether}${folder}\n${TOOLS_READ_ONLY_INSTRUCTIONS}` : `${base}${minecraft}${aether}${folder}`;
+  return session.writesWithheld ? `${base}${minecraft}${aether}${folder}\n${TOOLS_READ_ONLY_INSTRUCTIONS}${menu}` : `${base}${minecraft}${aether}${folder}${menu}`;
 }
 
 /** The function tools of a request body. */
@@ -229,10 +240,10 @@ export async function withToolRounds(
   for (;;) {
     const cap = turn.used === 0 ? deadline.plan.firstRoundMilliseconds : deadline.plan.laterRoundMilliseconds;
     const step = deadline.forStep(cap);
-    if (turn.toolsOff || turn.used >= session.maximumCalls || step < MINIMUM_ROUND_MILLISECONDS) return answer({ ...body, input });
+    if (turn.toolsOff || turn.used >= session.maximumCalls || step < MINIMUM_ROUND_MILLISECONDS) return answer({ ...withMenuTools(body, session), input });
     let envelope: unknown;
     try {
-      envelope = await send({ ...body, input }, time(step));
+      envelope = await send({ ...withMenuTools(body, session), input }, time(step));
     } catch (error) {
       if (callerStopped()) throw error;
       // It was already answering: what it sent stands, and is never asked for again.
@@ -259,6 +270,17 @@ export async function withToolRounds(
     }
     input.push(...await runToolStep(calls, session, turn, { parallel, ...(options.signal ? { signal: options.signal } : {}) }));
   }
+}
+
+/**
+ * With the tool menu, each round sends the schemas the session holds now (a tool opened by `tool_open` joins from the next round),
+ * in the same place of the body; a text round that asked for parallel calls asks again by what is sent now. Without it, the body.
+ */
+function withMenuTools(body: Record<string, unknown>, session: ShannonModelToolSession): Record<string, unknown> {
+  if (!session.menu || !Array.isArray(body.tools)) return body;
+  const definitions = session.definitions;
+  return { ...body, tools: providerFunctionTools(definitions),
+    ...(body.parallel_tool_calls === true ? { parallel_tool_calls: asksForParallelCalls(definitions) } : {}) };
 }
 
 function withoutTools(body: Record<string, unknown>): Record<string, unknown> {

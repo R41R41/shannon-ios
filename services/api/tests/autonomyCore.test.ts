@@ -81,6 +81,12 @@ describe('CORE as code', () => {
       'services/api/src/surfaces/voice/transcriptionRoute.ts': 'response_path',
       'services/api/src/infra/http/learningRoutes.ts': 'response_path',
       'services/api/src/infra/sqlite/lockWaits.ts': 'memory',
+      // Stage 2 (docs/skill-and-routing-contract.md).
+      'services/api/src/infra/models/jev/jevChoice.ts': 'response_path',
+      'services/api/src/mind/selectors/toolMenu.ts': 'response_path',
+      'services/api/src/mind/selectors/turnChoices.ts': 'response_path',
+      'services/api/src/mind/tools/shannonToolMenu.ts': 'response_path',
+      'services/api/src/wiring/skillRoutingWiring.ts': 'response_path',
     };
     for (const [file, area] of Object.entries(expected)) expect(coreAreaForRepositoryPath(file)?.area, file).toBe(area);
   });

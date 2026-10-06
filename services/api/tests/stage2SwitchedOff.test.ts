@@ -5,6 +5,8 @@ import { createLocalApiKernel, type ShannonApiKernelOptions } from '../src/infra
 import { OpenAIResponsesChatModel } from '../src/infra/models/chatModel.js';
 import { createConfiguredVoiceDecisionGateway, VOICE_SKILLS } from '../src/mind/selectors/voiceDecision.js';
 import { stage2SwitchedOffScenarios } from './support/stage2Scenarios.js';
+import { skillRoutingParts } from '../src/wiring/skillRoutingWiring.js';
+import type { DecisionTraceDraft } from '../src/contracts/decisionTraceContract.js';
 
 /**
  * Syzygy ADR-0008 stage 2, the switched-off proof (`docs/skill-and-routing-contract.md`): with `SHANNON_ADR8_STAGE2=off` every
@@ -64,7 +66,11 @@ export async function capturedScenarioDigests(extra: (fetchers: { jev: typeof fe
     }) as typeof fetch;
     const jev = (async (_url: string | URL | Request, init?: RequestInit) => {
       captured.jev.push(digest(String(init?.body)));
-      return new Response(JSON.stringify({ answers: jevAnswers() }));
+      // The router's answers; any other question (stage 2's) gets its menu's first entry, or a low probability.
+      const asked = (JSON.parse(String(init?.body)) as { questions: Record<string, { type: string; criteria: Record<string, string> }> }).questions;
+      const router = jevAnswers();
+      return new Response(JSON.stringify({ answers: Object.fromEntries(Object.entries(asked).map(([key, question]) => [key, router[key]
+        ?? (question.type === 'choice' ? { type: 'choice', choice: Object.keys(question.criteria)[0] } : { type: 'noul', noul: 0.2 })])) }));
     }) as typeof fetch;
     const chatModel = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: openai, now: () => at });
     const voiceDecision = createConfiguredVoiceDecisionGateway({ TYPESAFE_API_KEY: 'jev-test' }, undefined, jev);
@@ -103,5 +109,45 @@ describe('stage 2 switched off: the requests of ca7cf519', () => {
     expect(new Set(all).size).toBeGreaterThan(8);
     expect(recorded['tool-round']!.openai.length).toBe(2);
     expect(Object.values(recorded).some(item => item.jev.length > 0)).toBe(true);
+  });
+});
+
+/** The stage-2 wiring as `server.ts` builds it, from this environment, with Jev and the trace writer of the test. */
+function stage2(environment: Record<string, string>, traces: DecisionTraceDraft[]) {
+  return ({ jev }: { jev: typeof fetch }) => skillRoutingParts({ TYPESAFE_API_KEY: 'jev-test', ...environment }, {
+    trace: (_scopeKey, draft) => { traces.push(draft); }, jevFetch: jev, now: () => at,
+  });
+}
+
+describe('stage 2 switched off with the stage-2 wiring in place', () => {
+  it('sends the requests of ca7cf519 and no Jev request beyond the router\'s, with SHANNON_ADR8_STAGE2=off', async () => {
+    const traces: DecisionTraceDraft[] = [];
+    const current = await capturedScenarioDigests(stage2({ SHANNON_ADR8_STAGE2: 'off' }, traces));
+    const recorded = recordedSwitchedOff();
+    for (const name of Object.keys(recorded)) expect(current[name], name).toEqual(recorded[name]);
+    expect(traces).toEqual([]);
+    expect(skillRoutingParts({ SHANNON_ADR8_STAGE2: 'off', TYPESAFE_API_KEY: 'jev-test' }, { trace: null })).toEqual({});
+  });
+
+  it('also with only its parts switched off, and with stage 2 on but no Jev configured', async () => {
+    const recorded = recordedSwitchedOff();
+    for (const environment of [{ SHANNON_TOOL_MENU: 'off', SHANNON_DIFFICULTY: 'off', SHANNON_READ_TOOLS: 'off', SHANNON_TURN_VERIFY: 'off' }]) {
+      const traces: DecisionTraceDraft[] = [];
+      const current = await capturedScenarioDigests(stage2(environment, traces));
+      for (const name of Object.keys(recorded)) expect(current[name], `${JSON.stringify(environment)} ${name}`).toEqual(recorded[name]);
+      expect(traces).toEqual([]);
+    }
+    expect(skillRoutingParts({}, { trace: null })).toEqual({});
+  });
+
+  it('is not vacuous: with stage 2 on, a turn that offers tools asks Jev for the menu and sends other bytes', async () => {
+    const traces: DecisionTraceDraft[] = [];
+    const current = await capturedScenarioDigests(stage2({}, traces));
+    const recorded = recordedSwitchedOff();
+    expect(current['text-tools']!.openai).not.toEqual(recorded['text-tools']!.openai);
+    expect(current['text-tools']!.jev.length).toBe(1);
+    expect(traces.some(trace => trace.decision === 'tool_menu' && trace.surface === 'text')).toBe(true);
+    // A turn that offers no tools is not asked about them.
+    expect(current['voice-greeting']!.jev).toEqual(recorded['voice-greeting']!.jev);
   });
 });

@@ -97,7 +97,9 @@ import {
 import { randomUUID } from 'node:crypto';
 import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
 import { generateChatTurn, withSentenceStream } from '../../surfaces/text/chatSentenceStream.js';
-import { conversationTools, toolTraceReader, turnWroteHerOwnThings } from '../../mind/tools/shannonToolSession.js';
+import { conversationTools, toolMenuCandidates, toolTraceReader, turnWroteHerOwnThings } from '../../mind/tools/shannonToolSession.js';
+import { offerWithMenu, startToolMenu } from '../../mind/tools/shannonToolMenu.js';
+import type { TurnChooser } from '../../mind/selectors/turnChoices.js';
 import { withToolCapabilityLines } from '../../mind/tools/shannonAetherTools.js';
 import { withCapabilitySources } from '../../mind/action/respond/conversationCapabilities.js';
 import { usableThreadSummary } from '../../mind/memory/memoryVisibility.js';
@@ -138,6 +140,11 @@ export interface ShannonApiKernelOptions {
   notion?: NotionTurnReader; body?: ShannonBodyOptions; upcoming?: OwnerUpcoming; /** What she did on her own (`ownOutreach.ts`). */ ownOutreach?: OwnOutreachReader;
   /** What her Minecraft body reported about the requests it was given (`minecraftBodyRequests.ts`), for a turn the owner alone reads. */
   minecraftRequests?: { promptBlock(scopeKey: string, at: string): string } | null;
+  /**
+   * Syzygy ADR-0008 stage 2 (`wiring/skillRoutingWiring.ts`): the turn's Jev call (the tool menu). Absent, every turn is what
+   * it was at ca7cf519 (`SHANNON_ADR8_STAGE2=off` hands none).
+   */
+  turnChooser?: TurnChooser;
 }
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel;
@@ -167,6 +174,7 @@ export class ShannonApiKernel {
   private readonly autonomy: ShannonAutonomyService;
   private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null;
   private readonly minecraftRequests: { promptBlock(scopeKey: string, at: string): string } | null;
+  private readonly turnChooser: TurnChooser | null;
   /** What the server knows when it offers her tools: others present, and what her writes must not repeat (`shannonToolSession.ts`). */
   private readonly toolServer: ConversationToolServer;
   constructor(
@@ -203,6 +211,7 @@ export class ShannonApiKernel {
     this.memoryRecall = options.memoryRecall ?? null;
     this.notion = options.notion ?? null;
     this.minecraftRequests = options.minecraftRequests ?? null;
+    this.turnChooser = options.turnChooser ?? null;
     this.people = new PeopleMemory(options.peopleMemory ?? new SQLitePeopleMemoryStore(':memory:'), this.stateStore);
     this.autonomy = options.autonomy ?? createInMemoryAutonomyService(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) });
     this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now); this.ownOutreach = options.ownOutreach ? new OwnOutreach(options.ownOutreach, this.now) : null;
@@ -367,6 +376,15 @@ export class ShannonApiKernel {
     const deps = this.textTurnDependencies();
     const begun = beginTextTurn(deps, input);
     const { occurredAt, captured, provisionalIntent, peopleRecall } = begun;
+    // Who her tools are offered to: with others present, her Aether reading tools (owner decisions 2026-10-06): the owner's own
+    // turn (app text marked `others`, his turn in a shared platform conversation) as 'shared', someone else's as 'guests'.
+    const toolAudience = audience.alone || (!surface ? 'shared' as const : !surface.othersFolderReading ? false : surface.openOnly ? 'guests' as const : 'shared' as const);
+    // Game chat asks her Minecraft body through the turn's intent, not through her tools.
+    const toolOptions = surface && !surface.minecraftTools ? { withoutDomains: ['minecraft_body'], ...(surface.openOnly ? { openOnly: true } : {}) } : {};
+    // Syzygy ADR-0008 stage 2: the turn's Jev call (the tool menu), in parallel with recall; none without the stage-2 wiring.
+    const choices = startToolMenu(!begun.explicitCommand && !begun.organizeTurn && body.webSearch !== true && !placeOptions.placeSearch ? this.turnChooser : null,
+      { scopeKey: body.scopeKey, surface: 'text', words: message },
+      () => toolMenuCandidates(this.autonomy, body.scopeKey, 'text', toolAudience, this.toolServer, `${threadId}\n${message}`, toolOptions));
     const cognitiveContext = this.memoryRecall && !begun.explicitCommand && !begun.organizeTurn
       ? await this.memoryRecall.enrich(begun.deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }) : begun.deterministicContext;
     const { basePrompt, capabilityContext } = textTurnIdentityAndCapability(deps, input, begun);
@@ -381,12 +399,10 @@ export class ShannonApiKernel {
     const priorThreadSummary = surface?.openOnly ? undefined : usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId, audience.present);
     const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
     // Her Minecraft body's and Aether's capability lines, in her identity, exactly when this turn's tools include them (`withToolCapabilityLines`).
-    const toolOffer = conversationTools(this.autonomy, body.scopeKey, 'text',
-      // With others present, her Aether reading tools (owner decisions 2026-10-06): the owner's own turn (app text marked
-      // `others`, his turn in a shared platform conversation) as 'shared', someone else's as 'guests'.
-      audience.alone || (!surface ? 'shared' : !surface.othersFolderReading ? false : surface.openOnly ? 'guests' : 'shared'), this.toolServer, `${threadId}\n${message}`, deadline, undefined,
-      // Game chat asks her Minecraft body through the turn's intent, not through her tools.
-      surface && !surface.minecraftTools ? { withoutDomains: ['minecraft_body'], ...(surface.openOnly ? { openOnly: true } : {}) } : {});
+    // The menu narrows the schemas sent to what Jev chose, plus `tool_open`; when Jev failed, every offered schema goes.
+    // Awaited only with a menu: without one the turn runs exactly as before (no extra turn of the event loop).
+    const offered = conversationTools(this.autonomy, body.scopeKey, 'text', toolAudience, this.toolServer, `${threadId}\n${message}`, deadline, undefined, toolOptions);
+    const toolOffer = choices ? await offerWithMenu(offered, choices) : offered;
     const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withToolCapabilityLines({
       // Her fixed identity first, what she knows of the owner next, and the turn's context with the replay (`chatModelTurn.ts`).
       scopeKey: body.scopeKey, systemPrompt: layered.systemPrompt, ...(layered.profilePrompt ? { profilePrompt: layered.profilePrompt } : {}),
@@ -467,6 +483,7 @@ export class ShannonApiKernel {
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
       conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people, reactions: this.body.reactions, looks: this.body.turnLooks,
       toolServer: this.toolServer, ownerCalls: this.body.ownerCalls, ownOutreach: this.ownOutreach,
+      ...(this.turnChooser ? { turnChooser: this.turnChooser } : {}),
     };
   }
   waitForBackground(scopeKey: string): Promise<void> { return this.background.waitForIdle(scopeKey); }

@@ -11,7 +11,7 @@
 | Step | Content | State |
 | --- | --- | --- |
 | 1 | This contract, the switches, the core map, the trace vocabulary, the registry's one-line summaries, the switched-off proof | in place (`packages/learning/src/switches.ts`; tests `switches.test.ts`, `shannonTools.test.ts`, `autonomyCore.test.ts`, `stage2SwitchedOff.test.ts`) |
-| 2 | The Jev choice client, the tool menu and `tool_open`, text wiring, the parallel voice call | not yet |
+| 2 | The Jev choice client, the tool menu and `tool_open`, text wiring, the parallel voice call | in place (`infra/models/jev/jevChoice.ts`, `mind/selectors/{toolMenu,turnChoices}.ts`, `mind/tools/shannonToolMenu.ts`, `wiring/skillRoutingWiring.ts`; tests `toolMenu.test.ts`, `stage2SwitchedOff.test.ts`) |
 | 3 | Notion, Voyager tasks, the schedule and place search as gated registry tools; web as a capability entry | not yet |
 | 4 | Difficulty, the tier policy, `luna_plus`, the turn verifier, tier choices, the competence table, conversation choices in reward (I-3) | not yet |
 | 5 | The Anthropic adapter (`@anthropic-ai/sdk`, I-6), `TieredChatModel`, the `tier.*` scenario set | not yet (inert until the key and the switch) |
@@ -50,6 +50,20 @@ The stage-1 switches (`docs/cognition-ledger-contract.md`) are independent of th
 ## The registry's summaries
 
 Every tool of the registry (`shannonTools.ts`) has a summary (`TOOL_SUMMARIES`, `toolSummary`): one line of at most 60 characters, in her words, that tells it apart from the others (`shannonTools.test.ts`). It is what Jev's menu chooses from and what the model reads of a tool whose schema it was not given. It is kept beside the registry, not in a definition, so nothing that carries a definition (a provider request, a turn's session, a test's trace) changes with it.
+
+## The Jev client (step 2)
+
+`infra/models/jev/jevChoice.ts` is the one Jev client. `JevChoiceClient.ask` sends `{ model, state, questions }` with the headers, the timeout (900 ms unless `SHANNON_JEV_TIMEOUT_MS`) and the order of reading of the voice router, which now asks through it (its bytes are unchanged: the Jev digests of the switched-off proof). `JevChooser.decide` adds what the voice gateway has around its call: the caller's fallback on a timeout, a failure or an answer off the menu (never an exception), and one decision trace per call, the call counted by `countedJevFetch` (stage 1). One Jev call is one trace, so the usage summary's call count from the traces stays right.
+
+## The tool menu (step 2, `SHANNON_TOOL_MENU`)
+
+ADR-0008 §8 「道具は名前と短い説明だけを毎回渡し、使うときに定義を取り寄せる」.
+
+- **What Jev is asked** (`mind/selectors/toolMenu.ts`): one `choice` question `tool` over the provider names of the tools the turn offers, each with its summary, plus `none`. At most 64 entries a menu; beyond 63 tools they are grouped by area (`tool__<area>__<part>`), all in the same call, and every group's answer that is not `none` is chosen. Jev's state is the turn's words (at most 2,000 characters; the voice router already reads them) and the surface: never a schema, a description, a tool result or anything the turn's audience would withhold. The candidates are exactly what `conversationTools` would offer (`toolMenuCandidates`, which opens nothing), so an audience with others present gets a menu of her Aether reading tools only.
+- **When.** Text: in every turn that would offer tools (not a fixed command, an organizing turn, a forced web search or a place search), started before recall and awaited after the offer, so it runs in parallel with recall. Voice: only when the turn's words would offer tools, as a second Jev call started beside the router's (whose questions are unchanged); its answer is used only if the turn does offer tools in the end.
+- **What the model gets** (`mind/tools/shannonToolMenu.ts`, `withToolMenu`): the schemas of the chosen tools (only those the turn offers) plus `tool_open(name)`, whose `name` is an enum of the tools the turn offers. Its instructions list every offered tool by provider name and summary (`[ボクの道具・献立]`); the capability lines (Aether, her Minecraft body) and the instruction lines follow every offered tool, not only the schemas sent. `tool_open` is answered by the session: it runs nothing, is not counted against the turn's six calls, takes no time and is not written to the activity record or the turn's trace; the opened tool's schema is in the request from the next round (`withToolRounds`). A call of an offered tool that was not opened is refused like a name the turn does not offer, and runs nothing. The offer, the audience, the gate and the runner are unchanged.
+- **Fallback.** When Jev times out, fails or answers off the menu, the turn's session is not narrowed: every offered schema goes, as before.
+- **Trace.** `tool_menu` with `tool` (the first chosen name, `none`, or `all` for the fallback), `chosen` (how many; −1 for the fallback), `offered`, `groups`.
 
 ## Decision traces
 
