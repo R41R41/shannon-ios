@@ -1,10 +1,13 @@
 #if os(macOS)
 import Foundation
 
-/// What the Mac's folder device sends and reads (`docs/host-folder-contract.md`, v2). The Mac claims only the reading
-/// operations (A18 S2); writing comes in S3, so `write` and the changing operations are never listed.
+/// What the Mac's folder device sends and reads (`docs/host-folder-contract.md`, v2). The Mac reads (A18 S2) and changes
+/// (S3) her folder through the v2 operations. It never lists `write`, the v1 copy of a study piece: Syzygy ADR-0007 puts no
+/// story in the PC or Mac folder, and a device without `write` is never planned a copy.
 public enum ShannonFolderHostWire {
-    public static let operations = ["list", "read", "search"]
+    public static let operations = ["list", "read", "search", "create", "update", "move", "delete"]
+    /// The operations that change the folder.
+    public static let changing: Set<String> = ["create", "update", "move", "delete"]
     public static let protocolVersion = 2
     /// A long-poll: the server holds the claim open up to this long.
     public static let waitSeconds = 25
@@ -44,10 +47,24 @@ public struct ShannonFolderHostStep: Decodable, Equatable, Sendable {
     public var offset: Int?
     public var maxBytes: Int?
     public var query: String?
+    /// `create`, `update`: the whole text, its SHA-256 as UTF-8, and its length in UTF-8 bytes.
+    public var content: String?
+    public var contentSha256: String?
+    public var bytes: Int?
+    /// `update`: the digest she read; another one on disk is `changed_since_read`.
+    public var expectedSha256: String?
+    /// `move`: where to.
+    public var toRelativePath: String?
     public let expiresAt: String
 
     public init(id: String, operation: String, relativePath: String? = nil, recursive: Bool? = nil, limit: Int? = nil,
-                offset: Int? = nil, maxBytes: Int? = nil, query: String? = nil, expiresAt: String = "2099-01-01T00:00:00.000Z") {
+                offset: Int? = nil, maxBytes: Int? = nil, query: String? = nil, content: String? = nil, contentSha256: String? = nil,
+                bytes: Int? = nil, expectedSha256: String? = nil, toRelativePath: String? = nil, expiresAt: String = "2099-01-01T00:00:00.000Z") {
+        self.content = content
+        self.contentSha256 = contentSha256
+        self.bytes = bytes
+        self.expectedSha256 = expectedSha256
+        self.toRelativePath = toRelativePath
         self.id = id
         self.operation = operation
         self.relativePath = relativePath
@@ -133,10 +150,22 @@ public struct ShannonFolderHostSearchResult: Encodable, Equatable, Sendable {
     public let truncated: Bool
 }
 
+/// `create` `{ sha256 }`, `update` `{ sha256, trashedAs }`, `move` `{}`, `delete` `{ trashedAs }`: absent fields are left out.
+public struct ShannonFolderHostWriteResult: Encodable, Equatable, Sendable {
+    public let sha256: String?
+    public let trashedAs: String?
+
+    public init(sha256: String? = nil, trashedAs: String? = nil) {
+        self.sha256 = sha256
+        self.trashedAs = trashedAs
+    }
+}
+
 public enum ShannonFolderHostResult: Equatable, Sendable {
     case list(ShannonFolderHostListResult)
     case read(ShannonFolderHostReadResult)
     case search(ShannonFolderHostSearchResult)
+    case write(ShannonFolderHostWriteResult)
 }
 
 /// `POST /v1/autonomy/host-steps/{id}/report`: an outcome, a code from the fixed set, and for `done` the bounded result.
@@ -174,6 +203,7 @@ public struct ShannonFolderHostReport: Equatable, Sendable {
             case .list(let result): try container.encode(result, forKey: .result)
             case .read(let result): try container.encode(result, forKey: .result)
             case .search(let result): try container.encode(result, forKey: .result)
+            case .write(let result): try container.encode(result, forKey: .result)
             case nil: break
             }
         }

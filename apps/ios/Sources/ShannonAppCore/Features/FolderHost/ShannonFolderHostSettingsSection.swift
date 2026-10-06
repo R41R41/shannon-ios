@@ -128,10 +128,16 @@ public struct ShannonFolderHostSettingsSection: View {
         case "list": ShannonGeneratedStrings.folderHostLogList
         case "read": ShannonGeneratedStrings.folderHostLogRead
         case "search": ShannonGeneratedStrings.folderHostLogSearch
+        case "create": ShannonGeneratedStrings.folderHostLogCreate
+        case "update": ShannonGeneratedStrings.folderHostLogUpdate
+        case "move": ShannonGeneratedStrings.folderHostLogMove
+        case "delete": ShannonGeneratedStrings.folderHostLogDelete
         default: entry.operation
         }
         let refused = entry.outcome == "done" ? "" : "（\(ShannonGeneratedStrings.folderHostLogRefused(code: entry.code ?? entry.outcome))）"
-        return "\(when) \(action) \(entry.path.map { $0.isEmpty ? "/" : $0 } ?? "")\(refused)"
+        let target = (entry.path.map { $0.isEmpty ? "/" : $0 } ?? "") + (entry.to.map { " → \($0)" } ?? "")
+        let trashed = entry.trashedAs.map { "（\($0)）" } ?? ""
+        return "\(when) \(action) \(target)\(trashed)\(refused)"
     }
 }
 #endif

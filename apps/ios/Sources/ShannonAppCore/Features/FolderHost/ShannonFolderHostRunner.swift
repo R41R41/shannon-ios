@@ -93,23 +93,29 @@ public actor ShannonFolderHostRunner {
     }
 }
 
-/// One line of the local log: what was done, never what a file says or what was searched for.
+/// One line of the local log: what was done, never what a file says, what was written, or what was searched for.
 public struct ShannonFolderHostLogEntry: Codable, Equatable, Sendable {
     public let at: String
     public let operation: String
     public let path: String?
+    /// `move`: where to.
+    public let to: String?
     public let outcome: String
     public let code: String?
-    /// Entries listed, bytes read, or hits found.
+    /// Entries listed, bytes read or written, or hits found.
     public let count: Int?
+    /// `update`, `delete`: where the old file or folder went in the trash.
+    public let trashedAs: String?
 
-    public init(at: String, operation: String, path: String?, outcome: String, code: String?, count: Int?) {
+    public init(at: String, operation: String, path: String?, to: String? = nil, outcome: String, code: String?, count: Int?, trashedAs: String? = nil) {
         self.at = at
         self.operation = operation
         self.path = path
+        self.to = to
         self.outcome = outcome
         self.code = code
         self.count = count
+        self.trashedAs = trashedAs
     }
 
     init(step: ShannonFolderHostStep, report: ShannonFolderHostReport, at: Date) {
@@ -117,11 +123,14 @@ public struct ShannonFolderHostLogEntry: Codable, Equatable, Sendable {
         case .list(let list): list.entries.count
         case .read(let read): (read.nextOffset ?? read.totalBytes) - read.offset
         case .search(let search): search.hits.count
+        case .write: step.operation == "create" || step.operation == "update" ? step.bytes : nil
         case nil: nil
         }
+        let trashedAs: String? = if case .write(let write) = report.result { write.trashedAs } else { nil }
         let operation = ShannonFolderHostWire.operations.contains(step.operation) ? step.operation : "unknown"
         self.init(at: ShannonFolderHostTime.string(at), operation: operation, path: step.relativePath.map { String($0.prefix(240)) },
-                  outcome: report.outcome, code: report.code?.rawValue, count: count)
+                  to: step.operation == "move" ? step.toRelativePath.map { String($0.prefix(240)) } : nil,
+                  outcome: report.outcome, code: report.code?.rawValue, count: count, trashedAs: trashedAs)
     }
 }
 

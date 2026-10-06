@@ -198,7 +198,7 @@ final class ShannonFolderHostTests: XCTestCase {
         await worker.setFolder(folder)
         let listed = await worker.perform(step, stopped: false)
         XCTAssertEqual(listed.outcome, "done")
-        let written = await worker.perform(ShannonFolderHostStep(id: step.id, operation: "create", relativePath: "a.md"), stopped: false)
+        let written = await worker.perform(ShannonFolderHostStep(id: step.id, operation: "write", relativePath: "a.md"), stopped: false)
         XCTAssertEqual(written, .refused(.init(.unsupportedOperation)))
     }
 
@@ -330,7 +330,7 @@ final class ShannonFolderHostTests: XCTestCase {
         XCTAssertEqual(Set(claim.keys), ["scopeKey", "host", "protocol", "operations", "waitSeconds", "localStop"])
         XCTAssertEqual(claim["scopeKey"] as? String, "owner-scope")
         XCTAssertEqual(claim["protocol"] as? Int, 2)
-        XCTAssertEqual(claim["operations"] as? [String], ["list", "read", "search"])
+        XCTAssertEqual(claim["operations"] as? [String], ["list", "read", "search", "create", "update", "move", "delete"])
         XCTAssertEqual(claim["waitSeconds"] as? Int, 25)
         XCTAssertEqual(claim["localStop"] as? Bool, false)
 

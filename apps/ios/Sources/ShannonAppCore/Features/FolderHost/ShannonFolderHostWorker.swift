@@ -1,9 +1,10 @@
 #if os(macOS)
 import Foundation
 
-/// The part of the Mac app that touches her folder (A18 S2). It is handed a folder and a step and returns a report; it
-/// never sees the device token, the server, or the network (`ShannonFolderHostClaimClient` does that), so whatever a step
-/// asks, the most it can do is read inside the fence of `ShannonFolderHostRoot`.
+/// The part of the Mac app that touches her folder (A18 S2 reads, S3 changes). It is handed a folder and a step and returns
+/// a report; it never sees the device token, the server, or the network (`ShannonFolderHostClaimClient` does that), so
+/// whatever a step asks, the most it can do is read and change text inside the fence of `ShannonFolderHostRoot`, with every
+/// overwrite and delete going to the trash first (`ShannonFolderHostWrites`).
 public actor ShannonFolderHostWorker {
     private var folder: URL?
     private let now: @Sendable () -> Date
@@ -37,6 +38,21 @@ public actor ShannonFolderHostWorker {
                 guard let query = step.query, !query.isEmpty, query.count <= 100 else { return .refused(.init(.pathNotAllowed)) }
                 return .done(.search(try ShannonFolderHostOperations.search(
                     root, query: query, relativePath: step.relativePath ?? "", limit: step.limit ?? 20, now: now)))
+            case "create":
+                guard let path = step.relativePath else { return .refused(.init(.pathNotAllowed)) }
+                return .done(.write(try ShannonFolderHostWrites.create(
+                    root, relativePath: path, content: step.content, contentSha256: step.contentSha256, bytes: step.bytes)))
+            case "update":
+                guard let path = step.relativePath else { return .refused(.init(.pathNotAllowed)) }
+                return .done(.write(try ShannonFolderHostWrites.update(
+                    root, relativePath: path, content: step.content, contentSha256: step.contentSha256, bytes: step.bytes,
+                    expectedSha256: step.expectedSha256, now: now())))
+            case "move":
+                guard let path = step.relativePath else { return .refused(.init(.pathNotAllowed)) }
+                return .done(.write(try ShannonFolderHostWrites.move(root, relativePath: path, toRelativePath: step.toRelativePath)))
+            case "delete":
+                guard let path = step.relativePath else { return .refused(.init(.pathNotAllowed)) }
+                return .done(.write(try ShannonFolderHostWrites.delete(root, relativePath: path, now: now())))
             default:
                 return .refused(.init(.unsupportedOperation))
             }

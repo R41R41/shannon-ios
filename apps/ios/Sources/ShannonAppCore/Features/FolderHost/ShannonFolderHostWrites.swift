@@ -1,0 +1,271 @@
+#if os(macOS)
+import CryptoKit
+import Darwin
+import Foundation
+
+/// The changing operations of her folder on the Mac (A18 S3; `docs/host-folder-contract.md`, 「Operations」): `create`,
+/// `update`, `move`, `delete`. Inside the same fence as reading, and nothing is ever destroyed: an overwrite or a delete
+/// first moves the old file or folder into `.shannon/trash/`, behind the fence, where only the owner restores it.
+/// Never the v1 `write` (Syzygy ADR-0007: no story goes into the PC or Mac folder).
+public enum ShannonFolderHostWrites {
+    /// The device's own totals (as on Windows): what her folder may hold outside `.shannon`.
+    public static let totalBytes = 200 * 1_024 * 1_024
+    public static let totalFiles = 5_000
+
+    /// The totals a write is checked against (`folder_full`); tests pass smaller ones.
+    public struct Quota: Sendable {
+        public let files: Int
+        public let bytes: Int
+        public static let standard = Quota(files: totalFiles, bytes: totalBytes)
+        public init(files: Int, bytes: Int) {
+            self.files = files
+            self.bytes = bytes
+        }
+    }
+
+    // MARK: create
+
+    public static func create(
+        _ root: ShannonFolderHostRoot, relativePath: String, content: String?, contentSha256: String?, bytes: Int?, quota: Quota = .standard
+    ) throws(ShannonFolderHostRefusal) -> ShannonFolderHostWriteResult {
+        let data = try checkedContent(content, sha256: contentSha256, bytes: bytes)
+        let target = try root.target(relativePath, kind: .file)
+        guard target.existing == nil else { throw ShannonFolderHostRefusal(.alreadyExists) }
+        let usage = root.usage(stoppingAfter: quota.files)
+        guard usage.files + 1 <= quota.files, usage.bytes + data.count <= quota.bytes else { throw ShannonFolderHostRefusal(.folderFull) }
+        try root.makeParents(target)
+        let checked = try root.target(relativePath, kind: .file)
+        guard checked.existing == nil else { throw ShannonFolderHostRefusal(.alreadyExists) }
+        try writeNew(checked.absolute, data)
+        return .init(sha256: digest(data))
+    }
+
+    // MARK: update
+
+    /// Replaces a text file: the original goes into the trash first, then the new text is written in its place. With
+    /// `expectedSha256`, a file the owner changed since she read it is left alone (`changed_since_read`).
+    public static func update(
+        _ root: ShannonFolderHostRoot, relativePath: String, content: String?, contentSha256: String?, bytes: Int?,
+        expectedSha256: String?, now: Date, quota: Quota = .standard
+    ) throws(ShannonFolderHostRefusal) -> ShannonFolderHostWriteResult {
+        let data = try checkedContent(content, sha256: contentSha256, bytes: bytes)
+        let target = try root.target(relativePath, kind: .file)
+        guard let existing = target.existing else { throw ShannonFolderHostRefusal(.notFound) }
+        switch ShannonFolderHostRoot.kind(existing) {
+        case S_IFREG: break
+        case S_IFDIR: throw ShannonFolderHostRefusal(ShannonFolderHostRoot.isPackage(target.absolute) ? .notText : .notAFile)
+        default: throw ShannonFolderHostRefusal(.notAFile)
+        }
+        if ShannonFolderHostRoot.isAlias(target.absolute, status: existing) { throw ShannonFolderHostRefusal(.notText) }
+        let file = try root.locate(relativePath, kind: .file)
+        let old = try root.readFile(file, limit: ShannonFolderHostLimits.fileBytes)
+        guard ShannonFolderHostOperations.isText(old) else { throw ShannonFolderHostRefusal(.notText) }
+        if let expectedSha256, expectedSha256.lowercased() != digest(Data(old)) { throw ShannonFolderHostRefusal(.changedSinceRead) }
+        let usage = root.usage(stoppingAfter: quota.files)
+        guard usage.bytes - old.count + data.count <= quota.bytes else { throw ShannonFolderHostRefusal(.folderFull) }
+        let trashedAs = try root.trash(file.absolute, relative: file.relative, now: now)
+        do {
+            try writeNew(file.absolute, data)
+        } catch {
+            // The original is put back if it can be; it stays in the trash otherwise. Nothing is lost either way.
+            _ = renamex_np(root.path + "/" + trashedAs, file.absolute, UInt32(RENAME_EXCL))
+            throw error
+        }
+        return .init(sha256: digest(data), trashedAs: trashedAs)
+    }
+
+    // MARK: move
+
+    /// Moves or renames a file or a folder inside her folder, making missing parent folders. Never overwrites. A text file
+    /// stays a text file; a file of another kind (one the owner placed) keeps its extension.
+    public static func move(_ root: ShannonFolderHostRoot, relativePath: String, toRelativePath: String?) throws(ShannonFolderHostRefusal) -> ShannonFolderHostWriteResult {
+        guard let toRelativePath else { throw ShannonFolderHostRefusal(.pathNotAllowed) }
+        let source = try root.locate(relativePath, kind: .entry)
+        let target = try root.target(toRelativePath, kind: .entry)
+        guard target.existing == nil else { throw ShannonFolderHostRefusal(.alreadyExists) }
+        let fold = { (path: String) in path.decomposedStringWithCanonicalMapping.lowercased() }
+        if fold(target.relative) == fold(source.relative) || fold(target.relative).hasPrefix(fold(source.relative) + "/") {
+            throw ShannonFolderHostRefusal(.pathNotAllowed)
+        }
+        let isFolder = ShannonFolderHostRoot.kind(source.status) == S_IFDIR && !ShannonFolderHostRoot.isPackage(source.absolute)
+        if !isFolder {
+            let from = String(source.relative.split(separator: "/").last ?? "")
+            let to = String(target.relative.split(separator: "/").last ?? "")
+            if ShannonFolderHostPath.hasTextExtension(from) {
+                guard ShannonFolderHostPath.hasTextExtension(to) else { throw ShannonFolderHostRefusal(.extensionNotAllowed) }
+            } else {
+                guard fileExtension(from) == fileExtension(to) else { throw ShannonFolderHostRefusal(.extensionNotAllowed) }
+            }
+        }
+        try root.makeParents(target)
+        let checked = try root.target(toRelativePath, kind: .entry)
+        guard checked.existing == nil else { throw ShannonFolderHostRefusal(.alreadyExists) }
+        guard renamex_np(source.absolute, checked.absolute, UInt32(RENAME_EXCL)) == 0 else {
+            throw errno == EEXIST ? ShannonFolderHostRefusal(.alreadyExists) : ShannonFolderHostRefusal(.ioError, outcome: .failed)
+        }
+        return .init()
+    }
+
+    // MARK: delete
+
+    /// A file or a folder goes into the trash. Nothing is erased.
+    public static func delete(_ root: ShannonFolderHostRoot, relativePath: String, now: Date) throws(ShannonFolderHostRefusal) -> ShannonFolderHostWriteResult {
+        let entry = try root.locate(relativePath, kind: .entry)
+        guard !entry.relative.isEmpty else { throw ShannonFolderHostRefusal(.pathNotAllowed) }
+        return .init(trashedAs: try root.trash(entry.absolute, relative: entry.relative, now: now))
+    }
+
+    // MARK: Content
+
+    /// The text as sent: its digest and length must match (`content_mismatch`), at most 1 MiB (`too_large`), no NUL (`not_text`).
+    static func checkedContent(_ content: String?, sha256: String?, bytes: Int?) throws(ShannonFolderHostRefusal) -> Data {
+        guard let content, let sha256, let bytes else { throw ShannonFolderHostRefusal(.contentMismatch) }
+        let data = Data(content.utf8)
+        guard data.count == bytes, digest(data) == sha256.lowercased() else { throw ShannonFolderHostRefusal(.contentMismatch) }
+        guard data.count <= ShannonFolderHostLimits.fileBytes else { throw ShannonFolderHostRefusal(.tooLarge) }
+        guard ShannonFolderHostOperations.isText([UInt8](data)) else { throw ShannonFolderHostRefusal(.notText) }
+        return data
+    }
+
+    static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func fileExtension(_ name: String) -> String {
+        guard let dot = name.lastIndex(of: "."), dot > name.startIndex else { return "" }
+        return name[dot...].lowercased()
+    }
+
+    /// A new file, never over anything (`O_EXCL`), never through a link (`O_NOFOLLOW`). A partial file is removed.
+    static func writeNew(_ path: String, _ data: Data) throws(ShannonFolderHostRefusal) {
+        let descriptor = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o644)
+        guard descriptor >= 0 else {
+            let exists = errno == EEXIST
+            throw ShannonFolderHostRefusal(exists ? .alreadyExists : .ioError, outcome: exists ? .refused : .failed)
+        }
+        let written = data.withUnsafeBytes { buffer -> Bool in
+            var offset = 0
+            while offset < buffer.count {
+                let count = write(descriptor, buffer.baseAddress! + offset, buffer.count - offset)
+                if count <= 0 { return false }
+                offset += count
+            }
+            return true
+        }
+        let synced = written && fsync(descriptor) == 0
+        close(descriptor)
+        guard synced else {
+            unlink(path)
+            throw ShannonFolderHostRefusal(.ioError, outcome: .failed)
+        }
+    }
+}
+
+extension ShannonFolderHostRoot {
+    /// Where a write goes: the fence of `locate` over the part that exists, and nothing below a part that does not.
+    public struct Target: Sendable {
+        public let absolute: String
+        public let relative: String
+        /// The entry at the path, when one is there.
+        public let existing: stat?
+        let segments: [String]
+    }
+
+    /// `kind == .file` needs a text extension (else `extension_not_allowed`); `.entry` is a file or a folder of any name.
+    public func target(_ relative: String, kind: ShannonFolderHostPath.Kind) throws(ShannonFolderHostRefusal) -> Target {
+        let spelled = relative.replacingOccurrences(of: "\\", with: "/")
+        if let first = spelled.split(separator: "/", omittingEmptySubsequences: false).first, ShannonFolderHostPath.isProtectedName(String(first)) {
+            throw ShannonFolderHostRefusal(.protectedPath)
+        }
+        guard let checked = ShannonFolderHostPath.checked(relative, kind: .entry), !checked.isEmpty else { throw ShannonFolderHostRefusal(.pathNotAllowed) }
+        let segments = checked.split(separator: "/").map(String.init)
+        if kind == .file, !ShannonFolderHostPath.hasTextExtension(segments[segments.count - 1]) { throw ShannonFolderHostRefusal(.extensionNotAllowed) }
+        guard let rootStatus = Self.lstatOf(path), Self.kind(rootStatus) == S_IFDIR else { throw ShannonFolderHostRefusal(.folderNotConfigured) }
+        let fence = Self.lstatOf(path + "/" + ShannonFolderHostLimits.protectedFolder)
+        var current = path
+        var deepest = path
+        var existing: stat? = rootStatus
+        for (index, segment) in segments.enumerated() {
+            guard let parent = existing else {
+                current += "/" + segment
+                continue
+            }
+            if index > 0, Self.kind(parent) != S_IFDIR || Self.isPackage(current) { throw ShannonFolderHostRefusal(.notAFolder) }
+            current += "/" + segment
+            var found = stat()
+            guard lstat(current, &found) == 0 else {
+                guard errno == ENOENT else { throw ShannonFolderHostRefusal(.ioError, outcome: .failed) }
+                existing = nil
+                continue
+            }
+            if Self.kind(found) == S_IFLNK { throw ShannonFolderHostRefusal(.linkRefused) }
+            if index == 0, let fence, found.st_dev == fence.st_dev, found.st_ino == fence.st_ino { throw ShannonFolderHostRefusal(.protectedPath) }
+            existing = found
+            deepest = current
+        }
+        guard let real = Self.realPath(deepest), Self.isInside(real, root: path) else { throw ShannonFolderHostRefusal(.outsideFolder) }
+        return Target(absolute: current, relative: checked, existing: existing, segments: segments)
+    }
+
+    /// Makes the missing folders above a target, one at a time, each checked to be a real folder (not a link) inside hers.
+    func makeParents(_ target: Target) throws(ShannonFolderHostRefusal) {
+        var current = path
+        for segment in target.segments.dropLast() {
+            current += "/" + segment
+            if mkdir(current, 0o755) != 0, errno != EEXIST { throw ShannonFolderHostRefusal(.ioError, outcome: .failed) }
+            guard let made = Self.lstatOf(current) else { throw ShannonFolderHostRefusal(.ioError, outcome: .failed) }
+            if Self.kind(made) == S_IFLNK { throw ShannonFolderHostRefusal(.linkRefused) }
+            guard Self.kind(made) == S_IFDIR, !Self.isPackage(current) else { throw ShannonFolderHostRefusal(.notAFolder) }
+        }
+        guard let real = Self.realPath(current), Self.isInside(real, root: path) else { throw ShannonFolderHostRefusal(.outsideFolder) }
+    }
+
+    /// Files and bytes outside `.shannon` (links not followed, not counted). Stops counting once past the file total.
+    func usage(stoppingAfter limit: Int = ShannonFolderHostWrites.totalFiles) -> (files: Int, bytes: Int) {
+        var files = 0
+        var bytes = 0
+        var folders = [path]
+        while let folder = folders.popLast(), files <= limit {
+            guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder) else { continue }
+            for name in names {
+                if folder == path, ShannonFolderHostPath.isProtectedName(name) { continue }
+                let absolute = folder + "/" + name
+                guard let status = Self.lstatOf(absolute) else { continue }
+                switch Self.kind(status) {
+                case S_IFDIR: folders.append(absolute)
+                case S_IFREG:
+                    files += 1
+                    bytes += Int(status.st_size)
+                default: continue
+                }
+            }
+        }
+        return (files, bytes)
+    }
+
+    /// Moves a file or a folder into `.shannon/trash/<time>_<path flattened>` and returns that relative location.
+    func trash(_ absolute: String, relative: String, now: Date) throws(ShannonFolderHostRefusal) -> String {
+        let fence = path + "/" + ShannonFolderHostLimits.protectedFolder
+        let trash = fence + "/trash"
+        if mkdir(trash, 0o755) != 0, errno != EEXIST { throw ShannonFolderHostRefusal(.ioError, outcome: .failed) }
+        guard let folder = Self.lstatOf(fence), Self.kind(folder) == S_IFDIR,
+              let made = Self.lstatOf(trash), Self.kind(made) == S_IFDIR else { throw ShannonFolderHostRefusal(.ioError, outcome: .failed) }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyyMMdd'T'HHmmssSSS'Z'"
+        let stamp = formatter.string(from: now)
+        var flat = relative.replacingOccurrences(of: "/", with: "_")
+        // A name of at most 200 bytes, keeping the end (the extension) of a long path.
+        while flat.utf8.count > 200 { flat.removeFirst() }
+        for attempt in 1...100 {
+            let name = attempt == 1 ? "\(stamp)_\(flat)" : "\(stamp)-\(attempt)_\(flat)"
+            if renamex_np(absolute, trash + "/" + name, UInt32(RENAME_EXCL)) == 0 {
+                return ShannonFolderHostLimits.protectedFolder + "/trash/" + name
+            }
+            guard errno == EEXIST else { throw ShannonFolderHostRefusal(.ioError, outcome: .failed) }
+        }
+        throw ShannonFolderHostRefusal(.ioError, outcome: .failed)
+    }
+}
+#endif

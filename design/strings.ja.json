@@ -3230,10 +3230,10 @@
     },
     {
       "key": "folder.host.explanation",
-      "text": "シャノンが自分のものとして使ってよい、この Mac の中の場所です。いまは中を一覧・検索・読むことだけができます。書き換えたり、フォルダの外に触れたり、プログラムを動かしたりはできません。",
+      "text": "シャノンが自分のものとして使ってよい、この Mac の中の場所です。中のテキストのファイルを一覧・検索・読む・作る・書き換える・移す・消すことができます。書き換えたり消したりした元のものは、フォルダの中のゴミ箱（.shannon/trash）に残ります。フォルダの外に触れたり、プログラムを動かしたりはできません。",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
       "only": "apple",
-      "note": "Mac の専用フォルダ（A18 S2）。区画の説明（A18 S2、読むだけ）。"
+      "note": "Mac の専用フォルダ（A18 S2、S3 で書く）。区画の説明。"
     },
     {
       "key": "folder.host.state",
@@ -3419,7 +3419,7 @@
     },
     {
       "key": "folder.host.connected",
-      "text": "本体につながっています（{label}のフォルダとして）。シャノンが一覧・検索・読むと、下の記録に出ます。",
+      "text": "本体につながっています（{label}のフォルダとして）。シャノンがフォルダを使うと、下の記録に出ます。",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
       "only": "apple",
       "note": "Mac の専用フォルダ（A18 S2）。つながっている時。label は本体が返す名前（Mac）。"
@@ -3500,6 +3500,76 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostMenuSection.swift",
       "only": "apple",
       "note": "Mac の専用フォルダ（A18 S2）。メニューバーの区画の一行目。"
+    },
+    {
+      "key": "folder.host.logCreate",
+      "text": "作った",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ。記録の操作名（A18 S3）。"
+    },
+    {
+      "key": "folder.host.logUpdate",
+      "text": "書き換えた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ。記録の操作名（A18 S3）。元のものはゴミ箱へ。"
+    },
+    {
+      "key": "folder.host.logMove",
+      "text": "移した",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ。記録の操作名（A18 S3）。"
+    },
+    {
+      "key": "folder.host.logDelete",
+      "text": "ゴミ箱へ移した",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ。記録の操作名（A18 S3）。"
+    },
+    {
+      "key": "folder.host.openAtLogin",
+      "text": "Mac にログインした時に開く",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostLoginSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ。ログイン時に開く（A18 S4、SMAppService）。Windows の「PC の起動時に開く」に当たる。"
+    },
+    {
+      "key": "folder.host.openAtLoginDefault",
+      "text": "専用フォルダを選んである間は、はじめから入っています。シャノンがフォルダを使えるように、アプリが動いている必要があるためです。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostLoginSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ。既定の理由（A18 S4）。"
+    },
+    {
+      "key": "folder.host.openAtLoginApproval",
+      "text": "システム設定 › 一般 › ログイン項目 で、シャノンを許可してください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostLoginSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ。登録したが macOS の許可待ちの時。"
+    },
+    {
+      "key": "folder.host.openAtLoginFailed",
+      "text": "ログイン時に開く設定を変えられませんでした。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostLoginSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ。登録や解除に失敗した時。"
+    },
+    {
+      "key": "folder.host.retireTitle",
+      "text": "古い Mac 版（Electron）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostLoginSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ。Electron 版をやめる手順の見出し（A18 S4）。"
+    },
+    {
+      "key": "folder.host.retireSteps",
+      "text": "このアプリが専用フォルダを受け持つので、古い Mac 版は使いません。1. 古い版を終了する。2. システム設定 › 一般 › ログイン項目 から「Electron」を外す。3. 古い版のフォルダ（shannon-desktop）と、その設定のフォルダ（ライブラリ › Application Support › shannon-desktop）は消さずに、名前を変えて取っておく。「デスクトップ/シャノン用」はそのまま、上で選ぶ。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostLoginSection.swift",
+      "only": "apple",
+      "note": "Mac の専用フォルダ。所有者決定（2026-10-06）: 古い版のフォルダと設定は名前を変えて取っておく。"
     }
   ]
 }

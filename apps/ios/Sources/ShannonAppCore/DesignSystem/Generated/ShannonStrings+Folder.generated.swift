@@ -5,7 +5,7 @@ extension ShannonGeneratedStrings {
     /// `folder.host.section`
     public static let folderHostSection = "シャノン専用フォルダ"
     /// `folder.host.explanation`
-    public static let folderHostExplanation = "シャノンが自分のものとして使ってよい、この Mac の中の場所です。いまは中を一覧・検索・読むことだけができます。書き換えたり、フォルダの外に触れたり、プログラムを動かしたりはできません。"
+    public static let folderHostExplanation = "シャノンが自分のものとして使ってよい、この Mac の中の場所です。中のテキストのファイルを一覧・検索・読む・作る・書き換える・移す・消すことができます。書き換えたり消したりした元のものは、フォルダの中のゴミ箱（.shannon/trash）に残ります。フォルダの外に触れたり、プログラムを動かしたりはできません。"
     /// `folder.host.state`
     public static let folderHostState = "状態"
     /// `folder.host.stateUnset`
@@ -59,7 +59,7 @@ extension ShannonGeneratedStrings {
     /// `folder.host.forgetConfirm`
     public static let folderHostForgetConfirm = "このフォルダを、シャノン専用フォルダとして使うのをやめますか？フォルダと中のファイルは消えません。"
     /// `folder.host.connected`
-    public static func folderHostConnected(label: String) -> String { "本体につながっています（\(label)のフォルダとして）。シャノンが一覧・検索・読むと、下の記録に出ます。" }
+    public static func folderHostConnected(label: String) -> String { "本体につながっています（\(label)のフォルダとして）。シャノンがフォルダを使うと、下の記録に出ます。" }
     /// `folder.host.notRegistered`
     public static func folderHostNotRegistered(deviceId: String) -> String { "この Mac は、まだ本体に専用フォルダの端末として登録されていません。登録に使う端末 ID: \(deviceId)" }
     /// `folder.host.notPaired`
@@ -82,4 +82,24 @@ extension ShannonGeneratedStrings {
     public static let folderHostMenuRunning = "専用フォルダ：使えます"
     /// `folder.host.menuPaused`
     public static let folderHostMenuPaused = "専用フォルダ：一時停止中"
+    /// `folder.host.logCreate`
+    public static let folderHostLogCreate = "作った"
+    /// `folder.host.logUpdate`
+    public static let folderHostLogUpdate = "書き換えた"
+    /// `folder.host.logMove`
+    public static let folderHostLogMove = "移した"
+    /// `folder.host.logDelete`
+    public static let folderHostLogDelete = "ゴミ箱へ移した"
+    /// `folder.host.openAtLogin`
+    public static let folderHostOpenAtLogin = "Mac にログインした時に開く"
+    /// `folder.host.openAtLoginDefault`
+    public static let folderHostOpenAtLoginDefault = "専用フォルダを選んである間は、はじめから入っています。シャノンがフォルダを使えるように、アプリが動いている必要があるためです。"
+    /// `folder.host.openAtLoginApproval`
+    public static let folderHostOpenAtLoginApproval = "システム設定 › 一般 › ログイン項目 で、シャノンを許可してください。"
+    /// `folder.host.openAtLoginFailed`
+    public static let folderHostOpenAtLoginFailed = "ログイン時に開く設定を変えられませんでした。"
+    /// `folder.host.retireTitle`
+    public static let folderHostRetireTitle = "古い Mac 版（Electron）"
+    /// `folder.host.retireSteps`
+    public static let folderHostRetireSteps = "このアプリが専用フォルダを受け持つので、古い Mac 版は使いません。1. 古い版を終了する。2. システム設定 › 一般 › ログイン項目 から「Electron」を外す。3. 古い版のフォルダ（shannon-desktop）と、その設定のフォルダ（ライブラリ › Application Support › shannon-desktop）は消さずに、名前を変えて取っておく。「デスクトップ/シャノン用」はそのまま、上で選ぶ。"
 }
