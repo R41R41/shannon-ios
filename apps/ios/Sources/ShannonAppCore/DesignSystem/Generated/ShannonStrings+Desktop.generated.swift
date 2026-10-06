@@ -45,7 +45,7 @@ extension ShannonGeneratedStrings {
     /// `desktop.stream.copyURL`
     public static let desktopStreamCopyURL = "配信用の URL をコピー"
     /// `desktop.stream.explanation`
-    public static let desktopStreamExplanation = "入れると、この Mac の中だけの URL（http://127.0.0.1:41760/stream.html）に、背景が透明のシャノンが出ます。OBS のブラウザソースに、その URL を入れてください。デスクトップの体と同じ体で、同じ表情・しぐさをします。出るのは姿だけで、言葉・吹き出し・カメラの絵は出ません。入れている間は、ほかの人が見聞きしている場として扱います（部屋を見ない、あなただけへの一言を出さない）。"
+    public static let desktopStreamExplanation = "入れると、この Mac の中だけの URL（http://127.0.0.1:41760/stream.html）に、背景が透明のシャノンが出ます。OBS のブラウザソースに、その URL を入れてください。デスクトップの体と同じ体で、同じ表情・しぐさをします。出るのは姿だけで、言葉・吹き出し・カメラの絵は出ません。入れている間は、ほかの人が見聞きしている場として扱います（部屋を見ない、あなただけへの一言を出さない、音声会話は「友人も一緒」になる）。"
     /// `desktop.stream.live`
     public static func desktopStreamLive(url: String) -> String { "出しています。OBS のブラウザソースの URL: \(url)" }
     /// `desktop.stream.starting`
@@ -54,4 +54,6 @@ extension ShannonGeneratedStrings {
     public static func desktopStreamPortTaken(port: String) -> String { "配信用の出力を始められませんでした。ポート \(port) を、ほかのアプリ（古い Mac 版など）が使っているかもしれません。そのアプリを終えてから、もう一度入れてください。" }
     /// `desktop.stream.unavailable`
     public static let desktopStreamUnavailable = "このビルドには配信用のページが入っていないため、配信用の出力は使えません。"
+    /// `desktop.stream.callHeld`
+    public static let desktopStreamCallHeld = "配信用の出力を入れている間は、音声会話は「友人も一緒」のままです。本人だけに戻すには、先に配信用の出力を切ってください。"
 }

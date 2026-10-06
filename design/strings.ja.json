@@ -3237,7 +3237,7 @@
     },
     {
       "key": "desktop.stream.explanation",
-      "text": "入れると、この Mac の中だけの URL（http://127.0.0.1:41760/stream.html）に、背景が透明のシャノンが出ます。OBS のブラウザソースに、その URL を入れてください。デスクトップの体と同じ体で、同じ表情・しぐさをします。出るのは姿だけで、言葉・吹き出し・カメラの絵は出ません。入れている間は、ほかの人が見聞きしている場として扱います（部屋を見ない、あなただけへの一言を出さない）。",
+      "text": "入れると、この Mac の中だけの URL（http://127.0.0.1:41760/stream.html）に、背景が透明のシャノンが出ます。OBS のブラウザソースに、その URL を入れてください。デスクトップの体と同じ体で、同じ表情・しぐさをします。出るのは姿だけで、言葉・吹き出し・カメラの絵は出ません。入れている間は、ほかの人が見聞きしている場として扱います（部屋を見ない、あなただけへの一言を出さない、音声会話は「友人も一緒」になる）。",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/StreamOutput/ShannonStreamOutputSettingsSection.swift",
       "only": "apple",
       "note": "同じ区画の説明。入れている間の扱いは body-contract の Audience（配信中は others）。"
@@ -3269,6 +3269,13 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/StreamOutput/ShannonStreamOutput.swift",
       "only": "apple",
       "note": "体のページか配信用のページが無いとき。"
+    },
+    {
+      "key": "desktop.stream.callHeld",
+      "text": "配信用の出力を入れている間は、音声会話は「友人も一緒」のままです。本人だけに戻すには、先に配信用の出力を切ってください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCallControls.swift",
+      "only": "apple",
+      "note": "配信中は通話の 本人だけ／友人も一緒 の切り替えを押せない。その説明（所有者決定 2026-10-06、A18 S5）。"
     },
     {
       "key": "folder.host.section",

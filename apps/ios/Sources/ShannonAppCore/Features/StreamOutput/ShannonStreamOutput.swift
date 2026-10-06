@@ -3,6 +3,12 @@ import AppKit
 import Foundation
 import Observation
 
+public extension Notification.Name {
+    /// The owner turned 配信用の出力（OBS） on or off, or it went off because it could not start
+    /// (`userInfo[ShannonStreamOutput.isOnKey]`).
+    static let shannonStreamOutputChanged = Notification.Name("ShannonStreamOutputChanged")
+}
+
 /// 配信用の出力（OBS） on the Mac (roadmap A18 S5, `desktop.stream-output`, `desktop.stream-output-body`; the last thing
 /// the Electron Mac app did). While the owner has it on, `http://127.0.0.1:41760/stream.html` shows her figure on a
 /// transparent background for an OBS browser source: the bundled body page, in the body her desktop body takes, moved
@@ -42,8 +48,13 @@ public final class ShannonStreamOutput {
     @ObservationIgnored private(set) var listeningPort: UInt16?
     @ObservationIgnored private var started = false
     @ObservationIgnored private var bodyObserver: NSObjectProtocol?
+    /// The key of `.shannonStreamOutputChanged`'s `userInfo`: whether the switch is on now.
+    public static let isOnKey = "isOn"
 
-    init(defaults: UserDefaults = .standard, port: UInt16 = ShannonStreamOutput.port, files: @escaping () -> ShannonStreamOutputFiles? = { .bundled }) {
+    init(
+        defaults: UserDefaults = .standard, port: UInt16 = ShannonStreamOutput.port,
+        files: @escaping () -> ShannonStreamOutputFiles? = { .bundled }
+    ) {
         self.defaults = defaults
         self.port = port
         self.files = files
@@ -66,7 +77,9 @@ public final class ShannonStreamOutput {
     public func start() {
         guard !started else { return }
         started = true
-        if isOn { open() }
+        guard isOn else { return }
+        open()
+        announce()
     }
 
     public func setOn(_ value: Bool) {
@@ -80,6 +93,12 @@ public final class ShannonStreamOutput {
             close()
             state = .off
         }
+        announce()
+    }
+
+    /// Says the switch to what follows it: the app's voice call (`.shannonStreamOutputChanged`).
+    private func announce() {
+        NotificationCenter.default.post(name: .shannonStreamOutputChanged, object: self, userInfo: [Self.isOnKey: isOn])
     }
 
     /// Puts the page's address on the pasteboard.
@@ -143,6 +162,7 @@ public final class ShannonStreamOutput {
         defaults.set(false, forKey: Self.settingKey)
         isOn = false
         state = .failed(reason)
+        announce()
     }
 }
 

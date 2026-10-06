@@ -44,13 +44,13 @@ extension ShannonVoiceWorkspaceState {
             mayReport: { [weak conversationModel] in conversationModel.map { !$0.isDesignPreview } ?? false })
         geminiVoiceModel.callReported = { [weak geminiVoiceModel] active in
             if active {
-                ShannonVoiceCallPresence.shared.began(audience: geminiVoiceModel?.participantMode == .guest ? .others : .owner)
+                ShannonVoiceCallPresence.shared.began(audience: Self.callAudience(geminiVoiceModel?.participantMode))
             } else {
                 ShannonVoiceCallPresence.shared.ended()
             }
         }
         geminiVoiceModel.sessionAbandoned = { [weak geminiVoiceModel] in
-            ShannonVoiceCallPresence.shared.abandoned(audience: geminiVoiceModel?.participantMode == .guest ? .others : .owner)
+            ShannonVoiceCallPresence.shared.abandoned(audience: Self.callAudience(geminiVoiceModel?.participantMode))
         }
         // The one look an owner turn may ask for; however the call began, it is taken the same way.
         geminiVoiceModel.performAppLook = { [conversationModel] ask in await conversationModel.performAppLook(ask) }
@@ -132,5 +132,21 @@ extension ShannonVoiceWorkspaceState {
         // What he had typed before a friend joined comes back with the end of the call.
         restoreOwnerMessage()
         callEndRevision &+= 1
+    }
+}
+
+extension ShannonVoiceWorkspaceState {
+    /// Who may hear the call, as `callStarted` / `callEnded` report it: 「友人も一緒」 is others, and so is every call on
+    /// the Mac while 配信用の出力（OBS） is on (A18 S5), whatever its mode.
+    static func callAudience(_ mode: ShannonVoiceParticipantMode?) -> ShannonBodyAudience {
+#if os(macOS)
+        callAudience(mode, streamOutputOn: ShannonStreamOutput.shared.othersPresent)
+#else
+        callAudience(mode, streamOutputOn: false)
+#endif
+    }
+
+    nonisolated static func callAudience(_ mode: ShannonVoiceParticipantMode?, streamOutputOn: Bool) -> ShannonBodyAudience {
+        mode == .guest || streamOutputOn ? .others : .owner
     }
 }
