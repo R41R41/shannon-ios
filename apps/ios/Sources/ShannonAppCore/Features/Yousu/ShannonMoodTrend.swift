@@ -217,3 +217,44 @@ public enum ShannonMoodTrend {
         )
     }
 }
+
+/// What the three rows draw for one answer, computed once when the answer arrives (not on every
+/// layout pass): the window, the shared reach, the part before the record, each line's drawn steps,
+/// and the words and summary of the true newest point.
+public struct ShannonMoodTrendDrawing: Equatable, Sendable {
+    public let start: Date
+    public let now: Date
+    public let limit: Double
+    public let unrecorded: Range<Date>?
+    public let steps: [ShannonMoodLine: [ShannonMoodStep]]
+    public let levels: [ShannonMoodLine: ShannonMoodLevel]?
+    public let summary: String?
+
+    public init(history: ShannonMoodHistoryDTO, hours: Int, readAt: Date) {
+        // The window ends at the server's own time, so a device whose clock is off draws it right.
+        let end = ShannonMoodTrend.windowEnd(history, readAt: readAt)
+        let windowStart = end.addingTimeInterval(-Double(hours) * 3600)
+        now = end
+        start = windowStart
+        limit = ShannonMoodTrend.yLimit(history.points, carryIn: history.carryIn)
+        unrecorded = ShannonMoodTrend.unrecorded(history.points, carryIn: history.carryIn, windowStart: windowStart)
+        steps = Dictionary(uniqueKeysWithValues: ShannonMoodLine.allCases.map { line in
+            (line, ShannonMoodTrend.bucketed(
+                ShannonMoodTrend.steps(line, points: history.points, carryIn: history.carryIn, windowStart: windowStart, until: end),
+                windowStart: windowStart, bucket: ShannonMoodTrend.bucket(hours: hours)
+            ))
+        })
+        levels = ShannonMoodTrend.latestLevels(history.points, carryIn: history.carryIn)
+        summary = ShannonMoodTrend.summary(history.points, carryIn: history.carryIn)
+    }
+
+    /// Where the band of 「ふつう」 starts: after the part before anything was recorded.
+    public var recordStart: Date { unrecorded?.upperBound ?? start }
+
+    /// The share of the window's width before the record (0 when there is none).
+    public var unrecordedShare: Double {
+        guard let unrecorded else { return 0 }
+        let window = now.timeIntervalSince(start)
+        return window > 0 ? unrecorded.upperBound.timeIntervalSince(unrecorded.lowerBound) / window : 0
+    }
+}

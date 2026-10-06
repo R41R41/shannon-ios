@@ -18,6 +18,32 @@ private final class FakeMoodClient: ShannonYousuServing, @unchecked Sendable {
     }
 }
 
+/// Holds every read until the test answers it, in any order.
+private final class HeldMoodClient: ShannonYousuServing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var held: [(hours: Int, answer: CheckedContinuation<ShannonMoodHistoryDTO, Error>)] = []
+
+    var heldCount: Int { lock.withLock { held.count } }
+
+    func answer(_ index: Int, with result: Result<ShannonMoodHistoryDTO, Error>) {
+        let continuation = lock.withLock { held[index].answer }
+        continuation.resume(with: result)
+    }
+
+    func loadOps(scopeKey: String) async throws -> ShannonOpsReading { throw ShannonAPIError.rejected(status: 404) }
+    func sendOpsCommand(scopeKey: String, idempotencyKey: String, type: ShannonOpsCommandType, target: String) async -> ShannonOpsSendOutcome { .unknownDelivery }
+    func loadShannonNow(scopeKey: String) async throws -> ShannonNowDTO { throw ShannonAPIError.rejected(status: 404) }
+    func loadShannonOwnTime(scopeKey: String) async throws -> ShannonNowOwnTimeDTO { throw ShannonAPIError.rejected(status: 404) }
+    func loadShannonStudyWaiting(scopeKey: String) async throws -> ShannonNowStudyDTO { throw ShannonAPIError.rejected(status: 404) }
+    func loadShannonRecentActivity(scopeKey: String) async throws -> ShannonAutonomyActivityDTO { throw ShannonAPIError.rejected(status: 404) }
+    func opsReportScope(scopeKey: String) -> String? { nil }
+    func loadShannonMoodHistory(scopeKey: String, hours: Int) async throws -> ShannonMoodHistoryDTO {
+        try await withCheckedThrowingContinuation { continuation in
+            lock.withLock { held.append((hours, continuation)) }
+        }
+    }
+}
+
 final class ShannonMoodTrendTests: XCTestCase {
     /// The server's contract fixture (`docs/mood-history-contract.md`), read where the API tests keep it.
     private func contractFixture() throws -> ShannonMoodHistoryDTO {
@@ -246,6 +272,91 @@ final class ShannonMoodTrendTests: XCTestCase {
         XCTAssertEqual(model.phase, .loaded)
         XCTAssertEqual(model.history?.points, [])
         XCTAssertEqual(client.askedHours, [24, 24, 24, 24, 24, 24, 24, 168])
+    }
+
+    @MainActor
+    private func waitForReads(_ client: HeldMoodClient, _ count: Int) async {
+        for _ in 0..<1_000 where client.heldCount < count { await Task.yield() }
+        XCTAssertEqual(client.heldCount, count)
+    }
+
+    @MainActor
+    func testOnlyTheLatestReadIsApplied() async throws {
+        let client = HeldMoodClient()
+        let model = ShannonMoodTrendModel(client: client)
+        let older = ShannonMoodHistoryDTO(schemaVersion: 1, generatedAt: "2026-10-05T06:00:00.000Z", hours: 24, points: [point("2026-10-05T01:00:00Z", -0.3)], downsampled: false)
+        let newer = ShannonMoodHistoryDTO(schemaVersion: 1, generatedAt: "2026-10-05T06:01:00.000Z", hours: 24, points: [point("2026-10-05T01:00:00Z", 0.3)], downsampled: false)
+        // Two reads of the same window; the second answers first, then the first answers late.
+        let first = Task { await model.reload() }
+        await waitForReads(client, 1)
+        let second = Task { await model.reload() }
+        await waitForReads(client, 2)
+        client.answer(1, with: .success(newer))
+        await second.value
+        client.answer(0, with: .success(older))
+        await first.value
+        XCTAssertEqual(model.history, newer)
+        XCTAssertEqual(model.drawing?.levels?[.valence], .high)
+        // A late success never clears 「読めませんでした」 of a newer read.
+        let third = Task { await model.reload() }
+        await waitForReads(client, 3)
+        let fourth = Task { await model.reload() }
+        await waitForReads(client, 4)
+        client.answer(3, with: .failure(ShannonAPIError.rejected(status: 500)))
+        await fourth.value
+        client.answer(2, with: .success(older))
+        await third.value
+        XCTAssertEqual(model.phase, .unreadable)
+        XCTAssertEqual(model.history, newer)
+    }
+
+    @MainActor
+    func testSwitchingQuicklyKeepsTheLastChosenWindow() async {
+        let client = HeldMoodClient()
+        let model = ShannonMoodTrendModel(client: client)
+        // 24→1→24→1: the answers for 24 (any of them) arrive after the last choice and are dropped.
+        let toHour = Task { await model.choose(hours: 1) }
+        await waitForReads(client, 1)
+        let toDay = Task { await model.choose(hours: 24) }
+        await waitForReads(client, 2)
+        let toHourAgain = Task { await model.choose(hours: 1) }
+        await waitForReads(client, 3)
+        let hour = ShannonMoodHistoryDTO(schemaVersion: 1, generatedAt: "2026-10-05T06:00:00.000Z", hours: 1, points: [point("2026-10-05T05:30:00Z", 0.3)], downsampled: false)
+        let firstHour = ShannonMoodHistoryDTO(schemaVersion: 1, generatedAt: "2026-10-05T05:59:00.000Z", hours: 1, points: [], downsampled: false)
+        let day = ShannonMoodHistoryDTO(schemaVersion: 1, generatedAt: "2026-10-05T06:00:00.000Z", hours: 24, points: [point("2026-10-05T01:00:00Z", -0.3)], downsampled: false)
+        client.answer(2, with: .success(hour))
+        await toHourAgain.value
+        client.answer(1, with: .success(day))
+        await toDay.value
+        client.answer(0, with: .success(firstHour))
+        await toHour.value
+        XCTAssertEqual(model.hours, 1)
+        XCTAssertEqual(model.history, hour)
+        XCTAssertEqual(model.phase, .loaded)
+    }
+
+    func testTheDrawingIsComputedOncePerAnswer() throws {
+        let history = ShannonMoodHistoryDTO(
+            schemaVersion: 1, generatedAt: "2026-10-05T06:00:00.000Z", hours: 168,
+            points: [point("2026-10-04T06:00:00.000Z", 0.1), point("2026-10-04T06:00:10.000Z", 0.55)], downsampled: false
+        )
+        let drawing = ShannonMoodTrendDrawing(history: history, hours: 168, readAt: Date())
+        XCTAssertEqual(drawing.now, try date("2026-10-05T06:00:00.000Z"))
+        XCTAssertEqual(drawing.start, try date("2026-09-28T06:00:00.000Z"))
+        XCTAssertEqual(drawing.limit, 0.6, accuracy: 0.0001)
+        XCTAssertEqual(drawing.unrecorded, drawing.start..<(try date("2026-10-04T06:00:00.000Z")))
+        XCTAssertEqual(drawing.recordStart, try date("2026-10-04T06:00:00.000Z"))
+        XCTAssertEqual(drawing.unrecordedShare, 6.0 / 7.0, accuracy: 0.0001)
+        // The burst is one step; the words are those of the newest point.
+        XCTAssertEqual(drawing.steps[.valence]?.map(\.value), [0.55])
+        XCTAssertEqual(drawing.levels?[.valence], .high)
+        XCTAssertEqual(drawing.summary, "気分の明るさは明るめ、元気さはふつう、心の開きはふつう")
+        let carried = ShannonMoodTrendDrawing(
+            history: .init(schemaVersion: 1, generatedAt: "2026-10-05T06:00:00.000Z", hours: 24, points: [], carryIn: point("2026-10-01T00:00:00Z", 0), downsampled: false),
+            hours: 24, readAt: Date()
+        )
+        XCTAssertNil(carried.unrecorded)
+        XCTAssertEqual(carried.unrecordedShare, 0)
     }
 
     @MainActor

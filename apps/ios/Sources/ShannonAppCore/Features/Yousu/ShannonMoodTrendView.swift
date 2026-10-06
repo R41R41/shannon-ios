@@ -24,11 +24,16 @@ public final class ShannonMoodTrendModel {
     public private(set) var history: ShannonMoodHistoryDTO?
     public private(set) var hours = 24
     public private(set) var readAt = Date()
+    /// What the rows draw for `history`, computed once per answer.
+    public private(set) var drawing: ShannonMoodTrendDrawing?
 
     public var isAvailable: Bool { phase != .hidden }
 
     private let scopeKey: String
     private let client: (any ShannonYousuServing)?
+    /// Counts the reads: only the answer to the latest one is applied, so an older answer (of the
+    /// same window, after a quick 24→1→24) never replaces a newer one or clears 「読めませんでした」.
+    private var generation = 0
     private static let logger = Logger(subsystem: "com.r41r41.shannon", category: "MoodTrend")
 
     public init(scopeKey: String = "local-owner", client: (any ShannonYousuServing)?) {
@@ -39,34 +44,40 @@ public final class ShannonMoodTrendModel {
     public func choose(hours: Int) async {
         guard hours != self.hours else { return }
         self.hours = hours
-        history = nil
+        show(nil)
         if phase != .hidden { phase = .loading }
         await reload()
     }
 
     public func reload() async {
         guard let client else { phase = .hidden; return }
-        let (scopeKey, hours) = (scopeKey, hours)
+        generation += 1
+        let (scopeKey, hours, request) = (scopeKey, hours, generation)
         do {
             let answer = try await client.loadShannonMoodHistory(scopeKey: scopeKey, hours: hours)
-            guard hours == self.hours else { return }
-            history = answer
-            readAt = Date()
+            guard request == generation else { return }
+            show(answer)
             phase = .loaded
         } catch where ShannonOpsModel.isCancellation(error) {
             return
         } catch let error as ShannonAPIError where error == .rejected(status: 403) || error == .rejected(status: 404) {
-            guard hours == self.hours else { return }
-            history = nil
+            guard request == generation else { return }
+            show(nil)
             phase = .hidden
         } catch {
-            guard hours == self.hours else { return }
+            guard request == generation else { return }
             if error is DecodingError {
                 Self.logger.error("Mood history could not be decoded: \(String(describing: error), privacy: .public)")
             }
             // The last good chart of this window stays; a note under it says this read failed.
             phase = .unreadable
         }
+    }
+
+    private func show(_ answer: ShannonMoodHistoryDTO?) {
+        readAt = Date()
+        history = answer
+        drawing = answer.map { ShannonMoodTrendDrawing(history: $0, hours: hours, readAt: readAt) }
     }
 }
 
@@ -79,18 +90,13 @@ struct ShannonMoodTrendPanel: View {
     let palette: ShannonPalette
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    /// The width of the top row's chart, read only to decide whether 「記録なし」 fits its part.
-    @State private var chartWidth: CGFloat = 0
-
-    /// What all three rows share for one answer.
-    private struct Frame {
-        let start: Date
-        let now: Date
-        let limit: Double
-        let unrecorded: Range<Date>?
-        /// Where the band of 「ふつう」 starts: after the part before anything was recorded.
-        var recordStart: Date { unrecorded?.upperBound ?? start }
-    }
+    /// Whether 「記録なし」 fits the part before the record in the top row. Only this flag is kept
+    /// (never the width), so a resize redraws nothing unless it flips.
+    @State private var unrecordedLabelFits = false
+    /// The width 「記録なし」 needs, growing with the text size.
+    @ScaledMetric(relativeTo: .caption2) private var unrecordedLabelWidth: CGFloat = 44
+    /// How much wider than at the default size a time label is, to keep edge labels whole.
+    @ScaledMetric(relativeTo: .caption2) private var axisLabelScale: CGFloat = 1
 
     var body: some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.small) {
@@ -107,14 +113,14 @@ struct ShannonMoodTrendPanel: View {
             }
             switch model.phase {
             case .loaded:
-                if let history = model.history, history.hasMood {
-                    rows(history)
+                if let drawing = model.drawing, model.history?.hasMood == true {
+                    rows(drawing)
                 } else {
                     quietLine(ShannonGeneratedStrings.yousuMoodTrendEmpty)
                 }
             case .unreadable:
-                if let history = model.history, history.hasMood {
-                    rows(history)
+                if let drawing = model.drawing, model.history?.hasMood == true {
+                    rows(drawing)
                     Text(ShannonGeneratedStrings.yousuMoodTrendUnreadable)
                         .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
@@ -171,37 +177,24 @@ struct ShannonMoodTrendPanel: View {
     private var plotHeight: CGFloat { dynamicTypeSize.isAccessibilitySize ? 64 : 40 }
 
     /// The three rows, read as one element: 「気分の推移」 and the words of now.
-    private func rows(_ history: ShannonMoodHistoryDTO) -> some View {
-        // The window ends at the server's own time, so a phone whose clock is off draws it right.
-        let now = ShannonMoodTrend.windowEnd(history, readAt: model.readAt)
-        let start = now.addingTimeInterval(-Double(model.hours) * 3600)
-        let frame = Frame(
-            start: start, now: now,
-            limit: ShannonMoodTrend.yLimit(history.points, carryIn: history.carryIn),
-            unrecorded: ShannonMoodTrend.unrecorded(history.points, carryIn: history.carryIn, windowStart: start)
-        )
-        let levels = ShannonMoodTrend.latestLevels(history.points, carryIn: history.carryIn)
+    private func rows(_ drawing: ShannonMoodTrendDrawing) -> some View {
         let lines = ShannonMoodLine.allCases
         return VStack(alignment: .leading, spacing: ShannonSpacing.small) {
             ForEach(Array(lines.enumerated()), id: \.element) { index, line in
-                let steps = ShannonMoodTrend.bucketed(
-                    ShannonMoodTrend.steps(line, points: history.points, carryIn: history.carryIn, windowStart: start, until: now),
-                    windowStart: start, bucket: ShannonMoodTrend.bucket(hours: model.hours)
-                )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(line.title)
                         .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
                     HStack(alignment: .top, spacing: ShannonSpacing.small) {
-                        rowChart(line, steps: steps, frame: frame, isTop: index == 0, isBottom: index == lines.count - 1)
-                        word(line, level: levels?[line])
+                        rowChart(line, drawing: drawing, isTop: index == 0, isBottom: index == lines.count - 1)
+                        word(line, level: drawing.levels?[line])
                     }
                 }
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(ShannonGeneratedStrings.yousuMoodTrendTitle)
-        .accessibilityValue(ShannonMoodTrend.summary(history.points, carryIn: history.carryIn) ?? ShannonGeneratedStrings.yousuMoodTrendEmpty)
+        .accessibilityValue(drawing.summary ?? ShannonGeneratedStrings.yousuMoodTrendEmpty)
     }
 
     /// The word of now, in the line's colour. Every word is laid out unseen behind it, so the
@@ -221,12 +214,13 @@ struct ShannonMoodTrendPanel: View {
         .frame(minHeight: plotHeight)
     }
 
-    private func rowChart(_ line: ShannonMoodLine, steps: [ShannonMoodStep], frame: Frame, isTop: Bool, isBottom: Bool) -> some View {
+    private func rowChart(_ line: ShannonMoodLine, drawing frame: ShannonMoodTrendDrawing, isTop: Bool, isBottom: Bool) -> some View {
         let tint = color(line)
-        let labelsUnrecorded = isTop && frame.unrecorded.map { part in
-            let window = frame.now.timeIntervalSince(frame.start)
-            return window > 0 && chartWidth * part.upperBound.timeIntervalSince(part.lowerBound) / window >= 44
-        } ?? false
+        let steps = frame.steps[line] ?? []
+        let labelsUnrecorded = isTop && unrecordedLabelFits
+        // Watched in the top row only, and only while there is a part before the record.
+        let share = isTop ? frame.unrecordedShare : 0
+        let neededWidth = unrecordedLabelWidth
         return Chart {
             // The band of 「ふつう」 (±0.2 from rest), from where the record begins.
             if frame.recordStart < frame.now {
@@ -284,8 +278,8 @@ struct ShannonMoodTrendPanel: View {
         .chartXAxis { xAxis(labelled: isBottom, frame: frame) }
         .chartLegend(.hidden)
         .chartPlotStyle { plot in plot.frame(height: plotHeight) }
-        .onGeometryChange(for: CGFloat.self) { proxy in proxy.size.width } action: { width in
-            if isTop { chartWidth = width }
+        .onGeometryChange(for: Bool.self) { proxy in share > 0 && proxy.size.width * share >= neededWidth } action: { fits in
+            if isTop, unrecordedLabelFits != fits { unrecordedLabelFits = fits }
         }
     }
 
@@ -293,7 +287,7 @@ struct ShannonMoodTrendPanel: View {
     /// (「20:15」); 24時間: every 6 hours; 7日: by day. A time too near either edge to be read
     /// whole is left unlabelled (its grid line stays).
     @AxisContentBuilder
-    private func xAxis(labelled: Bool, frame: Frame) -> some AxisContent {
+    private func xAxis(labelled: Bool, frame: ShannonMoodTrendDrawing) -> some AxisContent {
         let japanese = Locale(identifier: "ja_JP")
         if model.hours <= 1 {
             AxisMarks(values: ShannonMoodTrend.quarterHours(from: frame.start, to: frame.now)) { value in
@@ -311,8 +305,9 @@ struct ShannonMoodTrendPanel: View {
     }
 
     @AxisMarkBuilder
-    private func xMark(_ value: AxisValue, labelled: Bool, frame: Frame, format: Date.FormatStyle) -> some AxisMark {
-        let margin = frame.now.timeIntervalSince(frame.start) * 0.06
+    private func xMark(_ value: AxisValue, labelled: Bool, frame: ShannonMoodTrendDrawing, format: Date.FormatStyle) -> some AxisMark {
+        // About half a label of a plot about 340pt wide, grown with the text size (wider plots only hide a little more).
+        let margin = frame.now.timeIntervalSince(frame.start) * 0.06 * Double(axisLabelScale)
         AxisGridLine().foregroundStyle(palette.divider.opacity(0.5))
         if labelled, let date = value.as(Date.self),
            date.timeIntervalSince(frame.start) >= margin, frame.now.timeIntervalSince(date) >= margin {
