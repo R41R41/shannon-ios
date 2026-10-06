@@ -202,7 +202,7 @@ public enum ShannonGeneratedStrings {
     /// `desktop.body.speaksHint`
     public static let desktopBodySpeaksHint = "シャノンから話しかけてきた一言と、場面ごとの一言を、体が吹き出しと声で伝えます。ほかの人がいる時も話します。席を外している間と、音声会話の間は、声に出しません。"
     /// `desktop.body.explanation`
-    public static let desktopBodyExplanation = "シャノンがデスクトップに立ちます。体の外のクリックは後ろの窓へ通り、体をつまんで好きな場所へ運べます。場所と大きさは画面ごとに覚えます。触れたこと・運んだこと・席を外して戻ったことは、「体に起きたことをシャノンに伝える」が入のときだけ届きます。体の窓が出ている間は、Live2D の姿はこちらに出て、トークの横の姿は水の光の目になります。"
+    public static let desktopBodyExplanation = "シャノンがデスクトップに立ちます。体の外のクリックは後ろの窓へ通ります。おでこのあたりか足もとを押したまま動かすと、好きな場所へ運べます（ほかの所を押すと、触れたことになります）。場所と大きさは画面ごとに覚えます。触れたこと・運んだこと・席を外して戻ったことは、「体に起きたことをシャノンに伝える」が入のときだけ届きます。体の窓が出ている間は、Live2D の姿はこちらに出て、トークの横の姿は水の光の目になります。"
     /// `desktop.body.unsupported`
     public static let desktopBodyUnsupported = "サーバーがまだ対応していないため、デスクトップの体はシャノンに何も送りません。姿だけを表示しています。"
     /// `desktop.body.notConnected`

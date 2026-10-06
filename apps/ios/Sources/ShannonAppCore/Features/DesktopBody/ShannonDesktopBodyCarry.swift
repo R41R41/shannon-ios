@@ -3,11 +3,12 @@ import Foundation
 
 /// Telling a carry (`touch.carry`: she is picked up and put down elsewhere) from the touches the page knows.
 ///
-/// The embed page has no carry: a window cannot be moved from inside it. So the window decides first, as the
-/// Windows body does (`acting/touch.ts`: pulling her by the body or the face carries her; the head is petted). A press
-/// on her head goes to the page at once. A press elsewhere is held for a moment: moved more than a few points, she is
-/// carried and the page never hears of it; released at once, the page gets the click (a poke, a tap); held still,
-/// the page gets the press and what follows (a held hand, a long pet). Pure, so it is tested without a window.
+/// The embed page has no carry: a window cannot be moved from inside it. So the window decides first, by the rule of
+/// the Windows body (owner decision 2026-10-06): she is picked up only by her face or by what has no named part (her
+/// boots), `ShannonDesktopBodyGrip`. A press anywhere else (her head and hair, neck, chest, waist, legs, skirt, arms,
+/// hands…) goes to the page at once and stays a touch. A press where she may be picked up is held for a moment: moved
+/// more than a few points, she is carried and the page never hears of it; released at once, the page gets the click
+/// (a poke, a tap); held still, the page gets the press and what follows. Pure, so it is tested without a window.
 /// Times are the events' own (seconds since the Mac started, as `NSEvent.timestamp` gives them).
 public struct ShannonDesktopBodyCarry: Equatable, Sendable {
     public enum Effect: Equatable, Sendable {
@@ -41,9 +42,9 @@ public struct ShannonDesktopBodyCarry: Equatable, Sendable {
     public var isCarrying: Bool { if case .carrying = state { true } else { false } }
     public var isPressed: Bool { state != .idle }
 
-    /// A press at `point` (screen), on her head or elsewhere, while her window's origin is `origin`.
-    public mutating func down(at point: CGPoint, onHead: Bool, origin: CGPoint, time: TimeInterval) -> [Effect] {
-        if onHead {
+    /// A press at `point` (screen), where she may be picked up (`mayCarry`) or not, while her window's origin is `origin`.
+    public mutating func down(at point: CGPoint, mayCarry: Bool, origin: CGPoint, time: TimeInterval) -> [Effect] {
+        if !mayCarry {
             state = .passthrough
             return [.deliverDown]
         }
@@ -104,14 +105,5 @@ public struct ShannonDesktopBodyCarry: Equatable, Sendable {
 
     static func moved(_ origin: CGPoint, from start: CGPoint, to point: CGPoint) -> CGPoint {
         CGPoint(x: origin.x + point.x - start.x, y: origin.y + point.y - start.y)
-    }
-
-    /// Her head, roughly, inside the part of the window where she is drawn: the top fifth of her figure's height,
-    /// across its middle. `figure` is the box of what is drawn (from the picture of the page, or estimated).
-    public static func isOnHead(_ point: CGPoint, figure: CGRect) -> Bool {
-        guard figure.width > 0, figure.height > 0 else { return false }
-        // AppKit's y grows upwards: the head is at the top of the box.
-        let head = CGRect(x: figure.minX + figure.width * 0.2, y: figure.maxY - figure.height * 0.2, width: figure.width * 0.6, height: figure.height * 0.2)
-        return head.contains(point)
     }
 }

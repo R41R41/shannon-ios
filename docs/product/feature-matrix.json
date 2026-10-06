@@ -2880,7 +2880,7 @@
       "id": "touch.carry",
       "area": "touch",
       "title": "つまんで運ぶ",
-      "description": "体をつまんで、画面の好きな場所へ運ぶ。",
+      "description": "おでこのあたりか足もと（ブーツ）を押したまま動かして、画面の好きな場所へ運ぶ。ほかの所を押すと、触れたことになる（所有者の決定、2026-10-06。Windows と同じ決まり）。",
       "scope": "desktop",
       "surfaces": {
         "ios": {
