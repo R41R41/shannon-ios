@@ -330,17 +330,19 @@ The v1 rules apply to every path, with these additions, checked by the server be
 5. While its own stop switch is on: claim with `localStop: true` at most every 15 s, run nothing, and report a held step as `stopped_locally`.
 6. Keep its append-only local log.
 
-## The Mac application (A18 S2)
+## The Mac application (A18 S2–S4)
 
-The Mac app (`apps/ios/Sources/ShannonAppCore/Features/FolderHost/`) is a v2 device built against this document, read-only for now.
+The Mac app (`apps/ios/Sources/ShannonAppCore/Features/FolderHost/`) is a v2 device built against this document: it reads (S2) and changes (S3) her folder, and opens at login (S4).
 
 - **Host.** It asks `GET /v1/autonomy/host-steps/binding` and claims for the host returned; with none it claims nothing and 設定 › 専用フォルダ shows the device id to register.
-- **Claim.** `protocol: 2`, `operations: ["list", "read", "search"]`, `waitSeconds: 25`, `localStop`. It never lists `write`, so it is never handed a v1 copy and, while it is the only host, none is planned.
+- **Claim.** `protocol: 2`, `operations: ["list", "read", "search", "create", "update", "move", "delete"]`, `waitSeconds: 25`, `localStop`. It never lists `write` (Syzygy ADR-0007: no story goes into the PC or Mac folder), so it is never handed a v1 copy and, while it is the only host, none is planned.
+- **Changes (S3).** `create` writes a new file with `O_CREAT | O_EXCL | O_NOFOLLOW` after making missing parent folders one at a time (each checked to be a real folder inside hers); anything at the path is `already_exists`. `update` reads the file first (a hard link, a link, a non-UTF-8 or NUL file, or one over 1 MiB is refused), compares `expectedSha256` (`changed_since_read`), moves the original into `.shannon/trash/` and then writes the new text; `trashedAs` names where the original went. `move` makes missing parents, never overwrites (`renamex_np` with `RENAME_EXCL`), never moves a folder into itself, keeps a text file a text file and a file of another kind at its own extension (`extension_not_allowed`). `delete` moves the file or folder into the trash. The trash name is `<UTC time to the millisecond>_<path with / as _>` (at most 200 bytes of path, keeping its end; a number is added when two would meet). `contentSha256` and `bytes` must match the text (`content_mismatch`); a text with NUL is `not_text`; over 1 MiB `too_large`; past 200 MiB or 5,000 files outside `.shannon` `folder_full`. The fence is the one of reading, applied to every existing part of the path.
 - **Token.** The claim client holds the device token; the part that reads the folder (an actor) is handed only a folder and a step and never sees the token or the network.
 - **Fence.** The server's lexical rules again (tested against the server's own recorded cases, `services/api/tests/fixtures/host-folder-paths-v1/cases.json`); every segment `lstat`ed, a link anywhere is `link_refused`; `.shannon` in any case, width or Unicode normalization, and anything that is the same directory on disk, is `protected_path`; a package (a bundle Finder shows as one file) is listed as a file and never entered; a Finder alias or a package is never text; the real path must stay inside the real folder (`outside_folder`); a file is opened with `O_NOFOLLOW`, must be the file that was checked, and is refused (`link_refused`) when it has another hard link.
 - **Bounds.** As above: 256 KiB per read and at most the 640 KiB report cap once escaped; files over 1 MiB are `too_large`; search stops at 50 hits, 500 files, 8 MiB or 2 s.
 - **Folder.** The owner chooses it in 設定 › 専用フォルダ: an empty folder gets the marker `.shannon/folder.json`; a folder that has it (the Electron app's 「デスクトップ/シャノン用」) is taken as it is; a folder with other files and no marker is refused. It is kept as an app-scoped security-scoped bookmark, made again when stale; when it cannot be opened every step is refused with `folder_not_configured`.
-- **Running.** While a folder is chosen the app keeps claiming without a window (under `ProcessInfo.beginActivity`), stays in the menu bar, and keeps the append-only, content-free log `Application Support/Shannon/folder-activity.jsonl` (time, operation, path, outcome, code, a count; at 128 KiB the file is renamed whole to `folder-activity.1.jsonl` and a new one begins).
+- **Login (S4).** 設定 › 専用フォルダ › 「Mac にログインした時に開く」 registers the app with `SMAppService.mainApp`. By default it is on while a folder is chosen and off otherwise (hosting needs the app running, and choosing a folder is the owner asking for it); once the owner sets the switch his choice holds.
+- **Running.** While a folder is chosen the app keeps claiming without a window (under `ProcessInfo.beginActivity`), stays in the menu bar, and keeps the append-only, content-free log `Application Support/Shannon/folder-activity.jsonl` (for a change also the destination and the trash location, never the text) (time, operation, path, outcome, code, a count; at 128 KiB the file is renamed whole to `folder-activity.1.jsonl` and a new one begins).
 
 ## Not built
 
@@ -348,5 +350,5 @@ The Mac app (`apps/ios/Sources/ShannonAppCore/Features/FolderHost/`) is a v2 dev
 - **`append`, `mkdir` as operations of their own, and `usage`.** The device has them; v2 does not queue them (`create` and `move` make parent folders).
 - **Binary files.** Listed by name only; never read, written, or searched.
 - **An owner route that lists the queue.** The owner sees every operation and its outcome in the activity record.
-- **Writing from the Mac.** The Mac application (A18 S2) claims `list`, `read`, `search` only; `create`, `update`, `move`, `delete` and v1 copies follow in S3. Opening the application at login is S4. See [The Mac application](#the-mac-application-a18-s2).
+- **v1 copies to the Mac.** The Mac application never claims `write` (Syzygy ADR-0007). See [The Mac application](#the-mac-application-a18-s2s4).
 - **A dedicated rate limit** for these routes. A long-poll device makes about two requests a minute while idle.

@@ -3920,8 +3920,11 @@
           "reason": "iPhone のアプリは常駐しない。"
         },
         "macos": {
-          "status": "no",
-          "note": "Mac のアプリに、ログイン時に開く設定は無い。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostLoginSection.swift"
+          ],
+          "note": "A18 S4（2026-10-06）：SMAppService.mainApp。専用フォルダを選んである間は既定で入（所有者が切り替えたらそれに従う）。"
         },
         "windows": {
           "status": "yes",
@@ -3997,13 +4000,14 @@
           "reason": "PC のフォルダに置く機能。iPhone では、結果を「したことの記録」で読む。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostSettingsSection.swift",
             "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostModel.swift",
-            "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostRoot.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostRoot.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostWrites.swift"
           ],
-          "note": "A18 S2（2026-10-06）：選ぶ・止める・確かめる・やめる・操作の記録・メニューバーに残る、はある。シャノンが使えるのは一覧・検索・読むだけで、書く（S3）とログイン時に開く・Electron 版の廃止（S4）はまだ。"
+          "note": "A18 S2・S3（2026-10-06）：選ぶ・止める・確かめる・やめる・操作の記録・メニューバーに残る。シャノンは一覧・検索・読む・作る・書き換える・移す・消す（元のものはフォルダの中のゴミ箱へ）。"
         },
         "windows": {
           "status": "yes",
@@ -4028,13 +4032,14 @@
           "reason": "フォルダは PC の中。iPhone では、したことの記録で読む。"
         },
         "macos": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostOperations.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostWrites.swift",
             "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostWorker.swift",
             "services/api/src/shannonFolderTools.ts"
           ],
-          "note": "A18 S1・S2（2026-10-06）：Mac のフォルダを folder.list・folder.search・folder.read で使える（取り決め v2、binding の道、2 台の時の選び方）。作る・書き換える・移す・消すは S3。"
+          "note": "A18 S1〜S3（2026-10-06）：取り決め v2 の全部の操作（v1 の写しは受けない。ADR-0007）。"
         },
         "windows": {
           "status": "planned",

@@ -165,6 +165,18 @@ scripts/release-runner.sh run \
 
 The Runner may report unrelated unstaged files, because only committed content is pushed. Any staged file stops the run until it is deliberately committed or unstaged. A failed or timed-out run is not completion; inspect the JSON summary and existing TestFlight history before retrying.
 
+## Retiring the Mac Electron app (A18 S4)
+
+The SwiftUI Mac app (`ShannonDesk`) hosts her folder, her desktop body and the menu bar, and opens at login. The Electron app in `/Users/arairyo/shannon-desktop` is no longer used on the Mac. By the owner's decision of 2026-10-06 its files are kept and renamed, never deleted. The owner does these steps himself; an agent does not touch those files.
+
+1. Quit the Electron app (its menu bar item, 終了).
+2. System Settings › General › Login Items: remove 「Electron」 (the Electron app's login item). Leave `com.shannon.agent-host` (the Mac Agent Host) alone; it is not the Electron app.
+3. Rename `/Users/arairyo/shannon-desktop` to `/Users/arairyo/shannon-desktop-retired-2026-10` and `~/Library/Application Support/shannon-desktop` (its settings) to `~/Library/Application Support/shannon-desktop-retired-2026-10`.
+4. Keep `~/Desktop/シャノン用` as it is and choose it in ShannonDesk, 設定 › 専用フォルダ (it already has `.shannon/folder.json`). Its earlier copies stay in the folder.
+5. If a server host entry still names the Electron app's device, remove that entry from `SHANNON_AUTONOMY_HOST_FOLDERS_JSON` (API and loop) and restart both; `owner-mac` names ShannonDesk.
+
+The same steps are shown in 設定 › 専用フォルダ › 古い Mac 版（Electron）.
+
 ## Data-preservation checks
 
 For persistence-affecting work, compare before/after evidence for:
