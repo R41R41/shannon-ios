@@ -28,6 +28,17 @@ export function noteProvenance(dependencies: Pick<StepDependencies, 'store'>, cy
   marks.markPursuits(cycle.scopeKey, since, at);
 }
 
+/** Marks documents a step just put in Aether when its session is marked, before the report (fails closed: an early mark is harmless). */
+export function markEarly(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id' | 'scopeKey'>, documentIds: readonly string[], at: string): void {
+  const marks = dependencies.store.informed;
+  if (documentIds.length && marks.sessionInformedAt(cycle.id)) marks.markDocuments(cycle.scopeKey, documentIds, cycle.id, at);
+}
+
+/** Whether the session is marked; one that cannot be read counts as marked. */
+export function sessionMarked(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id'>): boolean {
+  try { return dependencies.store.informed.sessionInformedAt(cycle.id) !== null; } catch { return true; }
+}
+
 /**
  * Which pieces of her study a prompt of this session may carry (owner decision 2026-10-06, option a): a session that is not
  * marked is given nothing marked, so a story or a message of an unmarked session cannot retell what she wrote after reading

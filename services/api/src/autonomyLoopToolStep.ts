@@ -1,6 +1,7 @@
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import type { PreparedStep, StepDependencies, StepResult } from './autonomyLoopSteps.js';
 import type { AutonomyDecision } from './autonomyPolicy.js';
+import { markEarly, sessionMarked } from './autonomyLoopProvenance.js';
 import { toolGateRequest, toolRefusal } from './shannonToolGate.js';
 import { neutralMarkers, toolSessionMemory, type ToolSessionMemory } from './shannonToolTypes.js';
 import { providerToolName, type ShannonToolDefinition } from './shannonTools.js';
@@ -79,7 +80,10 @@ export function toolThinking(dependencies: StepDependencies, cycle: AutonomyLoop
 export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep): PreparedStep | null {
   const results = dependencies.toolResults;
   if (!results || !step.tool) return null;
-  const context = { scopeKey: cycle.scopeKey, surface: 'autonomy' as const, audience: 'owner_alone' as const, memory: results.memory(cycle.id) };
+  const context = {
+    scopeKey: cycle.scopeKey, surface: 'autonomy' as const, audience: 'owner_alone' as const, memory: results.memory(cycle.id),
+    informedWrite: (documentIds: readonly string[]) => markEarly(dependencies, cycle, documentIds, dependencies.now?.() ?? cycle.startedAt),
+  };
   const ready = dependencies.service.tools.prepare(step.tool, step.input ?? {}, context);
   if ('result' in ready) {
     // Nothing ran: she is told why when she thinks next, and the step is skipped unasked.
@@ -87,6 +91,11 @@ export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyL
     return null;
   }
   const { tool, prepared } = ready;
+  // A session marked by what it read of the owner's writes nothing into her folder on his PC or Mac, which is not marked (ADR-0007).
+  if (tool.domain === 'host_folder' && tool.effect === 'write' && sessionMarked(dependencies, cycle)) {
+    results.add(cycle.id, `- ${tool.name}: できなかった（refused）。ライ氏の文書やNotionを読んだこの時間には、PCのフォルダに書かない。次の時間に書く。`);
+    return null;
+  }
   // Reading the owner's documents serves one of her active pursuits (ADR-0007): she names it, and an unknown or closed one is refused.
   const unserved = tool.domain === 'owner_documents_read' ? pursuitRefusal(dependencies, cycle.scopeKey, step.input?.pursuitId) : null;
   if (unserved) {

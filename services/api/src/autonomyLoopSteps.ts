@@ -16,7 +16,7 @@ import { storyNotes, withNoteAfterReading } from './autonomyLoopPlan.js';
 import { AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, revisePrompt } from './autonomyLoopPrompts.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import { prepareThinking } from './autonomyLoopThinkStep.js';
-import { heldForOthers, unmarkedOnly, unmarkedPursuits } from './autonomyLoopProvenance.js';
+import { heldForOthers, markEarly, sessionMarked, unmarkedOnly, unmarkedPursuits } from './autonomyLoopProvenance.js';
 import { prepareToolStep, type AutonomyToolResults } from './autonomyLoopToolStep.js';
 import type { AutonomyModelPurpose } from './autonomyModels.js';
 import { AUTONOMY_CALL_DOMAIN, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
@@ -166,7 +166,8 @@ export function prepareStep(dependencies: StepDependencies, cycle: AutonomyLoopC
     case 'show': return prepareShowing(dependencies, cycle, step);
     case 'put_away': return preparePutAway(dependencies, cycle, step);
     // With her study in Aether there are no copies to the folder on the owner's PC (Syzygy ADR-0007 revised: stories live in Aether only).
-    case 'copy': return dependencies.service.studyAether?.covers(cycle.scopeKey) ? null : prepareFolderCopy(dependencies, cycle, step, at);
+    // Nor from a session marked by what it read of the owner's (ADR-0007): the folder is not marked.
+    case 'copy': return dependencies.service.studyAether?.covers(cycle.scopeKey) || sessionMarked(dependencies, cycle) ? null : prepareFolderCopy(dependencies, cycle, step, at);
     case 'look': return prepareRoomLook(dependencies, cycle, at);
     // In a session marked by what she read of the owner's, she does not speak up while anyone else may see or hear (ADR-0007).
     case 'reach_out': return heldForOthers(dependencies, cycle, at) ? null : step.call ? preparePhoneCall(dependencies, cycle, step, at)
@@ -263,6 +264,7 @@ function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, s
       // With Aether her note goes to 「シャノン用フォルダ」 first; what Aether refused is not kept here either.
       const pushed = adapters.aether?.covers(cycle.scopeKey) ? await aetherStep(() => adapters.aether!.create(cycle.scopeKey, { kind: 'note', title: clip(title, 80), body: body.slice(0, STUDY_LIMITS.noteBody).trim() }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'note', reading.id), signal)) : null;
       if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: 'メモを書きましたが、Aetherのシャノン用フォルダに置けませんでした。', reasonCode: pushed.reasonCode };
+      if (pushed) markEarly(dependencies, cycle, [pushed.value.documentId], at);
       return {
         outcome: 'done', usage, summary: `メモ「${clip(title, 60)}」を書斎に書きました。`, documents: { read: [`${READING_DOCUMENT_PREFIX}${reading.id}`] },
         commit: (_remaining, commitAt) => {
@@ -301,6 +303,7 @@ function prepareDraft(dependencies: StepDependencies, cycle: AutonomyLoopCycle, 
       // With Aether the story goes to 「シャノンの書斎」 first (`inStudy: true`), the canonical copy.
       const pushed = adapters.aether?.covers(cycle.scopeKey) ? await aetherStep(() => adapters.aether!.create(cycle.scopeKey, { kind: 'story', title: clip(title, 80), body, changeNote: text(reply?.note, STUDY_LIMITS.changeNote) ?? '最初の稿です。' }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'draft', title), signal)) : null;
       if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: '物語の下書きを書きましたが、Aetherの書斎に置けませんでした。', reasonCode: pushed.reasonCode };
+      if (pushed) markEarly(dependencies, cycle, [pushed.value.documentId], at);
       return {
         // The title stays hers until she calls the piece 「見せてもいい」.
         outcome: 'done', usage, summary: '書斎に、短い物語の下書きを1つ書きました。まだ見せていません。',
@@ -345,6 +348,7 @@ function prepareRevision(dependencies: StepDependencies, cycle: AutonomyLoopCycl
       // A story that lives in Aether is revised there first, from the version she read (`baseVersion`); a stale one brings the newer text in.
       const pushed = adapters.aether?.covers(cycle.scopeKey) ? await aetherStep(() => adapters.aether!.update(cycle.scopeKey, piece, { title: clip(title, 80), body, changeNote: change }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'revise', piece.id, String(piece.version)), signal)) : null;
       if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: '物語を直しましたが、Aetherの書斎に書けませんでした。', reasonCode: pushed.reasonCode };
+      if (pushed?.value) markEarly(dependencies, cycle, [pushed.value.documentId], at);
       return {
         // Revising a marked piece is opening it on purpose: the session is marked (ADR-0007).
         outcome: 'done', usage, link: `shannon-study://${piece.id}`, documents: { read: [`shannon-study://${piece.id}`] },

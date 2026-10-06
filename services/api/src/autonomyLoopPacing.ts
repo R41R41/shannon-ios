@@ -1,5 +1,6 @@
 import { autonomyDayKey, yenFromUsd, type AutonomyBudgetStatus } from './autonomyBudget.js';
 import { ownerLocalTime } from './autonomyLoopCalls.js';
+import { sessionMarked } from './autonomyLoopProvenance.js';
 import { restSummary, type SessionFacts, type TypicalCost } from './autonomyLoopSessionPrompts.js';
 import { AUTONOMY_REST_REASON_MAXIMUM_CHARACTERS, sessionElapsedMilliseconds, type AutonomySession, type SessionEndCode } from './autonomyLoopSessions.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
@@ -126,7 +127,8 @@ export function prepareRest(dependencies: StepDependencies, cycle: AutonomyLoopC
   if (!session || session.endedAt) return null;
   const { config, loop } = dependencies;
   const forced = step.forced;
-  const reason = forced ? undefined : step.intent?.replace(/\s+/gu, ' ').trim().slice(0, AUTONOMY_REST_REASON_MAXIMUM_CHARACTERS) || undefined;
+  // A marked session's reason, in her words, is not kept (ADR-0007): the rest is.
+  const reason = forced || sessionMarked(dependencies, cycle) ? undefined : step.intent?.replace(/\s+/gu, ' ').trim().slice(0, AUTONOMY_REST_REASON_MAXIMUM_CHARACTERS) || undefined;
   // A session that did nothing but think ends as `idle`: a short rest the first time, the long default when the one before was idle too.
   const idle = forced === 'no_plan' && nothingDone(dependencies, cycle);
   const rest = restMilliseconds(loop, forced ? undefined : step.minutes, idle ? (idleBefore(dependencies, cycle.scopeKey) ? 'again' : true) : false);

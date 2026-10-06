@@ -72,6 +72,11 @@ export interface ToolExecutionContext extends ToolCallContext {
    * nothing read is given. Not used with the owner alone or in her own time.
    */
   othersText?: OthersTextCheck | null;
+  /**
+   * In her own time: marks what a write just put in Aether when her session is marked (`autonomyLoopProvenance.ts`), the moment
+   * Aether answers, so a write whose report later fails is still marked. Absent in a conversation.
+   */
+  informedWrite?: (documentIds: readonly string[]) => void;
 }
 
 export type ToolExecutor = (input: ToolInput, context: ToolExecutionContext) => PreparedToolCall | ToolResult;

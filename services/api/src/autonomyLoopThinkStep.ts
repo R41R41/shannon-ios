@@ -11,7 +11,7 @@ import { reasonedPlan, thinkingMaterials, type ReasonedThought } from './autonom
 import { salvagedModelObject, thinkingPrompt, type ThinkingExtras } from './autonomyLoopPrompts.js';
 import { phoneThinking, withPhone, type PhoneThinking } from './autonomyLoopPhoneStep.js';
 import { reachOutsRemaining } from './autonomyLoopReachOutStep.js';
-import { unmarkedOnly, unmarkedPursuits } from './autonomyLoopProvenance.js';
+import { sessionMarked, unmarkedOnly, unmarkedPursuits } from './autonomyLoopProvenance.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import { offeredOwnTools, toolThinking } from './autonomyLoopToolStep.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
@@ -213,7 +213,8 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
       const code = unplannable ?? (salvaged ? 'truncated' : null);
       return {
         outcome: 'done', usage, ...(code ? { reasonCode: noted(code) } : {}),
-        summary: thought.text ? `${words}「${thought.text}」` : words,
+        // In a marked session her thought may retell what she read of the owner's: the record keeps that she thought, not the words.
+        summary: thought.text && !sessionMarked(dependencies, cycle) ? `${words}「${thought.text}」` : words,
         commit: (_remaining, commitAt) => {
           // What her last calls returned has been in front of her: it is not given again.
           dependencies.toolResults?.clear(cycle.id);

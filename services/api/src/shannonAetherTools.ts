@@ -47,6 +47,8 @@ export function aetherExecutors(proposals: AetherProposalStore | null, study: Pi
       return {
         result: toolOk(hits.length ? [`${hits.length}件:`, ...hits.map(hitLines)].join('\n') : '当てはまるところはなかった。'),
         record: { summary: `Aetherを探しました（${hits.length}件）。`, outcome: 'done' },
+        // An excerpt is read too: a marked one marks her session (ADR-0007).
+        documents: { read: hits.map(hit => hit.documentId) },
       };
     })(input, context),
     'aether.read': (input, context) => reading('Aetherの文書を1つ読みます。', async ({ aether, surface }, signal) => {
@@ -68,11 +70,14 @@ export function aetherExecutors(proposals: AetherProposalStore | null, study: Pi
           `- id: ${entry.documentId}｜「${clip(entry.title || '（無題）', 60)}」｜${entry.inStudy ? '書斎' : 'シャノン用フォルダ'}｜第${entry.version}版｜更新 ${entry.updatedAt.slice(0, 10)}`),
         ...(entries.length > 60 ? ['（ほかにもある）'] : [])].join('\n') : 'シャノン用フォルダはまだ空。'),
         record: { summary: `Aetherのシャノン用フォルダの一覧を見ました（${entries.length}件）。`, outcome: 'done' },
+        documents: { read: entries.slice(0, 60).map(entry => entry.documentId) },
       };
     })(input, context),
     'aetherFolder.create': (input, context) => reading('Aetherのシャノン用フォルダに文書を1つ書きます。', async ({ aether }, signal) => {
       const title = stringInput(input, 'title')!.trim();
       const written = await aether.create({ title, body: stringInput(input, 'body')!, inStudy: false, idempotencyKey: writeKey(context, 'aetherFolder.create', input) }, signal);
+      // Marked the moment Aether has it, before anything else can fail (ADR-0007).
+      context.informedWrite?.([written.documentId]);
       return {
         result: toolOk(`シャノン用フォルダに「${clip(title, 60)}」を書いた。\nid: ${written.documentId}（第${written.version}版）`),
         record: { summary: `Aetherのシャノン用フォルダに文書「${clip(title, 60)}」を書きました。`, outcome: 'done', link: `aether://documents/${encodeURIComponent(written.documentId)}` },
@@ -85,6 +90,7 @@ export function aetherExecutors(proposals: AetherProposalStore | null, study: Pi
         documentId: stringInput(input, 'documentId')!.trim(), baseVersion: numberInput(input, 'baseVersion')!, body: stringInput(input, 'body')!,
         ...(title ? { title } : {}), idempotencyKey: writeKey(context, 'aetherFolder.update', input),
       }, signal);
+      context.informedWrite?.([written.documentId]);
       // A document of her study changed this way is her own revision, taken in at once (never read later as the owner's change).
       await study?.adoptOwnWrite(context.scopeKey, written, 'シャノン用フォルダの道具で書き換えました。', signal).catch(() => undefined);
       return {
