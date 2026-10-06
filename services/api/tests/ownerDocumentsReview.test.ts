@@ -124,7 +124,7 @@ describe('a second call and a phone call of a marked session', () => {
       const { harness } = await ownTime({ reachOuts, phone, agentic: true }, false);
       const at = harness.clock.at;
       const cycle = harness.store.loop.startCycle(scope, '2026-10-02', 'activity', [], at);
-      harness.store.loop.observations.add(scope, { cycleId: cycle.id, ordinal: 0, step: 'reach_out', outcome: 'done', reachOut: { id: 'initiative-1', reason: 'wonder', sentAt: at, waitedSeconds: 180, replied: false, delivery: 'unknown' } }, at);
+      harness.store.loop.observations.add(scope, { cycleId: cycle.id, ordinal: 0, step: 'reach_out', outcome: 'done', reachOut: { id: 'initiative-1', reason: 'wonder', sentAt: at, waitedSeconds: 180, replied: false, delivery: 'unknown', windowVisible: false, owner: 'unknown', others: false } }, at);
       harness.store.informed.markSession(cycle.id, at);
       const model = new FakeModel();
       model.during = () => { state.others = comes; };
