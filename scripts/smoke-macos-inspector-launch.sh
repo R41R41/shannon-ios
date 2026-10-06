@@ -52,19 +52,24 @@ run_case() {
   local label="$page/$panel"
   local output="$temporary_directory/${page}-${panel}.log"
   local elapsed=0
-  local page_arguments=(-shannon.desktop.lastDestination "$page")
+  # The page is a default (`-key value`) or a bare preview flag. The bare flags go last: the argument domain reads
+  # the word after any `-word` as its value, so a bare flag before a `-key value` pair leaves the value alone as a
+  # file to open, and AppKit then opens that "document" instead of the main window (no window, the case not tried).
+  local page_default=(-shannon.desktop.lastDestination "$page")
+  local page_flag=()
   case "$page" in
-    development) page_arguments=(-ShannonPreviewDevelopment) ;;
-    release) page_arguments=(-ShannonPreviewRelease) ;;
+    development) page_default=(); page_flag=(-ShannonPreviewDevelopment) ;;
+    release) page_default=(); page_flag=(-ShannonPreviewRelease) ;;
   esac
 
   NSUnbufferedIO=YES "$executable" \
-    -ShannonDesignPreview \
-    "${page_arguments[@]}" \
+    ${page_default[@]+"${page_default[@]}"} \
     -ApplePersistenceIgnoreState YES \
     "-NSWindow Frame main-AppWindow-1" "$window_frame" \
     -shannon.desktop.lastShowsInspector YES \
     -shannon.desktop.lastAuxiliaryPanel "$panel" \
+    -ShannonDesignPreview \
+    ${page_flag[@]+"${page_flag[@]}"} \
     >"$output" 2>&1 &
   app_pid=$!
 
