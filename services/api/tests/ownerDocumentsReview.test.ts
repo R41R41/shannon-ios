@@ -109,6 +109,27 @@ describe('a marked session', () => {
     expect(harness.service.folder.nextCopy(scope, at)).toMatchObject({ pieceId: plain.id });
   });
 
+  it('refuses a write and a copy for her folder on the Mac as for the PC, with both hosts bound (A18)', async () => {
+    const hosts = '{"owner-windows":{"deviceId":"0123456789abcdef"},"owner-mac":{"deviceId":"fedcba9876543210"}}';
+    const { harness, markFirstThought } = await ownTime({ environment: { SHANNON_AUTONOMY_HOST_FOLDERS_JSON: hosts } }, false);
+    markFirstThought();
+    harness.model.plans = [
+      { thought: '書きます。', steps: [{ action: 'tool', name: 'folder.create', input: { host: 'owner-mac', path: 'notes/宿.md', content: '下調べ。' } }] },
+      { thought: '休みます。', steps: [rest()] },
+    ];
+    await runUntilIdle(harness.loop);
+    expect(harness.model.prompts('think')[1]).toContain('ライ氏の文書やNotionを読んだこの時間には、PCのフォルダに書かない');
+    expect(harness.entries().some(entry => entry.tool === 'folder.create')).toBe(false);
+    const at = harness.clock.at;
+    const marked = harness.store.study.create(scope, { kind: 'note', title: '宿のメモ', body: '静かな宿のこと。' }, at);
+    if (typeof marked === 'string') throw new Error(marked);
+    harness.store.informed.markDocuments(scope, [`shannon-study://${marked.id}`], 'earlier', at);
+    expect(harness.service.folder.nextCopy(scope, at, marked.id)).toBeNull();
+    for (const host of ['owner-windows', 'owner-mac']) {
+      expect(() => harness.service.folder.enqueue(scope, { host, pieceId: marked.id, pieceVersion: marked.version }, at)).toThrow('HOST_STEP_PIECE_NOT_COPYABLE');
+    }
+  });
+
   it('holds a message whose words were written while someone came in', async () => {
     const said: string[] = [];
     const state = { others: false };
