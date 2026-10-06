@@ -5,20 +5,20 @@ import { toolFailure, type ToolResult } from './shannonTools.js';
 /**
  * What she reads of Aether reaches the model this way while anyone but the owner can see or hear the reply (Syzygy
  * ADR-0007, owner decision 2026-10-06: 人前で読んだシャノン用フォルダのメモからは、所有者の内緒・個人的なことを除いてから使う).
- * Her stories and notes may hold what the owner told her alone. The rule is the one memory follows for the same turn
- * (`docs/architecture.md`, People and audience), applied to free text with the check her writes from a conversation
- * already use (`conversationSecrets.ts`, runs of words; `othersSecrets` picks the items by `disclosureDecision`):
+ * Her stories and notes may hold what the owner told her alone. By his word 「除く」 they are removed, in every turn with
+ * others present, with the check her writes from a conversation already use (`conversationSecrets.ts`, runs of words;
+ * `othersSecrets` picks the items by `disclosureDecision`, as memory judges them):
  *
  * - a sentence that carries something withheld (what he asked to keep secret, marked 機微 by hand, asked her to forget,
  *   or anything withheld for an unnamed guest) is left out;
- * - a sentence that carries one of his other personal matters (guarded) is marked, as memory marks it, where he may
- *   release it (his own turn with others, 「友人も一緒」), and left out where he is not there (`openOnly`, someone
- *   else's turn on a platform), as memory leaves it out there.
- * - where he may release it, what she read is also, as a whole, derived text with no label of its own, and carries the
- *   unlabelled marker on a line of its own before it, as such text does in a prompt with him and others (review S2), so
- *   the speak-time check covers all of it. Where he is not there it carries none: the run filter is the rule there.
+ * - a sentence that carries one of his other personal matters (guarded, which memory would give such a turn marked) is
+ *   left out too (final review S-2), whoever is there.
+ * - where he may release a line (his own turn with others, 「友人も一緒」), what stays is, as a whole, derived text with
+ *   no label of its own, and carries the unlabelled marker on a line of its own before it, as such text does in a prompt
+ *   with him and others (review S2), so the speak-time check covers all of it. Where he is not there (`openOnly`) it
+ *   carries none.
  *
- * A sentence is a line, cut after 。！？!?. When what stays still carries something withheld (a run across sentences),
+ * A sentence is a line, cut after 。！？!?. When what stays still carries something of his (a run across sentences),
  * nothing of the result is given; nor when the check could not be read (`null`). A sentence that was left out is not
  * replaced by anything; one line at the end says that some were. Like every use of this check it catches the owner's
  * own words and their runs, not a retelling in other words.
@@ -26,7 +26,7 @@ import { toolFailure, type ToolResult } from './shannonTools.js';
 export interface OthersTextCheck {
   withheld: SecretCheck;
   guarded: SecretCheck;
-  /** Nobody present may release a protected line of the owner's (a turn someone other than the owner wrote). */
+  /** Nobody present may release a protected line of the owner's (a turn someone other than the owner wrote): no marker. */
   openOnly: boolean;
 }
 
@@ -53,21 +53,19 @@ export function resultForOthers(result: ToolResult, check: OthersTextCheck | nul
 
 /** The text without what may not reach the model, or null when nothing of it may. */
 export function textForOthers(text: string, check: OthersTextCheck): string | null {
-  if (!check.withheld.carries(text) && !check.guarded.carries(text)) return text;
+  const carries = (value: string) => check.withheld.carries(value) || check.guarded.carries(value);
+  if (!carries(text)) return text;
   let removed = false;
-  // What is kept, plain, and as shown (with markers); the last check reads the plain text, whose runs no marker splits (review S-1).
   const lines = text.split('\n').flatMap(line => {
     const kept = line.split(/(?<=[。！？!?])/u).filter(sentence => {
-      const out = check.withheld.carries(sentence) || (check.openOnly && check.guarded.carries(sentence));
+      const out = carries(sentence);
       removed ||= out;
       return !out;
-    });
-    const plain = kept.join('');
-    return plain.trim() || !line.trim()
-      ? [{ plain, shown: kept.map(sentence => check.guarded.carries(sentence) ? `${UNLABELLED_DISCLOSURE_MARKER}${sentence}` : sentence).join('') }] : [];
+    }).join('');
+    return kept.trim() || !line.trim() ? [kept] : [];
   });
-  const plain = lines.map(line => line.plain).join('\n');
-  if (check.withheld.carries(plain) || (check.openOnly && check.guarded.carries(plain))) return null;
-  const shown = lines.map(line => line.shown).join('\n');
+  // What stays is checked as a whole, plain (no marker inside it splits a run; review S-1).
+  const shown = lines.join('\n');
+  if (carries(shown)) return null;
   return removed ? `${shown}\n${LEFT_OUT_LINE}` : shown;
 }

@@ -28,12 +28,13 @@ const OTHERS_SPEAK_TIME_CHECK = speakTimePrivacyCheck.split('\n').filter(line =>
  *   without his profile, the speak-time check, no owner reads (notes, tasks, Notion, calendar); his turn is kept in the
  *   platform thread as his (`speaker: owner`) with that audience. Where the surface asks for it (`othersFolderReading`,
  *   the platform reply route) it is offered her Aether reading tools inside 「シャノン用フォルダ」 and nothing else, what she
- *   reads marked as a whole for the speak-time check (owner decision 2026-10-06); otherwise no tools;
+ *   reads without his secrets and personal matters and marked as a whole for the speak-time check (owner decision
+ *   2026-10-06); otherwise no tools;
  * - anyone else: their audience (the conversation as a whole, or that person alone in a DM), her guest identity, what
  *   she remembers of the people there. In a DM or a shared conversation alike (owner decision 2026-10-06), only what may
  *   be shown to anyone: no protected line of his, none of her pursuits, and no rule that he may release one (`openOnly`).
  *   Where the surface asks for it (`othersFolderReading`) such a turn is offered her Aether reading tools inside
- *   「シャノン用フォルダ」 and nothing else (owner decision 2026-10-06), with his guarded matters left out of what she
+ *   「シャノン用フォルダ」 and nothing else (owner decision 2026-10-06), with his secrets and personal matters left out of what she
  *   reads; her Minecraft body's game chat does not ask for it.
  */
 export function platformAudienceTurn(policy: PlatformAudiencePolicy): ChatAudienceTurn {
