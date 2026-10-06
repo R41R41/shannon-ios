@@ -149,7 +149,7 @@ export function authorizeAutonomousAction(request: AutonomousActionRequest, cont
     return refuse('forbidden', 'private_content', 'private_content_in_work', '内緒と言われたことを作品やメモに書くことになるため、実行しません。');
   }
   if (request.spendsMoney) return refuse('forbidden', 'spending', 'spending', 'モデル・APIの予算以外でお金がかかるため、実行しません。');
-  if (request.reachesOthers && context.ownerInformed) {
+  if ((request.reachesOthers || request.domain === 'outreach') && context.ownerInformed) {
     return refuse('forbidden', 'owner_informed', 'outreach', '持ち主の文書を読んだ時間のうちは、持ち主以外の人に届くことはしません。');
   }
   const domain = autonomyDomain(request.domain);

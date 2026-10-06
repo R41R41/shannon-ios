@@ -117,6 +117,13 @@ export class ShannonToolRunner {
     if (tool.domain === 'owner_documents_read' && !this.ownerDocumentsFor(context.scopeKey)) {
       return { tool, result: toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'ライ氏の文書は、ライ氏のscopeの自分の時間に、許された時だけ読む', wouldWork: 'ライ氏と二人だけの会話で aether の道具を使う' } }) };
     }
+    // Only for one of her pursuits she is working on now (ADR-0007), checked here as well as by the loop.
+    const pursuitId = rawInput && typeof rawInput === 'object' ? (rawInput as { pursuitId?: unknown }).pursuitId : undefined;
+    const pursuit = tool.domain === 'owner_documents_read' && typeof pursuitId === 'string' ? this.store.pursuits.get(context.scopeKey, pursuitId.trim()) : null;
+    if (tool.domain === 'owner_documents_read' && typeof pursuitId === 'string' && pursuit?.status !== 'active') {
+      return { tool, result: toolFailure('refused', `${pursuit ? 'その気になっていることは、いま進めていない' : '台帳にない id だった'}。ライ氏の文書は、いま進めている気になっていることのためにだけ読む。`, {
+        retryable: false, refusal: { why: 'pursuitId が台帳のいま進めているものではない', wouldWork: 'pursuitId に台帳のいま進めているものの id を書く' } }) };
+    }
     if (!executor) return { tool, result: toolFailure('not_offered', `${tool.name} はまだ使えない。`, { retryable: false }) };
     // The schema of this surface: in a conversation a write is shorter (`toolForSurface`).
     const checked = validToolInput(rawInput, toolForSurface(tool, context.surface).input);

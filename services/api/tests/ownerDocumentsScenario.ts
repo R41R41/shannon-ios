@@ -6,7 +6,7 @@ import { callKind, loopHarness, runUntilIdle, type LoopHarnessOptions } from './
 /**
  * One session of her own time with her tools wired and Aether configured (a fake Aether over real HTTP): she searches her
  * folder, reads a document of it, writes one, and rests. The same file was run on a10fdedd, the commit before her own time
- * could read the owner's documents, and `ownerDocumentsKillSwitch.test.ts` holds the digests of that run: with
+ * could read the owner's documents, and `ownerDocumentsOwnTime.test.ts` holds the digests of that run: with
  * `SHANNON_AUTONOMY_OWNER_DOCUMENTS` unset, `off` or mistyped every prompt is that commit's. Identifiers are random, so they
  * are replaced before a prompt is digested (`digest`); nothing else is.
  */

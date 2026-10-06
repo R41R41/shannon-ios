@@ -20,6 +20,12 @@ export const AETHER_DOCUMENT_PREFIX = 'aether://documents/';
 /** A reading her own time keeps until she writes a note about it (`autonomy_loop_readings`), when it came from a shared Notion page. */
 export const READING_DOCUMENT_PREFIX = 'autonomy-reading://';
 
+/** An id as it is stored and looked up: the same cut both ways, so two long ids that share a start are both marked (fails closed). */
+const ID_CHARACTERS = 300;
+function stored(id: string): string {
+  return id.slice(0, ID_CHARACTERS);
+}
+
 export class OwnerInformedMarks {
   constructor(private readonly database: DatabaseSync) {
     database.exec(`
@@ -71,7 +77,7 @@ export class OwnerInformedMarks {
       INSERT OR IGNORE INTO owner_informed_documents (scope_key, document_id, session_id, informed_at) VALUES (?, ?, ?, ?)
     `);
     for (const id of new Set(documentIds.flatMap(item => [item, ...this.aetherDocumentsOf(scopeKey, item)]))) {
-      if (id) insert.run(scopeKey, id.slice(0, 300), sessionId, at);
+      if (id) insert.run(scopeKey, stored(id), sessionId, at);
     }
   }
 
@@ -85,7 +91,7 @@ export class OwnerInformedMarks {
     const id = documentId.startsWith(AETHER_DOCUMENT_PREFIX) ? decodeURIComponent(documentId.slice(AETHER_DOCUMENT_PREFIX.length)) : documentId;
     const names = [id, ...this.aetherDocumentsOf(scopeKey, id), ...this.piecesOf(scopeKey, id).map(piece => `${STUDY_DOCUMENT_PREFIX}${piece}`)];
     const known = this.database.prepare('SELECT 1 AS found FROM owner_informed_documents WHERE scope_key = ? AND document_id = ?');
-    return names.some(name => Boolean(known.get(scopeKey, name)));
+    return names.some(name => Boolean(known.get(scopeKey, stored(name))));
   }
 
   /** Pursuits created or changed since the session was marked carry the mark. Seeds never change. */
