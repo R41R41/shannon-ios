@@ -161,7 +161,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     store, config, now, ...(options.roomLooks ? { roomLooks: options.roomLooks } : {}),
     ...(reachOuts ? { reachOuts: (scopeKey: string, at: string) => ({ today: reachOuts.sentOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutsPerDay }) } : {}),
     ...(options.phone ? { calls: (scopeKey: string, at: string) => callGateContext(options.phone!, scopeKey, at) } : {}),
-    ...(options.aether ? { aether: { access: options.aether } } : {}),
+    ...(options.aether ? { aether: { access: options.aether, ownerDocuments: loopConfig.ownerDocuments } } : {}),
     ...(reachOuts?.followUpsOn ? { reachOutFollowUps: (scopeKey: string, at: string) => ({ today: reachOuts.followUpsOn!(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutFollowUpsPerDay }) } : {}),
   });
   /** A waiting step does not sleep: the pause moves the test's clock. */

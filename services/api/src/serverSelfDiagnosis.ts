@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { SHANNON_ONE_LINE_VOICE, looksSecret, shannonCapabilityPrompt, shannonPersonaPrompt, shannonSuitePrompt } from '@shannon/cognition';
+import { ownerDocumentsEnabled } from './autonomyLoopConfig.js';
 import { AUTONOMY_MODEL_PURPOSES, AUTONOMY_ROOM_LOOK_MODEL, autonomyModel, type AutonomyModelPurpose } from './autonomyModels.js';
 import { dedicatedAutonomyCredential, resolveAutonomyModel } from './autonomyTextModel.js';
 import { createConfiguredElevenSpeechGateway } from './elevenSpeech.js';
@@ -144,7 +145,8 @@ function toolSummary(environment: Environment): ServerSelfDiagnosis['tools'] {
   // Her Aether tools exist on this server only while its Aether client is configured (address and token); without it the
   // summary is what it was before Aether access.
   const aether = configuredAetherAccess(environment) !== null;
-  const here = (tool: { name: string }) => aether || !tool.name.startsWith('aether');
+  // The owner's documents in her own time exist only with Aether and SHANNON_AUTONOMY_OWNER_DOCUMENTS=on (ADR-0007).
+  const here = (tool: { name: string; domain: string }) => tool.domain === 'owner_documents_read' ? aether && ownerDocumentsEnabled(environment) : aether || !tool.name.startsWith('aether');
   const offered = Object.fromEntries(SURFACES.map(surface => [surface, Object.fromEntries(AUDIENCES.map(audience => [
     audience, enabled ? offeredTools(surface, audience, here).length : 0,
   ]))])) as ServerSelfDiagnosis['tools']['offered'];

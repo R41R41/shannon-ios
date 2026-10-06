@@ -20,6 +20,18 @@ export interface ToolRun {
   apply?: () => string | void;
   /** The call was already written to the activity record where it closed (a folder operation from a conversation). */
   recordedElsewhere?: true;
+  /** For the provenance mark of her own time (`autonomyLoopProvenance.ts`). A write's ids are added by `apply`. */
+  documents?: ToolDocuments;
+}
+
+/**
+ * What a call or a step read and wrote, by id (an Aether document id, `shannon-study://<piece id>`, `autonomy-reading://<id>`),
+ * and whether it read something of the owner's (`informs`). Never text.
+ */
+export interface ToolDocuments {
+  informs?: true;
+  read?: readonly string[];
+  wrote?: readonly string[];
 }
 
 export interface PreparedToolCall {
@@ -60,6 +72,16 @@ export interface ToolExecutionContext extends ToolCallContext {
    * nothing read is given. Not used with the owner alone or in her own time.
    */
   othersText?: OthersTextCheck | null;
+  /**
+   * In her own time: marks what a write just put in Aether when her session is marked (`autonomyLoopProvenance.ts`), the moment
+   * Aether answers, so a write whose report later fails is still marked. Absent in a conversation.
+   */
+  informedWrite?: (documentIds: readonly string[]) => void;
+  /**
+   * In her own time, in a session that is not marked: a document (Aether id or `shannon-study://<piece>`) that a listing leaves
+   * out, so that listing her things does not mark the session (option (a), ADR-0007). Absent everywhere else.
+   */
+  unlisted?: (documentId: string) => boolean;
 }
 
 export type ToolExecutor = (input: ToolInput, context: ToolExecutionContext) => PreparedToolCall | ToolResult;

@@ -2,6 +2,7 @@ import { autonomyDayKey } from './autonomyBudget.js';
 import { callModel, ownerLocalTime, paidCall } from './autonomyLoopCalls.js';
 import { agenticLoop, followUpsRemaining, observeReachOut, ownerRepliedAt, reachOutChain } from './autonomyLoopObserve.js';
 import { AUTONOMY_FOLLOW_UP_MAXIMUM_CHARACTERS, AUTONOMY_JOT_MAXIMUM_CHARACTERS, followUpPrompt, happenedLines } from './autonomyLoopObservePrompts.js';
+import { heldForOthers } from './autonomyLoopProvenance.js';
 import { REACH_OUT_HELD_TOOL, conversationInProgress } from './autonomyLoopReachOutStep.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
@@ -68,6 +69,8 @@ export function prepareFollowUp(dependencies: StepDependencies, cycle: AutonomyL
       const writeAt = dependencies.now?.() ?? performAt;
       const after = stopped(writeAt, usage);
       if (after) return after;
+      // Someone else may have come while she wrote it: in a marked session she holds it (ADR-0007).
+      if (heldForOthers(dependencies, cycle, writeAt)) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, reasonCode: 'others_present', summary: 'ほかの人がいるので、もう一度声をかけるのはやめておきました。' };
       let delivery: 'sent' | 'limit' | 'unavailable';
       try {
         delivery = adapters.reachOuts.sayAgain(cycle.scopeKey, {

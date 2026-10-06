@@ -535,7 +535,7 @@ describe('what reaches the prompts of her own activity', () => {
     expect(loopSources.sort()).toEqual([
       'autonomyLoop.ts', 'autonomyLoopCalls.ts', 'autonomyLoopConfig.ts', 'autonomyLoopFolderStep.ts', 'autonomyLoopFollowUpStep.ts', 'autonomyLoopLookStep.ts',
       'autonomyLoopObservations.ts', 'autonomyLoopObserve.ts', 'autonomyLoopObservePrompts.ts', 'autonomyLoopOwnerContext.ts', 'autonomyLoopPacing.ts', 'autonomyLoopPhoneStep.ts', 'autonomyLoopPlan.ts',
-      'autonomyLoopPrompts.ts', 'autonomyLoopReachOutStep.ts', 'autonomyLoopSessionPrompts.ts', 'autonomyLoopSessions.ts', 'autonomyLoopState.ts', 'autonomyLoopSteps.ts',
+      'autonomyLoopPrompts.ts', 'autonomyLoopProvenance.ts', 'autonomyLoopReachOutStep.ts', 'autonomyLoopSessionPrompts.ts', 'autonomyLoopSessions.ts', 'autonomyLoopState.ts', 'autonomyLoopSteps.ts',
       'autonomyLoopThinkStep.ts', 'autonomyLoopToolStep.ts',
     ]);
     const allowed = new Set([
@@ -560,6 +560,8 @@ describe('what reaches the prompts of her own activity', () => {
       // Her tools (owner decision 2026-10-05): the step names the registry, its gate request and its result shape; the runner it is
       // handed by the service reaches her study and her folder's queue only.
       './autonomyLoopToolStep.js', './shannonToolGate.js', './shannonToolTypes.js', './shannonTools.js',
+      // The provenance mark (ADR-0007): ids and times of what a session read and wrote, through the store's own marks; no text.
+      './autonomyLoopProvenance.js', './ownerInformedMarks.js',
       // What she may see of the owner's: the interface the loop is handed, the output rule, and the check of her own free text. No store.
       './autonomyLoopOwnerContext.js',
       // The closed vocabulary of what her body may report about a message of hers: constants of the wire contract, no store.

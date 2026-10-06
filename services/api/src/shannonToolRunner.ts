@@ -7,6 +7,7 @@ import type { HostFolderOperations } from './hostFolderOperations.js';
 import { folderExecutors, folderToolForHosts } from './shannonFolderTools.js';
 import { minecraftExecutors, minecraftToolOffered, type MinecraftRequestPort } from './shannonMinecraftTools.js';
 import { aetherExecutors } from './shannonAetherTools.js';
+import { ownerDocumentExecutors } from './shannonOwnerDocumentTools.js';
 import { aetherStudyTool, studyExecutors } from './shannonStudyTools.js';
 import { authorizeToolCall, authorizeToolInput, gatedAether, shownAetherCall } from './shannonToolGate.js';
 import type { StudyAether } from './studyAether.js';
@@ -42,13 +43,15 @@ export interface ToolAetherPorts {
   study?: StudyAether | null;
   /** The owner's proposal inbox (`AETHER_SHANNON_PROPOSAL_DIR`), for `aether.propose`. */
   proposals?: AetherProposalStore | null;
+  /** Her own time may read the owner's documents (`SHANNON_AUTONOMY_OWNER_DOCUMENTS=on`, the autonomy service only); absent, `ownerDocs.*` do not exist. */
+  ownerDocuments?: boolean;
 }
 
 export class ShannonToolRunner {
   private readonly executors: Readonly<Record<string, ToolExecutor>>;
 
   constructor(
-    store: SQLiteAutonomyStore,
+    private readonly store: SQLiteAutonomyStore,
     private readonly folder: HostFolderOperations,
     private readonly recorder: ToolRecorder,
     now: () => string,
@@ -59,7 +62,7 @@ export class ShannonToolRunner {
   ) {
     const folderTools = folderExecutors(folder, scopeKey => roomLookGuard(store.study.roomLookTexts(scopeKey, ROOM_LOOK_GUARD.notes)));
     this.executors = Object.freeze({ ...studyExecutors(store, now, aether.study ?? null), ...(aether.study ? withoutStories(store, folderTools, aether.study) : folderTools),
-      ...minecraftExecutors(minecraft), ...aetherExecutors(aether.proposals ?? null, aether.study ?? null) });
+      ...minecraftExecutors(minecraft), ...aetherExecutors(aether.proposals ?? null, aether.study ?? null), ...ownerDocumentExecutors(aether.access ?? null) });
   }
 
   /**
@@ -71,6 +74,7 @@ export class ShannonToolRunner {
     // with the inbox alone (or the token alone) every offer is what it was before Aether access. Only to the owner's scope.
     const tools = offeredTools(surface, audience, tool => tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
       : tool.domain === 'minecraft_body' ? minecraftToolOffered(this.minecraft, tool, scopeKey)
+        : tool.domain === 'owner_documents_read' ? this.ownerDocumentsFor(scopeKey)
         : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true && this.aetherFor(scopeKey)
           : tool.name.startsWith('aether') ? this.aetherFor(scopeKey) : true);
     const hosts = this.folder.boundHosts();
@@ -86,12 +90,19 @@ export class ShannonToolRunner {
     return Boolean(this.aether.access) && scopeKey !== undefined && (this.aether.study?.covers(scopeKey) ?? false);
   }
 
+  /** Whether her own time may read the owner's documents in this scope: switched on, and her Aether tools exist there. */
+  private ownerDocumentsFor(scopeKey: string | undefined): boolean {
+    return this.aether.ownerDocuments === true && this.aetherFor(scopeKey);
+  }
+
   /**
    * A tool by its name or its provider name, as this server has it: without the Aether client her Aether tools are not
    * there at all, so a call of one is refused and recorded exactly as a call of a name that never existed (as before Aether).
+   * The same holds for `ownerDocs.*` while her own time may not read the owner's documents (as before they existed).
    */
   knownTool(name: string): ShannonToolDefinition | null {
     const tool = toolFromProviderName(name) ?? shannonTool(name);
+    if (tool?.domain === 'owner_documents_read' && !(this.aether.ownerDocuments === true && this.aether.access)) return null;
     return tool && !this.aether.access && (tool.name.startsWith('aether') || tool.domain === 'aether_proposal') ? null : tool;
   }
 
@@ -105,6 +116,16 @@ export class ShannonToolRunner {
     if ((tool.name.startsWith('aether') || tool.domain === 'aether_proposal') && !this.aetherFor(context.scopeKey)) {
       return { tool, result: toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'Aetherの道具はライ氏のscopeだけ', wouldWork: 'ライ氏との会話か、ボクの時間で使う' } }) };
     }
+    if (tool.domain === 'owner_documents_read' && !this.ownerDocumentsFor(context.scopeKey)) {
+      return { tool, result: toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'ライ氏の文書は、ライ氏のscopeの自分の時間に、許された時だけ読む', wouldWork: 'ライ氏と二人だけの会話で aether の道具を使う' } }) };
+    }
+    // Only for one of her pursuits she is working on now (ADR-0007), checked here as well as by the loop.
+    const pursuitId = rawInput && typeof rawInput === 'object' ? (rawInput as { pursuitId?: unknown }).pursuitId : undefined;
+    const pursuit = tool.domain === 'owner_documents_read' && typeof pursuitId === 'string' ? this.store.pursuits.get(context.scopeKey, pursuitId.trim()) : null;
+    if (tool.domain === 'owner_documents_read' && typeof pursuitId === 'string' && pursuit?.status !== 'active') {
+      return { tool, result: toolFailure('refused', `${pursuit ? 'その気になっていることは、いま進めていない' : '台帳にない id だった'}。ライ氏の文書は、いま進めている気になっていることのためにだけ読む。`, {
+        retryable: false, refusal: { why: 'pursuitId が台帳のいま進めているものではない', wouldWork: 'pursuitId に台帳のいま進めているものの id を書く' } }) };
+    }
     if (!executor) return { tool, result: toolFailure('not_offered', `${tool.name} はまだ使えない。`, { retryable: false }) };
     // The schema of this surface: in a conversation a write is shorter (`toolForSurface`).
     const checked = validToolInput(rawInput, toolForSurface(tool, context.surface).input);
@@ -115,7 +136,9 @@ export class ShannonToolRunner {
     if (secret) return { tool, result: secret };
     try {
       // Aether as this call may reach it: the gate narrows it with anyone else present and in her own time.
-      const prepared = executor(checked.input, this.aether.access && this.aetherFor(context.scopeKey) ? { ...context, aether: gatedAether(this.aether.access, context) } : context);
+      // With anyone else present, what she wrote after reading the owner's documents is not read either (ADR-0007).
+      const informed = (documentId: string) => this.store.informed.marked(context.scopeKey, documentId);
+      const prepared = executor(checked.input, this.aether.access && this.aetherFor(context.scopeKey) ? { ...context, aether: gatedAether(this.aether.access, context, informed) } : context);
       // With anyone else present, what she read reaches the model without the owner's private things.
       return 'run' in prepared ? { tool, prepared: shownAetherCall(tool, prepared, context) } : { tool, result: prepared };
     } catch {

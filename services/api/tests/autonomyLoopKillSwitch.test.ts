@@ -1,9 +1,10 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ownerPrivateRule, type AutonomyOwnerContext } from '../src/autonomyLoopOwnerContext.js';
 import { draftPrompt, reachOutPrompt, revisePrompt, thinkingPrompt } from '../src/autonomyLoopPrompts.js';
+import { OwnerInformedMarks } from '../src/ownerInformedMarks.js';
 import { agenticDay, builderDigests, plainDay } from './autonomyLoopKillSwitchScenario.js';
 import { loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 
@@ -64,7 +65,37 @@ const BUILDERS_AT_78C3493 = {
   upcoming: '927e3a29ab3fc461', saw: '35587157e98838f5', followUp: '47c28ee18c48828a',
 };
 
+/**
+ * The day reads a shared Notion page (cycle 3). Since the owner's decisions of 2026-10-06 (Syzygy ADR-0007: a note written after
+ * a Notion page is marked, option a) the note and the story of that cycle are not given to the prompts of later cycles, which are
+ * not marked. With that mark set aside (nothing reported as marked, `OwnerInformedMarks.any`), every prompt of the day is the
+ * commit before's, byte for byte: the tests below hold that. The day as it runs with the mark is pinned on its own below: it
+ * differs only in the prompts after cycle 3 that gave that note or story.
+ */
+const AGENTIC_DAY_WITH_THE_NOTION_MARK = [
+  ['think', '1ac1d5d9cdd5e9d7'], ['reach_out', '0ee3d0600b349738'], ['think', 'cf9ff59a90d2de12'], ['think', 'd0a2e4417e1c13f2'], ['follow_up', '516aa0c49c1b329e'],
+  ['think', '2b3be94aa6101952'], ['note', '2977210b0f7b5e1c'], ['reach_out', 'd99aaf1008918710'], ['think', '19bfd5c40ee0cad0'], ['think', '6dfe837ac4a0a529'],
+  ['note', '81264d2ee7bde300'], ['draft', '73d45990e026d56b'], ['think', 'f3fc1a6f560856c6'], ['think', 'f3fc1a6f560856c6'], ['revise', '842015897394f7d8'],
+  ['reach_out', 'dc7ea65dbc2f2977'], ['think', '1479f8d14555668d'], ['think', '7177e9609a8a1ac2'], ['reach_out', 'f675aa9fb5535f58'], ['think', '51262c09dc3eb5af'],
+  ['think', '2cdc354eb105e6a8'], ['reach_out', '78bc54ed4d10c8da'], ['think', '42102454cfd9173d'], ['think', '8efe23ab4202ff51'],
+];
+
+describe('with the Notion mark of the day, the prompts after it leave out what it marked, and nothing else changes', () => {
+  it('pins the day as it runs, which differs from the commit before only in later prompts that gave the marked note or story', async () => {
+    const other = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-marked-'));
+    try {
+      const day = (await agenticDay(other, CAP_OF_78C3493)).map(call => [call.kind, call.digest]);
+      expect(day).toEqual(AGENTIC_DAY_WITH_THE_NOTION_MARK);
+      const moved = day.flatMap(([kind], index) => (day[index]![1] === AGENTIC_DAY_AT_78C3493[index]![1] ? [] : [`${index}:${kind}`]));
+      expect(moved).toEqual(['12:think', '13:think', '14:revise', '17:think', '19:think', '20:think', '22:think', '23:think']);
+    } finally { rmSync(other, { recursive: true, force: true }); }
+  });
+});
+
 describe('with pacing and the owner\'s context switched off, the loop is what it was', () => {
+  // The Notion mark of the day set aside (see above): with it, every prompt is the commit before's.
+  beforeEach(() => { vi.spyOn(OwnerInformedMarks.prototype, 'any').mockReturnValue(false); });
+  afterEach(() => { vi.restoreAllMocks(); });
   it('sends byte for byte the prompts of the commit before, through a whole day with every step kind, when the day\'s cap is that commit\'s', async () => {
     expect((await agenticDay(directory, CAP_OF_78C3493)).map(call => [call.kind, call.digest])).toEqual(AGENTIC_DAY_AT_78C3493);
     expect((await plainDay(directory, PLAIN_OF_78C3493)).map(call => [call.kind, call.digest])).toEqual(PLAIN_DAY_AT_78C3493);

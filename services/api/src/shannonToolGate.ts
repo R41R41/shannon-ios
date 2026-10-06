@@ -61,22 +61,31 @@ export function authorizeToolInput(tool: ShannonToolDefinition, input: ToolInput
 /**
  * The Aether client an executor of this call is handed. While the reach is her folder only, a search is held to her folder
  * or her study and keeps only hits placed there, and a read first asks for one character to see where the document is,
- * so that nothing of a document outside her folder is returned.
+ * so that nothing of a document outside her folder is returned. With anyone else present, a document she wrote after reading
+ * the owner's (`informed`, the provenance mark of ADR-0007) is also left out of a search and a listing, and not read
+ * (`OWNER_INFORMED`); with the owner alone and in her own time it is read as before.
  */
-export function gatedAether(access: AetherAccess, context: Pick<ToolCallContext, 'surface' | 'audience'>): AetherAccess {
+export function gatedAether(access: AetherAccess, context: Pick<ToolCallContext, 'surface' | 'audience'>, informed?: (documentId: string) => boolean): AetherAccess {
   if (aetherReach(context) === 'everything') return access;
   const placed = (inShannonFolder: boolean) => { if (!inShannonFolder) throw new AetherAccessError('OUTSIDE_AUDIENCE'); };
+  // Fail closed: a mark that cannot be read counts as a mark.
+  const hidden = (documentId: string) => {
+    if (context.audience !== 'others' || !informed) return false;
+    try { return informed(documentId); } catch { return true; }
+  };
   return Object.freeze({
     search: async (input, signal) => (await access.search({ ...input, scope: input.scope === 'study' ? 'study' as const : 'shannonFolder' as const }, signal))
       // Placed in her folder, and for her study also tagged 書斎 there: a hit missing either is dropped.
-      .filter(hit => hit.inShannonFolder === true && (input.scope !== 'study' || hit.inStudy === true)),
+      .filter(hit => hit.inShannonFolder === true && (input.scope !== 'study' || hit.inStudy === true) && !hidden(hit.documentId)),
     read: async (input, signal) => {
+      if (hidden(input.documentId)) throw new AetherAccessError('OWNER_INFORMED');
       placed((await access.read({ documentId: input.documentId, offset: 0, maxChars: 1 }, signal)).inShannonFolder);
       const document = await access.read(input, signal);
       placed(document.inShannonFolder);
+      if (hidden(document.documentId)) throw new AetherAccessError('OWNER_INFORMED');
       return document;
     },
-    list: signal => access.list(signal),
+    list: async signal => (await access.list(signal)).filter(entry => !hidden(entry.documentId)),
     create: (input, signal) => access.create(input, signal),
     update: (input, signal) => access.update(input, signal),
     delete: (input, signal) => access.delete(input, signal),

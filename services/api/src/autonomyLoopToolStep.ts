@@ -1,6 +1,7 @@
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import type { PreparedStep, StepDependencies, StepResult } from './autonomyLoopSteps.js';
 import type { AutonomyDecision } from './autonomyPolicy.js';
+import { markEarly, sessionMarked, unlistedIn } from './autonomyLoopProvenance.js';
 import { toolGateRequest, toolRefusal } from './shannonToolGate.js';
 import { neutralMarkers, toolSessionMemory, type ToolSessionMemory } from './shannonToolTypes.js';
 import { providerToolName, type ShannonToolDefinition } from './shannonTools.js';
@@ -52,9 +53,11 @@ export class AutonomyToolResults {
   }
 }
 
-/** The tools her thinking may choose now, or none. */
+/** The tools her thinking may choose now, or none. The owner's documents only while her own time may read them (ADR-0007). */
 export function offeredOwnTools(dependencies: StepDependencies, scopeKey: string): readonly ShannonToolDefinition[] {
-  return dependencies.toolResults ? dependencies.service.tools.offered('autonomy', 'owner_alone', scopeKey) : [];
+  if (!dependencies.toolResults) return [];
+  const tools = dependencies.service.tools.offered('autonomy', 'owner_alone', scopeKey);
+  return dependencies.loop.ownerDocuments ? tools : tools.filter(tool => tool.domain !== 'owner_documents_read');
 }
 
 /** The action, its example and the list of tools for the thinking prompt; and what her last calls returned. */
@@ -77,7 +80,11 @@ export function toolThinking(dependencies: StepDependencies, cycle: AutonomyLoop
 export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep): PreparedStep | null {
   const results = dependencies.toolResults;
   if (!results || !step.tool) return null;
-  const context = { scopeKey: cycle.scopeKey, surface: 'autonomy' as const, audience: 'owner_alone' as const, memory: results.memory(cycle.id) };
+  const context = {
+    scopeKey: cycle.scopeKey, surface: 'autonomy' as const, audience: 'owner_alone' as const, memory: results.memory(cycle.id),
+    informedWrite: (documentIds: readonly string[]) => markEarly(dependencies, cycle, documentIds, dependencies.now?.() ?? cycle.startedAt),
+    ...listing(dependencies, cycle),
+  };
   const ready = dependencies.service.tools.prepare(step.tool, step.input ?? {}, context);
   if ('result' in ready) {
     // Nothing ran: she is told why when she thinks next, and the step is skipped unasked.
@@ -85,6 +92,17 @@ export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyL
     return null;
   }
   const { tool, prepared } = ready;
+  // A session marked by what it read of the owner's writes nothing into her folder on his PC or Mac, which is not marked (ADR-0007).
+  if (tool.domain === 'host_folder' && tool.effect === 'write' && sessionMarked(dependencies, cycle)) {
+    results.add(cycle.id, `- ${tool.name}: できなかった（refused）。ライ氏の文書やNotionを読んだこの時間には、PCのフォルダに書かない。次の時間に書く。`);
+    return null;
+  }
+  // Reading the owner's documents serves one of her active pursuits (ADR-0007): she names it, and an unknown or closed one is refused.
+  const unserved = tool.domain === 'owner_documents_read' ? pursuitRefusal(dependencies, cycle.scopeKey, step.input?.pursuitId) : null;
+  if (unserved) {
+    results.add(cycle.id, `- ${tool.name}: できなかった（refused）。${unserved}`);
+    return null;
+  }
   return {
     request: toolGateRequest(tool, prepared.summary, prepared.folder),
     async perform(_adapters, _at, signal): Promise<StepResult> {
@@ -93,7 +111,7 @@ export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyL
       const line = () => neutralMarkers(`- ${tool.name}: ${run.result.ok ? '' : `できなかった（${run.result.failure}）。`}${run.result.text}${added ? `\n${added}` : ''}${run.result.refusal ? `（${run.result.refusal.why}。${run.result.refusal.wouldWork}）` : ''}`);
       return {
         outcome: run.result.ok ? 'done' : 'failed', summary: run.record.summary, tool: tool.name,
-        ...(run.record.link ? { link: run.record.link } : {}),
+        ...(run.record.link ? { link: run.record.link } : {}), ...(run.documents ? { documents: run.documents } : {}),
         ...(run.result.ok ? {} : { reasonCode: run.record.reasonCode ?? run.result.failure ?? 'failed' }),
         ...(run.apply && run.result.ok ? { commit: () => { added = run.apply!() || undefined; } } : {}),
         // She is told the result only once it and its record are saved; otherwise what is true of it.
@@ -104,6 +122,20 @@ export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyL
       };
     },
   };
+}
+
+/** What a listing of this session leaves out; a mark that cannot be read leaves out everything marked. */
+function listing(dependencies: StepDependencies, cycle: AutonomyLoopCycle): { unlisted?: (documentId: string) => boolean } {
+  let unlisted: ((documentId: string) => boolean) | null;
+  try { unlisted = unlistedIn(dependencies, cycle); } catch { unlisted = () => true; }
+  return unlisted ? { unlisted } : {};
+}
+
+/** Why a call for the owner's documents serves none of her pursuits, or null when it names one she is working on now. */
+function pursuitRefusal(dependencies: StepDependencies, scopeKey: string, pursuitId: unknown): string | null {
+  const pursuit = typeof pursuitId === 'string' && pursuitId.trim() ? dependencies.store.pursuits.get(scopeKey, pursuitId.trim()) : null;
+  if (pursuit?.status === 'active') return null;
+  return `${pursuit ? 'その気になっていることは、いま進めていない' : '台帳にない id だった'}。ライ氏の文書は、いま進めている気になっていることのためにだけ読む（pursuitId に台帳の id を書く）。`;
 }
 
 /** A `tool` step of a thinking reply, or why it is not taken, as a closed code. */

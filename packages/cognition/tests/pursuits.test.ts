@@ -69,7 +69,7 @@ describe("Shannon's own pursuits", () => {
 describe('autonomy domains', () => {
   it('sorts every domain of the decision into free, approval, or forbidden', () => {
     const byRule = (rule: string) => SHANNON_AUTONOMY_DOMAINS.filter(domain => domain.rule === rule).map(domain => domain.id);
-    expect(byRule('free')).toEqual(['host_folder', 'vm_workspace', 'aether_study', 'voyager_list', 'public_read', 'notion_read', 'room_look', 'thinking', 'owner_message', 'owner_call']);
+    expect(byRule('free')).toEqual(['host_folder', 'vm_workspace', 'aether_study', 'voyager_list', 'public_read', 'notion_read', 'room_look', 'thinking', 'owner_message', 'owner_call', 'owner_documents_read']);
     expect(byRule('approval')).toEqual(['core', 'suite_app_code', 'owner_content', 'outreach']);
     expect(byRule('forbidden')).toEqual(['spending', 'self_replication', 'impersonation', 'private_content_in_work']);
     expect(new Set(SHANNON_AUTONOMY_DOMAINS.map(domain => domain.id)).size).toBe(SHANNON_AUTONOMY_DOMAINS.length);
@@ -77,6 +77,8 @@ describe('autonomy domains', () => {
 
   it('never resolves an unknown domain', () => {
     expect(autonomyDomain('aether_study')?.rule).toBe('free');
+    // Owner decision 2026-10-06 (ADR-0007): reading his documents in her own time is a free domain of its own, not her study's.
+    expect(autonomyDomain('owner_documents_read')).toMatchObject({ rule: 'free', label: '持ち主の文書を読む' });
     expect(autonomyDomain('anything_else')).toBeNull();
     expect(autonomyDomain(undefined)).toBeNull();
     expect(autonomyDomainLabel('anything_else')).toBe('不明な範囲');

@@ -43,9 +43,9 @@ export interface ReasonedThought extends Thought {
 /** The actions a thinking reply may name. */
 export const PLANNABLE_ACTIONS = ['read', 'notion', 'note', 'draft', 'revise', 'ready', 'put_away', 'copy', 'look', 'follow_up', 'jot', 'reach_out', 'call', 'tool'] as const;
 
-export function storyNotes(store: SQLiteAutonomyStore, scopeKey: string, pursuitId?: string, limit = 6, own = false): PromptNote[] {
+export function storyNotes(store: SQLiteAutonomyStore, scopeKey: string, pursuitId?: string, limit = 6, own = false, keep: (piece: StudyPiece) => boolean = () => true): PromptNote[] {
   // What she wrote down after an unanswered message is for her own thinking (`own`), never material for a story or a message.
-  const notes = store.study.list(scopeKey).filter(piece => piece.kind === 'note' && piece.status !== 'put_away' && (own || piece.origin !== 'reach_out'));
+  const notes = store.study.list(scopeKey).filter(piece => piece.kind === 'note' && piece.status !== 'put_away' && (own || piece.origin !== 'reach_out') && keep(piece));
   // Notes written for the same pursuit come first; the rest follow by recency.
   const ordered = pursuitId ? [...notes.filter(note => note.pursuitId === pursuitId), ...notes.filter(note => note.pursuitId !== pursuitId)] : notes;
   return ordered.slice(0, limit).map(note => ({
@@ -65,22 +65,28 @@ export function thinkingMaterials(
     reachOut?: { remaining: number; upcoming: readonly PromptUpcoming[] } | null;
     /** What she wrote down after an unanswered message is among her notes; only while that mechanism is on. */
     ownNotes?: boolean;
+    /** Which notes and stories this session may be given (`unmarkedOnly`, ADR-0007); absent, every one. */
+    keep?: (piece: StudyPiece) => boolean;
+    /** Which pursuits this session may be given (`unmarkedPursuits`, ADR-0007); absent, every one. */
+    keepPursuit?: (pursuit: ShannonPursuit) => boolean;
+    /** Which pages read but not written up this session may be given (a marked Notion page is not, ADR-0007); absent, every one. */
+    keepReading?: (readingId: string) => boolean;
   },
 ): ThinkingMaterials {
   const pieces = store.study.list(scopeKey);
-  const stories = pieces.filter(piece => piece.kind === 'story' && piece.status !== 'put_away');
+  const stories = pieces.filter(piece => piece.kind === 'story' && piece.status !== 'put_away' && (input.keep?.(piece) ?? true));
   return {
     localTime: input.localTime,
     remainingYen: input.remainingYen,
     remainingReads: input.remainingReads,
     maximumSteps: input.maximumSteps,
-    pursuits: store.pursuits.list(scopeKey, input.at),
+    pursuits: input.keepPursuit ? store.pursuits.list(scopeKey, input.at).filter(input.keepPursuit) : store.pursuits.list(scopeKey, input.at),
     stories: stories.map(piece => ({
       id: piece.id, title: piece.title, statusLabel: STUDY_STATUS_LABEL[piece.status], version: piece.version,
       characters: piece.body.length, lastChange: store.study.versions(scopeKey, piece.id).at(-1)?.changeNote ?? '',
     })),
-    notes: storyNotes(store, scopeKey, undefined, 6, input.ownNotes === true),
-    unnotedReadings: store.loop.unnotedReadings(scopeKey).map(reading => ({ id: reading.id, title: reading.title, url: reading.url })),
+    notes: storyNotes(store, scopeKey, undefined, 6, input.ownNotes === true, input.keep),
+    unnotedReadings: store.loop.unnotedReadings(scopeKey).filter(reading => input.keepReading?.(reading.id) ?? true).map(reading => ({ id: reading.id, title: reading.title, url: reading.url })),
     feedback: stories.flatMap(piece => store.study.pendingFeedback(scopeKey, piece.id).map(feedback => ({
       pieceId: piece.id, pieceTitle: piece.title, version: feedback.version,
       reactionLabel: STUDY_REACTION_LABEL[feedback.reaction], comment: feedback.comment,

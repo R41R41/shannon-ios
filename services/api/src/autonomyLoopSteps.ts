@@ -16,6 +16,7 @@ import { storyNotes, withNoteAfterReading } from './autonomyLoopPlan.js';
 import { AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, revisePrompt } from './autonomyLoopPrompts.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import { prepareThinking } from './autonomyLoopThinkStep.js';
+import { heldForOthers, markEarly, sessionMarked, shownLater, unmarkedOnly, unmarkedPursuits } from './autonomyLoopProvenance.js';
 import { prepareToolStep, type AutonomyToolResults } from './autonomyLoopToolStep.js';
 import type { AutonomyModelPurpose } from './autonomyModels.js';
 import { AUTONOMY_CALL_DOMAIN, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
@@ -24,6 +25,8 @@ import type { ShannonAutonomyService } from './autonomyService.js';
 import type { ShowingOutcome, StudyShowing } from './autonomyShowing.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import type { AutonomyTextModel } from './autonomyTextModel.js';
+import { READING_DOCUMENT_PREFIX } from './ownerInformedMarks.js';
+import type { ToolDocuments } from './shannonToolTypes.js';
 import { aetherStep, studyWriteKey, type StudyAether } from './studyAether.js';
 import { STUDY_LIMITS, STUDY_REACTION_LABEL } from './studyStore.js';
 
@@ -122,6 +125,8 @@ export interface StepResult {
   reasonCode?: string;
   /** What followed a message she sent in this step, as closed facts; kept as the step's observation. */
   observed?: ReachOutFacts;
+  /** What it read and wrote, by id, for the provenance mark (`autonomyLoopProvenance.ts`); a write's ids may be added by `commit`. */
+  documents?: ToolDocuments;
   /** Writes of the step's product; runs inside the reporting transaction. */
   commit?: (remaining: readonly AutonomyPlannedStep[], at: string) => StepCommit | void;
   /**
@@ -161,9 +166,11 @@ export function prepareStep(dependencies: StepDependencies, cycle: AutonomyLoopC
     case 'show': return prepareShowing(dependencies, cycle, step);
     case 'put_away': return preparePutAway(dependencies, cycle, step);
     // With her study in Aether there are no copies to the folder on the owner's PC (Syzygy ADR-0007 revised: stories live in Aether only).
-    case 'copy': return dependencies.service.studyAether?.covers(cycle.scopeKey) ? null : prepareFolderCopy(dependencies, cycle, step, at);
+    // Nor from a session marked by what it read of the owner's (ADR-0007): the folder is not marked.
+    case 'copy': return dependencies.service.studyAether?.covers(cycle.scopeKey) || sessionMarked(dependencies, cycle) ? null : prepareFolderCopy(dependencies, cycle, step, at);
     case 'look': return prepareRoomLook(dependencies, cycle, at);
-    case 'reach_out': return step.call ? preparePhoneCall(dependencies, cycle, step, at)
+    // In a session marked by what she read of the owner's, she does not speak up while anyone else may see or hear (ADR-0007).
+    case 'reach_out': return heldForOthers(dependencies, cycle, at) ? null : step.call ? preparePhoneCall(dependencies, cycle, step, at)
       : step.reason === 'follow_up' ? prepareFollowUp(dependencies, cycle, step, at) : prepareReachOut(dependencies, cycle, step, at);
     case 'jot': return prepareJot(dependencies, cycle, step, at);
     case 'rest': return prepareRest(dependencies, cycle, step);
@@ -216,11 +223,17 @@ function prepareNotion(dependencies: StepDependencies, cycle: AutonomyLoopCycle,
       try {
         const page = await adapters.notion.read({ query, signal });
         if (!page) return { outcome: 'failed', summary: '共有されたNotionに、探しているページは見つかりませんでした。' };
+        // A shared Notion page is the owner's (owner decision 5, ADR-0007): the session is marked, and so is the reading her note comes from.
+        const wrote: string[] = [];
         return {
-          outcome: 'done', summary: `Notionの「${clip(page.title, 80)}」を読みました。`,
-          commit: (remaining, at) => ({ plan: withNoteAfterReading(remaining, dependencies.store.loop.addReading(cycle.scopeKey, {
-            url: page.url, title: page.title, text: page.text.slice(0, 6_000), links: [], ...(step.pursuitId ? { pursuitId: step.pursuitId } : {}),
-          }, at).id) }),
+          outcome: 'done', summary: `Notionの「${clip(page.title, 80)}」を読みました。`, documents: { informs: true, wrote },
+          commit: (remaining, at) => {
+            const reading = dependencies.store.loop.addReading(cycle.scopeKey, {
+              url: page.url, title: page.title, text: page.text.slice(0, 6_000), links: [], ...(step.pursuitId ? { pursuitId: step.pursuitId } : {}),
+            }, at);
+            wrote.push(`${READING_DOCUMENT_PREFIX}${reading.id}`);
+            return { plan: withNoteAfterReading(remaining, reading.id) };
+          },
         };
       } catch {
         return { outcome: 'failed', summary: 'Notionのページを読めませんでした。' };
@@ -233,7 +246,7 @@ function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, s
   const { store, service } = dependencies;
   const reading = (step.readingId ? store.loop.reading(cycle.scopeKey, step.readingId) : null) ?? store.loop.unnotedReadings(cycle.scopeKey)[0] ?? null;
   if (!reading || reading.notedAt || !reading.text) return null;
-  const pursuit = reading.pursuitId ? store.pursuits.get(cycle.scopeKey, reading.pursuitId) : null;
+  const pursuit = reading.pursuitId ? shownPursuit(dependencies, cycle, store.pursuits.get(cycle.scopeKey, reading.pursuitId)) : null;
   const call = paidCall(dependencies, cycle.scopeKey, 'research_reading', notePrompt({ pursuit, reading, ...ownerWriting(dependencies, cycle.scopeKey, at, `${pursuit?.title ?? ''} ${reading.title}`) }), OUTPUT_TOKENS.note);
   if (!call) return null;
   return {
@@ -251,8 +264,10 @@ function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, s
       // With Aether her note goes to 「シャノン用フォルダ」 first; what Aether refused is not kept here either.
       const pushed = adapters.aether?.covers(cycle.scopeKey) ? await aetherStep(() => adapters.aether!.create(cycle.scopeKey, { kind: 'note', title: clip(title, 80), body: body.slice(0, STUDY_LIMITS.noteBody).trim() }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'note', reading.id), signal)) : null;
       if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: 'メモを書きましたが、Aetherのシャノン用フォルダに置けませんでした。', reasonCode: pushed.reasonCode };
+      // A note of a marked page (a shared Notion page) marks its session and itself the moment Aether has it (ADR-0007).
+      if (pushed) { if (informedReading(dependencies, cycle, reading.id)) dependencies.store.informed.markSession(cycle.id, at); markEarly(dependencies, cycle, [pushed.value.documentId], at); }
       return {
-        outcome: 'done', usage, summary: `メモ「${clip(title, 60)}」を書斎に書きました。`,
+        outcome: 'done', usage, summary: `メモ「${clip(title, 60)}」を書斎に書きました。`, documents: { read: [`${READING_DOCUMENT_PREFIX}${reading.id}`] },
         commit: (_remaining, commitAt) => {
           const piece = store.study.create(cycle.scopeKey, {
             kind: 'note', title, body: body.slice(0, STUDY_LIMITS.noteBody), sources: [{ title: clip(reading.title, 160) || reading.url, url: reading.url }],
@@ -273,9 +288,9 @@ function prepareDraft(dependencies: StepDependencies, cycle: AutonomyLoopCycle, 
   const { store } = dependencies;
   // In a session she is told when her study has no room for another story, and a draft that could not be kept is not paid for.
   if (sessionOf(dependencies, cycle) && openStories(dependencies, cycle.scopeKey) >= STUDY_LIMITS.openStories) return null;
-  const pursuit = step.pursuitId ? store.pursuits.get(cycle.scopeKey, step.pursuitId) : null;
+  const pursuit = step.pursuitId ? shownPursuit(dependencies, cycle, store.pursuits.get(cycle.scopeKey, step.pursuitId)) : null;
   const call = paidCall(dependencies, cycle.scopeKey, 'prose', draftPrompt({
-    idea: step.intent ?? '', pursuit, notes: storyNotes(store, cycle.scopeKey, step.pursuitId, 5), ...ownerWriting(dependencies, cycle.scopeKey, at, `${step.intent ?? ''} ${pursuit?.title ?? ''}`),
+    idea: step.intent ?? '', pursuit, notes: storyNotes(store, cycle.scopeKey, step.pursuitId, 5, false, unmarkedOnly(dependencies, cycle)), ...ownerWriting(dependencies, cycle.scopeKey, at, `${step.intent ?? ''} ${pursuit?.title ?? ''}`),
   }), OUTPUT_TOKENS.draft);
   if (!call) return null;
   return {
@@ -289,6 +304,7 @@ function prepareDraft(dependencies: StepDependencies, cycle: AutonomyLoopCycle, 
       // With Aether the story goes to 「シャノンの書斎」 first (`inStudy: true`), the canonical copy.
       const pushed = adapters.aether?.covers(cycle.scopeKey) ? await aetherStep(() => adapters.aether!.create(cycle.scopeKey, { kind: 'story', title: clip(title, 80), body, changeNote: text(reply?.note, STUDY_LIMITS.changeNote) ?? '最初の稿です。' }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'draft', title), signal)) : null;
       if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: '物語の下書きを書きましたが、Aetherの書斎に置けませんでした。', reasonCode: pushed.reasonCode };
+      if (pushed) markEarly(dependencies, cycle, [pushed.value.documentId], at);
       return {
         // The title stays hers until she calls the piece 「見せてもいい」.
         outcome: 'done', usage, summary: '書斎に、短い物語の下書きを1つ書きました。まだ見せていません。',
@@ -317,7 +333,7 @@ function prepareRevision(dependencies: StepDependencies, cycle: AutonomyLoopCycl
   const call = paidCall(dependencies, cycle.scopeKey, 'prose', revisePrompt({
     aim: step.intent ?? '', piece: { title: piece.title, body: piece.body, version: piece.version },
     feedback: feedback.map(item => ({ reactionLabel: STUDY_REACTION_LABEL[item.reaction], comment: item.comment, version: item.version })),
-    notes: storyNotes(store, cycle.scopeKey, piece.pursuitId, 3), ...ownerWriting(dependencies, cycle.scopeKey, at, `${step.intent ?? ''} ${piece.title}`),
+    notes: storyNotes(store, cycle.scopeKey, piece.pursuitId, 3, false, unmarkedOnly(dependencies, cycle)), ...ownerWriting(dependencies, cycle.scopeKey, at, `${step.intent ?? ''} ${piece.title}`),
   }), OUTPUT_TOKENS.revise);
   if (!call) return null;
   const seen = piece.readableVersion !== null;
@@ -333,8 +349,10 @@ function prepareRevision(dependencies: StepDependencies, cycle: AutonomyLoopCycl
       // A story that lives in Aether is revised there first, from the version she read (`baseVersion`); a stale one brings the newer text in.
       const pushed = adapters.aether?.covers(cycle.scopeKey) ? await aetherStep(() => adapters.aether!.update(cycle.scopeKey, piece, { title: clip(title, 80), body, changeNote: change }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'revise', piece.id, String(piece.version)), signal)) : null;
       if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: '物語を直しましたが、Aetherの書斎に書けませんでした。', reasonCode: pushed.reasonCode };
+      if (pushed?.value) markEarly(dependencies, cycle, [pushed.value.documentId], at);
       return {
-        outcome: 'done', usage, link: `shannon-study://${piece.id}`,
+        // Revising a marked piece is opening it on purpose: the session is marked (ADR-0007).
+        outcome: 'done', usage, link: `shannon-study://${piece.id}`, documents: { read: [`shannon-study://${piece.id}`] },
         summary: seen ? `物語「${clip(piece.title, 60)}」を直しました（第${piece.version + 1}稿）。` : `物語の下書きを直しました（第${piece.version + 1}稿）。まだ見せていません。`,
         commit: (_remaining, commitAt) => {
           const revised = store.study.revise(cycle.scopeKey, piece.id, { title, body, changeNote: change, model: call.model }, commitAt);
@@ -359,8 +377,10 @@ function prepareShowing(dependencies: StepDependencies, cycle: AutonomyLoopCycle
       const ready = store.transaction(() => store.study.markReady(cycle.scopeKey, piece.id, at));
       if (typeof ready === 'string') return { outcome: 'failed', summary: '物語を「見せてもいい」にできませんでした。' };
       const revised = store.study.versions(cycle.scopeKey, piece.id).length > 1 && Boolean(piece.shownAt);
-      let told: ShowingOutcome;
-      try { told = adapters.showing.tell(cycle.scopeKey, { id: piece.id, title: ready.title, version: ready.version, revised }, at); } catch { told = 'unavailable'; }
+      let told: ShowingOutcome | 'others_present';
+      // A story written after reading the owner's is not named in the Talk while anyone else may see it: told later (ADR-0007).
+      if (shownLater(dependencies, cycle, piece.id, at)) told = 'others_present';
+      else try { told = adapters.showing.tell(cycle.scopeKey, { id: piece.id, title: ready.title, version: ready.version, revised }, at); } catch { told = 'unavailable'; }
       const sent = told === 'sent' || told === 'already-told';
       return {
         outcome: 'done', link: `shannon-study://${piece.id}`, tool: sent ? 'study.show' : 'study.ready',
@@ -399,6 +419,16 @@ function ownerWriting(dependencies: StepDependencies, scopeKey: string, at: stri
   return { ownerInformed: true, ...(block ? { ownerContext: block } : {}) };
 }
 
+/** Whether a page she read is marked (a shared Notion page); one that cannot be read counts as marked. */
+function informedReading(dependencies: StepDependencies, cycle: AutonomyLoopCycle, readingId: string): boolean {
+  try { return dependencies.store.informed.marked(cycle.scopeKey, `${READING_DOCUMENT_PREFIX}${readingId}`); } catch { return true; }
+}
+
+/** A pursuit as a prompt of this session may name it: not one marked, in a session that is not (ADR-0007). */
+function shownPursuit<T extends { id: string }>(dependencies: StepDependencies, cycle: AutonomyLoopCycle, pursuit: T | null): T | null {
+  return pursuit && unmarkedPursuits(dependencies, cycle)(pursuit) ? pursuit : null;
+}
+
 /**
  * Why a planned step could not be carried out when its turn came, as `<action>.<why>` from closed sets: for her next
  * thought (`unplannedSection`) and the log. Never a word of the step.
@@ -415,8 +445,9 @@ export function openStories(dependencies: Pick<StepDependencies, 'store'>, scope
   return dependencies.store.study.list(scopeKey).filter(piece => piece.kind === 'story' && (piece.status === 'draft' || piece.status === 'ready')).length;
 }
 
-function waitingReason(outcome: ShowingOutcome): string {
+function waitingReason(outcome: ShowingOutcome | 'others_present'): string {
   switch (outcome) {
+    case 'others_present': return 'ほかの人がいるため';
     case 'quiet-hours': return '夜の静かな時間のため';
     case 'recent-conversation': return '話している最中のため';
     case 'today-is-enough': return '今日はもう一度話しかけたため';
