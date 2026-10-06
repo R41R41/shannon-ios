@@ -189,6 +189,12 @@ describe('the trace table and the usage summary', () => {
     expect(() => checkedTrace(trace({ answers: { list: ['ok', 'two words'] } }))).toThrow('DECISION_TRACE_ANSWER');
     expect(() => checkedTrace(trace({ relatedId: 'not an id' }))).toThrow('DECISION_TRACE_IDENTIFIER');
     expect(() => checkedTrace(trace({ decider: 'someone' as never }))).toThrow('DECISION_TRACE_VOCABULARY');
+    // Syzygy ADR-0008 stage 2 (docs/skill-and-routing-contract.md): the tool menu, the difficulty and tree recall, also on text.
+    for (const decision of ['tool_menu', 'difficulty', 'recall_beam'] as const) {
+      expect(checkedTrace(trace({ decision, surface: 'text' })).decision).toBe(decision);
+    }
+    expect(() => checkedTrace(trace({ decision: 'skill_read' as never }))).toThrow('DECISION_TRACE_VOCABULARY');
+    expect(() => checkedTrace(trace({ surface: 'platform' as never }))).toThrow('DECISION_TRACE_VOCABULARY');
     expect(traceSymbol('openai/gpt 5')).toBe('openai_gpt_5');
     const path = join(directory, 'loop.sqlite');
     const loop = configuredDecisionTraces({}, path)!;

@@ -346,20 +346,28 @@ export function normalizedRepositoryPath(path: string): string | null {
 /**
  * The core area that owns a repository-relative path, or null when it is not core.
  * Comparison ignores case because the owner's Mac and Windows file systems do.
+ *
+ * A file listed by name wins over a directory that contains it, and a deeper directory over a shallower one (Syzygy
+ * ADR-0008 stage 2: `packages/learning/src/difficultyPolicy.ts` is the response path's although `packages/learning/` is
+ * emotion's). So whether a path is core never changes; only a listed file inside another area's directory changes area.
+ * `autonomyCore.test.ts` holds that every other file of the repository keeps the area the first listed entry gave it.
  */
 export function coreAreaForRepositoryPath(path: string): CorePathMatch | null {
   const normalized = normalizedRepositoryPath(path)?.toLowerCase();
   if (!normalized) return null;
+  let best: (CorePathMatch & { length: number }) | null = null;
   for (const [area, entries] of Object.entries(SHANNON_CORE_PATHS) as Array<[ShannonCoreAreaId, readonly string[]]>) {
     for (const entry of entries) {
       const candidate = entry.toLowerCase();
-      const matches = candidate.endsWith('/')
-        ? normalized === candidate.slice(0, -1) || normalized.startsWith(candidate)
-        : normalized === candidate;
-      if (matches) return { area, entry };
+      if (!candidate.endsWith('/')) {
+        if (normalized === candidate) return { area, entry };
+        continue;
+      }
+      const matches = normalized === candidate.slice(0, -1) || normalized.startsWith(candidate);
+      if (matches && (!best || candidate.length > best.length)) best = { area, entry, length: candidate.length };
     }
   }
-  return null;
+  return best ? { area: best.area, entry: best.entry } : null;
 }
 
 export function allCorePaths(): readonly string[] {

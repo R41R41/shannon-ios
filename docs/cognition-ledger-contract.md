@@ -66,8 +66,8 @@ One row per decision, content-free (ADR-0008 §3 抑制系: 「判断ごとの�
 | --- | --- |
 | `trace_id` | Random id. |
 | `scope_key`, `at` | The scope and the instant the decision began. |
-| `surface` | `voice`, `autonomy`. |
-| `decision` | `voice_route` (the voice turn's routing decision), `autonomy_think` (a thought of her own). |
+| `surface` | `voice`, `autonomy`; `text` from stage 2. |
+| `decision` | `voice_route` (the voice turn's routing decision), `autonomy_think` (a thought of her own); from stage 2 `tool_menu`, `difficulty`, `recall_beam` (`docs/skill-and-routing-contract.md`). |
 | `decider` | `jev`, `openai`, `local` (the local rules), `model` (her own time's planning model). |
 | `model` | The model the decider asked (`jev-latest`, `gpt-5.6-luna`, `local-rules`, …). |
 | `questions` | How many questions were asked (Jev); null when not counted. |

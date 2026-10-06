@@ -6,10 +6,11 @@ import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyServi
 import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
 import { authorizeToolCall, toolRefusal } from '../src/mind/inhibition/shannonToolGate.js';
 import { validToolInput } from '../src/mind/tools/shannonToolInput.js';
+import { providerFunctionTools } from '../src/infra/models/chatModelTools.js';
 import { similarBodies } from '../src/mind/tools/shannonStudyTools.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import {
-  CONVERSATION_WRITE_CHARACTERS, SHANNON_TOOLS, TOOL_FAILURE_KINDS, offeredTools, providerToolName, shannonTool, toolFromProviderName, toolResultForModel,
+  CONVERSATION_WRITE_CHARACTERS, SHANNON_TOOLS, TOOL_FAILURE_KINDS, TOOL_SUMMARIES, toolSummary, offeredTools, providerToolName, shannonTool, toolFromProviderName, toolResultForModel,
   type ToolResult, type ToolSurface,
 } from '../src/mind/tools/shannonTools.js';
 
@@ -34,6 +35,26 @@ function idIn(result: ToolResult): string {
 }
 
 describe('the tool registry (ADR-0003 stage 1)', () => {
+  it('gives every tool a one-line summary of at most 60 characters, in her words, never sent in a schema (ADR-0008 stage 2)', () => {
+    const seen = new Set<string>();
+    expect(Object.keys(TOOL_SUMMARIES).sort()).toEqual(SHANNON_TOOLS.map(tool => tool.name).sort());
+    for (const definition of SHANNON_TOOLS) {
+      const tool = { name: definition.name, summary: toolSummary(definition) };
+      expect(typeof tool.summary, tool.name).toBe('string');
+      expect([...tool.summary].length, tool.name).toBeGreaterThan(0);
+      expect([...tool.summary].length, tool.name).toBeLessThanOrEqual(60);
+      expect(tool.summary, tool.name).not.toMatch(/[\n\r]/u);
+      expect(tool.summary, tool.name).toMatch(/[ぁ-んァ-ヶ一-龠]/u);
+      expect(tool.summary, tool.name).toBe(tool.summary.trim());
+      // Each tells the tools apart: Jev chooses by them.
+      expect(seen.has(tool.summary), tool.name).toBe(false);
+      seen.add(tool.summary);
+    }
+    // The summary is the menu's line, not part of a definition, a provider's function, or anything that carries them.
+    expect(SHANNON_TOOLS.every(item => !('summary' in item))).toBe(true);
+    expect(providerFunctionTools(SHANNON_TOOLS).every(item => !JSON.stringify(item).includes(String(TOOL_SUMMARIES[String(item.name).replace('_', '.')])))).toBe(true);
+  });
+
   it('lists every tool once with a Japanese description, an object schema, a gate domain, no cost of its own, and the owner alone as audience', () => {
     expect(new Set(SHANNON_TOOLS.map(tool => tool.name)).size).toBe(SHANNON_TOOLS.length);
     expect(SHANNON_TOOLS.map(tool => tool.name).sort()).toEqual([

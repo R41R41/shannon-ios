@@ -1,0 +1,85 @@
+{
+ "about": "Digests of the provider and Jev requests of ca7cf519 (stage2SwitchedOff.test.ts). Never regenerated for a stage-2 change.",
+ "scenarios": {
+  "text-tools": {
+   "openai": [
+    "b5ff3ab0017ba53c14bc73c8"
+   ],
+   "jev": []
+  },
+  "text-schedule": {
+   "openai": [
+    "93009c8d256d0feefe932b0f"
+   ],
+   "jev": []
+  },
+  "text-tasks": {
+   "openai": [
+    "e08ecb684d5619c50490ec3e"
+   ],
+   "jev": []
+  },
+  "text-notion": {
+   "openai": [
+    "8d8d47d47c72f57ff1c5e180"
+   ],
+   "jev": []
+  },
+  "text-web": {
+   "openai": [
+    "4aefe1a6be608bd07dc656e5"
+   ],
+   "jev": []
+  },
+  "text-others": {
+   "openai": [
+    "89dd92c66e2d651277903f91"
+   ],
+   "jev": []
+  },
+  "text-two-turns": {
+   "openai": [
+    "f15e00d7d607aaf881348f1e",
+    "3dd86403828a4cc6a58e8ce2"
+   ],
+   "jev": []
+  },
+  "tool-round": {
+   "openai": [
+    "605517a47285a9688a356b19",
+    "29add0f80ea831b8c83b1b1e"
+   ],
+   "jev": []
+  },
+  "voice-greeting": {
+   "openai": [
+    "b127554796dc91beb58395f6"
+   ],
+   "jev": [
+    "1d4966c5f4eba51d948fac05"
+   ]
+  },
+  "voice-tools": {
+   "openai": [
+    "f22d7663f6da9c6b4cce4b53"
+   ],
+   "jev": [
+    "10594c79350561968e68b81d"
+   ]
+  },
+  "voice-schedule": {
+   "openai": [
+    "bee0ecef4acd4ab13efd5bc2"
+   ],
+   "jev": [
+    "d38270c80b7135972efdb361"
+   ]
+  },
+  "voice-companion": {
+   "openai": [],
+   "jev": [
+    "c8c22f580c1f22730f1642f9"
+   ]
+  }
+ }
+}

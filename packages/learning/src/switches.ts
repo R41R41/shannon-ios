@@ -45,3 +45,61 @@ export function cognitionLedgerSwitches(values: SwitchValues): CognitionLedgerSw
     decisionTraces: stage1 && switchedOn(values.SHANNON_DECISION_TRACES),
   });
 }
+
+/**
+ * The switches of Syzygy ADR-0008 stage 2 (`docs/skill-and-routing-contract.md`). Pure, like the stage-1 switches.
+ *
+ * Every switch is on unless it says off (the same words as above), except `SHANNON_SONNET_ROUTING`, which is off unless it
+ * says `on`, `true`, `1` or `yes` (owner decision I-1: Sonnet goes live only after the owner has seen the `tier.*` report).
+ * **`SHANNON_ADR8_STAGE2=off` restores the behaviour of ca7cf519 byte for byte**: no Jev call beyond the voice router, no
+ * table, every request, prompt and reply as it was. The implications are fixed here, in one place:
+ * - `SHANNON_ADR8_STAGE2` off: everything below is off.
+ * - `SHANNON_DIFFICULTY` off: no tiers, so the verifier's luna checker and Sonnet routing are off too (the deterministic
+ *   check of `SHANNON_TURN_VERIFY` stays).
+ * - `SHANNON_SKILLS` off: no skill memory, so nothing is exported to Aether (`SHANNON_SKILL_EXPORT`) and tree recall does
+ *   not walk skill sections (it still walks knowledge headings and the Aether folder).
+ */
+export interface SkillRoutingSwitches {
+  /** `SHANNON_ADR8_STAGE2`: the master switch. */
+  stage2: boolean;
+  /** `SHANNON_TOOL_MENU`: Jev chooses the tools whose schemas the model gets (`tool_open` for the rest). Core: response path. */
+  toolMenu: boolean;
+  /** `SHANNON_READ_TOOLS`: Notion, Voyager tasks, the schedule and place search as gated registry tools. Core: guard, response path. */
+  readTools: boolean;
+  /** `SHANNON_DIFFICULTY`: Jev's difficulty questions, the tier policy and the competence table. Core: response path. */
+  difficulty: boolean;
+  /** `SHANNON_TURN_VERIFY`: the turn verifier (write claims against write results; the luna checker with `difficulty`). Core: response path. */
+  turnVerify: boolean;
+  /** `SHANNON_SKILLS`: skill memory (stage-2 step 6). Core: memory. */
+  skills: boolean;
+  /** `SHANNON_SKILL_EXPORT`: readable copies of her skills in Aether's シャノン用フォルダ (step 7). Core: memory. */
+  skillExport: boolean;
+  /** `SHANNON_TREE_RECALL`: Jev's beam search over headings (step 8). Core: memory, response path. */
+  treeRecall: boolean;
+  /** `SHANNON_SONNET_ROUTING`: the `sonnet` tier may leave for Anthropic (step 5; also needs the key). Default off. Core: response path. */
+  sonnetRouting: boolean;
+}
+
+const ON = new Set(['on', 'true', '1', 'yes']);
+
+/** Off unless the value names on: for a switch whose default is off. */
+export function switchedOnExplicitly(value: string | undefined): boolean {
+  return ON.has(value?.trim().toLowerCase() ?? '');
+}
+
+export function skillRoutingSwitches(values: SwitchValues): SkillRoutingSwitches {
+  const stage2 = switchedOn(values.SHANNON_ADR8_STAGE2);
+  const difficulty = stage2 && switchedOn(values.SHANNON_DIFFICULTY);
+  const skills = stage2 && switchedOn(values.SHANNON_SKILLS);
+  return Object.freeze({
+    stage2,
+    toolMenu: stage2 && switchedOn(values.SHANNON_TOOL_MENU),
+    readTools: stage2 && switchedOn(values.SHANNON_READ_TOOLS),
+    difficulty,
+    turnVerify: stage2 && switchedOn(values.SHANNON_TURN_VERIFY),
+    skills,
+    skillExport: skills && switchedOn(values.SHANNON_SKILL_EXPORT),
+    treeRecall: stage2 && switchedOn(values.SHANNON_TREE_RECALL),
+    sonnetRouting: difficulty && switchedOnExplicitly(values.SHANNON_SONNET_ROUTING),
+  });
+}

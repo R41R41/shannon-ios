@@ -282,6 +282,49 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
     input: schema({ id: { type: 'string', description: 'やめる頼みごとの id（minecraft.status の結果の「id: …」）。書かなければいちばん新しいもの', maxLength: 40 } }) }),
 ]);
 
+/**
+ * One line of at most 60 characters for each tool, in her words (Syzygy ADR-0008 stage 2, `docs/skill-and-routing-contract.md`):
+ * what Jev's tool menu chooses from, and the line the model reads for a tool whose schema it was not given (`tool_open`). Kept
+ * beside the registry, not in a definition, so that nothing that carries a definition (a request, a turn's session, a trace)
+ * changes with it; `shannonTools.test.ts` holds that every tool has one.
+ */
+export const TOOL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
+  'study.list': '書斎のメモと物語の一覧を見る',
+  'study.search': '書斎の題名と本文から言葉を探す',
+  'study.read': '書斎のものを1つ、本文まで読む（版も読める）',
+  'study.create': '書斎に新しいメモか物語を書く',
+  'study.update': '書斎のものを書き直すか、続きを足す',
+  'study.rename': '書斎のものの題名を変える',
+  'study.move': '書斎のものをしまう・戻す・棚を変える',
+  'study.delete': '書斎のものをゴミ箱に入れる（戻せる）',
+  'study.restore': '書斎のゴミ箱から1つ戻す',
+  'folder.list': 'PCやMacのボクのフォルダの一覧を見る',
+  'folder.search': 'PCやMacのボクのフォルダで言葉を探す',
+  'folder.read': 'PCやMacのボクのフォルダのテキストを読む',
+  'folder.create': 'PCやMacのボクのフォルダに新しいファイルを作る',
+  'folder.update': 'PCやMacのボクのフォルダのファイルを書き換える',
+  'folder.rename': 'PCやMacのボクのフォルダのものの名前を変える',
+  'folder.move': 'PCやMacのボクのフォルダの中でものを移す',
+  'folder.delete': 'PCやMacのボクのフォルダのものを消す（戻せる）',
+  'aether.search': 'Aetherの文書を言葉で探す',
+  'aether.read': 'Aetherの文書を1つ読む',
+  'aetherFolder.list': 'Aetherのシャノン用フォルダの一覧を見る',
+  'aetherFolder.create': 'Aetherのシャノン用フォルダに文書を書く',
+  'aetherFolder.update': 'Aetherのシャノン用フォルダの文書を書き換える',
+  'aetherFolder.delete': 'Aetherのシャノン用フォルダの文書を消す（戻せる）',
+  'ownerDocs.search': 'ライ氏のAetherの文書を言葉で探す（自分の時間）',
+  'ownerDocs.read': 'ライ氏のAetherの文書を1つ読む（自分の時間）',
+  'aether.propose': 'ライ氏のAetherの文書を変える提案を送る',
+  'minecraft.request': 'マイクラの体にゲームの中のことを頼む',
+  'minecraft.status': 'マイクラの体に頼んだことの様子を見る',
+  'minecraft.cancel': 'マイクラの体に頼んだことをやめてもらう',
+});
+
+/** The summary of a tool (by its registry name), or its name when it has none. */
+export function toolSummary(tool: Pick<ShannonToolDefinition, 'name'>): string {
+  return TOOL_SUMMARIES[tool.name] ?? tool.name;
+}
+
 /** `SHANNON_OWN_TOOLS=off` offers no tool on any surface; every request and prompt is then what it was before the tools. */
 export function ownToolsEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
   return !['off', 'false', '0', 'disabled', 'no', 'none'].includes(environment.SHANNON_OWN_TOOLS?.trim().toLowerCase() ?? '');

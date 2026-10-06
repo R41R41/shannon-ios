@@ -6,8 +6,13 @@
 export const TRACE_SYMBOL = /^[A-Za-z][A-Za-z0-9_.:-]{0,95}$/u;
 export const TRACE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9_:-]{0,119}$/u;
 
-export const TRACE_SURFACES = ['voice', 'autonomy'] as const;
-export const TRACE_DECISIONS = ['voice_route', 'autonomy_think'] as const;
+/** `text` from Syzygy ADR-0008 stage 2 (the tool menu and the difficulty of a text turn). */
+export const TRACE_SURFACES = ['voice', 'autonomy', 'text'] as const;
+/**
+ * Stage 2 adds `tool_menu` (Jev's choice of the tools a turn offers the model), `difficulty` (Jev's difficulty questions and
+ * the tier the policy chose) and `recall_beam` (one beam search of tree recall), `docs/skill-and-routing-contract.md`.
+ */
+export const TRACE_DECISIONS = ['voice_route', 'autonomy_think', 'tool_menu', 'difficulty', 'recall_beam'] as const;
 export const TRACE_DECIDERS = ['jev', 'openai', 'local', 'model'] as const;
 export const TRACE_OUTCOMES = ['ok', 'timeout', 'error', 'fallback'] as const;
 

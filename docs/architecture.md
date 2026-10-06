@@ -720,7 +720,7 @@ On the iPhone, 「シャノン」 (`Features/ShannonHub`) opens on a card that l
 - `scripts/verify.sh cognition-eval` は回帰、無効scenario、型不整合で非ゼロ終了する。
 - Memory V2の決定的シナリオ（全文検索、意味検索の失敗時の合流、知識の安全装置）は `packages/evaluation/fixtures/scenarios/memory.v2.ts` に置く。実モデルでの30問比較（合成データ、現行方式との正答率・出典・応答時間・費用）は課金を伴うため `pnpm --filter @shannon/api test:llm-memory-recall` で明示的に実行する時だけ動く。
 
-Phase -1ではSkill生成、独自NN、Fine-tuning、人格学習、Shadow/Canary、自動ロールバック、本番DB migration、API/UI変更を行わない。
+この評価Harness（Phase -1）自体は、Skill生成、独自NN、Fine-tuning、人格学習、Shadow/Canary、自動ロールバック、本番DB migration、API/UI変更を行わない。これはHarnessの範囲の決まりで、シャノン全体の決まりではない：選択の結果で値が変わる価値表と、その版・所有者による戻しはSyzygy ADR-0008第1段（`docs/cognition-ledger-contract.md`）、スキル記憶・難易度による段・Jevの道具の献立は第2段（`docs/skill-and-routing-contract.md`）にある。どの段でもモデルの重みは学習しない（`AGENTS.md`）。
 
 ## Reach measures
 
