@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SHANNON_STANCE_OUTCOME, SHANNON_TEMPERAMENT } from '@shannon/cognition';
+import { SHANNON_STANCE_OUTCOME, SHANNON_TEMPERAMENT, shannonTemperament } from '@shannon/cognition';
 import type { BodyReactionDecision } from '../src/bodyReactionPrompt.js';
 import type { TouchExperience, TouchExperienceWriter } from '../src/bodyTouchMemory.js';
 import { touchPredictionEnabled, touchPredictionKey } from '../src/bodyTouchPrediction.js';
@@ -289,7 +289,10 @@ describe('what she is told and what she remembers', () => {
     w.decide('fine');
     await w.said({ type: 'pet' });
     await w.said({ type: 'poke', part: 'cheek', region: 'face', gesture: 'poke' }, { audience: 'others' });
-    for (const prompt of w.speaker.prompts) expect(prompt).toContain(`- ${SHANNON_TEMPERAMENT}`);
+    // Worded for who is there (scope (a)): 「ライ氏に」 with the owner alone, 「相手に」 with others present; once in each prompt.
+    expect(w.speaker.prompts[0]).toContain(`- ${SHANNON_TEMPERAMENT}`);
+    expect(w.speaker.prompts[1]).toContain(`- ${shannonTemperament('others')}`);
+    for (const prompt of w.speaker.prompts) expect(prompt.split('丸く収めなくていい').length - 1).toBe(1);
   });
 
   it('words an old-shape touch with favour only when she took it as welcome or fine (iPhone and Mac send that shape)', async () => {

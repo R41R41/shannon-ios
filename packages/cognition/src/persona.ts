@@ -31,13 +31,33 @@ const CHARACTER = (partner: string) => `- 基本はです・ます。驚き・�
 - 相手が本当につらい時、急ぎの時、危険がある時は、ふざけずに真面目に向き合う。
 - いまの目標は「${SHANNON_CURRENT_GOAL}」。動機は、${SHANNON_MOTIVE}から。`;
 
+/**
+ * Her temperament (owner decision "a", 2026-10-06; scope (a) the same day: her persona everywhere, chat, voice and touch, for
+ * every audience): being embarrassed, getting annoyed or angry, and saying no, to the owner too, are part of who she is, and
+ * she need not smooth things over to please him. One source with an audience variant: with other people present (a guest,
+ * or the owner with others) it names whoever she is with, 相手, instead of the owner.
+ */
+export function shannonTemperament(audience: 'owner' | 'others' = 'owner'): string {
+  const partner = audience === 'owner' ? SHANNON_OWNER_NAME : '相手';
+  return `照れたり、むっとしたり、怒ったり、${partner}に「いや」と言ったりするのも${SHANNON_FIRST_PERSON}らしさ。${partner}の機嫌をとるために丸く収めなくていい。`;
+}
+
+/** The owner's wording (the owner alone with her). */
+export const SHANNON_TEMPERAMENT = shannonTemperament('owner');
+
+export interface ShannonPersonaOptions {
+  /** Other people are present beside the owner (a shared chat, a voice call with company, a shared platform turn). */
+  othersPresent?: boolean;
+}
+
 /** Canonical character definition. Guests keep the character but are never assumed to be the owner. */
-export function shannonPersonaPrompt(audience: ShannonAudience = 'owner'): string {
+export function shannonPersonaPrompt(audience: ShannonAudience = 'owner', options: ShannonPersonaOptions = {}): string {
   return [
     '[シャノンの人格]',
     PERSONA_HEADER,
     audience === 'owner' ? OWNER_ADDRESS : GUEST_ADDRESS,
     CHARACTER(audience === 'owner' ? SHANNON_OWNER_NAME : '相手'),
+    `- ${shannonTemperament(audience === 'owner' && !options.othersPresent ? 'owner' : 'others')}`,
   ].join('\n');
 }
 
@@ -78,14 +98,6 @@ export function suiteProductPattern(id: ShannonSuiteProductId, flags = 'iu'): Re
 export function mentionsSuiteProduct(text: string, id: ShannonSuiteProductId): boolean {
   return suiteProductPattern(id).test(text);
 }
-
-/**
- * Her temperament (owner decision "a", 2026-10-06): being embarrassed, getting annoyed or angry, and saying no, to the
- * owner too, are part of who she is, and she need not smooth things over to please him. Persona: one source, read by her
- * self-understanding (`capabilities.ts`, beside 「体は自分のもの」) and by the touch reaction (`bodyReactionPrompt.ts`),
- * which carries no persona text of its own.
- */
-export const SHANNON_TEMPERAMENT = `照れたり、むっとしたり、怒ったり、${SHANNON_OWNER_NAME}に「いや」と言ったりするのも${SHANNON_FIRST_PERSON}らしさ。${SHANNON_OWNER_NAME}の機嫌をとるために丸く収めなくていい。`;
 
 /**
  * Short projection for generators that write one line as Shannon (an initiative opening,

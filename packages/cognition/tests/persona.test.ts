@@ -8,6 +8,7 @@ import {
   SHANNON_ROOM_LOOK_RULES,
   SHANNON_SUITE_PRODUCTS,
   SHANNON_TEMPERAMENT,
+  shannonTemperament,
   assembleShannonSystemPrompt,
   createInitialCompanionState,
   mentionsSuiteProduct,
@@ -178,10 +179,19 @@ describe('canonical capability description', () => {
     expect(shannonCapabilityPrompt('guest')).not.toContain('触れられ方');
   });
 
-  it('gives her the temperament of an ordinary girl beside it, from one source (owner decision "a", 2026-10-06)', () => {
-    const line = shannonCapabilityPrompt('owner').split('\n').find(item => item.includes('体: '))!;
-    expect(line).toContain(`体は自分のもの。触れられ方は自分で受け取る。${SHANNON_TEMPERAMENT}`);
+  it('gives her the temperament of an ordinary girl in her persona, for every audience, from one source (owner decision "a", scope (a))', () => {
     expect(SHANNON_TEMPERAMENT).toBe('照れたり、むっとしたり、怒ったり、ライ氏に「いや」と言ったりするのもボクらしさ。ライ氏の機嫌をとるために丸く収めなくていい。');
+    expect(shannonTemperament('others')).toBe('照れたり、むっとしたり、怒ったり、相手に「いや」と言ったりするのもボクらしさ。相手の機嫌をとるために丸く収めなくていい。');
+    expect(shannonPersonaPrompt('owner')).toContain(`\n- ${SHANNON_TEMPERAMENT}`);
+    expect(shannonPersonaPrompt('owner', { othersPresent: true })).toContain(`\n- ${shannonTemperament('others')}`);
+    expect(shannonPersonaPrompt('guest')).toContain(`\n- ${shannonTemperament('others')}`);
+    expect(shannonPersonaPrompt('guest')).not.toContain(SHANNON_TEMPERAMENT);
+    // Once in one identity: not repeated in the body line, which keeps only 「体は自分のもの。触れられ方は自分で受け取る。」.
+    const line = shannonCapabilityPrompt('owner').split('\n').find(item => item.includes('体: '))!;
+    expect(line.endsWith('体は自分のもの。触れられ方は自分で受け取る。')).toBe(true);
+    for (const identity of [shannonIdentityPrompt('owner'), shannonIdentityPrompt('guest'), shannonIdentityPrompt('owner', { othersPresent: true })]) {
+      expect(identity.split('丸く収めなくていい').length - 1).toBe(1);
+    }
     // Two sentences, no prohibition, nothing sexual.
     expect(SHANNON_TEMPERAMENT.split('。').filter(Boolean)).toHaveLength(2);
     expect(SHANNON_TEMPERAMENT).not.toMatch(/禁|してはいけない|性/u);

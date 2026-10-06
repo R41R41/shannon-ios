@@ -92,7 +92,8 @@ const OTHERS_TURN: ChatAudienceTurn = Object.freeze({
   capabilities: Object.freeze({ aetherNotes: false, voyagerTasks: false, notion: false, upcoming: 'guarded' as const }),
   instructions: [chatOthersPresentInstructions, speakTimePrivacyCheck].join('\n\n'),
   turnLabel: Object.freeze({ audience: UNKNOWN_GUEST_PRESENCE, speaker: 'unknown' as const }),
-  identity: () => identityOnly(shannonIdentityPrompt('owner')),
+  // The owner's identity, its temperament worded for whoever is there (scope (a), 2026-10-06).
+  identity: () => identityOnly(shannonIdentityPrompt('owner', { othersPresent: true })),
   // What she does in her own time is told to the owner alone. What she saw of his room stays, guarded: each
   // line carries the marker of unlabelled personal information, and the speak-time check decides what is said.
   ownFocus: (focus: string, pursuits: string, state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string) => {

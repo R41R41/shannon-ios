@@ -25,9 +25,11 @@ export {
   SHANNON_TEMPERAMENT,
   mentionsSuiteProduct,
   shannonPersonaPrompt,
+  shannonTemperament,
   shannonSuitePrompt,
   suiteProductPattern,
   type ShannonAudience,
+  type ShannonPersonaOptions,
   type ShannonSuiteProductId,
 } from './persona.js';
 export {

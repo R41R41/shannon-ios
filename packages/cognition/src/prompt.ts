@@ -2,7 +2,7 @@ import type { CompanionStateSnapshot } from './types.js';
 import type { ContextualMemory, ShannonCognitiveFrame, ShannonIntent, ShannonSituationSnapshot } from './runtime.js';
 import { memoryControlFor, memoryIdentifier, visibleMemoryText } from './memory.js';
 import { filterMeaningfulInterests } from './interests.js';
-import { shannonPersonaPrompt, shannonSuitePrompt, type ShannonAudience } from './persona.js';
+import { shannonPersonaPrompt, shannonSuitePrompt, type ShannonAudience, type ShannonPersonaOptions } from './persona.js';
 import { shannonCapabilityPrompt } from './capabilities.js';
 import { lingeringFeelingLine, presentShannonFeeling } from './emotionContinuity.js';
 import type { ShannonEmotionTiming } from './emotionTime.js';
@@ -11,8 +11,8 @@ import type { ShannonEmotionTiming } from './emotionTime.js';
  * Stable identity block: canonical persona, suite roles, and capabilities. It is the
  * first section of every response prompt so the provider can cache it across turns.
  */
-export function shannonIdentityPrompt(audience: ShannonAudience = 'owner'): string {
-  return [shannonPersonaPrompt(audience), shannonSuitePrompt(), shannonCapabilityPrompt(audience)].join('\n\n');
+export function shannonIdentityPrompt(audience: ShannonAudience = 'owner', options: ShannonPersonaOptions = {}): string {
+  return [shannonPersonaPrompt(audience, options), shannonSuitePrompt(), shannonCapabilityPrompt(audience)].join('\n\n');
 }
 
 export const SHANNON_CORE_PROMPT = shannonIdentityPrompt('owner');
