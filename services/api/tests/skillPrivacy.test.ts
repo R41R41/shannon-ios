@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { UNKNOWN_GUEST_PRESENCE, createInitialCompanionState, type CompanionStateSnapshot } from '@shannon/cognition';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { WITHDRAWN_COPY_BODY } from '../src/integrations/aether/skillExport.js';
+import { WITHDRAWN_COPY_BODY, WITHDRAWN_COPY_TITLE, skillCopyTitle } from '../src/integrations/aether/skillExport.js';
 import { encodeSkill, type SkillDocument } from '../src/mind/memory/skillDocument.js';
 import { SkillMemory } from '../src/mind/memory/skillMemory.js';
 import { configuredSkillExport, skillBodyCheck, skillSeedSources } from '../src/wiring/skillMemoryWiring.js';
@@ -84,12 +84,24 @@ describe('every body checked again (B2)', () => {
     for (const skillId of [forgotten, secret]) {
       const skill = skills.store.get('owner', skillId)!;
       expect(folder.documents.get(skill.aetherDocumentId!)!.body).toBe(WITHDRAWN_COPY_BODY);
+      // Nor its name (review of the 学び tab): the title is neutral too.
+      expect(folder.documents.get(skill.aetherDocumentId!)!.title).toBe(WITHDRAWN_COPY_TITLE);
       expect(skill.exportHold).toBe('withdrawn');
     }
-    expect(folder.documents.get(skills.store.get('owner', fine)!.aetherDocumentId!)!.body).toBe(skills.store.get('owner', fine)!.body);
+    expect(folder.documents.get(skills.store.get('owner', fine)!.aetherDocumentId!)!).toMatchObject({ title: skillCopyTitle('weekly-review'), body: skills.store.get('owner', fine)!.body });
     const writes = folder.writes.length;
-    expect(await run('owner', AT)).toMatchObject({ withdrawn: 0 });
+    expect(await run('owner', AT)).toMatchObject({ withdrawn: 0, retitled: 0 });
     expect(folder.writes).toHaveLength(writes);
+
+    // A copy withdrawn before the title was neutral (as deployed at 5d4a8fcf) still shows the name: it is retitled once.
+    const old = folder.documents.get(skills.store.get('owner', forgotten)!.aetherDocumentId!)!;
+    old.title = skillCopyTitle('from-a-turn');
+    expect(await run('owner', AT)).toMatchObject({ withdrawn: 0, retitled: 1, created: 0, updated: 0 });
+    expect(folder.documents.get(skills.store.get('owner', forgotten)!.aetherDocumentId!)!).toMatchObject({ title: WITHDRAWN_COPY_TITLE, body: WITHDRAWN_COPY_BODY });
+    expect(skills.store.get('owner', forgotten)!.exportHold).toBe('withdrawn');
+    const after = folder.writes.length;
+    expect(await run('owner', AT)).toMatchObject({ withdrawn: 0, retitled: 0 });
+    expect(folder.writes).toHaveLength(after);
     store.close();
   });
 

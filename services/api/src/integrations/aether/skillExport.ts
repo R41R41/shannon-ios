@@ -11,7 +11,8 @@ import { AETHER_LIMITS, aetherErrorCode, aetherIdempotencyKey, type AetherAccess
  * - **Checked again here, fail closed** (privacy review B2). Every body is checked when it is built, restored and adopted, and
  *   again before it is written: nothing is written while the check cannot be read. A skill whose body no longer passes, whose
  *   source was forgotten or is now 内緒 or 機微 (`sources`), or that was retired because a source was forgotten, has its copy
- *   **withdrawn**: the copy's body becomes 「（この写しは取り下げました）」 and nothing is written to it again (`withdrawn`).
+ *   **withdrawn**: the copy's body becomes 「（この写しは取り下げました）」 and its title 「スキル（取り下げ）」, and nothing else is written to it
+ *   again (`withdrawn`; a copy withdrawn before the title was neutral gets that title once, `retitled`).
  *   What the owner called 内緒 never stays in a skill or its copy.
  * - **Idempotent by hash.** A copy is written only when the body changed since it was last written (`exported_hash`), with an
  *   idempotency key made of the skill, the body's hash and the version it builds on, so a retry never writes twice.
@@ -32,11 +33,18 @@ export interface SkillExportResult {
   created: number; updated: number; unchanged: number; adopted: number; held: number; deleted: number; failed: number; withdrawn: number;
   /** Review M2: her own copy edits taken as trial revisions, refused, and copies she deleted that were created again. */
   revised: number; refused: number; recreated: number;
+  /** Copies withdrawn before their title was made neutral, given the neutral title now. */
+  retitled: number;
 }
 
 export const SKILL_COPY_PREFIX = 'スキル';
 /** The body a withdrawn copy is left with: short, neutral, nothing of the skill. */
 export const WITHDRAWN_COPY_BODY = '（この写しは取り下げました）';
+/**
+ * The title a withdrawn copy is left with (review of the 学び tab, 2026-10-07): 「スキル「name」」 would keep the skill's name
+ * readable in the folder.
+ */
+export const WITHDRAWN_COPY_TITLE = 'スキル（取り下げ）';
 
 export function skillCopyTitle(name: string): string {
   return `${SKILL_COPY_PREFIX}「${name}」`;
@@ -47,7 +55,7 @@ export async function exportSkills(input: {
   /** Whether a skill's sources all still pass the seed rule (`skillSourcesPass`); absent, sources are not judged. */
   sources?: () => (sources: readonly string[]) => boolean;
 }): Promise<SkillExportResult> {
-  const result: SkillExportResult = { status: 'done', created: 0, updated: 0, unchanged: 0, adopted: 0, held: 0, deleted: 0, failed: 0, withdrawn: 0, revised: 0, refused: 0, recreated: 0 };
+  const result: SkillExportResult = { status: 'done', created: 0, updated: 0, unchanged: 0, adopted: 0, held: 0, deleted: 0, failed: 0, withdrawn: 0, revised: 0, refused: 0, recreated: 0, retitled: 0 };
   const log = input.log ?? (line => console.log(line));
   if (!input.skills.ready()) return { ...result, status: 'unavailable' };
   // Fail closed: nothing is written, read or adopted while what must never be in a skill cannot be read.
@@ -67,7 +75,19 @@ export async function exportSkills(input: {
   for (const listedSkill of input.skills.store.all(input.scopeKey, { includeRetired: true })) {
     let skill = listedSkill;
     try {
-      if (skill.exportHold === 'owner_deleted' || skill.exportHold === 'withdrawn') continue;
+      if (skill.exportHold === 'withdrawn') {
+        // A copy withdrawn before its title was made neutral still carries the skill's name: it gets the neutral title, once.
+        const entry = skill.aetherDocumentId ? listed.get(skill.aetherDocumentId) : undefined;
+        if (entry && entry.title !== WITHDRAWN_COPY_TITLE) {
+          const written = await input.access.update({ documentId: entry.documentId, baseVersion: entry.version, title: WITHDRAWN_COPY_TITLE,
+            idempotencyKey: aetherIdempotencyKey('skill-copy-retitled', input.scopeKey, skill.skillId, String(entry.version)) }, input.signal);
+          input.skills.exported(input.scopeKey, skill.skillId, { documentId: written.documentId, version: written.version, hash: skill.exportedHash ?? skillHash(WITHDRAWN_COPY_BODY) }, input.at);
+          input.skills.holdExport(input.scopeKey, skill.skillId, 'withdrawn', input.at);
+          result.retitled += 1;
+        }
+        continue;
+      }
+      if (skill.exportHold === 'owner_deleted') continue;
       const withdraw = (skill.status === 'retired' && skill.statusReason === 'source_forgotten') || !sourcesPass(skill.sources)
         || typeof checkedSkillText(skill.body, check) === 'string';
       const mine = input.skills.copyWrites.pending(input.scopeKey, skill.skillId);
@@ -86,8 +106,8 @@ export async function exportSkills(input: {
         }
         if (withdraw) {
           // Whoever last wrote it, the copy is withdrawn: nothing of the skill stays readable.
-          const written = await input.access.update({ documentId: entry.documentId, baseVersion: entry.version, body: WITHDRAWN_COPY_BODY,
-            idempotencyKey: aetherIdempotencyKey('skill-copy-withdrawn', input.scopeKey, skill.skillId, String(entry.version)) }, input.signal);
+          const written = await input.access.update({ documentId: entry.documentId, baseVersion: entry.version, title: WITHDRAWN_COPY_TITLE, body: WITHDRAWN_COPY_BODY,
+            idempotencyKey: aetherIdempotencyKey('skill-copy-withdrawn-titled', input.scopeKey, skill.skillId, String(entry.version)) }, input.signal);
           input.skills.exported(input.scopeKey, skill.skillId, { documentId: written.documentId, version: written.version, hash: skillHash(WITHDRAWN_COPY_BODY) }, input.at);
           input.skills.holdExport(input.scopeKey, skill.skillId, 'withdrawn', input.at);
           copyWritesRead(input.skills, input.scopeKey, skill.skillId, input.at);
@@ -149,6 +169,6 @@ export async function exportSkills(input: {
       log(`Shannon skill export: failed code=${aetherErrorCode(error)}`);
     }
   }
-  log(`Shannon skill export: status=done created=${result.created} updated=${result.updated} unchanged=${result.unchanged} adopted=${result.adopted} held=${result.held} deleted=${result.deleted} withdrawn=${result.withdrawn} revised=${result.revised} refused=${result.refused} recreated=${result.recreated} failed=${result.failed}`);
+  log(`Shannon skill export: status=done created=${result.created} updated=${result.updated} unchanged=${result.unchanged} adopted=${result.adopted} held=${result.held} deleted=${result.deleted} withdrawn=${result.withdrawn} retitled=${result.retitled} revised=${result.revised} refused=${result.refused} recreated=${result.recreated} failed=${result.failed}`);
   return result;
 }
