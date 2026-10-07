@@ -182,8 +182,9 @@ ADR-0008 §8 「記憶は目次は毎回、中身は必要なとき」, with Wik
 
 `infra/http/skillRoutes.ts`, only a paired device of the owner's scope (`SHANNON_NOW_OWNER_SCOPE`); `SKILLS_DISABLED` while her skills are off.
 
-- `GET /v1/autonomy/skills`: `capacity { used, limit }` (the index's usage against `SKILL_CAPACITY`), and each skill, retired ones too: `id`, `name`, `description`, `status`, `statusReason`, `version`, `pinned`, `ownerVersion`, `trial` (`baseVersion` a failed trial returns to, `uses` so far, `of` 3; null when not on trial), settled `uses` and `successes`, `copy` (`documentId`, `hold`).
+- `GET /v1/autonomy/skills`: `capacity { used, limit }` (the index's usage against `SKILL_CAPACITY`), and each skill, retired ones too: `id`, `name`, `description`, `hidden`, `status`, `statusReason`, `version`, `pinned`, `ownerVersion`, `trial` (`baseVersion` a failed trial returns to, `uses` so far, `of` 3; null when not on trial), settled `uses` and `successes`, `copy` (`documentId`, `hold`).
 - `GET /v1/autonomy/skills/{id}`: the same, with its SKILL.md (`body`; for a skill retired because a source was forgotten, or whose copy was withdrawn, a neutral note instead and `bodyHidden: true`, review N4), its versions (`version`, `kind`, `actor`, `reason`, `parent`, `restores`, `uses`, `successes`) and its audit (`kind`, `status`, `reason`, versions, `baselineRate`, trial counts, lint).
+- A skill retired because a source was forgotten, or whose copy was withdrawn, is sent without its name and description, in the list, in one skill and in a pin's answer: both read 「（表示しないスキル）」 (`HIDDEN_TITLE`) and `hidden` is true (independent review of the 学び tab, 2026-10-07; they were written from the same sources as the body). The apps show that title, read it to VoiceOver, and offer no pin for it.
 - `POST /v1/autonomy/skills/{id}/pin` and `/unpin`: the sleep never writes to a pinned skill. Each is written to the activity record as an owner control (`skills.pin`, `skills.unpin`, the skill's id; no content).
 
 ## Skill copies in Aether (step 7, `SHANNON_SKILL_EXPORT`)

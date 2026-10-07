@@ -13,7 +13,8 @@ import { sendJson } from './serverHttp.js';
  *   it is pinned, on trial (the version a failed trial returns to, its uses so far of three), the owner's version, its uses and
  *   successes, and where its copy is.
  * - `GET /v1/autonomy/skills/{id}`: one skill with its SKILL.md, its versions (actor, reason, lineage) and its audit; a skill retired
- *   because a source was forgotten, or whose copy was withdrawn, without its body (`HIDDEN_BODY`, review N4).
+ *   because a source was forgotten, or whose copy was withdrawn, without its body (`HIDDEN_BODY`, review N4), and, here and in the
+ *   list, without its name and description (`HIDDEN_TITLE`, `hidden: true`).
  * - `POST /v1/autonomy/skills/{id}/pin` and `/unpin`: the sleep never writes to a pinned skill (a patch, a branch, a rollback, a
  *   retirement, a consolidation); unpinned, it may again.
  *
@@ -48,6 +49,11 @@ export function ownerSkillRecorder(activity: Pick<AutonomyActivityRecord, 'appen
 
 /** What the 学び tab shows in place of a body that may no longer be shown. */
 export const HIDDEN_BODY = '（このスキルの本文は表示しません。元にした会話が忘れられたか、写しを取り下げたためです）';
+/**
+ * What the 学び tab shows in place of the name and the description of such a skill (independent review of the 学び tab,
+ * 2026-10-07): they were written from the same sources as the body, so they are withheld with it.
+ */
+export const HIDDEN_TITLE = '（表示しないスキル）';
 
 function hidden(skill: StoredSkill): boolean {
   return skill.statusReason === 'source_forgotten' || skill.exportHold === 'withdrawn';
@@ -56,8 +62,10 @@ function hidden(skill: StoredSkill): boolean {
 function summary(skill: StoredSkill): Record<string, unknown> {
   const settled = skill.uses.filter(use => use.o !== null);
   const trial = skill.status === 'trial' ? { baseVersion: skill.trialBaseVersion, uses: settled.filter(use => use.v === skill.version).length, of: SKILL_LIFECYCLE.trialUses } : null;
+  const withheld = hidden(skill);
   return {
-    id: skill.skillId, name: skill.name, description: skill.description, status: skill.status, statusReason: skill.statusReason, version: skill.version,
+    id: skill.skillId, name: withheld ? HIDDEN_TITLE : skill.name, description: withheld ? HIDDEN_TITLE : skill.description, hidden: withheld,
+    status: skill.status, statusReason: skill.statusReason, version: skill.version,
     pinned: skill.pinned, ownerVersion: skill.madeBy === 'owner_edit', trial, uses: settled.length, successes: settled.filter(use => use.o === 1).length,
     copy: skill.aetherDocumentId ? { documentId: skill.aetherDocumentId, hold: skill.exportHold } : null, createdAt: skill.createdAt, updatedAt: skill.updatedAt,
   };

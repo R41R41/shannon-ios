@@ -10,7 +10,7 @@ import { encodeSkill, type SkillDocument } from '../src/mind/memory/skillDocumen
 import { SkillMemory } from '../src/mind/memory/skillMemory.js';
 import { configuredSkillExport, skillBodyCheck, skillSeedSources } from '../src/wiring/skillMemoryWiring.js';
 import { SKILL_SOURCES_LIMIT } from '../src/mind/memory/skillMemoryParts.js';
-import { createSkillsRoute, HIDDEN_BODY } from '../src/infra/http/skillRoutes.js';
+import { createSkillsRoute, HIDDEN_BODY, HIDDEN_TITLE } from '../src/infra/http/skillRoutes.js';
 import { ShannonSkillConsolidator } from '../src/mind/sleep/skillConsolidation.js';
 import type { SkillSleepModel } from '../src/mind/sleep/skillSleepModel.js';
 import { FakeAetherFolder } from './support/fakeAetherFolder.js';
@@ -201,6 +201,40 @@ describe('every source, and only what truly fails (N1, N2, N4, L3, the proposer\
     skills.retire('owner', id, 'source_forgotten', AT);
     skills.store.setExportHold('owner', id, null);
     expect(JSON.stringify((await read()).body)).not.toContain('三つ挙げる');
+  });
+
+  it('never shows the name or the description of such a skill either, in the list, in one skill or in a pin\'s answer (学び tab review)', async () => {
+    const skills = new SkillMemory({ database: new DatabaseSync(':memory:'), createsSchema: true, defer: task => task(), log: () => {} });
+    const id = (skills.create('owner', { draft: doc('weekly-review', '1. 三つ挙げる'), evidence: [] }, pass, AT) as { skillId: string }).skillId;
+    const route = createSkillsRoute({ memory: skills, record: () => {}, ownerScopeKey: 'owner', now: () => AT });
+    const call = async (method: string, path: string) => {
+      let body = '';
+      const response = { writeHead: () => response, setHeader: () => response, end: (text: string) => { body = text; } } as never;
+      await route({ method, on: () => undefined } as never, response, { scopeKey: 'owner' }, path);
+      return JSON.parse(body) as Record<string, unknown>;
+    };
+    const shown = async () => {
+      const list = await call('GET', '/v1/autonomy/skills');
+      const one = await call('GET', `/v1/autonomy/skills/${id}`);
+      return { listed: (list.skills as Array<Record<string, unknown>>)[0]!, one };
+    };
+    // Shown as it is while nothing is withheld.
+    expect((await shown()).listed).toMatchObject({ name: 'weekly-review', description: 'ふりかえりの時', hidden: false });
+    for (const withhold of [
+      () => skills.holdExport('owner', id, 'withdrawn', AT),
+      () => { skills.store.setExportHold('owner', id, null); skills.retire('owner', id, 'source_forgotten', AT); },
+    ]) {
+      withhold();
+      const { listed, one } = await shown();
+      for (const view of [listed, one]) {
+        expect(view).toMatchObject({ id, name: HIDDEN_TITLE, description: HIDDEN_TITLE, hidden: true });
+        expect(JSON.stringify(view)).not.toContain('weekly-review');
+        expect(JSON.stringify(view)).not.toContain('ふりかえりの時');
+      }
+    }
+    const pinned = await call('POST', `/v1/autonomy/skills/${id}/pin`);
+    expect(pinned).toMatchObject({ name: HIDDEN_TITLE, description: HIDDEN_TITLE, hidden: true });
+    expect(JSON.stringify(pinned)).not.toContain('ふりかえりの時');
   });
 
   it('never judges a pinned skill\'s trial (L3)', () => {
