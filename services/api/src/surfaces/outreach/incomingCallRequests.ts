@@ -66,7 +66,7 @@ export class IncomingCallRequests implements AutonomyPhone {
   }
 
   /** Asks for the call with one message of hers. `requested`, or why not, as a code. */
-  request(scopeKey: string, initiativeId: string, at: string): 'requested' | 'unavailable' | 'too_soon' | 'ringing' | 'taken' | `held:${ProactiveDeliveryHold}` {
+  request(scopeKey: string, initiativeId: string, at: string, line?: { reason: string; subject: string | null; arisenAt: string }): 'requested' | 'unavailable' | 'too_soon' | 'ringing' | 'taken' | `held:${ProactiveDeliveryHold}` {
     const { store, claims } = this.dependencies;
     const facts = this.facts(scopeKey, at);
     if (!facts.switchedOn || !facts.serverReady) return 'unavailable';
@@ -76,8 +76,11 @@ export class IncomingCallRequests implements AutonomyPhone {
     const message = claims.message(scopeKey, initiativeId);
     if (!device || !message || store.ofMessage(scopeKey, initiativeId)) return 'unavailable';
     // Syzygy ADR-0008 stage 3: the proactive gate, before the claim and before anything rings. Her line was checked for its topic
-    // where it was written; the call is checked for the owner's activity, its message's age and a repeat of the same call.
-    const intent: ProactiveDeliveryIntent = { point: 'call', reason: message.reason as ProactiveReason, subject: initiativeId, arisenAt: message.createdAt, text: null };
+    // where it was written; the call is checked for the owner's activity, its intent's age and a repeat of an earlier call. The call
+    // is its line's intent (review M2: the phone step hands it on), so the line's own delivery is not a repeat of it.
+    const intent: ProactiveDeliveryIntent = line
+      ? { point: 'call', reason: line.reason as ProactiveReason, subject: line.subject ?? initiativeId, arisenAt: line.arisenAt, text: null }
+      : { point: 'call', reason: message.reason as ProactiveReason, subject: initiativeId, arisenAt: message.createdAt, text: null };
     const verdict = this.dependencies.gate?.check(scopeKey, intent, at);
     if (verdict?.verdict === 'hold') return `held:${verdict.code}`;
     const callId = (this.dependencies.newCallId ?? randomUUID)();

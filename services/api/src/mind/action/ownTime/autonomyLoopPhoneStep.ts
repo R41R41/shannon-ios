@@ -1,6 +1,6 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { autonomyDayKey, yenFromUsd } from '../../inhibition/inhibitionPorts.js';
-import { storyNotes } from './autonomyLoopPlan.js';
+import { reachOutSubject, storyNotes } from './autonomyLoopPlan.js';
 import { heldForOthers, unmarkedOnly } from './autonomyLoopProvenance.js';
 import {
   AUTONOMY_REACH_OUT_MAXIMUM_CHARACTERS, REACH_OUT_REASON_LABEL, parsedModelObject, reachOutPrompt,
@@ -53,7 +53,8 @@ export interface PhoneFacts {
 export interface AutonomyPhone {
   facts(scopeKey: string, at: string): PhoneFacts;
   /** Asks for the call with one message of hers. Anything but `requested` is why not, as a code. */
-  request(scopeKey: string, initiativeId: string, at: string): 'requested' | 'unavailable' | 'too_soon' | 'ringing' | 'taken' | `held:${string}`;
+  /** `line`: the intent of her line (its reason, subject and when it arose), which the call carries on (stage 3 review M2). */
+  request(scopeKey: string, initiativeId: string, at: string, line?: { reason: string; subject: string | null; arisenAt: string }): 'requested' | 'unavailable' | 'too_soon' | 'ringing' | 'taken' | `held:${string}`;
   /** What became of the call for one message; null while it has not ended. */
   outcome(scopeKey: string, initiativeId: string): ReachOutCallOutcome | null;
 }
@@ -189,6 +190,8 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
   if (costUsd === null) return null;
   const label = REACH_OUT_REASON_LABEL[reason as ReachOutReason];
   const arisenAt = intentArisenAt(dependencies, cycle, at);
+  // What it is about, for the proactive gate (stage 3 review M2); the call carries its line's intent on.
+  const subject = reachOutSubject(store, cycle.scopeKey, reason, { shown, upcoming: items, since: cycle.startedAt });
   return {
     request: {
       domain: AUTONOMY_CALL_DOMAIN, summary: `持ち主のiPhoneに電話をかけます（理由: ${label}）。`, tool: CALL_TOOL,
@@ -229,7 +232,7 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
       if (heldForOthers(dependencies, cycle, writeAt)) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, reasonCode: 'others_present', summary: `ほかの人がいるので、電話はやめておきました（理由: ${label}）。` };
       let written: ReturnType<NonNullable<typeof adapters.reachOuts.sayByPhone>>;
       try {
-        written = adapters.reachOuts.sayByPhone(cycle.scopeKey, { reason: reason as ReachOutReason, text, dayKey: autonomyDayKey(writeAt, config), arisenAt }, writeAt);
+        written = adapters.reachOuts.sayByPhone(cycle.scopeKey, { reason: reason as ReachOutReason, text, dayKey: autonomyDayKey(writeAt, config), arisenAt, subject }, writeAt);
       } catch { written = 'unavailable'; }
       // Syzygy ADR-0008 stage 3: the proactive gate held it where it would have been written.
       const heldLine = heldByGate(written, `電話をかけるの（理由: ${label}）`, usage);
@@ -240,7 +243,7 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
       if (!sent) return { outcome: 'failed', usage, reasonCode: 'call_failed', summary: `電話をかけようとしましたが、つながりませんでした（理由: ${label}）。一言はトークに残っています。` };
       // Her line is in the Talk. Now the call itself: asked for here, sent by the API process.
       let asked: ReturnType<AutonomyPhone['request']> = 'unavailable';
-      try { asked = adapters.phone.request(cycle.scopeKey, sent.id, writeAt); } catch { asked = 'unavailable'; }
+      try { asked = adapters.phone.request(cycle.scopeKey, sent.id, writeAt, { reason, subject, arisenAt }); } catch { asked = 'unavailable'; }
       // The gate held the call itself: nothing rings; her line is in the Talk.
       const heldCall = heldByGate(asked, `電話を鳴らすの（理由: ${label}）`, usage);
       if (heldCall) return { ...heldCall, summary: `${heldCall.summary}一言はトークに残っています。` };

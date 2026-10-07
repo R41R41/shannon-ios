@@ -142,6 +142,8 @@ export class SQLitePushNotificationStore {
       ? `(SELECT COUNT(*) FROM initiative_messages unread
             WHERE unread.scope_key = t.scope_key AND unread.read_at IS NULL)`
       : '0';
+    // Syzygy ADR-0008 stage 3 (coordinator decision): the push notices of an agent task's outcome and of a TestFlight failure are
+    // system notices of work the owner asked for, not messages she starts; they stay outside the proactive gate.
     const agentRows = !this.tableExists('agent_task_events') || !this.tableExists('agent_tasks')
       ? []
       : this.database.prepare(`

@@ -11,9 +11,9 @@ const EXPRESSION: Readonly<Record<ObservedReachOutReason, 'curious' | 'excited' 
 });
 
 /** The intent of one message at a delivery point: its reason, its subject, when it arose (the thought that chose it) and its words. */
-function intentOf(point: ProactivePoint, reason: ObservedReachOutReason, subject: string | null, input: { text: string; arisenAt?: string }, at: string): ProactiveDeliveryIntent {
+function intentOf(point: ProactivePoint, reason: ObservedReachOutReason, subject: string | null | undefined, input: { text: string; arisenAt?: string }, at: string): ProactiveDeliveryIntent {
   const arisen = input.arisenAt && Number.isFinite(Date.parse(input.arisenAt)) && input.arisenAt <= at ? input.arisenAt : at;
-  return { point, reason, subject, arisenAt: arisen, text: input.text };
+  return { point, reason, subject: subject ?? null, arisenAt: arisen, text: input.text };
 }
 
 export class SQLiteReachOutSpeaker {
@@ -99,8 +99,8 @@ export class SQLiteReachOutSpeaker {
     `).get(scopeKey, `${REACH_OUT_FOLLOW_UP_KEY_PREFIX}%:${originId}`));
   }
 
-  say(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; maximumPerDay: number; arisenAt?: string }, at: string): ReachOutDelivery {
-    return this.write(scopeKey, { reason: input.reason, text: input.text, at, intent: intentOf('say', input.reason, null, input, at) }, () => {
+  say(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; maximumPerDay: number; arisenAt?: string; subject?: string | null }, at: string): ReachOutDelivery {
+    return this.write(scopeKey, { reason: input.reason, text: input.text, at, intent: intentOf('say', input.reason, input.subject, input, at) }, () => {
       const taken = new Set((this.database.prepare(`
         SELECT day_key FROM initiative_messages WHERE scope_key = ? AND day_key LIKE ?
       `).all(scopeKey, `${REACH_OUT_SOURCE_PREFIX}${input.dayKey}:%`) as unknown as Array<{ day_key: string }>).map(row => row.day_key));
@@ -115,8 +115,8 @@ export class SQLiteReachOutSpeaker {
   }
 
   /** Her opening line of a call to his iPhone: written like a message of hers, outside the day's count. */
-  sayByPhone(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; arisenAt?: string }, at: string): ReachOutDelivery {
-    return this.write(scopeKey, { reason: input.reason, text: input.text, at, intent: intentOf('say_by_phone', input.reason, null, input, at) }, () => `${REACH_OUT_CALL_KEY_PREFIX}${input.dayKey}:${randomUUID()}`);
+  sayByPhone(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; arisenAt?: string; subject?: string | null }, at: string): ReachOutDelivery {
+    return this.write(scopeKey, { reason: input.reason, text: input.text, at, intent: intentOf('say_by_phone', input.reason, input.subject, input, at) }, () => `${REACH_OUT_CALL_KEY_PREFIX}${input.dayKey}:${randomUUID()}`);
   }
 
   /**
@@ -141,9 +141,6 @@ export class SQLiteReachOutSpeaker {
       if (!this.tableExists(table)) return 'unavailable';
     }
     const { at } = input;
-    // Syzygy ADR-0008 stage 3: the proactive gate, here where the message would be written (a hold is recorded by the gate).
-    const verdict = this.gate?.check(scopeKey, input.intent, at);
-    if (verdict?.verdict === 'hold') return `held:${verdict.code}`;
     const initiativeId = randomUUID();
     const sourceItemId = input.reason === 'follow_up' && input.seen ? `${REACH_OUT_FOLLOW_UP_SEEN_SOURCE_PREFIX}${initiativeId}` : `${REACH_OUT_SOURCE_PREFIX}${input.reason}:${initiativeId}`;
     this.database.exec('BEGIN IMMEDIATE');
@@ -152,6 +149,14 @@ export class SQLiteReachOutSpeaker {
       if (!dayKey) {
         this.database.exec('ROLLBACK');
         return 'limit';
+      }
+      // Syzygy ADR-0008 stage 3: the proactive gate, here where the message would be written, inside the transaction and after the
+      // day's slot (review): a message the limit refuses records no hold, and two writers cannot both pass. A hold is recorded after.
+      const decision = this.gate?.decide(scopeKey, input.intent, at, this.database);
+      if (decision?.verdict === 'hold') {
+        this.database.exec('ROLLBACK');
+        const verdict = this.gate!.hold(scopeKey, input.intent, decision, at);
+        return `held:${verdict.verdict === 'hold' ? verdict.code : decision.code}`;
       }
       const threadId = this.latestThread(scopeKey, at);
       const inserted = this.database.prepare(`
@@ -172,8 +177,15 @@ export class SQLiteReachOutSpeaker {
         initiativeId, sourceItemId, reachOut: { reason: input.reason },
       }));
       this.database.prepare('UPDATE conversation_threads SET updated_at = ? WHERE scope_key = ? AND thread_id = ?').run(at, scopeKey, threadId);
+      if (this.gate) {
+        // The delivery is noted in the same transaction as the message (review M3); if it cannot be, the message is not sent.
+        try { this.gate.deliveredWithin(scopeKey, input.intent, at, this.database); } catch {
+          this.database.exec('ROLLBACK');
+          this.gate.hold(scopeKey, input.intent, { verdict: 'hold', code: 'gate_error', retryAt: null }, at);
+          return 'held:gate_error';
+        }
+      }
       this.database.exec('COMMIT');
-      this.gate?.delivered(scopeKey, input.intent, at);
       return 'sent';
     } catch (error) {
       if (this.database.isTransaction) this.database.exec('ROLLBACK');

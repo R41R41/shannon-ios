@@ -55,6 +55,24 @@ export function storyNotes(store: SQLiteAutonomyStore, scopeKey: string, pursuit
   }));
 }
 
+/**
+ * What a message of hers is about, as a closed key for the proactive gate (Syzygy ADR-0008 stage 3 review M2): the piece offered
+ * first for `share` (her newest note that is material, else her newest story), her note of the look for `saw`, the first upcoming
+ * item for `upcoming`; none for `wonder` (the topic check judges it). Ids only, never words.
+ */
+export function reachOutSubject(store: SQLiteAutonomyStore, scopeKey: string, reason: string, options: { shown: (piece: StudyPiece) => boolean; upcoming: readonly PromptUpcoming[]; since: string }): string | null {
+  if (reason === 'upcoming') return options.upcoming[0]?.subject ?? null;
+  const pieces = reason === 'share' || reason === 'saw' ? store.study.list(scopeKey) : [];
+  const piece = reason === 'saw'
+    ? pieces.filter(item => item.kind === 'note' && item.origin === 'room_look' && item.status !== 'put_away' && item.createdAt >= options.since)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0]
+    : reason === 'share'
+      ? pieces.find(item => item.kind === 'note' && item.status !== 'put_away' && item.origin !== 'reach_out' && item.origin !== 'room_look' && options.shown(item))
+        ?? pieces.find(item => item.kind === 'story' && item.status !== 'put_away' && options.shown(item))
+      : undefined;
+  return piece ? `piece:${piece.id}` : null;
+}
+
 export function thinkingMaterials(
   store: SQLiteAutonomyStore,
   scopeKey: string,

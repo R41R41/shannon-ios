@@ -41,12 +41,14 @@ export function selectCandidate(
   interest: string | null,
   initiative: number,
   at: string,
+  /** eff of each candidate's topic against her recent messages (Syzygy ADR-0008 stage 3's gate): its score × (1 − eff). Absent: 0. */
+  topicReuse?: (candidate: CandidateRow) => number,
 ): (CandidateRow & { score: number }) | null {
-  const ranked = candidates.map(candidate => ({
-    ...candidate,
-    score: round(candidateScore(candidate, interest, initiative, at)
-      + sourceDiversityAdjustment(signalCandidate(candidate), recentSignals)),
-  })).sort((left, right) => right.score - left.score || right.discovered_at.localeCompare(left.discovered_at));
+  const ranked = candidates.map(candidate => {
+    const base = candidateScore(candidate, interest, initiative, at) + sourceDiversityAdjustment(signalCandidate(candidate), recentSignals);
+    const reuse = topicReuse ? Math.min(1, Math.max(0, topicReuse(candidate) || 0)) : 0;
+    return { ...candidate, score: round(reuse ? base * (1 - reuse) : base) };
+  }).sort((left, right) => right.score - left.score || right.discovered_at.localeCompare(left.discovered_at));
   return (ranked[0]?.score ?? 0) >= 0.56 ? ranked[0]! : null;
 }
 

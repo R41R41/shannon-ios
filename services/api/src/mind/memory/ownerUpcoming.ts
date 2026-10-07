@@ -24,6 +24,8 @@ export interface UpcomingItem {
   end?: string;
   allDay: boolean;
   location?: string;
+  /** A closed key of the item (`calendar:<id>@<start>`, `promise:<id>`, `task:<id>`), for the proactive gate's subject. */
+  subject?: string;
 }
 
 export const UPCOMING_KIND_LABEL: Readonly<Record<UpcomingKind, string>> = Object.freeze({ calendar: '予定', promise: '約束', task: 'タスク' });
@@ -95,14 +97,14 @@ export class OwnerUpcoming {
     try {
       if (this.calendarEnabled) {
         for (const event of this.dependencies.store.calendarEvents(scopeKey, now, until)) {
-          items.push({ kind: 'calendar', title: event.title || '（題なし）', start: event.start, end: event.end, allDay: event.allDay, ...(event.location ? { location: event.location } : {}) });
+          items.push({ kind: 'calendar', title: event.title || '（題なし）', start: event.start, end: event.end, allDay: event.allDay, ...(event.location ? { location: event.location } : {}), subject: `calendar:${event.id}@${event.start}` });
         }
       }
     } catch { /* a calendar that cannot be read is no calendar */ }
     try { items.push(...this.promises(scopeKey, now, until, options.present ?? 'owner')); } catch { /* no promises */ }
     try {
       for (const task of this.dependencies.store.tasks(scopeKey, UPCOMING_TASK_SOURCE, now, until, UPCOMING_LIMITS.taskSnapshotMaximumAgeMilliseconds)) {
-        items.push({ kind: 'task', title: task.title, start: task.dueAt, allDay: false });
+        items.push({ kind: 'task', title: task.title, start: task.dueAt, allDay: false, subject: `task:${task.id}` });
       }
     } catch { /* no tasks */ }
     return items.sort((left, right) => left.start.localeCompare(right.start) || left.kind.localeCompare(right.kind) || left.title.localeCompare(right.title))
@@ -110,9 +112,10 @@ export class OwnerUpcoming {
   }
 
   /** For her own activity: the next 24 hours as kind, title and owner-local time. */
-  loopLines(scopeKey: string, at: string, present: UpcomingPresence = 'owner'): readonly { kindLabel: string; title: string; when: string }[] {
+  loopLines(scopeKey: string, at: string, present: UpcomingPresence = 'owner'): readonly { kindLabel: string; title: string; when: string; subject?: string }[] {
     return this.upcomingForOwner(scopeKey, at, UPCOMING_LIMITS.loopHorizonMilliseconds, { present }).map(item => ({
       kindLabel: UPCOMING_KIND_LABEL[item.kind], title: clip(item.title, UPCOMING_LIMITS.loopTitleCharacters), when: upcomingWhen(item, at, this.timeZone),
+      ...(item.subject ? { subject: item.subject } : {}),
     }));
   }
 
@@ -170,10 +173,10 @@ export class OwnerUpcoming {
       if (!title || (memory.sourceExperienceId && !visibleMemoryText(owned, memory.sourceExperienceId, memory.summary))) return [];
       if (memory.dueAt) {
         const due = Date.parse(memory.dueAt);
-        return Number.isFinite(due) && due >= Date.parse(now) && due < Date.parse(until) ? [{ kind: 'promise', title, start: new Date(due).toISOString(), allDay: false }] : [];
+        return Number.isFinite(due) && due >= Date.parse(now) && due < Date.parse(until) ? [{ kind: 'promise', title, start: new Date(due).toISOString(), allDay: false, subject: `promise:${memory.id}` }] : [];
       }
       if (!memory.dueDate || !/^\d{4}-\d{2}-\d{2}$/u.test(memory.dueDate) || memory.dueDate < today || memory.dueDate > lastDay) return [];
-      return [{ kind: 'promise', title, start: localMidnight(memory.dueDate, memory.timeZone ?? this.timeZone), allDay: true }];
+      return [{ kind: 'promise', title, start: localMidnight(memory.dueDate, memory.timeZone ?? this.timeZone), allDay: true, subject: `promise:${memory.id}` }];
     });
   }
 }

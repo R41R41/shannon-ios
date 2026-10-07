@@ -21,6 +21,10 @@ export function configuredProactiveGate(
   const database = new DatabaseSync(parts.databasePath);
   database.exec(PRAGMAS);
   const { databasePath: _path, ...dependencies } = parts;
-  const gate = createProactiveGate({ ...dependencies, topics: new SQLiteProactiveTopics(database, { createSchema: true }) });
+  const gate = createProactiveGate({
+    ...dependencies, topics: new SQLiteProactiveTopics(database, { createSchema: true }),
+    // A delivery point's own connection, inside its write transaction: the tables exist (made above).
+    topicsOn: connection => new SQLiteProactiveTopics(connection as DatabaseSync, { createSchema: false }),
+  });
   return { gate, close: () => { if (database.isOpen) database.close(); } };
 }

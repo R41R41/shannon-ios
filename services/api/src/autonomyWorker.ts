@@ -56,7 +56,6 @@ const store = new SQLiteAutonomyStore(databasePath);
 const config = configuredAutonomy(process.env, { databasePath });
 const announcer = new SQLiteAutonomyAnnouncer(databasePath);
 // The same zone as the initiative loop, so both share one message slot per day.
-const showing = new SQLiteStudyShowing(databasePath);
 // Looking at the room in her own time (stage 2). This process opens the look row and reads its outcome;
 // the body's answer, and the frame, go to the API process. SHANNON_AUTONOMY_MAX_ROOM_LOOKS=0 switches it off.
 const bodyStore = new SQLiteBodyStore(databasePath);
@@ -73,11 +72,13 @@ const othersAroundBody = (scopeKey: string, at: string) => bodyIngestEnabled(pro
 // Syzygy ADR-0008 stage 3 (owner answer 2): the proactive gate every message of hers passes where it is written (the speaker, the call
 // request). A hold is a withheld action her next thought is shown and a notice for the conversation. SHANNON_PROACTIVE_GATE=off: none.
 const proactiveGate = configuredProactiveGate(process.env, {
-  databasePath, ownerActiveMilliseconds: configuredAutonomyLoop(process.env).ownerActiveMilliseconds,
+  databasePath, ownerActiveMilliseconds: configuredAutonomyLoop(process.env).ownerActiveMilliseconds, timeZone: config.timeZone,
   withheld: (scopeKey, draft, at) => withheldActions?.withheld.sink(scopeKey, draft, at), emit: (scopeKey, draft, at) => mindInbox?.emit(scopeKey, draft, at),
   audience: (scopeKey, at) => (othersAroundBody(scopeKey, at) ? 'others' : 'owner'), log: line => console.log(line),
 });
 const reachOuts = new SQLiteReachOutSpeaker(databasePath, othersAroundBody, proactiveGate?.gate ?? null);
+// Telling him a piece is ready passes the same gate (point share, its subject the piece; review M1).
+const showing = new SQLiteStudyShowing(databasePath, undefined, proactiveGate?.gate ?? null);
 // After a message of hers she stays with it for a short while (SHANNON_AUTONOMY_REACH_OUT_WAIT_SECONDS): what her body reported about
 // showing it and what the server knows of the body are read here as closed facts. SHANNON_AUTONOMY_MAX_FOLLOW_UPS=0 switches all of it off.
 const reachOutReports = new SQLiteReachOutReports(databasePath);

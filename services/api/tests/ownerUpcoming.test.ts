@@ -54,13 +54,16 @@ describe('upcomingForOwner', () => {
       ['calendar', '進行中の会議', false], ['promise', '母に電話する', false], ['calendar', '歯医者', false],
       ['task', '請求書を送る', false], ['promise', '確定申告の書類を出す', true],
     ]);
-    expect(upcoming.loopLines(scope, START)).toEqual([
+    // Each line carries a closed key of its item for the proactive gate (stage 3 review M2); prompts never show it.
+    expect(upcoming.loopLines(scope, START).map(({ subject: _subject, ...line }) => line)).toEqual([
       { kindLabel: '予定', title: '進行中の会議', when: 'いま進行中・今日 9:00〜11:00' },
       { kindLabel: '約束', title: '母に電話する', when: '今日 12:00' },
       { kindLabel: '予定', title: '歯医者', when: '今日 14:00〜15:00' },
       { kindLabel: 'タスク', title: '請求書を送る', when: '今日 16:00' },
       { kindLabel: '約束', title: '確定申告の書類を出す', when: '明日（終日）' },
     ]);
+    expect(upcoming.loopLines(scope, START).map(line => line.subject?.split(':')[0])).toEqual(['calendar', 'promise', 'calendar', 'task', 'promise']);
+    expect(upcoming.loopLines(scope, START)[1]!.subject).toBe('promise:p-timed');
   });
 
   it('is bounded: twelve lines, the horizon, and short titles', () => {
@@ -145,7 +148,7 @@ describe('Voyager tasks', () => {
     expect(await upcoming.refreshTasks(scope, catalog)).toBe(true);
     const url = new URL(requests[0]!);
     expect([url.pathname, url.searchParams.get('workspaceId'), url.searchParams.get('dueFrom'), url.searchParams.get('limit')]).toEqual(['/api/tasks/upcoming', 'w1', START, '50']);
-    expect(upcoming.loopLines(scope, START)).toEqual([{ kindLabel: 'タスク', title: '請求書を送る', when: '今日 13:00' }]);
+    expect(upcoming.loopLines(scope, START)).toEqual([{ kindLabel: 'タスク', title: '請求書を送る', when: '今日 13:00', subject: 'task:t1' }]);
     fail = true;
     expect(await upcoming.refreshTasks(scope, catalog)).toBe(false);
     expect(upcoming.loopLines(scope, START)).toHaveLength(1);

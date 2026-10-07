@@ -489,6 +489,7 @@ function waitingReason(outcome: ShowingOutcome | 'others_present'): string {
     case 'recent-conversation': return '話している最中のため';
     case 'today-is-enough': return '今日はもう一度話しかけたため';
     case 'reserved-for-commitment': return '今日は約束の声かけを先にするため';
+    case 'held': return '自分から話しかけるのを止められたため';
     default: return '今は知らせる場所がないため';
   }
 }

@@ -5,8 +5,8 @@ import { signatureSimilarity, type MinHashSignature } from './minhash.js';
  * her own messages at a delivery point, beside what already holds it today.
  *
  * - Spacing stays today's 5 minutes, in today's code (`reachOutsRemaining`); this gate adds no spacing and no spacing code.
- * - Owner active: held while the owner wrote or spoke within max(2 minutes, the existing 10-minute hold).
- * - The same intent is not repeated within 30 minutes.
+ * - Owner active: held while the owner wrote or spoke within max(2 minutes, the existing 10-minute hold); a time ahead of now counts as now.
+ * - The same intent (reason and subject) is not repeated within 30 minutes; an intent without a subject is never a repeat.
  * - An intent expires 30, 75 or 150 minutes after it arose, by its reason.
  * - Topic reuse is damped: eff = sim × (age < 5 h ? 1 : 2^(−(age − 5 h)/72 h)); blocked at eff ≥ 0.9, otherwise the priority is
  *   multiplied by (1 − eff). Similarity is MinHash over character 3-grams; only signatures are compared and stored.
@@ -99,11 +99,13 @@ export function proactiveVerdict(intent: ProactiveIntent, history: ProactiveHist
   const reuse = topicReuse(intent.topic, history.topics, at);
   const hold = (code: ProactiveHoldCode): ProactiveVerdict => ({ verdict: 'hold', code, topicReuse: reuse });
   if (history.ownerLastActiveAt !== null) {
-    const since = now - Date.parse(history.ownerLastActiveAt);
-    if (since >= 0 && since < ownerActiveHoldMilliseconds(options.ownerActiveMilliseconds)) return hold('owner_active');
+    // A time ahead of now (a clock that ran ahead) counts as now: the owner is active (stage 3 review).
+    const since = Math.max(0, now - Date.parse(history.ownerLastActiveAt));
+    if (Number.isFinite(since) && since < ownerActiveHoldMilliseconds(options.ownerActiveMilliseconds)) return hold('owner_active');
   }
   if (now >= Date.parse(intentExpiresAt(intent))) return hold('intent_expired');
-  const repeat = history.delivered.some(item => item.reason === intent.reason && item.subject === intent.subject
+  // An intent without a subject is its reason alone: not a repeat (topic reuse judges it), stage 3 review.
+  const repeat = intent.subject !== null && history.delivered.some(item => item.reason === intent.reason && item.subject === intent.subject
     && now - Date.parse(item.at) >= 0 && now - Date.parse(item.at) < PROACTIVE_GATE_V1.intentRepeatMinutes * MINUTE);
   if (repeat) return hold('intent_repeat');
   if (reuse >= PROACTIVE_GATE_V1.topic.blockAt) return hold('topic_reused');

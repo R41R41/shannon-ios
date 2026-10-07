@@ -47,7 +47,7 @@ export interface PromptFeedback { pieceId: string; pieceTitle: string; version: 
 export interface PromptPlace { title: string; url: string }
 
 /** One upcoming item of the owner's: what kind it is, its title, and when, in owner-local words. Nothing else of it. */
-export interface PromptUpcoming { kindLabel: string; title: string; when: string }
+export interface PromptUpcoming { kindLabel: string; title: string; when: string; /** A closed key of the item for the proactive gate; never in a prompt. */ subject?: string }
 
 /** Why she speaks up on her own. A closed set: the plan and the message carry one of these and nothing freer. */
 export const REACH_OUT_REASONS = ['share', 'wonder', 'upcoming', 'saw'] as const;

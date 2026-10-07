@@ -36,8 +36,9 @@ describe('the proactive gate (owner answer 2)', () => {
     expect(proactiveVerdict(intent(), { ...empty, ownerLastActiveAt: ago(1 * MINUTE) }, AT)).toMatchObject({ verdict: 'hold', code: 'owner_active' });
     expect(proactiveVerdict(intent(), { ...empty, ownerLastActiveAt: ago(10 * MINUTE) }, AT).verdict).toBe('deliver');
     expect(proactiveVerdict(intent(), { ...empty, ownerLastActiveAt: ago(20 * MINUTE) }, AT, { ownerActiveMilliseconds: 30 * MINUTE }).verdict).toBe('hold');
-    // A time in the future (a clock that went back) does not hold.
-    expect(proactiveVerdict(intent(), { ...empty, ownerLastActiveAt: ago(-MINUTE) }, AT).verdict).toBe('deliver');
+    // A time ahead of now (a clock that ran ahead) counts as now: he is active (stage 3 review).
+    expect(proactiveVerdict(intent(), { ...empty, ownerLastActiveAt: ago(-MINUTE) }, AT)).toMatchObject({ verdict: 'hold', code: 'owner_active' });
+    expect(proactiveVerdict(intent(), { ...empty, ownerLastActiveAt: ago(-24 * HOUR) }, AT)).toMatchObject({ verdict: 'hold', code: 'owner_active' });
   });
 
   it('expires an intent 30, 75 or 150 minutes after it arose, by its reason', () => {
@@ -55,7 +56,8 @@ describe('the proactive gate (owner answer 2)', () => {
     expect(proactiveVerdict(intent({ topic: null }), delivered(ago(30 * MINUTE)), AT).verdict).toBe('deliver');
     expect(proactiveVerdict(intent({ topic: null }), delivered(ago(5 * MINUTE), 'event-2'), AT).verdict).toBe('deliver');
     expect(proactiveVerdict(intent({ topic: null }), delivered(ago(5 * MINUTE), 'event-1', 'promise'), AT).verdict).toBe('deliver');
-    expect(codeOf(proactiveVerdict(intent({ reason: 'wonder', subject: null, topic: null }), delivered(ago(5 * MINUTE), null, 'wonder'), AT))).toBe('intent_repeat');
+    // No subject: the reason alone is not a repeat (stage 3 review M2); the topic check judges it.
+    expect(proactiveVerdict(intent({ reason: 'wonder', subject: null, topic: null }), delivered(ago(5 * MINUTE), null, 'wonder'), AT).verdict).toBe('deliver');
   });
 
   it('decays topic reuse: 1 for five hours, then halving every 72 hours', () => {

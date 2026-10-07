@@ -34,7 +34,7 @@ const withheldActions = mindSwitches(process.env).proactiveGate
   ? configuredWithheldActions(process.env, { databasePath, createsSchema: false, log: line => console.log(line) }) : null;
 const mindInbox = configuredMindInbox(process.env, { databasePath, log: line => console.log(line) });
 const proactiveGate = configuredProactiveGate(process.env, {
-  databasePath, withheld: withheldActions?.withheld.sink ?? null, emit: mindInbox?.emit ?? null, log: line => console.log(line),
+  databasePath, source: 'worker', withheld: withheldActions?.withheld.sink ?? null, emit: mindInbox?.emit ?? null, log: line => console.log(line),
 });
 const initiativeStore = new SQLiteInitiativeStore(databasePath, undefined, proactiveGate?.gate ?? null);
 const stateStore = new SQLiteShannonStore({ path: databasePath, now: nowISOString });

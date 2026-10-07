@@ -7,7 +7,7 @@ import { bodyLookIdOfSource } from '../../body/store/bodyLookDelivery.js';
 import { isRoomLookSource } from '../../../mind/perception/roomLookSource.js';
 import { reachOutOfSource } from '../reachOutDelivery.js';
 import type { ProactiveDeliveryGate } from '../../../mind/attention/attentionPorts.js';
-import { initiativeIntent, secureDatabaseFiles } from '../initiativeIntent.js';
+import { evaluationSummary, firstWritten, initiativeIntent, secureDatabaseFiles, type InitiativeWrite } from '../initiativeIntent.js';
 import { groundedWorldOpening, topicMatchesSource, worldVisibleInterests } from '../../../integrations/world/worldInterestRelevance.js';
 import {
   intentInitiativeCandidateIsCurrent,
@@ -167,9 +167,11 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       const delivered = (itemId: string) => Boolean(this.database.prepare(
         'SELECT 1 FROM initiative_messages WHERE scope_key = ? AND source_item_id = ?'
       ).get(scope.scope_key, itemId));
-      const promise = promises.find(candidate => !delivered(candidate.item_id));
-      if (promise) {
-        if (this.persistMessage(scope.scope_key, state, promise, null, null, dayKey, at)) sent += 1;
+      // Syzygy ADR-0008 stage 3 (review M4): a candidate the gate held today is passed over, and a hold moves on to the next one.
+      const fresh = <T extends CandidateRow>(candidate: T) => !this.gate?.heldToday(scope.scope_key, 'initiative', initiativeIntent(candidate, at), at);
+      const open = promises.filter(candidate => !delivered(candidate.item_id));
+      if (open.length) {
+        if (firstWritten(open.filter(fresh), candidate => this.persistMessage(scope.scope_key, state, candidate, null, null, dayKey, at)) === 'sent') sent += 1;
         continue;
       }
       // A promise due later today keeps the day's only slot; a spontaneous topic can wait.
@@ -179,11 +181,9 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       }
       const intentCandidates = intentInitiativeCandidates(this.database, scope.scope_key, at);
       considered += intentCandidates.length;
-      const intentCandidate = intentCandidates.find(candidate => !this.database.prepare(
-        'SELECT 1 FROM initiative_messages WHERE scope_key = ? AND source_item_id = ?'
-      ).get(scope.scope_key, candidate.item_id));
-      if (intentCandidate) {
-        if (this.persistMessage(scope.scope_key, state, intentCandidate, null, null, dayKey, at)) sent += 1;
+      const openIntents = intentCandidates.filter(candidate => !delivered(candidate.item_id));
+      if (openIntents.length) {
+        if (firstWritten(openIntents.filter(fresh), candidate => this.persistMessage(scope.scope_key, state, candidate, null, null, dayKey, at)) === 'sent') sent += 1;
         continue;
       }
       const interests = worldVisibleInterests(restoreCompanionState(scope.scope_key, JSON.parse(scope.snapshot_json), at));
@@ -198,8 +198,11 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       const recentSignals = this.recentSignals(scope.scope_key, at);
       const distinctCandidates = candidates.filter(candidate => !isRepeatedWorldSignal(signalCandidate(candidate), recentSignals));
       repeatedSuppressed += candidates.length - distinctCandidates.length;
+      let pool = distinctCandidates.filter(fresh);
+      // A topic like one of her recent messages is damped: its score × (1 − eff) (owner answer 2).
+      const damping = (candidate: CandidateRow) => this.gate?.topicReuse(scope.scope_key, initiativeIntent(candidate, at).text, at) ?? 0;
       const preferred = dailyFocus?.sourceItemId
-        ? distinctCandidates.find(candidate => candidate.item_id === dailyFocus.sourceItemId)
+        ? pool.find(candidate => candidate.item_id === dailyFocus.sourceItemId)
         : undefined;
       if (dailyFocus?.sourceItemId && !preferred) {
         // A weather or otherwise excluded focus must never donate its wording or
@@ -207,20 +210,20 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         lastStop = 'nothing-worth-saying';
         continue;
       }
-      const selected = preferred
-        ? { ...preferred, score: candidateScore(preferred, dailyFocus?.topic ?? interest, finite(state.temperament?.initiative, 0.25), at) }
-        : selectCandidate(distinctCandidates, recentSignals, dailyFocus?.topic ?? interest, finite(state.temperament?.initiative, 0.25), at);
-      if (!selected) {
-        lastStop = 'nothing-worth-saying';
-        continue;
+      let written: InitiativeWrite | 'none' = 'none';
+      for (let tries = 0; tries < 5 && written === 'none'; tries += 1) {
+        const selected = preferred
+          ? { ...preferred, score: candidateScore(preferred, dailyFocus?.topic ?? interest, finite(state.temperament?.initiative, 0.25), at) }
+          : selectCandidate(pool, recentSignals, dailyFocus?.topic ?? interest, finite(state.temperament?.initiative, 0.25), at, damping);
+        if (!selected) break;
+        const matchedInterest = interests.find(value => topicMatchesSource(value, selected.title, selected.summary ?? '')) ?? null;
+        if (dailyFocus && interest && !matchedInterest) break;
+        written = firstWritten([selected], candidate => this.persistMessage(scope.scope_key, state, candidate, matchedInterest, dailyFocus, dayKey, at));
+        if (preferred) break;
+        pool = pool.filter(candidate => candidate.item_id !== selected.item_id);
       }
-      const matchedInterest = interests.find(value => topicMatchesSource(value, selected.title, selected.summary ?? '')) ?? null;
-      if (dailyFocus && interest && !matchedInterest) {
-        lastStop = 'nothing-worth-saying';
-        continue;
-      }
-      if (this.persistMessage(scope.scope_key, state, selected, matchedInterest, dailyFocus, dayKey, at)) sent += 1;
-      lastStop = null;
+      if (written === 'sent') sent += 1;
+      lastStop = written === 'none' || written.startsWith('held:') ? 'nothing-worth-saying' : null;
     }
     this.secureFiles();
     return this.finish({ considered, sent, stopped: sent > 0 ? null : lastStop }, at, repeatedSuppressed);
@@ -243,27 +246,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       ORDER BY count DESC, source_title ASC
       LIMIT 8
     `).all(cutoff) as unknown as Array<{ source_title: string; count: number }>;
-    const stopped = {
-      'quiet-hours': 0, 'no-owner': 0, 'today-is-enough': 0,
-      'recent-conversation': 0, 'nothing-worth-saying': 0, 'reserved-for-commitment': 0,
-    } satisfies Record<Exclude<InitiativeLoopResult['stopped'], null>, number>;
-    for (const row of rows) if (row.stopped && row.stopped in stopped) stopped[row.stopped as keyof typeof stopped] += 1;
-    const eligible = rows.filter(row => row.stopped !== 'quiet-hours' && row.stopped !== 'no-owner');
-    const delivered = rows.reduce((sum, row) => sum + Number(row.sent), 0);
-    return Object.freeze({
-      windowDays: days,
-      runs: rows.length,
-      eligibleRuns: eligible.length,
-      delivered,
-      deliveryRate: eligible.length ? Math.round((delivered / eligible.length) * 10_000) / 10_000 : 0,
-      candidatesConsidered: rows.reduce((sum, row) => sum + Number(row.considered), 0),
-      repeatedCandidatesSuppressed: rows.reduce((sum, row) => sum + Number(row.repeated_suppressed), 0),
-      deliveredBySource: Object.freeze(sourceRows.map(row => Object.freeze({
-        sourceTitle: row.source_title,
-        count: Number(row.count),
-      }))),
-      stopped: Object.freeze(stopped),
-    });
+    return evaluationSummary(days, rows, sourceRows);
   }
 
   unreadMessages(scopeKey: string): readonly InitiativeMessage[] {
@@ -333,7 +316,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     dailyFocus: DailyMindFocus | null,
     dayKey: string,
     createdAt: string,
-  ): boolean {
+  ): InitiativeWrite {
     const initiativeId = randomUUID();
     const threadId = candidate.thread_id ?? this.latestThread(scopeKey, createdAt);
     const expression: InitiativeMessage['expression'] = candidate.score >= 0.85 ? 'excited' : interest ? 'curious' : 'thinking';
@@ -367,22 +350,25 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       }),
     });
 
-    const intent = initiativeIntent(candidate, content, createdAt); // Syzygy ADR-0008 stage 3: the proactive gate, where it would be written.
-    if (this.gate?.check(scopeKey, intent, createdAt).verdict === 'hold') return false;
+    const intent = initiativeIntent(candidate, createdAt); // Syzygy ADR-0008 stage 3: the proactive gate, where it would be written.
     this.database.exec('BEGIN IMMEDIATE');
     try {
       if (candidate.source_id === 'commitment') {
         const fresh = this.database.prepare('SELECT snapshot_json FROM companion_states WHERE scope_key = ?').get(scopeKey) as { snapshot_json: string } | undefined;
         if (!fresh || !dueCommitmentCandidate(scopeKey, JSON.parse(fresh.snapshot_json), createdAt).some(item => item.item_id === candidate.item_id)) {
           this.database.exec('ROLLBACK');
-          return false;
+          return 'skipped';
         }
       }
       if (candidate.source_id === 'intent'
         && !intentInitiativeCandidateIsCurrent(this.database, scopeKey, candidate.item_id)) {
         this.database.exec('ROLLBACK');
-        return false;
+        return 'skipped';
       }
+      // Inside the transaction, after the day's slot (review): the limit refuses before the gate, and two writers cannot both pass.
+      if (this.sentOnDay(scopeKey, dayKey)) { this.database.exec('ROLLBACK'); return 'skipped'; }
+      const decision = this.gate?.decide(scopeKey, intent, createdAt, this.database);
+      if (decision?.verdict === 'hold') { this.database.exec('ROLLBACK'); this.gate!.hold(scopeKey, intent, decision, createdAt); return `held:${decision.code}`; }
       const inserted = this.database.prepare(`
         INSERT OR IGNORE INTO initiative_messages
           (initiative_id, scope_key, thread_id, source_item_id, source_title, source_url,
@@ -392,7 +378,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         initiativeId, scopeKey, threadId, candidate.item_id, candidate.source_title,
         candidate.url, content, expression, dayKey, createdAt,
       );
-      if (!inserted.changes) { this.database.exec('ROLLBACK'); return false; }
+      if (!inserted.changes) { this.database.exec('ROLLBACK'); return 'skipped'; }
       this.database.prepare(`
         INSERT INTO conversation_messages
           (message_id, scope_key, thread_id, turn_id, ordinal, role, content, observed_at, metadata_json)
@@ -409,9 +395,16 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         initiativeId, sourceItemId: candidate.item_id, score: candidate.score,
         dailyMindDayKey: dailyFocus?.dayKey ?? null,
       }));
+      if (this.gate) {
+        // Noted with the message, in its transaction (review M3); if it cannot be, the message is not written.
+        try { this.gate.deliveredWithin(scopeKey, intent, createdAt, this.database); } catch {
+          this.database.exec('ROLLBACK');
+          this.gate.hold(scopeKey, intent, { verdict: 'hold', code: 'gate_error', retryAt: null }, createdAt);
+          return 'held:gate_error';
+        }
+      }
       this.database.exec('COMMIT');
-      this.gate?.delivered(scopeKey, intent, createdAt);
-      return true;
+      return 'sent';
     } catch (error) {
       if (this.database.isTransaction) this.database.exec('ROLLBACK');
       throw error;
