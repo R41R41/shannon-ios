@@ -3,7 +3,7 @@ import { turnPersistenceContext, type CompletedTurn } from '../../mind/sleep/bac
 import type { TextTurnInput, TextTurnSurface } from '../../infra/http/apiKernel.js';
 import { chatAudienceTurn, type ChatAudienceTurn } from '../text/chatAudience.js';
 import type { ChatResponse } from '../../contracts/contracts.js';
-import type { ConversationStore, ShannonExperience } from '../../mind/memory/store/conversationStore.js';
+import type { ConversationStore, ShannonExperience } from '../../mind/memory/memoryPorts.js';
 import { identityOnly } from '../../mind/memory/store/knowledgeStore.js';
 import { DisclosureGate, sharedDailyFocus } from '../../mind/inhibition/memoryDisclosure.js';
 import {

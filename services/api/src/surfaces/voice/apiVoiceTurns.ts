@@ -4,7 +4,7 @@ import { storedVoiceFace } from '../../mind/emotion/voiceEmotionPlan.js';
 import { objectBody, validScopeKey, validBoundedString, badRequest } from '../../infra/http/apiValidation.js';
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
 import type { TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.js';
-import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
+import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { ShannonChatModel } from '../../infra/models/chatModel.js';
 import { dispatchVoiceCallSummary } from './apiVoiceCallSummary.js';
 import { ownerSaysCompanionPresent } from './voiceCompanionPresence.js';

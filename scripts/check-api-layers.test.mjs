@@ -127,3 +127,17 @@ check('a window re-exports only types from a store: values are violations, types
   assert.deepEqual([...valueSpecifiers("import type { A } from './a.js';\nimport { type B } from './b.js';\nimport { c, type C } from './c.js';\nimport './d.js';\nconst e = () => import('./e.js');\ntype F = import('./f.js').F;\n")].sort(),
     ['./c.js', './d.js', './e.js']);
 });
+
+check('a pair a rule allows by name is not a violation, and only that pair (ADR-0008 stage 3: a surface store may use infra/sqlite)', () => {
+  const root = tree({
+    'src/surfaces/body/store/bodyStore.ts': "import { open } from '../../../infra/sqlite/context.js';\n",
+    'src/surfaces/body/bodyLook.ts': "import { open } from '../../infra/sqlite/context.js';\n",
+    'src/surfaces/body/store/other.ts': "import { x } from '../../voice/store/voiceStore.js';\n",
+    'src/surfaces/voice/store/voiceStore.ts': 'export const x = 1;\n',
+    'src/infra/sqlite/context.ts': 'export const open = 1;\n',
+  });
+  const rules = { sourceRoot: 'src', rules: [{ id: 'surfaces-without-stores', kind: 'imports', from: ['surfaces/**'], to: ['**/store/**', 'infra/sqlite/**'], crossComponent: true,
+    allowPairs: [{ from: ['surfaces/*/store/**'], to: ['infra/sqlite/**'] }] }] };
+  const found = violations({ root, config: rules, moves: { entries: [], moves: {} } }).map(item => `${item.from} -> ${item.to}`);
+  assert.deepEqual(found, ['surfaces/body/bodyLook.ts -> infra/sqlite/context.ts', 'surfaces/body/store/other.ts -> surfaces/voice/store/voiceStore.ts']);
+});

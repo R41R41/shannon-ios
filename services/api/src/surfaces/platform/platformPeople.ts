@@ -17,7 +17,7 @@ import { periodSummaryText, personMemoryId, platformSummaryId } from '../../mind
 import type { MemoryProposals } from '../../mind/memory/memoryPorts.js';
 
 export { platformSummaryId };
-import type { PeopleMemoryStore, PersonMemoryItem, RememberedPerson } from '../../mind/memory/store/peopleMemoryStore.js';
+import type { PeopleMemoryStore, PersonMemoryItem, RememberedPerson } from '../../mind/memory/memoryPorts.js';
 import { extractPromiseCaptures } from '../../mind/memory/prospectiveMemory.js';
 import { extractExplicitMemoryProposals } from '../../mind/sleep/sleepConsolidation.js';
 import { cleanPersonName } from '../voice/voiceGuestNames.js';

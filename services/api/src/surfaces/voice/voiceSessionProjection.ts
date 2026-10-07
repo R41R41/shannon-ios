@@ -10,9 +10,9 @@ import {
 } from '@shannon/cognition';
 import { voiceHistoryProjection } from '../../mind/action/respond/apiPromptProjection.js';
 import type { CognitiveIntentStore } from '../../mind/action/respond/cognitiveIntent.js';
-import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
+import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { DailyMindReader } from '../../mind/action/respond/dailyMind.js';
-import type { KnowledgeStore } from '../../mind/memory/store/knowledgeStore.js';
+import type { KnowledgeStore } from '../../mind/memory/memoryPorts.js';
 import { visibleConversationHistory } from '../../mind/memory/memoryVisibility.js';
 import { temporaryGuestVoiceInstructions, voiceConversationInstructions } from './voiceConversationInstructions.js';
 

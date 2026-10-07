@@ -147,6 +147,8 @@ export function violations({ root, config, moves, layout = 'projected' }) {
           if (rule.crossComponent && (target.module || componentOf(from) === componentOf(value))) continue;
           // A rule of types only: an import or re-export of types alone is allowed.
           if (rule.typesOnly && target.value === false) continue;
+          // A pair the rule allows by name (a decision recorded with the rule).
+          if ((rule.allowPairs ?? []).some(pair => matchesAny(from, pair.from) && matchesAny(value, pair.to))) continue;
           add(rule.id, from, value);
         }
       }

@@ -18,7 +18,7 @@ import { agentTaskPromptProjection } from '../../mind/action/respond/apiPromptPr
 import { badRequest, objectBody, validBoundedString, validScopeKey } from '../../infra/http/apiValidation.js';
 import type { AgentTaskStore } from '../../mind/action/agentTasks/agentTaskStore.js';
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
-import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
+import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { DailyMindReader } from '../../mind/action/respond/dailyMind.js';
 import { companionIdentityPrompt, identityOnly, type KnowledgeStore } from '../../mind/memory/store/knowledgeStore.js';
 import type { ShannonChatModel } from '../../infra/models/chatModel.js';
@@ -32,7 +32,7 @@ import { extractExplicitUserIntent, type CognitiveIntentStore } from '../../mind
 import { recordCompletedCognitiveCycle } from '../../mind/action/respond/cognitiveCycle.js';
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type ConversationReadCapabilities } from '../../mind/action/respond/conversationCapabilities.js';
 import { asksAboutNotion } from '../../integrations/notion/notionConversation.js';
-import type { PersonIdentityStore } from '../../mind/memory/store/personIdentity.js';
+import type { PersonIdentityStore } from '../../mind/memory/memoryPorts.js';
 import { voicePlanResponse } from '../../mind/emotion/voiceEmotionPlan.js';
 import { transcriptNeedsInterpretation, transcriptTrust, voiceTranscriptInterpretationPrompt } from './voiceTranscriptContext.js';
 import {

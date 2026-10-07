@@ -10,7 +10,7 @@ import {
 import type { PresentedCompanionState } from '../../mind/emotion/companionPresence.js';
 import type { ChatResponse } from '../../contracts/contracts.js';
 import type { ConversationCapabilitySelection } from '../../mind/action/respond/conversationCapabilities.js';
-import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
+import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import { identityOnly, type LayeredIdentityPrompt } from '../../mind/memory/store/knowledgeStore.js';
 import { DisclosureGate, sharedDailyFocus } from '../../mind/inhibition/memoryDisclosure.js';
 import { speakTimePrivacyCheck } from '../voice/voiceCompanionPresence.js';

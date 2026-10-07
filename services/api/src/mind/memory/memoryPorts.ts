@@ -31,3 +31,6 @@ export { MemoryCommands, MemoryWriter, type MemoryProposals } from './memoryWrit
 export { type MemoryTargets } from './memoryOps.js';
 export { decayDryRun, decayedUsable, identityOf, identityPeople, nameCosine, ruleJudgement, type IdentityChooser, type PersonFactJudge } from './personFacts.js';
 export { type IdentityCandidate, type PersonFactRow, type TurnSpeaker } from './store/personFactsStore.js';
+export { type KnowledgeStore } from './store/knowledgeStore.js';
+export { type PeopleMemoryStore, type PersonMemoryItem, type RememberedPerson } from './store/peopleMemoryStore.js';
+export { type PersonIdentityStore } from './store/personIdentity.js';

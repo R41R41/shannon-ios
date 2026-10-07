@@ -1,6 +1,6 @@
 import { estimatedOpenAICostUsd, configuredBackgroundBudgetUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
-import type { PeopleMemoryStore } from '../../mind/memory/store/peopleMemoryStore.js';
+import type { PeopleMemoryStore } from '../../mind/memory/memoryPorts.js';
 import { platformSummaryId, type PlatformPeople } from './platformPeople.js';
 
 /** Writes what one platform conversation period was about, from the stored exchanges only. */

@@ -24,7 +24,7 @@ import {
   buildConversationOrchestrationPrompt, observeConversationTurn, recordConversationReceipt, type ConversationOrchestrationStore,
 } from '../../mind/action/respond/conversationOrchestration.js';
 import { prepareConversationOrganize } from '../../integrations/voyager/conversationOrganize.js';
-import type { ConversationStore, ShannonExperience } from '../../mind/memory/store/conversationStore.js';
+import type { ConversationStore, ShannonExperience } from '../../mind/memory/memoryPorts.js';
 import type { DailyMindReader } from '../../mind/action/respond/dailyMind.js';
 import { companionIdentityPrompt, type KnowledgeStore, type LayeredIdentityPrompt } from '../../mind/memory/store/knowledgeStore.js';
 import { isOrganizeCommand, type OrganizeExtractor, type OrganizeStore, type VoyagerCatalog } from '../../integrations/voyager/organize.js';
@@ -32,7 +32,7 @@ import type { OwnOutreach } from '../outreach/ownOutreach.js';
 import type { OwnerUpcoming } from '../../mind/memory/ownerUpcoming.js';
 import type { PeopleMemory } from '../../mind/memory/peopleMemory.js';
 import { heardByEveryoneHere } from '../platform/platformPeople.js';
-import type { PersonIdentityStore } from '../../mind/memory/store/personIdentity.js';
+import type { PersonIdentityStore } from '../../mind/memory/memoryPorts.js';
 import type { ShannonBody } from '../body/shannonBody.js';
 import { startTurnToolMenu, type ConversationToolServer, type ToolMenuChooser, type TurnChoiceAnswer } from '../../mind/tools/shannonToolSession.js';
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';

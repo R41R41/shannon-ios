@@ -16,7 +16,7 @@ import { reflexPartWord } from './bodyTouchReflex.js';
 import { bodyTouchPartWord, bodyTouchRegionWord, touchDetailPhrase, type BodySurface } from './bodyTouchWords.js';
 import type { ReactionLine, SQLiteBodyReactionStore } from './store/bodyReactionStore.js';
 import type { BodyTouches, FeltTouch } from '../../mind/emotion/bodyTouch.js';
-import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
+import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import { visibleReplayMessages } from '../../mind/memory/memoryVisibility.js';
 
 /**

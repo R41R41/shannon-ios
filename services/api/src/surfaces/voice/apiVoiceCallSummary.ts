@@ -1,7 +1,7 @@
 import { badRequest, objectBody, validScopeKey } from '../../infra/http/apiValidation.js';
 import type { ShannonChatModel } from '../../infra/models/chatModel.js';
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
-import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
+import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import { GUEST_CALL_SUMMARY_TURNS, validatedGuestCallTurns, type GuestCallTurn } from './voiceGuestCall.js';
 
 export const VOICE_CALL_SUMMARY_PATH = '/v1/voice/gemini/cascade/summaries';

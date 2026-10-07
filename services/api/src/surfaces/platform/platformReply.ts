@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { PLATFORM_REPLY_ALLOWANCE, SurfaceTurnAllowance } from '../minecraft/minecraftTurnAllowance.js';
 import { SHANNON_OWNER_NAME, type CompanionClock } from '@shannon/cognition';
 import type { TextTurnInput, TextTurnResult } from '../../infra/http/apiKernel.js';
-import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
+import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { MinecraftTurnLog } from '../minecraft/store/minecraftTurnStore.js';
 import {
   PlatformBridgeError, type PlatformAudiencePolicy, type PlatformBridgeBinding, type PlatformBridgeService, type ShannonPlatform,

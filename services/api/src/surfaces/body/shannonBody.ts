@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME, presentShannonFeeling, type CompanionStateStore } from '@shannon/cognition';
-import type { AutonomyActivityDay } from '../../mind/inhibition/store/autonomyActivity.js';
+import type { AutonomyActivityDay } from '../../mind/inhibition/inhibitionPorts.js';
 import type { AutonomyControlLabel, ShannonAutonomyService } from '../../mind/action/ownTime/autonomyService.js';
 import {
   BODY_LIMITS, BODY_SCHEMA_VERSION, BODY_TOUCH_EVENT_TYPES, BODY_TOUCH_VOCABULARY, isBodyGameEvent, isImpossibleTouch,
@@ -28,7 +28,7 @@ import { gameDeathExperience, type GameExperienceWriter } from '../minecraft/sto
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './store/bodyStore.js';
 import { ownerDay, presentCompanionState } from '../../mind/emotion/companionPresence.js';
 import { emotionTiming } from '../../mind/emotion/emotionTiming.js';
-import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
+import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { ReachOutReportResult, SQLiteReachOutReports } from '../outreach/store/reachOutReports.js';
 
 /**

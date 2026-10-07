@@ -14,7 +14,7 @@ import {
   type PlatformConversationKind, type PlatformPeople, type PlatformSourceKind,
 } from './platformPeople.js';
 import type { TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.js';
-import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
+import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import { platformImpressionLines } from '../../mind/recall/impressionRecall.js';
 import { bindingFor, composedPlatformBridgeConfiguration, sharedAudienceHeader } from './platformBridgeBindings.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';

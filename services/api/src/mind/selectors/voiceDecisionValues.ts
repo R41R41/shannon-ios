@@ -1,5 +1,5 @@
 import { mentionsSuiteProduct } from '@shannon/cognition';
-import { memoNotForAether } from '../action/respond/memoPlace.js';
+import { memoNotForAether } from '../action/respond/respondPorts.js';
 import { wantsPlaceDiscovery } from '../../integrations/places/placeDiscovery.js';
 import {
   explicitWebRequestPattern, internalStatusPattern, mandatorySkillPatterns, VOICE_SKILLS,

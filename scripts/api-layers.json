@@ -46,10 +46,11 @@
     {
       "id": "surfaces-without-stores",
       "kind": "imports",
-      "description": "A surface is handed its stores by wiring; it imports no store of another component and not infra/sqlite (its own store/ folder is its own).",
+      "description": "A surface is handed its stores by wiring; it imports no store of another component and not infra/sqlite (its own store/ folder is its own). A surface's own store/ folder may import infra/sqlite (coordinator decision approved by the owner, Syzygy ADR-0008 stage 3, owner answer 5).",
       "from": ["surfaces/**"],
       "to": ["**/store/**", "infra/sqlite/**"],
-      "crossComponent": true
+      "crossComponent": true,
+      "allowPairs": [{ "from": ["surfaces/*/store/**"], "to": ["infra/sqlite/**"] }]
     },
     {
       "id": "integrations-outside-mind",
