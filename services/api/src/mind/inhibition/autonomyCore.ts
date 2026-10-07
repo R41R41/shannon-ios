@@ -276,6 +276,9 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/server.ts',
     'services/api/src/infra/http/serverHttp.ts',
     'services/api/src/infra/http/apiKernel.ts',
+    // Moved out of the kernel and the voice delegation for their size (Syzygy ADR-0008 §10), unchanged.
+    'services/api/src/infra/http/apiTestFlightRoutes.ts',
+    'services/api/src/surfaces/voice/voiceGrounding.ts',
     'services/api/src/surfaces/text/apiTextTurn.ts',
     'services/api/src/infra/http/apiValidation.ts',
     'services/api/src/surfaces/voice/apiLiveVoice.ts',

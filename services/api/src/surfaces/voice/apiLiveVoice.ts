@@ -44,18 +44,14 @@ import {
   type ConversationOrchestrationStore,
 } from '../../mind/action/respond/conversationOrchestration.js';
 import { isExplicitVoyagerUpdateRequest } from '../../integrations/voyager/organize.js';
-import {
-  validatedVoiceDeviceContext,
-  voiceDeviceContextPrompt,
-  type VoiceDeviceContext,
-} from './voiceDeviceContext.js';
+import { validatedVoiceDeviceContext, type VoiceDeviceContext } from './voiceDeviceContext.js';
 export { voiceConversationInstructions } from './voiceConversationInstructions.js';
 import { temporaryGuestVoiceInstructions, voiceConversationInstructions } from './voiceConversationInstructions.js';
-import { guestSpeakerReminder, guestTurnPositionInstruction, ownerCompanionPresenceInstructions } from './voiceIntroductionInstructions.js';
+import { guestSpeakerReminder, guestTurnPositionInstruction } from './voiceIntroductionInstructions.js';
 import { applyGuestAddressing, boundedVoiceHistory, guestAddressDecision, guestCallHistory, GUEST_CALL_MODEL_TURNS } from './voiceGuestCall.js';
 export { realtimeVoiceSessionProjection, type VoiceParticipantMode } from './voiceSessionProjection.js';
 import type { VoiceParticipantMode } from './voiceSessionProjection.js';
-import { companionPresentInstructions, ownerSaysCompanionPresent, speakTimePrivacyCheck } from './voiceCompanionPresence.js';
+import { ownerSaysCompanionPresent } from './voiceCompanionPresence.js';
 import { emotionTiming, feelingBeforeTurn, stillFeltLine } from '../../mind/emotion/companionPresence.js';
 import type { PeopleMemory } from '../../mind/memory/peopleMemory.js';
 import { DisclosureGate, sharedDailyFocus } from '../../mind/inhibition/memoryDisclosure.js';
@@ -65,6 +61,7 @@ import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './v
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
 import { conversationTools, ownerAloneReads, toolTraceReader, turnWroteHerOwnThings, withToolCapabilityLines, type ConversationToolServer, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
 import { startVoiceStage2, voiceFinished, voiceOfferAndTier } from './voiceStage2.js';
+import { voiceCommandResponse, voiceTurnGrounding } from './voiceGrounding.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from '../../mind/action/respond/turnDeadline.js';
 import { tierRequest, type TurnRouting } from '../../mind/action/respond/turnRouting.js';
 import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from './ownerCallElsewhere.js';
@@ -216,24 +213,8 @@ async function completeLiveVoiceDelegation(
     })
     : null;
   if (command) {
-    if (orchestrationState && command.receipt) {
-      orchestrationState = dependencies.conversationOrchestration.save(
-        recordConversationReceipt(orchestrationState, command.receipt),
-      );
-    }
-    const captured = dependencies.stateStore.snapshot(scopeKey);
-    const message = deviceContext?.userUtterance?.text ?? transcript;
-    const provisionalIntent = extractExplicitUserIntent(message, threadId, occurredAt);
-    const cognitiveContext = prepareTurnCognitiveContext(captured, dependencies.conversationStore, {
-      scopeKey, message, occurredAt, channel: 'voice', threadId, present,
-      intents: dependencies.cognitiveIntents.list(scopeKey, 'active'), provisionalIntent,
-    });
-    recordCompletedCognitiveCycle(dependencies.cognitiveIntents, scopeKey, cognitiveContext.frame, provisionalIntent, undefined, {
-      threadId, channel: 'voice', action: 'command', summary: '確認済みの音声コマンドを処理した。', occurredAt,
-    });
-    return { status: 200, body: { threadId, model: dependencies.chatModel.model,
-      reply: command.reply, webSources: [], ...(command.receipt ? { receipt: command.receipt } : {}),
-      ...(command.organizeSession ? { organizeSession: command.organizeSession } : {}) } };
+    if (orchestrationState && command.receipt) orchestrationState = dependencies.conversationOrchestration.save(recordConversationReceipt(orchestrationState, command.receipt));
+    return voiceCommandResponse(dependencies, { scopeKey, threadId, transcript, deviceContext, occurredAt, present, command });
   }
   const emotionState = temporaryGuest ? null : dependencies.stateStore.snapshot(scopeKey);
   const previousExpressiveEmotion = emotionState ? feelingBeforeTurn(emotionState, occurredAt) : undefined;
@@ -264,25 +245,7 @@ async function completeLiveVoiceDelegation(
   }
   const contextStartedAt = performance.now();
   const selectedSkills = new Set(decision.selectedSkills);
-  const backendInstructions = [
-    '[Voice turn grounding]',
-    '- The input is a potentially imperfect live Japanese transcript. Use the latest correction and do not invent missing details.',
-    '- Your reply is spoken aloud as Shannon herself. State verified facts concisely in her voice; avoid Markdown tables and long URLs.',
-    '- This lane is read-only unless an explicit user command has already returned a verified proposal receipt. Do not claim that a purchase, booking, deployment, file write, or other external mutation completed.',
-    '- If an external mutation or approval is needed, explain the exact next confirmation instead of performing it.',
-    ...(!temporaryGuest ? [
-      '- Shannon can propose a Codex implementation task, including adding a new capability or changing Shannon itself. A user starts the visible proposal before code work runs. Never claim this capability is unavailable.',
-      '- If an ASR-uncertain request sounds like an implementation request, briefly confirm the intended feature before proposing it. Do not treat uncertain speech as execution authorization.',
-      alone ? ownerCompanionPresenceInstructions : companionPresentInstructions,
-    ] : []),
-    ...(!alone && !legacyGuest ? [speakTimePrivacyCheck] : []),
-    ...(selectedSkills.has('current_web') ? [
-      '- For transit, search current operator or route sources. Ask for a missing origin or destination. Give no exact departure, arrival, fare, or disruption claim without a current source; distinguish timetable from live operating status.',
-      '- For local recommendations, use the one-time GPS only if present, check current opening hours and weather on the web, and mention uncertainty briefly.',
-    ] : []),
-    ...(selectedSkills.has('device_context') || selectedSkills.has('current_web')
-      ? [voiceDeviceContextPrompt(dependencies.now(), deviceContext)] : []),
-  ].join('\n');
+  const backendInstructions = voiceTurnGrounding({ temporaryGuest, alone, legacyGuest, selectedSkills, at: dependencies.now(), deviceContext });
   // Refresh after the classifier await so a concurrent forget/hide is respected.
   const captured = dependencies.stateStore.snapshot(scopeKey);
   // A goal is the owner's own; with anyone else present the words may not be his.

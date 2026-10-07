@@ -56,7 +56,8 @@ import { conversationToolServer, type ConversationToolServer } from '../../mind/
 import { TEXT_TURN_DEADLINE, TurnDeadline } from '../../mind/action/respond/turnDeadline.js';
 import type { TurnMemoryRecall } from '../../mind/recall/turnMemoryRecall.js';
 import { type NotionTurnReader } from '../../mind/action/respond/conversationCapabilities.js';
-import { WAITING_TESTFLIGHT_DASHBOARD, type TestFlightDeliveryReader } from '../../integrations/testflight/store/testflightDeliveryStore.js';
+import type { TestFlightDeliveryReader } from '../../integrations/testflight/store/testflightDeliveryStore.js';
+import { dispatchTestFlightRequest } from './apiTestFlightRoutes.js';
 import { dispatchPeopleMemoryRequest } from './apiPeopleMemoryRoutes.js';
 import { PeopleMemory } from '../../mind/memory/peopleMemory.js';
 import { SQLitePeopleMemoryStore, type PeopleMemoryStore } from '../../mind/memory/store/peopleMemoryStore.js';
@@ -272,35 +273,8 @@ export class ShannonApiKernel {
       return { status: 200, body: { tasks: this.agentTasks.list(scopeKey) } };
     }
 
-    if (request.method === 'GET' && request.path === '/v1/testflight/delivery') {
-      const scopeKey = request.query?.get('scopeKey');
-      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
-      return {
-        status: 200,
-        body: this.testFlightDelivery?.dashboard(30, scopeKey) ?? WAITING_TESTFLIGHT_DASHBOARD,
-      };
-    }
-
-    if (request.method === 'POST' && request.path === '/v1/testflight/delivery/confirm') {
-      if (!objectBody(request.body)) return badRequest('JSON object body is required');
-      const scopeKey = request.body.scopeKey;
-      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
-      if (!validBoundedString(request.body.buildVersion, 80)) return badRequest('buildVersion is invalid');
-      if (request.body.gate !== 'install' && request.body.gate !== 'smoke') return badRequest('gate is invalid');
-      if (!this.testFlightDelivery?.confirmGate) return { status: 503, body: { error: 'TESTFLIGHT_DELIVERY_UNAVAILABLE' } };
-      try {
-        return {
-          status: 200,
-          body: this.testFlightDelivery.confirmGate(scopeKey, request.body.buildVersion, request.body.gate, this.now()),
-        };
-      } catch (error) {
-        if (error instanceof Error && (error.message === 'TESTFLIGHT_BUILD_NOT_DISTRIBUTED'
-          || error.message === 'TESTFLIGHT_INSTALL_REQUIRED')) {
-          return { status: 409, body: { error: error.message } };
-        }
-        throw error;
-      }
-    }
+    const testFlightResponse = dispatchTestFlightRequest(request, { testFlightDelivery: this.testFlightDelivery, now: this.now });
+    if (testFlightResponse) return testFlightResponse;
 
     if (request.path.startsWith('/v1/organize/') || request.path.startsWith('/v1/integrations/voyager/')) {
       const organizeResponse = await dispatchOrganizeRequest(request, {
