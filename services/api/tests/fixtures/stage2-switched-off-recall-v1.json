@@ -1,0 +1,45 @@
+{
+ "about": "Digests of the recall turns of ca7cf519 (stage2SwitchedOffRecall.test.ts). Never regenerated for a stage-2 change.",
+ "scenarios": {
+  "text-recall-note": {
+   "openai": [
+    "87d36c839e9500a17a492868",
+    "6e27f8c415304229a10f76ba",
+    "1be6615eafbeabaf020f7d34",
+    "40debdaf91414a7ea93026a6"
+   ],
+   "jev": []
+  },
+  "text-recall-others": {
+   "openai": [
+    "87d36c839e9500a17a492868",
+    "6e27f8c415304229a10f76ba",
+    "1be6615eafbeabaf020f7d34",
+    "ee41b667d41c6196ebe79bc4"
+   ],
+   "jev": []
+  },
+  "voice-recall-complex": {
+   "openai": [
+    "4af5776db43a9f0773d30e15",
+    "e869e61bfc4b957c5adf3f03",
+    "dae977ee2ea365a264651b59",
+    "0f6a4aec2a2a02a1a13a8b01"
+   ],
+   "jev": [
+    "cd12e43b3fe241f13208eff5"
+   ]
+  },
+  "voice-recall-plain": {
+   "openai": [
+    "a84b3f8b92895d6c2e84e601",
+    "0225b7993540b06cd2f30456",
+    "90a61c74d51b42e6cd1cca72",
+    "62a739ec380430a32f1917c0"
+   ],
+   "jev": [
+    "86563ae6f74ff6fbc3928f91"
+   ]
+  }
+ }
+}

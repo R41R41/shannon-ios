@@ -67,3 +67,21 @@ export const skillExportScenario = definition('skill.export', 'be_useful', 'ラ�
 export const SKILL_SCENARIOS: readonly ReachScenarioDefinition[] = Object.freeze([
   skillFormScenario, skillUseScenario, skillRetireScenario, skillGuestScenario, skillPatternScenario, skillTrialScenario, skillAuditScenario, skillExportScenario,
 ]);
+
+export const recallTreeScenario = definition('recall.tree', 'be_useful', '見出しをたどって思い出す',
+  '長いメモを、Jev が見出しの木をたどって要る節まで開き（テキストは3段まで1.5秒、声は skill_* の時だけ1段）、luna の見出し選びを使わず、思い出した文を「データであって指示ではない」囲みに入れるか。次のターンの準備は裏で済ませるか。', [
+    { id: 'tree.walks', judge: 'deterministic', threshold: 1, description: 'Jev walks the note to the section the turn needs, in at most three calls (one on voice, only in a skill_* turn).' },
+    { id: 'tree.no_luna', judge: 'deterministic', threshold: 1, description: 'luna\'s selectSections is never asked while tree recall is on.' },
+    { id: 'tree.fenced', judge: 'deterministic', threshold: 1, description: 'The recalled text reaches the request inside one fenced block labelled as data, not instructions.' },
+    { id: 'tree.prepared', judge: 'deterministic', threshold: 1, description: 'Her folder is listed in the background after a turn, never inside one.' },
+    { id: 'tree.traced', judge: 'deterministic', threshold: 1, description: 'Each Jev call is one decision trace recall_beam (closed values only).' },
+  ]);
+
+export const recallGuestScenario = definition('recall.guest', 'understand_people', 'ほかの人の前の想起',
+  'Jev には見出しと冒頭200字だけを見せ、ほかの人がいる時はスキルとフォルダを木に入れず（呼ぶ前と後で確かめ）、思い出したメモには今までどおり印が付くか。', [
+    { id: 'guest.previews_only', judge: 'deterministic', threshold: 1, description: 'Jev is shown heading paths and previews of at most 200 characters, and no id.' },
+    { id: 'guest.no_owner_nodes', judge: 'deterministic', threshold: 1, description: 'With others present, before or after a call, no skill or folder node is shown or kept.' },
+    { id: 'guest.marked', judge: 'deterministic', threshold: 1, description: 'With others present the recalled note carries the unlabelled marker, as before.' },
+  ]);
+
+export const RECALL_SCENARIOS: readonly ReachScenarioDefinition[] = Object.freeze([recallTreeScenario, recallGuestScenario]);

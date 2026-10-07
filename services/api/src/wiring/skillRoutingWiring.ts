@@ -37,10 +37,21 @@ function configuredTurnChooser(
   options: { trace: DecisionTraceWriter | null; jevFetch?: typeof fetch; now?: () => string },
 ): TurnChooser | null {
   if (!switches.stage2 || (!switches.toolMenu && !switches.difficulty)) return null;
+  const jev = configuredJevChooser(environment, options);
+  return jev ? new JevTurnChooser(jev, { toolMenu: switches.toolMenu, difficulty: switches.difficulty }) : null;
+}
+
+/**
+ * The stage-2 Jev client with its trace writer (the turn's call, and tree recall's beam): the same endpoint, model and timeout as
+ * the voice router's Jev (`createConfiguredVoiceDecisionGateway`), counted like it. Null without `TYPESAFE_API_KEY`.
+ */
+export function configuredJevChooser(
+  environment: Readonly<Record<string, string | undefined>>,
+  options: { trace: DecisionTraceWriter | null; jevFetch?: typeof fetch; now?: () => string },
+): JevChooser | null {
   const apiKey = environment.TYPESAFE_API_KEY?.trim();
   if (!apiKey) return null;
   const timeout = Number(environment.SHANNON_JEV_TIMEOUT_MS);
-  // The same endpoint, model and timeout as the voice router's Jev (`createConfiguredVoiceDecisionGateway`), counted like it.
   const client = new JevChoiceClient({
     apiKey,
     ...(environment.SHANNON_JEV_ENDPOINT?.trim() ? { endpoint: environment.SHANNON_JEV_ENDPOINT.trim() } : {}),
@@ -49,7 +60,7 @@ function configuredTurnChooser(
     fetcher: options.trace ? countedJevFetch(options.jevFetch) : options.jevFetch ?? fetch,
   });
   const write = options.trace;
-  const jev = new JevChooser(client, {
+  return new JevChooser(client, {
     usdPerCall: jevUsdPerCall(environment),
     ...(options.now ? { now: options.now } : {}),
     ...(write ? { trace: (scopeKey: string, trace: JevChoiceTrace) => write(scopeKey, {
@@ -58,7 +69,6 @@ function configuredTurnChooser(
       costUsd: trace.costUsd, relatedId: null, at: trace.at,
     }) } : {}),
   });
-  return new JevTurnChooser(jev, { toolMenu: switches.toolMenu, difficulty: switches.difficulty });
 }
 
 /**

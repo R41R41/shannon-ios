@@ -17,6 +17,7 @@ import { configuredVoiceDecision, startRewardMood } from './wiring/cognitionLedg
 import { readToolPorts, skillRoutingParts } from './wiring/skillRoutingWiring.js';
 import { configuredTurnRouting } from './wiring/turnRoutingWiring.js';
 import { configuredSkillMemory, skillTurnPorts } from './wiring/skillMemoryWiring.js';
+import { configuredTreeRecall } from './wiring/treeRecallWiring.js';
 import { storyReacted, toolCallChoice, touchLedger } from './wiring/cognitionLedgerTaps.js';
 import { createValuesRoute, isValuesPath, ownerValueRecorder } from './infra/http/learningRoutes.js';
 import { configuredAuthPepper, SQLiteDeviceAuthStore } from './infra/auth/deviceAuth.js';
@@ -113,6 +114,9 @@ const autonomy = new ShannonAutonomyService({
 // Syzygy ADR-0008 stage 2, step 6 (docs/skill-and-routing-contract.md): her skill memory, its tables created here. SHANNON_SKILLS=off: none of it.
 const skillMemory = configuredSkillMemory(process.env, { databasePath: configuredDatabasePath(), createsSchema: true });
 const skills = skillMemory ? skillTurnPorts(skillMemory.memory, scopeKey => persistentStore.snapshot(scopeKey)) : null;
+// Step 8: tree recall over her notes, and with the owner alone her skills and her Aether folder. SHANNON_TREE_RECALL=off: recall as it was.
+const treeRecall = configuredTreeRecall(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, skills: skillMemory?.memory ?? null,
+  snapshot: scopeKey => persistentStore.snapshot(scopeKey), aether: { access: aetherPorts.access, covers: scopeKey => scopeKey === aetherPorts.studyScopeKey } });
 // Syzygy ADR-0008 stage 2, step 4 (docs/skill-and-routing-contract.md): the tier policy's inputs, the verifier, and the learning of her
 // conversation choices (and, step 6, the uses of her skills). SHANNON_ADR8_STAGE2=off: none of it.
 const turnRouting = configuredTurnRouting(process.env, { databasePath: configuredDatabasePath(), choices: choiceLedger, usageStore: persistentStore, now, skills });
@@ -182,7 +186,7 @@ const kernel = createLocalApiKernel(now, {
   worldSubscriptions: worldStore,
   cognitiveIntents: cognitiveIntentStore,
   conversationOrchestration: conversationOrchestrationStore,
-  memoryRecall: createConfiguredTurnMemoryRecall(persistentStore),
+  memoryRecall: createConfiguredTurnMemoryRecall(persistentStore, process.env, undefined, treeRecall),
   autonomy,
   // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
   body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), appLook: configuredAppLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: (scopeKey, deviceId) => privateListeningRoute.reachOuts.bodyPresence(scopeKey, deviceId, reachOuts.pending(scopeKey)), reachOutReports: privateListeningRoute.bodyReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env, configuredDatabasePath(), persistentStore, persistentStore.predictionShadow(), predictionLedger ? touchLedger(predictionLedger) : null),

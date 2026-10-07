@@ -220,7 +220,7 @@ export class ShannonApiKernel {
     this.autonomy = options.autonomy ?? createInMemoryAutonomyService(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) });
     this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now); this.ownOutreach = options.ownOutreach ? new OwnOutreach(options.ownOutreach, this.now) : null;
     this.body = new ShannonBody({ ...options.body, stateStore: this.stateStore, autonomy: this.autonomy, conversationStore: this.conversationStore, now: this.now });
-    this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now);
+    this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now); this.memoryRecall?.watchAudience?.(this.toolServer.audience); // Stage 2, step 8.
     this.readTools = Boolean(options.readTools && this.autonomy.tools);
     if (options.readTools) this.autonomy.tools?.useReads(options.readTools);
     this.skills = options.skills && this.autonomy.tools ? options.skills : null; if (this.skills) this.autonomy.tools?.useSkills(this.skills); // Stage 2, step 6: skill.read.

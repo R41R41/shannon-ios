@@ -299,11 +299,11 @@ async function completeLiveVoiceDelegation(
       participants: temporaryGuest ? [] : dependencies.personIdentities?.list(scopeKey).filter(person => person.status === 'active' && transcript.includes(person.displayName)).map(person => person.displayName),
     },
   );
-  const complexTurn = decision.conversationClass === 'skill_complex';
+  const complexTurn = decision.conversationClass === 'skill_complex' || dependencies.memoryRecall?.walksTree?.(decision.conversationClass) === true; // Stage 2, step 8: a skill_* turn walks the tree.
   const recalled = !legacyGuest && dependencies.memoryRecall
     && (semanticMemoryTurn || complexTurn || decision.selectedSkills.includes('conversation_memory'))
     ? await dependencies.memoryRecall.enrich(deterministicContext, { scopeKey, message: transcript, snapshot: captured, threadId,
-      memoryTurn: semanticMemoryTurn, complexTurn, ...(observer?.signal ? { signal: observer.signal } : {}) }) : null;
+      memoryTurn: semanticMemoryTurn, complexTurn, voiceClass: decision.conversationClass, ...(observer?.signal ? { signal: observer.signal } : {}) }) : null;
   const cognitiveContext = recalled ?? deterministicContext;
   // Fixed first, what changes last (`ShannonPromptLayers`): her profile follows the fixed blocks, the state opens the turn's context.
   // The slim path drops owner state, never the identity: persona, suite roles and capabilities stay.

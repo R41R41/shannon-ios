@@ -134,6 +134,10 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/wiring/skillMemoryWiring.ts',
     // Step 7: her skills' readable copies in Aether, and the owner's edits of them adopted.
     'services/api/src/integrations/aether/skillExport.ts',
+    // Step 8: tree recall (the beam, its tree and Jev's questions) and its wiring.
+    'services/api/src/mind/recall/treeBeam.ts',
+    'services/api/src/mind/recall/treeRecall.ts',
+    'services/api/src/wiring/treeRecallWiring.ts',
     'services/api/src/mind/memory/memoryService.ts',
     'services/api/src/mind/recall/memoryModels.ts',
     'services/api/src/mind/memory/memoryProjection.ts',

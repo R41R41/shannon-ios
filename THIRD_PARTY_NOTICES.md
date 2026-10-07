@@ -99,7 +99,9 @@ Shannon's skill sleep (Syzygy ADR-0008 stage 2) adapts review rules and skill-pr
 and the lesson layer of `agent/background_review.py` (`_DO_NOT_CAPTURE_BLOCK`, `_LESSON_LAYER_BLOCK`),
 rewritten for Shannon in `services/api/src/mind/sleep/skillSleepRules.ts`; per-revision provenance,
 pinning and rollback with a safety snapshot; the capacity line of the skills index; and the threat-pattern
-scan of written text (`services/api/src/mind/memory/skillDocument.ts`, `skillMemory.ts`).
+scan of written text (`services/api/src/mind/memory/skillDocument.ts`, `skillMemory.ts`); and, in tree recall,
+the fenced data block around recalled text and preparing the next turn's recall in the background
+(`services/api/src/mind/recall/treeRecall.ts`).
 
 Hermes Agent, Copyright (c) 2025 Nous Research, MIT License.
 

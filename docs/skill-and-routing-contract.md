@@ -17,7 +17,7 @@
 | 5 | The Anthropic adapter (`@anthropic-ai/sdk`, I-6), `TieredChatModel`, the `tier.*` scenario set | not yet (inert until the key and the switch) |
 | 6 | Skill memory: the pattern wiki, the maintainer and the proposer, trials and the audit, the index, `skill.read`, `skill.use` | in place on branch `adr8-stage2-skills` (`mind/memory/{skillDocument,skillMemory,memoryPorts}.ts`, `mind/memory/store/sqliteSkills.ts`, `mind/sleep/{skillConsolidation,skillSleepModel,skillSleepRules}.ts`, `mind/tools/shannonSkillTools.ts`, `wiring/skillMemoryWiring.ts`; tests `skillMemory.test.ts`, `reachSkills.test.ts`, `stage2SwitchedOff.test.ts`) |
 | 7 | Skill copies in Aether, the owner's edits adopted | in place on branch `adr8-stage2-skills` (`integrations/aether/skillExport.ts`, `configuredSkillExport` in `wiring/skillMemoryWiring.ts`, `worker.ts`; tests `skillExport.test.ts`, scenario `skill.export`) |
-| 8 | Tree recall | not yet (another branch) |
+| 8 | Tree recall | in place on branch `adr8-stage2-skills` (`mind/recall/{treeBeam,treeRecall}.ts`, `recallShannonKnowledge`'s tree path in `mind/recall/turnKnowledgeRecall.ts`, `wiring/treeRecallWiring.ts`; tests `treeRecall.test.ts`, `stage2SwitchedOffRecall.test.ts`, scenarios `recall.tree`, `recall.guest`) |
 | 9 | Scenario suite v2, shown to the owner, deployment | not yet |
 
 ## Owner answers (2026-10-07)
@@ -130,6 +130,20 @@ Owner answers I-4 「全部置く」 and I-5. `integrations/aether/skillExport.t
 - **The owner's edits.** When a copy's version in Aether is not the one she last wrote, it was edited there: at that sleep she reads it and adopts it as a new version of the skill (`adoptOwnerEdit`: actor `owner`, `made_by` `owner_edit`, active, any trial superseded in the audit; his text is kept as he wrote it, and a text that is not a SKILL.md keeps the skill's name and description). She never writes over it, and the sleep never patches his version. An edit that carries what must never enter a skill, carries an injection, is longer than she reads whole, or cannot be checked now is **held**: the skill keeps its version and the copy is never written again (`export_hold` `owner_edit_unadopted`). A copy he deleted is not created again (`owner_deleted`). An update answered `STALE_VERSION` (he edited it a moment before) writes nothing; the next sleep adopts it.
 - **Record.** One log line a night: `Shannon skill export: status=done created=… updated=… unchanged=… adopted=… held=… deleted=… failed=…`; a failure is counted by its code and never fails the sleep.
 
+## Tree recall (step 8, `SHANNON_TREE_RECALL`)
+
+ADR-0008 §3 「想起とスキル探し：フォルダや見出しの木を Jev でたどる（ビーム幅 4 程度）。拾った断片の役立ち度を採点し、十分な断片が出たら止める」. It **replaces luna's `selectSections`** in `recallShannonKnowledge` (`mind/recall/turnKnowledgeRecall.ts`): while tree recall is configured luna never navigates a note.
+
+- **The tree** (`treeRecall.ts`): her knowledge notes the turn may use (the chosen ones first, then the rest by recency, at most twenty), each by its heading tree; and, only while the owner alone can see or hear the reply (the turn's presence, and what the server knows of others present), her usable skills by their sections and the documents of 「シャノン用フォルダ」 and her study by title (I-7: the owner's documents only when he is alone; the folder's copies of her skills are left out, they are the skills).
+- **What Jev sees** (I-7): the turn's words (at most 2,000 characters) and, for each node, its heading path and at most 200 characters of its own text. No id, no body, no audience. One `noul` question per node: how useful is this passage for answering now.
+- **The beam** (`treeBeam.ts`, pure): width 4, depth at most 3; a leaf (or any node at the last level) that scores is a passage, and the four best others scoring at least 0.3 are opened. It stops at two passages of at least 0.8, at useful passages (≥ 0.5) summing to 1.6, when the time is up, when Jev fails, or when nothing is left. An opened node none of whose descendants was useful stands as a passage of its own.
+- **When.** Text: every turn that recalls knowledge (or, with the owner alone, has skills or a folder to walk), within 1.5 s. Voice: only a turn of a `skill_*` class (a `skill_simple` turn now recalls too), one level, within 900 ms; any other voice turn keeps the deterministic sections. Past the time the turn goes on with what it has; when Jev fails, the deterministic sections stand (as when luna failed).
+- **The audience** is checked before and after each call: an owner-only node is never shown to Jev unless he is alone before the call, and is dropped if he is not alone after it.
+- **The result**: the sections chosen per note (else the deterministic ones), at most four notes (the chosen three and what the beam found), her skills' passages, and pointers to folder documents (a story of her study without its title). All of it reaches the turn **inside one fenced block labelled as data, not instructions** (`fencedRecall`, Hermes Agent); a fence inside a passage cannot close it. With others present the block carries the unlabelled marker, as the notes always did.
+- **Prepared ahead** (Hermes Agent): when a recall ends, the next turn's skill and folder nodes are prepared in the background (the folder is listed through Aether then, never inside a turn), so a turn, above all a voice turn, does not wait for them.
+- **Traces**: one `recall_beam` per Jev call, closed values only. Cost: up to three Jev calls a text turn.
+- **Switched off** (`SHANNON_TREE_RECALL=off`, stage 2 off, or no Jev key): recall is exactly what it was; `stage2SwitchedOffRecall.test.ts` holds it against digests recorded on ca7cf519 (`fixtures/stage2-switched-off-recall-v1.json`).
+
 ## Decision traces
 
 The trace vocabulary (`contracts/decisionTraceContract.ts`, table `shannon_decision_traces`, unchanged) gains the surface `text` and three decisions:
@@ -138,7 +152,7 @@ The trace vocabulary (`contracts/decisionTraceContract.ts`, table `shannon_decis
 | --- | --- | --- |
 | `tool_menu` | Jev's choice of the tools whose schemas a turn sends | the chosen tool's name (or `none`), how many were offered, how many groups |
 | `difficulty` | Jev's difficulty questions (and the menu, in the same call) | `kind`, `strong`, `verify`, `multi`, `retry` (−1 when not asked or not answered), and the menu's answers when there was one; the tier itself is recorded as the choice `tier.<served>` |
-| `recall_beam` | one beam search of tree recall (step 8) | depth, width, leaves scored, stop reason |
+| `recall_beam` | one level of a beam search of tree recall (step 8): one trace per Jev call | `level`, `width`, `scored`, `best`, `useful`, `stop` (`continue`, `enough`, `sum`, `exhausted`, `failed`) |
 
 A trace never holds the owner's words, a tool's input or a heading's text. Jev's cost per call follows stage 1 (`SHANNON_JEV_USD_PER_CALL`, unset: unknown).
 
@@ -152,4 +166,4 @@ Each stage's exit criteria include structural refactoring. For stage 2: `process
 
 ## The switched-off proof
 
-`services/api/tests/stage2SwitchedOff.test.ts` runs twelve scenarios (text: tools offered, the schedule, tasks and Notion projections, a forced web search, others present, two turns, a tool round; voice: a greeting, tools, the schedule, a companion present) through the API kernel with the real OpenAI adapter and the real Jev voice gateway over a capturing fetch, and digests every provider and Jev request with random ids taken out. The digests (`tests/fixtures/stage2-switched-off-v1.json`) were recorded on ca7cf519 itself, before any stage-2 code, and are never regenerated for a stage-2 change. Every later step runs the scenarios with the stage-2 wiring built from `SHANNON_ADR8_STAGE2=off` and must send the same bytes, and no other Jev request.
+`services/api/tests/stage2SwitchedOff.test.ts` runs twelve scenarios (text: tools offered, the schedule, tasks and Notion projections, a forced web search, others present, two turns, a tool round; voice: a greeting, tools, the schedule, a companion present) through the API kernel with the real OpenAI adapter and the real Jev voice gateway over a capturing fetch, and digests every provider and Jev request with random ids taken out. The digests (`tests/fixtures/stage2-switched-off-v1.json`) were recorded on ca7cf519 itself, before any stage-2 code, and are never regenerated for a stage-2 change. Every later step runs the scenarios with the stage-2 wiring built from `SHANNON_ADR8_STAGE2=off` and must send the same bytes, and no other Jev request. The wiring includes the skill memory with a skill in it (step 6) and the export (step 7). A second set of recall scenarios (`stage2SwitchedOffRecall.test.ts`, `support/stage2RecallScenarios.ts`: a long note navigated by luna in text, with others present, in a `skill_complex` and a `skill_simple` voice turn) was recorded the same way on ca7cf519 (a detached worktree of that commit) and holds tree recall's switch.
