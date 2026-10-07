@@ -35,3 +35,4 @@ export { type KnowledgeStore } from './store/knowledgeStore.js';
 export { type PeopleMemoryStore, type PersonMemoryItem, type RememberedPerson } from './peopleMemoryContract.js';
 export { type PersonIdentityStore } from './store/personIdentity.js';
 export { type TurnCaptureRecord } from './store/turnCaptures.js';
+export { type PeopleMemory } from './peopleMemory.js';

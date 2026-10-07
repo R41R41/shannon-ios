@@ -302,7 +302,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/action/ownTime/autonomyLoopThinkStep.ts',
     'services/api/src/mind/action/ownTime/autonomyLoopFollowUpStep.ts',
     'services/api/src/mind/action/ownTime/autonomyLoopCalls.ts',
-    'services/api/src/surfaces/outreach/store/reachOutReports.ts',
+    'services/api/src/mind/attention/store/reachOutReports.ts',
     // She paces her own day: when a session may begin, what stops it, when the next begins, and what the owner is shown of it.
     'services/api/src/mind/action/ownTime/autonomyLoopPacing.ts',
     'services/api/src/mind/action/ownTime/store/autonomyLoopSessions.ts',
@@ -337,11 +337,15 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // Moved out of the kernel and the voice delegation for their size (Syzygy ADR-0008 §10), unchanged.
     'services/api/src/infra/http/apiTestFlightRoutes.ts',
     'services/api/src/surfaces/voice/voiceGrounding.ts',
-    'services/api/src/surfaces/text/apiTextTurn.ts',
+    'services/api/src/mind/action/respond/apiTextTurn.ts',
     'services/api/src/infra/http/apiValidation.ts',
     'services/api/src/surfaces/voice/apiLiveVoice.ts',
     'services/api/src/surfaces/voice/apiVoiceTurns.ts',
     'services/api/src/infra/models/chatModel.ts',
+    // Stage 3 (S3): its contract, its adapters and the fixed words of a voice reply, split out of it unchanged.
+    'services/api/src/infra/models/chatModelContract.ts',
+    'services/api/src/infra/models/openAIChatModel.ts',
+    'services/api/src/mind/action/respond/respondInstructions.ts',
     'services/api/src/contracts/contracts.ts',
     'services/api/src/mind/workspace/turnCognitiveContext.ts',
     'services/api/src/mind/recall/turnMemoryRecall.ts',

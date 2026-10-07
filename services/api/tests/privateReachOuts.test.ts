@@ -15,9 +15,9 @@ import { PRIVATE_REACH_OUT_LIMITS, privateReachOutListenSeconds, privateReachOut
 import { dispatchPrivateListeningRequest } from '../src/surfaces/body/privateListeningRoutes.js';
 import { SQLitePrivateListeningStore, type PrivateListener } from '../src/surfaces/body/store/privateListeningStore.js';
 import { PrivateReachOuts, chosenSpeaker } from '../src/surfaces/outreach/privateReachOuts.js';
-import { SQLiteReachOutClaims } from '../src/surfaces/outreach/store/reachOutClaims.js';
+import { SQLiteReachOutClaims } from '../src/mind/attention/store/reachOutClaims.js';
 import { SQLiteReachOutSpeaker } from '../src/surfaces/outreach/reachOutDelivery.js';
-import { SQLiteReachOutReports } from '../src/surfaces/outreach/store/reachOutReports.js';
+import { SQLiteReachOutReports } from '../src/mind/attention/store/reachOutReports.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 
 const scope = 'owner';

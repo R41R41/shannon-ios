@@ -22,9 +22,10 @@
  * with a known device, while another device is in a call. The apps are never refused, a guest call is never
  * refused, and a request without a device is never refused (fail open).
  */
+import type { OwnerCallSurface, OwnerCallElsewhere } from '../../contracts/ownerCallContract.js';
+export { type OwnerCallSurface, type OwnerCallElsewhere } from '../../contracts/ownerCallContract.js';
+
 export { SQLiteOwnerCallFacts } from './store/ownerCallFacts.js';
-export type OwnerCallSurface = 'ios' | 'mac';
-export interface OwnerCallElsewhere { active: boolean; since?: string; surface?: OwnerCallSurface }
 
 export const OWNER_CALL_LIMITS = Object.freeze({
   /** A `callStarted` without its `callEnded` stops counting after this long. */

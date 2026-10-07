@@ -2,8 +2,8 @@ import type { BodyReachOutDeliveryOutcome } from '../../contracts/bodyContract.j
 import { isDesktopBodyDeviceId } from '../body/desktopBodyIdentity.js';
 import { PRIVATE_REACH_OUT_LIMITS, type PrivateReachOutOutcome } from '../../contracts/privateListeningContract.js';
 import type { PrivateListener, SQLitePrivateListeningStore } from '../body/store/privateListeningStore.js';
-import type { ClaimedReachOut, ReachOutClaim, SQLiteReachOutClaims, UnreadReachOut } from './store/reachOutClaims.js';
-import type { ReachOutReportResult, SQLiteReachOutReports } from './store/reachOutReports.js';
+import type { ClaimedReachOut, ReachOutClaim, SQLiteReachOutClaims, UnreadReachOut } from '../../mind/attention/attentionPorts.js';
+import type { ReachOutReportResult, SQLiteReachOutReports } from '../../mind/attention/attentionPorts.js';
 
 /**
  * A message she started on her own, spoken through the owner's earphones (owner decision 2026-10-02).

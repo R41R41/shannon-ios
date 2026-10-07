@@ -17,9 +17,9 @@ import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiative
 import { dispatchPrivateListeningRequest } from '../src/surfaces/body/privateListeningRoutes.js';
 import { SQLitePrivateListeningStore } from '../src/surfaces/body/store/privateListeningStore.js';
 import { PrivateReachOuts } from '../src/surfaces/outreach/privateReachOuts.js';
-import { SQLiteReachOutClaims } from '../src/surfaces/outreach/store/reachOutClaims.js';
+import { SQLiteReachOutClaims } from '../src/mind/attention/store/reachOutClaims.js';
 import { SQLiteReachOutSpeaker } from '../src/surfaces/outreach/reachOutDelivery.js';
-import { SQLiteReachOutReports } from '../src/surfaces/outreach/store/reachOutReports.js';
+import { SQLiteReachOutReports } from '../src/mind/attention/store/reachOutReports.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { APNsVoipPushSender, createConfiguredVoipPushSender, type VoipPushResult, type VoipPushSender, type VoipPushTarget } from '../src/surfaces/outreach/voipPushSender.js';
 import { readApiSource } from './support/sources.js';

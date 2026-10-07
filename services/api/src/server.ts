@@ -72,15 +72,15 @@ import { CALENDAR_UPCOMING_PATH, calendarRequestBytes } from './contracts/calend
 import { HOST_STEP_CLAIM_PATH, closedSignal, hostStepRequestBytes } from './infra/http/apiAutonomyHostStepRoutes.js';
 import { configuredOwnerUpcoming } from './wiring/ownerUpcomingWiring.js';
 import { SQLiteReachOutSpeaker } from './surfaces/outreach/reachOutDelivery.js';
-import { SQLiteReachOutReports } from './surfaces/outreach/store/reachOutReports.js';
+import { SQLiteReachOutReports } from './mind/attention/store/reachOutReports.js';
 import { SHANNON_NOW_PATH, shannonNowEnabled, shannonNowOwnerScope } from './contracts/shannonNowContract.js';
 import { SQLiteShannonNowReader } from './mind/self/store/shannonNowReader.js';
 import { createShannonNowRoute } from './infra/http/serverShannonNowRoute.js';
 import { MOOD_HISTORY_PATH, moodHistoryEnabled } from './contracts/moodHistoryContract.js';
 import { SQLiteMoodHistoryReader } from './mind/emotion/store/moodHistoryReader.js';
 import { createMoodHistoryRoute } from './infra/http/serverMoodHistoryRoute.js';
-import { createPrivateListeningRoute } from './surfaces/body/serverPrivateListeningRoute.js';
-import { createIncomingCallRoute, type IncomingCallRoute } from './surfaces/outreach/serverIncomingCallRoute.js';
+import { createPrivateListeningRoute } from './wiring/serverPrivateListeningRoute.js';
+import { createIncomingCallRoute, type IncomingCallRoute } from './wiring/serverIncomingCallRoute.js';
 import { SQLiteOwnOutreach } from './surfaces/outreach/ownOutreach.js';
 import { SQLiteOwnerCallFacts, ownerCallElsewhereEnabled } from './surfaces/voice/ownerCallElsewhere.js';
 import { createServerSelfDiagnosis } from './infra/ops/serverSelfDiagnosis.js';

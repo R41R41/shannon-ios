@@ -94,7 +94,7 @@ import { OwnOutreach, type OwnOutreachReader } from '../../surfaces/outreach/own
 import { voiceSessionCalls } from '../../surfaces/voice/ownerCallElsewhere.js';
 import {
   NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type TextTurnInput, type TextTurnResult,
-} from '../../surfaces/text/apiTextTurn.js';
+} from '../../mind/action/respond/apiTextTurn.js';
 import { randomUUID } from 'node:crypto';
 import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
 import { generateChatTurn, withSentenceStream } from '../../surfaces/text/chatSentenceStream.js';
@@ -112,7 +112,7 @@ import { isExplicitVoyagerUpdateRequest } from '../../integrations/voyager/organ
 import { optionalPlaceDiscoverySkill, placeSkillReply } from '../../integrations/places/placeDiscoverySkill.js';
 import type { ChatResponse } from '../../contracts/contracts.js';
 import { withWorkspace, type MindTurnPorts } from '../../mind/workspace/workspacePorts.js';
-export type { TextTurnInput, TextTurnResult, TextTurnSurface } from '../../surfaces/text/apiTextTurn.js';
+export type { TextTurnInput, TextTurnResult, TextTurnSurface } from '../../mind/action/respond/apiTextTurn.js';
 export interface ShannonApiKernelOptions {
   chatModel?: ShannonChatModel;
   voiceDecision?: VoiceDecisionGateway;

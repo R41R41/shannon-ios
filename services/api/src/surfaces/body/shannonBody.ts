@@ -1,11 +1,7 @@
 import { createHash } from 'node:crypto';
 import { SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME, presentShannonFeeling, type CompanionStateStore } from '@shannon/cognition';
-import type { AutonomyActivityDay } from '../../mind/inhibition/inhibitionPorts.js';
-import type { AutonomyControlLabel, ShannonAutonomyService } from '../../mind/action/ownTime/autonomyService.js';
-import {
-  BODY_LIMITS, BODY_SCHEMA_VERSION, BODY_TOUCH_EVENT_TYPES, BODY_TOUCH_VOCABULARY, isBodyGameEvent, isImpossibleTouch,
-  type BodyAudience, type BodyCapabilities, type BodyDoing, type BodyEvent, type BodyEventType, type BodyNudge, type BodyReachOutDeliveryOutcome,
-} from '../../contracts/bodyContract.js';
+import type { ShannonAutonomyService } from '../../mind/action/ownTime/autonomyService.js';
+import { BODY_LIMITS, BODY_SCHEMA_VERSION, BODY_TOUCH_EVENT_TYPES, BODY_TOUCH_VOCABULARY, isBodyGameEvent, isImpossibleTouch, type BodyAudience, type BodyCapabilities, type BodyEvent, type BodyEventType, type BodyReachOutDeliveryOutcome } from '../../contracts/bodyContract.js';
 import { AppLooks, type AppLookOptions } from './appLook.js';
 import { APP_LOOK_TOOL } from './appLookLines.js';
 import { BODY_LOOK_TOOL, BodyLooks, type BodyLookOptions } from './bodyLook.js';
@@ -22,7 +18,7 @@ import { desktopBodyDeviceId, isDesktopBodyDeviceId } from './desktopBodyIdentit
 import { bodyPlace, bodySurfaceMark, factualTouchPhrase, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
 import { isReflexPart } from './bodyTouchReflex.js';
 import { ConversationLooks } from '../../mind/perception/conversationLooks.js';
-import { OWNER_CALL_LIMITS, OwnerCalls, type OwnerCallDependencies, type OwnerCallElsewhere, type OwnerCallSurface } from '../voice/ownerCallElsewhere.js';
+import { OWNER_CALL_LIMITS, OwnerCalls, type OwnerCallDependencies, type OwnerCallSurface } from '../voice/ownerCallElsewhere.js';
 import type { TouchExperienceWriter } from '../../mind/memory/bodyTouchExperience.js';
 import { gameDeathExperience, type GameExperienceWriter } from '../minecraft/store/gameBodyMemory.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './store/bodyStore.js';
@@ -30,7 +26,9 @@ import { presentCompanionState } from '../../mind/emotion/companionPresence.js';
 import { ownerDay } from '@shannon/cognition';
 import { emotionTiming } from '../../mind/emotion/emotionTiming.js';
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
-import type { ReachOutReportResult, SQLiteReachOutReports } from '../outreach/store/reachOutReports.js';
+import type { ReachOutReportResult, SQLiteReachOutReports } from '../../mind/attention/attentionPorts.js';
+import { type BodyPresence, type BodyPresenceUnchanged, type BodyNudges, bodyDoing } from './bodyPresence.js';
+export { type BodyPresence, type BodyPresenceUnchanged, type BodyNudges, bodyDoing } from './bodyPresence.js';
 
 /**
  * Shannon's body (the Live2D desktop application), seen from her mind.
@@ -85,59 +83,6 @@ export interface BodyIngestReceipt {
   stored: number;
   duplicates: number;
   results: readonly BodyEventResult[];
-}
-
-export interface BodyPresence {
-  schemaVersion: number;
-  etag: string;
-  /** When this server first saw the snapshot with this `etag`. */
-  changedAt: string;
-  pollAfterSeconds: number;
-  /** The touch vocabulary this server takes (`BODY_TOUCH_VOCABULARY`); a body sends the fields of vocabulary 2 only once it sees 2 or more. */
-  touchVocabulary: number;
-  mood: {
-    expression: string; feeling?: string; primary: string; intensity: number; fromConversation: boolean;
-    valence: number; arousal: number; openness: number;
-  };
-  doing: BodyDoing;
-  autonomy: { state: AutonomyControlLabel };
-  study: { awaitingReaction: number };
-  capabilities: StoredBodyCapabilities | null;
-  /** A look this device is asked to take now, or null. Absent while looks are switched off on the server. */
-  look?: { id: string; requestedAt: string; expiresAt: string } | null;
-  /** Unread messages she started on her own; `latestId` is the newest one's initiative id. Absent when the server does not deliver them. */
-  reachOut?: { pending: number; latestId?: string };
-  /** The owner is in a voice call on another of his apps (added 2026-10-05). Absent when switched off on the server. */
-  ownerCallElsewhere?: OwnerCallElsewhere;
-}
-
-export type BodyPresenceUnchanged = Pick<BodyPresence, 'schemaVersion' | 'etag' | 'changedAt' | 'pollAfterSeconds' | 'touchVocabulary'> & { unchanged: true };
-
-export interface BodyNudges {
-  schemaVersion: number;
-  generatedAt: string;
-  limits: { notDuringConversation: true; quietAfterConversationMinutes: number; maximumPerHour: number; maximumPerDay: number };
-  /** No nudge may be shown before this instant; null when no conversation is recent. */
-  quietUntil: string | null;
-  nudges: readonly BodyNudge[];
-}
-
-const STEP_DOING: Readonly<Record<string, BodyDoing>> = Object.freeze({
-  'study.think': 'thinking', 'study.read': 'reading', 'study.notion': 'reading', 'study.note': 'noting',
-  'study.draft': 'drafting', 'study.revise': 'revising', 'study.ready': 'showing', 'study.show': 'showing',
-});
-/** A step of the activity loop is shown for this long after its latest record. */
-const DOING_FRESH_MILLISECONDS = 3 * 60_000;
-
-/** What the loop is doing: its current or latest step while it is running, otherwise `idle`. */
-export function bodyDoing(loopState: string, days: readonly AutonomyActivityDay[], at: string): BodyDoing {
-  if (loopState !== 'running') return 'idle';
-  const latest = days.flatMap(day => day.entries).filter(entry => entry.actor === 'shannon' && entry.tool?.startsWith('study.')
-    && (entry.kind === 'action' || (entry.kind === 'decision' && entry.outcome === 'allowed')))
-    .sort((left, right) => right.sequence - left.sequence)[0];
-  if (!latest) return 'idle';
-  const age = Date.parse(at) - Date.parse(latest.occurredAt);
-  return age >= 0 && age <= DOING_FRESH_MILLISECONDS ? STEP_DOING[latest.tool ?? ''] ?? 'idle' : 'idle';
 }
 
 /** Only these reach a conversation turn; the rest are stored and nothing more. */

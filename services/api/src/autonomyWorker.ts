@@ -28,8 +28,8 @@ import { callGateContext } from './mind/action/ownTime/autonomyLoopPhoneStep.js'
 import { IncomingCallRequests, incomingCallMinimumIntervalMilliseconds, incomingCallsConfigured } from './surfaces/outreach/incomingCallRequests.js';
 import { SQLiteIncomingCallStore } from './surfaces/outreach/store/incomingCallStore.js';
 import { SQLitePrivateListeningStore } from './surfaces/body/store/privateListeningStore.js';
-import { SQLiteReachOutClaims } from './surfaces/outreach/store/reachOutClaims.js';
-import { SQLiteReachOutReports, reachOutBodyFacts } from './surfaces/outreach/store/reachOutReports.js';
+import { SQLiteReachOutClaims } from './mind/attention/store/reachOutClaims.js';
+import { SQLiteReachOutReports, reachOutBodyFacts } from './mind/attention/store/reachOutReports.js';
 import { ownToolsEnabled } from './mind/tools/shannonTools.js';
 import { configuredDatabasePath } from './infra/sqlite/sqliteStore.js';
 import { configuredPredictionShadow } from './mind/prediction/store/predictionShadow.js';

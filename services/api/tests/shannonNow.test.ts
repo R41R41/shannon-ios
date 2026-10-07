@@ -12,7 +12,7 @@ import { SQLiteBodyReactionStore } from '../src/surfaces/body/store/bodyReaction
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
 import { SQLiteIncomingCallStore } from '../src/surfaces/outreach/store/incomingCallStore.js';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
-import { SQLiteReachOutReports } from '../src/surfaces/outreach/store/reachOutReports.js';
+import { SQLiteReachOutReports } from '../src/mind/attention/store/reachOutReports.js';
 import { createShannonNowRoute, shannonNowResponse } from '../src/infra/http/serverShannonNowRoute.js';
 import { SHANNON_NOW_LIMITS, SHANNON_NOW_PATH, shannonNowEnabled, shannonNowOwnerScope, type ShannonNowResponse } from '../src/contracts/shannonNowContract.js';
 import { SQLiteShannonNowReader, type ReachOutDeliverySource } from '../src/mind/self/store/shannonNowReader.js';

@@ -592,7 +592,8 @@ describe('guests and other people present never move her feeling toward the owne
     const naming = files.filter(path => /replyFeeling|resolveTextReplyEmotion|resolveWrittenReplyEmotion/iu.test(readFileSync(path, 'utf8')))
       .map(path => basename(path)).sort();
     // (`autonomyCore.ts` names the module's path among the core paths.)
-    expect(naming).toEqual(['apiKernel.ts', 'autonomyCore.ts', 'chatModel.ts', 'chatModelSupport.ts', 'chatModelTurn.ts', 'chatReplyFeeling.ts', 'companionPresence.ts']);
+    // Syzygy ADR-0008 stage 3 (S3): the model's contract, split out of `chatModel.ts` unchanged, names the field now.
+    expect(naming).toEqual(['apiKernel.ts', 'autonomyCore.ts', 'chatModelContract.ts', 'chatModelSupport.ts', 'chatModelTurn.ts', 'chatReplyFeeling.ts', 'companionPresence.ts']);
     const kernel = readApiSource('apiKernel.ts');
     expect(kernel.match(/replyFeelingOffer\(audience\.alone\)/gu)).toHaveLength(1);
     expect(kernel.match(/resolveTextReplyEmotion\(\{[^}]*\}, completion, audience\.alone\)/gu)).toHaveLength(1);

@@ -203,9 +203,9 @@
       "why": "Owner-facing HTTP routes of her study"
     },
     "apiTextTurn.ts": {
-      "to": "surfaces/text/apiTextTurn.ts",
-      "wave": 6,
-      "why": "Text chat turn of the kernel"
+      "to": "mind/action/respond/apiTextTurn.ts",
+      "wave": 7,
+      "why": "Text chat turn of the kernel; stage 3 moved it to its part"
     },
     "apiValidation.ts": {
       "to": "infra/http/apiValidation.ts",
@@ -1328,9 +1328,9 @@
       "why": "Push notification registrations and delivery"
     },
     "reachOutClaims.ts": {
-      "to": "surfaces/outreach/store/reachOutClaims.ts",
-      "wave": 3,
-      "why": "SQL which surface speaks a reach-out"
+      "to": "mind/attention/store/reachOutClaims.ts",
+      "wave": 7,
+      "why": "SQL which surface speaks a reach-out; stage 3 moved it to its part"
     },
     "reachOutDelivery.ts": {
       "to": "surfaces/outreach/reachOutDelivery.ts",
@@ -1338,9 +1338,9 @@
       "why": "Delivers her reach-out message"
     },
     "reachOutReports.ts": {
-      "to": "surfaces/outreach/store/reachOutReports.ts",
-      "wave": 3,
-      "why": "SQL body reports on reach-outs"
+      "to": "mind/attention/store/reachOutReports.ts",
+      "wave": 7,
+      "why": "SQL body reports on reach-outs; stage 3 moved it to its part"
     },
     "realtimeVoice.ts": {
       "to": "surfaces/voice/realtimeVoice.ts",
@@ -1398,9 +1398,9 @@
       "why": "HTTP route helpers"
     },
     "serverIncomingCallRoute.ts": {
-      "to": "surfaces/outreach/serverIncomingCallRoute.ts",
-      "wave": 3,
-      "why": "Incoming call route and timer"
+      "to": "wiring/serverIncomingCallRoute.ts",
+      "wave": 7,
+      "why": "Incoming call route and timer; stage 3 moved it to its part"
     },
     "serverLiveVoiceStreamRoute.ts": {
       "to": "surfaces/voice/serverLiveVoiceStreamRoute.ts",
@@ -1443,9 +1443,9 @@
       "why": "Platform bridge route"
     },
     "serverPrivateListeningRoute.ts": {
-      "to": "surfaces/body/serverPrivateListeningRoute.ts",
-      "wave": 3,
-      "why": "Private listening route"
+      "to": "wiring/serverPrivateListeningRoute.ts",
+      "wave": 7,
+      "why": "Private listening route; stage 3 moved it to its part"
     },
     "serverRealtimeVoiceAllowanceRoute.ts": {
       "to": "surfaces/voice/serverRealtimeVoiceAllowanceRoute.ts",

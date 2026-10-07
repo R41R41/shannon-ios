@@ -17,3 +17,5 @@ export {
   type ProactiveDeliveryGate, type ProactiveDeliveryHold, type ProactiveDeliveryIntent, type ProactiveDeliveryVerdict, type ProactiveGateDependencies, type ProactivePoint,
 } from './proactiveDelivery.js';
 export type { ProactiveTopicRow, SQLiteProactiveTopics } from './store/proactiveTopicsStore.js';
+export { type ClaimedReachOut, type ReachOutClaim, type SQLiteReachOutClaims, type UnreadReachOut } from './store/reachOutClaims.js';
+export { type ReachOutReportResult, type SQLiteReachOutReports } from './store/reachOutReports.js';

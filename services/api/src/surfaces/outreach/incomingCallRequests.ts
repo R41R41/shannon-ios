@@ -5,7 +5,7 @@ import { INCOMING_CALL_LIMITS, incomingCallMinimumIntervalMilliseconds, incoming
 import type { SQLiteIncomingCallStore } from './store/incomingCallStore.js';
 import { privateReachOutsEnabled } from '../../contracts/privateListeningContract.js';
 import type { PrivateListener } from '../body/store/privateListeningStore.js';
-import type { SQLiteReachOutClaims } from './store/reachOutClaims.js';
+import type { SQLiteReachOutClaims } from '../../mind/attention/attentionPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import type { ProactiveDeliveryGate, ProactiveDeliveryIntent, ProactiveDeliveryHold, ProactiveReason } from '../../mind/attention/attentionPorts.js';
 

@@ -7,7 +7,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import { SQLiteReachOutSpeaker } from '../src/surfaces/outreach/reachOutDelivery.js';
-import { SQLiteReachOutClaims } from '../src/surfaces/outreach/store/reachOutClaims.js';
+import { SQLiteReachOutClaims } from '../src/mind/attention/store/reachOutClaims.js';
 import { SQLiteIncomingCallStore } from '../src/surfaces/outreach/store/incomingCallStore.js';
 import { IncomingCallRequests } from '../src/surfaces/outreach/incomingCallRequests.js';
 import { IncomingCalls } from '../src/surfaces/outreach/incomingCalls.js';

@@ -1,13 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
-import { INCOMING_CALL_LIMITS, INCOMING_CALL_PATH, incomingCallsEnabled } from '../../contracts/incomingCallContract.js';
-import { dispatchIncomingCallRequest, type IncomingCallRouteDependencies } from './incomingCallRoutes.js';
-import { IncomingCalls } from './incomingCalls.js';
-import { SQLiteIncomingCallStore } from './store/incomingCallStore.js';
-import { privateReachOutsEnabled } from '../../contracts/privateListeningContract.js';
-import { SQLiteReachOutClaims } from './store/reachOutClaims.js';
-import { bindScope, consumeDeviceAllowance, sendJson } from '../../infra/http/serverHttp.js';
-import { createConfiguredVoipPushSender, type VoipPushSender } from './voipPushSender.js';
+import type { ShannonDevicePrincipal } from '../infra/auth/deviceAuth.js';
+import { INCOMING_CALL_LIMITS, INCOMING_CALL_PATH, incomingCallsEnabled } from '../contracts/incomingCallContract.js';
+import { dispatchIncomingCallRequest, type IncomingCallRouteDependencies } from '../surfaces/outreach/incomingCallRoutes.js';
+import { IncomingCalls } from '../surfaces/outreach/incomingCalls.js';
+import { SQLiteIncomingCallStore } from '../surfaces/outreach/store/incomingCallStore.js';
+import { privateReachOutsEnabled } from '../contracts/privateListeningContract.js';
+import { SQLiteReachOutClaims } from '../mind/attention/store/reachOutClaims.js';
+import { bindScope, consumeDeviceAllowance, sendJson } from '../infra/http/serverHttp.js';
+import { createConfiguredVoipPushSender, type VoipPushSender } from '../surfaces/outreach/voipPushSender.js';
 
 /**
  * The HTTP side of a call from Shannon, and the timer that places one (`incomingCalls.ts`).

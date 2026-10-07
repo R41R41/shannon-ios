@@ -19,3 +19,5 @@ export { minecraftPerception, type MinecraftPerceptionInput } from './minecraftP
 export { platformPerception, type PlatformPerceptionInput } from './platformPerception.js';
 export { INBOX_PRESENT, inboxDetail, inboxPerception } from './inboxPerception.js';
 export type { MindPerceiver, PerceivedDetail, PerceivedItem, PerceivedVerdict } from './perceiver.js';
+export { type ChatAudienceTurn } from './chatAudience.js';
+export { type ConversationLookTurn } from './conversationLooks.js';

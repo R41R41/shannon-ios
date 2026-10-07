@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { REACH_OUT_SOURCE_PREFIX, reachOutOfSource } from '../reachOutDelivery.js';
+import { REACH_OUT_SOURCE_PREFIX, reachOutOfSource } from '../../../surfaces/outreach/reachOutDelivery.js';
 import { secureDatabaseFiles } from '../../../infra/sqlite/sqliteStoreContext.js';
 
 /**

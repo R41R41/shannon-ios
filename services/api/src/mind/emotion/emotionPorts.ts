@@ -3,5 +3,5 @@
  * may import of it. Her own time never imports it (rule `own-time-without-private-stores`); the awake clock is reached by the
  * worker alone (rule `awake-clock-from-worker`).
  */
-export { ownerDay, presentCompanionState, sharedTimeEvent, type PresentedCompanionState } from './companionPresence.js';
+export { ownerDay, presentCompanionState, resolveReplyEmotion, sharedTimeEvent, type PresentedCompanionState } from './companionPresence.js';
 export { emotionTiming } from './emotionTiming.js';

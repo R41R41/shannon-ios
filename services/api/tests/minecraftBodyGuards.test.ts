@@ -13,7 +13,7 @@ import { prepareTurnCognitiveContext } from '../src/mind/workspace/turnCognitive
 import { minecraftBodyRoute } from '../src/surfaces/minecraft/serverMinecraftBodyRoute.js';
 import type { MinecraftBody } from '../src/surfaces/minecraft/minecraftBody.js';
 import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.js';
-import { withoutGuardedEntries } from '../src/surfaces/text/apiTextTurn.js';
+import { withoutGuardedEntries } from '../src/mind/action/respond/apiTextTurn.js';
 import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
 import { LocalStubChatModel } from '../src/infra/models/chatModel.js';
 import { GAME_DISCLOSURE, GAME_REQUEST_DISCLOSURE } from '../src/surfaces/minecraft/store/gameBodyMemory.js';

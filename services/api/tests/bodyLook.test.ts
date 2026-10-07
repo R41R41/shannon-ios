@@ -727,12 +727,13 @@ describe('the frame is never kept', () => {
     const openers = names.filter(name => /looks\.open\(|store\.open\(/u.test(source(name)));
     // `appLook.ts` opens a look through the owner's app into its own table (`app_looks`), never into `body_looks`.
     expect(openers.sort()).toEqual(['appLook.ts', 'bodyLook.ts', 'bodyLookActivity.ts']);
-    const aware = names.filter(file => /^(?:autonomyLoop|autonomyPolicy|autonomyWorker|apiVoice|apiLiveVoice|platformBridge|voice)/u.test(file))
+    // The voice router was split in Syzygy ADR-0008 stage 3 (S3) into the local, Jev and OpenAI routers, unchanged: they count as it.
+    const aware = names.filter(file => /^(?:autonomyLoop|autonomyPolicy|autonomyWorker|apiVoice|apiLiveVoice|platformBridge|voice|jevVoice|openAIVoice|localVoice)/u.test(file))
       .filter(name => /bodyLook|roomLook|RoomLook/u.test(source(name)));
     expect(aware.sort()).toEqual(['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyLoopThinkStep.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts',
-      'voiceAppLook.ts', 'voiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRoomLook.ts']);
+      'jevVoiceDecision.ts', 'openAIVoiceDecision.ts', 'voiceAppLook.ts', 'voiceDecisionContract.ts', 'voiceRoomLook.ts']);
     // The voice side handles words and a probability: it has no room for a frame either.
-    for (const name of ['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'voiceAppLook.ts', 'voiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRoomLook.ts']) {
+    for (const name of ['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'voiceAppLook.ts', 'voiceDecision.ts', 'jevVoiceDecision.ts', 'openAIVoiceDecision.ts', 'localVoiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRoomLook.ts']) {
       expect(source(name), name).not.toMatch(/BodyLookImage|BodyLookResult|base64|RoomLookViewRequest|inlineData|\.image\b/u);
     }
     // The loop's side of a look, and the table the two processes share, have no room for a frame: text and token counts only.
