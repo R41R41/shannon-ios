@@ -26,8 +26,19 @@ import { sonnetToolRounds, type SonnetRoundResult } from './anthropicRounds.js';
  * - Usage: one `chat` row per response (input = uncached + cache write + cache read; cached = cache read), priced by
  *   `estimatedAnthropicCostUsd` (web searches included).
  * - First-token latency (`firstTokenLatency`): time from a turn's first request to its first word or tool call on a streamed
- *   turn; the rolling measurement the voice policy reads (owner answer I-2).
+ *   voice turn; the rolling measurement the voice policy reads (owner answer I-2). Text turns are measured apart
+ *   (`textFirstTokenLatency`), so they never move the voice estimate (review H3).
+ * - First-token watchdog (review H3): a request with `firstTokenBudgetMs` (a voice turn routed to Sonnet) is aborted when no word
+ *   and no tool call came within it (`SonnetFirstTokenTimeout`), before anything was said or run, so luna can answer instead;
+ *   on voice a round that ran out of time before any tool ran fails the same way instead of asking Sonnet again.
  */
+export class SonnetFirstTokenTimeout extends Error {
+  constructor() {
+    super('SONNET_FIRST_TOKEN_TIMEOUT');
+    this.name = 'SonnetFirstTokenTimeout';
+  }
+}
+
 export class FirstTokenLatency {
   private readonly samples: number[] = [];
 
@@ -64,6 +75,7 @@ export class AnthropicChatModel implements ShannonChatModel {
   readonly mode = 'anthropic' as const;
   readonly model: string;
   readonly firstTokenLatency = new FirstTokenLatency();
+  readonly textFirstTokenLatency = new FirstTokenLatency();
   private readonly client: Anthropic;
   private readonly clock: () => number;
 
@@ -94,14 +106,18 @@ export class AnthropicChatModel implements ShannonChatModel {
   private async text(request: ShannonChatModelRequest, onReplyText: ((text: string) => void | Promise<void>) | null): Promise<ShannonChatModelResult> {
     const body = sonnetChatBody(this.options.settings, request, this.options.agentHostHint);
     let written = '';
+    const watch = watchdog(request.firstTokenBudgetMs);
     const send = this.sender(request.scopeKey, onReplyText ? (delta, decoder) => {
       const text = decoder.push(delta);
       if (!text) return null;
       written += text;
       return Promise.resolve(onReplyText(text)).then(() => text);
-    } : null);
+    } : null, watch?.signal, this.textFirstTokenLatency, watch?.first);
     const usable = (message: Anthropic.Message) => { try { parsedChatTurn({ output_text: textOf(message) }); return true; } catch { return false; } };
-    const result = await sonnetToolRounds(body, { session: offersTools(request) ? request.tools : undefined, send, isAnswer: usable });
+    let result: SonnetRoundResult;
+    try {
+      result = await sonnetToolRounds(body, { session: offersTools(request) ? request.tools : undefined, send, isAnswer: usable, ...(watch ? { signal: watch.signal, timedOutRound: 'fail' as const } : {}) });
+    } catch (error) { throw watch?.timedOut() ? new SonnetFirstTokenTimeout() : error; } finally { watch?.clear(); }
     const outOfTime = (sent?: string): ShannonChatModelResult => this.outOfTimeTurn(request, sent ?? written);
     if (result.outOfTime || !result.final) return outOfTime(result.outOfTime?.sent);
     let structured: ReturnType<typeof parsedChatTurn>;
@@ -116,7 +132,8 @@ export class AnthropicChatModel implements ShannonChatModel {
     return { ...rest, mode: this.mode, model: this.model, ...(webSources.length ? { webSources } : {}) };
   }
 
-  private outOfTimeTurn(request: ShannonChatModelRequest, sent: string): ShannonChatModelResult {
+  /** Her fixed line after what was already written (also the tiered model's answer when a fallback would repeat a word or a tool). */
+  outOfTimeTurn(request: ShannonChatModelRequest, sent: string): ShannonChatModelResult {
     const reply = `${new ChatSentenceSplitter().append(sent).join('')}${TURN_OUT_OF_TIME_LINE}`;
     const structured = parsedChatTurn({ output_text: JSON.stringify({ reply, threadSummary: null, taskDecision: { disposition: 'none', reason: '時間が足りなかった' },
       taskProposal: null, intentPlan: null, artifacts: null }) });
@@ -129,12 +146,17 @@ export class AnthropicChatModel implements ShannonChatModel {
     const body = sonnetVoiceBody(this.options.settings, request, ceiling);
     let spoken = '';
     const speak = async (text: string) => { spoken += text; await onTextDelta?.(text); };
-    const send = this.sender(request.scopeKey, onTextDelta ? delta => speak(delta).then(() => delta) : null, signal);
-    const result = await sonnetToolRounds(body, {
-      session: tools, send, isAnswer: () => false, ...(signal ? { signal } : {}),
-      // Nothing is heard while a tool runs: before the first call of a turn in which she said nothing, her waiting phrase.
-      onCalls: async names => { if (onTextDelta && !spoken && names[0]) await speak(voiceWaitingPhrase(names[0])); },
-    });
+    const watch = watchdog(request.firstTokenBudgetMs);
+    const stop = watch ? (signal ? AbortSignal.any([signal, watch.signal]) : watch.signal) : signal;
+    const send = this.sender(request.scopeKey, onTextDelta ? delta => speak(delta).then(() => delta) : null, stop, this.firstTokenLatency, watch?.first);
+    let result: SonnetRoundResult;
+    try {
+      result = await sonnetToolRounds(body, {
+        session: tools, send, isAnswer: () => false, ...(stop ? { signal: stop } : {}), timedOutRound: 'fail',
+        // Nothing is heard while a tool runs: before the first call of a turn in which she said nothing, her waiting phrase.
+        onCalls: async names => { watch?.first(); if (onTextDelta && !spoken && names[0]) await speak(voiceWaitingPhrase(names[0])); },
+      });
+    } catch (error) { throw watch?.timedOut() && !signal?.aborted ? new SonnetFirstTokenTimeout() : error; } finally { watch?.clear(); }
     if (result.outOfTime || !result.final) {
       const standing = completeSpokenSentences(spoken.trim()) || '';
       if (onTextDelta) await speak(TURN_OUT_OF_TIME_LINE);
@@ -152,7 +174,8 @@ export class AnthropicChatModel implements ShannonChatModel {
    * One request: streamed when there is a listener (its first word or call measured on the turn's first round, its words
    * handed on in order), else not. A stream that fails or is refused after words went out is a `PartialAnswerError`.
    */
-  private sender(scopeKey: string, listen: ((delta: string, decoder: ChatReplyStreamDecoder) => Promise<string> | null) | null, caller?: AbortSignal) {
+  private sender(scopeKey: string, listen: ((delta: string, decoder: ChatReplyStreamDecoder) => Promise<string> | null) | null, caller?: AbortSignal,
+    latency: FirstTokenLatency = this.firstTokenLatency, onFirst?: () => void) {
     return async (body: Anthropic.MessageCreateParamsNonStreaming, time: RoundTime | null, round: number): Promise<Anthropic.Message> => {
       const timer = time ? new RoundTimer(time) : null;
       const signals = [caller, timer?.signal].filter((value): value is AbortSignal => Boolean(value));
@@ -162,6 +185,8 @@ export class AnthropicChatModel implements ShannonChatModel {
       try {
         if (!listen) {
           const message = await this.client.messages.create(body, signal ? { signal } : {});
+          // Not streamed: the first response is the first token.
+          if (round === 0) onFirst?.();
           this.recordUsage(scopeKey, message);
           return message;
         }
@@ -172,7 +197,8 @@ export class AnthropicChatModel implements ShannonChatModel {
           const text = event.type === 'content_block_delta' && event.delta.type === 'text_delta' ? event.delta.text : null;
           if (!first && round === 0 && (text !== null || (event.type === 'content_block_start' && event.content_block.type === 'tool_use'))) {
             first = true;
-            this.firstTokenLatency.record(this.clock() - started);
+            onFirst?.();
+            latency.record(this.clock() - started);
           }
           if (text === null) continue;
           const handed = listen(text, decoder);
@@ -224,4 +250,14 @@ export function webSourcesOf(result: Pick<SonnetRoundResult, 'turns'>): ShannonW
     }
   }
   return sources.slice(0, 8);
+}
+
+/** The first-token watchdog of a request with a budget: aborts unless `first` was called in time. */
+function watchdog(budgetMs: number | undefined): { signal: AbortSignal; first(): void; clear(): void; timedOut(): boolean } | null {
+  if (budgetMs === undefined || !Number.isFinite(budgetMs)) return null;
+  const controller = new AbortController();
+  let fired = false;
+  const timer = setTimeout(() => { fired = true; controller.abort(new SonnetFirstTokenTimeout()); }, Math.max(0, budgetMs));
+  timer.unref?.();
+  return { signal: controller.signal, first: () => clearTimeout(timer), clear: () => clearTimeout(timer), timedOut: () => fired };
 }

@@ -346,7 +346,7 @@ async function completeLiveVoiceDelegation(
     scopeKey, systemPrompt: basePrompt, ...skillProfilePrompt(identity.profile, dependencies.skills, scopeKey, toolOffer.tools, selectedSkills.has('current_web') || Boolean(placeSkill)), ...replayed,
     // What she said when she was touched is what he is answering: it directly precedes his words, in every mode, as context only.
     ...(reactionLine ? { precedingReply: reactionLine } : {}),
-    message: transcript, ...toolOffer, ...tierRequest(tier),
+    message: transcript, ...toolOffer, ...tierRequest(tier, deadline.left()),
     useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   });

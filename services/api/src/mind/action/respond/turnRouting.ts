@@ -65,11 +65,19 @@ export function turnDoing(kind: string | null, reply: string, results: ReadonlyA
 /** A tier decision with Jev's task kind (`unknown` when Jev gave none). */
 export type RoutedTier = TierDecision & { kind: string };
 
-/** The request fields of a tier: nothing for plain luna (the request is as it was); `sonnet` only when the policy served it (routing on). */
-export function tierRequest(decision: TierDecision | null): ShannonTierRequest {
+/** The most a voice turn's Sonnet first word or tool call may take, and the room the rest of the turn keeps (review H3). */
+export const VOICE_SONNET_FIRST_TOKEN = Object.freeze({ maximumMs: 4_000, marginMs: 6_000 });
+
+/**
+ * The request fields of a tier: nothing for plain luna (the request is as it was); `sonnet` only when the policy served it (routing
+ * on). On voice (`voiceRemainingMs`) Sonnet's first-token budget: min(left − 6 s, 4 s), past which luna answers instead.
+ */
+export function tierRequest(decision: TierDecision | null, voiceRemainingMs?: number): ShannonTierRequest {
   if (!decision) return {};
+  const budget = decision.served === 'sonnet' && voiceRemainingMs !== undefined
+    ? Math.max(0, Math.min(voiceRemainingMs - VOICE_SONNET_FIRST_TOKEN.marginMs, VOICE_SONNET_FIRST_TOKEN.maximumMs)) : null;
   return { ...(decision.served === 'luna_plus' ? { tier: 'luna_plus' as const } : decision.served === 'sonnet' ? { tier: 'sonnet' as const } : {}),
-    ...(decision.escalateOnTrouble ? { escalation: true as const } : {}) };
+    ...(decision.escalateOnTrouble ? { escalation: true as const } : {}), ...(budget !== null ? { firstTokenBudgetMs: budget } : {}) };
 }
 
 /**

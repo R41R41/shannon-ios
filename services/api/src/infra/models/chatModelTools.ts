@@ -335,6 +335,8 @@ export interface ShannonTierRequest {
   /** `sonnet` (step 5): answered by Sonnet through `TieredChatModel` while routing is on; any other model reads it as luna. */
   tier?: 'luna_plus' | 'sonnet';
   escalation?: true;
+  /** Review H3: on a voice turn routed to Sonnet, how long its first word or tool call may take before luna answers instead. */
+  firstTokenBudgetMs?: number;
 }
 
 /**

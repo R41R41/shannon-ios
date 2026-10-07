@@ -38,6 +38,11 @@ export interface SonnetRoundOptions {
   isAnswer: (message: Anthropic.Message) => boolean;
   /** Before a step's calls run, with their names (voice: her waiting phrase). */
   onCalls?: (names: readonly string[]) => Promise<void>;
+  /**
+   * A round that ran out of time before any tool ran: `answer` (default) asks for the answer without tools; `fail` throws, so
+   * the tiered model answers with luna instead of asking Sonnet again (voice, review H3).
+   */
+  timedOutRound?: 'answer' | 'fail';
 }
 
 export interface SonnetRoundResult {
@@ -117,6 +122,7 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
       if (callerStopped()) throw error;
       if (error instanceof PartialAnswerError) return out(error.sent);
       if (!timedOut(error) && turn.used === 0) throw error;
+      if (options.timedOutRound === 'fail' && turn.used === 0) throw error;
       note(TIMED_OUT_ROUND_NOTE);
       turn.toolsOff = true;
       continue;
