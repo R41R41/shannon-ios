@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { DATA_FRAME_RULE } from '../src/mind/workspace/workspacePorts.js';
 import { configuredMindInbox } from '../src/wiring/mindWiring.js';
 import { mindWorld } from './support/mindWorld.js';
+import { voicePerception } from '../src/mind/perception/perceptionPorts.js';
+import { applyOp, emptyScope, initialSalience, scopeFromSnapshot, snapshotOf } from '../src/mind/workspace/workspaceState.js';
+import { operationOf } from '../src/mind/workspace/workspacePorts.js';
 
 /**
  * Syzygy ADR-0008 stage 3, step F3 (`docs/mind-workspace-contract.md`): what the workspace keeps and shows. The journal, the
@@ -105,9 +108,10 @@ describe('someone else\'s words', () => {
 
   it('a 「友人も一緒」 call, then a text turn: no word of the guest call in the prompt (the reproduced case), nor in the journal', async () => {
     const world = mindWorld(ON, 'privacy-guest');
-    await world.speak('はじめまして、ミナです。合言葉はあさがお', {}, { participantMode: 'guest', threadId: 'guest-call-1' });
+    const guestCall = { callId: 'guest-call-1', turns: [{ role: 'user', text: 'はじめまして、ミナです。合言葉はあさがお' }] };
+    await world.speak('はじめまして、ミナです。合言葉はあさがお', { guestCall }, { participantMode: 'guest', threadId: 'guest-call-1' });
     world.advance(MINUTE);
-    await world.speak('シャノン、ミナさんの好きな花はあさがおだよ', {}, { participantMode: 'guest', threadId: 'guest-call-1' });
+    await world.speak('シャノン、ミナさんの好きな花はあさがおだよ', { guestCall }, { participantMode: 'guest', threadId: 'guest-call-1' });
     world.advance(MINUTE);
     await world.chat('ねえ、さっきの通話どうだった？');
     const context = world.lastContext();
@@ -116,7 +120,21 @@ describe('someone else\'s words', () => {
     world.mind!.host!.tick();
     const journal = rows(world.path, 'mind_workspace_journal');
     expect(journal).not.toMatch(/あさがお|合言葉/u);
-    expect(journal).not.toMatch(/"personIds":\["[^\]]/u);
+    const events = (JSON.parse(journal) as Array<{ data_json: string }>).map(row => row.data_json).join('\n');
+    expect(events).toContain('"surface":"voice"');
+    expect(events).not.toMatch(/"personIds":\["[^\]]/u);
+    expect(events).toContain('"unknownGuest":true');
+    // The snapshots neither (re-review A): taken on SIGTERM, then restored with the same audience as from the journal.
+    const restoredFromJournal = JSON.stringify(world.mind!.host!.view('owner', world.now()));
+    world.restart();
+    const states = (JSON.parse(rows(world.path, 'mind_workspace_snapshots')) as Array<{ state_json: string }>).map(row => row.state_json).join('\n');
+    expect(states).toContain('"surface":"voice"');
+    expect(states).not.toMatch(/"personIds":\["[^\]]/u);
+    expect(states).toContain('"unknownGuest":true');
+    expect(JSON.stringify(world.mind!.host!.view('owner', world.now()))).toBe(restoredFromJournal);
+    world.advance(MINUTE);
+    await world.chat('もう一度、さっきの通話は？');
+    expect(world.lastContext()).toContain('ほかの人と話していた');
     await world.close();
   });
 
@@ -131,6 +149,26 @@ describe('someone else\'s words', () => {
     expect(context).not.toContain('景色');
     expect(context).toContain('ほかの人と話していた');
     await world.close();
+  });
+});
+
+describe('a guest\'s person ids in the snapshots (re-review A)', () => {
+  it('are never written, and a scope restored from a snapshot has the audience a restore from the journal gives', () => {
+    const at = '2026-10-07T03:00:00.000Z';
+    const event = voicePerception({ threadId: 'call-1', transcript: 'シャノン、ミナです', present: { kind: 'people', personIds: ['person-mina'] }, alone: false, guest: true, at })!;
+    const scope = emptyScope();
+    applyOp(scope, { op: 'perceive', event, initial: initialSalience(event, []), detail: null, at });
+    expect(scope.held[0]!.audience).toEqual({ kind: 'people', personIds: ['person-mina'] });
+    const snapshot = snapshotOf(scope);
+    expect(snapshot).not.toContain('person-mina');
+    const fromSnapshot = scopeFromSnapshot(snapshot).held[0]!.audience;
+    // The journal keeps the event as `mindHost.journaled` does (the same rule): read back, the same audience.
+    const journaledScope = emptyScope();
+    const op = operationOf({ seq: 1, scopeKey: 'owner', at, op: 'perceive', itemId: event.id,
+      data: { event: { ...event, content: null, audience: fromSnapshot, people: [] }, initial: initialSalience(event, []), detail: null } });
+    applyOp(journaledScope, op!);
+    expect(fromSnapshot).toEqual(journaledScope.held[0]!.audience);
+    expect(fromSnapshot).toMatchObject({ kind: 'people', unknownGuest: true });
   });
 });
 

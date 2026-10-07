@@ -15,16 +15,21 @@ const PRAGMAS = 'PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA s
 
 export function configuredProactiveGate(
   environment: Readonly<Record<string, string | undefined>>,
-  parts: { databasePath: string } & Omit<ProactiveGateDependencies, 'topics'>,
+  parts: { databasePath: string; now?: () => string } & Omit<ProactiveGateDependencies, 'topics'>,
 ): { gate: ProactiveDeliveryGate; close(): void } | null {
   if (!mindSwitches(environment).proactiveGate) return null;
   const database = new DatabaseSync(parts.databasePath);
   database.exec(PRAGMAS);
-  const { databasePath: _path, ...dependencies } = parts;
+  const { databasePath: _path, now: _now, ...dependencies } = parts;
   const gate = createProactiveGate({
     ...dependencies, topics: new SQLiteProactiveTopics(database, { createSchema: true }),
     // A delivery point's own connection, inside its write transaction: the tables exist (made above).
     topicsOn: connection => new SQLiteProactiveTopics(connection as DatabaseSync, { createSchema: false }),
   });
-  return { gate, close: () => { if (database.isOpen) database.close(); } };
+  // Pruning of the gate's tables (30 days; stage 3 review): now, then once an hour, on the gate's own connection.
+  const now = parts.now ?? (() => new Date().toISOString());
+  gate.prune(now());
+  const timer = setInterval(() => gate.prune(now()), 60 * 60_000);
+  timer.unref();
+  return { gate, close: () => { clearInterval(timer); if (database.isOpen) database.close(); } };
 }

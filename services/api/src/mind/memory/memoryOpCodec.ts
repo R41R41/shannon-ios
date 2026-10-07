@@ -28,12 +28,19 @@ export const MEMORY_OP_LIMITS = Object.freeze({ payloadCharacters: 64_000, episo
 export type MemoryOpRefusal = 'unknown_kind' | 'unknown_origin' | 'malformed' | 'unknown_field' | 'too_long' | 'secret' | 'injection' | 'bad_id' | 'bad_time' | 'owner_only';
 
 /**
- * A key kept in the outbox's header (`opId`, `subjectKey`) with no free text in it (stage 3 review M1): each `:`-separated part that
- * is not an id-like token (letters, digits, `_ . @ -`) is replaced by `h-` and 16 hexadecimal characters of its SHA-256, so an
- * interest such as 「Final Fantasy」 is never stored, refused or not, and the same text always gives the same key.
+ * A key kept in the outbox's header (`opId`, `subjectKey`) with no free text in it (stage 3 review M1): what follows a free-text
+ * marker (`interest`, `resonant`: an interest in the owner's words, whatever its script, e.g. `interest:Minecraft`) is always one
+ * `h-` and 16 hexadecimal characters of its SHA-256; any other part that is not an id-like token (letters, digits, `_ . @ -`) is
+ * hashed the same way. The same text always gives the same key.
  */
+const FREE_TEXT_MARKERS: ReadonlySet<string> = new Set(['interest', 'resonant']);
+const hashed = (text: string) => `h-${createHash('sha256').update(text).digest('hex').slice(0, 16)}`;
 export function closedKey(value: string, maximum: number): string {
-  const key = String(value).split(':').map(part => (/^[A-Za-z0-9_.@-]{1,120}$/u.test(part) ? part : `h-${createHash('sha256').update(part).digest('hex').slice(0, 16)}`)).join(':');
+  const parts = String(value).split(':');
+  const marker = parts.findIndex(part => FREE_TEXT_MARKERS.has(part));
+  const closed = [...(marker >= 0 ? parts.slice(0, marker + 1) : parts), ...(marker >= 0 && marker < parts.length - 1 ? [parts.slice(marker + 1).join(':')] : [])]
+    .map((part, index) => (marker >= 0 && index === marker + 1 ? hashed(part) : /^[A-Za-z0-9_.@-]{1,120}$/u.test(part) ? part : hashed(part)));
+  const key = closed.join(':');
   return key.length <= maximum ? key : `h-${createHash('sha256').update(key).digest('hex').slice(0, 32)}`;
 }
 

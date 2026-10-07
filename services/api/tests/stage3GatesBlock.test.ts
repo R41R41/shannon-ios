@@ -44,7 +44,7 @@ function world(environment: Record<string, string> = {}) {
   // The API process creates the mind's inbox; the worker's gate writes its notices there.
   const mind = configuredMind({}, { databasePath: path, now, schedule: task => task() })!;
   const inbox = configuredMindInbox({}, { databasePath: path })!;
-  const gate = configuredProactiveGate(environment, { databasePath: path, withheld: withheld.withheld.sink, emit: inbox.emit });
+  const gate = configuredProactiveGate(environment, { databasePath: path, now, withheld: withheld.withheld.sink, emit: inbox.emit });
   const initiatives = new SQLiteInitiativeStore(path, now, gate?.gate ?? null);
   const speaker = new SQLiteReachOutSpeaker(path, () => false, gate?.gate ?? null);
   const plain = new SQLiteReachOutSpeaker(path);
@@ -373,6 +373,27 @@ describe('the gate after the review (stage 3 review M1–M4)', () => {
     expect(w.gate!.gate.check(SCOPE, { point: 'initiative', ...intent, arisenAt: w.now(), text: '星の観測の新しい記事' }, w.now())).toEqual({ verdict: 'hold', code: 'topic_reused' });
     expect(w.gate!.gate.heldToday(SCOPE, 'initiative', intent, w.now())).toBe(true);
     w.close();
+  });
+});
+
+describe('pruning of the gate\'s tables (re-review B)', () => {
+  it('drops topics and holds older than 30 days on the gate\'s connection, at most once an hour', () => {
+    const w = world();
+    const database = new DatabaseSync(w.path);
+    const old = new Date(START - 31 * 24 * 60 * MINUTE).toISOString();
+    const recent = new Date(START - 29 * 24 * 60 * MINUTE).toISOString();
+    for (const at of [old, recent]) {
+      database.prepare(`INSERT INTO proactive_topics (scope_key, at, point, reason, subject, signature) VALUES ('owner', ?, 'say', 'wonder', NULL, NULL)`).run(at);
+      database.prepare(`INSERT INTO proactive_holds (scope_key, day_key, point, hold_key, code, at) VALUES ('owner', ?, 'say', 'k', 'owner_active', ?)`).run(at.slice(0, 10), at);
+    }
+    const count = (table: string) => Number((database.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n);
+    // The wiring pruned once when it was built; inside the hour a second call does nothing.
+    expect(w.gate!.gate.prune(w.now())).toBe(false);
+    expect([count('proactive_topics'), count('proactive_holds')]).toEqual([2, 2]);
+    w.advance(61 * MINUTE);
+    expect(w.gate!.gate.prune(w.now())).toBe(true);
+    expect([count('proactive_topics'), count('proactive_holds')]).toEqual([1, 1]);
+    database.close(); w.close();
   });
 });
 

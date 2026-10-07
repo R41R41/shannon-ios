@@ -80,6 +80,11 @@ export interface ProactiveDeliveryGate {
   heldToday(scopeKey: string, point: ProactivePoint, intent: Pick<ProactiveDeliveryIntent, 'reason' | 'subject'>, at: string): boolean;
   /** eff of a topic against her earlier messages (0 without one, or on any error): a selector damps a priority by (1 − eff). */
   topicReuse(scopeKey: string, text: string | null, at: string): number;
+  /**
+   * Drops `proactive_topics` and `proactive_holds` rows older than 30 days, on the gate's own connection, at most once an hour (the
+   * wiring calls it on a timer; outside any writer's transaction). Answers whether it pruned now. Never throws.
+   */
+  prune(at: string): boolean;
 }
 
 export interface ProactiveGateDependencies {
@@ -103,6 +108,8 @@ export interface ProactiveGateDependencies {
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
+/** How long `proactive_topics` and `proactive_holds` keep a row. */
+const PROACTIVE_KEEP_DAYS = 30;
 const SUBJECT = /^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,119}$/u;
 /** How far back topics are compared: past it, a 0.9 similarity has decayed below one percent. */
 const TOPIC_LOOKBACK_MILLISECONDS = 14 * 24 * HOUR;
@@ -165,7 +172,20 @@ export function createProactiveGate(dependencies: ProactiveGateDependencies): Pr
     const signature = intent.text ? minHashSignature(intent.text) : null;
     topics.record({ scopeKey, at, point: intent.point, reason: intent.reason, subject: closedSubject(intent.subject), signature: signature ? encodeSignature(signature) : null });
   };
+  let prunedAt = Number.NEGATIVE_INFINITY;
   return {
+    prune(at) {
+      const now = Date.parse(at);
+      if (!Number.isFinite(now) || now - prunedAt < HOUR) return false;
+      try {
+        dependencies.topics.prune(new Date(now - PROACTIVE_KEEP_DAYS * 24 * HOUR).toISOString());
+        prunedAt = now;
+        return true;
+      } catch (error) {
+        log(`proactive gate: prune failed ${error instanceof Error ? error.name : 'unknown'}`);
+        return false;
+      }
+    },
     check(scopeKey, intent, at) {
       const decision = decideOn(dependencies.topics, scopeKey, intent, at);
       return decision.verdict === 'deliver' ? decision : held(scopeKey, intent, decision.code, decision.retryAt, at);
@@ -191,7 +211,6 @@ export function createProactiveGate(dependencies: ProactiveGateDependencies): Pr
     delivered(scopeKey, intent, at) {
       try {
         record(dependencies.topics, scopeKey, intent, at);
-        dependencies.topics.prune(new Date(Date.parse(at) - 30 * 24 * HOUR).toISOString());
       } catch (error) {
         log(`proactive gate: note failed ${error instanceof Error ? error.name : 'unknown'}`);
       }

@@ -1,4 +1,4 @@
-import type { MemoryAudience } from '@shannon/cognition';
+import { UNKNOWN_GUEST_PRESENCE, type MemoryAudience } from '@shannon/cognition';
 import {
   SALIENCE_V1, admit, currentSalience, novelty, persistenceOf, salience, withoutText,
   type AttentionItem, type MindEvent, type MindEventKind, type MindPresence, type MindSpeakerKind, type MindSurface, type MindTrust,
@@ -143,9 +143,19 @@ export function currentNotices(scope: WorkspaceScope, at: string): WorkspaceItem
   });
 }
 
-/** A snapshot of the scope as JSON (closed values only; the items carry no text). */
+/**
+ * Whether a voice item is someone else's turn with people in its audience (stage 3 review): it is kept, journaled and snapshotted
+ * with the audience of an unknown guest, so no guest's person id is ever written (`mindHost.journaled` uses the same rule).
+ */
+export function isGuestVoice(item: { surface: string; speaker: string; audience: MemoryAudience }): boolean {
+  return item.surface === 'voice' && item.speaker !== 'owner' && item.audience.kind !== 'owner';
+}
+
+const persisted = (item: WorkspaceItem): WorkspaceItem => (isGuestVoice(item) ? { ...item, audience: UNKNOWN_GUEST_PRESENCE } : item);
+
+/** A snapshot of the scope as JSON (closed values only; the items carry no text, and a guest's turn no person id). */
 export function snapshotOf(scope: WorkspaceScope): string {
-  return JSON.stringify(scope);
+  return JSON.stringify({ ...scope, held: scope.held.map(persisted), notices: scope.notices.map(persisted) });
 }
 
 export function scopeFromSnapshot(json: string): WorkspaceScope {

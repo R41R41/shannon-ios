@@ -5,7 +5,7 @@ import type { ConversationStore } from '../memory/memoryPorts.js';
 import { workspaceBlocks } from './promptLayout.js';
 import { WorkspaceTextReader } from './workspaceText.js';
 import {
-  applyOp, emptyScope, initialSalience, orderedHeld, currentNotices, scopeFromSnapshot, snapshotOf,
+  applyOp, emptyScope, isGuestVoice, initialSalience, orderedHeld, currentNotices, scopeFromSnapshot, snapshotOf,
   type WorkspaceDetail, type WorkspaceItem, type WorkspaceOp, type WorkspaceScope,
 } from './workspaceState.js';
 import type { JournalRow, SQLiteWorkspaceJournal } from './store/workspaceJournalStore.js';
@@ -331,7 +331,7 @@ class InProcessMindHost implements MindHost {
  */
 function journaled(event: MindEvent): MindEvent {
   const plain = withoutText(event);
-  return event.surface === 'voice' && event.speaker.kind !== 'owner' && event.audience.kind !== 'owner'
+  return isGuestVoice({ surface: event.surface, speaker: event.speaker.kind, audience: event.audience })
     ? { ...plain, audience: UNKNOWN_GUEST_PRESENCE, people: [] } : plain;
 }
 

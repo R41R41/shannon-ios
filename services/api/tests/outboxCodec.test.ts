@@ -94,6 +94,13 @@ describe('the memory outbox codec', () => {
     expect(encoded.value.opId).toBe(closedKey('turn-1:interest:Final Fantasy', 200));
     expect(encoded.value.subjectKey).toMatch(/^interest:h-[0-9a-f]{16}$/u);
     expect(closedKey('fact:user-fact-1', 240)).toBe('fact:user-fact-1');
+    // A single ASCII word is free text after an interest marker too (re-review): always hashed, whatever the script.
+    for (const key of ['turn-1:interest:Minecraft', 'interest:Minecraft', 'sleep:job-1:interest:Minecraft', 'turn-1:resonant:Minecraft', 'interest:a:b']) {
+      expect(closedKey(key, 240), key).not.toMatch(/Minecraft|:a:b$/u);
+    }
+    expect(closedKey('turn-1:interest:Minecraft', 200)).toMatch(/^turn-1:interest:h-[0-9a-f]{16}$/u);
+    const minecraft = memoryOpCodec.encode({ ...op('interest.change', { interest: 'Minecraft', source: 'conversation' }), opId: 'turn-1:interest:Minecraft', subjectKey: 'interest:Minecraft' });
+    expect(minecraft.ok && `${minecraft.value.opId} ${minecraft.value.subjectKey} ${minecraft.value.payloadJson}`.match(/Minecraft/gu)).toEqual(['Minecraft']);
     expect(closedKey('interest:星の話', 240)).toBe(closedKey('interest:星の話', 240));
   });
 
