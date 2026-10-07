@@ -13,10 +13,12 @@ import { ConversationReplaySummarizer, createConfiguredReplaySummaryWriter } fro
 import { createConfiguredImpressionAnalyzer, ImpressionUpdater } from './mind/memory/impressionUpdater.js';
 import { valueNightSchedule, valueSleep } from './mind/sleep/valueSleep.js';
 import { memoryOutboxOn, memoryWriterOf } from './wiring/memoryOutboxWiring.js';
+import { replayCompaction, structuredCompactionOn } from './wiring/compactionWiring.js';
 import { configuredSkillExport, configuredSkillMemory, skillSleepConsolidator } from './wiring/skillMemoryWiring.js';
 
 // Syzygy ADR-0008 stage 3 (F5): with SHANNON_MEMORY_OUTBOX on, this process's memory writers propose, and the one writer applies.
-const store = new SQLiteShannonStore({ path: configuredDatabasePath(), now: () => new Date().toISOString(), memoryOutbox: memoryOutboxOn(process.env) });
+const store = new SQLiteShannonStore({ path: configuredDatabasePath(), now: () => new Date().toISOString(), memoryOutbox: memoryOutboxOn(process.env),
+  structuredCompaction: structuredCompactionOn(process.env) });
 const memory = store.memoryProposals();
 const knowledge = new ShannonKnowledgeConsolidator(store, store, store, createConfiguredKnowledgeAnalyzer(process.env, store), store, { memory });
 // Syzygy ADR-0008 stage 2, step 6: her skills are built after her knowledge, in the same budget; the API process creates their tables.
@@ -31,7 +33,8 @@ const platformSummaries = new PlatformConversationSummarizer(peopleStore, new Pl
 const impressions = new ImpressionUpdater(store, store, store.impressionStore(), createConfiguredImpressionAnalyzer(process.env, store), store,
   { people: peopleStore, timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo', memory });
 const replayWriter = createConfiguredReplaySummaryWriter(process.env, store);
-const replaySummarizer = new ConversationReplaySummarizer(store, store, replayWriter, store, { memory });
+// Syzygy ADR-0008 stage 3 (F7): with SHANNON_STRUCTURED_COMPACTION on, the summary is the template rendered by code.
+const replaySummarizer = new ConversationReplaySummarizer(store, store, replayWriter, store, { memory, compaction: replayCompaction(process.env, store) });
 // Syzygy ADR-0008 stage 1: after each sleep batch, the ledgers' nightly pass (expiry, delayed credit, retention); never fails the batch.
 const valueNight = valueSleep({ predictions: store.predictionLedger(), choices: store.choiceLedger(), values: store.valueVersions() });
 // Its own daily trigger at the sleep hour, whether or not a conversation's sleep job ran or succeeded (idempotent per day).
@@ -65,7 +68,7 @@ const worker = new ShannonBackgroundWorker(store, store, store, createConfigured
 });
 // The one memory writer, on this process's connection, under its lease (null while the outbox is switched off).
 const memoryWriter = memoryWriterOf(store, { now: () => new Date().toISOString(), owner: `memory-${worker.workerId}`,
-  replaySummaries: { summarizer: replaySummarizer, model: replayWriter }, impressions });
+  replaySummaries: replaySummarizer, impressions });
 const embeddingWorker = new MemoryEmbeddingWorker(store, store, configuredMemoryModelGateway(process.env, store), store, {
   // Knowledge derived from a forgotten experience is never embedded.
   isSourceEligible: (scopeKey, source) => source.kind !== 'knowledge'

@@ -1,4 +1,6 @@
+import { renderedCompaction } from '@shannon/mind';
 import {
+  OWNER_AUDIENCE,
   isMemoryEvidenceVisible,
   isOwnerOnly,
   memoryControlFor,
@@ -268,14 +270,42 @@ export function usableReplaySummary(
   state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadId: string,
   present: MemoryAudience,
 ): string | undefined {
+  return replaySummaryFor(state, store, scopeKey, threadId, present, 'text')?.text;
+}
+
+/**
+ * The replay summary a turn may be given, and whether it is the structured one (Syzygy ADR-0008 stage 3, F7): a template is
+ * rendered for its channel (text at most 900 characters, voice 目的・途中・次・重要な文脈 at most 400); without one, the stored
+ * 600-character summary as it was.
+ */
+export function replaySummaryFor(
+  state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadId: string, present: MemoryAudience, channel: 'text' | 'voice',
+): { text: string; structured: boolean } | undefined {
   const stored = store.replaySummary?.(scopeKey, threadId);
   if (!stored?.summary) return undefined;
   const gate = new DisclosureGate(present, state, store, scopeKey);
   if (!gate.allowsThreadSummary(threadId)) return undefined;
   if (new MemoryWithholding(state, store, scopeKey).withholdsReplaySummary(threadId, stored)) return undefined;
-  return gate.unlabelledMarker ? `${gate.unlabelledMarker}${stored.summary}` : stored.summary;
+  const summary = stored.template ? renderedCompaction(stored.template, channel) : stored.summary;
+  if (!summary) return undefined;
+  return { text: gate.unlabelledMarker ? `${gate.unlabelledMarker}${summary}` : summary, structured: Boolean(stored.template) };
 }
 
 export function isForgottenCommitmentEvidence(state: CompanionStateSnapshot, evidence: string): boolean {
   return !isMemoryEvidenceVisible(state, evidence);
+}
+
+/**
+ * The raw messages a structured replay summary stands for (Syzygy ADR-0008 stage 3, F7: `covers_from_id`..`covers_to_id`), as the
+ * owner alone would be replayed them now (a message forgotten since is not opened). Empty without a structured summary.
+ */
+export function replaySummaryRawRange(state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadId: string, limit = 400): readonly StoredConversationMessage[] {
+  const template = store.replaySummary?.(scopeKey, threadId)?.template;
+  if (!template?.coversFromId || !template.coversToId) return [];
+  const messages = visibleReplayMessages(state, store, scopeKey, threadId, OWNER_AUDIENCE, limit).messages.map(entry => entry.message);
+  const ids = messages.map(message => message.id);
+  const start = ids.indexOf(template.coversFromId);
+  const end = ids.indexOf(template.coversToId);
+  if (end < 0) return [];
+  return Object.freeze(messages.slice(Math.max(0, start), end + 1));
 }

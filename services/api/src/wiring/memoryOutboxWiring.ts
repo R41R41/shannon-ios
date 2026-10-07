@@ -1,7 +1,7 @@
 import { mindSwitches, type SwitchValues } from '@shannon/mind';
 import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
 import { MemoryCommands, MemoryWriter, type MemoryProposals, type MemoryTargets } from '../mind/memory/memoryPorts.js';
-import type { ConversationReplaySummarizer, ReplaySummaryWriter } from '../mind/memory/conversationReplaySummary.js';
+import type { ConversationReplaySummarizer } from '../mind/memory/conversationReplaySummary.js';
 import type { ImpressionUpdater } from '../mind/memory/impressionUpdater.js';
 
 /**
@@ -22,16 +22,13 @@ export function memoryOutboxOn(environment: SwitchValues): boolean {
 /** The writer's targets: every memory write of an op on the one connection of `store`, so that its lock covers them. */
 export function memoryTargetsOf(store: SQLiteShannonStore, parts: {
   now: () => string;
-  replaySummaries?: { summarizer: ConversationReplaySummarizer; model: ReplaySummaryWriter | null } | null;
+  replaySummaries?: ConversationReplaySummarizer | null;
   impressions?: ImpressionUpdater | null;
 }): MemoryTargets {
   return {
     state: store, conversations: store, knowledge: store, impressions: store.impressionStore(), people: store.peopleMemoryOnConnection(),
     refreshProfile: scopeKey => store.refreshProfile(scopeKey),
-    replaySummaries: parts.replaySummaries ? {
-      planned: (scopeKey, threadId, update) => parts.replaySummaries!.summarizer.planned(scopeKey, threadId, update),
-      model: parts.replaySummaries.model ? (scopeKey, input) => parts.replaySummaries!.model!.update(scopeKey, input) : null,
-    } : null,
+    replaySummaries: parts.replaySummaries ? { planned: (scopeKey, threadId, call) => parts.replaySummaries!.planned(scopeKey, threadId, call) } : null,
     impressionChange: parts.impressions ? (op, state) => parts.impressions!.changeFor(op, state) : null,
     now: parts.now,
   };

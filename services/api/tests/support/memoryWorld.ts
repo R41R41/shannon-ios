@@ -32,7 +32,7 @@ export function memoryWorld(options: { summary?: (call: number) => string | null
   const summarizer = new ConversationReplaySummarizer(store, store, model, { backgroundLlmCostUsd: () => 0 },
     { environment: SMALL_REPLAY, backgroundBudgetUsd: 1, now, memory: ports.proposals });
   const writer = (parts: { owner?: string; beforeLock?: (op: MemoryOp) => void } = {}): MemoryWriter => memoryWriterOf(store, {
-    now, owner: parts.owner ?? 'writer-1', replaySummaries: { summarizer, model }, log: () => {}, ...(parts.beforeLock ? { beforeLock: parts.beforeLock } : {}),
+    now, owner: parts.owner ?? 'writer-1', replaySummaries: summarizer, log: () => {}, ...(parts.beforeLock ? { beforeLock: parts.beforeLock } : {}),
   })!;
   const thread = (turns: number, threadId = 'thread') => {
     let last = '';

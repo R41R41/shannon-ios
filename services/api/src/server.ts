@@ -86,9 +86,12 @@ import { SQLiteOwnerCallFacts, ownerCallElsewhereEnabled } from './surfaces/voic
 import { createServerSelfDiagnosis } from './infra/ops/serverSelfDiagnosis.js';
 import { createMinecraftBodyWiring } from './wiring/serverMinecraftBodyWiring.js';
 import { memoryOutboxOn, memoryPortsOf } from './wiring/memoryOutboxWiring.js';
+import { structuredCompactionOn } from './wiring/compactionWiring.js';
 const now = () => new Date().toISOString();
 // Syzygy ADR-0008 stage 3 (F5): with SHANNON_MEMORY_OUTBOX on, memory proposals of this process go to the outbox (the worker writes them).
-const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now, memoryOutbox: memoryOutboxOn(process.env) });
+// F7: with SHANNON_STRUCTURED_COMPACTION on, the replay summary's template is read and rendered per channel (text 900, voice 400).
+const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now, memoryOutbox: memoryOutboxOn(process.env),
+  structuredCompaction: structuredCompactionOn(process.env) });
 const memoryPorts = memoryPortsOf(persistentStore, now);
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
 const initiativeStore = new SQLiteInitiativeStore(configuredDatabasePath(), now);

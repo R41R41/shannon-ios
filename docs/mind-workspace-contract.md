@@ -14,7 +14,8 @@
 | F1 | Pure `packages/mind`: envelope, salience, proactive gate, MinHash and topics, evidence decay, identity tiers, temporal rules, compaction, trust fold | in place, not wired (`packages/mind/src/{envelope,salience,minhash,proactiveGate,evidenceDecay,identityTiers,temporalFacts,compaction,trustFold}.ts`; tests beside each; the perception and attention windows re-export them) |
 | S1 | Ports of every part, the types-only rule, the baseline shrunk | in place: windows `memoryPorts` (extended), `disclosurePorts`, `emotionPorts`, `respondPorts`, `recallPorts`, `ownTimePorts`, `agentTasksPorts`, `selfPorts`, `sleepPorts`, `predictionPorts`, `toolsPorts`, `selectorsPorts` and `inhibitionPorts` (extended); rule `ports-types-only-from-stores`; the baseline 287 → 175 (see "Structure") |
 | F5 | The memory outbox, its codec and the one writer; the phase-3a writers propose | in place, behind `SHANNON_MEMORY_OUTBOX` (`mind/memory/{memoryOpCodec,memoryOps,memoryWriter}.ts`, `mind/memory/store/memoryOutboxStore.ts`, `wiring/memoryOutboxWiring.ts`; tests `outboxCodec`, `memoryWriterReplay`, `memoryWriterContention`, `memoryOutboxWriters`, `memScenarios` (`mem.cas-forget`), `stage3MemoryOutbox`) |
-| S2, F2, F7 | sqlite splits; perception and the audience matrix; compaction | not yet |
+| F7 | Structured compaction of the replay summary | in place, behind `SHANNON_STRUCTURED_COMPACTION` (`conversationReplaySummary.ts` structured mode, `store/sqliteReplaySummary.ts` columns, `memoryVisibility.replaySummaryFor`/`replaySummaryRawRange`, `wiring/compactionWiring.ts`; tests `replayCompaction` with `compact.shiritori`) |
+| S2, F2 | sqlite splits; perception and the audience matrix | not yet |
 | F3, F4, F6 | the workspace host; the proactive gate at the delivery points; people facts, tiers, decay, the trust ledger | not yet |
 | S3, F8 | surface decisions out of the surfaces; suite v3, latency, review, owner preview, deployment | not yet |
 
@@ -126,6 +127,14 @@ As built (F5):
 ## Compaction
 
 The replay summary becomes a JSON template (`packages/mind/src/compaction.ts`) with 目的・制約・済み・途中・詰まり・決めたこと・次・重要な文脈, each at most 5 items of 80 characters, rendered by code: at most 900 characters for text, and 目的・途中・次・重要な文脈 in at most 400 for voice. It renders as `[ここまでの要約]` and one line per section (`目的: …／…`); when it is too long, items leave in the order 済み, 制約, 詰まり, 決めたこと, 重要な文脈, 途中, 次, 目的, the oldest of a section first. It is updated incrementally (a section the summarizer names replaces the previous one, the others stay); a tool call and its result are never split, and the oldest tool outputs are replaced by a fixed line first. `covers_from_id`/`covers_to_id` let recall open the raw range. The summarizer stays luna.
+
+As built (F7):
+- **Storage**: `conversation_replay_summaries` gains `template_json`, `covers_from_id`, `covers_to_id` (`ensureColumns`, only while the switch is on); `summary` holds the text rendering, so the forgetting checks read it as before. A summary written before the switch is handed to the first structured update as `previousText`.
+- **The model call** (`OpenAIReplaySummaryWriter.updateTemplate`, `REPLAY_TEMPLATE_INSTRUCTIONS`): strict JSON with every section a list or null; null keeps the section. The batches are the summarizer's (at most four of 8,000 characters); her tool calls and results of the summarized turns come as pairs (`compactionWiring.replayCompaction`: the stored trace, masked by `maskedTraceCalls` with the conversation's secrets), through `summaryInput`.
+- **Rendering**: `replaySummaryFor` renders a template for its channel (text: every section, at most 900; voice: 目的・途中・次・重要な文脈, at most 400) behind the same disclosure gate and withholding; the turn context lifts the 640-character clip only for a structured summary. Without a template the 600-character summary is read and clipped exactly as before.
+- **Raw range**: `replaySummaryRawRange` opens the messages from `covers_from_id` to `covers_to_id`, as the owner alone would be replayed them now.
+- **Through the writer (F5)**: `replay_summary.update` runs `ConversationReplaySummarizer.planned`, whose model calls go through the writer's cache.
+- `compact.shiritori`: the sixty-turn game of `context.shiritori-60` through the kernel with the structured summary refreshed after every turn: every check passes as before.
 
 ## Structure (S1)
 

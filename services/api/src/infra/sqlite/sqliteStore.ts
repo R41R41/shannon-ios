@@ -31,7 +31,7 @@ import { SQLiteShannonKnowledgeStore, type ShannonKnowledgeStore } from '../../m
 import type { KnowledgeDraft } from '@shannon/cognition';
 import { SQLiteMemoryEmbeddingIndex, type MemoryEmbeddingIndex, type PendingEmbeddingSource } from '../../mind/memory/store/sqliteMemoryEmbeddings.js';
 import { ensureTurnCaptureSchema, type TurnCaptureRecord } from '../../mind/memory/store/turnCaptures.js';
-import { ensureReplaySummarySchema, selectRecentMessages, selectReplaySummary, selectThreadOfTurn, upsertReplaySummary } from '../../mind/memory/store/sqliteReplaySummary.js';
+import { ensureReplaySummarySchema, ensureReplaySummaryTemplateColumns, selectRecentMessages, selectReplaySummary, selectThreadOfTurn, upsertReplaySummary } from '../../mind/memory/store/sqliteReplaySummary.js';
 import { deleteToolTraces, ensureToolTraceSchema, insertToolTrace, pruneToolTraces, selectToolTraceScopes, selectToolTraces, toolTraceRetentionBoundary } from '../../mind/tools/store/sqliteToolTraces.js';
 import type { ToolTraceRecord } from '../../mind/tools/shannonToolTrace.js';
 import type { ReplaySummaryRecord } from '../../mind/memory/store/conversationStore.js';
@@ -85,6 +85,11 @@ export interface SQLiteShannonStoreOptions {
   memoryOutbox?: boolean;
   /** Told after each proposal of this connection (the in-process writer drains then). */
   memoryNotify?: () => void;
+  /**
+   * Structured compaction (Syzygy ADR-0008 stage 3, F7): the replay summary keeps its template and the raw range it covers in
+   * three additive columns. Absent or false: the table as it was (the entries pass `mindSwitches(environment).structuredCompaction`).
+   */
+  structuredCompaction?: boolean;
 }
 
 export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore, MemoryEmbeddingIndex, ShannonKnowledgeStore {
@@ -141,6 +146,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     ensureTurnCaptureSchema(this.context.database);
     ensureSummaryLineageSchema(this.context.database);
     ensureReplaySummarySchema(this.context.database);
+    if (options.structuredCompaction) ensureReplaySummaryTemplateColumns(this.context.database);
     ensureToolTraceSchema(this.context.database);
     // What her tools did is kept 30 days: older traces go at every open too, in every scope.
     const traceBoundary = toolTraceRetentionBoundary(this.context.now());
@@ -248,8 +254,10 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   threadSummaryLineage(scopeKey: string, threadId: string) { return this.conversations.threadSummaryLineage(scopeKey, threadId); }
   experiencesById(scopeKey: string, experienceIds: readonly string[]) { return this.conversations.experiencesById(scopeKey, experienceIds); }
   recentMessages(scopeKey: string, threadId: string, limit: number) { return selectRecentMessages(this.context.database, scopeKey, this.conversations.threadId(scopeKey, threadId), limit); }
-  replaySummary(scopeKey: string, threadId: string) { return selectReplaySummary(this.context.database, scopeKey, threadId); }
-  saveReplaySummary(scopeKey: string, threadId: string, record: ReplaySummaryRecord) { this.context.transaction(() => upsertReplaySummary(this.context.database, scopeKey, threadId, record)); }
+  replaySummary(scopeKey: string, threadId: string) { return selectReplaySummary(this.context.database, scopeKey, threadId, this.context.options.structuredCompaction === true); }
+  saveReplaySummary(scopeKey: string, threadId: string, record: ReplaySummaryRecord) {
+    this.context.transaction(() => upsertReplaySummary(this.context.database, scopeKey, threadId, record, this.context.options.structuredCompaction === true));
+  }
   threadOfTurn(scopeKey: string, experienceId: string) { return selectThreadOfTurn(this.context.database, scopeKey, experienceId); }
   saveToolTrace(scopeKey: string, record: ToolTraceRecord) { this.context.transaction(() => insertToolTrace(this.context.database, scopeKey, record)); }
   toolTraces(scopeKey: string, threadId: string | null, query: { turnIds?: readonly string[]; since?: string }) { return selectToolTraces(this.context.database, scopeKey, threadId, query); }

@@ -20,7 +20,7 @@ export { copyDeleted, copyEdit, copyWritesRead, noteCopyWrite } from './skillCop
 export { IMPRESSION_MEMORY_PREFIX, OWNER_PERSON_KEY, comparable, impressionConfidence, impressionConfig, impressionMemoryId, impressionsEnabled, type ImpressionPerson, type ImpressionSource, type PersonImpression } from './impressions.js';
 export { localDayKey } from './memoryProjection.js';
 export { type SleepChange, type SleepContradiction } from './memoryService.js';
-export { MemoryWithholding, conversationStoreOf, isForgottenCommitmentEvidence, usableReplaySummary, visibleReplayMessages, type VisibleMessage } from './memoryVisibility.js';
+export { MemoryWithholding, conversationStoreOf, isForgottenCommitmentEvidence, replaySummaryFor, replaySummaryRawRange, usableReplaySummary, visibleReplayMessages, type VisibleMessage } from './memoryVisibility.js';
 export { type OwnerUpcoming } from './ownerUpcoming.js';
 export { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert } from './prospectiveMemory.js';
 export { type ConversationStore, type ShannonExperience, type StoredConversationMessage, type TurnPersistenceContext } from './store/conversationStore.js';

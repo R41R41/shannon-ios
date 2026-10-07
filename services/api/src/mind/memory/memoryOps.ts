@@ -11,7 +11,7 @@ import type { PeopleMemoryStore, PersonCall, PersonMemoryItem } from './store/pe
 import type { TurnCaptureRecord } from './store/turnCaptures.js';
 import type { ImpressionStore } from './impressions.js';
 import { impressionMemoryId } from './impressions.js';
-import type { ReplaySummaryWriter, ReplaySummaryOutcome } from './conversationReplaySummary.js';
+import type { ReplaySummaryCall, ReplaySummaryOutcome } from './conversationReplaySummary.js';
 import { MemoryWithholding } from './memoryVisibility.js';
 import { periodSummaryText, personMemoryId } from './peopleMemory.js';
 
@@ -29,10 +29,9 @@ export interface MemoryTargets {
   people?: PeopleMemoryStore | null;
   /** After a fact the sleep batch learned: the owner's profile and its prompt are written again, as the sleep batch did. */
   refreshProfile?: (scopeKey: string) => void;
-  /** The replay summary's reading (`ConversationReplaySummarizer.planned`), and its model (`ReplaySummaryWriter.update`). */
+  /** The replay summary's reading and model calls (`ConversationReplaySummarizer.planned`), through the writer's cache. */
   replaySummaries?: {
-    planned(scopeKey: string, threadId: string, update: ReplaySummaryWriter['update']): Promise<{ outcome: ReplaySummaryOutcome; record?: ReplaySummaryRecord }>;
-    model: ReplaySummaryWriter['update'] | null;
+    planned(scopeKey: string, threadId: string, call: ReplaySummaryCall): Promise<{ outcome: ReplaySummaryOutcome; record?: ReplaySummaryRecord }>;
   } | null;
   /** Her impressions' rules re-applied to the person's rows as they are now (`impressionUpdater.ts`). */
   impressionChange?: ((op: MemoryOp, state: CompanionStateSnapshot) => { upserts: readonly unknown[]; deleteIds: readonly string[] } | null) | null;
@@ -218,13 +217,12 @@ const replayHandler: MemoryOpHandler = {
   },
   prepare: async (targets, op, model) => {
     const summaries = targets.replaySummaries;
-    if (!summaries?.model) return { done: 'rejected', code: 'disabled' };
-    const writer = summaries.model;
+    if (!summaries) return { done: 'rejected', code: 'disabled' };
     const { threadId } = payloadOf<{ threadId: string }>(op);
-    const planned = await summaries.planned(op.scopeKey, threadId, (scopeKey, input) => model('replay_summary', { scopeKey, input }, () => writer(scopeKey, input)));
+    const planned = await summaries.planned(op.scopeKey, threadId, model);
     if (planned.record) return { write: planned.record };
-    // Nothing to write: the summary is current, or the budget is spent (the next turn proposes again).
-    return planned.outcome === 'budget' ? { done: 'superseded', code: 'budget' } : { done: 'applied', code: planned.outcome };
+    // Nothing to write: the summary is current, or the budget is spent (the next turn proposes again), or there is no model.
+    return planned.outcome === 'current' ? { done: 'applied', code: 'current' } : { done: 'superseded', code: planned.outcome };
   },
   blocked: (targets, op, state, plan) => {
     const { threadId } = payloadOf<{ threadId: string }>(op);
