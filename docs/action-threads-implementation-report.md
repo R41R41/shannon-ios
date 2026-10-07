@@ -1,76 +1,93 @@
 # Stage 4 implementation evidence
 
 Owner: ライ氏. Implementation: Codex, `codex/shannon/adr8-stage4`, based on `16bdf384`.
-Observed: 2026-10-07. Production remains Stage 3 at `16bdf384`; Stage 4 is OFF by default.
+Observed: 2026-10-08 (JST). Reviewed runtime source: `12dd3688378c37fd2570db7c4700b276ec4f575a`. Measurement interruption cleanup is a separate script-only fix at `e260e66e`.
+Production and `main` remain Stage 3 at `16bdf384`; Stage 4 defaults to OFF.
 
-The implemented contract and architecture diagram are in [action-threads-contract.md](action-threads-contract.md). This report distinguishes source verification, isolated Apple previews and production acceptance.
+The implemented architecture and diagram are in [action-threads-contract.md](action-threads-contract.md). The concrete cutover and recovery procedure is [action-threads-rollout.md](action-threads-rollout.md). This report records source, isolated process and Apple preview evidence separately from production acceptance.
 
-## Implemented slice
+## Resulting behavior
 
-- One separately owned mind worker, private Unix IPC, bounded projections, deadlines and disconnect recovery. Current audience and forgotten memory are checked after communication. No second mind is created by an API recovery path.
-- One foreground slot and two background slots per scope, with immutable origin, inherited marks, generations, hashed resource locks and atomic own-time budget reservations.
-- Existing own-time cycle, Agent Host task and Minecraft request records remain canonical. Stop propagates to descendants; sent work waits for its canonical acknowledgement. Unknown results retain locks and are not replayed automatically. Five repeated actual failures close one action.
-- Existing outreach, incoming call, tool, owner-document and core gates remain. Own-time thinking may continue during a conversation; that does not authorize an unsolicited delivery during it.
-- iPhone sheet and Mac popover show generic titles, origin and states; individual/all stop and explicit known own-time resume use a single POST followed by read-back when uncertain. Server and client audience flags both withhold details. Old-server 404 hides the entry.
-- Cross-part imports now use narrow ports. The registered API-layer exceptions shrink from 69 to 43, without new exceptions. The memory visibility port avoids importing unrelated writers and prevents an import cycle.
+- One separately owned mind worker, private Unix IPC, bounded projections, deadlines and disconnect recovery. Delivery rechecks the current audience and forgotten memory. An API recovery path does not create a second mind.
+- One foreground slot and two background slots per scope, immutable origin, inherited marks, generations, hashed resource locks and atomic own-time budget reservations. Sent background work retains its slot while its outcome is unknown.
+- Existing own-time cycle, Agent Host task and Minecraft request records remain canonical. Stop propagates to descendants; sent work waits for its original canonical acknowledgement. Unknown results retain locks and are not replayed automatically. Five repeated actual failures close one action.
+- Existing outreach, incoming call, tool, owner-document and core gates remain. Own-time thinking may continue during a conversation; unsolicited delivery still passes its existing gates. Dedicated credentials, daily budget, Sonnet and the owner's evidence-decay choice are unchanged.
+- iPhone sheet and Mac popover show generic titles, origin and states. Individual/all stop and explicit known own-time resume use one POST and read-back when uncertain. Server/client audience checks withhold details; old-server 404 hides the entry. A late control response cannot override a newer privacy poll.
+- Cross-part imports use narrow ports. Registered API-layer exceptions shrink from 69 to 43, with no new exceptions. The memory visibility port avoids unrelated writers and an import cycle. The new early-event helper is explicitly protected as approval/budget core and registered only in its actual Agent Host entry closure.
+
+## Review defects and permanent fixes
+
+Three independent reviewers covered the protected core, API/Apple state and outside-operation adapters. All passed on exact source `c1bc5dbb`; the final admission change was independently rechecked by the external and API reviewers on exact runtime `12dd3688`. No unresolved actionable runtime finding remains in those reviewed scopes. Reproductions drove the following changes:
+
+- Own-time outcomes, actual usage and closed ACKs persist in one canonical transaction. ACK-only retries settle known old budget and release only the appropriate original resources; they never run the model/tool again or erase an explicit queued resume. Known unused reservations persist a zero ACK even if delivery fails.
+- Transport loss after HTTP headers, absent/malformed usage and unknown outside results remain uncertain. Legitimate measured zero usage is accepted. Every paid retry checks its action permit immediately before sending; an initial refusal with zero calls records known zero usage. The OFF path preserves the old behavior, including byte/schema golden checks.
+- Agent Host recovery matches the saved original turn. Lost start responses and foreign turns do not grant an identity or release a lock. Terminal events persist with the original lease/event ID before clearing the turn, and retry idempotently after restart.
+- Notifications/results/approvals arriving before a successful `turn/start` response are bounded (512 events / 2 MiB), correlated only to its returned ID and replayed in order after the owning command finishes its start handling. A concurrent execution timer cannot take another command's pending events. Foreign/unattributed approvals are rejected; lost response or overflow remains unknown. Original results and verification evidence still complete normally.
+- Minecraft stores its first canonical result and ACK outbox atomically. Authenticated holding omission is an abandonment report; silence/lease expiry alone is not an ACK. Conflicting duplicates do not replace that first result. ACK retries do not repeat an outside operation.
+- VM admission latency exceeded the target reproducibly. Respond-only enqueue/claim now shares one durable transaction and one RPC, retaining the same draft/idempotency/parent/sweep/slot/resource/generation/deadline checks and SQLite FULL. A busy slot retains its queued intent; a SQL failure rolls back the whole admission. Other action kinds retain their earlier path.
+- Audience is checked after IPC at delivery. Apple discards an overtaken control response and performs a GET read-back. API-layer/source guards explicitly cover new core helpers; Git-based closure checks were rerun after tracking the new file.
 
 ## Deterministic verification
 
-The complete API/cognition/evaluation/learning/mind regression was rerun after fixing OFF-path timing, long-session lease checks and the explicit source/closure fixtures. The final serial run passed **274 files / 3,409 tests**, including known-versus-lost model acknowledgement and explicit resume after a known stopped thought. No model API was called.
+No paid model, Codex or Minecraft operation was used. All fixture databases and worker sockets were isolated; VM checks loaded no production environment, pairing or database.
 
-Targeted tests include the real own-time loop with a foreground slot, abort before committing a stopped step, retained outreach gates, two-versus-three admission, same-resource writes, Mac host versus Mac-folder write contention, old-generation progress, canonical stop acknowledgement, wrong Codex turn completion, lost stop response, parent stop, five failures, budget competition, forgotten memory after IPC, expired projections and socket ownership. The final narrow adapter run passed 10 tests. Concurrent Simulator/build repeats hit a Stage 3 switch-matrix wall-clock limit and a worker RPC timeout; their assertions were not changed. The final run ended those processes, used one Vitest worker and a 60-second wall-clock limit, and passed without unhandled errors. The switch matrix itself passed all four cases in 12.2 seconds (also previously passed with its default 30-second limit).
+| Check | Result and scope |
+| --- | --- |
+| Local full API/cognition/evaluation/learning/mind suite | 275 files / 3,497 tests passed on `2ade1df7`, before the last bounded early-event helper and test-only VM portability change |
+| Final changed external/source targets | Six files / 84 tests passed before freeze; final bridge 35 passed after the last identity normalization |
+| Exact `c1bc5dbb` independent rechecks | Core review: four files / 70 tests; external review: bridge/core/closures 59 tests; API/Apple review reran the original ordering reproduction and checked unchanged Swift/TF source |
+| Final admission rechecks | Four target files / 82 tests passed; independent exact runtime checks also passed 82 targets + 24 core/closure tests, original model/budget reproductions and an atomic rollback/resource/stop reproduction |
+| Final tracked-source fast checks | Passed on `12dd3688`: source size, protected paths/entry closures, layer baseline, product specification and shared strings |
+| Types | API plus cognition/evaluation/learning/mind passed locally; final VM result below |
+| Shared Swift | 777 XCTest + 145 Swift Testing passed; eight focused action-thread model tests passed |
+| Apple build components | Mac unit: 28 XCTest + 5 Swift Testing; release-runner: 8 passed. Unsigned macOS Debug and iOS device Debug passed after review fixes. Earlier Simulator Debug also passed; subsequent Swift source is unchanged |
 
-Shared Swift: the final full run passed 774 XCTest and 145 Swift Testing tests, including five new action-thread tests: audience change invalidates a late reply, server audience hides/returns detail, a lost stop response performs read-back without a second POST, old-server/disconnect handling hides the entry, and known stopped own-time work keeps its explicit resume entry. The final focused run passed six tests after adding rejection of stale server timestamps; an old report cannot become fresh merely by arriving late.
+The real `mindWorkerLifecycle.test.ts` launches the production worker entry with a synthetic database and no inherited credentials. It rejects a duplicate owner, verifies private socket permissions, SIGKILLs the owning process, restarts it, rejects old-generation rights and releases an uncertain resource only after its original canonical ACK. This passed locally and is included in the VM full suite.
 
-Mac unit tests passed 28 XCTest and 5 Swift Testing tests. Release-runner tests passed all eight cases. Final unsigned macOS Debug, arm64 iOS Simulator Debug and iOS device Debug builds succeeded, including the direct observable model reference. `scripts/verify.sh all` is represented by its component checks; its shell-based GUI launch smoke is replaced by native CUA preview inspection, preserving the restriction against shell UI automation.
+VM portability preserves mandatory server/shared core-path checks. Only the separate Apple-path existence check skips when the entire `apps/` tree is absent; local checks still verify all app paths. Git-listing guards skip without a Git checkout. These deployment-layout skips are reported explicitly.
+
+The isolated VM verified all **1,334 candidate files** against Git source hashes. On runtime `12dd3688`, API plus all four package typechecks passed and the complete suite passed **275 files / 3,508 tests**, with **3 deployment-layout skips** (two Apple-dependent checks and one Git-listing check), in 388.58 seconds on Node v24.20.0. The real process-death/one-owner lifecycle case passed as part of that suite; no unhandled error occurred. The prior exact `c1bc5dbb` VM run also passed 275 files / 3,502 tests / 3 skips before the admission change. The last script-only cleanup fix leaves these production/runtime/test trees identical.
 
 ## Apple interaction evidence
 
-Native CUA inspected an isolated Debug Mac bundle, never the installed production app. Ready state was inspected in light and dark appearance. Individual stop, all stop, retained entry at zero running count, explicit own-time resume, avatar entry and Escape returning focus to the invoking capsule were exercised. Unknown, stopping and five-failure states were inspected; unknown has no resume button. Screenshots are synthetic, not owner conversations: [light](screenshots/shannon-stage4-macos-light.png), [dark](screenshots/shannon-stage4-macos-dark.png), [unknown](screenshots/shannon-stage4-macos-unknown.png).
+Native CUA inspected a separate synthetic Debug Mac bundle, leaving the installed production app unopened. Light/dark, individual/all stop, retained entry at zero running count, explicit known own-time resume, avatar entry, unknown/stopping/five-failure states and Escape restoring capsule focus were exercised. Unknown has no resume button. Follow-up CUA rechecked live count/state changes and stop/resume after the response-ordering fixes. Synthetic screenshots: [light](screenshots/shannon-stage4-macos-light.png), [dark](screenshots/shannon-stage4-macos-dark.png), [unknown](screenshots/shannon-stage4-macos-unknown.png), [review](screenshots/shannon-stage4-macos-review.png).
 
-The dedicated iPhone 17 / iOS 26.5 Simulator launched the final synthetic preview. CUA verified the conversation entry alongside the existing task notice, opening the medium sheet, individual own-time stop and explicit resume with live state/count updates. [iPhone light](screenshots/shannon-stage4-ios-light.png). A transient simulator launch crash in the capsule value-copy path was found during inspection; the view now holds the observable model directly, with its callers rebuilt, and the final launch and interactions passed. iPhone dark, avatar entry, all-stop gesture and expanded-sheet interaction remain unverified.
+A dedicated iPhone 17 / iOS 26.5 Simulator ran the synthetic preview. CUA checked the entry alongside the existing task notice, medium sheet, individual stop/resume and live count updates. [iPhone light](screenshots/shannon-stage4-ios-light.png). A launch crash in a capsule value-copy path was corrected by retaining the observable model directly, rebuilding its callers and rechecking launch/interactions. iPhone dark, avatar entry, all-stop gesture and expanded-sheet interaction remain unverified.
 
-Six shared model tests cover privacy invalidation, stale timestamps, old servers, disconnection, single-post/read-back and resumable stopped work. Real VoiceOver speech, Dynamic Type, Reduce Motion, physical-device interaction and production networking remain unverified.
+Real VoiceOver speech, Dynamic Type, Reduce Motion, physical-device interaction and production networking remain unverified. Shared model tests verify privacy invalidation, stale timestamps, old-server/disconnect behavior, single POST/read-back, explicit known resume and overtaken control responses. Previews were quit, the dedicated Simulator shut down and resource claims released.
 
-## Local IPC latency
+## IPC and production read-only preflight
 
-`scripts/measure-action-thread-ipc.ts` uses a real mind worker/socket and synthetic isolated databases, with 20 warm-up calls and 200 measured calls per operation. This is warm local macOS IPC, not a VM or voice end-to-end measurement.
+The final benchmark starts the production `mindWorker.ts` as a separate child with no inherited credentials and uses a real Unix socket and isolated synthetic database, with 20 warm-ups and 200 samples per operation. SIGINT/SIGTERM cleanup stops its owned child and removes the temporary data. We compare each warm operation against the 5/10 ms budget as a diagnostic; individual operations do not certify the plan’s actual first-voice-audio target.
 
-| Operation | p50 | p95 | Maximum |
+| Warm macOS IPC, final admission code / production child | p50 | p95 | Maximum |
 | --- | ---: | ---: | ---: |
-| Workspace perception/projection | 0.181 ms | 0.272 ms | 1.349 ms |
-| Foreground enqueue/claim | 0.406 ms | 0.627 ms | 1.245 ms |
+| Workspace perception/projection | 0.330 ms | 0.997 ms | 4.293 ms |
+| Foreground atomic admission | 0.501 ms | 1.914 ms | 5.117 ms |
 
-The local added-communication target (p50 ≤ 5 ms, p95 ≤ 10 ms) is met. The previously recorded Stage 3 render p95 is 3 ms for text and 2 ms for voice. VM load, cold reconnect and first-audio comparison still need verification before enabling Stage 4.
+| Warm VM IPC on `12dd3688`, production child, after full regression | p50 | p95 | Maximum |
+| --- | ---: | ---: | ---: |
+| Workspace perception/projection | 0.782 ms | 1.420 ms | 3.679 ms |
+| Foreground atomic admission | 4.710 ms | 8.284 ms | 19.965 ms |
 
-## Acceptance still required
+Both operations meet the warm 5/10 ms targets. A separate initial post-change VM sample also passed (workspace 0.712/1.065 ms; admission 4.220/6.660 ms). The independently reviewed `e260e66e` script was also measured on the VM: workspace p50 0.749 / p95 1.488 / max 3.138 ms; admission p50 4.714 / p95 8.804 / max 112.278 ms. Its percentiles stayed within the budget, while the observed outlier is retained in this record. No end-to-end or worst-case voice guarantee follows from these samples. Its parent-only SIGINT/SIGTERM and ordinary-run cleanup, exit codes 130/143/0, 200 samples and standalone strict typecheck passed independent review.
 
-Independent review of the protected core and outside-operation adapters is pending. VM regression, production DB backup/integrity/count checks, service registration, one-mind confirmation and real Agent Host/Minecraft acknowledgement exercises are unrun. No production paid call, credential/budget change, Sonnet enabling, main integration or Stage 4 deployment occurred.
+The previous in-process VM benchmark on `c1bc5dbb` measured foreground enqueue/claim p50 8.606 / p95 14.791 ms; an independent repeat gave 8.260 / 16.048 ms. The action connection retained WAL/FULL/busy timeout 250 ms; enqueue and claim each committed durably. The measured disk flush count supported storage as the main cause, without proving exclusive attribution. The final process-separated benchmark strengthens the conditions, so its absolute result is recorded without claiming an exact percentage improvement against the earlier in-process samples.
 
-For Apple distribution, only unsigned local build/preview evidence is available. Archive, upload, processing, assignment, TestFlight install and human smoke for Stage 4 are unrun. The owner's earlier confirmation of the learning screen concerns Stage 3 and is not a Stage 4 acceptance.
+The benchmark excludes models, recognition, TTS, device/network latency and cold reconnect. Normal voice admission precedes server `turnStartedAt`, so server model-duration metrics omit that admission. Waiting audio can start before the reply model dispatch; a reply without waiting also incurs the separate send-time dispatch check/commit and any outstanding workspace sync. Nonstream replies can await finish/journal flush before their first segment. These gates remain. Same-condition Stage 3→4 device first-audio comparison remains a separate production acceptance check; individual microbenchmark success does not complete it.
 
-Windows body implementation/visual acceptance remains owned by its separate repository. Minecraft rollout remains subject to its existing plan. The independently reviewed TestFlight platform selection and effective-unit source repair is now included in this candidate; the original `codex/shannon/testflight-platform` branch is retained. Production application is still pending.
+Read-only VM preflight found production revision `16bdf384`, all five existing services and distribution timer active, unauthenticated auth 401 and live SQLite integrity `ok`. Aggregate counts were 42 conversation threads, 1,308 messages, ten terminal tasks and five device registrations. Tailscale IPv4 timed out; the same peer's IPv6 worked with its existing host-key identity preserved. No production source, unit, flag or process was changed.
 
-## Final reproducible checks
+## Included distribution repair
 
-- Bundled Node: `node node_modules/vitest/vitest.mjs run services/api/tests packages/cognition/tests packages/evaluation/tests packages/learning/tests packages/mind/tests --maxWorkers=1 --testTimeout=60000`: 274 files, 3,409 tests, all passed. See `/tmp/shannon-stage4-serial-regression.log` for this local run.
-- API TypeScript check passed; cognition/evaluation/learning/mind TypeScript checks passed. `bash scripts/verify.sh fast` passed, including source size, protected paths/closures, layer baseline and product/shared-string checks. `git diff --check` passed.
-- Shared Swift full suite: 774 XCTest and 145 Swift Testing passed; final six focused action-thread model tests passed. Mac unit suite: 28 XCTest and 5 Swift Testing passed; release-runner: 8 passed.
-- Xcode final unsigned Debug builds: ShannonDesk/macOS, ShannonApp/iOS device and ShannonApp/arm64 Simulator passed. Only one Swift/Xcode build ran at a time; the final Mac/device compiler concurrency was one.
-- CUA final isolated Mac/iPhone previews confirmed rendering and observable state updates. Dedicated Simulator shut down; previews quit; resource claims released. Shared hub validator passed.
+The separate TestFlight repair at `8358754d` passed exact-commit independent review and seven synthetic tests. Its changes were cherry-picked as `8460f6dc` and `b8467e86`; the three integrated files match the reviewed original. Platform selection uses `filter[preReleaseVersion.platform]=IOS` by default and preserves explicitly configured Mac selection. The effective distributor unit must run reviewed `/home/azureuser/shannon-ios` source. Applying only the repository template does not change a running systemd unit; install the effective unit and run `daemon-reload` as the rollout specifies. The separate writable Agent Host checkout stays intact. No distribution/unit mutation occurred.
 
-No main integration, push, production restart, Stage 4 switch enabling or TestFlight release was performed. The next step is independent review against the implementation contract, followed by the VM and Apple acceptance gates above.
+## Prepared delivery and remaining acceptance
 
-## Independent review follow-up
+A reviewable deploy bundle is prepared at `/tmp/shannon-stage4-deploy-candidate`: `source.tar`, added/modified/deleted lists, old-file hashes, old-source inventory and manifest. Excluding Apple/design/screenshots as the Azure runbook requires, it contains **43 added / 80 modified / 0 deleted** files. Read-only production preflight matched all **80 old hashes**, found no pre-existing added path or extra old API source, and confirmed the baseline revision. The manifest identifies the final candidate, including this documentation; its production/runtime/test trees match the verified `12dd3688` and its measurement script matches reviewed `e260e66e`.
 
-The first three independent reviews reproduced defects in late own-time acknowledgement/budget settlement, lost Codex RPC responses, Minecraft abandonment acknowledgement, paused-task steering, server audience changes during IPC and old Apple control responses overtaking a newer poll. The follow-up preserves stop/resume and the existing protocols while correcting those causes. Known canonical acknowledgements are persisted and delivered idempotently; uncertain external outcomes retain their locks and are not replayed. A provider response body lost after HTTP headers remains uncertain rather than a zero-cost known failure.
+The next production action requires the owner's final delivery approval under the shared Azure runbook. It includes source/dependency and consistent SQLite backups, installing compatible code while OFF, updating both Azure and Mac Agent Hosts, installing the mind/distributor effective units, enabling Stage 4, health/ACK/quiet-interval checks and the corresponding iPhone/Mac release. No main integration/push, production restart, Stage 4 enabling or TestFlight release occurred during implementation.
 
-The real `mindWorkerLifecycle.test.ts` launches the production worker entry point with an isolated database and no inherited credentials, rejects a duplicate process, kills its owner with SIGKILL, restarts it, rejects old rights and verifies that only the original canonical acknowledgement releases an uncertain resource. It passed locally.
+Real authorized Agent Host/Minecraft stop/finish, first voice audio comparison and existing-data acceptance remain rollout checks. Windows body implementation/visual acceptance belongs to its separate repository; Minecraft enablement remains subject to its existing plan. Deterministic adapter evidence does not certify another repository's implementation.
 
-Apple follow-up verification passed all **777 XCTest + 145 Swift Testing tests**, including eight action-thread model tests and the two new response-ordering cases. Unsigned ShannonDesk/macOS and ShannonApp/iOS device builds passed. Native CUA launched a separate synthetic Mac bundle and verified individual stop, explicit resume, observable count/state updates and Escape returning capsule focus. [Review preview](screenshots/shannon-stage4-macos-review.png). The preview was quit; the installed production app was not launched. These remain local build/synthetic evidence, not TestFlight acceptance.
-
-Read-only VM preflight confirmed revision `16bdf384`, the five existing services and distribution timer active, unauthenticated auth 401 and live SQLite integrity `ok`. Aggregate counts were 42 conversation threads, 1,308 messages, ten terminal tasks and five paired devices. A separate `/tmp` directory holds copied dependencies for candidate verification; it contains no copied production database, pairing or environment file. IPv4 SSH timed out while the same Tailscale peer's IPv6 worked with its existing host-key identity preserved. Production source, units, flags and processes were not changed.
-
-The separate TestFlight repair at `8358754d` passed its exact-commit independent review and seven synthetic tests. Applying it requires updating the effective systemd unit and `daemon-reload`; a repository template alone does not change the timer's actual executable. Its reviewed changes were cherry-picked as `8460f6dc` and `b8467e86` into the Stage 4 candidate for combined validation; the original branch remains intact. No distribution or production unit was changed.
-
-Final candidate regression, VM isolated verification and exact-commit re-review are recorded below when they finish. The [rollout procedure](action-threads-rollout.md) makes the pending source/unit/host/flag cutover and Apple gates explicit.
+Only unsigned local Apple Build evidence is available. Archive, Upload, Processing, Assignment, Install and human Smoke remain separate gates for both platforms. The owner's earlier successful learning-screen confirmation concerns Stage 3 and does not count as Stage 4 acceptance.

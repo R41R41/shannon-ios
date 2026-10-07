@@ -1,7 +1,7 @@
 # Action threads and the shared mind
 
-Status: implemented on `codex/shannon/adr8-stage4`; independent review and production rollout pending.
-Revision: 2026-10-07. Production remains Stage 3 (`16bdf384`).
+Status: implemented on `codex/shannon/adr8-stage4`; independent source review passed on runtime `12dd3688`, production rollout pending. See [verification evidence](action-threads-implementation-report.md).
+Revision: 2026-10-08. Production remains Stage 3 (`16bdf384`).
 
 Stage 4 is explicitly enabled by `SHANNON_ADR8_STAGE4=on`, with the Stage 3 workspace enabled. OFF retains the in-process Stage 3 mind, its conversation and autonomy behavior, and the existing device protocols. The new owner route returns 404 while OFF, so older servers do not produce a broken control in the apps.
 
