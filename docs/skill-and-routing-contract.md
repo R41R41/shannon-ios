@@ -67,6 +67,11 @@ ADR-0008 §8 「道具は名前と短い説明だけを毎回渡し、使うと�
 - **Fallback.** When Jev times out, fails or answers off the menu, the turn's session is not narrowed: every offered schema goes, as before.
 - **Trace.** `tool_menu` with `tool` (the first chosen name, `none`, or `all` for the fallback), `chosen` (how many; −1 for the fallback), `offered`, `groups`.
 
+## What the menu never hides (Hermes Agent finding)
+
+- **Always loaded.** In every turn that offers them, the schemas of `ALWAYS_LOADED_TOOL_NAMES` (`shannonTools.ts`) go to the model whatever Jev chose (`withToolMenu`): the way to stop (`minecraft.cancel`) and the way to ask for the owner's approval (`aether.propose`, a proposal he adopts or rejects). The registry has no tool to ask the owner or to clarify (she asks in her reply) and none to speak or send (showing, publishing or sending to anyone is never a tool, `AGENTS.md`); none is invented. A tool the turn does not offer (others present, no Minecraft body in the game, no Aether inbox) is not sent either.
+- **"Not found" is not "cannot".** With the tool menu's switch (`toolHints`, `skillRoutingParts`), a reading tool's answer that found nothing (`nothingFound`: `not_found`, or the whole text of an empty answer) carries one more line naming the places this turn can look in, each with one of its reading tools (`sourcesLine`). Only the text the model reads changes; the turn's trace and the activity record are as before.
+
 ## Read tools (step 3, `SHANNON_READ_TOOLS`)
 
 The read capabilities that were projections only also become registry tools (one registry, one gate, one record), each with its own gate domain:

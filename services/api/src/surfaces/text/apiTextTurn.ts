@@ -316,7 +316,7 @@ export async function settleTextTools<T extends { tools?: ShannonModelToolSessio
  * web entry beside her read tools), started before recall so that it runs in parallel with it. Neither without the wiring.
  */
 export function textToolStart(input: TextTurnInput, begun: BegunTextTurn, parts: {
-  autonomy: { tools?: ShannonToolRunner }; toolServer: ConversationToolServer; turnChooser: ToolMenuChooser | null; readTools: boolean;
+  autonomy: { tools?: ShannonToolRunner }; toolServer: ConversationToolServer; turnChooser: ToolMenuChooser | null; readTools: boolean; toolHints?: boolean;
 }) {
   const { audience, surface, body, message, threadId, placeOptions } = input;
   // With others present, her Aether reading tools (owner decisions 2026-10-06): the owner's own turn (app text marked `others`,
@@ -327,7 +327,7 @@ export function textToolStart(input: TextTurnInput, begun: BegunTextTurn, parts:
   // Game chat asks her Minecraft body through the turn's intent, not through her tools.
   const toolOptions = {
     ...(surface && !surface.minecraftTools ? { withoutDomains: ['minecraft_body'], ...(surface.openOnly ? { openOnly: true } : {}) } : {}),
-    ...(plan ? { reads: plan.offer } : {}),
+    ...(plan ? { reads: plan.offer } : {}), ...(parts.toolHints ? { sourceHints: true } : {}),
   };
   const choices = startTurnToolMenu(modelTurn ? parts.turnChooser : null, parts.autonomy, body.scopeKey, 'text', toolAudience, parts.toolServer, `${threadId}\n${message}`,
     toolOptions, plan ? [WEB_CAPABILITY_ENTRY] : []);

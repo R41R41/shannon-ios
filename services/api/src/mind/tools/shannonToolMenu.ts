@@ -1,5 +1,5 @@
 import type { ShannonModelToolSession, ToolCallOutcome } from '../../infra/models/chatModelTools.js';
-import { providerToolName, toolSummary, type ShannonToolDefinition, type ToolInputSchema } from './shannonTools.js';
+import { ALWAYS_LOADED_TOOL_NAMES, providerToolName, toolSummary, type ShannonToolDefinition, type ToolInputSchema } from './shannonTools.js';
 
 /**
  * The tool menu applied to a turn's session (Syzygy ADR-0008 stage 2, §8 「道具は名前と短い説明だけを毎回渡し、使うときに定義を
@@ -52,7 +52,8 @@ const NOT_OPENABLE = JSON.stringify({ ok: false, text: 'その名前の道具は
  */
 export function withToolMenu(base: ShannonModelToolSession, chosen: readonly string[]): ShannonModelToolSession {
   const offered = base.definitions;
-  const visible = new Set(offered.filter(tool => chosen.includes(providerToolName(tool.name))).map(tool => tool.name));
+  // What Jev chose, and always the ways to stop and to ask for approval (`ALWAYS_LOADED_TOOL_NAMES`) when the turn offers them.
+  const visible = new Set(offered.filter(tool => chosen.includes(providerToolName(tool.name)) || ALWAYS_LOADED_TOOL_NAMES.includes(tool.name)).map(tool => tool.name));
   const open = toolOpenDefinition(offered);
   const current = () => [...offered.filter(tool => visible.has(tool.name)), open];
   const session = { maximumCalls: base.maximumCalls } as Record<string, unknown>;
@@ -140,4 +141,30 @@ export async function offerWithMenu<T extends { tools?: ShannonModelToolSession 
   if (!choices || !offer.tools) return offer;
   const { menu } = await choices;
   return menu ? { ...offer, tools: withToolMenu(offer.tools, menu.chosen) } : offer;
+}
+
+/**
+ * The places a turn can look in, by the reading tools it offers (Syzygy ADR-0008 stage 2): said after a search or a read that found
+ * nothing, so that "not found here" does not read as "cannot look". Areas without a reading tool in this turn are not named.
+ */
+const SOURCE_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  study: '書斎', folder: 'PCやMacのボクのフォルダ', aether: 'Aether', aetherFolder: 'Aetherのシャノン用フォルダ', notion: 'Notion', voyager: 'Voyagerのタスク',
+  schedule: 'これからの予定', places: 'お店や施設（Web）', skill: 'ボクのスキル', minecraft: 'マイクラの体の様子',
+});
+/** The whole text of an empty answer of her reading executors (never a body that only contains such words). */
+const NOTHING_FOUND = /^(?:「[^\n]*」は見つからなかった。|見つからなかった。|当てはまるところはなかった。|当てはまるものはない。|何もない。|シャノン用フォルダはまだ空。|（何も見つからなかった）)$/u;
+
+export function nothingFound(result: { ok: boolean; text: string; failure?: string }): boolean {
+  return result.failure === 'not_found' || (result.ok && NOTHING_FOUND.test(result.text));
+}
+
+/** The line added to such a result: the areas this turn can read, each with one of its reading tools. */
+export function sourcesLine(offered: readonly ShannonToolDefinition[]): string | null {
+  const areas = new Map<string, string>();
+  for (const tool of offered) {
+    const area = tool.name.split('.')[0]!;
+    if (tool.effect !== 'read' || !SOURCE_LABELS[area] || areas.has(area)) continue;
+    areas.set(area, `${SOURCE_LABELS[area]}（${providerToolName(tool.name)}）`);
+  }
+  return areas.size ? `ここで見つからなかっただけで、探せないのではない。この返事で探せるところ: ${[...areas.values()].join('、')}` : null;
 }

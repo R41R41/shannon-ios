@@ -375,6 +375,15 @@ export function isReadToolDomain(domain: string): domain is ReadToolDomain {
 }
 
 /**
+ * The tools whose schemas go to the model in every turn that offers them, whatever Jev's tool menu chose (Syzygy ADR-0008 stage 2;
+ * the Hermes Agent finding: narrowing must never hide a way to stop, to ask for approval, to ask, or to speak). Of the four kinds
+ * the registry has two: stopping (`minecraft.cancel`) and asking for the owner's approval (`aether.propose`, a proposal he adopts
+ * or rejects). It has no tool to ask the owner or to clarify (she asks in her reply) and no tool to speak or send (showing,
+ * publishing or sending to anyone is never a tool, `AGENTS.md`), so none is invented here.
+ */
+export const ALWAYS_LOADED_TOOL_NAMES: readonly string[] = Object.freeze(['minecraft.cancel', 'aether.propose']);
+
+/**
  * Web search is not a function tool: it is an entry of Jev's menu that only sets the turn's `useWebSearch` (the provider's own
  * search; then no function tool is offered in that turn, as before).
  */

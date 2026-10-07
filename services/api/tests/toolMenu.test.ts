@@ -9,9 +9,11 @@ import { JevChoiceClient, JevChooser, type JevChoiceTrace } from '../src/infra/m
 import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/mind/action/respond/turnDeadline.js';
 import { TOOL_MENU_LIMIT, chosenTools, toolMenuQuestions } from '../src/mind/selectors/toolMenu.js';
 import { JevTurnChooser, type TurnChooser } from '../src/mind/selectors/turnChoices.js';
-import { TOOL_OPEN_PROVIDER_NAME, menuCandidatesOf, toolMenuInstructions, withToolMenu } from '../src/mind/tools/shannonToolMenu.js';
+import { TOOL_OPEN_PROVIDER_NAME, menuCandidatesOf, nothingFound, sourcesLine, toolMenuInstructions, withToolMenu } from '../src/mind/tools/shannonToolMenu.js';
+import { conversationTools } from '../src/mind/tools/shannonToolSession.js';
+import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
 import { turnWroteHerOwnThings } from '../src/mind/tools/shannonToolSession.js';
-import { SHANNON_TOOLS, shannonTool, toolSummary } from '../src/mind/tools/shannonTools.js';
+import { ALWAYS_LOADED_TOOL_NAMES, SHANNON_TOOLS, shannonTool, toolSummary } from '../src/mind/tools/shannonTools.js';
 import { withToolCapabilityLines } from '../src/mind/tools/shannonAetherTools.js';
 
 /** Syzygy ADR-0008 stage 2, step 2: Jev's tool menu and `tool_open` (docs/skill-and-routing-contract.md). */
@@ -204,5 +206,35 @@ describe('the menu in the kernel', () => {
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message: '書斎の下書き、どうなってる？' } });
     expect(model.all.at(-1)!.tools!.menu).toBeUndefined();
     expect(model.all.at(-1)!.tools!.definitions.length).toBe(9);
+  });
+});
+
+describe('the tools the menu never hides, and what a search that found nothing says (Hermes Agent finding)', () => {
+  it('always sends the ways to stop and to ask for approval that the turn offers, and invents none that do not exist', () => {
+    expect(ALWAYS_LOADED_TOOL_NAMES).toEqual(['minecraft.cancel', 'aether.propose']);
+    for (const name of ALWAYS_LOADED_TOOL_NAMES) expect(shannonTool(name), name).not.toBeNull();
+    // No registry tool asks the owner, clarifies, speaks or sends.
+    expect(SHANNON_TOOLS.some(tool => /^(?:ask|clarify|confirm|speak|send|say|notify|message|reply)$/u.test(tool.name.split('.')[1]!))).toBe(false);
+    const { session } = baseSession(['study.list', 'study.create', 'minecraft.request', 'minecraft.cancel', 'aether.propose']);
+    expect(withToolMenu(session, []).definitions.map(tool => tool.name)).toEqual(['minecraft.cancel', 'aether.propose', 'tool.open']);
+    expect(withToolMenu(session, ['study_list']).definitions.map(tool => tool.name)).toEqual(['study.list', 'minecraft.cancel', 'aether.propose', 'tool.open']);
+    // Not offered in the turn (others present, no Minecraft body): not sent either.
+    expect(withToolMenu(baseSession(['study.list']).session, []).definitions.map(tool => tool.name)).toEqual(['tool.open']);
+  });
+
+  it('names the places the turn can look in when a search or read found nothing, and only then', async () => {
+    const offered = ['study.search', 'study.create', 'aether.search', 'aether.read', 'notion.read', 'schedule.upcoming'].map(name => shannonTool(name)!);
+    expect(sourcesLine(offered)).toBe('ここで見つからなかっただけで、探せないのではない。この返事で探せるところ: 書斎（study_search）、Aether（aether_search）、Notion（notion_read）、これからの予定（schedule_upcoming）');
+    expect(nothingFound({ ok: true, text: '「雨」は見つからなかった。' })).toBe(true);
+    expect(nothingFound({ ok: false, text: 'x', failure: 'not_found' })).toBe(true);
+    expect(nothingFound({ ok: true, text: 'メモ「雨の日」\n本文に「見つからなかった。」とある' })).toBe(false);
+    const kernelTurn = async (sourceHints: boolean) => {
+      const runner = { tools: createInMemoryAutonomyService(() => at).tools };
+      const server = { audience: { othersKnown: () => false, noteOthers: () => undefined }, secrets: () => ({ carries: () => false }) };
+      const offer = conversationTools(runner, 'owner', 'text', true, server, 'thread\n雨のメモある？', new TurnDeadline(TEXT_TURN_DEADLINE), undefined, sourceHints ? { sourceHints: true } : {});
+      return JSON.parse(await offer.tools!.call('study_search', JSON.stringify({ query: '雨' }))) as { text: string };
+    };
+    expect((await kernelTurn(true)).text).toBe('「雨」は見つからなかった。\nここで見つからなかっただけで、探せないのではない。この返事で探せるところ: 書斎（study_list）');
+    expect((await kernelTurn(false)).text).toBe('「雨」は見つからなかった。');
   });
 });

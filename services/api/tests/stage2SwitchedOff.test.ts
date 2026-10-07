@@ -161,7 +161,8 @@ describe('stage 2 switched off with the stage-2 wiring in place', () => {
       for (const name of Object.keys(recorded)) expect(current[name], `${JSON.stringify(environment)} ${name}`).toEqual(recorded[name]);
       expect(traces).toEqual([]);
     }
-    expect(skillRoutingParts({}, { trace: null })).toEqual({});
+    // Without Jev no turn chooser; the tool menu's switch still names the places to look after a search found nothing.
+    expect(skillRoutingParts({}, { trace: null })).toEqual({ toolHints: true });
   });
 
   it('is not vacuous: with stage 2 on, a turn that offers tools asks Jev for the menu and sends other bytes', async () => {

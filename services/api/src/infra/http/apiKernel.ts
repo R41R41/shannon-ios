@@ -146,7 +146,7 @@ export interface ShannonApiKernelOptions {
    * Syzygy ADR-0008 stage 2 (`wiring/skillRoutingWiring.ts`): the turn's Jev call (the tool menu). Absent, every turn is what
    * it was at ca7cf519 (`SHANNON_ADR8_STAGE2=off` hands none).
    */
-  turnChooser?: TurnChooser;
+  turnChooser?: TurnChooser; toolHints?: true; // toolHints: a search that found nothing names the places to look (stage 2).
   readTools?: ReadToolPorts; // Stage 2, step 3 (SHANNON_READ_TOOLS): her read tools' ports, for her tool runner; the text turn folds its projections.
   turnRouting?: TurnRouting; skills?: SkillTurnPorts; // Stage 2, step 4: the tier policy's inputs, the verifier, where her conversation choices are learned (turnRoutingWiring.ts); step 6: her skill memory (skillMemoryWiring.ts).
 }
@@ -178,7 +178,7 @@ export class ShannonApiKernel {
   private readonly autonomy: ShannonAutonomyService;
   private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null;
   private readonly minecraftRequests: { promptBlock(scopeKey: string, at: string): string } | null;
-  private readonly turnChooser: TurnChooser | null;
+  private readonly turnChooser: TurnChooser | null; private readonly toolHints: boolean;
   private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null;
   /** What the server knows when it offers her tools: others present, and what her writes must not repeat (`shannonToolSession.ts`). */
   private readonly toolServer: ConversationToolServer;
@@ -216,7 +216,7 @@ export class ShannonApiKernel {
     this.memoryRecall = options.memoryRecall ?? null;
     this.notion = options.notion ?? null;
     this.minecraftRequests = options.minecraftRequests ?? null;
-    this.turnChooser = options.turnChooser ?? null; this.turnRouting = options.turnRouting ?? null;
+    this.turnChooser = options.turnChooser ?? null; this.turnRouting = options.turnRouting ?? null; this.toolHints = options.toolHints === true;
     this.people = new PeopleMemory(options.peopleMemory ?? new SQLitePeopleMemoryStore(':memory:'), this.stateStore);
     this.autonomy = options.autonomy ?? createInMemoryAutonomyService(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) });
     this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now); this.ownOutreach = options.ownOutreach ? new OwnOutreach(options.ownOutreach, this.now) : null;
@@ -358,7 +358,7 @@ export class ShannonApiKernel {
     const { occurredAt, captured, provisionalIntent, peopleRecall } = begun;
     // Who her tools are offered to, and (Syzygy ADR-0008 stage 2, none without its wiring) her read tools' plan and the turn's
     // Jev call, started here so that it runs in parallel with recall (`textToolStart`).
-    const { toolAudience, toolOptions, choices } = textToolStart(input, begun, { autonomy: this.autonomy, toolServer: this.toolServer, turnChooser: this.turnChooser, readTools: this.readTools });
+    const { toolAudience, toolOptions, choices } = textToolStart(input, begun, { autonomy: this.autonomy, toolServer: this.toolServer, turnChooser: this.turnChooser, readTools: this.readTools, toolHints: this.toolHints });
     const cognitiveContext = this.memoryRecall && !begun.explicitCommand && !begun.organizeTurn
       ? await this.memoryRecall.enrich(begun.deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }) : begun.deterministicContext;
     const { basePrompt, capabilityContext } = textTurnIdentityAndCapability(deps, input, begun);
@@ -463,7 +463,7 @@ export class ShannonApiKernel {
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
       conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people, reactions: this.body.reactions, looks: this.body.turnLooks,
       toolServer: this.toolServer, ownerCalls: this.body.ownerCalls, ownOutreach: this.ownOutreach,
-      ...(this.turnChooser ? { turnChooser: this.turnChooser } : {}), ...(this.turnRouting ? { turnRouting: this.turnRouting } : {}), ...(this.skills ? { skills: this.skills } : {}),
+      ...(this.turnChooser ? { turnChooser: this.turnChooser } : {}), ...(this.toolHints ? { toolHints: true as const } : {}), ...(this.turnRouting ? { turnRouting: this.turnRouting } : {}), ...(this.skills ? { skills: this.skills } : {}),
     };
   }
   waitForBackground(scopeKey: string): Promise<void> { return this.background.waitForIdle(scopeKey); }

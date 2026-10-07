@@ -89,7 +89,7 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   /** Others present as the server knows them, and what her writes must not repeat; absent, no tool is offered. */
   toolServer?: ConversationToolServer;
   ownerCalls?: Pick<OwnerCalls, 'admitTurn'>; // The owner in a call on another device (`ownerCallElsewhere.ts`); absent, nothing is refused.
-  turnChooser?: ToolMenuChooser; turnRouting?: TurnRouting; skills?: Pick<SkillTurnPorts, 'index'>; // Syzygy ADR-0008 stage 2: the second Jev call, the tier and the verifier, her skills' index (step 6); absent, as at ca7cf519.
+  turnChooser?: ToolMenuChooser; toolHints?: true; turnRouting?: TurnRouting; skills?: Pick<SkillTurnPorts, 'index'>; // Syzygy ADR-0008 stage 2: the second Jev call, the tier and the verifier, her skills' index (step 6); absent, as at ca7cf519.
 }
 
 export interface LiveVoiceStreamObserver {
@@ -340,7 +340,7 @@ async function completeLiveVoiceDelegation(
   const turnPrompt = [turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n');
   const replayed = replay?.request(turnPrompt) ?? { ...(turnPrompt ? { turnContext: turnPrompt } : {}), history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) };
   const offered = conversationTools(dependencies.autonomy, scopeKey, 'voice', toolAudience, dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline, // 「友人も一緒」: Aether reading tools; a legacy client none.
-    { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }, ownerAloneReads(toolAudience));
+    { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }, { ...ownerAloneReads(toolAudience), ...(dependencies.toolHints ? { sourceHints: true } : {}) });
   const { offer: toolOffer, tier } = choices ? await voiceOfferAndTier(dependencies.turnRouting, offered, choices, { scopeKey, threadId, deadline, at: occurredAt }) : { offer: offered, tier: null };
   const modelRequest = withToolCapabilityLines({ // Her Minecraft body's and Aether's lines, in her identity, exactly when their tools are offered.
     scopeKey, systemPrompt: basePrompt, ...skillProfilePrompt(identity.profile, dependencies.skills, scopeKey, toolOffer.tools, selectedSkills.has('current_web') || Boolean(placeSkill)), ...replayed,

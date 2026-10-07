@@ -9,7 +9,7 @@ import type { ShannonToolRunner } from './shannonToolRunner.js';
 import { toolTraceCall } from './shannonToolTrace.js';
 import { InMemoryToolTraces, TOOL_FOLLOW_UP_MILLISECONDS, ToolTurnLog, type ToolTraceStore } from './shannonToolTurns.js';
 import { toolSessionMemory } from './shannonToolTypes.js';
-import { baseToolSession, startToolMenu, type ToolMenuChooser } from './shannonToolMenu.js';
+import { baseToolSession, nothingFound, sourcesLine, startToolMenu, type ToolMenuChooser } from './shannonToolMenu.js';
 import { isReadToolDomain, ownToolsEnabled, providerToolName, toolFailure, toolFromProviderName, toolResultForModel, type ReadToolDomain, type ShannonToolDefinition } from './shannonTools.js';
 import type { TurnDeadline } from '../action/respond/turnDeadline.js';
 import { answersWithPlace, asksForMemo, asksWhichPlace, namesAether } from '../action/respond/memoPlace.js';
@@ -56,7 +56,9 @@ export function conversationTools(
   /** A spoken turn: how far its words can be trusted (`transcriptTrust`), and the client's utterance id. */
   voice: { trust: 'reliable' | 'uncertain' | 'unknown'; utteranceId?: string } = { trust: 'reliable' },
   /** A surface that has its own way to a domain (her Minecraft body's game chat asks it through the turn's intent). */
-  options: { withoutDomains?: readonly string[]; openOnly?: boolean; reads?: ReadToolOffer } = {},
+  options: { withoutDomains?: readonly string[]; openOnly?: boolean; reads?: ReadToolOffer;
+    /** Syzygy ADR-0008 stage 2: a search or read that found nothing names the places this turn can look in (`sourcesLine`). */
+    sourceHints?: boolean } = {},
 ): { tools?: ShannonModelToolSession; toolsWithheld?: true } {
   const runner = autonomy?.tools;
   // Without what the server knows of the audience, nothing is offered (and nothing said about it).
@@ -122,7 +124,9 @@ export function conversationTools(
     // A skill she opened is named by its closed name (stage 2, step 6: her use of it is noted as `skill.use`).
     const subject = tool.domain === 'skill_read' && result.ok ? skillNameOf(argumentsJson) : null;
     TURN_RESULTS.set(session, [...TURN_RESULTS.get(session) ?? [], { name: tool.name, effect: tool.effect === 'write' ? 'write' : 'read', ok: result.ok, ...(subject ? { subject } : {}) }]);
-    return { output: toolResultForModel(result), note: () => trace?.called(toolTraceCall(tool?.name ?? providerName.slice(0, 80), argumentsJson, result, secrets)) };
+    const hint = options.sourceHints && tool.effect === 'read' && nothingFound(result) ? sourcesLine(definitions) : null;
+    const shown = hint ? { ...result, text: `${result.text}\n${hint}` } : result;
+    return { output: toolResultForModel(shown), note: () => trace?.called(toolTraceCall(tool?.name ?? providerName.slice(0, 80), argumentsJson, result, secrets)) };
   };
   // Not enumerable: two turns that offer the same tools are the same request (what the model is asked), whoever runs the calls.
   Object.defineProperty(session, 'start', { enumerable: false, value: start });

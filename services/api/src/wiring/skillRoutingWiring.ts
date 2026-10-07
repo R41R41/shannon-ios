@@ -21,6 +21,8 @@ import { runPlaceDiscoverySkill } from '../integrations/places/placeDiscoverySki
 export interface SkillRoutingParts {
   /** The turn's Jev call (the tool menu, and from step 4 the difficulty); absent without Jev or with the parts switched off. */
   turnChooser?: TurnChooser;
+  /** With the tool menu's switch: a search or read that found nothing names the places the turn can look in (`sourcesLine`). */
+  toolHints?: true;
 }
 
 export function skillRoutingParts(
@@ -29,7 +31,7 @@ export function skillRoutingParts(
 ): SkillRoutingParts {
   const switches = skillRoutingSwitches(environment);
   const chooser = configuredTurnChooser(environment, switches, options);
-  return chooser ? { turnChooser: chooser } : {};
+  return { ...(chooser ? { turnChooser: chooser } : {}), ...(switches.stage2 && switches.toolMenu ? { toolHints: true as const } : {}) };
 }
 
 function configuredTurnChooser(
