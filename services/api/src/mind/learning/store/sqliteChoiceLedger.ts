@@ -19,7 +19,8 @@ export interface ChoiceDraft {
   choice: string;
   /** `<band>.<presence>`: the owner-local quarter of the day and who was around (alone, others, away, unknown). */
   context: string;
-  sourceKind: 'step' | 'tool_call';
+  /** `turn` (stage 2): a tier choice of a conversation turn. */
+  sourceKind: 'step' | 'tool_call' | 'turn';
   sourceId: string;
 }
 
@@ -118,7 +119,7 @@ function addColumn(database: DatabaseSync, statement: string): void {
 const round = (value: number) => Math.round(value * 1e6) / 1e6;
 
 export function checkedChoice(row: StoredChoice): StoredChoice {
-  if (!(CHOICE_SURFACES as readonly string[]).includes(row.surface) || !['step', 'tool_call'].includes(row.sourceKind)) throw new Error('CHOICE_VOCABULARY');
+  if (!(CHOICE_SURFACES as readonly string[]).includes(row.surface) || !['step', 'tool_call', 'turn'].includes(row.sourceKind)) throw new Error('CHOICE_VOCABULARY');
   if (![row.choice, row.context, row.expectedLevel].every(value => PREDICTION_SYMBOL.test(value))) throw new Error('CHOICE_SYMBOL');
   if (![row.choiceId, row.sourceId, row.valueVersion].every(value => PREDICTION_SOURCE_ID.test(value))) throw new Error('CHOICE_IDENTIFIER');
   if (!Number.isFinite(Date.parse(row.chosenAt))) throw new Error('CHOICE_TIME');
@@ -142,12 +143,13 @@ export class SQLiteChoiceLedger {
   }
 
   /** The step's own outcome, its cost and what it was about; only while it is pending and not yet reported. */
-  report(scopeKey: string, choiceId: string, report: { success: 0 | 1; costYen: number; subject?: { kind: string; id: string } }): boolean {
-    if (!Number.isFinite(report.costYen)) throw new Error('CHOICE_NUMBER');
+  report(scopeKey: string, choiceId: string, report: { success: number; costYen: number; subject?: { kind: string; id: string } }): boolean {
+    // 0 or 1 for a step; a conversation choice (stage 2) reports G, the mean of its closed signals, in [0, 1].
+    if (!Number.isFinite(report.costYen) || !(report.success >= 0 && report.success <= 1)) throw new Error('CHOICE_NUMBER');
     if (report.subject && (!PREDICTION_SYMBOL.test(report.subject.kind) || !PREDICTION_SOURCE_ID.test(report.subject.id))) throw new Error('CHOICE_IDENTIFIER');
     const result = this.database.prepare(`
       UPDATE shannon_choices SET success = ?, cost_yen = ?, subject_kind = ?, subject_id = ? WHERE scope_key = ? AND choice_id = ? AND status = 'pending' AND success IS NULL
-    `).run(report.success, round(report.costYen), report.subject?.kind ?? null, report.subject?.id ?? null, scopeKey, choiceId);
+    `).run(round(report.success), round(report.costYen), report.subject?.kind ?? null, report.subject?.id ?? null, scopeKey, choiceId);
     return Number(result.changes) > 0;
   }
 
@@ -205,14 +207,21 @@ export class SQLiteChoiceLedger {
    * Step 7b: settled choices of her own time whose mood was not yet claimed, in the order they were settled. A tool call in a
    * conversation (surface text or voice) is the owner's request, not her choice: it is data only and never claimed.
    */
-  unclaimed(scopeKey: string, limit = 50): StoredChoice[] {
-    return (this.database.prepare("SELECT * FROM shannon_choices WHERE scope_key = ? AND surface = 'autonomy' AND status = 'settled' AND mood_claimed_at IS NULL ORDER BY settle_seq LIMIT ?")
+  unclaimed(scopeKey: string, limit = 50, conversation = false): StoredChoice[] {
+    // Stage 2 (owner answer I-3, `conversation`): her conversation choices scored by closed signals (subject `talk`) are claimed too.
+    return (this.database.prepare(`SELECT * FROM shannon_choices WHERE scope_key = ? AND ${moodSurfaces(conversation)} AND status = 'settled' AND mood_claimed_at IS NULL ORDER BY settle_seq LIMIT ?`)
       .all(scopeKey, limit) as Array<Record<string, unknown>>).map(parsed);
   }
 
   /** Scopes with settled choices whose mood was not yet claimed. */
-  unclaimedScopes(): string[] {
-    return (this.database.prepare("SELECT DISTINCT scope_key FROM shannon_choices WHERE surface = 'autonomy' AND status = 'settled' AND mood_claimed_at IS NULL").all() as Array<{ scope_key: string }>).map(row => row.scope_key);
+  unclaimedScopes(conversation = false): string[] {
+    return (this.database.prepare(`SELECT DISTINCT scope_key FROM shannon_choices WHERE ${moodSurfaces(conversation)} AND status = 'settled' AND mood_claimed_at IS NULL`).all() as Array<{ scope_key: string }>).map(row => row.scope_key);
+  }
+
+  /** Pending conversation choices of one Talk (stage 2), oldest first. */
+  pendingInTalk(scopeKey: string, talkId: string): StoredChoice[] {
+    return (this.database.prepare("SELECT * FROM shannon_choices WHERE scope_key = ? AND status = 'pending' AND subject_kind = 'talk' AND subject_id = ? ORDER BY chosen_at, choice_id")
+      .all(scopeKey, talkId) as Array<Record<string, unknown>>).map(parsed);
   }
 
   /**
@@ -247,6 +256,11 @@ export class SQLiteChoiceLedger {
   scopes(): string[] {
     return (this.database.prepare('SELECT DISTINCT scope_key FROM shannon_choices').all() as Array<{ scope_key: string }>).map(row => row.scope_key);
   }
+}
+
+/** Which choices may move her mood: her own time's; with stage 2's conversation reward, also conversation choices scored by closed signals. */
+function moodSurfaces(conversation: boolean): string {
+  return conversation ? "(surface = 'autonomy' OR subject_kind = 'talk')" : "surface = 'autonomy'";
 }
 
 function parsed(row: Record<string, unknown>): StoredChoice {

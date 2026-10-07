@@ -63,7 +63,8 @@ export function chatTurnRequestBody(
           : request.message,
       },
     ],
-    reasoning: { effort: 'none' },
+    // Stage 2: `luna_plus` thinks one step longer.
+    reasoning: { effort: request.tier === 'luna_plus' ? 'low' : 'none' },
     text: {
       verbosity: 'medium',
       format: {

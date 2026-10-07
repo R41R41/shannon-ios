@@ -13,7 +13,7 @@
 | 1 | This contract, the switches, the core map, the trace vocabulary, the registry's one-line summaries, the switched-off proof | in place (`packages/learning/src/switches.ts`; tests `switches.test.ts`, `shannonTools.test.ts`, `autonomyCore.test.ts`, `stage2SwitchedOff.test.ts`) |
 | 2 | The Jev choice client, the tool menu and `tool_open`, text wiring, the parallel voice call | in place (`infra/models/jev/jevChoice.ts`, `mind/selectors/{toolMenu,turnChoices}.ts`, `mind/tools/shannonToolMenu.ts`, `wiring/skillRoutingWiring.ts`; tests `toolMenu.test.ts`, `stage2SwitchedOff.test.ts`) |
 | 3 | Notion, Voyager tasks, the schedule and place search as gated registry tools; web as a capability entry | in place (`mind/tools/shannonReadTools.ts`, `readToolPlan` in `conversationCapabilities.ts`, `settleTextTools` in `apiTextTurn.ts`, `readToolPorts` in `wiring/skillRoutingWiring.ts`; tests `readTools.test.ts`, `shannonCapabilityEvidence.test.ts`) |
-| 4 | Difficulty, the tier policy, `luna_plus`, the turn verifier, tier choices, the competence table, conversation choices in reward (I-3) | not yet |
+| 4 | Difficulty, the tier policy, `luna_plus`, the turn verifier, tier choices, the competence table, conversation choices in reward (I-3) | in place (`packages/learning/src/difficultyPolicy.ts`, `mind/selectors/{turnChoices,turnVerifier,tierCompetence}.ts`, `mind/action/respond/turnRouting.ts`, `infra/models/turnChecker.ts`, `wiring/turnRoutingWiring.ts`; tests `difficultyPolicy.test.ts`, `turnRouting.test.ts`, `stage2SwitchedOff.test.ts`) |
 | 5 | The Anthropic adapter (`@anthropic-ai/sdk`, I-6), `TieredChatModel`, the `tier.*` scenario set | not yet (inert until the key and the switch) |
 | 6–7 | Skill memory and its copies in Aether | not yet (another branch) |
 | 8 | Tree recall | not yet (another branch) |
@@ -44,6 +44,7 @@ All default on, except `SHANNON_SONNET_ROUTING` (off unless `on`, `true`, `1` or
 | `SHANNON_SKILL_EXPORT` | skills stay in the database only | memory |
 | `SHANNON_TREE_RECALL` | recall as before (luna's `selectSections`) | memory, response path |
 | `SHANNON_SONNET_ROUTING` | (default) `sonnet` is served as `luna_plus`; nothing leaves for Anthropic | response path |
+| `SHANNON_CONVERSATION_REWARD` | her conversation choices stay stage 1's data-only records (owner answer I-3 off) | emotion |
 
 The stage-1 switches (`docs/cognition-ledger-contract.md`) are independent of these.
 
@@ -83,6 +84,22 @@ The read capabilities that were projections only become registry tools (one regi
 - **Capability line.** `SHANNON_READ_TOOLS_CAPABILITY` (`packages/cognition`, conditional like Aether's and the Minecraft body's) is added after the Notion line only to a turn that offers a read tool (`withToolCapabilityLines`); with the switch off the description is what it was.
 - **Record.** Each call is written to the activity record by name and outcome only (`会話の中でNotionの共有ページを読みました。`), never the query or what was read; a failure is `unavailable` and retryable.
 
+## Difficulty and tiers (step 4, `SHANNON_DIFFICULTY`)
+
+- **Jev's questions** (`mind/selectors/turnChoices.ts`), in the same call as the menu: `task_kind` (closed: `chat`, `feelings`, `recall`, `lookup`, `write`, `plan`, `analysis`, `code`, `action`), `needs_strong_model`, `needs_verification`, `multi_step` (`noul`), and, in a turn of the owner alone that follows a reply of hers in the same Talk within ten minutes, `retry_or_correction` (`noul`; Jev reads that reply as `previous_reply`, never in a turn with anyone else present). Text: in every model turn, in parallel with recall. Voice: in every turn the router routes (not an overheard guest turn), as the second Jev call beside the router's, whose questions are unchanged. One call, one trace (`difficulty`, with the menu's answers when there was a menu).
+- **The policy** (`packages/learning/src/difficultyPolicy.ts`, pure, core **response path**: listed by name in the core map, so not emotion's). Luna first. `sonnet` when p(strong) ≥ 0.65, or when luna's learned success for the kind is below 0.6 over at least five outcomes; luna with one escalation allowed when 0.35 ≤ p < 0.65; `luna_plus` for multi-step (≥ 0.65); `jev_only` for small talk (served by luna); luna otherwise and whenever Jev could not answer. `verify` when p(verification) ≥ 0.5; `rethinks` (0–2) is recorded for step 5. `sonnet` is served as `luna_plus` unless Sonnet is available (the key **and** `SHANNON_SONNET_ROUTING=on`; never in step 4: there is no Anthropic client yet). On voice (I-2) an available Sonnet serves only when the turn's time left covers its first-token latency plus 6 s (`sonnetFirstTokenMs`, step 5's measured-latency hook; an estimate of 2.5 s until then), else luna.
+- **Serving** (`infra/models`): `luna_plus` is luna with reasoning one step up (text `none` → `low`; voice `none` → `low`, `low` → `medium`). A request without a tier is byte for byte what it was. **Escalation** (`ShannonTierRequest.escalation`, `withToolRounds` option `escalate`): once a turn, at a round boundary after a tool failed (not a refused name) or after a round with tools ran out of time, and only while no word of hers has gone out (a streamed text round that wrote is the answer; on voice not once anything was said, a waiting phrase included): every later round is `luna_plus`. The result says `escalated`.
+- **The turn verifier** (`SHANNON_TURN_VERIFY`, `mind/selectors/turnVerifier.ts`): in a turn that offered her a write (and could write), a sentence that claims she wrote, saved, made or sent something of hers must be matched by a write that worked; else her text reply gets one fixed line in her voice (`WRITE_CLAIM_CORRECTION`). On text, when the policy asked for verification and at least 15 s are left, a luna checker in its own context (`infra/models/turnChecker.ts`; her reply and the closed results of her tools; usage lane `chat`) may flag what the pattern missed. On voice her words were already spoken: the verdict is learned, the reply is not amended.
+- **The competence table** (`shannon_tier_outcomes`, `mind/selectors/tierCompetence.ts`): one row per routed turn (tier served, kind, surface, Talk, G), settled by the owner's next turn in the Talk (`tierOutcome`: G ≥ ⅔ and S ≥ ½) or after 30 minutes from G alone; competence is the Beta(1, 1) fold per (tier, kind). Read for routing only; never reward, mood or the value table. Created by the API process; kept 90 days.
+
+## Conversation choices in reward (owner answer I-3, `SHANNON_CONVERSATION_REWARD`)
+
+This reverses stage 1's rule that a conversation's tool call is data only (`docs/cognition-ledger-contract.md`, the choice ledger).
+
+- **Recorded at the end of the turn** (`recordTurn`, `wiring/turnRoutingWiring.ts`) in the stage-1 choice ledger: each tool call that ran (`tool.<name>`, source `tool_call`) and the turn's tier (`tier.<served>`, source `turn`), surface `text` or `voice`, context `<band>.<alone|others>`, subject `talk` (the Talk), pending. Stage 1's immediate data-only record of a conversation tool call is not made then (`server.ts`).
+- **Closed signals.** G (reported as the choice's success, in [0, 1]): the mean of the signals that apply: the tool worked, the turn ended inside its deadline, the verifier found nothing (when it checked); for the tier, inside the deadline, the verifier, and every tool worked. S: the owner's next turn in the same Talk, Jev's `retry_or_correction`: < 0.35 → 1, ≥ 0.65 → 0, else ½ (settle code `next_turn`). No next turn in 30 minutes: S = ½, code `turn_expired`, which never moves her mood (`MOOD_INELIGIBLE_CODES`). W: 0 (no linked prediction yet). r = (W + S + G)/3 as for every choice.
+- **Effects.** Settled conversation choices are folded into the value table with her own time's (same cells: `tool.study.search` learns from both), are claimed by the reward mood under the same warm-up (a cell that learned from three) and hourly cap (the stationary band) (`turnRouting.test.ts`, a chat burst of twenty calls), and may appear in her value facts (facts only, never with anyone else present, as before). Stage 1's data-only rows (no Talk) are never folded or claimed.
+
 ## Decision traces
 
 The trace vocabulary (`contracts/decisionTraceContract.ts`, table `shannon_decision_traces`, unchanged) gains the surface `text` and three decisions:
@@ -90,7 +107,7 @@ The trace vocabulary (`contracts/decisionTraceContract.ts`, table `shannon_decis
 | Decision | What it is | Answers (closed values only) |
 | --- | --- | --- |
 | `tool_menu` | Jev's choice of the tools whose schemas a turn sends | the chosen tool's name (or `none`), how many were offered, how many groups |
-| `difficulty` | Jev's difficulty questions and the tier the policy chose | `task_kind`, the three probabilities, the tier, whether it was mapped down, rethinks, verify |
+| `difficulty` | Jev's difficulty questions (and the menu, in the same call) | `kind`, `strong`, `verify`, `multi`, `retry` (−1 when not asked or not answered), and the menu's answers when there was one; the tier itself is recorded as the choice `tier.<served>` |
 | `recall_beam` | one beam search of tree recall (step 8) | depth, width, leaves scored, stop reason |
 
 A trace never holds the owner's words, a tool's input or a heading's text. Jev's cost per call follows stage 1 (`SHANNON_JEV_USD_PER_CALL`, unset: unknown).

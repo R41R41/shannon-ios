@@ -35,6 +35,8 @@ export interface VoiceToolTurn {
   clock?: () => number;
   /** How often silence is looked at. */
   tickMilliseconds?: number;
+  /** Stage 2: the turn's one escalation (`ToolRoundOptions.escalate`); never once she has said anything, a waiting phrase included. */
+  escalate?: NonNullable<Parameters<typeof withToolRounds>[3]['escalate']>;
 }
 
 export async function streamedVoiceToolTurn(turn: VoiceToolTurn): Promise<{ reply: string; envelope: unknown; truncated: boolean }> {
@@ -104,6 +106,7 @@ export async function streamedVoiceToolTurn(turn: VoiceToolTurn): Promise<{ repl
       }
     }, {
       isAnswer: () => false, ...(turn.signal ? { signal: turn.signal } : {}), plainBody: turn.plainBody, onSpent: turn.onSpent,
+      ...(turn.escalate ? { escalate: { ...turn.escalate, allowed: () => spoken === '' && turn.escalate!.allowed() } } : {}),
       // After a tool ran, an answer with no words is the fixed line.
       isUsable: () => roundOver,
       outOfTime: () => outOfTimeEnvelope(TURN_OUT_OF_TIME_LINE),

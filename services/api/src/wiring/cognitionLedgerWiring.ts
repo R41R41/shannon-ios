@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createAffectDynamics, episodeBoundaryMs, type CompanionStateEvent, type CompanionStateSnapshot } from '@shannon/cognition';
-import { cognitionLedgerSwitches } from '@shannon/learning';
+import { cognitionLedgerSwitches, skillRoutingSwitches } from '@shannon/learning';
 import { RewardMood } from '../mind/emotion/rewardMood.js';
 import type { PredictionShadow } from '../mind/prediction/predictionShadow.js';
 import type { DecisionTraceWriter } from '../contracts/decisionTraceContract.js';
@@ -75,11 +75,14 @@ export function startRewardMood(
 ): { mood: RewardMood | null; stop(): void } {
   const choices = parts.choices;
   if (!cognitionLedgerSwitches(environment).rewardMood || !choices) return { mood: null, stop: () => undefined };
+  const conversation = skillRoutingSwitches(environment).conversationReward;
   const fallback = episodeBoundaryMs(createAffectDynamics().boundary);
   const mood = new RewardMood({
+    // Stage 2, owner answer I-3: with the conversation reward on, her conversation choices move her mood too, under the same
+    // warm-up and hourly cap; off, only her own time's (as stage 1).
     claims: {
-      scopes: () => choices.store.unclaimedScopes(),
-      unclaimed: scopeKey => choices.store.unclaimed(scopeKey),
+      scopes: () => choices.store.unclaimedScopes(conversation),
+      unclaimed: scopeKey => choices.store.unclaimed(scopeKey, 50, conversation),
       claim: (scopeKey, choiceId, code, at, step) => choices.store.claimMood(scopeKey, choiceId, code, at, step),
       recordStep: (scopeKey, choiceId, step) => choices.store.recordMoodStep(scopeKey, choiceId, step),
       stepsSince: (scopeKey, since) => choices.store.moodStepsSince(scopeKey, since),

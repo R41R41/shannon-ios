@@ -36,7 +36,7 @@ function configuredTurnChooser(
   environment: Readonly<Record<string, string | undefined>>, switches: SkillRoutingSwitches,
   options: { trace: DecisionTraceWriter | null; jevFetch?: typeof fetch; now?: () => string },
 ): TurnChooser | null {
-  if (!switches.stage2 || !switches.toolMenu) return null;
+  if (!switches.stage2 || (!switches.toolMenu && !switches.difficulty)) return null;
   const apiKey = environment.TYPESAFE_API_KEY?.trim();
   if (!apiKey) return null;
   const timeout = Number(environment.SHANNON_JEV_TIMEOUT_MS);
@@ -58,7 +58,7 @@ function configuredTurnChooser(
       costUsd: trace.costUsd, relatedId: null, at: trace.at,
     }) } : {}),
   });
-  return new JevTurnChooser(jev, { toolMenu: switches.toolMenu });
+  return new JevTurnChooser(jev, { toolMenu: switches.toolMenu, difficulty: switches.difficulty });
 }
 
 /**

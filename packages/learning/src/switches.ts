@@ -78,6 +78,12 @@ export interface SkillRoutingSwitches {
   treeRecall: boolean;
   /** `SHANNON_SONNET_ROUTING`: the `sonnet` tier may leave for Anthropic (step 5; also needs the key). Default off. Core: response path. */
   sonnetRouting: boolean;
+  /**
+   * `SHANNON_CONVERSATION_REWARD` (owner answer I-3 「報酬にも入れる」): her tool calls and tier choices in a conversation are scored
+   * by closed outcome signals and go into reward, mood (warm-up and hourly cap unchanged) and the value table. Needs the stage-1
+   * choice ledger to have anywhere to go. Core: emotion.
+   */
+  conversationReward: boolean;
 }
 
 const ON = new Set(['on', 'true', '1', 'yes']);
@@ -101,5 +107,6 @@ export function skillRoutingSwitches(values: SwitchValues): SkillRoutingSwitches
     skillExport: skills && switchedOn(values.SHANNON_SKILL_EXPORT),
     treeRecall: stage2 && switchedOn(values.SHANNON_TREE_RECALL),
     sonnetRouting: difficulty && switchedOnExplicitly(values.SHANNON_SONNET_ROUTING),
+    conversationReward: stage2 && switchedOn(values.SHANNON_CONVERSATION_REWARD),
   });
 }

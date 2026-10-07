@@ -104,23 +104,39 @@ export function menuCandidatesOf(definitions: readonly ShannonToolDefinition[]):
 
 /** What the menu needs of the turn's Jev call (`mind/selectors/turnChoices.ts`), by shape. */
 export interface ToolMenuChooser {
-  choose(request: { scopeKey: string; surface: 'text' | 'voice'; words: string; menu: readonly { name: string; summary: string; group: string }[] }): Promise<{ menu: { chosen: readonly string[] } | null }>;
+  /** Whether it asks the difficulty questions (step 4): then it is asked in every turn, with or without tools. */
+  readonly difficulty?: boolean;
+  choose(request: TurnChoiceAsk): Promise<TurnChoiceAnswer>;
+}
+export interface TurnChoiceAsk {
+  scopeKey: string; surface: 'text' | 'voice'; words: string; menu: readonly { name: string; summary: string; group: string }[];
+  /** Her last reply in this Talk, only in a turn of the owner alone: for the retry-or-correction question (step 4). */
+  previousReply?: string;
+}
+export interface TurnChoiceAnswer {
+  menu: { chosen: readonly string[] } | null;
+  /** Step 4: Jev's difficulty answers (null: none asked or unusable) and the probability that he retried or corrected her. */
+  difficulty?: { taskKind: string; needsStrongModel: number; needsVerification: number; multiStep: number } | null;
+  retry?: number | null;
 }
 
-/** Starts the menu question for the tools a turn would offer (`toolMenuCandidates`); null when there is no chooser or nothing to offer. */
+/**
+ * Starts the turn's Jev call: the menu for the tools a turn would offer (`toolMenuCandidates`), and with step 4's difficulty
+ * questions in every turn. Null when there is no chooser, or nothing to ask.
+ */
 export function startToolMenu(
-  chooser: ToolMenuChooser | undefined | null, request: { scopeKey: string; surface: 'text' | 'voice'; words: string },
+  chooser: ToolMenuChooser | undefined | null, request: Omit<TurnChoiceAsk, 'menu'>,
   candidates: () => readonly ShannonToolDefinition[],
   /** Capability entries beside the tools (web search, step 3), only in a turn that offers tools. */
   extra: readonly { name: string; summary: string; group: string }[] = [],
-): Promise<{ menu: { chosen: readonly string[] } | null }> | null {
+): Promise<TurnChoiceAnswer> | null {
   if (!chooser) return null;
   const tools = menuCandidatesOf(candidates());
-  return tools.length ? chooser.choose({ ...request, menu: [...tools, ...extra] }) : null;
+  return tools.length || chooser.difficulty ? chooser.choose({ ...request, menu: tools.length ? [...tools, ...extra] : [] }) : null;
 }
 
 /** The turn's offer narrowed by the menu's answer, or the offer as it is (no menu, no tools, or Jev could not choose). */
-export async function offerWithMenu<T extends { tools?: ShannonModelToolSession }>(offer: T, choices: Promise<{ menu: { chosen: readonly string[] } | null }> | null): Promise<T> {
+export async function offerWithMenu<T extends { tools?: ShannonModelToolSession }>(offer: T, choices: Promise<TurnChoiceAnswer> | null): Promise<T> {
   if (!choices || !offer.tools) return offer;
   const { menu } = await choices;
   return menu ? { ...offer, tools: withToolMenu(offer.tools, menu.chosen) } : offer;

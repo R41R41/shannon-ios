@@ -34,7 +34,7 @@ import type { PeopleMemory } from '../../mind/memory/peopleMemory.js';
 import { heardByEveryoneHere } from '../platform/platformPeople.js';
 import type { PersonIdentityStore } from '../../mind/memory/store/personIdentity.js';
 import type { ShannonBody } from '../body/shannonBody.js';
-import { startTurnToolMenu, type ConversationToolServer, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
+import { startTurnToolMenu, type ConversationToolServer, type ToolMenuChooser, type TurnChoiceAnswer } from '../../mind/tools/shannonToolSession.js';
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
 import { prepareTurnCognitiveContext } from '../../mind/action/respond/turnCognitiveContext.js';
 import { TurnDeadline } from '../../mind/action/respond/turnDeadline.js';
@@ -306,19 +306,20 @@ export function storedBySurface(dependencies: TextTurnDependencies, surface: Tex
  */
 export async function settleTextTools<T extends { tools?: ShannonModelToolSession; toolsWithheld?: true }>(
   dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn,
-  turn: { offered: T; choices: Promise<{ menu: { chosen: readonly string[] } | null }> | null; plan: ReadToolPlan | null; capability: ConversationCapabilityContext;
+  turn: { offered: T; choices: Promise<TurnChoiceAnswer> | null; plan: ReadToolPlan | null; capability: ConversationCapabilityContext;
     prompt: () => TextTurnPrompt; rebuild: (capability: ConversationCapabilityContext) => TextTurnPrompt },
-): Promise<{ offer: T; web: boolean; capability: ConversationCapabilityContext; layered: TextTurnPrompt }> {
-  const menu = turn.choices ? (await turn.choices).menu : null;
+): Promise<{ offer: T; web: boolean; capability: ConversationCapabilityContext; layered: TextTurnPrompt; answer: TurnChoiceAnswer | null }> {
+  const answer = turn.choices ? await turn.choices : null;
+  const menu = answer?.menu ?? null;
   const offer = menu && turn.offered.tools ? { ...turn.offered, tools: withToolMenu(turn.offered.tools, menu.chosen) } : turn.offered;
   const web = menu?.chosen.includes(WEB_CAPABILITY_ENTRY.name) === true;
   const served = new Set(web ? [] : (turn.offered.tools?.definitions ?? []).map(tool => tool.domain as string));
   const missing = turn.plan?.dropped(served) ?? null;
-  if (!missing) return { offer, web, capability: turn.capability, layered: turn.prompt() };
+  if (!missing) return { offer, web, capability: turn.capability, layered: turn.prompt(), answer };
   const late = await conversationCapabilityContext(input.body.scopeKey, input.message, { aetherContext: dependencies.aetherContext, voyagerCatalog: dependencies.voyagerCatalog,
     notion: dependencies.notion, upcoming: dependencies.upcoming, ownOutreach: dependencies.ownOutreach }, missing);
   const capability = { prompt: [turn.capability.prompt, late.prompt].filter(Boolean).join('\n\n'), sources: [...turn.capability.sources, ...late.sources] };
-  return { offer, web, capability, layered: turn.rebuild(capability) };
+  return { offer, web, capability, layered: turn.rebuild(capability), answer };
 }
 
 /**

@@ -86,6 +86,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/wiring/cognitionLedgerWiring.ts',
     'services/api/src/wiring/cognitionLedgerTaps.ts',
     'services/api/src/contracts/cognitionLedgerContract.ts',
+    // Syzygy ADR-0008 stage 2, owner answer I-3: the wiring that scores her conversation choices into reward, mood and values.
+    'services/api/src/wiring/turnRoutingWiring.ts',
   ]),
   authentication: Object.freeze([
     'services/api/src/infra/auth/apiAuth.ts',
@@ -210,6 +212,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/tools/shannonFolderTools.ts',
     // Syzygy ADR-0008 stage 2, step 3: the executors of her read tools (Notion, Voyager tasks, the schedule, place search).
     'services/api/src/mind/tools/shannonReadTools.ts',
+    // The window other parts of the mind read what her tools did in a turn through (Syzygy ADR-0008 §10).
+    'services/api/src/mind/tools/toolsPorts.ts',
     // Aether (Syzygy ADR-0007 revised): the client of her access and the executors of her Aether tools.
     'services/api/src/integrations/aether/aetherAccess.ts',
     'services/api/src/mind/tools/shannonAetherTools.ts',
@@ -315,11 +319,23 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/surfaces/voice/transcriptionRoute.ts',
     // Syzygy ADR-0008 stage 1: the owner's view and controls of her value table.
     'services/api/src/infra/http/learningRoutes.ts',
+    // Syzygy ADR-0008 stage 2: the difficulty policy. Listed by name, so it is the response path's, not emotion's
+    // (`packages/learning/` is emotion's; a file listed by name wins over its directory).
+    'packages/learning/src/difficultyPolicy.ts',
     // Syzygy ADR-0008 stage 2: the turn's Jev call (the tool menu), the session it narrows, and their wiring.
     'services/api/src/mind/selectors/toolMenu.ts',
     'services/api/src/mind/selectors/turnChoices.ts',
     'services/api/src/mind/tools/shannonToolMenu.ts',
     'services/api/src/wiring/skillRoutingWiring.ts',
+    // Syzygy ADR-0008 stage 2, step 4: the tier of a turn, the verifier and its luna checker, the competence table, and the voice glue.
+    'services/api/src/mind/action/respond/turnRouting.ts',
+    'services/api/src/mind/selectors/turnVerifier.ts',
+    'services/api/src/mind/selectors/selectorsPorts.ts',
+    'services/api/src/mind/selectors/tierCompetence.ts',
+    'services/api/src/mind/selectors/store/sqliteTierOutcomes.ts',
+    'services/api/src/infra/models/turnChecker.ts',
+    'services/api/src/contracts/turnRoutingContract.ts',
+    'services/api/src/surfaces/voice/voiceStage2.ts',
   ]),
   deployment: Object.freeze([
     'deploy/',

@@ -116,6 +116,8 @@ export function conversationTools(
       ...(timeMilliseconds !== undefined ? { timeMilliseconds } : {}),
     }, signal);
     if (result.ok && writesHerOwnThings(definitions.find(item => item.name === tool.name))) WROTE_HER_OWN_THINGS.add(session);
+    // What ran, as closed values, for the turn's verifier and her conversation choices (Syzygy ADR-0008 stage 2).
+    TURN_RESULTS.set(session, [...TURN_RESULTS.get(session) ?? [], { name: tool.name, effect: tool.effect === 'write' ? 'write' : 'read', ok: result.ok }]);
     return { output: toolResultForModel(result), note: () => trace?.called(toolTraceCall(tool?.name ?? providerName.slice(0, 80), argumentsJson, result, secrets)) };
   };
   // Not enumerable: two turns that offer the same tools are the same request (what the model is asked), whoever runs the calls.
@@ -139,6 +141,20 @@ export type ReadToolOffer = Partial<Record<ReadToolDomain, boolean>>;
 
 function readOffered(tool: ShannonToolDefinition, reads: ReadToolOffer | undefined): boolean {
   return !isReadToolDomain(tool.domain) || reads?.[tool.domain] === true;
+}
+
+/** The calls that ran in each turn's session, in the order they ended: name, effect, whether it worked. */
+const TURN_RESULTS = new WeakMap<object, ReadonlyArray<{ name: string; effect: 'read' | 'write'; ok: boolean }>>();
+
+/** Syzygy ADR-0008 stage 2: what her tools did in this turn (closed values), for the verifier and her conversation choices. */
+export function turnToolResults(tools: ShannonModelToolSession | undefined): ReadonlyArray<{ name: string; effect: 'read' | 'write'; ok: boolean }> {
+  return tools ? TURN_RESULTS.get(baseToolSession(tools)) ?? TURN_RESULTS.get(tools) ?? [] : [];
+}
+
+/** Whether the turn offered her a write (and its words could be trusted to write): where the verifier checks her claims. */
+export function turnOffersWrites(tools: ShannonModelToolSession | undefined): boolean {
+  if (!tools || tools.writesWithheld) return false;
+  return (tools.menu?.offered ?? tools.definitions).some(tool => tool.effect === 'write');
 }
 
 /** The tool sessions of turns in which a write of hers to her own places, or a proposal to the owner's Aether, worked. */
@@ -293,7 +309,7 @@ export function conversationToolServer(
   };
 }
 
-export { offerWithMenu, type ToolMenuChooser } from './shannonToolMenu.js';
+export { offerWithMenu, type ToolMenuChooser, type TurnChoiceAnswer } from './shannonToolMenu.js';
 
 /** Syzygy ADR-0008 stage 2: the menu question for the tools this turn would offer (`toolMenuCandidates`), or null. */
 export function startTurnToolMenu(
@@ -301,7 +317,13 @@ export function startTurnToolMenu(
   ownerAlone: boolean | 'others' | 'guests' | 'shared', server: Partial<ConversationToolServer>, turn: string, options: { withoutDomains?: readonly string[]; reads?: ReadToolOffer } = {},
   extra: readonly { name: string; summary: string; group: string }[] = [],
 ) {
-  return startToolMenu(chooser, { scopeKey, surface, words: turn.slice(turn.indexOf('\n') + 1) },
+  if (!chooser) return null;
+  // Her last reply in this Talk (ten minutes, the owner alone only): Jev reads it for the retry-or-correction question.
+  const threadId = turn.slice(0, Math.max(0, turn.indexOf('\n')));
+  let previous: StoredConversationMessage | undefined;
+  try { previous = ownerAlone === true && chooser.difficulty ? server.lastMessage?.(scopeKey, threadId) : undefined; } catch { previous = undefined; }
+  const recent = previous?.role === 'assistant' && Date.parse(server.now?.() ?? '') - Date.parse(previous.observedAt) < TOOL_FOLLOW_UP_MILLISECONDS;
+  return startToolMenu(chooser, { scopeKey, surface, words: turn.slice(turn.indexOf('\n') + 1), ...(recent ? { previousReply: previous!.content.slice(0, 600) } : {}) },
     () => toolMenuCandidates(autonomy, scopeKey, surface, ownerAlone, server, turn, options), extra);
 }
 

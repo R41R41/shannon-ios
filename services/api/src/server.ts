@@ -15,6 +15,7 @@ import { startToolTraceSweep } from './mind/tools/shannonToolTraceSweep.js';
 import { createConfiguredChatModel } from './infra/models/chatModel.js';
 import { configuredVoiceDecision, startRewardMood } from './wiring/cognitionLedgerWiring.js';
 import { readToolPorts, skillRoutingParts } from './wiring/skillRoutingWiring.js';
+import { configuredTurnRouting } from './wiring/turnRoutingWiring.js';
 import { storyReacted, toolCallChoice, touchLedger } from './wiring/cognitionLedgerTaps.js';
 import { createValuesRoute, isValuesPath, ownerValueRecorder } from './infra/http/learningRoutes.js';
 import { configuredAuthPepper, SQLiteDeviceAuthStore } from './infra/auth/deviceAuth.js';
@@ -108,8 +109,11 @@ const autonomy = new ShannonAutonomyService({
   announcer: autonomyAnnouncer, agentTasks: agentTaskStore, defaultThread: scopeKey => persistentStore.threadId(scopeKey),
   defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST?.trim() || null, minecraftBody: minecraft.requests, aether: aetherPorts,
   ...(predictionLedger ? { storyReacted: (scopeKey, pieceId, reaction, at) => storyReacted(predictionLedger, scopeKey, pieceId, reaction, at, choiceLedger) } : {}) });
-// Her tool calls in conversations are choices too (data for stage 2, no effect).
-if (choiceLedger) autonomy.tools.observeChoices(toolCallChoice(choiceLedger), now);
+// Syzygy ADR-0008 stage 2, step 4 (docs/skill-and-routing-contract.md): the tier policy's inputs, the verifier, and the learning of her
+// conversation choices. SHANNON_ADR8_STAGE2=off: none of it.
+const turnRouting = configuredTurnRouting(process.env, { databasePath: configuredDatabasePath(), choices: choiceLedger, usageStore: persistentStore, now });
+// Her tool calls in conversations are choices too: stage 1's data only, unless stage 2's conversation reward scores them (owner answer I-3).
+if (choiceLedger && !turnRouting?.routing.switches.conversationReward) autonomy.tools.observeChoices(toolCallChoice(choiceLedger), now);
 // Step 7b (SHANNON_REWARD_MOOD): settled choices of hers move her mood once each, here only, within the hourly safeguard.
 const rewardMood = startRewardMood(process.env, { choices: choiceLedger, shadow: persistentStore.predictionShadow(), state: persistentStore }, now);
 // Her folder's operations (docs/host-folder-contract.md): stale ones are closed and results pruned also when no device or tool calls.
@@ -184,7 +188,7 @@ const kernel = createLocalApiKernel(now, {
   notion, minecraftRequests: minecraft.requests,
   // Syzygy ADR-0008 stage 2 (docs/skill-and-routing-contract.md): the turn's Jev call. SHANNON_ADR8_STAGE2=off: none of it.
   ...skillRoutingParts(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null }),
-  ...(readTools ? { readTools } : {}),
+  ...(readTools ? { readTools } : {}), ...(turnRouting ? { turnRouting: turnRouting.routing } : {}),
 });
 const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, chatModel, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input) }, databasePath: configuredDatabasePath() });
 // What this server resolved (docs/ops-contract.md, `server`): model names, persona hash, tools, revision, integrations as booleans. Owner only.
@@ -427,6 +431,7 @@ function shutdown(): void {
     testFlightDeliveryStore.close();
     dailyMindStore.close();
     organizeStore.close();
+    turnRouting?.close();
     cognitiveIntentStore.close();
     conversationOrchestrationStore.close();
     peopleMemoryStore.close();

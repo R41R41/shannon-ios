@@ -166,6 +166,12 @@ export interface ToolRoundOptions {
   /** A content-free line for the service log. */
   log?: (line: string) => void;
   /**
+   * Syzygy ADR-0008 stage 2, step 4: the turn's one escalation. At a round boundary after a step in which a tool failed, or after
+   * a round with tools ran out of time, and only while `allowed()` (no word of hers has gone out), every later round is sent as
+   * `body(...)` says (luna thinking longer). At most once a turn. Absent: every round is what it was.
+   */
+  escalate?: { allowed: () => boolean; body: (body: Record<string, unknown>) => Record<string, unknown>; onEscalated: () => void };
+  /**
    * The envelope of her fixed short line (`TURN_OUT_OF_TIME_LINE`), in the format the caller reads. `sent`: the reply
    * text an answer had already sent before it failed; it stands (cut at a sentence boundary) and the line follows it.
    */
@@ -210,13 +216,22 @@ export { TURN_OUT_OF_TIME_LINE };
  * tool has run, and otherwise as the input so far, with the tools' results as text and a note.
  */
 export async function withToolRounds(
-  body: Record<string, unknown>,
+  initialBody: Record<string, unknown>,
   session: ShannonModelToolSession | undefined,
   send: (body: Record<string, unknown>, time?: RoundTime) => Promise<unknown>,
   options: ToolRoundOptions,
 ): Promise<unknown> {
+  let body = initialBody;
   if (!session) return send(body);
   const deadline = session.deadline;
+  // Stage 2: escalated once at most; `body` is what every later round is built from.
+  let escalated = false;
+  const escalate = () => {
+    if (escalated || !options.escalate || !options.escalate.allowed()) return;
+    escalated = true;
+    body = options.escalate.body(body);
+    options.escalate.onEscalated();
+  };
   const input = Array.isArray(body.input) ? [...body.input as unknown[]] : [];
   const turn: ToolStepState = { used: 0, toolsOff: false };
   const parallel = parallelToolsEnabled();
@@ -258,6 +273,7 @@ export async function withToolRounds(
       if (!timedOut(error) && turn.used === 0) throw error;
       input.push({ role: 'developer', content: TIMED_OUT_ROUND_NOTE });
       turn.toolsOff = true;
+      escalate();
       continue;
     }
     const calls = functionCallsOf(envelope);
@@ -268,7 +284,9 @@ export async function withToolRounds(
       turn.toolsOff = true;
       continue;
     }
-    input.push(...await runToolStep(calls, session, turn, { parallel, ...(options.signal ? { signal: options.signal } : {}) }));
+    const ran = await runToolStep(calls, session, turn, { parallel, ...(options.signal ? { signal: options.signal } : {}) });
+    input.push(...ran);
+    if (options.escalate && ran.some(failedCall)) escalate();
   }
 }
 
@@ -281,6 +299,16 @@ function withMenuTools(body: Record<string, unknown>, session: ShannonModelToolS
   const definitions = session.definitions;
   return { ...body, tools: providerFunctionTools(definitions),
     ...(body.parallel_tool_calls === true ? { parallel_tool_calls: asksForParallelCalls(definitions) } : {}) };
+}
+
+/** A call's output that says it did not work (a refusal of a name the turn does not offer is not trouble with a tool). */
+function failedCall(item: unknown): boolean {
+  const value = item && typeof item === 'object' ? item as Record<string, unknown> : null;
+  if (value?.type !== 'function_call_output' || typeof value.output !== 'string') return false;
+  try {
+    const output = JSON.parse(value.output) as { ok?: unknown; failure?: unknown };
+    return output.ok === false && output.failure !== 'not_offered';
+  } catch { return false; }
 }
 
 function withoutTools(body: Record<string, unknown>): Record<string, unknown> {
@@ -296,4 +324,32 @@ function textOnly(input: readonly unknown[]): unknown[] {
     if (value?.type === 'function_call_output') return [{ role: 'developer', content: `[道具の結果] ${String(value.output).slice(0, 8_000)}` }];
     return [item];
   });
+}
+
+/**
+ * Syzygy ADR-0008 stage 2, step 4 (`docs/skill-and-routing-contract.md`): the tier that answers the turn, when it is not plain
+ * luna. `luna_plus` is luna thinking one step longer. `escalation`: the turn may be escalated once, at a round boundary,
+ * before any word of hers has gone out, when a tool fails or a round runs out of time. Absent: the request is as it was.
+ */
+export interface ShannonTierRequest {
+  tier?: 'luna_plus';
+  escalation?: true;
+}
+
+/**
+ * Stage 2, step 4: the one escalation a turn may take (`ShannonTierRequest.escalation`), from luna to `luna_plus`: every later
+ * round thinks one step longer. None for a turn that is already `luna_plus`, and none without the field.
+ */
+export function tierEscalation(request: ShannonTierRequest & { conversationClass?: string }, voice = false) {
+  if (!request.escalation || request.tier === 'luna_plus') return null;
+  let happened = false;
+  const complex = request.conversationClass === 'skill_complex';
+  return {
+    happened: () => happened,
+    option: {
+      allowed: () => true,
+      body: (body: Record<string, unknown>) => ({ ...body, reasoning: { effort: voice ? (complex ? 'medium' : 'low') : 'low' } }),
+      onEscalated: () => { happened = true; },
+    },
+  };
 }

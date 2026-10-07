@@ -23,7 +23,7 @@ import { streamedVoiceToolTurn } from './chatModelVoiceTools.js';
 import { ChatSentenceSplitter } from '../../surfaces/text/chatSentenceSplitter.js';
 import { PartialAnswerError, RoundTimer, type RoundTime } from '../../mind/action/respond/turnDeadline.js';
 import {
-  TOOLS_WITHHELD_INSTRUCTIONS, TURN_OUT_OF_TIME_LINE, VOICE_TOOL_OUTPUT_TOKENS, toolInstructions,
+  TOOLS_WITHHELD_INSTRUCTIONS, TURN_OUT_OF_TIME_LINE, VOICE_TOOL_OUTPUT_TOKENS, tierEscalation, toolInstructions, type ShannonTierRequest,
   isOutOfTime, outOfTimeEnvelope, providerFunctionTools, withToolRounds, type ShannonModelToolSession,
 } from './chatModelTools.js';
 import {
@@ -72,7 +72,7 @@ export interface ShannonPrecedingReply {
   precedingReply?: string;
 }
 
-export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPrecedingReply {
+export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPrecedingReply, ShannonTierRequest {
   generateThreadTitle?: boolean;
   priorThreadSummary?: string;
   scopeKey: string;
@@ -95,7 +95,7 @@ export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPre
   toolsWithheld?: true;
 }
 
-export interface ShannonVoiceModelRequest extends ShannonPromptLayers, ShannonPrecedingReply {
+export interface ShannonVoiceModelRequest extends ShannonPromptLayers, ShannonPrecedingReply, ShannonTierRequest {
   scopeKey: string;
   history: readonly ShannonConversationItem[];
   message: string;
@@ -141,6 +141,8 @@ export interface ShannonChatModelResult {
   truncated?: boolean;
   /** A turn with her tools ran out of time: `reply` ends with her fixed line, and nothing may be added to it. */
   outOfTime?: true;
+  /** Stage 2: the turn was escalated once (luna to `luna_plus`) at a round boundary. */
+  escalated?: true;
 }
 
 export interface ShannonIntentPlan {
@@ -260,8 +262,10 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       }
       return json;
     };
-    const json = await withToolRounds(chatTurnRequestBody(this.model, request, this.options.agentHostHint), offersTools(request) ? request.tools : undefined, send, this.chatRounds(request, () => ''));
-    return this.completedChatTurn(request, json);
+    const escalation = tierEscalation(request);
+    const json = await withToolRounds(chatTurnRequestBody(this.model, request, this.options.agentHostHint), offersTools(request) ? request.tools : undefined, send,
+      { ...this.chatRounds(request, () => ''), ...(escalation ? { escalate: escalation.option } : {}) });
+    return escalation?.happened() ? { ...this.completedChatTurn(request, json), escalated: true } : this.completedChatTurn(request, json);
   }
 
   /**
@@ -294,6 +298,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     // Each tool round streams on its own; a round that only calls tools writes no reply text. A round that writes reply
     // text is the answer: it gets the answer's time, and if it fails after all, what it sent stands (`PartialAnswerError`).
     let written = '';
+    const escalation = tierEscalation(request);
     const envelope = await withToolRounds(chatTurnRequestBody(this.model, request, this.options.agentHostHint), offersTools(request) ? request.tools : undefined,
       async (body, time) => {
         const timer = time ? new RoundTimer(time) : undefined;
@@ -310,8 +315,8 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
           if (timer && written) throw new PartialAnswerError(written);
           throw error;
         } finally { timer?.clear(); }
-      }, this.chatRounds(request, () => written));
-    return this.completedChatTurn(request, envelope);
+      }, { ...this.chatRounds(request, () => written), ...(escalation ? { escalate: { ...escalation.option, allowed: () => written === '' } } : {}) });
+    return escalation?.happened() ? { ...this.completedChatTurn(request, envelope), escalated: true } : this.completedChatTurn(request, envelope);
   }
 
   /** Parse, then account, then build the result: the order `generate` has always used. */
@@ -338,6 +343,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
   async generateVoice(request: ShannonVoiceModelRequest): Promise<ShannonChatModelResult> {
     // Words of a round that called tools (a short waiting phrase) come before the words of the answer.
     const said: string[] = [];
+    const voiceEscalation = tierEscalation(request, true);
     const json = await withToolRounds(this.voiceRequestPayload(request), this.voiceTools(request), async (body, time) => {
       const response = await this.fetcher(this.endpoint, {
         method: 'POST',
@@ -354,6 +360,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       if (!response.ok) throw new Error(`OPENAI_RESPONSE_${response.status}: ${errorDetail(value)}`);
       return value;
     }, {
+      ...(voiceEscalation ? { escalate: voiceEscalation.option } : {}),
       isAnswer: () => false, plainBody: this.voiceRequestPayload({ ...request, tools: undefined }), outOfTime: () => outOfTimeEnvelope(TURN_OUT_OF_TIME_LINE),
       // After a tool ran, an empty answer is the fixed line, so the turn is still saved.
       isUsable: envelope => extractOutputText(envelope).trim().length > 0,
@@ -371,7 +378,8 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       this.recordSpentVoiceUsage(request.scopeKey, json);
       throw new Error('OPENAI_RESPONSE_EMPTY');
     }
-    return this.voiceResult(request, json, reply, truncated);
+    const result = this.voiceResult(request, json, reply, truncated);
+    return voiceEscalation?.happened() ? { ...result, escalated: true } : result;
   }
 
   async generateVoiceStreaming(
@@ -386,13 +394,16 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     const tools = this.voiceTools(request);
     if (tools) {
       // Her tools: waiting phrases, the turn's deadline, and the out-of-time line (`chatModelVoiceTools.ts`).
+      const escalation = tierEscalation(request, true);
       const turn = await streamedVoiceToolTurn({
+        ...(escalation ? { escalate: escalation.option } : {}),
         fetcher: this.fetcher, endpoint: this.endpoint, apiKey: this.options.apiKey, body: this.voiceRequestPayload(request),
         plainBody: this.voiceRequestPayload({ ...request, tools: undefined }), tools, bounds, ...(signal ? { signal } : {}), onTextDelta,
         onSpent: envelope => this.recordChatUsage(request.scopeKey, envelope),
         onSpentWithoutReply: envelope => this.recordSpentVoiceUsage(request.scopeKey, envelope),
       });
-      return this.voiceResult(request, turn.envelope, turn.reply, turn.truncated);
+      const result = this.voiceResult(request, turn.envelope, turn.reply, turn.truncated);
+      return escalation?.happened() ? { ...result, escalated: true } : result;
     }
     const outcome = await streamedVoiceReply({
       fetcher: this.fetcher, endpoint: this.endpoint, apiKey: this.options.apiKey,
@@ -449,7 +460,8 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
         ...precedingReplyMessage(request),
         { role: 'user', content: request.message },
       ],
-      reasoning: { effort: complex ? 'low' : 'none' },
+      // Stage 2: `luna_plus` thinks one step longer.
+      reasoning: { effort: request.tier === 'luna_plus' ? (complex ? 'medium' : 'low') : complex ? 'low' : 'none' },
       text: { verbosity: complex ? 'medium' : 'low' },
       // A turn with her tools may write a whole story in one call; how long she speaks is still the instructions'.
       max_output_tokens: tools ? Math.max(maximumOutputTokens, VOICE_TOOL_OUTPUT_TOKENS) : maximumOutputTokens,

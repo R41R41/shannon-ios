@@ -109,3 +109,23 @@ export {
   type AppraisableChoice,
   type RewardMoodCode,
 } from './choiceAppraisal.js';
+export {
+  DIFFICULTY_THRESHOLDS,
+  SONNET_FIRST_TOKEN_ESTIMATE_MS,
+  TASK_KINDS,
+  TIERS,
+  VOICE_SONNET_MARGIN_MS,
+  competenceMean,
+  conversationGrowth,
+  decideTier,
+  escalatedTier,
+  nextTurnServe,
+  tierOutcome,
+  type Competence,
+  type DifficultyAnswers,
+  type DifficultyContext,
+  type ServedTier,
+  type TaskKind,
+  type Tier,
+  type TierDecision,
+} from './difficultyPolicy.js';

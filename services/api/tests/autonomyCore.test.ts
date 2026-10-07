@@ -19,7 +19,7 @@ function filesBelow(folder: string): string[] {
  * Files listed by name in another area than the directory that holds them (Syzygy ADR-0008 stage 2). Each is still core;
  * only its area differs from the area of its directory.
  */
-const CORE_AREA_OVERRIDES: readonly string[] = [];
+const CORE_AREA_OVERRIDES: readonly string[] = ['packages/learning/src/difficultyPolicy.ts: emotion -> response_path'];
 
 describe('CORE as code', () => {
   it('covers the nine core areas of ADR-0002, each with at least one path', () => {
@@ -88,6 +88,7 @@ describe('CORE as code', () => {
       'services/api/src/mind/tools/shannonToolMenu.ts': 'response_path',
       'services/api/src/wiring/skillRoutingWiring.ts': 'response_path',
       'services/api/src/mind/tools/shannonReadTools.ts': 'approval_and_budget',
+      'packages/learning/src/difficultyPolicy.ts': 'response_path',
       'services/api/src/mind/inhibition/inhibitionPorts.ts': 'approval_and_budget',
     };
     for (const [file, area] of Object.entries(expected)) expect(coreAreaForRepositoryPath(file)?.area, file).toBe(area);

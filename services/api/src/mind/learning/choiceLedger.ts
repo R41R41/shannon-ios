@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { ROOT_VALUE, cognitionLedgerSwitches, type ValueRead } from '@shannon/learning';
+import { ROOT_VALUE, cognitionLedgerSwitches, skillRoutingSwitches, type ValueRead } from '@shannon/learning';
 import { LockWaitMeter, loggedFailure, tableExists, underWriteLock, ownerDayKey, type SqliteConnection } from '../../infra/sqlite/lockWaits.js';
-import { settlePending } from './rewardSettlement.js';
+import { settleConversation, settlePending } from './rewardSettlement.js';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import { CHOICES_TABLE, SQLiteChoiceLedger, type ChoiceDraft, type StoredChoice } from './store/sqliteChoiceLedger.js';
 import { PREDICTIONS_TABLE, SQLitePredictionLedger } from './store/sqlitePredictionLedger.js';
 
@@ -30,6 +31,11 @@ export type ValueReader = (scopeKey: string, choice: string, context: string) =>
 export interface ChoiceLedgerOptions {
   database: SqliteConnection;
   createsSchema: boolean;
+  /**
+   * Syzygy ADR-0008 stage 2, owner answer I-3 (`SHANNON_CONVERSATION_REWARD`): her conversation choices are scored by closed
+   * signals and settled by the owner's next turn. Default: the switch as the environment says.
+   */
+  conversation?: boolean;
   /** The same queue as the prediction ledger on this connection, so a prediction settled before a report is seen by it. */
   defer?: (task: () => void) => void;
   values?: ValueReader;
@@ -43,6 +49,7 @@ export class ChoiceLedger {
   private readonly defer: (task: () => void) => void;
   private values: ValueReader;
   private present = false;
+  readonly conversation: boolean;
 
   constructor(private readonly options: ChoiceLedgerOptions) {
     this.store = new SQLiteChoiceLedger(options.database, { createSchema: options.createsSchema });
@@ -50,6 +57,7 @@ export class ChoiceLedger {
     this.meter = new LockWaitMeter('choice ledger', options.log);
     this.defer = options.defer ?? (task => { setImmediate(task); });
     this.values = options.values ?? (() => ROOT_VALUE);
+    this.conversation = options.conversation ?? skillRoutingSwitches(serverEnvironment()).conversationReward;
   }
 
   /** Where the value at choice time is read (the value table of step 5). */
@@ -69,8 +77,27 @@ export class ChoiceLedger {
     return choiceId;
   }
 
+  /**
+   * Stage 2 (owner answer I-3): a conversation choice (a tool call that ran, the tier of a turn) at the end of its turn, with G
+   * (`conversationGrowth`) and the Talk whose next turn of the owner's settles it (`settleTalk`). Nothing while switched off.
+   */
+  recordConversation(scopeKey: string, draft: ChoiceDraft, growth: number, talkId: string, at: string): string | null {
+    if (!this.conversation) return null;
+    const choiceId = this.choose(scopeKey, draft, at);
+    this.report(scopeKey, choiceId, { success: growth, costYen: 0, subject: { kind: 'talk', id: talkId } }, at);
+    return choiceId;
+  }
+
+  /** The owner's next turn in a Talk, as S (`nextTurnServe`): settles the conversation choices of the turn before. */
+  settleTalk(scopeKey: string, talkId: string, serve: number, at: string): void {
+    if (!this.conversation) return;
+    this.later(() => this.write(at, () => {
+      settleConversation(this.store, scopeKey, talkId, serve, 'next_turn', at);
+    }));
+  }
+
   /** Its step ended: done or failed, what it cost, what it was about; then whatever can be settled is. */
-  report(scopeKey: string, choiceId: string, report: { success: 0 | 1; costYen: number; subject?: { kind: string; id: string } }, at: string): void {
+  report(scopeKey: string, choiceId: string, report: { success: number; costYen: number; subject?: { kind: string; id: string } }, at: string): void {
     this.later(() => this.write(at, () => {
       this.store.report(scopeKey, choiceId, report);
       this.settleNow(scopeKey, at);
@@ -112,7 +139,7 @@ export class ChoiceLedger {
   flushLockWaits(): void { this.meter.flush(); }
 
   private settleNow(scopeKey: string, at: string): number {
-    return settlePending(this.store, tableExists(this.options.database, PREDICTIONS_TABLE) ? this.predictions : null, scopeKey, at);
+    return settlePending(this.store, tableExists(this.options.database, PREDICTIONS_TABLE) ? this.predictions : null, scopeKey, at, { conversation: this.conversation });
   }
 
   private readValue(scopeKey: string, draft: ChoiceDraft): ValueRead {

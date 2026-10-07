@@ -13,7 +13,9 @@ import {
   type ValueRead,
   type ValueVersionMaker,
   type ValueVersionRecord,
+  skillRoutingSwitches,
 } from '@shannon/learning';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import { LockWaitMeter, tableExists, underWriteLock, ownerDayKey, type SqliteConnection } from '../../infra/sqlite/lockWaits.js';
 import { SQLiteChoiceLedger } from './store/sqliteChoiceLedger.js';
 import { SQLiteValueTable, VALUE_VERSIONS_TABLE } from './store/sqliteValueTable.js';
@@ -33,6 +35,11 @@ export interface ValueVersionsOptions {
   database: SqliteConnection;
   createsSchema: boolean;
   log?: (line: string) => void;
+  /**
+   * Syzygy ADR-0008 stage 2, owner answer I-3: her conversation choices scored by closed signals (subject `talk`) are folded too,
+   * into the same cells as her own time's. Default: `SHANNON_CONVERSATION_REWARD` as the environment says.
+   */
+  conversation?: boolean;
 }
 
 export class ValueVersions {
@@ -133,8 +140,11 @@ export class ValueVersions {
   flushLockWaits(): void { this.meter.flush(); }
 
   private evidence(scopeKey: string, upTo: number): ValueEvidence[] {
-    // Her own choices only: a tool call in a conversation is the owner's request, recorded as data, never a value.
-    return this.choices.settledInOrder(scopeKey, upTo).filter(choice => choice.reward !== null && choice.surface === 'autonomy').map(choice => ({
+    // Her own time's choices; with stage 2's conversation reward also her conversation choices scored by closed signals. A tool
+    // call recorded by stage 1 as data only (no subject) is never a value.
+    const conversation = this.options.conversation ?? skillRoutingSwitches(serverEnvironment()).conversationReward;
+    return this.choices.settledInOrder(scopeKey, upTo).filter(choice => choice.reward !== null
+      && (choice.surface === 'autonomy' || (conversation && choice.subjectKind === 'talk'))).map(choice => ({
       choice: choice.choice, context: choice.context, reward: choice.reward!, world: choice.world ?? 0, serve: choice.serve ?? 0, growth: choice.growth ?? 0,
       costYen: choice.costYen, settledAt: choice.settledAt ?? choice.chosenAt,
     }));

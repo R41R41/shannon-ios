@@ -35,7 +35,7 @@ describe('the switches of ADR-0008 stage 1', () => {
 describe('the switches of ADR-0008 stage 2', () => {
   it('are all on by default, except Sonnet routing', () => {
     expect(skillRoutingSwitches({})).toEqual({
-      stage2: true, toolMenu: true, readTools: true, difficulty: true, turnVerify: true, skills: true, skillExport: true, treeRecall: true, sonnetRouting: false,
+      stage2: true, toolMenu: true, readTools: true, difficulty: true, turnVerify: true, skills: true, skillExport: true, treeRecall: true, sonnetRouting: false, conversationReward: true,
     });
   });
 
@@ -56,6 +56,7 @@ describe('the switches of ADR-0008 stage 2', () => {
     expect(skillRoutingSwitches({ SHANNON_READ_TOOLS: 'no' })).toMatchObject({ readTools: false, toolMenu: true });
     expect(skillRoutingSwitches({ SHANNON_TURN_VERIFY: '0' })).toMatchObject({ turnVerify: false, difficulty: true });
     expect(skillRoutingSwitches({ SHANNON_TREE_RECALL: 'none' })).toMatchObject({ treeRecall: false, skills: true });
+    expect(skillRoutingSwitches({ SHANNON_CONVERSATION_REWARD: 'off' })).toMatchObject({ conversationReward: false, difficulty: true });
   });
 
   it('is independent of the stage-1 switches', () => {

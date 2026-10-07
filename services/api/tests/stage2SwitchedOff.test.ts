@@ -6,6 +6,8 @@ import { OpenAIResponsesChatModel } from '../src/infra/models/chatModel.js';
 import { createConfiguredVoiceDecisionGateway, VOICE_SKILLS } from '../src/mind/selectors/voiceDecision.js';
 import { stage2SwitchedOffScenarios } from './support/stage2Scenarios.js';
 import { readToolPorts, skillRoutingParts } from '../src/wiring/skillRoutingWiring.js';
+import { configuredTurnRouting } from '../src/wiring/turnRoutingWiring.js';
+import { DatabaseSync } from 'node:sqlite';
 import { DisabledVoyagerCatalog } from '../src/integrations/voyager/organizeIntegrations.js';
 import { LocalStubChatModel } from '../src/infra/models/chatModel.js';
 import type { DecisionTraceDraft } from '../src/contracts/decisionTraceContract.js';
@@ -120,9 +122,10 @@ function stage2(environment: Record<string, string>, traces: DecisionTraceDraft[
     const reads = readToolPorts({ TYPESAFE_API_KEY: 'jev-test', ...environment }, {
       notion: null, voyagerCatalog: new DisabledVoyagerCatalog(), upcoming: { promptFor: () => '' }, chatModel: new LocalStubChatModel(),
     });
+    const routing = configuredTurnRouting({ TYPESAFE_API_KEY: 'jev-test', ...environment }, { databasePath: null, database: new DatabaseSync(':memory:'), choices: null });
     return { ...skillRoutingParts({ TYPESAFE_API_KEY: 'jev-test', ...environment }, {
       trace: (_scopeKey, draft) => { traces.push(draft); }, jevFetch: jev, now: () => at,
-    }), ...(reads ? { readTools: reads } : {}) };
+    }), ...(reads ? { readTools: reads } : {}), ...(routing ? { turnRouting: routing.routing } : {}) };
   };
 }
 
@@ -134,11 +137,12 @@ describe('stage 2 switched off with the stage-2 wiring in place', () => {
     for (const name of Object.keys(recorded)) expect(current[name], name).toEqual(recorded[name]);
     expect(traces).toEqual([]);
     expect(skillRoutingParts({ SHANNON_ADR8_STAGE2: 'off', TYPESAFE_API_KEY: 'jev-test' }, { trace: null })).toEqual({});
+    expect(configuredTurnRouting({ SHANNON_ADR8_STAGE2: 'off' }, { databasePath: ':memory:', choices: null })).toBeNull();
   });
 
   it('also with only its parts switched off, and with stage 2 on but no Jev configured', async () => {
     const recorded = recordedSwitchedOff();
-    for (const environment of [{ SHANNON_TOOL_MENU: 'off', SHANNON_DIFFICULTY: 'off', SHANNON_READ_TOOLS: 'off', SHANNON_TURN_VERIFY: 'off' }]) {
+    for (const environment of [{ SHANNON_TOOL_MENU: 'off', SHANNON_DIFFICULTY: 'off', SHANNON_READ_TOOLS: 'off', SHANNON_TURN_VERIFY: 'off', SHANNON_CONVERSATION_REWARD: 'off' }]) {
       const traces: DecisionTraceDraft[] = [];
       const current = await capturedScenarioDigests(stage2(environment, traces));
       for (const name of Object.keys(recorded)) expect(current[name], `${JSON.stringify(environment)} ${name}`).toEqual(recorded[name]);
@@ -155,8 +159,13 @@ describe('stage 2 switched off with the stage-2 wiring in place', () => {
     expect(current['text-tools']!.jev.length).toBe(1);
     // Her read tools fold the schedule's projection of a text turn of the owner alone.
     expect(current['text-schedule']!.openai).not.toEqual(recorded['text-schedule']!.openai);
-    expect(traces.some(trace => trace.decision === 'tool_menu' && trace.surface === 'text')).toBe(true);
-    // A turn that offers no tools is not asked about them.
-    expect(current['voice-greeting']!.jev).toEqual(recorded['voice-greeting']!.jev);
+    // With the difficulty on, the one call holds the menu and the difficulty questions, traced as `difficulty`.
+    expect(traces.some(trace => trace.decision === 'difficulty' && trace.surface === 'text' && trace.answers.tool !== undefined)).toBe(true);
+    // Voice: the router's call is the same; the second call is beside it, also in a turn that offers no tools (the difficulty).
+    expect(current['voice-greeting']!.jev).toContain(recorded['voice-greeting']!.jev[0]);
+    expect(current['voice-greeting']!.jev).toHaveLength(2);
+    // With only the menu, a turn that offers no tools is not asked anything.
+    const menuOnly = await capturedScenarioDigests(stage2({ SHANNON_DIFFICULTY: 'off' }, []));
+    expect(menuOnly['voice-greeting']!.jev).toEqual(recorded['voice-greeting']!.jev);
   });
 });

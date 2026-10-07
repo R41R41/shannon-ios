@@ -28,10 +28,19 @@ export function linkedPrediction(row: StoredPrediction): LinkedPrediction {
 }
 
 /** Settles every pending choice of a scope that can be settled now. Returns how many were settled or voided. */
-export function settlePending(choices: SQLiteChoiceLedger, predictions: SQLitePredictionLedger | null, scopeKey: string, at: string): number {
+export function settlePending(choices: SQLiteChoiceLedger, predictions: SQLitePredictionLedger | null, scopeKey: string, at: string,
+  options: { conversation?: boolean } = {}): number {
   const now = Date.parse(at);
   let settled = 0;
-  const pending = choices.pending(scopeKey);
+  // Stage 2 (owner answer I-3): a conversation choice waits for the owner's next turn in its Talk; one whose next turn did not
+  // come in time is credited S = ½ (`turn_expired`, never a mood). Switched off, they wait and nothing else changes.
+  const all = choices.pending(scopeKey);
+  for (const choice of all.filter(item => item.subjectKind === 'talk')) {
+    if (options.conversation && choice.success !== null && now - Date.parse(choice.chosenAt) >= TALK_NEXT_TURN_MINUTES * 60_000) {
+      if (settleOne(choices, scopeKey, choice, 0.5, 'turn_expired', at)) settled += 1;
+    }
+  }
+  const pending = all.filter(item => item.subjectKind !== 'talk');
   // A showing is settled before the drafts that inherit from it.
   const ordered = [...pending.filter(choice => serveRule(choice.choice) !== 'inherit'), ...pending.filter(choice => serveRule(choice.choice) === 'inherit')];
   for (const choice of ordered) {
@@ -76,4 +85,22 @@ export function inheritedServe(choices: SQLiteChoiceLedger, scopeKey: string, ch
     return { serve: shown.serve, code: shown.settleCode === 'story_expired' ? 'inherited_expired' : 'inherited' };
   }
   return now - Date.parse(choice.chosenAt) >= INHERIT_STALE_DAYS * DAY ? { serve: 0, code: 'stale' } : { serve: 'pending', code: 'inherited' };
+}
+
+/** How long a conversation choice waits for the owner's next turn in its Talk (stage 2). Modelling assumption. */
+export const TALK_NEXT_TURN_MINUTES = 30;
+
+/** Settles a conversation choice: W 0 (no linked prediction), S from the next turn, G as reported. */
+function settleOne(choices: SQLiteChoiceLedger, scopeKey: string, choice: StoredChoice, serve: number, code: string, at: string): boolean {
+  const result = settle({ world: 0, serve, growth: choice.success ?? 0 }, { mean: choice.expected, variance: choice.expectedSd ** 2, noise: choice.expectedNoise });
+  return choices.settle(scopeKey, choice.choiceId, result, code, at);
+}
+
+/** The owner's next turn in a Talk settles the conversation choices still waiting there. */
+export function settleConversation(choices: SQLiteChoiceLedger, scopeKey: string, talkId: string, serve: number, code: string, at: string): number {
+  let settled = 0;
+  for (const choice of choices.pendingInTalk(scopeKey, talkId)) {
+    if (choice.success !== null && Date.parse(choice.chosenAt) <= Date.parse(at) && settleOne(choices, scopeKey, choice, serve, code, at)) settled += 1;
+  }
+  return settled;
 }

@@ -63,8 +63,10 @@ import { guestPeoplePrompt } from '../../mind/memory/peopleMemoryPrompts.js';
 import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
-import { conversationTools, offerWithMenu, ownerAloneReads, startTurnToolMenu, toolTraceReader, turnWroteHerOwnThings, withToolCapabilityLines, type ConversationToolServer, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
+import { conversationTools, ownerAloneReads, toolTraceReader, turnWroteHerOwnThings, withToolCapabilityLines, type ConversationToolServer, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
+import { startVoiceStage2, voiceFinished, voiceOfferAndTier } from './voiceStage2.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from '../../mind/action/respond/turnDeadline.js';
+import { tierRequest, type TurnRouting } from '../../mind/action/respond/turnRouting.js';
 import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from './ownerCallElsewhere.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
@@ -90,7 +92,7 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   /** Others present as the server knows them, and what her writes must not repeat; absent, no tool is offered. */
   toolServer?: ConversationToolServer;
   ownerCalls?: Pick<OwnerCalls, 'admitTurn'>; // The owner in a call on another device (`ownerCallElsewhere.ts`); absent, nothing is refused.
-  turnChooser?: ToolMenuChooser; // Syzygy ADR-0008 stage 2: the turn's second Jev call (the menu); absent, the turn is as at ca7cf519.
+  turnChooser?: ToolMenuChooser; turnRouting?: TurnRouting; // Syzygy ADR-0008 stage 2: the second Jev call, the tier and the verifier; absent, as at ca7cf519.
 }
 
 export interface LiveVoiceStreamObserver {
@@ -173,8 +175,7 @@ async function completeLiveVoiceDelegation(
   // The turn in which he says that someone is with him is said to her; from the next one on she must be addressed.
   const turnFacts = temporaryGuest ? undefined : ownerVoiceTurnFacts({ history: routingHistory, at: occurredAt, othersPresent: !alone && !ownerSaysCompanionPresent(transcript),
     newest: dependencies.conversationStore.conversationHistory(scopeKey, threadId).at(-1), source: deviceContext?.userUtterance?.source, answersHer: reactionLine });
-  const toolAudience = temporaryGuest ? !legacyGuest && 'guests' as const : alone || 'others' as const; // ADR-0008 stage 2: the menu's Jev call beside the router's.
-  const choices = startTurnToolMenu(router === dependencies.voiceDecision ? dependencies.turnChooser : null, dependencies.autonomy, scopeKey, 'voice', toolAudience, dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, ownerAloneReads(toolAudience));
+  const { toolAudience, choices } = startVoiceStage2(router === dependencies.voiceDecision ? dependencies.turnChooser : null, { autonomy: dependencies.autonomy, server: dependencies.toolServer ?? {}, scopeKey, threadId, transcript, guest: temporaryGuest, legacyGuest, alone });
   let decision = await router.decide({
     // In a remembered 「友人も一緒」 call the same capabilities may be chosen as with the owner; what is said is checked at speak time.
     scopeKey, transcript, rawTranscript, participantMode: legacyGuest ? 'guest' : 'owner',
@@ -377,12 +378,12 @@ async function completeLiveVoiceDelegation(
   const replayed = replay?.request(turnPrompt) ?? { ...(turnPrompt ? { turnContext: turnPrompt } : {}), history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) };
   const offered = conversationTools(dependencies.autonomy, scopeKey, 'voice', toolAudience, dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline, // 「友人も一緒」: Aether reading tools; a legacy client none.
     { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }, ownerAloneReads(toolAudience));
-  const toolOffer = choices ? await offerWithMenu(offered, choices) : offered; // The menu narrows the schemas; without one, no extra await.
+  const { offer: toolOffer, tier } = choices ? await voiceOfferAndTier(dependencies.turnRouting, offered, choices, { scopeKey, threadId, deadline, at: occurredAt }) : { offer: offered, tier: null };
   const modelRequest = withToolCapabilityLines({ // Her Minecraft body's and Aether's lines, in her identity, exactly when their tools are offered.
     scopeKey, systemPrompt: basePrompt, ...(identity.profile ? { profilePrompt: identity.profile } : {}), ...replayed,
     // What she said when she was touched is what he is answering: it directly precedes his words, in every mode, as context only.
     ...(reactionLine ? { precedingReply: reactionLine } : {}),
-    message: transcript, ...toolOffer,
+    message: transcript, ...toolOffer, ...tierRequest(tier),
     useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   });
@@ -431,9 +432,8 @@ async function completeLiveVoiceDelegation(
   const taskProposal = completion.taskProposal ?? (confirmedImplementationRequest ? {
     title: '依頼された機能の実装', goal: confirmedImplementationRequest,
   } : undefined);
-  const reply = confirmedImplementationRequest
-    ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。'
-    : placeSkill ? spokenPlaceReply(completion.reply) : completion.reply;
+  const answered = confirmedImplementationRequest ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。' : placeSkill ? spokenPlaceReply(completion.reply) : completion.reply;
+  const reply = dependencies.turnRouting ? await voiceFinished(dependencies.turnRouting, { scopeKey, threadId, alone, reply: answered, completion, tier, tools: toolOffer.tools, deadline, at: occurredAt }) : answered;
   // Opens the look only if this turn chose one, she said so herself, and its conditions still hold.
   if (!confirmedImplementationRequest) roomLook.open(threadId, reply);
   expressiveEmotion = resolveShannonEmotionState({
