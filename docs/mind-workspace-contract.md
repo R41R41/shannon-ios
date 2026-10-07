@@ -97,7 +97,7 @@ An intent is its reason and a closed subject key (an upcoming item's id, a piece
 - **When an intent arose**: her steps pass the time of the thought that chose them (`intentArisenAt`: the cycle's latest thought), so a session that stood still while the owner talked lets an upcoming item expire. The call's intent is its line's (reason, its message, written when the line was). The initiative loop chooses and writes at once, so its intent arises when it is written (expiry does not apply to it; the owner active, a repeat of the same item and a reused topic do): a promise is `promise`, a goal she follows `follow_up`, a topic of the world `world`, each with its item as the subject.
 - **Owner active** is read from the conversation's table (the newest message he wrote or spoke, a timestamp) and held for max(2 minutes, the loop's setting, 10 minutes). Her step's own check before the model call (`conversation_in_progress`) and today's spacing stay as they were.
 - **Topics**: the signature of the message's words; a call (its line already checked) has none. Earlier topics are compared over 14 days.
-- **Fails open**: an error of the gate itself lets the message through as before stage 3 and is logged (closed codes); a hold is never silent.
+- **Fails closed** (coordinator decision, stage 3: proactive speech is inhibition): an error of the gate itself holds the message with the code `gate_error`, written as a withheld action and a notice as far as those still work, and logged by error class only; a hold is never silent. Only the gate's construction failing stops the process that builds it.
 - `SHANNON_PROACTIVE_GATE=off` (or `SHANNON_ADR8_STAGE3=off`): the wiring hands no gate, no table is created, every message is as it was.
 
 ## The workspace and the prompt

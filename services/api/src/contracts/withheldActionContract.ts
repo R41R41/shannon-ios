@@ -53,6 +53,8 @@ export const WITHHELD_REASON_LABELS = Object.freeze({
   intent_repeat: '同じ用件を30分以内に繰り返さない',
   intent_expired: '用件が古くなった',
   topic_reused: '近い話題を使い回さない',
+  // The gate itself failed: proactive speech is inhibition, so it fails closed (coordinator decision, stage 3).
+  gate_error: '止める仕組みをいま確かめられない',
 } as const);
 export type WithheldReason = keyof typeof WITHHELD_REASON_LABELS;
 export const WITHHELD_REASONS = Object.freeze(Object.keys(WITHHELD_REASON_LABELS)) as readonly WithheldReason[];

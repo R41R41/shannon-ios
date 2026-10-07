@@ -18,7 +18,9 @@ import type { SQLiteProactiveTopics } from './store/proactiveTopicsStore.js';
  * `topic_reused`) that her next thought is shown, and a notice (`【知らせ:止められた】`) for the conversation's workspace through
  * the mind's inbox. A delivery is noted in `proactive_topics` (closed reason and subject, the signature; never the words).
  *
- * The gate never throws: an error of its own lets the message through as before stage 3, and is logged (closed codes only).
+ * The gate never throws, and it fails closed: an error of its own holds the message with the code `gate_error` (proactive speech
+ * is inhibition; coordinator decision of stage 3), recorded and noticed like any hold as far as they still work, and logged
+ * (closed codes only).
  */
 export const PROACTIVE_POINTS = ['say', 'say_again', 'say_by_phone', 'initiative', 'call'] as const;
 export type ProactivePoint = typeof PROACTIVE_POINTS[number];
@@ -40,7 +42,10 @@ export interface ProactiveDeliveryIntent {
   text: string | null;
 }
 
-export type ProactiveDeliveryVerdict = { verdict: 'deliver'; topicReuse: number } | { verdict: 'hold'; code: ProactiveHoldCode };
+/** Why a delivery point held a message: one of the gate's four codes, or `gate_error` when the gate itself failed (fail closed). */
+export type ProactiveDeliveryHold = ProactiveHoldCode | 'gate_error';
+
+export type ProactiveDeliveryVerdict = { verdict: 'deliver'; topicReuse: number } | { verdict: 'hold'; code: ProactiveDeliveryHold };
 
 export interface ProactiveDeliveryGate {
   /** The verdict at `at`; a hold is recorded as a withheld action and a notice before it is answered. */
@@ -76,6 +81,19 @@ export function closedSubject(subject: string | null): string | null {
 export function createProactiveGate(dependencies: ProactiveGateDependencies): ProactiveDeliveryGate {
   const log = (line: string) => { try { dependencies.log?.(line); } catch { /* the log is optional */ } };
   const ownerLast = (scopeKey: string) => (dependencies.ownerLastActiveAt ?? (key => dependencies.topics.ownerLastActiveAt(key)))(scopeKey);
+  /** A hold: the withheld action her next thought is shown and the workspace's notice, each written as far as it works. */
+  const held = (scopeKey: string, intent: ProactiveDeliveryIntent, code: ProactiveDeliveryHold, retryAt: string | null, at: string): ProactiveDeliveryVerdict => {
+    let tool: string = 'owner.reach_out';
+    try { tool = PROACTIVE_POINT_TOOL[intent.point] ?? tool; } catch { /* the default tool */ }
+    try { dependencies.withheld?.(scopeKey, { surface: 'autonomy', tool, reason: code, rail: 'gate', retryAt }, at); } catch { log(`proactive gate: withheld write failed`); }
+    try {
+      let audience: 'owner' | 'others' = 'owner';
+      try { audience = dependencies.audience?.(scopeKey, at) ?? 'owner'; } catch { audience = 'others'; }
+      dependencies.emit?.(scopeKey, { kind: 'notice', code: 'withheld', audience, source: 'own_time', sourceId: `withheld-${randomUUID()}`, tool, reason: code }, at);
+    } catch { log(`proactive gate: notice failed`); }
+    log(`proactive gate: ${String(intent.point)} held ${code}`);
+    return { verdict: 'hold', code };
+  };
   return {
     check(scopeKey, intent, at) {
       try {
@@ -97,18 +115,11 @@ export function createProactiveGate(dependencies: ProactiveGateDependencies): Pr
           : verdict.code === 'intent_repeat'
             ? new Date(Math.max(...rows.filter(row => row.reason === intent.reason && row.subject === subject).map(row => Date.parse(row.at))) + PROACTIVE_GATE_V1.intentRepeatMinutes * MINUTE).toISOString()
             : null;
-        const tool = PROACTIVE_POINT_TOOL[intent.point];
-        try { dependencies.withheld?.(scopeKey, { surface: 'autonomy', tool, reason: verdict.code, rail: 'gate', retryAt }, at); } catch { log(`proactive gate: withheld write failed`); }
-        try {
-          let audience: 'owner' | 'others' = 'owner';
-          try { audience = dependencies.audience?.(scopeKey, at) ?? 'owner'; } catch { audience = 'others'; }
-          dependencies.emit?.(scopeKey, { kind: 'notice', code: 'withheld', audience, source: 'own_time', sourceId: `withheld-${randomUUID()}`, tool, reason: verdict.code }, at);
-        } catch { log(`proactive gate: notice failed`); }
-        log(`proactive gate: ${intent.point} held ${verdict.code}`);
-        return { verdict: 'hold', code: verdict.code };
+        return held(scopeKey, intent, verdict.code, retryAt, at);
       } catch (error) {
+        // Fail closed: the message is held, and recorded as held as far as that still works.
         log(`proactive gate: check failed ${error instanceof Error ? error.name : 'unknown'}`);
-        return { verdict: 'deliver', topicReuse: 0 };
+        return held(scopeKey, intent, 'gate_error', null, at);
       }
     },
     delivered(scopeKey, intent, at) {

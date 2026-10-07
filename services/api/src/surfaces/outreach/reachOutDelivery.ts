@@ -4,7 +4,7 @@ import { UNLABELLED_DISCLOSURE_MARKER } from '@shannon/cognition';
 import { OBSERVED_REACH_OUT_REASONS, type ObservedReachOutReason } from '../../mind/action/ownTime/store/autonomyLoopObservations.js';
 import type { ReachOutReason } from '../../mind/action/ownTime/autonomyLoopPrompts.js';
 import { speakTimePrivacyCheck } from '../voice/voiceCompanionPresence.js';
-import type { ProactiveDeliveryGate, ProactiveDeliveryIntent, ProactiveHoldCode, ProactivePoint } from '../../mind/attention/attentionPorts.js';
+import type { ProactiveDeliveryGate, ProactiveDeliveryIntent, ProactiveDeliveryHold, ProactivePoint } from '../../mind/attention/attentionPorts.js';
 
 /**
  * A message she starts on her own, from her own activity (owner decision 2026-10-02),
@@ -44,7 +44,7 @@ export function reachOutOfSource(sourceItemId: unknown): { kind: 'reach_out'; re
 }
 
 /** `held:<code>`: the proactive gate held it at this delivery point (Syzygy ADR-0008 stage 3); nothing was written. */
-export type ReachOutDelivery = 'sent' | 'limit' | 'unavailable' | `held:${ProactiveHoldCode}`;
+export type ReachOutDelivery = 'sent' | 'limit' | 'unavailable' | `held:${ProactiveDeliveryHold}`;
 
 /**
  * What the prompt of a reach-out receives while someone other than the owner may see or hear her body:

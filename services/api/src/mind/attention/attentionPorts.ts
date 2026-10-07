@@ -14,6 +14,6 @@ export {
 } from '@shannon/mind';
 export {
   PROACTIVE_POINTS, PROACTIVE_POINT_TOOL, closedSubject, createProactiveGate,
-  type ProactiveDeliveryGate, type ProactiveDeliveryIntent, type ProactiveDeliveryVerdict, type ProactiveGateDependencies, type ProactivePoint,
+  type ProactiveDeliveryGate, type ProactiveDeliveryHold, type ProactiveDeliveryIntent, type ProactiveDeliveryVerdict, type ProactiveGateDependencies, type ProactivePoint,
 } from './proactiveDelivery.js';
 export type { ProactiveTopicRow, SQLiteProactiveTopics } from './store/proactiveTopicsStore.js';

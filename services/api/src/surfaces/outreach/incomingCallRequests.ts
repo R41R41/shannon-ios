@@ -7,7 +7,7 @@ import { privateReachOutsEnabled } from '../../contracts/privateListeningContrac
 import type { PrivateListener } from '../body/store/privateListeningStore.js';
 import type { SQLiteReachOutClaims } from './store/reachOutClaims.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
-import type { ProactiveDeliveryGate, ProactiveDeliveryIntent, ProactiveHoldCode, ProactiveReason } from '../../mind/attention/attentionPorts.js';
+import type { ProactiveDeliveryGate, ProactiveDeliveryIntent, ProactiveDeliveryHold, ProactiveReason } from '../../mind/attention/attentionPorts.js';
 
 /**
  * Her loop's side of a call (`autonomyLoopPhoneStep.ts`): the facts she chooses with, and asking for the call.
@@ -66,7 +66,7 @@ export class IncomingCallRequests implements AutonomyPhone {
   }
 
   /** Asks for the call with one message of hers. `requested`, or why not, as a code. */
-  request(scopeKey: string, initiativeId: string, at: string): 'requested' | 'unavailable' | 'too_soon' | 'ringing' | 'taken' | `held:${ProactiveHoldCode}` {
+  request(scopeKey: string, initiativeId: string, at: string): 'requested' | 'unavailable' | 'too_soon' | 'ringing' | 'taken' | `held:${ProactiveDeliveryHold}` {
     const { store, claims } = this.dependencies;
     const facts = this.facts(scopeKey, at);
     if (!facts.switchedOn || !facts.serverReady) return 'unavailable';

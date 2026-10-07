@@ -15,6 +15,8 @@ import { dispatchIncomingCallRequest } from '../src/surfaces/outreach/incomingCa
 import { configuredMind, configuredMindInbox } from '../src/wiring/mindWiring.js';
 import { configuredProactiveGate } from '../src/wiring/proactiveGateWiring.js';
 import { configuredWithheldActions } from '../src/wiring/withheldWiring.js';
+import { createProactiveGate } from '../src/mind/attention/attentionPorts.js';
+import type { SQLiteProactiveTopics } from '../src/mind/attention/store/proactiveTopicsStore.js';
 
 /**
  * Every delivery point of stage 3's proactive gate really blocks (Syzygy ADR-0008 stage 3, owner answer 2; after Genesis, one of
@@ -53,7 +55,8 @@ function world(environment: Record<string, string> = {}) {
   `).run(randomUUID(), SCOPE, persistent.threadId(SCOPE), randomUUID(), now());
   const day = () => now().slice(0, 10);
   const close = () => { database.close(); plain.close(); speaker.close(); initiatives.close(); gate?.close(); inbox.close(); mind.close(); withheld.close(); persistent.close(); };
-  return { path, clock, now, persistent, speaker, plain, initiatives, gate, count, reasons, notices, ownerSpeaks, day, close, advance: (ms: number) => { clock.at += ms; } };
+  return { path, clock, now, persistent, speaker, plain, initiatives, gate, count, reasons, notices, ownerSpeaks, day, close, advance: (ms: number) => { clock.at += ms; },
+    sink: withheld.withheld.sink, emit: inbox.emit };
 }
 
 const WONDER = 'ライ氏はいま何をしているのでしょう。';
@@ -225,5 +228,38 @@ describe('the switch', () => {
     database.close();
     expect(w.reasons()).toEqual([]);
     w.close();
+  });
+});
+
+describe('a gate that fails holds (fail closed: proactive speech is inhibition)', () => {
+  it('holds the message with gate_error at every point it guards, records the withheld action and the notice, and writes nothing', () => {
+    const w = world();
+    // The gate's own store breaks: every read throws.
+    const broken = { since: () => { throw new Error('disk I/O error'); }, ownerLastActiveAt: () => { throw new Error('disk I/O error'); },
+      record: () => { throw new Error('disk I/O error'); }, prune: () => undefined } as unknown as SQLiteProactiveTopics;
+    const logged: string[] = [];
+    const gate = createProactiveGate({ topics: broken, withheld: w.sink, emit: w.emit, log: line => logged.push(line) });
+    expect(gate.check(SCOPE, { point: 'say', reason: 'wonder', subject: null, arisenAt: w.now(), text: WONDER }, w.now())).toEqual({ verdict: 'hold', code: 'gate_error' });
+    const speaker = new SQLiteReachOutSpeaker(w.path, () => false, gate);
+    const initiatives = new SQLiteInitiativeStore(w.path, w.now, gate);
+    expect(speaker.say(SCOPE, { reason: 'wonder', text: WONDER, dayKey: w.day(), maximumPerDay: 20 }, w.now())).toBe('held:gate_error');
+    const insert = (initiatives as unknown as { persistMessage(...args: unknown[]): boolean }).persistMessage(
+      SCOPE, { version: 1 }, { item_id: 'bread', source_id: 'world-hn', source_title: 'Hacker News', title: 'パンの発酵', url: 'https://example.org/bread', summary: null, published_at: null, discovered_at: w.now(), score: 0.5 },
+      null, null, w.day(), w.now());
+    expect(insert).toBe(false);
+    expect(w.count('initiative_messages')).toBe(0);
+    expect(w.reasons()).toEqual([
+      { tool: 'owner.reach_out', reason: 'gate_error', rail: 'gate' }, { tool: 'owner.reach_out', reason: 'gate_error', rail: 'gate' },
+      { tool: 'owner.initiative', reason: 'gate_error', rail: 'gate' },
+    ]);
+    expect(w.notices().map(notice => notice.reason)).toEqual(['gate_error', 'gate_error', 'gate_error']);
+    // The log names the failure by its error class only, never a message's words.
+    expect(logged.every(line => !line.includes(WONDER) && !line.includes('disk I/O'))).toBe(true);
+    // Even with the withheld record and the notice broken too, it still holds.
+    const worse = createProactiveGate({ topics: broken, withheld: () => { throw new Error('x'); }, emit: () => { throw new Error('x'); } });
+    expect(worse.check(SCOPE, { point: 'call', reason: 'wonder', subject: null, arisenAt: w.now(), text: null }, w.now())).toEqual({ verdict: 'hold', code: 'gate_error' });
+    // Positive control: the working gate of the same world lets it through.
+    expect(w.speaker.say(SCOPE, { reason: 'wonder', text: WONDER, dayKey: w.day(), maximumPerDay: 20 }, w.now())).toBe('sent');
+    speaker.close(); initiatives.close(); w.close();
   });
 });
