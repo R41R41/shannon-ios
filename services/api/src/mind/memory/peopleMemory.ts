@@ -18,9 +18,27 @@ import type { LabelledRecallCandidate } from '../action/respond/respondPorts.js'
 import type { GuestCallTurn } from '../../surfaces/voice/voiceGuestCall.js';
 import { establishedGuestName, personNameKey } from '../../surfaces/voice/voiceGuestNames.js';
 import { ownerPeoplePrompt, type VisiblePersonItem } from './peopleMemoryPrompts.js';
+import type { MemoryCommands, MemoryProposals } from './memoryWriter.js';
 
 /** Recall and memory-control identifier of a person memory item. */
 export const personMemoryId = (itemId: string) => `person:${itemId}`;
+/** The item id of a platform conversation period's summary. */
+export const platformSummaryId = (callId: string) => `ps-${createHash('sha256').update(callId).digest('hex').slice(0, 32)}`;
+
+/**
+ * The summary of one conversation period as code writes it (the deterministic one, or the written `text`): its item id, its
+ * text as stored (one line) and as labelled. Null when the period is not known.
+ */
+export function periodSummaryText(store: Pick<PeopleMemoryStore, 'call' | 'person' | 'items'>, scopeKey: string, callId: string, label: string, text?: string):
+  { id: string; text: string; labelled: string } | null {
+  const call = store.call(scopeKey, callId);
+  if (!call) return null;
+  const names = call.personIds.flatMap(id => store.person(scopeKey, id)?.displayName ?? []).map(name => `${name}さん`);
+  const turns = store.items(scopeKey).filter(item => item.callId === callId && item.kind === 'turn');
+  const opening = Array.from((turns.at(-1)?.evidence ?? '').replace(/\s+/gu, ' ').trim()).slice(0, 40).join('');
+  const summary = text ?? `相手: ${names.join('・') || '名前を聞いていない方'}\n話したこと: ${label}で${turns.length}件のやり取り。「${opening}」から始まった。`;
+  return { id: platformSummaryId(callId), text: summary.replace(/\s+/gu, ' ').trim(), labelled: summary };
+}
 const personCause = (personId: string) => `person-record:${personId}`;
 const HOW_KNOWN = '「友人も一緒」の通話で名前を聞いた';
 const FORGET_REASON = 'ユーザーが忘れるよう指定';
@@ -58,7 +76,15 @@ const namesOf = (person: RememberedPerson) => [person.displayName, ...person.ali
  * applies to these items exactly as it does to the owner's own.
  */
 export class PeopleMemory {
-  constructor(private readonly store: PeopleMemoryStore, private readonly stateStore: CompanionStateStore) {}
+  constructor(
+    private readonly store: PeopleMemoryStore,
+    private readonly stateStore: CompanionStateStore,
+    /**
+     * Syzygy ADR-0008 stage 3 (F5): the memory outbox. What a call leaves is proposed; the owner's rename and merge run as
+     * synchronous commands through the same write path. Absent (switched off): everything is written here, as it was.
+     */
+    private readonly memory: { proposals: MemoryProposals; commands: Pick<MemoryCommands, 'run'> | null } | null = null,
+  ) {}
 
   listPeople(scopeKey: string): readonly RememberedPerson[] { return this.store.listPeople(scopeKey); }
 
@@ -171,8 +197,23 @@ export class PeopleMemory {
         add('promise', `${subject}と話した時の約束: ${promise.memory.summary}`, { evidence: promise.memory.evidence ?? turn.text, ...(single ? { personId: single.id } : {}) });
       }
     }
-    this.store.saveCall(scopeKey, { ...call, status: 'remembered', updatedAt: at, ...(input.threadId ? { threadId: input.threadId } : {}) });
-    this.store.replaceCallItems(scopeKey, input.callId, items);
+    if (this.memory) {
+      // The period (its summary and exchanges, replacing what an earlier save left), then its topics, facts and promises.
+      const remembered: PersonCall = { ...call, status: 'remembered', updatedAt: at, ...(input.threadId ? { threadId: input.threadId } : {}) };
+      const of = (...kinds: PersonMemoryItem['kind'][]) => items.filter(item => kinds.includes(item.kind));
+      const opId = (part: string) => `call:${scopeKey}:${input.callId}:${at}:${part}`.slice(0, 200);
+      const propose = (kind: 'person.summary' | 'person.topic' | 'person.fact' | 'person.promise', part: string, subjectKey: string, payload: Record<string, unknown>) =>
+        this.memory!.proposals.propose({ opId: opId(part), scopeKey, kind, origin: 'people', subjectKey, payload });
+      propose('person.summary', 'period', `call:${input.callId}`, { callId: input.callId, mode: 'replace', call: remembered, items: of('summary', 'turn') });
+      if (of('topic').length) propose('person.topic', 'topics', `call:${input.callId}`, { callId: input.callId, mode: 'upsert', items: of('topic') });
+      if (of('fact').length) propose('person.fact', 'facts', single ? `person:${single.id}` : `call:${input.callId}`,
+        { callId: input.callId, mode: 'upsert', items: of('fact').map(item => ({ ...item, validAt: at })) });
+      if (of('promise').length) propose('person.promise', 'promises', single ? `person:${single.id}` : `call:${input.callId}`,
+        { callId: input.callId, mode: 'upsert', items: of('promise') });
+    } else {
+      this.store.saveCall(scopeKey, { ...call, status: 'remembered', updatedAt: at, ...(input.threadId ? { threadId: input.threadId } : {}) });
+      this.store.replaceCallItems(scopeKey, input.callId, items);
+    }
     return { status: 'remembered', callId: input.callId, summary, itemCount: items.length,
       people: people.map(person => ({ id: person.id, displayName: person.displayName })) };
   }
@@ -223,10 +264,16 @@ export class PeopleMemory {
   rename(scopeKey: string, personId: string, displayName: string, at: string): boolean {
     const person = this.store.person(scopeKey, personId);
     if (!person) return false;
+    const commands = this.memory?.commands;
+    if (commands) return commands.run({ opId: `owner:rename:${personId}:${at}:${createHash('sha256').update(displayName).digest('hex').slice(0, 16)}`, scopeKey, kind: 'person.link', subjectKey: `person:${personId}`,
+      payload: { action: 'rename', personId, displayName } }).applied;
     return Boolean(this.store.updatePerson(scopeKey, personId, { displayName, aliases: [...person.aliases, person.displayName] }, at));
   }
 
   merge(scopeKey: string, intoId: string, fromId: string, at: string): boolean {
+    const commands = this.memory?.commands;
+    if (commands) return commands.run({ opId: `owner:merge:${fromId}:${intoId}:${at}`, scopeKey, kind: 'person.link', subjectKey: `person:${intoId}`,
+      payload: { action: 'merge', personId: fromId, intoPersonId: intoId } }).applied;
     return Boolean(this.store.mergePeople(scopeKey, intoId, fromId, at));
   }
 

@@ -9,15 +9,16 @@ import { ImpressionEvidenceCheck, usableImpression } from '../recall/recallPorts
 import {
   FEELING_CHARACTERS, IMPRESSION_KINDS, OWNER_PERSON_KEY, PATTERN_CHARACTERS, applyImpressionAnalysis, comparable, impressionConfig,
   impressionMemoryId, impressionsEnabled,
-  type ImpressionAnalysis, type ImpressionConfig, type ImpressionStore, type PersonImpression,
+  type ImpressionAnalysis, type ImpressionChange, type ImpressionConfig, type ImpressionStore, type PersonImpression,
 } from './impressions.js';
+import type { MemoryProposals } from './memoryWriter.js';
+import type { MemoryOp } from './memoryOpCodec.js';
 import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { localDayKey } from './memoryProjection.js';
 import { MemoryWithholding } from './memoryVisibility.js';
-import { personMemoryId } from './peopleMemory.js';
 import type { PeopleMemoryStore } from './store/peopleMemoryStore.js';
-import { platformSummaryId } from '../../surfaces/platform/platformPeople.js';
+import { personMemoryId, platformSummaryId } from './peopleMemory.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /** What the background model is shown for one person and one turn. */
@@ -45,7 +46,7 @@ export interface ImpressionAnalyzer {
   analyze(scopeKey: string, input: ImpressionAnalysisInput): Promise<ImpressionAnalysisOutput | null>;
 }
 
-export type ImpressionOutcome = 'disabled' | 'skipped' | 'duplicate' | 'cap' | 'budget' | 'failed' | 'unchanged' | 'updated';
+export type ImpressionOutcome = 'disabled' | 'skipped' | 'duplicate' | 'cap' | 'budget' | 'failed' | 'unchanged' | 'updated' | 'proposed';
 
 const SAID_CHARACTERS = 800;
 const REPLY_CHARACTERS = 300;
@@ -78,6 +79,8 @@ export class ImpressionUpdater {
     private readonly options: {
       environment?: Readonly<Record<string, string | undefined>>; now?: () => string; backgroundBudgetUsd?: number;
       timeZone?: string; people?: PeopleMemoryStore;
+      /** Syzygy ADR-0008 stage 3 (F5): the memory outbox. Absent (switched off): the change is written here, as it was. */
+      memory?: MemoryProposals | null;
     } = {},
   ) {
     this.environment = options.environment ?? serverEnvironment();
@@ -96,11 +99,7 @@ export class ImpressionUpdater {
       lane: 'owner', personKey: OWNER_PERSON_KEY, person: 'ライ氏（持ち主）', sourceId: turn.id, at: turn.observedAt, said: turn.userMessage, audience: OWNER_AUDIENCE,
       lines: [`ライ氏: ${clip(turn.userMessage, SAID_CHARACTERS)}`, `シャノン: ${clip(turn.shannonReply, REPLY_CHARACTERS)}`],
       // The owner's own impressions are his alone and protected, whatever their wording.
-      label: (pattern, feeling) => {
-        const decision = classifySensitivity(`${pattern}\n${feeling}`);
-        return { audience: OWNER_AUDIENCE, sensitivity: 'sensitive', ...(decision.category ? { category: decision.category } : {}),
-          reason: 'ライ氏についてのシャノンの印象', decidedBy: 'rule' };
-      },
+      label: ownerImpressionLabel,
       stillUsable: () => this.usableTurn(scopeKey, turn.id),
     });
   }
@@ -146,7 +145,7 @@ export class ImpressionUpdater {
           lane: 'platform', personKey: personId, person: `${period.person.displayName}さん`, sourceId: summaryId, at: call.updatedAt,
           said: period.turns.map(turn => turn.evidence ?? '').join('\n'), audience: period.audience,
           lines: period.turns.map(turn => clip(turn.text, PLATFORM_LINE_CHARACTERS)),
-          label: () => ({ audience: period.audience, sensitivity: 'sensitive', category: 'third_party', reason: 'ほかの人についてのシャノンの印象', decidedBy: 'rule' }),
+          label: platformImpressionLabel(period.audience),
           stillUsable: () => usable() !== null,
         });
         if (outcome === 'updated') updated += 1;
@@ -198,12 +197,42 @@ export class ImpressionUpdater {
         feeling: typeof item.feeling === 'string' ? item.feeling : '', feelingTag: typeof item.feelingTag === 'string' ? item.feelingTag : '',
       })),
     };
+    if (this.options.memory) {
+      // ADR-0008 stage 3 (F5): the analysis is proposed; the one writer applies it to the rows as they are then.
+      const clipped = (value: string, limit: number) => Array.from(value).slice(0, limit).join('');
+      this.options.memory.propose({ opId: `impression:${scopeKey}:${input.personKey}:${input.sourceId}`.slice(0, 200), scopeKey, kind: 'impression.observe',
+        origin: 'impressions', subjectKey: `impressions:${input.personKey}`, baseRevision: null, episodeIds: [input.sourceId],
+        payload: { lane: input.lane, personKey: input.personKey, sourceId: input.sourceId, at: input.at, said: clipped(input.said, 8_000), audience: input.audience,
+          analysis: {
+            observations: analysis.observations.slice(0, 40).map(item => ({ id: item.id, stance: item.stance,
+              ...(item.keyTerms ? { keyTerms: item.keyTerms.slice(0, 8).map(term => clipped(String(term), 80)) } : {}),
+              ...(item.feeling !== undefined ? { feeling: clipped(item.feeling, 200) } : {}), ...(item.feelingTag !== undefined ? { feelingTag: clipped(item.feelingTag, 40) } : {}) })),
+            candidates: analysis.candidates.slice(0, 8).map(item => ({ kind: clipped(item.kind, 40) || 'trait', pattern: clipped(item.pattern, 200),
+              keyTerms: item.keyTerms.slice(0, 8).map(term => clipped(String(term), 80)), feeling: clipped(item.feeling, 200), feelingTag: clipped(item.feelingTag, 40) })),
+          } } });
+      return 'proposed';
+    }
     const change = applyImpressionAnalysis(fresh.rows, analysis, {
       personKey: input.personKey, sourceId: input.sourceId, at: input.at, dayKey: localDayKey(input.at, this.timeZone),
       said: input.said, audience: input.audience, forgottenIds: fresh.forgotten, protectedIds: fresh.decided, config,
     }, input.label);
     this.impressions.saveImpressions(scopeKey, change.upserts, change.deleteIds);
     return change.upserts.length || change.deleteIds.length ? 'updated' : 'unchanged';
+  }
+
+  /**
+   * The memory writer's step for `impression.observe` (ADR-0008 stage 3, F5): the proposed analysis applied, by the same rules,
+   * to the person's rows and the owner's controls as they are now. Null when the turn may no longer be learned from.
+   */
+  changeFor(op: MemoryOp, state: CompanionStateSnapshot): ImpressionChange | null {
+    const payload = op.payload as { lane: 'owner' | 'platform'; personKey: string; sourceId: string; at: string; said: string; audience: MemoryAudience; analysis: ImpressionAnalysis };
+    if (payload.lane === 'owner' && !this.usableTurn(op.scopeKey, payload.sourceId)) return null;
+    const config = impressionConfig(this.environment);
+    const fresh = this.held(op.scopeKey, payload.personKey, state, payload.said, config);
+    return applyImpressionAnalysis(fresh.rows, payload.analysis, {
+      personKey: payload.personKey, sourceId: payload.sourceId, at: payload.at, dayKey: localDayKey(payload.at, this.timeZone),
+      said: payload.said, audience: payload.audience, forgottenIds: fresh.forgotten, protectedIds: fresh.decided, config,
+    }, payload.lane === 'owner' ? ownerImpressionLabel : platformImpressionLabel(payload.audience));
   }
 
   /**
@@ -230,6 +259,18 @@ export class ImpressionUpdater {
         .slice(0, config.updateContext),
     };
   }
+}
+
+/** The label of an impression of the owner: his alone and protected, whatever its wording. */
+function ownerImpressionLabel(pattern: string, feeling: string): MemoryDisclosure {
+  const decision = classifySensitivity(`${pattern}\n${feeling}`);
+  return { audience: OWNER_AUDIENCE, sensitivity: 'sensitive', ...(decision.category ? { category: decision.category } : {}),
+    reason: 'ライ氏についてのシャノンの印象', decidedBy: 'rule' };
+}
+
+/** The label of an impression of someone met on a platform: the period's audience, a third party's matter. */
+function platformImpressionLabel(audience: MemoryAudience): () => MemoryDisclosure {
+  return () => ({ audience, sensitivity: 'sensitive', category: 'third_party', reason: 'ほかの人についてのシャノンの印象', decidedBy: 'rule' });
 }
 
 export const IMPRESSION_INSTRUCTIONS = [

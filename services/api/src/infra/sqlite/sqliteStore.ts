@@ -48,6 +48,10 @@ import { PredictionLedger, predictionLedgerEnabled } from '../../mind/learning/p
 import { ChoiceLedger, choiceLedgerEnabled } from '../../mind/learning/choiceLedger.js';
 import { ValueVersions } from '../../mind/learning/valueTable.js';
 import { serverEnvironment } from '../config/serverEnvironment.js';
+import { SQLiteMemoryOutbox } from '../../mind/memory/store/memoryOutboxStore.js';
+import { MemoryProposer } from '../../mind/memory/memoryWriter.js';
+import { SQLitePeopleMemoryStore } from '../../mind/memory/store/peopleMemoryStore.js';
+import { LockWaitMeter } from './lockWaits.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../../../data/shannon.sqlite', import.meta.url)));
 
@@ -73,6 +77,14 @@ export interface SQLiteShannonStoreOptions {
   choiceLedger?: boolean;
   /** When the cognition ledger's writes run (traces, predictions). Absent: `setImmediate`. Tests may pass one that runs at once. */
   cognitionDefer?: (task: () => void) => void;
+  /**
+   * The memory outbox on this connection (Syzygy ADR-0008 stage 3, F5): its tables, the proposals of this store's own writers
+   * (the sleep batch) and the writer's targets. Absent or false: nothing of it, every table as it was (the entries pass
+   * `mindSwitches(environment).memoryOutbox`).
+   */
+  memoryOutbox?: boolean;
+  /** Told after each proposal of this connection (the in-process writer drains then). */
+  memoryNotify?: () => void;
 }
 
 export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore, MemoryEmbeddingIndex, ShannonKnowledgeStore {
@@ -90,6 +102,9 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   private readonly ledger: PredictionLedger | null;
   private readonly choices: ChoiceLedger | null;
   private readonly values: ValueVersions | null;
+  private readonly outbox: SQLiteMemoryOutbox | null;
+  private proposer: MemoryProposer | null = null;
+  private sharedPeople: SQLitePeopleMemoryStore | null = null;
 
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
@@ -121,7 +136,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     });
     this.realtimeVoice = new SQLiteRealtimeVoiceRepository(this.context);
     this.conversations = new SQLiteConversationRepository(this.context);
-    this.jobs = new SQLiteBackgroundJobRepository(this.context, this.companion);
+    this.jobs = new SQLiteBackgroundJobRepository(this.context, this.companion, () => this.memoryProposals());
     new SQLiteStoreMigrator(this.context, this.companion).migrate();
     ensureTurnCaptureSchema(this.context.database);
     ensureSummaryLineageSchema(this.context.database);
@@ -144,7 +159,31 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     this.traces = tracesOn ? new DecisionTraces({
       database: this.context.database, createsSchema: true, now: () => this.context.now(), ...(options.cognitionDefer ? { defer: options.cognitionDefer } : {}),
     }) : null;
+    // Syzygy ADR-0008 stage 3 (F5): the memory outbox, only while it is switched on.
+    this.outbox = options.memoryOutbox ? new SQLiteMemoryOutbox(this.context.database, { meter: new LockWaitMeter('memory writer') }) : null;
     secureDatabaseFiles(options.path);
+  }
+
+  /** The memory outbox on this connection (ADR-0008 stage 3), or null while it is switched off. */
+  memoryOutbox(): SQLiteMemoryOutbox | null { return this.outbox; }
+  /** Proposals appended on this connection (so a proposal inside this store's transaction is part of it), or null while off. */
+  memoryProposals(): MemoryProposer | null {
+    if (!this.outbox) return null;
+    this.proposer ??= new MemoryProposer(this.outbox, { now: () => this.context.now(), notify: () => this.context.options.memoryNotify?.(), log: line => console.log(line) });
+    return this.proposer;
+  }
+  /** People memory on this connection (the memory writer's targets share it), only while the outbox is on. */
+  peopleMemoryOnConnection(): SQLitePeopleMemoryStore | null {
+    if (!this.outbox) return null;
+    this.sharedPeople ??= new SQLitePeopleMemoryStore(this.context.database);
+    return this.sharedPeople;
+  }
+  /** The owner's profile and its prompt written again from the state as it is (what the sleep batch does after it learned). */
+  refreshProfile(scopeKey: string): void {
+    this.context.transaction(() => {
+      this.companion.writePersonalityProfile(scopeKey, this.companion.snapshot(scopeKey), this.context.now());
+      this.companion.writePromptProjection(scopeKey, this.companion.snapshot(scopeKey));
+    });
   }
 
   snapshot(scopeKey: string) { return this.companion.snapshot(scopeKey); }
@@ -240,7 +279,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   dailyUserMessages(scopeKey: string, startAt: string, endAt: string): readonly DailyUserMessage[] { return this.jobs.dailyUserMessages(scopeKey, startAt, endAt); }
   applySleepOutcome(job: ClaimedBackgroundJob, workerId: string, completedAt: string, outcome: SleepConsolidationOutcome) { return this.jobs.applySleepOutcome(job, workerId, completedAt, outcome); }
   pendingBackgroundJobCount() { return this.jobs.pendingBackgroundJobCount(); }
-  close() { this.traces?.flushLockWaits(); this.ledger?.flushLockWaits(); this.choices?.flushLockWaits(); this.values?.flushLockWaits(); this.context.close(); }
+  close() { this.outbox?.meter?.flush(); this.traces?.flushLockWaits(); this.ledger?.flushLockWaits(); this.choices?.flushLockWaits(); this.values?.flushLockWaits(); this.context.close(); }
 }
 
 export function configuredDatabasePath(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): string {

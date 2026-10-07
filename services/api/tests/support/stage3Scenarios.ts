@@ -28,6 +28,7 @@ import { readToolPorts, skillRoutingParts } from '../../src/wiring/skillRoutingW
 import { configuredTurnRouting } from '../../src/wiring/turnRoutingWiring.js';
 import { configuredSkillMemory, skillTurnPorts } from '../../src/wiring/skillMemoryWiring.js';
 import { FakeModel, FakeShowing, loopHarness, runUntilIdle, type LoopHarnessOptions } from '../autonomyLoopHarness.js';
+import type { MemoryCommands, MemoryProposals } from '../../src/mind/memory/memoryPorts.js';
 
 /**
  * The scenarios of the stage-3 switched-off proof (`stage3SwitchedOff.test.ts`, Syzygy ADR-0008 stage 3,
@@ -51,6 +52,17 @@ export interface Stage3Hooks {
   loop?: (context: { databasePath: string }) => Partial<LoopHarnessOptions>;
   /** Told of every scenario's unexpected answer, so the test names the scenario. */
   expectStatus?: (status: number, name: string) => void;
+  /**
+   * Step F5: the memory outbox, built from the environment by the scenario's own wiring (`memoryOutboxWiring.ts`). It gives the
+   * options of the scenario's store, and, on that store, the proposals and commands handed to the writers and a `settle` that
+   * waits for the in-process writer. Null (switched off): every store and writer is built exactly as on afb38c28.
+   */
+  memory?: (context: { databasePath: string; now: () => string }) => Stage3MemoryHook | null;
+}
+
+export interface Stage3MemoryHook {
+  storeOptions: { memoryOutbox: true; memoryNotify: () => void };
+  attach(store: SQLiteShannonStore): { proposals: MemoryProposals; commands: Pick<MemoryCommands, 'run'> | null; settle(): Promise<void> };
 }
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/giu;
@@ -164,9 +176,11 @@ type Turn = { kind: 'text' | 'voice'; words: string; extra?: Record<string, unkn
 async function kernelScenario(name: string, turns: readonly Turn[], hooks: Stage3Hooks, options: { toolRound?: true } = {}): Promise<Stage3Capture> {
   const w = world(name);
   if (options.toolRound) w.toolRound();
-  const store = new SQLiteShannonStore({ path: w.databasePath, now: w.now });
+  const memoryHook = hooks.memory?.({ databasePath: w.databasePath, now: w.now }) ?? null;
+  const store = new SQLiteShannonStore({ path: w.databasePath, now: w.now, ...memoryHook?.storeOptions });
+  const memory = memoryHook?.attach(store) ?? null;
   const peopleStore = new SQLitePeopleMemoryStore(w.databasePath);
-  const background = new BackgroundUpdateCoordinator(store, store);
+  const background = memory ? new BackgroundUpdateCoordinator(store, store, undefined, undefined, memory.proposals) : new BackgroundUpdateCoordinator(store, store);
   const autonomyStore = new SQLiteAutonomyStore(w.databasePath);
   const autonomy = createInMemoryAutonomyService(w.now, { store: autonomyStore });
   const chatModel = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: w.openai, now: w.now });
@@ -174,7 +188,7 @@ async function kernelScenario(name: string, turns: readonly Turn[], hooks: Stage
   const stage2 = stage2Parts(w.databasePath, w.jev, w.now);
   const api = createLocalApiKernel(w.now, {
     chatModel, voiceDecision, stateStore: store, conversationStore: store, knowledgeStore: store, background, peopleMemory: peopleStore, autonomy,
-    ...stage2.parts, ...hooks.kernel?.({ jev: w.jev, databasePath: w.databasePath, now: w.now }),
+    ...stage2.parts, ...hooks.kernel?.({ jev: w.jev, databasePath: w.databasePath, now: w.now }), ...(memory ? { memory } : {}),
   });
   for (const turn of turns) {
     const response = await api.dispatch(turn.kind === 'text'
@@ -190,6 +204,7 @@ async function kernelScenario(name: string, turns: readonly Turn[], hooks: Stage
     w.advance(MINUTE);
   }
   await background.waitForIdle('owner');
+  await memory?.settle();
   stage2.close(); autonomyStore.close(); peopleStore.close(); store.close();
   return w.finish();
 }
@@ -239,15 +254,18 @@ const PLATFORM_ENVIRONMENT = {
 /** The platform reply: the owner in his DM, then a friend and the owner in a shared channel. */
 async function platformScenario(hooks: Stage3Hooks): Promise<Stage3Capture> {
   const w = world('platform');
-  const store = new SQLiteShannonStore({ path: w.databasePath, now: w.now });
+  const memoryHook = hooks.memory?.({ databasePath: w.databasePath, now: w.now }) ?? null;
+  const store = new SQLiteShannonStore({ path: w.databasePath, now: w.now, ...memoryHook?.storeOptions });
+  const memory = memoryHook?.attach(store) ?? null;
   const peopleStore = new SQLitePeopleMemoryStore(w.databasePath);
-  const background = new BackgroundUpdateCoordinator(store, store);
+  const background = memory ? new BackgroundUpdateCoordinator(store, store, undefined, undefined, memory.proposals) : new BackgroundUpdateCoordinator(store, store);
   const autonomyStore = new SQLiteAutonomyStore(w.databasePath);
   const autonomy = createInMemoryAutonomyService(w.now, { store: autonomyStore });
   const chatModel = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: w.openai, now: w.now });
   const api = createLocalApiKernel(w.now, { chatModel, stateStore: store, conversationStore: store, knowledgeStore: store, background, peopleMemory: peopleStore, autonomy,
-    ...hooks.kernel?.({ jev: w.jev, databasePath: w.databasePath, now: w.now }) });
-  const bridge = new PlatformBridgeService(configuredPlatformBridge(PLATFORM_ENVIRONMENT)!, store, store, background, w.now, new PlatformPeople(peopleStore, store), () => true);
+    ...hooks.kernel?.({ jev: w.jev, databasePath: w.databasePath, now: w.now }), ...(memory ? { memory } : {}) });
+  const people = memory ? new PlatformPeople(peopleStore, store, undefined, memory.proposals) : new PlatformPeople(peopleStore, store);
+  const bridge = new PlatformBridgeService(configuredPlatformBridge(PLATFORM_ENVIRONMENT)!, store, store, background, w.now, people, () => true);
   const turns = new SQLiteSurfaceTurnLog(w.databasePath, 'platform_reply_turns');
   const service = new PlatformReplyService({ scopeKey: 'owner', bridge, conversationStore: store, conversation: api, turns, now: w.now });
   const messages: Array<Record<string, unknown>> = [
@@ -263,9 +281,11 @@ async function platformScenario(hooks: Stage3Hooks): Promise<Stage3Capture> {
       hooks.expectStatus?.(500, `platform: ${String(message.requestId)}: ${error instanceof Error ? error.message : String(error)}`);
     }
     await background.waitForIdle('owner');
+    await memory?.settle();
     w.advance(MINUTE);
   }
   await background.waitForIdle('owner');
+  await memory?.settle();
   turns.close(); autonomyStore.close(); peopleStore.close(); store.close();
   return w.finish();
 }
@@ -276,18 +296,20 @@ const FRIEND_UUID = '0f6a8c52-1b2d-4e3f-9a8b-7c6d5e4f3a2b';
 /** Her Minecraft body's game chat: the owner, then a friend, on an online-mode server. */
 async function minecraftScenario(hooks: Stage3Hooks): Promise<Stage3Capture> {
   const w = world('minecraft');
-  const store = new SQLiteShannonStore({ path: w.databasePath, now: w.now });
+  const memoryHook = hooks.memory?.({ databasePath: w.databasePath, now: w.now }) ?? null;
+  const store = new SQLiteShannonStore({ path: w.databasePath, now: w.now, ...memoryHook?.storeOptions });
+  const memory = memoryHook?.attach(store) ?? null;
   const peopleStore = new SQLitePeopleMemoryStore(w.databasePath);
-  const background = new BackgroundUpdateCoordinator(store, store);
+  const background = memory ? new BackgroundUpdateCoordinator(store, store, undefined, undefined, memory.proposals) : new BackgroundUpdateCoordinator(store, store);
   const chatModel = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: w.openai, now: w.now });
   const api = createLocalApiKernel(w.now, { chatModel, stateStore: store, conversationStore: store, knowledgeStore: store, background, peopleMemory: peopleStore,
-    ...hooks.kernel?.({ jev: w.jev, databasePath: w.databasePath, now: w.now }) });
+    ...hooks.kernel?.({ jev: w.jev, databasePath: w.databasePath, now: w.now }), ...(memory ? { memory } : {}) });
   const configuration = configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify({ deviceId: 'minebot-dev', servers: [
     { serverId: 'lab-qywEbW', ownerUuid: OWNER_UUID, title: 'マイクラ実験ワールド', onlineMode: true },
   ] }) })!;
   const turns = new SQLiteMinecraftTurnLog(w.databasePath);
   const body = new MinecraftBody({ configuration, stateStore: store, conversationStore: store, background, now: w.now, chatModel, turns,
-    conversation: { textTurn: input => api.textTurn(input) }, peopleStore, peopleEnabled: () => true });
+    conversation: { textTurn: input => api.textTurn(input) }, peopleStore, peopleEnabled: () => true, ...(memory ? { memory: memory.proposals } : {}) });
   const said: Array<Record<string, unknown>> = [
     { requestId: 'mc-1', speaker: { uuid: OWNER_UUID, name: 'Rai1241' }, message: 'こんばんは、シャノン' },
     { requestId: 'mc-2', speaker: { uuid: FRIEND_UUID, name: 'Mina_77' }, message: 'シャノン、一緒に家を建てよう' },
@@ -300,9 +322,11 @@ async function minecraftScenario(hooks: Stage3Hooks): Promise<Stage3Capture> {
       hooks.expectStatus?.(500, `minecraft: ${String(fields.requestId)}: ${error instanceof Error ? error.message : String(error)}`);
     }
     await background.waitForIdle('owner');
+    await memory?.settle();
     w.advance(MINUTE);
   }
   await background.waitForIdle('owner');
+  await memory?.settle();
   turns.close(); peopleStore.close(); store.close();
   return w.finish();
 }

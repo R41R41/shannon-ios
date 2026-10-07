@@ -6,12 +6,18 @@ import type { SleepConsolidationOutcome } from '../../mind/sleep/sleepConsolidat
 import { parseBackgroundJobPayload, parseTurnPayload } from './sqliteStoreCodecs.js';
 import type { SQLiteCompanionRepository } from './sqliteCompanionRepository.js';
 import type { SQLiteStoreContext } from './sqliteStoreContext.js';
+import type { MemoryProposals } from '../../mind/memory/memoryPorts.js';
 
 interface EventRow { event_id: string; scope_key: string; observed_at: string; payload_json: string; }
 interface BackgroundJobRow { job_id: string; scope_key: string; payload_json: string; attempts: number; }
 
 export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
-  constructor(private readonly context: SQLiteStoreContext, private readonly companion: SQLiteCompanionRepository) {}
+  constructor(
+    private readonly context: SQLiteStoreContext,
+    private readonly companion: SQLiteCompanionRepository,
+    /** Syzygy ADR-0008 stage 3 (F5): the memory outbox of this connection, or null while it is switched off. */
+    private readonly memory: () => MemoryProposals | null = () => null,
+  ) {}
 
   enqueueTurnRefinement(
     scopeKey: string,
@@ -188,14 +194,27 @@ export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
   ): void {
     this.completeClaimedBackgroundJob(job, workerId, completedAt, () => {
       outcome = reconcileSleepOutcome(outcome, this.companion.snapshot(job.scopeKey), completedAt);
-      for (const fact of outcome.facts) {
-        this.companion.apply(job.scopeKey, { type: 'user-fact-upserted', fact, source: 'sleep' });
-      }
-      for (const relationship of outcome.relationships) {
-        this.companion.apply(job.scopeKey, { type: 'relationship-upserted', relationship, source: 'sleep' });
-      }
-      for (const interest of outcome.interests) {
-        this.companion.apply(job.scopeKey, { type: 'interest-observed', interest, source: 'sleep' });
+      const memory = this.memory();
+      if (memory) {
+        // ADR-0008 stage 3 (F5): what the sleep batch learned is proposed, in this transaction; the one writer applies it.
+        const episodes = (item: { sourceExperienceId?: string }) => (item.sourceExperienceId ? [item.sourceExperienceId] : []);
+        for (const fact of outcome.facts) memory.propose({ opId: `sleep:${job.id}:fact:${fact.id}`, scopeKey: job.scopeKey, kind: 'fact.upsert', origin: 'sleep',
+          subjectKey: `fact:${fact.id}`, payload: { fact, source: 'sleep' }, episodeIds: episodes(fact), disclosure: fact.disclosure ?? null });
+        for (const relationship of outcome.relationships) memory.propose({ opId: `sleep:${job.id}:relationship:${relationship.id}`, scopeKey: job.scopeKey,
+          kind: 'relationship.upsert', origin: 'sleep', subjectKey: `relationship:${relationship.id}`, payload: { relationship, source: 'sleep' },
+          episodeIds: episodes(relationship), disclosure: relationship.disclosure ?? null });
+        for (const interest of outcome.interests) memory.propose({ opId: `sleep:${job.id}:interest:${interest}`.slice(0, 200), scopeKey: job.scopeKey,
+          kind: 'interest.change', origin: 'sleep', subjectKey: `interest:${interest}`.slice(0, 240), payload: { interest, source: 'sleep' } });
+      } else {
+        for (const fact of outcome.facts) {
+          this.companion.apply(job.scopeKey, { type: 'user-fact-upserted', fact, source: 'sleep' });
+        }
+        for (const relationship of outcome.relationships) {
+          this.companion.apply(job.scopeKey, { type: 'relationship-upserted', relationship, source: 'sleep' });
+        }
+        for (const interest of outcome.interests) {
+          this.companion.apply(job.scopeKey, { type: 'interest-observed', interest, source: 'sleep' });
+        }
       }
       this.context.insertEvent(job.scopeKey, 'sleep.completed', completedAt, {
         dayKey: job.payload.kind === 'sleep-consolidation' ? job.payload.dayKey : null,

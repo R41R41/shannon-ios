@@ -18,6 +18,7 @@ import { MinecraftTurnAllowance } from './minecraftTurnAllowance.js';
 import { PlatformBridgeError, PlatformBridgeService, platformBridgeThreadId, type PlatformAudiencePolicy } from '../platform/platformBridge.js';
 import type { PeopleMemoryStore } from '../../mind/memory/store/peopleMemoryStore.js';
 import { PlatformPeople, platformPeopleEnabled } from '../platform/platformPeople.js';
+import type { MemoryProposals } from '../../mind/memory/memoryPorts.js';
 
 /**
  * A game-chat turn of her Minecraft body (`docs/minecraft-body-contract.md`). One mind: the turn is a turn of the
@@ -45,6 +46,8 @@ export interface MinecraftBodyDependencies {
   /** People met in the game. Without it, or while `SHANNON_PLATFORM_PEOPLE_INGEST` is off, only the owner is remembered. */
   peopleStore?: PeopleMemoryStore | null;
   peopleEnabled?: () => boolean;
+  /** Syzygy ADR-0008 stage 3 (F5): the memory outbox (absent: switched off, people memory written as it was). */
+  memory?: MemoryProposals | null;
   /**
    * Phase 4: the request queue (`minecraftBodyRequests.ts`). The owner's game-chat task becomes one more entrance to it
    * while the body is claiming; his 「止まって」 asks every open request to stop.
@@ -65,7 +68,7 @@ export class MinecraftBody {
   constructor(private readonly dependencies: MinecraftBodyDependencies) {
     const { stateStore, conversationStore, background, now, peopleStore } = dependencies;
     this.bridge = new PlatformBridgeService(minecraftBridgeConfiguration(dependencies.configuration), stateStore, conversationStore, background, now,
-      peopleStore ? new PlatformPeople(peopleStore, stateStore) : null, dependencies.peopleEnabled ?? (() => platformPeopleEnabled()));
+      peopleStore ? new PlatformPeople(peopleStore, stateStore, undefined, dependencies.memory ?? null) : null, dependencies.peopleEnabled ?? (() => platformPeopleEnabled()));
   }
 
   async turn(scopeKey: string, deviceId: string, value: unknown): Promise<MinecraftTurnResponse> {

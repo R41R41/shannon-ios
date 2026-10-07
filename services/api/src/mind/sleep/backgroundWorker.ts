@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { CompanionStateStore } from '@shannon/cognition';
 import type { BackgroundJobStore, ClaimedBackgroundJob } from './store/backgroundJobStore.js';
 import { TurnRefinementProcessor } from './backgroundUpdates.js';
-import type { ConversationStore } from '../memory/memoryPorts.js';
+import type { ConversationStore, MemoryProposals } from '../memory/memoryPorts.js';
 import {
   consolidateSleepMemory,
   LocalRuleSleepMemoryAnalyzer,
@@ -23,6 +23,8 @@ export interface BackgroundWorkerOptions {
   replaySummarizer?: { refreshForTurn(scopeKey: string, experienceId: string): Promise<unknown> };
   /** Her impressions of the owner are updated after the turn's refinement; a failure never fails the job. */
   impressionUpdater?: { observeTurn(scopeKey: string, experienceId: string): Promise<unknown> };
+  /** Syzygy ADR-0008 stage 3 (F5): what a turn teaches is proposed to the memory outbox (absent: written here, as it was). */
+  memoryProposals?: MemoryProposals | null;
 }
 
 export class ShannonBackgroundWorker {
@@ -48,7 +50,7 @@ export class ShannonBackgroundWorker {
     options: BackgroundWorkerOptions = {},
   ) {
     this.workerId = options.workerId ?? `worker-${randomUUID()}`;
-    this.processor = new TurnRefinementProcessor(stateStore, conversationStore);
+    this.processor = new TurnRefinementProcessor(stateStore, conversationStore, options.memoryProposals ?? null);
     this.timeZone = validTimeZone(options.timeZone ?? 'Asia/Tokyo');
     this.sleepHour = validHour(options.sleepHour ?? 3);
     this.leaseMilliseconds = options.leaseMilliseconds ?? 120_000;

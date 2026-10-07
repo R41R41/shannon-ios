@@ -124,9 +124,12 @@ const strings = (raw: string | null): string[] => {
  */
 export class SQLitePeopleMemoryStore implements PeopleMemoryStore {
   private readonly database: DatabaseSync;
+  private readonly ownsConnection: boolean;
 
-  constructor(path: string) {
-    this.database = new DatabaseSync(path);
+  /** A path opens a connection of its own; a shared one (ADR-0008 stage 3, F5: the memory writer's) is never closed here. */
+  constructor(path: string | DatabaseSync) {
+    this.ownsConnection = typeof path === 'string';
+    this.database = typeof path === 'string' ? new DatabaseSync(path) : path;
     this.database.exec(`
       PRAGMA busy_timeout = 5000;
       PRAGMA journal_mode = WAL;
@@ -208,7 +211,7 @@ export class SQLitePeopleMemoryStore implements PeopleMemoryStore {
     }
   }
 
-  close(): void { this.database.close(); }
+  close(): void { if (this.ownsConnection) this.database.close(); }
 
   /** People met in person. Candidates and revoked rows of the platform identity registry are not listed. */
   listPeople(scopeKey: string): readonly RememberedPerson[] {
@@ -452,6 +455,7 @@ export class SQLitePeopleMemoryStore implements PeopleMemoryStore {
   }
 
   private transaction<T>(operation: () => T): T {
+    if (this.database.isTransaction) return operation(); // inside the memory writer's transaction (shared connection)
     this.database.exec('BEGIN IMMEDIATE');
     try {
       const result = operation();

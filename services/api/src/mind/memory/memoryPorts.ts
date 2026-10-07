@@ -26,3 +26,6 @@ export { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert } f
 export { type ConversationStore, type ShannonExperience, type StoredConversationMessage, type TurnPersistenceContext } from './store/conversationStore.js';
 export { type MemoryEmbeddingIndex } from './store/sqliteMemoryEmbeddings.js';
 export { type ShannonKnowledgeStore } from './store/sqliteShannonKnowledge.js';
+export { MEMORY_OP_KINDS, MEMORY_OP_ORIGINS, memoryOpCodec, type MemoryOp, type MemoryOpDraft, type MemoryOpKind, type MemoryOpOrigin } from './memoryOpCodec.js';
+export { MemoryCommands, MemoryWriter, type MemoryProposals } from './memoryWriter.js';
+export { type MemoryTargets } from './memoryOps.js';

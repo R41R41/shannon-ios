@@ -17,7 +17,7 @@ import type { ShannonExperience } from '../memory/memoryPorts.js';
 import type { BackgroundJobStore } from './store/backgroundJobStore.js';
 import { captureImmediateExplicitMemory, type UserFactProposal } from './sleepConsolidation.js';
 import type { ShannonGeneratedArtifact, ShannonTaskDecision } from '../../infra/models/chatModel.js';
-import { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert } from '../memory/memoryPorts.js';
+import { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert, type MemoryProposals } from '../memory/memoryPorts.js';
 import { extractExplicitUserIntent } from '../action/respond/cognitiveIntent.js';
 import { intentCaptureKey, ownerFacingStatement, turnCaptureId, type TurnCaptureRecord } from '../memory/store/turnCaptures.js';
 import { applyExplicitCommitmentCommand } from '../action/respond/commitmentCommands.js';
@@ -75,6 +75,12 @@ export class TurnRefinementProcessor {
   constructor(
     private readonly stateStore: CompanionStateStore,
     private readonly conversationStore: ConversationStore,
+    /**
+     * Syzygy ADR-0008 stage 3 (F5): the memory outbox. Present, what the turn teaches (facts, relationships, interests, promises,
+     * the turn's captures) is proposed and the one writer applies it; emotion, the recalled memories and shared time stay direct.
+     * Absent (switched off): everything is written here, as it was.
+     */
+    private readonly memory: MemoryProposals | null = null,
   ) {}
 
   process(
@@ -131,24 +137,35 @@ export class TurnRefinementProcessor {
         ...(revision ? { change: 'updated' as const, previousText: revision.previousText }
           : { change: known ? 'confirmed' as const : 'created' as const }) });
     };
+    const proposals = this.memory;
+    const opId = (part: string) => `turn:${scopeKey}:${recordedExperienceId ?? sourceTime}:${part}`.slice(0, 200);
+    const episodes = recordedExperienceId ? [recordedExperienceId] : [];
     for (const fact of immediate.facts) {
-      this.stateStore.apply(scopeKey, { type: 'user-fact-upserted',
-        fact: { ...fact, ...(recordedExperienceId ? { sourceExperienceId: recordedExperienceId } : {}),
-          ...labelled(`${fact.statement}\n${fact.evidence ?? ''}`) }, source: 'conversation' });
+      const stored = { ...fact, ...(recordedExperienceId ? { sourceExperienceId: recordedExperienceId } : {}),
+        ...labelled(`${fact.statement}\n${fact.evidence ?? ''}`) };
+      if (proposals) proposals.propose({ opId: opId(`fact:${fact.id}`), scopeKey, kind: 'fact.upsert', origin: 'turn', subjectKey: `fact:${fact.id}`,
+        payload: { fact: stored, source: 'conversation' }, episodeIds: episodes, disclosure: stored.disclosure });
+      else this.stateStore.apply(scopeKey, { type: 'user-fact-upserted', fact: stored, source: 'conversation' });
       learned(fact.id, fact.statement, current.userFacts.some(item => item.id === fact.id));
     }
     for (const relationship of immediate.relationships) {
-      this.stateStore.apply(scopeKey, { type: 'relationship-upserted',
-        relationship: { ...relationship, ...(recordedExperienceId ? { sourceExperienceId: recordedExperienceId } : {}),
-          ...labelled(`${relationship.statement}\n${relationship.evidence ?? ''}`) }, source: 'conversation' });
+      const stored = { ...relationship, ...(recordedExperienceId ? { sourceExperienceId: recordedExperienceId } : {}),
+        ...labelled(`${relationship.statement}\n${relationship.evidence ?? ''}`) };
+      if (proposals) proposals.propose({ opId: opId(`relationship:${relationship.id}`), scopeKey, kind: 'relationship.upsert', origin: 'turn',
+        subjectKey: `relationship:${relationship.id}`, payload: { relationship: stored, source: 'conversation' }, episodeIds: episodes, disclosure: stored.disclosure });
+      else this.stateStore.apply(scopeKey, { type: 'relationship-upserted', relationship: stored, source: 'conversation' });
       learned(relationship.id, relationship.statement, current.relationships.some(item => item.id === relationship.id));
     }
     for (const interest of immediate.interests) {
-      this.stateStore.apply(scopeKey, { type: 'interest-observed', interest, source: 'conversation' });
+      if (proposals) proposals.propose({ opId: opId(`interest:${interest}`), scopeKey, kind: 'interest.change', origin: 'turn',
+        subjectKey: `interest:${interest}`.slice(0, 240), payload: { interest, source: 'conversation' }, episodeIds: episodes });
+      else this.stateStore.apply(scopeKey, { type: 'interest-observed', interest, source: 'conversation' });
     }
     for (const promise of extractPromiseCaptures(userMessage, sourceTime, recordedExperienceId, source?.timeZone ?? timeZone)) {
       const memory = { ...promise.memory, ...labelled(`${promise.memory.summary}\n${promise.memory.evidence ?? ''}`) };
-      this.stateStore.apply(scopeKey, { type: 'prospective-memory-upserted', memory });
+      if (proposals) proposals.propose({ opId: opId(`promise:${memory.id}`), scopeKey, kind: 'promise.capture', origin: 'turn', subjectKey: `promise:${memory.id}`,
+        payload: { memory }, episodeIds: episodes, disclosure: memory.disclosure ?? null });
+      else this.stateStore.apply(scopeKey, { type: 'prospective-memory-upserted', memory });
       capture('commitment', memory.id, promise.topic, { itemId: memory.id,
         ...(memory.dueDate ? { dueDate: memory.dueDate } : {}), ...(memory.dueAt ? { dueAt: memory.dueAt } : {}),
         ...(memory.dueHint ? { dueHint: memory.dueHint } : {}), ...(memory.timeZone ? { timeZone: memory.timeZone } : {}),
@@ -158,7 +175,14 @@ export class TurnRefinementProcessor {
     const goal = extractExplicitUserIntent(userMessage, '', sourceTime);
     if (goal) capture('intent', intentCaptureKey(goal.title), goal.title, { itemId: intentCaptureKey(goal.title) });
     if (requestsExactTimeAlert(userMessage)) capture('notice', 'exact-time', EXACT_TIME_DECLINED);
-    if (captures.length) this.conversationStore.recordTurnCaptures?.(scopeKey, captures);
+    if (proposals && captures.length) {
+      // What the turn stated as a goal is its own op (the intention ledger reads it); the rest of the turn's captures are one.
+      for (const intent of captures.filter(item => item.kind === 'intent')) proposals.propose({ opId: opId(`capture:${intent.id}`), scopeKey, kind: 'intent.capture',
+        origin: 'turn', subjectKey: `turn:${intent.turnId}`, payload: { capture: intent }, episodeIds: episodes });
+      const rest = captures.filter(item => item.kind !== 'intent');
+      if (rest.length) proposals.propose({ opId: opId('captures'), scopeKey, kind: 'turn_capture', origin: 'turn', subjectKey: `turn:${rest[0]!.turnId}`,
+        payload: { captures: rest }, episodeIds: episodes });
+    } else if (captures.length) this.conversationStore.recordTurnCaptures?.(scopeKey, captures);
 
     const pinnedIds = new Set(current.memoryControls
       .filter(control => control.kind === 'experience' && control.status === 'active' && control.pinned)
@@ -170,7 +194,10 @@ export class TurnRefinementProcessor {
     const resonantInterest = current.temperament.curiosity >= 0.5
       ? deriveResonantInterest(userMessage, recalled)
       : null;
-    if (resonantInterest) {
+    if (resonantInterest && proposals) {
+      proposals.propose({ opId: opId(`resonant:${resonantInterest}`), scopeKey, kind: 'interest.change', origin: 'turn',
+        subjectKey: `interest:${resonantInterest}`.slice(0, 240), payload: { interest: resonantInterest }, episodeIds: episodes });
+    } else if (resonantInterest) {
       this.stateStore.apply(scopeKey, { type: 'interest-observed', interest: resonantInterest });
     }
     // Last, so the slow traits are recalibrated from what this turn just stored.
@@ -189,8 +216,10 @@ export class BackgroundUpdateCoordinator implements TurnBackgroundService {
     private readonly reportError: (error: unknown) => void = error => console.error('Shannon background update failed', error),
     /** Runs after a turn's refinement, still off the response path (the replay summary). */
     private readonly afterTurn?: (turn: CompletedTurn, recordedExperienceId?: string) => Promise<unknown>,
+    /** Syzygy ADR-0008 stage 3 (F5): the memory outbox (absent: switched off, written here as it was). */
+    memory?: MemoryProposals | null,
   ) {
-    this.processor = new TurnRefinementProcessor(stateStore, conversationStore);
+    this.processor = new TurnRefinementProcessor(stateStore, conversationStore, memory ?? null);
   }
 
   recordTurn(turn: CompletedTurn): ShannonExperience {

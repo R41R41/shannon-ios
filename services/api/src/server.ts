@@ -85,8 +85,11 @@ import { SQLiteOwnOutreach } from './surfaces/outreach/ownOutreach.js';
 import { SQLiteOwnerCallFacts, ownerCallElsewhereEnabled } from './surfaces/voice/ownerCallElsewhere.js';
 import { createServerSelfDiagnosis } from './infra/ops/serverSelfDiagnosis.js';
 import { createMinecraftBodyWiring } from './wiring/serverMinecraftBodyWiring.js';
+import { memoryOutboxOn, memoryPortsOf } from './wiring/memoryOutboxWiring.js';
 const now = () => new Date().toISOString();
-const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
+// Syzygy ADR-0008 stage 3 (F5): with SHANNON_MEMORY_OUTBOX on, memory proposals of this process go to the outbox (the worker writes them).
+const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now, memoryOutbox: memoryOutboxOn(process.env) });
+const memoryPorts = memoryPortsOf(persistentStore, now);
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
 const initiativeStore = new SQLiteInitiativeStore(configuredDatabasePath(), now);
 const pushStore = new SQLitePushNotificationStore(configuredDatabasePath(), now);
@@ -166,7 +169,7 @@ const chatModel = tieredChatModel(createConfiguredChatModel(process.env, persist
 const voiceDecision = configuredVoiceDecision(process.env, persistentStore, persistentStore.decisionTraces()?.writer ?? null); // ADR-0008: traced; SHANNON_DECISION_TRACES=off: as it was.
 // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
 const notion = configuredNotionSource(process.env, { log: line => console.log(line) });
-minecraft.connect({ stateStore: persistentStore, conversationStore: persistentStore, background: backgroundDispatcher, now, chatModel, peopleStore: peopleMemoryStore, conversation: { textTurn: input => kernel.textTurn(input) } });
+minecraft.connect({ stateStore: persistentStore, conversationStore: persistentStore, background: backgroundDispatcher, now, chatModel, peopleStore: peopleMemoryStore, conversation: { textTurn: input => kernel.textTurn(input) }, memory: memoryPorts?.proposals ?? null });
 // Syzygy ADR-0008 stage 2, step 3 (SHANNON_READ_TOOLS): her read tools over the same reads as the projections; off, none.
 const readTools = readToolPorts(process.env, { notion, voyagerCatalog, upcoming: ownerUpcoming.upcoming, chatModel });
 const kernel = createLocalApiKernel(now, {
@@ -196,6 +199,7 @@ const kernel = createLocalApiKernel(now, {
   voyagerDestination: createConfiguredVoyagerDestination(process.env),
   personIdentities: personIdentityStore,
   peopleMemory: peopleMemoryStore,
+  ...(memoryPorts ? { memory: memoryPorts } : {}),
   worldSubscriptions: worldStore,
   cognitiveIntents: cognitiveIntentStore,
   conversationOrchestration: conversationOrchestrationStore,
@@ -211,7 +215,7 @@ const kernel = createLocalApiKernel(now, {
   ...skillRoutingParts(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt }),
   ...(readTools ? { readTools } : {}), ...(turnRouting ? { turnRouting: turnRouting.routing } : {}), ...(skills ? { skills } : {}),
 });
-const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, chatModel, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input) }, databasePath: configuredDatabasePath() });
+const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, chatModel, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input) }, databasePath: configuredDatabasePath() }, memoryPorts?.proposals ?? null);
 // What this server resolved (docs/ops-contract.md, `server`): model names, persona hash, tools, revision, integrations as booleans. Owner only.
 const selfDiagnosis = createServerSelfDiagnosis({ environment: process.env, startedAt: now(), chatModel, voiceDecision, dictation: voiceTranscriber, vision: voiceVisionGateway,
   voyagerCatalog, notion, platformBridge, autonomy: { enabled: autonomyConfig.enabled, preferences: scopeKey => autonomyStore.modelPreferences(scopeKey) } });

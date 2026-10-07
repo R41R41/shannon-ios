@@ -9,6 +9,7 @@ import { MINECRAFT_BODY_LIMITS, MINECRAFT_BODY_TURN_PATH, MinecraftBodyError, co
 import { SQLiteMinecraftTurnLog } from './store/minecraftTurnStore.js';
 import type { PeopleMemoryStore } from '../../mind/memory/store/peopleMemoryStore.js';
 import { platformPeopleEnabled } from '../platform/platformPeople.js';
+import type { MemoryProposals } from '../../mind/memory/memoryPorts.js';
 import { consumeDeviceAllowance, sendJson } from '../../infra/http/serverHttp.js';
 import { closedSignal } from '../../infra/http/apiAutonomyHostStepRoutes.js';
 import type { MinecraftBodyRequests } from './minecraftBodyRequests.js';
@@ -36,6 +37,8 @@ export function createMinecraftBodyRoute(
     conversation: MinecraftConversation;
     /** Phase 4: the request queue, made by the server so her tools share it. Absent, the request routes answer 503. */
     requests?: MinecraftBodyRequests | null;
+    /** Syzygy ADR-0008 stage 3 (F5): the memory outbox (absent: switched off). */
+    memory?: MemoryProposals | null;
   },
 ): MinecraftBodyRoute {
   const configuration = configuredMinecraftBody(environment);

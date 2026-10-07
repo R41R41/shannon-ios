@@ -60,6 +60,7 @@ import type { TestFlightDeliveryReader } from '../../integrations/testflight/sto
 import { dispatchTestFlightRequest } from './apiTestFlightRoutes.js';
 import { dispatchPeopleMemoryRequest } from './apiPeopleMemoryRoutes.js';
 import { PeopleMemory } from '../../mind/memory/peopleMemory.js';
+import type { MemoryCommands, MemoryProposals } from '../../mind/memory/memoryPorts.js';
 import { SQLitePeopleMemoryStore, type PeopleMemoryStore } from '../../mind/memory/store/peopleMemoryStore.js';
 import type { DailyMindReader } from '../../mind/action/respond/dailyMind.js';
 import type { WorldSubscriptionReader } from '../../integrations/world/store/worldStore.js';
@@ -138,6 +139,8 @@ export interface ShannonApiKernelOptions {
   conversationOrchestration?: ConversationOrchestrationStore;
   memoryRecall?: TurnMemoryRecall;
   peopleMemory?: PeopleMemoryStore;
+  /** Syzygy ADR-0008 stage 3 (F5): the memory outbox's proposals and the owner's synchronous commands. Absent: switched off. */
+  memory?: { proposals: MemoryProposals; commands: Pick<MemoryCommands, 'run'> | null } | null;
   autonomy?: ShannonAutonomyService;
   notion?: NotionTurnReader; body?: ShannonBodyOptions; upcoming?: OwnerUpcoming; /** What she did on her own (`ownOutreach.ts`). */ ownOutreach?: OwnOutreachReader;
   /** What her Minecraft body reported about the requests it was given (`minecraftBodyRequests.ts`), for a turn the owner alone reads. */
@@ -217,7 +220,7 @@ export class ShannonApiKernel {
     this.notion = options.notion ?? null;
     this.minecraftRequests = options.minecraftRequests ?? null;
     this.turnChooser = options.turnChooser ?? null; this.turnRouting = options.turnRouting ?? null; this.toolHints = options.toolHints === true;
-    this.people = new PeopleMemory(options.peopleMemory ?? new SQLitePeopleMemoryStore(':memory:'), this.stateStore);
+    this.people = new PeopleMemory(options.peopleMemory ?? new SQLitePeopleMemoryStore(':memory:'), this.stateStore, options.memory ?? null);
     this.autonomy = options.autonomy ?? createInMemoryAutonomyService(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) });
     this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now); this.ownOutreach = options.ownOutreach ? new OwnOutreach(options.ownOutreach, this.now) : null;
     this.body = new ShannonBody({ ...options.body, stateStore: this.stateStore, autonomy: this.autonomy, conversationStore: this.conversationStore, now: this.now });

@@ -4,6 +4,7 @@ import type { ConversationStore, ReplaySummaryRecord } from './store/conversatio
 import { REPLAY_SUMMARY_CHARACTERS, nextWindowStart, replayRule, replayWindow, type ReplayRule, type ReplayWindow } from '../recall/recallPorts.js';
 import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
 import { MemoryWithholding, visibleReplayMessages } from './memoryVisibility.js';
+import type { MemoryProposals } from './memoryWriter.js';
 
 /** Writes the next replay summary from the previous one and the messages that left the replay window. */
 export interface ReplaySummaryWriter {
@@ -39,47 +40,29 @@ export class ConversationReplaySummarizer {
     private readonly usage: { backgroundLlmCostUsd(monthKey: string): number },
     private readonly options: {
       backgroundBudgetUsd?: number; now?: () => string; environment?: Readonly<Record<string, string | undefined>>;
+      /** ADR-0008 stage 3 (F5): the memory outbox. Absent (switched off): the refresh writes the summary itself, as it did. */
+      memory?: MemoryProposals | null;
     } = {},
   ) {}
 
   /** After a completed turn: refresh the summary of the thread it was stored in. */
-  async refreshForTurn(scopeKey: string, experienceId: string): Promise<ReplaySummaryOutcome> {
+  async refreshForTurn(scopeKey: string, experienceId: string): Promise<ReplaySummaryOutcome | 'proposed'> {
     const threadId = this.store.threadOfTurn?.(scopeKey, experienceId);
-    return threadId ? this.refresh(scopeKey, threadId) : 'current';
+    if (!threadId) return 'current';
+    // Syzygy ADR-0008 stage 3 (F5): with the memory outbox on, the refresh is proposed and the one writer runs it.
+    if (this.options.memory) {
+      this.options.memory.propose({ opId: `replay:${scopeKey}:${experienceId}`, scopeKey, kind: 'replay_summary.update', origin: 'replay_summary',
+        subjectKey: `thread:${threadId}`, payload: { threadId, experienceId }, episodeIds: [experienceId] });
+      return 'proposed';
+    }
+    return this.refresh(scopeKey, threadId);
   }
 
   async refresh(scopeKey: string, threadId: string): Promise<ReplaySummaryOutcome> {
     if (!this.writer || !this.store.saveReplaySummary || !this.store.replaySummary) return 'disabled';
-    // Taken before the state is read: an item forgotten while the writer runs is later than this.
-    const startedAt = this.options.now?.() ?? new Date().toISOString();
-    const state = this.stateStore.snapshot(scopeKey);
-    const text = replayRule('text', this.options.environment);
-    const voice = replayRule('voice', this.options.environment);
-    // Only what the owner alone would be replayed; a withheld turn never becomes summary text.
-    const visible = visibleReplayMessages(state, this.store, scopeKey, threadId, OWNER_AUDIENCE, text.maximumMessages + 1).messages;
-    const items = visible.map(entry => entry.item);
-    // The window that drops the most decides what the summary has to account for.
-    const windows = [replayWindow(items, text), replayWindow(items, voice)] as const;
-    const dropped = Math.max(...windows.map(window => window.start));
-    if (!windows.some((window, index) => window.start > 0 || nearlyFull(window, index ? voice : text))) return 'current';
-    // A full window drops to its next boundary in one turn (`StableHead`), its first drop included: what it will leave out
-    // then is covered now, before that turn, as sliding by a message or two was covered by the lookahead. The cover reaches
-    // the boundary after that one, so a refresh that ends only after the next request (the background worker) still leaves
-    // nothing out of both on an ordinary turn; a turn whose messages fill much of the budget at once can still drop past it.
-    // The model is given the summary only once the window leaves something out.
-    const twoAhead = (rule: ReplayRule, start: number) => nextWindowStart(items, rule, nextWindowStart(items, rule, start));
-    const next = Math.max(twoAhead(text, windows[0].start), twoAhead(voice, windows[1].start));
-
-    const stored = this.store.replaySummary(scopeKey, threadId);
-    const previous = stored && !new MemoryWithholding(state, this.store, scopeKey).withholdsReplaySummary(threadId, stored) ? stored : null;
-    const covered = previous ? visible.findIndex(entry => entry.message.id === previous.coveredThroughMessageId) : -1;
-    if (previous && covered >= Math.min(visible.length, next) - 1) return 'current';
-
-    const end = Math.min(visible.length, Math.max(dropped + LOOKAHEAD_MESSAGES, next));
-    const batches = batchesOf(visible.slice(covered + 1, end).map(entry => ({
-      id: entry.message.id,
-      line: `${entry.message.role === 'user' ? 'ユーザー' : 'シャノン'}: ${Array.from(entry.message.content.trim().replace(/\s+/gu, ' ')).slice(0, LINE_CHARACTERS).join('')}`,
-    })));
+    const prepared = this.prepared(scopeKey, threadId);
+    if ('outcome' in prepared) return prepared.outcome;
+    const { previous, startedAt, batches } = prepared;
     let summary = previous?.summary ?? null;
     let outcome: ReplaySummaryOutcome = 'current';
     for (const batch of batches) {
@@ -95,6 +78,66 @@ export class ConversationReplaySummarizer {
       outcome = 'updated';
     }
     return outcome;
+  }
+
+  /**
+   * The memory writer's refresh (ADR-0008 stage 3, F5): the same reading and the same calls as `refresh`, through `update` (the
+   * writer's cached model call), but nothing is saved: the record to write is answered, and the writer writes it under its lock
+   * after the compare-and-set. A failed call throws (the writer counts it).
+   */
+  async planned(scopeKey: string, threadId: string, update: ReplaySummaryWriter['update']): Promise<{ outcome: ReplaySummaryOutcome; record?: ReplaySummaryRecord }> {
+    if (!this.store.saveReplaySummary || !this.store.replaySummary) return { outcome: 'disabled' };
+    const prepared = this.prepared(scopeKey, threadId);
+    if ('outcome' in prepared) return { outcome: prepared.outcome };
+    const { previous, startedAt, batches } = prepared;
+    let summary = previous?.summary ?? null;
+    let record: ReplaySummaryRecord | undefined;
+    for (const batch of batches) {
+      if (this.usage.backgroundLlmCostUsd(utcMonthKey(new Date(startedAt))) >= (this.options.backgroundBudgetUsd ?? configuredBackgroundBudgetUsd())) {
+        return record ? { outcome: 'updated', record } : { outcome: 'budget' };
+      }
+      const written = boundedReplaySummary(await update(scopeKey, { previousSummary: summary, lines: batch.map(entry => entry.line) }));
+      if (!written) throw new Error('REPLAY_SUMMARY_EMPTY');
+      summary = written;
+      record = { summary, coveredThroughMessageId: batch.at(-1)!.id, chainStartedAt: previous?.chainStartedAt ?? startedAt, updatedAt: startedAt };
+    }
+    return record ? { outcome: 'updated', record } : { outcome: 'current' };
+  }
+
+  /** What a refresh reads before its first call: the window, the previous summary, and the batches of lines it has to cover. */
+  private prepared(scopeKey: string, threadId: string): { outcome: ReplaySummaryOutcome }
+    | { previous: ReplaySummaryRecord | null; startedAt: string; batches: Array<Array<{ id: string; line: string }>> } {
+    // Taken before the state is read: an item forgotten while the writer runs is later than this.
+    const startedAt = this.options.now?.() ?? new Date().toISOString();
+    const state = this.stateStore.snapshot(scopeKey);
+    const text = replayRule('text', this.options.environment);
+    const voice = replayRule('voice', this.options.environment);
+    // Only what the owner alone would be replayed; a withheld turn never becomes summary text.
+    const visible = visibleReplayMessages(state, this.store, scopeKey, threadId, OWNER_AUDIENCE, text.maximumMessages + 1).messages;
+    const items = visible.map(entry => entry.item);
+    // The window that drops the most decides what the summary has to account for.
+    const windows = [replayWindow(items, text), replayWindow(items, voice)] as const;
+    const dropped = Math.max(...windows.map(window => window.start));
+    if (!windows.some((window, index) => window.start > 0 || nearlyFull(window, index ? voice : text))) return { outcome: 'current' };
+    // A full window drops to its next boundary in one turn (`StableHead`), its first drop included: what it will leave out
+    // then is covered now, before that turn, as sliding by a message or two was covered by the lookahead. The cover reaches
+    // the boundary after that one, so a refresh that ends only after the next request (the background worker) still leaves
+    // nothing out of both on an ordinary turn; a turn whose messages fill much of the budget at once can still drop past it.
+    // The model is given the summary only once the window leaves something out.
+    const twoAhead = (rule: ReplayRule, start: number) => nextWindowStart(items, rule, nextWindowStart(items, rule, start));
+    const next = Math.max(twoAhead(text, windows[0].start), twoAhead(voice, windows[1].start));
+
+    const stored = this.store.replaySummary!(scopeKey, threadId);
+    const previous = stored && !new MemoryWithholding(state, this.store, scopeKey).withholdsReplaySummary(threadId, stored) ? stored : null;
+    const covered = previous ? visible.findIndex(entry => entry.message.id === previous.coveredThroughMessageId) : -1;
+    if (previous && covered >= Math.min(visible.length, next) - 1) return { outcome: 'current' };
+
+    const end = Math.min(visible.length, Math.max(dropped + LOOKAHEAD_MESSAGES, next));
+    const batches = batchesOf(visible.slice(covered + 1, end).map(entry => ({
+      id: entry.message.id,
+      line: `${entry.message.role === 'user' ? 'ユーザー' : 'シャノン'}: ${Array.from(entry.message.content.trim().replace(/\s+/gu, ' ')).slice(0, LINE_CHARACTERS).join('')}`,
+    })));
+    return { previous, startedAt, batches };
   }
 }
 
