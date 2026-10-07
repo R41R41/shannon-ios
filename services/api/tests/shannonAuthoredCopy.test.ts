@@ -9,11 +9,13 @@ import { readApiSource } from './support/sources.js';
  * Files whose Japanese string literals are spoken or shown as Shannon herself
  * (command replies, initiative messages, notifications, waiting phrases).
  * System status and error codes live elsewhere and stay neutral UI text.
+ * Where a file was split (Syzygy ADR-0008 stage 3, S2), the part that holds the words is listed (`pushNotificationStore.ts`,
+ * `autonomyAnnouncerStore.ts`), not the file that re-exports it; every listed file must hold quoted Japanese (the test below).
  */
 const SHANNON_VOICE_SOURCES = [
   'conversationCommands.ts', 'commitmentCommands.ts', 'conversationOrganize.ts', 'memoryForgetCommand.ts',
-  'conversationReference.ts', 'initiativeStore.ts', 'initiativeIntentCandidates.ts', 'pushNotifications.ts',
-  'pushNotificationSender.ts', 'voiceWaitingCue.ts', 'autonomyAnnouncer.ts', 'autonomyShowing.ts', 'bodyNudges.ts', 'bodyLookLines.ts',
+  'conversationReference.ts', 'initiativeStore.ts', 'initiativeIntentCandidates.ts', 'pushNotificationStore.ts',
+  'pushNotificationSender.ts', 'voiceWaitingCue.ts', 'autonomyAnnouncerStore.ts', 'autonomyShowing.ts', 'bodyNudges.ts', 'bodyLookLines.ts',
 ];
 
 // Casual sentence endings, second-person あなた, and third-person self-reference in her own speech.
@@ -25,6 +27,12 @@ const OUT_OF_CHARACTER = [
 ];
 
 describe('sentences authored as Shannon', () => {
+  it('lists only files that hold her words, so the check below cannot go vacuous after a split', () => {
+    const empty = SHANNON_VOICE_SOURCES.filter(file => !readApiSource(file).split('\n')
+      .some(line => (line.match(/'[^'\n]*'|`[^`\n]*`/gu) ?? []).some(quoted => /[ぁ-んァ-ヶ]/u.test(quoted))));
+    expect(empty).toEqual([]);
+  });
+
   it('stay in です・ます, call the owner ライ氏, and never say あなた', () => {
     const offenders: string[] = [];
     expect(SHANNON_VOICE_SOURCES.length).toBeGreaterThan(0);

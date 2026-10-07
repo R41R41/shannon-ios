@@ -292,7 +292,8 @@ describe('daily budget and the request to raise it', () => {
     expect(message).toContain('1,300円');
     expect(message).toContain('あと250円');
     expect(message).not.toMatch(/あなた|所有者|だよ。|るよ。/u);
-    const source = readApiSource('autonomyAnnouncer.ts');
+    const source = readApiSource('autonomyAnnouncerStore.ts');
+    expect(source).toMatch(/[ぁ-ん]/u); // The part that holds the words since the S2 split, not the re-export.
     expect(source).not.toMatch(/'[^'\n]*(?:あなた|だよ。|てね。)[^'\n]*'/u);
   });
 });
