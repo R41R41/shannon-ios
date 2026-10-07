@@ -100,7 +100,9 @@ function settleOne(choices: SQLiteChoiceLedger, scopeKey: string, choice: Stored
 export function settleConversation(choices: SQLiteChoiceLedger, scopeKey: string, talkId: string, serve: number, code: string, at: string): number {
   let settled = 0;
   for (const choice of choices.pendingInTalk(scopeKey, talkId)) {
-    if (choice.success !== null && Date.parse(choice.chosenAt) <= Date.parse(at) && settleOne(choices, scopeKey, choice, serve, code, at)) settled += 1;
+    // Review (low): the next turn settles only what it can be the next turn of (within the window); older choices expire.
+    const age = Date.parse(at) - Date.parse(choice.chosenAt);
+    if (choice.success !== null && age >= 0 && age <= TALK_NEXT_TURN_MINUTES * 60_000 && settleOne(choices, scopeKey, choice, serve, code, at)) settled += 1;
   }
   return settled;
 }

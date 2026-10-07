@@ -20,6 +20,7 @@ import { configuredWithheldActions, gateRefusals } from './wiring/withheldWiring
 import { configuredSonnet, tieredChatModel } from './wiring/sonnetWiring.js';
 import { configuredSkillMemory, skillTurnPorts } from './wiring/skillMemoryWiring.js';
 import { noteCopyWrite } from './mind/memory/memoryPorts.js';
+import { installSalt } from './wiring/installSalt.js';
 import { configuredTreeRecall } from './wiring/treeRecallWiring.js';
 import { storyReacted, toolCallChoice, touchLedger } from './wiring/cognitionLedgerTaps.js';
 import { createValuesRoute, isValuesPath, ownerValueRecorder } from './infra/http/learningRoutes.js';
@@ -125,7 +126,8 @@ const skillMemory = configuredSkillMemory(process.env, { databasePath: configure
 const skills = skillMemory ? skillTurnPorts(skillMemory.memory, scopeKey => persistentStore.snapshot(scopeKey)) : null;
 if (skillMemory) autonomy.tools.observeCopyWrites((scopeKey, documentId, write) => noteCopyWrite(skillMemory.memory, scopeKey, documentId, write, now())); // Her copy edits are hers (M2).
 // Step 8: tree recall over her notes, and with the owner alone her skills and her Aether folder. SHANNON_TREE_RECALL=off: recall as it was.
-const treeRecall = configuredTreeRecall(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, skills: skillMemory?.memory ?? null,
+const traceSalt = installSalt(configuredDatabasePath()); // The salt of Jev's input digests in the traces (never in the repository).
+const treeRecall = configuredTreeRecall(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt, skills: skillMemory?.memory ?? null,
   snapshot: scopeKey => persistentStore.snapshot(scopeKey), aether: { access: aetherPorts.access, covers: scopeKey => scopeKey === aetherPorts.studyScopeKey } });
 // Syzygy ADR-0008 stage 2, step 4 (docs/skill-and-routing-contract.md): the tier policy's inputs, the verifier, and the learning of her
 // conversation choices (and, step 6, the uses of her skills). SHANNON_ADR8_STAGE2=off: none of it.
@@ -205,7 +207,7 @@ const kernel = createLocalApiKernel(now, {
       answered: (scopeKey, since) => { try { return ownerCallFacts.answered(scopeKey, since); } catch { return []; } } }, game: minecraft.game },
   notion, minecraftRequests: minecraft.requests,
   // Syzygy ADR-0008 stage 2 (docs/skill-and-routing-contract.md): the turn's Jev call. SHANNON_ADR8_STAGE2=off: none of it.
-  ...skillRoutingParts(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null }),
+  ...skillRoutingParts(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt }),
   ...(readTools ? { readTools } : {}), ...(turnRouting ? { turnRouting: turnRouting.routing } : {}), ...(skills ? { skills } : {}),
 });
 const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, chatModel, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input) }, databasePath: configuredDatabasePath() });

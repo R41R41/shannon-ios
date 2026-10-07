@@ -43,7 +43,9 @@ export class TierCompetence {
   nextTurn(scopeKey: string, talkId: string, serve: number | null, at: string): void {
     this.later(at, () => {
       for (const row of this.store.pendingInTalk(scopeKey, talkId)) {
-        if (Date.parse(row.chosenAt) <= Date.parse(at)) this.store.settle(scopeKey, row.outcomeId, tierOutcome(row.growth, serve), 'next_turn', at);
+        // Within the window only (review, low); older turns expire from G alone below.
+        const age = Date.parse(at) - Date.parse(row.chosenAt);
+        if (age >= 0 && age <= TIER_NEXT_TURN_MINUTES * 60_000) this.store.settle(scopeKey, row.outcomeId, tierOutcome(row.growth, serve), 'next_turn', at);
       }
       this.expire(scopeKey, at);
     });

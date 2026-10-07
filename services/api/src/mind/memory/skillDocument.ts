@@ -169,13 +169,15 @@ export type SkillStatus = 'trial' | 'active' | 'retired';
 
 /** What a trial has shown: accept, revert, or not yet. `base` is null for a new skill. */
 export function trialVerdict(trial: { base: number | null; baseline: number | null; outcomes: readonly (0 | 1)[] }): 'accept' | 'revert' | null {
-  const successes = trial.outcomes.reduce<number>((sum, value) => sum + value, 0);
+  // Review (low): the trial is its first three uses, in order; later ones never change its verdict.
+  const outcomes = trial.outcomes.slice(0, SKILL_LIFECYCLE.trialUses);
+  const successes = outcomes.reduce<number>((sum, value) => sum + value, 0);
   if (trial.base === null) {
     if (successes >= SKILL_LIFECYCLE.newSkillSuccesses) return 'accept';
-    return trial.outcomes.length >= SKILL_LIFECYCLE.trialUses ? 'revert' : null;
+    return outcomes.length >= SKILL_LIFECYCLE.trialUses ? 'revert' : null;
   }
-  if (trial.outcomes.length < SKILL_LIFECYCLE.trialUses) return null;
-  return successes / trial.outcomes.length >= (trial.baseline ?? SKILL_LIFECYCLE.newSkillSuccesses / SKILL_LIFECYCLE.trialUses) ? 'accept' : 'revert';
+  if (outcomes.length < SKILL_LIFECYCLE.trialUses) return null;
+  return successes / outcomes.length >= (trial.baseline ?? SKILL_LIFECYCLE.newSkillSuccesses / SKILL_LIFECYCLE.trialUses) ? 'accept' : 'revert';
 }
 
 /** The rate a patched version must reach: its predecessor's success over its resolved uses, or ⅔ (the new-skill rule) with fewer than three. */

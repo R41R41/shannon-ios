@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { PREDICTION_SOURCE_ID, PREDICTION_SYMBOL } from '../../../contracts/cognitionLedgerContract.js';
+import { ensureColumns } from '../../../infra/sqlite/schemaColumns.js';
 
 /**
  * The outcomes of her tiers (Syzygy ADR-0008 stage 2, step 4; `docs/skill-and-routing-contract.md`). Core: response path.
@@ -32,6 +33,8 @@ export function ensureTierOutcomeSchema(database: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS shannon_tier_outcomes_talk ON shannon_tier_outcomes (scope_key, talk_id, outcome);
     CREATE INDEX IF NOT EXISTS shannon_tier_outcomes_kind ON shannon_tier_outcomes (scope_key, tier, task_kind, outcome);
   `);
+  // ADR-0008 §14 added `doing` after the table first existed on a branch: added when missing.
+  ensureColumns(database, 'shannon_tier_outcomes', { doing: "TEXT CHECK (doing IS NULL OR doing IN ('done', 'described_not_done'))" });
 }
 
 export interface TierOutcomeRow {

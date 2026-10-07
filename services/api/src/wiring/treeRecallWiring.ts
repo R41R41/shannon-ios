@@ -15,7 +15,7 @@ import { configuredJevChooser } from './skillRoutingWiring.js';
 export function configuredTreeRecall(
   environment: Readonly<Record<string, string | undefined>>,
   parts: {
-    trace: DecisionTraceWriter | null; jevFetch?: typeof fetch; now?: () => string;
+    trace: DecisionTraceWriter | null; jevFetch?: typeof fetch; now?: () => string; salt?: string;
     skills?: SkillMemory | null; snapshot?: (scopeKey: string) => CompanionStateSnapshot;
     aether?: { access: AetherAccess | null; covers(scopeKey: string): boolean } | null;
     defer?: (task: () => void) => void; clock?: () => number;
@@ -23,7 +23,8 @@ export function configuredTreeRecall(
 ): TreeKnowledgeRecall | null {
   const switches = skillRoutingSwitches(environment);
   if (!switches.treeRecall) return null;
-  const jev = configuredJevChooser(environment, { trace: parts.trace, ...(parts.jevFetch ? { jevFetch: parts.jevFetch } : {}), ...(parts.now ? { now: parts.now } : {}) });
+  const jev = configuredJevChooser(environment, { trace: parts.trace, ...(parts.jevFetch ? { jevFetch: parts.jevFetch } : {}), ...(parts.now ? { now: parts.now } : {}),
+    ...(parts.salt ? { salt: parts.salt } : {}) });
   if (!jev) return null;
   const skills = switches.skills ? parts.skills ?? null : null;
   const access = parts.aether?.access ?? null;

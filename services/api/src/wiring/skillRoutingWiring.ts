@@ -27,7 +27,7 @@ export interface SkillRoutingParts {
 
 export function skillRoutingParts(
   environment: Readonly<Record<string, string | undefined>>,
-  options: { trace: DecisionTraceWriter | null; jevFetch?: typeof fetch; now?: () => string },
+  options: { trace: DecisionTraceWriter | null; jevFetch?: typeof fetch; now?: () => string; /** The install's secret salt of the input digest `h`. */ salt?: string },
 ): SkillRoutingParts {
   const switches = skillRoutingSwitches(environment);
   const chooser = configuredTurnChooser(environment, switches, options);
@@ -36,7 +36,7 @@ export function skillRoutingParts(
 
 function configuredTurnChooser(
   environment: Readonly<Record<string, string | undefined>>, switches: SkillRoutingSwitches,
-  options: { trace: DecisionTraceWriter | null; jevFetch?: typeof fetch; now?: () => string },
+  options: { trace: DecisionTraceWriter | null; jevFetch?: typeof fetch; now?: () => string; /** The install's secret salt of the input digest `h`. */ salt?: string },
 ): TurnChooser | null {
   if (!switches.stage2 || (!switches.toolMenu && !switches.difficulty)) return null;
   const jev = configuredJevChooser(environment, options);
@@ -49,7 +49,7 @@ function configuredTurnChooser(
  */
 export function configuredJevChooser(
   environment: Readonly<Record<string, string | undefined>>,
-  options: { trace: DecisionTraceWriter | null; jevFetch?: typeof fetch; now?: () => string },
+  options: { trace: DecisionTraceWriter | null; jevFetch?: typeof fetch; now?: () => string; /** The install's secret salt of the input digest `h`. */ salt?: string },
 ): JevChooser | null {
   const apiKey = environment.TYPESAFE_API_KEY?.trim();
   if (!apiKey) return null;
@@ -63,7 +63,7 @@ export function configuredJevChooser(
   });
   const write = options.trace;
   return new JevChooser(client, {
-    usdPerCall: jevUsdPerCall(environment),
+    usdPerCall: jevUsdPerCall(environment), ...(options.salt ? { salt: options.salt } : {}),
     ...(options.now ? { now: options.now } : {}),
     ...(write ? { trace: (scopeKey: string, trace: JevChoiceTrace) => write(scopeKey, {
       surface: trace.surface, decision: trace.decision, decider: 'jev', model: trace.model, questions: trace.questions, contextChars: trace.contextChars,

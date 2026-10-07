@@ -133,9 +133,10 @@ async function form() {
 function kernelOf(world: SkillWorld, model: ShannonChatModel) {
   const ports = world.ports();
   const routing = configuredTurnRouting({}, { databasePath: null, database: world.database, choices: world.store.choiceLedger(), skills: ports, defer: task => task() })!;
-  const autonomy = createInMemoryAutonomyService(() => AT);
-  const api = createLocalApiKernel(() => AT, { chatModel: model, autonomy, skills: ports, turnRouting: routing.routing });
-  return { api, routing: routing.routing, autonomy };
+  const clock = { at: AT };
+  const autonomy = createInMemoryAutonomyService(() => clock.at);
+  const api = createLocalApiKernel(() => clock.at, { chatModel: model, autonomy, skills: ports, turnRouting: routing.routing });
+  return { api, routing: routing.routing, autonomy, clock };
 }
 
 async function use() {
@@ -245,9 +246,10 @@ async function trial() {
   const world = new SkillWorld();
   try {
     const { skillId } = world.skills.create(SCOPE, { draft: skill('weekly-review'), evidence: [] }, { carries: () => false }, minutes(-600)) as { skillId: string };
-    const { api, routing } = kernelOf(world, new SkillReadingModel('weekly-review'));
+    const { api, routing, clock } = kernelOf(world, new SkillReadingModel('weekly-review'));
     const uses = async (prefix: string, outcomes: boolean[], start: number) => {
       for (const [index, good] of outcomes.entries()) {
+        clock.at = minutes(start + index);
         await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: SCOPE, threadId: `${prefix}-${index}`, message: '週末のふりかえりをしたい' } });
         routing.nextTurn(SCOPE, talkId(`${prefix}-${index}`), good ? 0.1 : 0.9, minutes(start + index));
       }

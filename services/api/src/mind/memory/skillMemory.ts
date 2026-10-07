@@ -126,7 +126,9 @@ export class SkillMemory {
     this.later(at, () => {
       for (const skill of this.store.all(scopeKey)) {
         if (!skill.uses.some(use => use.o === null && use.talk === talk)) continue;
-        this.writeUses(skill, skill.uses.map(use => use.o === null && use.talk === talk && Date.parse(use.at) <= Date.parse(at) ? { ...use, o: tierOutcome(use.g, serve) } : use));
+        // Within the window only (review, low); older uses settle from G alone at night.
+        const due = (use: SkillUse) => { const age = Date.parse(at) - Date.parse(use.at); return age >= 0 && age <= SKILL_USE_NEXT_TURN_MINUTES * 60_000; };
+        this.writeUses(skill, skill.uses.map(use => use.o === null && use.talk === talk && due(use) ? { ...use, o: tierOutcome(use.g, serve) } : use));
       }
     });
   }
@@ -157,7 +159,7 @@ export class SkillMemory {
         const outcomes = (version?: number) => skill.uses.filter(use => use.o !== null && (version === undefined || use.v === version)).map(use => use.o as 0 | 1);
         if (skill.status === 'trial') {
           const audit = skill.trialAuditId ? this.store.audits(scopeKey).find(entry => entry.auditId === skill.trialAuditId) ?? null : null;
-          const trial = outcomes(skill.version);
+          const trial = outcomes(skill.version).slice(0, SKILL_LIFECYCLE.trialUses);
           const verdict = trialVerdict({ base: skill.trialBaseVersion, baseline: audit?.baselineRate ?? null, outcomes: trial });
           if (!verdict) continue;
           const measured = { uses: trial.length, successes: trial.filter(value => value === 1).length };

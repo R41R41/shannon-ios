@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { emptyJevProbe, withJevProbe, type JevCallProbe } from './jevClient.js';
 
 /**
@@ -16,7 +16,8 @@ import { emptyJevProbe, withJevProbe, type JevCallProbe } from './jevClient.js';
  * ADR-0008 §14 (after Canny and JevBystander):
  * - **Fixed question sets.** Every question set has a version id and a language (`JEV_QUESTION_SETS`); a change of any wording is
  *   a new version. Each trace records the sets asked (`qv`), their language (`ql`), a digest of the exact questions (`qh`) and
- *   of the whole input (`h`: model, state, questions).
+ *   of the whole input (`h`: model, state, questions), salted with the install's secret (kept on the server, never in the
+ *   repository; a per-process one without it), so the digest of a turn's words cannot be matched against guesses.
  * - **Replayable.** Each trace also records Jev's raw answers, one per question (`a.<key>`: the probability, or the chosen key),
  *   so `replayedAnswers` gives back what the selector parsed and every decision can be recomputed from the traces alone.
  * - **Cached by content.** The same input within `JEV_CACHE_MILLISECONDS` is answered from the last usable answer, without a call
@@ -190,8 +191,14 @@ export class JevChooser {
       clock?: () => number;
       /** How long a usable answer stands for the same input; 0: no cache. */
       cacheMilliseconds?: number;
+      /** The install's secret salt of `h` (`wiring/installSalt.ts`); absent, one for this process. */
+      salt?: string;
     },
-  ) {}
+  ) {
+    this.salt = options.salt ?? randomBytes(16).toString('hex');
+  }
+
+  private readonly salt: string;
 
   get model(): string { return this.client.model; }
 
@@ -211,7 +218,7 @@ export class JevChooser {
     const clock = this.options.clock ?? (() => performance.now());
     const started = clock();
     const probe: JevCallProbe = emptyJevProbe();
-    const input = jevDigest('h', { model: this.client.model, state: request.state, questions: request.questions });
+    const input = jevDigest('h', { salt: this.salt, model: this.client.model, state: request.state, questions: request.questions });
     const key = `${request.scopeKey}\u0000${input}`;
     const ttl = this.options.cacheMilliseconds ?? JEV_CACHE_MILLISECONDS;
     const hit = ttl > 0 ? this.cache.get(key) : undefined;
