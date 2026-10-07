@@ -24,7 +24,7 @@ export function bodyPerception(input: BodyPerceptionInput): MindEvent | null {
   const alone = input.audience === 'owner';
   return perceived({
     id: perceivedId('body'), kind: 'touch', surface: 'body', time: input.at, body: closedId(input.deviceId, 80),
-    audience: input.present, presence: { openOnly: alone, othersMayHear: !alone },
+    audience: input.present, presence: { ownerOnlyHears: alone, othersMayHear: !alone },
     // Whose hand it was is not proven: the body sees a pointer, not a person.
     speaker: { kind: 'unknown' },
     salienceInputs: { touch: input.input },

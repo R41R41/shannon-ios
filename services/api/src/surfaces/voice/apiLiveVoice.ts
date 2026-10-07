@@ -179,8 +179,6 @@ async function completeLiveVoiceDelegation(
     : deviceContext?.companionPresent === true || ownerSaysCompanionPresent(transcript) ? UNKNOWN_GUEST_PRESENCE : OWNER_AUDIENCE;
   const alone = isOwnerOnly(present);
   if (!alone) dependencies.toolServer?.audience.noteOthers(scopeKey);
-  // Stage 3: the turn as the mind perceives it, with the audience decided above, copied (nothing without the wiring).
-  const perceivedTurn = perceiveVoiceTurn(dependencies.mind, scopeKey, { threadId, transcript, present, alone, guest: temporaryGuest, at: occurredAt });
   // A client that predates people memory tells the friend that no owner memory is used; keep that promise for it.
   const legacyGuest = temporaryGuest && guestPresence?.recorded !== true;
   const routingHistory = temporaryGuest ? guestHistory
@@ -210,6 +208,11 @@ async function completeLiveVoiceDelegation(
       dependencies.conversationStore.conversationHistory(scopeKey, threadId).slice(-2), occurredAt);
   decision = settleOwnerVoiceTurn(decision, { transcript, facts: turnFacts, uncertain: uncertainTranscript });
   if (address) decision = applyGuestAddressing(decision, address);
+  // Stage 3: the turn as the mind perceives it, with the audience decided above, copied (nothing without the wiring); once the
+  // router has heard it, so that a transcript it scored uncertain, or words not his to her (an echo, overheard), are not taken as his
+  // (stage 3 review). A transcript with no score (an old client, the router's fallback) keeps the handling it had.
+  const perceivedTurn = perceiveVoiceTurn(dependencies.mind, scopeKey, { threadId, transcript, present, alone, guest: temporaryGuest,
+    unverified: transcriptTrust(decision, deviceContext?.userUtterance) === 'uncertain' || notHisWordsToHer(decision), at: occurredAt });
   // One look at the room: the same conditions as a text turn, chosen by the gateway or asked for in so many words (voiceRoomLook.ts).
   // Judged at this instant, not at the turn's start: the body may have read presence while the router decided.
   const roomLook = voiceLookTurn(dependencies.looks, { scopeKey, transcript, at: dependencies.now(), threadId, turnId: deviceContext?.userUtterance?.id, guest: temporaryGuest, source: deviceContext?.userUtterance?.source,

@@ -1,4 +1,4 @@
-import { isMemoryEvidenceVisible, type CompanionStateSnapshot, type MemoryAudience } from '@shannon/cognition';
+import { isMemoryEvidenceVisible, visibleMemoryText, type CompanionStateSnapshot, type MemoryAudience } from '@shannon/cognition';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { MemoryWithholding, type ConversationStore } from '../memory/memoryPorts.js';
 
@@ -38,6 +38,26 @@ export class WorkspaceTextReader {
     if (this.rules().withholdsReply({ text: held, observedAt: item.at })) return null;
     if (this.disclosure().mentionsWithheld(held)) return null;
     return held;
+  }
+
+  /**
+   * Whether a notice's source is still visible now (stage 3 review): a promise that is still there and not forgotten (nor the turn
+   * it came from), a task the owner did not hide. Read from the source id the producer gave it (`promise-<id>@…`, `task-<id>@…`).
+   */
+  noticeVisible(item: { kind: string; sourceId: string }): boolean {
+    const id = (prefix: string) => (item.sourceId.startsWith(prefix) && item.sourceId.includes('@') ? item.sourceId.slice(prefix.length, item.sourceId.lastIndexOf('@')) : null);
+    if (item.kind === 'promise_due') {
+      const promiseId = id('promise-');
+      const memory = promiseId ? this.snapshot.prospectiveMemories.find(entry => entry.id === promiseId) : undefined;
+      if (!memory) return false;
+      if (visibleMemoryText(this.snapshot, memory.id, memory.summary) === null) return false;
+      return !memory.sourceExperienceId || visibleMemoryText(this.snapshot, memory.sourceExperienceId, memory.summary) !== null;
+    }
+    if (item.kind === 'task_outcome') {
+      const taskId = id('task-');
+      return taskId === null || visibleMemoryText(this.snapshot, taskId, 'visible') !== null;
+    }
+    return true;
   }
 
   private experience(id: string): string | null {

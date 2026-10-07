@@ -22,7 +22,7 @@ export interface PlatformPerceptionInput {
 export function platformPerception(input: PlatformPerceptionInput): MindEvent | null {
   return perceived({
     id: perceivedId('platform'), kind: 'platform_message', surface: 'platform', time: input.at,
-    audience: input.present, presence: { openOnly: input.alone, othersMayHear: !input.alone },
+    audience: input.present, presence: { ownerOnlyHears: input.alone, othersMayHear: !input.alone },
     speaker: input.ownerWrote ? { kind: 'owner', verified: true, tier: 1 } : { kind: 'person' },
     salienceInputs: input.ownerWrote ? { ownerSpeech: true, addressed: namesHer(input.message) } : { othersSpeech: true, addressed: namesHer(input.message) },
     provenance: { source: 'platform', sourceId: closedId(input.threadId), trust: input.ownerWrote ? 'owner' : 'untrusted' },

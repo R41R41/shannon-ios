@@ -24,7 +24,7 @@ export function textPerception(input: TextPerceptionInput): MindEvent | null {
   const owner = (input.speaker ?? 'owner') === 'owner';
   return perceived({
     id: perceivedId('text'), kind: 'utterance', surface: 'text', time: input.at,
-    audience: input.present, presence: { openOnly: input.alone, othersMayHear: !input.alone },
+    audience: input.present, presence: { ownerOnlyHears: input.alone, othersMayHear: !input.alone },
     // The paired app proves the owner only while he alone reads it; with others present the words may not be his.
     speaker: owner && input.alone ? { kind: 'owner', verified: true, tier: 1 } : { kind: 'unknown' },
     salienceInputs: owner && input.alone ? { ownerSpeech: true, addressed: namesHer(input.message) } : { othersSpeech: true, addressed: namesHer(input.message) },

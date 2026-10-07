@@ -4,7 +4,7 @@ import { MIND_EVENT_KINDS, MIND_EVENT_SCHEMA, MIND_SURFACES, checkedMindEvent, m
 
 const AT = '2026-10-07T03:00:00.000Z';
 const draft: MindEventDraft = {
-  id: 'evt-1', kind: 'utterance', surface: 'text', audience: OWNER_AUDIENCE, presence: { openOnly: true, othersMayHear: false },
+  id: 'evt-1', kind: 'utterance', surface: 'text', audience: OWNER_AUDIENCE, presence: { ownerOnlyHears: true, othersMayHear: false },
   speaker: { kind: 'owner', verified: true, tier: null }, time: AT, salienceInputs: { ownerSpeech: true, addressed: true },
   provenance: { source: 'conversation', sourceId: 'turn-1', trust: 'owner' }, content: { text: '今日は寒いね' },
 };
@@ -15,7 +15,7 @@ describe('mind.event.v1', () => {
     const event = built();
     expect(event).toEqual({
       schema: MIND_EVENT_SCHEMA, id: 'evt-1', kind: 'utterance', surface: 'text', body: null, audience: { kind: 'owner' },
-      presence: { openOnly: true, othersMayHear: false }, speaker: { kind: 'owner', personId: null, verified: true, tier: null }, people: [], time: AT,
+      presence: { ownerOnlyHears: true, othersMayHear: false }, speaker: { kind: 'owner', personId: null, verified: true, tier: null }, people: [], time: AT,
       salienceInputs: { ownerSpeech: true, addressed: true }, provenance: { source: 'conversation', sourceId: 'turn-1', trust: 'owner', episodeIds: [] },
       content: { text: '今日は寒いね' },
     });
@@ -29,13 +29,13 @@ describe('mind.event.v1', () => {
   it('copies the surface\'s audience as it was decided, never recomputing it, and cannot be changed through the copy', () => {
     // A people audience as a surface decided it, ids unsorted: a copy keeps them as they are (normalizeAudience would sort them).
     const decided = { kind: 'people' as const, personIds: ['person-b', 'person-a'], unknownGuest: true };
-    const event = mindEvent({ ...draft, audience: decided, presence: { openOnly: false, othersMayHear: true } }) as MindEvent;
+    const event = mindEvent({ ...draft, audience: decided, presence: { ownerOnlyHears: false, othersMayHear: true } }) as MindEvent;
     expect(event.audience).toEqual(decided);
     expect(event.audience).not.toBe(decided);
     decided.personIds.push('person-c');
     expect(event.audience).toEqual({ kind: 'people', personIds: ['person-b', 'person-a'], unknownGuest: true });
     for (const audience of [OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE, peopleAudience(['p1']), groupAudience('discord:111:222')]) {
-      expect((mindEvent({ ...draft, audience, presence: { openOnly: false, othersMayHear: true } }) as MindEvent).audience).toEqual(audience);
+      expect((mindEvent({ ...draft, audience, presence: { ownerOnlyHears: false, othersMayHear: true } }) as MindEvent).audience).toEqual(audience);
     }
   });
 
@@ -58,8 +58,8 @@ describe('mind.event.v1', () => {
       ['body is invalid', { ...event, body: '' }],
       ['time is invalid', { ...event, time: 'now' }],
       ['audience is invalid', { ...event, audience: { kind: 'everyone' } }],
-      ['presence must be', { ...event, presence: { openOnly: true } }],
-      ['presence cannot be open only', { ...event, presence: { openOnly: true, othersMayHear: true } }],
+      ['presence must be', { ...event, presence: { ownerOnlyHears: true } }],
+      ['presence cannot be the owner alone', { ...event, presence: { ownerOnlyHears: true, othersMayHear: true } }],
       ['speaker.kind is invalid', { ...event, speaker: { kind: 'admin', personId: null, verified: false, tier: null } }],
       ['speaker.tier must be', { ...event, speaker: { kind: 'person', personId: 'p1', verified: false, tier: 5 } }],
       ['a speaker named by tier 3 or 4 is not verified', { ...event, speaker: { kind: 'person', personId: 'p1', verified: true, tier: 3 } }],

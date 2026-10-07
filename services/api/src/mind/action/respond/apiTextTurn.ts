@@ -239,11 +239,14 @@ export function textTurnWorkspace(mind: MindTurnPorts | null, input: TextTurnInp
   if (!mind?.render) return '';
   try {
     const surface = input.surface?.perception?.surface ?? (input.surface ? null : 'text');
-    return mind.render({
+    const blocks = mind.render({
       scopeKey: input.scopeKey, surface: 'text', present: input.audience.present, at: begun.occurredAt, currentItemId: perceived?.itemId ?? null,
       current: surface ? { surface, sourceId: closedId(input.threadId) } : null,
       snapshot: begun.captured, store,
     });
+    // A turn whose reply only open items may reach (`openOnly`: someone else's platform turn) gets the blocks as its context is
+    // given, without a guarded entry (stage 3 review: latent, since the audience check already holds them out).
+    return input.surface?.openOnly ? withoutGuardedEntries(blocks) : blocks;
   } catch { return ''; }
 }
 

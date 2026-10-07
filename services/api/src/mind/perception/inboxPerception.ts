@@ -38,7 +38,7 @@ export function inboxPerception(input: { draft: MindInboxDraft; at: string; seq?
   const alone = draft.audience === 'owner';
   return perceived({
     id: input.seq === undefined ? perceivedId('inbox') : `inbox:${input.seq}`, kind: KIND[draft.kind], surface: SURFACE[draft.source], time: input.at,
-    audience: INBOX_PRESENT[draft.audience], presence: { openOnly: alone, othersMayHear: !alone },
+    audience: INBOX_PRESENT[draft.audience], presence: { ownerOnlyHears: alone, othersMayHear: !alone },
     speaker: { kind: draft.source === 'own_time' ? 'shannon' : 'system' },
     salienceInputs: salienceOf(draft),
     provenance: { source: draft.kind, sourceId: closedId(draft.sourceId), trust: 'system' },

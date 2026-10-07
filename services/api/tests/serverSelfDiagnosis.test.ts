@@ -333,7 +333,8 @@ describe('server.ts', () => {
 
   it('logs the same summary once at startup and hands the ops route the owner-only reader', () => {
     expect(server.match(/selfDiagnosis\.startupLine\(\)/gu)).toHaveLength(1);
-    expect(server).toContain('server: scopeKey => selfDiagnosis.forScope(scopeKey),');
+    // Stage 3 review: the mind's state is added for the owner (`withMindOps`, nothing with stage 3 off), to the same owner-only reader.
+    expect(server).toContain('server: scopeKey => withMindOps(selfDiagnosis.forScope(scopeKey), { host: mind?.host ?? null, outbox: persistentStore.memoryOutbox(), now }),');
     expect(server).not.toMatch(/selfDiagnosis\.read\(\)/u);
   });
 });

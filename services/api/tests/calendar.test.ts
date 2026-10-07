@@ -179,7 +179,8 @@ describe('PUT /v1/calendar/upcoming', () => {
       { id: 'utc', title: 'UTCの予定', start: '2026-10-02T05:00:00Z', end: '2026-10-02T06:00:00Z', allDay: false },
     ]))).status).toBe(200);
     expect(titles(await get())).toEqual(['記念日', 'UTCの予定']);
-    expect(upcoming.loopLines(scope, START)).toEqual([
+    // Each line also carries its item's key for the proactive gate (stage 3 review M2), never shown in a prompt.
+    expect(upcoming.loopLines(scope, START).map(({ subject: _subject, ...line }) => line)).toEqual([
       { kindLabel: '予定', title: '記念日', when: '今日（終日）' }, { kindLabel: '予定', title: 'UTCの予定', when: '今日 14:00〜15:00' },
     ]);
     // `calendar` and `location` are left out when empty; null is not a value of the contract.

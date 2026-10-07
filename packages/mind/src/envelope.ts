@@ -40,7 +40,7 @@ export interface MindSpeaker {
 
 export interface MindPresence {
   /** Only the owner can see or hear the answer. */
-  openOnly: boolean;
+  ownerOnlyHears: boolean;
   /** Someone else may hear or read it. */
   othersMayHear: boolean;
 }
@@ -149,9 +149,9 @@ export function checkedMindEvent(value: unknown, options: { copyAudience?: boole
   const audienceRow = row.audience as Record<string, unknown> | null;
   if (!audienceRow || typeof audienceRow !== 'object' || !['owner', 'people', 'group'].includes(String(audienceRow.kind))) return 'audience is invalid';
   const presence = row.presence as Record<string, unknown> | null;
-  if (!presence || typeof presence !== 'object' || Object.keys(presence).sort().join() !== 'openOnly,othersMayHear'
-    || typeof presence.openOnly !== 'boolean' || typeof presence.othersMayHear !== 'boolean') return 'presence must be { openOnly, othersMayHear }';
-  if (presence.openOnly && presence.othersMayHear) return 'presence cannot be open only while others may hear';
+  if (!presence || typeof presence !== 'object' || Object.keys(presence).sort().join() !== 'othersMayHear,ownerOnlyHears'
+    || typeof presence.ownerOnlyHears !== 'boolean' || typeof presence.othersMayHear !== 'boolean') return 'presence must be { ownerOnlyHears, othersMayHear }';
+  if (presence.ownerOnlyHears && presence.othersMayHear) return 'presence cannot be the owner alone while others may hear';
   const speaker = row.speaker as Record<string, unknown> | null;
   if (!speaker || typeof speaker !== 'object' || Object.keys(speaker).some(key => !['kind', 'personId', 'verified', 'tier'].includes(key))) return 'speaker is invalid';
   if (!has(MIND_SPEAKER_KINDS, speaker.kind)) return 'speaker.kind is invalid';
@@ -176,7 +176,7 @@ export function checkedMindEvent(value: unknown, options: { copyAudience?: boole
   return Object.freeze({
     schema: MIND_EVENT_SCHEMA, id: row.id, kind: row.kind, surface: row.surface, body: row.body as string | null,
     audience: options.copyAudience ? copiedAudience(row.audience as MemoryAudience) : normalizeAudience(row.audience),
-    presence: Object.freeze({ openOnly: presence.openOnly, othersMayHear: presence.othersMayHear }),
+    presence: Object.freeze({ ownerOnlyHears: presence.ownerOnlyHears, othersMayHear: presence.othersMayHear }),
     speaker: Object.freeze({ kind: speaker.kind, personId: speaker.personId as string | null, verified: speaker.verified, tier: speaker.tier as MindSpeaker['tier'] }),
     people: Object.freeze([...row.people as string[]]), time: row.time, salienceInputs,
     provenance: Object.freeze({ source: provenance.source, sourceId: provenance.sourceId, trust: provenance.trust, episodeIds: Object.freeze([...provenance.episodeIds as string[]]) }),

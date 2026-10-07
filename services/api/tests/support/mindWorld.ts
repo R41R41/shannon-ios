@@ -7,6 +7,11 @@ import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
 import { SQLiteBodyStore } from '../../src/surfaces/body/store/bodyStore.js';
 import { SQLiteBodyReactionStore } from '../../src/surfaces/body/store/bodyReactionStore.js';
 import { configuredMind } from '../../src/wiring/mindWiring.js';
+import { BackgroundUpdateCoordinator } from '../../src/mind/sleep/backgroundUpdates.js';
+import { SQLiteMinecraftTurnLog } from '../../src/surfaces/minecraft/store/minecraftTurnStore.js';
+import { MinecraftBody } from '../../src/surfaces/minecraft/minecraftBody.js';
+import { configuredMinecraftBody } from '../../src/contracts/minecraftBodyContract.js';
+import { SQLitePeopleMemoryStore } from '../../src/mind/memory/store/peopleMemoryStore.js';
 
 /**
  * A small world for the tests of Syzygy ADR-0008 stage 3's workspace: one database, the API kernel with the production wiring of
@@ -33,6 +38,18 @@ export function mindWorld(environment: Readonly<Record<string, string | undefine
     body: { store: bodyStore, ingestEnabled: true, reactions: { store: reactionStore, speaker: null, config: {}, experiences: null } },
   });
   let api = build();
+  // Her Minecraft body on a test server, for someone else's words in a game chat (the surface whose words reach a frame).
+  const OWNER_UUID = 'b9191317-c52d-4d67-85fe-ab831e6db146';
+  const minecraftTurns = new SQLiteMinecraftTurnLog(path);
+  const minecraftPeople = new SQLitePeopleMemoryStore(path);
+  const minecraftBackground = new BackgroundUpdateCoordinator(store, store);
+  let minecraftRequest = 0;
+  const minecraft = () => new MinecraftBody({
+    configuration: configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify({ deviceId: 'minebot-dev', servers: [
+      { serverId: 'lab-qywEbW', ownerUuid: OWNER_UUID, title: 'マイクラ実験ワールド', onlineMode: true }] }) })!,
+    stateStore: store, conversationStore: store, background: minecraftBackground, now, chatModel, turns: minecraftTurns,
+    conversation: { textTurn: input => api.textTurn(input) }, peopleStore: minecraftPeople, peopleEnabled: () => true,
+  });
   const world = {
     path, store, requests, logs, now,
     get api() { return api; },
@@ -55,6 +72,15 @@ export function mindWorld(environment: Readonly<Record<string, string | undefine
       await api.waitForBackground('owner');
       return response;
     },
+    /** A friend's words in her Minecraft body's shared game chat (someone else's words, untrusted). */
+    async friendInGame(message: string, name = 'Mina_77') {
+      minecraftRequest += 1;
+      const result = await minecraft().turn('owner', 'minebot-dev', { requestId: `mc-${minecraftRequest}`, serverId: 'lab-qywEbW', conversation: { kind: 'channel' },
+        observedAt: now(), speaker: { uuid: '0f6a8c52-1b2d-4e3f-9a8b-7c6d5e4f3a2b', name }, message });
+      await api.waitForBackground('owner');
+      await minecraftBackground.waitForIdle('owner');
+      return result;
+    },
     async touch(id: string, type = 'pet', audience: 'owner' | 'others' = 'owner', deviceId = 'body-pc') {
       return api.dispatch({ method: 'POST', path: '/v1/body/reactions', body: { scopeKey: 'owner', id, touch: { type, durationMs: 1_500, ongoing: false }, audience, occurredAt: now() }, deviceId });
     },
@@ -69,8 +95,9 @@ export function mindWorld(environment: Readonly<Record<string, string | undefine
     async close() {
       await api.waitForBackground('owner');
       for (let tick = 0; tick < 3; tick += 1) await new Promise(resolve => setImmediate(resolve));
+      await minecraftBackground.waitForIdle('owner');
       mind?.close();
-      reactionStore.close(); bodyStore.close(); store.close();
+      minecraftTurns.close(); minecraftPeople.close(); reactionStore.close(); bodyStore.close(); store.close();
     },
   };
   return world;

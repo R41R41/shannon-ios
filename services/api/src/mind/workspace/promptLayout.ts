@@ -68,7 +68,19 @@ export interface LayoutTurn {
   dataFrames: boolean;
   /** The words of an item for this turn (`WorkspaceTextReader`), or null. */
   text: (item: WorkspaceItem) => string | null;
+  /** Whether a notice's source (a promise, a task) is still visible now (`WorkspaceTextReader.noticeVisible`); absent: yes. */
+  noticeVisible?: (item: WorkspaceItem) => boolean;
 }
+
+/**
+ * A voice turn that was not the owner alone in his own call (a 「友人も一緒」 call, a call with someone else present): never its words,
+ * here or in a frame, only that she was talking with someone (stage 3 review, HIGH). Words of his own call that were not proven his
+ * (an uncertain transcript, an echo) are someone's words: 「誰かが話した」 and, with the frames on, a data frame.
+ */
+export function closedVoiceItem(item: Pick<WorkspaceItem, 'surface' | 'kind' | 'presence'>): boolean {
+  return item.surface === 'voice' && SPEECH_KINDS.has(item.kind) && !item.presence.ownerOnlyHears;
+}
+const CLOSED_VOICE_LINE = 'ほかの人と話していた';
 
 export function agoLabel(at: string, now: string): string {
   const minutes = Math.floor((Date.parse(now) - Date.parse(at)) / 60_000);
@@ -88,6 +100,7 @@ function placeOf(item: WorkspaceItem): string {
 /** One line of `[いまの場]` for an item that is not a notice. */
 function placeLine(item: WorkspaceItem, turn: LayoutTurn, excerpt: string | null): string {
   const head = `- ${agoLabel(item.at, turn.at)}・${placeOf(item)}：`;
+  if (closedVoiceItem(item)) return `${head}${CLOSED_VOICE_LINE}`;
   if (SPEECH_KINDS.has(item.kind)) return `${head}${SPEAKER_LABEL[item.speaker] || '誰か'}が話した${excerpt ? `「${excerpt}」` : ''}`;
   if (item.kind === 'own_time_step') return `${head}${item.detail?.tool ? `〈${item.detail.tool}〉を` : ''}${item.detail?.code === 'failed' ? 'しようとして、できなかった' : 'した'}`;
   if (item.kind === 'presence') return `${head}${SPEAKER_LABEL[item.speaker] || '誰か'}の様子が変わった`;
@@ -130,7 +143,8 @@ export function workspaceBlocks(scope: WorkspaceScope | undefined, turn: LayoutT
   const shown = (item: WorkspaceItem) => item.id !== turn.currentItemId && audienceCovers(item.audience, turn.present)
     && !(turn.current && item.surface === turn.current.surface && item.sourceId === turn.current.sourceId);
   const held = orderedHeld(scope, turn.at).filter(entry => shown(entry.item));
-  const notices = currentNotices(scope, turn.at).filter(shown);
+  // A notice whose promise or task was forgotten since is not shown (review: a forget hides it at once, after a restore too).
+  const notices = currentNotices(scope, turn.at).filter(item => shown(item) && (turn.noticeVisible?.(item) ?? true));
   if (turn.surface === 'voice') {
     const { lines, characters, minimumSalience } = PROMPT_LAYOUT_LIMITS.voice;
     const strong = held.filter(entry => !SPEECH_KINDS.has(entry.item.kind) && entry.salience >= minimumSalience).map(entry => entry.item);
@@ -141,13 +155,14 @@ export function workspaceBlocks(scope: WorkspaceScope | undefined, turn: LayoutT
   const frames: string[] = [];
   const lines: string[] = [];
   for (const { item } of held.filter(entry => !NOTICE_KINDS.has(entry.item.kind))) {
-    const words = SPEECH_KINDS.has(item.kind) ? turn.text(item) : null;
+    const words = SPEECH_KINDS.has(item.kind) && !closedVoiceItem(item) ? turn.text(item) : null;
     if (words && item.trust !== 'owner') {
       // Someone else's words: never on a line of the place; framed as data, or not given at all with the frames off.
       if (turn.dataFrames && frames.length < limits.frames) frames.push(dataFrame(item, words, limits.frameCharacters));
       lines.push(placeLine(item, turn, null));
     } else {
-      lines.push(placeLine(item, turn, words ? oneLine(words, limits.excerptCharacters) : null));
+      // The owner's own words, quoted on the line: neutralized (`oneLine`), and left out when they read like an instruction (review).
+      lines.push(placeLine(item, turn, words && !injectionThreats(words).length ? oneLine(words, limits.excerptCharacters) : null));
     }
   }
   if (scope.summary.count > 0 && isOwnerOnly(turn.present)) {

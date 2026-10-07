@@ -24,7 +24,7 @@ export interface MinecraftPerceptionInput {
 export function minecraftPerception(input: MinecraftPerceptionInput): MindEvent | null {
   return perceived({
     id: perceivedId('minecraft'), kind: 'game', surface: 'minecraft', time: input.at, body: input.deviceId ? closedId(input.deviceId, 80) : null,
-    audience: input.present, presence: { openOnly: input.alone, othersMayHear: !input.alone },
+    audience: input.present, presence: { ownerOnlyHears: input.alone, othersMayHear: !input.alone },
     speaker: input.ownerWrote ? { kind: 'owner', verified: true, tier: 1 } : { kind: 'person' },
     salienceInputs: input.ownerWrote ? { ownerSpeech: true, addressed: namesHer(input.message) } : { othersSpeech: true, addressed: namesHer(input.message) },
     provenance: { source: 'minecraft', sourceId: closedId(input.threadId), trust: input.ownerWrote ? 'owner' : 'untrusted' },

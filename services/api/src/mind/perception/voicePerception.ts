@@ -17,20 +17,30 @@ export interface VoicePerceptionInput {
   alone: boolean;
   /** 「友人も一緒」: a temporary guest call. */
   guest: boolean;
+  /**
+   * The words may not be his to her as heard (an uncertain transcript, an echo, overheard talk, a fragment: stage 3 review): then
+   * the speaker is not proven and the item is someone's words, at a lower salience, without 「ライ氏が話した」.
+   */
+  unverified?: boolean;
   /** The device that heard it, when the request named one. */
   deviceId?: string | null;
   at: string;
 }
 
+/**
+ * The words are held only for the owner alone in his own call (stage 3 review, HIGH): a 「友人も一緒」 call and a call with someone
+ * else present enter the workspace without any text, and render only as a closed line (`promptLayout.ts`).
+ */
 export function voicePerception(input: VoicePerceptionInput): MindEvent | null {
-  const owner = !input.guest && input.alone;
+  const owner = !input.guest && input.alone && !input.unverified;
+  const ownersCall = !input.guest && input.alone;
   return perceived({
     id: perceivedId('voice'), kind: 'utterance', surface: 'voice', time: input.at,
     body: input.deviceId ? closedId(input.deviceId, 80) : null,
-    audience: input.present, presence: { openOnly: input.alone, othersMayHear: !input.alone },
+    audience: input.present, presence: { ownerOnlyHears: input.alone, othersMayHear: !input.alone },
     speaker: owner ? { kind: 'owner', verified: true, tier: 1 } : { kind: input.guest ? 'person' : 'unknown' },
     salienceInputs: owner ? { ownerSpeech: true, addressed: namesHer(input.transcript) } : { othersSpeech: true, addressed: namesHer(input.transcript) },
     provenance: { source: 'voice', sourceId: closedId(input.threadId), trust: owner ? 'owner' : 'untrusted' },
-    content: heldText(input.transcript),
+    content: ownersCall ? heldText(input.transcript) : null,
   });
 }

@@ -76,7 +76,11 @@ function world(name: string) {
     return new Response(JSON.stringify({ output_text: text, usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 } }));
   }) as typeof fetch;
   const events: MindEvent[] = [];
-  const mind = { perceive: (_scopeKey: string, event: MindEvent | null) => { if (event) events.push(event); return null; } };
+  // The workspace's render is wrapped too (stage 3 review): the audience a turn renders for is recorded beside the legacy paths'.
+  const mind = {
+    perceive: (_scopeKey: string, event: MindEvent | null) => { if (event) events.push(event); return null; },
+    render: (turn: { present: MemoryAudience }) => { legacy.calls.push({ path: 'render', audience: turn.present }); return ''; },
+  };
   const store = new SQLiteShannonStore({ path, now });
   const peopleStore = new SQLitePeopleMemoryStore(path);
   const background = new BackgroundUpdateCoordinator(store, store);
@@ -115,6 +119,10 @@ async function turn(fixture: string, w: ReturnType<typeof world>, run: () => Pro
 function expectCopied(row: Matrix, paths: readonly string[]): void {
   for (const path of paths) expect(row.audiences.some(call => call.path === path), `${row.fixture}: ${path} was called`).toBe(true);
   for (const call of row.audiences) expect(row.event.audience, `${row.fixture}: ${call.path}`).toEqual(call.audience);
+  // The workspace is rendered for the very audience the legacy paths read with (not compared with itself: review).
+  const rendered = row.audiences.filter(call => call.path === 'render');
+  const read = row.audiences.filter(call => call.path !== 'render');
+  for (const call of rendered) for (const other of read) expect(call.audience, `${row.fixture}: render vs ${other.path}`).toEqual(other.audience);
 }
 
 function kernel(w: ReturnType<typeof world>) {
@@ -132,13 +140,13 @@ describe('perception copies every surface\'s audience (stage 3, step F2)', () =>
     await chat('こんにちは');
     w.advance(MINUTE);
     const alone = await turn('text owner', w, () => chat('前に話したこと、覚えてる？'));
-    expectCopied(alone, ['prepareTurnCognitiveContext', 'visibleReplayMessages', 'SemanticMemoryRecall']);
+    expectCopied(alone, ['prepareTurnCognitiveContext', 'visibleReplayMessages', 'SemanticMemoryRecall', 'render']);
     expect(alone.event).toMatchObject({ surface: 'text', kind: 'utterance', audience: { kind: 'owner' }, speaker: { kind: 'owner', verified: true } });
     w.advance(MINUTE);
     const others = await turn('text others', w, () => chat('前に話したこと、覚えてる？', { audience: 'others' }));
-    expectCopied(others, ['prepareTurnCognitiveContext', 'visibleReplayMessages', 'SemanticMemoryRecall']);
+    expectCopied(others, ['prepareTurnCognitiveContext', 'visibleReplayMessages', 'SemanticMemoryRecall', 'render']);
     expect(others.event.audience).toEqual(chatAudienceTurn('others')!.present);
-    expect(others.event).toMatchObject({ presence: { openOnly: false, othersMayHear: true }, speaker: { kind: 'unknown', verified: false } });
+    expect(others.event).toMatchObject({ presence: { ownerOnlyHears: false, othersMayHear: true }, speaker: { kind: 'unknown', verified: false } });
     await w.close(api);
   });
 
@@ -152,16 +160,26 @@ describe('perception copies every surface\'s audience (stage 3, step F2)', () =>
     await speak('おはよう');
     w.advance(MINUTE);
     const alone = await turn('voice owner', w, () => speak('シャノン、前に話したこと覚えてる？'));
-    expectCopied(alone, ['prepareTurnCognitiveContext', 'visibleConversationHistory', 'visibleReplayMessages']);
+    expectCopied(alone, ['prepareTurnCognitiveContext', 'visibleConversationHistory', 'visibleReplayMessages', 'render']);
     expect(alone.event).toMatchObject({ surface: 'voice', audience: { kind: 'owner' }, speaker: { kind: 'owner', verified: true } });
     w.advance(MINUTE);
     const companion = await turn('voice companion', w, () => speak('シャノン、前に話したこと覚えてる？', { companionPresent: true }));
-    expectCopied(companion, ['prepareTurnCognitiveContext', 'visibleConversationHistory', 'visibleReplayMessages']);
+    expectCopied(companion, ['prepareTurnCognitiveContext', 'visibleConversationHistory', 'visibleReplayMessages', 'render']);
+    // With someone else present the words are not held (review, HIGH).
+    expect(companion.event.content).toBeNull();
     expect(companion.event.audience).toMatchObject({ kind: 'people', unknownGuest: true });
     w.advance(MINUTE);
     const guest = await turn('voice guest', w, () => speak('シャノン、こんにちは', {}, { participantMode: 'guest' }));
     expectCopied(guest, ['prepareTurnCognitiveContext']);
     expect(guest.event).toMatchObject({ audience: { kind: 'people' }, speaker: { kind: 'person' }, provenance: { trust: 'untrusted' } });
+    expect(guest.event.content).toBeNull();
+    // A guest call whose names resolved (the friend said her name and the call is remembered): the people it resolved, copied.
+    w.advance(MINUTE);
+    const guestCall = { callId: 'call-matrix-1', turns: [{ role: 'user', text: 'はじめまして、ミナです' }] };
+    const named = await turn('voice guest named', w, () => speak('はじめまして、ミナです', { guestCall }, { participantMode: 'guest', threadId: 'guest-thread' }));
+    expectCopied(named, ['prepareTurnCognitiveContext']);
+    expect(named.event).toMatchObject({ speaker: { kind: 'person' }, content: null, presence: { ownerOnlyHears: false, othersMayHear: true } });
+    expect(named.event.audience.kind).toBe('people');
     // Semantic recall, when the turn searched, was asked with the same audience.
     expect([alone, companion].some(row => row.audiences.some(call => call.path === 'SemanticMemoryRecall'))).toBe(true);
     await w.close(api);
@@ -190,7 +208,7 @@ describe('perception copies every surface\'s audience (stage 3, step F2)', () =>
     expect(others.audiences).toEqual([]);
     expect(others.event.audience).toEqual(BODY_PRESENT.others);
     expect(others.event.audience).toEqual(chatAudienceTurn('others')!.present);
-    expect(others.event.presence).toEqual({ openOnly: false, othersMayHear: true });
+    expect(others.event.presence).toEqual({ ownerOnlyHears: false, othersMayHear: true });
     await w.close(api);
     reactionStore.close(); bodyStore.close();
   });
@@ -216,6 +234,14 @@ describe('perception copies every surface\'s audience (stage 3, step F2)', () =>
     const friend = await turn('minecraft friend', w, () => say('mc-2', FRIEND, 'Mina_77', 'シャノン、一緒に家を建てよう'));
     expectCopied(friend, ['prepareTurnCognitiveContext', 'visibleReplayMessages']);
     expect(friend.event).toMatchObject({ speaker: { kind: 'person', verified: false }, provenance: { trust: 'untrusted' } });
+    // A whisper from the friend to her alone (review: coverage): its audience is the conversation the body decided, copied.
+    w.advance(MINUTE);
+    const whisper = await turn('minecraft whisper', w, () => body.turn('owner', 'minebot-dev', {
+      requestId: 'mc-3', serverId: 'lab-qywEbW', conversation: { kind: 'dm' }, observedAt: w.now(), speaker: { uuid: FRIEND, name: 'Mina_77' }, message: 'シャノン、内緒の話だよ',
+    }));
+    expectCopied(whisper, ['prepareTurnCognitiveContext', 'visibleReplayMessages']);
+    expect(whisper.event).toMatchObject({ speaker: { kind: 'person', verified: false }, provenance: { trust: 'untrusted' } });
+    expect(whisper.event.audience).not.toEqual({ kind: 'owner' });
     await w.close(api);
     turns.close();
   });
@@ -229,6 +255,7 @@ describe('perception copies every surface\'s audience (stage 3, step F2)', () =>
       SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify([
         { platform: 'discord', conversationId: 'discord::555', ownerUserId: OWNER, title: 'ライ氏とのDM', audience: 'owner-private' },
         { platform: 'discord', conversationIdPrefix: 'discord:111:', ownerUserId: OWNER, title: 'テストサーバー' },
+        { platform: 'discord', conversationId: 'discord::777', ownerUserId: OWNER, title: 'ミナとのDM' },
       ]),
     })!, w.store, w.store, w.background, w.now, new PlatformPeople(w.peopleStore, w.store), () => true);
     const log = new SQLiteSurfaceTurnLog(w.path, 'platform_reply_turns');
@@ -245,6 +272,12 @@ describe('perception copies every surface\'s audience (stage 3, step F2)', () =>
     const shared = await turn('platform owner shared', w, () => reply({ requestId: 'ch-2', conversationId: 'discord:111:222', conversationKind: 'channel', sourceUserId: OWNER, userMessage: 'ミナはぼくの友達だよ' }));
     expectCopied(shared, ['prepareTurnCognitiveContext', 'visibleReplayMessages']);
     expect(shared.event.audience).not.toEqual({ kind: 'owner' });
+    // A friend's own DM to her (review: coverage): that friend alone, as the platform decided it, copied.
+    w.advance(MINUTE);
+    const friendDm = await turn('platform friend dm', w, () => reply({ requestId: 'dm-2', conversationId: 'discord::777', conversationKind: 'dm', sourceUserId: '900000000000000002', sourceDisplayName: 'ミナ', userMessage: 'シャノン、ふたりだけの話' }));
+    expectCopied(friendDm, ['prepareTurnCognitiveContext', 'visibleReplayMessages']);
+    expect(friendDm.event).toMatchObject({ speaker: { kind: 'person' }, provenance: { trust: 'untrusted' } });
+    expect(friendDm.event.audience).toMatchObject({ kind: 'people' });
     await w.close(api);
     log.close();
   });
@@ -259,4 +292,33 @@ describe('perception copies every surface\'s audience (stage 3, step F2)', () =>
     // A row of anything but closed values is refused, not perceived.
     expect(inboxPerception({ draft: { kind: 'notice', code: 'said something', audience: 'owner', source: 'own_time', sourceId: 'x' }, at: new Date(START).toISOString() })).toBeNull();
   });
+
+  it('the inbox writers decide owner or others from who could see her, and fail toward others (review)', async () => {
+    const { createProactiveGate } = await import('../src/mind/attention/attentionPorts.js');
+    const { promiseDueNotices } = await import('../src/mind/perception/noticeProducers.js');
+    const { ShannonAutonomyLoop } = await import('../src/mind/action/ownTime/autonomyLoop.js');
+    const at = new Date(START).toISOString();
+    const drafts: Array<{ audience: string }> = [];
+    const topics = { since: () => [], ownerLastActiveAt: () => at, record: () => {}, prune: () => 0, noteHold: () => true, heldOn: () => false } as never;
+    const gateWith = (audience: () => 'owner' | 'others') => createProactiveGate({ topics, emit: (_scopeKey, draft) => { drafts.push(draft); }, audience });
+    const intent = { point: 'say' as const, reason: 'wonder' as const, subject: null, arisenAt: at, text: null };
+    gateWith(() => 'owner').check('owner', intent, at);
+    gateWith(() => 'others').check('owner', intent, at);
+    gateWith(() => { throw new Error('unreadable'); }).check('owner', intent, at);
+    expect(drafts.map(draft => draft.audience)).toEqual(['owner', 'others', 'others']);
+    // Her own time's step: others while her body says someone else is there, or when that cannot be read.
+    const emitted: Array<{ audience: string }> = [];
+    const step = (audience: () => unknown) => (ShannonAutonomyLoop.prototype as unknown as { emitStep(...args: unknown[]): void }).emitStep.call(
+      { scopeKey: 'owner', dependencies: { emitMindEvent: (_scopeKey: string, draft: { audience: string }) => { emitted.push(draft); }, reachOuts: { audience } } },
+      { kind: 'study' }, 'step-1', 'study.create', { outcome: 'done' }, at);
+    step(() => null);
+    step(() => ({ instructions: 'x', marker: 'y' }));
+    step(() => { throw new Error('unreadable'); });
+    expect(emitted.map(draft => draft.audience)).toEqual(['owner', 'others', 'others']);
+    // The notice producers write for the owner only (his promises and tasks).
+    const { createInitialCompanionState } = await import('@shannon/cognition');
+    const state = { ...createInitialCompanionState('owner', at), prospectiveMemories: [{ id: 'p-1', summary: '歯医者', status: 'pending', dueAt: at, createdAt: at, updatedAt: at }] } as never;
+    expect(promiseDueNotices(state, at).map(notice => notice.draft.audience)).toEqual(['owner']);
+  });
 });
+

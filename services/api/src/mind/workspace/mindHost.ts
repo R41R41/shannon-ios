@@ -1,4 +1,4 @@
-import type { CompanionStateSnapshot, MemoryAudience } from '@shannon/cognition';
+import { UNKNOWN_GUEST_PRESENCE, type CompanionStateSnapshot, type MemoryAudience } from '@shannon/cognition';
 import { checkedMindEvent, withoutText, type MindEvent, type MindSurface, type MindSwitches } from '@shannon/mind';
 import { inboxDetail, inboxPerception, type MindPerceiver, type PerceivedDetail, type PerceivedItem } from '../perception/perceptionPorts.js';
 import type { ConversationStore } from '../memory/memoryPorts.js';
@@ -130,6 +130,7 @@ class InProcessMindHost implements MindHost {
       return workspaceBlocks(scope, {
         surface: turn.surface, present: turn.present, at: turn.at, currentItemId: turn.currentItemId, current: turn.current,
         dataFrames: this.options.switches.dataFrames, text: (item: WorkspaceItem) => reader.read(item, this.texts.get(item.id) ?? null),
+        noticeVisible: (item: WorkspaceItem) => reader.noticeVisible(item),
       });
     }, '');
   }
@@ -201,7 +202,7 @@ class InProcessMindHost implements MindHost {
     const result = applyOp(scope, op);
     if (this.options.journal && !(op.op === 'perceive' && result?.verdict === 'duplicate')) {
       this.pending.push(op.op === 'perceive'
-        ? { scopeKey, at: op.at, op: 'perceive', itemId: op.event.id, data: { event: withoutText(op.event), initial: op.initial, detail: op.detail } }
+        ? { scopeKey, at: op.at, op: 'perceive', itemId: op.event.id, data: { event: journaled(op.event), initial: op.initial, detail: op.detail } }
         : op.op === 'bind' ? { scopeKey, at: op.at, op: 'bind', itemId: op.itemId, data: { ref: op.ref } }
           : { scopeKey, at: op.at, op: 'flush', itemId: null, data: { day: op.day } });
     }
@@ -321,6 +322,17 @@ class InProcessMindHost implements MindHost {
       this.options.journal?.append([{ scopeKey: '_mind', at: new Date(now).toISOString(), op: 'mind_fault', itemId: null, data: { stage, error: name, open: this.open } }]);
     } catch { /* the trace is best effort */ }
   }
+}
+
+/**
+ * An event as the journal keeps it: without its text, and (stage 3 review, HIGH) a voice turn of anyone but the owner without the
+ * people it was with: its audience is journaled as an unknown guest, so no guest's person id is ever written, whether the call was
+ * remembered, discarded or a client's that predates people memory (nothing to scrub on a discard). In memory it keeps its audience.
+ */
+function journaled(event: MindEvent): MindEvent {
+  const plain = withoutText(event);
+  return event.surface === 'voice' && event.speaker.kind !== 'owner' && event.audience.kind !== 'owner'
+    ? { ...plain, audience: UNKNOWN_GUEST_PRESENCE, people: [] } : plain;
 }
 
 /** A journal row read back as an operation; null for a trace or anything unreadable. */

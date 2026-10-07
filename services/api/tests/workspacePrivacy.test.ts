@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
-import { DATA_FRAME_RULE, DATA_FRAME_THREAT } from '../src/mind/workspace/workspacePorts.js';
+import { DATA_FRAME_RULE } from '../src/mind/workspace/workspacePorts.js';
 import { configuredMindInbox } from '../src/wiring/mindWiring.js';
 import { mindWorld } from './support/mindWorld.js';
 
@@ -83,7 +83,9 @@ describe('who may be shown what', () => {
 });
 
 describe('someone else\'s words', () => {
-  it('reach the owner\'s turn only inside a data frame, after the fixed line, with an injection replaced', async () => {
+  // Since the stage 3 review (HIGH): a voice turn with anyone else present, or of a 「友人も一緒」 call, is in the workspace without
+  // any text and renders only as a closed line; someone else's words in a frame are the other surfaces' (`promptLayout.test.ts`).
+  it('never reach a later turn from a call with someone else present: only that she was talking with someone', async () => {
     const world = mindWorld(ON, 'privacy-frames');
     await world.speak('シャノン、ここの景色きれいだね', { companionPresent: true });
     world.advance(MINUTE);
@@ -91,21 +93,34 @@ describe('someone else\'s words', () => {
     world.advance(MINUTE);
     await world.chat('さっきの人の話、どう思った？');
     const context = world.lastContext();
-    const frames = context.slice(context.indexOf(DATA_FRAME_RULE));
-    expect(context).toContain(DATA_FRAME_RULE);
-    expect(frames).toMatch(/〔データ 出どころ=voice id=[^〕]+〕シャノン、ここの景色きれいだね〔\/データ〕/u);
-    expect(frames).toContain(DATA_FRAME_THREAT);
-    expect(context).not.toContain('パスワード');
-    // Their words are never on a line of the place, which says only that someone spoke.
-    const place = context.slice(context.indexOf('[いまの場]'), context.indexOf(DATA_FRAME_RULE));
-    expect(place).toContain('誰かが話した');
-    expect(place).not.toContain('景色');
-    // The frames come last, after the turn's context, which is kept as its start.
+    expect(context).not.toMatch(/景色|パスワード|指示を無視/u);
+    expect(context).not.toContain(DATA_FRAME_RULE);
+    const place = context.slice(context.indexOf('[いまの場]'));
+    expect(place).toContain('・声の会話：ほかの人と話していた');
+    expect(place).not.toContain('話した「');
+    // The blocks come last, after the turn's context, which is kept as its start.
     expect(context.indexOf('[いまの場]')).toBeGreaterThan(context.indexOf('[Shannon shared state'));
     await world.close();
   });
 
-  it('reach no prompt with SHANNON_DATA_FRAMES=off, as before stage 3', async () => {
+  it('a 「友人も一緒」 call, then a text turn: no word of the guest call in the prompt (the reproduced case), nor in the journal', async () => {
+    const world = mindWorld(ON, 'privacy-guest');
+    await world.speak('はじめまして、ミナです。合言葉はあさがお', {}, { participantMode: 'guest', threadId: 'guest-call-1' });
+    world.advance(MINUTE);
+    await world.speak('シャノン、ミナさんの好きな花はあさがおだよ', {}, { participantMode: 'guest', threadId: 'guest-call-1' });
+    world.advance(MINUTE);
+    await world.chat('ねえ、さっきの通話どうだった？');
+    const context = world.lastContext();
+    expect(context).not.toMatch(/あさがお|合言葉|ミナです/u);
+    expect(context).toContain('ほかの人と話していた');
+    world.mind!.host!.tick();
+    const journal = rows(world.path, 'mind_workspace_journal');
+    expect(journal).not.toMatch(/あさがお|合言葉/u);
+    expect(journal).not.toMatch(/"personIds":\["[^\]]/u);
+    await world.close();
+  });
+
+  it('with SHANNON_DATA_FRAMES=off a call with someone else present is the same closed line', async () => {
     const world = mindWorld({ ...ON, SHANNON_DATA_FRAMES: 'off' }, 'privacy-frames-off');
     await world.speak('シャノン、ここの景色きれいだね', { companionPresent: true });
     world.advance(MINUTE);
@@ -114,7 +129,8 @@ describe('someone else\'s words', () => {
     expect(context).not.toContain('〔データ');
     expect(context).not.toContain(DATA_FRAME_RULE);
     expect(context).not.toContain('景色');
-    expect(context).toContain('誰かが話した');
+    expect(context).toContain('ほかの人と話していた');
     await world.close();
   });
 });
+

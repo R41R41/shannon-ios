@@ -57,7 +57,7 @@ The switches of stages 1 and 2 (`docs/cognition-ledger-contract.md`, `docs/skill
 `packages/mind/src/envelope.ts`. One closed shape for everything a surface perceived:
 
 - `kind` (closed: utterance, touch, presence, game, platform message, task outcome, promise due, own-time step, notice), `surface` (text, voice, body, minecraft, platform, outreach, own time), `body` (which body, when one).
-- `audience`: the existing `MemoryAudience`, **copied** from the surface's own decision, never recomputed (`perceptionAudienceMatrix.test.ts` holds deep equality with the legacy paths). `presence { openOnly, othersMayHear }`.
+- `audience`: the existing `MemoryAudience`, **copied** from the surface's own decision, never recomputed (`perceptionAudienceMatrix.test.ts` holds deep equality with the legacy paths and with the audience the workspace is rendered for; it covers text, voice alone, with a companion, 「友人も一緒」 with and without resolved names, the body, Minecraft's shared chat and whispers, the platform's owner DM, a friend's DM and shared channels, and which audience each inbox writer chooses). `presence { ownerOnlyHears, othersMayHear }` (renamed from `openOnly` in the stage 3 review, so it is not confused with a text turn's `openOnly`).
 - `speaker { kind, personId, verified, tier }`, `people`, `time`.
 - `salienceInputs` (closed numbers), `provenance { source, sourceId, trust, episodeIds }`.
 - `content`: text kept in memory only, or a reference that is re-read through `MemoryWithholding` and `DisclosureGate` when rendered, so a forget applies also after a restart.
@@ -195,6 +195,10 @@ The baseline is **69** entries (`mind-via-ports` 43, `surfaces-apart` 16, `surfa
 - Her own time is handed `emitMindEvent` and nothing else of the mind. The rule `own-time-without-private-stores` (`scripts/api-layers.json`) forbids it the memory part (the outbox and the writer among it), `disclosurePorts`, perception and the workspace; `autonomyLoopPrivacy.test.ts` and the kill-switch digests hold.
 - The journal, the inbox, the topics table and the trust ledger hold closed symbols, ids, numbers and signatures, never a word of the owner's.
 - What the owner asked to forget is gone from a rendered workspace at once, because text is re-read through the withholding and the disclosure gate when rendered.
+- **Calls with anyone else** (stage 3 review, HIGH): a voice turn of a 「友人も一緒」 call or of the owner's call with someone else present enters the workspace without any text and renders only as the closed line 「ほかの人と話していた」, never its words, here or in a frame (its stored turn is not read either). Only the owner alone in his own call keeps his words, re-checked at render as before; words of his call the router scored uncertain, or that were not his words to her (an echo, overheard talk), are someone's words (「誰かが話した」, a data frame, a lower salience). The journal never keeps a guest's person id: a voice turn of anyone but the owner is journaled with the audience of an unknown guest and no people, so a discarded or legacy guest call leaves nothing to scrub.
+- **Owner's excerpts**: the owner's words quoted on a line of the place are neutralized like a frame's body, and left out when they read like an instruction.
+- **Notices re-checked at render**: a promise's notice is shown only while its promise is still there and neither it nor the turn it came from is forgotten; a task's while the task is not hidden. A forget hides an existing notice at once, after a restore too.
+- **`openOnly` turns** (someone else's platform turn): the workspace's blocks pass `withoutGuardedEntries` like the rest of the turn's context (latent: the audience check already holds such entries out).
 
 ## The switched-off proof
 
