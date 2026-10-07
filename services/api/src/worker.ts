@@ -14,11 +14,14 @@ import { createConfiguredImpressionAnalyzer, ImpressionUpdater } from './mind/me
 import { valueNightSchedule, valueSleep } from './mind/sleep/valueSleep.js';
 import { memoryOutboxOn, memoryWriterOf } from './wiring/memoryOutboxWiring.js';
 import { replayCompaction, structuredCompactionOn } from './wiring/compactionWiring.js';
+import { peopleFactsStoreOptions } from './wiring/peopleFactsWiring.js';
+import { createConfiguredPersonFactJudge } from './mind/memory/personFacts.js';
+import { configuredJevIdentityChooser } from './infra/models/jev/jevIdentity.js';
 import { configuredSkillExport, configuredSkillMemory, skillSleepConsolidator } from './wiring/skillMemoryWiring.js';
 
 // Syzygy ADR-0008 stage 3 (F5): with SHANNON_MEMORY_OUTBOX on, this process's memory writers propose, and the one writer applies.
 const store = new SQLiteShannonStore({ path: configuredDatabasePath(), now: () => new Date().toISOString(), memoryOutbox: memoryOutboxOn(process.env),
-  structuredCompaction: structuredCompactionOn(process.env) });
+  structuredCompaction: structuredCompactionOn(process.env), ...peopleFactsStoreOptions(process.env) });
 const memory = store.memoryProposals();
 const knowledge = new ShannonKnowledgeConsolidator(store, store, store, createConfiguredKnowledgeAnalyzer(process.env, store), store, { memory });
 // Syzygy ADR-0008 stage 2, step 6: her skills are built after her knowledge, in the same budget; the API process creates their tables.
@@ -68,7 +71,9 @@ const worker = new ShannonBackgroundWorker(store, store, store, createConfigured
 });
 // The one memory writer, on this process's connection, under its lease (null while the outbox is switched off).
 const memoryWriter = memoryWriterOf(store, { now: () => new Date().toISOString(), owner: `memory-${worker.workerId}`,
-  replaySummaries: replaySummarizer, impressions });
+  replaySummaries: replaySummarizer, impressions,
+  // F6: luna's contradiction and duplicate step (40 calls a day, then the rule) and tier 4's Jev chooser, in the background only.
+  judge: createConfiguredPersonFactJudge(process.env, store), chooser: configuredJevIdentityChooser(process.env) });
 const embeddingWorker = new MemoryEmbeddingWorker(store, store, configuredMemoryModelGateway(process.env, store), store, {
   // Knowledge derived from a forgotten experience is never embedded.
   isSourceEligible: (scopeKey, source) => source.kind !== 'knowledge'

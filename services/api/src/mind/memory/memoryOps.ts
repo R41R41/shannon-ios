@@ -14,6 +14,13 @@ import { impressionMemoryId } from './impressions.js';
 import type { ReplaySummaryCall, ReplaySummaryOutcome } from './conversationReplaySummary.js';
 import { MemoryWithholding } from './memoryVisibility.js';
 import { periodSummaryText, personMemoryId } from './peopleMemory.js';
+import type { SQLitePersonFacts } from './store/personFactsStore.js';
+import { impressionTemporal } from './store/personFactsStore.js';
+import {
+  PERSON_FACTS_V1, identityChoice, identityOf, identityPeople, planFact, ruleJudgement,
+  type IdentityChooser, type PersonFactJudge, type PersonFactPlan,
+} from './personFacts.js';
+import { ownerDayKey } from '../../infra/sqlite/lockWaits.js';
 
 /**
  * What one memory op does (Syzygy ADR-0008 stage 3, step F5, `docs/mind-workspace-contract.md`): for each closed kind, the
@@ -33,6 +40,18 @@ export interface MemoryTargets {
   replaySummaries?: {
     planned(scopeKey: string, threadId: string, call: ReplaySummaryCall): Promise<{ outcome: ReplaySummaryOutcome; record?: ReplaySummaryRecord }>;
   } | null;
+  /**
+   * F6 (`SHANNON_TEMPORAL_FACTS`): people facts with the time they were true, judged by luna (at most 40 calls a day, else the
+   * rule) before they are written; her impressions keep their temporal fields. Null: switched off.
+   */
+  personFacts?: {
+    store: Pick<SQLitePersonFacts, 'facts' | 'setTemporal' | 'updateFact'>;
+    judge: PersonFactJudge | null;
+    /** Model calls of the judge so far on the owner-local day of `at`. */
+    callsToday(at: string): number;
+  } | null;
+  /** F6 (`SHANNON_IDENTITY_TIERS`): where tiers 3 and 4 put their suggestions, and tier 4's chooser (Jev; null: tier 3 only). */
+  identity?: { store: Pick<SQLitePersonFacts, 'recordCandidate' | 'settleCandidates'>; chooser: IdentityChooser | null } | null;
   /** Her impressions' rules re-applied to the person's rows as they are now (`impressionUpdater.ts`). */
   impressionChange?: ((op: MemoryOp, state: CompanionStateSnapshot) => { upserts: readonly unknown[]; deleteIds: readonly string[] } | null) | null;
   /** The clock of the writes. */
@@ -113,8 +132,53 @@ const personRevision = (targets: MemoryTargets, op: MemoryOp) => {
   const call = people.call(op.scopeKey, payload.callId);
   const items = people.items(op.scopeKey).filter(item => item.callId === payload.callId).map(item => [item.id, item.text, item.disclosure.decidedBy ?? null]);
   const personIds = [...new Set([...(call?.personIds ?? []), ...(payload.call?.personIds ?? []), ...payload.items.flatMap(item => item.personId ?? [])])];
-  return digest([call?.status ?? null, call?.personIds ?? null, items, personIds.map(id => people.person(op.scopeKey, id)?.forgottenAt ?? null)]);
+  // With temporal facts, the person's current facts and their revisions too (a contradiction closes them).
+  const facts = op.kind === 'person.fact' && targets.personFacts
+    ? personIds.map(id => targets.personFacts!.store.facts(op.scopeKey, id, { limit: PERSON_FACTS_V1.rows }).map(row => [row.id, row.revision])) : null;
+  return digest([call?.status ?? null, call?.personIds ?? null, items, personIds.map(id => people.person(op.scopeKey, id)?.forgottenAt ?? null), facts]);
 };
+
+/**
+ * F6: before person facts are written, one judgement for the op over at most 30 of each person's current facts: by luna through
+ * the writer's cache while the day has calls left, otherwise by the rule. A duplicate is not inserted and gives its episode to the
+ * row it repeats; a contradicted row is closed where the new fact begins.
+ */
+async function personFactPlan(targets: MemoryTargets, op: MemoryOp, model: MemoryModelCall): Promise<PersonFactPlan | null> {
+  const facts = targets.personFacts;
+  if (op.kind !== 'person.fact' || !facts) return null;
+  const payload = payloadOf<PersonPayload>(op);
+  const at = targets.now();
+  const items = payload.items.filter(item => item.personId);
+  const plan: PersonFactPlan = { inserts: [], updates: [], repeated: [], judgedBy: [] };
+  if (!items.length) return plan;
+  const personIds = [...new Set(items.map(item => item.personId!))];
+  const rows = personIds.flatMap(id => facts.store.facts(op.scopeKey, id, { limit: PERSON_FACTS_V1.rows })).slice(0, PERSON_FACTS_V1.rows);
+  const shown = rows.map((row, index) => ({ key: `f${index + 1}`, id: row.id, text: row.text }));
+  let answers: Array<{ key: string; duplicates: string[]; contradicts: string[] }> | null = null;
+  if (facts.judge && shown.length && facts.callsToday(at) < PERSON_FACTS_V1.callsPerDay) {
+    const judge = facts.judge;
+    const input = { newFacts: items.map((item, index) => ({ key: `n${index + 1}`, text: item.text })), facts: shown.map(({ key, text }) => ({ key, text })) };
+    const answer = await model('fact_judge', input, () => judge.judge(op.scopeKey, input));
+    answers = Array.isArray(answer?.judgements) ? answer.judgements : null;
+  }
+  const byKey = new Map(shown.map(item => [item.key, item.id]));
+  const ids = (keys: unknown) => (Array.isArray(keys) ? [...new Set(keys.flatMap(key => (typeof key === 'string' && byKey.has(key) ? [byKey.get(key)!] : [])))] : []);
+  let current = rows;
+  items.forEach((item, index) => {
+    const own = current.filter(row => row.personId === item.personId);
+    const answered = answers?.find(entry => entry.key === `n${index + 1}`);
+    const judgement = answered ? { duplicates: ids(answered.duplicates), contradicts: ids(answered.contradicts) } : ruleJudgement(item.text, own);
+    plan.judgedBy.push(answered ? 'luna' : shown.length ? 'rule' : 'none');
+    const step = planFact(own, { id: item.id, validAt: item.validAt ?? item.observedAt, episodeIds: item.episodeIds ?? [] }, judgement, at);
+    for (const update of step.updates) {
+      const earlier = plan.updates.find(entry => entry.fact.id === update.fact.id);
+      if (earlier) earlier.fact = update.fact; else plan.updates.push(update);
+    }
+    current = current.map(row => { const updated = step.updates.find(entry => entry.fact.id === row.id); return updated ? { ...row, ...updated.fact } : row; });
+    if (step.insert) plan.inserts.push({ itemId: item.id, fact: step.insert }); else plan.repeated.push(item.id);
+  });
+  return plan;
+}
 
 /** The items that may still be written: their person is known and not forgotten, and the owner did not forget the item. */
 function writableItems(targets: MemoryTargets, op: MemoryOp, state: CompanionStateSnapshot): PersonPayload['items'] {
@@ -129,19 +193,28 @@ function writableItems(targets: MemoryTargets, op: MemoryOp, state: CompanionSta
 
 const personHandler: MemoryOpHandler = {
   revision: personRevision,
+  prepare: async (targets, op, model) => ({ write: { facts: await personFactPlan(targets, op, model) } }),
   blocked: (targets, op) => {
     if (!targets.people) return 'no_store';
     // 「今回は残さない」 wins over anything proposed of that period.
     return targets.people.call(op.scopeKey, payloadOf<PersonPayload>(op).callId)?.status === 'discarded' ? 'discarded' : null;
   },
-  apply: (targets, op) => {
+  apply: (targets, op, plan) => {
     const people = targets.people!;
     const payload = payloadOf<PersonPayload>(op);
     const state = targets.state.snapshot(op.scopeKey);
+    const facts = (plan as { facts?: PersonFactPlan | null } | null)?.facts ?? null;
     if (payload.call) people.saveCall(op.scopeKey, payload.call);
-    const items = writableItems(targets, op, state).map(({ validAt: _valid, episodeIds: _episodes, ...item }) => item);
+    const items = writableItems(targets, op, state).filter(item => !facts?.repeated.includes(item.id))
+      .map(({ validAt: _valid, episodeIds: _episodes, ...item }) => item);
     if (payload.mode === 'replace') people.replaceCallItems(op.scopeKey, payload.callId, items);
     else if (items.length) people.upsertCallItems(op.scopeKey, payload.callId, items);
+    if (facts && targets.personFacts) {
+      // The new rows' time, then the rows the rules closed or gave an episode (their revision checked, inside the lock).
+      const written = new Set(items.map(item => item.id));
+      for (const insert of facts.inserts) if (written.has(insert.itemId)) targets.personFacts.store.setTemporal(op.scopeKey, insert.itemId, insert.fact);
+      for (const update of facts.updates) if (!targets.personFacts.store.updateFact(op.scopeKey, update.fact, update.expectedRevision)) throw new Error('PERSON_FACT_REVISION');
+    }
     if (payload.summary) {
       const text = periodSummaryText(people, op.scopeKey, payload.callId, payload.summary.label, payload.summary.text);
       if (text !== null) {
@@ -149,24 +222,58 @@ const personHandler: MemoryOpHandler = {
           disclosure: disclosureFor(text.text, payload.summary.audience) }]);
       }
     }
-    return items.length === payload.items.length ? 'written' : 'written_partly';
+    if (facts?.repeated.length && !items.length) return facts.updates.length ? 'duplicate' : 'unchanged';
+    if (facts?.updates.some(update => update.fact.expiredAt)) return 'written_closing';
+    return items.length === payload.items.length ? 'written' : facts?.repeated.length ? 'written_duplicates' : 'written_partly';
   },
 };
 
-type LinkPayload = { action: 'merge'; personId: string; intoPersonId: string } | { action: 'rename'; personId: string; displayName: string };
+type LinkPayload = { action: 'merge'; personId: string; intoPersonId: string } | { action: 'rename'; personId: string; displayName: string }
+  | { action: 'suggest'; personId: string; name: string; link?: string };
 
 const linkHandler: MemoryOpHandler = {
   revision: (targets, op) => {
     const payload = payloadOf<LinkPayload>(op);
+    if (payload.action === 'suggest') return digest(targets.people?.listPeople(op.scopeKey).map(person => [person.id, person.displayName, person.aliases, person.forgottenAt ?? null]) ?? null);
     const ids = payload.action === 'merge' ? [payload.personId, payload.intoPersonId] : [payload.personId];
     return digest(ids.map(id => targets.people?.person(op.scopeKey, id) ?? null));
   },
-  apply: (targets, op) => {
+  prepare: async (targets, op, model) => {
+    const payload = payloadOf<LinkPayload>(op);
+    if (payload.action !== 'suggest') return { write: null };
+    const identity = targets.identity;
+    const people = targets.people;
+    if (!identity || !people || !people.person(op.scopeKey, payload.personId)) return { done: 'superseded', code: 'disabled' };
+    // The owner is not a person row: he is never among those a name is matched to, at any tier.
+    const known = identityPeople(people, op.scopeKey, [payload.personId]);
+    const outcome = identityOf(payload.name, known, { link: payload.link ?? null });
+    if (outcome.verdict === 'suggest') return { write: { candidatePersonId: outcome.personId, tier: 3, score: outcome.jaccard } };
+    if (outcome.verdict !== 'ask' || !identity.chooser) return { done: 'applied', code: `tier${outcome.tier}_${outcome.verdict}` };
+    const chooser = identity.chooser;
+    const menu = outcome.menu.map((item, index) => ({ key: `p${index + 1}`, personId: item.personId, names: known.find(person => person.personId === item.personId)?.names ?? [] }));
+    const request = { name: payload.name, menu: menu.map(({ key, names }) => ({ key, names })) };
+    const answers = await model('identity_choice', request, () => chooser.probabilities(op.scopeKey, request));
+    const byPerson = Object.fromEntries([...menu.map(item => [item.personId, answers[item.key]] as const), ['new_person', answers.new_person] as const]
+      .filter((entry): entry is readonly [string, number] => typeof entry[1] === 'number'));
+    const choice = identityChoice(outcome.menu, byPerson);
+    return choice.verdict === 'suggest' ? { write: { candidatePersonId: choice.personId, tier: 4, score: choice.probability } } : { done: 'applied', code: `tier4_${choice.verdict}` };
+  },
+  apply: (targets, op, plan) => {
     const people = targets.people;
     if (!people) return { status: 'rejected', code: 'no_store' };
     const payload = payloadOf<LinkPayload>(op);
     const at = targets.now();
-    if (payload.action === 'merge') return people.mergePeople(op.scopeKey, payload.intoPersonId, payload.personId, at) ? 'merged' : { status: 'superseded', code: 'not_found' };
+    if (payload.action === 'suggest') {
+      const suggestion = plan as { candidatePersonId: string; tier: 3 | 4; score: number };
+      if (!people.person(op.scopeKey, suggestion.candidatePersonId)) return { status: 'superseded', code: 'not_found' };
+      targets.identity?.store.recordCandidate(op.scopeKey, { personId: payload.personId, candidatePersonId: suggestion.candidatePersonId, tier: suggestion.tier, score: suggestion.score }, at);
+      return `suggested_tier${suggestion.tier}`;
+    }
+    if (payload.action === 'merge') {
+      const merged = people.mergePeople(op.scopeKey, payload.intoPersonId, payload.personId, at);
+      if (merged) targets.identity?.store.settleCandidates(op.scopeKey, [payload.personId], 'merged', at);
+      return merged ? 'merged' : { status: 'superseded', code: 'not_found' };
+    }
     const person = people.person(op.scopeKey, payload.personId);
     if (!person) return { status: 'superseded', code: 'not_found' };
     return people.updatePerson(op.scopeKey, payload.personId, { displayName: payload.displayName, aliases: [...person.aliases, person.displayName] }, at)
@@ -262,7 +369,9 @@ const impressionHandler: MemoryOpHandler = {
   },
   apply: (targets, op, plan) => {
     const change = plan as { upserts: Parameters<ImpressionStore['saveImpressions']>[1]; deleteIds: readonly string[] };
-    targets.impressions!.saveImpressions(op.scopeKey, change.upserts, change.deleteIds);
+    // F6: with temporal facts, every impression written carries when it held and the episodes it came from.
+    const upserts = targets.personFacts ? change.upserts.map(row => ({ ...row, ...impressionTemporal(row as unknown as Record<string, unknown>) })) : change.upserts;
+    targets.impressions!.saveImpressions(op.scopeKey, upserts, change.deleteIds);
     return change.upserts.length || change.deleteIds.length ? 'updated' : 'unchanged';
   },
 };

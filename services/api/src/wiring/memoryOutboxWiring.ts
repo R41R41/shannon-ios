@@ -3,6 +3,10 @@ import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
 import { MemoryCommands, MemoryWriter, type MemoryProposals, type MemoryTargets } from '../mind/memory/memoryPorts.js';
 import type { ConversationReplaySummarizer } from '../mind/memory/conversationReplaySummary.js';
 import type { ImpressionUpdater } from '../mind/memory/impressionUpdater.js';
+import type { IdentityChooser, PersonFactJudge } from '../mind/memory/memoryPorts.js';
+import type { PeopleMemoryParts } from '../mind/memory/peopleMemory.js';
+import { ownerDayKey } from '../infra/sqlite/lockWaits.js';
+import { peopleFactReaders } from './peopleFactsWiring.js';
 
 /**
  * The memory outbox and its one writer, wired (Syzygy ADR-0008 stage 3, step F5, `docs/mind-workspace-contract.md`).
@@ -24,8 +28,17 @@ export function memoryTargetsOf(store: SQLiteShannonStore, parts: {
   now: () => string;
   replaySummaries?: ConversationReplaySummarizer | null;
   impressions?: ImpressionUpdater | null;
+  /** F6: luna's contradiction and duplicate step (null: the rule), and tier 4's chooser (null: tiers 1 to 3 only). */
+  judge?: PersonFactJudge | null;
+  chooser?: IdentityChooser | null;
 }): MemoryTargets {
+  const facts = store.personFacts();
+  const outbox = store.memoryOutbox();
+  // The owner-local day of the judge's cap (40 calls).
+  const dayStart = (at: string) => new Date(`${ownerDayKey(at)}T00:00:00+09:00`).toISOString();
   return {
+    personFacts: facts?.parts.temporal ? { store: facts, judge: parts.judge ?? null, callsToday: at => outbox?.callsSince('person.fact', dayStart(at)) ?? 0 } : null,
+    identity: facts?.parts.identity ? { store: facts, chooser: parts.chooser ?? null } : null,
     state: store, conversations: store, knowledge: store, impressions: store.impressionStore(), people: store.peopleMemoryOnConnection(),
     refreshProfile: scopeKey => store.refreshProfile(scopeKey),
     replaySummaries: parts.replaySummaries ? { planned: (scopeKey, threadId, call) => parts.replaySummaries!.planned(scopeKey, threadId, call) } : null,
@@ -35,11 +48,12 @@ export function memoryTargetsOf(store: SQLiteShannonStore, parts: {
 }
 
 /** The proposals and the owner's commands of a store opened with `memoryOutbox: true`, or null while it is switched off. */
-export function memoryPortsOf(store: SQLiteShannonStore, now: () => string): { proposals: MemoryProposals; commands: MemoryCommands } | null {
+export function memoryPortsOf(store: SQLiteShannonStore, now: () => string): ({ proposals: MemoryProposals; commands: MemoryCommands } & Pick<PeopleMemoryParts, 'facts' | 'identity'>) | null {
   const outbox = store.memoryOutbox();
   const proposals = store.memoryProposals();
   if (!outbox || !proposals) return null;
-  return { proposals, commands: new MemoryCommands(outbox, memoryTargetsOf(store, { now })) };
+  const readers = peopleFactReaders(store, now);
+  return { proposals, commands: new MemoryCommands(outbox, memoryTargetsOf(store, { now })), ...(readers ? { facts: readers, identity: readers.identity } : {}) };
 }
 
 /** The writer of the worker (or of the local kernel), on `store`'s connection, or null while the outbox is switched off. */

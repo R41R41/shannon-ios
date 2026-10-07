@@ -155,6 +155,8 @@ const PAYLOADS: Readonly<Record<MemoryOpKind, Codec>> = Object.freeze({
   'person.link': union('action', {
     merge: record({ action: oneOf(['merge']), personId: id, intoPersonId: id }),
     rename: record({ action: oneOf(['rename']), personId: id, displayName: text(80) }),
+    // F6: a newly met name, for identity tiers 3 and 4 (they only suggest; the owner merges).
+    suggest: record({ action: oneOf(['suggest']), personId: id, name: text(80), link: optional(word(200)) }),
   }),
   'knowledge.create': record({ draft: knowledgeDraft, reason: text(400), at: time }),
   'knowledge.update': record({ knowledgeId: id, expectedVersion: integer, draft: knowledgeDraft, reason: text(400), at: time }),

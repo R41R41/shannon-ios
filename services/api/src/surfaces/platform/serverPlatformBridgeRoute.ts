@@ -67,13 +67,14 @@ export function createConfiguredPlatformBridgeRoute(
   peopleStore: PeopleMemoryStore | null = null,
   /** The app's conversation kernel and the database, for `POST /v1/platform/reply`. Without them the route answers 503. */
   replies: { conversation: PlatformReplyConversation; databasePath: string } | null = null,
-  /** Syzygy ADR-0008 stage 3 (F5): the memory outbox (null: switched off). */
+  /** Syzygy ADR-0008 stage 3 (F5): the memory outbox (null: switched off); F6: the people facts' readers (null: off). */
   memory: MemoryProposals | null = null,
+  facts: ConstructorParameters<typeof PlatformPeople>[4] = null,
 ): PlatformBridgeRouteDependencies | null {
   const configuration = configuredPlatformBridge(environment);
   if (!configuration) return null;
   const service = new PlatformBridgeService(configuration, stateStore, conversationStore, background, now,
-    peopleStore ? new PlatformPeople(peopleStore, stateStore, undefined, memory) : null, () => platformPeopleEnabled(environment));
+    peopleStore ? new PlatformPeople(peopleStore, stateStore, undefined, memory, facts) : null, () => platformPeopleEnabled(environment));
   const turns = replies && platformReplyEnabled(environment) ? new SQLiteSurfaceTurnLog(replies.databasePath, 'platform_reply_turns') : null;
   const reply = replies && turns ? new PlatformReplyService({
     scopeKey: configuration.scopeKey, bridge: service, conversationStore, conversation: replies.conversation, turns, now,

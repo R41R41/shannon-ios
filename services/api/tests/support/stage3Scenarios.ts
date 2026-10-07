@@ -61,7 +61,7 @@ export interface Stage3Hooks {
 }
 
 export interface Stage3MemoryHook {
-  storeOptions: { memoryOutbox: true; memoryNotify: () => void };
+  storeOptions: { memoryOutbox: true; memoryNotify: () => void; peopleFacts?: { temporal: boolean; identity: boolean }; trustLedger?: true };
   attach(store: SQLiteShannonStore): { proposals: MemoryProposals; commands: Pick<MemoryCommands, 'run'> | null; settle(): Promise<void> };
 }
 

@@ -52,6 +52,8 @@ import { SQLiteMemoryOutbox } from '../../mind/memory/store/memoryOutboxStore.js
 import { MemoryProposer } from '../../mind/memory/memoryWriter.js';
 import { SQLitePeopleMemoryStore } from '../../mind/memory/store/peopleMemoryStore.js';
 import { LockWaitMeter } from './lockWaits.js';
+import { SQLitePersonFacts } from '../../mind/memory/store/personFactsStore.js';
+import { SQLiteTrustLedger } from '../../mind/memory/store/trustLedgerStore.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../../../data/shannon.sqlite', import.meta.url)));
 
@@ -90,6 +92,13 @@ export interface SQLiteShannonStoreOptions {
    * three additive columns. Absent or false: the table as it was (the entries pass `mindSwitches(environment).structuredCompaction`).
    */
   structuredCompaction?: boolean;
+  /**
+   * People facts (Syzygy ADR-0008 stage 3, F6): `temporal` adds the validity columns of `person_memory_items` (with their
+   * backfill) and her impressions' temporal fields; `identity` the identity suggestions and the turns' speakers. Absent: nothing.
+   */
+  peopleFacts?: { temporal: boolean; identity: boolean };
+  /** The trust ledger's table (F6; inert: its parameters are unset). Absent or false: no table. */
+  trustLedger?: boolean;
 }
 
 export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore, MemoryEmbeddingIndex, ShannonKnowledgeStore {
@@ -110,6 +119,8 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   private readonly outbox: SQLiteMemoryOutbox | null;
   private proposer: MemoryProposer | null = null;
   private sharedPeople: SQLitePeopleMemoryStore | null = null;
+  private readonly facts: SQLitePersonFacts | null;
+  private readonly trust: SQLiteTrustLedger | null;
 
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
@@ -167,6 +178,11 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     }) : null;
     // Syzygy ADR-0008 stage 3 (F5): the memory outbox, only while it is switched on.
     this.outbox = options.memoryOutbox ? new SQLiteMemoryOutbox(this.context.database, { meter: new LockWaitMeter('memory writer') }) : null;
+    // F6: people facts on the people tables of this connection (made here first), and the inert trust ledger; only while switched on.
+    const facts = options.peopleFacts && (options.peopleFacts.temporal || options.peopleFacts.identity) ? options.peopleFacts : null;
+    if (facts) this.peopleMemoryOnConnection();
+    this.facts = facts ? new SQLitePersonFacts(this.context.database, facts) : null;
+    this.trust = options.trustLedger ? new SQLiteTrustLedger(this.context.database) : null;
     secureDatabaseFiles(options.path);
   }
 
@@ -178,12 +194,15 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     this.proposer ??= new MemoryProposer(this.outbox, { now: () => this.context.now(), notify: () => this.context.options.memoryNotify?.(), log: line => console.log(line) });
     return this.proposer;
   }
-  /** People memory on this connection (the memory writer's targets share it), only while the outbox is on. */
-  peopleMemoryOnConnection(): SQLitePeopleMemoryStore | null {
-    if (!this.outbox) return null;
+  /** People memory on this connection (the memory writer's targets and people facts share it); made when first asked for. */
+  peopleMemoryOnConnection(): SQLitePeopleMemoryStore {
     this.sharedPeople ??= new SQLitePeopleMemoryStore(this.context.database);
     return this.sharedPeople;
   }
+  /** People facts with time, identity suggestions and the turns' speakers (F6), or null while they are switched off. */
+  personFacts(): SQLitePersonFacts | null { return this.facts; }
+  /** The inert trust ledger (F6), or null while it is switched off. */
+  trustLedger(): SQLiteTrustLedger | null { return this.trust; }
   /** The owner's profile and its prompt written again from the state as it is (what the sleep batch does after it learned). */
   refreshProfile(scopeKey: string): void {
     this.context.transaction(() => {

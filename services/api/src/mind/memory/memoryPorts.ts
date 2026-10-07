@@ -29,3 +29,5 @@ export { type ShannonKnowledgeStore } from './store/sqliteShannonKnowledge.js';
 export { MEMORY_OP_KINDS, MEMORY_OP_ORIGINS, memoryOpCodec, type MemoryOp, type MemoryOpDraft, type MemoryOpKind, type MemoryOpOrigin } from './memoryOpCodec.js';
 export { MemoryCommands, MemoryWriter, type MemoryProposals } from './memoryWriter.js';
 export { type MemoryTargets } from './memoryOps.js';
+export { decayDryRun, decayedUsable, identityOf, identityPeople, nameCosine, ruleJudgement, type IdentityChooser, type PersonFactJudge } from './personFacts.js';
+export { type IdentityCandidate, type PersonFactRow, type TurnSpeaker } from './store/personFactsStore.js';

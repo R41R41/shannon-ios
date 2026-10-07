@@ -86,6 +86,7 @@ export function peopleMemoryOverview(people: PeopleMemory, stateStore: Companion
   const sourcesOf = (personId: string) => [...new Set(items.filter(item => belongs(item, personId))
     .map(item => { const source = callOf(item.callId)?.source; return source ? platformDisplayName(source) : '音声'; }))].sort();
   const keysOf = (person: RememberedPerson) => [person.displayName, ...person.aliases].map(personNameKey).filter(Boolean);
+  const suggested = people.identityCandidates(scopeKey);
   return {
     people: listed.map(person => {
       const own = items.filter(item => belongs(item, person.id));
@@ -97,8 +98,11 @@ export function peopleMemoryOverview(people: PeopleMemory, stateStore: Companion
         items: [...own.filter(item => item.kind !== 'turn').map(view), ...personImpressionViews(impressions, snapshot, person.id, nameOf)],
         sources: sourcesOf(person.id),
         // Never merged automatically: the same name on a platform and in a call may be two people.
+        // F6: identity tiers 3 and 4 add what they suggested; the owner merges, as for the same name.
         mergeSuggestions: person.forgottenAt ? [] : listed.filter(other => other.id !== person.id && !other.forgottenAt
-          && keysOf(other).some(key => keys.includes(key))).map(other => ({ personId: other.id, displayName: other.displayName, sources: sourcesOf(other.id) })) };
+          && (keysOf(other).some(key => keys.includes(key)) || suggested.some(pair => (pair.personId === person.id && pair.candidatePersonId === other.id)
+            || (pair.candidatePersonId === person.id && pair.personId === other.id))))
+          .map(other => ({ personId: other.id, displayName: other.displayName, sources: sourcesOf(other.id) })) };
     }),
     unnamed: items.filter(item => audiencePeople(item).length === 0 && !item.personId && !callOf(item.callId)?.source && item.kind !== 'turn').map(view),
   };

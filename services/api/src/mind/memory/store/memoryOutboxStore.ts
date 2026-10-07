@@ -200,6 +200,12 @@ export class SQLiteMemoryOutbox {
       .run(key, seq, kind, answerJson, at);
   }
 
+  /** Model answers of one purpose stored since `since` (a daily cap counts them: the people facts' judge, at most 40 a day). */
+  callsSince(kind: string, since: string): number {
+    const row = this.database.prepare('SELECT COUNT(*) AS calls FROM memory_writer_calls WHERE kind = ? AND created_at >= ?').get(kind, since) as { calls: number };
+    return Number(row.calls);
+  }
+
   /** Model answers older than `before` are not needed again (their rows are final long since). */
   pruneCalls(before: string): void {
     this.database.prepare(`DELETE FROM memory_writer_calls WHERE created_at < ? AND op_seq <= COALESCE((SELECT applied_seq FROM memory_writer_state WHERE id = 1), 0)`).run(before);

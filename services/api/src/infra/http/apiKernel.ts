@@ -59,8 +59,7 @@ import { type NotionTurnReader } from '../../mind/action/respond/conversationCap
 import type { TestFlightDeliveryReader } from '../../integrations/testflight/store/testflightDeliveryStore.js';
 import { dispatchTestFlightRequest } from './apiTestFlightRoutes.js';
 import { dispatchPeopleMemoryRequest } from './apiPeopleMemoryRoutes.js';
-import { PeopleMemory } from '../../mind/memory/peopleMemory.js';
-import type { MemoryCommands, MemoryProposals } from '../../mind/memory/memoryPorts.js';
+import { PeopleMemory, type PeopleMemoryParts } from '../../mind/memory/peopleMemory.js';
 import { SQLitePeopleMemoryStore, type PeopleMemoryStore } from '../../mind/memory/store/peopleMemoryStore.js';
 import type { DailyMindReader } from '../../mind/action/respond/dailyMind.js';
 import type { WorldSubscriptionReader } from '../../integrations/world/store/worldStore.js';
@@ -140,7 +139,7 @@ export interface ShannonApiKernelOptions {
   memoryRecall?: TurnMemoryRecall;
   peopleMemory?: PeopleMemoryStore;
   /** Syzygy ADR-0008 stage 3 (F5): the memory outbox's proposals and the owner's synchronous commands. Absent: switched off. */
-  memory?: { proposals: MemoryProposals; commands: Pick<MemoryCommands, 'run'> | null } | null;
+  memory?: PeopleMemoryParts | null;
   autonomy?: ShannonAutonomyService;
   notion?: NotionTurnReader; body?: ShannonBodyOptions; upcoming?: OwnerUpcoming; /** What she did on her own (`ownOutreach.ts`). */ ownOutreach?: OwnOutreachReader;
   /** What her Minecraft body reported about the requests it was given (`minecraftBodyRequests.ts`), for a turn the owner alone reads. */

@@ -100,6 +100,11 @@ export class PlatformPeople {
     private readonly limits: PlatformPeopleLimits = DEFAULT_PLATFORM_PEOPLE_LIMITS,
     /** Syzygy ADR-0008 stage 3 (F5): the memory outbox. Absent (switched off): the items are written here, as they were. */
     private readonly memory: MemoryProposals | null = null,
+    /**
+     * F6: the readers and recorders of people facts and identity: items recall leaves out now, the speaker of each stored message
+     * (tier 1, verified by the platform account), and whether a newly met account goes to identity tiers 3 and 4.
+     */
+    private readonly facts: { closedIds(scopeKey: string): ReadonlySet<string>; speaker?(scopeKey: string, turnId: string, personId: string, at: string): void; identity?: boolean } | null = null,
   ) {}
 
   /** The audience of a conversation a friend wrote in: the friend alone in a DM, otherwise the conversation. */
@@ -134,6 +139,10 @@ export class PlatformPeople {
     const resolved = this.resolvePerson(scopeKey, turn);
     if (!resolved) return done('forgotten_person');
     const { person, created } = resolved;
+    // F6: who wrote it, by the platform account (tier 1, verified); a new account's name goes to tiers 3 and 4 in the background.
+    this.facts?.speaker?.(scopeKey, `pt-${hash(turn.platform, turn.requestId)}`, person.id, turn.observedAt);
+    if (created && this.facts?.identity && this.memory) this.memory.propose({ opId: `identity:${scopeKey}:${person.id}`, scopeKey, kind: 'person.link', origin: 'platform',
+      subjectKey: `identity:${person.id}`, payload: { action: 'suggest', personId: person.id, name: person.displayName, link: `${turn.platform}:${turn.sourceUserId}`.slice(0, 200) } });
     const name = `${person.displayName}さん`;
     const callId = `platform:${turn.threadKey}:${dayKey}`;
     const call = this.store.call(scopeKey, callId);
@@ -166,7 +175,7 @@ export class PlatformPeople {
       this.memory.propose({ opId: opId('turn'), scopeKey, kind: 'person.summary', origin: 'platform', subjectKey: `call:${callId}`,
         payload: { callId, mode: 'upsert', items: of('turn'), summary: { label: turn.label, audience, at: turn.observedAt } } });
       if (of('fact').length) this.memory.propose({ opId: opId('facts'), scopeKey, kind: 'person.fact', origin: 'platform', subjectKey: `person:${person.id}`,
-        payload: { callId, mode: 'upsert', items: of('fact').map(item => ({ ...item, validAt: turn.observedAt })) } });
+        payload: { callId, mode: 'upsert', items: of('fact').map(item => ({ ...item, validAt: turn.observedAt, episodeIds: [personMemoryId(itemId)] })) } });
       if (of('promise').length) this.memory.propose({ opId: opId('promises'), scopeKey, kind: 'person.promise', origin: 'platform', subjectKey: `person:${person.id}`,
         payload: { callId, mode: 'upsert', items: of('promise') } });
       return done('stored', itemId, { personId: person.id, personCreated: created });
@@ -207,8 +216,9 @@ export class PlatformPeople {
       if (!labels.has(callId)) labels.set(callId, this.store.call(scopeKey, callId)?.label ?? '');
       return labels.get(callId)!;
     };
+    const closed = this.facts?.closedIds(scopeKey);
     const lines = this.store.items(scopeKey)
-      .filter(item => item.kind !== 'turn' && item.personId !== undefined && ids.has(item.personId))
+      .filter(item => item.kind !== 'turn' && item.personId !== undefined && ids.has(item.personId) && !closed?.has(item.id))
       .filter(item => visibleMemoryText(snapshot, personMemoryId(item.id), item.text) !== null && gate.allows(personMemoryId(item.id), item.disclosure)
         && heardByEveryoneHere(snapshot, personMemoryId(item.id), item.disclosure, present))
       .flatMap(item => {

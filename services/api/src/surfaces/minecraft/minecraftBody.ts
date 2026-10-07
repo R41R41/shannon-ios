@@ -48,6 +48,8 @@ export interface MinecraftBodyDependencies {
   peopleEnabled?: () => boolean;
   /** Syzygy ADR-0008 stage 3 (F5): the memory outbox (absent: switched off, people memory written as it was). */
   memory?: MemoryProposals | null;
+  /** F6: the people facts' readers and recorders (absent: switched off). */
+  peopleFacts?: ConstructorParameters<typeof PlatformPeople>[4];
   /**
    * Phase 4: the request queue (`minecraftBodyRequests.ts`). The owner's game-chat task becomes one more entrance to it
    * while the body is claiming; his 「止まって」 asks every open request to stop.
@@ -68,7 +70,7 @@ export class MinecraftBody {
   constructor(private readonly dependencies: MinecraftBodyDependencies) {
     const { stateStore, conversationStore, background, now, peopleStore } = dependencies;
     this.bridge = new PlatformBridgeService(minecraftBridgeConfiguration(dependencies.configuration), stateStore, conversationStore, background, now,
-      peopleStore ? new PlatformPeople(peopleStore, stateStore, undefined, dependencies.memory ?? null) : null, dependencies.peopleEnabled ?? (() => platformPeopleEnabled()));
+      peopleStore ? new PlatformPeople(peopleStore, stateStore, undefined, dependencies.memory ?? null, dependencies.peopleFacts ?? null) : null, dependencies.peopleEnabled ?? (() => platformPeopleEnabled()));
   }
 
   async turn(scopeKey: string, deviceId: string, value: unknown): Promise<MinecraftTurnResponse> {

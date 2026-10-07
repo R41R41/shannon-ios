@@ -1,3 +1,4 @@
+import { mindSwitches } from '@shannon/mind';
 import {
   OWNER_AUDIENCE, disclosureDecision, isMemoryEvidenceVisible, isOwnerOnly, memoryControlFor, type memoryWithholdingRules,
   resolveDisclosure, ruleWithholdsText,
@@ -10,7 +11,7 @@ import {
 } from '../memory/memoryPorts.js';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { localDayKey } from '../memory/memoryPorts.js';
-import { MemoryWithholding } from '../memory/memoryPorts.js';
+import { MemoryWithholding, decayedUsable } from '../memory/memoryPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export const IMPRESSION_HEADER = '[人についての印象 — ボクがやりとりを重ねて気づいてきたこと]';
@@ -88,6 +89,8 @@ export function usableImpression(
   row: PersonImpression, state: CompanionStateSnapshot, check: ImpressionEvidenceCheck, people: readonly ImpressionPerson[],
 ): UsableImpression | null {
   const memoryId = impressionMemoryId(row.id);
+  // F6: an impression closed in time (no longer true, or no longer believed) is kept, never used.
+  if (row.invalidAt || row.expiredAt) return null;
   const control = memoryControlFor(state, memoryId);
   if (control && control.status !== 'active') return null;
   const shown = control?.overrideText || row.pattern;
@@ -140,6 +143,11 @@ interface Selection {
   personIds?: readonly string[];
   /** False: the owner's own impressions are left out (a platform conversation). */
   owner?: boolean;
+  /**
+   * F6 (`SHANNON_EVIDENCE_DECAY`, off by default): impressions of people other than the owner are used by the two clocks of their
+   * evidence instead of their fading and retirement; the owner's own keep today's rule.
+   */
+  decay?: boolean;
   recent?: readonly ShannonExperience[];
 }
 
@@ -166,7 +174,9 @@ export function selectImpressions(
   // Read per person, and only what a reply may use: never the whole scope.
   const rows = [
     ...(input.owner !== false && keys.includes(OWNER_PERSON_KEY) ? source.impressions(input.scopeKey, { personKey: OWNER_PERSON_KEY, live: true }) : []),
-    ...allowedPeople.flatMap(id => source.impressions(input.scopeKey, { personKey: id, live: true })),
+    ...allowedPeople.flatMap(id => (input.decay
+      ? source.impressions(input.scopeKey, { personKey: id }).filter(row => decayedUsable(row, state, input.at))
+      : source.impressions(input.scopeKey, { personKey: id, live: true }))),
   ];
 
   const ranked = rows
@@ -178,7 +188,7 @@ export function selectImpressions(
       return { row, matched, score };
     })
     // A weakened impression is shown only when the message itself brings it up.
-    .filter(item => item.matched || item.row.status === 'active')
+    .filter(item => item.matched || item.row.status === 'active' || (input.decay === true && item.row.personKey !== OWNER_PERSON_KEY))
     .sort((left, right) => right.score - left.score || left.row.id.localeCompare(right.row.id))
     .slice(0, input.maximum * 4);
   if (!ranked.length) return [];
@@ -238,6 +248,7 @@ export function recallImpressions(
   const lines = selectImpressions(store, source, state, {
     scopeKey: input.scopeKey, message: input.message, at: input.occurredAt, present: input.present, recent,
     maximum: input.channel === 'voice' ? config.voiceLines : config.promptLines, ...(input.timeZone ? { timeZone: input.timeZone } : {}),
+    ...(mindSwitches(environment).evidenceDecay ? { decay: true } : {}),
   });
   if (!lines.length) return NOTHING;
   // Provenance names only the impressions this message brought up: forgetting one later withholds the replies
@@ -261,6 +272,7 @@ export function ownerImpressionLines(
   return selectImpressions(store, source, state, {
     scopeKey, message: options.topic ?? '', at: options.at, present: options.present ?? OWNER_AUDIENCE, personIds: [],
     maximum: Math.min(8, options.maximum ?? impressionConfig(environment).promptLines), ...(options.timeZone ? { timeZone: options.timeZone } : {}),
+    ...(mindSwitches(environment).evidenceDecay ? { decay: true } : {}),
   }).map(item => item.line);
 }
 
@@ -277,7 +289,7 @@ export function platformImpressionLines(
   if (!source) return [];
   const lines = selectImpressions(store, source, state, {
     scopeKey, message: '', at: options.at, present: options.present, personIds: options.personIds, owner: false,
-    maximum: impressionConfig(environment).voiceLines,
+    maximum: impressionConfig(environment).voiceLines, ...(mindSwitches(environment).evidenceDecay ? { decay: true } : {}),
   });
   return lines.length ? [IMPRESSION_HEADER, ...lines.map(item => item.line), IMPRESSION_INSTRUCTION] : [];
 }

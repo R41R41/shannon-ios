@@ -58,6 +58,8 @@ export interface PersonImpression {
   disclosure: MemoryDisclosure;
   createdAt: string;
   updatedAt: string;
+  /** Syzygy ADR-0008 stage 3 (F6, `SHANNON_TEMPORAL_FACTS`): when it held, when it stopped, when she stopped believing it, from what. */
+  validAt?: string | null; invalidAt?: string | null; expiredAt?: string | null; episodeIds?: readonly string[];
 }
 
 /** A remembered person as the impression rules need them. */

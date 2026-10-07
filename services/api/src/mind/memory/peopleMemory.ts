@@ -43,6 +43,17 @@ const personCause = (personId: string) => `person-record:${personId}`;
 const HOW_KNOWN = '「友人も一緒」の通話で名前を聞いた';
 const FORGET_REASON = 'ユーザーが忘れるよう指定';
 
+/**
+ * Syzygy ADR-0008 stage 3: the memory outbox's proposals and the owner's commands (F5), and (F6) the readers of people facts with
+ * time (`closedIds`: items recall leaves out now), the identity suggestions, and whether a newly met name is proposed to the tiers.
+ */
+export interface PeopleMemoryParts {
+  proposals: MemoryProposals;
+  commands: Pick<MemoryCommands, 'run'> | null;
+  facts?: { closedIds(scopeKey: string): ReadonlySet<string>; candidates(scopeKey: string): readonly { personId: string; candidatePersonId: string; tier: 3 | 4 }[] } | null;
+  identity?: boolean;
+}
+
 /** Who is in a 「友人も一緒」 call right now, as far as the words said have established. */
 export interface GuestCallPresence {
   present: MemoryAudience;
@@ -83,8 +94,13 @@ export class PeopleMemory {
      * Syzygy ADR-0008 stage 3 (F5): the memory outbox. What a call leaves is proposed; the owner's rename and merge run as
      * synchronous commands through the same write path. Absent (switched off): everything is written here, as it was.
      */
-    private readonly memory: { proposals: MemoryProposals; commands: Pick<MemoryCommands, 'run'> | null } | null = null,
+    private readonly memory: PeopleMemoryParts | null = null,
   ) {}
+
+  /** F6: the open identity suggestions of tiers 3 and 4 (empty while `SHANNON_IDENTITY_TIERS` is off). */
+  identityCandidates(scopeKey: string): readonly { personId: string; candidatePersonId: string; tier: 3 | 4 }[] {
+    return this.memory?.facts?.candidates(scopeKey) ?? [];
+  }
 
   listPeople(scopeKey: string): readonly RememberedPerson[] { return this.store.listPeople(scopeKey); }
 
@@ -113,6 +129,9 @@ export class PeopleMemory {
         if (matches.length === 0) {
           newlyNamed = this.store.createPerson(scopeKey, { displayName: name, howKnown: HOW_KNOWN }, at);
           call = { ...settled, personIds: [...call.personIds, newlyNamed.id], createdPersonIds: [...call.createdPersonIds, newlyNamed.id] };
+          // F6: a new name goes to identity tiers 3 and 4 in the background; they only suggest, the owner merges.
+          if (this.memory?.identity) this.memory.proposals.propose({ opId: `identity:${scopeKey}:${newlyNamed.id}`, scopeKey, kind: 'person.link', origin: 'people',
+            subjectKey: `identity:${newlyNamed.id}`, payload: { action: 'suggest', personId: newlyNamed.id, name } });
         } else if (matches.length === 1) {
           newlyNamed = matches[0]!;
           call = { ...settled, personIds: [...call.personIds, newlyNamed.id] };
@@ -207,7 +226,7 @@ export class PeopleMemory {
       propose('person.summary', 'period', `call:${input.callId}`, { callId: input.callId, mode: 'replace', call: remembered, items: of('summary', 'turn') });
       if (of('topic').length) propose('person.topic', 'topics', `call:${input.callId}`, { callId: input.callId, mode: 'upsert', items: of('topic') });
       if (of('fact').length) propose('person.fact', 'facts', single ? `person:${single.id}` : `call:${input.callId}`,
-        { callId: input.callId, mode: 'upsert', items: of('fact').map(item => ({ ...item, validAt: at })) });
+        { callId: input.callId, mode: 'upsert', items: of('fact').map(item => ({ ...item, validAt: at, episodeIds: [`call:${input.callId}`] })) });
       if (of('promise').length) propose('person.promise', 'promises', single ? `person:${single.id}` : `call:${input.callId}`,
         { callId: input.callId, mode: 'upsert', items: of('promise') });
     } else {
@@ -226,10 +245,13 @@ export class PeopleMemory {
   /** Items that may be used at all: their people still exist and are not forgotten, and the item itself is not forgotten. */
   visibleItems(scopeKey: string, snapshot: CompanionStateSnapshot): readonly VisiblePersonItem[] {
     const people = new Map(this.store.listPeople(scopeKey).map(person => [person.id, person]));
+    // F6: a fact closed by a contradiction (or not yet true) is kept, never recalled.
+    const closed = this.memory?.facts?.closedIds(scopeKey);
     const usable = (id: string) => { const person = people.get(id); return Boolean(person && !person.forgottenAt); };
     const calls = new Map<string, PersonCall | null>();
     const callOf = (id: string) => { if (!calls.has(id)) calls.set(id, this.store.call(scopeKey, id)); return calls.get(id) ?? null; };
     return this.store.items(scopeKey).flatMap(item => {
+      if (closed?.has(item.id)) return [];
       const ids = [...audiencePeople(item), ...(item.personId ? [item.personId] : [])];
       if (!ids.every(usable) || visibleMemoryText(snapshot, personMemoryId(item.id), item.text) === null) return [];
       const nameOf = (id: string) => people.get(id)?.displayName;
