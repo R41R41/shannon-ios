@@ -85,7 +85,7 @@ each protected profile line, the owner side of a replayed protected turn, the in
 today's focus. Alone with the owner nothing is marked.
 
 **Self-check block.** Added once to the prompt whenever anyone else can hear (`speakTimePrivacyCheck` in
-`services/api/src/surfaces/voice/voiceCompanionPresence.ts`; the platform projection carries the same check in Japanese):
+`services/api/src/mind/perception/voiceCompanionPresence.ts`; the platform projection carries the same check in Japanese):
 
 ```text
 [Speak-time privacy check — other people can hear this reply]
