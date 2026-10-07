@@ -16,10 +16,18 @@ export function minecraftActionPort(actions: ActionThreads): MinecraftExecutionP
     async acknowledge(scopeKey, id, state) {
       const view = await find(scopeKey, id);
       if (!view) return;
+      if (['completed', 'failed', 'cancelled'].includes(view.state)) return;
+      if (view.state === 'queued') {
+        await actions.stop(scopeKey,view.id,`body-terminal:${id}`);
+        return;
+      }
       if (view.state === 'unknown') {
         // The body reports a known terminal outcome for the original unique request id; it was never re-issued.
-        await actions.reconcile({ id: view.id, generation: view.generation-1, holder: view.lastHolder ?? 'body-ack' }, state, 'body_result');
-      } else if (view.holder) await actions.finish(leaseOf(view), state, 'body_result');
+        if (!view.lastHolder || !await actions.reconcile({ id: view.id, generation: view.generation-1, holder: view.lastHolder }, state, 'body_result')) throw new Error('BODY_ACK_WAIT');
+      } else if (view.holder) {
+        const lease = leaseOf(view);
+        if (!await actions.finish(lease, state, 'body_result') && !await actions.reconcile(lease, state, 'body_result')) throw new Error('BODY_ACK_WAIT');
+      } else throw new Error('BODY_ACK_WAIT');
     },
   };
 }

@@ -23,6 +23,10 @@ export class CodexTaskEventPublisher {
   }
 
   async publish(events: readonly HostAgentEvent[]): Promise<void> {
-    try { await this.destination(events); } catch (error) { this.diagnostic(error); }
+    await this.publishReliable(events);
+  }
+
+  async publishReliable(events: readonly HostAgentEvent[]): Promise<boolean> {
+    try { await this.destination(events); return true; } catch (error) { this.diagnostic(error); return false; }
   }
 }

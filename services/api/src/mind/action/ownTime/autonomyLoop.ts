@@ -14,6 +14,7 @@ import { toolRefusalLine } from './autonomyLoopToolStep.js';
 import { adaptersFor, prepareStep, unpreparedCode, type PreparedStep, type StepCommit, type StepDependencies, type StepResult } from './autonomyLoopSteps.js';
 import type { RecordedDecision } from './autonomyService.js';
 import { resolveAutonomyModel } from './autonomyTextModel.js';
+import { actionFailureCode, recoverActionAcknowledgements, saveCycleAcknowledgement, saveStepAcknowledgement, stepAcknowledged } from './autonomyActionAcknowledgements.js';
 
 /**
  * The activity loop of bounded autonomy (Syzygy ADR-0002 step 3). Core.
@@ -77,6 +78,7 @@ export class ShannonAutonomyLoop {
 
   async tick(signal?: AbortSignal): Promise<AutonomyLoopTick> {
     const { store, loop, now } = this.dependencies;
+    if(this.dependencies.actionSteps && !await recoverActionAcknowledgements(store,this.dependencies.actionSteps,this.scopeKey))return 'thread-wait';
     const at = now();
     const readiness = this.readiness();
     const leaseUntil = new Date(Date.parse(at) + loop.leaseMilliseconds).toISOString();
@@ -227,25 +229,31 @@ export class ShannonAutonomyLoop {
     }, at));
 
     let result: StepResult;
-    if(execution)delete execution.modelOutcome;
+    let performing=false;
+    if(execution){delete execution.modelOutcome;delete execution.modelUsage;delete execution.stepOutcome;}
     try {
       const resource=ready.request.host?`folder:${ready.request.host}`:'study';
       await actionPermit(ready.request.host?[actionResource(this.scopeKey,resource)]:[]);
       if(execution && (execution.signal.aborted || store.control(this.scopeKey).paused))throw new Error('ACTION_STOPPED');
+      performing=true;
       result = await ready.perform(adaptersFor(begun.decision, this.dependencies), at, signal);
-    } catch {
-      result = { outcome: 'failed', summary: '一歩の途中で、うまくいかなくなりました。' };
+    } catch(error) {
+      result = { outcome: 'failed', summary: '一歩の途中で、うまくいかなくなりました。',
+        ...(execution?.modelUsage?{usage:execution.modelUsage}:{}),acknowledged:!performing||error instanceof Error&&error.message==='ACTION_STOPPED' };
     }
+    if(execution)execution.stepOutcome=stepAcknowledged(current.kind,result,execution)?'acknowledged':'unknown';
     if(execution && !this.renew())result={...result,outcome:'failed',commit:undefined,reasonCode:'action_unknown'};
     if(execution)try{await actionPermit(result.commit?[actionResource(this.scopeKey,'study')]:[]);}catch{result={...result,outcome:'failed',commit:undefined,reasonCode:'action_unknown'};}
     const reportedAt = now();
     if(execution?.signal.aborted)result={...result,outcome:'failed',commit:undefined,reasonCode:'action_unknown',summary:'停止を受け取りました。送った処理の結果を確かめる必要があります。'};
-    const reported = this.report(cycle, begun.row, begun.decision, ready, result, plan, reportedAt);
+    const reported = this.report(cycle, begun.row, begun.decision, ready, result, plan, reportedAt,reservationId);
     if(execution && runner){
-      await runner.checkpoint(execution.lease,reservationId,reported.saved===true?this.costYen(ready,result):null,current.kind,result.outcome==='failed' && !execution.signal.aborted ? /^[A-Za-z][A-Za-z0-9_.:-]{0,79}$/u.test(result.reasonCode ?? '') ? result.reasonCode : 'step_failed' : undefined).catch(()=>{});
+      if(await runner.checkpoint(execution.lease,reservationId,reported.saved===true?result.usage?this.costYen(ready,result):0:null,current.kind,actionFailureCode(result,execution)).catch(()=>false))
+        store.deliveredActionAcknowledgement(reservationId);
       if(execution.signal.aborted){
-        // A pure thought has no external write. A returned provider result and canonical report acknowledge its stop.
-        const acknowledged=current.kind==='think' && reported.saved===true && execution.modelOutcome!=='unknown';
+        // Only a returned provider/closed executor result and the canonical report acknowledge a stop.
+        const acknowledged=reported.saved===true && execution.modelOutcome!=='unknown'
+          && (current.kind==='think' || execution.stepOutcome==='acknowledged');
         await runner.end(acknowledged?'cancelled':'unknown',acknowledged?'stop_acknowledged':'step_interrupted').catch(()=>{});
       }
     }
@@ -321,7 +329,7 @@ export class ShannonAutonomyLoop {
   /** The product, the record entry with its actual cost, and the journal close commit together. */
   private report(
     cycle: AutonomyLoopCycle, row: AutonomyLoopStep, decision: RecordedDecision, prepared: PreparedStep,
-    result: StepResult, plan: readonly AutonomyPlannedStep[], at: string,
+    result: StepResult, plan: readonly AutonomyPlannedStep[], at: string,reservationId:string,
   ): { saved: boolean | 'unknown'; link?: string } {
     const { store, service } = this.dependencies;
     const usage = result.usage && prepared.request.paid ? { ...result.usage, ...(prepared.purpose ? { purpose: prepared.purpose } : {}) } : undefined;
@@ -334,11 +342,13 @@ export class ShannonAutonomyLoop {
         const committed = (result.commit?.(plan, at) || undefined) as StepCommit | undefined;
         const link = committed?.link ?? result.link;
         if (link) state.link = link;
-        service.recordAction(this.scopeKey, {
+        const recorded=service.recordAction(this.scopeKey, {
           decisionId: decision.activityId, summary: result.summary, outcome: result.outcome,
           ...(link ? { link } : {}), ...(result.tool ? { tool: result.tool } : {}), ...(usage ? { usage } : {}),
           ...(result.reasonCode ? { reasonCode: result.reasonCode } : {}),
         });
+        saveStepAcknowledgement(store,this.scopeKey,row,reservationId,result,recorded.costYen,currentActionExecution());
+        if(!store.loop.openCycle(this.scopeKey))saveCycleAcknowledgement(store,cycle,currentActionExecution());
         // What it read of the owner's marks the session, and what a marked session writes is marked (ADR-0007); ids only.
         noteProvenance(this.dependencies, cycle, row.step, result, link, at);
         // What the step led to, as facts; when it is worth thinking about, she thinks again before going on.
@@ -356,9 +366,10 @@ export class ShannonAutonomyLoop {
       try {
         store.transaction(() => {
           if ((currentActionExecution() && !store.loop.holdsLease(this.workerId,at)) || !store.loop.finishStep(row.id, 'reported', at)) return;
-          service.recordAction(this.scopeKey, {
+          const recorded=service.recordAction(this.scopeKey, {
             decisionId: decision.activityId, summary: 'したことの結果を保存できませんでした。', outcome: 'failed', ...(usage ? { usage } : {}), ...(reasonCode ? { reasonCode } : {}),
           });
+          saveStepAcknowledgement(store,this.scopeKey,row,reservationId,{...result,outcome:'failed'},recorded.costYen,currentActionExecution());
         });
       } catch { /* left `authorized`; the next tick closes it as abandoned */ }
     }
@@ -449,7 +460,8 @@ export class ShannonAutonomyLoop {
   }
 
   private endCycle(cycle: AutonomyLoopCycle, reason: string, at: string): AutonomyLoopTick {
-    this.dependencies.store.loop.endCycle(cycle.id, reason, at);
+    const {store}=this.dependencies;
+    store.transaction(()=>{store.loop.endCycle(cycle.id,reason,at);saveCycleAcknowledgement(store,cycle,currentActionExecution());});
     return 'cycle-ended';
   }
 
@@ -466,7 +478,8 @@ export class ShannonAutonomyLoop {
       again = idle && idleBefore(this.dependencies, cycle.scopeKey);
     } catch { idle = false; again = false; }
     const resumeAt = new Date(Date.parse(at) + restMilliseconds(this.dependencies.loop, undefined, again ? 'again' : idle)).toISOString();
-    closeSession(this.dependencies, cycle, idle ? 'idle' : code, at, resumeAt);
+    this.dependencies.store.transaction(()=>{closeSession(this.dependencies,cycle,idle?'idle':code,at,resumeAt);
+      saveCycleAcknowledgement(this.dependencies.store,cycle,currentActionExecution());});
     return 'cycle-ended';
   }
 }

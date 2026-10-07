@@ -14,6 +14,7 @@ import { AUTONOMY_REACH_OUT_TOOL } from '../../inhibition/inhibitionPorts.js';
 import { AutonomyModelError, resolveAutonomyModel } from './autonomyTextModel.js';
 import { STUDY_STATUS_LABEL } from './store/studyStore.js';
 import { WITHHELD_REASON_LABELS, isWithheldReason } from '../../../contracts/withheldActionContract.js';
+import { generateModel } from './autonomyLoopCalls.js';
 
 /**
  * The step 「話しかける」 (owner decision 2026-10-02): from her own activity she may write one
@@ -151,8 +152,7 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
       let reply: Record<string, unknown> | null = null;
       let usage: { inputTokens: number; outputTokens: number } | undefined;
       try {
-        await actionPermit();
-        const result = await adapters.model.generate({ model, system: prompt.system, prompt: prompt.prompt, maximumOutputTokens: OUTPUT_TOKENS, signal });
+        const result = await generateModel(adapters.model,{ model, system: prompt.system, prompt: prompt.prompt, maximumOutputTokens: OUTPUT_TOKENS, signal });
         reply = parsedModelObject(result.text);
         usage = result.usage;
       } catch (error) {
@@ -174,10 +174,11 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
       // Someone else may have come while she wrote it: in a session that read the owner's documents she holds it.
       if (heldForOthers(dependencies, cycle, writeAt)) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, reasonCode: 'others_present', summary: `ほかの人がいるので、話しかけるのをやめておきました（理由: ${label}）。` };
       let delivery: ReturnType<AutonomyReachOuts['say']>;
+      let acknowledged=true;
       try {
         await actionPermit();
         delivery = adapters.reachOuts.say(cycle.scopeKey, { reason, text, dayKey: autonomyDayKey(writeAt, config), maximumPerDay: config.maximumReachOutsPerDay, arisenAt, subject }, writeAt);
-      } catch { delivery = 'unavailable'; }
+      } catch(error) { delivery = 'unavailable';acknowledged=error instanceof Error&&error.message==='ACTION_STOPPED'; }
       // Syzygy ADR-0008 stage 3: the proactive gate held it where it would have been written.
       const held = heldByGate(delivery, `持ち主に話しかけるの（理由: ${label}）`, usage);
       if (held) return held;
@@ -201,7 +202,7 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
         };
       }
       return {
-        outcome: 'failed', usage, reasonCode: delivery === 'limit' ? 'daily_limit' : 'nowhere_to_speak',
+        outcome: 'failed', usage, acknowledged, reasonCode: delivery === 'limit' ? 'daily_limit' : 'nowhere_to_speak',
         summary: delivery === 'limit' ? `今日はもう十分に話しかけたので、やめておきました（理由: ${label}）。` : `話しかける場所がなかったので、話しかけませんでした（理由: ${label}）。`,
       };
     },

@@ -14,5 +14,6 @@ export function actionThreadsClient(call:MindCall,holder=`runner-${randomUUID()}
     checkpoint:(lease,progress,failureCode)=>call('action.checkpoint',{lease,progress,failureCode}),
     reserve:(lease,reservationId,day,yen,cap,spent)=>call('action.reserve',{lease,reservationId,day,yen,cap,spent}),
     settle:(lease,reservationId,actual)=>call('action.settle',{lease,reservationId,actual}),
+    acknowledge:report=>call('action.acknowledge',report),
   };
 }

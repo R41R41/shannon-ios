@@ -5,6 +5,7 @@ import type { MindHost } from '../mind/workspace/workspacePorts.js';
 import { serveMindSocket } from '../infra/ipc/mindSocket.js';
 import { mindSocketPath } from '../infra/config/stage4.js';
 import { checkedMindEvent } from '../mind/perception/perceptionPorts.js';
+import type { ActionAcknowledgement } from '../contracts/actionThreadContract.js';
 /** Worker-only database and dispatcher; the API never opens the scheduler's writer. */
 export async function configuredMindWorker(values:Readonly<Record<string,string|undefined>>,databasePath:string,hostFactory:()=>{host:MindHost;close():void},now:()=>string) {
   const db=new DatabaseSync(databasePath);db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=250;');
@@ -50,6 +51,7 @@ export async function configuredMindWorker(values:Readonly<Record<string,string|
       }
       case 'action.reserve':return actions.reserve(lease(),text('reservationId'),String(a.day),Number(a.yen),Number(a.cap),Number(a.spent),at);
       case 'action.settle':return actions.settle(lease(),text('reservationId'),a.actual===null?null:Number(a.actual),at);
+      case 'action.acknowledge':return actions.acknowledge(a as unknown as ActionAcknowledgement,at);
       default:throw new Error('MIND_METHOD');
     }
   });

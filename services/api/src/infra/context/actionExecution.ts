@@ -4,6 +4,9 @@ export interface ActionExecution {
   lease:ActionLease; signal:AbortSignal;
   /** Transient acknowledgement of this step's model request; never persisted or exposed. */
   modelOutcome?:'unknown'|'acknowledged';
+  modelUsage?:{inputTokens:number;outputTokens:number};
+  /** A bounded executor's acknowledgement, separate from a model call nested inside that step. */
+  stepOutcome?:'unknown'|'acknowledged';
   /** Rechecked immediately before an outside call. Never grants a tool permission. */
   permit(resources?:readonly string[]):Promise<boolean>;
   checkpoint?(code:string):Promise<boolean>;

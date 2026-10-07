@@ -411,6 +411,115 @@ describe('CodexTaskBridge', () => {
     expect(fixture.client.requests.filter(r=>r.method==='turn/start')).toHaveLength(0);
     await bridge.stop();
   });
+  it('keeps a lost turn/start answer uncertain and never fabricates a stopped acknowledgement without a turn id',async()=>{
+    const fixture=makeFixture(),events:HostAgentEvent[]=[];fixture.client.loseTurnStartResponse=true;
+    let allowed=true;
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>allowed,publish:async batch=>{events.push(...batch);}});
+    await bridge.start();await bridge.handle({...command('start-1','start',{goal:'Work',projectHint:'fixture'}),actionLease:{id:'action-1',holder:'host',generation:1}});
+    expect(fixture.state.session('task-1')?.executionUncertain).toBe(true);
+    expect(events.some(e=>e.type==='failed')).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({type:'progress',payload:expect.objectContaining({executionUncertain:true})}));
+    allowed=false;await bridge.checkExecutionRights();
+    expect(events.some(e=>e.type==='paused')).toBe(false);
+    expect(fixture.state.session('task-1')?.stopRequested).toBe(true);
+    expect(fixture.client.requests.filter(r=>r.method==='turn/start')).toHaveLength(1);
+    fixture.client.notify({method:'turn/started',params:{threadId:'thread-1',turn:{id:'turn-1'}}});await bridge.whenIdle();
+    await bridge.checkExecutionRights();
+    fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'turn-1',status:'interrupted'}}});await bridge.whenIdle();
+    expect(events.filter(e=>e.type==='paused')).toHaveLength(1);expect(fixture.state.resumableSessions()).toHaveLength(0);
+    await bridge.stop();
+  });
+  it('recovers the original stopped-turn result after host restart without starting a replacement',async()=>{
+    const fixture=makeFixture(),events:HostAgentEvent[]=[];
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>true,publish:async batch=>{events.push(...batch);}});
+    await bridge.start();await bridge.handle({...command('start-1','start',{goal:'Work',projectHint:'fixture'}),actionLease:{id:'action-1',holder:'host',generation:1}});
+    await bridge.handle(command('stop-1','interrupt',{cancel:true}));
+    expect(fixture.state.session('task-1')?.stopRequested).toBe(true);await bridge.stop();
+    const client=new FakeCodexConnection();client.resumeClosedTurn={id:'turn-1',status:'interrupted'};
+    const restarted=new CodexTaskBridge({...fixture,client,state:new AgentHostStateStore(fixture.config.stateFile),permit:async()=>false,publish:async batch=>{events.push(...batch);}});
+    await restarted.start();expect(client.requests.some(r=>r.method==='turn/start')).toBe(false);
+    expect(events.filter(e=>e.type==='paused')).toHaveLength(1);expect(events.some(e=>e.type==='failed')).toBe(false);
+    await restarted.stop();
+  });
+  it('keeps missing canonical restart evidence unknown instead of automatically recovering a paid turn',async()=>{
+    const fixture=makeFixture(),events:HostAgentEvent[]=[];
+    fixture.state.saveSession({taskId:'task-1',startCommandId:'start-1',threadId:'thread-1',turnId:'turn-1',actionLease:{id:'action-1',holder:'host',generation:1},projectKey:'fixture',cwd:fixture.project,updatedAt:'2026-10-07T12:00:00.000Z'});
+    fixture.client.resumeClosedTurn={id:'older-turn',status:'completed'};
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>true,publish:async batch=>{events.push(...batch);}});
+    await bridge.start();expect(fixture.client.requests.some(r=>r.method==='turn/start')).toBe(false);
+    expect(fixture.state.session('task-1')?.executionUncertain).toBe(true);
+    expect(events.some(e=>['paused','completed','failed'].includes(e.type))).toBe(false);
+    await bridge.stop();
+  });
+  it('does not turn a transport error notification into a terminal execution result',async()=>{
+    const fixture=makeFixture(),events:HostAgentEvent[]=[];
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>true,publish:async batch=>{events.push(...batch);}});
+    await bridge.start();await bridge.handle({...command('start-1','start',{goal:'Work',projectHint:'fixture'}),actionLease:{id:'action-1',holder:'host',generation:1}});
+    fixture.client.notify({method:'error',params:{threadId:'thread-1',turnId:'turn-1',willRetry:false,error:{message:'connection lost'}}});await bridge.whenIdle();
+    expect(events.some(e=>e.type==='failed')).toBe(false);expect(fixture.state.session('task-1')?.turnId).toBe('turn-1');
+    expect(fixture.state.session('task-1')?.executionUncertain).toBe(true);
+    fixture.client.notify({method:'turn/started',params:{threadId:'thread-1',turn:{id:'older-turn'}}});
+    fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'older-turn',status:'failed'}}});await bridge.whenIdle();
+    expect(fixture.state.session('task-1')?.turnId).toBe('turn-1');expect(events.some(e=>e.type==='failed')).toBe(false);
+    await bridge.stop();
+  });
+  it('fences old progress and approval notifications after explicitly resuming the task',async()=>{
+    const fixture=makeFixture(),events:HostAgentEvent[]=[];
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>true,publish:async batch=>{events.push(...batch);}});
+    const lease={id:'action-1',holder:'host',generation:1};
+    await bridge.start();await bridge.handle({...command('start-1','start',{goal:'Work',projectHint:'fixture'}),actionLease:lease});
+    await bridge.handle(command('stop-1','interrupt',{}));
+    fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'turn-1',status:'interrupted'}}});await bridge.whenIdle();
+    await bridge.handle({...command('resume-1','resume',{}),actionLease:{...lease,generation:2}});
+    const before=events.length;
+    fixture.client.notify({method:'turn/plan/updated',params:{threadId:'thread-1',turnId:'turn-1',plan:[{step:'stale private plan',status:'inProgress'}]}});
+    fixture.client.serverRequest({id:'old-approval',method:'item/fileChange/requestApproval',params:{threadId:'thread-1',turnId:'turn-1',itemId:'old-file',reason:'old'}});
+    await bridge.whenIdle();
+    expect(fixture.state.session('task-1')?.turnId).toBe('turn-2');expect(events).toHaveLength(before);
+    expect(fixture.state.session('task-1')?.pendingApprovalExternalRequestID).toBeUndefined();
+    await bridge.stop();
+  });
+  it('persists the original terminal event before clearing a turn and replays that exact acknowledgement after restart',async()=>{
+    const fixture=makeFixture(),attempted:HostAgentEvent[]=[];
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>true,publish:async batch=>{
+      for(const event of batch)if(event.type==='paused') {
+        const stored=new AgentHostStateStore(fixture.config.stateFile).session('task-1');
+        expect(stored?.turnId).toBeUndefined();expect(stored?.pendingTerminalEvent?.eventId).toBe(event.eventId);
+        attempted.push(event);throw new Error('Crash/network loss before broker delivery');
+      }
+    }});
+    await bridge.start();await bridge.handle({...command('start-1','start',{goal:'Work',projectHint:'fixture'}),actionLease:{id:'action-1',holder:'host',generation:1}});
+    await bridge.handle(command('stop-1','interrupt',{}));
+    fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'turn-1',status:'interrupted'}}});await bridge.whenIdle();await bridge.stop();
+    expect(attempted).toHaveLength(1);
+    const state=new AgentHostStateStore(fixture.config.stateFile),client=new FakeCodexConnection(),delivered:HostAgentEvent[]=[];
+    const restarted=new CodexTaskBridge({...fixture,state,client,permit:async()=>false,publish:async batch=>{delivered.push(...batch);}});
+    await restarted.start();await restarted.checkExecutionRights();
+    expect(delivered).toEqual(attempted);expect(delivered[0]?.payload?.actionLease).toEqual({id:'action-1',holder:'host',generation:1});
+    expect(state.session('task-1')?.pendingTerminalEvent).toBeUndefined();expect(client.requests).toEqual([]);
+    await restarted.stop();
+  });
+  it('does not let an older acknowledgement retry erase a newer generation terminal outbox entry',async()=>{
+    const fixture=makeFixture();let firstId:string|undefined,releaseRetry:(()=>void)|undefined,retrying=false;
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>true,publish:async batch=>{
+      const event=batch.find(e=>['paused','failed'].includes(e.type));if(!event)return;
+      if(!firstId){firstId=event.eventId;throw new Error('Reply lost after accepted');}
+      if(event.eventId===firstId && retrying){await new Promise<void>(resolve=>{releaseRetry=resolve;});return;}
+      throw new Error('New result not delivered yet');
+    }});
+    const lease={id:'action-1',holder:'host',generation:1};
+    await bridge.start();await bridge.handle({...command('start-1','start',{goal:'Work',projectHint:'fixture'}),actionLease:lease});
+    await bridge.handle(command('stop-1','interrupt',{}));
+    fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'turn-1',status:'interrupted'}}});await bridge.whenIdle();
+    retrying=true;const retry=bridge.checkExecutionRights();
+    await bridge.handle({...command('resume-1','resume',{}),actionLease:{...lease,generation:2}});
+    fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'turn-2',status:'failed'}}});await bridge.whenIdle();
+    const newer=fixture.state.session('task-1')?.pendingTerminalEvent;expect(newer?.eventId).not.toBe(firstId);
+    expect(newer?.payload?.actionLease).toEqual({...lease,generation:2});
+    expect(releaseRetry).toBeTypeOf('function');releaseRetry!();await retry;
+    expect(fixture.state.session('task-1')?.pendingTerminalEvent?.eventId).toBe(newer?.eventId);
+    await bridge.stop();
+  });
 
 });
 
@@ -418,6 +527,8 @@ class FakeCodexConnection implements CodexAppServerConnection {
   requests: Array<{ method: string; params: Record<string, unknown> }> = [];
   responses: Array<{ id: CodexRequestID; result: Record<string, unknown> }> = [];
   resumeActiveTurnID?: string;
+  resumeClosedTurn?: Record<string, unknown>;
+  loseTurnStartResponse=false;
   private notificationHandler?: (notification: CodexNotification) => void;
   private requestHandler?: (request: CodexServerRequest) => void;
 
@@ -431,9 +542,10 @@ class FakeCodexConnection implements CodexAppServerConnection {
     if (method === 'thread/start') return { thread: { id: 'thread-1', status: { type: 'idle' }, turns: [] } } as T;
     if (method === 'thread/resume') return { thread: {
       id: params.threadId, status: { type: this.resumeActiveTurnID ? 'active' : 'idle' },
-      turns: this.resumeActiveTurnID ? [{ id: this.resumeActiveTurnID, status: 'inProgress' }] : [],
+      turns: this.resumeActiveTurnID ? [{ id: this.resumeActiveTurnID, status: 'inProgress' }] : this.resumeClosedTurn ? [this.resumeClosedTurn] : [],
     } } as T;
     if (method === 'turn/start') {
+      if(this.loseTurnStartResponse)throw new Error('Response lost after turn started');
       const count = this.requests.filter(request => request.method === 'turn/start').length;
       return { turn: { id: `turn-${count}`, status: 'inProgress', items: [] } } as T;
     }

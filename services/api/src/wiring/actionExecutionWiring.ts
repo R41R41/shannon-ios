@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
-import { actionResource, leaseOf, type ActionDraft, type ActionThreads, type RunningAction, type ActionLease } from '../contracts/actionThreadContract.js';
+import { actionResource, leaseOf, type ActionDraft, type ActionThreads, type RunningAction, type ActionLease, type ActionAcknowledgement } from '../contracts/actionThreadContract.js';
 import { inActionExecution } from '../infra/context/actionExecution.js';
 export async function acquireAction(actions:ActionThreads,draft:ActionDraft,signal?:AbortSignal):Promise<RunningAction|null> {
   const queued=await actions.enqueue(draft),view=await actions.claim(queued.id);
@@ -73,12 +73,32 @@ export class OwnTimeActionRunner {
     return this.active;
   }
   async reserve(lease:ActionLease,id:string,day:string,yen:number,cap:number,spent:number):Promise<boolean>{return this.actions.reserve(lease,id,day,yen,cap,spent);}
-  async checkpoint(lease:ActionLease,id:string,actual:number|null,code:string,failureCode?:string):Promise<void>{
+  async checkpoint(lease:ActionLease,id:string,actual:number|null,code:string,failureCode?:string):Promise<boolean>{
+    if(this.active?.execution.lease.id===lease.id && (this.active.execution.modelOutcome==='unknown' || this.active.execution.stepOutcome==='unknown')){
+      await this.actions.settle(lease,id,this.active.execution.modelOutcome==='unknown'?null:actual);
+      await this.end('unknown',this.active.execution.modelOutcome==='unknown'?'model_result_unknown':'step_result_unknown');
+      return false;
+    }
+    if(this.active && actual!==null && (code==='think'||this.active.execution.stepOutcome==='acknowledged')){
+      const stopping=this.active.execution.signal.aborted;
+      return this.actions.acknowledge({id,scopeKey:this.active.view.scopeKey,lease,reservationId:id,actual,
+        state:stopping?'cancelled':'checkpoint',code:stopping?'stop_acknowledged':code,...(failureCode?{failureCode}:{})});
+    }
     await this.actions.settle(lease,id,actual);
     await this.actions.checkpoint(lease,code,failureCode);
+    return false;
+  }
+  async recover(reports:readonly ActionAcknowledgement[]):Promise<readonly string[]>{
+    const delivered:string[]=[];
+    for(const report of reports){if(!await this.actions.acknowledge(report))break;delivered.push(report.id);}
+    return delivered;
   }
   async end(state:'completed'|'failed'|'cancelled'|'unknown',code:string):Promise<void>{
-    if(this.active){const active=this.active;this.active=null;await active.finish(state,code);}
+    if(this.active){
+      const active=this.active;this.active=null;await active.finish(state,code);
+      // end is called only after the loop's canonical report/acknowledgement. A lease expiry is not a lost result.
+      if(state!=='unknown')await this.actions.reconcile(active.execution.lease,state,code);
+    }
   }
   close():void{this.active?.stop();this.active=null;}
 }

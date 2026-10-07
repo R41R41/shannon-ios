@@ -10,6 +10,7 @@ export function actionHarness(now:()=>string,path=':memory:') {
     stop:async(scope,id,request)=>store.stop(scope,id,request,now()),resume:async(scope,id)=>store.resume(scope,id,now()),
     reconcile:async(lease,state,code)=>store.reconcile(lease,state,code,now()),checkpoint:async(lease,code,failureCode)=>store.checkpoint(lease,code,now(),failureCode),
     reserve:async(lease,id,day,yen,cap,spent)=>store.reserve(lease,id,day,yen,cap,spent,now()),settle:async(lease,id,yen)=>store.settle(lease,id,yen,now()),
+    acknowledge:async report=>store.acknowledge(report,now()),
   };
   return {db,store,actions,close:()=>db.close()};
 }

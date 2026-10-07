@@ -3,6 +3,11 @@ import { posix, win32 } from 'node:path';
 import type { ActionDraft, ActionLease, ActionView } from '@shannon/mind';
 import type { ActionExecution } from '../infra/context/actionExecution.js';
 export type { ActionDraft, ActionLease, ActionView } from '@shannon/mind';
+/** A canonical own-time report, containing closed IDs/codes and known usage only. It cannot start or resume work. */
+export interface ActionAcknowledgement {
+  id:string;scopeKey:string;lease:ActionLease;reservationId:string|null;actual:number;
+  state:'budget'|'checkpoint'|'completed'|'failed'|'cancelled';code:string;failureCode?:string;
+}
 export interface ActionThreads {
   enqueue(draft: ActionDraft): Promise<ActionView>;
   claim(id: string): Promise<ActionView|null>;
@@ -16,6 +21,7 @@ export interface ActionThreads {
   checkpoint(lease:ActionLease,progress:string,failureCode?:string):Promise<boolean>;
   reserve(lease:ActionLease,reservationId:string,day:string,yen:number,cap:number,spent:number):Promise<boolean>;
   settle(lease:ActionLease,reservationId:string,actual:number|null):Promise<boolean>;
+  acknowledge(report:ActionAcknowledgement):Promise<boolean>;
 }
 /** Keys identify an authority plus a normalized target; paths and names never enter the scheduler journal. */
 export function actionResource(host: string,target: string): string {
@@ -35,7 +41,8 @@ export interface RunningAction {
 export interface ActionStepPort {
   begin(scopeKey:string,cycleId:string,ownerInformed:boolean,signal?:AbortSignal):Promise<RunningAction|null>;
   reserve(lease:ActionLease,id:string,day:string,yen:number,cap:number,spent:number):Promise<boolean>;
-  checkpoint(lease:ActionLease,id:string,actual:number|null,code:string,failureCode?:string):Promise<void>;
+  checkpoint(lease:ActionLease,id:string,actual:number|null,code:string,failureCode?:string):Promise<boolean>;
+  recover(reports:readonly ActionAcknowledgement[]):Promise<readonly string[]>;
   end(state:'completed'|'failed'|'cancelled'|'unknown',code:string):Promise<void>;
 }
 

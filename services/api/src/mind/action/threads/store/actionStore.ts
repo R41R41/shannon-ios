@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { ACTION_CODE, ACTION_ID, ACTION_LIMITS, ACTION_TERMINAL, validActionDraft, type ActionDraft, type ActionLease, type ActionState, type ActionView } from '@shannon/mind';
+import type { ActionAcknowledgement } from '../../../../contracts/actionThreadContract.js';
 
 /** The mind worker alone owns scheduling. BEGIN IMMEDIATE also fences another worker during recovery. No words here. */
 export class SQLiteActionStore {
@@ -22,6 +23,9 @@ export class SQLiteActionStore {
       );
       CREATE TABLE IF NOT EXISTS mind_action_controls (
         request_id TEXT PRIMARY KEY, scope_key TEXT NOT NULL, target_id TEXT, created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS mind_action_acknowledgements (
+        id TEXT PRIMARY KEY,report_json TEXT NOT NULL
       );
     `);
   }
@@ -70,7 +74,8 @@ export class SQLiteActionStore {
       this.sweep(at);
       const action = this.get(id);
       if (!action || action.state !== 'queued' || action.failures >= ACTION_LIMITS.consecutiveFailures) return null;
-      const live = this.list(action.scopeKey).filter(item => ['running','waiting','stopping'].includes(item.state));
+      const live = this.list(action.scopeKey).filter(item => ['running','waiting','stopping'].includes(item.state)
+        || item.kind!=='respond'&&item.state==='unknown'&&item.sent);
       const foreground = action.kind === 'respond';
       if (live.filter(item => (item.kind === 'respond') === foreground).length >= (foreground ? 1 : 2)) return null;
       if (this.list(action.scopeKey).some(item => item.id!==action.id && (['running','waiting','stopping'].includes(item.state)||(item.state==='unknown'&&item.sent)) && item.resources.some(key => action.resources.includes(key)))) return null;
@@ -176,10 +181,17 @@ export class SQLiteActionStore {
   settle(lease: ActionLease, reservationId: string, actual: number | null, at: string): boolean {
     if(actual!==null && (!Number.isFinite(actual)||actual<0))return false;
     return this.transaction(()=>{
+      this.sweep(at);
       const action=this.get(lease.id);
-      if(!action || action.generation!==lease.generation || action.holder!==lease.holder || !action.leaseUntil || action.leaseUntil<=at || !['running','waiting','stopping'].includes(action.state))return false;
+      if(!action)return false;
+      const live=action.generation===lease.generation && action.holder===lease.holder && action.leaseUntil!==null
+        && action.leaseUntil>at && ['running','waiting','stopping'].includes(action.state);
+      // A late canonical report can settle only this immediately previous attempt, never a newer holder's charge.
+      const acknowledged=actual!==null && action.generation===lease.generation+1 && action.lastHolder===lease.holder
+        && (action.state==='unknown' || action.state==='cancelled' && !action.sent && actual===0);
+      if(!live && !acknowledged)return false;
       const row=this.db.prepare("SELECT state FROM mind_action_budget WHERE reservation_id=? AND action_id=? AND generation=?").get(reservationId,lease.id,lease.generation) as {state:string}|undefined;
-      if(!row || row.state!=='reserved')return false;
+      if(!row || row.state!=='reserved' && !(acknowledged && row.state==='held'))return false;
       // The caller's canonical spend ledger records actual usage before this reservation is released.
       this.db.prepare('UPDATE mind_action_budget SET state=? WHERE reservation_id=?').run(actual===null?'held':'settled',reservationId);
       return true;
@@ -189,9 +201,51 @@ export class SQLiteActionStore {
   reconcile(lease:ActionLease,state:'completed'|'failed'|'cancelled',code:string,at:string):boolean {
     if(!ACTION_CODE.test(code))return false;
     return this.transaction(()=>{
+      this.sweep(at);
       const action=this.get(lease.id);
       if(!action || action.state!=='unknown' || action.generation!==lease.generation+1 || action.lastHolder!==lease.holder)return false;
       this.db.prepare('UPDATE mind_actions SET state=?,result=?,sent=0,updated_at=? WHERE id=?').run(state,code,at,lease.id);
+      return true;
+    });
+  }
+  /** Idempotent delivery of a canonical report. An expired/stopped attempt closes; it never receives fresh execution rights. */
+  acknowledge(report:ActionAcknowledgement,at:string):boolean {
+    const {lease}=report;
+    if(!lease||typeof report.id!=='string'||typeof report.scopeKey!=='string'||typeof lease.id!=='string'||typeof lease.holder!=='string'
+      ||!ACTION_ID.test(report.id)||!ACTION_ID.test(report.scopeKey)||!ACTION_ID.test(lease.id)||!ACTION_ID.test(lease.holder)
+      || !Number.isSafeInteger(lease.generation)||lease.generation<1||!Number.isFinite(report.actual)||report.actual<0
+      || report.reservationId!==null&&(typeof report.reservationId!=='string'||!ACTION_ID.test(report.reservationId))
+      || !['budget','checkpoint','completed','failed','cancelled'].includes(report.state)||typeof report.code!=='string'||!ACTION_CODE.test(report.code)
+      || report.failureCode!==undefined&&(typeof report.failureCode!=='string'||!ACTION_CODE.test(report.failureCode)))return false;
+    return this.transaction(()=>{
+      const encoded=JSON.stringify({id:report.id,scopeKey:report.scopeKey,lease:{id:lease.id,generation:lease.generation,holder:lease.holder},
+        reservationId:report.reservationId,actual:report.actual,state:report.state,code:report.code,...(report.failureCode?{failureCode:report.failureCode}:{})});
+      const receipt=this.db.prepare('SELECT report_json FROM mind_action_acknowledgements WHERE id=?').get(report.id);
+      if(receipt)return receipt.report_json===encoded;
+      this.sweep(at);
+      const action=this.get(lease.id);
+      if(!action||action.scopeKey!==report.scopeKey||action.kind!=='ownTime'||action.origin!=='own_time'||action.lastHolder!==lease.holder)return false;
+      const live=action.generation===lease.generation&&action.holder===lease.holder&&['running','waiting','stopping'].includes(action.state);
+      const expired=action.generation===lease.generation+1&&['unknown','cancelled'].includes(action.state);
+      const closed=action.generation===lease.generation&&['completed','failed','cancelled'].includes(action.state);
+      if(!live&&!expired&&!closed)return false;
+      if(report.reservationId){
+        const reservation=this.db.prepare('SELECT state FROM mind_action_budget WHERE reservation_id=? AND action_id=? AND generation=?')
+          .get(report.reservationId,lease.id,lease.generation);
+        if(reservation && ['reserved','held'].includes(String(reservation.state)))
+          this.db.prepare("UPDATE mind_action_budget SET state='settled' WHERE reservation_id=?").run(report.reservationId);
+      }
+      if(report.state!=='budget'&&(live||action.state==='unknown')){
+        const checkpoint=report.state==='checkpoint'&&live&&action.state!=='stopping';
+        const failures=report.failureCode?(action.lastFailure===report.failureCode?action.failures+1:1):0;
+        const state=checkpoint?(failures>=5?'failed':'waiting'):report.state==='checkpoint'?'cancelled':report.state;
+        const code=checkpoint?(failures>=5?'repeated_failure':null):report.state==='checkpoint'?'step_acknowledged':report.code;
+        this.db.prepare(`UPDATE mind_actions SET state=?,sent=0,resources_json=base_resources_json,progress=?,result=?,
+          failures=?,last_failure=?,holder=CASE WHEN ?='waiting' THEN holder ELSE NULL END,
+          lease_until=CASE WHEN ?='waiting' THEN lease_until ELSE NULL END,updated_at=? WHERE id=?`)
+          .run(state,checkpoint?report.code:null,code,failures,report.failureCode??null,state,state,at,action.id);
+      }
+      this.db.prepare('INSERT INTO mind_action_acknowledgements VALUES(?,?)').run(report.id,encoded);
       return true;
     });
   }

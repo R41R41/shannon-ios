@@ -81,11 +81,13 @@ public final class ShannonActionThreadsModel {
     public func control(id: String?, resume: Bool = false) async {
         guard let client, !controlPending, !othersPresent, phase == .loaded, !isStale(at: Date()) else { return }
         controlPending = true; notice = nil; readGeneration += 1
-        let expectedContext = context, requestID = UUID().uuidString
+        let expectedContext = context, expectedRead = readGeneration, requestID = UUID().uuidString
         defer { if expectedContext == context { controlPending = false } }
         do {
             let answer = try await client.controlActionThread(scopeKey: scopeKey, id: id, resume: resume, requestID: requestID)
             guard expectedContext == context else { return }
+            // A poll may already have observed a new audience or outcome while this POST's answer was in transit.
+            guard expectedRead == readGeneration else { await reload(); return }
             readGeneration += 1; apply(answer)
         } catch {
             guard expectedContext == context else { return }

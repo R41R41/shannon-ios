@@ -10,6 +10,7 @@ import { AutonomyPursuitLedger } from './pursuitLedger.js';
 import { OwnerInformedMarks } from '../../../inhibition/store/ownerInformedMarks.js';
 import { secureDatabaseFiles } from '../../../../infra/sqlite/sqliteStoreContext.js';
 import { StudyStore } from './studyStore.js';
+import type { ActionAcknowledgement } from '../../../../contracts/actionThreadContract.js';
 
 /**
  * Durable state of bounded autonomy. Every table is created with
@@ -122,6 +123,9 @@ export class SQLiteAutonomyStore {
         updated_at TEXT NOT NULL,
         PRIMARY KEY (scope_key, purpose)
       );
+      CREATE TABLE IF NOT EXISTS autonomy_action_acknowledgements (
+        id TEXT PRIMARY KEY,scope_key TEXT NOT NULL,report_json TEXT NOT NULL
+      );
     `);
     this.activity = new AutonomyActivityRecord(this.database);
     this.pursuits = new AutonomyPursuitLedger(this.database);
@@ -145,6 +149,19 @@ export class SQLiteAutonomyStore {
       if (this.database.isTransaction) this.database.exec('ROLLBACK');
       throw error;
     }
+  }
+
+  /** Called in the same transaction as the canonical usage and step/cycle report. No request or product text. */
+  recordActionAcknowledgement(report:ActionAcknowledgement):void {
+    this.database.prepare('INSERT OR IGNORE INTO autonomy_action_acknowledgements VALUES(?,?,?)')
+      .run(report.id,report.scopeKey,JSON.stringify(report));
+  }
+  pendingActionAcknowledgements(scopeKey:string):ActionAcknowledgement[] {
+    return this.database.prepare('SELECT report_json FROM autonomy_action_acknowledgements WHERE scope_key=? ORDER BY rowid LIMIT 64')
+      .all(scopeKey).map(row=>JSON.parse(String(row.report_json)) as ActionAcknowledgement);
+  }
+  deliveredActionAcknowledgement(id:string):void {
+    this.database.prepare('DELETE FROM autonomy_action_acknowledgements WHERE id=?').run(id);
   }
 
   /** Throws when the state cannot be read; the caller treats that as paused. */

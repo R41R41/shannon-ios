@@ -216,6 +216,8 @@ Response `200`:
 
 - `request` is null unless the body holds nothing and something is queued. `surface` is where it was asked (`text`, `voice`, `minecraft`); the Talk is never sent. `leaseExpiresAt`: the body must claim again (naming it in `holding`) or report progress before this.
 - `cancel`: held ids the body should stop (the owner or she cancelled them), and held ids already closed on the server (drop them). It answers at once when not empty. After stopping, the body reports `stopped` and stops naming the id.
+
+With ADR-0008 Stage 4 enabled, this existing authenticated `holding` handshake also acknowledges abandonment to the shared mind: a request this device was handed but no longer holds is closed in the canonical queue and its execution right is released. Mere silence or lease expiry does not acknowledge an outside result; an uncertain action retains the body resource until this handshake or a real terminal report. The acknowledgement contains only the request ID and a closed terminal state, is persisted beside the canonical queue, and retries IPC delivery after a restart or lost response. A duplicate report cannot replace the first acknowledged outcome. Previously handed requests awaiting this acknowledgement retain their canonical rows beyond the usual pruning window; after acknowledgement, the existing 30-day pruning applies. No new Minebot request field or automatic replay is introduced.
 - Every claim marks the body present, also one that returns nothing.
 
 ### `POST /v1/body/minecraft/requests/{id}/progress` (the body)

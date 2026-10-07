@@ -1045,6 +1045,7 @@
     "mind/action/agentTasks/store/agentTaskPersistenceSupport.ts",
     "mind/action/agentTasks/store/agentTaskQueue.ts",
     "mind/action/agentTasks/store/agentWorkspaceResources.ts",
+    "mind/action/ownTime/autonomyActionAcknowledgements.ts",
     "mind/action/ownTime/autonomyAnnouncer.ts",
     "mind/action/ownTime/autonomyHostFolderDesk.ts",
     "mind/action/ownTime/autonomyHostFolderPath.ts",

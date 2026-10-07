@@ -16,6 +16,7 @@ import { autonomyModelCostUsd } from './autonomyModels.js';
 import { AUTONOMY_CALL_DOMAIN, AUTONOMY_CALL_TOOL } from '../../inhibition/inhibitionPorts.js';
 import { AutonomyModelError, resolveAutonomyModel } from './autonomyTextModel.js';
 import { STUDY_STATUS_LABEL } from './store/studyStore.js';
+import { generateModel } from './autonomyLoopCalls.js';
 
 /**
  * The step 「電話をかける」 (owner decision 2026-10-03): from her own activity she may phone the owner's iPhone.
@@ -214,8 +215,7 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
       let reply: Record<string, unknown> | null = null;
       let usage: { inputTokens: number; outputTokens: number } | undefined;
       try {
-        await actionPermit();
-        const result = await adapters.model.generate({ model, system: prompt.system, prompt: prompt.prompt, maximumOutputTokens: OUTPUT_TOKENS, signal });
+        const result = await generateModel(adapters.model,{ model, system: prompt.system, prompt: prompt.prompt, maximumOutputTokens: OUTPUT_TOKENS, signal });
         reply = parsedModelObject(result.text);
         usage = result.usage;
       } catch (error) {
@@ -233,20 +233,22 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
       // Someone else may have come while she wrote it: in a marked session she holds the call (ADR-0007).
       if (heldForOthers(dependencies, cycle, writeAt)) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, reasonCode: 'others_present', summary: `ほかの人がいるので、電話はやめておきました（理由: ${label}）。` };
       let written: ReturnType<NonNullable<typeof adapters.reachOuts.sayByPhone>>;
+      let acknowledged=true;
       try {
         await actionPermit();
         written = adapters.reachOuts.sayByPhone(cycle.scopeKey, { reason: reason as ReachOutReason, text, dayKey: autonomyDayKey(writeAt, config), arisenAt, subject }, writeAt);
-      } catch { written = 'unavailable'; }
+      } catch(error) { written = 'unavailable';acknowledged=error instanceof Error&&error.message==='ACTION_STOPPED'; }
       // Syzygy ADR-0008 stage 3: the proactive gate held it where it would have been written.
       const heldLine = heldByGate(written, `電話をかけるの（理由: ${label}）`, usage);
       if (heldLine) return heldLine;
-      if (written !== 'sent') return { outcome: 'failed', usage, reasonCode: 'nowhere_to_speak', summary: `電話の一言を残す場所がなかったので、かけませんでした（理由: ${label}）。` };
+      if (written !== 'sent') return { outcome: 'failed', usage, acknowledged, reasonCode: 'nowhere_to_speak', summary: `電話の一言を残す場所がなかったので、かけませんでした（理由: ${label}）。` };
       let sent: { id: string; at: string } | null = null;
       try { sent = adapters.reachOuts.latest?.(cycle.scopeKey) ?? null; } catch { sent = null; }
       if (!sent) return { outcome: 'failed', usage, reasonCode: 'call_failed', summary: `電話をかけようとしましたが、つながりませんでした（理由: ${label}）。一言はトークに残っています。` };
       // Her line is in the Talk. Now the call itself: asked for here, sent by the API process.
       let asked: ReturnType<AutonomyPhone['request']> = 'unavailable';
-      try { await actionPermit(); asked = adapters.phone.request(cycle.scopeKey, sent.id, writeAt, { reason, subject, arisenAt }); } catch { asked = 'unavailable'; }
+      try { await actionPermit(); asked = adapters.phone.request(cycle.scopeKey, sent.id, writeAt, { reason, subject, arisenAt }); }
+      catch(error) { asked = 'unavailable';acknowledged=error instanceof Error&&error.message==='ACTION_STOPPED'; }
       // The gate held the call itself: nothing rings; her line is in the Talk.
       const heldCall = heldByGate(asked, `電話を鳴らすの（理由: ${label}）`, usage);
       if (heldCall) return { ...heldCall, summary: `${heldCall.summary}一言はトークに残っています。` };
@@ -275,7 +277,7 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
       }
       observed = { ...observed, call, waitedSeconds: waited, ...(call === 'answered' ? { replied: true, repliedAfterSeconds: observed.repliedAfterSeconds ?? waited } : {}) };
       return {
-        outcome: 'done', usage, observed, reasonCode: `call_${call}`,
+        outcome: 'done', usage, observed, acknowledged, reasonCode: `call_${call}`,
         summary: `持ち主のiPhoneに電話をかけました（理由: ${label}）。${CALL_SUMMARY[call]}`,
       };
     },

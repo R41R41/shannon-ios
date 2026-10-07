@@ -19,7 +19,7 @@ export function externalActionWiring(actions: ActionThreads | null, tasks: Agent
     (await actions!.list(ownerScope)).find(view => view.kind === kind && view.sourceId === sourceId);
   const acknowledge = async (view: ActionView, lease: ActionLease, state: 'completed' | 'failed' | 'cancelled', code: string) => {
     if (view.state === 'unknown') await actions!.reconcile(lease, state, code);
-    else await actions!.finish(lease, state, code);
+    else if (!await actions!.finish(lease, state, code)) await actions!.reconcile(lease, state, code);
   };
   return {
     async beforeHost(request: ApiRequest): Promise<ApiResponse | undefined> {
@@ -31,6 +31,10 @@ export function externalActionWiring(actions: ActionThreads | null, tasks: Agent
         const task = id(body.taskId) ? tasks.get(ownerScope, body.taskId) : null;
         const lease = checkedActionLease(body.lease);
         const view = task && task.assignedHostID === body.hostId ? await find('agentTask', task.id) : null;
+        if (view && task && ['paused', 'cancelled', 'failed', 'completed'].includes(task.status)) {
+          await actions.stop(ownerScope, view.id, `host-stop:${view.id}:${task.updatedAt}`);
+          return { status: 200, body: { allowed: false } };
+        }
         const matches = !!view && !!lease && view.id === lease.id && view.generation === lease.generation && view.holder === lease.holder;
         const allowed = matches && !!await actions.renew(lease!) && await actions.dispatch(lease!);
         return { status: 200, body: { allowed } };
@@ -49,7 +53,7 @@ export function externalActionWiring(actions: ActionThreads | null, tasks: Agent
       if (host?.kind === 'local') resources.push(actionResource(ownerScope, 'folder:mac'));
       let view = await actions.enqueue({ scopeKey: ownerScope, kind: 'agentTask', origin: 'owner_request',
         sourceId: task.id, ownerInformed: true, resources });
-      if (['failed', 'cancelled'].includes(view.state) && candidate.type === 'resume') {
+      if (['failed', 'cancelled'].includes(view.state) && ['resume', 'steer'].includes(candidate.type)) {
         await actions.resume(ownerScope, view.id);
         view = (await actions.list(ownerScope)).find(item => item.id === view.id)!;
       }
@@ -72,8 +76,12 @@ export function externalActionWiring(actions: ActionThreads | null, tasks: Agent
         if (!view) { events.push(event); continue; } // Legacy completed-task events retain their validator.
         if (!lease || lease.id !== view.id || lease.holder !== view.lastHolder) continue;
         const acknowledged = ['paused', 'completed', 'failed'].includes(event.type);
+        // Command receipt is separate from the turn's outcome. It closes the canonical
+        // delivery record even when that turn is uncertain, without releasing its locks.
+        const commandReceipt = event.type === 'command_completed';
         if (view.generation === lease.generation && !terminal.includes(view.state)
-          || acknowledged && view.state === 'unknown' && view.generation === lease.generation + 1) events.push(event);
+          || (acknowledged || commandReceipt) && view.state === 'unknown' && view.generation === lease.generation + 1
+          || commandReceipt && view.generation === lease.generation) events.push(event);
       }
       return { ...request, body: { ...body, events } };
     },
@@ -81,10 +89,12 @@ export function externalActionWiring(actions: ActionThreads | null, tasks: Agent
       if (!actions || response.status !== 200 || request.path !== '/v1/agent/host/events') return;
       const body = request.body as { events: HostAgentEvent[] };
       for (const event of body.events) {
-        if(!['paused','completed','failed'].includes(event.type))continue;
+        const uncertain = event.type === 'progress' && event.payload?.executionUncertain === true;
+        if(!uncertain && !['paused','completed','failed'].includes(event.type))continue;
         const lease = checkedActionLease(event.payload?.actionLease);
         const task = tasks.get(ownerScope, event.taskId), view = await find('agentTask', event.taskId);
         if (!task || !view || !lease) continue;
+        if (uncertain) { await actions.finish(lease, 'unknown', 'host_result_unknown'); continue; }
         if (['paused','cancelled'].includes(task.status)) await acknowledge(view, lease, 'cancelled', 'host_paused');
         else if (task.status === 'completed') await acknowledge(view, lease, 'completed', 'host_completed');
         else if (task.status === 'failed') await acknowledge(view, lease, 'failed', 'host_failed');

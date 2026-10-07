@@ -10,6 +10,9 @@ export interface PersistedAgentSession {
   startCommandId: string;
   threadId: string;
   turnId?: string;
+  executionUncertain?: boolean;
+  stopRequested?: boolean;
+  pendingTerminalEvent?: HostAgentEvent;
   pendingApprovalExternalRequestID?: string;
   goal?: string;
   projectKey: string;
@@ -50,7 +53,7 @@ export class AgentHostStateStore {
 
   resumableSessions(): readonly PersistedAgentSession[] {
     return Object.freeze(Object.values(this.state.sessions)
-      .filter(session => Boolean(session.turnId || session.pendingApprovalExternalRequestID))
+      .filter(session => Boolean(session.turnId || session.pendingApprovalExternalRequestID || session.pendingTerminalEvent || session.actionLease && session.executionUncertain))
       .map(session => Object.freeze({ ...session })));
   }
 
@@ -65,6 +68,7 @@ export class AgentHostStateStore {
     const next = { ...current, ...update, taskId: current.taskId };
     if (!next.turnId) delete next.turnId;
     if (!next.pendingApprovalExternalRequestID) delete next.pendingApprovalExternalRequestID;
+    if (!next.pendingTerminalEvent) delete next.pendingTerminalEvent;
     this.state.sessions[taskId] = next;
     this.persist();
     return Object.freeze({ ...next });

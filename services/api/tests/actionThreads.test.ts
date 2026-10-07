@@ -26,6 +26,16 @@ describe('one foreground and two background threads',()=>{
     expect(s.enqueue(draft,later).state).toBe('unknown');
     expect(s.resume('owner',first.id,later)).toBe(false);
   });
+  it('retains an uncertain sent background slot until its canonical acknowledgement while allowing conversation',()=>{
+    const s=store(),make=(sourceId:string,kind:'agentTask'|'respond'='agentTask')=>s.enqueue({scopeKey:'owner',kind,origin:'owner_request',sourceId},at);
+    const a=s.claim(make('lost').id,'a',at)!;s.dispatch(leaseOf(a),at);
+    s.transaction(()=>s.sweep(later));expect(s.get(a.id)?.state).toBe('unknown');
+    expect(s.claim(make('second').id,'b',later)).not.toBeNull();
+    const third=make('third');expect(s.claim(third.id,'c',later)).toBeNull();
+    expect(s.claim(make('talk','respond').id,'api',later)?.state).toBe('running');
+    expect(s.reconcile(leaseOf(a),'cancelled','outside_stopped',later)).toBe(true);
+    expect(s.claim(third.id,'c',later)).not.toBeNull();
+  });
   it('holds competing resources through a stop until the runner acknowledges it',()=>{
     const s=store(),resource=actionResource('mac','/notes/a');
     const a=s.claim(s.enqueue({scopeKey:'owner',kind:'agentTask',origin:'owner_request',sourceId:'one',resources:[resource]},at).id,'a',at)!;
@@ -70,6 +80,66 @@ describe('one foreground and two background threads',()=>{
     s.transaction(()=>s.sweep(later));expect(s.get(a.id)?.state).toBe('unknown');
     expect(s.reconcile(token,'cancelled','outside_stopped',later)).toBe(true);
     expect(s.reconcile(token,'completed','late_duplicate',later)).toBe(false);
+  });
+  it('settles an expired estimate only from its original acknowledged attempt before reconciling it',()=>{
+    const s=store(),a=s.claim(s.enqueue({scopeKey:'owner',kind:'ownTime',origin:'own_time',sourceId:'late'},at).id,'a',at)!;
+    const token=leaseOf(a);
+    expect(s.reserve(token,'late-budget','2026-10-07',1200,2000,0,at)).toBe(true);
+    expect(s.dispatch(token,at)).toBe(true);s.stop('owner',a.id,'late-stop',at);
+    // Settlement must normalize an expired lease even before the one-second sweep has run.
+    expect(s.settle({...token,holder:'wrong'},'late-budget',400,later)).toBe(false);
+    expect(s.get(a.id)?.state).toBe('unknown');
+    expect(s.settle(token,'late-budget',null,later)).toBe(false);
+    expect(s.settle({...token,generation:token.generation+1},'late-budget',400,later)).toBe(false);
+    const b=s.claim(s.enqueue({scopeKey:'owner',kind:'ownTime',origin:'own_time',sourceId:'other'},later).id,'b',later)!;
+    expect(s.reserve(leaseOf(b),'other-budget','2026-10-07',1000,2000,400,later)).toBe(false);
+    expect(s.settle(token,'late-budget',400,later)).toBe(true);
+    expect(s.settle(token,'late-budget',400,later)).toBe(false);
+    expect(s.reserve(leaseOf(b),'other-budget','2026-10-07',1000,2000,400,later)).toBe(true);
+    expect(s.reconcile(token,'cancelled','stop_acknowledged',later)).toBe(true);
+    expect(s.resume('owner',a.id,later)).toBe(true);
+    expect(s.claim(a.id,'new-holder',later)?.generation).toBe(3);
+    expect(s.reconcile(token,'completed','stale_ack',later)).toBe(false);
+  });
+  it('returns only known unused reservations after a not-sent lease expires',()=>{
+    const s=store(),a=s.claim(s.enqueue({scopeKey:'owner',kind:'ownTime',origin:'own_time',sourceId:'unused'},at).id,'a',at)!;
+    const token=leaseOf(a);s.reserve(token,'unused-budget','2026-10-07',100,2000,0,at);
+    expect(s.settle(token,'unused-budget',42,later)).toBe(false);
+    expect(s.get(a.id)?.state).toBe('cancelled');
+    expect(s.settle(token,'unused-budget',0,later)).toBe(true);
+  });
+  it('receipts a known late acknowledgement without granting execution or accepting a different report',()=>{
+    const s=store(),a=s.claim(s.enqueue({scopeKey:'owner',kind:'ownTime',origin:'own_time',sourceId:'ack'},at).id,'a',at)!;
+    const lease=leaseOf(a),report={id:'ack-one',scopeKey:'owner',lease,reservationId:'ack-budget',actual:400,state:'checkpoint' as const,code:'think'};
+    s.reserve(lease,'ack-budget','2026-10-07',1200,2000,0,at);s.dispatch(lease,at);
+    expect(s.acknowledge({...report,lease:{...lease,holder:'wrong'}},later)).toBe(false);
+    expect(s.acknowledge(report,later)).toBe(true);
+    expect(s.get(a.id)).toMatchObject({state:'cancelled',generation:2,result:'step_acknowledged',holder:null,sent:false});
+    expect(s.resume('owner',a.id,later)).toBe(true);const resumed=s.claim(a.id,'new',later)!;
+    expect(s.acknowledge(report,later)).toBe(true);expect(s.get(a.id)).toEqual(resumed);
+    expect(s.acknowledge({...report,actual:399},later)).toBe(false);
+    expect(s.acknowledge({...report,id:'different-ack'},later)).toBe(false);
+  });
+  it('counts an acknowledged failure once despite lost replies and ends at the fifth identical failure',()=>{
+    const s=store(),a=s.claim(s.enqueue({scopeKey:'owner',kind:'ownTime',origin:'own_time',sourceId:'ack-fail'},at).id,'a',at)!;
+    const lease=leaseOf(a);
+    for(let index=0;index<5;index++){
+      const report={id:`failure-${index}`,scopeKey:'owner',lease,reservationId:null,actual:0,state:'checkpoint' as const,code:'think',failureCode:'provider_failed'};
+      s.dispatch(lease,at);expect(s.acknowledge(report,at)).toBe(true);expect(s.acknowledge(report,at)).toBe(true);
+      expect(s.get(a.id)?.failures).toBe(index+1);
+    }
+    expect(s.get(a.id)).toMatchObject({state:'failed',result:'repeated_failure',failures:5});
+    expect(s.resume('owner',a.id,at)).toBe(false);
+  });
+  it('settles known model usage without acknowledging an uncertain outside write or releasing its lock',()=>{
+    const s=store(),resource=actionResource('owner','study'),a=s.claim(s.enqueue({scopeKey:'owner',kind:'ownTime',origin:'own_time',sourceId:'uncertain-write',resources:[resource]},at).id,'a',at)!;
+    const lease=leaseOf(a);s.reserve(lease,'known-model','2026-10-07',100,2000,0,at);s.dispatch(lease,at);
+    s.transaction(()=>s.sweep(later));
+    expect(s.acknowledge({id:'usage-only',scopeKey:'owner',lease,reservationId:'known-model',actual:42,state:'budget',code:'model_usage_known'},later)).toBe(true);
+    expect(s.get(a.id)).toMatchObject({state:'unknown',sent:true,resources:[resource]});
+    expect(s.resume('owner',a.id,later)).toBe(false);
+    const competing=s.enqueue({scopeKey:'owner',kind:'agentTask',origin:'owner_request',sourceId:'competing',resources:[resource]},later);
+    expect(s.claim(competing.id,'other',later)).toBeNull();
   });
   it('stops after five consecutive identical failures and preserves the origin',()=>{
     const s=store(),draft={scopeKey:'owner',kind:'ownTime' as const,origin:'own_time' as const,sourceId:'fail'};

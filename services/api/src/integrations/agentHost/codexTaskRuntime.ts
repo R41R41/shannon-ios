@@ -1,5 +1,5 @@
 import type { ActionLease } from '../../contracts/actionThreadContract.js';
-import type { AgentChangeSummary, AgentReasoningEffort, AgentTestResult } from '../../mind/action/agentTasks/agentTasksPorts.js';
+import type { AgentChangeSummary, AgentReasoningEffort, AgentTestResult, HostAgentEvent } from '../../mind/action/agentTasks/agentTasksPorts.js';
 import type { AgentHostConfig, AgentHostProject } from './agentHostConfig.js';
 import type { AgentHostStateStore, PersistedAgentSession } from './agentHostState.js';
 import { stringValue } from './codexTaskProjection.js';
@@ -29,6 +29,9 @@ export interface RuntimeTask {
   reasoningEffort?: AgentReasoningEffort;
   suppressTerminalEvent: boolean;
   stopRequested?: boolean;
+  executionUncertain?: boolean;
+  recoveredTurn?: Record<string, unknown>;
+  pendingTerminalEvent?: HostAgentEvent;
 }
 
 export class CodexTaskRuntimeRegistry {
@@ -50,6 +53,9 @@ export class CodexTaskRuntimeRegistry {
       startCommandId: session.startCommandId,
       threadId: session.threadId,
       ...(session.turnId ? { turnId: session.turnId } : {}),
+      ...(session.stopRequested ? { stopRequested: true } : {}),
+      ...(session.executionUncertain ? { executionUncertain: true } : {}),
+      ...(session.pendingTerminalEvent ? { pendingTerminalEvent: session.pendingTerminalEvent } : {}),
       project,
       changes: new Map(),
       tests: new Map(),
@@ -78,6 +84,9 @@ export class CodexTaskRuntimeRegistry {
       startCommandId: runtime.startCommandId,
       threadId: runtime.threadId,
       ...(runtime.turnId ? { turnId: runtime.turnId } : {}),
+      ...(runtime.stopRequested ? { stopRequested: true } : {}),
+      ...(runtime.executionUncertain ? { executionUncertain: true } : {}),
+      ...(runtime.pendingTerminalEvent ? { pendingTerminalEvent: runtime.pendingTerminalEvent } : {}),
       ...(runtime.pendingApprovalExternalRequestID ? { pendingApprovalExternalRequestID: runtime.pendingApprovalExternalRequestID } : {}),
       ...(runtime.goal ? { goal: runtime.goal } : {}),
       ...(runtime.model ? { model: runtime.model } : {}),

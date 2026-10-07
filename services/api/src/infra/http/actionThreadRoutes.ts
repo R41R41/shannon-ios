@@ -27,10 +27,11 @@ export function createActionThreadRoute(actions: ActionThreads | null, ownerScop
     if (!actions) return sendJson(response, 404, { error: 'ACTION_THREADS_DISABLED' });
     if (!consumeDeviceAllowance(usage, principal.deviceId, 90)) return sendJson(response, 429, { error: 'RATE_LIMITED' });
     const url = new URL(request.url ?? path, 'http://localhost');
-    let others=true;try{others=url.searchParams.get('audience')==='others'||audienceNow();}catch{/* uncertain audience stays private */}
+    // Read at delivery, after IPC and outside-stop awaits: someone may have joined while this request waited.
+    const othersNow=()=>{try{return url.searchParams.get('audience')==='others'||audienceNow()!==false;}catch{return true;}};
     try {
       if (request.method === 'GET' && path === ACTION_THREAD_PATH) {
-        return sendJson(response, 200, publicActionThreads(await actions.list(ownerScope), now(), others));
+        return sendJson(response, 200, publicActionThreads(await actions.list(ownerScope), now(), othersNow()));
       }
       if (request.method !== 'POST') return sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
       const body = await readJson(request, 4096) as Record<string, unknown>;
@@ -48,7 +49,7 @@ export function createActionThreadRoute(actions: ActionThreads | null, ownerScop
         const views = await actions.stop(ownerScope, target, body.requestId);
         await stopOutside(views, body.requestId);
       }
-      return sendJson(response, 200, { requestId: body.requestId, ...publicActionThreads(await actions.list(ownerScope), now(), others) });
+      return sendJson(response, 200, { requestId: body.requestId, ...publicActionThreads(await actions.list(ownerScope), now(), othersNow()) });
     } catch {
       // The stop may already be accepted. Client must re-read, never blindly resend the mutation.
       return sendJson(response, 503, { error: 'ACTION_STATE_UNAVAILABLE', availability: 'recovering' });

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { AUTONOMY_DEFAULT_MODEL, AUTONOMY_MODELS, autonomyModel, autonomyModelAllowedFor, type AutonomyModel, type AutonomyModelPurpose } from './autonomyModels.js';
 import { responseUsage } from '../../../infra/models/llmUsage.js';
 import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
+import { currentActionExecution } from '../../../infra/context/actionExecution.js';
 
 /**
  * The model adapters of Shannon's own activity, behind one interface.
@@ -127,6 +128,7 @@ export class GeminiAutonomyTextModel {
     const json = await jsonBody(response);
     if (!response.ok) throw new AutonomyModelError(`AUTONOMY_MODEL_HTTP_${response.status}`);
     const metadata = object(object(json)?.usageMetadata);
+    if(currentActionExecution()&&!metadata)throw new Error('AUTONOMY_MODEL_USAGE_UNKNOWN');
     // Reasoning tokens are billed as output.
     const inputTokens = count(metadata?.promptTokenCount);
     const cachedInputTokens = Math.min(inputTokens, count(metadata?.cachedContentTokenCount));
@@ -179,6 +181,7 @@ export class OpenAIAutonomyTextModel {
     }));
     const json = await jsonBody(response);
     if (!response.ok) throw new AutonomyModelError(`AUTONOMY_MODEL_HTTP_${response.status}`);
+    if(currentActionExecution()&&!object(object(json)?.usage))throw new Error('AUTONOMY_MODEL_USAGE_UNKNOWN');
     const reported = responseUsage(json);
     const usage = { inputTokens: reported.inputTokens, outputTokens: reported.outputTokens, ...(reported.cachedInputTokens ? { cachedInputTokens: reported.cachedInputTokens } : {}) };
     const text = openAIOutputText(json);
@@ -263,7 +266,11 @@ function signalFor(signal: AbortSignal | undefined, timeoutMilliseconds: number)
 }
 
 async function jsonBody(response: Response): Promise<unknown> {
-  try { return JSON.parse(await response.text()) as unknown; } catch { return null; }
+  // Stage 4 keeps lost transport/malformed usage uncertain. OFF retains the original empty-reply behavior.
+  const execution=currentActionExecution();
+  if(execution&&!response.ok){await response.body?.cancel().catch(()=>{});return null;}
+  try { return JSON.parse(await response.text()) as unknown; }
+  catch { if(execution)throw new Error('AUTONOMY_MODEL_RESPONSE_UNKNOWN');return null; }
 }
 
 function openAIOutputText(value: unknown): string {

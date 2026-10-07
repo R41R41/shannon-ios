@@ -154,6 +154,8 @@ export function adaptersFor(decision: Pick<AutonomyDecision, 'decision' | 'domai
 
 export interface StepResult {
   outcome: 'done' | 'failed';
+  /** True only for a closed outside result or a known not-sent refusal; false retains uncertain execution. */
+  acknowledged?:boolean;
   /** One plain Japanese sentence for the activity record. */
   summary: string;
   usage?: { inputTokens: number; outputTokens: number };
@@ -225,11 +227,11 @@ function prepareReading(dependencies: StepDependencies, cycle: AutonomyLoopCycle
   return {
     request: { domain: 'public_read', summary: `公開ページを1つ読みます（${host}）。`, tool: 'study.read', urls: [url] },
     async perform(adapters, _at, signal) {
-      if (!adapters.reader) return { outcome: 'failed', summary: '読む道具が渡されなかったため、読みませんでした。' };
+      if (!adapters.reader) return { outcome: 'failed', summary: '読む道具が渡されなかったため、読みませんでした。', acknowledged:true };
       try {
         const page = await adapters.reader.read(url, signal);
         return {
-          outcome: 'done', summary: `「${clip(page.title, 80)}」を読みました。`, ...(page.url.startsWith('https://') ? { link: page.url } : {}),
+          outcome: 'done', summary: `「${clip(page.title, 80)}」を読みました。`, acknowledged:true, ...(page.url.startsWith('https://') ? { link: page.url } : {}),
           commit: (remaining, at) => {
             const reading = dependencies.store.loop.addReading(cycle.scopeKey, {
               url: page.url, title: page.title, text: page.text, links: page.links, ...(step.pursuitId ? { pursuitId: step.pursuitId } : {}),
@@ -241,7 +243,7 @@ function prepareReading(dependencies: StepDependencies, cycle: AutonomyLoopCycle
       } catch (error) {
         const code = error instanceof Error ? error.message : '';
         return {
-          outcome: 'failed',
+          outcome: 'failed', acknowledged:knownReadRefusal(code),
           summary: code === 'AUTONOMY_READ_ROBOTS_DISALLOWED' ? `読まないでほしいと書かれていたので、読みませんでした（${host}）。`
             : code === 'AUTONOMY_READ_NOT_PUBLIC' ? `公開されている場所ではなかったので、読みませんでした（${host}）。`
             : `ページを読めませんでした（${host}）。`,
@@ -259,14 +261,14 @@ function prepareNotion(dependencies: StepDependencies, cycle: AutonomyLoopCycle,
   return {
     request: { domain: NOTION_READ_DOMAIN, summary: '持ち主が共有したNotionのページを1つ読みます。', tool: 'study.notion' },
     async perform(adapters, _at, signal) {
-      if (!adapters.notion) return { outcome: 'failed', summary: 'Notionを読む道具が渡されなかったため、読みませんでした。' };
+      if (!adapters.notion) return { outcome: 'failed', summary: 'Notionを読む道具が渡されなかったため、読みませんでした。', acknowledged:true };
       try {
         const page = await adapters.notion.read({ query, signal });
-        if (!page) return { outcome: 'failed', summary: '共有されたNotionに、探しているページは見つかりませんでした。' };
+        if (!page) return { outcome: 'failed', summary: '共有されたNotionに、探しているページは見つかりませんでした。', acknowledged:true };
         // A shared Notion page is the owner's (owner decision 5, ADR-0007): the session is marked, and so is the reading her note comes from.
         const wrote: string[] = [];
         return {
-          outcome: 'done', summary: `Notionの「${clip(page.title, 80)}」を読みました。`, documents: { informs: true, wrote },
+          outcome: 'done', summary: `Notionの「${clip(page.title, 80)}」を読みました。`, acknowledged:true, documents: { informs: true, wrote },
           commit: (remaining, at) => {
             const reading = dependencies.store.loop.addReading(cycle.scopeKey, {
               url: page.url, title: page.title, text: page.text.slice(0, 6_000), links: [], ...(step.pursuitId ? { pursuitId: step.pursuitId } : {}),
@@ -277,10 +279,15 @@ function prepareNotion(dependencies: StepDependencies, cycle: AutonomyLoopCycle,
           },
         };
       } catch {
-        return { outcome: 'failed', summary: 'Notionのページを読めませんでした。' };
+        return { outcome: 'failed', summary: 'Notionのページを読めませんでした。', acknowledged:false };
       }
     },
   };
+}
+
+function knownReadRefusal(code:string):boolean {
+  return /^AUTONOMY_READ_HTTP_[1-5][0-9]{2}$/u.test(code) || ['AUTONOMY_READ_URL_INVALID','AUTONOMY_READ_NOT_PUBLIC',
+    'AUTONOMY_READ_ROBOTS_DISALLOWED','AUTONOMY_READ_REDIRECT_LIMIT','AUTONOMY_READ_NOT_TEXT','AUTONOMY_READ_TOO_LARGE','AUTONOMY_READ_EMPTY'].includes(code);
 }
 
 function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep, at: string): PreparedStep | null {

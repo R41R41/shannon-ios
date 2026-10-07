@@ -117,10 +117,24 @@ export class CodexTaskBridge {
     await this.options.client.start();
     this.started = true;
     for (const session of this.options.state.resumableSessions()) {
+      if (session.pendingTerminalEvent) { await this.publishPendingTerminal(session); continue; }
       try {
-        await this.commands.attach(session);
+        const runtime = await this.commands.attach(session);
+        if (runtime.recoveredTurn) {
+          await this.completeTurn(runtime, runtime.recoveredTurn);
+          runtime.recoveredTurn = undefined;
+        } else if (runtime.executionUncertain && runtime.actionLease) {
+          await this.events.emit(session.taskId, 'progress', '作業結果を確認できない', undefined, {
+            currentAction: '作業環境の応答を確認中', executionUncertain: true,
+          });
+        }
       } catch (error) {
-        await this.events.emit(session.taskId, 'failed', '作業へ再接続できない', friendlyError(error));
+        if (session.actionLease) {
+          this.options.state.updateSession(session.taskId, { executionUncertain: true });
+          await this.events.emit(session.taskId, 'progress', '作業へ再接続できない', friendlyError(error), {
+            currentAction: '作業環境の応答を確認中', executionUncertain: true,
+          });
+        } else await this.events.emit(session.taskId, 'failed', '作業へ再接続できない', friendlyError(error));
       }
     }
   }
@@ -141,7 +155,7 @@ export class CodexTaskBridge {
   async checkExecutionRights(): Promise<void> {
     if (!this.options.permit) return;
     for (const session of this.options.state.resumableSessions()) {
-
+      if (session.pendingTerminalEvent) { await this.publishPendingTerminal(session); continue; }
       let allowed = false;
       try { allowed = await this.options.permit(session.taskId); } catch { /* unavailable: stop */ }
       if (!allowed) await this.commands.handle({id:`lease-stop-${session.actionLease?.id ?? session.taskId}`,taskId:session.taskId,
@@ -163,6 +177,10 @@ export class CodexTaskBridge {
     if (!['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/permissions/requestApproval']
       .includes(request.method)) {
       this.options.client.respondError(request.id, -32601, 'Unsupported request');
+      return;
+    }
+    if (runtime.actionLease && (!runtime.turnId || stringValue(params.turnId) !== runtime.turnId || runtime.stopRequested)) {
+      this.options.client.respondError(request.id, -32602, 'Inactive Shannon turn');
       return;
     }
 
@@ -194,10 +212,14 @@ export class CodexTaskBridge {
     const params = notification.params ?? {};
     const runtime = this.runtimes.fromParams(params);
     if (!runtime) return;
+    const eventTurnId = stringValue(params.turnId);
+    if (runtime.actionLease && eventTurnId && eventTurnId !== runtime.turnId) return;
     switch (notification.method) {
       case 'turn/started': {
         const turn = objectValue(params.turn);
-        runtime.turnId = stringValue(turn?.id) ?? runtime.turnId;
+        const incomingId = stringValue(turn?.id);
+        if (runtime.turnId && incomingId && runtime.turnId !== incomingId) break;
+        runtime.turnId = incomingId ?? runtime.turnId;
         this.runtimes.save(runtime);
         break;
       }
@@ -250,7 +272,12 @@ export class CodexTaskBridge {
             currentAction: 'Codexへ再接続中',
           }, 'warning');
         } else if (!runtime.suppressTerminalEvent) {
-          await this.events.emit(runtime.taskId, 'failed', 'Codexで問題が発生', errorMessage(params));
+          if (runtime.actionLease) {
+            runtime.executionUncertain = true; this.runtimes.save(runtime);
+            await this.events.emit(runtime.taskId, 'progress', 'Codexで問題が発生', errorMessage(params), {
+              currentAction: '作業環境の応答を確認中', executionUncertain: true,
+            });
+          } else await this.events.emit(runtime.taskId, 'failed', 'Codexで問題が発生', errorMessage(params));
         }
         break;
       case 'turn/completed':
@@ -330,25 +357,32 @@ export class CodexTaskBridge {
 
   private async completeTurn(runtime: RuntimeTask, turn: Record<string, unknown> | undefined): Promise<void> {
     const incomingId=stringValue(turn?.id);
+    if (runtime.actionLease && (!incomingId || !runtime.turnId)) return;
     if(incomingId && runtime.turnId && incomingId!==runtime.turnId)return;
+    if (runtime.actionLease) await this.flushCommandOutput(runtime.taskId);
     const status = stringValue(turn?.status);
-    runtime.turnId = undefined;
-    runtime.approvals.clear();
-    runtime.pendingApprovalExternalRequestID = undefined;
-    this.runtimes.save(runtime);
-    if (runtime.suppressTerminalEvent && !runtime.stopRequested) {
+    if (!runtime.actionLease) {
+      runtime.turnId = undefined;runtime.executionUncertain = false;runtime.approvals.clear();
+      runtime.pendingApprovalExternalRequestID = undefined;this.runtimes.save(runtime);
+    }
+    if (runtime.suppressTerminalEvent && !runtime.stopRequested && !runtime.actionLease) {
       runtime.suppressTerminalEvent = false;
       return;
     }
     runtime.suppressTerminalEvent=false;
     if (runtime.stopRequested) {
-      runtime.stopRequested=false;this.runtimes.save(runtime);
-      await this.events.emit(runtime.taskId,'paused','作業を一時停止','作業環境から停止の応答が届きました。',{pauseReason:'owner'});
+      runtime.stopRequested=false;
+      await this.emitTurnTerminal(runtime,'paused','作業を一時停止','作業環境から停止の応答が届きました。',{pauseReason:'owner'});
       return;
     }
-    if (status === 'interrupted') return;
+    if (status === 'interrupted') {
+      if (runtime.actionLease) await this.emitTurnTerminal(runtime, 'paused', '作業を中断', '作業環境から中断の応答が届きました。', {
+        pauseReason: 'needs_owner', currentAction: '続ける場合は再開してください。',
+      });
+      return;
+    }
     if (status === 'failed') {
-      await this.events.emit(runtime.taskId, 'failed', 'Codexの作業が停止', errorMessage(turn ?? {}));
+      await this.emitTurnTerminal(runtime, 'failed', 'Codexの作業が停止', errorMessage(turn ?? {}));
       return;
     }
     if (status === 'completed') {
@@ -357,7 +391,7 @@ export class CodexTaskBridge {
       const payload = { changes: [...runtime.changes.values()], tests };
       const failedVerification = tests.find(test => test.status === 'failed');
       if (failedVerification) {
-        await this.events.emit(runtime.taskId, 'paused', '検証が残っています',
+        await this.emitTurnTerminal(runtime, 'paused', '検証が残っています',
           result?.summary ?? compact(runtime.lastAgentMessage) ?? '自動検証で問題が見つかりました。', {
             ...payload, pauseReason: 'needs_owner',
             currentAction: result?.remainingAction ?? `${failedVerification.name}を修正して再実行`,
@@ -365,7 +399,7 @@ export class CodexTaskBridge {
         return;
       }
       if (!result) {
-        await this.events.emit(runtime.taskId, 'paused', '完了条件を確認できません',
+        await this.emitTurnTerminal(runtime, 'paused', '完了条件を確認できません',
           compact(runtime.lastAgentMessage) ?? 'Codexのターンは終了しましたが、作業の完了条件を確認できませんでした。', {
             ...payload, pauseReason: 'needs_owner',
             currentAction: '変更・検証・配備の残作業を確認',
@@ -373,18 +407,40 @@ export class CodexTaskBridge {
         return;
       }
       if (result.status === 'failed') {
-        await this.events.emit(runtime.taskId, 'failed', '作業を完了できません', result.summary, payload);
+        await this.emitTurnTerminal(runtime, 'failed', '作業を完了できません', result.summary, payload);
         return;
       }
       if (result.status === 'paused') {
-        await this.events.emit(runtime.taskId, 'paused', '続きが必要です', result.summary, {
+        await this.emitTurnTerminal(runtime, 'paused', '続きが必要です', result.summary, {
           ...payload, pauseReason: 'needs_owner',
           currentAction: result.remainingAction ?? '残っている工程を確認',
         });
         return;
       }
-      await this.events.emit(runtime.taskId, 'completed', '作業が完了', result.summary, payload);
+      await this.emitTurnTerminal(runtime, 'completed', '作業が完了', result.summary, payload);
     }
+  }
+
+  private async emitTurnTerminal(runtime: RuntimeTask, type: 'paused'|'completed'|'failed', title: string, detail?: string, payload?: Record<string, unknown>): Promise<void> {
+    if (!runtime.actionLease) { await this.events.emit(runtime.taskId,type,title,detail,payload); return; }
+    const event = this.events.event(runtime.taskId,type,title,detail,{...payload,actionLease:runtime.actionLease});
+    // The original result and clearing its live turn are one durable JSON write.
+    // A crash before broker enqueue still leaves this exact event for recovery.
+    runtime.pendingTerminalEvent=event;runtime.turnId=undefined;runtime.executionUncertain=false;
+    runtime.stopRequested=false;runtime.approvals.clear();runtime.pendingApprovalExternalRequestID=undefined;
+    this.runtimes.save(runtime);
+    if (await this.events.publishReliable([event])) this.clearPendingTerminal(runtime.taskId,event.eventId);
+  }
+
+  private async publishPendingTerminal(session: PersistedAgentSession): Promise<void> {
+    if (session.pendingTerminalEvent && await this.events.publishReliable([session.pendingTerminalEvent])) {
+      this.clearPendingTerminal(session.taskId,session.pendingTerminalEvent.eventId);
+    }
+  }
+
+  private clearPendingTerminal(taskId: string,eventId: string): void {
+    if (this.options.state.session(taskId)?.pendingTerminalEvent?.eventId===eventId) this.options.state.updateSession(taskId,{pendingTerminalEvent:undefined});
+    const runtime=this.runtimes.get(taskId);if(runtime?.pendingTerminalEvent?.eventId===eventId)runtime.pendingTerminalEvent=undefined;
   }
 
   private diagnostic(error: unknown): void {

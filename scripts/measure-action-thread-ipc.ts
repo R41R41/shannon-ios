@@ -28,5 +28,5 @@ try{
     if(index>=20){samples.push(perception);admission.push(accepted);}
   }
   const summary=(values:number[])=>{values.sort((a,b)=>a-b);return {samples:values.length,p50Ms:values[Math.floor(values.length*.50)],p95Ms:values[Math.floor(values.length*.95)],maxMs:values.at(-1)};};
-  console.log(JSON.stringify({environment:'local macOS, isolated synthetic warm IPC; VM verification still required',workspace:summary(samples),foregroundAdmission:summary(admission)},null,2));
+  console.log(JSON.stringify({environment:`${process.platform}; isolated synthetic warm IPC`,workspace:summary(samples),foregroundAdmission:summary(admission)},null,2));
 }finally{remote.close();client.close();await worker.close();await rm(directory,{recursive:true,force:true});}

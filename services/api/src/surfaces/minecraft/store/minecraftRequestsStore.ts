@@ -25,7 +25,9 @@ export class MinecraftBodyRequests {
     try { return await this.execution.heartbeat(scopeKey,id); } catch { return false; }
   }
   async acknowledgeExecution(scopeKey: string,id: string,state:'completed'|'failed'|'cancelled'):Promise<void> {
-    await this.execution?.acknowledge(scopeKey,id,state);
+    // report() persisted the first authenticated result. A retry must use that
+    // result, not replace it with the retry's possibly contradictory outcome.
+    await this.flushExecutionAcknowledgements(scopeKey);
   }
   /** Experiences of requests closed in the open transaction, written after it commits (the experience table is another connection's). */
   private pendingExperiences: Array<{ scopeKey: string; experience: GameExperience }> = [];
@@ -63,6 +65,10 @@ export class MinecraftBodyRequests {
         scope_key TEXT PRIMARY KEY,
         device_id TEXT NOT NULL,
         seen_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS minecraft_execution_acknowledgements (
+        request_id TEXT PRIMARY KEY, scope_key TEXT NOT NULL, state TEXT NOT NULL,
+        delivered INTEGER NOT NULL DEFAULT 0
       );
     `);
     secureDatabaseFiles(path);
@@ -115,6 +121,10 @@ export class MinecraftBodyRequests {
     if (deviceId !== this.configuration.deviceId) return 'DEVICE_DENIED';
     if (!this.configuredFor(scopeKey)) return 'SCOPE_DENIED';
     this.markSeen(scopeKey, deviceId);
+    if (this.execution) {
+      this.recordAbandonedRequests(scopeKey, deviceId, input.holding);
+      try { await this.flushExecutionAcknowledgements(scopeKey); } catch { /* locks remain until the next authenticated handshake */ }
+    }
     const deadline = Date.parse(this.now()) + Math.min(MINECRAFT_REQUEST_LIMITS.claimMaximumWaitSeconds, Math.max(0, input.waitSeconds)) * 1_000;
     try {
       for (;;) {
@@ -161,9 +171,17 @@ export class MinecraftBodyRequests {
       const row = this.row(scopeKey, id);
       if (!row || !row.device_id || row.device_id !== deviceId) return 'NOT_FOUND' as const;
       this.markSeen(scopeKey, deviceId);
-      if (!OPEN_REQUEST_STATES.includes(row.state)) return { id, state: row.state, recorded: false };
+      if (!OPEN_REQUEST_STATES.includes(row.state)) {
+        if (this.execution) {
+          const known = parseJson<MinecraftRequestResult>(row.result_json) ?? result;
+          this.queueExecutionAcknowledgement(row, row.state === 'done' ? 'completed' : row.state === 'failed' ? 'failed'
+            : row.state === 'cancelled' || known.outcome === 'stopped' ? 'cancelled' : known.outcome === 'done' ? 'completed' : 'failed');
+        }
+        return { id, state: row.state, recorded: false };
+      }
       const state: MinecraftRequestState = result.outcome === 'done' ? 'done' : result.outcome === 'stopped' || row.cancel_requested === 1 ? 'cancelled' : 'failed';
       this.finish(row, state, at, result);
+      if (this.execution) this.queueExecutionAcknowledgement(row, state === 'done' ? 'completed' : state === 'cancelled' ? 'cancelled' : 'failed');
       return { id, state, recorded: true };
     });
     return closed;
@@ -244,9 +262,14 @@ export class MinecraftBodyRequests {
       this.transaction(() => {
         const scopes = this.database.prepare(`SELECT DISTINCT scope_key FROM minecraft_body_requests WHERE state IN ('queued', 'claimed', 'running')`).all() as Array<{ scope_key: string }>;
         for (const { scope_key: scopeKey } of scopes) this.sweep(scopeKey, at);
-        this.database.prepare('DELETE FROM minecraft_body_requests WHERE finished_at IS NOT NULL AND finished_at < ?')
+        const acknowledged = this.execution ? `AND (claimed_at IS NULL OR EXISTS (
+          SELECT 1 FROM minecraft_execution_acknowledgements a WHERE a.request_id=minecraft_body_requests.id AND a.delivered=1))` : '';
+        this.database.prepare(`DELETE FROM minecraft_body_requests WHERE finished_at IS NOT NULL AND finished_at < ? ${acknowledged}`)
           .run(new Date(Date.parse(at) - MINECRAFT_REQUEST_LIMITS.keepDays * 86_400_000).toISOString());
+        this.database.prepare(`DELETE FROM minecraft_execution_acknowledgements WHERE delivered=1
+          AND request_id NOT IN (SELECT id FROM minecraft_body_requests)`).run();
       });
+      void this.flushExecutionAcknowledgements(this.configuration.ownerScopeKey).catch(() => {});
     } catch { /* the next tick tries again */ }
   }
 
@@ -291,6 +314,39 @@ export class MinecraftBodyRequests {
     });
   }
 
+  /** `holding` is the authenticated body's complete set of running requests.
+   * Its omission acknowledges abandonment, including a request already expired
+   * by silence. Silence alone never produces this acknowledgement. */
+  private recordAbandonedRequests(scopeKey: string, deviceId: string, holding: readonly string[]): void {
+    const at = this.now();
+    this.transaction(() => {
+      const rows = this.database.prepare(`SELECT r.* FROM minecraft_body_requests r
+        LEFT JOIN minecraft_execution_acknowledgements a ON a.request_id=r.id
+        WHERE r.scope_key=? AND r.device_id=? AND r.claimed_at IS NOT NULL
+          AND r.state IN ('claimed','running','expired','cancelled') AND a.request_id IS NULL`).all(scopeKey,deviceId) as unknown as Row[];
+      for (const row of rows) {
+        if (holding.includes(row.id)) continue;
+        if (OPEN_REQUEST_STATES.includes(row.state)) this.finish(row, row.cancel_requested ? 'cancelled' : 'expired', at);
+        this.queueExecutionAcknowledgement(row, 'cancelled');
+      }
+    });
+  }
+
+  private queueExecutionAcknowledgement(row: Row, state: 'completed'|'failed'|'cancelled'): void {
+    this.database.prepare(`INSERT OR IGNORE INTO minecraft_execution_acknowledgements(request_id,scope_key,state)
+      VALUES(?,?,?)`).run(row.id,row.scope_key,state);
+  }
+
+  private async flushExecutionAcknowledgements(scopeKey: string): Promise<void> {
+    if (!this.execution) return;
+    const pending = this.database.prepare(`SELECT request_id,state FROM minecraft_execution_acknowledgements
+      WHERE scope_key=? AND delivered=0`).all(scopeKey) as Array<{request_id:string;state:'completed'|'failed'|'cancelled'}>;
+    for (const ack of pending) {
+      await this.execution.acknowledge(scopeKey,ack.request_id,ack.state);
+      this.database.prepare('UPDATE minecraft_execution_acknowledgements SET delivered=1 WHERE request_id=?').run(ack.request_id);
+    }
+  }
+
   /** Closes leases that ran out, queued requests nobody took, and requests open too long. */
   private sweep(scopeKey: string, at: string): void {
     const time = Date.parse(at);
@@ -311,6 +367,9 @@ export class MinecraftBodyRequests {
       UPDATE minecraft_body_requests SET state = ?, result_json = COALESCE(?, result_json), finished_at = ?, updated_at = ?, lease_until = NULL
       WHERE id = ? AND state IN ('queued', 'claimed', 'running')
     `).run(state, result ? JSON.stringify(result) : null, at, at, row.id);
+    if (Number(changed.changes) && this.execution && !row.claimed_at && ['cancelled','expired'].includes(state)) {
+      this.queueExecutionAcknowledgement(row, 'cancelled');
+    }
     if (!Number(changed.changes) || !row.claimed_at || !this.experiences) return;
     const closed = this.row(row.scope_key, row.id);
     if (closed) this.pendingExperiences.push({ scopeKey: row.scope_key, experience: requestExperience(row.scope_key, this.configuration.deviceId, view(closed)) });

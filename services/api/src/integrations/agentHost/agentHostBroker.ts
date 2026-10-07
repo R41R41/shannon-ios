@@ -61,7 +61,7 @@ export class AgentHostBrokerClient {
   async publish(events: readonly HostAgentEvent[]): Promise<void> {
     this.state.enqueueEvents(events.map(event => {
       const lease=this.state.session(event.taskId)?.actionLease;
-      return lease ? {...event,payload:{...event.payload,actionLease:lease}} : event;
+      return lease && !event.payload?.actionLease ? {...event,payload:{...event.payload,actionLease:lease}} : event;
     }));
     await this.flush();
   }

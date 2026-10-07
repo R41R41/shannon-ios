@@ -43,7 +43,13 @@ export class CodexTaskCommandController {
         case 'resolve_approval': await this.resolveApproval(command); break;
       }
     } catch (error) {
-      await this.events.emit(command.taskId, 'failed', '作業を続けられない', friendlyError(error));
+      const runtime = this.runtimes.get(command.taskId);
+      if (runtime?.actionLease && (runtime.turnId || runtime.executionUncertain)) {
+        runtime.executionUncertain = true; this.runtimes.save(runtime);
+        await this.events.emit(command.taskId, 'progress', '作業結果を確認できない', friendlyError(error), {
+          currentAction: '作業環境の応答を確認中', executionUncertain: true,
+        });
+      } else await this.events.emit(command.taskId, 'failed', '作業を続けられない', friendlyError(error));
     } finally {
       await this.events.publish([this.events.event(command.taskId, 'command_completed', '命令を作業環境へ反映', undefined, {
         commandId: command.id,
@@ -97,11 +103,14 @@ export class CodexTaskCommandController {
     const instruction = stringValue(command.payload.instruction);
     if (!instruction) throw new Error('追加の指示が空です。');
     if (runtime.turnId) {
+      if (runtime.actionLease && this.options.permit && !await this.options.permit(runtime.taskId)) throw new Error('ACTION_STOPPED');
+      if (runtime.actionLease) { runtime.executionUncertain = true; this.runtimes.save(runtime); }
       await this.options.client.request('turn/steer', {
         threadId: runtime.threadId,
         expectedTurnId: runtime.turnId,
         input: [{ type: 'text', text: instruction }],
       });
+      if (runtime.actionLease) { runtime.executionUncertain = false; this.runtimes.save(runtime); }
     } else {
       runtime.turnId = await this.startTurn(runtime, instruction);
       this.runtimes.save(runtime);
@@ -115,8 +124,15 @@ export class CodexTaskCommandController {
     const runtime = await this.ensureRuntime(command.taskId);
     const cancel = command.payload.cancel === true || command.payload.cancel === 'true';
     runtime.suppressTerminalEvent = cancel;
+    if (runtime.actionLease && runtime.executionUncertain && !runtime.turnId) {
+      runtime.stopRequested = true; this.runtimes.save(runtime);
+      await this.events.emit(command.taskId, 'progress', '停止の応答を確認できない', undefined, {
+        currentAction: '作業環境の応答を確認中', executionUncertain: true,
+      });
+      return;
+    }
     if (runtime.turnId) {
-      if(runtime.actionLease)runtime.stopRequested=true;
+      if(runtime.actionLease){runtime.stopRequested=true;this.runtimes.save(runtime);}
       await this.options.client.request('turn/interrupt', { threadId: runtime.threadId, turnId: runtime.turnId });
     }
     if(runtime.actionLease && runtime.turnId)return; // Wait for the turn/completed acknowledgement.
@@ -174,11 +190,13 @@ export class CodexTaskCommandController {
       // The task store predates per-operation deny and has already cancelled the task: stop the turn too.
       runtime.suppressTerminalEvent = true;
       if (runtime.turnId) {
+        if (runtime.actionLease) { runtime.stopRequested = true; this.runtimes.save(runtime); }
         await this.options.client.request('turn/interrupt', {
           threadId: runtime.threadId,
           turnId: runtime.turnId,
-        }).catch(() => undefined);
+        }).catch(error => { if (runtime.actionLease) throw error; });
       }
+      if (runtime.actionLease && (runtime.turnId || runtime.executionUncertain)) return;
       runtime.turnId = undefined;
       runtime.pendingApprovalExternalRequestID = undefined;
       this.runtimes.save(runtime);
@@ -202,7 +220,7 @@ export class CodexTaskCommandController {
   async attach(session: PersistedAgentSession): Promise<RuntimeTask> {
     const project = this.options.config.projects.get(session.projectKey);
     if (!project || project.path !== session.cwd) throw new Error('保存済みプロジェクトが現在の許可一覧にありません。');
-    if (session.pendingApprovalExternalRequestID) {
+    if (session.pendingApprovalExternalRequestID && !session.actionLease) {
       // A Codex approval is tied to the live app-server request. Reusing a thread whose
       // approval request disappeared can leave an unmatched tool call in its history,
       // so recover the durable Shannon task in a clean Codex thread instead.
@@ -244,6 +262,15 @@ export class CodexTaskCommandController {
     const activeTurn = result.thread?.turns?.find(turn => turn.status === 'inProgress');
     const activeTurnID = stringValue(activeTurn?.id)
       ?? (result.thread?.status?.type === 'active' ? session.turnId : undefined);
+    if (session.actionLease && !activeTurnID && (session.turnId || session.executionUncertain || session.pendingApprovalExternalRequestID)) {
+      // A missing live turn is not proof that it never ran. Recover only the original
+      // recorded turn's canonical terminal result; never start a replacement here.
+      const original = result.thread?.turns?.find(turn => turn.id === session.turnId);
+      if (original && ['completed', 'failed', 'interrupted'].includes(String(original.status))) {
+        runtime.recoveredTurn = original;
+      } else { runtime.executionUncertain = true; this.runtimes.save(runtime); }
+      return runtime;
+    }
     if (!activeTurnID && session.turnId) {
       runtime.turnId = await this.startTurn(runtime, recoveryPrompt(
         project, this.options.config, runtime.taskId, false, session.goal,
@@ -269,6 +296,9 @@ export class CodexTaskCommandController {
 
   private async startTurn(runtime: RuntimeTask, text: string): Promise<string> {
     if(this.options.permit && !await this.options.permit(runtime.taskId))throw new Error('ACTION_STOPPED');
+    // Persist the uncertainty before crossing the process boundary. Losing only
+    // the response must not turn a paid, still-running turn into a known failure.
+    if (runtime.actionLease) { runtime.executionUncertain = true; this.runtimes.save(runtime); }
     const result = await this.options.client.request<CodexTurnResult>('turn/start', {
       threadId: runtime.threadId,
       input: [{ type: 'text', text }],
@@ -279,6 +309,7 @@ export class CodexTaskCommandController {
     });
     const turnId = stringValue(result.turn?.id);
     if (!turnId) throw new Error('Codexが作業ターンを開始できませんでした。');
+    if (runtime.actionLease) { runtime.turnId = turnId; runtime.executionUncertain = false; this.runtimes.save(runtime); }
     return turnId;
   }
 }

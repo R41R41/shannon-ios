@@ -2,13 +2,21 @@ import { afterEach, expect, it } from 'vitest';
 import { OwnTimeActionRunner, foregroundRunner } from '../src/wiring/actionExecutionWiring.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { FULL_PLAN, loopHarness } from './autonomyLoopHarness.js';
+import { GeminiAutonomyTextModel, OpenAIAutonomyTextModel } from '../src/mind/action/ownTime/autonomyTextModel.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { ShannonAutonomyLoop } from '../src/mind/action/ownTime/autonomyLoop.js';
+import { AutonomyToolResults } from '../src/mind/action/ownTime/autonomyLoopToolStep.js';
 const cleanups:Array<()=>void>=[];
 afterEach(()=>cleanups.splice(0).reverse().forEach(close=>close()));
-function fixture(){
+function fixture(path?:string,ownTools=false){
   const clock={at:'2026-10-07T01:00:00.000Z'},h=actionHarness(()=>clock.at),runner=new OwnTimeActionRunner(h.actions);
-  const loop=loopHarness({clock,actionSteps:runner,concurrentActions:true});
+  const loop=loopHarness({clock,actionSteps:runner,concurrentActions:true,path,toolResults:ownTools?new AutonomyToolResults():undefined});
   cleanups.push(h.close,()=>runner.close(),()=>loop.store.close());
-  return {...h,...loop,runner};
+  return {...h,...loop,runner,actionStore:h.store};
 }
 it('continues her own work while the owner talks through an independent foreground slot',async()=>{
   const h=fixture();h.showing.ownerActive=true;h.model.plans=[FULL_PLAN];
@@ -57,6 +65,133 @@ it('retains unknown execution when a stopped model request loses its acknowledge
   expect(await h.actions.resume('owner',unknown.id)).toBeFalsy();
   expect(await h.loop.tick()).toBe('thread-wait');
   expect(h.model.calls).toHaveLength(1);
+});
+it('recovers an acknowledged stopped thought after lease expiry without replaying its withheld plan',async()=>{
+  const h=fixture();h.model.plans=[FULL_PLAN];
+  const seeds=h.store.pursuits.list('owner',h.clock.at).map(p=>p.id);
+  h.model.during=async()=>{
+    const own=(await h.actions.list('owner')).find(a=>a.kind==='ownTime')!;
+    await h.actions.stop('owner',own.id,'late-stop');
+    // The provider returns after expiry, before the mind worker's next periodic sweep.
+    h.advance(31_000);
+  };
+  expect(await h.loop.tick()).toBe('stepped');
+  const stopped=(await h.actions.list('owner')).find(a=>a.kind==='ownTime')!;
+  expect(stopped).toMatchObject({state:'cancelled',generation:2,result:'stop_acknowledged'});
+  expect(h.store.pursuits.list('owner',h.clock.at).map(p=>p.id)).toEqual(seeds);
+  expect(h.service.overview('owner').budget.spentYen).toBeGreaterThan(0);
+  expect(h.db.prepare('SELECT state FROM mind_action_budget').all()).toEqual([{state:'settled'}]);
+  expect(await h.actions.resume('owner',stopped.id)).toBe(true);
+  h.model.during=undefined;
+  expect(await h.loop.tick()).toBe('cycle-ended');
+  expect(h.model.calls).toHaveLength(1);
+});
+it('retains an uncertain provider call and its estimate even without an owner stop',async()=>{
+  const h=fixture();h.model.during=()=>{throw new Error('connection lost');};
+  expect(await h.loop.tick()).toBe('stepped');
+  const unknown=(await h.actions.list('owner')).find(a=>a.kind==='ownTime')!;
+  expect(unknown).toMatchObject({state:'unknown',result:'model_result_unknown'});
+  expect(h.db.prepare('SELECT state FROM mind_action_budget').all()).toEqual([{state:'held'}]);
+  expect(await h.actions.resume('owner',unknown.id)).toBe(false);
+  expect(await h.loop.tick()).toBe('thread-wait');
+  expect(h.model.calls).toHaveLength(1);
+});
+it.each([false,true])('recovers only the durable acknowledgement after an IPC loss and worker replacement (answer lost: %s)',async(answerLost)=>{
+  const directory=mkdtempSync(join(tmpdir(),'shannon-action-ack-'));cleanups.push(()=>rmSync(directory,{recursive:true,force:true}));
+  const path=join(directory,'canonical.sqlite'),h=fixture(path);h.model.plans=[FULL_PLAN];
+  const acknowledge=h.actions.acknowledge,finish=h.actions.finish;
+  h.model.during=async()=>{
+    const own=(await h.actions.list('owner')).find(a=>a.kind==='ownTime')!;
+    await h.actions.stop('owner',own.id,'ipc-stop');
+    h.actions.acknowledge=async report=>{if(answerLost)await acknowledge(report);throw new Error('IPC lost');};
+    h.actions.finish=async()=>{throw new Error('IPC lost');};
+  };
+  expect(await h.loop.tick()).toBe('stepped');
+  const spent=h.service.overview('owner').budget.spentYen;
+  expect(spent).toBeGreaterThan(0);expect(h.store.pendingActionAcknowledgements('owner')).toHaveLength(1);
+  h.runner.close();h.advance(Math.max(31_000,h.loopConfig.leaseMilliseconds+1));h.actionStore.transaction(()=>h.actionStore.sweep(h.clock.at));
+  h.actions.acknowledge=acknowledge;h.actions.finish=finish;
+  // Reopen the canonical database: recovery cannot depend on the old runner's memory.
+  const store=new SQLiteAutonomyStore(path),runner=new OwnTimeActionRunner(h.actions);
+  const service=new ShannonAutonomyService({store,config:h.config,now:()=>h.clock.at});
+  const replacement=new ShannonAutonomyLoop({store,service,config:h.config,loop:h.loopConfig,model:h.model,reader:h.reader,
+    showing:h.showing,now:()=>h.clock.at,workerId:'replacement',actionSteps:runner,concurrentActions:true});
+  cleanups.push(()=>store.close(),()=>runner.close());
+  expect(await replacement.tick()).toBe('thread-wait');
+  const stopped=(await h.actions.list('owner')).find(a=>a.kind==='ownTime')!;
+  expect(stopped.state).toBe('cancelled');expect(store.pendingActionAcknowledgements('owner')).toHaveLength(0);
+  expect(h.db.prepare('SELECT state FROM mind_action_budget').all()).toEqual([{state:'settled'}]);
+  expect(service.overview('owner').budget.spentYen).toBe(spent);
+  expect(h.model.calls).toHaveLength(1);
+  expect(await h.actions.resume('owner',stopped.id)).toBe(true);
+});
+it.each([null,'AUTONOMY_READ_NOT_PUBLIC'])('acknowledges a stopped read only after its known result or not-sent refusal (%s)',async(failure)=>{
+  const h=fixture();h.model.plans=[FULL_PLAN];await h.loop.tick();
+  const read=h.reader.read.bind(h.reader);h.reader.failure=failure;
+  h.reader.read=async url=>{
+    const own=(await h.actions.list('owner')).find(a=>a.kind==='ownTime')!;
+    await h.actions.stop('owner',own.id,'read-stop');return read(url);
+  };
+  expect(await h.loop.tick()).toBe('stepped');
+  const stopped=(await h.actions.list('owner')).find(a=>a.kind==='ownTime')!;
+  expect(stopped.state).toBe('cancelled');expect(h.store.loop.wasRead('owner','https://example.org/station')).toBe(false);
+  expect(await h.actions.resume('owner',stopped.id)).toBe(true);expect(h.reader.reads).toHaveLength(1);
+});
+it('retains an uncertain read without clearing its execution rights or replaying it',async()=>{
+  const h=fixture();h.model.plans=[FULL_PLAN];await h.loop.tick();h.reader.failure='connection lost';
+  expect(await h.loop.tick()).toBe('stepped');
+  const unknown=(await h.actions.list('owner')).find(a=>a.kind==='ownTime')!;
+  expect(unknown).toMatchObject({state:'unknown',result:'step_result_unknown'});
+  expect(await h.actions.resume('owner',unknown.id)).toBe(false);
+  expect(await h.loop.tick()).toBe('thread-wait');expect(h.reader.reads).toHaveLength(1);
+});
+it('acknowledges a normally returned tool after stop without running the tool again',async()=>{
+  const h=fixture(undefined,true);h.model.plans=[{thought:'書斎を見ます。',pursuits:[],steps:[{action:'tool',name:'study.list',input:{}}]}];
+  expect(await h.loop.tick()).toBe('stepped');
+  const prepare=h.service.tools.prepare.bind(h.service.tools);let runs=0;
+  h.service.tools.prepare=(...args)=>{
+    const ready=prepare(...args);if('result' in ready)return ready;
+    const prepared=ready.prepared;
+    return {...ready,prepared:{...prepared,run:async signal=>{
+      const result=await prepared.run(signal);runs++;
+      const own=(await h.actions.list('owner')).find(a=>a.kind==='ownTime')!;
+      await h.actions.stop('owner',own.id,'tool-stop');return result;
+    }}};
+  };
+  expect(await h.loop.tick()).toBe('stepped');
+  const stopped=(await h.actions.list('owner')).find(a=>a.kind==='ownTime')!;
+  expect(stopped.state).toBe('cancelled');expect(await h.actions.resume('owner',stopped.id)).toBe(true);
+  expect(runs).toBe(1);expect(h.model.calls).toHaveLength(1);
+});
+it('settles a known draft model call after stop while withholding its product',async()=>{
+  const h=fixture();h.model.plans=[{thought:'物語を書きます。',pursuits:[],steps:[{action:'draft',idea:'合成の話'}]}];
+  await h.loop.tick();const before=h.service.overview('owner').budget.spentYen;
+  h.model.during=async()=>{const own=(await h.actions.list('owner')).find(a=>a.kind==='ownTime')!;await h.actions.stop('owner',own.id,'draft-stop');};
+  expect(await h.loop.tick()).toBe('stepped');
+  const stopped=(await h.actions.list('owner')).find(a=>a.kind==='ownTime')!;
+  expect(stopped.state).toBe('cancelled');expect(h.store.study.list('owner')).toHaveLength(0);
+  expect(h.service.overview('owner').budget.spentYen).toBeGreaterThan(before);
+  expect(h.db.prepare('SELECT state FROM mind_action_budget').all()).toEqual([{state:'settled'},{state:'settled'}]);
+  expect(await h.actions.resume('owner',stopped.id)).toBe(true);expect(h.model.calls).toHaveLength(2);
+});
+it.each([['google',GeminiAutonomyTextModel],['openai',OpenAIAutonomyTextModel]] as const)('keeps an HTTP 200 response with a lost body unknown and charges its estimate (%s)',async(_provider,Provider)=>{
+  const h=fixture(),provider=new Provider({apiKey:'synthetic-only',fetcher:async()=>new Response(new ReadableStream({
+    start(controller){controller.error(new Error('connection lost after headers'));},
+  }),{status:200})});
+  h.model.generate=async request=>{h.model.calls.push(request);return provider.generate(request);};
+  expect(await h.loop.tick()).toBe('stepped');
+  const unknown=(await h.actions.list('owner')).find(a=>a.kind==='ownTime')!;
+  expect(unknown.state).toBe('unknown');expect(h.service.overview('owner').budget.spentYen).toBeGreaterThan(0);
+  expect(h.db.prepare('SELECT state FROM mind_action_budget').all()).toEqual([{state:'held'}]);
+  expect(h.store.pendingActionAcknowledgements('owner')).toHaveLength(0);
+  expect(await h.loop.tick()).toBe('thread-wait');expect(h.model.calls).toHaveLength(1);
+});
+it.each([['google',GeminiAutonomyTextModel],['openai',OpenAIAutonomyTextModel]] as const)('preserves the pre-Stage-4 lost-body empty reply and zero usage (%s)',async(_provider,Provider)=>{
+  const provider=new Provider({apiKey:'synthetic-only',fetcher:async()=>new Response(new ReadableStream({
+    start(controller){controller.error(new Error('connection lost after headers'));},
+  }),{status:200})});
+  await expect(provider.generate({model:'synthetic',system:'s',prompt:'p',maximumOutputTokens:10}))
+    .rejects.toMatchObject({code:'AUTONOMY_MODEL_EMPTY',usage:{inputTokens:0,outputTokens:0}});
 });
 it('serializes recovery conversations locally and grants no outside write during disconnection',async()=>{
   const h=fixture(),run=foregroundRunner({...h.actions,enqueue:async()=>{throw new Error('disconnected');}});

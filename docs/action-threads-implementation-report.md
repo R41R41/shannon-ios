@@ -60,3 +60,17 @@ Windows body implementation/visual acceptance remains owned by its separate repo
 - CUA final isolated Mac/iPhone previews confirmed rendering and observable state updates. Dedicated Simulator shut down; previews quit; resource claims released. Shared hub validator passed.
 
 No main integration, push, production restart, Stage 4 switch enabling or TestFlight release was performed. The next step is independent review against the implementation contract, followed by the VM and Apple acceptance gates above.
+
+## Independent review follow-up
+
+The first three independent reviews reproduced defects in late own-time acknowledgement/budget settlement, lost Codex RPC responses, Minecraft abandonment acknowledgement, paused-task steering, server audience changes during IPC and old Apple control responses overtaking a newer poll. The follow-up preserves stop/resume and the existing protocols while correcting those causes. Known canonical acknowledgements are persisted and delivered idempotently; uncertain external outcomes retain their locks and are not replayed. A provider response body lost after HTTP headers remains uncertain rather than a zero-cost known failure.
+
+The real `mindWorkerLifecycle.test.ts` launches the production worker entry point with an isolated database and no inherited credentials, rejects a duplicate process, kills its owner with SIGKILL, restarts it, rejects old rights and verifies that only the original canonical acknowledgement releases an uncertain resource. It passed locally.
+
+Apple follow-up verification passed all **777 XCTest + 145 Swift Testing tests**, including eight action-thread model tests and the two new response-ordering cases. Unsigned ShannonDesk/macOS and ShannonApp/iOS device builds passed. Native CUA launched a separate synthetic Mac bundle and verified individual stop, explicit resume, observable count/state updates and Escape returning capsule focus. [Review preview](screenshots/shannon-stage4-macos-review.png). The preview was quit; the installed production app was not launched. These remain local build/synthetic evidence, not TestFlight acceptance.
+
+Read-only VM preflight confirmed revision `16bdf384`, the five existing services and distribution timer active, unauthenticated auth 401 and live SQLite integrity `ok`. Aggregate counts were 42 conversation threads, 1,308 messages, ten terminal tasks and five paired devices. A separate `/tmp` directory holds copied dependencies for candidate verification; it contains no copied production database, pairing or environment file. IPv4 SSH timed out while the same Tailscale peer's IPv6 worked with its existing host-key identity preserved. Production source, units, flags and processes were not changed.
+
+The separate TestFlight repair at `8358754d` passed its exact-commit independent review and seven synthetic tests. Applying it requires updating the effective systemd unit and `daemon-reload`; a repository template alone does not change the timer's actual executable. It remains a separate release prerequisite.
+
+Final candidate regression, VM isolated verification and exact-commit re-review are recorded below when they finish. The [rollout procedure](action-threads-rollout.md) makes the pending source/unit/host/flag cutover and Apple gates explicit.
