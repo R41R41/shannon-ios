@@ -2,13 +2,14 @@ schema_version: 1
 screen_id: shannon-macos-memory
 platform: macos
 baseline_commit: a84f898
-last_verified_at: 2026-10-02
-verification_scope: "2026-10-02（書斎・活動の状態）: 書斎の一覧と読む画面のDTO解読、見せていない物語を題名なしで扱うこと、感想の送信と失敗時の文、しまうお願い、活動の状態4種の文言、記録から書斎を開く判定をswift testとサーバーの回帰テスト、iOS DebugとMac Debugのビルドで確認。Simulator・実機での表示、実タップ、長い物語のスクロール、Dynamic Typeでの折り返し、VoiceOver実読み上げ、実サーバーとの往復は未確認。 2026-10-02（Discordなどで会った人）: 話した場所・統合の提案・旧サーバーの読み込みをswift test、サーバーの回帰テスト、iOS DebugとMac Debugのビルドで確認。Simulator・実機での表示、実タップ、VoiceOver実読み上げ、実際のDiscordからの受信は未確認。 2026-10-02（人・機微／ふつう）: 共有の一覧・詳細・扱い表示をswift testとMac Debugビルドで確認。起動中のMacアプリでの表示、キーボード操作、VoiceOver実読み上げは未確認。 2026-10-02（忘れる範囲の精密化と説明文）: サーバーの回帰テスト、swift test（文言の検査を含む）、iOS DebugビルドとMac Debugのテストで確認。実機・Simulatorでの確認ダイアログの表示、Dynamic Typeでの折り返し、VoiceOver読み上げは未確認。2026-10-02（鉛筆の訂正・忘れる確認の説明）: サーバーの回帰テストとswift test、Debugビルドで確認。実機での訂正操作と翌日の表示は未確認。合成fixture・shared Swiftモデル/部品描画。起動中Macアプリでの目的状態変更は未確認 2026-10-02（シャノンのやりたいこと・したことの記録）: 合成fixtureでのDTO解読・状態ラベル・所有者に許す操作の判定・一時停止と予算依頼と提案の決定の流れをswift testで確認し、iOS DebugとMac Debugのビルドが通ることを確認。Simulator・実機での表示、実タップ、Dynamic Typeでの折り返し、VoiceOver実読み上げ、実サーバーとの往復は未確認。 2026-10-02（忘れる範囲の精密化と説明文）: サーバーの回帰テスト、swift test（文言の検査を含む）、iOS DebugビルドとMac Debugのテストで確認。実機・Simulatorでの確認ダイアログの表示、Dynamic Typeでの折り返し、VoiceOver読み上げは未確認。2026-10-02（鉛筆の訂正・忘れる確認の説明）: サーバーの回帰テストとswift test、Debugビルドで確認。実機での訂正操作と翌日の表示は未確認。合成fixture・shared Swiftモデル/部品描画。起動中Macアプリでの目的状態変更は未確認"
+last_verified_at: 2026-10-08
+verification_scope: "2026-10-02（書斎・活動の状態）: 書斎の一覧と読む画面のDTO解読、見せていない物語を題名なしで扱うこと、感想の送信と失敗時の文、しまうお願い、活動の状態4種の文言、記録から書斎を開く判定をswift testとサーバーの回帰テスト、iOS DebugとMac Debugのビルドで確認。Simulator・実機での表示、実タップ、長い物語のスクロール、Dynamic Typeでの折り返し、VoiceOver実読み上げ、実サーバーとの往復は未確認。 2026-10-02（Discordなどで会った人）: 話した場所・統合の提案・旧サーバーの読み込みをswift test、サーバーの回帰テスト、iOS DebugとMac Debugのビルドで確認。Simulator・実機での表示、実タップ、VoiceOver実読み上げ、実際のDiscordからの受信は未確認。 2026-10-02（人・機微／ふつう）: 共有の一覧・詳細・扱い表示をswift testとMac Debugビルドで確認。起動中のMacアプリでの表示、キーボード操作、VoiceOver実読み上げは未確認。 2026-10-02（忘れる範囲の精密化と説明文）: サーバーの回帰テスト、swift test（文言の検査を含む）、iOS DebugビルドとMac Debugのテストで確認。実機・Simulatorでの確認ダイアログの表示、Dynamic Typeでの折り返し、VoiceOver読み上げは未確認。2026-10-02（鉛筆の訂正・忘れる確認の説明）: サーバーの回帰テストとswift test、Debugビルドで確認。実機での訂正操作と翌日の表示は未確認。合成fixture・shared Swiftモデル/部品描画。起動中Macアプリでの目的状態変更は未確認 2026-10-02（シャノンのやりたいこと・したことの記録）: 合成fixtureでのDTO解読・状態ラベル・所有者に許す操作の判定・一時停止と予算依頼と提案の決定の流れをswift testで確認し、iOS DebugとMac Debugのビルドが通ることを確認。Simulator・実機での表示、実タップ、Dynamic Typeでの折り返し、VoiceOver実読み上げ、実サーバーとの往復は未確認。 2026-10-02（忘れる範囲の精密化と説明文）: サーバーの回帰テスト、swift test（文言の検査を含む）、iOS DebugビルドとMac Debugのテストで確認。実機・Simulatorでの確認ダイアログの表示、Dynamic Typeでの折り返し、VoiceOver読み上げは未確認。2026-10-02（鉛筆の訂正・忘れる確認の説明）: サーバーの回帰テストとswift test、Debugビルドで確認。実機での訂正操作と翌日の表示は未確認。合成fixture・shared Swiftモデル/部品描画。起動中Macアプリでの目的状態変更は未確認 2026-10-08（ADR-0008 Stage5追加範囲）: 関心の日記・対象返答の反応・作業条件の3画面をMac DebugでLight/Dark確認。関心の個別undo・自動更新停止・再開・固定と解除・禁止と解除・忘れるの確認と非表示、関心が空の表示、確認のEscape取消しを操作確認。対象返答の反応は選択・切替・取消し、応答喪失後の元操作GET照会、同席時の非表示、409競合時の新版読み戻しを確認。合成データのMac DebugアプリとiPhone Simulatorでの追加範囲であり、既存機能全体の再検証・物理端末・本番TestFlightの受入ではない。loadingのnative観測はiPhoneの関心画面（Light）だけ。Macおよび反応・作業画面のloading、VoiceOver実読み上げ、Reduce Motionは未確認。"
 user_job: "頭の中から記憶・約束・継続目的、その次の一手と計画案、認知結果を確認し、必要な状態変更を行う"
 primary_action: "継続目的を開き、確認・一時停止・完了・再開する"
 preserve:
   - "Mac sidebarと会話・開発・作業の構成"
   - "いま・知識・記憶の概要、日記、活動表示"
+  - "ようすのいま／学び／気分、頭の中の記憶・約束・目的・人・書斎の既存入口"
 improve:
   - "分類リストの上に『シャノンのやりたいこと』を置く。シャノン自身の目標・問い・作品を最大3件、種類と状態つきで示し、押すと全件（理由、出どころ、ノートや下書きへのリンク、使うモデル）を開く。所有者の『続けている目的』とは別の節にして混ぜない"
   - "やりたいことは読むだけ。所有者ができる変更は、種（はじめに決めた目標と動機）以外の項目に『休ませる』『やめてもらう』を伝えることだけで、やめてもらう時は確認を出す"
@@ -29,6 +30,9 @@ improve:
   - "完了・取り消し済みや忘れた記憶も一覧から詳細へ進める"
   - "継続目的と最近の認知履歴を一覧し、目的状態を明示操作で変更する"
   - "明示目標から作られた次の一手と最大5段階の計画案を、実行証拠と区別して表示する"
+  - "ADR-0008 Stage5は既存の頭の中に「関心の日記」を加え、いまの関心と朝の変更を分けて読む。ようすのいま／学び／気分と既存の記憶・目的管理を保つ"
+  - "関心の変更は前後の版・理由を固定して残す。選んだ朝の変更だけを戻すとその関心の自動更新を止め、「自動更新を再開する」で明示再開する。固定と解除、禁止と解除、忘れるは個別の確認を経て送る。禁止解除だけでは自動更新停止を解除しない"
+  - "関心詳細の「参考にした記録」は現在の開示・忘却境界で許された原文だけを示す。表示しない／いま確認できない状態を区別し、内部traceや実行証明の中身を出さない"
 do_not_change:
   - "サーバー正本、記憶変更API、他アプリへの承認境界"
   - "認知履歴を非公開の思考過程として記録・表示すること"
@@ -47,13 +51,23 @@ states:
   study_reaction_failed: "感想やしまうお願いを保存できなかった時は、保存されていないことを文で伝え、選んだ内容は残す"
   autonomy_pause: "一時停止の表示は、サーバーが保存を返してから切り替える。保存に失敗した時は、まだ止まっていないことを文で伝える"
   selection: "memory IDで記憶詳細を、intent IDで目的状態を保持する"
+  stage5_unavailable: "未対応・無効・権限不足の403/404では新しい関心入口を隠す。通常の記憶管理やようすの既存入口を失わない"
+  stage5_unknown: "POSTの結果が不確定な時は元operationIdのGETだけで届いたか確認し、再POSTしない。関心detailと変更detailのどちらにも確認導線を置く"
+  stage5_conflict: "409の確定拒否では最新の関心と変更履歴を読み直す。古い版を成功扱いにしない"
+  stage5_audience: "既存のbody／voiceが同席者を知った時に新しい関心本文・変更・根拠を即時に隠し、古い非同期応答で戻さない"
+  stage5_forgotten: "忘れた内容は現在項目・過去の変更・操作結果・根拠のすべてで再検査して表示しない"
 accessibility:
-  dynamic_type: "記憶・目的・次の一手・計画案・認知要約を必要に応じて複数行で表示する"
-  voiceover: "目的本文、明示状態、次の一手、番号付き計画案、変更メニュー、認知結果をひとまとまりで提供する"
+  dynamic_type: "記憶・目的・次の一手・計画案・認知要約を必要に応じて複数行で表示する 関心の理由・変更前後・根拠も複数行に伸長する。製品本文に文字サイズ上限を設けない"
+  voiceover: "目的本文、明示状態、次の一手、番号付き計画案、変更メニュー、認知結果をひとまとまりで提供する 関心の状態は固定／禁止／自動更新は停止中の文字でも示し、確認内容と戻るを標準コントロールで提供する"
   target_size: "主要行は44ポイント以上"
-  focus: "標準List・NavigationLink・Menuによるキーボード移動と状態変更を保つ"
+  focus: "標準List・NavigationLink・Menuによるキーボード移動と状態変更を保つ Macの標準NavigationLink・List・確認ダイアログとEscapeによる取消しで現在表示中の詳細から確認し、元画面まで戻る操作を保持する"
   reduce_motion: "意味伝達を動きだけに依存させない"
 evidence:
-  current: []
+  current:
+    - "docs/screenshots/shannon-stage5-macos-interests-light.png"
+    - "docs/screenshots/shannon-stage5-macos-interests-dark.png"
+    - "docs/screenshots/shannon-stage5-macos-undo-confirm.png"
+    - "docs/screenshots/shannon-stage5-macos-forgotten.png"
+    - "docs/screenshots/shannon-stage5-macos-interest-unknown-dark.png"
   approved: []
   privacy: "合成fixtureのみ。実会話・個人情報・credentialを含めない。人の記憶はiPhoneの「友人も一緒」の通話と、結び付け済みのDiscordなどの会話から作られ、Macからは追加しない。声では人を確かめない"

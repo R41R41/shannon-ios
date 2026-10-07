@@ -89,6 +89,13 @@ public final class ShannonTaskTreeModel {
     private let scopeKey: String
     private let client: (any ShannonTaskTreeServing)?
     private var generation = 0
+    private struct ApprovalReceipt: Hashable {
+        let taskID: String; let proposalID: String; let diffHash: String; let revision: Int
+        init(_ proposal: ShannonTaskTreeProposalDTO) {
+            taskID = proposal.taskId; proposalID = proposal.id; diffHash = proposal.diffHash; revision = proposal.expectedRevision
+        }
+    }
+    private var confirmedApprovals: Set<ApprovalReceipt> = []
     public enum Pending: Equatable, Sendable { case proposal(operationID: String); case approval(id: String, diffHash: String) }
     public init(scopeKey: String, taskID: String, client: (any ShannonTaskTreeServing)?) {
         self.scopeKey = scopeKey; self.taskID = taskID; self.client = client
@@ -108,6 +115,7 @@ public final class ShannonTaskTreeModel {
             let proposalList = try await client.loadTaskTreeProposals(scopeKey: scopeKey, taskID: taskID)
             guard result.tree.taskId == taskID, proposalList.allSatisfy({ $0.taskId == taskID }) else { throw ShannonAPIError.invalidResponse }
             // Receipt resolution survives a newer read overtaking this GET. Display does not.
+            for proposal in proposalList where proposal.state == "approved" { confirmedApprovals.insert(ApprovalReceipt(proposal)) }
             if let pending {
                 let acknowledged = switch pending {
                 case .proposal(let id): proposalList.contains { $0.operationId == id }
@@ -126,6 +134,13 @@ public final class ShannonTaskTreeModel {
             notice = pending == nil ? "作業の条件を読み込めません。接続後に読み直してください。" : "届いたか確認できません。接続後に確認してください。"
         }
     }
+    /// A transient first read has a visible GET recovery path; concealed owner endpoints still have no entry.
+    public var showsInitialReadError: Bool { read == nil && !hidden && !othersPresent && !isLoading && notice != nil }
+    /// Closing a comparison requires an exact adoption receipt, never a newer tree or a cleared pending flag alone.
+    public func isAdoptionConfirmed(_ proposal: ShannonTaskTreeProposalDTO?) -> Bool {
+        guard let proposal, proposal.taskId == taskID, !hidden, !othersPresent else { return false }
+        return confirmedApprovals.contains(ApprovalReceipt(proposal))
+    }
     public func propose(_ change: ShannonTaskTreeChangeDTO) async {
         guard let client, let tree = read?.tree, fresh, pending == nil, !hidden else { return }
         let id = UUID().uuidString; pending = .proposal(operationID: id)
@@ -138,12 +153,13 @@ public final class ShannonTaskTreeModel {
         } catch { await handle(error, expected: .proposal(operationID: id)) }
     }
     public func approve(_ proposal: ShannonTaskTreeProposalDTO) async {
-        guard let client, fresh, pending == nil, proposal.state == "proposed",
+        guard let client, fresh, pending == nil, proposal.taskId == taskID, proposal.state == "proposed",
               read?.tree.revision == proposal.expectedRevision else { return }
         pending = .approval(id: proposal.id, diffHash: proposal.diffHash)
         do {
             let value = try await client.approveTaskTree(scopeKey: scopeKey, proposal: proposal)
             guard value.taskId == taskID, value.revision > proposal.expectedRevision else { throw ShannonAPIError.invalidResponse }
+            confirmedApprovals.insert(ApprovalReceipt(proposal))
             if case .approval(let id, let hash) = pending, id == proposal.id && hash == proposal.diffHash { pending = nil }
             await reload()
         } catch { await handle(error, expected: .approval(id: proposal.id, diffHash: proposal.diffHash)) }

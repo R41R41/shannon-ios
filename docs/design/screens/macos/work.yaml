@@ -2,14 +2,15 @@ schema_version: 1
 screen_id: shannon-macos-work
 platform: macos
 baseline_commit: 3f2c69579f02d3ec336572e2115ea1618be0d671
-last_verified_at: 2026-10-05
-verification_scope: "2026-10-05（A11、承認の3つの選択と長押し）: 長押しの要否の判定と、Macの手がかりの文（クリック）をswift test、Mac DebugのビルドとShannonDeskTestsで確認。Mac実画面でのポインターの押し続け、確認ダイアログ、VoiceOver実読み上げは未確認。2026-10-01: 状態語の統一、承認の対象表示と『許可しない』の意味、続きが必要の次の一手と再開、未解決の節、作業バッジの確認済み、作業中止の確認をShannonDeskのDebugビルドとShannonDeskTests（20件）で確認。Mac実画面の表示と操作は未確認。2026-09-30に作業インスペクタの『計画』セクションだけを対象として新設。他のセクションは既存実装の記述で、この契約の新設時点では再検証していない。Macの計画タイムラインはShannonDeskのDebugビルドとShannonDeskTests（19件）で確認。Mac実画面の表示と開閉操作は未確認"
+last_verified_at: 2026-10-08
+verification_scope: "2026-10-05（A11、承認の3つの選択と長押し）: 長押しの要否の判定と、Macの手がかりの文（クリック）をswift test、Mac DebugのビルドとShannonDeskTestsで確認。Mac実画面でのポインターの押し続け、確認ダイアログ、VoiceOver実読み上げは未確認。2026-10-01: 状態語の統一、承認の対象表示と『許可しない』の意味、続きが必要の次の一手と再開、未解決の節、作業バッジの確認済み、作業中止の確認をShannonDeskのDebugビルドとShannonDeskTests（20件）で確認。Mac実画面の表示と操作は未確認。2026-09-30に作業インスペクタの『計画』セクションだけを対象として新設。他のセクションは既存実装の記述で、この契約の新設時点では再検証していない。Macの計画タイムラインはShannonDeskのDebugビルドとShannonDeskTests（19件）で確認。Mac実画面の表示と開閉操作は未確認 2026-10-08（ADR-0008 Stage5追加範囲）: Mac Debugで作業条件のLight/Dark、初回GET通信断からの再読、変更案の目的入力・保存、比較本文のスクロール、確認の戻る、正規採用による目的更新を操作確認。比較シートの最小寸法修正は実画面で確認。final4のLightで正常採用後に比較シートが自動で閉じ、目的Weekend readingと3工程の確認待ち表示に戻ることを確認。合成データのMac DebugアプリとiPhone Simulatorでの追加範囲であり、既存機能全体の再検証・物理端末・本番TestFlightの受入ではない。loadingのnative観測はiPhoneの関心画面（Light）だけ。Macおよび反応・作業画面のloading、VoiceOver実読み上げ、Reduce Motionは未確認。"
 user_job: "選択した作業の目的・現在地・計画・検証結果を一覧し、必要な承認や指示を同じインスペクタで行う"
 primary_action: "現在地と計画を確認し、必要な承認・追加の指示・一時停止・中止を行う"
 preserve:
   - "agent_tasksとイベント列を作業状態の正本とする"
   - "目的、いま、次、シャノンの様子、会話への移動、承認、計画、最近の進捗、変更、検証、追加の指示、作業操作の各セクション"
   - "開始前の作業だけが開発環境の選択と開始操作を持つ"
+  - "既存の開始設定、許可、一時停止・再開・中止、進捗・計画、変更／検証／未解決、追加の指示"
 improve:
   - "シャノンが自分の活動から出した提案（origin = shannon）は、頭の中の『したことの記録』に理由つきで出る。所有者がそこで開始した時にだけ作業として一覧に現れ、概要は『シャノンからの提案です。理由：…』で始まる。開始前は作業一覧に何も作られない"
   - "状態語はiPhoneと同じ（docs/design/screens/ios/work.yaml の vocabulary）。節は『いま／これから／終了』、絞り込みは『すべて／対応待ち／進行中／提案／終了』"
@@ -24,6 +25,10 @@ improve:
   - "『計画』はiPhoneと同じ意味の縦タイムラインで示す。完了はチェック付きの点と成功色の連結線、実行中はaccent色の色面ブロック、未着手は番号付きの点"
   - "実行中の工程は直近のコマンド結果、最新の作業記録、検証結果の集計をborderlessの開閉ボタンで展開・折りたたみできる"
   - "全N工程中M工程完了を計画の先頭に併記する"
+  - "ADR-0008 Stage5は既存の作業詳細に「作業の条件と道筋」を加え、元作業と子工程、依存関係、完了条件・守ること・範囲・停止条件、確認された根拠を示す。工程状態と完了証明はサーバーの保存結果から取り、文章や反応ボタンを証明にしない"
+  - "所有者の依頼の目的・内容・期限・条件は変更案として保存し、いま／変更後と工程の条件を読んで確認してから採用する。変更案の保存や採用を実行許可に読み替えない"
+  - "比較シートは元taskId・proposalId・diffHash・expectedRevisionに一致する正規採用受領だけで閉じる。結果不明や409競合は比較を保持し、目的の版が進んだことや確認待ちが解除されたことだけを成功にしない"
+  - "Macの変更案比較シートだけに最小520×600ポイントを確保し、比較本文と採用操作をListのスクロールで読めるようにする。ほかのシートやiPhoneの寸法は変えない"
 do_not_change:
   - "ユーザー承認の境界と承認の意味"
   - "モデルの文章から工程の進捗を推定しない。工程の状態はplanのstatusだけで決める"
@@ -36,13 +41,23 @@ states:
   conflict: "サーバーの新しいイベント列を優先する"
   selection: "選択中の作業、工程の完了・進行中・未着手を色だけでなく形・番号・文言で示す"
   plan_timeline: "計画が空の時はセクションを出さない。進行中の工程が無い時は詳細を出さない"
+  stage5_initial_error: "初回の作業条件GETが接続・サーバーエラーの時は注意と「読み直す」を出す。403/404では新しい条件欄を隠す"
+  stage5_unknown: "保存は元operationId、採用は元proposalIdとdiffHashのGETで確かめる。不確定なPOSTを自動で繰り返さず、確認待ちと確定結果を区別する"
+  stage5_conflict: "409の確定拒否と条件の版の競合では最新の条件を読み、採用受領なしに比較を閉じない"
+  stage5_audience: "既存の同席状態では新しい条件・変更案の本文を隠し、古い非同期応答を表示しない"
+  stage5_verification: "「確認された根拠」は確認済み・根拠が未成立・結果未確認を分ける。過去のタスクや文章から新しい完了証拠を作らない"
 accessibility:
-  dynamic_type: "工程名と詳細は切り捨てずに折り返し、長い詳細は3行で省略してヘルプに全文を出す"
-  voiceover: "計画を『計画』としてまとめ、各工程を『工程N: 名前』と完了・進行中・未着手の値で読む。開閉ボタンは『詳細を開く』『詳細を閉じる』"
+  dynamic_type: "工程名と詳細は切り捨てずに折り返し、長い詳細は3行で省略してヘルプに全文を出す 追加する目的・内容・条件も複数行で読み、長い変更案は標準Listでスクロールする"
+  voiceover: "計画を『計画』としてまとめ、各工程を『工程N: 名前』と完了・進行中・未着手の値で読む。開閉ボタンは『詳細を開く』『詳細を閉じる』 追加工程の状態を確認済み／続けています／止まっています／確認待ちの文字と記号で伝える。実読み上げの受入は今回未実施"
   target_size: "Mac標準のborderlessボタンとポインター操作の寸法に従う"
-  focus: "キーボード移動で開閉ボタンへ到達でき、インスペクタの読み上げ順は上から下に保つ"
+  focus: "キーボード移動で開閉ボタンへ到達でき、インスペクタの読み上げ順は上から下に保つ 条件入力・比較・採用確認・戻るには標準Form／List／sheet／確認ダイアログを使う"
   reduce_motion: "連結線とブロックの変化は短い切替にし、脈動させない"
 evidence:
-  current: []
+  current:
+    - "docs/screenshots/shannon-stage5-macos-task-light.png"
+    - "docs/screenshots/shannon-stage5-macos-task-offline-light.png"
+    - "docs/screenshots/shannon-stage5-macos-proposal-dark.png"
+    - "docs/screenshots/shannon-stage5-macos-task-adopted-dark.png"
+    - "docs/screenshots/shannon-stage5-macos-task-adopted-light.png"
   approved: []
   privacy: "合成タスクだけを表示・保存し、実作業名や変更内容を含めない"

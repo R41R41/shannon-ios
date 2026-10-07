@@ -161,6 +161,55 @@ struct ShannonStage5Tests {
         #expect(await client.approvalPosts == 1)
     }
 
+    @Test func comparisonClosesOnlyAfterExactAdoptionReceipt() async throws {
+        for mode in [TaskTreeFake.ApprovalMode.acceptedUnreadable, .unknownUnreadable, .conflict] {
+            let client = try TaskTreeFake()
+            await client.setApprovalMode(mode)
+            let model = ShannonTaskTreeModel(scopeKey: "synthetic", taskID: "task", client: client)
+            await model.reload()
+            var change = ShannonTaskTreeChangeDTO(tree: try #require(model.read?.tree))
+            change.goal = "採用する目的"
+            await model.propose(change)
+            let selection = try #require(model.proposals.first)
+            #expect(!model.isAdoptionConfirmed(selection))
+            await model.approve(selection)
+            switch mode {
+            case .acceptedUnreadable:
+                // The genuine POST receipt closes the sheet even if its subsequent display GET fails.
+                #expect(model.isAdoptionConfirmed(selection))
+                #expect(model.notice != nil && model.pending == nil)
+            case .unknownUnreadable:
+                #expect(!model.isAdoptionConfirmed(selection))
+                #expect(model.pending != nil)
+                await model.reload()
+                #expect(model.isAdoptionConfirmed(selection))
+                #expect(model.pending == nil)
+            case .conflict:
+                // A newer tree and cleared pending are not adoption evidence.
+                #expect(model.read?.tree.revision == 3 && model.pending == nil)
+                #expect(!model.isAdoptionConfirmed(selection))
+                await model.reload()
+                #expect(!model.isAdoptionConfirmed(selection))
+            case .lost: Issue.record("This case is covered by the existing unknown-response test")
+            }
+            #expect(await client.approvalPosts == 1)
+            if model.isAdoptionConfirmed(selection) {
+                for other in [
+                    ShannonTaskTreeProposalDTO(id: "other", taskId: selection.taskId, expectedRevision: selection.expectedRevision,
+                        diffHash: selection.diffHash, change: selection.change, state: "proposed"),
+                    ShannonTaskTreeProposalDTO(id: selection.id, taskId: selection.taskId, expectedRevision: selection.expectedRevision,
+                        diffHash: "other-diff", change: selection.change, state: "proposed"),
+                    ShannonTaskTreeProposalDTO(id: selection.id, taskId: "other-task", expectedRevision: selection.expectedRevision,
+                        diffHash: selection.diffHash, change: selection.change, state: "proposed"),
+                    ShannonTaskTreeProposalDTO(id: selection.id, taskId: selection.taskId, expectedRevision: selection.expectedRevision + 1,
+                        diffHash: selection.diffHash, change: selection.change, state: "proposed")
+                ] { #expect(!model.isAdoptionConfirmed(other)) }
+                model.setAudience(othersPresent: true)
+                #expect(!model.isAdoptionConfirmed(selection))
+            }
+        }
+    }
+
     @Test func knownOthersClearOnlyNewProjectionAndFenceOlderRead() async throws {
         let client = try TaskTreeFake()
         let task = ShannonTaskTreeModel(scopeKey: "synthetic", taskID: "task", client: client)
@@ -181,6 +230,29 @@ struct ShannonStage5Tests {
         interest.setAudience(othersPresent: true)
         #expect(!interest.offered)
         #expect(interest.snapshot == nil)
+    }
+
+    @Test func initialTaskReadErrorShowsRecoveryAndKeepsConcealedEndpointsHidden() async throws {
+        let client = try TaskTreeFake()
+        await client.failNextRead(status: 503)
+        let model = ShannonTaskTreeModel(scopeKey: "synthetic", taskID: "task", client: client)
+        await model.reload()
+        #expect(model.read == nil)
+        #expect(model.showsInitialReadError)
+        #expect(!model.isLoading)
+        await model.reload()
+        #expect(model.read != nil && model.fresh)
+        #expect(!model.showsInitialReadError)
+        for status in [403, 404] {
+            let concealedClient = try TaskTreeFake()
+            await concealedClient.failNextRead(status: status)
+            let concealed = ShannonTaskTreeModel(scopeKey: "synthetic", taskID: "task", client: concealedClient)
+            await concealed.reload()
+            #expect(concealed.hidden)
+            #expect(concealed.read == nil && !concealed.showsInitialReadError)
+        }
+        model.setAudience(othersPresent: true)
+        #expect(!model.showsInitialReadError)
     }
 
     private func feedbackModel(_ client: FeedbackFake) -> ShannonFeedbackModel {
@@ -271,14 +343,20 @@ private func treeFixture() throws -> ShannonTaskTreeDTO {
 }
 
 private actor TaskTreeFake: ShannonTaskTreeServing {
+    enum ApprovalMode { case lost, acceptedUnreadable, unknownUnreadable, conflict }
+    private var approvalMode: ApprovalMode = .lost
+    private var failProposalReadOnce = false
+    func setApprovalMode(_ mode: ApprovalMode) { approvalMode = mode }
     var proposalPosts = 0
     var approvalPosts = 0
     private var tree: ShannonTaskTreeDTO
     private var proposals: [ShannonTaskTreeProposalDTO] = []
     private var hold = false
+    private var nextReadError: ShannonAPIError?
     private var readWaiter: CheckedContinuation<Void, Never>?
     private var readContinuation: CheckedContinuation<ShannonTaskTreeReadDTO, any Error>?
     init() throws { tree = try treeFixture() }
+    func failNextRead(status: Int) { nextReadError = .rejected(status: status) }
     func holdRead() { hold = true }
     func waitForRead() async {
         if readContinuation != nil { return }
@@ -286,10 +364,14 @@ private actor TaskTreeFake: ShannonTaskTreeServing {
     }
     func finishRead() { readContinuation?.resume(returning: ShannonTaskTreeReadDTO(tree: tree, verification: nil)); readContinuation = nil }
     func loadTaskTree(scopeKey: String, taskID: String) async throws -> ShannonTaskTreeReadDTO {
+        if let error = nextReadError { nextReadError = nil; throw error }
         if hold { return try await withCheckedThrowingContinuation { readContinuation = $0; readWaiter?.resume(); readWaiter = nil } }
         return ShannonTaskTreeReadDTO(tree: tree, verification: nil)
     }
-    func loadTaskTreeProposals(scopeKey: String, taskID: String) async throws -> [ShannonTaskTreeProposalDTO] { proposals }
+    func loadTaskTreeProposals(scopeKey: String, taskID: String) async throws -> [ShannonTaskTreeProposalDTO] {
+        if failProposalReadOnce { failProposalReadOnce = false; throw URLError(.notConnectedToInternet) }
+        return proposals
+    }
     func proposeTaskTree(scopeKey: String, taskID: String, revision: Int, change: ShannonTaskTreeChangeDTO, operationID: String) async throws -> ShannonTaskTreeProposalDTO {
         proposalPosts += 1
         proposals = [ShannonTaskTreeProposalDTO(id: "proposal", taskId: taskID, expectedRevision: revision,
@@ -298,11 +380,18 @@ private actor TaskTreeFake: ShannonTaskTreeServing {
     }
     func approveTaskTree(scopeKey: String, proposal: ShannonTaskTreeProposalDTO) async throws -> ShannonTaskTreeDTO {
         approvalPosts += 1
+        if approvalMode == .conflict {
+            tree = ShannonTaskTreeDTO(schema: tree.schema, taskId: tree.taskId, revision: 3, rootId: tree.rootId,
+                goal: tree.goal, content: tree.content, deadline: tree.deadline, origin: tree.origin, legacy: false, nodes: tree.nodes)
+            throw ShannonAPIError.rejected(status: 409)
+        }
         proposals = [ShannonTaskTreeProposalDTO(id: proposal.id, taskId: proposal.taskId, expectedRevision: proposal.expectedRevision,
             diffHash: proposal.diffHash, change: proposal.change, state: "approved", operationId: proposal.operationId)]
         tree = ShannonTaskTreeDTO(schema: tree.schema, taskId: tree.taskId, revision: 3, rootId: tree.rootId,
             goal: proposal.change.goal, content: proposal.change.content, deadline: proposal.change.deadline,
             origin: tree.origin, legacy: false, nodes: tree.nodes)
+        if approvalMode == .acceptedUnreadable || approvalMode == .unknownUnreadable { failProposalReadOnce = true }
+        if approvalMode == .acceptedUnreadable { return tree }
         throw URLError(.networkConnectionLost)
     }
 }

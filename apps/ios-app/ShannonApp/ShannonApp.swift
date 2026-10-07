@@ -233,6 +233,9 @@ private final class ShannonAppDelegate: NSObject, UIApplicationDelegate, UNUserN
         Self.pendingTestFlightDeliveryOpen = Self.isTestFlightFailure(launchOptions?[.remoteNotification])
         UNUserNotificationCenter.current().delegate = self
         // PushKit and CallKit, at every launch: a VoIP push that started the app is answered with a call at once.
+#if DEBUG
+        guard !ProcessInfo.processInfo.arguments.contains("-ShannonDesignPreview") else { return true }
+#endif
         ShannonIncomingCalls.activate()
         return true
     }

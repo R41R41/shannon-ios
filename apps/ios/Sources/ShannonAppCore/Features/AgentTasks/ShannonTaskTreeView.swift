@@ -60,17 +60,30 @@ public struct ShannonTaskTreeView: View {
                 .tint(palette.action)
             } else if model.isLoading {
                 ProgressView("作業の条件を確認しています…")
+            } else if model.showsInitialReadError, let notice = model.notice {
+                VStack(alignment: .leading, spacing: ShannonSpacing.small) {
+                    Text(notice).font(.shannon(.callout)).foregroundStyle(palette.textSecondary)
+                    Button("読み直す") { Task { await model.reload() } }
+                        .frame(minHeight: ShannonTouchTarget.minimum)
+                }
+                .accessibilityIdentifier("task-tree-initial-read-error")
             }
         }
         .task(id: model.othersPresent) { if !model.othersPresent { await model.reload() } }
         .sheet(isPresented: $showsEditor) {
             if let tree = model.read?.tree { ShannonTaskTreeEditor(tree: tree, model: model) }
         }
+        .onChange(of: model.isAdoptionConfirmed(selectedProposal)) { _, confirmed in
+            if confirmed { selectedProposal = nil }
+        }
         .sheet(item: $selectedProposal) { proposal in
             NavigationStack {
                 ShannonTaskTreeProposalView(proposal: proposal, model: model)
                     .toolbar { ToolbarItem(placement: .cancellationAction) { Button("閉じる") { selectedProposal = nil } } }
             }
+#if os(macOS)
+            .frame(minWidth: 520, minHeight: 600)
+#endif
         }
     }
     private struct Entry: Identifiable { let node: ShannonTaskTreeNodeDTO; let depth: Int; var id: String { node.id } }
