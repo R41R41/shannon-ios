@@ -41,7 +41,7 @@ import { prepareTurnCognitiveContext } from '../../workspace/contextPorts.js';
 import { TurnDeadline } from './turnDeadline.js';
 import type { TurnMemoryRecall } from '../../recall/recallPorts.js';
 import { closedId, minecraftPerception, platformPerception, textPerception, type MindPerceiver, type PerceivedItem } from '../../perception/perceptionPorts.js';
-import type { MindTurnPorts } from '../../workspace/workspacePorts.js';
+import { framedReport, type MindTurnPorts } from '../../workspace/workspacePorts.js';
 
 /**
  * The first half of one text turn of the conversation kernel (`ShannonApiKernel.textTurn`): orchestration, a fixed
@@ -59,6 +59,8 @@ export interface TextTurnDependencies {
   body: Pick<ShannonBody, 'ownerContext'>;
   /** What her Minecraft body reported about the requests it was given (`minecraftBodyRequests.ts`), for a turn the owner alone reads. */
   minecraftRequests: { promptBlock(scopeKey: string, at: string): string } | null;
+  /** Syzygy ADR-0008 stage 3: the mind of the turn, when there is one (its data frames frame the reports a turn builds itself). */
+  mind?: MindTurnPorts | null;
 }
 
 /** A surface other than the app's text chat, such as her Minecraft body (`minecraftBody.ts`) or a platform reply (`platformReply.ts`). */
@@ -272,6 +274,12 @@ export interface TextTurnPrompt {
   turnContext: string;
 }
 
+/** The Minecraft body's reports; with data frames on (stage 3), its reported lines framed as data (`framedReport`). */
+function minecraftReport(dependencies: TextTurnDependencies, scopeKey: string, at: string): string {
+  const block = dependencies.minecraftRequests?.promptBlock(scopeKey, at) ?? '';
+  return block && dependencies.mind?.dataFrames ? framedReport(block, 'minecraft') : block;
+}
+
 export function textTurnSystemPrompt(dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn, parts: {
   basePrompt: LayeredIdentityPrompt; cognitiveContext: { prompt: string }; capability: ConversationCapabilityContext; roomLook: ConversationLookTurn;
 }): TextTurnPrompt {
@@ -282,7 +290,7 @@ export function textTurnSystemPrompt(dependencies: TextTurnDependencies, input: 
   const dailyMindPrompt = [audience.ownFocus(dependencies.dailyMind?.promptFor(body.scopeKey, dependencies.now()) ?? '', dependencies.autonomy.pursuitPrompt(body.scopeKey), captured, dependencies.conversationStore, body.scopeKey),
     surface ? '' : dependencies.body.ownerContext(body.scopeKey, occurredAt, audience.audience), roomLook.prompt,
     // What her Minecraft body did with what it was asked: his matter, given only while he alone reads the reply (also in his whisper in the game).
-    audience.alone ? dependencies.minecraftRequests?.promptBlock(body.scopeKey, occurredAt) ?? '' : ''].filter(Boolean).join('\n\n');
+    audience.alone ? minecraftReport(dependencies, body.scopeKey, occurredAt) : ''].filter(Boolean).join('\n\n');
   // Where nobody may release a protected line (a turn someone other than the owner wrote), none is given.
   const memory = (text: string) => surface?.openOnly ? withoutGuardedEntries(text) : text;
   // Her work with the owner is his: on another surface it is given only while he alone reads the reply.

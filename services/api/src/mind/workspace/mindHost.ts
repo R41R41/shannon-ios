@@ -40,6 +40,8 @@ export interface MindTurnPorts extends MindPerceiver {
   bind?(scopeKey: string, itemId: string, ref: string): void;
   /** The response is built: what the mind noted is written now, off the response path. */
   turnEnded?(): void;
+  /** Whether untrusted text reaches a prompt inside data frames (`SHANNON_DATA_FRAMES`), for blocks a turn builds itself. */
+  readonly dataFrames?: boolean;
 }
 
 export interface MindHost extends Required<MindTurnPorts> {
@@ -96,6 +98,7 @@ class InProcessMindHost implements MindHost {
   }
 
   get faulted(): boolean { return this.open; }
+  get dataFrames(): boolean { return this.options.switches.dataFrames && !this.open; }
 
   perceive(scopeKey: string, event: MindEvent | null, detail?: PerceivedDetail | null): PerceivedItem | null {
     if (!event || !this.options.switches.attention) return null;

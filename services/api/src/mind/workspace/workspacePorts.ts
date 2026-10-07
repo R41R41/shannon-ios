@@ -11,7 +11,7 @@
 export { mindSwitches, type MindSwitches } from '@shannon/mind';
 export { MIND_HOST_LIMITS, createMindHost, operationOf, type MindHost, type MindHostOptions, type MindTurnPorts, type WorkspaceTurn } from './mindHost.js';
 export {
-  DATA_FRAME_RULE, DATA_FRAME_THREAT, NOTICE_MARKERS, PROMPT_LAYOUT_LIMITS, WORKSPACE_PLACE_HEADER, dataFrame, noticeLine, withWorkspace, workspaceBlocks, type LayoutTurn,
+  DATA_FRAME_RULE, DATA_FRAME_THREAT, framedReport, NOTICE_MARKERS, PROMPT_LAYOUT_LIMITS, WORKSPACE_PLACE_HEADER, dataFrame, noticeLine, withWorkspace, workspaceBlocks, type LayoutTurn,
 } from './promptLayout.js';
 export { NOTICE_KINDS, SPEECH_KINDS, WORKSPACE_LIMITS, type WorkspaceItem, type WorkspaceScope } from './workspaceState.js';
 export { WorkspaceTextReader } from './workspaceText.js';
