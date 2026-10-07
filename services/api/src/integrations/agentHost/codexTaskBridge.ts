@@ -218,6 +218,9 @@ export class CodexTaskBridge {
       case 'turn/started': {
         const turn = objectValue(params.turn);
         const incomingId = stringValue(turn?.id);
+        // A notification alone cannot correlate a lost start response. Only the
+        // successful turn/start RPC may bind Stage 4's execution rights to an ID.
+        if (runtime.actionLease && (!runtime.turnId || incomingId !== runtime.turnId)) break;
         if (runtime.turnId && incomingId && runtime.turnId !== incomingId) break;
         runtime.turnId = incomingId ?? runtime.turnId;
         this.runtimes.save(runtime);

@@ -114,6 +114,19 @@ it('retains an uncertain provider call and its estimate even without an owner st
   expect(await h.loop.tick()).toBe('thread-wait');
   expect(h.model.calls).toHaveLength(1);
 });
+it('records zero known usage when the model gate stops an authorized step before calling its provider',async()=>{
+  const h=fixture(),dispatch=h.actions.dispatch;let permits=0;
+  h.actions.dispatch=async(lease,resources)=>{
+    if(++permits===2){await h.actions.stop('owner',lease.id,'pre-model-stop');return false;}
+    return dispatch(lease,resources);
+  };
+  expect(await h.loop.tick()).toBe('stepped');expect(h.model.calls).toHaveLength(0);
+  expect(h.service.overview('owner').budget.spentYen).toBe(0);
+  expect(h.db.prepare('SELECT state FROM mind_action_budget').all()).toEqual([{state:'settled'}]);
+  const stopped=h.actionStore.list('owner').find(a=>a.kind==='ownTime')!;
+  expect(stopped.state).toBe('cancelled');expect(h.store.pendingActionAcknowledgements('owner')).toHaveLength(0);
+  expect(await h.actions.resume('owner',stopped.id)).toBe(true);expect(h.model.calls).toHaveLength(0);
+});
 it.each(['paused','not-leader'] as const)('durably settles a known unused reservation after %s and lost ACK delivery',async(reason)=>{
   const h=fixture(),reserve=h.actions.reserve,acknowledge=h.actions.acknowledge;
   h.actions.reserve=async(...args)=>{

@@ -42,8 +42,14 @@ export async function callModel(adapters: { model?: AutonomyTextModel }, call: P
 
 /** All own-time model paths carry the same transient usage/acknowledgement, including outreach and phone wording. */
 export async function generateModel(model:AutonomyTextModel,request:AutonomyTextRequest):Promise<AutonomyTextResult> {
-  await actionPermit();
-  const execution=currentActionExecution();if(execution){execution.modelOutcome='unknown';delete execution.modelUsage;}
+  const execution=currentActionExecution();
+  try { await actionPermit(); }
+  catch(error){
+    if(!execution)throw error;
+    execution.modelOutcome='acknowledged';execution.modelUsage={inputTokens:0,outputTokens:0};
+    throw new AutonomyModelError('ACTION_STOPPED',execution.modelUsage);
+  }
+  if(execution){execution.modelOutcome='unknown';delete execution.modelUsage;}
   try {
     const result=await model.generate(request);
     if(execution){execution.modelOutcome='acknowledged';execution.modelUsage=result.usage;}

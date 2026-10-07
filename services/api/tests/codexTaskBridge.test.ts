@@ -423,10 +423,52 @@ describe('CodexTaskBridge', () => {
     expect(events.some(e=>e.type==='paused')).toBe(false);
     expect(fixture.state.session('task-1')?.stopRequested).toBe(true);
     expect(fixture.client.requests.filter(r=>r.method==='turn/start')).toHaveLength(1);
-    fixture.client.notify({method:'turn/started',params:{threadId:'thread-1',turn:{id:'turn-1'}}});await bridge.whenIdle();
+    fixture.client.notify({method:'turn/started',params:{threadId:'thread-1',turn:{id:'foreign'}}});await bridge.whenIdle();
     await bridge.checkExecutionRights();
-    fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'turn-1',status:'interrupted'}}});await bridge.whenIdle();
-    expect(events.filter(e=>e.type==='paused')).toHaveLength(1);expect(fixture.state.resumableSessions()).toHaveLength(0);
+    fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'foreign',status:'interrupted'}}});await bridge.whenIdle();
+    expect(fixture.state.session('task-1')?.turnId).toBeUndefined();
+    expect(events.filter(e=>e.type==='paused')).toHaveLength(0);expect(fixture.state.resumableSessions()).toHaveLength(1);
+    await bridge.stop();
+  });
+  it('keeps a lost start unknown after restart despite foreign started and completed notifications',async()=>{
+    const fixture=makeFixture(),events:HostAgentEvent[]=[];
+    fixture.state.saveSession({taskId:'task-1',startCommandId:'start-1',threadId:'thread-1',executionUncertain:true,
+      actionLease:{id:'action-1',holder:'host',generation:1},projectKey:'fixture',cwd:fixture.project,updatedAt:'2026-10-07T12:00:00.000Z'});
+    fixture.client.resumeActiveTurnID='foreign';
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>false,publish:async batch=>{events.push(...batch);}});
+    await bridge.start();
+    fixture.client.notify({method:'turn/started',params:{threadId:'thread-1',turn:{id:'foreign'}}});
+    fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'foreign',status:'completed'}}});
+    await bridge.whenIdle();await bridge.checkExecutionRights();
+    expect(fixture.state.session('task-1')).toMatchObject({executionUncertain:true,stopRequested:true});
+    expect(fixture.state.session('task-1')?.turnId).toBeUndefined();
+    expect(events.some(e=>['paused','completed','failed'].includes(e.type))).toBe(false);
+    expect(fixture.client.requests.some(r=>r.method==='turn/start'||r.params.turnId==='foreign')).toBe(false);
+    await bridge.stop();
+  });
+  it('binds a successful start RPC after early notifications and acknowledges only that returned turn',async()=>{
+    const fixture=makeFixture(),events:HostAgentEvent[]=[];
+    const actionLease={id:'action-1',holder:'host',generation:1};
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>true,publish:async batch=>{events.push(...batch);}});
+    fixture.client.beforeTurnStartResponse=async()=>{
+      for(const id of ['foreign','turn-1']) {
+        fixture.client.notify({method:'turn/started',params:{threadId:'thread-1',turn:{id}}});
+        await bridge.whenIdle();expect(fixture.state.session('task-1')?.turnId).toBeUndefined();
+      }
+    };
+    await bridge.start();await bridge.handle({...command('start-1','start',{goal:'Work',projectHint:'fixture'}),actionLease});
+    expect(fixture.state.session('task-1')?.turnId).toBe('turn-1');
+    expect(fixture.state.session('task-1')?.executionUncertain).not.toBe(true);
+    fixture.client.notify({method:'turn/started',params:{threadId:'thread-1',turn:{id:'foreign'}}});
+    fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'foreign',status:'completed'}}});
+    await bridge.whenIdle();expect(fixture.state.session('task-1')?.turnId).toBe('turn-1');
+    fixture.client.notify({method:'turn/started',params:{threadId:'thread-1',turn:{id:'turn-1'}}});
+    fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'turn-1',status:'interrupted'}}});
+    await bridge.whenIdle();
+    expect(events.filter(e=>['paused','completed','failed'].includes(e.type))).toEqual([
+      expect.objectContaining({type:'paused',payload:expect.objectContaining({actionLease})}),
+    ]);
+    expect(fixture.client.requests.filter(r=>r.method==='turn/start')).toHaveLength(1);
     await bridge.stop();
   });
   it('recovers the original stopped-turn result after host restart without starting a replacement',async()=>{
@@ -567,6 +609,7 @@ class FakeCodexConnection implements CodexAppServerConnection {
   resumeActiveTurnID?: string;
   resumeClosedTurn?: Record<string, unknown>;
   loseTurnStartResponse=false;
+  beforeTurnStartResponse?:()=>Promise<void>;
   private notificationHandler?: (notification: CodexNotification) => void;
   private requestHandler?: (request: CodexServerRequest) => void;
 
@@ -585,6 +628,7 @@ class FakeCodexConnection implements CodexAppServerConnection {
     if (method === 'turn/start') {
       if(this.loseTurnStartResponse)throw new Error('Response lost after turn started');
       const count = this.requests.filter(request => request.method === 'turn/start').length;
+      await this.beforeTurnStartResponse?.();
       return { turn: { id: `turn-${count}`, status: 'inProgress', items: [] } } as T;
     }
     if (method === 'turn/steer') return { turnId: params.expectedTurnId } as T;
