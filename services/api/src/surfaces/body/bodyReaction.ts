@@ -141,11 +141,11 @@ export class BodyReactions {
   }
 
   /** Stage 3, step F2: a new touch, as the mind perceives it; never throws, never changes the answer. */
-  private perceive(_scopeKey: string, deviceId: string, request: BodyReactionRequest, at: string): void {
+  private perceive(scopeKey: string, deviceId: string, request: BodyReactionRequest, at: string): void {
     if (!this.dependencies.mind) return;
     try {
-      this.dependencies.mind.perceive(bodyPerception({ touchId: request.id, deviceId, audience: request.audience, present: BODY_PRESENT[request.audience],
-        input: request.touch.input === 'hover' ? 'hover' : 'press', at }));
+      this.dependencies.mind.perceive(scopeKey, bodyPerception({ touchId: request.id, deviceId, audience: request.audience, present: BODY_PRESENT[request.audience],
+        input: request.touch.input === 'hover' ? 'hover' : 'press', at }), { code: request.touch.type });
     } catch { /* the touch is answered whatever the mind did */ }
   }
 

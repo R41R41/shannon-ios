@@ -76,7 +76,7 @@ function world(name: string) {
     return new Response(JSON.stringify({ output_text: text, usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 } }));
   }) as typeof fetch;
   const events: MindEvent[] = [];
-  const mind = { perceive: (event: MindEvent | null) => { if (event) events.push(event); return null; } };
+  const mind = { perceive: (_scopeKey: string, event: MindEvent | null) => { if (event) events.push(event); return null; } };
   const store = new SQLiteShannonStore({ path, now });
   const peopleStore = new SQLitePeopleMemoryStore(path);
   const background = new BackgroundUpdateCoordinator(store, store);

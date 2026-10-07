@@ -11,3 +11,4 @@ export { stableFingerprint } from '../report.js';
 export * from './cognitionLedger.js';
 export * from './tierSet.js';
 export * from './skillRecall.js';
+export * from './mindWorkspace.js';

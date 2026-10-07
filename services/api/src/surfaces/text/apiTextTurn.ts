@@ -39,7 +39,8 @@ import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
 import { prepareTurnCognitiveContext } from '../../mind/action/respond/turnCognitiveContext.js';
 import { TurnDeadline } from '../../mind/action/respond/turnDeadline.js';
 import type { TurnMemoryRecall } from '../../mind/recall/turnMemoryRecall.js';
-import { minecraftPerception, platformPerception, textPerception, type MindPerceiver, type PerceivedItem } from '../../mind/perception/perceptionPorts.js';
+import { closedId, minecraftPerception, platformPerception, textPerception, type MindPerceiver, type PerceivedItem } from '../../mind/perception/perceptionPorts.js';
+import type { MindTurnPorts } from '../../mind/workspace/workspacePorts.js';
 
 /**
  * The first half of one text turn of the conversation kernel (`ShannonApiKernel.textTurn`): orchestration, a fixed
@@ -89,9 +90,9 @@ export interface TextTurnSurface {
   store(turn: CompletedTurn): ShannonExperience | null;
   /**
    * Syzygy ADR-0008 stage 3: what the mind's normalizer of this surface needs beside the turn's audience, which it copies:
-   * which surface, the request's id, whether the verified owner wrote, and the body (her Minecraft body's device).
+   * which surface, whether the verified owner wrote, and the body (her Minecraft body's device); the conversation is the turn's thread.
    */
-  perception?: { surface: 'minecraft' | 'platform'; sourceId: string; ownerWrote: boolean; body?: string | null };
+  perception?: { surface: 'minecraft' | 'platform'; ownerWrote: boolean; body?: string | null };
 }
 
 export interface TextTurnInput {
@@ -219,11 +220,28 @@ export function perceiveTextTurn(mind: MindPerceiver | null, input: TextTurnInpu
     const facts = { message, present: audience.present, alone: audience.alone, at };
     const perception = surface?.perception;
     const event = !surface ? textPerception({ ...facts, threadId, ...(audience.turnLabel.speaker ? { speaker: audience.turnLabel.speaker } : {}) })
-      : perception?.surface === 'minecraft' ? minecraftPerception({ ...facts, requestId: perception.sourceId, ownerWrote: perception.ownerWrote, deviceId: perception.body ?? null })
-      : perception?.surface === 'platform' ? platformPerception({ ...facts, requestId: perception.sourceId, ownerWrote: perception.ownerWrote })
+      : perception?.surface === 'minecraft' ? minecraftPerception({ ...facts, threadId, ownerWrote: perception.ownerWrote, deviceId: perception.body ?? null })
+      : perception?.surface === 'platform' ? platformPerception({ ...facts, threadId, ownerWrote: perception.ownerWrote })
       : null;
-    return event ? mind.perceive(event) : null;
+    return event ? mind.perceive(input.scopeKey, event) : null;
   } catch { return null; }
+}
+
+/**
+ * Stage 3, step F3: the workspace's blocks for this turn (`[いまの場]`, the notices, the data frames), or '' without the
+ * workspace. The turn's own item and its conversation are not repeated: its words close the prompt and its thread is the history.
+ */
+export function textTurnWorkspace(mind: MindTurnPorts | null, input: TextTurnInput, perceived: PerceivedItem | null, begun: Pick<BegunTextTurn, 'captured' | 'occurredAt'>,
+  store: ConversationStore): string {
+  if (!mind?.render) return '';
+  try {
+    const surface = input.surface?.perception?.surface ?? (input.surface ? null : 'text');
+    return mind.render({
+      scopeKey: input.scopeKey, surface: 'text', present: input.audience.present, at: begun.occurredAt, currentItemId: perceived?.itemId ?? null,
+      current: surface ? { surface, sourceId: closedId(input.threadId) } : null,
+      snapshot: begun.captured, store,
+    });
+  } catch { return ''; }
 }
 
 /** Her identity, then what she may read this turn: a promise only when a read is asynchronous (`conversationCapabilityContext`). */

@@ -38,6 +38,7 @@ import { ledgerPredictionTap, presenceOf, valueFactsReader } from './wiring/cogn
 import { cognitionLedgerSwitches } from '@shannon/learning';
 import { configuredWithheldActions, gateRefusals, withheldFactsReader } from './wiring/withheldWiring.js';
 import { configuredSkillCopies } from './wiring/skillCopyWiring.js';
+import { configuredMindInbox } from './wiring/mindWiring.js';
 import { clock } from './mind/action/ownTime/autonomyLoopPacing.js';
 
 /**
@@ -139,6 +140,9 @@ const predictionLedger = configuredPredictionLedger(process.env, databasePath);
 // it gives nothing while anyone else may see or hear her.
 const valueFacts = cognitionLedgerSwitches(process.env).valueFacts && predictionLedger?.values ? valueFactsReader(predictionLedger.values, observer.body) : null;
 const shadowTap = shadow ? { reachOut: (...args: Parameters<typeof shadow.reachOut>) => shadow.reachOut(...args) } : null;
+// Syzygy ADR-0008 stage 3: the one function her own time is handed of the mind (rows of closed fields in `mind_inbox`, once the API
+// created it). SHANNON_WORKSPACE=off (or SHANNON_ADR8_STAGE3=off): none, and every step is what it was.
+const mindInbox = configuredMindInbox(process.env, { databasePath, log: line => console.log(line) });
 const loop = new ShannonAutonomyLoop({
   store, service, config, loop: loopConfig, model: configuredAutonomyTextModel(process.env, undefined, line => console.log(line)),
   reader: new BoundedPublicReader({
@@ -157,6 +161,7 @@ const loop = new ShannonAutonomyLoop({
   ...(valueFacts ? { valueFacts } : {}),
   // ADR-0008 §14: her next thought is told what a rule stopped lately, apart from a rest she chose; never with anyone else present.
   ...(withheldActions ? { withheldFacts: withheldFactsReader(withheldActions.withheld, observer.body, at => clock(at, config.timeZone)) } : {}),
+  ...(mindInbox ? { emitMindEvent: mindInbox.emit } : {}),
   // Content-free: a step kind and a closed reason code.
   log: line => console.log(`Shannon autonomy step: ${line.replace(/[^a-z0-9_:., -]/giu, '_').slice(0, 300)}`),
 });
@@ -196,6 +201,7 @@ try {
   decisionTraces?.close();
   predictionLedger?.close();
   withheldActions?.close();
+  mindInbox?.close();
   skillCopies?.close();
   ownerContext?.close();
   ownerUpcoming.close();

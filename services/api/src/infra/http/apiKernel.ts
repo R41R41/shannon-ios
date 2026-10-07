@@ -93,7 +93,7 @@ import { InMemoryVoiceIdentityStore, type ShannonVoiceIdentityStore } from '../.
 import { OwnOutreach, type OwnOutreachReader } from '../../surfaces/outreach/ownOutreach.js';
 import { voiceSessionCalls } from '../../surfaces/voice/ownerCallElsewhere.js';
 import {
-  NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textToolStart, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type TextTurnInput, type TextTurnResult,
+  NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type TextTurnInput, type TextTurnResult,
 } from '../../surfaces/text/apiTextTurn.js';
 import { randomUUID } from 'node:crypto';
 import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
@@ -111,7 +111,7 @@ import { recordCompletedCognitiveCycle } from '../../mind/action/respond/cogniti
 import { isExplicitVoyagerUpdateRequest } from '../../integrations/voyager/organize.js';
 import { optionalPlaceDiscoverySkill, placeSkillReply } from '../../integrations/places/placeDiscoverySkill.js';
 import type { ChatResponse } from '../../contracts/contracts.js';
-import type { MindPerceiver } from '../../mind/perception/perceptionPorts.js';
+import { withWorkspace, type MindTurnPorts } from '../../mind/workspace/workspacePorts.js';
 export type { TextTurnInput, TextTurnResult, TextTurnSurface } from '../../surfaces/text/apiTextTurn.js';
 export interface ShannonApiKernelOptions {
   chatModel?: ShannonChatModel;
@@ -154,7 +154,7 @@ export interface ShannonApiKernelOptions {
    * Syzygy ADR-0008 stage 3 (`docs/mind-workspace-contract.md`, `wiring/mindWiring.ts`): what every surface hands the mind. Absent
    * (`SHANNON_ADR8_STAGE3=off`, `SHANNON_MIND_EVENTS=off`), nothing is perceived and every turn is what it was at afb38c28.
    */
-  mind?: MindPerceiver;
+  mind?: MindTurnPorts;
 }
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel;
@@ -186,7 +186,7 @@ export class ShannonApiKernel {
   private readonly minecraftRequests: { promptBlock(scopeKey: string, at: string): string } | null;
   private readonly turnChooser: TurnChooser | null; private readonly toolHints: boolean;
   private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null;
-  private readonly mind: MindPerceiver | null;
+  private readonly mind: MindTurnPorts | null;
   /** What the server knows when it offers her tools: others present, and what her writes must not repeat (`shannonToolSession.ts`). */
   private readonly toolServer: ConversationToolServer;
   constructor(
@@ -365,7 +365,7 @@ export class ShannonApiKernel {
     const begun = beginTextTurn(deps, input);
     const { occurredAt, captured, provisionalIntent, peopleRecall } = begun;
     // Stage 3: the turn as the mind perceives it, with the audience the surface decided (nothing without the wiring).
-    perceiveTextTurn(this.mind, input, occurredAt);
+    const perceived = perceiveTextTurn(this.mind, input, occurredAt);
     // Who her tools are offered to, and (Syzygy ADR-0008 stage 2, none without its wiring) her read tools' plan and the turn's
     // Jev call, started here so that it runs in parallel with recall (`textToolStart`).
     const { toolAudience, toolOptions, choices } = textToolStart(input, begun, { autonomy: this.autonomy, toolServer: this.toolServer, turnChooser: this.turnChooser, readTools: this.readTools, toolHints: this.toolHints });
@@ -395,8 +395,9 @@ export class ShannonApiKernel {
       // Her fixed identity first, what she knows of the owner next, and the turn's context with the replay (`chatModelTurn.ts`).
       scopeKey: body.scopeKey, systemPrompt: layered.systemPrompt, ...(layered.profilePrompt ? { profilePrompt: layered.profilePrompt } : {}),
       // The history is a character budget; what fell out of it is covered by the replay summary.
-      ...conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey), surface?.openOnly)
-        .request([layered.turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n')),
+      // Stage 3: the workspace's blocks follow the turn's context, which stays byte for byte as it was (none without the wiring).
+      ...withWorkspace(conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey), surface?.openOnly)
+        .request([layered.turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n')), textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore)),
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message,
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,
@@ -435,6 +436,7 @@ export class ShannonApiKernel {
     // Another surface decides where its turn is kept (her Minecraft body: the owner's platform thread, or person memory).
     const experience = surface ? storedBySurface(deps, surface, completedTurn) : this.background.recordTurn(completedTurn);
     if (experience) response.turnId = experience.id;
+    if (experience && perceived) this.mind?.bind?.(body.scopeKey, perceived.itemId, `experience:${experience.id}`); // Stage 3: re-read at render.
     const completedIntent = experience ? recordCompletedCognitiveCycle(this.cognitiveIntents, body.scopeKey, cognitiveContext.frame, provisionalIntent, experience.id, {
       threadId, channel: 'text', action: 'respond', summary: '現在の状況・記憶・意図を使って返答した。', occurredAt,
     }, provisionalIntent ? completion.intentPlan : undefined) : null;
@@ -456,6 +458,7 @@ export class ShannonApiKernel {
     if (experience) this.background.schedule(completedTurn, experience.id);
     // Her stored feeling toward the owner moves only on a turn that is his alone.
     if (audience.alone) commitReplyEmotionLater(this.stateStore, body.scopeKey, expressiveEmotion);
+    this.mind?.turnEnded?.(); // Stage 3: what the mind noted is written after the response.
     return { response: withSentenceStream(completion, { status: 200, body: audience.visible(response) }), completion, ...(experience ? { experienceId: experience.id } : {}) };
   }
 

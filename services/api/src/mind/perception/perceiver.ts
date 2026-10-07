@@ -21,5 +21,5 @@ export interface PerceivedDetail {
 }
 
 export interface MindPerceiver {
-  perceive(event: MindEvent | null, detail?: PerceivedDetail | null): PerceivedItem | null;
+  perceive(scopeKey: string, event: MindEvent | null, detail?: PerceivedDetail | null): PerceivedItem | null;
 }

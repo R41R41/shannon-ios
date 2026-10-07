@@ -8,8 +8,8 @@ import { closedId, heldText, namesHer, perceived, perceivedId } from './percepti
  * both are copied. Someone else's words are text from outside: `untrusted`.
  */
 export interface PlatformPerceptionInput {
-  /** The platform request's id. */
-  requestId: string;
+  /** The conversation the bridge keeps the turn in (its platform thread): the item's source, so the thread's own turns are not repeated. */
+  threadId: string;
   message: string;
   /** The turn's audience as the surface decided it (`ChatAudienceTurn.present`), copied as it is. */
   present: MemoryAudience;
@@ -25,7 +25,7 @@ export function platformPerception(input: PlatformPerceptionInput): MindEvent | 
     audience: input.present, presence: { openOnly: input.alone, othersMayHear: !input.alone },
     speaker: input.ownerWrote ? { kind: 'owner', verified: true, tier: 1 } : { kind: 'person' },
     salienceInputs: input.ownerWrote ? { ownerSpeech: true, addressed: namesHer(input.message) } : { othersSpeech: true, addressed: namesHer(input.message) },
-    provenance: { source: 'platform', sourceId: closedId(input.requestId), trust: input.ownerWrote ? 'owner' : 'untrusted' },
+    provenance: { source: 'platform', sourceId: closedId(input.threadId), trust: input.ownerWrote ? 'owner' : 'untrusted' },
     content: heldText(input.message),
   });
 }

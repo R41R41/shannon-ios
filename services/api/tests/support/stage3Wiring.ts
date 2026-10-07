@@ -1,4 +1,4 @@
-import { configuredMind } from '../../src/wiring/mindWiring.js';
+import { configuredMind, configuredMindInbox } from '../../src/wiring/mindWiring.js';
 import type { Stage3Hooks } from './stage3Scenarios.js';
 
 /**
@@ -8,9 +8,13 @@ import type { Stage3Hooks } from './stage3Scenarios.js';
  */
 export function stage3Hooks(environment: Readonly<Record<string, string | undefined>> = process.env): Stage3Hooks {
   return {
-    kernel: () => {
-      const mind = configuredMind(environment);
+    kernel: ({ databasePath, now }) => {
+      const mind = configuredMind(environment, { databasePath, now, schedule: task => task() });
       return mind ? { mind: mind.mind } : {};
+    },
+    loop: ({ databasePath }) => {
+      const inbox = configuredMindInbox(environment, { databasePath });
+      return inbox ? { emitMindEvent: inbox.emit } : {};
     },
   };
 }

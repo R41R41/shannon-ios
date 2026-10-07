@@ -79,10 +79,13 @@ describe('stage 3 switched off in the environment', () => {
    * digests of afb38c28. Perception and attention alone change nothing anyone can see; the workspace changes the conversation's
    * prompts; the proactive gate changes only her own messages.
    */
+  const CONVERSATION = STAGE3_SCENARIOS.filter(name => name !== 'reach-out');
   const ALONE: ReadonlyArray<{ part: string; on: readonly string[]; reaches: readonly string[] }> = [
     { part: 'perception', on: ['SHANNON_MIND_EVENTS'], reaches: [] },
     { part: 'attention', on: ['SHANNON_MIND_EVENTS', 'SHANNON_ATTENTION'], reaches: [] },
     { part: 'data frames', on: ['SHANNON_DATA_FRAMES'], reaches: [] },
+    // The workspace keeps its journal in the conversation's database; her own time alone has no workspace to write to.
+    { part: 'workspace', on: ['SHANNON_MIND_EVENTS', 'SHANNON_ATTENTION', 'SHANNON_WORKSPACE', 'SHANNON_DATA_FRAMES'], reaches: CONVERSATION },
   ];
 
   it('reaches, with one part switched on alone, only the surfaces that part is about', async () => {
@@ -90,6 +93,8 @@ describe('stage 3 switched off in the environment', () => {
     for (const { part, on, reaches } of ALONE) {
       const current = await digestsWith(Object.fromEntries(PART_SWITCHES.map(name => [name, on.includes(name) ? 'on' : 'off'])));
       for (const name of STAGE3_SCENARIOS.filter(item => !reaches.includes(item))) expect(current[name], `${part} alone: ${name}`).toEqual(recorded[name]);
+      // Not vacuous: a part that reaches a surface changes what that surface keeps.
+      for (const name of reaches) expect(current[name]!.state, `${part} alone: ${name}`).not.toEqual(recorded[name]!.state);
     }
   });
 });

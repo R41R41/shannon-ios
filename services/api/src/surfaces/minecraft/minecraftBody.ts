@@ -140,8 +140,8 @@ export class MinecraftBody {
         ignored = this.rememberPerson(request, conversationId, sourceUserId, turn.shannonReply);
         return null;
       },
-      // Stage 3: her Minecraft body's normalizer copies the turn's audience; it is told the request, who wrote and the body.
-      perception: { surface: 'minecraft', sourceId: request.requestId, ownerWrote: owner, body: deviceId },
+      // Stage 3: her Minecraft body's normalizer copies the turn's audience; it is told who wrote and the body.
+      perception: { surface: 'minecraft', ownerWrote: owner, body: deviceId },
     }));
     const completion = result.completion;
     if (!completion) throw new Error('MINECRAFT_TURN_WITHOUT_COMPLETION');

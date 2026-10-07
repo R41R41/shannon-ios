@@ -97,6 +97,22 @@ export interface StepDependencies {
    * null. Absent (`SHANNON_ADR8_STAGE2=off`): every prompt is what it was.
    */
   withheldFacts?: (scopeKey: string, at: string) => string | null;
+  /**
+   * Syzygy ADR-0008 stage 3: the one function she is handed of the mind (`EmitMindEvent`, `contracts/mindInboxContract.ts`): a step
+   * of hers that ended, as one row of closed fields in `mind_inbox`. Never a word; returns nothing. Absent (`SHANNON_WORKSPACE`
+   * off), nothing is written.
+   */
+  emitMindEvent?: (scopeKey: string, draft: OwnTimeMindEvent, at: string) => void;
+}
+
+/** What her own time hands the mind of a step: its kind or tool, how it ended, and who could see her (closed values). */
+export interface OwnTimeMindEvent {
+  kind: 'own_time_step';
+  code: 'done' | 'failed';
+  audience: 'owner' | 'others';
+  source: 'own_time';
+  sourceId: string;
+  tool: string;
 }
 
 /** The adapters of one domain. A step allowed for a domain can reach nothing else. */

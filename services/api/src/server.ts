@@ -171,7 +171,7 @@ minecraft.connect({ stateStore: persistentStore, conversationStore: persistentSt
 // Syzygy ADR-0008 stage 2, step 3 (SHANNON_READ_TOOLS): her read tools over the same reads as the projections; off, none.
 const readTools = readToolPorts(process.env, { notion, voyagerCatalog, upcoming: ownerUpcoming.upcoming, chatModel });
 // Syzygy ADR-0008 stage 3 (docs/mind-workspace-contract.md): what every surface perceived. SHANNON_ADR8_STAGE3=off: none of it.
-const mind = configuredMind(process.env);
+const mind = configuredMind(process.env, { databasePath: configuredDatabasePath(), now, ticking: true, timeZone: autonomyConfig.timeZone, log: line => console.log(line) });
 const kernel = createLocalApiKernel(now, {
   ownOutreach,
   chatModel,

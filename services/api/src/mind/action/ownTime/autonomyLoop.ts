@@ -208,6 +208,7 @@ export class ShannonAutonomyLoop {
     }
     const reportedAt = now();
     const reported = this.report(cycle, begun.row, begun.decision, ready, result, plan, reportedAt);
+    this.emitStep(current, begun.row.id, result.tool ?? ready.request.tool, result, reportedAt);
     this.choice(tap => tap.reported?.(this.scopeKey, {
       stepId: begun.row.id, outcome: reported.saved === 'unknown' ? 'void' : reported.saved ? result.outcome : 'failed', costYen: this.costYen(ready, result),
       ...(/^shannon-study:\/\/[A-Za-z0-9][A-Za-z0-9_:-]{0,119}$/u.test(reported.link ?? '') ? { pieceId: reported.link!.slice('shannon-study://'.length) } : {}),
@@ -245,6 +246,21 @@ export class ShannonAutonomyLoop {
       return dropped.length && mayRetryThought(this.dependencies, cycle, cycle.stepsTaken) ? { kind: 'think', again: true, dropped } : { kind: 'rest', forced: 'no_plan' };
     }
     return { kind: 'think', again: true, ...(dropped.length ? { dropped } : {}) };
+  }
+
+  /**
+   * Syzygy ADR-0008 stage 3: a step of hers that did something (not a thought or a rest) is handed to the mind as closed values
+   * (`emitMindEvent`), so the conversation's workspace can say what she did; who could see her decides who may be told.
+   */
+  private emitStep(step: AutonomyPlannedStep, stepId: string, named: string | undefined, result: StepResult, at: string): void {
+    const emit = this.dependencies.emitMindEvent;
+    if (!emit || step.kind === 'think' || step.kind === 'rest' || !/^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,159}$/u.test(stepId)) return;
+    try {
+      let others = false;
+      try { others = this.dependencies.reachOuts?.audience(this.scopeKey, at) != null; } catch { others = true; }
+      const tool = /^[A-Za-z][A-Za-z0-9_.:-]{0,79}$/u.test(named ?? '') ? named! : step.kind;
+      emit(this.scopeKey, { kind: 'own_time_step', code: result.outcome === 'done' ? 'done' : 'failed', audience: others ? 'others' : 'owner', source: 'own_time', sourceId: stepId, tool }, at);
+    } catch { /* the mind never stops a step */ }
   }
 
   /** Hands the prediction tap one closed fact about a choice of hers; it never stops a step. */
