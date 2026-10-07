@@ -3,6 +3,7 @@ import type { MindCall } from '../infra/ipc/mindSocket.js';
 import type { ActionThreads, ActionDraft, ActionLease, ActionView } from '../contracts/actionThreadContract.js';
 export function actionThreadsClient(call:MindCall,holder=`runner-${randomUUID()}`):ActionThreads {
   return {
+    admitRespond:(draft:ActionDraft)=>call('action.admitRespond',{draft,holder}),
     enqueue:(draft:ActionDraft)=>call('action.enqueue',draft),claim:(id:string)=>call('action.claim',{id,holder}),
     renew:(lease:ActionLease,progress?:string)=>call('action.renew',{lease,progress}),
     dispatch:(lease:ActionLease,resources?:readonly string[])=>call('action.dispatch',{lease,resources}),

@@ -33,6 +33,7 @@ export async function configuredMindWorker(values:Readonly<Record<string,string|
       }
       case 'mind.bind':{const scopeKey=text('scopeKey');host.bind(scopeKey,text('itemId'),text('ref'));return projection(scopeKey);}
       case 'mind.flush':host.tick();return true;
+      case 'action.admitRespond':return actions.admitRespond(a.draft as ActionDraft,text('holder'),at);
       case 'action.enqueue':return actions.enqueue(a as unknown as ActionDraft,at);
       case 'action.claim':return actions.claim(text('id'),text('holder'),at);
       case 'action.renew':return actions.renew(lease(),at,a.progress as string|undefined);

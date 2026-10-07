@@ -4,6 +4,7 @@ import type { ActionThreads } from '../../src/contracts/actionThreadContract.js'
 export function actionHarness(now:()=>string,path=':memory:') {
   const db=new DatabaseSync(path),store=new SQLiteActionStore(db);
   const actions:ActionThreads={
+    admitRespond:async draft=>store.admitRespond(draft,'test-runner',now()),
     enqueue:async draft=>store.enqueue(draft,now()),claim:async id=>store.claim(id,'test-runner',now()),
     renew:async(lease,progress)=>store.renew(lease,now(),progress),dispatch:async(lease,keys)=>store.dispatch(lease,now(),keys),
     finish:async(lease,state,code)=>store.finish(lease,state,code,now()),list:async scope=>store.list(scope),

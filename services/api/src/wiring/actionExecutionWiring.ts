@@ -3,7 +3,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { actionResource, leaseOf, type ActionDraft, type ActionThreads, type RunningAction, type ActionLease, type ActionAcknowledgement } from '../contracts/actionThreadContract.js';
 import { inActionExecution } from '../infra/context/actionExecution.js';
 export async function acquireAction(actions:ActionThreads,draft:ActionDraft,signal?:AbortSignal):Promise<RunningAction|null> {
-  const queued=await actions.enqueue(draft),view=await actions.claim(queued.id);
+  const view=draft.kind==='respond'?await actions.admitRespond(draft):await actions.claim((await actions.enqueue(draft)).id);
   if(!view)return null;
   const controller=new AbortController(),lease=leaseOf(view);
   const externalStop=()=>controller.abort();signal?.addEventListener('abort',externalStop,{once:true});if(signal?.aborted)controller.abort();

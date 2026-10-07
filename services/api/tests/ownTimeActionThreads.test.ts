@@ -338,7 +338,7 @@ it.each(tokenProviders)('preserves known $name reasoning/cache counts and their 
   expect(h.service.overview('owner').budget.spentYen).toBeGreaterThan(0);
 });
 it('serializes recovery conversations locally and grants no outside write during disconnection',async()=>{
-  const h=fixture(),run=foregroundRunner({...h.actions,enqueue:async()=>{throw new Error('disconnected');}});
+  const h=fixture(),run=foregroundRunner({...h.actions,admitRespond:async()=>{throw new Error('disconnected');}});
   let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});let active=0,maximum=0;
   const first=run('owner',async()=>{maximum=Math.max(maximum,++active);await gate;active--;});
   const second=run('owner',async()=>{maximum=Math.max(maximum,++active);active--;});

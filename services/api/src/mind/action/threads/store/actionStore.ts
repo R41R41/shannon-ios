@@ -47,42 +47,51 @@ export class SQLiteActionStore {
   }
   enqueue(draft: ActionDraft, at: string): ActionView {
     if (!validActionDraft(draft)) throw new Error('ACTION_DRAFT');
-    return this.transaction(() => {
-      const known = this.db.prepare('SELECT * FROM mind_actions WHERE scope_key=? AND kind=? AND source_id=?').get(draft.scopeKey,draft.kind,draft.sourceId);
-      if (known) {
-        const existing = view(known);
-        if (existing.origin !== draft.origin || existing.parentId !== (draft.parentId ?? null)) throw new Error('ACTION_ORIGIN');
-        if(draft.ownerInformed && !existing.ownerInformed){
-          this.db.prepare('UPDATE mind_actions SET owner_informed=1,updated_at=? WHERE id=?').run(at,existing.id);
-          return this.get(existing.id)!;
-        }
-        return existing;
+    return this.transaction(() => this.enqueueInTransaction(draft,at));
+  }
+  private enqueueInTransaction(draft:ActionDraft,at:string):ActionView {
+    const known = this.db.prepare('SELECT * FROM mind_actions WHERE scope_key=? AND kind=? AND source_id=?').get(draft.scopeKey,draft.kind,draft.sourceId);
+    if (known) {
+      const existing = view(known);
+      if (existing.origin !== draft.origin || existing.parentId !== (draft.parentId ?? null)) throw new Error('ACTION_ORIGIN');
+      if(draft.ownerInformed && !existing.ownerInformed){
+        this.db.prepare('UPDATE mind_actions SET owner_informed=1,updated_at=? WHERE id=?').run(at,existing.id);
+        return this.get(existing.id)!;
       }
-      const parent = draft.parentId ? this.get(draft.parentId) : null;
-      if (draft.parentId && (!parent || parent.scopeKey !== draft.scopeKey || parent.origin !== draft.origin || ACTION_TERMINAL.includes(parent.state) || parent.state === 'stopping')) throw new Error('ACTION_PARENT');
-      const id = randomUUID();
-      const keys=JSON.stringify([...new Set(draft.resources ?? [])].sort());
-      this.db.prepare(`INSERT INTO mind_actions(id,scope_key,kind,origin,source_id,parent_id,state,resources_json,base_resources_json,owner_informed,deadline,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,'queued',?,?,?,?,?,?)`).run(id,draft.scopeKey,draft.kind,draft.origin,draft.sourceId,draft.parentId ?? null,
-          keys,keys,parent?.ownerInformed || draft.ownerInformed ? 1 : 0,draft.deadline ?? null,at,at);
-      return this.get(id)!;
-    });
+      return existing;
+    }
+    const parent = draft.parentId ? this.get(draft.parentId) : null;
+    if (draft.parentId && (!parent || parent.scopeKey !== draft.scopeKey || parent.origin !== draft.origin || ACTION_TERMINAL.includes(parent.state) || parent.state === 'stopping')) throw new Error('ACTION_PARENT');
+    const id = randomUUID();
+    const keys=JSON.stringify([...new Set(draft.resources ?? [])].sort());
+    this.db.prepare(`INSERT INTO mind_actions(id,scope_key,kind,origin,source_id,parent_id,state,resources_json,base_resources_json,owner_informed,deadline,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,'queued',?,?,?,?,?,?)`).run(id,draft.scopeKey,draft.kind,draft.origin,draft.sourceId,draft.parentId ?? null,
+        keys,keys,parent?.ownerInformed || draft.ownerInformed ? 1 : 0,draft.deadline ?? null,at,at);
+    return this.get(id)!;
   }
   claim(id: string, holder: string, at: string): ActionView | null {
     if (!ACTION_ID.test(holder)) throw new Error('ACTION_HOLDER');
-    return this.transaction(() => {
-      this.sweep(at);
-      const action = this.get(id);
-      if (!action || action.state !== 'queued' || action.failures >= ACTION_LIMITS.consecutiveFailures) return null;
-      const live = this.list(action.scopeKey).filter(item => ['running','waiting','stopping'].includes(item.state)
-        || item.kind!=='respond'&&item.state==='unknown'&&item.sent);
-      const foreground = action.kind === 'respond';
-      if (live.filter(item => (item.kind === 'respond') === foreground).length >= (foreground ? 1 : 2)) return null;
-      if (this.list(action.scopeKey).some(item => item.id!==action.id && (['running','waiting','stopping'].includes(item.state)||(item.state==='unknown'&&item.sent)) && item.resources.some(key => action.resources.includes(key)))) return null;
-      const until = new Date(Date.parse(at)+ACTION_LIMITS.leaseMs).toISOString();
-      this.db.prepare(`UPDATE mind_actions SET state='running',generation=generation+1,holder=?,last_holder=?,lease_until=?,sent=0,deadline=CASE WHEN kind='respond' THEN NULL ELSE deadline END,updated_at=? WHERE id=?`).run(holder,holder,until,at,id);
-      return this.get(id);
-    });
+    return this.transaction(() => this.claimInTransaction(id,holder,at));
+  }
+  private claimInTransaction(id:string,holder:string,at:string):ActionView|null {
+    this.sweep(at);
+    const action = this.get(id);
+    if (!action || action.state !== 'queued' || action.failures >= ACTION_LIMITS.consecutiveFailures) return null;
+    const live = this.list(action.scopeKey).filter(item => ['running','waiting','stopping'].includes(item.state)
+      || item.kind!=='respond'&&item.state==='unknown'&&item.sent);
+    const foreground = action.kind === 'respond';
+    if (live.filter(item => (item.kind === 'respond') === foreground).length >= (foreground ? 1 : 2)) return null;
+    if (this.list(action.scopeKey).some(item => item.id!==action.id && (['running','waiting','stopping'].includes(item.state)||(item.state==='unknown'&&item.sent)) && item.resources.some(key => action.resources.includes(key)))) return null;
+    const until = new Date(Date.parse(at)+ACTION_LIMITS.leaseMs).toISOString();
+    this.db.prepare(`UPDATE mind_actions SET state='running',generation=generation+1,holder=?,last_holder=?,lease_until=?,sent=0,deadline=CASE WHEN kind='respond' THEN NULL ELSE deadline END,updated_at=? WHERE id=?`).run(holder,holder,until,at,id);
+    return this.get(id);
+  }
+  /** Foreground admission has one durable commit; no execution right leaves an uncommitted transaction. */
+  admitRespond(draft:ActionDraft,holder:string,at:string):ActionView|null {
+    if(!draft || typeof draft!=='object' || Array.isArray(draft) || !validActionDraft(draft))throw new Error('ACTION_DRAFT');
+    if(draft.kind!=='respond')throw new Error('ACTION_RESPOND');
+    if(typeof holder!=='string'||!ACTION_ID.test(holder))throw new Error('ACTION_HOLDER');
+    return this.transaction(()=>this.claimInTransaction(this.enqueueInTransaction(draft,at).id,holder,at));
   }
   check(lease: ActionLease, at: string): ActionView | null {
     const action = this.get(lease.id);

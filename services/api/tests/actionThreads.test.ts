@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { SQLiteActionStore } from '../src/mind/action/threads/store/actionStore.js';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
@@ -7,6 +7,58 @@ const at='2026-10-07T12:00:00.000Z';
 const later='2026-10-07T12:00:31.000Z';
 function store(){const db=new DatabaseSync(':memory:');databases.push(db);return new SQLiteActionStore(db);}
 afterEach(()=>databases.splice(0).forEach(db=>db.close()));
+describe('atomic foreground admission',()=>{
+  const draft=(sourceId:string)=>({scopeKey:'owner',kind:'respond' as const,origin:'owner_request' as const,sourceId});
+  it('uses one immediate transaction and durable commit and does not reacquire a running or completed attempt',()=>{
+    const s=store(),exec=vi.spyOn(databases.at(-1)!,'exec');
+    const running=s.admitRespond({...draft('talk'),deadline:later},'api',at)!;
+    expect(exec.mock.calls.map(([sql])=>sql)).toEqual(['BEGIN IMMEDIATE','COMMIT']);exec.mockRestore();
+    expect(running).toMatchObject({state:'running',generation:1,holder:'api',deadline:null});
+    expect(s.admitRespond(draft('talk'),'other-api',at)).toBeNull();expect(s.get(running.id)).toEqual(running);
+    s.finish(leaseOf(running),'completed','responded',at);
+    expect(s.admitRespond(draft('talk'),'api',at)).toBeNull();expect(s.get(running.id)?.generation).toBe(1);
+  });
+  it('commits a competing queued turn and later admits that same identity after the foreground releases',()=>{
+    const s=store(),first=s.admitRespond(draft('first'),'api',at)!;
+    expect(s.admitRespond(draft('second'),'other-api',at)).toBeNull();
+    const queued=s.list('owner').find(action=>action.sourceId==='second')!;
+    expect(queued).toMatchObject({state:'queued',generation:0,holder:null});
+    s.finish(leaseOf(first),'completed','responded',at);
+    expect(s.admitRespond({...draft('second'),ownerInformed:true},'other-api',at)).toMatchObject({id:queued.id,state:'running',generation:1,ownerInformed:true});
+    expect(s.list('owner').filter(action=>action.sourceId==='second')).toHaveLength(1);
+  });
+  it('sweeps expired leases and deadlines while retaining uncertain resource exclusion',()=>{
+    const s=store(),resource=actionResource('synthetic','folder');
+    const old=s.admitRespond({...draft('old'),resources:[resource]},'old-api',at)!;s.dispatch(leaseOf(old),at);
+    expect(s.admitRespond({...draft('blocked'),resources:[resource]},'new-api',later)).toBeNull();
+    expect(s.get(old.id)).toMatchObject({state:'unknown',generation:2,sent:true,resources:[resource]});
+    expect(s.admitRespond({...draft('expired'),deadline:at},'new-api',later)).toBeNull();
+    expect(s.list('owner').some(action=>action.sourceId==='expired')).toBe(false);
+    expect(databases.at(-1)!.prepare("SELECT state,result FROM mind_actions WHERE source_id='expired'").get()).toEqual({state:'cancelled',result:'deadline'});
+    expect(s.admitRespond(draft('independent'),'new-api',later)).toMatchObject({state:'running',generation:1});
+  });
+  it('validates kind, draft, holder and parent without inserting a failed admission',()=>{
+    const s=store();
+    expect(()=>s.admitRespond({...draft('background'),kind:'agentTask'},'api',at)).toThrow('ACTION_RESPOND');
+    expect(()=>s.admitRespond({...draft('invalid'),origin:'own_time'},'api',at)).toThrow('ACTION_DRAFT');
+    expect(()=>s.admitRespond({...draft('invalid'),resources:['private-path']},'api',at)).toThrow('ACTION_DRAFT');
+    expect(()=>s.admitRespond(draft('invalid'),'bad holder',at)).toThrow('ACTION_HOLDER');
+    const parent=s.enqueue({scopeKey:'owner',kind:'agentTask',origin:'owner_request',sourceId:'parent',ownerInformed:true},at);
+    expect(s.admitRespond({...draft('child'),parentId:parent.id},'api',at)).toMatchObject({parentId:parent.id,ownerInformed:true});
+    s.stop('owner',parent.id,'parent-stop',at);
+    expect(()=>s.admitRespond({...draft('rejected-child'),parentId:parent.id},'api',at)).toThrow('ACTION_PARENT');
+    expect(()=>s.admitRespond({...draft('child'),parentId:null},'api',at)).toThrow('ACTION_ORIGIN');
+    expect(databases.at(-1)!.prepare("SELECT source_id FROM mind_actions WHERE source_id NOT IN ('parent','child')").all()).toEqual([]);
+  });
+  it('rolls back the inserted draft if claim fails before commit',()=>{
+    const s=store(),db=databases.at(-1)!;
+    db.exec("CREATE TRIGGER reject_admission BEFORE UPDATE ON mind_actions WHEN NEW.source_id='failing' AND NEW.state='running' BEGIN SELECT RAISE(ABORT,'injected_claim_failure'); END;");
+    expect(()=>s.admitRespond(draft('failing'),'api',at)).toThrow('injected_claim_failure');
+    expect(db.prepare("SELECT id FROM mind_actions WHERE source_id='failing'").all()).toEqual([]);
+    db.exec('DROP TRIGGER reject_admission');
+    expect(s.admitRespond(draft('failing'),'api',at)).toMatchObject({state:'running',generation:1});
+  });
+});
 describe('one foreground and two background threads',()=>{
   it('keeps the third background queued and gives the foreground its independent slot',()=>{
     const s=store(), make=(sourceId:string,kind:'ownTime'|'respond'='ownTime')=>s.enqueue({scopeKey:'owner',sourceId,kind,origin:kind==='ownTime'?'own_time':'owner_request'},at);

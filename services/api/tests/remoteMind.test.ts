@@ -10,6 +10,9 @@ import { configuredRemoteMind } from '../src/wiring/remoteMindWiring.js';
 import { textPerception } from '../src/mind/perception/perceptionPorts.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { serveMindSocket } from '../src/infra/ipc/mindSocket.js';
+import { MindSocketClient } from '../src/infra/ipc/mindSocket.js';
+import { actionThreadsClient } from '../src/wiring/actionThreadsWiring.js';
+import { acquireAction } from '../src/wiring/actionExecutionWiring.js';
 const cleanups:Array<()=>void|Promise<void>>=[];
 afterEach(async()=>{for(const close of cleanups.splice(0).reverse())await close();});
 const at='2026-10-07T12:00:00.000Z',now=()=>at;
@@ -17,6 +20,20 @@ const on={SHANNON_ADR8_STAGE3:'on',SHANNON_ADR8_STAGE4:'on'};
 function location(){const dir=mkdtempSync(join(tmpdir(),'shannon-ipc-'));cleanups.push(()=>rmSync(dir,{recursive:true,force:true}));return {dir,path:join(dir,'db.sqlite')};}
 function ownerHost(path:string){const mind=configuredMind(on,{role:'worker',databasePath:path,now,schedule:work=>work()})!;return {host:mind.host!,close:mind.close};}
 describe('one mind across the process boundary',()=>{
+  it('admits the real foreground through one RPC and keeps a competing turn queued',async()=>{
+    const {path,dir}=location(),worker=await configuredMindWorker(on,path,()=>ownerHost(path),now);cleanups.push(worker.close);
+    const client=new MindSocketClient(join(dir,'mind-runtime','mind.sock'));cleanups.push(()=>client.close());
+    const methods:string[]=[],actions=actionThreadsClient(async(method,args)=>{methods.push(method);return client.call(method,args);},'api');
+    const draft={scopeKey:'owner',kind:'respond' as const,origin:'owner_request' as const,sourceId:'first'};
+    const first=await acquireAction(actions,draft);expect(first).not.toBeNull();
+    expect(methods).toEqual(['action.admitRespond']);
+    expect(await acquireAction(actions,{...draft,sourceId:'second'})).toBeNull();
+    const queued=(await actions.list('owner')).find(action=>action.sourceId==='second')!;expect(queued.state).toBe('queued');
+    await first!.finish('completed','responded');
+    const second=await acquireAction(actions,{...draft,sourceId:'second'});expect(second?.view).toMatchObject({id:queued.id,state:'running',generation:1});
+    await second!.finish('completed','responded');
+    expect(methods).not.toContain('action.enqueue');expect(methods).not.toContain('action.claim');
+  });
   it('acquires the socket before constructing its owner, and rejects a second owner without constructing it',async()=>{
     const {path}=location();const worker=await configuredMindWorker(on,path,()=>ownerHost(path),now);cleanups.push(worker.close);
     let constructed=false;

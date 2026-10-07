@@ -9,6 +9,8 @@ export interface ActionAcknowledgement {
   state:'budget'|'checkpoint'|'completed'|'failed'|'cancelled';code:string;failureCode?:string;
 }
 export interface ActionThreads {
+  /** Respond only: enqueue and claim atomically, returning rights only after the durable commit. */
+  admitRespond(draft:ActionDraft):Promise<ActionView|null>;
   enqueue(draft: ActionDraft): Promise<ActionView>;
   claim(id: string): Promise<ActionView|null>;
   renew(lease: ActionLease,progress?: string): Promise<ActionView|null>;
