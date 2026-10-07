@@ -10,7 +10,9 @@ import type { LlmUsageEvent } from '../src/infra/models/llmUsage.js';
 import { TEXT_TURN_DEADLINE, TURN_OUT_OF_TIME_LINE, TurnDeadline, VOICE_TURN_DEADLINE } from '../src/mind/action/respond/turnDeadline.js';
 import { routeTurn, tierRequest } from '../src/mind/action/respond/turnRouting.js';
 import { SHANNON_TOOLS, shannonTool } from '../src/mind/tools/shannonTools.js';
-import { configuredSonnet, tieredChatModel } from '../src/wiring/sonnetWiring.js';
+import { configuredSkillProposer, configuredSonnet, tieredChatModel } from '../src/wiring/sonnetWiring.js';
+import { AnthropicSkillSleepModel } from '../src/infra/models/anthropic/anthropicSkillModel.js';
+import { createConfiguredSkillSleepModels } from '../src/mind/sleep/skillSleepModel.js';
 import { configuredTurnRouting } from '../src/wiring/turnRoutingWiring.js';
 import { anthropicFixture, message, scriptedAnthropic } from './support/anthropicFixtures.js';
 
@@ -228,5 +230,31 @@ describe('Sonnet routing (owner answers I-1, I-2)', () => {
     const none = configuredTurnRouting({}, { databasePath: null, choices: null })!.routing;
     expect(tierRequest(routeTurn(none, { scopeKey: 'owner', surface: 'text', threadId: 't', answer, at: '2026-10-07T03:00:00.000Z' }))).toEqual({ tier: 'luna_plus' });
     expect(decideTier({ surface: 'text', answers: null, lunaCompetence: null, sonnetAvailable: true }).served).toBe('luna');
+  });
+});
+
+describe('the skill proposer of her sleep (the strongest hook)', () => {
+  it('is Sonnet whenever the key is present, routing on or off, and terra otherwise; the maintainer stays OpenAI', () => {
+    expect(configuredSkillProposer({}, {})).toBeNull();
+    expect(configuredSkillProposer({ ANTHROPIC_API_KEY: 'k' }, {})).toBeInstanceOf(AnthropicSkillSleepModel);
+    expect(configuredSkillProposer({ ANTHROPIC_API_KEY: 'k', SHANNON_SONNET_ROUTING: 'off', SHANNON_ADR8_STAGE2: 'off' }, {})!.model).toBe('claude-sonnet-5-5');
+    const strongest = () => configuredSkillProposer({ ANTHROPIC_API_KEY: 'k' }, {});
+    const both = createConfiguredSkillSleepModels({ OPENAI_API_KEY: 'o' }, undefined, strongest);
+    expect(both.maintainer?.model).toBe('gpt-5.6-terra');
+    expect(both.proposer?.model).toBe('claude-sonnet-5-5');
+    expect(createConfiguredSkillSleepModels({ OPENAI_API_KEY: 'o' }, undefined, () => configuredSkillProposer({}, {})).proposer?.model).toBe('gpt-5.6-terra');
+    expect(createConfiguredSkillSleepModels({}, undefined, strongest)).toMatchObject({ maintainer: null, proposer: { model: 'claude-sonnet-5-5' } });
+  });
+
+  it('answers one structured object, its cost on the background lane, and throws on a refusal', async () => {
+    const { fetcher, bodies } = scriptedAnthropic([message([{ type: 'text', text: '{"skills":[]}', citations: null }], 'end_turn'), anthropicFixture('refusal')]);
+    const usage: LlmUsageEvent[] = [];
+    const proposer = configuredSkillProposer({ ANTHROPIC_API_KEY: 'k' }, { fetch: fetcher, usageStore: { recordLlmUsage: event => { usage.push(event); }, backgroundLlmCostUsd: () => 0 } })!;
+    const schema = { type: 'object', properties: { skills: { type: 'array', maxItems: 2, items: { type: 'string' } } }, required: ['skills'], additionalProperties: false };
+    expect(await proposer.json('owner', 'skill_proposals', '[手順]', { seeds: [] }, schema)).toEqual({ skills: [] });
+    expect(bodies[0]).toMatchObject({ model: 'claude-sonnet-5-5', thinking: { type: 'adaptive' }, output_config: { effort: 'medium', format: { type: 'json_schema' } } });
+    expect(JSON.stringify(bodies[0]!.output_config)).not.toContain('maxItems');
+    expect(usage[0]).toMatchObject({ lane: 'memory_background', model: 'claude-sonnet-5-5', cachedInputTokens: 2_000 });
+    await expect(proposer.json('owner', 'skill_proposals', '[手順]', {}, schema)).rejects.toThrow('ANTHROPIC_SKILLS_REFUSAL');
   });
 });

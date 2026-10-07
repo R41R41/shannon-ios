@@ -11,6 +11,7 @@ import type { ShannonKnowledgeStore } from '../mind/memory/store/sqliteShannonKn
 import { isExperienceSourceVisible, usableKnowledgeFor } from '../mind/recall/turnKnowledgeRecall.js';
 import { ShannonSkillConsolidator, type SkillSeedSources, type SkillSleepModels } from '../mind/sleep/skillConsolidation.js';
 import { createConfiguredSkillSleepModels } from '../mind/sleep/skillSleepModel.js';
+import { configuredSkillProposer } from './sonnetWiring.js';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import { aetherStudyScope, configuredAetherAccess, type AetherAccess } from '../integrations/aether/aetherAccess.js';
 import { exportSkills, type SkillExportResult } from '../integrations/aether/skillExport.js';
@@ -79,7 +80,8 @@ export function skillSleepConsolidator(
   },
 ): ShannonSkillConsolidator {
   return new ShannonSkillConsolidator(parts.memory, skillSeedSources(parts.store, parts.choices),
-    parts.models ?? createConfiguredSkillSleepModels(environment, parts.store), parts.store,
+    // The proposer is Sonnet whenever the Anthropic key is present (step 5); otherwise terra.
+    parts.models ?? createConfiguredSkillSleepModels(environment, parts.store, () => configuredSkillProposer(environment, { usageStore: parts.store })), parts.store,
     { ...(parts.now ? { now: parts.now } : {}), ...(parts.log ? { log: parts.log } : {}) });
 }
 

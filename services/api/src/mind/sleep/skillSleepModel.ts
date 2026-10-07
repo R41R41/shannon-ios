@@ -6,9 +6,9 @@ import { estimatedOpenAICostUsd, responseUsage, type LlmUsageStore } from '../..
  * pattern wiki and for the skill proposer. Core: memory. Usage is recorded on the background lane, inside its monthly budget.
  *
  * The proposer should be the strongest model there is (WikiSkill: skills written by a stronger model carry over to a weaker one,
- * and luna is the main model). Sonnet 5.5 comes with step 5's Anthropic adapter (`infra/models/anthropic`, on the stage-2 branch):
- * `createConfiguredSkillSleepModels` is the one hook where it is chosen once that adapter and its key are present; until then both
- * roles use terra.
+ * and luna is the main model). `createConfiguredSkillSleepModels` is the one hook where Sonnet 5.5 is chosen: the wiring hands
+ * `configuredSkillProposer` (`wiring/sonnetWiring.ts`), which is Sonnet whenever the Anthropic key is present (independent of
+ * `SHANNON_SONNET_ROUTING`); without the key the proposer is terra, like the maintainer.
  */
 export interface SkillSleepModel {
   readonly model: string;

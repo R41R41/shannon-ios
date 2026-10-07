@@ -1,5 +1,6 @@
 import { anthropicApiKey, sonnetRoutingAvailable, sonnetSettings } from '../infra/models/anthropic/anthropicConfig.js';
 import { AnthropicChatModel } from '../infra/models/anthropic/anthropicChatModel.js';
+import { AnthropicSkillSleepModel } from '../infra/models/anthropic/anthropicSkillModel.js';
 import type { ShannonChatModel } from '../infra/models/chatModel.js';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import { TieredChatModel } from '../infra/models/tieredChatModel.js';
@@ -25,4 +26,20 @@ export function configuredSonnet(
 /** The kernel's chat model: luna, or the tiered model when Sonnet is configured. */
 export function tieredChatModel(luna: ShannonChatModel, sonnet: AnthropicChatModel | null): ShannonChatModel {
   return sonnet ? new TieredChatModel(luna, sonnet) : luna;
+}
+
+/**
+ * The skill proposer of her sleep on Sonnet (the `strongest` hook of `createConfiguredSkillSleepModels`): whenever the Anthropic key
+ * is present, independent of `SHANNON_SONNET_ROUTING` (a sleep job, not a conversation turn). Null without the key: terra proposes.
+ */
+export function configuredSkillProposer(
+  environment: Readonly<Record<string, string | undefined>>, parts: { usageStore?: LlmUsageStore; fetch?: typeof fetch },
+): AnthropicSkillSleepModel | null {
+  const apiKey = anthropicApiKey(environment);
+  if (!apiKey) return null;
+  const effort = environment.SHANNON_SKILL_PROPOSER_EFFORT?.trim().toLowerCase();
+  return new AnthropicSkillSleepModel({
+    apiKey, model: sonnetSettings(environment).model, effort: effort === 'low' || effort === 'high' ? effort : 'medium',
+    ...(parts.usageStore ? { usageStore: parts.usageStore } : {}), ...(parts.fetch ? { fetch: parts.fetch } : {}),
+  });
 }
