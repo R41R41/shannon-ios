@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { conversationGrowth, nextTurnServe, skillRoutingSwitches } from '@shannon/learning';
+import { conversationGrowth as growthOf, nextTurnServe, skillRoutingSwitches } from '@shannon/learning';
 import { PREDICTION_SOURCE_ID, PREDICTION_SYMBOL, dayBand } from '../contracts/cognitionLedgerContract.js';
 import type { ConversationTurnRecord, TurnRouting } from '../contracts/turnRoutingContract.js';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
@@ -68,12 +68,15 @@ export function configuredTurnRouting(
 /**
  * One turn's choices: each tool call that ran (`tool.<name>`) and the tier (`tier.<served>`), with G from closed signals
  * (`conversationGrowth`): the tool worked, the turn ended inside its deadline, the verifier found nothing (when it checked). The
- * tier's outcome also goes to the competence table.
+ * tier's outcome also goes to the competence table. ADR-0008 §14: a turn asked to run or change something earns growth only with
+ * an `acts` result that worked; `described_not_done` gives every choice of the turn G = 0 and is kept on the tier's outcome row.
  */
 export function recordTurn(choices: ChoiceLedger | null, competence: TierCompetence | null, scopeKey: string, turn: ConversationTurnRecord, at: string,
   skills: SkillTurnPorts | null = null): void {
   const verified = turn.verified === null ? [] : [turn.verified];
   const context = `${dayBand(at)}.${turn.presence}`;
+  const undone = turn.doing === 'described_not_done';
+  const conversationGrowth = (signals: readonly boolean[]) => (undone ? 0 : growthOf(signals));
   for (const tool of turn.tools) {
     // A skill she opened (step 6): a use of that skill, noted on it and recorded once as `skill.use` with the skill as its source.
     if (tool.name === 'skill.read' && tool.subject && skills) {
@@ -93,5 +96,6 @@ export function recordTurn(choices: ChoiceLedger | null, competence: TierCompete
   const growth = conversationGrowth([turn.inDeadline, ...verified, turn.tools.every(tool => tool.ok)]);
   const tier = PREDICTION_SYMBOL.test(`tier.${turn.tier.served}`) ? turn.tier.served : 'luna';
   choices?.recordConversation(scopeKey, { surface: turn.surface, choice: `tier.${tier}`, context, sourceKind: 'turn', sourceId: randomUUID() }, growth, turn.talk, at);
-  competence?.record(scopeKey, { talkId: turn.talk, surface: turn.surface, tier, taskKind: PREDICTION_SYMBOL.test(turn.tier.kind) ? turn.tier.kind : 'unknown', growth }, at);
+  competence?.record(scopeKey, { talkId: turn.talk, surface: turn.surface, tier, taskKind: PREDICTION_SYMBOL.test(turn.tier.kind) ? turn.tier.kind : 'unknown', growth,
+    doing: turn.doing ?? null }, at);
 }

@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import { decideTier, type DifficultyAnswers, type TierDecision } from '@shannon/learning';
-import type { TurnRouting } from '../../../contracts/turnRoutingContract.js';
+import type { TurnDoing, TurnRouting } from '../../../contracts/turnRoutingContract.js';
 
 export type { TurnRouting } from '../../../contracts/turnRoutingContract.js';
 import type { ShannonModelToolSession, ShannonTierRequest } from '../../../infra/models/chatModelTools.js';
-import { TURN_CHECKER_MINIMUM_MILLISECONDS, verifiedReply, verifyWriteClaims, type TurnVerdict } from '../../selectors/selectorsPorts.js';
-import { turnOffersWrites, turnToolResults } from '../../tools/toolsPorts.js';
+import { TURN_CHECKER_MINIMUM_MILLISECONDS, verifiedReply, verifyWriteClaims, writeClaims, type TurnVerdict } from '../../selectors/selectorsPorts.js';
+import { toolDoing, turnOffersWrites, turnToolResults } from '../../tools/toolsPorts.js';
 
 /**
  * The routing of one conversation turn (Syzygy ADR-0008 stage 2, step 4; `docs/skill-and-routing-contract.md`). Core: response path.
@@ -46,6 +46,22 @@ export function routeTurn(routing: TurnRouting | null | undefined, turn: {
   }), kind: answers?.taskKind ?? 'unknown' };
 }
 
+/** Jev's task kinds that ask her to run or change something (ADR-0008 §14). */
+export const DOING_KINDS: readonly string[] = Object.freeze(['write', 'action']);
+
+/**
+ * Doing or describing (ADR-0008 §14, after Prometheus): the turn was to run or change something when Jev's kind says so and the
+ * turn offered her a way to act (a write it could trust its words with), or when her reply claims she did (the verifier's
+ * deterministic pattern). Then it is `done` only with an `acts` tool result that worked; else `described_not_done`. A turn that
+ * could not act and did not claim to is neither: telling him she cannot is not a failure to do.
+ */
+export function turnDoing(kind: string | null, reply: string, results: ReadonlyArray<{ name: string; ok: boolean }>, offeredActs: boolean): TurnDoing | null {
+  const claimed = writeClaims(reply).length > 0;
+  const asked = kind !== null && DOING_KINDS.includes(kind) && offeredActs;
+  if (!asked && !claimed) return null;
+  return results.some(result => result.ok && toolDoing(result.name) === 'acts') ? 'done' : 'described_not_done';
+}
+
 /** A tier decision with Jev's task kind (`unknown` when Jev gave none). */
 export type RoutedTier = TierDecision & { kind: string };
 
@@ -63,9 +79,10 @@ export function tierRequest(decision: TierDecision | null): ShannonTierRequest {
 export async function finishTurn(routing: TurnRouting | null | undefined, turn: {
   scopeKey: string; surface: 'text' | 'voice'; threadId: string; presence: 'alone' | 'others'; reply: string; outOfTime: boolean; escalated: boolean;
   decision: RoutedTier | null; tools: ShannonModelToolSession | undefined; remainingMs: number; at: string;
-}): Promise<{ reply: string; verdict: TurnVerdict | null }> {
-  if (!routing) return { reply: turn.reply, verdict: null };
+}): Promise<{ reply: string; verdict: TurnVerdict | null; doing: TurnDoing | null }> {
+  if (!routing) return { reply: turn.reply, verdict: null, doing: null };
   const results = turnToolResults(turn.tools);
+  const doing = turnDoing(turn.decision?.kind ?? null, turn.reply, results, turnOffersWrites(turn.tools));
   let verdict: TurnVerdict | null = null;
   if (routing.switches.turnVerify && !turn.outOfTime && turnOffersWrites(turn.tools)) {
     verdict = verifyWriteClaims(turn.reply, results);
@@ -78,11 +95,11 @@ export async function finishTurn(routing: TurnRouting | null | undefined, turn: 
   try {
     routing.record(turn.scopeKey, {
       talk: talkId(turn.threadId), surface: turn.surface, presence: turn.presence, tier: turn.decision && served ? { served, kind: turn.decision.kind } : null,
-      tools: results.map(result => ({ name: result.name, ok: result.ok, ...(result.subject ? { subject: result.subject } : {}) })), inDeadline: !turn.outOfTime, verified: verdict === null ? null : verdict === 'ok',
+      tools: results.map(result => ({ name: result.name, ok: result.ok, ...(result.subject ? { subject: result.subject } : {}) })), inDeadline: !turn.outOfTime, verified: verdict === null ? null : verdict === 'ok', doing,
     }, turn.at);
   } catch { /* learning never fails a turn */ }
   // On voice her words were already spoken: the verdict is learned (G), and the reply is not amended after the fact.
-  return { reply: verdict && turn.surface === 'text' ? verifiedReply(turn.reply, verdict) : turn.reply, verdict };
+  return { reply: verdict && turn.surface === 'text' ? verifiedReply(turn.reply, verdict) : turn.reply, verdict, doing };
 }
 
 function safe<T>(read: () => T, fallback: T): T { try { return read(); } catch { return fallback; } }

@@ -25,7 +25,15 @@ export interface ConversationTurnRecord {
   inDeadline: boolean;
   /** The verifier's verdict: true when it found nothing, false when it flagged a claim, null when it did not check. */
   verified: boolean | null;
+  /**
+   * Doing or describing (ADR-0008 §14): `done` when the turn was to run or change something and an `acts` tool result worked;
+   * `described_not_done` when it was, or her reply claimed doing, without one (then nothing in the turn earns growth); null
+   * otherwise. Absent: null.
+   */
+  doing?: TurnDoing | null;
 }
+
+export type TurnDoing = 'done' | 'described_not_done';
 
 export interface TurnRouting {
   readonly switches: TurnRoutingSwitches;

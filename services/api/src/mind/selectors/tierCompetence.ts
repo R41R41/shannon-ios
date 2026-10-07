@@ -32,7 +32,7 @@ export class TierCompetence {
     try { return this.ready() ? this.store.competence(scopeKey, tier, taskKind) : null; } catch { return null; }
   }
 
-  record(scopeKey: string, turn: { talkId: string; surface: 'text' | 'voice'; tier: string; taskKind: string; growth: number }, at: string): void {
+  record(scopeKey: string, turn: { talkId: string; surface: 'text' | 'voice'; tier: string; taskKind: string; growth: number; doing?: 'done' | 'described_not_done' | null }, at: string): void {
     this.later(at, () => {
       this.store.insert({ outcomeId: randomUUID(), scopeKey, chosenAt: at, ...turn });
       this.expire(scopeKey, at);

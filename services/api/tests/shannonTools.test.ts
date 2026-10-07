@@ -10,7 +10,7 @@ import { providerFunctionTools } from '../src/infra/models/chatModelTools.js';
 import { similarBodies } from '../src/mind/tools/shannonStudyTools.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import {
-  CONVERSATION_WRITE_CHARACTERS, SHANNON_TOOLS, TOOL_FAILURE_KINDS, TOOL_SUMMARIES, isReadToolDomain, toolSummary, offeredTools, providerToolName, shannonTool, toolFromProviderName, toolResultForModel,
+  CONVERSATION_WRITE_CHARACTERS, SHANNON_TOOLS, TOOL_DOING, TOOL_FAILURE_KINDS, TOOL_SUMMARIES, toolDoing, isReadToolDomain, toolSummary, offeredTools, providerToolName, shannonTool, toolFromProviderName, toolResultForModel,
   type ToolResult, type ToolSurface,
 } from '../src/mind/tools/shannonTools.js';
 
@@ -38,6 +38,13 @@ function idIn(result: ToolResult): string {
 const READ_TOOL_DOMAIN_OF: Readonly<Record<string, string>> = { 'notion.read': 'notion_read', 'voyager.tasks': 'voyager_read', 'schedule.upcoming': 'schedule_read', 'places.search': 'places_search' };
 
 describe('the tool registry (ADR-0003 stage 1)', () => {
+  it('tags every tool as acting or describing (ADR-0008 §14): today exactly the write effect, and an unknown name never acts', () => {
+    expect(Object.keys(TOOL_DOING).sort()).toEqual(SHANNON_TOOLS.map(tool => tool.name).sort());
+    for (const definition of SHANNON_TOOLS) expect(toolDoing(definition.name), definition.name).toBe(definition.effect === 'write' ? 'acts' : 'describes');
+    expect(toolDoing('web_search')).toBe('describes');
+    expect(toolDoing('tool_open')).toBe('describes');
+  });
+
   it('gives every tool a one-line summary of at most 60 characters, in her words, never sent in a schema (ADR-0008 stage 2)', () => {
     const seen = new Set<string>();
     expect(Object.keys(TOOL_SUMMARIES).sort()).toEqual(SHANNON_TOOLS.map(tool => tool.name).sort());

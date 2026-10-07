@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { stationaryBand } from '@shannon/cognition';
+import type { DifficultyAnswers } from '@shannon/learning';
 import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { OpenAIResponsesChatModel, type ShannonChatModel, type ShannonChatModelRequest, type ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { CONVERSATION_TOOL_CALLS, functionCallsOf, withToolRounds, type ShannonModelToolSession } from '../src/infra/models/chatModelTools.js';
@@ -11,9 +12,10 @@ import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/mind/action/respond/turnDeadline.js';
-import { talkId, tierRequest } from '../src/mind/action/respond/turnRouting.js';
+import { talkId, tierRequest, turnDoing } from '../src/mind/action/respond/turnRouting.js';
 import { TALK_NEXT_TURN_MINUTES } from '../src/mind/learning/rewardSettlement.js';
 import { SQLiteTierOutcomes } from '../src/mind/selectors/store/sqliteTierOutcomes.js';
+import { TierCompetence } from '../src/mind/selectors/tierCompetence.js';
 import { WRITE_CLAIM_CORRECTION, verifiedReply, verifyWriteClaims, writeClaims } from '../src/mind/selectors/turnVerifier.js';
 import type { TurnChooser } from '../src/mind/selectors/turnChoices.js';
 import { shannonTool } from '../src/mind/tools/shannonTools.js';
@@ -118,12 +120,12 @@ function world(environment: Record<string, string> = {}) {
   const database = new DatabaseSync(path);
   const routing = configuredTurnRouting(environment, { databasePath: null, database, choices: store.choiceLedger(), defer: task => task() })!;
   const outcomes = new SQLiteTierOutcomes(database, { createSchema: false });
-  return { clock, store, routing: routing.routing, outcomes, close: () => { store.close(); database.close(); } };
+  return { clock, store, database, routing: routing.routing, outcomes, close: () => { store.close(); database.close(); } };
 }
 
-const answers = (strong: number, retry: number | null = null): TurnChooser => ({
+const answers = (strong: number, retry: number | null = null, taskKind: DifficultyAnswers['taskKind'] = 'write'): TurnChooser => ({
   difficulty: true,
-  choose: async () => ({ menu: null, difficulty: { taskKind: 'write', needsStrongModel: strong, needsVerification: 0.1, multiStep: 0.1 }, retry }),
+  choose: async () => ({ menu: null, difficulty: { taskKind, needsStrongModel: strong, needsVerification: 0.1, multiStep: 0.1 }, retry }),
 });
 
 describe('a routed conversation turn', () => {
@@ -140,16 +142,15 @@ describe('a routed conversation turn', () => {
     expect((response.body as { reply: string }).reply).toBe(`書斎にメモを保存しました。\n${WRITE_CLAIM_CORRECTION}`);
     const tierChoice = w.store.choiceLedger()!.rows('owner').find(row => row.choice.startsWith('tier.'))!;
     expect(tierChoice).toMatchObject({ choice: 'tier.luna_plus', surface: 'text', sourceKind: 'turn', status: 'pending', subjectKind: 'talk', subjectId: talkId('thread'), context: 'afternoon.alone' });
-    // G: inside the deadline 1, the verifier flagged it 0, no tool failed 1.
-    expect(tierChoice.success).toBeCloseTo(2 / 3, 5);
-    expect(w.outcomes.all('owner')).toMatchObject([{ tier: 'luna_plus', taskKind: 'write', outcome: null }]);
+    // Asked to write, and only said she did (ADR-0008 §14): described, not done, so the turn earns no growth.
+    expect(tierChoice.success).toBe(0);
+    expect(w.outcomes.all('owner')).toMatchObject([{ tier: 'luna_plus', taskKind: 'write', outcome: null, doing: 'described_not_done', growth: 0 }]);
     // His next turn retries: S = 0 settles her last turn; the competence table learns a failure.
     w.clock.at = at(2);
     chooser = answers(0.1, 0.9);
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message: 'ちゃんと保存して' } });
     const settled = w.store.choiceLedger()!.rows('owner').find(row => row.choiceId === tierChoice.choiceId)!;
-    expect(settled).toMatchObject({ status: 'settled', settleCode: 'next_turn', serve: 0, world: 0 });
-    expect(settled.growth).toBeCloseTo(2 / 3, 5);
+    expect(settled).toMatchObject({ status: 'settled', settleCode: 'next_turn', serve: 0, world: 0, growth: 0 });
     expect(w.outcomes.all('owner')[0]).toMatchObject({ outcome: 0, settleCode: 'next_turn' });
     expect(w.routing.competence('owner', 'luna_plus', 'write')).toEqual({ successes: 0, failures: 1 });
     w.close();
@@ -167,18 +168,47 @@ describe('a routed conversation turn', () => {
 
   it('settles her last turn from G alone when Jev is not sure he retried (ADR-0008 §14), never moving her mood', async () => {
     const w = world();
-    const model = new RecordingModel('書斎にメモを保存しました。');
-    let chooser = answers(0.95);
+    const model = new RecordingModel('うん、少し考えてみるね。');
+    let chooser = answers(0.95, null, 'analysis');
     const api = createLocalApiKernel(() => w.clock.at, { chatModel: model, autonomy: createInMemoryAutonomyService(() => w.clock.at),
       turnChooser: { difficulty: true, choose: request => chooser.choose(request) }, turnRouting: w.routing });
-    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message: '書斎にメモを書いて' } });
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message: '量子もつれについて考えて' } });
     const tierChoice = w.store.choiceLedger()!.rows('owner').find(row => row.choice.startsWith('tier.'))!;
     w.clock.at = at(2);
-    chooser = answers(0.1, 0.6);
+    chooser = answers(0.1, 0.6, 'analysis');
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message: 'うーん' } });
     expect(w.store.choiceLedger()!.rows('owner').find(row => row.choiceId === tierChoice.choiceId)).toMatchObject({ status: 'settled', settleCode: 'next_turn_unsure', serve: 0.5 });
-    // G was 2/3 (the verifier flagged it): from G alone the competence table learns a success, as an expired turn would.
+    // From G alone (1: in time, nothing flagged) the competence table learns a success, as an expired turn would.
     expect(w.outcomes.all('owner')[0]).toMatchObject({ outcome: 1, settleCode: 'next_turn' });
+    w.close();
+  });
+
+  it('tells doing from describing (ADR-0008 §14): a request to change something is done only by an acts result that worked', () => {
+    const create = { name: 'study.create', ok: true };
+    const list = { name: 'study.list', ok: true };
+    expect(turnDoing('write', 'メモを置いたよ。', [list, create], true)).toBe('done');
+    expect(turnDoing('write', 'こう書くといいよ：……', [list], true)).toBe('described_not_done');
+    expect(turnDoing('write', 'こう書くといいよ：……', [{ name: 'study.create', ok: false }], true)).toBe('described_not_done');
+    expect(turnDoing('action', 'わかった、やってみる。', [], true)).toBe('described_not_done');
+    // A claim of doing without an acts result is described, whatever the kind; a turn that could not act and did not claim is neither.
+    expect(turnDoing('chat', '書斎にメモを保存しました。', [list], false)).toBe('described_not_done');
+    expect(turnDoing('write', 'いまは書けないんだ。', [], false)).toBeNull();
+    expect(turnDoing('lookup', '予定は三つあるよ。', [list], true)).toBeNull();
+    expect(turnDoing(null, 'はい。', [create], true)).toBeNull();
+  });
+
+  it('gives every choice of a described-not-done turn no growth, and keeps the outcome on the tier\'s row', () => {
+    const w = world();
+    const ledger = w.store.choiceLedger()!;
+    const competence = new TierCompetence({ database: w.database, createsSchema: false, defer: task => task() });
+    recordTurn(ledger, competence, 'owner', { talk: 'thread', surface: 'text', presence: 'alone', tier: { served: 'luna', kind: 'write' },
+      tools: [{ name: 'study.list', ok: true }], inDeadline: true, verified: true, doing: 'described_not_done' }, at(0));
+    expect(ledger.rows('owner').map(row => [row.choice, row.success])).toEqual([['tool.study.list', 0], ['tier.luna', 0]]);
+    expect(w.outcomes.all('owner')).toMatchObject([{ doing: 'described_not_done', growth: 0 }]);
+    recordTurn(ledger, competence, 'owner', { talk: 'thread-2', surface: 'text', presence: 'alone', tier: { served: 'luna', kind: 'write' },
+      tools: [{ name: 'study.create', ok: true }], inDeadline: true, verified: true, doing: 'done' }, at(1));
+    expect(ledger.rows('owner').slice(2).map(row => [row.choice, row.success])).toEqual([['tool.study.create', 1], ['tier.luna', 1]]);
+    expect(w.outcomes.all('owner')[1]).toMatchObject({ doing: 'done', growth: 1 });
     w.close();
   });
 

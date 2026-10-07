@@ -355,6 +355,33 @@ export const TOOL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
   'skill.read': 'ボクのスキル（自分の手順書）を1つ開いて読む',
 });
 
+/**
+ * Doing or describing (ADR-0008 §14, after Prometheus): whether a tool's result that worked is evidence that she did something
+ * (`acts`: changed a thing of hers, sent a proposal, moved or stopped her body) or only that she looked at something
+ * (`describes`). Reward reads it: in a turn asked to run or change something, nothing earns growth without an `acts` result that
+ * worked (`turnRouting.ts`). Kept beside the registry like the summaries, so no definition changes. Today `acts` is exactly the
+ * registry's `write` effect (`shannonTools.test.ts`); the tag is what reward reads, so a future tool decides it here on its own.
+ */
+export type ToolDoing = 'acts' | 'describes';
+export const TOOL_DOING: Readonly<Record<string, ToolDoing>> = Object.freeze({
+  'study.list': 'describes', 'study.search': 'describes', 'study.read': 'describes',
+  'study.create': 'acts', 'study.update': 'acts', 'study.rename': 'acts', 'study.move': 'acts', 'study.delete': 'acts', 'study.restore': 'acts',
+  'folder.list': 'describes', 'folder.search': 'describes', 'folder.read': 'describes',
+  'folder.create': 'acts', 'folder.update': 'acts', 'folder.rename': 'acts', 'folder.move': 'acts', 'folder.delete': 'acts',
+  'aether.search': 'describes', 'aether.read': 'describes',
+  'aetherFolder.list': 'describes', 'aetherFolder.create': 'acts', 'aetherFolder.update': 'acts', 'aetherFolder.delete': 'acts',
+  'ownerDocs.search': 'describes', 'ownerDocs.read': 'describes',
+  'aether.propose': 'acts',
+  'minecraft.request': 'acts', 'minecraft.status': 'describes', 'minecraft.cancel': 'acts',
+  'notion.read': 'describes', 'voyager.tasks': 'describes', 'schedule.upcoming': 'describes', 'places.search': 'describes',
+  'skill.read': 'describes',
+});
+
+/** Whether a tool acts or describes (an unknown name describes: it is never evidence of doing). */
+export function toolDoing(name: string): ToolDoing {
+  return TOOL_DOING[name] ?? 'describes';
+}
+
 /** The summary of a tool (by its registry name), or its name when it has none. */
 export function toolSummary(tool: Pick<ShannonToolDefinition, 'name'>): string {
   return TOOL_SUMMARIES[tool.name] ?? tool.name;
