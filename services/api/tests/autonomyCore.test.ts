@@ -27,13 +27,33 @@ const CORE_AREA_OVERRIDES: readonly string[] = [
   'services/api/src/mind/inhibition/store/autonomyActivity.ts: approval_and_budget -> activity_record',
 ];
 
-/** The repository's tracked files, or why they cannot be listed here: no git (the production VM), or no repository (a copied tree). */
+/**
+ * The repository's tracked files, or why they cannot be listed here: git is not installed (the production VM has none), or the
+ * folder is not inside a git work tree (a copied tree). Any other failure of git is an error of the test's world and is thrown,
+ * with what git said.
+ */
 function trackedFiles(): { files: string[] } | { reason: string } {
-  try {
-    return { files: execFileSync('git', ['ls-files'], { cwd: repositoryRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean) };
-  } catch (error) {
-    return { reason: (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'git is not installed' : `${repositoryRoot} is not a git repository` };
+  type GitResult = { output: string } | { missing: true } | { status: number | null; stderr: string };
+  const git = (args: string[]): GitResult => {
+    try {
+      return { output: execFileSync('git', args, { cwd: repositoryRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, LC_ALL: 'C' } }) };
+    } catch (error) {
+      const failure = error as NodeJS.ErrnoException & { status?: number | null; stderr?: string | Buffer };
+      if (failure.code === 'ENOENT') return { missing: true };
+      return { status: failure.status ?? null, stderr: String(failure.stderr ?? '').trim() };
+    }
+  };
+  const inside = git(['rev-parse', '--is-inside-work-tree']);
+  if ('missing' in inside) return { reason: 'git is not installed' };
+  if ('stderr' in inside) {
+    if (/not a git repository/iu.test(inside.stderr)) return { reason: `${repositoryRoot} is not a git repository` };
+    throw new Error(`git rev-parse failed (status ${inside.status ?? 'none'}): ${inside.stderr}`);
   }
+  if (inside.output.trim() !== 'true') return { reason: `${repositoryRoot} is not inside a git work tree` };
+  const listed = git(['ls-files']);
+  if ('missing' in listed) return { reason: 'git is not installed' };
+  if ('stderr' in listed) throw new Error(`git ls-files failed (status ${listed.status ?? 'none'}): ${listed.stderr}`);
+  return { files: listed.output.split('\n').filter(Boolean) };
 }
 
 describe('CORE as code', () => {
