@@ -173,10 +173,10 @@ const voiceDecision = configuredVoiceDecision(process.env, persistentStore, pers
 // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
 const notion = configuredNotionSource(process.env, { log: line => console.log(line) });
 minecraft.connect({ stateStore: persistentStore, conversationStore: persistentStore, background: backgroundDispatcher, now, chatModel, peopleStore: peopleMemoryStore, conversation: { textTurn: input => kernel.textTurn(input) }, memory: memoryPorts?.proposals ?? null, peopleFacts });
-// Syzygy ADR-0008 stage 2, step 3 (SHANNON_READ_TOOLS): her read tools over the same reads as the projections; off, none.
-const readTools = readToolPorts(process.env, { notion, voyagerCatalog, upcoming: ownerUpcoming.upcoming, chatModel });
-// Syzygy ADR-0008 stage 3 (docs/mind-workspace-contract.md): what every surface perceived. SHANNON_ADR8_STAGE3=off: none of it.
-const mind = configuredMind(process.env, { databasePath: configuredDatabasePath(), now, ticking: true, timeZone: autonomyConfig.timeZone, log: line => console.log(line) });
+const readTools = readToolPorts(process.env, { notion, voyagerCatalog, upcoming: ownerUpcoming.upcoming, chatModel }); // ADR-0008 stage 2, step 3 (SHANNON_READ_TOOLS); off, none.
+// ADR-0008 stage 3: what every surface perceived, and the notices of promises and tasks (off: none). docs/mind-workspace-contract.md.
+const mind = configuredMind(process.env, { databasePath: configuredDatabasePath(), now, ticking: true, timeZone: autonomyConfig.timeZone, log: line => console.log(line),
+  notices: { ownerScopeKey: shannonNowOwnerScope(process.env), snapshot: scopeKey => persistentStore.snapshot(scopeKey), tasks: scopeKey => agentTaskStore.list(scopeKey) } });
 const kernel = createLocalApiKernel(now, {
   ownOutreach,
   chatModel,

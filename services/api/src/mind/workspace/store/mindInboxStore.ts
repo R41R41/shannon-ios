@@ -48,6 +48,12 @@ export class SQLiteMindInbox {
     return true;
   }
 
+  /** Whether a row of this kind and source was written for the scope (a producer writes each once). False without the table. */
+  has(scopeKey: string, kind: string, sourceId: string): boolean {
+    if (!this.available) return false;
+    return Boolean(this.database.prepare('SELECT 1 AS found FROM mind_inbox WHERE scope_key = ? AND kind = ? AND source_id = ? LIMIT 1').get(scopeKey, kind, sourceId));
+  }
+
   /** Rows after `seq`, oldest first, not older than `since`. */
   after(seq: number, since: string, limit = 100): StoredMindInboxRow[] {
     return (this.database.prepare('SELECT * FROM mind_inbox WHERE seq > ? AND at >= ? ORDER BY seq LIMIT ?').all(seq, since, limit) as Array<Record<string, unknown>>)
