@@ -1,8 +1,8 @@
 import { AetherAccessError, type AetherAccess } from '../../integrations/aether/aetherAccess.js';
 import { resultForOthers } from './aetherShownText.js';
 import type { AutonomousActionRequest, AutonomyDecision } from './autonomyPolicy.js';
-import type { ToolInput } from '../tools/shannonToolInput.js';
-import type { PreparedToolCall, ToolExecutionContext } from '../tools/shannonToolTypes.js';
+import type { ToolInput } from '../tools/toolsPorts.js';
+import type { PreparedToolCall, ToolExecutionContext } from '../tools/toolsPorts.js';
 import { toolFailure, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface } from '../tools/shannonTools.js';
 
 /**

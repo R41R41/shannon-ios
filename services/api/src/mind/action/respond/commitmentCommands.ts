@@ -1,6 +1,6 @@
 import { visibleMemoryText, type CompanionStateSnapshot, type CompanionStateStore } from '@shannon/cognition';
 import { ShannonMemoryService, type MemoryMutation } from '../../memory/memoryService.js';
-import type { ConversationStore } from '../../memory/store/conversationStore.js';
+import type { ConversationStore } from '../../memory/memoryPorts.js';
 
 /** Conservative local command resolution. Ambiguous references never change state. */
 export function resolveCommitmentCommand(state: CompanionStateSnapshot, message: string):

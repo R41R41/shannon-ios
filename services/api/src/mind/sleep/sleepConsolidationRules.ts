@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { memoryIdentifier, isOwnerMemoryEvidence, type CompanionStateSnapshot, type MemoryKind, type RelationshipInsight, type UserFact } from '@shannon/cognition';
-import type { SleepChange } from '../memory/memoryService.js';
+import type { SleepChange } from '../memory/memoryPorts.js';
 import type { ImmediateMemoryOutcome, UserFactProposal } from './sleepConsolidation.js';
 
 export const SLEEP_INSTRUCTIONS = `その日のユーザー発言を振り返る。

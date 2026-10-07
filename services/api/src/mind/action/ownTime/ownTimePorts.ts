@@ -10,3 +10,8 @@ export { configuredAutonomyModelPrices, type AutonomyModelPrices } from './auton
 export { type RecordedDecision, type ShannonAutonomyService } from './autonomyService.js';
 export { type AutonomyLoopHeartbeat } from './store/autonomyLoopState.js';
 export { type StudyAether } from './studyAether.js';
+export { type ListResult, type ReadResult, type SearchResult, type WriteResult } from './hostFolderOperationResults.js';
+export { type HostFolderOperations, type HostRunOutcome } from './hostFolderOperations.js';
+export { type SQLiteAutonomyStore } from './store/autonomyStore.js';
+export { type HostOperation } from './store/hostFolderOperationsStore.js';
+export { type StudyPiece, type StudyPieceKind, type StudyPieceStatus, type StudyRejection } from './store/studyStore.js';

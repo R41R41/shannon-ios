@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { CompanionStateStore } from '@shannon/cognition';
 import { CONVERSATION_TOOL_CALLS, type ShannonModelToolSession, type ToolCallOutcome } from '../../infra/models/chatModelTools.js';
-import type { OthersTextCheck } from '../inhibition/aetherShownText.js';
+import type { OthersTextCheck } from '../inhibition/disclosurePorts.js';
 import { conversationSecrets, othersSecrets, type SecretCheck } from '../inhibition/conversationSecrets.js';
 import type { ConversationStore, StoredConversationMessage } from '../memory/memoryPorts.js';
 import { ToolAudienceWatch, type ToolAudienceSource } from '../inhibition/shannonToolAudience.js';

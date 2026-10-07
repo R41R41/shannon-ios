@@ -6,3 +6,5 @@
 export { turnOffersWrites, turnToolResults } from './shannonToolSession.js';
 export { toolDoing } from './shannonTools.js';
 export { TOOL_FOLLOW_UP_MILLISECONDS } from './shannonToolTurns.js';
+export { type ToolInput } from './shannonToolInput.js';
+export { type PreparedToolCall, type ToolExecutionContext } from './shannonToolTypes.js';

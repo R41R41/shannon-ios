@@ -1,5 +1,5 @@
 import type { CompanionStateStore, ShannonActionReceipt } from '@shannon/cognition';
-import type { ConversationStore, StoredConversationMessage } from '../../memory/store/conversationStore.js';
+import type { ConversationStore, StoredConversationMessage } from '../../memory/memoryPorts.js';
 import type { OrganizeSession, OrganizeStore } from '../../../integrations/voyager/organize.js';
 import type { AetherProposalStore } from '../../../integrations/aether/aetherProposal.js';
 import type { AgentTask, AgentTaskStore } from '../agentTasks/agentTasksPorts.js';
