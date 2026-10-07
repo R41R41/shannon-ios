@@ -55,6 +55,8 @@ export const DIFFICULTY_THRESHOLDS = Object.freeze({
   weakLuna: 0.6,
   /** … over at least this many outcomes. */
   weakLunaN: 5,
+  /** Review M5: a turn of a kind luna is learned to be weak at is still hers this often, so her competence can recover. */
+  exploreLuna: 0.1,
 });
 
 /** First-token latency assumed for Sonnet on voice until it is measured (step 5's hook), and the room voice keeps for the rest. */
@@ -71,6 +73,8 @@ export interface DifficultyContext {
   sonnetAvailable: boolean;
   /** Voice: the turn's time left, and Sonnet's measured first-token latency (null: the estimate). */
   voice?: { remainingMs: number; sonnetFirstTokenMs: number | null };
+  /** Review M5: a draw in [0, 1) for exploring luna on a kind she is learned to be weak at; absent, no exploration. */
+  explore?: number;
 }
 
 export interface TierDecision {
@@ -79,7 +83,7 @@ export interface TierDecision {
   /** What answers the turn. */
   served: ServedTier;
   /** A closed code of why. */
-  reason: 'no_answers' | 'strong' | 'luna_weak' | 'middle' | 'multi_step' | 'small_talk' | 'plain';
+  reason: 'no_answers' | 'strong' | 'luna_weak' | 'explore' | 'middle' | 'multi_step' | 'small_talk' | 'plain';
   /** `sonnet` was served as `luna_plus` (not available) or as luna (voice time). */
   mappedDown: 'none' | 'unavailable' | 'voice_time';
   rethinks: 0 | 1 | 2;
@@ -109,6 +113,8 @@ export function decideTier(context: DifficultyContext): TierDecision {
   const luna = competenceMean(context.lunaCompetence);
   const strong = strongBand === 'yes' ? 'strong' as const
     : luna.n >= DIFFICULTY_THRESHOLDS.weakLunaN && luna.mean < DIFFICULTY_THRESHOLDS.weakLuna ? 'luna_weak' as const : null;
+  // Review M5: learned weakness alone (not Jev's confident yes) leaves one turn in ten to luna, so the table can learn she improved.
+  if (strong === 'luna_weak' && context.explore !== undefined && context.explore < DIFFICULTY_THRESHOLDS.exploreLuna) return { ...plain('luna', 'explore'), rethinks, verify, escalateOnTrouble: true };
   if (strong) return served({ ...plain('sonnet', strong), rethinks, verify }, context);
   if (strongBand === 'unsure') return { ...plain('luna', 'middle'), rethinks, verify, escalateOnTrouble: true };
   if (multiBand === 'yes') return { ...plain('luna_plus', 'multi_step'), rethinks, verify };

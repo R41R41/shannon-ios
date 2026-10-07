@@ -12,7 +12,7 @@ import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/mind/action/respond/turnDeadline.js';
-import { talkId, tierRequest, turnDoing } from '../src/mind/action/respond/turnRouting.js';
+import { finishTurn, talkId, tierRequest, turnDoing } from '../src/mind/action/respond/turnRouting.js';
 import { TALK_NEXT_TURN_MINUTES } from '../src/mind/learning/rewardSettlement.js';
 import { SQLiteTierOutcomes } from '../src/mind/selectors/store/sqliteTierOutcomes.js';
 import { TierCompetence } from '../src/mind/selectors/tierCompetence.js';
@@ -209,6 +209,17 @@ describe('a routed conversation turn', () => {
       tools: [{ name: 'study.create', ok: true }], inDeadline: true, verified: true, doing: 'done' }, at(1));
     expect(ledger.rows('owner').filter(row => row.subjectId === 'thread-2').map(row => [row.choice, row.success]).sort()).toEqual([['tier.luna', 1], ['tool.study.create', 1]]);
     expect(w.outcomes.all('owner')[1]).toMatchObject({ doing: 'done', growth: 1 });
+    w.close();
+  });
+
+  it('learns a Sonnet turn that luna answered as luna\'s (review M5)', async () => {
+    const w = world();
+    const decision = { tier: 'sonnet', served: 'sonnet', reason: 'strong', mappedDown: 'none', rethinks: 0, verify: false, escalateOnTrouble: false, kind: 'analysis' } as const;
+    const finish = (answeredBy: string, threadId: string) => finishTurn(w.routing, { scopeKey: 'owner', surface: 'text', threadId, presence: 'alone', reply: 'はい。', outOfTime: false,
+      escalated: false, decision, tools: undefined, remainingMs: 30_000, at: at(0), answeredBy });
+    await finish('openai', 'fell-back');
+    await finish('anthropic', 'sonnet');
+    expect(w.outcomes.all('owner').map(row => [row.talkId, row.tier]).sort()).toEqual([['fell-back', 'luna'], ['sonnet', 'sonnet']]);
     w.close();
   });
 

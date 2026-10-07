@@ -34,6 +34,10 @@ describe('the difficulty policy (ADR-0008 stage 2, step 4)', () => {
     expect(decideTier(text({ lunaCompetence: { successes: 1, failures: 4 } }))).toMatchObject({ tier: 'sonnet', reason: 'luna_weak' });
     expect(decideTier(text({ lunaCompetence: { successes: 1, failures: 3 } }))).toMatchObject({ tier: 'luna' });
     expect(decideTier(text({ lunaCompetence: { successes: 5, failures: 2 } }))).toMatchObject({ tier: 'luna' });
+    // Review M5: one turn in ten of a kind luna is weak at is still hers, so her competence can recover; never against Jev's yes.
+    expect(decideTier(text({ lunaCompetence: { successes: 1, failures: 4 }, explore: 0.05 }))).toMatchObject({ tier: 'luna', served: 'luna', reason: 'explore', escalateOnTrouble: true });
+    expect(decideTier(text({ lunaCompetence: { successes: 1, failures: 4 }, explore: 0.1 }))).toMatchObject({ tier: 'sonnet', reason: 'luna_weak' });
+    expect(decideTier(text({ answers: answers({ needsStrongModel: 0.95 }), lunaCompetence: { successes: 1, failures: 4 }, explore: 0 }))).toMatchObject({ tier: 'sonnet', reason: 'strong' });
   });
 
   it('escalates the middle once on trouble, and gives a multi-step turn luna_plus', () => {

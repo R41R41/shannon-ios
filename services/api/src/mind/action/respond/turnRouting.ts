@@ -41,7 +41,7 @@ export function routeTurn(routing: TurnRouting | null | undefined, turn: {
   let competence: { successes: number; failures: number } | null = null;
   try { competence = answers ? routing.competence(turn.scopeKey, 'luna', answers.taskKind) : null; } catch { competence = null; }
   return { ...decideTier({
-    surface: turn.surface, answers, lunaCompetence: competence, sonnetAvailable: routing.sonnetAvailable,
+    surface: turn.surface, answers, lunaCompetence: competence, sonnetAvailable: routing.sonnetAvailable, explore: safe(() => (routing.random ?? Math.random)(), 1),
     ...(turn.surface === 'voice' ? { voice: { remainingMs: turn.remainingMs ?? 0, sonnetFirstTokenMs: safe(() => routing.sonnetFirstTokenMs(), null) } } : {}),
   }), kind: answers?.taskKind ?? 'unknown' };
 }
@@ -87,6 +87,8 @@ export function tierRequest(decision: TierDecision | null, voiceRemainingMs?: nu
 export async function finishTurn(routing: TurnRouting | null | undefined, turn: {
   scopeKey: string; surface: 'text' | 'voice'; threadId: string; presence: 'alone' | 'others'; reply: string; outOfTime: boolean; escalated: boolean;
   decision: RoutedTier | null; tools: ShannonModelToolSession | undefined; remainingMs: number; at: string;
+  /** The answering model's mode (`anthropic` for Sonnet): a `sonnet` turn that luna answered is learned as luna's (review M5). */
+  answeredBy?: string;
 }): Promise<{ reply: string; verdict: TurnVerdict | null; doing: TurnDoing | null }> {
   if (!routing) return { reply: turn.reply, verdict: null, doing: null };
   const results = turnToolResults(turn.tools);
@@ -99,7 +101,9 @@ export async function finishTurn(routing: TurnRouting | null | undefined, turn: 
       if (checked === 'claims_unsupported') verdict = 'checker_flagged';
     }
   }
-  const served = turn.decision ? (turn.escalated && turn.decision.served === 'luna' ? 'luna_plus' : turn.decision.served) : null;
+  // The tier that actually answered (review M5): a Sonnet turn that fell back to luna is luna's; an escalated luna turn is luna_plus.
+  const served = turn.decision ? (turn.decision.served === 'sonnet' && turn.answeredBy !== undefined && turn.answeredBy !== 'anthropic' ? 'luna'
+    : turn.escalated && turn.decision.served === 'luna' ? 'luna_plus' : turn.decision.served) : null;
   try {
     routing.record(turn.scopeKey, {
       talk: talkId(turn.threadId), surface: turn.surface, presence: turn.presence, tier: turn.decision && served ? { served, kind: turn.decision.kind } : null,

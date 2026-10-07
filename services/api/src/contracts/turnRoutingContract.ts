@@ -42,6 +42,8 @@ export interface TurnRouting {
   readonly switches: TurnRoutingSwitches;
   /** The Anthropic key and `SHANNON_SONNET_ROUTING=on` (step 5); false in steps 1–4. */
   readonly sonnetAvailable: boolean;
+  /** Review M5: the draw for exploring luna on a kind she is weak at (tests: fixed); absent, `Math.random`. */
+  readonly random?: () => number;
   /** Step 5's hook: Sonnet's measured first-token latency on voice; null until measured. */
   sonnetFirstTokenMs(): number | null;
   /** The competence table's (tier, kind). */

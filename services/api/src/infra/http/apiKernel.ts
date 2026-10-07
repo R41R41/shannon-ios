@@ -397,7 +397,7 @@ export class ShannonApiKernel {
     }));
     const answered = completion.outOfTime ? completion.reply : placeSkillReply(withCapabilitySources(completion, capability), placeSkill);
     const reply = this.turnRouting ? (await finishTurn(this.turnRouting, { scopeKey: body.scopeKey, surface: 'text', threadId, presence: audience.alone ? 'alone' : 'others', reply: answered, // Stage 2: verified, learned.
-      outOfTime: completion.outOfTime === true, escalated: completion.escalated === true, decision: tier, tools: toolOffer.tools, remainingMs: deadline.left(), at: occurredAt })).reply : answered;
+      outOfTime: completion.outOfTime === true, escalated: completion.escalated === true, decision: tier, tools: toolOffer.tools, remainingMs: deadline.left(), at: occurredAt, answeredBy: completion.mode })).reply : answered;
     // A turn that wrote with her own tools has done the request itself: no agent task for it (`turnWroteHerOwnThings`).
     const suppressAgentTaskProposal = !audience.alone || Boolean(surface) || isExplicitVoyagerUpdateRequest(message) || turnWroteHerOwnThings(toolOffer.tools);
     // Her feeling for this reply, from state already in hand; it is stored after the response.

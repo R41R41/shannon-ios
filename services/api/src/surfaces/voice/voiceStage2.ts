@@ -30,10 +30,10 @@ export async function voiceOfferAndTier<T extends { tools?: ShannonModelToolSess
 
 /** After the reply: the verdict and her choices learned (her spoken words are not amended). */
 export async function voiceFinished(routing: TurnRouting, turn: {
-  scopeKey: string; threadId: string; alone: boolean; reply: string; completion: { outOfTime?: true; escalated?: true }; tier: RoutedTier | null;
+  scopeKey: string; threadId: string; alone: boolean; reply: string; completion: { outOfTime?: true; escalated?: true; mode?: string }; tier: RoutedTier | null;
   tools: ShannonModelToolSession | undefined; deadline: TurnDeadline; at: string;
 }): Promise<string> {
   return (await finishTurn(routing, { scopeKey: turn.scopeKey, surface: 'voice', threadId: turn.threadId, presence: turn.alone ? 'alone' : 'others', reply: turn.reply,
     outOfTime: turn.completion.outOfTime === true, escalated: turn.completion.escalated === true, decision: turn.tier, tools: turn.tools,
-    remainingMs: turn.deadline.left(), at: turn.at })).reply;
+    remainingMs: turn.deadline.left(), at: turn.at, answeredBy: turn.completion.mode })).reply;
 }
