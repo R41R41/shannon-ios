@@ -9,6 +9,8 @@ import { ensureSkillSchema } from '../src/mind/memory/store/sqliteSkills.js';
 import { TierCompetence } from '../src/mind/selectors/tierCompetence.js';
 import { ensureTierOutcomeSchema } from '../src/mind/selectors/store/sqliteTierOutcomes.js';
 import { installSalt } from '../src/wiring/installSalt.js';
+import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
+import { SkillMemory } from '../src/mind/memory/skillMemory.js';
 
 /** The low findings of the stage-2 review (Syzygy ADR-0008): each as it is fixed. */
 const directory = mkdtempSync(join(tmpdir(), 'shannon-review-lows-'));
@@ -50,6 +52,21 @@ describe('the review\'s low findings', () => {
     expect(await digest(salt)).toBe(await digest(salt));
     expect(await digest(salt)).not.toBe(await digest('0'.repeat(64)));
     expect(await digest(undefined)).not.toBe(await digest(undefined));
+  });
+
+  it('shows the skill sleep\'s spend as its own line of the usage summary, month to date against its budget, read-only (R2)', () => {
+    const path = join(directory, 'usage.sqlite');
+    const store = new SQLiteShannonStore({ path, now: () => AT });
+    expect(store.llmUsageSummary('owner', '2026-10').some(row => row.lane === 'skill_sleep')).toBe(false);
+    const memory = new SkillMemory({ database: new DatabaseSync(path), createsSchema: true, defer: task => task(), log: () => {} });
+    memory.sleepUsage.call('owner', 'proposer', '2026-10-07', 'claude-sonnet-5-5', AT);
+    memory.sleepUsage.cost('owner', '2026-10-07', 'claude-sonnet-5-5', 0.25, AT);
+    memory.sleepUsage.cost('owner', '2026-09-30', 'claude-sonnet-5-5', 9, '2026-09-30T03:00:00.000Z');
+    const row = store.llmUsageSummary('owner', '2026-10').find(item => item.lane === 'skill_sleep');
+    expect(row).toMatchObject({ calls: 1, estimatedCostUsd: 0.25, budgetUsd: 5, remainingUsd: 4.75 });
+    // Never the shared background budget.
+    expect(store.backgroundLlmCostUsd('2026-10')).toBe(0);
+    store.close();
   });
 
   it('adds the columns stage 2 added to its own tables when an older copy of a table is there', () => {

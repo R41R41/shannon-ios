@@ -25,13 +25,17 @@ export interface LlmUsageStore {
 }
 
 export interface LlmUsageSummaryRow {
-  lane: LlmUsageLane;
+  /** `skill_sleep` (review R2): the skill sleep's own spend, from `shannon_skill_sleep_usage`, against its own budget. */
+  lane: LlmUsageLane | 'skill_sleep';
   calls: number;
   inputTokens: number;
   cachedInputTokens: number;
   outputTokens: number;
   totalTokens: number;
   estimatedCostUsd: number;
+  /** `skill_sleep` only: its monthly budget (`SHANNON_SKILL_MONTHLY_BUDGET_USD`) and what is left of it this month. */
+  budgetUsd?: number;
+  remainingUsd?: number;
   /** `jev` only: some calls have no price (`SHANNON_JEV_USD_PER_CALL` unset), so the cost is 未設定 and `estimatedCostUsd` is the known part. */
   costUnknown?: true;
 }

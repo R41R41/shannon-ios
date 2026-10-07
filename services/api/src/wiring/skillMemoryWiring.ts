@@ -157,11 +157,13 @@ export function skillSourcesPass(store: ConversationStore & Pick<CompanionStateS
   // Review N2: a note counts by the turns it was built from, retired or not (consolidation retires notes in normal operation);
   // only a turn that fails the rule withdraws. Without her notes (a store that has none) a skill built from one fails: closed.
   const notes = new Map((store.listShannonKnowledge?.(scopeKey, { includeRetired: true }) ?? []).map(document => [document.id, document]));
+  // Review R1: and the forget rules on the note's own title and body (what `usableKnowledgeFor` applied), retired or not.
+  const withholding = new MemoryWithholding(rule.snapshot, store, scopeKey, rule.candidates);
   const check = (sources: readonly string[], depth: number): boolean => sources.every(source => {
     const [kind, ...rest] = source.split(':');
     const id = rest.join(':');
     if (kind === 'experience') return rule.passes([id]);
-    if (kind === 'knowledge') { const note = notes.get(id); return note !== undefined && rule.passes(note.sourceExperienceIds); }
+    if (kind === 'knowledge') { const note = notes.get(id); return note !== undefined && !withholding.withholdsKnowledge(note) && rule.passes(note.sourceExperienceIds); }
     if (kind === 'pattern') { const page = memory.store.pattern(scopeKey, id); return page !== null && depth < 3 && check(page.sources, depth + 1); }
     return true;
   });

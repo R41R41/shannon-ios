@@ -42,6 +42,8 @@ import { moodHistoryRecording, type MoodHistoryRecording } from '../../contracts
 import { PredictionShadow, predictionShadowEnabled } from '../../mind/prediction/predictionShadow.js';
 import { DecisionTraces, decisionTracesEnabled } from '../../mind/inhibition/decisionTraces.js';
 import { jevUsageRow } from '../models/jev/jevUsage.js';
+import { configuredSkillBudgetUsd } from '../models/llmUsage.js';
+import { skillSleepUsageRow } from '../../mind/memory/store/sqliteSkillSleepUsage.js';
 import { PredictionLedger, predictionLedgerEnabled } from '../../mind/learning/predictionLedger.js';
 import { ChoiceLedger, choiceLedgerEnabled } from '../../mind/learning/choiceLedger.js';
 import { ValueVersions } from '../../mind/learning/valueTable.js';
@@ -173,7 +175,9 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     // Jev's calls come from the decision traces, never from `llm_usage_events` (the transcription cap counts its `voice` lane).
     const jev = this.traces ? jevUsageRow(this.traces.jevMonth(scopeKey, monthKey)) : null;
     const rows = this.companion.llmUsageSummary(scopeKey, monthKey);
-    return jev ? Object.freeze([...rows, jev]) : rows;
+    // Review R2: the skill sleep's own spend (every scope, read-only), month to date against its own budget.
+    const skills = skillSleepUsageRow(this.context.database, monthKey, configuredSkillBudgetUsd());
+    return jev || skills ? Object.freeze([...rows, ...(jev ? [jev] : []), ...(skills ? [skills] : [])]) : rows;
   }
 
   listThreads(scopeKey: string): readonly ConversationThread[] { return this.conversations.listThreads(scopeKey); }

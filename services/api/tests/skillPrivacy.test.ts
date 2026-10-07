@@ -165,6 +165,25 @@ describe('every source, and only what truly fails (N1, N2, N4, L3, the proposer\
     store.close();
   });
 
+  it('withdraws the copy when a forget rule matches the note\'s own text, though not its source turns (R1)', async () => {
+    const { store, viewed, skills, overrides } = world();
+    const thread = store.createThread('owner');
+    const turn = store.appendTurn('owner', thread, '週末の過ごし方の話', 'うん', '2026-09-20T00:00:00.000Z', { capturedStateVersion: 0, messageEmotion: emotion });
+    const note = store.createShannonKnowledge('owner', { title: '週末の過ごし方', applicability: '週末の相談',
+      bodyMarkdown: '## 行動\nウォンバット会の集まりのある週末は予定を空ける。', status: 'confirmed', sourceExperienceIds: [turn.id] }, '2026-09-21T00:00:00.000Z', 'test');
+    const id = (skills.create('owner', { draft: doc('weekend-plan', '1. 予定を空ける'), evidence: [`knowledge:${note.id}`] }, pass, AT) as { skillId: string }).skillId;
+    const folder = new FakeAetherFolder();
+    const run = configuredSkillExport({}, { memory: skills, store: viewed, access: folder, log: () => {} })!;
+    expect(await run('owner', AT)).toMatchObject({ created: 1 });
+    overrides.state = { ...createInitialCompanionState('owner', AT), memoryControls: [{ memoryId: 'fact-wombat', kind: 'user-fact', status: 'forgotten', pinned: false,
+      updatedAt: AT, changeReason: 'forget', withheldText: 'ウォンバット会の集まり' }] };
+    // The source turn itself says nothing of it: only the note's own text matches the rule.
+    expect(skillSeedSources(viewed, null).experiences('owner', '2026-09-01T00:00:00.000Z', AT).map(item => item.id)).toContain(turn.id);
+    expect(await run('owner', AT)).toMatchObject({ withdrawn: 1 });
+    expect(skills.store.get('owner', id)!.exportHold).toBe('withdrawn');
+    store.close();
+  });
+
   it('never shows the body of a skill built from something forgotten, or whose copy was withdrawn (N4)', async () => {
     const skills = new SkillMemory({ database: new DatabaseSync(':memory:'), createsSchema: true, defer: task => task(), log: () => {} });
     const id = (skills.create('owner', { draft: doc('weekly-review', '1. 三つ挙げる'), evidence: [] }, pass, AT) as { skillId: string }).skillId;

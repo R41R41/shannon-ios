@@ -49,3 +49,21 @@ export class SQLiteSkillSleepUsage {
     return Number((this.database.prepare("SELECT COALESCE(SUM(estimated_cost_usd), 0) AS usd FROM shannon_skill_sleep_usage WHERE kind = 'cost' AND substr(occurred_at, 1, 7) = ?").get(monthKey) as { usd: number }).usd);
   }
 }
+
+/**
+ * Review R2: the skill sleep's line of the usage summary, month to date (UTC month, every scope) against its own budget; null
+ * while the table does not exist (the skills never ran) or nothing was called or spent this month. Read-only.
+ */
+export function skillSleepUsageRow(database: DatabaseSync, monthKey: string, budgetUsd: number) {
+  try {
+    if (!database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'shannon_skill_sleep_usage'").get()) return null;
+    const row = database.prepare(`SELECT COALESCE(SUM(CASE WHEN kind = 'cost' THEN estimated_cost_usd ELSE 0 END), 0) AS usd,
+      COALESCE(SUM(CASE WHEN kind != 'cost' THEN 1 ELSE 0 END), 0) AS calls FROM shannon_skill_sleep_usage WHERE substr(occurred_at, 1, 7) = ?`).get(monthKey) as { usd: number; calls: number };
+    const usd = Math.round(Number(row.usd) * 1e9) / 1e9;
+    if (!Number(row.calls) && !usd) return null;
+    return Object.freeze({
+      lane: 'skill_sleep' as const, calls: Number(row.calls), inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, totalTokens: 0,
+      estimatedCostUsd: usd, budgetUsd, remainingUsd: Math.max(0, Math.round((budgetUsd - usd) * 1e9) / 1e9),
+    });
+  } catch { return null; }
+}
