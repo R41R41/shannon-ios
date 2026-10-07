@@ -27,6 +27,15 @@ const CORE_AREA_OVERRIDES: readonly string[] = [
   'services/api/src/mind/inhibition/store/autonomyActivity.ts: approval_and_budget -> activity_record',
 ];
 
+/** The repository's tracked files, or why they cannot be listed here: no git (the production VM), or no repository (a copied tree). */
+function trackedFiles(): { files: string[] } | { reason: string } {
+  try {
+    return { files: execFileSync('git', ['ls-files'], { cwd: repositoryRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean) };
+  } catch (error) {
+    return { reason: (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'git is not installed' : `${repositoryRoot} is not a git repository` };
+  }
+}
+
 describe('CORE as code', () => {
   it('covers the nine core areas of ADR-0002, each with at least one path', () => {
     expect(Object.keys(SHANNON_CORE_PATHS)).toEqual(Object.keys(SHANNON_CORE_AREA_LABELS));
@@ -132,7 +141,12 @@ describe('CORE as code', () => {
     ] as const) expect(coreAreaForRepositoryPath(path)?.area, path).toBe(area);
   });
 
-  it('only widens: every file of the repository keeps the area the first listed entry gives it, unless it is listed by name (ADR-0008 stage 2)', () => {
+  it('only widens: every file of the repository keeps the area the first listed entry gives it, unless it is listed by name (ADR-0008 stage 2)', ({ skip }) => {
+    // The list of files comes from git: where git or the repository is missing (the production VM has no git), the test is
+    // skipped and says why, as the tests that read `apps/` are where it is missing.
+    const listing = trackedFiles();
+    if ('reason' in listing) return skip(`only widens: ${listing.reason}; run it in a checkout of the repository`);
+    const tracked = listing.files;
     // The rule before stage 2: the first entry in the map's order that matches, a directory by prefix.
     const firstListed = (path: string) => {
       const normalized = normalizedRepositoryPath(path)!.toLowerCase();
@@ -144,7 +158,6 @@ describe('CORE as code', () => {
       }
       return null;
     };
-    const tracked = execFileSync('git', ['ls-files'], { cwd: repositoryRoot, encoding: 'utf8' }).split('\n').filter(Boolean);
     expect(tracked.length).toBeGreaterThan(1_000);
     const exact = new Set(allCorePaths().filter(path => !path.endsWith('/')).map(path => path.toLowerCase()));
     const moved: string[] = [];
