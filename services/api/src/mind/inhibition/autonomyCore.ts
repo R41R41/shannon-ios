@@ -350,6 +350,11 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/surfaces/voice/transcriptionRoute.ts',
     // Syzygy ADR-0008 stage 1: the owner's view and controls of her value table.
     'services/api/src/infra/http/learningRoutes.ts',
+    // Stage 2 (review scope gap): the owner's view and pins of her skills; the install's salt of the trace digests; the column
+    // guards of stage 2's own tables.
+    'services/api/src/infra/http/skillRoutes.ts',
+    'services/api/src/wiring/installSalt.ts',
+    'services/api/src/infra/sqlite/schemaColumns.ts',
     // Syzygy ADR-0008 stage 2: the difficulty policy. Listed by name, so it is the response path's, not emotion's
     // (`packages/learning/` is emotion's; a file listed by name wins over its directory).
     'packages/learning/src/difficultyPolicy.ts',

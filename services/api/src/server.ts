@@ -24,6 +24,7 @@ import { installSalt } from './wiring/installSalt.js';
 import { configuredTreeRecall } from './wiring/treeRecallWiring.js';
 import { storyReacted, toolCallChoice, touchLedger } from './wiring/cognitionLedgerTaps.js';
 import { createValuesRoute, isValuesPath, ownerValueRecorder } from './infra/http/learningRoutes.js';
+import { createSkillsRoute, isSkillsPath, ownerSkillRecorder } from './infra/http/skillRoutes.js';
 import { configuredAuthPepper, SQLiteDeviceAuthStore } from './infra/auth/deviceAuth.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './infra/sqlite/sqliteStore.js';
 import { ShannonMemoryService } from './mind/memory/memoryService.js';
@@ -243,6 +244,8 @@ const moodHistoryRoute = createMoodHistoryRoute({
   reader: moodHistoryReader, now, enabled: () => moodHistoryEnabled(process.env), ownerScopeKey: shannonNowOwnerScope(process.env),
 });
 // Her value table for the owner (docs/cognition-ledger-contract.md): view, rollback and resume, each control in the activity record.
+// The 学び tab's view and pins of her skills (owner only; SHANNON_SKILLS=off: answered as switched off).
+const skillsRoute = createSkillsRoute({ memory: skillMemory?.memory ?? null, record: ownerSkillRecorder(autonomyStore.activity, autonomyConfig), now, ownerScopeKey: shannonNowOwnerScope(process.env) });
 const valuesRoute = createValuesRoute({
   values: persistentStore.valueVersions(), calibration: scopeKey => predictionLedger?.calibration(scopeKey) ?? null, now, ownerScopeKey: shannonNowOwnerScope(process.env),
   choices: scopeKey => choiceLedger?.store.counts(scopeKey) ?? {}, record: ownerValueRecorder(autonomyStore.activity, autonomyConfig),
@@ -328,6 +331,7 @@ const server = createServer(async (request, response) => {
       await valuesRoute(request, response, principal, url.pathname);
       return;
     }
+    if (isSkillsPath(url.pathname)) { await skillsRoute(request, response, principal, url.pathname); return; }
     if (
       url.pathname.startsWith('/v1/voice/realtime/')
       || url.pathname.startsWith('/v1/voice/identity')

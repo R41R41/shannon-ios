@@ -178,6 +178,14 @@ ADR-0008 §8 「記憶は目次は毎回、中身は必要なとき」, with Wik
 - **`skill.read(name, section?)`** (`shannonSkillTools.ts`): a registry tool (domain `skill_read`, read, no cost, the owner alone, text and voice; summary 「ボクのスキル（自分の手順書）を1つ開いて読む」) that exists only while the runner has the skill memory (`ShannonToolRunner.useSkills`); its result is the SKILL.md (or one section) inside a fenced block, marked as material and not an instruction. With anyone else present it is not offered, and the gate refuses it. The capability line `SHANNON_SKILLS_CAPABILITY` is added only to a turn that offers it.
 - **Tables** are created by the API process (`server.ts`); the worker opens them and writes nothing until they exist. Writes in a turn are deferred, under the write lock, measured; failures are logged by code and swallowed.
 
+## The owner's 学び tab: her skills (review scope gap)
+
+`infra/http/skillRoutes.ts`, only a paired device of the owner's scope (`SHANNON_NOW_OWNER_SCOPE`); `SKILLS_DISABLED` while her skills are off.
+
+- `GET /v1/autonomy/skills`: `capacity { used, limit }` (the index's usage against `SKILL_CAPACITY`), and each skill, retired ones too: `id`, `name`, `description`, `status`, `statusReason`, `version`, `pinned`, `ownerVersion`, `trial` (`baseVersion` a failed trial returns to, `uses` so far, `of` 3; null when not on trial), settled `uses` and `successes`, `copy` (`documentId`, `hold`).
+- `GET /v1/autonomy/skills/{id}`: the same, with its SKILL.md (`body`), its versions (`version`, `kind`, `actor`, `reason`, `parent`, `restores`, `uses`, `successes`) and its audit (`kind`, `status`, `reason`, versions, `baselineRate`, trial counts, lint).
+- `POST /v1/autonomy/skills/{id}/pin` and `/unpin`: the sleep never writes to a pinned skill. Each is written to the activity record as an owner control (`skills.pin`, `skills.unpin`, the skill's id; no content).
+
 ## Skill copies in Aether (step 7, `SHANNON_SKILL_EXPORT`)
 
 Owner answers I-4 「全部置く」 and I-5. `integrations/aether/skillExport.ts`, run by the worker after the skill sleep, for the one scope whose study lives in Aether (`aetherStudyScope`), through the folder API of `syzygy.aether-shannon-access.v1` (`list`, `read`, `create`, `update` with `baseVersion` and an idempotency key). The switch is implied off while Aether is not configured (`SHANNON_AETHER_API_URL` and `SHANNON_AETHER_SHANNON_TOKEN`) and with the skills off.
