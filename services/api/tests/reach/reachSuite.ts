@@ -4,7 +4,7 @@ import { configuredAutonomyTextModel, dedicatedAutonomyCredential, resolveAutono
 import { createConfiguredChatModel } from '../../src/infra/models/chatModel.js';
 import { estimatedOpenAICostUsd } from '../../src/infra/models/llmUsage.js';
 import {
-  COGNITION_SCENARIOS, autonomyDayScenario, buildReachReport, cappedEstimate, compareReachReports, conversationEstimate, estimateTotal,
+  COGNITION_SCENARIOS, SKILL_SCENARIOS, autonomyDayScenario, buildReachReport, cappedEstimate, compareReachReports, conversationEstimate, estimateTotal,
   isReachReport, pendingEstimate, reachReportMarkdown, runReachScenario, shiritoriScenario, stableFingerprint, threeToolsScenario,
   type ReachDriver, type ReachEstimateLine, type ReachMode, type ReachReport, type ReachRunRecord, type ReachScenarioDefinition,
 } from '../../../../packages/evaluation/src/reach/index.js';
@@ -12,12 +12,13 @@ import { autonomyDayDriver, scriptedAutonomyDayDriver } from './reachAutonomy.js
 import { REACH_YEN_PER_USD, ReachUsage, scriptedShiritoriDriver, shiritoriDriver } from './reachConversation.js';
 import { pendingRegistryDriver, scriptedThreeToolsDriver } from './reachTools.js';
 import { cognitionDrivers } from './reachCognition.js';
+import { skillDrivers } from './reachSkills.js';
 
 /**
  * The suite of reach scenarios for one mode, the live estimate, and the result files. The live mode is
  * built only from credentials in the environment, which are passed to the model adapters and never printed.
  */
-export const REACH_SCENARIOS: readonly ReachScenarioDefinition[] = [shiritoriScenario, threeToolsScenario, autonomyDayScenario, ...COGNITION_SCENARIOS];
+export const REACH_SCENARIOS: readonly ReachScenarioDefinition[] = [shiritoriScenario, threeToolsScenario, autonomyDayScenario, ...COGNITION_SCENARIOS, ...SKILL_SCENARIOS];
 type Environment = Readonly<Record<string, string | undefined>>;
 
 /** Drivers are made only for the scenarios a run includes, so nothing a skipped scenario would open is opened. */
@@ -32,6 +33,8 @@ export function scriptedDrivers(): Record<string, ReachDriverFactory> {
     [autonomyDayScenario.id]: () => scriptedAutonomyDayDriver(),
     // Syzygy ADR-0008 stage 1, scenario suite v1: model-free in both modes.
     ...cognitionDrivers(),
+    // Stage 2, suite v2 (skills and recall): model-free in both modes.
+    ...skillDrivers(),
   };
 }
 
@@ -80,6 +83,7 @@ export function liveDrivers(environment: Environment): Record<string, ReachDrive
     },
     // Model-free: the same drivers, nothing spent.
     ...cognitionDrivers(),
+    ...skillDrivers(),
   };
 }
 
@@ -116,7 +120,7 @@ export function liveEstimate(scripted: ReachReport, environment: Environment): R
       lines.push(pendingEstimate(run.scenarioId, 'registry not on main'));
     } else if (run.scenarioId === autonomyDayScenario.id) {
       lines.push(unready(cappedEstimate(run.scenarioId, autonomyDayScenario.limits.budgetYen!), ready.autonomy));
-    } else if (COGNITION_SCENARIOS.some(scenario => scenario.id === run.scenarioId)) {
+    } else if ([...COGNITION_SCENARIOS, ...SKILL_SCENARIOS].some(scenario => scenario.id === run.scenarioId)) {
       lines.push({ scenarioId: run.scenarioId, yen: 0, basis: 'model-free in both modes: no model is called' });
     }
   }

@@ -150,7 +150,7 @@ A choice of hers, recorded when the gate allowed it and settled once by her thre
 | `surface` | `autonomy` (a step of her own time), `text`, `voice` (a tool call of hers in a conversation). |
 | `choice` | Closed: the step kind (`read`, `notion`, `note`, `draft`, `revise`, `show`, `put_away`, `copy`, `look`, `jot`), `reach_out.<reason>`, `call.<reason>`, `follow_up`, `tool.<registry name>`. Thinking and resting are not choices. |
 | `context` | `<band>.<presence>`: the owner-local quarter of the day, and who was around (`alone`, `others`, `away`, `unknown` from what the server knows of her body; in a conversation, its audience). |
-| `source_kind`, `source_id` | `step` and the loop step's id, or `tool_call` and a random id. |
+| `source_kind`, `source_id` | `step` and the loop step's id, or `tool_call` and a random id; from stage 2 `turn` (a tier choice) and `skill` with the skill's id (`skill.use`, `docs/skill-and-routing-contract.md`). |
 | `subject_kind`, `subject_id` | What the step made or showed (`study_piece`), for delayed credit; null otherwise. |
 | `chosen_at`, `value_version`, `expected`, `expected_sd`, `expected_noise`, `expected_level`, `expected_n` | When, and the value she held then: V, √U, N, the level of the cell that answered, how many settled choices it had learned from, and its version (the root cell, mean 0 and variance 1/3, until step 5). |
 | `status` | `pending`, `settled`, `void` (unscored; moves nothing). |

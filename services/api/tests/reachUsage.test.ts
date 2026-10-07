@@ -10,7 +10,7 @@ import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiative
 import { SQLiteReachOutReports } from '../src/surfaces/outreach/store/reachOutReports.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { reachUsageReport, weekKey } from './reach/reachUsageReport.js';
-import { liveEstimate, runReachSuite, scriptedDrivers, writeReachReport } from './reach/reachSuite.js';
+import { REACH_SCENARIOS, liveEstimate, runReachSuite, scriptedDrivers, writeReachReport } from './reach/reachSuite.js';
 
 /**
  * The reach measures from use, over a database built by the real stores, and the result files of a
@@ -117,8 +117,9 @@ describe('the result files of a model-free run', () => {
     const out = join(directory, 'results');
     const now = () => '2026-10-05T00:00:00.000Z';
     const first = await runReachSuite(scriptedDrivers(), { mode: 'scripted', revision: 'aaaa', now });
-    // Three reach scenarios and the nine of Syzygy ADR-0008's scenario suite v1.
-    expect(first.totals).toMatchObject({ passed: 12, failed: 0, pending: 0, invalid: 0 });
+    // Three reach scenarios, the nine of Syzygy ADR-0008's scenario suite v1, and the skill and recall scenarios of suite v2.
+    expect(first.totals).toMatchObject({ passed: REACH_SCENARIOS.length, failed: 0, pending: 0, invalid: 0 });
+    expect(REACH_SCENARIOS.length).toBeGreaterThan(12);
     const written = writeReachReport(first, out, { full: true });
     expect(written.compared).toBeNull();
     expect(existsSync(join(out, 'latest-scripted.json'))).toBe(true);
@@ -135,7 +136,8 @@ describe('the result files of a model-free run', () => {
     expect(writeReachReport(first, out, { full: true }).compared).toBeNull();
     const estimate = liveEstimate(first, {});
     expect(estimate.map(line => line.scenarioId).slice(0, 3)).toEqual(['context.shiritori-60', 'helpful.three-tools', 'growth.autonomy-day']);
-    expect(estimate.slice(3).map(line => [line.scenarioId.startsWith('cog.'), line.yen])).toEqual(Array.from({ length: 9 }, () => [true, 0]));
+    expect(estimate.slice(3, 12).map(line => [line.scenarioId.startsWith('cog.'), line.yen])).toEqual(Array.from({ length: 9 }, () => [true, 0]));
+    expect(estimate.slice(12).map(line => [/^(?:skill|recall)\./u.test(line.scenarioId), line.yen])).toEqual(Array.from({ length: REACH_SCENARIOS.length - 12 }, () => [true, 0]));
     expect(estimate[0]!.yen).toBeGreaterThan(0);
     expect(estimate[1]!.yen).toBe(0);
     expect(estimate[2]!.yen).toBe(300);

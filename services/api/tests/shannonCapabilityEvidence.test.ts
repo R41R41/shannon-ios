@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { SHANNON_READ_TOOLS_CAPABILITY, withReadToolsCapability } from '@shannon/cognition';
+import { SHANNON_READ_TOOLS_CAPABILITY, SHANNON_SKILLS_CAPABILITY, withReadToolsCapability, withSkillsCapability } from '@shannon/cognition';
+import { skillExecutors } from '../src/mind/tools/shannonSkillTools.js';
+import { configuredSkillMemory, skillBodyCheck } from '../src/wiring/skillMemoryWiring.js';
+import { ShannonSkillConsolidator } from '../src/mind/sleep/skillConsolidation.js';
 import { readToolExecutors } from '../src/mind/tools/shannonReadTools.js';
 import { readToolPorts } from '../src/wiring/skillRoutingWiring.js';
 import { readToolPlan } from '../src/mind/action/respond/conversationCapabilities.js';
@@ -186,6 +189,13 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
     && readToolPorts({ SHANNON_READ_TOOLS: 'off' }, {} as never) === null
     && !shannonCapabilityPrompt('owner').includes(SHANNON_READ_TOOLS_CAPABILITY.text)
     && withReadToolsCapability(shannonCapabilityPrompt('owner')).includes(SHANNON_READ_TOOLS_CAPABILITY.text),
+  // Syzygy ADR-0008 stage 2, step 6: her skills, built in her sleep with every body checked, opened with skill.read; only while
+  // SHANNON_SKILLS is on and only in a turn that offers skill.read (the line is conditional).
+  skills: () => exists(skillExecutors, configuredSkillMemory, skillBodyCheck, ShannonSkillConsolidator.prototype.consolidate, ShannonToolRunner.prototype.useSkills)
+    && SHANNON_TOOLS.some(tool => tool.name === 'skill.read' && tool.domain === 'skill_read' && tool.audiences.join() === 'owner_alone' && tool.surfaces.join() === 'text,voice')
+    && configuredSkillMemory({ SHANNON_SKILLS: 'off' }, { databasePath: ':memory:', createsSchema: true }) === null
+    && !shannonCapabilityPrompt('owner').includes(SHANNON_SKILLS_CAPABILITY.text)
+    && withSkillsCapability(shannonCapabilityPrompt('owner')).includes(SHANNON_SKILLS_CAPABILITY.text),
   phone_call: () => exists(preparePhoneCall, IncomingCallRequests.prototype.request, IncomingCalls.prototype.tick, APNsVoipPushSender.prototype.send)
     && autonomyDomain(AUTONOMY_CALL_DOMAIN)?.rule === 'free' && incomingCallsEnabled({}) && !incomingCallsEnabled({ SHANNON_INCOMING_CALLS: 'off' }),
 };

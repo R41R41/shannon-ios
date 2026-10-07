@@ -18,6 +18,8 @@ import {
   type ReadToolDomain, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface,
 } from './shannonTools.js';
 import { READ_TOOL_PORT, readToolExecutors, type ReadToolPorts } from './shannonReadTools.js';
+import { skillExecutors } from './shannonSkillTools.js';
+import type { SkillTurnPorts } from '../../contracts/skillMemoryContract.js';
 
 /**
  * Runs the registry's tools. Conversations (text and voice) call `call`; her own time uses `prepare` inside a
@@ -57,6 +59,8 @@ export class ShannonToolRunner {
   private choices: { sink: ToolCallChoiceSink; now: () => string } | null = null;
   /** Syzygy ADR-0008 stage 2: the ports of her read tools (`useReads`); null, they do not exist on this server. */
   private reads: ReadToolPorts | null = null;
+  /** Syzygy ADR-0008 stage 2, step 6: her skill memory (`useSkills`); null, `skill.read` does not exist on this server. */
+  private skills: SkillTurnPorts | null = null;
 
   constructor(
     private readonly store: SQLiteAutonomyStore,
@@ -81,6 +85,7 @@ export class ShannonToolRunner {
     // Her Aether tools only while the Aether client is configured (URL and token), and a proposal only while the inbox is too:
     // with the inbox alone (or the token alone) every offer is what it was before Aether access. Only to the owner's scope.
     const tools = offeredTools(surface, audience, tool => isReadToolDomain(tool.domain) ? this.readsFor(tool.domain)
+      : tool.domain === 'skill_read' ? this.skills !== null
       : tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
       : tool.domain === 'minecraft_body' ? minecraftToolOffered(this.minecraft, tool, scopeKey)
         : tool.domain === 'owner_documents_read' ? this.ownerDocumentsFor(scopeKey)
@@ -113,6 +118,7 @@ export class ShannonToolRunner {
     const tool = toolFromProviderName(name) ?? shannonTool(name);
     // Her read tools do not exist without their ports: a call of one is refused as a name that never existed.
     if (tool && isReadToolDomain(tool.domain) && !this.readsFor(tool.domain)) return null;
+    if (tool?.domain === 'skill_read' && !this.skills) return null;
     if (tool?.domain === 'owner_documents_read' && !(this.aether.ownerDocuments === true && this.aether.access)) return null;
     return tool && !this.aether.access && (tool.name.startsWith('aether') || tool.domain === 'aether_proposal') ? null : tool;
   }
@@ -172,6 +178,15 @@ export class ShannonToolRunner {
   useReads(ports: ReadToolPorts): void {
     this.reads = ports;
     this.executors = Object.freeze({ ...this.executors, ...readToolExecutors(ports) });
+  }
+
+  /**
+   * Syzygy ADR-0008 stage 2, step 6 (`SHANNON_SKILLS`): `skill.read` exists from now on, over her skill memory (the wiring hands
+   * it only while the switch is on). Never called, every offer, name and refusal is what it was.
+   */
+  useSkills(ports: SkillTurnPorts): void {
+    this.skills = ports;
+    this.executors = Object.freeze({ ...this.executors, ...skillExecutors(ports) });
   }
 
   private readsFor(domain: ReadToolDomain): boolean {

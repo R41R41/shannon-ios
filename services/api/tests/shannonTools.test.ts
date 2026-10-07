@@ -64,11 +64,12 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
       'aether.propose', 'aether.read', 'aether.search', 'aetherFolder.create', 'aetherFolder.delete', 'aetherFolder.list', 'aetherFolder.update',
       'folder.create', 'folder.delete', 'folder.list', 'folder.move', 'folder.read', 'folder.rename', 'folder.search', 'folder.update',
       'minecraft.cancel', 'minecraft.request', 'minecraft.status', 'notion.read', 'ownerDocs.read', 'ownerDocs.search', 'places.search', 'schedule.upcoming',
-      'study.create', 'study.delete', 'study.list', 'study.move', 'study.read', 'study.rename', 'study.restore', 'study.search', 'study.update', 'voyager.tasks',
+      'skill.read', 'study.create', 'study.delete', 'study.list', 'study.move', 'study.read', 'study.rename', 'study.restore', 'study.search', 'study.update', 'voyager.tasks',
     ]);
     // Conversation only: her Minecraft body (phase 4) and a proposal to the owner's Aether inbox.
     // and her read tools of ADR-0008 stage 2.
-    const conversationOnly = (tool: { domain: string }) => tool.domain === 'minecraft_body' || tool.domain === 'aether_proposal' || isReadToolDomain(tool.domain);
+    // Her skills (ADR-0008 stage 2, step 6) too.
+    const conversationOnly = (tool: { domain: string }) => tool.domain === 'minecraft_body' || tool.domain === 'aether_proposal' || isReadToolDomain(tool.domain) || tool.domain === 'skill_read';
     // Her own time only, with the owner alone: the owner's documents (ADR-0007, owner decision 2026-10-06; offered only while switched on).
     const ownTimeOnly = (tool: { domain: string }) => tool.domain === 'owner_documents_read';
     // With anyone else present: only her Aether reading tools (held to 「シャノン用フォルダ」 by the gate, Syzygy ADR-0007 revised).
@@ -79,7 +80,7 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
       for (const required of tool.input.required) expect(Object.keys(tool.input.properties), tool.name).toContain(required);
       expect(tool.domain).toBe(tool.name.startsWith('study.') || tool.name.startsWith('aetherFolder.') || tool.name === 'aether.search' || tool.name === 'aether.read' ? 'aether_study'
         : tool.name.startsWith('minecraft.') ? 'minecraft_body' : tool.name === 'aether.propose' ? 'aether_proposal' : tool.name.startsWith('ownerDocs.') ? 'owner_documents_read'
-          : READ_TOOL_DOMAIN_OF[tool.name] ?? 'host_folder');
+          : tool.name === 'skill.read' ? 'skill_read' : READ_TOOL_DOMAIN_OF[tool.name] ?? 'host_folder');
       // Place search (ADR-0008 stage 2) asks a model with web search; every other tool calls none itself.
       expect(tool.cost).toBe(tool.name === 'places.search' ? 'model' : 'none');
       if (READ_TOOL_DOMAIN_OF[tool.name]) expect(tool.effect).toBe('read');
