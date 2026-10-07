@@ -85,6 +85,7 @@ import { SQLiteOwnOutreach } from './surfaces/outreach/ownOutreach.js';
 import { SQLiteOwnerCallFacts, ownerCallElsewhereEnabled } from './surfaces/voice/ownerCallElsewhere.js';
 import { createServerSelfDiagnosis } from './infra/ops/serverSelfDiagnosis.js';
 import { createMinecraftBodyWiring } from './wiring/serverMinecraftBodyWiring.js';
+import { configuredMind } from './wiring/mindWiring.js';
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -169,6 +170,8 @@ const notion = configuredNotionSource(process.env, { log: line => console.log(li
 minecraft.connect({ stateStore: persistentStore, conversationStore: persistentStore, background: backgroundDispatcher, now, chatModel, peopleStore: peopleMemoryStore, conversation: { textTurn: input => kernel.textTurn(input) } });
 // Syzygy ADR-0008 stage 2, step 3 (SHANNON_READ_TOOLS): her read tools over the same reads as the projections; off, none.
 const readTools = readToolPorts(process.env, { notion, voyagerCatalog, upcoming: ownerUpcoming.upcoming, chatModel });
+// Syzygy ADR-0008 stage 3 (docs/mind-workspace-contract.md): what every surface perceived. SHANNON_ADR8_STAGE3=off: none of it.
+const mind = configuredMind(process.env);
 const kernel = createLocalApiKernel(now, {
   ownOutreach,
   chatModel,
@@ -210,6 +213,7 @@ const kernel = createLocalApiKernel(now, {
   // Syzygy ADR-0008 stage 2 (docs/skill-and-routing-contract.md): the turn's Jev call. SHANNON_ADR8_STAGE2=off: none of it.
   ...skillRoutingParts(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt }),
   ...(readTools ? { readTools } : {}), ...(turnRouting ? { turnRouting: turnRouting.routing } : {}), ...(skills ? { skills } : {}),
+  ...(mind ? { mind: mind.mind } : {}),
 });
 const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, chatModel, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input) }, databasePath: configuredDatabasePath() });
 // What this server resolved (docs/ops-contract.md, `server`): model names, persona hash, tools, revision, integrations as booleans. Owner only.
@@ -456,6 +460,7 @@ function shutdown(): void {
     dailyMindStore.close();
     organizeStore.close();
     turnRouting?.close();
+    mind?.close();
     withheldActions?.close();
     skillMemory?.close();
     cognitiveIntentStore.close();

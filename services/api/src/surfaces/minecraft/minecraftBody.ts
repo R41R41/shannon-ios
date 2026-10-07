@@ -93,7 +93,7 @@ export class MinecraftBody {
     if (!this.allowance.take(owner, `${request.serverId}:${request.speaker.uuid}`, Date.parse(this.dependencies.now()))) {
       throw new MinecraftBodyError('RATE_LIMITED', 429, owner ? 'Too many game-chat turns from the owner; retry after a minute.' : 'Too many game-chat turns from this player; retry later.');
     }
-    const answer = this.answer(scopeKey, server, request, hash);
+    const answer = this.answer(scopeKey, server, request, hash, deviceId);
     this.pending.set(key, { hash, answer });
     try {
       const response = await answer;
@@ -104,7 +104,7 @@ export class MinecraftBody {
     }
   }
 
-  private async answer(scopeKey: string, server: MinecraftServerBinding, request: MinecraftTurnRequest, hash: string): Promise<MinecraftTurnResponse> {
+  private async answer(scopeKey: string, server: MinecraftServerBinding, request: MinecraftTurnRequest, hash: string, deviceId: string): Promise<MinecraftTurnResponse> {
     const kind = request.conversation.kind;
     // Only an online-mode server proves the account; anywhere else nobody is the owner and nobody is remembered.
     const owner = server.onlineMode && request.speaker.uuid === server.ownerUuid;
@@ -140,6 +140,8 @@ export class MinecraftBody {
         ignored = this.rememberPerson(request, conversationId, sourceUserId, turn.shannonReply);
         return null;
       },
+      // Stage 3: her Minecraft body's normalizer copies the turn's audience; it is told the request, who wrote and the body.
+      perception: { surface: 'minecraft', sourceId: request.requestId, ownerWrote: owner, body: deviceId },
     }));
     const completion = result.completion;
     if (!completion) throw new Error('MINECRAFT_TURN_WITHOUT_COMPLETION');

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MIND_SWITCH_NAMES, mindSwitches } from '@shannon/mind';
 import { capturedStage3Digests, STAGE3_SCENARIOS, type Stage3Capture } from './support/stage3Scenarios.js';
+import { stage3Hooks } from './support/stage3Wiring.js';
 
 /**
  * Syzygy ADR-0008 stage 3, the switched-off proof (`docs/mind-workspace-contract.md`): with `SHANNON_ADR8_STAGE3=off` every
@@ -54,16 +55,41 @@ describe('stage 3 switched off: what afb38c28 sent, answered and kept', () => {
 describe('stage 3 switched off in the environment', () => {
   afterEach(() => { vi.unstubAllEnvs(); });
 
-  it('keeps every digest of afb38c28 with SHANNON_ADR8_STAGE3=off, and with each switch of stage 3 off alone', async () => {
+  /** Every switch of a part of stage 3 (all but the master). */
+  const PART_SWITCHES = Object.values(MIND_SWITCH_NAMES).filter(name => name !== 'SHANNON_ADR8_STAGE3');
+
+  async function digestsWith(environment: Record<string, string>): Promise<Record<string, Stage3Capture>> {
+    vi.unstubAllEnvs();
+    for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value);
+    // The production wiring of stage 3, built from this environment, as the server and the worker build it.
+    return capturedStage3Digests(stage3Hooks());
+  }
+
+  it('keeps every digest of afb38c28 with SHANNON_ADR8_STAGE3=off, and with every part switched off by its own switch', async () => {
     const recorded = recordedStage3();
-    const environments: Array<Record<string, string>> = [{ SHANNON_ADR8_STAGE3: 'off' },
-      ...Object.values(MIND_SWITCH_NAMES).filter(name => name !== 'SHANNON_ADR8_STAGE3').map(name => ({ [name]: 'off' }))];
-    for (const environment of environments) {
-      vi.unstubAllEnvs();
-      for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value);
-      const current = await capturedStage3Digests();
+    for (const environment of [{ SHANNON_ADR8_STAGE3: 'off' }, Object.fromEntries(PART_SWITCHES.map(name => [name, 'off']))]) {
+      const current = await digestsWith(environment);
       for (const name of STAGE3_SCENARIOS) expect(current[name], `${JSON.stringify(environment)} ${name}`).toEqual(recorded[name]);
     }
     expect(Object.values(mindSwitches({ SHANNON_ADR8_STAGE3: 'off' })).some(Boolean)).toBe(false);
+  });
+
+  /**
+   * Each part, switched on alone (with what it needs), reaches only the surfaces it is about: every other scenario keeps the
+   * digests of afb38c28. Perception and attention alone change nothing anyone can see; the workspace changes the conversation's
+   * prompts; the proactive gate changes only her own messages.
+   */
+  const ALONE: ReadonlyArray<{ part: string; on: readonly string[]; reaches: readonly string[] }> = [
+    { part: 'perception', on: ['SHANNON_MIND_EVENTS'], reaches: [] },
+    { part: 'attention', on: ['SHANNON_MIND_EVENTS', 'SHANNON_ATTENTION'], reaches: [] },
+    { part: 'data frames', on: ['SHANNON_DATA_FRAMES'], reaches: [] },
+  ];
+
+  it('reaches, with one part switched on alone, only the surfaces that part is about', async () => {
+    const recorded = recordedStage3();
+    for (const { part, on, reaches } of ALONE) {
+      const current = await digestsWith(Object.fromEntries(PART_SWITCHES.map(name => [name, on.includes(name) ? 'on' : 'off'])));
+      for (const name of STAGE3_SCENARIOS.filter(item => !reaches.includes(item))) expect(current[name], `${part} alone: ${name}`).toEqual(recorded[name]);
+    }
   });
 });

@@ -391,6 +391,9 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/attention/',
     'services/api/src/mind/workspace/',
     'packages/mind/',
+    // Their wiring and the contract of the mind's inbox (what another process may hand the mind).
+    'services/api/src/wiring/mindWiring.ts',
+    'services/api/src/contracts/mindInboxContract.ts',
   ]),
   deployment: Object.freeze([
     'deploy/',

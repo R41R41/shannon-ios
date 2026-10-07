@@ -132,6 +132,8 @@ export class PlatformReplyService {
       // With others present (his turn in a shared conversation, anyone else's): her Aether reading tools inside 「シャノン用フォルダ」,
       // nothing else (owner decisions 2026-10-06).
       othersFolderReading: true,
+      // Stage 3: the platform's normalizer copies the turn's audience; it is told the request and who wrote.
+      perception: { surface: 'platform', sourceId: request.requestId, ownerWrote: owner },
       store: turn => {
         try {
           if (owner) return keepOwnerPlatformTurn(conversationStore, { platform: request.platform, requestId: request.requestId, payloadHash: hash }, turn);

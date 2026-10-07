@@ -39,6 +39,7 @@ import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
 import { prepareTurnCognitiveContext } from '../../mind/action/respond/turnCognitiveContext.js';
 import { TurnDeadline } from '../../mind/action/respond/turnDeadline.js';
 import type { TurnMemoryRecall } from '../../mind/recall/turnMemoryRecall.js';
+import { minecraftPerception, platformPerception, textPerception, type MindPerceiver, type PerceivedItem } from '../../mind/perception/perceptionPorts.js';
 
 /**
  * The first half of one text turn of the conversation kernel (`ShannonApiKernel.textTurn`): orchestration, a fixed
@@ -86,6 +87,11 @@ export interface TextTurnSurface {
   ownOutreach: boolean;
   /** Keeps the completed turn and returns its experience, or null when it was kept nowhere in the owner's conversation. */
   store(turn: CompletedTurn): ShannonExperience | null;
+  /**
+   * Syzygy ADR-0008 stage 3: what the mind's normalizer of this surface needs beside the turn's audience, which it copies:
+   * which surface, the request's id, whether the verified owner wrote, and the body (her Minecraft body's device).
+   */
+  perception?: { surface: 'minecraft' | 'platform'; sourceId: string; ownerWrote: boolean; body?: string | null };
 }
 
 export interface TextTurnInput {
@@ -201,6 +207,24 @@ export function beginTextTurn(dependencies: TextTurnDependencies, input: TextTur
 }
 
 export type BegunTextTurn = ReturnType<typeof beginTextTurn>;
+
+/**
+ * Syzygy ADR-0008 stage 3, step F2: the turn handed to the mind through its surface's normalizer, which copies `audience.present`
+ * (the value `prepareTurnCognitiveContext`, the replay and semantic recall receive). Synchronous; never throws, never changes the turn.
+ */
+export function perceiveTextTurn(mind: MindPerceiver | null, input: TextTurnInput, at: string): PerceivedItem | null {
+  if (!mind) return null;
+  try {
+    const { audience, surface, threadId, message } = input;
+    const facts = { message, present: audience.present, alone: audience.alone, at };
+    const perception = surface?.perception;
+    const event = !surface ? textPerception({ ...facts, threadId, ...(audience.turnLabel.speaker ? { speaker: audience.turnLabel.speaker } : {}) })
+      : perception?.surface === 'minecraft' ? minecraftPerception({ ...facts, requestId: perception.sourceId, ownerWrote: perception.ownerWrote, deviceId: perception.body ?? null })
+      : perception?.surface === 'platform' ? platformPerception({ ...facts, requestId: perception.sourceId, ownerWrote: perception.ownerWrote })
+      : null;
+    return event ? mind.perceive(event) : null;
+  } catch { return null; }
+}
 
 /** Her identity, then what she may read this turn: a promise only when a read is asynchronous (`conversationCapabilityContext`). */
 export function textTurnIdentityAndCapability(dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn) {

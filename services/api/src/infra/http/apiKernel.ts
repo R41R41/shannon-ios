@@ -93,7 +93,7 @@ import { InMemoryVoiceIdentityStore, type ShannonVoiceIdentityStore } from '../.
 import { OwnOutreach, type OwnOutreachReader } from '../../surfaces/outreach/ownOutreach.js';
 import { voiceSessionCalls } from '../../surfaces/voice/ownerCallElsewhere.js';
 import {
-  NO_LOOK, answerTextCommand, beginTextTurn, settleTextTools, textToolStart, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type TextTurnInput, type TextTurnResult,
+  NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textToolStart, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type TextTurnInput, type TextTurnResult,
 } from '../../surfaces/text/apiTextTurn.js';
 import { randomUUID } from 'node:crypto';
 import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
@@ -111,6 +111,7 @@ import { recordCompletedCognitiveCycle } from '../../mind/action/respond/cogniti
 import { isExplicitVoyagerUpdateRequest } from '../../integrations/voyager/organize.js';
 import { optionalPlaceDiscoverySkill, placeSkillReply } from '../../integrations/places/placeDiscoverySkill.js';
 import type { ChatResponse } from '../../contracts/contracts.js';
+import type { MindPerceiver } from '../../mind/perception/perceptionPorts.js';
 export type { TextTurnInput, TextTurnResult, TextTurnSurface } from '../../surfaces/text/apiTextTurn.js';
 export interface ShannonApiKernelOptions {
   chatModel?: ShannonChatModel;
@@ -149,6 +150,11 @@ export interface ShannonApiKernelOptions {
   turnChooser?: TurnChooser; toolHints?: true; // toolHints: a search that found nothing names the places to look (stage 2).
   readTools?: ReadToolPorts; // Stage 2, step 3 (SHANNON_READ_TOOLS): her read tools' ports, for her tool runner; the text turn folds its projections.
   turnRouting?: TurnRouting; skills?: SkillTurnPorts; // Stage 2, step 4: the tier policy's inputs, the verifier, where her conversation choices are learned (turnRoutingWiring.ts); step 6: her skill memory (skillMemoryWiring.ts).
+  /**
+   * Syzygy ADR-0008 stage 3 (`docs/mind-workspace-contract.md`, `wiring/mindWiring.ts`): what every surface hands the mind. Absent
+   * (`SHANNON_ADR8_STAGE3=off`, `SHANNON_MIND_EVENTS=off`), nothing is perceived and every turn is what it was at afb38c28.
+   */
+  mind?: MindPerceiver;
 }
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel;
@@ -180,6 +186,7 @@ export class ShannonApiKernel {
   private readonly minecraftRequests: { promptBlock(scopeKey: string, at: string): string } | null;
   private readonly turnChooser: TurnChooser | null; private readonly toolHints: boolean;
   private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null;
+  private readonly mind: MindPerceiver | null;
   /** What the server knows when it offers her tools: others present, and what her writes must not repeat (`shannonToolSession.ts`). */
   private readonly toolServer: ConversationToolServer;
   constructor(
@@ -217,10 +224,11 @@ export class ShannonApiKernel {
     this.notion = options.notion ?? null;
     this.minecraftRequests = options.minecraftRequests ?? null;
     this.turnChooser = options.turnChooser ?? null; this.turnRouting = options.turnRouting ?? null; this.toolHints = options.toolHints === true;
+    this.mind = options.mind ?? null;
     this.people = new PeopleMemory(options.peopleMemory ?? new SQLitePeopleMemoryStore(':memory:'), this.stateStore);
     this.autonomy = options.autonomy ?? createInMemoryAutonomyService(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) });
     this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now); this.ownOutreach = options.ownOutreach ? new OwnOutreach(options.ownOutreach, this.now) : null;
-    this.body = new ShannonBody({ ...options.body, stateStore: this.stateStore, autonomy: this.autonomy, conversationStore: this.conversationStore, now: this.now });
+    this.body = new ShannonBody({ ...options.body, ...(this.mind ? { reactions: { ...options.body?.reactions, mind: this.mind } } : {}), stateStore: this.stateStore, autonomy: this.autonomy, conversationStore: this.conversationStore, now: this.now });
     this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now); this.memoryRecall?.watchAudience?.(this.toolServer.audience); // Stage 2, step 8.
     this.readTools = Boolean(options.readTools && this.autonomy.tools);
     if (options.readTools) this.autonomy.tools?.useReads(options.readTools);
@@ -356,6 +364,8 @@ export class ShannonApiKernel {
     const deps = this.textTurnDependencies();
     const begun = beginTextTurn(deps, input);
     const { occurredAt, captured, provisionalIntent, peopleRecall } = begun;
+    // Stage 3: the turn as the mind perceives it, with the audience the surface decided (nothing without the wiring).
+    perceiveTextTurn(this.mind, input, occurredAt);
     // Who her tools are offered to, and (Syzygy ADR-0008 stage 2, none without its wiring) her read tools' plan and the turn's
     // Jev call, started here so that it runs in parallel with recall (`textToolStart`).
     const { toolAudience, toolOptions, choices } = textToolStart(input, begun, { autonomy: this.autonomy, toolServer: this.toolServer, turnChooser: this.turnChooser, readTools: this.readTools, toolHints: this.toolHints });
@@ -462,7 +472,7 @@ export class ShannonApiKernel {
       aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
       conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people, reactions: this.body.reactions, looks: this.body.turnLooks,
-      toolServer: this.toolServer, ownerCalls: this.body.ownerCalls, ownOutreach: this.ownOutreach,
+      toolServer: this.toolServer, ownerCalls: this.body.ownerCalls, ownOutreach: this.ownOutreach, ...(this.mind ? { mind: this.mind } : {}),
       ...(this.turnChooser ? { turnChooser: this.turnChooser } : {}), ...(this.toolHints ? { toolHints: true as const } : {}), ...(this.turnRouting ? { turnRouting: this.turnRouting } : {}), ...(this.skills ? { skills: this.skills } : {}),
     };
   }

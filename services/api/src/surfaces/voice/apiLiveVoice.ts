@@ -65,6 +65,7 @@ import { voiceCommandResponse, voiceTurnGrounding } from './voiceGrounding.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from '../../mind/action/respond/turnDeadline.js';
 import { tierRequest, type TurnRouting } from '../../mind/action/respond/turnRouting.js';
 import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from './ownerCallElsewhere.js';
+import { voicePerception, type MindPerceiver, type PerceivedItem } from '../../mind/perception/perceptionPorts.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
   /** Looking through her body's camera or the app's (`voiceAppLook.ts`); absent, a voice turn never looks. */
@@ -90,6 +91,8 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   toolServer?: ConversationToolServer;
   ownerCalls?: Pick<OwnerCalls, 'admitTurn'>; // The owner in a call on another device (`ownerCallElsewhere.ts`); absent, nothing is refused.
   turnChooser?: ToolMenuChooser; toolHints?: true; turnRouting?: TurnRouting; skills?: Pick<SkillTurnPorts, 'index'>; // Syzygy ADR-0008 stage 2: the second Jev call, the tier and the verifier, her skills' index (step 6); absent, as at ca7cf519.
+  /** Syzygy ADR-0008 stage 3: what the turn hands the mind (`voicePerception` copies `present`); absent, nothing is perceived. */
+  mind?: MindPerceiver;
 }
 
 export interface LiveVoiceStreamObserver {
@@ -128,6 +131,12 @@ export function dispatchLiveVoiceRequest(
     reaction?.text ?? null, { ...dependencies, looks: dependencies.looks?.of(request) }, observer);
 }
 
+/** Stage 3, step F2: never throws and never changes the turn. */
+function perceiveVoiceTurn(mind: MindPerceiver | undefined, input: Parameters<typeof voicePerception>[0]): PerceivedItem | null {
+  if (!mind) return null;
+  try { return mind.perceive(voicePerception(input)); } catch { return null; }
+}
+
 async function completeLiveVoiceDelegation(
   scopeKey: string,
   requestedThreadId: string | undefined,
@@ -158,6 +167,8 @@ async function completeLiveVoiceDelegation(
     : deviceContext?.companionPresent === true || ownerSaysCompanionPresent(transcript) ? UNKNOWN_GUEST_PRESENCE : OWNER_AUDIENCE;
   const alone = isOwnerOnly(present);
   if (!alone) dependencies.toolServer?.audience.noteOthers(scopeKey);
+  // Stage 3: the turn as the mind perceives it, with the audience decided above, copied (nothing without the wiring).
+  perceiveVoiceTurn(dependencies.mind, { threadId, transcript, present, alone, guest: temporaryGuest, at: occurredAt });
   // A client that predates people memory tells the friend that no owner memory is used; keep that promise for it.
   const legacyGuest = temporaryGuest && guestPresence?.recorded !== true;
   const routingHistory = temporaryGuest ? guestHistory
