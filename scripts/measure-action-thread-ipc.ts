@@ -35,7 +35,9 @@ async function ready():Promise<void> {
   }
   throw new Error('Benchmark worker ready deadline: '+output);
 }
-async function stopWorker():Promise<void> {
+let stopPromise:Promise<void>|undefined;
+function stopWorker():Promise<void> {return stopPromise??=stopWorkerOnce();}
+async function stopWorkerOnce():Promise<void> {
   if(!alive()){await exited;return;}
   worker.kill('SIGTERM');
   let timer:ReturnType<typeof setTimeout>|undefined;
@@ -46,9 +48,17 @@ async function stopWorker():Promise<void> {
 }
 const remote=configuredRemoteMind(on,path),client=new MindSocketClient(join(directory,'mind-runtime','mind.sock'));
 const actions=actionThreadsClient(client.call),samples:number[]=[],admission:number[]=[];
+let interrupted:NodeJS.Signals|undefined;
+const interrupt=(signal:NodeJS.Signals)=>{
+  interrupted??=signal;process.exitCode=interrupted==='SIGINT'?130:143;
+  remote.close();client.close();void stopWorker();
+};
+const onInterrupt=()=>interrupt('SIGINT'),onTerminate=()=>interrupt('SIGTERM');
+process.on('SIGINT',onInterrupt);process.on('SIGTERM',onTerminate);
 try{
   await ready();
   for(let index=0;index<220;index++){
+    if(interrupted)break;
     const started=performance.now();
     remote.host.perceive('owner',textPerception({threadId:`synthetic-${index}`,message:'こんにちは',present:OWNER_AUDIENCE,alone:true,at:now()}));
     await remote.host.sync();
@@ -60,5 +70,9 @@ try{
     if(index>=20){samples.push(perception);admission.push(accepted);}
   }
   const summary=(values:number[])=>{values.sort((a,b)=>a-b);return {samples:values.length,p50Ms:values[Math.floor(values.length*.50)],p95Ms:values[Math.floor(values.length*.95)],maxMs:values.at(-1)};};
-  console.log(JSON.stringify({environment:`${process.platform}; isolated synthetic warm IPC; production worker child`,workspace:summary(samples),foregroundAdmission:summary(admission)},null,2));
-}finally{remote.close();client.close();await stopWorker();await rm(directory,{recursive:true,force:true});}
+  if(!interrupted)console.log(JSON.stringify({environment:`${process.platform}; isolated synthetic warm IPC; production worker child`,workspace:summary(samples),foregroundAdmission:summary(admission)},null,2));
+}catch(error){if(!interrupted)throw error;}
+finally{
+  remote.close();client.close();await stopWorker();await rm(directory,{recursive:true,force:true});
+  process.off('SIGINT',onInterrupt);process.off('SIGTERM',onTerminate);
+}
