@@ -14,7 +14,7 @@ import { toolRefusalLine } from './autonomyLoopToolStep.js';
 import { adaptersFor, prepareStep, unpreparedCode, type PreparedStep, type StepCommit, type StepDependencies, type StepResult } from './autonomyLoopSteps.js';
 import type { RecordedDecision } from './autonomyService.js';
 import { resolveAutonomyModel } from './autonomyTextModel.js';
-import { actionFailureCode, recoverActionAcknowledgements, saveCycleAcknowledgement, saveStepAcknowledgement, stepAcknowledged } from './autonomyActionAcknowledgements.js';
+import { actionFailureCode, recoverActionAcknowledgements, saveCycleAcknowledgement, saveStepAcknowledgement, saveUnusedAcknowledgement, stepAcknowledged } from './autonomyActionAcknowledgements.js';
 
 /**
  * The activity loop of bounded autonomy (Syzygy ADR-0002 step 3). Core.
@@ -207,20 +207,20 @@ export class ShannonAutonomyLoop {
 
     // Journal the step and ask the gate in one transaction: after a crash either both exist or neither.
     const begun = store.transaction(() => {
-      if (!store.loop.holdsLease(this.workerId, at)) return null;
+      if (!store.loop.holdsLease(this.workerId, at)) { if(paid)saveUnusedAcknowledgement(store,this.scopeKey,reservationId,execution,'not_leader');return null; }
       const row = store.loop.beginStep(cycle, current, plan, at);
       const decision = service.authorize(this.scopeKey, ready.request);
       const allowed = decision.decision === 'allow' && (decision.domain as string) === ready.request.domain;
       if (allowed) store.loop.markAuthorized(row.id, decision.activityId, ready.estimate);
-      else store.loop.finishStep(row.id, 'refused', at, decision.activityId);
+      else { store.loop.finishStep(row.id, 'refused', at, decision.activityId);if(paid)saveUnusedAcknowledgement(store,this.scopeKey,reservationId,execution,'refused'); }
       return { row, decision, allowed };
     });
     if (!begun) {
-      if(execution && runner && paid)await runner.checkpoint(execution.lease,reservationId,0,'not_leader');
+      if(execution && runner && paid)await recoverActionAcknowledgements(store,runner,this.scopeKey);
       return 'not-leader';
     }
     if (!begun.allowed) {
-      if(execution && runner && paid)await runner.checkpoint(execution.lease,reservationId,0,'refused');
+      if(execution && runner && paid)await recoverActionAcknowledgements(store,runner,this.scopeKey);
       return this.refused(cycle,begun.row,plan,ready,begun.decision,at);
     }
     // Syzygy ADR-0008 stage 1: a step the gate allowed is a choice of hers (write-only, closed values; refused ones never are).

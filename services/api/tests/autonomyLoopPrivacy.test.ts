@@ -581,6 +581,8 @@ describe('what reaches the prompts of her own activity', () => {
       'inhibitionPorts.ts', 'autonomyReadPorts.ts', 'serverEnvironment.ts',
       // Stage 4 closed execution rights and narrow pure tool windows; these open no private notebook.
       'actionExecution.ts', 'actionThreadContract.ts', 'toolGatePorts.ts', 'toolRegistryPorts.ts', 'executionPorts.ts',
+      // ACK-only recovery through the canonical store/runner already handed to the loop; no new reader or model call.
+      'autonomyActionAcknowledgements.ts',
       // Syzygy ADR-0008 §14: what a refusal of her gate is as a withheld action, and its closed vocabulary; no store.
       'withheldRules.ts', 'withheldActionContract.ts',
     ]);
@@ -596,6 +598,10 @@ describe('what reaches the prompts of her own activity', () => {
     expect(imports('withheldActionContract.ts')).toEqual([]);
     expect(imports('autonomyObservationContract.ts')).toEqual(['bodyContract.ts']);
     expect(imports('serverEnvironment.ts')).toEqual([]);
+    expect(imports('autonomyActionAcknowledgements.ts').sort()).toEqual([
+      'actionExecution.ts', 'actionThreadContract.ts', 'autonomyLoopState.ts', 'autonomyLoopSteps.ts', 'autonomyStore.ts',
+    ]);
+    expect(read('autonomyActionAcknowledgements.ts')).not.toMatch(/DatabaseSync|node:sqlite|fetch\(|\.generate\(|assembleShannonSystemPrompt|conversationHistory|PeopleMemory/u);
     for (const name of loopSources) {
       for (const imported of imports(name)) expect(allowed.has(imported), `${name} imports ${imported}`).toBe(true);
       // The loop itself still builds no state or memory projection: what it is given of the owner's arrives as one finished section.

@@ -1,6 +1,5 @@
-/** Fixed protected paths for the Stage 4 execution owner. This definition is itself protected. */
+/** Fixed response paths for the Stage 4 execution owner. This definition stays in approval_and_budget. */
 export const STAGE4_CORE_PATHS = Object.freeze([
-  'services/api/src/mind/inhibition/stage4CorePaths.ts',
     // Stage 4: the only mind owner, execution rights, IPC and their adapters are core too.
     'services/api/src/mindWorker.ts',
     'services/api/src/mind/action/threads/',

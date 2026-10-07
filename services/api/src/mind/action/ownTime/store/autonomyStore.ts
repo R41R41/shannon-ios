@@ -123,9 +123,6 @@ export class SQLiteAutonomyStore {
         updated_at TEXT NOT NULL,
         PRIMARY KEY (scope_key, purpose)
       );
-      CREATE TABLE IF NOT EXISTS autonomy_action_acknowledgements (
-        id TEXT PRIMARY KEY,scope_key TEXT NOT NULL,report_json TEXT NOT NULL
-      );
     `);
     this.activity = new AutonomyActivityRecord(this.database);
     this.pursuits = new AutonomyPursuitLedger(this.database);
@@ -153,15 +150,25 @@ export class SQLiteAutonomyStore {
 
   /** Called in the same transaction as the canonical usage and step/cycle report. No request or product text. */
   recordActionAcknowledgement(report:ActionAcknowledgement):void {
+    // OFF keeps the original schema. First real Stage 4 ACK creates its table in
+    // the same transaction; a rolled-back report also rolls back the schema.
+    if(!this.hasActionAcknowledgements())this.database.exec(`CREATE TABLE IF NOT EXISTS autonomy_action_acknowledgements (
+      id TEXT PRIMARY KEY,scope_key TEXT NOT NULL,report_json TEXT NOT NULL
+    )`);
     this.database.prepare('INSERT OR IGNORE INTO autonomy_action_acknowledgements VALUES(?,?,?)')
       .run(report.id,report.scopeKey,JSON.stringify(report));
   }
   pendingActionAcknowledgements(scopeKey:string):ActionAcknowledgement[] {
+    if(!this.hasActionAcknowledgements())return [];
     return this.database.prepare('SELECT report_json FROM autonomy_action_acknowledgements WHERE scope_key=? ORDER BY rowid LIMIT 64')
       .all(scopeKey).map(row=>JSON.parse(String(row.report_json)) as ActionAcknowledgement);
   }
   deliveredActionAcknowledgement(id:string):void {
+    if(!this.hasActionAcknowledgements())return;
     this.database.prepare('DELETE FROM autonomy_action_acknowledgements WHERE id=?').run(id);
+  }
+  private hasActionAcknowledgements():boolean {
+    return !!this.database.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='autonomy_action_acknowledgements'").get();
   }
 
   /** Throws when the state cannot be read; the caller treats that as paused. */

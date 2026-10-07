@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { AUTONOMY_DEFAULT_MODEL, AUTONOMY_MODELS, autonomyModel, autonomyModelAllowedFor, type AutonomyModel, type AutonomyModelPurpose } from './autonomyModels.js';
 import { responseUsage } from '../../../infra/models/llmUsage.js';
 import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
-import { currentActionExecution } from '../../../infra/context/actionExecution.js';
+import { actionPermit, currentActionExecution } from '../../../infra/context/actionExecution.js';
 
 /**
  * The model adapters of Shannon's own activity, behind one interface.
@@ -81,13 +81,20 @@ const MODEL_ID = /^[A-Za-z0-9._-]{1,100}$/u;
 async function sendWithReasoning(
   refused: Set<string>, request: AutonomyTextRequest, provider: string, log: ProviderOptions['log'], send: (reasoning: boolean) => Promise<Response>,
 ): Promise<Response> {
+  const sendChecked=async(reasoning:boolean)=>{
+    if(currentActionExecution()){
+      try { await actionPermit(); }
+      catch { throw new AutonomyModelError('ACTION_STOPPED',{inputTokens:0,outputTokens:0}); }
+    }
+    return send(reasoning);
+  };
   const reasoning = request.reasoning === 'low' && !refused.has(request.model);
-  const response = await send(reasoning);
+  const response = await sendChecked(reasoning);
   const malformed = (status: number) => status === 400 || status === 422;
   if (!reasoning || !malformed(response.status)) return response;
   // The refusal is not read: it may quote the request.
   try { await response.body?.cancel(); } catch { /* nothing to release */ }
-  const second = await send(false);
+  const second = await sendChecked(false);
   // Only when the same request is accepted without the field was the field the cause. A request that is refused either
   // way (too long, say) leaves the field in use.
   if (!malformed(second.status)) {
@@ -128,7 +135,6 @@ export class GeminiAutonomyTextModel {
     const json = await jsonBody(response);
     if (!response.ok) throw new AutonomyModelError(`AUTONOMY_MODEL_HTTP_${response.status}`);
     const metadata = object(object(json)?.usageMetadata);
-    if(currentActionExecution()&&!metadata)throw new Error('AUTONOMY_MODEL_USAGE_UNKNOWN');
     // Reasoning tokens are billed as output.
     const inputTokens = count(metadata?.promptTokenCount);
     const cachedInputTokens = Math.min(inputTokens, count(metadata?.cachedContentTokenCount));
@@ -142,6 +148,12 @@ export class GeminiAutonomyTextModel {
     const text = Array.isArray(parts)
       ? parts.map(part => (object(part)?.thought === true ? '' : object(part)?.text)).filter((value): value is string => typeof value === 'string').join('')
       : '';
+    // Gemini may omit the zero candidate count for an empty or reasoning-only
+    // reply. Generated text requires its output count; every present count is checked.
+    if(currentActionExecution()&&(!knownTokenCounts(metadata,text.trim()?['promptTokenCount','candidatesTokenCount']:['promptTokenCount'],
+      ['candidatesTokenCount','thoughtsTokenCount','cachedContentTokenCount','totalTokenCount'])
+      ||count(metadata?.cachedContentTokenCount)>inputTokens
+        ||metadata?.totalTokenCount!==undefined&&metadata.totalTokenCount!==inputTokens+usage.outputTokens))throw new Error('AUTONOMY_MODEL_USAGE_UNKNOWN');
     const truncated = Array.isArray(candidates) && object(candidates[0])?.finishReason === 'MAX_TOKENS';
     // The whole ceiling went to reasoning: nothing was written, and the call is still charged.
     if (!text.trim()) throw new AutonomyModelError(truncated ? 'AUTONOMY_MODEL_TRUNCATED' : 'AUTONOMY_MODEL_EMPTY', usage);
@@ -181,7 +193,10 @@ export class OpenAIAutonomyTextModel {
     }));
     const json = await jsonBody(response);
     if (!response.ok) throw new AutonomyModelError(`AUTONOMY_MODEL_HTTP_${response.status}`);
-    if(currentActionExecution()&&!object(object(json)?.usage))throw new Error('AUTONOMY_MODEL_USAGE_UNKNOWN');
+    const metadata=object(object(json)?.usage),cache=object(metadata?.input_tokens_details);
+    if(currentActionExecution()&&(!knownTokenCounts(metadata,['input_tokens','output_tokens'],['total_tokens'])
+      ||metadata?.total_tokens!==undefined&&metadata.total_tokens!==count(metadata.input_tokens)+count(metadata.output_tokens)
+      ||cache?.cached_tokens!==undefined&&(!knownTokenCounts(cache,['cached_tokens'])||count(cache.cached_tokens)>count(metadata?.input_tokens))))throw new Error('AUTONOMY_MODEL_USAGE_UNKNOWN');
     const reported = responseUsage(json);
     const usage = { inputTokens: reported.inputTokens, outputTokens: reported.outputTokens, ...(reported.cachedInputTokens ? { cachedInputTokens: reported.cachedInputTokens } : {}) };
     const text = openAIOutputText(json);
@@ -290,6 +305,10 @@ function object(value: unknown): Record<string, unknown> | null {
 
 function count(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
+}
+function knownTokenCounts(value:Record<string,unknown>|null,required:readonly string[],optional:readonly string[]=[]):boolean {
+  const tokenCount=(count:unknown)=>typeof count==='number'&&Number.isSafeInteger(count)&&count>=0;
+  return !!value&&required.every(key=>tokenCount(value[key]))&&optional.every(key=>value[key]===undefined||tokenCount(value[key]));
 }
 
 function boundedInteger(value: string | undefined, minimum: number, maximum: number, fallback: number): number {

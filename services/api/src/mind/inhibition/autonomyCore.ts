@@ -207,6 +207,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
   ]),
   approval_and_budget: Object.freeze([
     'services/api/src/mind/inhibition/autonomyCore.ts',
+    'services/api/src/mind/inhibition/stage4CorePaths.ts',
     'services/api/src/mind/inhibition/autonomyPaths.ts',
     'services/api/src/mind/inhibition/autonomyPolicy.ts',
     // The window other parts of the mind import the gate and the budget through (Syzygy ADR-0008 §10).
@@ -235,6 +236,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/infra/http/apiAutonomyRoutes.ts',
     // The activity loop: every step it takes passes the gate, the budget, and the record.
     'services/api/src/mind/action/ownTime/autonomyLoop.ts',
+    // Closed usage/terminal ACK recovery decides when her original reservation and rights can be released.
+    'services/api/src/mind/action/ownTime/autonomyActionAcknowledgements.ts',
     'services/api/src/mind/action/ownTime/autonomyLoopConfig.ts',
     'services/api/src/mind/action/ownTime/store/autonomyLoopState.ts',
     'services/api/src/mind/action/ownTime/autonomyLoopSteps.ts',

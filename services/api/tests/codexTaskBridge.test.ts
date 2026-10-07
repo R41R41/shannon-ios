@@ -451,6 +451,44 @@ describe('CodexTaskBridge', () => {
     expect(events.some(e=>['paused','completed','failed'].includes(e.type))).toBe(false);
     await bridge.stop();
   });
+  it.each(['inProgress','completed','failed','interrupted'] as const)('recovers only the recorded turn when a foreign turn is also active (%s)',async(status)=>{
+    const fixture=makeFixture(),events:HostAgentEvent[]=[];
+    const actionLease={id:'action-1',holder:'host',generation:1};
+    fixture.state.saveSession({taskId:'task-1',startCommandId:'start-1',threadId:'thread-1',turnId:'original',actionLease,
+      projectKey:'fixture',cwd:fixture.project,updatedAt:'2026-10-07T12:00:00.000Z'});
+    // Foreign goes first so selecting the first active turn would misbind the lease.
+    fixture.client.resumeActiveTurnID='foreign';fixture.client.resumeClosedTurn={id:'original',status};
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>false,publish:async batch=>{events.push(...batch);}});
+    await bridge.start();expect(fixture.client.requests.some(r=>r.method==='turn/start')).toBe(false);
+    if(status==='inProgress') {
+      expect(fixture.state.session('task-1')?.turnId).toBe('original');
+      await bridge.checkExecutionRights();
+      expect(fixture.client.requests.find(r=>r.method==='turn/interrupt')?.params.turnId).toBe('original');
+      fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'foreign',status:'completed'}}});
+      await bridge.whenIdle();expect(fixture.state.session('task-1')?.turnId).toBe('original');
+      expect(events.some(e=>['paused','completed','failed'].includes(e.type))).toBe(false);
+    } else {
+      expect(fixture.state.session('task-1')?.turnId).toBeUndefined();
+      expect(events.filter(e=>['paused','completed','failed'].includes(e.type))).toEqual([
+        expect.objectContaining({type:status==='failed'?'failed':'paused',payload:expect.objectContaining({actionLease})}),
+      ]);
+    }
+    await bridge.stop();
+  });
+  it.each([false,true])('never binds a foreign active turn to missing original execution evidence (lost start: %s)',async(lostStart)=>{
+    const fixture=makeFixture(),events:HostAgentEvent[]=[];
+    fixture.state.saveSession({taskId:'task-1',startCommandId:'start-1',threadId:'thread-1',
+      ...(lostStart?{executionUncertain:true}:{turnId:'original'}),actionLease:{id:'action-1',holder:'host',generation:1},
+      projectKey:'fixture',cwd:fixture.project,updatedAt:'2026-10-07T12:00:00.000Z'});
+    fixture.client.resumeActiveTurnID='foreign';
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>false,publish:async batch=>{events.push(...batch);}});
+    await bridge.start();await bridge.checkExecutionRights();
+    expect(fixture.state.session('task-1')).toMatchObject({executionUncertain:true});
+    expect(fixture.state.session('task-1')?.turnId).toBe(lostStart?undefined:'original');
+    expect(fixture.client.requests.some(r=>r.method==='turn/start'||r.params.turnId==='foreign')).toBe(false);
+    expect(events.some(e=>['paused','completed','failed'].includes(e.type))).toBe(false);
+    await bridge.stop();
+  });
   it('does not turn a transport error notification into a terminal execution result',async()=>{
     const fixture=makeFixture(),events:HostAgentEvent[]=[];
     const bridge=new CodexTaskBridge({...fixture,permit:async()=>true,publish:async batch=>{events.push(...batch);}});
@@ -542,7 +580,7 @@ class FakeCodexConnection implements CodexAppServerConnection {
     if (method === 'thread/start') return { thread: { id: 'thread-1', status: { type: 'idle' }, turns: [] } } as T;
     if (method === 'thread/resume') return { thread: {
       id: params.threadId, status: { type: this.resumeActiveTurnID ? 'active' : 'idle' },
-      turns: this.resumeActiveTurnID ? [{ id: this.resumeActiveTurnID, status: 'inProgress' }] : this.resumeClosedTurn ? [this.resumeClosedTurn] : [],
+      turns: [...(this.resumeActiveTurnID ? [{ id: this.resumeActiveTurnID, status: 'inProgress' }] : []), ...(this.resumeClosedTurn ? [this.resumeClosedTurn] : [])],
     } } as T;
     if (method === 'turn/start') {
       if(this.loseTurnStartResponse)throw new Error('Response lost after turn started');

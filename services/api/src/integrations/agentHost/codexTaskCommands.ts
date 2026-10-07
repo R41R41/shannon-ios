@@ -259,18 +259,24 @@ export class CodexTaskCommandController {
       excludeTurns: false,
     });
     const runtime = this.runtimes.register(session, project);
+    if (session.actionLease) {
+      // Execution rights belong to the recorded turn, even if another actor has
+      // since started a different turn on the same Codex thread.
+      const original = session.turnId ? result.thread?.turns?.find(turn => turn.id === session.turnId) : undefined;
+      if (original?.status === 'inProgress') {
+        runtime.executionUncertain = false; this.runtimes.save(runtime);
+      } else if (original && ['completed', 'failed', 'interrupted'].includes(String(original.status))) {
+        runtime.recoveredTurn = original;
+      } else if (session.turnId || session.executionUncertain || session.pendingApprovalExternalRequestID) {
+        // Thread-level active status and an uncorrelated active turn cannot prove
+        // what happened to the original execution or to a lost start response.
+        runtime.executionUncertain = true; this.runtimes.save(runtime);
+      }
+      return runtime;
+    }
     const activeTurn = result.thread?.turns?.find(turn => turn.status === 'inProgress');
     const activeTurnID = stringValue(activeTurn?.id)
       ?? (result.thread?.status?.type === 'active' ? session.turnId : undefined);
-    if (session.actionLease && !activeTurnID && (session.turnId || session.executionUncertain || session.pendingApprovalExternalRequestID)) {
-      // A missing live turn is not proof that it never ran. Recover only the original
-      // recorded turn's canonical terminal result; never start a replacement here.
-      const original = result.thread?.turns?.find(turn => turn.id === session.turnId);
-      if (original && ['completed', 'failed', 'interrupted'].includes(String(original.status))) {
-        runtime.recoveredTurn = original;
-      } else { runtime.executionUncertain = true; this.runtimes.save(runtime); }
-      return runtime;
-    }
     if (!activeTurnID && session.turnId) {
       runtime.turnId = await this.startTurn(runtime, recoveryPrompt(
         project, this.options.config, runtime.taskId, false, session.goal,

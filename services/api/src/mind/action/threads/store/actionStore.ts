@@ -228,7 +228,11 @@ export class SQLiteActionStore {
       const live=action.generation===lease.generation&&action.holder===lease.holder&&['running','waiting','stopping'].includes(action.state);
       const expired=action.generation===lease.generation+1&&['unknown','cancelled'].includes(action.state);
       const closed=action.generation===lease.generation&&['completed','failed','cancelled'].includes(action.state);
-      if(!live&&!expired&&!closed)return false;
+      // An explicit resume can precede delivery of the old known ACK. It has
+      // granted no new holder yet: collect only that attempt's budget/receipt.
+      const resumed=action.state==='queued'&&!action.holder&&!action.sent
+        &&(action.generation===lease.generation||action.generation===lease.generation+1);
+      if(!live&&!expired&&!closed&&!resumed)return false;
       if(report.reservationId){
         const reservation=this.db.prepare('SELECT state FROM mind_action_budget WHERE reservation_id=? AND action_id=? AND generation=?')
           .get(report.reservationId,lease.id,lease.generation);

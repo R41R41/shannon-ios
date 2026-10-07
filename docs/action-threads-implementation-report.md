@@ -49,7 +49,7 @@ Independent review of the protected core and outside-operation adapters is pendi
 
 For Apple distribution, only unsigned local build/preview evidence is available. Archive, upload, processing, assignment, TestFlight install and human smoke for Stage 4 are unrun. The owner's earlier confirmation of the learning screen concerns Stage 3 and is not a Stage 4 acceptance.
 
-Windows body implementation/visual acceptance remains owned by its separate repository. Minecraft rollout remains subject to its existing plan. The separate TestFlight platform selection repair remains on `codex/shannon/testflight-platform` and is not folded into this change.
+Windows body implementation/visual acceptance remains owned by its separate repository. Minecraft rollout remains subject to its existing plan. The independently reviewed TestFlight platform selection and effective-unit source repair is now included in this candidate; the original `codex/shannon/testflight-platform` branch is retained. Production application is still pending.
 
 ## Final reproducible checks
 
@@ -71,6 +71,6 @@ Apple follow-up verification passed all **777 XCTest + 145 Swift Testing tests**
 
 Read-only VM preflight confirmed revision `16bdf384`, the five existing services and distribution timer active, unauthenticated auth 401 and live SQLite integrity `ok`. Aggregate counts were 42 conversation threads, 1,308 messages, ten terminal tasks and five paired devices. A separate `/tmp` directory holds copied dependencies for candidate verification; it contains no copied production database, pairing or environment file. IPv4 SSH timed out while the same Tailscale peer's IPv6 worked with its existing host-key identity preserved. Production source, units, flags and processes were not changed.
 
-The separate TestFlight repair at `8358754d` passed its exact-commit independent review and seven synthetic tests. Applying it requires updating the effective systemd unit and `daemon-reload`; a repository template alone does not change the timer's actual executable. It remains a separate release prerequisite.
+The separate TestFlight repair at `8358754d` passed its exact-commit independent review and seven synthetic tests. Applying it requires updating the effective systemd unit and `daemon-reload`; a repository template alone does not change the timer's actual executable. Its reviewed changes were cherry-picked as `8460f6dc` and `b8467e86` into the Stage 4 candidate for combined validation; the original branch remains intact. No distribution or production unit was changed.
 
 Final candidate regression, VM isolated verification and exact-commit re-review are recorded below when they finish. The [rollout procedure](action-threads-rollout.md) makes the pending source/unit/host/flag cutover and Apple gates explicit.

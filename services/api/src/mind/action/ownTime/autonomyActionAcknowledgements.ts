@@ -5,6 +5,11 @@ import type { AutonomyLoopCycle, AutonomyLoopStep } from './store/autonomyLoopSt
 import type { StepResult } from './autonomyLoopSteps.js';
 
 /** Persisted beside canonical usage, never a model/tool request to replay. */
+export function saveUnusedAcknowledgement(store:SQLiteAutonomyStore,scopeKey:string,reservationId:string,
+  execution:ActionExecution|undefined,code:'not_leader'|'refused'):void {
+  if(execution)store.recordActionAcknowledgement({id:reservationId,scopeKey,lease:execution.lease,reservationId,actual:0,
+    state:code==='not_leader'?'budget':'checkpoint',code});
+}
 export function saveStepAcknowledgement(store:SQLiteAutonomyStore,scopeKey:string,row:AutonomyLoopStep,reservationId:string,
   result:StepResult,actual:number,execution:ActionExecution|undefined):void {
   if(!execution||execution.modelOutcome==='unknown')return;
