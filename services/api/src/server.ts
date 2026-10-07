@@ -16,6 +16,7 @@ import { createConfiguredChatModel } from './infra/models/chatModel.js';
 import { configuredVoiceDecision, startRewardMood } from './wiring/cognitionLedgerWiring.js';
 import { readToolPorts, skillRoutingParts } from './wiring/skillRoutingWiring.js';
 import { configuredTurnRouting } from './wiring/turnRoutingWiring.js';
+import { configuredWithheldActions, gateRefusals } from './wiring/withheldWiring.js';
 import { configuredSonnet, tieredChatModel } from './wiring/sonnetWiring.js';
 import { configuredSkillMemory, skillTurnPorts } from './wiring/skillMemoryWiring.js';
 import { configuredTreeRecall } from './wiring/treeRecallWiring.js';
@@ -107,11 +108,15 @@ const aetherPorts = configuredAetherPorts(process.env, now); // Aether (Syzygy A
 // Syzygy ADR-0008 stage 1 (docs/cognition-ledger-contract.md): the prediction and choice ledgers; each null while switched off.
 const predictionLedger = persistentStore.predictionLedger();
 const choiceLedger = persistentStore.choiceLedger();
+// Syzygy ADR-0008 §14: what a rule stopped, as closed facts (`shannon_withheld_actions`, created here). SHANNON_ADR8_STAGE2=off: none of it.
+const withheldActions = configuredWithheldActions(process.env, { databasePath: configuredDatabasePath(), createsSchema: true, log: line => console.log(line) });
 const autonomy = new ShannonAutonomyService({
   store: autonomyStore, config: autonomyConfig, now, ownerFirstActiveAfter: (scopeKey, after) => ownerTurns.ownerFirstActiveAfter(scopeKey, after),
   announcer: autonomyAnnouncer, agentTasks: agentTaskStore, defaultThread: scopeKey => persistentStore.threadId(scopeKey),
   defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST?.trim() || null, minecraftBody: minecraft.requests, aether: aetherPorts,
-  ...(predictionLedger ? { storyReacted: (scopeKey, pieceId, reaction, at) => storyReacted(predictionLedger, scopeKey, pieceId, reaction, at, choiceLedger) } : {}) });
+  ...(predictionLedger ? { storyReacted: (scopeKey, pieceId, reaction, at) => storyReacted(predictionLedger, scopeKey, pieceId, reaction, at, choiceLedger) } : {}),
+  ...(withheldActions ? { withheld: gateRefusals(withheldActions.withheld, autonomyConfig) } : {}) });
+if (withheldActions) autonomy.tools.observeWithheld(withheldActions.withheld.sink, now);
 // Syzygy ADR-0008 stage 2, step 5: the Sonnet tier, only with the Anthropic key and SHANNON_SONNET_ROUTING=on (default off); else luna as it was.
 const sonnet = configuredSonnet(process.env, { usageStore: persistentStore, now });
 // Syzygy ADR-0008 stage 2, step 6 (docs/skill-and-routing-contract.md): her skill memory, its tables created here. SHANNON_SKILLS=off: none of it.
@@ -443,6 +448,7 @@ function shutdown(): void {
     dailyMindStore.close();
     organizeStore.close();
     turnRouting?.close();
+    withheldActions?.close();
     skillMemory?.close();
     cognitiveIntentStore.close();
     conversationOrchestrationStore.close();

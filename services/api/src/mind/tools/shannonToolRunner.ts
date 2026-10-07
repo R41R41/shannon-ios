@@ -20,6 +20,7 @@ import {
 import { READ_TOOL_PORT, readToolExecutors, type ReadToolPorts } from './shannonReadTools.js';
 import { skillExecutors } from './shannonSkillTools.js';
 import type { SkillTurnPorts } from '../../contracts/skillMemoryContract.js';
+import { WITHHELD_TOOL, withheldRail, type WithheldRail, type WithheldReason, type WithheldSink } from '../../contracts/withheldActionContract.js';
 
 /**
  * Runs the registry's tools. Conversations (text and voice) call `call`; her own time uses `prepare` inside a
@@ -54,8 +55,20 @@ export interface ToolAetherPorts {
 /** Syzygy ADR-0008 stage 1: a tool call of hers in a conversation that ran, as closed values (data only, no effect). */
 export type ToolCallChoiceSink = (scopeKey: string, call: { tool: string; surface: 'text' | 'voice'; audience: ToolAudience; ok: boolean }, at: string) => void;
 
+/**
+ * Results a rule withheld (Syzygy ADR-0008 §14: the gate, who can see or hear, what the owner said is 内緒): a turn's choices leave
+ * them out (`turnToolResults`), so a stop is never learned as a failure of hers.
+ */
+const WITHHELD_RESULTS = new WeakSet<object>();
+
+export function wasWithheld(result: ToolResult): boolean {
+  return WITHHELD_RESULTS.has(result);
+}
+
 export class ShannonToolRunner {
   private executors: Readonly<Record<string, ToolExecutor>>;
+  /** Syzygy ADR-0008 §14: where a call a rule stopped is written (`observeWithheld`); null, nothing is written. */
+  private withheld: { sink: WithheldSink; now: () => string } | null = null;
   private choices: { sink: ToolCallChoiceSink; now: () => string } | null = null;
   /** Syzygy ADR-0008 stage 2: the ports of her read tools (`useReads`); null, they do not exist on this server. */
   private reads: ReadToolPorts | null = null;
@@ -128,29 +141,30 @@ export class ShannonToolRunner {
     const named = shannonTool(name);
     const tool = named && this.knownTool(named.name) ? named : null;
     const refused = authorizeToolCall(tool, context);
-    if (refused || !tool) return { tool, result: refused ?? toolFailure('not_offered', 'そういう道具はない。', { retryable: false }) };
+    if (refused || !tool) return tool && refused ? this.withhold(context, tool, refused, tool.surfaces.includes(context.surface) ? 'audience' : 'not_offered')
+      : { tool, result: refused ?? toolFailure('not_offered', 'そういう道具はない。', { retryable: false }) };
     const executor = this.executors[tool.name];
     if ((tool.name.startsWith('aether') || tool.domain === 'aether_proposal') && !this.aetherFor(context.scopeKey)) {
-      return { tool, result: toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'Aetherの道具はライ氏のscopeだけ', wouldWork: 'ライ氏との会話か、ボクの時間で使う' } }) };
+      return this.withhold(context, tool, toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'Aetherの道具はライ氏のscopeだけ', wouldWork: 'ライ氏との会話か、ボクの時間で使う' } }), 'not_offered');
     }
     if (tool.domain === 'owner_documents_read' && !this.ownerDocumentsFor(context.scopeKey)) {
-      return { tool, result: toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'ライ氏の文書は、ライ氏のscopeの自分の時間に、許された時だけ読む', wouldWork: 'ライ氏と二人だけの会話で aether の道具を使う' } }) };
+      return this.withhold(context, tool, toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'ライ氏の文書は、ライ氏のscopeの自分の時間に、許された時だけ読む', wouldWork: 'ライ氏と二人だけの会話で aether の道具を使う' } }), 'not_offered');
     }
     // Only for one of her pursuits she is working on now (ADR-0007), checked here as well as by the loop.
     const pursuitId = rawInput && typeof rawInput === 'object' ? (rawInput as { pursuitId?: unknown }).pursuitId : undefined;
     const pursuit = tool.domain === 'owner_documents_read' && typeof pursuitId === 'string' ? this.store.pursuits.get(context.scopeKey, pursuitId.trim()) : null;
     if (tool.domain === 'owner_documents_read' && typeof pursuitId === 'string' && pursuit?.status !== 'active') {
-      return { tool, result: toolFailure('refused', `${pursuit ? 'その気になっていることは、いま進めていない' : '台帳にない id だった'}。ライ氏の文書は、いま進めている気になっていることのためにだけ読む。`, {
-        retryable: false, refusal: { why: 'pursuitId が台帳のいま進めているものではない', wouldWork: 'pursuitId に台帳のいま進めているものの id を書く' } }) };
+      return this.withhold(context, tool, toolFailure('refused', `${pursuit ? 'その気になっていることは、いま進めていない' : '台帳にない id だった'}。ライ氏の文書は、いま進めている気になっていることのためにだけ読む。`, {
+        retryable: false, refusal: { why: 'pursuitId が台帳のいま進めているものではない', wouldWork: 'pursuitId に台帳のいま進めているものの id を書く' } }), 'not_pursuing');
     }
     if (!executor) return { tool, result: toolFailure('not_offered', `${tool.name} はまだ使えない。`, { retryable: false }) };
     // The schema of this surface: in a conversation a write is shorter (`toolForSurface`).
     const checked = validToolInput(rawInput, toolForSurface(tool, context.surface).input);
     if ('problem' in checked) return { tool, result: toolFailure('invalid_input', `入力が正しくない（${checked.problem}）。`, { retryable: false }) };
     const inputRefused = authorizeToolInput(tool, checked.input, context);
-    if (inputRefused) return { tool, result: inputRefused };
+    if (inputRefused) return this.withhold(context, tool, inputRefused, 'outside_reach', context.audience === 'others' ? 'audience' : 'gate');
     const secret = secretRefusal(tool.name, checked.input, context.secrets);
-    if (secret) return { tool, result: secret };
+    if (secret) return this.withhold(context, tool, secret, 'secret');
     try {
       // Aether as this call may reach it: the gate narrows it with anyone else present and in her own time.
       // With anyone else present, what she wrote after reading the owner's documents is not read either (ADR-0007).
@@ -163,12 +177,31 @@ export class ShannonToolRunner {
     }
   }
 
-  /** A call from a conversation that the turn refused before it reached here (a name it does not offer): recorded, not run. */
-  refused(name: string, scopeKey: string, result: ToolResult): ToolResult {
+  /**
+   * A call from a conversation that the turn refused before it reached here (a name it does not offer): recorded, not run. With
+   * `withheld` (a rule stopped it: who can hear, words not trusted to write) it is also written as withheld (ADR-0008 §14).
+   */
+  refused(name: string, scopeKey: string, result: ToolResult, withheld?: { surface: 'text' | 'voice'; tool: string; reason: WithheldReason }): ToolResult {
     try {
       this.recorder.recordConversationAction(scopeKey, { summary: `会話の中で道具「${this.knownTool(name)?.name ?? '不明'}」を使おうとしましたが、使えませんでした。`, tool: name.slice(0, 120), outcome: 'failed', reasonCode: 'not_offered' });
     } catch { /* the refusal stands */ }
+    if (withheld) this.note(scopeKey, withheld.surface, withheld.tool, withheld.reason);
     return result;
+  }
+
+  /** Syzygy ADR-0008 §14: every call a rule stops is written as withheld, through this sink (the wiring hands it only with stage 2 on). */
+  observeWithheld(sink: WithheldSink, now: () => string): void { this.withheld = { sink, now }; }
+
+  /** A tool or step a rule stopped outside `prepare` (her own time's tool step), written as withheld. */
+  note(scopeKey: string, surface: ToolSurface, tool: string, reason: WithheldReason, rail: WithheldRail = withheldRail(reason)): void {
+    if (!this.withheld) return;
+    try { this.withheld.sink(scopeKey, { surface, tool: WITHHELD_TOOL.test(tool) ? tool : 'unknown', reason, rail }, this.withheld.now()); } catch { /* the refusal stands */ }
+  }
+
+  private withhold(context: ToolExecutionContext, tool: ShannonToolDefinition, result: ToolResult, reason: WithheldReason, rail?: WithheldRail): { tool: ShannonToolDefinition; result: ToolResult } {
+    WITHHELD_RESULTS.add(result);
+    this.note(context.scopeKey, context.surface, tool.name, reason, rail);
+    return { tool, result };
   }
 
   /**

@@ -76,8 +76,10 @@ export function recordTurn(choices: ChoiceLedger | null, competence: TierCompete
   const verified = turn.verified === null ? [] : [turn.verified];
   const context = `${dayBand(at)}.${turn.presence}`;
   const undone = turn.doing === 'described_not_done';
+  // A call a rule stopped is not a choice of hers (ADR-0008 §14): not learned, not counted against the turn.
+  const tools = turn.tools.filter(tool => !tool.withheld);
   const conversationGrowth = (signals: readonly boolean[]) => (undone ? 0 : growthOf(signals));
-  for (const tool of turn.tools) {
+  for (const tool of tools) {
     // A skill she opened (step 6): a use of that skill, noted on it and recorded once as `skill.use` with the skill as its source.
     if (tool.name === 'skill.read' && tool.subject && skills) {
       const growth = conversationGrowth([tool.ok, turn.inDeadline, ...verified]);
@@ -93,7 +95,7 @@ export function recordTurn(choices: ChoiceLedger | null, competence: TierCompete
       conversationGrowth([tool.ok, turn.inDeadline, ...verified]), turn.talk, at);
   }
   if (!turn.tier) return;
-  const growth = conversationGrowth([turn.inDeadline, ...verified, turn.tools.every(tool => tool.ok)]);
+  const growth = conversationGrowth([turn.inDeadline, ...verified, tools.every(tool => tool.ok)]);
   const tier = PREDICTION_SYMBOL.test(`tier.${turn.tier.served}`) ? turn.tier.served : 'luna';
   choices?.recordConversation(scopeKey, { surface: turn.surface, choice: `tier.${tier}`, context, sourceKind: 'turn', sourceId: randomUUID() }, growth, turn.talk, at);
   competence?.record(scopeKey, { talkId: turn.talk, surface: turn.surface, tier, taskKind: PREDICTION_SYMBOL.test(turn.tier.kind) ? turn.tier.kind : 'unknown', growth,

@@ -577,8 +577,12 @@ describe('what reaches the prompts of her own activity', () => {
       // Syzygy ADR-0008 §10: the inhibition part's window (it re-exports the budget and the gate and nothing else, held below),
       // and the one reader of the environment (no store).
       'inhibitionPorts.ts', 'serverEnvironment.ts',
+      // Syzygy ADR-0008 §14: what a refusal of her gate is as a withheld action, and its closed vocabulary; no store.
+      'withheldRules.ts', 'withheldActionContract.ts',
     ]);
-    expect(imports('inhibitionPorts.ts').sort()).toEqual(['autonomyBudget.ts', 'autonomyPolicy.ts']);
+    expect(imports('inhibitionPorts.ts').sort()).toEqual(['autonomyBudget.ts', 'autonomyPolicy.ts', 'withheldRules.ts']);
+    expect(imports('withheldRules.ts').sort()).toEqual(['autonomyBudget.ts', 'autonomyPolicy.ts', 'withheldActionContract.ts']);
+    expect(imports('withheldActionContract.ts')).toEqual([]);
     expect(imports('serverEnvironment.ts')).toEqual([]);
     for (const name of loopSources) {
       for (const imported of imports(name)) expect(allowed.has(imported), `${name} imports ${imported}`).toBe(true);

@@ -153,7 +153,9 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
     sections: [...(extras?.sections ?? []), ...tooling.sections], ownTools: true,
   } : extras);
   // Syzygy ADR-0008 stage 1, step 7a: what the server counted for the choices offered now, last in the prompt; none while switched off.
-  const counted = !dependencies.valueFacts ? null : valueFactsFor(dependencies, cycle.scopeKey, at, offeredChoices(materials, phone?.offered === true, tooling ? offeredOwnTools(dependencies, cycle.scopeKey).map(tool => tool.name) : [], { followUp: again && rethink.followUp !== null, jot: again && rethink.jot }));
+  const valued = !dependencies.valueFacts ? null : valueFactsFor(dependencies, cycle.scopeKey, at, offeredChoices(materials, phone?.offered === true, tooling ? offeredOwnTools(dependencies, cycle.scopeKey).map(tool => tool.name) : [], { followUp: again && rethink.followUp !== null, jot: again && rethink.jot }));
+  // ADR-0008 §14: what a rule stopped lately, last of all; none while stage 2 is off.
+  const counted = [valued, withheldFactsFor(dependencies, cycle.scopeKey, at)].filter(Boolean).join('\n\n') || null;
   const priced = (reserveYen?: number) => paidCall(dependencies, cycle.scopeKey, 'planning', thinkingPrompt(materials, withTools(extrasWith(reserveYen)), counted), session ? loop.sessionThinkOutputTokens : OUTPUT_TOKENS);
   // In a session she is told what the gate reserves for a thought: the estimate of this very prompt, priced once without that line.
   const first = priced();
@@ -272,6 +274,11 @@ function offeredChoices(materials: ReturnType<typeof thinkingMaterials>, call: b
 }
 
 /** The value facts for this thought, or null: switched off, nothing counted yet, anyone else present, or not readable just now. */
+function withheldFactsFor(dependencies: StepDependencies, scopeKey: string, at: string): string | null {
+  if (!dependencies.withheldFacts) return null;
+  try { return dependencies.withheldFacts(scopeKey, at); } catch { return null; }
+}
+
 function valueFactsFor(dependencies: StepDependencies, scopeKey: string, at: string, offered: readonly string[]): string | null {
   if (!dependencies.valueFacts) return null;
   try { return dependencies.valueFacts(scopeKey, offered, at); } catch { return null; }

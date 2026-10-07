@@ -203,12 +203,21 @@ describe('a routed conversation turn', () => {
     const competence = new TierCompetence({ database: w.database, createsSchema: false, defer: task => task() });
     recordTurn(ledger, competence, 'owner', { talk: 'thread', surface: 'text', presence: 'alone', tier: { served: 'luna', kind: 'write' },
       tools: [{ name: 'study.list', ok: true }], inDeadline: true, verified: true, doing: 'described_not_done' }, at(0));
-    expect(ledger.rows('owner').map(row => [row.choice, row.success])).toEqual([['tool.study.list', 0], ['tier.luna', 0]]);
+    expect(ledger.rows('owner').map(row => [row.choice, row.success]).sort()).toEqual([['tier.luna', 0], ['tool.study.list', 0]]);
     expect(w.outcomes.all('owner')).toMatchObject([{ doing: 'described_not_done', growth: 0 }]);
     recordTurn(ledger, competence, 'owner', { talk: 'thread-2', surface: 'text', presence: 'alone', tier: { served: 'luna', kind: 'write' },
       tools: [{ name: 'study.create', ok: true }], inDeadline: true, verified: true, doing: 'done' }, at(1));
-    expect(ledger.rows('owner').slice(2).map(row => [row.choice, row.success])).toEqual([['tool.study.create', 1], ['tier.luna', 1]]);
+    expect(ledger.rows('owner').filter(row => row.subjectId === 'thread-2').map(row => [row.choice, row.success]).sort()).toEqual([['tier.luna', 1], ['tool.study.create', 1]]);
     expect(w.outcomes.all('owner')[1]).toMatchObject({ doing: 'done', growth: 1 });
+    w.close();
+  });
+
+  it('never learns a call a rule stopped as a choice of hers, nor counts it against the turn (ADR-0008 §14)', () => {
+    const w = world();
+    const ledger = w.store.choiceLedger()!;
+    recordTurn(ledger, null, 'owner', { talk: 'thread', surface: 'text', presence: 'others', tier: { served: 'luna', kind: 'lookup' },
+      tools: [{ name: 'study.create', ok: false, withheld: true }, { name: 'study.list', ok: true }], inDeadline: true, verified: null }, at(0));
+    expect(ledger.rows('owner').map(row => [row.choice, row.success]).sort()).toEqual([['tier.luna', 1], ['tool.study.list', 1]]);
     w.close();
   });
 

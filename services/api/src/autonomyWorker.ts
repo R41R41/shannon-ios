@@ -36,6 +36,8 @@ import { configuredPredictionShadow } from './mind/prediction/predictionShadow.j
 import { configuredDecisionTraces, configuredPredictionLedger } from './wiring/cognitionLedgerWiring.js';
 import { ledgerPredictionTap, presenceOf, valueFactsReader } from './wiring/cognitionLedgerTaps.js';
 import { cognitionLedgerSwitches } from '@shannon/learning';
+import { configuredWithheldActions, gateRefusals, withheldFactsReader } from './wiring/withheldWiring.js';
+import { clock } from './mind/action/ownTime/autonomyLoopPacing.js';
 
 /**
  * Entry of the activity loop (Syzygy ADR-0002 step 3): its own process, so the API,
@@ -93,6 +95,8 @@ const observer = {
 const ownerState = sqliteOwnerSnapshot(databasePath);
 const ownerUpcoming = configuredOwnerUpcoming(process.env, databasePath, { snapshot: ownerState.read, now });
 const loopConfig = configuredAutonomyLoop(process.env);
+// Syzygy ADR-0008 §14: what a rule stopped (her gate, her tool steps, a session's budget), written once the API has created the table.
+const withheldActions = configuredWithheldActions(process.env, { databasePath, createsSchema: false, log: line => console.log(line) });
 const service = new ShannonAutonomyService({
   store, config, now, announcer, roomLooks: (scopeKey, at) => looks.counts(scopeKey, at),
   reachOuts: (scopeKey, at) => ({ today: reachOuts.sentOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutsPerDay }),
@@ -101,7 +105,9 @@ const service = new ShannonAutonomyService({
   // Her study's text in Aether when it is configured (Syzygy ADR-0007); the proposal inbox is the conversation's, never her own time's.
   // The owner's documents only while SHANNON_AUTONOMY_OWNER_DOCUMENTS=on (owner decision 2026-10-06, ADR-0007).
   aether: { access: configuredAetherAccess(process.env), studyScopeKey: aetherStudyScope(process.env), ownerDocuments: loopConfig.ownerDocuments },
+  ...(withheldActions ? { withheld: gateRefusals(withheldActions.withheld, config) } : {}),
 });
+if (withheldActions) service.tools.observeWithheld(withheldActions.withheld.sink, now);
 // Read-only Notion, only when the owner connected it; without a token the loop never plans a Notion step.
 const notion = notionLoopReader(configuredNotionSource(process.env, { log: line => console.log(line) }));
 // What she may see of the owner's in her own time (owner decision 2026-10-02, ADR-0003): one bounded block, read through the
@@ -145,6 +151,8 @@ const loop = new ShannonAutonomyLoop({
     ? { ledger: predictionLedger.choices, presence: (scopeKey: string, at: string) => presenceOf(observer.body(scopeKey, at)) } : null) : shadowTap } : {}),
   ...(decisionTraces ? { trace: decisionTraces.traces.writer } : {}),
   ...(valueFacts ? { valueFacts } : {}),
+  // ADR-0008 §14: her next thought is told what a rule stopped lately, apart from a rest she chose; never with anyone else present.
+  ...(withheldActions ? { withheldFacts: withheldFactsReader(withheldActions.withheld, observer.body, at => clock(at, config.timeZone)) } : {}),
   // Content-free: a step kind and a closed reason code.
   log: line => console.log(`Shannon autonomy step: ${line.replace(/[^a-z0-9_:., -]/giu, '_').slice(0, 300)}`),
 });
@@ -183,6 +191,7 @@ try {
   prediction?.close();
   decisionTraces?.close();
   predictionLedger?.close();
+  withheldActions?.close();
   ownerContext?.close();
   ownerUpcoming.close();
   ownerState.close();

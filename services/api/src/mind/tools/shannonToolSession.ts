@@ -5,7 +5,7 @@ import type { OthersTextCheck } from '../inhibition/aetherShownText.js';
 import { conversationSecrets, othersSecrets, type SecretCheck } from '../inhibition/conversationSecrets.js';
 import type { ConversationStore, StoredConversationMessage } from '../memory/store/conversationStore.js';
 import { ToolAudienceWatch, type ToolAudienceSource } from '../inhibition/shannonToolAudience.js';
-import type { ShannonToolRunner } from './shannonToolRunner.js';
+import { wasWithheld, type ShannonToolRunner } from './shannonToolRunner.js';
 import { toolTraceCall } from './shannonToolTrace.js';
 import { InMemoryToolTraces, TOOL_FOLLOW_UP_MILLISECONDS, ToolTurnLog, type ToolTraceStore } from './shannonToolTurns.js';
 import { toolSessionMemory } from './shannonToolTypes.js';
@@ -100,7 +100,11 @@ export function conversationTools(
       : !toolFromProviderName(providerName) ? { why: '道具の名前の形が違う', wouldWork: `${providerToolName(tool.name)} という名前で呼ぶ` }
         : !writes && tool.effect === 'write' ? { why: '聞き取りが確かでないので、書く・消す道具は出していない', wouldWork: 'ライ氏がはっきり確かめた次の返事で' }
           : { why: 'この返事ではその道具は出していない', wouldWork: '出してある道具だけを使う' };
-    return toolResultForModel(runner.refused(providerName.slice(0, 80), scopeKey, toolFailure('not_offered', 'この返事ではその道具は出していない。', { retryable: false, refusal })));
+    // A rule stopped it (ADR-0008 §14): her words not trusted to write, or someone else here; a name she got wrong is not withheld.
+    const reason = !tool || !toolFromProviderName(providerName) ? null : !writes && tool.effect === 'write' ? 'unreliable_words' as const
+      : othersPresent && !tool.audiences.includes('others') ? 'audience' as const : null;
+    return toolResultForModel(runner.refused(providerName.slice(0, 80), scopeKey, toolFailure('not_offered', 'この返事ではその道具は出していない。', { retryable: false, refusal }),
+      reason ? { surface, tool: tool!.name, reason } : undefined));
   };
   Object.defineProperty(session, 'refuse', { enumerable: false, value: refuse });
   /** Runs one call; its note in the turn's trace is left to `note()`, so a step's calls are noted in the model's order. */
@@ -123,7 +127,9 @@ export function conversationTools(
     // What ran, as closed values, for the turn's verifier and her conversation choices (Syzygy ADR-0008 stage 2).
     // A skill she opened is named by its closed name (stage 2, step 6: her use of it is noted as `skill.use`).
     const subject = tool.domain === 'skill_read' && result.ok ? skillNameOf(argumentsJson) : null;
-    TURN_RESULTS.set(session, [...TURN_RESULTS.get(session) ?? [], { name: tool.name, effect: tool.effect === 'write' ? 'write' : 'read', ok: result.ok, ...(subject ? { subject } : {}) }]);
+    // A call a rule stopped (ADR-0008 §14) is marked: it is never learned as a choice of hers.
+    TURN_RESULTS.set(session, [...TURN_RESULTS.get(session) ?? [], { name: tool.name, effect: tool.effect === 'write' ? 'write' : 'read', ok: result.ok, ...(subject ? { subject } : {}),
+      ...(wasWithheld(result) ? { withheld: true as const } : {}) }]);
     const hint = options.sourceHints && tool.effect === 'read' && nothingFound(result) ? sourcesLine(definitions) : null;
     const shown = hint ? { ...result, text: `${result.text}\n${hint}` } : result;
     return { output: toolResultForModel(shown), note: () => trace?.called(toolTraceCall(tool?.name ?? providerName.slice(0, 80), argumentsJson, result, secrets)) };
@@ -153,7 +159,7 @@ function readOffered(tool: ShannonToolDefinition, reads: ReadToolOffer | undefin
 
 /** The calls that ran in each turn's session, in the order they ended: name, effect, whether it worked, and the skill a `skill.read` opened. */
 const TURN_RESULTS = new WeakMap<object, ReadonlyArray<TurnToolResult>>();
-export interface TurnToolResult { name: string; effect: 'read' | 'write'; ok: boolean; subject?: string }
+export interface TurnToolResult { name: string; effect: 'read' | 'write'; ok: boolean; subject?: string; withheld?: true }
 
 /** The name of the skill a `skill.read` call asked for, when it is a skill's closed name. */
 function skillNameOf(argumentsJson: string): string | null {

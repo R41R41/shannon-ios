@@ -14,8 +14,8 @@ import { formatYen, type AutonomyActivityDay, type AutonomyActivityEntry } from 
 import { DisabledAutonomyAnnouncer, type AutonomyAnnouncer } from './autonomyAnnouncer.js';
 import { autonomyLoopStatus, type AutonomyLoopStatus } from '../../inhibition/autonomyDayLog.js';
 import {
-  autonomyBudgetStatus, autonomyDayKey, configuredAutonomy, yenFromUsd,
-  type AutonomyBudgetStatus, type AutonomyConfig,
+  authorizeAutonomousAction, autonomyBudgetStatus, autonomyDayKey, configuredAutonomy, yenFromUsd, type AutonomousActionRequest, type AutonomyBudgetStatus,
+  type AutonomyConfig, type AutonomyDecision, type GateRefusalObserver,
 } from '../../inhibition/inhibitionPorts.js';
 import {
   autonomyModel, autonomyModelAllowedFor, autonomyModelChoices, autonomyModelCostUsd, isAutonomyModelPurpose,
@@ -26,7 +26,6 @@ import { ShannonToolRunner, type ToolAetherPorts } from '../../tools/shannonTool
 import { StudyAether } from './studyAether.js';
 import type { MinecraftRequestPort } from '../../tools/shannonMinecraftTools.js';
 import { resolvePhysicalPath, type AutonomyPathResolver } from '../../inhibition/autonomyPaths.js';
-import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyDecision } from '../../inhibition/inhibitionPorts.js';
 import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './store/autonomyProposals.js';
 import type { PursuitDraft, PursuitRejection } from '../../self/autonomyPursuits.js';
 import { autonomyPacing } from './autonomyLoopConfig.js';
@@ -36,11 +35,10 @@ import { StudyDesk, type StudyReactionTap } from './studyDesk.js';
 import { clip, pursuitStatusPhrase, type AutonomyOverview } from './autonomyServiceParts.js';
 
 /**
- * The live side of bounded autonomy: it hands `authorizeAutonomousAction` the current
- * stop switch and budget, writes every decision to the activity record, and offers
- * the only functions through which Shannon's own activity may write (each one asks the
- * gate first). The owner-side functions back the HTTP routes. The activity loop
- * (`autonomyLoop.ts`, its own process) is the only caller of the Shannon-side functions.
+ * The live side of bounded autonomy: it hands `authorizeAutonomousAction` the current stop switch and budget, writes every
+ * decision to the activity record, and offers the only functions through which Shannon's own activity may write (each one asks
+ * the gate first). The owner-side functions back the HTTP routes. The activity loop (`autonomyLoop.ts`, its own process) is the
+ * only caller of the Shannon-side functions.
  */
 export interface AutonomyServiceDependencies {
   store: SQLiteAutonomyStore;
@@ -68,6 +66,8 @@ export interface AutonomyServiceDependencies {
   aether?: Pick<ToolAetherPorts, 'access' | 'proposals' | 'ownerDocuments'> & { studyScopeKey?: string };
   /** Syzygy ADR-0008 stage 1: told the reaction (the enum only) after the owner reacted to a story; absent, nothing is told. */
   storyReacted?: StudyReactionTap;
+  /** Syzygy ADR-0008 §14: told each step the gate did not allow, to write it as withheld (`withheldRules.ts`); absent, nothing is told. */
+  withheld?: GateRefusalObserver;
 }
 
 export interface RecordedDecision extends AutonomyDecision {
@@ -174,6 +174,7 @@ export class ShannonAutonomyService {
       approval: decision.decision === 'needs_approval' ? 'needed' : 'not_needed',
       reasonCode: decision.reason,
     });
+    if (decision.decision !== 'allow') { try { this.dependencies.withheld?.(scopeKey, declared, decision, at); } catch { /* the refusal stands */ } }
     return Object.freeze({ ...decision, activityId: entry.id });
   }
 

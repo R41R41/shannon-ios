@@ -170,6 +170,8 @@ export class ShannonAutonomyLoop {
         if (!prepared && step.kind === 'think') stop = 'no_plan';
         else if (!prepared) unprepared.push(unpreparedCode(this.dependencies, cycle, step));
         if (prepared?.request.paid && !fitsSession(this.dependencies, cycle, prepared.request.paid.estimatedCostYen)) {
+          // A step the session's budget stopped, not a rest she chose (ADR-0008 §14).
+          this.dependencies.service.tools.note(this.scopeKey, 'autonomy', prepared.request.tool ?? prepared.request.domain, 'session_budget');
           stop = 'session_budget';
           prepared = null;
         }

@@ -92,6 +92,11 @@ export interface StepDependencies {
    * every prompt is what it was.
    */
   valueFacts?: (scopeKey: string, offered: readonly string[], at: string) => string | null;
+  /**
+   * Syzygy ADR-0008 §14: the 「止められたこと」 section (what a rule stopped lately, as closed facts, apart from a rest she chose), or
+   * null. Absent (`SHANNON_ADR8_STAGE2=off`): every prompt is what it was.
+   */
+  withheldFacts?: (scopeKey: string, at: string) => string | null;
 }
 
 /** The adapters of one domain. A step allowed for a domain can reach nothing else. */

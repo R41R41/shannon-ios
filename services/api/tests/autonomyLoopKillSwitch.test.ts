@@ -208,6 +208,29 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
     }
   });
 
+  it('keeps every prompt with no withheld facts, and with them changes only her thoughts (ADR-0008 §14)', async () => {
+    const none = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-withheld-none-'));
+    const some = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-withheld-'));
+    const block = '[止められたこと（決まりが止めた事実。ボクが選んだ休みではないし、ボクの性格でもない）]\n- 止められた：〈public_read〉〈今日の予算に収まらない〉';
+    try {
+      expect((await agenticDay(none, { ...CAP_OF_78C3493, withheldFacts: () => null })).map(call => [call.kind, call.digest])).toEqual(AGENTIC_DAY_AT_78C3493);
+      const withFacts = await agenticDay(some, { ...CAP_OF_78C3493, withheldFacts: () => block });
+      withFacts.forEach((call, index) => {
+        if (call.kind === 'think') expect(call.digest).not.toBe(AGENTIC_DAY_AT_78C3493[index]![1]);
+        else expect(call.digest).toBe(AGENTIC_DAY_AT_78C3493[index]![1]);
+      });
+    } finally {
+      rmSync(none, { recursive: true, force: true });
+      rmSync(some, { recursive: true, force: true });
+    }
+  });
+
+  it('places the withheld facts last in a thought, after her value facts', async () => {
+    const { loop, model } = loopHarness({ valueFacts: () => '[これまでの手応え]（サーバーが数えた事実）', withheldFacts: () => '[止められたこと]\n- 止められた：〈thinking〉〈ライ氏が一時停止している〉' });
+    await runUntilIdle(loop);
+    expect(model.prompts('think')[0]!.endsWith('[これまでの手応え]（サーバーが数えた事実）\n\n[止められたこと]\n- 止められた：〈thinking〉〈ライ氏が一時停止している〉')).toBe(true);
+  });
+
   it('builds byte for byte the prompts of the commit before from every prompt builder', () => {
     expect(builderDigests()).toEqual(BUILDERS_AT_78C3493);
   });

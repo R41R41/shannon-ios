@@ -152,6 +152,9 @@ export interface LoopHarnessOptions {
   storyReacted?: AutonomyServiceDependencies['storyReacted'];
   /** Syzygy ADR-0008 stage 1, step 7a: the value facts of a thought; absent, as with `SHANNON_VALUE_FACTS=off`. */
   valueFacts?: (scopeKey: string, offered: readonly string[], at: string) => string | null;
+  /** Syzygy ADR-0008 §14: told each step the gate did not allow, and the 「止められたこと」 of a thought; absent, as with stage 2 off. */
+  withheld?: AutonomyServiceDependencies['withheld'];
+  withheldFacts?: (scopeKey: string, at: string) => string | null;
 }
 
 export function loopHarness(options: LoopHarnessOptions = {}) {
@@ -171,7 +174,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     store, config, now, ...(options.roomLooks ? { roomLooks: options.roomLooks } : {}), ...(options.storyReacted ? { storyReacted: options.storyReacted } : {}),
     ...(reachOuts ? { reachOuts: (scopeKey: string, at: string) => ({ today: reachOuts.sentOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutsPerDay }) } : {}),
     ...(options.phone ? { calls: (scopeKey: string, at: string) => callGateContext(options.phone!, scopeKey, at) } : {}),
-    ...(options.aether ? { aether: { access: options.aether, ownerDocuments: loopConfig.ownerDocuments } } : {}),
+    ...(options.aether ? { aether: { access: options.aether, ownerDocuments: loopConfig.ownerDocuments } } : {}), ...(options.withheld ? { withheld: options.withheld } : {}),
     ...(reachOuts?.followUpsOn ? { reachOutFollowUps: (scopeKey: string, at: string) => ({ today: reachOuts.followUpsOn!(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutFollowUpsPerDay }) } : {}),
   });
   /** A waiting step does not sleep: the pause moves the test's clock. */
@@ -192,7 +195,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     ...(options.ownerContext ? { ownerContext: options.ownerContext } : {}), ...(options.log ? { log: options.log } : {}),
     ...(options.toolResults ? { toolResults: options.toolResults } : {}),
     ...(options.prediction ? { prediction: options.prediction } : {}), ...(options.trace ? { trace: options.trace } : {}),
-    ...(options.valueFacts ? { valueFacts: options.valueFacts } : {}),
+    ...(options.valueFacts ? { valueFacts: options.valueFacts } : {}), ...(options.withheldFacts ? { withheldFacts: options.withheldFacts } : {}),
   });
   const loop = newLoop('runner-a');
   const entries = () => service.activityDays(scope, 30).flatMap(day => day.entries);

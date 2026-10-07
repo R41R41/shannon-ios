@@ -19,8 +19,11 @@ export interface ConversationTurnRecord {
   presence: 'alone' | 'others';
   /** The tier that served the turn and Jev's task kind; null when the policy did not route it. */
   tier: { served: string; kind: string } | null;
-  /** Her tool calls that ran, as closed values; `subject` is the closed name of the skill a `skill.read` opened (step 6). */
-  tools: readonly { name: string; ok: boolean; subject?: string }[];
+  /**
+   * Her tool calls that ran, as closed values; `subject` is the closed name of the skill a `skill.read` opened (step 6);
+   * `withheld` when a rule stopped it (ADR-0008 §14): never learned as a choice of hers.
+   */
+  tools: readonly { name: string; ok: boolean; subject?: string; withheld?: boolean }[];
   /** The turn ended inside its deadline (not with her out-of-time line). */
   inDeadline: boolean;
   /** The verifier's verdict: true when it found nothing, false when it flagged a claim, null when it did not check. */

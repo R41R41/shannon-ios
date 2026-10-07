@@ -94,12 +94,14 @@ export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyL
   const { tool, prepared } = ready;
   // A session marked by what it read of the owner's writes nothing into her folder on his PC or Mac, which is not marked (ADR-0007).
   if (tool.domain === 'host_folder' && tool.effect === 'write' && sessionMarked(dependencies, cycle)) {
+    dependencies.service.tools.note(cycle.scopeKey, 'autonomy', tool.name, 'owner_informed'); // Withheld (ADR-0008 §14).
     results.add(cycle.id, `- ${tool.name}: できなかった（refused）。ライ氏の文書やNotionを読んだこの時間には、PCやMacのフォルダに書かない。次の時間に書く。`);
     return null;
   }
   // Reading the owner's documents serves one of her active pursuits (ADR-0007): she names it, and an unknown or closed one is refused.
   const unserved = tool.domain === 'owner_documents_read' ? pursuitRefusal(dependencies, cycle.scopeKey, step.input?.pursuitId) : null;
   if (unserved) {
+    dependencies.service.tools.note(cycle.scopeKey, 'autonomy', tool.name, 'not_pursuing');
     results.add(cycle.id, `- ${tool.name}: できなかった（refused）。${unserved}`);
     return null;
   }
