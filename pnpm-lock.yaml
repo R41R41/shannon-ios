@@ -35,6 +35,12 @@ importers:
         specifier: workspace:*
         version: link:../cognition
 
+  packages/mind:
+    dependencies:
+      '@shannon/cognition':
+        specifier: workspace:*
+        version: link:../cognition
+
   services/api:
     dependencies:
       '@anthropic-ai/sdk':
@@ -46,6 +52,9 @@ importers:
       '@shannon/learning':
         specifier: workspace:*
         version: link:../../packages/learning
+      '@shannon/mind':
+        specifier: workspace:*
+        version: link:../../packages/mind
 
 packages:
 

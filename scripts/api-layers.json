@@ -69,10 +69,10 @@
     {
       "id": "own-time-without-private-stores",
       "kind": "imports",
-      "description": "Her own time (mind/action/ownTime) opens no conversation store (the companion store and its repositories), memory, recall, emotion, conversation response path (mind/action/respond: dailyMind, turnCognitiveContext), disclosure gate, conversation model, HTTP layer or conversational surface (text, voice, platform), as autonomyLoopPrivacy.test.ts allows the loop modules. The one reader of the owner's context, autonomyOwnerContext.ts, reads through the conversation's entry points and is the exception (AGENTS.md, Bounded autonomy).",
+      "description": "Her own time (mind/action/ownTime) opens no conversation store (the companion store and its repositories), memory (the memory outbox and its writer among it), recall, emotion, conversation response path (mind/action/respond: dailyMind, turnCognitiveContext), disclosure gate or its window (disclosurePorts), perception, workspace (Syzygy ADR-0008 stage 3: she is handed one function, emitMindEvent), conversation model, HTTP layer or conversational surface (text, voice, platform), as autonomyLoopPrivacy.test.ts allows the loop modules. The one reader of the owner's context, autonomyOwnerContext.ts, reads through the conversation's entry points and is the exception (AGENTS.md, Bounded autonomy).",
       "from": ["mind/action/ownTime/**"],
       "fromExcept": ["**/autonomyOwnerContext.ts"],
-      "to": ["mind/memory/**", "mind/recall/**", "mind/emotion/**", "mind/action/respond/**", "**/memoryDisclosure.ts", "infra/sqlite/sqliteStore.ts", "infra/sqlite/*Repository.ts", "infra/models/chatModel*.ts", "infra/http/**", "surfaces/text/**", "surfaces/voice/**", "surfaces/platform/**", "wiring/**"]
+      "to": ["mind/memory/**", "mind/recall/**", "mind/emotion/**", "mind/action/respond/**", "**/memoryDisclosure.ts", "**/disclosurePorts.ts", "**/memoryOutbox*.ts", "**/memoryWriter*.ts", "mind/perception/**", "mind/workspace/**", "infra/sqlite/sqliteStore.ts", "infra/sqlite/*Repository.ts", "infra/models/chatModel*.ts", "infra/http/**", "surfaces/text/**", "surfaces/voice/**", "surfaces/platform/**", "wiring/**"]
     },
     {
       "id": "owner-context-through-wiring",

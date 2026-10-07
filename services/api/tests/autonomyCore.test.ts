@@ -134,6 +134,20 @@ describe('CORE as code', () => {
     for (const [file, area] of Object.entries(expected)) expect(coreAreaForRepositoryPath(file)?.area, file).toBe(area);
   });
 
+  it('keeps the parts and the package of Syzygy ADR-0008 stage 3 inside core, and the memory writer in memory', () => {
+    // Whole folders, so a file added there later is core at once (docs/mind-workspace-contract.md).
+    for (const folder of ['packages/mind', 'services/api/src/mind/perception', 'services/api/src/mind/attention', 'services/api/src/mind/workspace']) {
+      const files = filesBelow(join(repositoryRoot, folder));
+      expect(files.length, folder).toBeGreaterThan(0);
+      for (const file of files) expect(coreAreaForRepositoryPath(relative(repositoryRoot, file).split(sep).join('/'))?.area, file).toBe('response_path');
+      expect(coreAreaForRepositoryPath(`${folder}/someFutureFile.ts`)?.area, folder).toBe('response_path');
+    }
+    // The outbox, its codec, its store and the one writer are memory's before they exist (the plan's paths, D).
+    for (const file of ['memoryOutbox.ts', 'memoryOpCodec.ts', 'memoryWriter.ts', 'store/memoryOutboxStore.ts', 'store/memoryWriterState.ts']) {
+      expect(coreAreaForRepositoryPath(`services/api/src/mind/memory/${file}`)?.area, file).toBe('memory');
+    }
+  });
+
   it('keeps the value table\'s command line inside core', () => {
     expect(coreAreaForRepositoryPath('services/api/scripts/shannon-values.ts')?.area).toBe('approval_and_budget');
     expect(coreAreaForRepositoryPath('scripts/shannon-values.sh')?.area).toBe('deployment');
@@ -181,7 +195,8 @@ describe('CORE as code', () => {
     expect(tracked.length).toBeGreaterThan(1_000);
     const exact = new Set(allCorePaths().filter(path => !path.endsWith('/')).map(path => path.toLowerCase()));
     const moved: string[] = [];
-    for (const path of [...tracked, 'packages/learning/src/someFutureFile.ts', 'services/api/src/mind/learning/someFutureFile.ts']) {
+    for (const path of [...tracked, 'packages/learning/src/someFutureFile.ts', 'services/api/src/mind/learning/someFutureFile.ts', 'packages/mind/src/someFutureFile.ts',
+      'services/api/src/mind/workspace/someFutureFile.ts', 'services/api/src/mind/memory/memoryWriter.ts']) {
       const before = firstListed(path);
       const now = coreAreaForRepositoryPath(path)?.area ?? null;
       // Whether a path is core never changes.

@@ -376,6 +376,13 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/infra/models/anthropic/',
     'services/api/src/infra/models/tieredChatModel.ts',
     'services/api/src/wiring/sonnetWiring.ts',
+    // Syzygy ADR-0008 stage 3 (`docs/mind-workspace-contract.md`): perception, attention (the proactive gate among it) and the
+    // workspace, every file below each, and the pure package of the stage. The memory outbox and its one writer are the memory
+    // part's (`services/api/src/mind/memory/`, above), so they are memory's from their first file.
+    'services/api/src/mind/perception/',
+    'services/api/src/mind/attention/',
+    'services/api/src/mind/workspace/',
+    'packages/mind/',
   ]),
   deployment: Object.freeze([
     'deploy/',

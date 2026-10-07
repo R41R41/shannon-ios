@@ -24,6 +24,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.131.0",
     "@shannon/cognition": "workspace:*",
-    "@shannon/learning": "workspace:*"
+    "@shannon/learning": "workspace:*",
+    "@shannon/mind": "workspace:*"
   }
 }
