@@ -3,6 +3,7 @@ import { memoryOpCodec, type MemoryOp, type MemoryOpDraft } from './memoryOpCode
 import { applyMemoryOp, memoryOpBlockedBeforePrepare, memoryOpHandler, ownerCommandPeople, subjectRevision, type MemoryModelCall, type MemoryTargets } from './memoryOps.js';
 import { isSqliteBusy } from '../../infra/sqlite/lockWaits.js';
 import { SQLiteMemoryOutbox, type MemoryOutboxRow } from './store/memoryOutboxStore.js';
+import { deferredSelfInterestKinds } from './selfInterestHandlers.js';
 import { ModelFailure, errorCode } from './memoryProposer.js';
 export { type MemoryProposals, MemoryProposer } from './memoryProposer.js';
 
@@ -64,8 +65,8 @@ export class MemoryWriter {
     const at = this.now();
     const leased = this.outbox.underLock(at, () => this.outbox.acquireLease(this.owner, at, this.leaseUntil()));
     if (!leased) return 'leased_elsewhere';
-    // A subject waiting for its retry is left out of the batch whole, so it takes no place from the others (review M7).
-    const rows = this.outbox.pending(MEMORY_WRITER_V1.batch, at);
+    // A retry or disabled self port holds only its subject; eligible subjects still fill the batch (review M7).
+    const rows = this.outbox.pending(MEMORY_WRITER_V1.batch, at, deferredSelfInterestKinds(this.targets));
     if (!rows.length) {
       this.outbox.underLock(at, () => {
         this.outbox.advanceCursor(at);

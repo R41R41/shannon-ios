@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { memoryIdentifier, memoryControlFor, type SelfInterestOwnerCommand, type SelfInterestProposal } from '@shannon/cognition';
-import type { MemoryOpHandler } from './memoryOps.js';
+import type { MemoryOpHandler, MemoryTargets } from './memoryOps.js';
 
 export const selfInterestHandlers = {
   'self.interest.propose': {
@@ -32,6 +32,13 @@ export const selfInterestHandlers = {
     },
   },
 } satisfies Record<string, MemoryOpHandler>;
+
+const SELF_INTEREST_KINDS = Object.freeze(Object.keys(selfInterestHandlers));
+
+/** OFF suspends durable self operations; a missing port is not a permanent refusal of their original intent. */
+export function deferredSelfInterestKinds(targets: Pick<MemoryTargets, 'selfInterests'>): readonly string[] {
+  return targets.selfInterests ? [] : SELF_INTEREST_KINDS;
+}
 
 /** ON never treats an unverified old op as an owner observation. OFF keeps the original path. */
 export const interestChangeHandler: MemoryOpHandler = {

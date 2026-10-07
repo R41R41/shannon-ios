@@ -131,14 +131,18 @@ export class SQLiteMemoryOutbox {
 
   /**
    * Up to `limit` pending rows after the cursor, in seq order, leaving out every row of a subject that waits for a retry after `now`
-   * (stage 3 review M7): a subject waiting does not take the batch's places from the others, and its rows keep their order.
+   * (stage 3 review M7), or whose earlier operation is deferred while its port is off. Neither takes the batch's places from
+   * eligible subjects, and each subject's rows keep their order. Deferred rows stay pending without consuming a retry.
    */
-  pending(limit: number, now?: string): readonly MemoryOutboxRow[] {
+  pending(limit: number, now?: string, deferredKinds: readonly string[] = []): readonly MemoryOutboxRow[] {
     const waiting = now ? `AND NOT EXISTS (SELECT 1 FROM memory_outbox w WHERE w.status = 'pending' AND w.scope_key = o.scope_key
         AND w.subject_key = o.subject_key AND w.seq <= o.seq AND w.next_attempt_at IS NOT NULL AND w.next_attempt_at > ?)` : '';
+    const deferred = deferredKinds.length ? `AND NOT EXISTS (SELECT 1 FROM memory_outbox d WHERE d.status = 'pending'
+        AND d.scope_key = o.scope_key AND d.subject_key = o.subject_key AND d.seq <= o.seq
+        AND d.kind IN (${deferredKinds.map(() => '?').join(',')}))` : '';
     return Object.freeze((this.database.prepare(`SELECT ${COLUMNS} FROM memory_outbox o
-      WHERE status = 'pending' AND seq > (SELECT COALESCE((SELECT applied_seq FROM memory_writer_state WHERE id = 1), 0)) ${waiting}
-      ORDER BY seq ASC LIMIT ?`).all(...(now ? [now] : []), Math.max(1, Math.trunc(limit))) as unknown as Row[]).map(rowOf));
+      WHERE status = 'pending' AND seq > (SELECT COALESCE((SELECT applied_seq FROM memory_writer_state WHERE id = 1), 0)) ${waiting} ${deferred}
+      ORDER BY seq ASC LIMIT ?`).all(...(now ? [now] : []), ...deferredKinds, Math.max(1, Math.trunc(limit))) as unknown as Row[]).map(rowOf));
   }
 
   /**
