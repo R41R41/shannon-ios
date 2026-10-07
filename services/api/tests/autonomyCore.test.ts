@@ -15,6 +15,12 @@ function filesBelow(folder: string): string[] {
   });
 }
 
+function corePathIsMissing(path: string): boolean {
+  const absolute = join(repositoryRoot, path);
+  if (!existsSync(absolute)) return true;
+  return path.endsWith('/') !== statSync(absolute).isDirectory();
+}
+
 /**
  * Files listed by name in another area than the directory that holds them (Syzygy ADR-0008 stage 2). Each is still core;
  * only its area differs from the area of its directory.
@@ -66,12 +72,12 @@ describe('CORE as code', () => {
   });
 
   it('lists only paths that exist, so a rename has to update the map', () => {
-    const missing = allCorePaths().filter(path => {
-      const absolute = join(repositoryRoot, path);
-      if (!existsSync(absolute)) return true;
-      return path.endsWith('/') !== statSync(absolute).isDirectory();
-    });
-    expect(missing).toEqual([]);
+    expect(allCorePaths().filter(path => !path.startsWith('apps/')).filter(corePathIsMissing)).toEqual([]);
+  });
+
+  // The server deploy ships without apps/. If the folder is present, every mapped app path must still exist.
+  it.skipIf(!existsSync(join(repositoryRoot, 'apps')))('lists only app paths that exist when the app checkout is present', () => {
+    expect(allCorePaths().filter(path => path.startsWith('apps/')).filter(corePathIsMissing)).toEqual([]);
   });
 
   it('lists every path once', () => {
