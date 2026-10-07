@@ -10,7 +10,7 @@ import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiative
 import { SQLiteReachOutReports } from '../src/surfaces/outreach/store/reachOutReports.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { reachUsageReport, weekKey } from './reach/reachUsageReport.js';
-import { liveEstimate, runReachSuite, scriptedDrivers, writeReachReport } from './reach/reachSuite.js';
+import { REACH_SCENARIOS, liveEstimate, runReachSuite, scriptedDrivers, writeReachReport } from './reach/reachSuite.js';
 
 /**
  * The reach measures from use, over a database built by the real stores, and the result files of a
@@ -117,8 +117,9 @@ describe('the result files of a model-free run', () => {
     const out = join(directory, 'results');
     const now = () => '2026-10-05T00:00:00.000Z';
     const first = await runReachSuite(scriptedDrivers(), { mode: 'scripted', revision: 'aaaa', now });
-    // Three reach scenarios, the nine of Syzygy ADR-0008's scenario suite v1, and the 25 of stage 2's tier set.
-    expect(first.totals).toMatchObject({ passed: 37, failed: 0, pending: 0, invalid: 0 });
+    // Three reach scenarios, the nine of Syzygy ADR-0008's scenario suite v1, the skill and recall scenarios of suite v2, and stage 2's tier set.
+    expect(first.totals).toMatchObject({ passed: REACH_SCENARIOS.length, failed: 0, pending: 0, invalid: 0 });
+    expect(REACH_SCENARIOS.length).toBeGreaterThan(12);
     const written = writeReachReport(first, out, { full: true });
     expect(written.compared).toBeNull();
     expect(existsSync(join(out, 'latest-scripted.json'))).toBe(true);
@@ -136,8 +137,11 @@ describe('the result files of a model-free run', () => {
     const estimate = liveEstimate(first, {});
     expect(estimate.map(line => line.scenarioId).slice(0, 3)).toEqual(['context.shiritori-60', 'helpful.three-tools', 'growth.autonomy-day']);
     expect(estimate.slice(3, 12).map(line => [line.scenarioId.startsWith('cog.'), line.yen])).toEqual(Array.from({ length: 9 }, () => [true, 0]));
-    // The tier set is priced at Sonnet's rates, and says it would be pending without the key.
-    expect(estimate.slice(12).every(line => line.scenarioId.startsWith('tier.') && line.yen > 0 && line.basis.includes('no credential'))).toBe(true);
+    // Skills and recall are model-free (0 yen); the tier set is priced at Sonnet's rates and says it would be pending without the key.
+    const rest = estimate.slice(12);
+    expect(rest.filter(line => /^(?:skill|recall)\./u.test(line.scenarioId)).every(line => line.yen === 0)).toBe(true);
+    expect(rest.filter(line => line.scenarioId.startsWith('tier.')).every(line => line.yen > 0 && line.basis.includes('no credential'))).toBe(true);
+    expect(rest.every(line => /^(?:skill|recall|tier)\./u.test(line.scenarioId))).toBe(true);
     expect(estimate[0]!.yen).toBeGreaterThan(0);
     expect(estimate[1]!.yen).toBe(0);
     expect(estimate[2]!.yen).toBe(300);

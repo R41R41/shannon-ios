@@ -78,7 +78,7 @@ export async function finishTurn(routing: TurnRouting | null | undefined, turn: 
   try {
     routing.record(turn.scopeKey, {
       talk: talkId(turn.threadId), surface: turn.surface, presence: turn.presence, tier: turn.decision && served ? { served, kind: turn.decision.kind } : null,
-      tools: results.map(result => ({ name: result.name, ok: result.ok })), inDeadline: !turn.outOfTime, verified: verdict === null ? null : verdict === 'ok',
+      tools: results.map(result => ({ name: result.name, ok: result.ok, ...(result.subject ? { subject: result.subject } : {}) })), inDeadline: !turn.outOfTime, verified: verdict === null ? null : verdict === 'ok',
     }, turn.at);
   } catch { /* learning never fails a turn */ }
   // On voice her words were already spoken: the verdict is learned (G), and the reply is not amended after the fact.

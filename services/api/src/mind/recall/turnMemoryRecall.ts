@@ -19,6 +19,7 @@ import {
 import type { MemoryEmbeddingIndex } from '../memory/store/sqliteMemoryEmbeddings.js';
 import type { ShannonKnowledgeStore } from '../memory/store/sqliteShannonKnowledge.js';
 import { recallShannonKnowledge, usableKnowledgeFor } from './turnKnowledgeRecall.js';
+import type { TreeKnowledgeRecall } from './treeRecall.js';
 import { DisclosureGate } from '../inhibition/memoryDisclosure.js';
 import { conversationStoreOf } from '../memory/memoryVisibility.js';
 import { withRecalledMemories, type TurnCognitiveContext } from '../action/respond/turnCognitiveContext.js';
@@ -33,6 +34,8 @@ export interface TurnMemoryRecallInput {
   memoryTurn?: boolean;
   /** Voice `skill_complex`: knowledge documents may be navigated by heading. */
   complexTurn?: boolean;
+  /** Voice: the router's conversation class (tree recall walks a voice turn only in a `skill_*` class, one level). Absent: text. */
+  voiceClass?: string;
   signal?: AbortSignal;
 }
 
@@ -49,6 +52,10 @@ export interface TurnMemoryRecall {
   enrich(context: TurnCognitiveContext, input: TurnMemoryRecallInput): Promise<EnrichedTurnContext>;
   /** Owner-directed forgetting of Shannon knowledge cited in an inquiry answer; returns retired IDs. */
   retireKnowledge(scopeKey: string, ids: readonly string[], reason: string, at: string): readonly string[];
+  /** Syzygy ADR-0008 stage 2, step 8: whether a voice turn of this class walks the tree (absent or false: as before). */
+  walksTree?(conversationClass: string | undefined): boolean;
+  /** Step 8: what the server knows of others present, which tree recall checks before and after each Jev call. */
+  watchAudience?(watch: { othersKnown(scopeKey: string): boolean }): void;
 }
 
 const semanticGuidance = '[Semantic recall] Memories with cue "semantic" are search candidates, not confirmed facts. Use one only when its date and content fit the current message; if unsure, say so briefly or ask.';
@@ -57,7 +64,13 @@ export class ShannonTurnMemoryRecall implements TurnMemoryRecall {
   constructor(
     private readonly semantic: SemanticMemoryRecall,
     private readonly knowledge: ShannonKnowledgeStore | null = null,
+    /** Syzygy ADR-0008 stage 2, step 8 (`SHANNON_TREE_RECALL`): absent, recall is what it was. */
+    private readonly tree: TreeKnowledgeRecall | null = null,
   ) {}
+
+  walksTree(conversationClass: string | undefined): boolean { return this.tree?.walksTree(conversationClass) ?? false; }
+
+  watchAudience(watch: { othersKnown(scopeKey: string): boolean }): void { this.tree?.watchAudience(watch); }
 
   willSearch(input: Pick<TurnMemoryRecallInput, 'message' | 'memoryTurn'>): boolean {
     return this.semantic.available && (input.memoryTurn ?? needsSemanticMemoryRecall(input.message));
@@ -81,12 +94,16 @@ export class ShannonTurnMemoryRecall implements TurnMemoryRecall {
     // A hit with others present carries its marker at its start; with only open items allowed a marked one is left out whole.
     const experienceHits = outcome.hits.filter(hit => !hit.id.startsWith('knowledge:') && !(context.openOnly && hit.summary.includes('【機微:')));
     const memories = mergeSemanticMemories(context.memories, experienceHits);
-    const knowledge = this.knowledge && usable.length ? await recallShannonKnowledge({
-      store: this.knowledge, gateway: this.semantic.modelGateway, scopeKey: input.scopeKey, message: input.message,
+    // Step 8: tree recall walks a text turn, and a voice turn of a `skill_*` class; with the owner alone also her skills and folder.
+    const tree = this.tree && (input.voiceClass === undefined || this.tree.walksTree(input.voiceClass))
+      ? { recall: this.tree, ownerAlone: ownerOnly && !context.openOnly, surface: input.voiceClass === undefined ? 'text' as const : 'voice' as const, usable } : undefined;
+    const knowledge = this.knowledge && (usable.length || tree?.ownerAlone) ? await recallShannonKnowledge({
+      // With tree recall configured luna never navigates a note: the beam does, or the deterministic sections stand.
+      store: this.knowledge, gateway: this.tree ? null : this.semantic.modelGateway, scopeKey: input.scopeKey, message: input.message,
       snapshot: input.snapshot, semanticHits: outcome.hits, complexTurn: input.complexTurn === true,
       remainingModelCalls: Math.max(0, this.semantic.maximumModelCallsPerTurn - outcome.modelCalls),
       timeoutMilliseconds: this.semantic.timeoutMilliseconds,
-      ...(input.signal ? { signal: input.signal } : {}),
+      ...(input.signal ? { signal: input.signal } : {}), ...(tree ? { tree } : {}),
     }) : { ids: [], prompt: '', modelCalls: 0, documents: [] };
     // Shannon's notes are built from one-to-one talk and have no label of their own.
     if (!ownerOnly && knowledge.prompt) knowledge.prompt = `${UNLABELLED_DISCLOSURE_MARKER}\n${knowledge.prompt}`;
@@ -135,8 +152,10 @@ export function createConfiguredTurnMemoryRecall(
   index: MemoryEmbeddingIndex & LlmUsageStore & ShannonKnowledgeStore,
   environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
   gateway: MemoryModelGateway | null = configuredMemoryModelGateway(environment, index),
+  /** Syzygy ADR-0008 stage 2, step 8: tree recall (`wiring/treeRecallWiring.ts`); null with `SHANNON_TREE_RECALL` off. */
+  tree: TreeKnowledgeRecall | null = null,
 ): TurnMemoryRecall {
-  return new ShannonTurnMemoryRecall(new SemanticMemoryRecall(gateway, index, configuredSemanticMemoryConfig(environment)), index);
+  return new ShannonTurnMemoryRecall(new SemanticMemoryRecall(gateway, index, configuredSemanticMemoryConfig(environment)), index, tree);
 }
 
 export function configuredMemoryModelGateway(

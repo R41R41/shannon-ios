@@ -12,9 +12,15 @@ import { createConfiguredPlatformSummaryWriter, PlatformConversationSummarizer }
 import { ConversationReplaySummarizer, createConfiguredReplaySummaryWriter } from './mind/memory/conversationReplaySummary.js';
 import { createConfiguredImpressionAnalyzer, ImpressionUpdater } from './mind/memory/impressionUpdater.js';
 import { valueNightSchedule, valueSleep } from './mind/sleep/valueSleep.js';
+import { configuredSkillExport, configuredSkillMemory, skillSleepConsolidator } from './wiring/skillMemoryWiring.js';
 
 const store = new SQLiteShannonStore({ path: configuredDatabasePath(), now: () => new Date().toISOString() });
 const knowledge = new ShannonKnowledgeConsolidator(store, store, store, createConfiguredKnowledgeAnalyzer(process.env, store), store);
+// Syzygy ADR-0008 stage 2, step 6: her skills are built after her knowledge, in the same budget; the API process creates their tables.
+const skillMemory = configuredSkillMemory(process.env, { databasePath: configuredDatabasePath(), createsSchema: false });
+const skills = skillMemory ? skillSleepConsolidator(process.env, { memory: skillMemory.memory, store, choices: store.choiceLedger() }) : null;
+// Step 7: their readable copies in Aether's シャノン用フォルダ, and the owner's edits of them adopted; off without Aether.
+const skillExport = skillMemory ? configuredSkillExport(process.env, { memory: skillMemory.memory, store }) : null;
 const peopleStore = new SQLitePeopleMemoryStore(configuredDatabasePath());
 const platformSummaries = new PlatformConversationSummarizer(peopleStore, new PlatformPeople(peopleStore, store),
   createConfiguredPlatformSummaryWriter(process.env, store), store);
@@ -44,6 +50,9 @@ const worker = new ShannonBackgroundWorker(store, store, store, createConfigured
   // All run after a completed sleep batch, inside the shared background budget; none can fail the batch.
   knowledgeConsolidator: { consolidate: async (scopeKey, startAt, endAt) => {
     try { await knowledge.consolidate(scopeKey, startAt, endAt); } finally {
+      // Her skills after her knowledge (they may be built from it); a failure is logged by code and never fails the rest.
+      try { await skills?.consolidate(scopeKey, startAt, endAt); } catch (error) { console.error('Shannon skill sleep failed', error instanceof Error ? error.name : 'unknown'); }
+      try { await skillExport?.(scopeKey, new Date().toISOString()); } catch (error) { console.error('Shannon skill export failed', error instanceof Error ? error.name : 'unknown'); }
       try { await platformSummaries.consolidate(scopeKey, startAt, endAt); } finally { await impressions.observePlatformPeople(scopeKey, startAt, endAt); }
     }
   } },
@@ -76,6 +85,7 @@ try {
   } while (!stopping);
 } finally {
   peopleStore.close();
+  skillMemory?.close();
   store.close();
 }
 

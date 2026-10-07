@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { withAetherAccessCapability, withReadToolsCapability } from '@shannon/cognition';
+import { withAetherAccessCapability, withReadToolsCapability, withSkillsCapability } from '@shannon/cognition';
 import { aetherErrorCode, aetherIdempotencyKey, type AetherDocument } from '../../integrations/aether/aetherAccess.js';
 import type { AetherSectionHit } from '../../integrations/aether/aetherKnowledgeSearch.js';
 import type { AetherProposalOperation, AetherProposalStore } from '../../integrations/aether/aetherProposal.js';
@@ -210,6 +210,8 @@ export function withToolCapabilityLines<T extends { systemPrompt: string; tools?
   const withAether = offered?.some(tool => tool.name === 'aether.search')
     ? { ...withBody, systemPrompt: withAetherAccessCapability(withBody.systemPrompt) } : withBody;
   // Her read tools (stage 2, step 3): their line only in a turn that offers them.
-  return offered?.some(tool => tool.domain !== undefined && isReadToolDomain(tool.domain))
+  const withReads = offered?.some(tool => tool.domain !== undefined && isReadToolDomain(tool.domain))
     ? { ...withAether, systemPrompt: withReadToolsCapability(withAether.systemPrompt) } : withAether;
+  // Her skills (stage 2, step 6): their line only in a turn that offers `skill.read`.
+  return offered?.some(tool => tool.domain === 'skill_read') ? { ...withReads, systemPrompt: withSkillsCapability(withReads.systemPrompt) } : withReads;
 }

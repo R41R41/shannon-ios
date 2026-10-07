@@ -13,8 +13,10 @@ import { baseToolSession, startToolMenu, type ToolMenuChooser } from './shannonT
 import { isReadToolDomain, ownToolsEnabled, providerToolName, toolFailure, toolFromProviderName, toolResultForModel, type ReadToolDomain, type ShannonToolDefinition } from './shannonTools.js';
 import type { TurnDeadline } from '../action/respond/turnDeadline.js';
 import { answersWithPlace, asksForMemo, asksWhichPlace, namesAether } from '../action/respond/memoPlace.js';
+import { SKILL_LIMITS, SKILL_NAME } from '../memory/memoryPorts.js';
 export { withMinecraftToolLine } from './shannonMinecraftTools.js';
 export { withToolCapabilityLines } from './shannonAetherTools.js';
+export { skillProfilePrompt, turnSkillIndex, type SkillTurnPorts } from './shannonSkillTools.js';
 
 /**
  * The tools of one conversation turn, for the model adapter (`chatModelTools.ts`). Owner decision 2026-10-05: her
@@ -117,7 +119,9 @@ export function conversationTools(
     }, signal);
     if (result.ok && writesHerOwnThings(definitions.find(item => item.name === tool.name))) WROTE_HER_OWN_THINGS.add(session);
     // What ran, as closed values, for the turn's verifier and her conversation choices (Syzygy ADR-0008 stage 2).
-    TURN_RESULTS.set(session, [...TURN_RESULTS.get(session) ?? [], { name: tool.name, effect: tool.effect === 'write' ? 'write' : 'read', ok: result.ok }]);
+    // A skill she opened is named by its closed name (stage 2, step 6: her use of it is noted as `skill.use`).
+    const subject = tool.domain === 'skill_read' && result.ok ? skillNameOf(argumentsJson) : null;
+    TURN_RESULTS.set(session, [...TURN_RESULTS.get(session) ?? [], { name: tool.name, effect: tool.effect === 'write' ? 'write' : 'read', ok: result.ok, ...(subject ? { subject } : {}) }]);
     return { output: toolResultForModel(result), note: () => trace?.called(toolTraceCall(tool?.name ?? providerName.slice(0, 80), argumentsJson, result, secrets)) };
   };
   // Not enumerable: two turns that offer the same tools are the same request (what the model is asked), whoever runs the calls.
@@ -143,11 +147,20 @@ function readOffered(tool: ShannonToolDefinition, reads: ReadToolOffer | undefin
   return !isReadToolDomain(tool.domain) || reads?.[tool.domain] === true;
 }
 
-/** The calls that ran in each turn's session, in the order they ended: name, effect, whether it worked. */
-const TURN_RESULTS = new WeakMap<object, ReadonlyArray<{ name: string; effect: 'read' | 'write'; ok: boolean }>>();
+/** The calls that ran in each turn's session, in the order they ended: name, effect, whether it worked, and the skill a `skill.read` opened. */
+const TURN_RESULTS = new WeakMap<object, ReadonlyArray<TurnToolResult>>();
+export interface TurnToolResult { name: string; effect: 'read' | 'write'; ok: boolean; subject?: string }
+
+/** The name of the skill a `skill.read` call asked for, when it is a skill's closed name. */
+function skillNameOf(argumentsJson: string): string | null {
+  try {
+    const name = (JSON.parse(argumentsJson) as { name?: unknown }).name;
+    return typeof name === 'string' && name.length <= SKILL_LIMITS.name && SKILL_NAME.test(name.trim()) ? name.trim() : null;
+  } catch { return null; }
+}
 
 /** Syzygy ADR-0008 stage 2: what her tools did in this turn (closed values), for the verifier and her conversation choices. */
-export function turnToolResults(tools: ShannonModelToolSession | undefined): ReadonlyArray<{ name: string; effect: 'read' | 'write'; ok: boolean }> {
+export function turnToolResults(tools: ShannonModelToolSession | undefined): ReadonlyArray<TurnToolResult> {
   return tools ? TURN_RESULTS.get(baseToolSession(tools)) ?? TURN_RESULTS.get(tools) ?? [] : [];
 }
 

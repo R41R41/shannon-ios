@@ -1,0 +1,129 @@
+import { DatabaseSync } from 'node:sqlite';
+import { isOwnerOnly, ownerSpoke, visibleMemoryText, type CompanionStateSnapshot, type CompanionStateStore } from '@shannon/cognition';
+import { skillRoutingSwitches } from '@shannon/learning';
+import type { SkillTurnPorts } from '../contracts/skillMemoryContract.js';
+import { SkillMemory, type SkillBodyCheck } from '../mind/memory/memoryPorts.js';
+import type { ChoiceLedger } from '../mind/learning/choiceLedger.js';
+import { conversationSecrets, othersSecrets } from '../mind/inhibition/conversationSecrets.js';
+import { MemoryWithholding } from '../mind/memory/memoryVisibility.js';
+import type { ConversationStore } from '../mind/memory/store/conversationStore.js';
+import type { ShannonKnowledgeStore } from '../mind/memory/store/sqliteShannonKnowledge.js';
+import { isExperienceSourceVisible, usableKnowledgeFor } from '../mind/recall/turnKnowledgeRecall.js';
+import { ShannonSkillConsolidator, type SkillSeedSources, type SkillSleepModels } from '../mind/sleep/skillConsolidation.js';
+import { createConfiguredSkillSleepModels } from '../mind/sleep/skillSleepModel.js';
+import type { LlmUsageStore } from '../infra/models/llmUsage.js';
+import { aetherStudyScope, configuredAetherAccess, type AetherAccess } from '../integrations/aether/aetherAccess.js';
+import { exportSkills, type SkillExportResult } from '../integrations/aether/skillExport.js';
+
+/**
+ * Wiring of Syzygy ADR-0008 stage 2, step 6 (`docs/skill-and-routing-contract.md`, 「スキル記憶」): her skill memory on its own
+ * connection, what a conversation turn is handed of it, and the sleep builder's sources. Null with `SHANNON_SKILLS=off` (or
+ * `SHANNON_ADR8_STAGE2=off`): then no table is created, no index is given, `skill.read` does not exist, and nothing is noted.
+ *
+ * The API process creates the tables (`createsSchema`); the background worker opens them and writes nothing until they exist.
+ */
+const PRAGMAS = 'PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;';
+
+export function configuredSkillMemory(
+  environment: Readonly<Record<string, string | undefined>>,
+  parts: { databasePath: string | null; database?: DatabaseSync; createsSchema: boolean; defer?: (task: () => void) => void; log?: (line: string) => void },
+): { memory: SkillMemory; close(): void } | null {
+  if (!skillRoutingSwitches(environment).skills || (!parts.database && !parts.databasePath)) return null;
+  const database = parts.database ?? new DatabaseSync(parts.databasePath!);
+  if (!parts.database) database.exec(PRAGMAS);
+  const memory = new SkillMemory({ database, createsSchema: parts.createsSchema, ...(parts.defer ? { defer: parts.defer } : {}), ...(parts.log ? { log: parts.log } : {}) });
+  return { memory, close: () => { if (!parts.database && database.isOpen) database.close(); } };
+}
+
+/** What a turn is handed: the index, one skill by name, and the notes of its use; a skill built from something forgotten is left out at once. */
+export function skillTurnPorts(memory: SkillMemory, snapshot: (scopeKey: string) => CompanionStateSnapshot): SkillTurnPorts {
+  const visible = (scopeKey: string) => {
+    const state = snapshot(scopeKey);
+    return (experienceId: string) => isExperienceSourceVisible(state, experienceId);
+  };
+  return {
+    index: scopeKey => memory.index(scopeKey, visible(scopeKey)),
+    open: (scopeKey, name) => {
+      const skill = memory.open(scopeKey, name, visible(scopeKey));
+      return skill ? { skillId: skill.skillId, name: skill.name, version: skill.version, status: skill.status === 'active' ? 'active' : 'draft', body: skill.body } : null;
+    },
+    used: (scopeKey, name, use, at) => memory.used(scopeKey, name, use, at),
+    nextTurn: (scopeKey, talk, serve, at) => memory.nextTurn(scopeKey, talk, serve, at),
+  };
+}
+
+/**
+ * The check every skill body passes before it is stored (owner answer I-4, ADR-0002): what the owner asked to keep secret, marked
+ * 機微 by hand, or had her forget (`conversationSecrets`), and what must reach nobody but him, judged for an unnamed guest
+ * (`othersSecrets(...).withheld`), since every skill has a copy in a folder guests can read. Null when his memory cannot be read.
+ */
+export function skillBodyCheck(state: CompanionStateSnapshot, conversations: Pick<ConversationStore, 'experienceCandidates'>, scopeKey: string): SkillBodyCheck | null {
+  try {
+    const secrets = conversationSecrets(state, conversations, scopeKey);
+    const withheld = othersSecrets(state, conversations, scopeKey).withheld;
+    return { carries: text => secrets.carries(text) || withheld.carries(text) };
+  } catch { return null; }
+}
+
+/** The sleep builder over the worker's stores (`worker.ts`): runs after knowledge consolidation, inside the background budget. */
+export function skillSleepConsolidator(
+  environment: Readonly<Record<string, string | undefined>>,
+  parts: {
+    memory: SkillMemory;
+    store: ShannonKnowledgeStore & ConversationStore & Pick<CompanionStateStore, 'snapshot'> & LlmUsageStore & { backgroundLlmCostUsd(monthKey: string): number };
+    choices: ChoiceLedger | null;
+    /** The maintainer's and the proposer's models; absent, from the environment (`createConfiguredSkillSleepModels`). */
+    models?: SkillSleepModels;
+    now?: () => string;
+    log?: (line: string) => void;
+  },
+): ShannonSkillConsolidator {
+  return new ShannonSkillConsolidator(parts.memory, skillSeedSources(parts.store, parts.choices),
+    parts.models ?? createConfiguredSkillSleepModels(environment, parts.store), parts.store,
+    { ...(parts.now ? { now: parts.now } : {}), ...(parts.log ? { log: parts.log } : {}) });
+}
+
+/** The builder's seeds, by the rules knowledge consolidation follows for what it may be built from. */
+export function skillSeedSources(store: ShannonKnowledgeStore & ConversationStore & Pick<CompanionStateStore, 'snapshot'>, choices: ChoiceLedger | null): SkillSeedSources {
+  return {
+    knowledge: scopeKey => usableKnowledgeFor(store, scopeKey, store.snapshot(scopeKey)).filter(document => document.status === 'confirmed')
+      .map(document => ({ id: document.id, title: document.title, applicability: document.applicability, body: document.bodyMarkdown })),
+    experiences: (scopeKey, startAt, endAt) => {
+      const snapshot = store.snapshot(scopeKey);
+      const candidates = store.experienceCandidates(scopeKey);
+      const withholding = new MemoryWithholding(snapshot, store, scopeKey, candidates);
+      // Only turns the owner had with her alone, that he spoke in, that are visible, not withheld, and not kept secret.
+      return candidates.filter(item => item.observedAt >= startAt && item.observedAt < endAt && isOwnerOnly(item.disclosure?.audience) && ownerSpoke(item.disclosure)
+        && item.disclosure?.category !== 'secret' && !(item.disclosure?.decidedBy === 'owner' && item.disclosure.sensitivity === 'sensitive')
+        && visibleMemoryText(snapshot, item.id, item.summary) !== null && !withholding.withholdsExperience(item))
+        .map(item => ({ id: item.id, observedAt: item.observedAt, summary: item.summary, text: `${item.userMessage}\n${item.shannonReply}` }));
+    },
+    choices: (scopeKey, startAt, endAt) => (choices?.rows(scopeKey) ?? []).filter(row => row.chosenAt >= startAt && row.chosenAt < endAt).map(row => ({
+      choiceId: row.choiceId, settleCode: row.settleCode, choice: row.choice, surface: row.surface, subjectKind: row.subjectKind, subjectId: row.subjectId, chosenAt: row.chosenAt, status: row.status,
+      growth: row.growth, serve: row.serve, reward: row.reward,
+    })),
+    visible: scopeKey => {
+      const state = store.snapshot(scopeKey);
+      return experienceId => isExperienceSourceVisible(state, experienceId);
+    },
+    check: scopeKey => skillBodyCheck(store.snapshot(scopeKey), store, scopeKey),
+  };
+}
+
+/**
+ * Step 7 (`SHANNON_SKILL_EXPORT`, owner answers I-4 and I-5): readable copies of her skills in Aether's シャノン用フォルダ, after the
+ * skill sleep, for the one scope whose study lives in Aether (`aetherStudyScope`). Null while the switch is off, the skills are
+ * off, or Aether is not configured (address and token): then her skills stay in the database only.
+ */
+export function configuredSkillExport(
+  environment: Readonly<Record<string, string | undefined>>,
+  parts: { memory: SkillMemory; store: ConversationStore & Pick<CompanionStateStore, 'snapshot'>; access?: AetherAccess | null; log?: (line: string) => void },
+): ((scopeKey: string, at: string) => Promise<SkillExportResult | null>) | null {
+  if (!skillRoutingSwitches(environment).skillExport) return null;
+  const access = parts.access === undefined ? configuredAetherAccess(environment) : parts.access;
+  if (!access) return null;
+  const scope = aetherStudyScope(environment);
+  return async (scopeKey, at) => scopeKey !== scope ? null : exportSkills({
+    scopeKey, skills: parts.memory, access, at, check: () => skillBodyCheck(parts.store.snapshot(scopeKey), parts.store, scopeKey), ...(parts.log ? { log: parts.log } : {}),
+  });
+}

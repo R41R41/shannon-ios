@@ -10,3 +10,4 @@ export { SHIRITORI_WORDS } from './shiritoriWords.js';
 export { stableFingerprint } from '../report.js';
 export * from './cognitionLedger.js';
 export * from './tierSet.js';
+export * from './skillRecall.js';

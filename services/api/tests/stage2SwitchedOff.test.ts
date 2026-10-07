@@ -11,6 +11,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { DisabledVoyagerCatalog } from '../src/integrations/voyager/organizeIntegrations.js';
 import { LocalStubChatModel } from '../src/infra/models/chatModel.js';
 import type { DecisionTraceDraft } from '../src/contracts/decisionTraceContract.js';
+import { createInitialCompanionState } from '@shannon/cognition';
+import { configuredSkillExport, configuredSkillMemory, skillTurnPorts } from '../src/wiring/skillMemoryWiring.js';
 
 /**
  * Syzygy ADR-0008 stage 2, the switched-off proof (`docs/skill-and-routing-contract.md`): with `SHANNON_ADR8_STAGE2=off` every
@@ -122,10 +124,14 @@ function stage2(environment: Record<string, string>, traces: DecisionTraceDraft[
     const reads = readToolPorts({ TYPESAFE_API_KEY: 'jev-test', ...environment }, {
       notion: null, voyagerCatalog: new DisabledVoyagerCatalog(), upcoming: { promptFor: () => '' }, chatModel: new LocalStubChatModel(),
     });
-    const routing = configuredTurnRouting({ TYPESAFE_API_KEY: 'jev-test', ...environment }, { databasePath: null, database: new DatabaseSync(':memory:'), choices: null });
+    // Step 6: her skill memory with one skill in it, as server.ts builds it (its own connection, the tables created here).
+    const skillMemory = configuredSkillMemory({ TYPESAFE_API_KEY: 'jev-test', ...environment }, { databasePath: null, database: new DatabaseSync(':memory:'), createsSchema: true, defer: task => task() });
+    skillMemory?.memory.create('owner', { draft: { name: 'weekly-review', description: '週のふりかえりをする時', steps: '1. 三つ挙げる', aids: 'なし', references: 'なし' }, evidence: [] }, { carries: () => false }, at);
+    const skills = skillMemory ? skillTurnPorts(skillMemory.memory, scopeKey => createInitialCompanionState(scopeKey, at)) : null;
+    const routing = configuredTurnRouting({ TYPESAFE_API_KEY: 'jev-test', ...environment }, { databasePath: null, database: new DatabaseSync(':memory:'), choices: null, skills });
     return { ...skillRoutingParts({ TYPESAFE_API_KEY: 'jev-test', ...environment }, {
       trace: (_scopeKey, draft) => { traces.push(draft); }, jevFetch: jev, now: () => at,
-    }), ...(reads ? { readTools: reads } : {}), ...(routing ? { turnRouting: routing.routing } : {}) };
+    }), ...(reads ? { readTools: reads } : {}), ...(routing ? { turnRouting: routing.routing } : {}), ...(skills ? { skills } : {}) };
   };
 }
 
@@ -138,11 +144,18 @@ describe('stage 2 switched off with the stage-2 wiring in place', () => {
     expect(traces).toEqual([]);
     expect(skillRoutingParts({ SHANNON_ADR8_STAGE2: 'off', TYPESAFE_API_KEY: 'jev-test' }, { trace: null })).toEqual({});
     expect(configuredTurnRouting({ SHANNON_ADR8_STAGE2: 'off' }, { databasePath: ':memory:', choices: null })).toBeNull();
+    // Step 6: no skill memory, so no table, no index and no skill.read.
+    expect(configuredSkillMemory({ SHANNON_ADR8_STAGE2: 'off' }, { databasePath: ':memory:', createsSchema: true })).toBeNull();
+    // Step 7: no export, even with Aether configured.
+    const memory = configuredSkillMemory({}, { databasePath: ':memory:', createsSchema: true })!;
+    expect(configuredSkillExport({ SHANNON_ADR8_STAGE2: 'off', SHANNON_AETHER_API_URL: 'http://127.0.0.1:3007', SHANNON_AETHER_SHANNON_TOKEN: 'fake-token-0015' },
+      { memory: memory.memory, store: { snapshot: () => { throw new Error('unused'); }, experienceCandidates: () => [] } as never })).toBeNull();
+    memory.close();
   });
 
   it('also with only its parts switched off, and with stage 2 on but no Jev configured', async () => {
     const recorded = recordedSwitchedOff();
-    for (const environment of [{ SHANNON_TOOL_MENU: 'off', SHANNON_DIFFICULTY: 'off', SHANNON_READ_TOOLS: 'off', SHANNON_TURN_VERIFY: 'off', SHANNON_CONVERSATION_REWARD: 'off' }]) {
+    for (const environment of [{ SHANNON_TOOL_MENU: 'off', SHANNON_DIFFICULTY: 'off', SHANNON_READ_TOOLS: 'off', SHANNON_TURN_VERIFY: 'off', SHANNON_CONVERSATION_REWARD: 'off', SHANNON_SKILLS: 'off', SHANNON_TREE_RECALL: 'off' }]) {
       const traces: DecisionTraceDraft[] = [];
       const current = await capturedScenarioDigests(stage2(environment, traces));
       for (const name of Object.keys(recorded)) expect(current[name], `${JSON.stringify(environment)} ${name}`).toEqual(recorded[name]);

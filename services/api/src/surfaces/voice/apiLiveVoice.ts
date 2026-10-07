@@ -59,7 +59,7 @@ import { guestPeoplePrompt } from '../../mind/memory/peopleMemoryPrompts.js';
 import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
-import { conversationTools, ownerAloneReads, toolTraceReader, turnWroteHerOwnThings, withToolCapabilityLines, type ConversationToolServer, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
+import { conversationTools, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnWroteHerOwnThings, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
 import { startVoiceStage2, voiceFinished, voiceOfferAndTier } from './voiceStage2.js';
 import { voiceCommandResponse, voiceTurnGrounding } from './voiceGrounding.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from '../../mind/action/respond/turnDeadline.js';
@@ -89,7 +89,7 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   /** Others present as the server knows them, and what her writes must not repeat; absent, no tool is offered. */
   toolServer?: ConversationToolServer;
   ownerCalls?: Pick<OwnerCalls, 'admitTurn'>; // The owner in a call on another device (`ownerCallElsewhere.ts`); absent, nothing is refused.
-  turnChooser?: ToolMenuChooser; turnRouting?: TurnRouting; // Syzygy ADR-0008 stage 2: the second Jev call, the tier and the verifier; absent, as at ca7cf519.
+  turnChooser?: ToolMenuChooser; turnRouting?: TurnRouting; skills?: Pick<SkillTurnPorts, 'index'>; // Syzygy ADR-0008 stage 2: the second Jev call, the tier and the verifier, her skills' index (step 6); absent, as at ca7cf519.
 }
 
 export interface LiveVoiceStreamObserver {
@@ -262,11 +262,11 @@ async function completeLiveVoiceDelegation(
       participants: temporaryGuest ? [] : dependencies.personIdentities?.list(scopeKey).filter(person => person.status === 'active' && transcript.includes(person.displayName)).map(person => person.displayName),
     },
   );
-  const complexTurn = decision.conversationClass === 'skill_complex';
+  const complexTurn = decision.conversationClass === 'skill_complex' || dependencies.memoryRecall?.walksTree?.(decision.conversationClass) === true; // Stage 2, step 8: a skill_* turn walks the tree.
   const recalled = !legacyGuest && dependencies.memoryRecall
     && (semanticMemoryTurn || complexTurn || decision.selectedSkills.includes('conversation_memory'))
     ? await dependencies.memoryRecall.enrich(deterministicContext, { scopeKey, message: transcript, snapshot: captured, threadId,
-      memoryTurn: semanticMemoryTurn, complexTurn, ...(observer?.signal ? { signal: observer.signal } : {}) }) : null;
+      memoryTurn: semanticMemoryTurn, complexTurn, voiceClass: decision.conversationClass, ...(observer?.signal ? { signal: observer.signal } : {}) }) : null;
   const cognitiveContext = recalled ?? deterministicContext;
   // Fixed first, what changes last (`ShannonPromptLayers`): her profile follows the fixed blocks, the state opens the turn's context.
   // The slim path drops owner state, never the identity: persona, suite roles and capabilities stay.
@@ -343,7 +343,7 @@ async function completeLiveVoiceDelegation(
     { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }, ownerAloneReads(toolAudience));
   const { offer: toolOffer, tier } = choices ? await voiceOfferAndTier(dependencies.turnRouting, offered, choices, { scopeKey, threadId, deadline, at: occurredAt }) : { offer: offered, tier: null };
   const modelRequest = withToolCapabilityLines({ // Her Minecraft body's and Aether's lines, in her identity, exactly when their tools are offered.
-    scopeKey, systemPrompt: basePrompt, ...(identity.profile ? { profilePrompt: identity.profile } : {}), ...replayed,
+    scopeKey, systemPrompt: basePrompt, ...skillProfilePrompt(identity.profile, dependencies.skills, scopeKey, toolOffer.tools, selectedSkills.has('current_web') || Boolean(placeSkill)), ...replayed,
     // What she said when she was touched is what he is answering: it directly precedes his words, in every mode, as context only.
     ...(reactionLine ? { precedingReply: reactionLine } : {}),
     message: transcript, ...toolOffer, ...tierRequest(tier),

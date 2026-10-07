@@ -44,6 +44,8 @@ export {
   withAetherAccessCapability,
   withReadToolsCapability,
   SHANNON_READ_TOOLS_CAPABILITY,
+  withSkillsCapability,
+  SHANNON_SKILLS_CAPABILITY,
   withMinecraftBodyCapability,
   type ShannonCapability,
   type ShannonCapabilityId,

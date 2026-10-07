@@ -59,7 +59,7 @@ export interface ShannonToolDefinition {
    * the owner's documents in her own time is `owner_documents_read` (ADR-0007, owner decision 2026-10-06). `meta` is never a
    * registry tool: it is `tool_open` of the tool menu (Syzygy ADR-0008 stage 2, `shannonToolMenu.ts`), which runs nothing.
    */
-  domain: 'aether_study' | 'host_folder' | 'minecraft_body' | 'aether_proposal' | 'owner_documents_read' | 'meta' | ReadToolDomain;
+  domain: 'aether_study' | 'host_folder' | 'minecraft_body' | 'aether_proposal' | 'owner_documents_read' | 'meta' | ReadToolDomain | 'skill_read';
   effect: 'read' | 'write';
   /** `none`: no model or paid API is called by the tool itself. `model`: it calls one (place search asks a model with web search). */
   cost: 'none' | 'model';
@@ -303,6 +303,13 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
       query: { type: 'string', description: '何を探すか（例: 静かなカフェ、ラーメン屋）', minLength: 1, maxLength: 120 },
       area: { type: 'string', description: 'どこで（駅・町・住所）', maxLength: 80 },
     }, ['query']) }),
+  // Syzygy ADR-0008 stage 2, step 6 (`SHANNON_SKILLS`): one of her skills, opened from the index in her profile.
+  readTool({ name: 'skill.read', domain: 'skill_read',
+    description: `ボクのスキル（自分で作った手順書。目次は「ボクのスキル」にある）を1つ開いて、手順・補助・参考を読む。目次の名前を name に書く。一部だけ読む時は section に書く。${READ_RULE}`,
+    input: schema({
+      name: { type: 'string', description: 'スキルの名前（目次の「- 」のあとの英字の名前）', minLength: 1, maxLength: 40 },
+      section: { type: 'string', description: '一部だけ読む時: 手順・補助・参考のどれか。書かなければ全部', enum: ['手順', '補助', '参考'] },
+    }, ['name']) }),
 ]);
 
 /**
@@ -345,6 +352,7 @@ export const TOOL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
   'voyager.tasks': 'ライ氏のVoyagerのタスクを言葉で探して読む',
   'schedule.upcoming': 'ライ氏のこれからの予定と期日のある約束を見る',
   'places.search': 'お店や施設の候補を地図リンクつきで探す',
+  'skill.read': 'ボクのスキル（自分の手順書）を1つ開いて読む',
 });
 
 /** The summary of a tool (by its registry name), or its name when it has none. */

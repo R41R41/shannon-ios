@@ -98,10 +98,9 @@ import {
 import { randomUUID } from 'node:crypto';
 import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
 import { generateChatTurn, withSentenceStream } from '../../surfaces/text/chatSentenceStream.js';
-import { conversationTools, toolTraceReader, turnWroteHerOwnThings } from '../../mind/tools/shannonToolSession.js';
+import { conversationTools, toolTraceReader, turnSkillIndex, turnWroteHerOwnThings, type SkillTurnPorts } from '../../mind/tools/shannonToolSession.js';
 import type { ReadToolPorts } from '../../mind/tools/shannonReadTools.js';
 import { finishTurn, routeTurn, tierRequest, type TurnRouting } from '../../mind/action/respond/turnRouting.js';
-
 import type { TurnChooser } from '../../mind/selectors/turnChoices.js';
 import { withToolCapabilityLines } from '../../mind/tools/shannonAetherTools.js';
 import { withCapabilitySources } from '../../mind/action/respond/conversationCapabilities.js';
@@ -149,7 +148,7 @@ export interface ShannonApiKernelOptions {
    */
   turnChooser?: TurnChooser;
   readTools?: ReadToolPorts; // Stage 2, step 3 (SHANNON_READ_TOOLS): her read tools' ports, for her tool runner; the text turn folds its projections.
-  turnRouting?: TurnRouting; // Stage 2, step 4: the tier policy's inputs, the verifier, where her conversation choices are learned (turnRoutingWiring.ts).
+  turnRouting?: TurnRouting; skills?: SkillTurnPorts; // Stage 2, step 4: the tier policy's inputs, the verifier, where her conversation choices are learned (turnRoutingWiring.ts); step 6: her skill memory (skillMemoryWiring.ts).
 }
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel;
@@ -180,7 +179,7 @@ export class ShannonApiKernel {
   private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null;
   private readonly minecraftRequests: { promptBlock(scopeKey: string, at: string): string } | null;
   private readonly turnChooser: TurnChooser | null;
-  private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null;
+  private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null;
   /** What the server knows when it offers her tools: others present, and what her writes must not repeat (`shannonToolSession.ts`). */
   private readonly toolServer: ConversationToolServer;
   constructor(
@@ -222,9 +221,10 @@ export class ShannonApiKernel {
     this.autonomy = options.autonomy ?? createInMemoryAutonomyService(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) });
     this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now); this.ownOutreach = options.ownOutreach ? new OwnOutreach(options.ownOutreach, this.now) : null;
     this.body = new ShannonBody({ ...options.body, stateStore: this.stateStore, autonomy: this.autonomy, conversationStore: this.conversationStore, now: this.now });
-    this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now);
+    this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now); this.memoryRecall?.watchAudience?.(this.toolServer.audience); // Stage 2, step 8.
     this.readTools = Boolean(options.readTools && this.autonomy.tools);
     if (options.readTools) this.autonomy.tools?.useReads(options.readTools);
+    this.skills = options.skills && this.autonomy.tools ? options.skills : null; if (this.skills) this.autonomy.tools?.useSkills(this.skills); // Stage 2, step 6: skill.read.
     this.background = this.toolServer.turns.watching(this.background); // Each stored turn takes what her tools did with it.
   }
   get voiceSessions() { return voiceSessionCalls(this.body.ownerCalls, this.now); } // A voice session while the owner is in a call elsewhere.
@@ -244,7 +244,6 @@ export class ShannonApiKernel {
       cognitiveIntents: this.cognitiveIntents,
     });
   }
-
   async streamLiveVoiceDelegation(request: ApiRequest, observer: LiveVoiceStreamObserver): Promise<ApiResponse> {
     const response = dispatchLiveVoiceRequest(request, this.liveVoiceDependencies(), observer);
     return response ? await response : { status: 404, body: { error: 'NOT_FOUND' } };
@@ -366,8 +365,8 @@ export class ShannonApiKernel {
     const capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
     // A surface has no look at the room or through the app.
     const roomLook = surface ? NO_LOOK : this.body.turnLooks.turn(body.scopeKey, message, occurredAt, audience.audience, request);
-    const layered = textTurnSystemPrompt(deps, input, begun, { basePrompt, cognitiveContext, capability, roomLook });
-    const systemPrompt = layered.prompt;
+    let layered = textTurnSystemPrompt(deps, input, begun, { basePrompt, cognitiveContext, capability, roomLook });
+    let systemPrompt = layered.prompt;
     if (begun.explicitCommand || begun.organizeTurn) return answerTextCommand(deps, input, begun, cognitiveContext, systemPrompt);
     let { orchestrationState } = begun;
     // A summary has no label of its own: none where only open items may be given (a turn someone other than the owner wrote).
@@ -378,6 +377,8 @@ export class ShannonApiKernel {
     // Stage 2: the menu narrows the schemas sent; awaited only with a Jev call, so without one nothing changes (not even a tick).
     const settled = choices ? await settleTextTools(toolOffer, choices) : null;
     if (settled) toolOffer = settled.offer;
+    layered = turnSkillIndex(layered, this.skills, body.scopeKey, toolOffer.tools, body.webSearch === true || Boolean(placeSkill) || settled?.web === true); // Step 6: her skills' index.
+    systemPrompt = layered.prompt;
     // Stage 2, step 4: the tier from Jev's difficulty answers (none without the routing), and her last turn settled by this one.
     const tier = routeTurn(this.turnRouting, { scopeKey: body.scopeKey, surface: 'text', threadId, answer: settled?.answer ?? null, at: occurredAt });
     const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withToolCapabilityLines({
@@ -462,7 +463,7 @@ export class ShannonApiKernel {
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
       conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people, reactions: this.body.reactions, looks: this.body.turnLooks,
       toolServer: this.toolServer, ownerCalls: this.body.ownerCalls, ownOutreach: this.ownOutreach,
-      ...(this.turnChooser ? { turnChooser: this.turnChooser } : {}), ...(this.turnRouting ? { turnRouting: this.turnRouting } : {}),
+      ...(this.turnChooser ? { turnChooser: this.turnChooser } : {}), ...(this.turnRouting ? { turnRouting: this.turnRouting } : {}), ...(this.skills ? { skills: this.skills } : {}),
     };
   }
   waitForBackground(scopeKey: string): Promise<void> { return this.background.waitForIdle(scopeKey); }

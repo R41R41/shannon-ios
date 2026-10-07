@@ -121,6 +121,23 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/memory/store/conversationStore.ts',
     'services/api/src/mind/memory/store/knowledgeStore.ts',
     'services/api/src/mind/sleep/knowledgeConsolidation.ts',
+    // Syzygy ADR-0008 stage 2, step 6: her skill memory (the SKILL.md codec, the store, the service and its window), the sleep
+    // builder, what a turn is handed of it, and its wiring.
+    'services/api/src/mind/memory/skillDocument.ts',
+    'services/api/src/mind/memory/skillMemory.ts',
+    'services/api/src/mind/memory/memoryPorts.ts',
+    'services/api/src/mind/memory/store/sqliteSkills.ts',
+    'services/api/src/mind/sleep/skillConsolidation.ts',
+    'services/api/src/mind/sleep/skillSleepModel.ts',
+    'services/api/src/mind/sleep/skillSleepRules.ts',
+    'services/api/src/contracts/skillMemoryContract.ts',
+    'services/api/src/wiring/skillMemoryWiring.ts',
+    // Step 7: her skills' readable copies in Aether, and the owner's edits of them adopted.
+    'services/api/src/integrations/aether/skillExport.ts',
+    // Step 8: tree recall (the beam, its tree and Jev's questions) and its wiring.
+    'services/api/src/mind/recall/treeBeam.ts',
+    'services/api/src/mind/recall/treeRecall.ts',
+    'services/api/src/wiring/treeRecallWiring.ts',
     'services/api/src/mind/memory/memoryService.ts',
     'services/api/src/mind/recall/memoryModels.ts',
     'services/api/src/mind/memory/memoryProjection.ts',
@@ -212,6 +229,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/tools/shannonFolderTools.ts',
     // Syzygy ADR-0008 stage 2, step 3: the executors of her read tools (Notion, Voyager tasks, the schedule, place search).
     'services/api/src/mind/tools/shannonReadTools.ts',
+    // Step 6: the executor of skill.read.
+    'services/api/src/mind/tools/shannonSkillTools.ts',
     // The window other parts of the mind read what her tools did in a turn through (Syzygy ADR-0008 §10).
     'services/api/src/mind/tools/toolsPorts.ts',
     // Aether (Syzygy ADR-0007 revised): the client of her access and the executors of her Aether tools.

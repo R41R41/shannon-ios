@@ -116,8 +116,28 @@ export const SHANNON_READ_TOOLS_CAPABILITY = Object.freeze({
   text: '読む道具: ライ氏と二人だけの会話で、Notionの共有ページ・Voyagerのタスク・これからの予定・お店や施設の候補を、要る時に道具で読む（読むだけ）。テキストでも、今の情報が要る時はWeb検索を自分で選ぶことがある。',
 } as const satisfies ShannonCapability);
 
+/**
+ * Her skills (Syzygy ADR-0008 stage 2, step 6, `SHANNON_SKILLS`): procedures she writes for herself in her sleep, listed by name
+ * in an index and opened with a tool when needed; their readable copies are in Aether's シャノン用フォルダ (step 7). Added by the
+ * API (`withSkillsCapability`) only to a turn that offers `skill.read`, so with the switch off the description is what it was.
+ */
+export const SHANNON_SKILLS_CAPABILITY = Object.freeze({
+  id: 'skills', audience: 'owner',
+  text: 'スキル: よくすることの手順を、眠っている間に自分で手順書（スキル）にまとめる。目次から要る時に道具で開いて使い、うまくいかないものはやめる。写しはAetherのシャノン用フォルダにあり、ライ氏が直したらその版を使う。ライ氏に内緒と言われたことはスキルに書かない。',
+} as const satisfies ShannonCapability);
+
 /** Capabilities the API may add to the description while it has them. */
-export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_READ_TOOLS_CAPABILITY] as const);
+export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_READ_TOOLS_CAPABILITY, SHANNON_SKILLS_CAPABILITY] as const);
+
+/** The owner's description with the skills' line, after her study's line; any other prompt unchanged. */
+export function withSkillsCapability(prompt: string): string {
+  const line = `- ${SHANNON_SKILLS_CAPABILITY.text}\n`;
+  if (prompt.includes(line)) return prompt;
+  const study = SHANNON_CAPABILITIES.find(item => item.id === 'own_study');
+  const anchor = study ? `- ${study.text}\n` : '';
+  const at = anchor ? prompt.indexOf(anchor) : -1;
+  return at < 0 ? prompt : `${prompt.slice(0, at + anchor.length)}${line}${prompt.slice(at + anchor.length)}`;
+}
 
 /** The owner's description with the read tools' line, after the Notion line; any other prompt unchanged. */
 export function withReadToolsCapability(prompt: string): string {
