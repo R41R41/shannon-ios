@@ -11,16 +11,16 @@ import {
   type MemoryAudience,
   type MemoryDisclosure,
 } from '@shannon/cognition';
-import { DisclosureGate } from '../../mind/inhibition/memoryDisclosure.js';
-import { localDayKey } from '../../mind/memory/memoryProjection.js';
-import { periodSummaryText, personMemoryId, platformSummaryId } from '../../mind/memory/peopleMemory.js';
-import type { MemoryProposals } from '../../mind/memory/memoryPorts.js';
+import { DisclosureGate } from '../inhibition/disclosurePorts.js';
+import { localDayKey } from './memoryProjection.js';
+import { periodSummaryText, personMemoryId, platformSummaryId } from './peopleMemory.js';
+import type { MemoryProposals } from './memoryPorts.js';
 
 export { platformSummaryId };
-import type { PeopleMemoryStore, PersonMemoryItem, RememberedPerson } from '../../mind/memory/memoryPorts.js';
-import { extractPromiseCaptures } from '../../mind/memory/prospectiveMemory.js';
-import { extractExplicitMemoryProposals } from '../../mind/sleep/sleepConsolidation.js';
-import { cleanPersonName } from '../../mind/perception/voiceGuestNames.js';
+import type { PeopleMemoryStore, PersonMemoryItem, RememberedPerson } from './memoryPorts.js';
+import { extractPromiseCaptures } from './prospectiveMemory.js';
+import { extractExplicitMemoryProposals } from '../sleep/proposalPorts.js';
+import { cleanPersonName } from '../perception/guestNamesPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export type PlatformConversationKind = 'dm' | 'group' | 'channel';

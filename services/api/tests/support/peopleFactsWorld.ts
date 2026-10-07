@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
 import { SQLitePeopleMemoryStore } from '../../src/mind/memory/store/peopleMemoryStore.js';
-import { PlatformPeople } from '../../src/surfaces/platform/platformPeople.js';
+import { PlatformPeople } from '../../src/mind/memory/platformPeople.js';
 import type { IdentityChooser, PersonFactJudge } from '../../src/mind/memory/memoryPorts.js';
 import { memoryPortsOf, memoryWriterOf } from '../../src/wiring/memoryOutboxWiring.js';
 import { peopleFactReaders, peopleFactsStoreOptions } from '../../src/wiring/peopleFactsWiring.js';

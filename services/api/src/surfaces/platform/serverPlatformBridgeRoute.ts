@@ -15,7 +15,7 @@ import {
 } from './platformBridge.js';
 import { readJson, sendJson } from '../../infra/http/serverHttp.js';
 import type { PeopleMemoryStore } from '../../mind/memory/memoryPorts.js';
-import { PlatformPeople, platformPeopleEnabled } from './platformPeople.js';
+import { PlatformPeople, platformPeopleEnabled } from '../../mind/memory/platformPeople.js';
 import type { MemoryProposals } from '../../mind/memory/memoryPorts.js';
 import { SQLiteSurfaceTurnLog } from '../minecraft/store/minecraftTurnStore.js';
 import { PlatformReplyService, SHANNON_PLATFORM_REPLY_PATH, platformReplyEnabled, type PlatformReplyConversation } from './platformReply.js';

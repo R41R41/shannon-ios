@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createInitialCompanionState } from '@shannon/cognition';
-import { chatAudienceTurn } from '../src/surfaces/text/chatAudience.js';
+import { chatAudienceTurn } from '../src/mind/perception/chatAudience.js';
 import { heldForOthers, noteProvenance } from '../src/mind/action/ownTime/autonomyLoopProvenance.js';
 import type { AutonomyReachOuts } from '../src/mind/action/ownTime/autonomyLoopReachOutStep.js';
 import { AutonomyToolResults } from '../src/mind/action/ownTime/autonomyLoopToolStep.js';

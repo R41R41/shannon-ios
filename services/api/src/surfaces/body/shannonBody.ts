@@ -21,12 +21,13 @@ import { BODY_TOUCH_ONLY_FLAG, isFullBody, isTouchOnlyBody } from './bodyTouchOn
 import { desktopBodyDeviceId, isDesktopBodyDeviceId } from './desktopBodyIdentity.js';
 import { bodyPlace, bodySurfaceMark, factualTouchPhrase, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
 import { isReflexPart } from './bodyTouchReflex.js';
-import { ConversationLooks } from './conversationLooks.js';
+import { ConversationLooks } from '../../mind/perception/conversationLooks.js';
 import { OWNER_CALL_LIMITS, OwnerCalls, type OwnerCallDependencies, type OwnerCallElsewhere, type OwnerCallSurface } from '../voice/ownerCallElsewhere.js';
 import type { TouchExperienceWriter } from '../../mind/memory/bodyTouchExperience.js';
 import { gameDeathExperience, type GameExperienceWriter } from '../minecraft/store/gameBodyMemory.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './store/bodyStore.js';
-import { ownerDay, presentCompanionState } from '../../mind/emotion/companionPresence.js';
+import { presentCompanionState } from '../../mind/emotion/companionPresence.js';
+import { ownerDay } from '@shannon/cognition';
 import { emotionTiming } from '../../mind/emotion/emotionTiming.js';
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { ReachOutReportResult, SQLiteReachOutReports } from '../outreach/store/reachOutReports.js';

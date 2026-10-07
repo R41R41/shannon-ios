@@ -2,7 +2,7 @@ import { dailyCount } from '../../infra/config/dailyCount.js';
 import { delimiter, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SHANNON_AUTONOMY_DAILY_BUDGET_YEN } from '@shannon/cognition';
-import { ownerDay } from '../emotion/emotionPorts.js';
+import { ownerDay } from '@shannon/cognition';
 import { configuredAutonomyModelPrices, type AutonomyModelPrices } from '../action/ownTime/ownTimePorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 

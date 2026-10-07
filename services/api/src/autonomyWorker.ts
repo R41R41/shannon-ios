@@ -19,7 +19,7 @@ import { SQLiteBodyLookActivityStore } from './surfaces/body/store/bodyLookActiv
 import { configuredBodyLook } from './contracts/bodyLookContract.js';
 import { SQLiteBodyLookStore } from './surfaces/body/store/bodyLookStore.js';
 import { SQLiteBodyStore } from './surfaces/body/store/bodyStore.js';
-import { ownerDay } from './mind/emotion/companionPresence.js';
+import { ownerDay } from '@shannon/cognition';
 import { notionLoopReader } from './integrations/notion/notionLoopReader.js';
 import { configuredNotionSource } from './integrations/notion/notionSource.js';
 import { configuredOwnerUpcoming, sqliteOwnerSnapshot } from './wiring/ownerUpcomingWiring.js';

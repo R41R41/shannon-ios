@@ -12,7 +12,7 @@ import { DisclosureGate, sharedProfilePrompt } from '../../mind/inhibition/memor
 import {
   platformConversationLabel, platformPeopleEnabled,
   type PlatformConversationKind, type PlatformPeople, type PlatformSourceKind,
-} from './platformPeople.js';
+} from '../../mind/memory/platformPeople.js';
 import type { TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.js';
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import { platformImpressionLines } from '../../mind/recall/impressionRecall.js';

@@ -16,7 +16,7 @@ import { SQLiteBodyReactionStore } from '../../src/surfaces/body/store/bodyReact
 import { SQLiteBodyStore } from '../../src/surfaces/body/store/bodyStore.js';
 import { OpenAIBodyReactionSpeaker } from '../../src/surfaces/body/bodyReactionModel.js';
 import { PlatformBridgeService, configuredPlatformBridge } from '../../src/surfaces/platform/platformBridge.js';
-import { PlatformPeople } from '../../src/surfaces/platform/platformPeople.js';
+import { PlatformPeople } from '../../src/mind/memory/platformPeople.js';
 import { PlatformReplyService } from '../../src/surfaces/platform/platformReply.js';
 import { SQLiteMinecraftTurnLog, SQLiteSurfaceTurnLog } from '../../src/surfaces/minecraft/store/minecraftTurnStore.js';
 import { MinecraftBody } from '../../src/surfaces/minecraft/minecraftBody.js';

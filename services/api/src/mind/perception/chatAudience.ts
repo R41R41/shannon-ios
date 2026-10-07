@@ -7,13 +7,13 @@ import {
   type CompanionStateSnapshot,
   type MemoryAudience,
 } from '@shannon/cognition';
-import type { PresentedCompanionState } from '../../mind/emotion/companionPresence.js';
+import type { PresentedCompanionState } from '../emotion/emotionPorts.js';
 import type { ChatResponse } from '../../contracts/contracts.js';
-import type { ConversationCapabilitySelection } from '../../mind/action/respond/conversationCapabilities.js';
-import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
-import { identityOnly, type LayeredIdentityPrompt } from '../../mind/memory/store/knowledgeStore.js';
-import { DisclosureGate, sharedDailyFocus } from '../../mind/inhibition/memoryDisclosure.js';
-import { speakTimePrivacyCheck } from '../../mind/perception/voiceCompanionPresence.js';
+import type { ConversationCapabilitySelection } from '../action/respond/respondPorts.js';
+import type { ConversationStore } from '../memory/memoryPorts.js';
+import { identityOnly, type LayeredIdentityPrompt } from '../memory/identityPorts.js';
+import { DisclosureGate, sharedDailyFocus } from '../inhibition/disclosurePorts.js';
+import { speakTimePrivacyCheck } from './voiceCompanionPresence.js';
 
 /** `audience` on `POST /v1/chat`: who can see or hear the reply, as the client reports it. */
 export type ChatAudience = 'owner' | 'others';

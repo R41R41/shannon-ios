@@ -55,6 +55,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'packages/cognition/src/state.ts',
     'packages/cognition/src/stateRestore.ts',
     'services/api/src/mind/emotion/companionPresence.ts',
+    // Stage 3 (S3): the owner-local day, moved unchanged into the pure package.
+    'packages/cognition/src/ownerDay.ts',
     'services/api/src/mind/emotion/voiceEmotionPlan.ts',
     // The strength of a text reply's feeling, decided by the chat model and handed to the one resolver.
     'services/api/src/mind/emotion/chatReplyFeeling.ts',
@@ -157,7 +159,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/memory/store/peopleMemoryStore.ts',
     'services/api/src/mind/memory/peopleMemoryPrompts.ts',
     'services/api/src/infra/http/apiPeopleMemoryRoutes.ts',
-    'services/api/src/surfaces/platform/platformPeople.ts',
+    'services/api/src/mind/memory/platformPeople.ts',
     'services/api/src/surfaces/platform/platformPeopleSummaries.ts',
     // Her impressions of people: what is kept, what reaches a reply, and how the owner forgets them.
     'services/api/src/mind/memory/impressions.ts',
@@ -341,7 +343,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/surfaces/voice/apiVoiceTurns.ts',
     'services/api/src/infra/models/chatModel.ts',
     'services/api/src/contracts/contracts.ts',
-    'services/api/src/mind/action/respond/turnCognitiveContext.ts',
+    'services/api/src/mind/workspace/turnCognitiveContext.ts',
     'services/api/src/mind/recall/turnMemoryRecall.ts',
     'services/api/src/mind/action/respond/conversationOrchestration.ts',
     'services/api/src/mind/action/respond/conversationCommands.ts',

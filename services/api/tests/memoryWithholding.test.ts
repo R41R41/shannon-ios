@@ -15,7 +15,7 @@ import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
 import { usableThreadSummary, visibleConversationHistory } from '../src/mind/memory/memoryVisibility.js';
 import { SemanticMemoryRecall } from '../src/mind/recall/semanticMemoryRecall.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { prepareTurnCognitiveContext } from '../src/mind/action/respond/turnCognitiveContext.js';
+import { prepareTurnCognitiveContext } from '../src/mind/workspace/turnCognitiveContext.js';
 import { usableKnowledgeFor } from '../src/mind/recall/turnKnowledgeRecall.js';
 import { ShannonTurnMemoryRecall } from '../src/mind/recall/turnMemoryRecall.js';
 

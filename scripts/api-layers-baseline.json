@@ -10,7 +10,6 @@
       "mind/action/ownTime/autonomyLoopToolStep.ts -> mind/tools/shannonToolTypes.ts",
       "mind/action/ownTime/autonomyLoopToolStep.ts -> mind/tools/shannonTools.ts",
       "mind/action/ownTime/autonomyOwnerContext.ts -> mind/action/respond/dailyMind.ts",
-      "mind/action/ownTime/autonomyOwnerContext.ts -> mind/action/respond/turnCognitiveContext.ts",
       "mind/action/ownTime/autonomyOwnerContext.ts -> mind/inhibition/memoryDisclosure.ts",
       "mind/action/ownTime/autonomyOwnerContext.ts -> mind/memory/memoryVisibility.ts",
       "mind/action/ownTime/autonomyOwnerContext.ts -> mind/memory/peopleMemory.ts",
@@ -20,7 +19,6 @@
       "mind/action/ownTime/autonomyService.ts -> mind/inhibition/autonomyPaths.ts",
       "mind/action/ownTime/autonomyService.ts -> mind/tools/shannonMinecraftTools.ts",
       "mind/action/ownTime/autonomyService.ts -> mind/tools/shannonToolRunner.ts",
-      "mind/action/ownTime/autonomySessionView.ts -> mind/emotion/companionPresence.ts",
       "mind/action/ownTime/autonomyShowing.ts -> mind/action/respond/commitmentInitiative.ts",
       "mind/action/ownTime/autonomyShowing.ts -> mind/action/respond/initiativeSelection.ts",
       "mind/action/ownTime/store/autonomyStore.ts -> mind/inhibition/store/autonomyActivity.ts",
@@ -36,7 +34,6 @@
       "mind/recall/conversationWindow.ts -> mind/inhibition/conversationSecrets.ts",
       "mind/recall/conversationWindow.ts -> mind/tools/shannonToolTrace.ts",
       "mind/recall/conversationWindow.ts -> mind/tools/shannonTools.ts",
-      "mind/recall/turnMemoryRecall.ts -> mind/action/respond/turnCognitiveContext.ts",
       "mind/sleep/backgroundUpdates.ts -> mind/action/respond/cognitiveIntent.ts",
       "mind/sleep/backgroundUpdates.ts -> mind/action/respond/commitmentCommands.ts",
       "mind/sleep/knowledgeConsolidation.ts -> mind/recall/turnKnowledgeRecall.ts",
@@ -51,7 +48,6 @@
       "mind/tools/shannonToolTraceSweep.ts -> mind/inhibition/conversationSecrets.ts"
     ],
     "own-time-without-private-stores": [
-      "mind/action/ownTime/autonomySessionView.ts -> mind/emotion/companionPresence.ts",
       "mind/action/ownTime/autonomyShowing.ts -> mind/action/respond/commitmentInitiative.ts",
       "mind/action/ownTime/autonomyShowing.ts -> mind/action/respond/initiativeSelection.ts"
     ],
@@ -68,24 +64,18 @@
       "surfaces/body/shannonBody.ts -> surfaces/outreach/store/reachOutReports.ts",
       "surfaces/body/shannonBody.ts -> surfaces/voice/ownerCallElsewhere.ts",
       "surfaces/minecraft/minecraftBody.ts -> surfaces/platform/platformBridge.ts",
-      "surfaces/minecraft/minecraftBody.ts -> surfaces/platform/platformPeople.ts",
       "surfaces/minecraft/minecraftBody.ts -> surfaces/platform/platformSurface.ts",
-      "surfaces/minecraft/serverMinecraftBodyRoute.ts -> surfaces/platform/platformPeople.ts",
       "surfaces/outreach/incomingCallRequests.ts -> surfaces/body/store/privateListeningStore.ts",
       "surfaces/outreach/privateReachOuts.ts -> surfaces/body/desktopBodyIdentity.ts",
       "surfaces/outreach/privateReachOuts.ts -> surfaces/body/store/privateListeningStore.ts",
       "surfaces/outreach/store/initiativeStore.ts -> surfaces/body/store/bodyLookDelivery.ts",
       "surfaces/platform/platformReply.ts -> surfaces/minecraft/store/minecraftTurnStore.ts",
-      "surfaces/platform/platformSurface.ts -> surfaces/text/chatAudience.ts",
       "surfaces/platform/serverPlatformBridgeRoute.ts -> surfaces/minecraft/store/minecraftTurnStore.ts",
-      "surfaces/text/apiTextTurn.ts -> surfaces/body/conversationLooks.ts",
       "surfaces/text/apiTextTurn.ts -> surfaces/body/shannonBody.ts",
       "surfaces/text/apiTextTurn.ts -> surfaces/outreach/ownOutreach.ts",
-      "surfaces/text/apiTextTurn.ts -> surfaces/platform/platformPeople.ts",
       "surfaces/text/serverChatSentenceStream.ts -> surfaces/voice/serverLiveVoiceStreamRoute.ts",
       "surfaces/voice/voiceAppLook.ts -> surfaces/body/appLookLines.ts",
       "surfaces/voice/voiceAppLook.ts -> surfaces/body/bodyLook.ts",
-      "surfaces/voice/voiceAppLook.ts -> surfaces/body/conversationLooks.ts",
       "surfaces/voice/voiceRoomLook.ts -> surfaces/body/bodyLook.ts"
     ],
     "surfaces-without-stores": [
@@ -97,12 +87,8 @@
       "surfaces/outreach/privateReachOuts.ts -> surfaces/body/store/privateListeningStore.ts",
       "surfaces/outreach/store/initiativeStore.ts -> surfaces/body/store/bodyLookDelivery.ts",
       "surfaces/platform/platformReply.ts -> surfaces/minecraft/store/minecraftTurnStore.ts",
-      "surfaces/platform/platformSurface.ts -> mind/memory/store/knowledgeStore.ts",
       "surfaces/platform/serverPlatformBridgeRoute.ts -> surfaces/minecraft/store/minecraftTurnStore.ts",
-      "surfaces/text/apiConversationRead.ts -> mind/memory/store/turnCaptures.ts",
-      "surfaces/text/apiTextTurn.ts -> mind/memory/store/knowledgeStore.ts",
-      "surfaces/text/chatAudience.ts -> mind/memory/store/knowledgeStore.ts",
-      "surfaces/voice/apiLiveVoice.ts -> mind/memory/store/knowledgeStore.ts"
+      "surfaces/text/apiConversationRead.ts -> mind/memory/store/turnCaptures.ts"
     ]
   }
 }

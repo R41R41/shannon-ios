@@ -7,7 +7,7 @@ import type { ShannonChatModel } from '../models/chatModel.js';
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
 import { audiencePeople, personMemoryId, placeLabel, type CallSummarizer, type PeopleMemory } from '../../mind/memory/peopleMemory.js';
 import type { PersonCall, PersonMemoryItem, RememberedPerson } from '../../mind/memory/store/peopleMemoryStore.js';
-import { platformDisplayName } from '../../surfaces/platform/platformPeople.js';
+import { platformDisplayName } from '../../mind/memory/platformPeople.js';
 import { GUEST_CALL_SUMMARY_TURNS, validatedGuestCallTurns } from '../../surfaces/voice/voiceGuestCall.js';
 import { cleanPersonName, personNameKey } from '../../mind/perception/voiceGuestNames.js';
 import { mutatePersonImpression, personImpressionViews } from '../../mind/memory/impressionViews.js';

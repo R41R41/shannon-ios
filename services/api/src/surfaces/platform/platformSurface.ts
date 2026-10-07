@@ -1,10 +1,10 @@
 import { shannonIdentityPrompt, guardedShannonSeenPrompt, type CompanionStateSnapshot } from '@shannon/cognition';
 import { turnPersistenceContext, type CompletedTurn } from '../../mind/sleep/backgroundUpdates.js';
 import type { TextTurnInput, TextTurnSurface } from '../../infra/http/apiKernel.js';
-import { chatAudienceTurn, type ChatAudienceTurn } from '../text/chatAudience.js';
+import { chatAudienceTurn, type ChatAudienceTurn } from '../../mind/perception/chatAudience.js';
 import type { ChatResponse } from '../../contracts/contracts.js';
 import type { ConversationStore, ShannonExperience } from '../../mind/memory/memoryPorts.js';
-import { identityOnly } from '../../mind/memory/store/knowledgeStore.js';
+import { identityOnly } from '../../mind/memory/identityPrompt.js';
 import { DisclosureGate, sharedDailyFocus } from '../../mind/inhibition/memoryDisclosure.js';
 import {
   PlatformBridgeError,

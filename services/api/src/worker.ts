@@ -7,7 +7,7 @@ import { configuredMemoryModelGateway } from './mind/recall/turnMemoryRecall.js'
 import { createConfiguredKnowledgeAnalyzer, ShannonKnowledgeConsolidator } from './mind/sleep/knowledgeConsolidation.js';
 import { usableKnowledgeFor } from './mind/recall/turnKnowledgeRecall.js';
 import { SQLitePeopleMemoryStore } from './mind/memory/store/peopleMemoryStore.js';
-import { PlatformPeople } from './surfaces/platform/platformPeople.js';
+import { PlatformPeople } from './mind/memory/platformPeople.js';
 import { createConfiguredPlatformSummaryWriter, PlatformConversationSummarizer } from './surfaces/platform/platformPeopleSummaries.js';
 import { ConversationReplaySummarizer, createConfiguredReplaySummaryWriter } from './mind/memory/conversationReplaySummary.js';
 import { createConfiguredImpressionAnalyzer, ImpressionUpdater } from './mind/memory/impressionUpdater.js';

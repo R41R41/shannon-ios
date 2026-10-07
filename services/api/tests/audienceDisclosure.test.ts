@@ -14,7 +14,7 @@ import { usableThreadSummary, visibleConversationHistory } from '../src/mind/mem
 import { configuredPlatformBridge, PlatformBridgeService, platformBridgeThreadId } from '../src/surfaces/platform/platformBridge.js';
 import { DEFAULT_SEMANTIC_MEMORY_CONFIG, SemanticMemoryRecall } from '../src/mind/recall/semanticMemoryRecall.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { prepareTurnCognitiveContext } from '../src/mind/action/respond/turnCognitiveContext.js';
+import { prepareTurnCognitiveContext } from '../src/mind/workspace/turnCognitiveContext.js';
 import { ShannonTurnMemoryRecall } from '../src/mind/recall/turnMemoryRecall.js';
 import { ownerSaysCompanionPresent, speakTimePrivacyCheck } from '../src/mind/perception/voiceCompanionPresence.js';
 import { promptOf } from './modelPrompt.js';

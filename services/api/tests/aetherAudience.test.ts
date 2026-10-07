@@ -14,7 +14,7 @@ import { TOOLS_GUESTS_INSTRUCTIONS, TOOLS_OTHERS_INSTRUCTIONS, toolInstructions 
 import { othersSecrets } from '../src/mind/inhibition/conversationSecrets.js';
 import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemoryStore.js';
 import { PlatformBridgeService, configuredPlatformBridge } from '../src/surfaces/platform/platformBridge.js';
-import { PlatformPeople } from '../src/surfaces/platform/platformPeople.js';
+import { PlatformPeople } from '../src/mind/memory/platformPeople.js';
 import { PlatformReplyService } from '../src/surfaces/platform/platformReply.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SQLiteSurfaceTurnLog } from '../src/surfaces/minecraft/store/minecraftTurnStore.js';

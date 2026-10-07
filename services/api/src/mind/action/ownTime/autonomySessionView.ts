@@ -1,4 +1,4 @@
-import { ownerDay } from '../../emotion/companionPresence.js';
+import { ownerDay } from '@shannon/cognition';
 import { SESSION_END_LABEL, yen } from './autonomyLoopSessionPrompts.js';
 import type { SessionEndCode } from './store/autonomyLoopSessions.js';
 import type { AutonomyLoopState } from './store/autonomyLoopState.js';

@@ -4,7 +4,7 @@ import type { ShannonChatModel } from '../../infra/models/chatModel.js';
 import { recordCompletedCognitiveCycle } from '../../mind/action/respond/cognitiveCycle.js';
 import { extractExplicitUserIntent, type CognitiveIntentStore } from '../../mind/action/respond/cognitiveIntent.js';
 import type { executeConversationCommand } from '../../mind/action/respond/conversationCommands.js';
-import { prepareTurnCognitiveContext } from '../../mind/action/respond/turnCognitiveContext.js';
+import { prepareTurnCognitiveContext } from '../../mind/workspace/turnCognitiveContext.js';
 import { companionPresentInstructions, speakTimePrivacyCheck } from '../../mind/perception/voiceCompanionPresence.js';
 import { voiceDeviceContextPrompt, type VoiceDeviceContext } from './voiceDeviceContext.js';
 import { ownerCompanionPresenceInstructions } from './voiceIntroductionInstructions.js';

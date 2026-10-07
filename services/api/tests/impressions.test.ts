@@ -24,10 +24,10 @@ import { withheldTerms } from '../src/mind/memory/impressionViews.js';
 import { memoryWithholdingRules } from '@shannon/cognition';
 import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemoryStore.js';
 import { configuredPlatformBridge, PlatformBridgeService } from '../src/surfaces/platform/platformBridge.js';
-import { PlatformPeople } from '../src/surfaces/platform/platformPeople.js';
+import { PlatformPeople } from '../src/mind/memory/platformPeople.js';
 import { LocalRuleSleepMemoryAnalyzer } from '../src/mind/sleep/sleepConsolidation.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { prepareTurnCognitiveContext } from '../src/mind/action/respond/turnCognitiveContext.js';
+import { prepareTurnCognitiveContext } from '../src/mind/workspace/turnCognitiveContext.js';
 import { promptOf } from './modelPrompt.js';
 
 const DAY = 86_400_000;

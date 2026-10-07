@@ -605,9 +605,12 @@ describe('what reaches the prompts of her own activity', () => {
     // replay under forgetting and disclosure, the replay window, the deterministic recall of a turn, people memory, today's focus.
     const context = read('autonomyOwnerContext.ts');
     expect(imports('autonomyOwnerContext.ts').sort()).toEqual([
-      '@shannon/cognition', 'autonomyLoopOwnerContext.ts', 'chatModel.ts', 'conversationStore.ts', 'conversationWindow.ts',
-      'dailyMind.ts', 'memoryDisclosure.ts', 'memoryVisibility.ts', 'peopleMemory.ts', 'turnCognitiveContext.ts',
+      '@shannon/cognition', 'autonomyLoopOwnerContext.ts', 'chatModel.ts', 'contextPorts.ts', 'conversationStore.ts', 'conversationWindow.ts',
+      'dailyMind.ts', 'memoryDisclosure.ts', 'memoryVisibility.ts', 'peopleMemory.ts',
     ]);
+    // Syzygy ADR-0008 stage 3 (S3): a turn's cognitive context moved into the workspace; this reader reaches it through a window
+    // that re-exports that module alone.
+    expect(imports('contextPorts.ts')).toEqual(['turnCognitiveContext.ts']);
     for (const entry of ['new DisclosureGate(', 'visibleReplayMessages(', 'replayWindow(', 'prepareTurnCognitiveContext(', '.recall(', 'visibleMemoryText(', '.promptProjection(', '.currentFocus(']) {
       expect(context, entry).toContain(entry);
     }

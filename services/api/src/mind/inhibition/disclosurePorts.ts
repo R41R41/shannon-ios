@@ -5,4 +5,4 @@
  */
 export { type OthersTextCheck } from './aetherShownText.js';
 export { type SecretCheck } from './conversationSecrets.js';
-export { DisclosureGate, sharedProfilePrompt } from './memoryDisclosure.js';
+export { DisclosureGate, sharedDailyFocus, sharedProfilePrompt } from './memoryDisclosure.js';

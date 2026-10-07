@@ -20,10 +20,11 @@ import type { AgentTaskStore } from '../../mind/action/agentTasks/agentTaskStore
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { DailyMindReader } from '../../mind/action/respond/dailyMind.js';
-import { companionIdentityPrompt, identityOnly, type KnowledgeStore } from '../../mind/memory/store/knowledgeStore.js';
+import { type KnowledgeStore } from '../../mind/memory/memoryPorts.js';
+import { companionIdentityPrompt, identityOnly } from '../../mind/memory/identityPrompt.js';
 import type { ShannonChatModel } from '../../infra/models/chatModel.js';
 import { LocalVoiceDecisionGateway, type VoiceDecisionGateway, type VoiceTurnDecision } from '../../mind/selectors/voiceDecision.js';
-import { prepareTurnCognitiveContext } from '../../mind/action/respond/turnCognitiveContext.js';
+import { prepareTurnCognitiveContext } from '../../mind/workspace/turnCognitiveContext.js';
 import { withMemorySearchLatency, type TurnMemoryRecall } from '../../mind/recall/turnMemoryRecall.js';
 import { visibleConversationHistory } from '../../mind/memory/memoryVisibility.js';
 import { conversationReplay } from '../../mind/recall/conversationWindow.js';

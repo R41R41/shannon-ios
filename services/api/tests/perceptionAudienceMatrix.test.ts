@@ -13,8 +13,8 @@ import type { MindEvent } from '@shannon/mind';
  */
 const legacy = vi.hoisted(() => ({ calls: [] as Array<{ path: string; audience: unknown }> }));
 
-vi.mock('../src/mind/action/respond/turnCognitiveContext.js', async importOriginal => {
-  const original = await importOriginal<typeof import('../src/mind/action/respond/turnCognitiveContext.js')>();
+vi.mock('../src/mind/workspace/turnCognitiveContext.js', async importOriginal => {
+  const original = await importOriginal<typeof import('../src/mind/workspace/turnCognitiveContext.js')>();
   return { ...original, prepareTurnCognitiveContext: (...args: Parameters<typeof original.prepareTurnCognitiveContext>) => {
     legacy.calls.push({ path: 'prepareTurnCognitiveContext', audience: args[2].present });
     return original.prepareTurnCognitiveContext(...args);
@@ -47,12 +47,12 @@ const { SQLiteBodyStore } = await import('../src/surfaces/body/store/bodyStore.j
 const { OpenAIBodyReactionSpeaker } = await import('../src/surfaces/body/bodyReactionModel.js');
 const { BODY_PRESENT } = await import('../src/surfaces/body/bodyReaction.js');
 const { PlatformBridgeService, configuredPlatformBridge } = await import('../src/surfaces/platform/platformBridge.js');
-const { PlatformPeople } = await import('../src/surfaces/platform/platformPeople.js');
+const { PlatformPeople } = await import('../src/mind/memory/platformPeople.js');
 const { PlatformReplyService } = await import('../src/surfaces/platform/platformReply.js');
 const { SQLiteMinecraftTurnLog, SQLiteSurfaceTurnLog } = await import('../src/surfaces/minecraft/store/minecraftTurnStore.js');
 const { MinecraftBody } = await import('../src/surfaces/minecraft/minecraftBody.js');
 const { configuredMinecraftBody } = await import('../src/contracts/minecraftBodyContract.js');
-const { chatAudienceTurn } = await import('../src/surfaces/text/chatAudience.js');
+const { chatAudienceTurn } = await import('../src/mind/perception/chatAudience.js');
 const { INBOX_PRESENT, inboxPerception } = await import('../src/mind/perception/perceptionPorts.js');
 
 const directory = mkdtempSync(join(tmpdir(), 'shannon-perception-matrix-'));

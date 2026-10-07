@@ -78,7 +78,7 @@ import { dispatchAppLookRequest } from '../src/surfaces/body/apiAppLookRoutes.js
 import { AppLooks } from '../src/surfaces/body/appLook.js';
 import { APP_LOOK_SCHEMA, configuredAppLook } from '../src/contracts/appLookContract.js';
 import { appLookUnavailablePrompt } from '../src/surfaces/body/appLookLines.js';
-import { ConversationLooks } from '../src/surfaces/body/conversationLooks.js';
+import { ConversationLooks } from '../src/mind/perception/conversationLooks.js';
 import { createConfiguredVoiceVisionGateway } from '../src/surfaces/voice/voiceVision.js';
 import { apiSourceFiles } from './support/sources.js';
 

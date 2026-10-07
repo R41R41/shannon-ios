@@ -9,7 +9,7 @@ import { conversationReplay, openItems } from '../src/mind/recall/conversationWi
 import { ShannonTurnMemoryRecall } from '../src/mind/recall/turnMemoryRecall.js';
 import type { SemanticMemoryRecall } from '../src/mind/recall/semanticMemoryRecall.js';
 import { extractExplicitUserIntent } from '../src/mind/action/respond/cognitiveIntent.js';
-import { prepareTurnCognitiveContext } from '../src/mind/action/respond/turnCognitiveContext.js';
+import { prepareTurnCognitiveContext } from '../src/mind/workspace/turnCognitiveContext.js';
 import { minecraftBodyRoute } from '../src/surfaces/minecraft/serverMinecraftBodyRoute.js';
 import type { MinecraftBody } from '../src/surfaces/minecraft/minecraftBody.js';
 import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.js';

@@ -6,7 +6,7 @@ import type { AetherProposalStore } from '../../integrations/aether/aetherPropos
 import type { AgentTaskStore } from '../../mind/action/agentTasks/agentTaskStore.js';
 import type { ShannonAutonomyService } from '../../mind/action/ownTime/autonomyService.js';
 import type { CompletedTurn, TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.js';
-import type { ChatAudienceTurn } from './chatAudience.js';
+import type { ChatAudienceTurn } from '../../mind/perception/chatAudience.js';
 import type { ShannonChatAttachment, ShannonChatModel, ShannonChatModelResult } from '../../infra/models/chatModel.js';
 import { recordCompletedCognitiveCycle } from '../../mind/action/respond/cognitiveCycle.js';
 import { extractExplicitUserIntent, type CognitiveIntentStore } from '../../mind/action/respond/cognitiveIntent.js';
@@ -18,7 +18,7 @@ import {
 import { WEB_CAPABILITY_ENTRY } from '../../mind/tools/shannonTools.js';
 import { withToolMenu } from '../../mind/tools/shannonToolMenu.js';
 import type { ShannonModelToolSession } from '../../infra/models/chatModelTools.js';
-import type { ConversationLookTurn } from '../body/conversationLooks.js';
+import type { ConversationLookTurn } from '../../mind/perception/conversationLooks.js';
 import { executeConversationCommand } from '../../mind/action/respond/conversationCommands.js';
 import {
   buildConversationOrchestrationPrompt, observeConversationTurn, recordConversationReceipt, type ConversationOrchestrationStore,
@@ -26,17 +26,18 @@ import {
 import { prepareConversationOrganize } from '../../integrations/voyager/conversationOrganize.js';
 import type { ConversationStore, ShannonExperience } from '../../mind/memory/memoryPorts.js';
 import type { DailyMindReader } from '../../mind/action/respond/dailyMind.js';
-import { companionIdentityPrompt, type KnowledgeStore, type LayeredIdentityPrompt } from '../../mind/memory/store/knowledgeStore.js';
+import { type KnowledgeStore } from '../../mind/memory/memoryPorts.js';
+import { companionIdentityPrompt, type LayeredIdentityPrompt } from '../../mind/memory/identityPrompt.js';
 import { isOrganizeCommand, type OrganizeExtractor, type OrganizeStore, type VoyagerCatalog } from '../../integrations/voyager/organize.js';
 import type { OwnOutreach } from '../outreach/ownOutreach.js';
 import type { OwnerUpcoming } from '../../mind/memory/ownerUpcoming.js';
 import type { PeopleMemory } from '../../mind/memory/peopleMemory.js';
-import { heardByEveryoneHere } from '../platform/platformPeople.js';
+import { heardByEveryoneHere } from '../../mind/memory/platformPeople.js';
 import type { PersonIdentityStore } from '../../mind/memory/memoryPorts.js';
 import type { ShannonBody } from '../body/shannonBody.js';
 import { startTurnToolMenu, type ConversationToolServer, type ToolMenuChooser, type TurnChoiceAnswer } from '../../mind/tools/shannonToolSession.js';
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
-import { prepareTurnCognitiveContext } from '../../mind/action/respond/turnCognitiveContext.js';
+import { prepareTurnCognitiveContext } from '../../mind/workspace/turnCognitiveContext.js';
 import { TurnDeadline } from '../../mind/action/respond/turnDeadline.js';
 import type { TurnMemoryRecall } from '../../mind/recall/turnMemoryRecall.js';
 import { closedId, minecraftPerception, platformPerception, textPerception, type MindPerceiver, type PerceivedItem } from '../../mind/perception/perceptionPorts.js';

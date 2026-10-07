@@ -11,5 +11,5 @@ export { type DailyMindFocus, type DailyMindReader } from './dailyMind.js';
 export { answersWithPlace, asksForMemo, asksWhichPlace, memoNotForAether, namesAether } from './memoPlace.js';
 export { isExactTimeAlertRequest, matchPromise } from './promiseRules.js';
 export { classifyRememberRequest, isRememberRequest, rememberRequestContent } from './rememberRequest.js';
-export { type LabelledRecallCandidate } from './turnCognitiveContext.js';
 export { type TurnDeadline } from './turnDeadline.js';
+export { type ConversationCapabilitySelection } from './conversationCapabilities.js';

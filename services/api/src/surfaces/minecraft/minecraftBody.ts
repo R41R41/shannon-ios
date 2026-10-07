@@ -17,7 +17,7 @@ import { minecraftBodyStateBlock, type MinecraftBodyState } from './minecraftBod
 import { MinecraftTurnAllowance } from '../../mind/inhibition/minecraftTurnAllowance.js';
 import { PlatformBridgeError, PlatformBridgeService, platformBridgeThreadId, type PlatformAudiencePolicy } from '../platform/platformBridge.js';
 import type { PeopleMemoryStore } from '../../mind/memory/memoryPorts.js';
-import { PlatformPeople, platformPeopleEnabled } from '../platform/platformPeople.js';
+import { PlatformPeople, platformPeopleEnabled } from '../../mind/memory/platformPeople.js';
 import type { MemoryProposals } from '../../mind/memory/memoryPorts.js';
 
 /**

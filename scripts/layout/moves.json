@@ -638,9 +638,9 @@
       "why": "Owner-app calendar HTTP routes"
     },
     "chatAudience.ts": {
-      "to": "surfaces/text/chatAudience.ts",
-      "wave": 6,
-      "why": "Audience of a text chat turn"
+      "to": "mind/perception/chatAudience.ts",
+      "wave": 7,
+      "why": "Audience of a text chat turn; stage 3 moved it to its part"
     },
     "chatModel.ts": {
       "to": "infra/models/chatModel.ts",
@@ -788,9 +788,9 @@
       "why": "Fixed conversation commands"
     },
     "conversationLooks.ts": {
-      "to": "surfaces/body/conversationLooks.ts",
-      "wave": 3,
-      "why": "Which camera a turn may look through"
+      "to": "mind/perception/conversationLooks.ts",
+      "wave": 7,
+      "why": "Which camera a turn may look through; stage 3 moved it to its part"
     },
     "conversationOrchestration.ts": {
       "to": "mind/action/respond/conversationOrchestration.ts",
@@ -1243,9 +1243,9 @@
       "why": "Platform bridge bindings"
     },
     "platformPeople.ts": {
-      "to": "surfaces/platform/platformPeople.ts",
-      "wave": 3,
-      "why": "Platform people messages and memory"
+      "to": "mind/memory/platformPeople.ts",
+      "wave": 7,
+      "why": "Platform people messages and memory; stage 3 moved it to its part"
     },
     "platformPeopleSummaries.ts": {
       "to": "surfaces/platform/platformPeopleSummaries.ts",
@@ -1693,9 +1693,9 @@
       "why": "SQL turn captures"
     },
     "turnCognitiveContext.ts": {
-      "to": "mind/action/respond/turnCognitiveContext.ts",
-      "wave": 6,
-      "why": "Cognitive context of a turn"
+      "to": "mind/workspace/turnCognitiveContext.ts",
+      "wave": 7,
+      "why": "Cognitive context of a turn; stage 3 moved it to its part"
     },
     "turnDeadline.ts": {
       "to": "mind/action/respond/turnDeadline.ts",

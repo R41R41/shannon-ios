@@ -11,17 +11,8 @@ import {
   type CompanionStateStore,
 } from '@shannon/cognition';
 import type { LlmUsageEvent, LlmUsageStore } from '../models/llmUsage.js';
-import {
-  classifyQuestion,
-  companionIdentityPrompt,
-  joinedIdentityPrompt,
-  type KnowledgeAnswer,
-  type KnowledgeRevision,
-  type KnowledgeSource,
-  type KnowledgeStore,
-  type LayeredIdentityPrompt,
-  type PersonalityProfile,
-} from '../../mind/memory/store/knowledgeStore.js';
+import { classifyQuestion, type KnowledgeAnswer, type KnowledgeRevision, type KnowledgeSource, type KnowledgeStore, type PersonalityProfile } from '../../mind/memory/store/knowledgeStore.js';
+import { companionIdentityPrompt, joinedIdentityPrompt, type LayeredIdentityPrompt } from '../../mind/memory/identityPrompt.js';
 import { parseSnapshot } from './sqliteStoreCodecs.js';
 import type { SQLiteStoreContext } from './sqliteStoreContext.js';
 import { hydrateMemoryBoundaries, safePersonalityAnalysis } from '../../mind/memory/memoryProjectionSafety.js';

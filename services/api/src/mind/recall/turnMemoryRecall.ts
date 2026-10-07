@@ -22,7 +22,7 @@ import { recallShannonKnowledge, usableKnowledgeFor } from './turnKnowledgeRecal
 import type { TreeKnowledgeRecall } from './treeRecall.js';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { conversationStoreOf } from '../memory/memoryPorts.js';
-import { withRecalledMemories, type TurnCognitiveContext } from '../action/respond/turnCognitiveContext.js';
+import { withRecalledMemories, type TurnCognitiveContext } from '../workspace/contextPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export interface TurnMemoryRecallInput {

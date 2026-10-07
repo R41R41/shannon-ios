@@ -9,7 +9,7 @@ import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelReques
 import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemoryStore.js';
 import { SQLitePersonIdentityStore } from '../src/mind/memory/store/personIdentity.js';
 import { configuredPlatformBridge, PlatformBridgeError, PlatformBridgeService, platformBridgeThreadId } from '../src/surfaces/platform/platformBridge.js';
-import { DEFAULT_PLATFORM_PEOPLE_LIMITS, PlatformPeople, platformPeopleEnabled } from '../src/surfaces/platform/platformPeople.js';
+import { DEFAULT_PLATFORM_PEOPLE_LIMITS, PlatformPeople, platformPeopleEnabled } from '../src/mind/memory/platformPeople.js';
 import { PlatformConversationSummarizer, acceptedPlatformSummary } from '../src/surfaces/platform/platformPeopleSummaries.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { promptOf } from './modelPrompt.js';

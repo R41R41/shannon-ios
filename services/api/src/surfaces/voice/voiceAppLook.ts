@@ -3,11 +3,11 @@ import {
   LOOK_NOT_NOW_GUARD, LOOK_NOT_SEEN_GUARD, announcedLook, appLookUnavailablePrompt, voiceAppLookOfferPrompt, voiceAppLookPrompt,
 } from '../body/appLookLines.js';
 import { asksToLook, type BodyLookVoiceTurn } from '../body/bodyLook.js';
-import type { VoiceLooks } from '../body/conversationLooks.js';
+import type { VoiceLooks } from '../../mind/perception/conversationLooks.js';
 import { VOICE_ROOM_LOOK_READY_PROMPT, voiceRoomLookPrompt, voiceRoomLookTurn, type VoiceRoomLookTurn } from './voiceRoomLook.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
-export type { VoiceLooks } from '../body/conversationLooks.js';
+export type { VoiceLooks } from '../../mind/perception/conversationLooks.js';
 
 /**
  * One look from a voice turn, through her body or through the app the turn came from (`conversationLooks.ts` says which).

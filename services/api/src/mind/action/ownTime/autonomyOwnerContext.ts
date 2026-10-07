@@ -10,7 +10,7 @@ import type { DailyMindReader } from '../respond/dailyMind.js';
 import { DisclosureGate } from '../../inhibition/memoryDisclosure.js';
 import { visibleReplayMessages } from '../../memory/memoryVisibility.js';
 import type { PeopleMemory } from '../../memory/peopleMemory.js';
-import { prepareTurnCognitiveContext } from '../respond/turnCognitiveContext.js';
+import { prepareTurnCognitiveContext } from '../../workspace/contextPorts.js';
 
 /**
  * The owner's context for her own activity (owner decision 2026-10-02, Syzygy ADR-0003: 「基本的に全部見ていい」). Core: memory.

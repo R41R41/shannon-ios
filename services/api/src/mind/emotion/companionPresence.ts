@@ -15,32 +15,18 @@ import {
   type ShannonExpressiveEmotion,
   type ShannonPresentMood,
   type ShannonTemperamentReasons,
+  ownerDay,
 } from '@shannon/cognition';
+// Moved to the pure package in Syzygy ADR-0008 stage 3 (S3), unchanged; re-exported for its readers.
+export { ownerDay } from '@shannon/cognition';
 import { emotionTiming } from './emotionTiming.js';
 
 export { emotionTiming };
 import { decidedReplyFeeling, type ChatReplyFeeling } from './chatReplyFeeling.js';
 export { replyFeelingOffer } from './chatReplyFeeling.js';
 
-const DEFAULT_TIME_ZONE = 'Asia/Tokyo';
 const SHARED_TIME_LOOKBACK_MILLISECONDS = 31 * 24 * 60 * 60_000;
-const dayFormatters = new Map<string, Intl.DateTimeFormat>();
 
-/** The owner-local calendar day (YYYY-MM-DD) of an instant. */
-export function ownerDay(at: string, timeZone?: string): string {
-  const zone = timeZone || DEFAULT_TIME_ZONE;
-  let formatter = dayFormatters.get(zone);
-  if (!formatter) {
-    try {
-      formatter = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' });
-    } catch {
-      return ownerDay(at, DEFAULT_TIME_ZONE);
-    }
-    dayFormatters.set(zone, formatter);
-  }
-  const time = Date.parse(at);
-  return formatter.format(new Date(Number.isFinite(time) ? time : 0));
-}
 
 /**
  * Evidence that the owner and Shannon talked: the days of recorded owner turns

@@ -50,7 +50,7 @@ import {
   type HostAgentEvent,
 } from '../../mind/action/agentTasks/agentTaskStore.js';
 import { validatedPlaceSearchOptions } from '../../integrations/places/placeDiscovery.js';
-import { chatAudienceTurn } from '../../surfaces/text/chatAudience.js';
+import { chatAudienceTurn } from '../../mind/perception/chatAudience.js';
 import { validChatStream } from '../../surfaces/text/chatSentenceStream.js';
 import { conversationToolServer, type ConversationToolServer } from '../../mind/tools/shannonToolSession.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from '../../mind/action/respond/turnDeadline.js';

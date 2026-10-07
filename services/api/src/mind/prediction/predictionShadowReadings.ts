@@ -10,7 +10,7 @@ import {
   type ShannonEmotionTiming,
   type ShannonExpressiveEmotion,
 } from '@shannon/cognition';
-import { ownerDay } from '../emotion/emotionPorts.js';
+import { ownerDay } from '@shannon/cognition';
 import type { FoldedOutcome } from './predictionShadowFold.js';
 import type { PredictionOutcomeDraft, ShadowComparison } from './store/predictionStore.js';
 

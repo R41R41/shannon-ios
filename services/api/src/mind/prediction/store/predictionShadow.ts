@@ -14,7 +14,7 @@ import {
 } from '@shannon/cognition';
 import { OBSERVATION_RETENTION_DAYS, type AutonomyPredictionTap, type ReachOutFacts } from '../../../contracts/autonomyObservationContract.js';
 import { BODY_LIMITS } from '../../../contracts/bodyContract.js';
-import { ownerDay } from '../../emotion/emotionPorts.js';
+import { ownerDay } from '@shannon/cognition';
 import { emotionTiming } from '../../emotion/emotionPorts.js';
 import { MOOD_HISTORY_LIMITS } from '../../../contracts/moodHistoryContract.js';
 import { createShadowMind, foldOutcome, foldOutcomes, readMind, type FoldedOutcome, type ShadowMind } from '../predictionShadowFold.js';

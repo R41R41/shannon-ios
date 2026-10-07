@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
 import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
-import { chatAudienceTurn } from '../src/surfaces/text/chatAudience.js';
+import { chatAudienceTurn } from '../src/mind/perception/chatAudience.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { ShannonMemoryService } from '../src/mind/memory/memoryService.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';

@@ -10,7 +10,7 @@ import { MemoryEmbeddingWorker } from '../src/mind/memory/memoryEmbeddingWorker.
 import { DeterministicMemoryModelGateway, OpenAIMemoryModelGateway } from '../src/mind/recall/memoryModels.js';
 import { DEFAULT_SEMANTIC_MEMORY_CONFIG, SemanticMemoryRecall, type SemanticMemoryConfig } from '../src/mind/recall/semanticMemoryRecall.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { prepareTurnCognitiveContext } from '../src/mind/action/respond/turnCognitiveContext.js';
+import { prepareTurnCognitiveContext } from '../src/mind/workspace/turnCognitiveContext.js';
 import { ShannonTurnMemoryRecall, withMemorySearchLatency } from '../src/mind/recall/turnMemoryRecall.js';
 import type { VoiceTurnDecision } from '../src/mind/selectors/voiceDecision.js';
 

@@ -20,7 +20,8 @@ import type {
   RealtimeVoiceSessionReservation,
   RealtimeVoiceSessionReservationRequest,
 } from '../../surfaces/voice/realtimeVoice.js';
-import type { KnowledgeAnswer, KnowledgeRevision, KnowledgeSource, KnowledgeStore, LayeredIdentityPrompt, PersonalityProfile } from '../../mind/memory/store/knowledgeStore.js';
+import type { KnowledgeAnswer, KnowledgeRevision, KnowledgeSource, KnowledgeStore, PersonalityProfile } from '../../mind/memory/store/knowledgeStore.js';
+import type { LayeredIdentityPrompt } from '../../mind/memory/identityPrompt.js';
 import { SQLiteBackgroundJobRepository } from './sqliteBackgroundJobRepository.js';
 import { SQLiteCompanionRepository } from './sqliteCompanionRepository.js';
 import { ensureSummaryLineageSchema, SQLiteConversationRepository } from './sqliteConversationRepository.js';

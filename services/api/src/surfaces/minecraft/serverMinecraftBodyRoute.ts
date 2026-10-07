@@ -8,7 +8,7 @@ import { MinecraftBody, type MinecraftBodyDependencies, type MinecraftConversati
 import { MINECRAFT_BODY_LIMITS, MINECRAFT_BODY_TURN_PATH, MinecraftBodyError, configuredMinecraftBody, type MinecraftBodyConfiguration } from '../../contracts/minecraftBodyContract.js';
 import { SQLiteMinecraftTurnLog } from './store/minecraftTurnStore.js';
 import type { PeopleMemoryStore } from '../../mind/memory/memoryPorts.js';
-import { platformPeopleEnabled } from '../platform/platformPeople.js';
+import { platformPeopleEnabled } from '../../mind/memory/platformPeople.js';
 import type { MemoryProposals } from '../../mind/memory/memoryPorts.js';
 import { consumeDeviceAllowance, sendJson } from '../../infra/http/serverHttp.js';
 import { closedSignal } from '../../infra/http/apiAutonomyHostStepRoutes.js';

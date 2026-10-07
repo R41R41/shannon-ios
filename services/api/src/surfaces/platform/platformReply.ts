@@ -7,7 +7,7 @@ import type { MinecraftTurnLog } from '../minecraft/store/minecraftTurnStore.js'
 import {
   PlatformBridgeError, type PlatformAudiencePolicy, type PlatformBridgeBinding, type PlatformBridgeService, type ShannonPlatform,
 } from './platformBridge.js';
-import { platformDisplayName, type PlatformConversationKind } from './platformPeople.js';
+import { platformDisplayName, type PlatformConversationKind } from '../../mind/memory/platformPeople.js';
 import { keepOwnerPlatformTurn, platformTextTurnInput, rememberPlatformPerson } from './platformSurface.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 

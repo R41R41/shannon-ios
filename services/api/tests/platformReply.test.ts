@@ -15,7 +15,7 @@ import { conversationCapabilityContext } from '../src/mind/action/respond/conver
 import { SQLiteSurfaceTurnLog } from '../src/surfaces/minecraft/store/minecraftTurnStore.js';
 import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemoryStore.js';
 import { PlatformBridgeError, PlatformBridgeService, configuredPlatformBridge, platformBridgeThreadId } from '../src/surfaces/platform/platformBridge.js';
-import { PlatformPeople } from '../src/surfaces/platform/platformPeople.js';
+import { PlatformPeople } from '../src/mind/memory/platformPeople.js';
 import { PLATFORM_REPLY_LIMITS, PlatformReplyService, SHANNON_PLATFORM_REPLY_PATH, platformReplyEnabled } from '../src/surfaces/platform/platformReply.js';
 import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeReply, isPlatformBridgePath } from '../src/surfaces/platform/serverPlatformBridgeRoute.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
