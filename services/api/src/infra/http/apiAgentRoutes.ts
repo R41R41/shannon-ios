@@ -9,11 +9,8 @@ import type {
 } from '../../mind/action/agentTasks/agentTaskStore.js';
 import type { ApiRequest, ApiResponse } from '../../contracts/contracts.js';
 import { badRequest, objectBody, validAgentCommandType, validBoundedString, validHostEvents, validPlan, validScopeKey } from './apiValidation.js';
-import {
-  normalizedAgentProjectKey,
-  normalizedGitHubRepositoryURL,
-  type AgentProjectProvisioningEvent,
-} from '../../mind/action/agentTasks/store/agentProjectProvisioning.js';
+import { type AgentProjectProvisioningEvent } from '../../mind/action/agentTasks/store/agentProjectProvisioning.js';
+import { normalizedAgentProjectKey, normalizedGitHubRepositoryURL } from '../../mind/action/agentTasks/agentProjectNames.js';
 import {
   normalizedResourcePath,
   type AgentWorkspaceResourceEvent,

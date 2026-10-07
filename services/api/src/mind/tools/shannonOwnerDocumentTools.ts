@@ -1,5 +1,5 @@
 import { aetherErrorCode, type AetherAccess } from '../../integrations/aether/aetherAccess.js';
-import { AETHER_DOCUMENT_PREFIX } from '../inhibition/store/ownerInformedMarks.js';
+import { AETHER_DOCUMENT_PREFIX } from '../inhibition/provenancePorts.js';
 import { DEFAULT_READ_CHARACTERS, NOT_CONFIGURED, aetherToolFailure, documentText, hitLines } from './shannonAetherTools.js';
 import { numberInput, stringInput } from './shannonToolInput.js';
 import type { PreparedToolCall, ToolExecutor, ToolRun } from './shannonToolTypes.js';

@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import type { CandidateRow } from './initiativeSelection.js';
+import type { CandidateRow } from '../../../mind/action/respond/initiativeSelection.js';
 
 const STALE_INTENT_MILLISECONDS = 24 * 60 * 60_000;
 

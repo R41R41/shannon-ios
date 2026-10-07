@@ -3,7 +3,7 @@ import { validatedBodyCapabilities, validatedBodyEvents } from '../src/contracts
 import { bodyReactionContentHash, validatedBodyReactionRequest, type BodyReactionRequest } from '../src/contracts/bodyReactionContract.js';
 import { bodyTouchLine } from '../src/surfaces/body/bodyReactionPrompt.js';
 import type { StoredTouchBurst } from '../src/surfaces/body/store/bodyReactionStore.js';
-import { touchExperienceSummary } from '../src/surfaces/body/store/bodyTouchMemory.js';
+import { touchExperienceSummary } from '../src/mind/memory/store/bodyTouchMemory.js';
 import { addColumnOnce } from '../src/surfaces/body/store/bodyStore.js';
 import {
   BODY_SURFACES, BODY_TOUCH_PARTS, BODY_TOUCH_PART_WORDS, BODY_TOUCH_REGIONS, bodyPlace, bodySurfaceMark, bodyTouchPartWord, bodyWhere, burstTouchPhrase,

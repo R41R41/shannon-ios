@@ -1,7 +1,7 @@
 import { configuredBodyReactions } from '../contracts/bodyReactionContract.js';
 import { createConfiguredBodyReactionSpeaker } from '../surfaces/body/bodyReactionModel.js';
 import { SQLiteBodyReactionStore } from '../surfaces/body/store/bodyReactionStore.js';
-import { SQLiteTouchExperiences } from '../surfaces/body/store/bodyTouchMemory.js';
+import { SQLiteTouchExperiences } from '../mind/memory/store/bodyTouchMemory.js';
 import { touchPredictionEnabled } from '../mind/prediction/bodyTouchPrediction.js';
 import type { LlmUsageEvent } from '../infra/models/llmUsage.js';
 import type { ShannonBodyOptions } from '../surfaces/body/shannonBody.js';

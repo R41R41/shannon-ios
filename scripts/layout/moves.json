@@ -263,9 +263,9 @@
       "why": "Announces budget requests via initiative"
     },
     "autonomyAwakeClock.ts": {
-      "to": "mind/emotion/autonomyAwakeClock.ts",
-      "wave": 2,
-      "why": "Awake clock write to companion state"
+      "to": "mind/emotion/store/autonomyAwakeClock.ts",
+      "wave": 7,
+      "why": "Awake clock write to companion state; stage 3 moved it to its part"
     },
     "autonomyBudget.ts": {
       "to": "mind/inhibition/autonomyBudget.ts",
@@ -603,9 +603,9 @@
       "why": "Touch entrance that moves her feeling"
     },
     "bodyTouchMemory.ts": {
-      "to": "surfaces/body/store/bodyTouchMemory.ts",
-      "wave": 3,
-      "why": "SQL experience rows for touches"
+      "to": "mind/memory/store/bodyTouchMemory.ts",
+      "wave": 7,
+      "why": "SQL experience rows for touches; stage 3 moved it to its part"
     },
     "bodyTouchOnly.ts": {
       "to": "surfaces/body/bodyTouchOnly.ts",
@@ -948,9 +948,9 @@
       "why": "Places a call from Shannon"
     },
     "initiativeIntentCandidates.ts": {
-      "to": "mind/action/respond/initiativeIntentCandidates.ts",
-      "wave": 6,
-      "why": "Initiative candidates from intents"
+      "to": "surfaces/outreach/store/initiativeIntentCandidates.ts",
+      "wave": 7,
+      "why": "Initiative candidates from intents; stage 3 moved it to its part; stage 3 moved it to its part"
     },
     "initiativeSchedule.ts": {
       "to": "surfaces/outreach/initiativeSchedule.ts",
@@ -1263,9 +1263,9 @@
       "why": "Platform surface of the kernel"
     },
     "predictionShadow.ts": {
-      "to": "mind/prediction/predictionShadow.ts",
-      "wave": 2,
-      "why": "Prediction shadow taps; split later"
+      "to": "mind/prediction/store/predictionShadow.ts",
+      "wave": 7,
+      "why": "Prediction shadow taps; split later; stage 3 moved it to its part"
     },
     "predictionShadowFold.ts": {
       "to": "mind/prediction/predictionShadowFold.ts",
@@ -1841,6 +1841,11 @@
       "to": "integrations/world/store/worldStore.ts",
       "wave": 1,
       "why": "SQL world store"
+    },
+    "bodyTouchExperience.ts": {
+      "to": "mind/memory/bodyTouchExperience.ts",
+      "wave": 7,
+      "why": "Syzygy ADR-0008 stage 3; stage 3 moved it to its part"
     }
   }
 }

@@ -12,7 +12,7 @@ import type { BodyTouchGesture } from '../../contracts/bodyContract.js';
 import type { TouchLedger } from '../../contracts/cognitionLedgerContract.js';
 import type { TouchRecord } from '../../surfaces/body/store/bodyReactionStore.js';
 import type { BodyTouchStance } from '../../surfaces/body/bodyTouchReflex.js';
-import type { PredictionShadow } from './predictionShadow.js';
+import type { PredictionShadow } from './store/predictionShadow.js';
 import { outcome } from './predictionShadowReadings.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 

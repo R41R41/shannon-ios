@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { OWNER_AUDIENCE, type MemoryDisclosure } from '@shannon/cognition';
 import type { BodyEvent } from '../../../contracts/bodyContract.js';
-import { touchWhen } from '../../body/store/bodyTouchMemory.js';
+import { touchWhen } from '../../../mind/memory/bodyTouchExperience.js';
 
 /**
  * What happened to her Minecraft body as something she remembers (phase 1: only that she died, and of what).

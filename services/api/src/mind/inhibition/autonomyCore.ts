@@ -45,7 +45,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'packages/cognition/src/emotionTime.ts',
     'packages/cognition/src/emotionContinuity.ts',
     'services/api/src/mind/emotion/emotionTiming.ts',
-    'services/api/src/mind/emotion/autonomyAwakeClock.ts',
+    'services/api/src/mind/emotion/store/autonomyAwakeClock.ts',
     // The record of her mood written beside each committed state write; it reads the state and never changes it.
     'services/api/src/mind/emotion/store/moodHistory.ts',
     'packages/cognition/src/emotionOverrides.ts',
@@ -68,7 +68,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'packages/cognition/src/predictionDomains.ts',
     'packages/cognition/src/affectDynamics.ts',
     'services/api/src/mind/prediction/store/predictionStore.ts',
-    'services/api/src/mind/prediction/predictionShadow.ts',
+    'services/api/src/mind/prediction/store/predictionShadow.ts',
     'services/api/src/mind/prediction/predictionShadowFold.ts',
     'services/api/src/mind/prediction/predictionShadowReadings.ts',
     // Syzygy ADR-0006 stage 2: a touch's startle and her stance's prediction error move her (`SHANNON_PREDICTION`).
@@ -92,6 +92,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
   authentication: Object.freeze([
     'services/api/src/infra/auth/apiAuth.ts',
     'services/api/src/infra/auth/deviceAuth.ts',
+    // Syzygy ADR-0008 stage 3 (S2): its SQLite part, split out unchanged.
+    'services/api/src/infra/auth/store/deviceAuthStore.ts',
     'services/api/src/authCli.ts',
     'services/api/src/infra/auth/serverPairingRoute.ts',
     'services/api/src/infra/auth/serverDeviceRoutes.ts',
@@ -181,7 +183,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/memory/ownerUpcoming.ts',
     'services/api/src/wiring/ownerUpcomingWiring.ts',
     // A touch as an experience she recalls, and her line while it waits outside the conversation.
-    'services/api/src/surfaces/body/store/bodyTouchMemory.ts',
+    'services/api/src/mind/memory/store/bodyTouchMemory.ts',
     'services/api/src/surfaces/body/store/bodyReactionStore.ts',
     // What happened to her Minecraft body as an experience, and the replay of her game-chat answers.
     'services/api/src/surfaces/minecraft/store/gameBodyMemory.ts',
@@ -220,10 +222,13 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/action/ownTime/autonomyModels.ts',
     'services/api/src/mind/action/ownTime/store/autonomyStore.ts',
     'services/api/src/mind/self/autonomyPursuits.ts',
+    // Stage 3 (S2): its ledger, moved unchanged into her own time's store folder.
+    'services/api/src/mind/action/ownTime/store/pursuitLedger.ts',
     'services/api/src/mind/action/ownTime/store/autonomyProposals.ts',
     'services/api/src/mind/action/ownTime/autonomyService.ts',
     'services/api/src/mind/action/ownTime/autonomyServiceParts.ts',
     'services/api/src/mind/action/ownTime/autonomyAnnouncer.ts',
+    'services/api/src/mind/action/ownTime/store/autonomyAnnouncerStore.ts',
     'services/api/src/infra/http/apiAutonomyRoutes.ts',
     // The activity loop: every step it takes passes the gate, the budget, and the record.
     'services/api/src/mind/action/ownTime/autonomyLoop.ts',

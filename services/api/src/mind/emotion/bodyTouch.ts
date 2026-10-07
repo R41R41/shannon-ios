@@ -2,7 +2,7 @@ import { memoryControlFor, type CompanionStateSnapshot, type CompanionStateStore
 import { BODY_LIMITS } from '../../contracts/bodyContract.js';
 import { BODY_REACTION_LIMITS } from '../../contracts/bodyReactionContract.js';
 import type { SQLiteBodyReactionStore, StoredTouchBurst, TouchRecord } from '../../surfaces/body/store/bodyReactionStore.js';
-import { touchExperience, type TouchExperienceWriter } from '../../surfaces/body/store/bodyTouchMemory.js';
+import { touchExperience, type TouchExperienceWriter } from '../memory/touchMemoryPorts.js';
 import { reflexPartWord, type BodyTouchStance } from '../../surfaces/body/bodyTouchReflex.js';
 import { TouchPredictions, stanceOutcome, type TouchPrediction, type TouchPredictionRecord } from '../prediction/predictionPorts.js';
 

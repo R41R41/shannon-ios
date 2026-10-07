@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { autonomyDomainLabel } from '@shannon/cognition';
-import { roundYen } from '../autonomyBudget.js';
+import { formatYen, roundYen } from '../autonomyBudget.js';
+// Moved to the budget in Syzygy ADR-0008 stage 3 (S2), so a value helper is no store's; re-exported for its readers.
+export { formatYen } from '../autonomyBudget.js';
 import { autonomyDayLog } from '../autonomyDayLog.js';
 
 /**
@@ -182,10 +184,6 @@ export function summarizeAutonomyDay(dayKey: string, entries: readonly AutonomyA
   return Object.freeze({ dayKey, summary, counts, costYen, entries: Object.freeze([...entries]) });
 }
 
-export function formatYen(value: number): string {
-  const rounded = roundYen(value);
-  return `${Number.isInteger(rounded) ? rounded.toLocaleString('en-US') : rounded.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}円`;
-}
 
 function entry(row: ActivityRow): AutonomyActivityEntry {
   return Object.freeze({

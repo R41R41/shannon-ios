@@ -5,9 +5,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SHANNON_STANCE_OUTCOME, SHANNON_TEMPERAMENT, shannonTemperament } from '@shannon/cognition';
 import type { BodyReactionDecision } from '../src/surfaces/body/bodyReactionPrompt.js';
-import type { TouchExperience, TouchExperienceWriter } from '../src/surfaces/body/store/bodyTouchMemory.js';
+import type { TouchExperience, TouchExperienceWriter } from '../src/mind/memory/store/bodyTouchMemory.js';
 import { touchPredictionEnabled, touchPredictionKey } from '../src/mind/prediction/bodyTouchPrediction.js';
-import { PredictionShadow } from '../src/mind/prediction/predictionShadow.js';
+import { PredictionShadow } from '../src/mind/prediction/store/predictionShadow.js';
 import { SQLitePredictionStore } from '../src/mind/prediction/store/predictionStore.js';
 import { MINUTE, SECOND, reactionHarness, scope } from './bodyReactionHarness.js';
 

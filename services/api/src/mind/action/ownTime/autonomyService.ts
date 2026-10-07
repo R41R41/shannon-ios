@@ -10,12 +10,11 @@ import {
   type ShannonPursuitStatus,
 } from '@shannon/cognition';
 import type { AgentTask, AgentTaskStore } from '../agentTasks/agentTasksPorts.js';
-import { formatYen, type AutonomyActivityDay, type AutonomyActivityEntry } from '../../inhibition/store/autonomyActivity.js';
 import { DisabledAutonomyAnnouncer, type AutonomyAnnouncer } from './autonomyAnnouncer.js';
 import { autonomyLoopStatus, type AutonomyLoopStatus } from '../../inhibition/autonomyDayLog.js';
 import {
-  authorizeAutonomousAction, autonomyBudgetStatus, autonomyDayKey, configuredAutonomy, yenFromUsd, type AutonomousActionRequest, type AutonomyBudgetStatus,
-  type AutonomyConfig, type AutonomyDecision, type GateRefusalObserver,
+  authorizeAutonomousAction, autonomyBudgetStatus, autonomyDayKey, configuredAutonomy, formatYen, yenFromUsd, type AutonomousActionRequest, type AutonomyActivityDay,
+  type AutonomyActivityEntry, type AutonomyBudgetStatus, type AutonomyConfig, type AutonomyDecision, type GateRefusalObserver,
 } from '../../inhibition/inhibitionPorts.js';
 import {
   autonomyModel, autonomyModelAllowedFor, autonomyModelChoices, autonomyModelCostUsd, isAutonomyModelPurpose,

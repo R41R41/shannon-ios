@@ -3,4 +3,4 @@
  * may import of it (a touch's predictions and the type of the shadow).
  */
 export { TouchPredictions, stanceOutcome, touchPredictionEnabled, type TouchPrediction, type TouchPredictionRecord } from './bodyTouchPrediction.js';
-export { type PredictionShadow } from './predictionShadow.js';
+export { type PredictionShadow } from './store/predictionShadow.js';

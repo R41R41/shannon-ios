@@ -3,7 +3,8 @@ import {
 } from '../../../integrations/aether/aetherAccess.js';
 import type { SQLiteAutonomyStore } from './store/autonomyStore.js';
 import type { StudyAetherLink } from './store/studyAetherLinks.js';
-import { STUDY_LIMITS, type StudyPiece, type StudyPieceKind } from './store/studyStore.js';
+import { type StudyPiece, type StudyPieceKind } from './store/studyStore.js';
+import { STUDY_LIMITS } from './studyVocabulary.js';
 
 /**
  * Her study in Aether (Syzygy ADR-0007 and its revision of 2026-10-06, owner decision): her stories are documents tagged

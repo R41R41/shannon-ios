@@ -12,7 +12,7 @@ import { groundedWorldOpening, topicMatchesSource, worldVisibleInterests } from 
 import {
   intentInitiativeCandidateIsCurrent,
   intentInitiativeCandidates,
-} from '../../../mind/action/respond/initiativeIntentCandidates.js';
+} from './initiativeIntentCandidates.js';
 
 import {
   candidateScore,

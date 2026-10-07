@@ -39,7 +39,7 @@ import { SQLiteImpressionStore } from '../../mind/memory/store/sqliteImpressions
 import { ensureMoodHistorySchema, pruneMoodHistory, recordMoodPoint } from '../../mind/emotion/store/moodHistory.js';
 import { SQLiteRealtimeVoiceRepository } from './sqliteRealtimeVoiceRepository.js';
 import { moodHistoryRecording, type MoodHistoryRecording } from '../../contracts/moodHistoryContract.js';
-import { PredictionShadow, predictionShadowEnabled } from '../../mind/prediction/predictionShadow.js';
+import { PredictionShadow, predictionShadowEnabled } from '../../mind/prediction/store/predictionShadow.js';
 import { DecisionTraces, decisionTracesEnabled } from '../../mind/inhibition/decisionTraces.js';
 import { jevUsageRow } from '../models/jev/jevUsage.js';
 import { configuredSkillBudgetUsd } from '../models/llmUsage.js';

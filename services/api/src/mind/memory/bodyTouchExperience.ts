@@ -1,11 +1,7 @@
-import { DatabaseSync } from 'node:sqlite';
-import {
-  OWNER_AUDIENCE, SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME, SHANNON_TOUCH_FEELINGS, classifySensitivity,
-  type MemoryDisclosure,
-} from '@shannon/cognition';
-import { BODY_TOUCH_SOURCE } from '../../../contracts/bodyReactionContract.js';
-import type { StoredTouchBurst } from './bodyReactionStore.js';
-import { bodyWhere, burstTouchPhrase, touchDetailPhrase } from '../bodyTouchWords.js';
+/** A touch as an experience she recalls: its words and when (Syzygy ADR-0008 stage 3, S2: the rules of `bodyTouchMemory.ts`, moved out of the store unchanged). */
+import { classifySensitivity, type MemoryDisclosure, OWNER_AUDIENCE, SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME, SHANNON_TOUCH_FEELINGS } from '@shannon/cognition';
+import type { StoredTouchBurst } from '../../surfaces/body/store/bodyReactionStore.js';
+import { bodyWhere, burstTouchPhrase, touchDetailPhrase } from '../../surfaces/body/bodyTouchWords.js';
 
 /**
  * A touch as something she remembers. Touches of one kind that follow each other are one
@@ -34,6 +30,7 @@ export interface TouchExperienceWriter {
 }
 
 const DAY_PARTS: ReadonlyArray<readonly [number, string]> = [[5, '深夜'], [11, '朝'], [13, '昼'], [18, '午後'], [23, '夜'], [24, '深夜']];
+
 const localParts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: 'numeric', hourCycle: 'h23' });
 
 /** 「10月2日の午後」: the owner-local day and part of the day, so 「今日の午後」 finds it. */
@@ -92,60 +89,4 @@ export function touchExperience(burst: StoredTouchBurst, options: { parts?: bool
     }),
     touch: { type: burst.type, count: burst.count, totalDurationMs: burst.totalDurationMs, lastAt: burst.lastAt, others: burst.others },
   };
-}
-
-export class SQLiteTouchExperiences implements TouchExperienceWriter {
-  private readonly database: DatabaseSync;
-
-  constructor(path: string) {
-    this.database = new DatabaseSync(path);
-    this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
-  }
-
-  write(scopeKey: string, experience: TouchExperience): boolean {
-    // The experience table belongs to the conversation store.
-    if (!this.has('table', 'experience_events')) return false;
-    const payload = JSON.stringify({
-      userMessage: touchEvidence(experience.id), shannonReply: experience.shannonReply, summary: experience.summary, disclosure: experience.disclosure,
-      source: BODY_TOUCH_SOURCE, touch: experience.touch,
-    });
-    this.database.exec('BEGIN IMMEDIATE');
-    try {
-      // The insert trigger of the search index runs for a new experience only.
-      const inserted = this.database.prepare(`
-        INSERT OR IGNORE INTO experience_events (event_id, scope_key, event_type, observed_at, payload_json) VALUES (?, ?, 'turn.completed', ?, ?)
-      `).run(experience.id, scopeKey, experience.observedAt, payload);
-      if (!Number(inserted.changes)) {
-        const updated = this.database.prepare(`
-          UPDATE experience_events SET payload_json = ?
-          WHERE event_id = ? AND scope_key = ? AND event_type = 'turn.completed' AND json_extract(payload_json, '$.source') = ?
-        `).run(payload, experience.id, scopeKey, BODY_TOUCH_SOURCE);
-        if (!Number(updated.changes)) {
-          this.database.exec('ROLLBACK');
-          return false;
-        }
-        // A rewritten memory is searched and embedded by its new text.
-        if (this.has('table', 'memory_search_documents')) {
-          const revision = (this.database.prepare("PRAGMA table_info('memory_search_documents')").all() as unknown as Array<{ name: string }>)
-            .some(column => column.name === 'revision') ? ', revision = revision + 1' : '';
-          this.database.prepare(`
-            UPDATE memory_search_documents SET body = ?${revision} WHERE source_kind = 'experience' AND source_id = ? AND scope_key = ? AND body IS NOT ?
-          `).run(experience.summary.slice(0, 2_000), experience.id, scopeKey, experience.summary.slice(0, 2_000));
-        }
-      }
-      this.database.exec('COMMIT');
-      return true;
-    } catch (error) {
-      if (this.database.isTransaction) this.database.exec('ROLLBACK');
-      throw error;
-    }
-  }
-
-  close(): void {
-    if (this.database.isOpen) this.database.close();
-  }
-
-  private has(type: string, name: string): boolean {
-    return Boolean(this.database.prepare('SELECT 1 AS found FROM sqlite_master WHERE type = ? AND name = ?').get(type, name));
-  }
 }

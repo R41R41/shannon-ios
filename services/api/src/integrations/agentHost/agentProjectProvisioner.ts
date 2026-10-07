@@ -3,12 +3,8 @@ import { existsSync, mkdirSync, realpathSync, renameSync, rmSync, statSync } fro
 import { join, relative } from 'node:path';
 import type { AgentHostConfig } from './agentHostConfig.js';
 import type { AgentHostStateStore } from './agentHostState.js';
-import {
-  normalizedAgentProjectKey,
-  normalizedGitHubRepositoryURL,
-  type AgentProjectProvisioningEvent,
-  type ClaimedAgentProjectProvisioning,
-} from '../../mind/action/agentTasks/store/agentProjectProvisioning.js';
+import { type AgentProjectProvisioningEvent, type ClaimedAgentProjectProvisioning } from '../../mind/action/agentTasks/agentTasksPorts.js';
+import { normalizedAgentProjectKey, normalizedGitHubRepositoryURL } from '../../mind/action/agentTasks/projectNamesPorts.js';
 import { processEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export class AgentProjectProvisioner {

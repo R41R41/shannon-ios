@@ -1,5 +1,3 @@
-import type { DatabaseSync } from 'node:sqlite';
-
 /**
  * The provenance mark (owner decision 2026-10-06, Syzygy ADR-0007 「自分の時間に所有者の文書を読む」): what she writes after
  * reading the owner's documents, or a shared Notion page, is marked, and a turn with anyone else present does not read it.
@@ -15,10 +13,9 @@ import type { DatabaseSync } from 'node:sqlite';
  * The literal filters of a turn with others present (`aetherShownText.ts`) stay as a second layer; they cannot catch a retelling,
  * which is why this mark exists.
  */
-export const STUDY_DOCUMENT_PREFIX = 'shannon-study://';
-export const AETHER_DOCUMENT_PREFIX = 'aether://documents/';
-/** A reading her own time keeps until she writes a note about it (`autonomy_loop_readings`), when it came from a shared Notion page. */
-export const READING_DOCUMENT_PREFIX = 'autonomy-reading://';
+import type { DatabaseSync } from 'node:sqlite';
+import { STUDY_DOCUMENT_PREFIX, AETHER_DOCUMENT_PREFIX } from '../ownerInformedPrefixes.js';
+export { STUDY_DOCUMENT_PREFIX, AETHER_DOCUMENT_PREFIX, READING_DOCUMENT_PREFIX } from '../ownerInformedPrefixes.js';
 
 /** An id as it is stored and looked up: the same cut both ways, so two long ids that share a start are both marked (fails closed). */
 const ID_CHARACTERS = 300;

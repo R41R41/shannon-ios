@@ -2,11 +2,7 @@
   "schemaVersion": 1,
   "about": "Violations of scripts/api-layers.json on the projected layout when the rules were introduced (Syzygy ADR-0008 §6). It may only shrink: fix one, then run `node scripts/check-api-layers.mjs --update-baseline`.",
   "violations": {
-    "integrations-outside-mind": [
-      "integrations/agentHost/agentProjectProvisioner.ts -> mind/action/agentTasks/store/agentProjectProvisioning.ts"
-    ],
     "mind-via-ports": [
-      "mind/action/ownTime/autonomyAnnouncer.ts -> mind/inhibition/store/autonomyActivity.ts",
       "mind/action/ownTime/autonomyLoopProvenance.ts -> mind/inhibition/store/ownerInformedMarks.ts",
       "mind/action/ownTime/autonomyLoopSteps.ts -> mind/inhibition/store/ownerInformedMarks.ts",
       "mind/action/ownTime/autonomyLoopSteps.ts -> mind/tools/shannonToolTypes.ts",
@@ -22,7 +18,6 @@
       "mind/action/ownTime/autonomyOwnerContext.ts -> mind/recall/conversationWindow.ts",
       "mind/action/ownTime/autonomyService.ts -> mind/inhibition/autonomyDayLog.ts",
       "mind/action/ownTime/autonomyService.ts -> mind/inhibition/autonomyPaths.ts",
-      "mind/action/ownTime/autonomyService.ts -> mind/inhibition/store/autonomyActivity.ts",
       "mind/action/ownTime/autonomyService.ts -> mind/tools/shannonMinecraftTools.ts",
       "mind/action/ownTime/autonomyService.ts -> mind/tools/shannonToolRunner.ts",
       "mind/action/ownTime/autonomySessionView.ts -> mind/emotion/companionPresence.ts",
@@ -45,11 +40,9 @@
       "mind/recall/conversationWindow.ts -> mind/inhibition/conversationSecrets.ts",
       "mind/recall/conversationWindow.ts -> mind/tools/shannonToolTrace.ts",
       "mind/recall/conversationWindow.ts -> mind/tools/shannonTools.ts",
-      "mind/recall/semanticMemoryRecall.ts -> mind/memory/store/sqliteMemoryEmbeddings.ts",
       "mind/recall/turnMemoryRecall.ts -> mind/action/respond/turnCognitiveContext.ts",
       "mind/sleep/backgroundUpdates.ts -> mind/action/respond/cognitiveIntent.ts",
       "mind/sleep/backgroundUpdates.ts -> mind/action/respond/commitmentCommands.ts",
-      "mind/sleep/backgroundUpdates.ts -> mind/memory/store/turnCaptures.ts",
       "mind/sleep/knowledgeConsolidation.ts -> mind/recall/turnKnowledgeRecall.ts",
       "mind/sleep/sleepCommitmentReview.ts -> mind/memory/memoryVisibility.ts",
       "mind/sleep/sleepConsolidationRules.ts -> mind/memory/memoryService.ts",
@@ -58,7 +51,6 @@
       "mind/tools/shannonFolderTools.ts -> mind/action/ownTime/hostFolderOperationResults.ts",
       "mind/tools/shannonFolderTools.ts -> mind/action/ownTime/hostFolderOperations.ts",
       "mind/tools/shannonFolderTools.ts -> mind/action/ownTime/store/hostFolderOperationsStore.ts",
-      "mind/tools/shannonOwnerDocumentTools.ts -> mind/inhibition/store/ownerInformedMarks.ts",
       "mind/tools/shannonStudyTools.ts -> mind/action/ownTime/store/autonomyStore.ts",
       "mind/tools/shannonStudyTools.ts -> mind/action/ownTime/store/studyStore.ts",
       "mind/tools/shannonStudyTools.ts -> mind/action/ownTime/studyAether.ts",
@@ -78,16 +70,7 @@
       "mind/action/ownTime/autonomyShowing.ts -> mind/action/respond/initiativeSelection.ts"
     ],
     "sqlite-in-stores": [
-      "infra/auth/deviceAuth.ts -> node:sqlite",
-      "mind/action/ownTime/autonomyAnnouncer.ts -> node:sqlite",
-      "mind/action/ownTime/autonomyShowing.ts -> node:sqlite",
-      "mind/action/respond/cognitiveIntent.ts -> node:sqlite",
-      "mind/action/respond/dailyMind.ts -> node:sqlite",
-      "mind/action/respond/initiativeIntentCandidates.ts -> node:sqlite",
-      "mind/emotion/autonomyAwakeClock.ts -> node:sqlite",
-      "mind/prediction/predictionShadow.ts -> node:sqlite",
-      "mind/self/autonomyPursuits.ts -> node:sqlite",
-      "surfaces/minecraft/minecraftBodyRequests.ts -> node:sqlite"
+      "mind/action/ownTime/autonomyShowing.ts -> node:sqlite"
     ],
     "surfaces-apart": [
       "surfaces/body/privateListeningRoutes.ts -> surfaces/outreach/incomingCalls.ts",
@@ -101,9 +84,7 @@
       "surfaces/minecraft/minecraftBody.ts -> surfaces/platform/platformBridge.ts",
       "surfaces/minecraft/minecraftBody.ts -> surfaces/platform/platformPeople.ts",
       "surfaces/minecraft/minecraftBody.ts -> surfaces/platform/platformSurface.ts",
-      "surfaces/minecraft/minecraftBodyRequests.ts -> surfaces/body/store/bodyTouchMemory.ts",
       "surfaces/minecraft/serverMinecraftBodyRoute.ts -> surfaces/platform/platformPeople.ts",
-      "surfaces/minecraft/store/gameBodyMemory.ts -> surfaces/body/store/bodyTouchMemory.ts",
       "surfaces/outreach/incomingCallRequests.ts -> surfaces/body/store/privateListeningStore.ts",
       "surfaces/outreach/privateReachOuts.ts -> surfaces/body/desktopBodyIdentity.ts",
       "surfaces/outreach/privateReachOuts.ts -> surfaces/body/store/privateListeningStore.ts",
@@ -126,9 +107,6 @@
       "surfaces/body/serverPrivateListeningRoute.ts -> surfaces/outreach/store/reachOutReports.ts",
       "surfaces/body/shannonBody.ts -> surfaces/minecraft/store/gameBodyMemory.ts",
       "surfaces/body/shannonBody.ts -> surfaces/outreach/store/reachOutReports.ts",
-      "surfaces/minecraft/minecraftBodyRequests.ts -> infra/sqlite/sqliteStoreContext.ts",
-      "surfaces/minecraft/minecraftBodyRequests.ts -> surfaces/body/store/bodyTouchMemory.ts",
-      "surfaces/minecraft/store/gameBodyMemory.ts -> surfaces/body/store/bodyTouchMemory.ts",
       "surfaces/outreach/incomingCallRequests.ts -> surfaces/body/store/privateListeningStore.ts",
       "surfaces/outreach/privateReachOuts.ts -> surfaces/body/store/privateListeningStore.ts",
       "surfaces/outreach/store/initiativeStore.ts -> surfaces/body/store/bodyLookDelivery.ts",

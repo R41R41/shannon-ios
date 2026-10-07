@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+export { cosineSimilarity } from '../embeddingMath.js';
 
 export type EmbeddingSourceKind = 'experience' | 'thread' | 'knowledge';
 
@@ -229,13 +230,6 @@ export function unitVector(vector: Float32Array): Float32Array {
   if (!Number.isFinite(norm) || norm === 0) return result;
   for (let index = 0; index < vector.length; index += 1) result[index] = vector[index]! / norm;
   return result;
-}
-
-export function cosineSimilarity(left: Float32Array, right: Float32Array): number {
-  if (left.length !== right.length || !left.length) return 0;
-  let dot = 0;
-  for (let index = 0; index < left.length; index += 1) dot += left[index]! * right[index]!;
-  return Number.isFinite(dot) ? dot : 0;
 }
 
 function decodeVector(value: Uint8Array): Float32Array {

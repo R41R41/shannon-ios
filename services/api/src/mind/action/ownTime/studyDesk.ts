@@ -3,10 +3,8 @@ import { autonomyDayPhrases } from '../../inhibition/autonomyDayLog.js';
 import { AUTONOMY_REACH_OUT_MEMORY_MAXIMUM, reachOutMemories, reachOutMemoryLine } from './autonomyLoopObservePrompts.js';
 import type { SQLiteAutonomyStore } from './store/autonomyStore.js';
 import { syncedWithin, type StudyAether } from './studyAether.js';
-import {
-  STUDY_KIND_LABEL, STUDY_REACTION_LABEL, STUDY_STATUS_LABEL,
-  type StudyPiece, type StudyPieceKind, type StudyPieceStatus, type StudyReaction, type StudyRejection, type StudySource,
-} from './store/studyStore.js';
+import { STUDY_REACTION_LABEL, type StudyPiece, type StudyPieceKind, type StudyPieceStatus, type StudyReaction, type StudyRejection, type StudySource } from './store/studyStore.js';
+import { STUDY_KIND_LABEL, STUDY_STATUS_LABEL } from './studyVocabulary.js';
 
 /** What is told after the owner reacted to a story: the piece and the reaction's enum, never his comment. */
 export type StudyReactionTap = (scopeKey: string, pieceId: string, reaction: StudyReaction, at: string) => void;

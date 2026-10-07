@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { StudyAetherLinks } from './studyAetherLinks.js';
+import { STUDY_LIMITS } from '../studyVocabulary.js';
+export { STUDY_STATUS_LABEL, STUDY_KIND_LABEL, STUDY_LIMITS } from '../studyVocabulary.js';
 
 /**
  * Shannon's study (書斎): the notes and story drafts she writes in her own time.
@@ -19,21 +21,8 @@ export type StudyPieceKind = 'story' | 'note';
 export type StudyPieceStatus = 'draft' | 'ready' | 'shown' | 'put_away';
 export type StudyReaction = 'like' | 'more' | 'unclear';
 export type StudyPieceOrigin = 'room_look' | 'reach_out';
-
-export const STUDY_STATUS_LABEL: Readonly<Record<StudyPieceStatus, string>> = Object.freeze({
-  draft: '下書き', ready: '見せてもいい', shown: '見せた', put_away: 'しまった',
-});
 export const STUDY_REACTION_LABEL: Readonly<Record<StudyReaction, string>> = Object.freeze({
   like: '好き', more: 'もう少し', unclear: 'よく分からない',
-});
-export const STUDY_KIND_LABEL: Readonly<Record<StudyPieceKind, string>> = Object.freeze({ story: '物語', note: 'メモ' });
-
-export const STUDY_LIMITS = Object.freeze({
-  title: 80, storyBody: 4_000, noteBody: 1_200, changeNote: 400, comment: 400, sources: 8, sourceTitle: 160, sourceUrl: 2_000,
-  /** Stories that may be open (下書き or 見せてもいい) at once. */
-  openStories: 12,
-  /** Reactions kept unread per piece; more than this and the oldest stay but no new one is taken. */
-  pendingFeedback: 6,
 });
 
 export interface StudySource { title: string; url: string }

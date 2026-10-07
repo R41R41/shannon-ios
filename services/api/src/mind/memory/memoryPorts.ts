@@ -24,7 +24,7 @@ export { MemoryWithholding, conversationStoreOf, isForgottenCommitmentEvidence, 
 export { type OwnerUpcoming } from './ownerUpcoming.js';
 export { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert } from './prospectiveMemory.js';
 export { type ConversationStore, type ShannonExperience, type StoredConversationMessage, type TurnPersistenceContext } from './store/conversationStore.js';
-export { type MemoryEmbeddingIndex } from './store/sqliteMemoryEmbeddings.js';
+export { type MemoryEmbeddingIndex, type StoredEmbeddingCandidate } from './store/sqliteMemoryEmbeddings.js';
 export { type ShannonKnowledgeStore } from './store/sqliteShannonKnowledge.js';
 export { MEMORY_OP_KINDS, MEMORY_OP_ORIGINS, memoryOpCodec, type MemoryOp, type MemoryOpDraft, type MemoryOpKind, type MemoryOpOrigin } from './memoryOpCodec.js';
 export { MemoryCommands, MemoryWriter, type MemoryProposals } from './memoryWriter.js';
@@ -34,3 +34,4 @@ export { type IdentityCandidate, type PersonFactRow, type TurnSpeaker } from './
 export { type KnowledgeStore } from './store/knowledgeStore.js';
 export { type PeopleMemoryStore, type PersonMemoryItem, type RememberedPerson } from './store/peopleMemoryStore.js';
 export { type PersonIdentityStore } from './store/personIdentity.js';
+export { type TurnCaptureRecord } from './store/turnCaptures.js';

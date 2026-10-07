@@ -174,3 +174,9 @@ function finite(value: number): number {
 }
 
 export { dailyCount } from '../../infra/config/dailyCount.js';
+
+/** Yen as the owner reads it in her record (moved from the activity store in stage 3, S2, unchanged). */
+export function formatYen(value: number): string {
+  const rounded = roundYen(value);
+  return `${Number.isInteger(rounded) ? rounded.toLocaleString('en-US') : rounded.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}円`;
+}

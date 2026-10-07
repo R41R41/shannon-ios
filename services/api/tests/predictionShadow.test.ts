@@ -10,7 +10,7 @@ import type { StepDependencies } from '../src/mind/action/ownTime/autonomyLoopSt
 import { SHANNON_CORE_PATHS } from '../src/mind/inhibition/autonomyCore.js';
 import { SQLiteBodyReactionStore } from '../src/surfaces/body/store/bodyReactionStore.js';
 import { BodyTouches } from '../src/mind/emotion/bodyTouch.js';
-import { PredictionShadow, decidedFeelingOutcome, predictionShadowEnabled } from '../src/mind/prediction/predictionShadow.js';
+import { PredictionShadow, decidedFeelingOutcome, predictionShadowEnabled } from '../src/mind/prediction/store/predictionShadow.js';
 import { foldOutcomes, readMind } from '../src/mind/prediction/predictionShadowFold.js';
 import { PREDICTION_SOURCE_ID, PREDICTION_SYMBOL, SQLitePredictionStore, ensurePredictionSchema } from '../src/mind/prediction/store/predictionStore.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';

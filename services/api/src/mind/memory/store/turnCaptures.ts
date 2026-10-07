@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import {
   isMemoryEvidenceVisible,
@@ -9,6 +8,8 @@ import {
   type ShannonIntent,
 } from '@shannon/cognition';
 import type { ConversationStore, StoredConversationMessage } from './conversationStore.js';
+import { intentCaptureKey, ownerFacingStatement } from '../turnCaptureKeys.js';
+export { turnCaptureId, intentCaptureKey, ownerFacingStatement } from '../turnCaptureKeys.js';
 
 /**
  * What Shannon took in from one completed turn. The record is written by the
@@ -47,20 +48,6 @@ export interface ReminderView { commitmentId: string; state: 'pending' | 'snooze
 export interface TurnCaptureStore {
   recordTurnCaptures(scopeKey: string, captures: readonly TurnCaptureRecord[]): void;
   turnCaptures(scopeKey: string, turnIds: readonly string[]): readonly TurnCaptureRecord[];
-}
-
-export function turnCaptureId(turnId: string, kind: TurnCaptureKind, key: string): string {
-  return `capture-${createHash('sha256').update(`${turnId}\u0000${kind}\u0000${key}`).digest('hex').slice(0, 24)}`;
-}
-
-/** Same normalization the intention ledger uses to deduplicate a restated goal. */
-export function intentCaptureKey(title: string): string {
-  return title.toLocaleLowerCase('ja-JP').replace(/[\s\p{P}\p{S}]+/gu, '').slice(0, 160);
-}
-
-/** The owner reads their own fact, not the internal third-person sentence. */
-export function ownerFacingStatement(statement: string): string {
-  return statement.replace(/^ユーザー(?:は|の|が)(?:シャノンに)?/u, '').trim() || statement;
 }
 
 /** `commitment:<memory id>:<revision>` is the initiative source reference of a reminder. */

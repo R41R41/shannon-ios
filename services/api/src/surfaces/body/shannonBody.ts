@@ -23,7 +23,7 @@ import { bodyPlace, bodySurfaceMark, factualTouchPhrase, touchPartPhrase, type B
 import { isReflexPart } from './bodyTouchReflex.js';
 import { ConversationLooks } from './conversationLooks.js';
 import { OWNER_CALL_LIMITS, OwnerCalls, type OwnerCallDependencies, type OwnerCallElsewhere, type OwnerCallSurface } from '../voice/ownerCallElsewhere.js';
-import type { TouchExperienceWriter } from './store/bodyTouchMemory.js';
+import type { TouchExperienceWriter } from '../../mind/memory/bodyTouchExperience.js';
 import { gameDeathExperience, type GameExperienceWriter } from '../minecraft/store/gameBodyMemory.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './store/bodyStore.js';
 import { ownerDay, presentCompanionState } from '../../mind/emotion/companionPresence.js';

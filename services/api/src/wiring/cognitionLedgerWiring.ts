@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createAffectDynamics, episodeBoundaryMs, type CompanionStateEvent, type CompanionStateSnapshot } from '@shannon/cognition';
 import { cognitionLedgerSwitches, skillRoutingSwitches } from '@shannon/learning';
 import { RewardMood } from '../mind/emotion/rewardMood.js';
-import type { PredictionShadow } from '../mind/prediction/predictionShadow.js';
+import type { PredictionShadow } from '../mind/prediction/store/predictionShadow.js';
 import type { DecisionTraceWriter } from '../contracts/decisionTraceContract.js';
 import type { VoiceDecisionGateway } from '../contracts/voiceDecisionContract.js';
 import { JEV_QUESTION_LANGUAGE, JEV_QUESTION_SETS } from '../infra/models/jev/jevChoice.js';

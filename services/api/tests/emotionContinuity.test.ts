@@ -8,7 +8,7 @@ import {
   type CompanionStateSnapshot,
 } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
-import { configuredAwakeClock } from '../src/mind/emotion/autonomyAwakeClock.js';
+import { configuredAwakeClock } from '../src/mind/emotion/store/autonomyAwakeClock.js';
 import { TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
 import { SHANNON_CORE_PATHS } from '../src/mind/inhibition/autonomyCore.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';

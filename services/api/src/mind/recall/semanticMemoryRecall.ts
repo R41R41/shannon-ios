@@ -2,7 +2,8 @@ import { visibleMemoryText, type CompanionStateSnapshot, type MemoryAudience, ty
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import type { MemoryModelGateway } from './memoryModels.js';
 import { conversationStoreOf, MemoryWithholding } from '../memory/memoryPorts.js';
-import { cosineSimilarity, type MemoryEmbeddingIndex, type StoredEmbeddingCandidate } from '../memory/store/sqliteMemoryEmbeddings.js';
+import { type MemoryEmbeddingIndex, type StoredEmbeddingCandidate } from '../memory/memoryPorts.js';
+import { cosineSimilarity } from '../memory/embeddingPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export interface SemanticMemoryConfig {

@@ -19,7 +19,8 @@ import { captureImmediateExplicitMemory, type UserFactProposal } from './sleepCo
 import type { ShannonGeneratedArtifact, ShannonTaskDecision } from '../../infra/models/chatModel.js';
 import { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert, type MemoryProposals } from '../memory/memoryPorts.js';
 import { extractExplicitUserIntent } from '../action/respond/cognitiveIntent.js';
-import { intentCaptureKey, ownerFacingStatement, turnCaptureId, type TurnCaptureRecord } from '../memory/store/turnCaptures.js';
+import { type TurnCaptureRecord } from '../memory/memoryPorts.js';
+import { intentCaptureKey, ownerFacingStatement, turnCaptureId } from '../memory/capturePorts.js';
 import { applyExplicitCommitmentCommand } from '../action/respond/commitmentCommands.js';
 import { sharedTimeEvent } from '../emotion/emotionPorts.js';
 import { emotionTiming } from '../emotion/emotionPorts.js';

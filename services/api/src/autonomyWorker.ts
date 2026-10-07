@@ -1,7 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { aetherStudyScope, configuredAetherAccess } from './integrations/aether/aetherAccess.js';
 import { SQLiteAutonomyAnnouncer } from './mind/action/ownTime/autonomyAnnouncer.js';
-import { configuredAwakeClock } from './mind/emotion/autonomyAwakeClock.js';
+import { configuredAwakeClock } from './mind/emotion/store/autonomyAwakeClock.js';
 import { moodHistoryRecording } from './contracts/moodHistoryContract.js';
 import { autonomyDayKey, configuredAutonomy } from './mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyLoop } from './mind/action/ownTime/autonomyLoop.js';
@@ -32,7 +32,7 @@ import { SQLiteReachOutClaims } from './surfaces/outreach/store/reachOutClaims.j
 import { SQLiteReachOutReports, reachOutBodyFacts } from './surfaces/outreach/store/reachOutReports.js';
 import { ownToolsEnabled } from './mind/tools/shannonTools.js';
 import { configuredDatabasePath } from './infra/sqlite/sqliteStore.js';
-import { configuredPredictionShadow } from './mind/prediction/predictionShadow.js';
+import { configuredPredictionShadow } from './mind/prediction/store/predictionShadow.js';
 import { configuredDecisionTraces, configuredPredictionLedger } from './wiring/cognitionLedgerWiring.js';
 import { ledgerPredictionTap, presenceOf, valueFactsReader } from './wiring/cognitionLedgerTaps.js';
 import { cognitionLedgerSwitches } from '@shannon/learning';

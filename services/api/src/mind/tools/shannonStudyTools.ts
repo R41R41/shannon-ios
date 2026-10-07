@@ -6,10 +6,8 @@ import { numberInput, stringInput, type ToolInput } from './shannonToolInput.js'
 import { clip, type PreparedToolCall, type ToolExecutionContext, type ToolExecutor, type ToolRun } from './shannonToolTypes.js';
 import { toolFailure, toolOk, type ShannonToolDefinition, type ToolResult } from './shannonTools.js';
 import { studyWriteKey, syncedWithin, type StudyAether } from '../action/ownTime/studyAether.js';
-import {
-  STUDY_KIND_LABEL, STUDY_LIMITS, STUDY_STATUS_LABEL,
-  type StudyPiece, type StudyPieceKind, type StudyPieceStatus, type StudyRejection,
-} from '../action/ownTime/store/studyStore.js';
+import { type StudyPiece, type StudyPieceKind, type StudyPieceStatus, type StudyRejection } from '../action/ownTime/store/studyStore.js';
+import { STUDY_KIND_LABEL, STUDY_LIMITS, STUDY_STATUS_LABEL } from '../action/ownTime/studyPorts.js';
 
 /**
  * The study tools (`study.*` in `shannonTools.ts`): her own study, fully server-side and immediate.

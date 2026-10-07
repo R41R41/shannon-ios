@@ -7,7 +7,7 @@ import type { BodyReactionDecision } from '../src/surfaces/body/bodyReactionProm
 import { SQLiteBodyReactionStore } from '../src/surfaces/body/store/bodyReactionStore.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
 import type { BodyTouchDependencies } from '../src/mind/emotion/bodyTouch.js';
-import type { TouchExperienceWriter } from '../src/surfaces/body/store/bodyTouchMemory.js';
+import type { TouchExperienceWriter } from '../src/mind/memory/store/bodyTouchMemory.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { InMemoryConversationStore, type ConversationStore } from '../src/mind/memory/store/conversationStore.js';
 

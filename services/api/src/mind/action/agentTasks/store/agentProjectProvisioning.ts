@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+export { normalizedGitHubRepositoryURL, normalizedAgentProjectKey } from '../agentProjectNames.js';
 
 export type AgentProjectProvisioningStatus = 'queued' | 'provisioning' | 'ready' | 'failed';
 
@@ -183,29 +184,4 @@ function inflate(row: ProvisioningRow): AgentProjectProvisioningRequest {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
-}
-
-export function normalizedGitHubRepositoryURL(value: unknown): string | null {
-  if (typeof value !== 'string' || value.length > 500) return null;
-  try {
-    const url = new URL(value.trim());
-    if (url.protocol !== 'https:' || url.hostname.toLocaleLowerCase('en-US') !== 'github.com') return null;
-    if (url.username || url.password || url.search || url.hash) return null;
-    const components = url.pathname.split('/').filter(Boolean);
-    if (components.length !== 2) return null;
-    const owner = components[0]!;
-    const repository = components[1]!.replace(/\.git$/i, '');
-    const safeCoordinate = /^[A-Za-z0-9_.-]+$/;
-    if (!safeCoordinate.test(owner) || !safeCoordinate.test(repository)
-      || owner === '.' || owner === '..' || repository === '.' || repository === '..') return null;
-    return `https://github.com/${owner}/${repository}.git`;
-  } catch {
-    return null;
-  }
-}
-
-export function normalizedAgentProjectKey(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const key = value.trim().toLocaleLowerCase('en-US');
-  return /^[a-z0-9][a-z0-9._-]{0,63}$/.test(key) ? key : null;
 }

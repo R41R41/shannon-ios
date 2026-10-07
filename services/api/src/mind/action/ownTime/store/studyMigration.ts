@@ -4,7 +4,8 @@ import { aetherErrorCode, type AetherAccess } from '../../../../integrations/aet
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import { studyWriteKey } from '../studyAether.js';
 import { studyMigrationRows, studyScopes, type StudyMigrationRow } from './studyAetherLinks.js';
-import { STUDY_KIND_LABEL, STUDY_STATUS_LABEL, type StudyPieceKind, type StudyPieceStatus } from './studyStore.js';
+import { type StudyPieceKind, type StudyPieceStatus } from './studyStore.js';
+import { STUDY_KIND_LABEL, STUDY_STATUS_LABEL } from '../studyVocabulary.js';
 
 /**
  * Moving her study to Aether (Syzygy ADR-0007, revised 2026-10-06, owner decision): her stories go to 「シャノンの書斎」
