@@ -11,8 +11,9 @@ WorkingDirectory=/home/azureuser/shannon-ios
 Environment=NODE_ENV=production
 Environment=SHANNON_DATABASE_PATH=/home/azureuser/shannon-ios-data/shannon.sqlite
 EnvironmentFile=/home/azureuser/.config/shannon-ios/api.env
-ExecCondition=/home/azureuser/shannon-ios-runtime/bin/node --import tsx -e "import('./services/api/src/infra/config/stage4.ts').then(m=>process.exit(m.stage4Enabled(process.env)?0:1))"
-ExecStart=/home/azureuser/shannon-ios-runtime/bin/node --import tsx services/api/src/mindWorker.ts
+# systemd 245 retries a skipped ExecCondition with Restart=on-failure (fixed in 246).
+# Keep failure recovery, but finish the main process successfully when Stage 4 is OFF.
+ExecStart=/home/azureuser/shannon-ios-runtime/bin/node --import tsx -e "import('./services/api/src/infra/config/stage4.ts').then(m=>{if(m.stage4Enabled(process.env))return import('./services/api/src/mindWorker.ts')})"
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30
