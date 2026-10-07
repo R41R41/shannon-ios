@@ -18,6 +18,7 @@ import { runToolStep } from '../src/infra/models/chatModelToolStep.js';
 import { chatTurnRequestBody, offersTools } from '../src/infra/models/chatModelTurn.js';
 import { conversationTools, type ConversationToolServer } from '../src/mind/tools/shannonToolSession.js';
 import { gatedAether } from '../src/mind/inhibition/shannonToolGate.js';
+import { skillHash } from '../src/mind/memory/skillDocument.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import type { ToolAudience, ToolSurface } from '../src/mind/tools/shannonTools.js';
 import { AETHER_SIDE_CHANGE } from '../src/mind/action/ownTime/store/studyAetherLinks.js';
@@ -239,23 +240,19 @@ describe('a call of an Aether tool without the Aether client', () => {
   });
 });
 
-describe('her skills\' copies in her folder (review M2)', () => {
-  it('are never updated or deleted by her own tools: refused, written as withheld, and the copy stays as it was', async () => {
+describe('her own writes to her folder are noted (review M2, 「できるようにする」)', () => {
+  it('lets her update and delete any document of her folder, and notes each write that worked with the hash of what she wrote', async () => {
     const { fake, call, service } = await harness({});
     const created = await call('aetherFolder.create', { title: 'スキル「weekly-review」', body: '手順' });
     const id = /id: (doc_\d+)/u.exec(created.text)![1]!;
-    const withheld: Array<{ tool: string; reason: string }> = [];
-    service.tools.observeWithheld((_scope, draft) => { withheld.push({ tool: draft.tool, reason: draft.reason }); }, () => '2026-10-06T01:00:00.000Z');
-    service.tools.guardSkillCopies((_scope, documentId) => documentId === id);
-    expect(await call('aetherFolder.update', { documentId: id, baseVersion: 1, body: '書き換え' })).toMatchObject({ ok: false, failure: 'refused' });
-    expect(await call('aetherFolder.delete', { documentId: id, baseVersion: 1 })).toMatchObject({ ok: false, failure: 'refused' });
-    expect(fake.documents.get(id)).toMatchObject({ body: '手順' });
-    expect(withheld).toEqual([{ tool: 'aetherFolder.update', reason: 'skill_copy' }, { tool: 'aetherFolder.delete', reason: 'skill_copy' }]);
-    // A copy list that cannot be read counts as a copy; any other document of hers is hers to change.
-    service.tools.guardSkillCopies(() => { throw new Error('locked'); });
-    expect(await call('aetherFolder.update', { documentId: id, baseVersion: 1, body: '書き換え' })).toMatchObject({ ok: false });
-    service.tools.guardSkillCopies(() => false);
+    const notes: Array<{ documentId: string; kind: string; bodyHash: string | null }> = [];
+    service.tools.observeCopyWrites((_scope, documentId, write) => { notes.push({ documentId, ...write }); });
     expect(await call('aetherFolder.update', { documentId: id, baseVersion: 1, body: '書き換え' })).toMatchObject({ ok: true });
+    expect(fake.documents.get(id)).toMatchObject({ body: '書き換え' });
+    // A write that did not work is not noted.
+    expect(await call('aetherFolder.update', { documentId: id, baseVersion: 1, body: '古い版から' })).toMatchObject({ ok: false });
+    expect(await call('aetherFolder.delete', { documentId: id, baseVersion: 2 })).toMatchObject({ ok: true });
+    expect(notes).toEqual([{ documentId: id, kind: 'update', bodyHash: skillHash('書き換え') }, { documentId: id, kind: 'delete', bodyHash: null }]);
   });
 });
 

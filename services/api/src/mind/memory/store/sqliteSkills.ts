@@ -16,6 +16,9 @@ import type { SkillStatus } from '../skillDocument.js';
  * - `shannon_skill_audit`: each skill change the sleep proposed, its diff, the patterns it was for, the rate it had to reach, what
  *   its trial measured and whether it was accepted or reverted, so that a reverted change is not proposed again.
  *
+ * - `shannon_skill_copy_writes` (review M2): her own `aetherFolder.update` and `.delete` of one of her skills' copies, with the
+ *   hash of the body she wrote, so that the export reads that change as hers (`shannon_copy`) and never as the owner's.
+ *
  * Nothing is deleted: a retired skill and a deprecated page are kept for reference. The raw experience (turns, choices, tool and
  * step outcomes) lives in its own tables and is only read. Additive, created by the API process only, outside the numbered migrations.
  */
@@ -60,7 +63,7 @@ export function ensureSkillSchema(database: DatabaseSync): void {
       body TEXT NOT NULL,
       body_hash TEXT NOT NULL,
       made_by TEXT NOT NULL CHECK (made_by IN ('sleep', 'owner_edit')),
-      actor TEXT NOT NULL CHECK (actor IN ('sleep', 'conversation', 'owner')),
+      actor TEXT NOT NULL CHECK (actor IN ('sleep', 'conversation', 'owner', 'shannon_copy')),
       evidence_json TEXT NOT NULL,
       before_sha256 TEXT,
       after_sha256 TEXT NOT NULL,
@@ -104,7 +107,7 @@ export function ensureSkillSchema(database: DatabaseSync): void {
       scope_key TEXT NOT NULL,
       skill_id TEXT NOT NULL,
       target TEXT NOT NULL,
-      kind TEXT NOT NULL CHECK (kind IN ('create', 'patch')),
+      kind TEXT NOT NULL CHECK (kind IN ('create', 'patch', 'copy_delete')),
       from_version INTEGER,
       to_version INTEGER NOT NULL,
       proposal_hash TEXT NOT NULL,
@@ -120,6 +123,17 @@ export function ensureSkillSchema(database: DatabaseSync): void {
       reason TEXT
     );
     CREATE INDEX IF NOT EXISTS shannon_skill_audit_scope ON shannon_skill_audit (scope_key, status);
+    CREATE TABLE IF NOT EXISTS shannon_skill_copy_writes (
+      write_id TEXT PRIMARY KEY,
+      scope_key TEXT NOT NULL,
+      skill_id TEXT NOT NULL,
+      document_id TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('update', 'delete')),
+      body_hash TEXT,
+      at TEXT NOT NULL,
+      processed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS shannon_skill_copy_writes_skill ON shannon_skill_copy_writes (scope_key, skill_id, processed_at);
   `);
 }
 
@@ -159,8 +173,9 @@ export interface StoredSkill {
   exportHold: string | null;
 }
 
-/** Who made a revision (Hermes Agent's provenance, adapted): her sleep, a conversation, or the owner. */
-export type SkillActor = 'sleep' | 'conversation' | 'owner';
+/** Who made a revision (Hermes Agent's provenance, adapted): her sleep, a conversation, the owner, or her own edit of a copy (M2). */
+export type SkillActor = 'sleep' | 'conversation' | 'owner' | 'shannon_copy';
+
 
 /**
  * A revision: a version, or a safety snapshot of the current state taken before a rollback. Each records who made it, the
@@ -186,7 +201,7 @@ export interface StoredPattern {
 export interface PatternLogEntry { logId: string; patternId: string; version: number; operation: 'create' | 'patch' | 'append' | 'merge' | 'deprecate'; body: string; relatedId: string | null; at: string }
 
 export interface SkillAuditEntry {
-  auditId: string; scopeKey: string; skillId: string; target: string; kind: 'create' | 'patch'; fromVersion: number | null; toVersion: number;
+  auditId: string; scopeKey: string; skillId: string; target: string; kind: 'create' | 'patch' | 'copy_delete'; fromVersion: number | null; toVersion: number;
   proposalHash: string; diff: string; purposePatternIds: readonly string[]; baselineRate: number | null; lint: readonly string[]; trialUses: number; trialSuccesses: number;
   status: 'trial' | 'accepted' | 'reverted' | 'superseded'; proposedAt: string; decidedAt: string | null; reason: string | null;
 }
@@ -213,9 +228,16 @@ export class SQLiteSkills {
     return row ? parsed(row) : null;
   }
 
-  /** Whether a document of Aether is the copy of one of her skills (any status). */
-  isCopy(scopeKey: string, documentId: string): boolean {
-    return this.database.prepare('SELECT 1 FROM shannon_skills WHERE scope_key = ? AND aether_document_id = ? LIMIT 1').get(scopeKey, documentId) !== undefined;
+  /** The skill whose copy a document of Aether is (any status), or null. */
+  byCopy(scopeKey: string, documentId: string): string | null {
+    const row = this.database.prepare('SELECT skill_id FROM shannon_skills WHERE scope_key = ? AND aether_document_id = ? LIMIT 1').get(scopeKey, documentId) as { skill_id: string } | undefined;
+    return row?.skill_id ?? null;
+  }
+
+  /** The copy is gone (she deleted it): the skill keeps no pointer, so the next export may create one again. */
+  clearExport(scopeKey: string, skillId: string): void {
+    this.database.prepare('UPDATE shannon_skills SET aether_document_id = NULL, aether_version = NULL, exported_hash = NULL, exported_at = NULL, export_hold = NULL WHERE scope_key = ? AND skill_id = ?')
+      .run(scopeKey, skillId);
   }
 
   byName(scopeKey: string, name: string): StoredSkill | null {
@@ -336,7 +358,7 @@ export class SQLiteSkills {
 
   // The audit.
 
-  insertAudit(entry: Omit<SkillAuditEntry, 'trialUses' | 'trialSuccesses' | 'status' | 'decidedAt' | 'reason'>): void {
+  insertAudit(entry: Omit<SkillAuditEntry, 'trialUses' | 'trialSuccesses' | 'status' | 'decidedAt' | 'reason' | 'kind'> & { kind: SkillAuditEntry['kind'] }): void {
     identifier(entry.auditId);
     for (const code of entry.lint) symbol(code);
     this.database.prepare(`INSERT INTO shannon_skill_audit (audit_id, scope_key, skill_id, target, kind, from_version, to_version, proposal_hash, diff, purpose_pattern_ids_json, baseline_rate, lint_json, status, proposed_at)
@@ -352,7 +374,7 @@ export class SQLiteSkills {
 
   audits(scopeKey: string): SkillAuditEntry[] {
     return (this.database.prepare('SELECT * FROM shannon_skill_audit WHERE scope_key = ? ORDER BY proposed_at, audit_id').all(scopeKey) as Array<Record<string, unknown>>).map(row => ({
-      auditId: String(row.audit_id), scopeKey: String(row.scope_key), skillId: String(row.skill_id), target: String(row.target), kind: String(row.kind) as 'create' | 'patch',
+      auditId: String(row.audit_id), scopeKey: String(row.scope_key), skillId: String(row.skill_id), target: String(row.target), kind: String(row.kind) as SkillAuditEntry['kind'],
       fromVersion: nullableNumber(row.from_version), toVersion: Number(row.to_version), proposalHash: String(row.proposal_hash), diff: String(row.diff),
       purposePatternIds: list<string[]>(row.purpose_pattern_ids_json, []), baselineRate: nullableNumber(row.baseline_rate), lint: list<string[]>(row.lint_json, []), trialUses: Number(row.trial_uses), trialSuccesses: Number(row.trial_successes),
       status: String(row.status) as SkillAuditEntry['status'], proposedAt: String(row.proposed_at), decidedAt: text(row.decided_at), reason: text(row.reason),

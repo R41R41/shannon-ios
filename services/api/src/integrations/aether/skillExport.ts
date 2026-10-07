@@ -1,4 +1,4 @@
-import { checkedSkillText, skillHash, type SkillBodyCheck, type SkillMemory } from '../../mind/memory/memoryPorts.js';
+import { checkedSkillText, copyDeleted, copyEdit, copyWritesRead, skillHash, type SkillBodyCheck, type SkillMemory } from '../../mind/memory/memoryPorts.js';
 import { AETHER_LIMITS, aetherErrorCode, aetherIdempotencyKey, type AetherAccess } from './aetherAccess.js';
 
 /**
@@ -15,6 +15,11 @@ import { AETHER_LIMITS, aetherErrorCode, aetherIdempotencyKey, type AetherAccess
  *   What the owner called 内緒 never stays in a skill or its copy.
  * - **Idempotent by hash.** A copy is written only when the body changed since it was last written (`exported_hash`), with an
  *   idempotency key made of the skill, the body's hash and the version it builds on, so a retry never writes twice.
+ * - **Her own edits of a copy are hers** (review M2, owner decision 「できるようにする」). A change of a copy that matches one of her
+ *   own noted writes (`noteCopyWrite`: the hash of the body she wrote) becomes a trial revision of the skill (`copyEdit`, actor
+ *   `shannon_copy`), checked, audited and on trial like any proposer patch; refused (pinned, the owner's version, on trial, a body
+ *   that fails), the copy gets the skill's body back. A copy she deleted is not the owner's deletion: the audit records it, the
+ *   skill stays, and a copy is created again in the same export if the skill is active.
  * - **The owner's edits are his.** When a copy's Aether version is not the one she last wrote and its body is not what she
  *   wrote (a version bump with the same body is not an edit), the owner (or someone through Aether) changed it: she reads it and adopts it as a new version of the skill (`adoptOwnerEdit`), and never writes over it.
  *   An edit that cannot be adopted (it carries what must never enter a skill, or an injection) is held: the copy is left as he
@@ -25,6 +30,8 @@ import { AETHER_LIMITS, aetherErrorCode, aetherIdempotencyKey, type AetherAccess
 export interface SkillExportResult {
   status: 'done' | 'unavailable';
   created: number; updated: number; unchanged: number; adopted: number; held: number; deleted: number; failed: number; withdrawn: number;
+  /** Review M2: her own copy edits taken as trial revisions, refused, and copies she deleted that were created again. */
+  revised: number; refused: number; recreated: number;
 }
 
 export const SKILL_COPY_PREFIX = 'スキル';
@@ -40,7 +47,7 @@ export async function exportSkills(input: {
   /** Whether a skill's sources all still pass the seed rule (`skillSourcesPass`); absent, sources are not judged. */
   sources?: () => (sources: readonly string[]) => boolean;
 }): Promise<SkillExportResult> {
-  const result: SkillExportResult = { status: 'done', created: 0, updated: 0, unchanged: 0, adopted: 0, held: 0, deleted: 0, failed: 0, withdrawn: 0 };
+  const result: SkillExportResult = { status: 'done', created: 0, updated: 0, unchanged: 0, adopted: 0, held: 0, deleted: 0, failed: 0, withdrawn: 0, revised: 0, refused: 0, recreated: 0 };
   const log = input.log ?? (line => console.log(line));
   if (!input.skills.ready()) return { ...result, status: 'unavailable' };
   // Fail closed: nothing is written, read or adopted while what must never be in a skill cannot be read.
@@ -57,11 +64,19 @@ export async function exportSkills(input: {
     log(`Shannon skill export: status=unavailable code=${aetherErrorCode(error)}`);
     return { ...result, status: 'unavailable' };
   }
-  for (const skill of input.skills.store.all(input.scopeKey, { includeRetired: true })) {
+  for (const listedSkill of input.skills.store.all(input.scopeKey, { includeRetired: true })) {
+    let skill = listedSkill;
     try {
       if (skill.exportHold === 'owner_deleted' || skill.exportHold === 'withdrawn') continue;
       const withdraw = (skill.status === 'retired' && skill.statusReason === 'source_forgotten') || !sourcesPass(skill.sources)
         || typeof checkedSkillText(skill.body, check) === 'string';
+      const mine = input.skills.copyWrites.pending(input.scopeKey, skill.skillId);
+      if (skill.aetherDocumentId && !listed.has(skill.aetherDocumentId) && mine.some(write => write.kind === 'delete')) {
+        // She deleted it (M2): not the owner's deletion. The skill stays; a copy is made again below if it may be.
+        copyDeleted(input.skills, input.scopeKey, skill.skillId, input.at);
+        skill = input.skills.store.get(input.scopeKey, skill.skillId) ?? skill;
+        if (skill.status !== 'retired' && !withdraw) result.recreated += 1;
+      }
       if (skill.aetherDocumentId) {
         const entry = listed.get(skill.aetherDocumentId);
         if (!entry) {
@@ -75,6 +90,7 @@ export async function exportSkills(input: {
             idempotencyKey: aetherIdempotencyKey('skill-copy-withdrawn', input.scopeKey, skill.skillId, String(entry.version)) }, input.signal);
           input.skills.exported(input.scopeKey, skill.skillId, { documentId: written.documentId, version: written.version, hash: skillHash(WITHDRAWN_COPY_BODY) }, input.at);
           input.skills.holdExport(input.scopeKey, skill.skillId, 'withdrawn', input.at);
+          copyWritesRead(input.skills, input.scopeKey, skill.skillId, input.at);
           result.withdrawn += 1;
           continue;
         }
@@ -85,6 +101,21 @@ export async function exportSkills(input: {
             input.skills.exported(input.scopeKey, skill.skillId, { documentId: entry.documentId, version: entry.version, hash: skill.exportedHash }, input.at);
             if (skill.exportHold) input.skills.holdExport(input.scopeKey, skill.skillId, skill.exportHold as 'owner_edit_unadopted', input.at);
             result.unchanged += 1;
+            continue;
+          }
+          // Her own edit of the copy (M2): a trial revision, never an owner edit; refused, the copy gets the skill's body back.
+          if (!document.hasMore && mine.some(write => write.kind === 'update' && write.bodyHash === skillHash(document.body))) {
+            const revised = copyEdit(input.skills, input.scopeKey, skill.skillId, document.body, check, input.at);
+            copyWritesRead(input.skills, input.scopeKey, skill.skillId, input.at);
+            const now = input.skills.store.get(input.scopeKey, skill.skillId) ?? skill;
+            if ('version' in revised) result.revised += 1; else result.refused += 1;
+            if (now.bodyHash === skillHash(document.body)) {
+              input.skills.exported(input.scopeKey, skill.skillId, { documentId: entry.documentId, version: entry.version, hash: now.bodyHash }, input.at);
+              continue;
+            }
+            const written = await input.access.update({ documentId: entry.documentId, baseVersion: entry.version, body: now.body,
+              idempotencyKey: aetherIdempotencyKey('skill-copy', input.scopeKey, skill.skillId, now.bodyHash, String(entry.version)) }, input.signal);
+            input.skills.exported(input.scopeKey, skill.skillId, { documentId: written.documentId, version: written.version, hash: skillHash(now.body) }, input.at);
             continue;
           }
           // Changed in Aether since she wrote it: his edit, adopted at this sleep, never written over.
@@ -118,6 +149,6 @@ export async function exportSkills(input: {
       log(`Shannon skill export: failed code=${aetherErrorCode(error)}`);
     }
   }
-  log(`Shannon skill export: status=done created=${result.created} updated=${result.updated} unchanged=${result.unchanged} adopted=${result.adopted} held=${result.held} deleted=${result.deleted} withdrawn=${result.withdrawn} failed=${result.failed}`);
+  log(`Shannon skill export: status=done created=${result.created} updated=${result.updated} unchanged=${result.unchanged} adopted=${result.adopted} held=${result.held} deleted=${result.deleted} withdrawn=${result.withdrawn} revised=${result.revised} refused=${result.refused} recreated=${result.recreated} failed=${result.failed}`);
   return result;
 }

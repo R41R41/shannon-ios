@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { createInitialCompanionState } from '@shannon/cognition';
 import { encodeSkill, type SkillDocument } from '../src/mind/memory/skillDocument.js';
 import { SkillMemory } from '../src/mind/memory/skillMemory.js';
+import { noteCopyWrite } from '../src/mind/memory/skillCopies.js';
+import { skillHash } from '../src/mind/memory/skillDocument.js';
 import { exportSkills, skillCopyTitle } from '../src/integrations/aether/skillExport.js';
 import { configuredSkillExport, skillBodyCheck } from '../src/wiring/skillMemoryWiring.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
@@ -89,6 +91,54 @@ describe('her skills in シャノン用フォルダ', () => {
     expect(await run(skills, folder, minutes(4), () => null)).toMatchObject({ status: 'unavailable', adopted: 0 });
     expect(folder.writes).toHaveLength(before);
     expect(skills.store.get(scope, held)).toMatchObject({ version: 1 });
+  });
+
+  it('reads her own edit of a copy as hers: a trial revision (shannon_copy), never an owner edit; refused, the copy gets the skill back (M2)', async () => {
+    const skills = memory();
+    const folder = new FakeAetherFolder();
+    const id = make(skills, 'weekly-review');
+    const pinned = make(skills, 'morning-plan', { description: '朝の予定' });
+    for (const skillId of [id, pinned]) skills.store.setStatus(scope, skillId, 'active', 'test', at);
+    skills.store.setPinned(scope, pinned, true);
+    await run(skills, folder, minutes(1));
+    const hers = encodeSkill(skill('weekly-review', { steps: '1. 今週したことを五つ挙げる' }));
+    for (const skillId of [id, pinned]) {
+      const documentId = skills.store.get(scope, skillId)!.aetherDocumentId!;
+      folder.edit(documentId, hers.replace('weekly-review', skills.store.get(scope, skillId)!.name));
+      noteCopyWrite(skills, scope, documentId, { kind: 'update', bodyHash: skillHash(folder.documents.get(documentId)!.body) }, minutes(2));
+    }
+    expect(await run(skills, folder, minutes(3))).toMatchObject({ revised: 1, refused: 1, adopted: 0 });
+    expect(skills.store.get(scope, id)).toMatchObject({ status: 'trial', madeBy: 'sleep', version: 2, trialBaseVersion: 1 });
+    expect(skills.store.revisions(scope, id).at(-1)).toMatchObject({ actor: 'shannon_copy', reason: 'copy_edit', parentRevisionId: `${id}:v1` });
+    expect(skills.store.audits(scope).at(-1)).toMatchObject({ kind: 'patch', status: 'trial' });
+    // The pinned skill keeps its body, and so does its copy again.
+    const kept = skills.store.get(scope, pinned)!;
+    expect(kept).toMatchObject({ version: 1, madeBy: 'sleep' });
+    expect(folder.documents.get(kept.aetherDocumentId!)!.body).toBe(kept.body);
+    // The owner's edit after hers is still his.
+    const documentId = skills.store.get(scope, id)!.aetherDocumentId!;
+    folder.edit(documentId, encodeSkill(skill('weekly-review', { steps: '1. 散歩しながら話す' })));
+    expect(await run(skills, folder, minutes(4))).toMatchObject({ adopted: 1 });
+    expect(skills.store.get(scope, id)).toMatchObject({ madeBy: 'owner_edit' });
+  });
+
+  it('keeps a skill whose copy she deleted, records it in the audit, and creates the copy again only while the skill is active (M2)', async () => {
+    const skills = memory();
+    const folder = new FakeAetherFolder();
+    const active = make(skills, 'weekly-review');
+    const retired = make(skills, 'old-way', { description: '古いやり方' });
+    await run(skills, folder, minutes(1));
+    skills.retire(scope, retired, 'low_success', minutes(2));
+    for (const skillId of [active, retired]) {
+      const documentId = skills.store.get(scope, skillId)!.aetherDocumentId!;
+      folder.remove(documentId);
+      noteCopyWrite(skills, scope, documentId, { kind: 'delete', bodyHash: null }, minutes(2));
+    }
+    expect(await run(skills, folder, minutes(3))).toMatchObject({ recreated: 1, created: 1, deleted: 0 });
+    expect(skills.store.get(scope, active)).toMatchObject({ status: 'trial', exportHold: null, aetherDocumentId: expect.any(String) });
+    expect(skills.store.get(scope, retired)).toMatchObject({ status: 'retired', exportHold: null, aetherDocumentId: null });
+    expect(skills.store.audits(scope).filter(entry => entry.kind === 'copy_delete').map(entry => [entry.skillId, entry.reason]).sort())
+      .toEqual([[active, 'copy_deleted'], [retired, 'copy_deleted']].sort());
   });
 
   it('writes nothing when he changed the copy a moment before (STALE_VERSION); the next sleep adopts it', async () => {

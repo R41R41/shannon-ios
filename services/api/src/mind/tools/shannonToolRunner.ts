@@ -11,7 +11,7 @@ import { ownerDocumentExecutors } from './shannonOwnerDocumentTools.js';
 import { aetherStudyTool, studyExecutors } from './shannonStudyTools.js';
 import { authorizeToolCall, authorizeToolInput, gatedAether, shownAetherCall } from '../inhibition/shannonToolGate.js';
 import type { StudyAether } from '../action/ownTime/studyAether.js';
-import { validToolInput } from './shannonToolInput.js';
+import { validToolInput, type ToolInput } from './shannonToolInput.js';
 import type { PreparedToolCall, ToolExecutionContext, ToolExecutor } from './shannonToolTypes.js';
 import {
   isReadToolDomain, offeredTools, shannonTool, toolFailure, toolForSurface, toolFromProviderName,
@@ -20,6 +20,7 @@ import {
 import { READ_TOOL_PORT, readToolExecutors, type ReadToolPorts } from './shannonReadTools.js';
 import { skillExecutors } from './shannonSkillTools.js';
 import type { SkillTurnPorts } from '../../contracts/skillMemoryContract.js';
+import { skillHash } from '../memory/memoryPorts.js';
 import { WITHHELD_TOOL, withheldRail, type WithheldRail, type WithheldReason, type WithheldSink } from '../../contracts/withheldActionContract.js';
 
 /**
@@ -68,10 +69,10 @@ export function wasWithheld(result: ToolResult): boolean {
 export class ShannonToolRunner {
   private executors: Readonly<Record<string, ToolExecutor>>;
   /**
-   * Review M2: whether a document of her Aether folder is the copy of one of her skills (`guardSkillCopies`); her own
-   * `aetherFolder.update` and `.delete` never touch one, so only the owner's edits of a copy are adopted as his.
+   * Review M2 (owner: 「できるようにする」): told of each of her own `aetherFolder.update` and `.delete` that worked
+   * (`observeCopyWrites`), so that a write to one of her skills' copies is known as hers (`shannon_copy`), never as the owner's.
    */
-  private skillCopy: ((scopeKey: string, documentId: string) => boolean) | null = null;
+  private copyWrites: ((scopeKey: string, documentId: string, write: { kind: 'update' | 'delete'; bodyHash: string | null }) => void) | null = null;
   /** Syzygy ADR-0008 §14: where a call a rule stopped is written (`observeWithheld`); null, nothing is written. */
   private withheld: { sink: WithheldSink; now: () => string } | null = null;
   private choices: { sink: ToolCallChoiceSink; now: () => string } | null = null;
@@ -166,10 +167,6 @@ export class ShannonToolRunner {
     // The schema of this surface: in a conversation a write is shorter (`toolForSurface`).
     const checked = validToolInput(rawInput, toolForSurface(tool, context.surface).input);
     if ('problem' in checked) return { tool, result: toolFailure('invalid_input', `入力が正しくない（${checked.problem}）。`, { retryable: false }) };
-    if ((tool.name === 'aetherFolder.update' || tool.name === 'aetherFolder.delete') && this.skillCopy && this.isSkillCopy(context.scopeKey, checked.input.documentId)) {
-      return this.withhold(context, tool, toolFailure('refused', 'これはボクのスキルの写し。写しを直すのはライ氏だけで、ボクは書き換えも削除もしない。', {
-        retryable: false, refusal: { why: 'スキルの写しは、ライ氏が直したものだけを取り込む', wouldWork: 'スキルを変えたい時は、眠っている間の見直しに任せる' } }), 'skill_copy');
-    }
     const inputRefused = authorizeToolInput(tool, checked.input, context);
     if (inputRefused) return this.withhold(context, tool, inputRefused, 'outside_reach', context.audience === 'others' ? 'audience' : 'gate');
     const secret = secretRefusal(tool.name, checked.input, context.secrets);
@@ -180,7 +177,7 @@ export class ShannonToolRunner {
       const informed = (documentId: string) => this.store.informed.marked(context.scopeKey, documentId);
       const prepared = executor(checked.input, this.aether.access && this.aetherFor(context.scopeKey) ? { ...context, aether: gatedAether(this.aether.access, context, informed) } : context);
       // With anyone else present, what she read reaches the model without the owner's private things.
-      return 'run' in prepared ? { tool, prepared: shownAetherCall(tool, prepared, context) } : { tool, result: prepared };
+      return 'run' in prepared ? { tool, prepared: this.notedCopyWrite(tool, checked.input, context.scopeKey, shownAetherCall(tool, prepared, context)) } : { tool, result: prepared };
     } catch {
       return { tool, result: toolFailure('failed', 'うまく準備できなかった。', { retryable: true }) };
     }
@@ -198,13 +195,21 @@ export class ShannonToolRunner {
     return result;
   }
 
-  /** Review M2: her skills' copies, by document id (the wiring hands it while the skills are on, in both processes). */
-  guardSkillCopies(isCopy: (scopeKey: string, documentId: string) => boolean): void { this.skillCopy = isCopy; }
+  /** Review M2: where her own Aether folder writes are noted (the wiring hands it while the skills are on, in both processes). */
+  observeCopyWrites(noted: (scopeKey: string, documentId: string, write: { kind: 'update' | 'delete'; bodyHash: string | null }) => void): void { this.copyWrites = noted; }
 
-  private isSkillCopy(scopeKey: string, documentId: unknown): boolean {
-    if (typeof documentId !== 'string') return false;
-    // A copy list that cannot be read counts as a copy (fail closed).
-    try { return this.skillCopy!(scopeKey, documentId.trim()); } catch { return true; }
+  /** Her `aetherFolder.update` or `.delete`, noted once it worked (the skill memory keeps it only for a skill's copy). */
+  private notedCopyWrite(tool: ShannonToolDefinition, input: ToolInput, scopeKey: string, prepared: PreparedToolCall): PreparedToolCall {
+    const noted = this.copyWrites;
+    const documentId = typeof input.documentId === 'string' ? input.documentId.trim() : '';
+    if (!noted || !documentId || (tool.name !== 'aetherFolder.update' && tool.name !== 'aetherFolder.delete')) return prepared;
+    const kind = tool.name === 'aetherFolder.update' ? 'update' as const : 'delete' as const;
+    const bodyHash = kind === 'update' && typeof input.body === 'string' ? skillHash(input.body) : null;
+    return { ...prepared, run: async signal => {
+      const run = await prepared.run(signal);
+      if (run.result.ok) { try { noted(scopeKey, documentId, { kind, bodyHash }); } catch { /* the write stands */ } }
+      return run;
+    } };
   }
 
   /** Syzygy ADR-0008 §14: every call a rule stops is written as withheld, through this sink (the wiring hands it only with stage 2 on). */

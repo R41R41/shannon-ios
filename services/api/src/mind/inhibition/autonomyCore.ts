@@ -135,7 +135,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // Step 7: her skills' readable copies in Aether, and the owner's edits of them adopted.
     'services/api/src/integrations/aether/skillExport.ts',
     // Review M3: every file of the memory part, so a new one is covered at once (a file listed by name elsewhere keeps its area);
-    // her skills' lineage and helpers among them, and the worker's read of which documents are her skills' copies.
+    // her skills' lineage, copies and helpers among them, and the worker's note of her own writes to her skills' copies.
     'services/api/src/mind/memory/',
     'services/api/src/wiring/skillCopyWiring.ts',
     // Step 8: tree recall (the beam, its tree and Jev's questions) and its wiring.

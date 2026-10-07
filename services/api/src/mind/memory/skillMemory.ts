@@ -5,6 +5,7 @@ import {
   SKILL_CAPACITY, SKILL_LIFECYCLE, applyReplacements, baselineRate, checked, encodeSkill, injectionThreats, lineDiff, parseSkill, retiresForLowSuccess, skillHash, skillIndex,
   skillLint, trialVerdict, type SkillDocument, type SkillProblem,
 } from './skillDocument.js';
+import { SQLiteSkillCopyWrites } from './store/sqliteSkillCopyWrites.js';
 import { SKILLS_TABLE, SQLiteSkills, versionRevisionId, type SkillActor, type SkillUse, type StoredPattern, type StoredSkill } from './store/sqliteSkills.js';
 import { checkedPage, checkedSkillBody, checkedSkillText, closedSources, digest, iso } from './skillMemoryParts.js';
 import { parentBaseline, type LineageNode } from './skillLineage.js';
@@ -61,12 +62,15 @@ export { PATTERN_LIMITS } from './skillMemoryParts.js';
 
 export class SkillMemory {
   readonly store: SQLiteSkills;
+  /** Review M2: her own writes to her skills' copies (`skillCopies.ts`). */
+  readonly copyWrites: SQLiteSkillCopyWrites;
   private readonly meter: LockWaitMeter;
   private readonly defer: (task: () => void) => void;
   private present = false;
 
   constructor(private readonly options: SkillMemoryOptions) {
     this.store = new SQLiteSkills(options.database, { createSchema: options.createsSchema });
+    this.copyWrites = new SQLiteSkillCopyWrites(options.database);
     this.meter = new LockWaitMeter('skills', options.log);
     this.defer = options.defer ?? (task => { setImmediate(task); });
   }
@@ -77,10 +81,8 @@ export class SkillMemory {
     return this.present;
   }
 
-  /** Review M2: whether a document of Aether is one of her skills' copies (none while the tables do not exist). */
-  isCopy(scopeKey: string, documentId: string): boolean {
-    return this.ready() && this.store.isCopy(scopeKey, documentId);
-  }
+  /** One write under the write lock, now (her skills' copies, `skillCopies.ts`); nothing while the tables do not exist. */
+  write(at: string, operation: () => void): void { this.now(at, operation); }
 
   /** Her skills that may be used now: not retired, and nothing they were built from forgotten. */
   usable(scopeKey: string, visible: (experienceId: string) => boolean = () => true): StoredSkill[] {
@@ -255,7 +257,8 @@ export class SkillMemory {
    * to). The current version is read again in the same pass and the patch applied to it (targeted replacements by default). Never
    * while the skill is on trial, never to the owner's version or a pinned skill, never a change the audit saw reverted.
    */
-  revise(scopeKey: string, skillId: string, expectedVersion: number, patch: SkillPatch, check: SkillBodyCheck | null, at: string): { version: number } | { rejected: SkillRejection } {
+  revise(scopeKey: string, skillId: string, expectedVersion: number, patch: SkillPatch, check: SkillBodyCheck | null, at: string,
+    actor: 'sleep' | 'shannon_copy' = 'sleep'): { version: number } | { rejected: SkillRejection } {
     let outcome: { version: number } | { rejected: SkillRejection } = { rejected: 'unavailable' };
     this.now(at, () => {
       const current = this.store.get(scopeKey, skillId);
@@ -292,9 +295,9 @@ export class SkillMemory {
       const merged = closedSources([...current.sources, ...patch.evidence, ...purposes.map(id => `pattern:${id}`)]);
       outcome = this.store.update(scopeKey, skillId, expectedVersion, {
         name: body.skill.name, description: body.skill.description, body: body.text, bodyHash: skillHash(body.text), madeBy: 'sleep', sources: merged,
-        purposePatternIds: [...new Set([...current.purposePatternIds, ...purposes])], trial: { base: expectedVersion, audit: auditId }, actor: 'sleep', evidence: patch.evidence,
+        purposePatternIds: [...new Set([...current.purposePatternIds, ...purposes])], trial: { base: expectedVersion, audit: auditId }, actor, evidence: patch.evidence,
         lineage: { parent: base?.revisionId ?? node },
-      }, base ? 'branched' : 'patched', at, 'trial') ? { version: expectedVersion + 1 } : { rejected: 'stale' };
+      }, actor === 'shannon_copy' ? 'copy_edit' : base ? 'branched' : 'patched', at, 'trial') ? { version: expectedVersion + 1 } : { rejected: 'stale' };
     });
     return outcome;
   }

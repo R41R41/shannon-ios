@@ -109,9 +109,9 @@ const service = new ShannonAutonomyService({
   ...(withheldActions ? { withheld: gateRefusals(withheldActions.withheld, config) } : {}),
 });
 if (withheldActions) service.tools.observeWithheld(withheldActions.withheld.sink, now);
-// Her own time's Aether folder writes never touch a skill's copy (review M2); read-only use of the skill tables, once the API created them.
-const skillCopies = configuredSkillCopies(process.env, databasePath);
-if (skillCopies) service.tools.guardSkillCopies((scopeKey, documentId) => skillCopies.isCopy(scopeKey, documentId));
+// Her own time's edits and deletes of her skills' copies are noted as hers (review M2), once the API created the skill tables.
+const skillCopies = configuredSkillCopies(process.env, databasePath, now);
+if (skillCopies) service.tools.observeCopyWrites((scopeKey, documentId, write) => skillCopies.noted(scopeKey, documentId, write));
 // Read-only Notion, only when the owner connected it; without a token the loop never plans a Notion step.
 const notion = notionLoopReader(configuredNotionSource(process.env, { log: line => console.log(line) }));
 // What she may see of the owner's in her own time (owner decision 2026-10-02, ADR-0003): one bounded block, read through the

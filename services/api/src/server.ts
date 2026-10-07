@@ -19,6 +19,7 @@ import { configuredTurnRouting } from './wiring/turnRoutingWiring.js';
 import { configuredWithheldActions, gateRefusals } from './wiring/withheldWiring.js';
 import { configuredSonnet, tieredChatModel } from './wiring/sonnetWiring.js';
 import { configuredSkillMemory, skillTurnPorts } from './wiring/skillMemoryWiring.js';
+import { noteCopyWrite } from './mind/memory/memoryPorts.js';
 import { configuredTreeRecall } from './wiring/treeRecallWiring.js';
 import { storyReacted, toolCallChoice, touchLedger } from './wiring/cognitionLedgerTaps.js';
 import { createValuesRoute, isValuesPath, ownerValueRecorder } from './infra/http/learningRoutes.js';
@@ -122,7 +123,7 @@ const sonnet = configuredSonnet(process.env, { usageStore: persistentStore, now 
 // Syzygy ADR-0008 stage 2, step 6 (docs/skill-and-routing-contract.md): her skill memory, its tables created here. SHANNON_SKILLS=off: none of it.
 const skillMemory = configuredSkillMemory(process.env, { databasePath: configuredDatabasePath(), createsSchema: true });
 const skills = skillMemory ? skillTurnPorts(skillMemory.memory, scopeKey => persistentStore.snapshot(scopeKey)) : null;
-if (skillMemory) autonomy.tools.guardSkillCopies((scopeKey, documentId) => skillMemory.memory.isCopy(scopeKey, documentId)); // Her writes never touch a skill's copy (review M2).
+if (skillMemory) autonomy.tools.observeCopyWrites((scopeKey, documentId, write) => noteCopyWrite(skillMemory.memory, scopeKey, documentId, write, now())); // Her copy edits are hers (M2).
 // Step 8: tree recall over her notes, and with the owner alone her skills and her Aether folder. SHANNON_TREE_RECALL=off: recall as it was.
 const treeRecall = configuredTreeRecall(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, skills: skillMemory?.memory ?? null,
   snapshot: scopeKey => persistentStore.snapshot(scopeKey), aether: { access: aetherPorts.access, covers: scopeKey => scopeKey === aetherPorts.studyScopeKey } });
