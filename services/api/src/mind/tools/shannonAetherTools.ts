@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { withAetherAccessCapability } from '@shannon/cognition';
+import { withAetherAccessCapability, withReadToolsCapability } from '@shannon/cognition';
 import { aetherErrorCode, aetherIdempotencyKey, type AetherDocument } from '../../integrations/aether/aetherAccess.js';
 import type { AetherSectionHit } from '../../integrations/aether/aetherKnowledgeSearch.js';
 import type { AetherProposalOperation, AetherProposalStore } from '../../integrations/aether/aetherProposal.js';
@@ -7,7 +7,7 @@ import type { StudyAether } from '../action/ownTime/studyAether.js';
 import { withMinecraftToolLine } from './shannonMinecraftTools.js';
 import { numberInput, stringInput, type ToolInput } from './shannonToolInput.js';
 import { clip, neutralMarkers, type PreparedToolCall, type ToolExecutionContext, type ToolExecutor, type ToolRun } from './shannonToolTypes.js';
-import { toolFailure, toolOk, type ToolResult } from './shannonTools.js';
+import { isReadToolDomain, toolFailure, toolOk, type ToolResult } from './shannonTools.js';
 
 /**
  * The executors of her Aether tools (`aether.*`, `aetherFolder.*`; Syzygy ADR-0007 revised, `syzygy.aether-shannon-access.v1`).
@@ -202,10 +202,14 @@ export function documentText(document: AetherDocument): string {
  * while her Aether tools are offered, Aether's (`withAetherAccessCapability`). A request without them is returned as it is,
  * and so is one that searches the web or places: the adapter sends no tools then (`offersTools`, `voiceTools` in `chatModel.ts`).
  */
-export function withToolCapabilityLines<T extends { systemPrompt: string; tools?: { definitions: readonly { name: string }[]; menu?: { offered: readonly { name: string }[] } }; useWebSearch?: boolean; placeSearch?: unknown }>(request: T): T {
+export function withToolCapabilityLines<T extends { systemPrompt: string; tools?: { definitions: readonly { name: string; domain?: string }[]; menu?: { offered: readonly { name: string; domain?: string }[] } }; useWebSearch?: boolean; placeSearch?: unknown }>(request: T): T {
   if (request.useWebSearch || request.placeSearch) return request;
   const withBody = withMinecraftToolLine(request);
   // With the tool menu (Syzygy ADR-0008 stage 2) the line follows every tool the turn offers, not only the schemas sent.
-  return (withBody.tools?.menu?.offered ?? withBody.tools?.definitions)?.some(tool => tool.name === 'aether.search')
+  const offered = withBody.tools?.menu?.offered ?? withBody.tools?.definitions;
+  const withAether = offered?.some(tool => tool.name === 'aether.search')
     ? { ...withBody, systemPrompt: withAetherAccessCapability(withBody.systemPrompt) } : withBody;
+  // Her read tools (stage 2, step 3): their line only in a turn that offers them.
+  return offered?.some(tool => tool.domain !== undefined && isReadToolDomain(tool.domain))
+    ? { ...withAether, systemPrompt: withReadToolsCapability(withAether.systemPrompt) } : withAether;
 }

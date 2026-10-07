@@ -63,7 +63,7 @@ import { guestPeoplePrompt } from '../../mind/memory/peopleMemoryPrompts.js';
 import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
-import { conversationTools, offerWithMenu, startTurnToolMenu, toolTraceReader, turnWroteHerOwnThings, withToolCapabilityLines, type ConversationToolServer, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
+import { conversationTools, offerWithMenu, ownerAloneReads, startTurnToolMenu, toolTraceReader, turnWroteHerOwnThings, withToolCapabilityLines, type ConversationToolServer, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from '../../mind/action/respond/turnDeadline.js';
 import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from './ownerCallElsewhere.js';
 
@@ -174,7 +174,7 @@ async function completeLiveVoiceDelegation(
   const turnFacts = temporaryGuest ? undefined : ownerVoiceTurnFacts({ history: routingHistory, at: occurredAt, othersPresent: !alone && !ownerSaysCompanionPresent(transcript),
     newest: dependencies.conversationStore.conversationHistory(scopeKey, threadId).at(-1), source: deviceContext?.userUtterance?.source, answersHer: reactionLine });
   const toolAudience = temporaryGuest ? !legacyGuest && 'guests' as const : alone || 'others' as const; // ADR-0008 stage 2: the menu's Jev call beside the router's.
-  const choices = startTurnToolMenu(router === dependencies.voiceDecision ? dependencies.turnChooser : null, dependencies.autonomy, scopeKey, 'voice', toolAudience, dependencies.toolServer ?? {}, `${threadId}\n${transcript}`);
+  const choices = startTurnToolMenu(router === dependencies.voiceDecision ? dependencies.turnChooser : null, dependencies.autonomy, scopeKey, 'voice', toolAudience, dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, ownerAloneReads(toolAudience));
   let decision = await router.decide({
     // In a remembered 「友人も一緒」 call the same capabilities may be chosen as with the owner; what is said is checked at speak time.
     scopeKey, transcript, rawTranscript, participantMode: legacyGuest ? 'guest' : 'owner',
@@ -376,7 +376,7 @@ async function completeLiveVoiceDelegation(
   const turnPrompt = [turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n');
   const replayed = replay?.request(turnPrompt) ?? { ...(turnPrompt ? { turnContext: turnPrompt } : {}), history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) };
   const offered = conversationTools(dependencies.autonomy, scopeKey, 'voice', toolAudience, dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline, // 「友人も一緒」: Aether reading tools; a legacy client none.
-    { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) });
+    { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }, ownerAloneReads(toolAudience));
   const toolOffer = choices ? await offerWithMenu(offered, choices) : offered; // The menu narrows the schemas; without one, no extra await.
   const modelRequest = withToolCapabilityLines({ // Her Minecraft body's and Aether's lines, in her identity, exactly when their tools are offered.
     scopeKey, systemPrompt: basePrompt, ...(identity.profile ? { profilePrompt: identity.profile } : {}), ...replayed,

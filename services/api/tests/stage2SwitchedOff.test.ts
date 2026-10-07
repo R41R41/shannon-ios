@@ -5,7 +5,9 @@ import { createLocalApiKernel, type ShannonApiKernelOptions } from '../src/infra
 import { OpenAIResponsesChatModel } from '../src/infra/models/chatModel.js';
 import { createConfiguredVoiceDecisionGateway, VOICE_SKILLS } from '../src/mind/selectors/voiceDecision.js';
 import { stage2SwitchedOffScenarios } from './support/stage2Scenarios.js';
-import { skillRoutingParts } from '../src/wiring/skillRoutingWiring.js';
+import { readToolPorts, skillRoutingParts } from '../src/wiring/skillRoutingWiring.js';
+import { DisabledVoyagerCatalog } from '../src/integrations/voyager/organizeIntegrations.js';
+import { LocalStubChatModel } from '../src/infra/models/chatModel.js';
 import type { DecisionTraceDraft } from '../src/contracts/decisionTraceContract.js';
 
 /**
@@ -114,9 +116,14 @@ describe('stage 2 switched off: the requests of ca7cf519', () => {
 
 /** The stage-2 wiring as `server.ts` builds it, from this environment, with Jev and the trace writer of the test. */
 function stage2(environment: Record<string, string>, traces: DecisionTraceDraft[]) {
-  return ({ jev }: { jev: typeof fetch }) => skillRoutingParts({ TYPESAFE_API_KEY: 'jev-test', ...environment }, {
-    trace: (_scopeKey, draft) => { traces.push(draft); }, jevFetch: jev, now: () => at,
-  });
+  return ({ jev }: { jev: typeof fetch }) => {
+    const reads = readToolPorts({ TYPESAFE_API_KEY: 'jev-test', ...environment }, {
+      notion: null, voyagerCatalog: new DisabledVoyagerCatalog(), upcoming: { promptFor: () => '' }, chatModel: new LocalStubChatModel(),
+    });
+    return { ...skillRoutingParts({ TYPESAFE_API_KEY: 'jev-test', ...environment }, {
+      trace: (_scopeKey, draft) => { traces.push(draft); }, jevFetch: jev, now: () => at,
+    }), ...(reads ? { readTools: reads } : {}) };
+  };
 }
 
 describe('stage 2 switched off with the stage-2 wiring in place', () => {
@@ -146,6 +153,8 @@ describe('stage 2 switched off with the stage-2 wiring in place', () => {
     const recorded = recordedSwitchedOff();
     expect(current['text-tools']!.openai).not.toEqual(recorded['text-tools']!.openai);
     expect(current['text-tools']!.jev.length).toBe(1);
+    // Her read tools fold the schedule's projection of a text turn of the owner alone.
+    expect(current['text-schedule']!.openai).not.toEqual(recorded['text-schedule']!.openai);
     expect(traces.some(trace => trace.decision === 'tool_menu' && trace.surface === 'text')).toBe(true);
     // A turn that offers no tools is not asked about them.
     expect(current['voice-greeting']!.jev).toEqual(recorded['voice-greeting']!.jev);

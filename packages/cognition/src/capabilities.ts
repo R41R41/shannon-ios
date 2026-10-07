@@ -106,8 +106,28 @@ export const SHANNON_AETHER_ACCESS_CAPABILITY = Object.freeze({
   text: 'Aetherの文書: ライ氏と二人だけの時、Aetherの文書を道具で探して全文まで読む。Aetherのシャノン用フォルダにはボクの文書を自由に作る・書き換える・消す（書斎の物語の正本もそこにある）。ほかの人がいる時は、シャノン用フォルダの中だけを読む。ライ氏の文書を変えたい時は提案（新しいノート・追記・書き換え・削除）を送り、決めるのはライ氏。',
 } as const satisfies ShannonCapability);
 
+/**
+ * Her read tools (Syzygy ADR-0008 stage 2, step 3, `SHANNON_READ_TOOLS`): Notion, Voyager tasks, the schedule and place search
+ * as tools she calls when she needs them, and in a text turn web search that she may choose. Added by the API
+ * (`withReadToolsCapability`) only to a turn that offers them, so with the switch off the description is what it was.
+ */
+export const SHANNON_READ_TOOLS_CAPABILITY = Object.freeze({
+  id: 'read_tools', audience: 'owner',
+  text: '読む道具: ライ氏と二人だけの会話で、Notionの共有ページ・Voyagerのタスク・これからの予定・お店や施設の候補を、要る時に道具で読む（読むだけ）。テキストでも、今の情報が要る時はWeb検索を自分で選ぶことがある。',
+} as const satisfies ShannonCapability);
+
 /** Capabilities the API may add to the description while it has them. */
-export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_AETHER_ACCESS_CAPABILITY] as const);
+export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_READ_TOOLS_CAPABILITY] as const);
+
+/** The owner's description with the read tools' line, after the Notion line; any other prompt unchanged. */
+export function withReadToolsCapability(prompt: string): string {
+  const line = `- ${SHANNON_READ_TOOLS_CAPABILITY.text}\n`;
+  if (prompt.includes(line)) return prompt;
+  const notion = SHANNON_CAPABILITIES.find(item => item.id === 'notion_read');
+  const anchor = notion ? `- ${notion.text}\n` : '';
+  const at = anchor ? prompt.indexOf(anchor) : -1;
+  return at < 0 ? prompt : `${prompt.slice(0, at + anchor.length)}${line}${prompt.slice(at + anchor.length)}`;
+}
 
 /** The owner's description with the Aether line, after the line of Aether's shared notes; any other prompt unchanged. */
 export function withAetherAccessCapability(prompt: string): string {

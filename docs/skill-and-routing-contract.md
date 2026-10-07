@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | 1 | This contract, the switches, the core map, the trace vocabulary, the registry's one-line summaries, the switched-off proof | in place (`packages/learning/src/switches.ts`; tests `switches.test.ts`, `shannonTools.test.ts`, `autonomyCore.test.ts`, `stage2SwitchedOff.test.ts`) |
 | 2 | The Jev choice client, the tool menu and `tool_open`, text wiring, the parallel voice call | in place (`infra/models/jev/jevChoice.ts`, `mind/selectors/{toolMenu,turnChoices}.ts`, `mind/tools/shannonToolMenu.ts`, `wiring/skillRoutingWiring.ts`; tests `toolMenu.test.ts`, `stage2SwitchedOff.test.ts`) |
-| 3 | Notion, Voyager tasks, the schedule and place search as gated registry tools; web as a capability entry | not yet |
+| 3 | Notion, Voyager tasks, the schedule and place search as gated registry tools; web as a capability entry | in place (`mind/tools/shannonReadTools.ts`, `readToolPlan` in `conversationCapabilities.ts`, `settleTextTools` in `apiTextTurn.ts`, `readToolPorts` in `wiring/skillRoutingWiring.ts`; tests `readTools.test.ts`, `shannonCapabilityEvidence.test.ts`) |
 | 4 | Difficulty, the tier policy, `luna_plus`, the turn verifier, tier choices, the competence table, conversation choices in reward (I-3) | not yet |
 | 5 | The Anthropic adapter (`@anthropic-ai/sdk`, I-6), `TieredChatModel`, the `tier.*` scenario set | not yet (inert until the key and the switch) |
 | 6–7 | Skill memory and its copies in Aether | not yet (another branch) |
@@ -64,6 +64,24 @@ ADR-0008 §8 「道具は名前と短い説明だけを毎回渡し、使うと�
 - **What the model gets** (`mind/tools/shannonToolMenu.ts`, `withToolMenu`): the schemas of the chosen tools (only those the turn offers) plus `tool_open(name)`, whose `name` is an enum of the tools the turn offers. Its instructions list every offered tool by provider name and summary (`[ボクの道具・献立]`); the capability lines (Aether, her Minecraft body) and the instruction lines follow every offered tool, not only the schemas sent. `tool_open` is answered by the session: it runs nothing, is not counted against the turn's six calls, takes no time and is not written to the activity record or the turn's trace; the opened tool's schema is in the request from the next round (`withToolRounds`). A call of an offered tool that was not opened is refused like a name the turn does not offer, and runs nothing. The offer, the audience, the gate and the runner are unchanged.
 - **Fallback.** When Jev times out, fails or answers off the menu, the turn's session is not narrowed: every offered schema goes, as before.
 - **Trace.** `tool_menu` with `tool` (the first chosen name, `none`, or `all` for the fallback), `chosen` (how many; −1 for the fallback), `offered`, `groups`.
+
+## Read tools (step 3, `SHANNON_READ_TOOLS`)
+
+The read capabilities that were projections only become registry tools (one registry, one gate, one record), each with its own gate domain:
+
+| Tool | Domain | Reads (the same read as) | Cost |
+| --- | --- | --- | --- |
+| `notion.read(query)` | `notion_read` | the Notion projection (`notionTurnProjection`) for one search word | none |
+| `voyager.tasks(query?)` | `voyager_read` | the Voyager task read (`conversationCapabilityPrompt`, keyword search) | none |
+| `schedule.upcoming(range)` | `schedule_read` | the owner's upcoming items as he alone hears them (`OwnerUpcoming.promptFor`, 48 hours or 8 days) | none |
+| `places.search(query, area?)` | `places_search` | the place skill (`runPlaceDiscoverySkill`, a model with web search; no device location) | model |
+
+- **Who.** The registry lists them for the owner alone, text and voice, never her own time; the gate (`authorizeToolCall`) refuses anyone else. They exist only while the wiring hands the runner their ports (`ShannonToolRunner.useReads`, `readToolPorts`); without them every offer, name and refusal is what it was (a call of `notion_read` is a name that does not exist). The self-diagnosis lists them only while the switch is on.
+- **Audience rules unchanged.** A turn offers them only where its own projection rules would read the same thing (`conversationTools` option `reads`, fail closed): text, the owner alone in the app (`readToolPlan` of his selection: Notion, tasks and the schedule as he alone hears them; places); voice, the owner alone (`ownerAloneReads`). With anyone else present (text marked `others`, a companion, 「友人も一緒」, a platform conversation) no read tool is offered and every projection, guarded marks included, is exactly what it was (`readTools.test.ts`, the audience matrix). Jev's menu never lists a read tool in such a turn, because it lists only what the turn offers.
+- **Fold.** In a text turn of the owner alone the projections the tools serve are not made (`remaining`); what she was told of her own outreach still follows the schedule's old audience. When the session does not serve them in the end (no tools after all: others known to the server, a forced web search chosen by Jev), they are read the old way and the prompt is built again (`settleTextTools`), so nothing reachable before is lost. Voice keeps every projection as it was and adds the tools in a turn that offers tools.
+- **Web** is a capability entry of the menu (`WEB_CAPABILITY_ENTRY`, text only, beside her read tools), not a function tool: choosing it sets the turn's `useWebSearch` (the provider's own search; no function tools that turn, as before).
+- **Capability line.** `SHANNON_READ_TOOLS_CAPABILITY` (`packages/cognition`, conditional like Aether's and the Minecraft body's) is added after the Notion line only to a turn that offers a read tool (`withToolCapabilityLines`); with the switch off the description is what it was.
+- **Record.** Each call is written to the activity record by name and outcome only (`会話の中でNotionの共有ページを読みました。`), never the query or what was read; a failure is `unavailable` and retryable.
 
 ## Decision traces
 

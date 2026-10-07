@@ -10,7 +10,7 @@ import { toolTraceCall } from './shannonToolTrace.js';
 import { InMemoryToolTraces, TOOL_FOLLOW_UP_MILLISECONDS, ToolTurnLog, type ToolTraceStore } from './shannonToolTurns.js';
 import { toolSessionMemory } from './shannonToolTypes.js';
 import { baseToolSession, startToolMenu, type ToolMenuChooser } from './shannonToolMenu.js';
-import { ownToolsEnabled, providerToolName, toolFailure, toolFromProviderName, toolResultForModel, type ShannonToolDefinition } from './shannonTools.js';
+import { isReadToolDomain, ownToolsEnabled, providerToolName, toolFailure, toolFromProviderName, toolResultForModel, type ReadToolDomain, type ShannonToolDefinition } from './shannonTools.js';
 import type { TurnDeadline } from '../action/respond/turnDeadline.js';
 import { answersWithPlace, asksForMemo, asksWhichPlace, namesAether } from '../action/respond/memoPlace.js';
 export { withMinecraftToolLine } from './shannonMinecraftTools.js';
@@ -54,7 +54,7 @@ export function conversationTools(
   /** A spoken turn: how far its words can be trusted (`transcriptTrust`), and the client's utterance id. */
   voice: { trust: 'reliable' | 'uncertain' | 'unknown'; utteranceId?: string } = { trust: 'reliable' },
   /** A surface that has its own way to a domain (her Minecraft body's game chat asks it through the turn's intent). */
-  options: { withoutDomains?: readonly string[]; openOnly?: boolean } = {},
+  options: { withoutDomains?: readonly string[]; openOnly?: boolean; reads?: ReadToolOffer } = {},
 ): { tools?: ShannonModelToolSession; toolsWithheld?: true } {
   const runner = autonomy?.tools;
   // Without what the server knows of the audience, nothing is offered (and nothing said about it).
@@ -77,7 +77,7 @@ export function conversationTools(
     || (voice.trust === 'unknown' && ((confirms(words) && lastReplyAsksToConfirm(server, scopeKey, threadId))
       || (answersWithPlace(words) && lastReplyAsks(server, scopeKey, threadId, asksWhichPlace))));
   const definitions = runner.offered(surface, audience, scopeKey)
-    .filter(tool => (writes || tool.effect === 'read') && !options.withoutDomains?.includes(tool.domain));
+    .filter(tool => (writes || tool.effect === 'read') && !options.withoutDomains?.includes(tool.domain) && readOffered(tool, options.reads));
   if (!definitions.length) return {};
   const trace = ownerAlone === 'guests' ? undefined : server.turns?.open(scopeKey, threadId, words, offer === 'asked', voice.utteranceId);
   const memory = toolSessionMemory(createHash('sha256').update(`${scopeKey}\n${turn}`).digest('hex'));
@@ -131,6 +131,16 @@ export function conversationTools(
   return { tools: session };
 }
 
+/**
+ * Syzygy ADR-0008 stage 2, step 3: which of her read tools a turn offers, by the rules its own projections follow
+ * (`conversationCapabilities.ts`); absent, none (fail closed). Only with the owner alone: the registry lists them for him alone.
+ */
+export type ReadToolOffer = Partial<Record<ReadToolDomain, boolean>>;
+
+function readOffered(tool: ShannonToolDefinition, reads: ReadToolOffer | undefined): boolean {
+  return !isReadToolDomain(tool.domain) || reads?.[tool.domain] === true;
+}
+
 /** The tool sessions of turns in which a write of hers to her own places, or a proposal to the owner's Aether, worked. */
 const WROTE_HER_OWN_THINGS = new WeakSet<object>();
 
@@ -156,7 +166,7 @@ export function turnWroteHerOwnThings(tools: ShannonModelToolSession | undefined
  */
 export function toolMenuCandidates(
   autonomy: { tools?: ShannonToolRunner } | undefined, scopeKey: string, surface: 'text' | 'voice', ownerAlone: boolean | 'others' | 'guests' | 'shared',
-  server: Partial<ConversationToolServer>, turn: string, options: { withoutDomains?: readonly string[] } = {},
+  server: Partial<ConversationToolServer>, turn: string, options: { withoutDomains?: readonly string[]; reads?: ReadToolOffer } = {},
 ): readonly ShannonToolDefinition[] {
   try {
     const runner = autonomy?.tools;
@@ -166,7 +176,7 @@ export function toolMenuCandidates(
     const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface), offersAether(runner, scopeKey, surface)) : 'text';
     if (!offer) return [];
     const othersPresent = ownerAlone === 'others' || ownerAlone === 'guests' || ownerAlone === 'shared' || server.audience.othersKnown(scopeKey);
-    return runner.offered(surface, othersPresent ? 'others' : 'owner_alone', scopeKey).filter(tool => !options.withoutDomains?.includes(tool.domain));
+    return runner.offered(surface, othersPresent ? 'others' : 'owner_alone', scopeKey).filter(tool => !options.withoutDomains?.includes(tool.domain) && readOffered(tool, options.reads));
   } catch { return []; }
 }
 
@@ -288,8 +298,18 @@ export { offerWithMenu, type ToolMenuChooser } from './shannonToolMenu.js';
 /** Syzygy ADR-0008 stage 2: the menu question for the tools this turn would offer (`toolMenuCandidates`), or null. */
 export function startTurnToolMenu(
   chooser: ToolMenuChooser | undefined | null, autonomy: { tools?: ShannonToolRunner } | undefined, scopeKey: string, surface: 'text' | 'voice',
-  ownerAlone: boolean | 'others' | 'guests' | 'shared', server: Partial<ConversationToolServer>, turn: string, options: { withoutDomains?: readonly string[] } = {},
+  ownerAlone: boolean | 'others' | 'guests' | 'shared', server: Partial<ConversationToolServer>, turn: string, options: { withoutDomains?: readonly string[]; reads?: ReadToolOffer } = {},
+  extra: readonly { name: string; summary: string; group: string }[] = [],
 ) {
   return startToolMenu(chooser, { scopeKey, surface, words: turn.slice(turn.indexOf('\n') + 1) },
-    () => toolMenuCandidates(autonomy, scopeKey, surface, ownerAlone, server, turn, options));
+    () => toolMenuCandidates(autonomy, scopeKey, surface, ownerAlone, server, turn, options), extra);
+}
+
+/**
+ * Syzygy ADR-0008 stage 2, step 3: the read tools a voice turn offers. With the owner alone every one (his voice projections
+ * read all of them for him alone); anyone else present, none (the voice projections stay as they were). They exist at all only
+ * while the runner has their ports.
+ */
+export function ownerAloneReads(ownerAlone: boolean | 'others' | 'guests' | 'shared'): { reads?: ReadToolOffer } {
+  return ownerAlone === true ? { reads: { notion_read: true, voyager_read: true, schedule_read: true, places_search: true } } : {};
 }

@@ -42,6 +42,8 @@ export {
   SHANNON_ROOM_LOOK_RULES,
   shannonCapabilityPrompt,
   withAetherAccessCapability,
+  withReadToolsCapability,
+  SHANNON_READ_TOOLS_CAPABILITY,
   withMinecraftBodyCapability,
   type ShannonCapability,
   type ShannonCapabilityId,

@@ -186,3 +186,37 @@ async function readTaskContext(message: string, dependencies: ConversationReadCa
     finally { if (timer) clearTimeout(timer); }
   return sections.join('\n\n').slice(0, 6_000);
 }
+
+/**
+ * Syzygy ADR-0008 stage 2, step 3 (`SHANNON_READ_TOOLS`): the projections of a turn of the owner alone that her read tools
+ * fold. `offer` is what the turn's own selection would read (Notion, Voyager tasks, the schedule with him alone; places always),
+ * as the read tools her session offers; `remaining` is the selection without them (what she was told of her own outreach
+ * stays, by the schedule's audience it had); `dropped(served)` is the selection of what the session does not serve after all
+ * (no tools in the end, a forced web search), read the old way then, so nothing reachable before is lost.
+ */
+export interface ReadToolPlan {
+  offer: Readonly<Record<'notion_read' | 'voyager_read' | 'schedule_read' | 'places_search', boolean>>;
+  remaining: ConversationCapabilitySelection;
+  dropped(served: ReadonlySet<string>): ConversationCapabilitySelection | null;
+}
+
+export function readToolPlan(selection: ConversationCapabilitySelection | undefined): ReadToolPlan {
+  const base = selection ?? { aetherNotes: true, voyagerTasks: true, notion: true };
+  const offer = Object.freeze({
+    notion_read: base.notion !== false, voyager_read: base.voyagerTasks !== false,
+    // The owner alone hears every line of the schedule; `guarded` (others present) stays a projection.
+    schedule_read: base.upcoming === undefined || base.upcoming === true, places_search: true,
+  });
+  const ownOutreach = base.ownOutreach ?? base.upcoming;
+  return {
+    offer,
+    remaining: { ...base, ...(offer.notion_read ? { notion: false } : {}), ...(offer.voyager_read ? { voyagerTasks: false } : {}),
+      ...(offer.schedule_read ? { upcoming: false } : {}), ownOutreach: ownOutreach ?? true },
+    dropped: served => {
+      const notion = offer.notion_read && !served.has('notion_read');
+      const voyagerTasks = offer.voyager_read && !served.has('voyager_read');
+      const upcoming = offer.schedule_read && !served.has('schedule_read');
+      return notion || voyagerTasks || upcoming ? { aetherNotes: false, notion, voyagerTasks, upcoming, ownOutreach: false } : null;
+    },
+  };
+}

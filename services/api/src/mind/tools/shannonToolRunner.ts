@@ -14,8 +14,10 @@ import type { StudyAether } from '../action/ownTime/studyAether.js';
 import { validToolInput } from './shannonToolInput.js';
 import type { PreparedToolCall, ToolExecutionContext, ToolExecutor } from './shannonToolTypes.js';
 import {
-  offeredTools, shannonTool, toolFailure, toolForSurface, toolFromProviderName, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface,
+  isReadToolDomain, offeredTools, shannonTool, toolFailure, toolForSurface, toolFromProviderName,
+  type ReadToolDomain, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface,
 } from './shannonTools.js';
+import { READ_TOOL_PORT, readToolExecutors, type ReadToolPorts } from './shannonReadTools.js';
 
 /**
  * Runs the registry's tools. Conversations (text and voice) call `call`; her own time uses `prepare` inside a
@@ -51,8 +53,10 @@ export interface ToolAetherPorts {
 export type ToolCallChoiceSink = (scopeKey: string, call: { tool: string; surface: 'text' | 'voice'; audience: ToolAudience; ok: boolean }, at: string) => void;
 
 export class ShannonToolRunner {
-  private readonly executors: Readonly<Record<string, ToolExecutor>>;
+  private executors: Readonly<Record<string, ToolExecutor>>;
   private choices: { sink: ToolCallChoiceSink; now: () => string } | null = null;
+  /** Syzygy ADR-0008 stage 2: the ports of her read tools (`useReads`); null, they do not exist on this server. */
+  private reads: ReadToolPorts | null = null;
 
   constructor(
     private readonly store: SQLiteAutonomyStore,
@@ -76,7 +80,8 @@ export class ShannonToolRunner {
   offered(surface: ToolSurface, audience: ToolAudience, scopeKey?: string): readonly ShannonToolDefinition[] {
     // Her Aether tools only while the Aether client is configured (URL and token), and a proposal only while the inbox is too:
     // with the inbox alone (or the token alone) every offer is what it was before Aether access. Only to the owner's scope.
-    const tools = offeredTools(surface, audience, tool => tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
+    const tools = offeredTools(surface, audience, tool => isReadToolDomain(tool.domain) ? this.readsFor(tool.domain)
+      : tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
       : tool.domain === 'minecraft_body' ? minecraftToolOffered(this.minecraft, tool, scopeKey)
         : tool.domain === 'owner_documents_read' ? this.ownerDocumentsFor(scopeKey)
         : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true && this.aetherFor(scopeKey)
@@ -106,6 +111,8 @@ export class ShannonToolRunner {
    */
   knownTool(name: string): ShannonToolDefinition | null {
     const tool = toolFromProviderName(name) ?? shannonTool(name);
+    // Her read tools do not exist without their ports: a call of one is refused as a name that never existed.
+    if (tool && isReadToolDomain(tool.domain) && !this.readsFor(tool.domain)) return null;
     if (tool?.domain === 'owner_documents_read' && !(this.aether.ownerDocuments === true && this.aether.access)) return null;
     return tool && !this.aether.access && (tool.name.startsWith('aether') || tool.domain === 'aether_proposal') ? null : tool;
   }
@@ -156,6 +163,19 @@ export class ShannonToolRunner {
       this.recorder.recordConversationAction(scopeKey, { summary: `会話の中で道具「${this.knownTool(name)?.name ?? '不明'}」を使おうとしましたが、使えませんでした。`, tool: name.slice(0, 120), outcome: 'failed', reasonCode: 'not_offered' });
     } catch { /* the refusal stands */ }
     return result;
+  }
+
+  /**
+   * Syzygy ADR-0008 stage 2, step 3 (`SHANNON_READ_TOOLS`): her read tools exist from now on, over these ports (the wiring hands
+   * them only while the switch is on). Never called, every offer, name and refusal is what it was.
+   */
+  useReads(ports: ReadToolPorts): void {
+    this.reads = ports;
+    this.executors = Object.freeze({ ...this.executors, ...readToolExecutors(ports) });
+  }
+
+  private readsFor(domain: ReadToolDomain): boolean {
+    return Boolean(this.reads?.[READ_TOOL_PORT[domain]]);
   }
 
   /** Syzygy ADR-0008 stage 1: told of every conversation call that ran (`SHANNON_CHOICE_LEDGER`); never set, nothing is told. */

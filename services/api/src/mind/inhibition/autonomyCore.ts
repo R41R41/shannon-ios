@@ -208,6 +208,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/inhibition/conversationSecrets.ts',
     'services/api/src/mind/tools/shannonStudyTools.ts',
     'services/api/src/mind/tools/shannonFolderTools.ts',
+    // Syzygy ADR-0008 stage 2, step 3: the executors of her read tools (Notion, Voyager tasks, the schedule, place search).
+    'services/api/src/mind/tools/shannonReadTools.ts',
     // Aether (Syzygy ADR-0007 revised): the client of her access and the executors of her Aether tools.
     'services/api/src/integrations/aether/aetherAccess.ts',
     'services/api/src/mind/tools/shannonAetherTools.ts',

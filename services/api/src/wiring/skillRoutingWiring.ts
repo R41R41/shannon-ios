@@ -4,6 +4,14 @@ import { countedJevFetch } from '../infra/models/jev/jevClient.js';
 import { JevChoiceClient, JevChooser, type JevChoiceTrace } from '../infra/models/jev/jevChoice.js';
 import { jevUsdPerCall } from '../infra/models/jev/jevUsage.js';
 import { JevTurnChooser, type TurnChooser } from '../mind/selectors/turnChoices.js';
+import type { ReadToolPorts } from '../mind/tools/shannonReadTools.js';
+import { conversationCapabilityPrompt } from '../mind/action/respond/conversationCapabilities.js';
+import { notionTurnProjection } from '../integrations/notion/notionConversation.js';
+import type { NotionSource } from '../integrations/notion/notionSource.js';
+import type { VoyagerCatalog } from '../integrations/voyager/organize.js';
+import type { OwnerUpcoming } from '../mind/memory/ownerUpcoming.js';
+import type { ShannonChatModel } from '../infra/models/chatModel.js';
+import { runPlaceDiscoverySkill } from '../integrations/places/placeDiscoverySkill.js';
 
 /**
  * Wiring of Syzygy ADR-0008 stage 2 (`docs/skill-and-routing-contract.md`): what the API kernel is handed for the turn's Jev
@@ -51,4 +59,25 @@ function configuredTurnChooser(
     }) } : {}),
   });
   return new JevTurnChooser(jev, { toolMenu: switches.toolMenu });
+}
+
+/**
+ * Step 3 (`SHANNON_READ_TOOLS`): the ports of her read tools, over the same reads the conversation's projections make. Null
+ * while stage 2 or the switch is off: then her runner has none of them and every offer is what it was.
+ */
+export function readToolPorts(
+  environment: Readonly<Record<string, string | undefined>>,
+  parts: { notion: NotionSource | null; voyagerCatalog: VoyagerCatalog; upcoming: Pick<OwnerUpcoming, 'promptFor'>; chatModel: ShannonChatModel },
+): ReadToolPorts | null {
+  if (!skillRoutingSwitches(environment).readTools) return null;
+  return {
+    notion: async query => {
+      const read = await notionTurnProjection(parts.notion, `Notionの「${query}」`);
+      return { text: read?.prompt ?? '', sources: read?.sources ?? [] };
+    },
+    voyagerTasks: async query => conversationCapabilityPrompt('', query ? `「${query}」のタスク` : 'タスク', { voyagerCatalog: parts.voyagerCatalog },
+      { aetherNotes: false, voyagerTasks: true, upcoming: false, ownOutreach: false }),
+    upcoming: (scopeKey, range) => parts.upcoming.promptFor(scopeKey, range === 'week' ? '今週の予定' : 'これからの予定', 'owner'),
+    places: async (scopeKey, query, spoken) => (await runPlaceDiscoverySkill(parts.chatModel, { scopeKey, message: query, context: spoken ? { spoken: true } : {} })).prompt,
+  };
 }

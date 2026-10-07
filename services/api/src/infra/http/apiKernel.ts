@@ -92,13 +92,14 @@ import { InMemoryVoiceIdentityStore, type ShannonVoiceIdentityStore } from '../.
 import { OwnOutreach, type OwnOutreachReader } from '../../surfaces/outreach/ownOutreach.js';
 import { voiceSessionCalls } from '../../surfaces/voice/ownerCallElsewhere.js';
 import {
-  NO_LOOK, answerTextCommand, beginTextTurn, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type TextTurnInput, type TextTurnResult,
+  NO_LOOK, answerTextCommand, beginTextTurn, settleTextTools, textToolStart, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type TextTurnInput, type TextTurnResult,
 } from '../../surfaces/text/apiTextTurn.js';
 import { randomUUID } from 'node:crypto';
 import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
 import { generateChatTurn, withSentenceStream } from '../../surfaces/text/chatSentenceStream.js';
-import { conversationTools, toolMenuCandidates, toolTraceReader, turnWroteHerOwnThings } from '../../mind/tools/shannonToolSession.js';
-import { offerWithMenu, startToolMenu } from '../../mind/tools/shannonToolMenu.js';
+import { conversationTools, toolTraceReader, turnWroteHerOwnThings } from '../../mind/tools/shannonToolSession.js';
+import type { ReadToolPorts } from '../../mind/tools/shannonReadTools.js';
+
 import type { TurnChooser } from '../../mind/selectors/turnChoices.js';
 import { withToolCapabilityLines } from '../../mind/tools/shannonAetherTools.js';
 import { withCapabilitySources } from '../../mind/action/respond/conversationCapabilities.js';
@@ -145,6 +146,8 @@ export interface ShannonApiKernelOptions {
    * it was at ca7cf519 (`SHANNON_ADR8_STAGE2=off` hands none).
    */
   turnChooser?: TurnChooser;
+  /** Stage 2, step 3 (`SHANNON_READ_TOOLS`): the ports of her read tools; handed to her tool runner, and the text turn folds its projections. */
+  readTools?: ReadToolPorts;
 }
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel;
@@ -175,6 +178,7 @@ export class ShannonApiKernel {
   private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null;
   private readonly minecraftRequests: { promptBlock(scopeKey: string, at: string): string } | null;
   private readonly turnChooser: TurnChooser | null;
+  private readonly readTools: boolean;
   /** What the server knows when it offers her tools: others present, and what her writes must not repeat (`shannonToolSession.ts`). */
   private readonly toolServer: ConversationToolServer;
   constructor(
@@ -217,6 +221,8 @@ export class ShannonApiKernel {
     this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now); this.ownOutreach = options.ownOutreach ? new OwnOutreach(options.ownOutreach, this.now) : null;
     this.body = new ShannonBody({ ...options.body, stateStore: this.stateStore, autonomy: this.autonomy, conversationStore: this.conversationStore, now: this.now });
     this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now);
+    this.readTools = Boolean(options.readTools && this.autonomy.tools);
+    if (options.readTools) this.autonomy.tools?.useReads(options.readTools);
     this.background = this.toolServer.turns.watching(this.background); // Each stored turn takes what her tools did with it.
   }
   get voiceSessions() { return voiceSessionCalls(this.body.ownerCalls, this.now); } // A voice session while the owner is in a call elsewhere.
@@ -376,33 +382,29 @@ export class ShannonApiKernel {
     const deps = this.textTurnDependencies();
     const begun = beginTextTurn(deps, input);
     const { occurredAt, captured, provisionalIntent, peopleRecall } = begun;
-    // Who her tools are offered to: with others present, her Aether reading tools (owner decisions 2026-10-06): the owner's own
-    // turn (app text marked `others`, his turn in a shared platform conversation) as 'shared', someone else's as 'guests'.
-    const toolAudience = audience.alone || (!surface ? 'shared' as const : !surface.othersFolderReading ? false : surface.openOnly ? 'guests' as const : 'shared' as const);
-    // Game chat asks her Minecraft body through the turn's intent, not through her tools.
-    const toolOptions = surface && !surface.minecraftTools ? { withoutDomains: ['minecraft_body'], ...(surface.openOnly ? { openOnly: true } : {}) } : {};
-    // Syzygy ADR-0008 stage 2: the turn's Jev call (the tool menu), in parallel with recall; none without the stage-2 wiring.
-    const choices = startToolMenu(!begun.explicitCommand && !begun.organizeTurn && body.webSearch !== true && !placeOptions.placeSearch ? this.turnChooser : null,
-      { scopeKey: body.scopeKey, surface: 'text', words: message },
-      () => toolMenuCandidates(this.autonomy, body.scopeKey, 'text', toolAudience, this.toolServer, `${threadId}\n${message}`, toolOptions));
+    // Who her tools are offered to, and (Syzygy ADR-0008 stage 2, none without its wiring) her read tools' plan and the turn's
+    // Jev call, started here so that it runs in parallel with recall (`textToolStart`).
+    const { toolAudience, toolOptions, plan, choices } = textToolStart(input, begun, { autonomy: this.autonomy, toolServer: this.toolServer, turnChooser: this.turnChooser, readTools: this.readTools });
     const cognitiveContext = this.memoryRecall && !begun.explicitCommand && !begun.organizeTurn
       ? await this.memoryRecall.enrich(begun.deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }) : begun.deterministicContext;
-    const { basePrompt, capabilityContext } = textTurnIdentityAndCapability(deps, input, begun);
-    const capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
+    const { basePrompt, capabilityContext } = textTurnIdentityAndCapability(deps, input, begun, plan?.remaining);
+    let capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
     // A surface has no look at the room or through the app.
     const roomLook = surface ? NO_LOOK : this.body.turnLooks.turn(body.scopeKey, message, occurredAt, audience.audience, request);
-    const layered = textTurnSystemPrompt(deps, input, begun, { basePrompt, cognitiveContext, capability, roomLook });
-    const systemPrompt = layered.prompt;
+    const prompt = (with_: typeof capability) => textTurnSystemPrompt(deps, input, begun, { basePrompt, cognitiveContext, capability: with_, roomLook });
+    let layered = prompt(capability);
+    let systemPrompt = layered.prompt;
     if (begun.explicitCommand || begun.organizeTurn) return answerTextCommand(deps, input, begun, cognitiveContext, systemPrompt);
     let { orchestrationState } = begun;
     // A summary has no label of its own: none where only open items may be given (a turn someone other than the owner wrote).
     const priorThreadSummary = surface?.openOnly ? undefined : usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId, audience.present);
     const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
     // Her Minecraft body's and Aether's capability lines, in her identity, exactly when this turn's tools include them (`withToolCapabilityLines`).
-    // The menu narrows the schemas sent to what Jev chose, plus `tool_open`; when Jev failed, every offered schema goes.
-    // Awaited only with a menu: without one the turn runs exactly as before (no extra turn of the event loop).
-    const offered = conversationTools(this.autonomy, body.scopeKey, 'text', toolAudience, this.toolServer, `${threadId}\n${message}`, deadline, undefined, toolOptions);
-    const toolOffer = choices ? await offerWithMenu(offered, choices) : offered;
+    let toolOffer = conversationTools(this.autonomy, body.scopeKey, 'text', toolAudience, this.toolServer, `${threadId}\n${message}`, deadline, undefined, toolOptions);
+    // Stage 2: the menu narrows the schemas sent; awaited only with a menu or a plan, so without them nothing changes (not even a tick).
+    const settled = choices || plan ? await settleTextTools(deps, input, begun, { offered: toolOffer, choices, plan, capability, prompt: () => layered, rebuild: prompt }) : null;
+    if (settled) ({ offer: toolOffer, capability, layered } = settled);
+    systemPrompt = layered.prompt;
     const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withToolCapabilityLines({
       // Her fixed identity first, what she knows of the owner next, and the turn's context with the replay (`chatModelTurn.ts`).
       scopeKey: body.scopeKey, systemPrompt: layered.systemPrompt, ...(layered.profilePrompt ? { profilePrompt: layered.profilePrompt } : {}),
@@ -412,7 +414,7 @@ export class ShannonApiKernel {
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message,
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,
-      ...(body.webSearch === true || placeSkill ? { useWebSearch: true } : {}),
+      ...(body.webSearch === true || placeSkill || settled?.web ? { useWebSearch: true } : {}),
       ...(surface?.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}),
       // A surface's conversation has its own fixed title.
       generateThreadTitle: surface ? false : this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),

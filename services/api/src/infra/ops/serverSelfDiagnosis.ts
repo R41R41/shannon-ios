@@ -25,7 +25,8 @@ import { createConfiguredOpenAITranscriptionGateway } from '../models/openaiTran
 import { DisabledVoyagerCatalog, type VoyagerCatalog } from '../../integrations/voyager/organizeIntegrations.js';
 import { shannonNowOwnerScope } from '../../contracts/shannonNowContract.js';
 import { configuredAetherAccess } from '../../integrations/aether/aetherAccess.js';
-import { SHANNON_TOOLS, offeredTools, ownToolsEnabled, type ToolAudience, type ToolSurface } from '../../mind/tools/shannonTools.js';
+import { SHANNON_TOOLS, isReadToolDomain, offeredTools, ownToolsEnabled, type ToolAudience, type ToolSurface } from '../../mind/tools/shannonTools.js';
+import { skillRoutingSwitches } from '@shannon/learning';
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -148,7 +149,10 @@ function toolSummary(environment: Environment): ServerSelfDiagnosis['tools'] {
   // summary is what it was before Aether access.
   const aether = configuredAetherAccess(environment) !== null;
   // The owner's documents in her own time exist only with Aether and SHANNON_AUTONOMY_OWNER_DOCUMENTS=on (ADR-0007).
-  const here = (tool: { name: string; domain: string }) => tool.domain === 'owner_documents_read' ? aether && ownerDocumentsEnabled(environment) : aether || !tool.name.startsWith('aether');
+  // Her read tools (Syzygy ADR-0008 stage 2) exist only while SHANNON_READ_TOOLS is on; off, the summary is what it was.
+  const reads = skillRoutingSwitches(environment).readTools;
+  const here = (tool: { name: string; domain: string }) => isReadToolDomain(tool.domain) ? reads
+    : tool.domain === 'owner_documents_read' ? aether && ownerDocumentsEnabled(environment) : aether || !tool.name.startsWith('aether');
   // Her folder's tools are offered only while a PC or Mac is bound to it (`ShannonToolRunner.offered`), as the API reads it.
   const bound = Object.keys(configuredAutonomy(environment).places.hostDevices ?? {}).length > 0;
   const offeredHere = (tool: { name: string; domain: string }) => here(tool) && (tool.domain !== 'host_folder' || bound);

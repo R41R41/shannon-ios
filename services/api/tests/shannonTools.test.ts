@@ -10,7 +10,7 @@ import { providerFunctionTools } from '../src/infra/models/chatModelTools.js';
 import { similarBodies } from '../src/mind/tools/shannonStudyTools.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import {
-  CONVERSATION_WRITE_CHARACTERS, SHANNON_TOOLS, TOOL_FAILURE_KINDS, TOOL_SUMMARIES, toolSummary, offeredTools, providerToolName, shannonTool, toolFromProviderName, toolResultForModel,
+  CONVERSATION_WRITE_CHARACTERS, SHANNON_TOOLS, TOOL_FAILURE_KINDS, TOOL_SUMMARIES, isReadToolDomain, toolSummary, offeredTools, providerToolName, shannonTool, toolFromProviderName, toolResultForModel,
   type ToolResult, type ToolSurface,
 } from '../src/mind/tools/shannonTools.js';
 
@@ -34,6 +34,9 @@ function idIn(result: ToolResult): string {
   return match[1]!;
 }
 
+/** Her read tools of Syzygy ADR-0008 stage 2, step 3, and their own gate domains. */
+const READ_TOOL_DOMAIN_OF: Readonly<Record<string, string>> = { 'notion.read': 'notion_read', 'voyager.tasks': 'voyager_read', 'schedule.upcoming': 'schedule_read', 'places.search': 'places_search' };
+
 describe('the tool registry (ADR-0003 stage 1)', () => {
   it('gives every tool a one-line summary of at most 60 characters, in her words, never sent in a schema (ADR-0008 stage 2)', () => {
     const seen = new Set<string>();
@@ -52,7 +55,7 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
     }
     // The summary is the menu's line, not part of a definition, a provider's function, or anything that carries them.
     expect(SHANNON_TOOLS.every(item => !('summary' in item))).toBe(true);
-    expect(providerFunctionTools(SHANNON_TOOLS).every(item => !JSON.stringify(item).includes(String(TOOL_SUMMARIES[String(item.name).replace('_', '.')])))).toBe(true);
+    expect(providerFunctionTools(SHANNON_TOOLS).every(item => Object.keys(item).join() === 'type,name,description,parameters,strict')).toBe(true);
   });
 
   it('lists every tool once with a Japanese description, an object schema, a gate domain, no cost of its own, and the owner alone as audience', () => {
@@ -60,11 +63,12 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
     expect(SHANNON_TOOLS.map(tool => tool.name).sort()).toEqual([
       'aether.propose', 'aether.read', 'aether.search', 'aetherFolder.create', 'aetherFolder.delete', 'aetherFolder.list', 'aetherFolder.update',
       'folder.create', 'folder.delete', 'folder.list', 'folder.move', 'folder.read', 'folder.rename', 'folder.search', 'folder.update',
-      'minecraft.cancel', 'minecraft.request', 'minecraft.status', 'ownerDocs.read', 'ownerDocs.search',
-      'study.create', 'study.delete', 'study.list', 'study.move', 'study.read', 'study.rename', 'study.restore', 'study.search', 'study.update',
+      'minecraft.cancel', 'minecraft.request', 'minecraft.status', 'notion.read', 'ownerDocs.read', 'ownerDocs.search', 'places.search', 'schedule.upcoming',
+      'study.create', 'study.delete', 'study.list', 'study.move', 'study.read', 'study.rename', 'study.restore', 'study.search', 'study.update', 'voyager.tasks',
     ]);
     // Conversation only: her Minecraft body (phase 4) and a proposal to the owner's Aether inbox.
-    const conversationOnly = (tool: { domain: string }) => tool.domain === 'minecraft_body' || tool.domain === 'aether_proposal';
+    // and her read tools of ADR-0008 stage 2.
+    const conversationOnly = (tool: { domain: string }) => tool.domain === 'minecraft_body' || tool.domain === 'aether_proposal' || isReadToolDomain(tool.domain);
     // Her own time only, with the owner alone: the owner's documents (ADR-0007, owner decision 2026-10-06; offered only while switched on).
     const ownTimeOnly = (tool: { domain: string }) => tool.domain === 'owner_documents_read';
     // With anyone else present: only her Aether reading tools (held to 「シャノン用フォルダ」 by the gate, Syzygy ADR-0007 revised).
@@ -74,8 +78,11 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
       expect(tool.input).toMatchObject({ type: 'object', additionalProperties: false });
       for (const required of tool.input.required) expect(Object.keys(tool.input.properties), tool.name).toContain(required);
       expect(tool.domain).toBe(tool.name.startsWith('study.') || tool.name.startsWith('aetherFolder.') || tool.name === 'aether.search' || tool.name === 'aether.read' ? 'aether_study'
-        : tool.name.startsWith('minecraft.') ? 'minecraft_body' : tool.name === 'aether.propose' ? 'aether_proposal' : tool.name.startsWith('ownerDocs.') ? 'owner_documents_read' : 'host_folder');
-      expect(tool.cost).toBe('none');
+        : tool.name.startsWith('minecraft.') ? 'minecraft_body' : tool.name === 'aether.propose' ? 'aether_proposal' : tool.name.startsWith('ownerDocs.') ? 'owner_documents_read'
+          : READ_TOOL_DOMAIN_OF[tool.name] ?? 'host_folder');
+      // Place search (ADR-0008 stage 2) asks a model with web search; every other tool calls none itself.
+      expect(tool.cost).toBe(tool.name === 'places.search' ? 'model' : 'none');
+      if (READ_TOOL_DOMAIN_OF[tool.name]) expect(tool.effect).toBe('read');
       expect(tool.audiences).toEqual(shared.has(tool.name) ? ['owner_alone', 'others'] : ['owner_alone']);
       if (shared.has(tool.name)) expect(tool.effect).toBe('read');
       expect(tool.surfaces).toEqual(conversationOnly(tool) ? ['text', 'voice'] : ownTimeOnly(tool) ? ['autonomy'] : ['text', 'voice', 'autonomy']);

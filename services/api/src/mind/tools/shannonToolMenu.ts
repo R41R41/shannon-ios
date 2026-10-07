@@ -111,10 +111,12 @@ export interface ToolMenuChooser {
 export function startToolMenu(
   chooser: ToolMenuChooser | undefined | null, request: { scopeKey: string; surface: 'text' | 'voice'; words: string },
   candidates: () => readonly ShannonToolDefinition[],
+  /** Capability entries beside the tools (web search, step 3), only in a turn that offers tools. */
+  extra: readonly { name: string; summary: string; group: string }[] = [],
 ): Promise<{ menu: { chosen: readonly string[] } | null }> | null {
   if (!chooser) return null;
-  const menu = menuCandidatesOf(candidates());
-  return menu.length ? chooser.choose({ ...request, menu }) : null;
+  const tools = menuCandidatesOf(candidates());
+  return tools.length ? chooser.choose({ ...request, menu: [...tools, ...extra] }) : null;
 }
 
 /** The turn's offer narrowed by the menu's answer, or the offer as it is (no menu, no tools, or Jev could not choose). */
