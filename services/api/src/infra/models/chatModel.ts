@@ -38,7 +38,7 @@ import {
 import { serverEnvironment } from '../config/serverEnvironment.js';
 export { AGENT_TASK_INSTRUCTIONS, agentTaskInstructions } from './chatModelSupport.js';
 
-export type ShannonChatMode = 'openai' | 'local-stub';
+export type ShannonChatMode = 'openai' | 'local-stub' | 'anthropic';
 
 export interface ShannonConversationItem {
   role: 'user' | 'assistant';

@@ -22,6 +22,7 @@
     "migrate:study-to-aether": "tsx --env-file-if-exists=../../.env scripts/migrate-study-to-aether.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
     "@shannon/cognition": "workspace:*",
     "@shannon/learning": "workspace:*"
   }

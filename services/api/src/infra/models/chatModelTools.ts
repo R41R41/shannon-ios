@@ -332,7 +332,8 @@ function textOnly(input: readonly unknown[]): unknown[] {
  * before any word of hers has gone out, when a tool fails or a round runs out of time. Absent: the request is as it was.
  */
 export interface ShannonTierRequest {
-  tier?: 'luna_plus';
+  /** `sonnet` (step 5): answered by Sonnet through `TieredChatModel` while routing is on; any other model reads it as luna. */
+  tier?: 'luna_plus' | 'sonnet';
   escalation?: true;
 }
 

@@ -117,8 +117,8 @@ describe('the result files of a model-free run', () => {
     const out = join(directory, 'results');
     const now = () => '2026-10-05T00:00:00.000Z';
     const first = await runReachSuite(scriptedDrivers(), { mode: 'scripted', revision: 'aaaa', now });
-    // Three reach scenarios and the nine of Syzygy ADR-0008's scenario suite v1.
-    expect(first.totals).toMatchObject({ passed: 12, failed: 0, pending: 0, invalid: 0 });
+    // Three reach scenarios, the nine of Syzygy ADR-0008's scenario suite v1, and the 25 of stage 2's tier set.
+    expect(first.totals).toMatchObject({ passed: 37, failed: 0, pending: 0, invalid: 0 });
     const written = writeReachReport(first, out, { full: true });
     expect(written.compared).toBeNull();
     expect(existsSync(join(out, 'latest-scripted.json'))).toBe(true);
@@ -135,7 +135,9 @@ describe('the result files of a model-free run', () => {
     expect(writeReachReport(first, out, { full: true }).compared).toBeNull();
     const estimate = liveEstimate(first, {});
     expect(estimate.map(line => line.scenarioId).slice(0, 3)).toEqual(['context.shiritori-60', 'helpful.three-tools', 'growth.autonomy-day']);
-    expect(estimate.slice(3).map(line => [line.scenarioId.startsWith('cog.'), line.yen])).toEqual(Array.from({ length: 9 }, () => [true, 0]));
+    expect(estimate.slice(3, 12).map(line => [line.scenarioId.startsWith('cog.'), line.yen])).toEqual(Array.from({ length: 9 }, () => [true, 0]));
+    // The tier set is priced at Sonnet's rates, and says it would be pending without the key.
+    expect(estimate.slice(12).every(line => line.scenarioId.startsWith('tier.') && line.yen > 0 && line.basis.includes('no credential'))).toBe(true);
     expect(estimate[0]!.yen).toBeGreaterThan(0);
     expect(estimate[1]!.yen).toBe(0);
     expect(estimate[2]!.yen).toBe(300);

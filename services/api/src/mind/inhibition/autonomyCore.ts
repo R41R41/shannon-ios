@@ -336,6 +336,10 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/infra/models/turnChecker.ts',
     'services/api/src/contracts/turnRoutingContract.ts',
     'services/api/src/surfaces/voice/voiceStage2.ts',
+    // Syzygy ADR-0008 stage 2, step 5: the Sonnet tier (the Anthropic adapter, its rounds and settings), the tiered model, its wiring.
+    'services/api/src/infra/models/anthropic/',
+    'services/api/src/infra/models/tieredChatModel.ts',
+    'services/api/src/wiring/sonnetWiring.ts',
   ]),
   deployment: Object.freeze([
     'deploy/',

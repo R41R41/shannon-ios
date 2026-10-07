@@ -16,6 +16,7 @@ import { createConfiguredChatModel } from './infra/models/chatModel.js';
 import { configuredVoiceDecision, startRewardMood } from './wiring/cognitionLedgerWiring.js';
 import { readToolPorts, skillRoutingParts } from './wiring/skillRoutingWiring.js';
 import { configuredTurnRouting } from './wiring/turnRoutingWiring.js';
+import { configuredSonnet, tieredChatModel } from './wiring/sonnetWiring.js';
 import { storyReacted, toolCallChoice, touchLedger } from './wiring/cognitionLedgerTaps.js';
 import { createValuesRoute, isValuesPath, ownerValueRecorder } from './infra/http/learningRoutes.js';
 import { configuredAuthPepper, SQLiteDeviceAuthStore } from './infra/auth/deviceAuth.js';
@@ -109,9 +110,11 @@ const autonomy = new ShannonAutonomyService({
   announcer: autonomyAnnouncer, agentTasks: agentTaskStore, defaultThread: scopeKey => persistentStore.threadId(scopeKey),
   defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST?.trim() || null, minecraftBody: minecraft.requests, aether: aetherPorts,
   ...(predictionLedger ? { storyReacted: (scopeKey, pieceId, reaction, at) => storyReacted(predictionLedger, scopeKey, pieceId, reaction, at, choiceLedger) } : {}) });
+// Syzygy ADR-0008 stage 2, step 5: the Sonnet tier, only with the Anthropic key and SHANNON_SONNET_ROUTING=on (default off); else luna as it was.
+const sonnet = configuredSonnet(process.env, { usageStore: persistentStore, now });
 // Syzygy ADR-0008 stage 2, step 4 (docs/skill-and-routing-contract.md): the tier policy's inputs, the verifier, and the learning of her
 // conversation choices. SHANNON_ADR8_STAGE2=off: none of it.
-const turnRouting = configuredTurnRouting(process.env, { databasePath: configuredDatabasePath(), choices: choiceLedger, usageStore: persistentStore, now });
+const turnRouting = configuredTurnRouting(process.env, { databasePath: configuredDatabasePath(), choices: choiceLedger, usageStore: persistentStore, now, sonnet });
 // Her tool calls in conversations are choices too: stage 1's data only, unless stage 2's conversation reward scores them (owner answer I-3).
 if (choiceLedger && !turnRouting?.routing.switches.conversationReward) autonomy.tools.observeChoices(toolCallChoice(choiceLedger), now);
 // Step 7b (SHANNON_REWARD_MOOD): settled choices of hers move her mood once each, here only, within the hourly safeguard.
@@ -141,7 +144,7 @@ const incomingCallRoute: IncomingCallRoute | null = createIncomingCallRoute(proc
 // What she did on her own to reach the owner (ownOutreach.ts), and which app a device is (ownerCallElsewhere.ts): read-only connections.
 const ownOutreach = new SQLiteOwnOutreach(configuredDatabasePath());
 const ownerCallFacts = new SQLiteOwnerCallFacts(configuredDatabasePath());
-const chatModel = createConfiguredChatModel(process.env, persistentStore);
+const chatModel = tieredChatModel(createConfiguredChatModel(process.env, persistentStore), sonnet);
 const voiceDecision = configuredVoiceDecision(process.env, persistentStore, persistentStore.decisionTraces()?.writer ?? null); // ADR-0008: traced; SHANNON_DECISION_TRACES=off: as it was.
 // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
 const notion = configuredNotionSource(process.env, { log: line => console.log(line) });

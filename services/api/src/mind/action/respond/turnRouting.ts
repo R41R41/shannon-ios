@@ -49,10 +49,11 @@ export function routeTurn(routing: TurnRouting | null | undefined, turn: {
 /** A tier decision with Jev's task kind (`unknown` when Jev gave none). */
 export type RoutedTier = TierDecision & { kind: string };
 
-/** The request fields of a tier: nothing for plain luna (the request is as it was). `sonnet` is not served before step 5. */
+/** The request fields of a tier: nothing for plain luna (the request is as it was); `sonnet` only when the policy served it (routing on). */
 export function tierRequest(decision: TierDecision | null): ShannonTierRequest {
   if (!decision) return {};
-  return { ...(decision.served === 'luna_plus' ? { tier: 'luna_plus' as const } : {}), ...(decision.escalateOnTrouble ? { escalation: true as const } : {}) };
+  return { ...(decision.served === 'luna_plus' ? { tier: 'luna_plus' as const } : decision.served === 'sonnet' ? { tier: 'sonnet' as const } : {}),
+    ...(decision.escalateOnTrouble ? { escalation: true as const } : {}) };
 }
 
 /**

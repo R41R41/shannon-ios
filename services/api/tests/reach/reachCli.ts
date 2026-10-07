@@ -55,7 +55,7 @@ async function run(args: string[]): Promise<number> {
   const envFile = join(repositoryRoot, '.env');
   if (existsSync(envFile)) process.loadEnvFile(envFile);
   const ready = liveReadiness(process.env);
-  console.log(`Live mode. Credentials present: conversation=${ready.conversation ? 'yes' : 'no'}, her own time=${ready.autonomy ? 'yes' : 'no'}.`);
+  console.log(`Live mode. Credentials present: conversation=${ready.conversation ? 'yes' : 'no'}, her own time=${ready.autonomy ? 'yes' : 'no'}, sonnet=${ready.sonnet ? 'yes' : 'no'}.`);
   console.log('Estimated cost of this live run (errs high):');
   console.log(estimateText(liveEstimate(scripted, process.env)));
   if (!args.includes('--yes')) {

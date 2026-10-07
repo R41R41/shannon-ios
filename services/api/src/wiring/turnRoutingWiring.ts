@@ -16,14 +16,17 @@ import { TierCompetence } from '../mind/selectors/tierCompetence.js';
  * - The competence table has its own connection, created by the API process (`shannon_tier_outcomes`), with `SHANNON_DIFFICULTY`.
  * - Her conversation choices (owner answer I-3) go to the stage-1 choice ledger with `SHANNON_CONVERSATION_REWARD`, scored by
  *   closed signals and settled by the owner's next turn; the ledger must be on (`SHANNON_CHOICE_LEDGER`).
- * - Sonnet is never available in step 4: there is no Anthropic client yet (step 5 adds it behind the key and `SHANNON_SONNET_ROUTING`).
+ * - Sonnet is available only when `configuredSonnet` built it (the key and `SHANNON_SONNET_ROUTING=on`, step 5); the voice policy reads
+ *   its rolling first-token latency.
  */
 const PRAGMAS = 'PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;';
 
 export function configuredTurnRouting(
   environment: Readonly<Record<string, string | undefined>>,
   parts: { databasePath: string | null; choices: ChoiceLedger | null; usageStore?: LlmUsageStore; now?: () => string; fetcher?: typeof fetch; database?: DatabaseSync;
-    /** When writes run (tests: at once). */ defer?: (task: () => void) => void },
+    /** When writes run (tests: at once). */ defer?: (task: () => void) => void;
+    /** Step 5: the Sonnet tier when routing is available (`configuredSonnet`), for its availability and measured first-token latency. */
+    sonnet?: { firstTokenLatency: { estimate(): number | null } } | null },
 ): { routing: TurnRouting; close(): void } | null {
   const switches = skillRoutingSwitches(environment);
   if (!switches.stage2 || (!switches.difficulty && !switches.turnVerify && !switches.conversationReward)) return null;
@@ -41,8 +44,8 @@ export function configuredTurnRouting(
   }) : null;
   const routing: TurnRouting = {
     switches: { difficulty: switches.difficulty, turnVerify: switches.turnVerify, conversationReward: choices !== null },
-    sonnetAvailable: false,
-    sonnetFirstTokenMs: () => null,
+    sonnetAvailable: Boolean(parts.sonnet),
+    sonnetFirstTokenMs: () => parts.sonnet?.firstTokenLatency.estimate() ?? null,
     competence: (scopeKey, tier, kind) => competence?.competence(scopeKey, tier, kind) ?? null,
     nextTurn: (scopeKey, talk, retryProbability, at) => {
       const serve = nextTurnServe(retryProbability);

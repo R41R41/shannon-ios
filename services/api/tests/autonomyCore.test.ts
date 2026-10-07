@@ -89,6 +89,11 @@ describe('CORE as code', () => {
       'services/api/src/wiring/skillRoutingWiring.ts': 'response_path',
       'services/api/src/mind/tools/shannonReadTools.ts': 'approval_and_budget',
       'packages/learning/src/difficultyPolicy.ts': 'response_path',
+      'services/api/src/infra/models/anthropic/anthropicChatModel.ts': 'response_path',
+      'services/api/src/infra/models/tieredChatModel.ts': 'response_path',
+      'services/api/src/wiring/sonnetWiring.ts': 'response_path',
+      'services/api/package.json': 'deployment',
+      'pnpm-lock.yaml': 'deployment',
       'services/api/src/mind/inhibition/inhibitionPorts.ts': 'approval_and_budget',
     };
     for (const [file, area] of Object.entries(expected)) expect(coreAreaForRepositoryPath(file)?.area, file).toBe(area);
