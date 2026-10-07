@@ -37,6 +37,7 @@ import { configuredDecisionTraces, configuredPredictionLedger } from './wiring/c
 import { ledgerPredictionTap, presenceOf, valueFactsReader } from './wiring/cognitionLedgerTaps.js';
 import { cognitionLedgerSwitches } from '@shannon/learning';
 import { configuredWithheldActions, gateRefusals, withheldFactsReader } from './wiring/withheldWiring.js';
+import { configuredSkillCopies } from './wiring/skillCopyWiring.js';
 import { clock } from './mind/action/ownTime/autonomyLoopPacing.js';
 
 /**
@@ -108,6 +109,9 @@ const service = new ShannonAutonomyService({
   ...(withheldActions ? { withheld: gateRefusals(withheldActions.withheld, config) } : {}),
 });
 if (withheldActions) service.tools.observeWithheld(withheldActions.withheld.sink, now);
+// Her own time's Aether folder writes never touch a skill's copy (review M2); read-only use of the skill tables, once the API created them.
+const skillCopies = configuredSkillCopies(process.env, databasePath);
+if (skillCopies) service.tools.guardSkillCopies((scopeKey, documentId) => skillCopies.isCopy(scopeKey, documentId));
 // Read-only Notion, only when the owner connected it; without a token the loop never plans a Notion step.
 const notion = notionLoopReader(configuredNotionSource(process.env, { log: line => console.log(line) }));
 // What she may see of the owner's in her own time (owner decision 2026-10-02, ADR-0003): one bounded block, read through the
@@ -192,6 +196,7 @@ try {
   decisionTraces?.close();
   predictionLedger?.close();
   withheldActions?.close();
+  skillCopies?.close();
   ownerContext?.close();
   ownerUpcoming.close();
   ownerState.close();

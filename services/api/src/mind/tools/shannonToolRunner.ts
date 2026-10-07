@@ -67,6 +67,11 @@ export function wasWithheld(result: ToolResult): boolean {
 
 export class ShannonToolRunner {
   private executors: Readonly<Record<string, ToolExecutor>>;
+  /**
+   * Review M2: whether a document of her Aether folder is the copy of one of her skills (`guardSkillCopies`); her own
+   * `aetherFolder.update` and `.delete` never touch one, so only the owner's edits of a copy are adopted as his.
+   */
+  private skillCopy: ((scopeKey: string, documentId: string) => boolean) | null = null;
   /** Syzygy ADR-0008 §14: where a call a rule stopped is written (`observeWithheld`); null, nothing is written. */
   private withheld: { sink: WithheldSink; now: () => string } | null = null;
   private choices: { sink: ToolCallChoiceSink; now: () => string } | null = null;
@@ -161,6 +166,10 @@ export class ShannonToolRunner {
     // The schema of this surface: in a conversation a write is shorter (`toolForSurface`).
     const checked = validToolInput(rawInput, toolForSurface(tool, context.surface).input);
     if ('problem' in checked) return { tool, result: toolFailure('invalid_input', `入力が正しくない（${checked.problem}）。`, { retryable: false }) };
+    if ((tool.name === 'aetherFolder.update' || tool.name === 'aetherFolder.delete') && this.skillCopy && this.isSkillCopy(context.scopeKey, checked.input.documentId)) {
+      return this.withhold(context, tool, toolFailure('refused', 'これはボクのスキルの写し。写しを直すのはライ氏だけで、ボクは書き換えも削除もしない。', {
+        retryable: false, refusal: { why: 'スキルの写しは、ライ氏が直したものだけを取り込む', wouldWork: 'スキルを変えたい時は、眠っている間の見直しに任せる' } }), 'skill_copy');
+    }
     const inputRefused = authorizeToolInput(tool, checked.input, context);
     if (inputRefused) return this.withhold(context, tool, inputRefused, 'outside_reach', context.audience === 'others' ? 'audience' : 'gate');
     const secret = secretRefusal(tool.name, checked.input, context.secrets);
@@ -187,6 +196,15 @@ export class ShannonToolRunner {
     } catch { /* the refusal stands */ }
     if (withheld) this.note(scopeKey, withheld.surface, withheld.tool, withheld.reason);
     return result;
+  }
+
+  /** Review M2: her skills' copies, by document id (the wiring hands it while the skills are on, in both processes). */
+  guardSkillCopies(isCopy: (scopeKey: string, documentId: string) => boolean): void { this.skillCopy = isCopy; }
+
+  private isSkillCopy(scopeKey: string, documentId: unknown): boolean {
+    if (typeof documentId !== 'string') return false;
+    // A copy list that cannot be read counts as a copy (fail closed).
+    try { return this.skillCopy!(scopeKey, documentId.trim()); } catch { return true; }
   }
 
   /** Syzygy ADR-0008 §14: every call a rule stops is written as withheld, through this sink (the wiring hands it only with stage 2 on). */

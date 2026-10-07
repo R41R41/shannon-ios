@@ -77,6 +77,11 @@ export class SkillMemory {
     return this.present;
   }
 
+  /** Review M2: whether a document of Aether is one of her skills' copies (none while the tables do not exist). */
+  isCopy(scopeKey: string, documentId: string): boolean {
+    return this.ready() && this.store.isCopy(scopeKey, documentId);
+  }
+
   /** Her skills that may be used now: not retired, and nothing they were built from forgotten. */
   usable(scopeKey: string, visible: (experienceId: string) => boolean = () => true): StoredSkill[] {
     if (!this.ready()) return [];

@@ -46,6 +46,7 @@ export const WITHHELD_REASON_LABELS = Object.freeze({
   secret: '内緒と言われたことが入る',
   not_pursuing: 'いま進めていないことのため',
   outside_reach: 'シャノン用フォルダの外',
+  skill_copy: 'スキルの写しを直すのはライ氏だけ',
   // A session's bound.
   session_budget: '一度に使える金額の上限',
 } as const);

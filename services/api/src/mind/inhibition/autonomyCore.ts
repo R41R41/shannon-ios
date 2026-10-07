@@ -134,6 +134,10 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/wiring/skillMemoryWiring.ts',
     // Step 7: her skills' readable copies in Aether, and the owner's edits of them adopted.
     'services/api/src/integrations/aether/skillExport.ts',
+    // Review M3: every file of the memory part, so a new one is covered at once (a file listed by name elsewhere keeps its area);
+    // her skills' lineage and helpers among them, and the worker's read of which documents are her skills' copies.
+    'services/api/src/mind/memory/',
+    'services/api/src/wiring/skillCopyWiring.ts',
     // Step 8: tree recall (the beam, its tree and Jev's questions) and its wiring.
     'services/api/src/mind/recall/treeBeam.ts',
     'services/api/src/mind/recall/treeRecall.ts',
@@ -190,6 +194,11 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // The window other parts of the mind import the gate and the budget through (Syzygy ADR-0008 §10).
     'services/api/src/mind/inhibition/inhibitionPorts.ts',
     'services/api/src/mind/inhibition/autonomyBudget.ts',
+    // Review M3: every file of the inhibition part (a file listed by name elsewhere keeps its area), her withheld actions among
+    // them, with their contract and wiring.
+    'services/api/src/mind/inhibition/',
+    'services/api/src/contracts/withheldActionContract.ts',
+    'services/api/src/wiring/withheldWiring.ts',
     'services/api/src/mind/action/ownTime/autonomyModels.ts',
     'services/api/src/mind/action/ownTime/store/autonomyStore.ts',
     'services/api/src/mind/self/autonomyPursuits.ts',

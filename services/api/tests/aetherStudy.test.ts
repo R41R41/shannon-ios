@@ -239,6 +239,26 @@ describe('a call of an Aether tool without the Aether client', () => {
   });
 });
 
+describe('her skills\' copies in her folder (review M2)', () => {
+  it('are never updated or deleted by her own tools: refused, written as withheld, and the copy stays as it was', async () => {
+    const { fake, call, service } = await harness({});
+    const created = await call('aetherFolder.create', { title: 'スキル「weekly-review」', body: '手順' });
+    const id = /id: (doc_\d+)/u.exec(created.text)![1]!;
+    const withheld: Array<{ tool: string; reason: string }> = [];
+    service.tools.observeWithheld((_scope, draft) => { withheld.push({ tool: draft.tool, reason: draft.reason }); }, () => '2026-10-06T01:00:00.000Z');
+    service.tools.guardSkillCopies((_scope, documentId) => documentId === id);
+    expect(await call('aetherFolder.update', { documentId: id, baseVersion: 1, body: '書き換え' })).toMatchObject({ ok: false, failure: 'refused' });
+    expect(await call('aetherFolder.delete', { documentId: id, baseVersion: 1 })).toMatchObject({ ok: false, failure: 'refused' });
+    expect(fake.documents.get(id)).toMatchObject({ body: '手順' });
+    expect(withheld).toEqual([{ tool: 'aetherFolder.update', reason: 'skill_copy' }, { tool: 'aetherFolder.delete', reason: 'skill_copy' }]);
+    // A copy list that cannot be read counts as a copy; any other document of hers is hers to change.
+    service.tools.guardSkillCopies(() => { throw new Error('locked'); });
+    expect(await call('aetherFolder.update', { documentId: id, baseVersion: 1, body: '書き換え' })).toMatchObject({ ok: false });
+    service.tools.guardSkillCopies(() => false);
+    expect(await call('aetherFolder.update', { documentId: id, baseVersion: 1, body: '書き換え' })).toMatchObject({ ok: true });
+  });
+});
+
 describe('her folder in Aether and proposals v2', () => {
   it('writes her own documents, refuses a stale version and the owner\'s documents, and proposes instead', async () => {
     const { fake, call, directory } = await harness({ proposals: true });

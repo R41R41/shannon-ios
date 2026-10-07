@@ -19,7 +19,13 @@ function filesBelow(folder: string): string[] {
  * Files listed by name in another area than the directory that holds them (Syzygy ADR-0008 stage 2). Each is still core;
  * only its area differs from the area of its directory.
  */
-const CORE_AREA_OVERRIDES: readonly string[] = ['packages/learning/src/difficultyPolicy.ts: emotion -> response_path'];
+// Review M3 lists the inhibition part by its folder (so a new file is covered at once); the two files of the activity record in
+// it are listed there by name and keep their area.
+const CORE_AREA_OVERRIDES: readonly string[] = [
+  'packages/learning/src/difficultyPolicy.ts: emotion -> response_path',
+  'services/api/src/mind/inhibition/autonomyDayLog.ts: approval_and_budget -> activity_record',
+  'services/api/src/mind/inhibition/store/autonomyActivity.ts: approval_and_budget -> activity_record',
+];
 
 describe('CORE as code', () => {
   it('covers the nine core areas of ADR-0002, each with at least one path', () => {
@@ -116,6 +122,14 @@ describe('CORE as code', () => {
     expect(coreAreaForRepositoryPath('tools/story-lab/run.mjs')).toBeNull();
     expect(coreAreaForRepositoryPath(apiSourcePath('autonomyActivity.ts'))?.area).toBe('activity_record');
     expect(coreAreaForRepositoryPath(apiSourcePath('autonomyPolicy.ts'))?.area).toBe('approval_and_budget');
+    // Review M3: the files stage 2 added, and any new file of the memory and inhibition parts.
+    for (const [path, area] of [
+      ['services/api/src/mind/memory/skillMemoryParts.ts', 'memory'], ['services/api/src/mind/memory/skillLineage.ts', 'memory'],
+      ['services/api/src/mind/memory/someFutureFile.ts', 'memory'], ['services/api/src/wiring/skillCopyWiring.ts', 'memory'],
+      ['services/api/src/mind/inhibition/withheldActions.ts', 'approval_and_budget'], ['services/api/src/mind/inhibition/withheldRules.ts', 'approval_and_budget'],
+      ['services/api/src/mind/inhibition/store/sqliteWithheldActions.ts', 'approval_and_budget'], ['services/api/src/mind/inhibition/someFutureFile.ts', 'approval_and_budget'],
+      ['services/api/src/contracts/withheldActionContract.ts', 'approval_and_budget'], ['services/api/src/wiring/withheldWiring.ts', 'approval_and_budget'],
+    ] as const) expect(coreAreaForRepositoryPath(path)?.area, path).toBe(area);
   });
 
   it('only widens: every file of the repository keeps the area the first listed entry gives it, unless it is listed by name (ADR-0008 stage 2)', () => {

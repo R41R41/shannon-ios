@@ -213,6 +213,11 @@ export class SQLiteSkills {
     return row ? parsed(row) : null;
   }
 
+  /** Whether a document of Aether is the copy of one of her skills (any status). */
+  isCopy(scopeKey: string, documentId: string): boolean {
+    return this.database.prepare('SELECT 1 FROM shannon_skills WHERE scope_key = ? AND aether_document_id = ? LIMIT 1').get(scopeKey, documentId) !== undefined;
+  }
+
   byName(scopeKey: string, name: string): StoredSkill | null {
     const row = this.database.prepare("SELECT * FROM shannon_skills WHERE scope_key = ? AND name = ? AND status != 'retired' ORDER BY created_at DESC LIMIT 1").get(scopeKey, name) as Record<string, unknown> | undefined;
     return row ? parsed(row) : null;

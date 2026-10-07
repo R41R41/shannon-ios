@@ -122,6 +122,7 @@ const sonnet = configuredSonnet(process.env, { usageStore: persistentStore, now 
 // Syzygy ADR-0008 stage 2, step 6 (docs/skill-and-routing-contract.md): her skill memory, its tables created here. SHANNON_SKILLS=off: none of it.
 const skillMemory = configuredSkillMemory(process.env, { databasePath: configuredDatabasePath(), createsSchema: true });
 const skills = skillMemory ? skillTurnPorts(skillMemory.memory, scopeKey => persistentStore.snapshot(scopeKey)) : null;
+if (skillMemory) autonomy.tools.guardSkillCopies((scopeKey, documentId) => skillMemory.memory.isCopy(scopeKey, documentId)); // Her writes never touch a skill's copy (review M2).
 // Step 8: tree recall over her notes, and with the owner alone her skills and her Aether folder. SHANNON_TREE_RECALL=off: recall as it was.
 const treeRecall = configuredTreeRecall(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, skills: skillMemory?.memory ?? null,
   snapshot: scopeKey => persistentStore.snapshot(scopeKey), aether: { access: aetherPorts.access, covers: scopeKey => scopeKey === aetherPorts.studyScopeKey } });
