@@ -7,12 +7,16 @@ import { SQLiteTestFlightDeliveryStore } from './integrations/testflight/store/t
 
 const appStoreConnectOrigin = 'https://api.appstoreconnect.apple.com';
 
+export type TestFlightPlatform = 'IOS' | 'MAC_OS';
+
 export interface TestFlightDistributionConfig {
   readonly keyId: string;
   readonly privateKeyPath: string;
   readonly appId: string;
   readonly betaGroupId: string;
   readonly statePath?: string;
+  /** The timer owns iPhone delivery; the Mac workflow assigns its builds separately. */
+  readonly platform?: TestFlightPlatform;
 }
 
 interface BuildResource {
@@ -60,7 +64,10 @@ export function configuredTestFlightDistribution(
   const appId = resourceId(environment.SHANNON_ASC_APP_ID, 'SHANNON_ASC_APP_ID');
   const betaGroupId = resourceId(environment.SHANNON_ASC_BETA_GROUP_ID, 'SHANNON_ASC_BETA_GROUP_ID');
   const statePath = environment.SHANNON_ASC_STATE_PATH?.trim();
+  const platform = environment.SHANNON_ASC_PLATFORM?.trim() || 'IOS';
+  if (platform !== 'IOS' && platform !== 'MAC_OS') throw new Error('SHANNON_ASC_PLATFORM is invalid');
   return {
+    platform,
     keyId,
     privateKeyPath,
     appId,
@@ -122,6 +129,8 @@ export async function distributeLatestInternalBuild(options: {
 
   const query = new URLSearchParams({
     'filter[app]': options.config.appId,
+    // A higher Mac build number must not starve the latest iPhone build.
+    'filter[preReleaseVersion.platform]': options.config.platform ?? 'IOS',
     'filter[processingState]': 'VALID',
     'fields[builds]': 'version,uploadedDate,processingState,expired,buildAudienceType',
     sort: '-uploadedDate',

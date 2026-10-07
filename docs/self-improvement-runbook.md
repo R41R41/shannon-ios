@@ -144,6 +144,13 @@ To roll back: set `SHANNON_AUTONOMY_ENABLED=false` and restart `shannon-ios.serv
 3. Have the owner update the existing app through TestFlight. Do not directly install or upload a development build to the iPhone for verification.
 4. Confirm the installed build number when it is available, then check conversation restoration, pairing, the changed flow, and one adjacent flow through the TestFlight app. Record owner-reported checks separately from directly observed checks.
 
+### Distribution platform
+
+The Azure timer selects iPhone builds with App Store Connect's `filter[preReleaseVersion.platform]=IOS`.
+`SHANNON_ASC_PLATFORM` defaults to `IOS`; a separately configured Mac distributor may use `MAC_OS` with its own state file.
+The Mac Xcode Cloud workflow continues to assign its builds to Shannon Internal in its post-action.
+Never compare build numbers across platforms when choosing the next iPhone release.
+
 ## Shannon Release Runner
 
 `scripts/release-runner.sh` is the single local entry point for routine Xcode Cloud/TestFlight delivery. It reuses the Azure TestFlight distributor; it does not create a second build-assignment system. The shell entry point locates the same bundled Node.js fallback as the repository verifier.

@@ -19,6 +19,48 @@ describe('TestFlight distributor', () => {
     }).keyId).toBe('UWR83E6MW5QE');
   });
 
+  it('keeps platform selection explicit and rejects unknown platforms', () => {
+    const environment = {
+      SHANNON_ASC_KEY_ID: 'UWR83E6MW5QE', SHANNON_ASC_PRIVATE_KEY_PATH: '/private/key.p8',
+      SHANNON_ASC_APP_ID: '6808634666', SHANNON_ASC_BETA_GROUP_ID: 'group-1',
+    };
+    expect(configuredTestFlightDistribution(environment).platform).toBe('IOS');
+    expect(configuredTestFlightDistribution({ ...environment, SHANNON_ASC_PLATFORM: 'MAC_OS' }).platform).toBe('MAC_OS');
+    expect(() => configuredTestFlightDistribution({ ...environment, SHANNON_ASC_PLATFORM: 'android' })).toThrow('SHANNON_ASC_PLATFORM is invalid');
+  });
+
+  it.each([['IOS', 'build-166', '166'], ['MAC_OS', 'build-167', '167']] as const)(
+    'assigns the latest %s build when the other platform has a higher build number', async (platform, id, version) => {
+      const posted: string[] = [];
+      const fetchImpl = async (input: string | URL | Request, init?: RequestInit) => {
+        const url = new URL(String(input));
+        if (url.pathname === '/v1/builds') {
+          // Model Apple's platform filter; without it the older bug selects Mac 167.
+          const requested = url.searchParams.get('filter[preReleaseVersion.platform]');
+          const candidates = [
+            { platform: 'IOS', id: 'build-166', version: '166' },
+            { platform: 'MAC_OS', id: 'build-167', version: '167' },
+          ].filter(build => !requested || build.platform === requested);
+          return jsonResponse({ data: candidates.map(build => ({ type: 'builds', id: build.id, attributes: {
+            version: build.version, processingState: 'VALID', expired: false, buildAudienceType: 'INTERNAL_ONLY',
+          } })) });
+        }
+        if (init?.method === 'POST') {
+          posted.push(init.body as string);
+          return new Response(null, { status: 204 });
+        }
+        return jsonResponse({ data: [{ type: 'builds', id: 'older-build' }] });
+      };
+      const result = await distributeLatestInternalBuild({
+        config: { keyId: 'GTU22DPJD5', privateKeyPath: '/private/key.p8', appId: '6808634666', betaGroupId: 'group-1',
+          ...(platform === 'MAC_OS' ? { platform } : {}) },
+        fetchImpl: fetchImpl as typeof fetch, readPrivateKey: async () => privateKeyPem,
+      });
+      expect(result).toEqual({ status: 'distributed', buildId: id, version });
+      expect(posted).toEqual([JSON.stringify({ data: [{ type: 'builds', id }] })]);
+    },
+  );
+
   it('creates a valid short-lived individual App Store Connect token', () => {
     const token = createIndividualAppStoreConnectToken('GTU22DPJD5', privateKeyPem, 1_780_000_000);
     const [header, payload, signature] = token.split('.');
