@@ -223,6 +223,8 @@ struct ShannonLearningView: View {
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(line.accessibilityLabel)
+                    // Read as text (on the Mac a bare combined row is an element of unknown role).
+                    .accessibilityAddTraits(.isStaticText)
                     .id(line.id == lines.first?.id ? "learning.values" : "learning.values.\(line.id)")
                 }
             }
