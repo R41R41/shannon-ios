@@ -85,19 +85,24 @@ export function skillSleepConsolidator(
     { ...(parts.now ? { now: parts.now } : {}), ...(parts.log ? { log: parts.log } : {}) });
 }
 
-/** The builder's seeds, by the rules knowledge consolidation follows for what it may be built from. */
+/**
+ * The builder's seeds, by the rules knowledge consolidation follows for what it may be built from. A turn is a seed only when the
+ * owner had it with her alone, spoke in it, and it is visible, not withheld, not kept secret and not marked 機微 by him. A knowledge
+ * note is a seed only when every turn it was built from passes the same rule (a source that cannot be found fails it): every skill
+ * has a copy in a folder guests can read (privacy review B1).
+ */
 export function skillSeedSources(store: ShannonKnowledgeStore & ConversationStore & Pick<CompanionStateStore, 'snapshot'>, choices: ChoiceLedger | null): SkillSeedSources {
+  const seedable = (scopeKey: string) => seedRule(store, scopeKey);
   return {
-    knowledge: scopeKey => usableKnowledgeFor(store, scopeKey, store.snapshot(scopeKey)).filter(document => document.status === 'confirmed')
-      .map(document => ({ id: document.id, title: document.title, applicability: document.applicability, body: document.bodyMarkdown })),
+    knowledge: scopeKey => {
+      const seeds = seedable(scopeKey);
+      return usableKnowledgeFor(store, scopeKey, seeds.snapshot).filter(document => document.status === 'confirmed' && seeds.passes(document.sourceExperienceIds))
+        .map(document => ({ id: document.id, title: document.title, applicability: document.applicability, body: document.bodyMarkdown }));
+    },
     experiences: (scopeKey, startAt, endAt) => {
-      const snapshot = store.snapshot(scopeKey);
-      const candidates = store.experienceCandidates(scopeKey);
-      const withholding = new MemoryWithholding(snapshot, store, scopeKey, candidates);
+      const seeds = seedable(scopeKey);
       // Only turns the owner had with her alone, that he spoke in, that are visible, not withheld, and not kept secret.
-      return candidates.filter(item => item.observedAt >= startAt && item.observedAt < endAt && isOwnerOnly(item.disclosure?.audience) && ownerSpoke(item.disclosure)
-        && item.disclosure?.category !== 'secret' && !(item.disclosure?.decidedBy === 'owner' && item.disclosure.sensitivity === 'sensitive')
-        && visibleMemoryText(snapshot, item.id, item.summary) !== null && !withholding.withholdsExperience(item))
+      return seeds.candidates.filter(item => item.observedAt >= startAt && item.observedAt < endAt && seeds.ok(item))
         .map(item => ({ id: item.id, observedAt: item.observedAt, summary: item.summary, text: `${item.userMessage}\n${item.shannonReply}` }));
     },
     choices: (scopeKey, startAt, endAt) => (choices?.rows(scopeKey) ?? []).filter(row => row.chosenAt >= startAt && row.chosenAt < endAt).map(row => ({
@@ -112,6 +117,43 @@ export function skillSeedSources(store: ShannonKnowledgeStore & ConversationStor
   };
 }
 
+/** The seed rule over a scope's turns now; a turn outside the recent window is read by its id (a turn not found fails). */
+function seedRule(store: ConversationStore & Pick<CompanionStateStore, 'snapshot'>, scopeKey: string) {
+  const snapshot = store.snapshot(scopeKey);
+  const candidates = store.experienceCandidates(scopeKey);
+  const withholding = new MemoryWithholding(snapshot, store, scopeKey, candidates);
+  const ok = (item: (typeof candidates)[number]) => isOwnerOnly(item.disclosure?.audience) && ownerSpoke(item.disclosure)
+    && item.disclosure?.category !== 'secret' && !(item.disclosure?.decidedBy === 'owner' && item.disclosure.sensitivity === 'sensitive')
+    && visibleMemoryText(snapshot, item.id, item.summary) !== null && !withholding.withholdsExperience(item);
+  const known = new Map(candidates.map(item => [item.id, item]));
+  const passes = (ids: readonly string[]) => {
+    const missing = [...new Set(ids)].filter(id => !known.has(id));
+    if (missing.length) for (const item of store.experiencesById?.(scopeKey, missing) ?? []) known.set(item.id, item);
+    return ids.every(id => { const item = known.get(id); return item !== undefined && ok(item); });
+  };
+  return { snapshot, candidates, ok, passes };
+}
+
+/**
+ * Whether every source of a skill still passes the seed rule (privacy review B2): its turns, the turns of the notes it was built
+ * from, and the sources of its pattern pages. A skill whose source was forgotten, or is now 内緒 or 機微, fails: its copy in Aether
+ * is withdrawn (`skillExport.ts`).
+ */
+export function skillSourcesPass(store: ConversationStore & Pick<CompanionStateStore, 'snapshot'> & Partial<ShannonKnowledgeStore>, memory: SkillMemory, scopeKey: string): (sources: readonly string[]) => boolean {
+  const rule = seedRule(store, scopeKey);
+  // Without her notes (a store that has none) a skill built from one fails: closed.
+  const notes = new Map(store.listShannonKnowledge ? usableKnowledgeFor(store as ShannonKnowledgeStore, scopeKey, rule.snapshot).map(document => [document.id, document]) : []);
+  const check = (sources: readonly string[], depth: number): boolean => sources.every(source => {
+    const [kind, ...rest] = source.split(':');
+    const id = rest.join(':');
+    if (kind === 'experience') return rule.passes([id]);
+    if (kind === 'knowledge') { const note = notes.get(id); return note !== undefined && rule.passes(note.sourceExperienceIds); }
+    if (kind === 'pattern') { const page = memory.store.pattern(scopeKey, id); return page !== null && depth < 3 && check(page.sources, depth + 1); }
+    return true;
+  });
+  return sources => check(sources, 0);
+}
+
 /**
  * Step 7 (`SHANNON_SKILL_EXPORT`, owner answers I-4 and I-5): readable copies of her skills in Aether's シャノン用フォルダ, after the
  * skill sleep, for the one scope whose study lives in Aether (`aetherStudyScope`). Null while the switch is off, the skills are
@@ -119,13 +161,14 @@ export function skillSeedSources(store: ShannonKnowledgeStore & ConversationStor
  */
 export function configuredSkillExport(
   environment: Readonly<Record<string, string | undefined>>,
-  parts: { memory: SkillMemory; store: ConversationStore & Pick<CompanionStateStore, 'snapshot'>; access?: AetherAccess | null; log?: (line: string) => void },
+  parts: { memory: SkillMemory; store: ConversationStore & Pick<CompanionStateStore, 'snapshot'> & Partial<ShannonKnowledgeStore>; access?: AetherAccess | null; log?: (line: string) => void },
 ): ((scopeKey: string, at: string) => Promise<SkillExportResult | null>) | null {
   if (!skillRoutingSwitches(environment).skillExport) return null;
   const access = parts.access === undefined ? configuredAetherAccess(environment) : parts.access;
   if (!access) return null;
   const scope = aetherStudyScope(environment);
   return async (scopeKey, at) => scopeKey !== scope ? null : exportSkills({
-    scopeKey, skills: parts.memory, access, at, check: () => skillBodyCheck(parts.store.snapshot(scopeKey), parts.store, scopeKey), ...(parts.log ? { log: parts.log } : {}),
+    scopeKey, skills: parts.memory, access, at, check: () => skillBodyCheck(parts.store.snapshot(scopeKey), parts.store, scopeKey),
+    sources: () => skillSourcesPass(parts.store, parts.memory, scopeKey), ...(parts.log ? { log: parts.log } : {}),
   });
 }

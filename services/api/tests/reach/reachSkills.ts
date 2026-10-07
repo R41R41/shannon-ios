@@ -284,12 +284,12 @@ async function audit() {
       world.skills.nextTurn(SCOPE, `${prefix}-${index}`, good ? 1 : 0, minutes(start + index * 2 + 1));
     });
     use('a', [true, true], -590);
-    world.skills.lifecycle(SCOPE, minutes(-580));
+    world.skills.lifecycle(SCOPE, minutes(-580), ok);
     const page = (world.skills.createPattern(SCOPE, { kind: 'strategy', title: '十個挙げる', body: '多く挙げると漏れがない。' }, [], ok, minutes(-570)) as { patternId: string }).patternId;
     const replacements = [{ find: '三つ挙げる', replace: '十個挙げる' }];
     world.skills.revise(SCOPE, skillId, 1, { replacements, evidence: [], purposePatternIds: [page] }, ok, minutes(-560));
     use('b', [false, false, false], -550);
-    world.skills.lifecycle(SCOPE, minutes(-540));
+    world.skills.lifecycle(SCOPE, minutes(-540), ok);
     // The next night the proposer offers the same change again.
     const proposer = scripted(input => (input.round === 1 ? { ...proposal('weekly-review', [page]), operation: 'patch', skillId, expectedVersion: 3, replacements } : { ...proposal('x', []), action: 'none' }));
     const before = world.skills.store.get(SCOPE, skillId)!;
@@ -320,7 +320,7 @@ async function lineage() {
       world.skills.nextTurn(SCOPE, talk, good ? 1 : 0, minutes(clock + 1));
       clock += 2;
     });
-    const night = () => { world.skills.lifecycle(SCOPE, minutes(clock)); clock += 2; };
+    const night = () => { world.skills.lifecycle(SCOPE, minutes(clock), ok); clock += 2; };
     const pages = ['五つ挙げる', '二つ決める', '書き出す', '声に出す'].map(title => (world.skills.createPattern(SCOPE, { kind: 'strategy', title, body: `${title}とよい。` }, [], ok, minutes(-899)) as { patternId: string }).patternId);
     const revise = (version: number, find: string, replace: string, page: string) => world.skills.revise(SCOPE, skillId, version, { replacements: [{ find, replace }], evidence: [], purposePatternIds: [page] }, ok, minutes(clock));
     use([true, true]); night(); use([false, false]);
@@ -362,7 +362,9 @@ async function exported() {
     const gone = (world.skills.create(SCOPE, { draft: skill('old-way', { description: '古いやり方' }), evidence: [] }, ok, minutes(0)) as { skillId: string }).skillId;
     world.skills.retire(SCOPE, gone, 'source_forgotten', minutes(1));
     await run(SCOPE, minutes(2));
-    const copies = [kept, gone].map(id => world.skills.store.get(SCOPE, id)!).every(item => folder.documents.get(item.aetherDocumentId ?? '')?.body === item.body);
+    // Every usable skill has its copy; a retired one never gets one (privacy review B2).
+    const copies = folder.documents.get(world.skills.store.get(SCOPE, kept)!.aetherDocumentId ?? '')?.body === world.skills.store.get(SCOPE, kept)!.body
+      && world.skills.store.get(SCOPE, gone)!.aetherDocumentId === null;
     const writes = folder.writes.length;
     await run(SCOPE, minutes(3));
     const idempotent = folder.writes.length === writes;

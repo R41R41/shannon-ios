@@ -88,12 +88,12 @@ export class ShannonSkillConsolidator {
     const forgotten = (sources: readonly string[]) => sources.some(source => source.startsWith('experience:') && !visible(source.slice('experience:'.length)));
     for (const skill of this.skills.store.all(scopeKey)) if (forgotten(skill.sources) && this.skills.retire(scopeKey, skill.skillId, 'source_forgotten', at)) result.retired += 1;
     for (const page of this.skills.patterns(scopeKey)) if (forgotten(page.sources) && this.skills.deprecatePattern(scopeKey, page.patternId, null, at)) result.patterns.deprecated += 1;
-    const lifecycle = this.skills.lifecycle(scopeKey, at);
+    const check = safe(() => this.sources.check(scopeKey), null);
+    const lifecycle = this.skills.lifecycle(scopeKey, at, check);
     result.accepted = lifecycle.accepted.length;
     result.reverted = lifecycle.reverted.length;
     result.retired += lifecycle.retired.length;
     if (!this.models.maintainer && !this.models.proposer) return finish('disabled');
-    const check = safe(() => this.sources.check(scopeKey), null);
     const affordable = () => this.usage.backgroundLlmCostUsd(utcMonthKey(new Date(at))) < this.budgetUsd;
     const made = this.skills.madeToday(scopeKey, at);
 

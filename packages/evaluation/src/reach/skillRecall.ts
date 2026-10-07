@@ -58,11 +58,11 @@ export const skillAuditScenario = definition('skill.audit', 'grow', '同じ失�
   ]);
 
 export const skillExportScenario = definition('skill.export', 'be_useful', 'ライ氏が読めて、直せる',
-  'すべてのスキルの読める写しがAetherのシャノン用フォルダにあり（同じ本文は二度書かない）、ライ氏が写しを直したら次の睡眠で新しい版として取り込み、上書きしないか。Aetherがない時は何も書かないか。', [
-    { id: 'export.copies', judge: 'deterministic', threshold: 1, description: 'Every skill, retired ones included, has a copy whose body is its SKILL.md; a second night writes nothing (idempotent by hash).' },
+  '使えるスキルの読める写しがAetherのシャノン用フォルダにあり（引退したスキルには新しく作らず、同じ本文は二度書かない）、ライ氏が写しを直したら次の睡眠で新しい版として取り込み、上書きしないか。Aetherがない時は何も書かないか。', [
+    { id: 'export.copies', judge: 'deterministic', threshold: 1, description: 'Every usable skill has a copy whose body is its SKILL.md, a retired one never gets one; a second night writes nothing (idempotent by hash).' },
     { id: 'export.owner_edit', judge: 'deterministic', threshold: 1, description: 'An owner\'s edit of a copy is adopted at the next sleep as a new version (actor owner) and never written over.' },
     { id: 'export.off', judge: 'deterministic', threshold: 1, description: 'Without Aether, or with SHANNON_SKILL_EXPORT=off, there is no export.' },
-  ]);
+  ], 2);
 
 export const skillLineageScenario = definition('skill.lineage', 'grow', '良かった古い版から直す',
   'スキルの版を捨てずに系譜（木）で残し、次に直す元の版を σ(10(s−0.5))/(1+子の数) の重みで選ぶか。今の版よりうまくいっていた古い枝が選ばれ、その枝から直した版が、最初の版でも今の版でもなく親の成績と比べて試されるか。', [

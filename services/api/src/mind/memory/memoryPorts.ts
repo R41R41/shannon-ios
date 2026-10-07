@@ -14,3 +14,4 @@ export {
 export type { PatternLogEntry, SkillActor, SkillAuditEntry, SkillRevision, SkillUse, StoredPattern, StoredSkill } from './store/sqliteSkills.js';
 export { versionRevisionId } from './store/sqliteSkills.js';
 export { SKILL_LINEAGE, chosenBase, parentBaseline, rankedNodes, scoredLineage, type LineageNode, type ScoredNode } from './skillLineage.js';
+export { checkedSkillBody, checkedSkillText } from './skillMemoryParts.js';

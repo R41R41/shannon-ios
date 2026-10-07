@@ -28,17 +28,18 @@ describe('her skills in シャノン用フォルダ', () => {
     const id = make(skills, 'weekly-review');
     const retired = make(skills, 'old-way', { description: '古いやり方' });
     skills.retire(scope, retired, 'source_forgotten', at);
-    expect(await run(skills, folder, minutes(1))).toMatchObject({ created: 2, updated: 0 });
+    // A retired skill never gets a new copy (privacy review B2).
+    expect(await run(skills, folder, minutes(1))).toMatchObject({ created: 1, updated: 0 });
     const copy = skills.store.get(scope, id)!;
     expect(folder.documents.get(copy.aetherDocumentId!)).toMatchObject({ title: skillCopyTitle('weekly-review'), body: copy.body, version: 1 });
     expect(await run(skills, folder, minutes(2))).toMatchObject({ created: 0, updated: 0, unchanged: 2 });
-    expect(folder.writes).toHaveLength(2);
+    expect(folder.writes).toHaveLength(1);
     // The skill is accepted and patched; its copy is updated on the version she last wrote.
     skills.used(scope, 'weekly-review', { talk: 't1', growth: 1 }, minutes(3));
     skills.used(scope, 'weekly-review', { talk: 't2', growth: 1 }, minutes(4));
     skills.nextTurn(scope, 't1', 1, minutes(5));
     skills.nextTurn(scope, 't2', 1, minutes(6));
-    skills.lifecycle(scope, minutes(10));
+    skills.lifecycle(scope, minutes(10), pass);
     expect(skills.revise(scope, id, 1, { replacements: [{ find: '三つ', replace: '五つ' }], evidence: [] }, pass, minutes(11))).toEqual({ version: 2 });
     expect(await run(skills, folder, minutes(12))).toMatchObject({ updated: 1 });
     expect(folder.documents.get(copy.aetherDocumentId!)).toMatchObject({ version: 2, body: expect.stringContaining('五つ') });
@@ -82,9 +83,12 @@ describe('her skills in シャノン用フォルダ', () => {
     expect(await run(skills, folder, minutes(3), () => check)).toMatchObject({ created: 0, updated: 0 });
     expect(folder.writes).toHaveLength(writes);
     expect(folder.documents.get(heldDocument)!.body).toBe('ウォンバット会の集まりに毎月出ている日は休む');
-    // A check that cannot be read adopts nothing either.
+    // A check that cannot be read writes, reads and adopts nothing (fail closed).
     folder.edit(heldDocument, '別の書き方');
-    expect(await run(skills, folder, minutes(4), () => null)).toMatchObject({ held: 1 });
+    const before = folder.writes.length;
+    expect(await run(skills, folder, minutes(4), () => null)).toMatchObject({ status: 'unavailable', adopted: 0 });
+    expect(folder.writes).toHaveLength(before);
+    expect(skills.store.get(scope, held)).toMatchObject({ version: 1 });
   });
 
   it('writes nothing when he changed the copy a moment before (STALE_VERSION); the next sleep adopts it', async () => {

@@ -10,7 +10,7 @@ import type { ShannonModelToolSession } from '../src/infra/models/chatModelTools
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
 import { SkillMemory } from '../src/mind/memory/skillMemory.js';
-import type { SkillDocument } from '../src/mind/memory/skillDocument.js';
+import { encodeSkill, type SkillDocument } from '../src/mind/memory/skillDocument.js';
 import { ShannonSkillConsolidator } from '../src/mind/sleep/skillConsolidation.js';
 import type { SkillSleepModel } from '../src/mind/sleep/skillSleepModel.js';
 import type { TurnChooser } from '../src/mind/selectors/turnChoices.js';
@@ -115,7 +115,7 @@ describe('the skill sleep\'s writes', () => {
     const free = id('free-one');
     for (const skillId of [pinned, owned, free]) skills.store.setStatus('owner', skillId, 'active', 'test', at(1));
     skills.store.setPinned('owner', pinned, true);
-    expect(skills.adoptOwnerEdit('owner', owned, '---\nname: owned-one\ndescription: ライ氏が直した\n---\n\n## 手順\n1. 散歩しながら話す\n', { documentId: 'doc-1', version: 2 }, ok, at(2))).toBe('adopted');
+    expect(skills.adoptOwnerEdit('owner', owned, encodeSkill({ ...doc('owned-one', '1. 散歩しながら話す'), description: 'ライ氏が直した' }), { documentId: 'doc-1', version: 2 }, ok, at(2))).toBe('adopted');
     const page = (skills.createPattern('owner', { kind: 'strategy', title: '五つ挙げる', body: '五つ挙げる。' }, [], ok, at(2)) as { patternId: string }).patternId;
     return { skills, pinned, owned, free, page };
   }
@@ -140,7 +140,7 @@ describe('the skill sleep\'s writes', () => {
         skills.nextTurn('owner', `${name}-${index}`, 0, at(4 + index));
       }
     }
-    expect(skills.lifecycle('owner', at(20)).retired).toEqual([free]);
+    expect(skills.lifecycle('owner', at(20), ok).retired).toEqual([free]);
     for (const [index, skillId] of [pinned, owned].entries()) {
       expect(skills.store.get('owner', skillId)).toMatchObject({ status: 'active', version: before[index]!.skill.version, body: before[index]!.skill.body });
       expect(skills.store.revisions('owner', skillId)).toHaveLength(before[index]!.revisions);

@@ -6,7 +6,7 @@ import {
   skillLint, trialVerdict, type SkillDocument, type SkillProblem,
 } from './skillDocument.js';
 import { SKILLS_TABLE, SQLiteSkills, versionRevisionId, type SkillActor, type SkillUse, type StoredPattern, type StoredSkill } from './store/sqliteSkills.js';
-import { checkedPage, closedSources, digest, iso } from './skillMemoryParts.js';
+import { checkedPage, checkedSkillBody, checkedSkillText, closedSources, digest, iso } from './skillMemoryParts.js';
 import { parentBaseline, type LineageNode } from './skillLineage.js';
 
 /**
@@ -143,7 +143,7 @@ export class SkillMemory {
    * Night: trials are judged (a new skill accepted or retired, a patched version kept or reverted to the version before it, each
    * recorded in the audit), and active skills that keep failing retire.
    */
-  lifecycle(scopeKey: string, at: string): { accepted: string[]; reverted: string[]; retired: string[] } {
+  lifecycle(scopeKey: string, at: string, check: SkillBodyCheck | null = null): { accepted: string[]; reverted: string[]; retired: string[] } {
     const result = { accepted: [] as string[], reverted: [] as string[], retired: [] as string[] };
     this.now(at, () => {
       for (const skill of this.store.all(scopeKey)) {
@@ -163,7 +163,13 @@ export class SkillMemory {
             if (audit) this.store.decideAudit(scopeKey, audit.auditId, 'reverted', measured, 'trial_failed', at);
             result.retired.push(skill.skillId);
           } else {
-            if (this.restore(scopeKey, skill, skill.trialBaseVersion, 'sleep', [...(audit ? [`audit:${audit.auditId}`] : [])], 'reverted', at) !== 'restored') continue;
+            const restored = this.restore(scopeKey, skill, skill.trialBaseVersion, 'sleep', [...(audit ? [`audit:${audit.auditId}`] : [])], 'reverted', at, check);
+            // The version it would return to now carries what must never be in a skill: the skill retires instead (B2).
+            if (restored === 'unsafe' && this.store.setStatus(scopeKey, skill.skillId, 'retired', 'restore_unsafe', at)) {
+              if (audit) this.store.decideAudit(scopeKey, audit.auditId, 'reverted', measured, 'restore_unsafe', at);
+              result.retired.push(skill.skillId);
+            }
+            if (restored !== 'restored') continue;
             if (audit) this.store.decideAudit(scopeKey, audit.auditId, 'reverted', measured, 'trial_worse', at);
             result.reverted.push(skill.skillId);
           }
@@ -182,15 +188,16 @@ export class SkillMemory {
    * current state is written first, and if it cannot be, nothing changes (fail closed). The sleep may not roll back the owner's
    * version or a pinned skill; the owner may.
    */
-  rollback(scopeKey: string, skillId: string, toVersion: number, actor: SkillActor, at: string): 'restored' | 'not_found' | 'pinned' | 'owner_edited' | 'snapshot_failed' | 'unavailable' {
+  rollback(scopeKey: string, skillId: string, toVersion: number, actor: SkillActor, at: string, check: SkillBodyCheck | null = null)
+    : 'restored' | 'not_found' | 'pinned' | 'owner_edited' | 'snapshot_failed' | 'unavailable' | 'unsafe' | 'check_unavailable' {
     let outcome: ReturnType<SkillMemory['rollback']> = 'unavailable';
     this.now(at, () => {
       const current = this.store.get(scopeKey, skillId);
       if (!current) { outcome = 'not_found'; return; }
       if (actor === 'sleep' && current.pinned) { outcome = 'pinned'; return; }
       if (actor === 'sleep' && current.madeBy === 'owner_edit') { outcome = 'owner_edited'; return; }
-      if (current.trialAuditId) this.store.decideAudit(scopeKey, current.trialAuditId, 'superseded', { uses: 0, successes: 0 }, 'rollback', at);
-      outcome = this.restore(scopeKey, current, toVersion, actor, [], 'rollback', at);
+      outcome = this.restore(scopeKey, current, toVersion, actor, [], 'rollback', at, check);
+      if (outcome === 'restored' && current.trialAuditId) this.store.decideAudit(scopeKey, current.trialAuditId, 'superseded', { uses: 0, successes: 0 }, 'rollback', at);
     });
     return outcome;
   }
@@ -304,17 +311,17 @@ export class SkillMemory {
         outcome = 'unchanged';
         return;
       }
-      let carries = true;
-      try { carries = check === null || check.carries(text); } catch { carries = true; }
-      // His text is checked like any body written into a skill: what must never enter one, and prompt injection.
-      if (carries || injectionThreats(text).length > 0 || !text.trim() || text.length > 20_000) {
-        this.store.setExportHold(scopeKey, skillId, 'owner_edit_unadopted');
+      // His text is checked like any body written into a skill (B2): a valid SKILL.md, what must never enter one, anything
+      // credential-shaped, and prompt injection. One that fails, or cannot be checked now, is held and never written over.
+      const safe = checkedSkillText(text, check);
+      if (safe === 'unsafe' || safe === 'unavailable') {
+        // Unreadable now: the next sleep tries again; unsafe: held.
+        if (safe === 'unsafe') this.store.setExportHold(scopeKey, skillId, 'owner_edit_unadopted');
         outcome = 'held';
         return;
       }
-      const parsed = parseSkill(text);
-      const name = 'skill' in parsed && !this.nameTaken(scopeKey, parsed.skill.name, skillId) ? parsed.skill.name : current.name;
-      const description = 'skill' in parsed ? parsed.skill.description : current.description;
+      const name = !this.nameTaken(scopeKey, safe.ok.name, skillId) ? safe.ok.name : current.name;
+      const description = safe.ok.description;
       if (current.trialAuditId) this.store.decideAudit(scopeKey, current.trialAuditId, 'superseded', { uses: 0, successes: 0 }, 'owner_edit', at);
       if (!this.store.update(scopeKey, skillId, current.version, { name, description, body: text, bodyHash: hash, madeBy: 'owner_edit', trial: null, actor: 'owner', evidence: [] }, 'owner_edit', at, 'active')) return;
       this.store.setExport(scopeKey, skillId, { ...copy, hash }, at);
@@ -329,7 +336,7 @@ export class SkillMemory {
   }
 
   /** Step 7: a copy that is not written again (`owner_deleted`, `owner_edit_unadopted`). */
-  holdExport(scopeKey: string, skillId: string, hold: 'owner_deleted' | 'owner_edit_unadopted', at: string): void {
+  holdExport(scopeKey: string, skillId: string, hold: 'owner_deleted' | 'owner_edit_unadopted' | 'withdrawn', at: string): void {
     this.now(at, () => { this.store.setExportHold(scopeKey, skillId, hold); });
   }
 
@@ -431,26 +438,27 @@ export class SkillMemory {
     return Boolean(other && other.skillId !== skillId);
   }
 
-  /** A version restored as a new one, after a safety snapshot; nothing changes when the snapshot cannot be written (fail closed). */
-  private restore(scopeKey: string, current: StoredSkill, toVersion: number, actor: SkillActor, evidence: readonly string[], reason: string, at: string): 'restored' | 'not_found' | 'snapshot_failed' {
+  /**
+   * A version restored as a new one, after a safety snapshot; nothing changes when the snapshot cannot be written (fail closed).
+   * The restored body is checked again (privacy review B2): one that now carries what must never be in a skill is `unsafe`, and
+   * one that cannot be checked now waits (`check_unavailable`).
+   */
+  private restore(scopeKey: string, current: StoredSkill, toVersion: number, actor: SkillActor, evidence: readonly string[], reason: string, at: string,
+    check: SkillBodyCheck | null): 'restored' | 'not_found' | 'snapshot_failed' | 'unsafe' | 'check_unavailable' {
     const base = this.store.revisions(scopeKey, current.skillId).find(revision => revision.kind === 'version' && revision.version === toVersion);
     if (!base) return 'not_found';
+    const safe = checkedSkillText(base.body, check);
+    if (safe === 'unsafe') return 'unsafe';
+    if (safe === 'unavailable') return 'check_unavailable';
     try { this.store.snapshot(scopeKey, current.skillId, actor, 'safety_snapshot', at); } catch { return 'snapshot_failed'; }
-    const parsed = parseSkill(base.body);
     return this.store.update(scopeKey, current.skillId, current.version, {
-      name: 'skill' in parsed ? parsed.skill.name : current.name, description: 'skill' in parsed ? parsed.skill.description : current.description,
+      name: safe.ok.name, description: safe.ok.description,
       body: base.body, bodyHash: base.bodyHash, madeBy: actor === 'owner' ? 'owner_edit' : base.madeBy, trial: null, actor, evidence, lineage: { restores: base.revisionId },
     }, reason, at, 'active') ? 'restored' : 'not_found';
   }
 
   private checkedBody(draft: SkillDocument, check: SkillBodyCheck | null): { skill: SkillDocument; text: string } | { rejected: SkillRejection } {
-    const valid = checked(draft);
-    if ('problem' in valid) return { rejected: valid.problem };
-    const text = encodeSkill(valid.skill);
-    // What the owner said is 内緒 never enters a skill (ADR-0002, owner answer I-4): checked when the body is built, not at export.
-    if (check === null) return { rejected: 'check_unavailable' };
-    try { if (check.carries(text)) return { rejected: 'secret' }; } catch { return { rejected: 'check_unavailable' }; }
-    return { skill: valid.skill, text };
+    return checkedSkillBody(draft, check);
   }
 
   private writeUses(skill: StoredSkill, uses: readonly SkillUse[]): void {
