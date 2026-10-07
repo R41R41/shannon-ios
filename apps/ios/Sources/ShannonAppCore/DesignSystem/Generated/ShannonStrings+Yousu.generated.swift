@@ -246,6 +246,8 @@ extension ShannonGeneratedStrings {
     public static let yousuLearningSkillsUnused = "まだ使っていません"
     /// `yousu.learning.skills.ownerVersion`
     public static let yousuLearningSkillsOwnerVersion = "ライ氏の版"
+    /// `yousu.learning.skills.hiddenTitle`
+    public static let yousuLearningSkillsHiddenTitle = "（表示しないスキル）"
     /// `yousu.learning.skills.pinned`
     public static let yousuLearningSkillsPinned = "固定中"
     /// `yousu.learning.skills.notPinned`
@@ -348,4 +350,10 @@ extension ShannonGeneratedStrings {
     public static let yousuLearningVersionResumeConfirm = "再開する"
     /// `yousu.learning.version.failed`
     public static let yousuLearningVersionFailed = "価値表を変えられませんでした。いまの状態を表示しています。"
+    /// `yousu.learning.version.checking`
+    public static let yousuLearningVersionChecking = "届いたか確かめています…"
+    /// `yousu.learning.version.arrived`
+    public static let yousuLearningVersionArrived = "変更は届いていました。いまの状態を表示しています。"
+    /// `yousu.learning.version.unknown`
+    public static let yousuLearningVersionUnknown = "届いたか分かりませんでした。あとで読み直してください。"
 }

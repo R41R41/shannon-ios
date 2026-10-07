@@ -140,9 +140,14 @@ public enum ShannonLearning {
         }
     }
 
+    /// What a skill is called on screen: her description, or 「（表示しないスキル）」 for a withheld one (whatever the server sent).
+    public static func title(_ skill: ShannonSkillDTO) -> String {
+        skill.isWithheld ? ShannonGeneratedStrings.yousuLearningSkillsHiddenTitle : skill.description
+    }
+
     /// What a row says to VoiceOver: the title, its line, and whether it is pinned or the owner's version.
     public static func skillAccessibilityLabel(_ skill: ShannonSkillDTO) -> String {
-        var parts = [skill.description, skillLine(skill)]
+        var parts = [title(skill), skillLine(skill)]
         if skill.ownerVersion { parts.append(ShannonGeneratedStrings.yousuLearningSkillsOwnerVersion) }
         if skill.pinned { parts.append(ShannonGeneratedStrings.yousuLearningSkillsPinned) }
         return parts.joined(separator: "、")

@@ -24,7 +24,11 @@ extension ShannonYousuFixtureClient {
         .init(id: "s-nudge", name: "nudge-before-event", description: "予定の前に一言そえる", status: "trial", version: 1, pinned: false,
               trial: .init(baseVersion: nil, uses: 0, of: 3), uses: 0, successes: 0),
         .init(id: "s-weather", name: "weather-symbols", description: "天気の記号を読む", status: "retired", statusReason: "low_success", version: 2, pinned: false, uses: 8, successes: 2),
-        .init(id: "s-old", name: "old-note-summary", description: "古いメモを要約する", status: "retired", statusReason: "source_forgotten", version: 1, pinned: false, uses: 1, successes: 1),
+        // As the server sends a withheld skill: neutral text for its name and description.
+        .init(id: "s-old", name: "（表示しないスキル）", description: "（表示しないスキル）", hidden: true, status: "retired", statusReason: "source_forgotten",
+              version: 1, pinned: false, uses: 1, successes: 1),
+        .init(id: "s-copy", name: "（表示しないスキル）", description: "（表示しないスキル）", hidden: true, status: "active", copyHold: "withdrawn",
+              version: 2, pinned: false, uses: 3, successes: 2),
     ]
 
     private static func fixtureValues(frozen: Bool) -> ShannonValuesDTO {
@@ -69,7 +73,7 @@ extension ShannonYousuFixtureClient {
 
     func loadShannonSkill(scopeKey: String, id: String) async throws -> ShannonSkillDetailDTO {
         guard let skill = Self.fixtureSkills.first(where: { $0.id == id }) else { throw ShannonAPIError.rejected(status: 404) }
-        let hidden = skill.statusReason == "source_forgotten"
+        let hidden = skill.isWithheld
         let body = hidden ? "" : """
         ---
         name: \(skill.name)

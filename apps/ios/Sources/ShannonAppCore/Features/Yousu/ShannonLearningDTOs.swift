@@ -82,13 +82,17 @@ public struct ShannonSkillDTO: Decodable, Equatable, Sendable, Identifiable {
     }
 
     public let id: String
-    /// A closed symbol (`weekly-review`).
+    /// A closed symbol (`weekly-review`). For a withheld skill the server sends neutral text instead.
     public let name: String
-    /// One line in her words: what the skill is for.
+    /// One line in her words: what the skill is for. For a withheld skill the server sends neutral text instead.
     public let description: String
+    /// The server withholds this skill's name, description and body (`hidden`; absent on a server before the 学び review).
+    public let hidden: Bool?
     /// `trial`, `active` or `retired`.
     public let status: String
     public let statusReason: String?
+    /// Where its copy in Aether stands (`copy.hold`): `withdrawn` withholds the skill.
+    public let copyHold: String?
     public let version: Int
     public var pinned: Bool
     public let ownerVersion: Bool
@@ -97,15 +101,23 @@ public struct ShannonSkillDTO: Decodable, Equatable, Sendable, Identifiable {
     public let uses: Int
     public let successes: Int
 
+    private struct Copy: Decodable { let hold: String? }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, description, hidden, status, statusReason, version, pinned, ownerVersion, trial, uses, successes, copy
+    }
+
     public init(
-        id: String, name: String, description: String, status: String, statusReason: String? = nil, version: Int,
-        pinned: Bool, ownerVersion: Bool = false, trial: Trial? = nil, uses: Int, successes: Int
+        id: String, name: String, description: String, hidden: Bool? = nil, status: String, statusReason: String? = nil,
+        copyHold: String? = nil, version: Int, pinned: Bool, ownerVersion: Bool = false, trial: Trial? = nil, uses: Int, successes: Int
     ) {
         self.id = id
         self.name = name
         self.description = description
+        self.hidden = hidden
         self.status = status
         self.statusReason = statusReason
+        self.copyHold = copyHold
         self.version = version
         self.pinned = pinned
         self.ownerVersion = ownerVersion
@@ -114,7 +126,28 @@ public struct ShannonSkillDTO: Decodable, Equatable, Sendable, Identifiable {
         self.successes = successes
     }
 
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decode(String.self, forKey: .description)
+        hidden = try container.decodeIfPresent(Bool.self, forKey: .hidden)
+        status = try container.decode(String.self, forKey: .status)
+        statusReason = try container.decodeIfPresent(String.self, forKey: .statusReason)
+        copyHold = (try container.decodeIfPresent(Copy.self, forKey: .copy))?.hold
+        version = try container.decode(Int.self, forKey: .version)
+        pinned = try container.decode(Bool.self, forKey: .pinned)
+        ownerVersion = (try container.decodeIfPresent(Bool.self, forKey: .ownerVersion)) ?? false
+        trial = try container.decodeIfPresent(Trial.self, forKey: .trial)
+        uses = try container.decode(Int.self, forKey: .uses)
+        successes = try container.decode(Int.self, forKey: .successes)
+    }
+
     public var isRetired: Bool { status == "retired" }
+
+    /// Whether its name, description and body are withheld: the server says so, or, from a server that does not say, it was
+    /// retired because a source was forgotten or its copy was withdrawn (the server's own rule). Shown with a neutral title.
+    public var isWithheld: Bool { hidden == true || statusReason == "source_forgotten" || copyHold == "withdrawn" }
 }
 
 public struct ShannonSkillsDTO: Decodable, Equatable, Sendable {
@@ -178,9 +211,11 @@ public struct ShannonSkillDetailDTO: Decodable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         skill = try ShannonSkillDTO(from: decoder)
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        body = try container.decode(String.self, forKey: .body)
-        // Anything but an explicit false hides the body: a server that does not say is not trusted to have checked.
-        bodyHidden = (try container.decodeIfPresent(Bool.self, forKey: .bodyHidden)) ?? true
+        // Anything but an explicit false hides the body: a server that does not say is not trusted to have checked. A withheld
+        // skill's body is hidden whatever is said. Only a body that is shown has to be there.
+        let shown = (try container.decodeIfPresent(Bool.self, forKey: .bodyHidden)) == false && !skill.isWithheld
+        bodyHidden = !shown
+        body = shown ? try container.decode(String.self, forKey: .body) : ""
         versions = (try container.decodeIfPresent([Revision].self, forKey: .versions)) ?? []
     }
 }

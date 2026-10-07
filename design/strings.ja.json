@@ -2963,6 +2963,13 @@
       "note": "所有者が直した版のスキル（ownerVersion）。行の二行目と読み上げ。"
     },
     {
+      "key": "yousu.learning.skills.hiddenTitle",
+      "text": "（表示しないスキル）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "元にした会話が忘れられた、または写しを取り下げたスキルの題（行・読み上げ・スキルの頁・頁の題）。サーバーの HIDDEN_TITLE と同じ文。サーバーが hidden を言わなくても、statusReason が source_forgotten か写しが withdrawn なら、これを出す。固定のピンは押せない（学びの独立レビュー、2026-10-07）。"
+    },
+    {
       "key": "yousu.learning.skills.pinned",
       "text": "固定中",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
@@ -3319,7 +3326,28 @@
       "text": "価値表を変えられませんでした。いまの状態を表示しています。",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningModel.swift",
       "only": "apple",
-      "note": "戻す・再開がうまくいかなかったとき（送り直さない）。サーバーのいまの状態を読み直して出す。"
+      "note": "戻す・再開をサーバーが断ったとき（4xx）、または答えが返らず、読み直しても変わっていなかったとき。送り直さない。サーバーのいまの状態を読み直して出す。"
+    },
+    {
+      "key": "yousu.learning.version.checking",
+      "text": "届いたか確かめています…",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningModel.swift",
+      "only": "apple",
+      "note": "戻す・再開の答えが返らなかったとき（時間切れ・届かない・5xx）。送り直さず、読み直している間に出す。"
+    },
+    {
+      "key": "yousu.learning.version.arrived",
+      "text": "変更は届いていました。いまの状態を表示しています。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningModel.swift",
+      "only": "apple",
+      "note": "答えは返らなかったが、読み直すと変わっていたとき。"
+    },
+    {
+      "key": "yousu.learning.version.unknown",
+      "text": "届いたか分かりませんでした。あとで読み直してください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningModel.swift",
+      "only": "apple",
+      "note": "答えが返らず、読み直しもできなかったとき。"
     },
     {
       "key": "emotion.kind.pride",

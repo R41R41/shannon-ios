@@ -141,9 +141,9 @@ struct ShannonLearningView: View {
             } label: {
                 HStack(spacing: ShannonSpacing.small) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(skill.description)
+                        Text(ShannonLearning.title(skill))
                             .font(.shannon(.body))
-                            .foregroundStyle(skill.isRetired ? palette.textSecondary : palette.textPrimary)
+                            .foregroundStyle(skill.isRetired || skill.isWithheld ? palette.textSecondary : palette.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                         HStack(spacing: ShannonSpacing.small) {
                             Text(ShannonLearning.skillLine(skill))
@@ -185,7 +185,8 @@ struct ShannonLearningView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
-        .disabled(sending)
+        // A withheld skill offers no pin: what it is cannot be shown.
+        .disabled(sending || skill.isWithheld)
         .accessibilityLabel(skill.pinned ? ShannonGeneratedStrings.yousuLearningSkillsUnpin : ShannonGeneratedStrings.yousuLearningSkillsPin)
         .accessibilityValue(skill.pinned ? ShannonGeneratedStrings.yousuLearningSkillsPinned : ShannonGeneratedStrings.yousuLearningSkillsNotPinned)
         .accessibilityHint(ShannonGeneratedStrings.yousuLearningSkillsPinHint)
@@ -306,7 +307,7 @@ struct ShannonSkillDetailPage: View {
             if let detail = model.detail {
                 Section {
                     VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
-                        Text(detail.skill.description)
+                        Text(ShannonLearning.title(detail.skill))
                             .font(.shannon(.title3).weight(.semibold))
                             .foregroundStyle(palette.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -314,10 +315,12 @@ struct ShannonSkillDetailPage: View {
                             .font(.shannon(.footnote))
                             .monospacedDigit()
                             .foregroundStyle(palette.textSecondary)
-                        Text(detail.skill.name)
-                            .font(.shannon(.caption).monospaced())
-                            .foregroundStyle(palette.textSecondary)
-                            .accessibilityLabel(ShannonGeneratedStrings.yousuLearningSkillName(name: detail.skill.name))
+                        if !detail.skill.isWithheld {
+                            Text(detail.skill.name)
+                                .font(.shannon(.caption).monospaced())
+                                .foregroundStyle(palette.textSecondary)
+                                .accessibilityLabel(ShannonGeneratedStrings.yousuLearningSkillName(name: detail.skill.name))
+                        }
                     }
                     .accessibilityElement(children: .combine)
                 }
@@ -351,7 +354,7 @@ struct ShannonSkillDetailPage: View {
         .overlay {
             if model.detail == nil, model.phase == .loading { ProgressView() }
         }
-        .navigationTitle(model.detail?.skill.description ?? ShannonGeneratedStrings.yousuLearningSkillsHeading)
+        .navigationTitle(model.detail.map { ShannonLearning.title($0.skill) } ?? ShannonGeneratedStrings.yousuLearningSkillsHeading)
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif

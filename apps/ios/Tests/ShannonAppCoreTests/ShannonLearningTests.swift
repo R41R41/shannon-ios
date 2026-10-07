@@ -12,6 +12,14 @@ private final class FakeLearningClient: ShannonYousuServing, @unchecked Sendable
     private(set) var resumes = 0
     private(set) var pins: [(String, Bool)] = []
     private var heldPin: CheckedContinuation<Void, Never>?
+    /// When set, a list read waits until `releaseSkillsRead()` and then answers what `skills` held when it was asked.
+    var holdsSkillsReads = false
+    private var heldSkillsRead: CheckedContinuation<Void, Never>?
+    /// Every value read after a change answers this, when set.
+    var valuesAfterChange: ShannonValuesDTO?
+
+    func releaseSkillsRead() { let held = lock.withLock { () -> CheckedContinuation<Void, Never>? in defer { heldSkillsRead = nil }; return heldSkillsRead }; held?.resume() }
+    var skillsReadIsHeld: Bool { lock.withLock { heldSkillsRead != nil } }
 
     func releasePin() { lock.withLock { heldPin }?.resume(); lock.withLock { heldPin = nil } }
     var pinIsHeld: Bool { lock.withLock { heldPin != nil } }
@@ -25,9 +33,14 @@ private final class FakeLearningClient: ShannonYousuServing, @unchecked Sendable
     func opsReportScope(scopeKey: String) -> String? { nil }
 
     func loadShannonValues(scopeKey: String) async throws -> ShannonValuesDTO { try values.get() }
-    func loadShannonSkills(scopeKey: String) async throws -> ShannonSkillsDTO { try skills.get() }
+    func loadShannonSkills(scopeKey: String) async throws -> ShannonSkillsDTO {
+        let answer = skills
+        if holdsSkillsReads { await withCheckedContinuation { continuation in lock.withLock { heldSkillsRead = continuation } } }
+        return try answer.get()
+    }
     func rollbackShannonValues(scopeKey: String, versionID: String?) async throws -> ShannonValuesDTO {
         rollbackVersions.append(versionID)
+        if let after = valuesAfterChange { values = .success(after) }
         return try changeAnswer.get()
     }
     func resumeShannonValues(scopeKey: String) async throws -> ShannonValuesDTO {
@@ -265,4 +278,130 @@ final class ShannonLearningTests: XCTestCase {
         XCTAssertEqual(client.resumes, 1)
         XCTAssertEqual(model.values?.frozen, false)
     }
+    // MARK: Review of the 学び tab (2026-10-07)
+
+    func testAWithheldSkillIsShownWithANeutralTitleAndANormalOneByItsDescription() throws {
+        func decode(_ extra: String) throws -> ShannonSkillDTO {
+            try JSONDecoder().decode(ShannonSkillDTO.self, from: Data("""
+            {"id":"s1","name":"weekly-review","description":"ふりかえりの時","status":"active","version":1,"pinned":false,"uses":0,"successes":0\(extra)}
+            """.utf8))
+        }
+        let normal = try decode("")
+        XCTAssertFalse(normal.isWithheld)
+        XCTAssertEqual(ShannonLearning.title(normal), "ふりかえりの時")
+        XCTAssertFalse(try decode(#","hidden":false,"statusReason":"low_success","copy":{"documentId":"d","hold":null}"#).isWithheld)
+        // The server says so; or, from a server that does not say, its own rule holds.
+        for extra in [#","hidden":true"#, #","statusReason":"source_forgotten""#, #","copy":{"documentId":"d","hold":"withdrawn"}"#] {
+            let skill = try decode(extra)
+            XCTAssertTrue(skill.isWithheld, extra)
+            XCTAssertEqual(ShannonLearning.title(skill), "（表示しないスキル）")
+            XCTAssertFalse(ShannonLearning.skillAccessibilityLabel(skill).contains("ふりかえり"), extra)
+        }
+        XCTAssertEqual(try decode(#","copy":{"documentId":"d","hold":"withdrawn"}"#).copyHold, "withdrawn")
+    }
+
+    func testABodyIsReadOnlyWhenItIsShown() throws {
+        let summary = #""id":"s1","name":"n","description":"d","status":"active","version":1,"pinned":false,"uses":0,"successes":0"#
+        let missing = try JSONDecoder().decode(ShannonSkillDetailDTO.self, from: Data("{\(summary),\"bodyHidden\":true}".utf8))
+        XCTAssertTrue(missing.bodyHidden)
+        XCTAssertEqual(missing.body, "")
+        XCTAssertTrue(try JSONDecoder().decode(ShannonSkillDetailDTO.self, from: Data("{\(summary)}".utf8)).bodyHidden)
+        XCTAssertThrowsError(try JSONDecoder().decode(ShannonSkillDetailDTO.self, from: Data("{\(summary),\"bodyHidden\":false}".utf8)))
+        let withheld = try JSONDecoder().decode(ShannonSkillDetailDTO.self, from: Data(
+            "{\(summary),\"statusReason\":\"source_forgotten\",\"bodyHidden\":false,\"body\":\"secret\"}".utf8
+        ))
+        XCTAssertTrue(withheld.bodyHidden)
+        XCTAssertEqual(withheld.body, "")
+    }
+
+    @MainActor
+    func testAWithheldSkillCannotBePinned() async {
+        let client = FakeLearningClient()
+        let hidden = ShannonSkillDTO(id: "h", name: "（表示しないスキル）", description: "（表示しないスキル）", hidden: true, status: "active", copyHold: "withdrawn", version: 1, pinned: false, uses: 0, successes: 0)
+        client.skills = .success(.init(capacity: .init(used: 1, limit: 20), skills: [hidden]))
+        let model = ShannonLearningModel(client: client)
+        await model.reload()
+        await model.setPinned("h", pinned: true)
+        XCTAssertTrue(client.pins.isEmpty)
+        XCTAssertFalse(model.activeSkills[0].pinned)
+    }
+
+    @MainActor
+    func testAListReadThatStartedBeforeAPinNeverUndoesIt() async {
+        let client = FakeLearningClient()
+        client.skills = .success(.init(capacity: .init(used: 1, limit: 20), skills: [skill("a")]))
+        let model = ShannonLearningModel(client: client)
+        await model.reload()
+
+        // A read starts and is held with the old list (not pinned).
+        client.holdsSkillsReads = true
+        let read = Task { await model.reload() }
+        while !client.skillsReadIsHeld { await Task.yield() }
+        client.holdsSkillsReads = false
+
+        // The pin starts and the server takes it before the read answers.
+        client.pinAnswer = .success(skill("a", pinned: true))
+        let pin = Task { await model.setPinned("a", pinned: true) }
+        while !client.pinIsHeld { await Task.yield() }
+        client.releasePin()
+        await pin.value
+        XCTAssertTrue(model.activeSkills[0].pinned)
+
+        client.releaseSkillsRead()
+        await read.value
+        XCTAssertTrue(model.activeSkills[0].pinned, "the older read is not applied")
+
+        // A read that starts after the pin is applied as usual.
+        client.skills = .success(.init(capacity: .init(used: 1, limit: 20), skills: [skill("a", pinned: true), skill("b")]))
+        await model.reload()
+        XCTAssertEqual(model.activeSkills.map(\.id), ["a", "b"])
+    }
+
+    @MainActor
+    func testTheLearningTabIsOfferedOnlyAfterASuccessfulRead() async {
+        let client = FakeLearningClient()
+        client.skills = .failure(ShannonAPIError.rejected(status: 500))
+        let yousu = ShannonYousuModel(client: client)
+        XCTAssertEqual(yousu.tabs, [.now, .mood], "never offered before a read has answered")
+        await yousu.learning.reload()
+        XCTAssertEqual(yousu.tabs, [.now, .mood], "a failed read offers nothing")
+        client.skills = .success(.init(capacity: .init(used: 0, limit: 20), skills: []))
+        await yousu.learning.reload()
+        XCTAssertEqual(yousu.tabs, [.now, .learning, .mood])
+    }
+
+    @MainActor
+    func testAChangeWithoutAnAnswerIsCheckedAndNeverCalledAFailureWhenItArrived() async throws {
+        let client = FakeLearningClient()
+        let before = ShannonValuesDTO(
+            active: version("c", to: 30, hoursAgo: 1), frozen: false,
+            versions: [version("b", to: 20, hoursAgo: 26), version("c", to: 30, hoursAgo: 1)], cells: []
+        )
+        client.values = .success(before)
+        let model = ShannonLearningModel(client: client)
+        await model.reload()
+        let target = try XCTUnwrap(model.rollbackTarget)
+
+        // The answer timed out, but the server had written the rollback.
+        client.changeAnswer = .failure(URLError(.timedOut))
+        client.valuesAfterChange = ShannonValuesDTO(
+            active: version("d", to: 20, madeBy: "owner_rollback", hoursAgo: 0, frozen: true), frozen: true, versions: before.versions, cells: []
+        )
+        await model.rollback(to: target)
+        XCTAssertEqual(model.valuesNotice, ShannonGeneratedStrings.yousuLearningVersionArrived)
+        XCTAssertEqual(model.values?.frozen, true)
+        XCTAssertEqual(client.rollbackVersions, ["b"], "sent once")
+
+        // Timed out and not written: then it did not go through.
+        client.valuesAfterChange = nil
+        client.values = .success(model.values!)
+        await model.resume()
+        XCTAssertEqual(model.valuesNotice, ShannonGeneratedStrings.yousuLearningVersionFailed)
+
+        // Timed out and the server cannot be read either: not known.
+        client.values = .failure(URLError(.notConnectedToInternet))
+        await model.resume()
+        XCTAssertEqual(model.valuesNotice, ShannonGeneratedStrings.yousuLearningVersionUnknown)
+    }
 }
+

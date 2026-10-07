@@ -95,9 +95,9 @@ public final class ShannonYousuModel {
         learning = ShannonLearningModel(scopeKey: scopeKey, client: client)
     }
 
-    /// The tabs offered: 学び only while this device may read some of it (it is the owner's alone).
+    /// The tabs offered: 学び only once a read of it has answered on this device (it is the owner's alone), never before.
     public var tabs: [ShannonYousuTab] {
-        learning.isUnavailable ? [.now, .mood] : ShannonYousuTab.allCases
+        learning.isOffered || (tab == .learning && !learning.isUnavailable) ? ShannonYousuTab.allCases : [.now, .mood]
     }
 
     /// The 運用 mark (top-left button, 設定 tile, 運用 row): something in 運用 deserves a look.

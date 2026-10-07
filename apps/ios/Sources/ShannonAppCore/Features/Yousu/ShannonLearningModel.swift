@@ -37,6 +37,9 @@ public final class ShannonLearningModel {
     /// The pinned state shown while its request is in flight, laid over every answer that arrives meanwhile.
     private var optimisticPins: [String: Bool] = [:]
     private var generation = 0
+    /// Moves on when a pin starts and when it ends: a list read that started before either is older than what the screen
+    /// shows, and is not applied (it could undo the pin).
+    private var skillsGeneration = 0
 
     public init(scopeKey: String = "local-owner", client: (any ShannonYousuServing)?) {
         self.scopeKey = scopeKey
@@ -49,6 +52,8 @@ public final class ShannonLearningModel {
 
     /// Neither part is offered to this device: the 学び tab is not offered either.
     public var isUnavailable: Bool { valuesPhase == .hidden && skillsPhase == .hidden }
+    /// Some part has been read successfully on this device: only then is the 学び tab offered.
+    public var isOffered: Bool { skills != nil || values != nil }
     public var isLoading: Bool { valuesPhase == .loading || skillsPhase == .loading }
 
     public var activeSkills: [ShannonSkillDTO] { (skills?.skills ?? []).filter { !$0.isRetired } }
@@ -59,7 +64,7 @@ public final class ShannonLearningModel {
     public func reload() async {
         guard let client else { return }
         generation += 1
-        let (scopeKey, request) = (scopeKey, generation)
+        let (scopeKey, request, skillsRequest) = (scopeKey, generation, skillsGeneration)
         async let valuesRead = Self.read { try await client.loadShannonValues(scopeKey: scopeKey) }
         async let skillsRead = Self.read { try await client.loadShannonSkills(scopeKey: scopeKey) }
         let (valuesResult, skillsResult) = await (valuesRead, skillsRead)
@@ -77,6 +82,8 @@ public final class ShannonLearningModel {
         case .cancelled:
             if valuesPhase == .loading, values == nil { valuesPhase = .unreadable }
         }
+        // A pin started or ended while the list was read: what the screen shows is newer than this answer.
+        guard skillsRequest == skillsGeneration else { return }
         switch skillsResult {
         case .value(var answer):
             for index in answer.skills.indices {
@@ -99,14 +106,17 @@ public final class ShannonLearningModel {
     /// Pins or unpins a skill at once on screen, then asks the server. When the server does not take it, the switch goes back
     /// and one sentence says so; when it does, the skill is shown as the server answered.
     public func setPinned(_ skillID: String, pinned: Bool) async {
-        guard let client, !pinsInFlight.contains(skillID), let index = skills?.skills.firstIndex(where: { $0.id == skillID }) else { return }
+        guard let client, !pinsInFlight.contains(skillID), let index = skills?.skills.firstIndex(where: { $0.id == skillID }),
+              !skills!.skills[index].isWithheld else { return }
         let before = skills!.skills[index].pinned
         guard before != pinned else { return }
         skillNotice = nil
+        skillsGeneration += 1
         pinsInFlight.insert(skillID)
         optimisticPins[skillID] = pinned
         skills!.skills[index].pinned = pinned
         defer {
+            skillsGeneration += 1
             pinsInFlight.remove(skillID)
             optimisticPins[skillID] = nil
         }
@@ -128,15 +138,16 @@ public final class ShannonLearningModel {
 
     /// 「前の版に戻す」, after the owner confirmed it: back to `target` (the version the confirmation named).
     public func rollback(to target: ShannonValuesDTO.Version?) async {
-        await changeValues { client, scopeKey in try await client.rollbackShannonValues(scopeKey: scopeKey, versionID: target?.versionId) }
+        await changeValues(expectsFrozen: true) { client, scopeKey in try await client.rollbackShannonValues(scopeKey: scopeKey, versionID: target?.versionId) }
     }
 
     /// 「更新を再開する」, after the owner confirmed it.
     public func resume() async {
-        await changeValues { client, scopeKey in try await client.resumeShannonValues(scopeKey: scopeKey) }
+        await changeValues(expectsFrozen: false) { client, scopeKey in try await client.resumeShannonValues(scopeKey: scopeKey) }
     }
 
-    private func changeValues(_ operation: @escaping (any ShannonYousuServing, String) async throws -> ShannonValuesDTO) async {
+    /// `expectsFrozen`: whether the table is frozen once the change has arrived (after a rollback, yes; after a resume, no).
+    private func changeValues(expectsFrozen: Bool, _ operation: @escaping (any ShannonYousuServing, String) async throws -> ShannonValuesDTO) async {
         guard let client, !isChangingValues else { return }
         isChangingValues = true
         valuesNotice = nil
@@ -148,10 +159,22 @@ public final class ShannonLearningModel {
             readAt = Date()
             valuesPhase = .loaded
         } catch {
-            // What the server holds now is read again, so the card never shows a change that did not happen. The request is
-            // never sent twice.
-            valuesNotice = ShannonGeneratedStrings.yousuLearningVersionFailed
+            // What the server holds now is read again, so the card never shows a change that did not happen, and never says
+            // a change failed that in fact arrived (a timeout after the server wrote it). The request is never sent twice.
+            if let rejected = error as? ShannonAPIError, case .rejected(let status) = rejected, (400..<500).contains(status) {
+                valuesNotice = ShannonGeneratedStrings.yousuLearningVersionFailed
+                await reload()
+                return
+            }
+            let before = values?.active?.versionId
+            valuesNotice = ShannonGeneratedStrings.yousuLearningVersionChecking
             await reload()
+            guard valuesPhase == .loaded, let now = values else {
+                valuesNotice = ShannonGeneratedStrings.yousuLearningVersionUnknown
+                return
+            }
+            let arrived = now.active?.versionId != before && now.frozen == expectsFrozen
+            valuesNotice = arrived ? ShannonGeneratedStrings.yousuLearningVersionArrived : ShannonGeneratedStrings.yousuLearningVersionFailed
         }
     }
 
