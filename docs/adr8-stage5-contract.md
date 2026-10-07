@@ -1,6 +1,6 @@
 # ADR-0008 Stage 5: interests, task tree, feedback and self revision
 
-Status: implemented on `codex/shannon/adr8-stage5`; individual deterministic checks and unlocked Mac launch smoke passed; the final full Swift repeat remains incomplete at the existing audio-device wait described in the report. Production deployment and TestFlight delivery have not been performed.
+Status: implemented on `codex/shannon/adr8-stage5`; full deterministic verification and unlocked Mac launch smoke passed. The test-host microphone dependency was corrected without changing product recording; all 940 shared Swift tests pass. The owner authorized production ON and both TestFlight deliveries; deployment and distribution gates are in progress.
 Verified coverage and remaining checks are recorded in the [implementation report](adr8-stage5-implementation-report.md); these results do not establish complete native or device acceptance.
 Owner: Shannon task. Approved plan: Syzygy `notes/adr0008-stage5-plan.md`, owner approval 2026-10-08 (UI C/B).
 The release baseline is `8200c128`: Stage 4 and evidence decay were already enabled in production and Build 169/168 were confirmed on devices. This document describes the new branch; it is not evidence of a Stage 5 release.
