@@ -146,6 +146,8 @@ To roll back: set `SHANNON_AUTONOMY_ENABLED=false` and restart `shannon-ios.serv
 
 ### Distribution platform
 
+The timer runs the reviewed source and dependencies in `/home/azureuser/shannon-ios`, not the writable Agent Host task checkout.
+Stop it during deployment and restore it after the source and dependency checks.
 The Azure timer selects iPhone builds with App Store Connect's `filter[preReleaseVersion.platform]=IOS`.
 `SHANNON_ASC_PLATFORM` defaults to `IOS`; a separately configured Mac distributor may use `MAC_OS` with its own state file.
 The Mac Xcode Cloud workflow continues to assign its builds to Shannon Internal in its post-action.

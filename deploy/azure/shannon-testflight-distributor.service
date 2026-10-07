@@ -7,11 +7,11 @@ Wants=network-online.target
 Type=oneshot
 User=azureuser
 Group=azureuser
-WorkingDirectory=/home/azureuser/shannon-agent-workspace/shannon-ios
+WorkingDirectory=/home/azureuser/shannon-ios
 EnvironmentFile=/home/azureuser/.config/shannon-appstore-connect/testflight.env
 Environment=SHANNON_DATABASE_PATH=/home/azureuser/shannon-ios-data/shannon.sqlite
 Environment=PATH=/home/azureuser/shannon-ios-runtime/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/home/azureuser/shannon-ios-runtime/bin/node /home/azureuser/shannon-agent-workspace/shannon-ios/node_modules/tsx/dist/cli.mjs /home/azureuser/shannon-agent-workspace/shannon-ios/services/api/src/testflightDistributor.ts
+ExecStart=/home/azureuser/shannon-ios-runtime/bin/node /home/azureuser/shannon-ios/node_modules/tsx/dist/cli.mjs /home/azureuser/shannon-ios/services/api/src/testflightDistributor.ts
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
