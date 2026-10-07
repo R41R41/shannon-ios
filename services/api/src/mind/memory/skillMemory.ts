@@ -1,12 +1,13 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { looksSecret } from '@shannon/cognition';
+import { randomUUID } from 'node:crypto';
 import { tierOutcome } from '@shannon/learning';
 import { LockWaitMeter, loggedFailure, ownerDayKey, tableExists, underWriteLock, type SqliteConnection } from '../../infra/sqlite/lockWaits.js';
 import {
   SKILL_CAPACITY, SKILL_LIFECYCLE, applyReplacements, baselineRate, checked, encodeSkill, injectionThreats, lineDiff, parseSkill, retiresForLowSuccess, skillHash, skillIndex,
   skillLint, trialVerdict, type SkillDocument, type SkillProblem,
 } from './skillDocument.js';
-import { SKILLS_TABLE, SQLiteSkills, type SkillActor, type SkillUse, type StoredPattern, type StoredSkill } from './store/sqliteSkills.js';
+import { SKILLS_TABLE, SQLiteSkills, versionRevisionId, type SkillActor, type SkillUse, type StoredPattern, type StoredSkill } from './store/sqliteSkills.js';
+import { checkedPage, closedSources, digest, iso } from './skillMemoryParts.js';
+import { parentBaseline, type LineageNode } from './skillLineage.js';
 
 /**
  * Her skill memory (Syzygy ADR-0008 stage 2, step 6; `docs/skill-and-routing-contract.md`, 「スキル記憶」). Core: memory.
@@ -50,10 +51,13 @@ export const SKILL_MINIMUM_AGE_DAYS = 14;
 /** What the proposer hands for a new skill: the body, where it came from, the pages it is for, and skills it replaces in the same batch. */
 export interface SkillCreation { draft: SkillDocument; evidence: readonly string[]; purposePatternIds?: readonly string[]; consolidates?: readonly string[] }
 
-/** What the proposer hands for a patch: targeted replacements in the current SKILL.md (the default), or a whole new body. */
-export type SkillPatch = ({ replacements: readonly { find: string; replace: string }[] } | { draft: SkillDocument }) & { evidence: readonly string[]; purposePatternIds?: readonly string[] };
+/**
+ * What the proposer hands for a patch: targeted replacements in the base's SKILL.md (the default), or a whole new body. The base is
+ * the current version unless `baseRevisionId` names an older one of the skill's lineage (ADR-0008 §14, `skillLineage.ts`).
+ */
+export type SkillPatch = ({ replacements: readonly { find: string; replace: string }[] } | { draft: SkillDocument }) & { evidence: readonly string[]; purposePatternIds?: readonly string[]; baseRevisionId?: string };
 
-export const PATTERN_LIMITS = Object.freeze({ title: 60, body: 1_500 });
+export { PATTERN_LIMITS } from './skillMemoryParts.js';
 
 export class SkillMemory {
   readonly store: SQLiteSkills;
@@ -249,9 +253,14 @@ export class SkillMemory {
       if (current.pinned) { outcome = { rejected: 'pinned' }; return; }
       if (current.version !== expectedVersion) { outcome = { rejected: 'stale' }; return; }
       if (current.status === 'trial') { outcome = { rejected: 'on_trial' }; return; }
+      // ADR-0008 §14: an older version of hers may be the base (never the owner's); the trial is judged against that parent.
+      const node = this.store.node(versionRevisionId(skillId, current.version));
+      const base = patch.baseRevisionId && patch.baseRevisionId !== node ? this.store.revisions(scopeKey, skillId)
+        .find(item => item.revisionId === patch.baseRevisionId && item.kind === 'version' && item.variantOf === null && item.madeBy === 'sleep') : undefined;
+      if (patch.baseRevisionId && patch.baseRevisionId !== node && !base) { outcome = { rejected: 'not_found' }; return; }
       let draft: SkillDocument;
       if ('replacements' in patch) {
-        const patched = applyReplacements(current.body, patch.replacements);
+        const patched = applyReplacements(base?.body ?? current.body, patch.replacements);
         if ('problem' in patched) { outcome = { rejected: 'patch_failed' }; return; }
         const parsed = parseSkill(patched.text);
         if ('problem' in parsed) { outcome = { rejected: parsed.problem }; return; }
@@ -264,15 +273,16 @@ export class SkillMemory {
       if (other && other.skillId !== skillId) { outcome = { rejected: 'name_taken' }; return; }
       const purposes = this.purposes(scopeKey, patch.purposePatternIds ?? []);
       if (this.revertedBefore(scopeKey, `skill:${skillId}`, skillHash(body.text), purposes)) { outcome = { rejected: 'audit_reverted' }; return; }
-      const baseline = baselineRate(current.uses.filter(use => use.o !== null && use.v === current.version).map(use => use.o as 0 | 1));
+      const baseline = base ? parentBaseline(base) : baselineRate(current.uses.filter(use => use.o !== null && use.v === current.version).map(use => use.o as 0 | 1));
       const auditId = `audit_${digest(`${skillId}\n${expectedVersion + 1}\n${randomUUID()}`)}`;
-      this.store.insertAudit({ auditId, scopeKey, skillId, target: `skill:${skillId}`, kind: 'patch', fromVersion: expectedVersion, toVersion: expectedVersion + 1, proposalHash: skillHash(body.text),
-        diff: lineDiff(current.body, body.text), purposePatternIds: purposes, baselineRate: baseline, lint: skillLint(body.text), proposedAt: at });
+      this.store.insertAudit({ auditId, scopeKey, skillId, target: `skill:${skillId}`, kind: 'patch', fromVersion: base?.version ?? expectedVersion, toVersion: expectedVersion + 1, proposalHash: skillHash(body.text),
+        diff: lineDiff(base?.body ?? current.body, body.text), purposePatternIds: purposes, baselineRate: baseline, lint: skillLint(body.text), proposedAt: at });
       const merged = closedSources([...current.sources, ...patch.evidence, ...purposes.map(id => `pattern:${id}`)]);
       outcome = this.store.update(scopeKey, skillId, expectedVersion, {
         name: body.skill.name, description: body.skill.description, body: body.text, bodyHash: skillHash(body.text), madeBy: 'sleep', sources: merged,
         purposePatternIds: [...new Set([...current.purposePatternIds, ...purposes])], trial: { base: expectedVersion, audit: auditId }, actor: 'sleep', evidence: patch.evidence,
-      }, 'patched', at, 'trial') ? { version: expectedVersion + 1 } : { rejected: 'stale' };
+        lineage: { parent: base?.revisionId ?? node },
+      }, base ? 'branched' : 'patched', at, 'trial') ? { version: expectedVersion + 1 } : { rejected: 'stale' };
     });
     return outcome;
   }
@@ -396,6 +406,14 @@ export class SkillMemory {
 
   lockWaits() { return this.meter.summary(); }
 
+  /** ADR-0008 §14: the lineage of a skill, every version kept (`skillLineage.ts`). */
+  lineage(scopeKey: string, skillId: string): LineageNode[] {
+    try {
+      return this.ready() ? this.store.revisions(scopeKey, skillId).filter(item => item.kind === 'version')
+        .map(item => ({ revisionId: item.revisionId, version: item.version, parentRevisionId: item.parentRevisionId, variantOf: item.variantOf, madeBy: item.madeBy, uses: item.uses, successes: item.successes })) : [];
+    } catch { return []; }
+  }
+
   /** The pattern ids a proposal names that are active pages, in order, at most eight. */
   private purposes(scopeKey: string, ids: readonly string[]): string[] {
     return [...new Set(ids)].filter(id => this.store.pattern(scopeKey, id)?.status === 'active').slice(0, 8);
@@ -421,7 +439,7 @@ export class SkillMemory {
     const parsed = parseSkill(base.body);
     return this.store.update(scopeKey, current.skillId, current.version, {
       name: 'skill' in parsed ? parsed.skill.name : current.name, description: 'skill' in parsed ? parsed.skill.description : current.description,
-      body: base.body, bodyHash: base.bodyHash, madeBy: actor === 'owner' ? 'owner_edit' : base.madeBy, trial: null, actor, evidence,
+      body: base.body, bodyHash: base.bodyHash, madeBy: actor === 'owner' ? 'owner_edit' : base.madeBy, trial: null, actor, evidence, lineage: { restores: base.revisionId },
     }, reason, at, 'active') ? 'restored' : 'not_found';
   }
 
@@ -440,6 +458,8 @@ export class SkillMemory {
       .sort((left, right) => left.at.localeCompare(right.at)).slice(-USES_KEPT);
     const newlySettled = uses.filter(use => use.o === 1 && !skill.uses.some(old => old.id === use.id && old.o === 1)).length;
     this.store.setUses(skill.scopeKey, skill.skillId, kept, skill.successes + newlySettled);
+    // ADR-0008 §14: each newly settled use counts on its version's node of the lineage.
+    for (const use of uses) if (use.o !== null && !skill.uses.some(old => old.id === use.id && old.o !== null)) this.store.tally(skill.skillId, use.v, use.o);
   }
 
   private later(at: string, operation: () => void): void {
@@ -455,31 +475,4 @@ export class SkillMemory {
     if (!this.options.database.isOpen || !this.ready()) return;
     try { underWriteLock(this.options.database, this.meter, ownerDayKey(at), operation, 'shannon_skills'); } catch (error) { loggedFailure('skills', error); }
   }
-}
-
-/** A pattern page's title and body as stored: present, within bounds, nothing credential-shaped, passing the check. */
-function checkedPage(title: string, body: string, check: SkillBodyCheck | null): { title: string; body: string } | { rejected: SkillRejection } {
-  const cleanTitle = title.replace(/\s+/gu, ' ').trim();
-  const cleanBody = body.trim();
-  if (!cleanTitle || !cleanBody) return { rejected: 'empty' };
-  if ([...cleanTitle].length > PATTERN_LIMITS.title || cleanBody.length > PATTERN_LIMITS.body) return { rejected: 'too_long' };
-  if (looksSecret(`${cleanTitle}\n${cleanBody}`)) return { rejected: 'secret_like' };
-  if (injectionThreats(`${cleanTitle}\n${cleanBody}`).length) return { rejected: 'threat' };
-  if (check === null) return { rejected: 'check_unavailable' };
-  try { if (check.carries(`${cleanTitle}\n${cleanBody}`)) return { rejected: 'secret' }; } catch { return { rejected: 'check_unavailable' }; }
-  return { title: cleanTitle, body: cleanBody };
-}
-
-/** Sources as ids only (`experience:<id>`, `knowledge:<id>`, `pattern:<id>`, `choice:<id>`, `sequence:<symbols>`), at most 40. */
-function closedSources(sources: readonly string[]): string[] {
-  return [...new Set(sources.filter(source => /^(?:experience|knowledge|pattern|choice|sequence):[A-Za-z0-9][A-Za-z0-9_.:>-]{0,160}$/u.test(source)))].slice(0, 40);
-}
-
-function digest(value: string): string {
-  return createHash('sha256').update(value).digest('hex').slice(0, 24);
-}
-
-function iso(at: string): string {
-  const time = Date.parse(at);
-  return new Date(Number.isFinite(time) ? time : Date.now()).toISOString();
 }

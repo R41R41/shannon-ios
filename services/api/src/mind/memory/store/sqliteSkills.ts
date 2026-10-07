@@ -9,7 +9,8 @@ import type { SkillStatus } from '../skillDocument.js';
  * - `shannon_skills`: one row per skill: its current SKILL.md, its status (`trial`, `active`, `retired`), the patterns that
  *   motivated it (`purpose_pattern_ids_json`), the version its trial would revert to, the outcomes of its recent uses (a short JSON
  *   array of ids, instants, numbers and closed values: never words), its sources (ids), and where its copy in Aether is (step 7).
- * - `shannon_skill_revisions`: every version, with who made it (`sleep` or `owner_edit`) and a closed reason.
+ * - `shannon_skill_revisions`: every version, with who made it (`sleep` or `owner_edit`) and a closed reason; with ADR-0008 §14 its
+ *   lineage (`parent_revision_id`, the version it restores `variant_of`) and its settled uses and successes (`skillLineage.ts`).
  * - `shannon_skill_patterns` and `shannon_skill_pattern_log`: the wiki layer, pages of a failure mode or a strategy with what to do
  *   about it, and the log of how each page evolved (created, patched, appended, merged, deprecated). Never given to a turn.
  * - `shannon_skill_audit`: each skill change the sleep proposed, its diff, the patterns it was for, the rate it had to reach, what
@@ -65,7 +66,11 @@ export function ensureSkillSchema(database: DatabaseSync): void {
       after_sha256 TEXT NOT NULL,
       pinned INTEGER NOT NULL,
       reason TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      parent_revision_id TEXT,
+      variant_of TEXT,
+      uses INTEGER NOT NULL DEFAULT 0,
+      successes INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS shannon_skill_revisions_skill ON shannon_skill_revisions (skill_id, version);
     CREATE INDEX IF NOT EXISTS shannon_skill_revisions_scope ON shannon_skill_revisions (scope_key, created_at);
@@ -164,6 +169,13 @@ export type SkillActor = 'sleep' | 'conversation' | 'owner';
 export interface SkillRevision {
   revisionId: string; skillId: string; version: number; kind: 'version' | 'snapshot'; body: string; bodyHash: string; madeBy: 'sleep' | 'owner_edit';
   actor: SkillActor; evidence: readonly string[]; beforeSha256: string | null; afterSha256: string; pinned: boolean; reason: string; createdAt: string;
+  /** ADR-0008 §14: the version it was derived from, the version it restores, and its settled uses and successes. */
+  parentRevisionId: string | null; variantOf: string | null; uses: number; successes: number;
+}
+
+/** The revision id of a version of a skill. */
+export function versionRevisionId(skillId: string, version: number): string {
+  return `${skillId}:v${version}`;
 }
 
 export interface StoredPattern {
@@ -223,6 +235,7 @@ export class SQLiteSkills {
     name: string; description: string; body: string; bodyHash: string; madeBy: 'sleep' | 'owner_edit'; sources?: readonly string[]; purposePatternIds?: readonly string[];
     /** The trial this version starts (`{ base, audit }`), or null to end any trial. */ trial: { base: number | null; audit: string } | null;
     actor: SkillActor; evidence: readonly string[];
+    /** ADR-0008 §14: the version it was derived from (default: the current one), or the one it restores. */ lineage?: { parent?: string; restores?: string };
   }, reason: string, at: string, status?: SkillStatus): boolean {
     symbol(reason);
     const before = this.get(scopeKey, skillId);
@@ -234,8 +247,12 @@ export class SQLiteSkills {
       next.trial?.base ?? null, next.trial?.audit ?? null,
       ...(next.sources ? [JSON.stringify(next.sources)] : []), ...(next.purposePatternIds ? [JSON.stringify(next.purposePatternIds)] : []),
       ...(status ? [status, at, reason] : []), scopeKey, skillId, expectedVersion).changes);
-    if (changed) this.revision({ scopeKey, skillId, version: expectedVersion + 1, kind: 'version', body: next.body, bodyHash: next.bodyHash, madeBy: next.madeBy,
-      actor: next.actor, evidence: next.evidence, before: before.body, pinned: before.pinned, reason }, at);
+    if (changed) {
+      const restores = next.lineage?.restores ? this.node(next.lineage.restores) : null;
+      this.revision({ scopeKey, skillId, version: expectedVersion + 1, kind: 'version', body: next.body, bodyHash: next.bodyHash, madeBy: next.madeBy,
+        actor: next.actor, evidence: next.evidence, before: before.body, pinned: before.pinned, reason,
+        parent: restores ?? next.lineage?.parent ?? this.node(versionRevisionId(skillId, expectedVersion)), variantOf: restores }, at);
+    }
     return changed > 0;
   }
 
@@ -281,6 +298,18 @@ export class SQLiteSkills {
     this.database.prepare('UPDATE shannon_skills SET export_hold = ? WHERE scope_key = ? AND skill_id = ?').run(hold, scopeKey, skillId);
   }
 
+  /** The node a version belongs to: itself, or the version it restores. */
+  node(revisionId: string): string {
+    const row = this.database.prepare('SELECT variant_of FROM shannon_skill_revisions WHERE revision_id = ?').get(revisionId) as { variant_of: string | null } | undefined;
+    return row?.variant_of ?? revisionId;
+  }
+
+  /** ADR-0008 §14: one settled use of a version, counted on its node. */
+  tally(skillId: string, version: number, outcome: 0 | 1): void {
+    this.database.prepare('UPDATE shannon_skill_revisions SET uses = uses + 1, successes = successes + ? WHERE revision_id = ?')
+      .run(outcome, this.node(versionRevisionId(skillId, version)));
+  }
+
   revisions(scopeKey: string, skillId?: string): SkillRevision[] {
     const rows = (skillId
       ? this.database.prepare('SELECT * FROM shannon_skill_revisions WHERE scope_key = ? AND skill_id = ? ORDER BY version, created_at, kind DESC').all(scopeKey, skillId)
@@ -289,6 +318,7 @@ export class SQLiteSkills {
       revisionId: String(row.revision_id), skillId: String(row.skill_id), version: Number(row.version), kind: String(row.kind) as 'version' | 'snapshot', body: String(row.body),
       bodyHash: String(row.body_hash), madeBy: String(row.made_by) as 'sleep' | 'owner_edit', actor: String(row.actor) as SkillActor, evidence: list<string[]>(row.evidence_json, []),
       beforeSha256: text(row.before_sha256), afterSha256: String(row.after_sha256), pinned: Number(row.pinned) === 1, reason: String(row.reason), createdAt: String(row.created_at),
+      parentRevisionId: text(row.parent_revision_id), variantOf: text(row.variant_of), uses: Number(row.uses ?? 0), successes: Number(row.successes ?? 0),
     }));
   }
 
@@ -379,14 +409,14 @@ export class SQLiteSkills {
   }
 
   private revision(entry: { scopeKey: string; skillId: string; version: number; kind: 'version' | 'snapshot'; body: string; bodyHash: string; madeBy: 'sleep' | 'owner_edit';
-    actor: SkillActor; evidence: readonly string[]; before: string | null; pinned: boolean; reason: string }, at: string): void {
+    actor: SkillActor; evidence: readonly string[]; before: string | null; pinned: boolean; reason: string; parent?: string | null; variantOf?: string | null }, at: string): void {
     const evidence = [...new Set(entry.evidence)].filter(id => /^[A-Za-z][A-Za-z0-9_.:>-]{0,160}$/u.test(id)).slice(0, 40);
     const snapshots = entry.kind === 'snapshot'
       ? Number((this.database.prepare("SELECT COUNT(*) AS n FROM shannon_skill_revisions WHERE skill_id = ? AND kind = 'snapshot'").get(entry.skillId) as { n: number }).n) : 0;
-    this.database.prepare(`INSERT INTO shannon_skill_revisions (revision_id, skill_id, scope_key, version, kind, body, body_hash, made_by, actor, evidence_json, before_sha256, after_sha256, pinned, reason, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(entry.kind === 'snapshot' ? `${entry.skillId}:s${snapshots + 1}` : `${entry.skillId}:v${entry.version}`,
+    this.database.prepare(`INSERT INTO shannon_skill_revisions (revision_id, skill_id, scope_key, version, kind, body, body_hash, made_by, actor, evidence_json, before_sha256, after_sha256, pinned, reason, created_at, parent_revision_id, variant_of)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(entry.kind === 'snapshot' ? `${entry.skillId}:s${snapshots + 1}` : versionRevisionId(entry.skillId, entry.version),
       entry.skillId, entry.scopeKey, entry.version, entry.kind, entry.body, entry.bodyHash, entry.madeBy, entry.actor, JSON.stringify(evidence),
-      entry.before === null ? null : sha256(entry.before), sha256(entry.body), entry.pinned ? 1 : 0, entry.reason, at);
+      entry.before === null ? null : sha256(entry.before), sha256(entry.body), entry.pinned ? 1 : 0, entry.reason, at, entry.parent ?? null, entry.variantOf ?? null);
   }
 }
 

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { UNKNOWN_GUEST_PRESENCE, createInitialCompanionState, type CompanionStateSnapshot } from '@shannon/cognition';
 import {
-  judgedFacts, skillAuditScenario, skillExportScenario, skillFormScenario, skillGuestScenario, skillPatternScenario, skillRetireScenario, skillTrialScenario, skillUseScenario, stableFingerprint,
+  judgedFacts, skillAuditScenario, skillExportScenario, skillFormScenario, skillLineageScenario, skillGuestScenario, skillPatternScenario, skillRetireScenario, skillTrialScenario, skillUseScenario, stableFingerprint,
   type ReachDriver, type ReachScenarioDefinition,
 } from '../../../../packages/evaluation/src/reach/index.js';
 import { createLocalApiKernel } from '../../src/infra/http/apiKernel.js';
@@ -15,6 +15,7 @@ import { talkId } from '../../src/mind/action/respond/turnRouting.js';
 import { authorizeToolCall } from '../../src/mind/inhibition/shannonToolGate.js';
 import { SKILL_INDEX_HEADER, SKILL_INDEX_LINES, SKILL_INDEX_WIDTH, parseSkill, type SkillDocument } from '../../src/mind/memory/skillDocument.js';
 import { SkillMemory } from '../../src/mind/memory/skillMemory.js';
+import { rankedNodes } from '../../src/mind/memory/skillLineage.js';
 import { ShannonSkillConsolidator, type SkillSleepModels } from '../../src/mind/sleep/skillConsolidation.js';
 import type { SkillSleepModel } from '../../src/mind/sleep/skillSleepModel.js';
 import { shannonTool } from '../../src/mind/tools/shannonTools.js';
@@ -56,10 +57,10 @@ class SkillWorld {
 
   ports() { return skillTurnPorts(this.skills, () => this.state); }
 
-  builder(models: SkillSleepModels, at: string) {
+  builder(models: SkillSleepModels, at: string, random?: () => number) {
     const sources = skillSeedSources(this.store, this.store.choiceLedger());
     return new ShannonSkillConsolidator(this.skills, { ...sources, check: () => skillBodyCheck(this.state, this.store, SCOPE) }, models, { backgroundLlmCostUsd: () => 0 },
-      { backgroundBudgetUsd: 1, now: () => at, log: () => {} });
+      { backgroundBudgetUsd: 1, now: () => at, log: () => {}, ...(random ? { random } : {}) });
   }
 
   close(): void {
@@ -302,6 +303,54 @@ async function audit() {
   } finally { world.close(); }
 }
 
+/**
+ * ADR-0008 §14 (DGM): v1 did so-so, v2 (from v1) did very well, v3 (from v2) is the current one and did a little worse, v4 (from v3)
+ * failed its trial and was reverted (v5 restores v3). The next night's base, drawn best first, is the older branch v2; the patch
+ * starts from v2's body, and its trial must reach v2's rate.
+ */
+async function lineage() {
+  const world = new SkillWorld();
+  try {
+    const ok = { carries: () => false };
+    const { skillId } = world.skills.create(SCOPE, { draft: skill('weekly-review'), evidence: [] }, ok, minutes(-900)) as { skillId: string };
+    let clock = -890;
+    const use = (outcomes: boolean[]) => outcomes.forEach(good => {
+      const talk = `t${clock}`;
+      world.skills.used(SCOPE, 'weekly-review', { talk, growth: 1 }, minutes(clock));
+      world.skills.nextTurn(SCOPE, talk, good ? 1 : 0, minutes(clock + 1));
+      clock += 2;
+    });
+    const night = () => { world.skills.lifecycle(SCOPE, minutes(clock)); clock += 2; };
+    const pages = ['五つ挙げる', '二つ決める', '書き出す', '声に出す'].map(title => (world.skills.createPattern(SCOPE, { kind: 'strategy', title, body: `${title}とよい。` }, [], ok, minutes(-899)) as { patternId: string }).patternId);
+    const revise = (version: number, find: string, replace: string, page: string) => world.skills.revise(SCOPE, skillId, version, { replacements: [{ find, replace }], evidence: [], purposePatternIds: [page] }, ok, minutes(clock));
+    use([true, true]); night(); use([false, false]);
+    revise(1, '三つ', '五つ', pages[0]!); use([true, true, true]); night(); use([true, true, true, true, true, true]);
+    revise(2, '来週の一つ', '来週の二つ', pages[1]!); use([true, true, true]); night(); use([false]);
+    revise(3, '決める', '書き出す', pages[2]!); use([false, false, false]); night();
+    const current = world.skills.store.get(SCOPE, skillId)!;
+    const nodes = world.skills.lineage(SCOPE, skillId);
+    const ranked = rankedNodes(nodes);
+    const v2 = world.skills.store.revisions(SCOPE, skillId).find(item => item.version === 2)!;
+    const proposer = scripted(input => (input.round === 1 ? { ...proposal('weekly-review', [pages[3]!]), operation: 'patch', skillId, expectedVersion: current.version,
+      replacements: [{ find: '来週の一つを決める', replace: '来週の一つを声に出して決める' }] } : { ...proposal('x', []), action: 'none' }));
+    // The next night (a new owner-local day: three revisions were made today).
+    await world.builder({ maintainer: null, proposer }, minutes(clock + 1_440), () => 0).consolidate(SCOPE, minutes(0), minutes(clock + 1_440));
+    const shown = (proposer.inputs[0]?.skills as Array<{ id: string; body: string; branch?: { version: number } }> | undefined)?.find(item => item.id === skillId);
+    const after = world.skills.store.get(SCOPE, skillId)!;
+    const branched = world.skills.store.revisions(SCOPE, skillId).find(item => item.version === after.version)!;
+    const audit = world.skills.store.audits(SCOPE).at(-1)!;
+    const node = (version: number) => nodes.find(item => item.version === version)!;
+    return outcome(skillLineageScenario, {
+      'lineage.kept': current.version === 5 && current.status === 'active' && node(2).parentRevisionId === node(1).revisionId && node(3).parentRevisionId === node(2).revisionId
+        && node(4).parentRevisionId === node(3).revisionId && node(5).variantOf === node(3).revisionId && node(3).uses === 4 && node(4).uses === 3,
+      'lineage.older_branch': ranked.map(item => item.node.version).join(',') === '2,3,1,4' && ranked.every((item, index) => index === 0 || ranked[index - 1]!.weight >= item.weight)
+        && shown?.branch?.version === 2 && shown.body === v2.body.slice(0, 1_500),
+      'lineage.parent_judged': after.status === 'trial' && after.trialBaseVersion === 5 && branched.parentRevisionId === v2.revisionId && branched.body.includes('五つ')
+        && branched.body.includes('声に出して') && !branched.body.includes('二つ') && audit.fromVersion === 2 && audit.baselineRate === 1,
+    }, { ranked: ranked.length }, 3);
+  } finally { world.close(); }
+}
+
 /** Every skill's copy in シャノン用フォルダ, the owner's edit adopted at the next sleep and never overwritten. */
 async function exported() {
   const world = new SkillWorld();
@@ -345,6 +394,7 @@ export function skillDrivers(): Record<string, () => ReachDriver> {
     [skillTrialScenario.id]: () => driver(trial),
     [skillAuditScenario.id]: () => driver(audit),
     [skillExportScenario.id]: () => driver(exported),
+    [skillLineageScenario.id]: () => driver(lineage),
   };
 }
 

@@ -64,8 +64,16 @@ export const skillExportScenario = definition('skill.export', 'be_useful', 'ラ�
     { id: 'export.off', judge: 'deterministic', threshold: 1, description: 'Without Aether, or with SHANNON_SKILL_EXPORT=off, there is no export.' },
   ]);
 
+export const skillLineageScenario = definition('skill.lineage', 'grow', '良かった古い版から直す',
+  'スキルの版を捨てずに系譜（木）で残し、次に直す元の版を σ(10(s−0.5))/(1+子の数) の重みで選ぶか。今の版よりうまくいっていた古い枝が選ばれ、その枝から直した版が、最初の版でも今の版でもなく親の成績と比べて試されるか。', [
+    { id: 'lineage.kept', judge: 'deterministic', threshold: 1, description: 'Every version is kept with its parent; a reverted branch stays; a restored version is the node it restores (not a child).' },
+    { id: 'lineage.older_branch', judge: 'deterministic', threshold: 1, description: 'Ranked best first, the older branch that did better than the current version leads, and the draw shows the proposer its body as a branch.' },
+    { id: 'lineage.parent_judged', judge: 'deterministic', threshold: 1, description: 'The new version\'s parent is that branch and its trial must reach the branch\'s own rate, not the first version\'s or the current one\'s.' },
+  ]);
+
 export const SKILL_SCENARIOS: readonly ReachScenarioDefinition[] = Object.freeze([
   skillFormScenario, skillUseScenario, skillRetireScenario, skillGuestScenario, skillPatternScenario, skillTrialScenario, skillAuditScenario, skillExportScenario,
+  skillLineageScenario,
 ]);
 
 export const recallTreeScenario = definition('recall.tree', 'be_useful', '見出しをたどって思い出す',

@@ -12,3 +12,5 @@ export {
   PATTERN_LIMITS, SKILL_MINIMUM_AGE_DAYS, SKILL_USE_NEXT_TURN_MINUTES, SkillMemory, type SkillBodyCheck, type SkillCreation, type SkillPatch, type SkillRejection,
 } from './skillMemory.js';
 export type { PatternLogEntry, SkillActor, SkillAuditEntry, SkillRevision, SkillUse, StoredPattern, StoredSkill } from './store/sqliteSkills.js';
+export { versionRevisionId } from './store/sqliteSkills.js';
+export { SKILL_LINEAGE, chosenBase, parentBaseline, rankedNodes, scoredLineage, type LineageNode, type ScoredNode } from './skillLineage.js';

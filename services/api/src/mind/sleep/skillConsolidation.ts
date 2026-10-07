@@ -4,6 +4,7 @@ import {
   SKILL_CAPACITY, SKILL_LIFECYCLE, type SkillBodyCheck, type SkillDocument, type SkillMemory, type SkillPatch, type SkillRejection, type StoredPattern,
 } from '../memory/memoryPorts.js';
 import { MAINTAINER_INSTRUCTIONS, PROPOSER_INSTRUCTIONS } from './skillSleepRules.js';
+import { chosenBase, versionRevisionId } from '../memory/memoryPorts.js';
 import type { SkillSleepModel } from './skillSleepModel.js';
 
 /**
@@ -65,7 +66,8 @@ export class ShannonSkillConsolidator {
     private readonly sources: SkillSeedSources,
     private readonly models: SkillSleepModels,
     private readonly usage: { backgroundLlmCostUsd(monthKey: string): number },
-    private readonly options: { backgroundBudgetUsd?: number; now?: () => string; log?: (line: string) => void } = {},
+    private readonly options: { backgroundBudgetUsd?: number; now?: () => string; log?: (line: string) => void;
+      /** The draw of a patch's base in a skill's lineage (ADR-0008 §14); `Math.random` unless handed. */ random?: () => number } = {},
   ) {
     this.budgetUsd = options.backgroundBudgetUsd ?? configuredBackgroundBudgetUsd();
   }
@@ -153,6 +155,7 @@ export class ShannonSkillConsolidator {
   private async propose(scopeKey: string, limits: { create: number; update: number }, check: SkillBodyCheck | null, texts: readonly string[], at: string,
     reject: (why: SkillRejection) => void): Promise<'created' | 'updated' | 'rejected' | 'none'> {
     const opened = new Map<string, StoredPattern>();
+    const bases = this.bases(scopeKey);
     for (let round = 1; round <= PROPOSER_ROUNDS; round += 1) {
       const pages = this.skills.patterns(scopeKey);
       const skills = this.skills.store.all(scopeKey);
@@ -162,9 +165,11 @@ export class ShannonSkillConsolidator {
         patternIndex: pages.map(page => ({ id: page.patternId, kind: page.kind, title: page.title })),
         skills: skills.map(skill => {
           const resolved = skill.uses.filter(use => use.o !== null);
+          const base = bases.get(skill.skillId);
           return { id: skill.skillId, version: skill.version, name: skill.name, description: skill.description, status: skill.status,
             editable: skill.madeBy !== 'owner_edit' && !skill.pinned && skill.status !== 'trial', purposes: skill.purposePatternIds,
-            uses: skill.uses.length, successes: resolved.filter(use => use.o === 1).length, body: skill.body.slice(0, 1_500) };
+            uses: skill.uses.length, successes: resolved.filter(use => use.o === 1).length, body: (base?.body ?? skill.body).slice(0, 1_500),
+            ...(base ? { branch: { version: base.version, uses: base.uses, successes: base.successes } } : {}) };
         }),
         reverted: this.skills.store.audits(scopeKey).filter(entry => entry.status === 'reverted').slice(-12)
           .map(entry => ({ target: entry.target, purposes: entry.purposePatternIds, diff: entry.diff.slice(0, 300) })),
@@ -189,12 +194,32 @@ export class ShannonSkillConsolidator {
         return 'created';
       }
       if (limits.update <= 0) { reject('over_limit'); return 'rejected'; }
-      const patch: SkillPatch = answer.replacements.length ? { replacements: answer.replacements, evidence, purposePatternIds: purposes } : { draft, evidence, purposePatternIds: purposes };
+      const branch = bases.get(answer.skillId);
+      const patch: SkillPatch = { ...(answer.replacements.length ? { replacements: answer.replacements } : { draft }), evidence, purposePatternIds: purposes,
+        ...(branch ? { baseRevisionId: branch.revisionId } : {}) };
       const revised = this.skills.revise(scopeKey, answer.skillId, answer.expectedVersion, patch, check, at);
       if ('rejected' in revised) { reject(revised.rejected); return 'rejected'; }
       return 'updated';
     }
     return 'none';
+  }
+
+  /**
+   * ADR-0008 §14: for each skill the proposer may patch, its base drawn from its lineage (p ∝ σ(10(s − 0.5)) / (1 + children),
+   * `skillLineage.ts`); only a base that is not the current version is named (a branch).
+   */
+  private bases(scopeKey: string): Map<string, { revisionId: string; version: number; body: string; uses: number; successes: number }> {
+    const bases = new Map<string, { revisionId: string; version: number; body: string; uses: number; successes: number }>();
+    for (const skill of safe(() => this.skills.store.all(scopeKey), [])) {
+      if (skill.madeBy === 'owner_edit' || skill.pinned || skill.status === 'trial') continue;
+      const lineage = this.skills.lineage(scopeKey, skill.skillId);
+      if (lineage.length < 2) continue;
+      const chosen = chosenBase(lineage, this.options.random ?? Math.random);
+      if (!chosen || chosen.node.revisionId === safe(() => this.skills.store.node(versionRevisionId(skill.skillId, skill.version)), null)) continue;
+      const body = safe(() => this.skills.store.revisions(scopeKey, skill.skillId).find(item => item.revisionId === chosen.node.revisionId)?.body, undefined);
+      if (body) bases.set(skill.skillId, { revisionId: chosen.node.revisionId, version: chosen.node.version, body, uses: chosen.node.uses, successes: chosen.node.successes });
+    }
+    return bases;
   }
 
   private seeds(scopeKey: string, startAt: string, endAt: string) {
