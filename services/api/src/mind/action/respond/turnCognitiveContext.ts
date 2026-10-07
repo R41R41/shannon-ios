@@ -14,12 +14,12 @@ import {
   type ShannonIntent,
   type ShannonSituationSnapshot,
 } from '@shannon/cognition';
-import { emotionTiming } from '../../emotion/emotionTiming.js';
-import type { ConversationStore } from '../../memory/store/conversationStore.js';
-import { MemoryWithholding } from '../../memory/memoryVisibility.js';
-import { DisclosureGate, sharedProfilePrompt } from '../../inhibition/memoryDisclosure.js';
-import { recallImpressions } from '../../recall/impressionRecall.js';
-import { IMPRESSION_MEMORY_PREFIX } from '../../memory/impressions.js';
+import { emotionTiming } from '../../emotion/emotionPorts.js';
+import type { ConversationStore } from '../../memory/memoryPorts.js';
+import { MemoryWithholding } from '../../memory/memoryPorts.js';
+import { DisclosureGate, sharedProfilePrompt } from '../../inhibition/disclosurePorts.js';
+import { recallImpressions } from '../../recall/recallPorts.js';
+import { IMPRESSION_MEMORY_PREFIX } from '../../memory/memoryPorts.js';
 
 export interface TurnCognitiveContext {
   situation: ShannonSituationSnapshot;

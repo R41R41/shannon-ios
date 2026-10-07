@@ -6,7 +6,7 @@ import { AutonomyHostFolderSteps } from './autonomyHostFolderSteps.js';
 import { HostFolderOperationsStore } from './hostFolderOperationsStore.js';
 import { AutonomyLoopState } from './autonomyLoopState.js';
 import { AutonomyProposalLedger } from './autonomyProposals.js';
-import { AutonomyPursuitLedger } from '../../../self/autonomyPursuits.js';
+import { AutonomyPursuitLedger } from '../../../self/selfPorts.js';
 import { OwnerInformedMarks } from '../../../inhibition/store/ownerInformedMarks.js';
 import { secureDatabaseFiles } from '../../../../infra/sqlite/sqliteStoreContext.js';
 import { StudyStore } from './studyStore.js';

@@ -3,14 +3,14 @@ import {
   resolveDisclosure, ruleWithholdsText,
   type CompanionStateSnapshot, type MemoryAudience,
 } from '@shannon/cognition';
-import type { ConversationStore, ShannonExperience } from '../memory/store/conversationStore.js';
+import type { ConversationStore, ShannonExperience } from '../memory/memoryPorts.js';
 import {
   IMPRESSION_MEMORY_PREFIX, OWNER_PERSON_KEY, comparable, impressionConfidence, impressionConfig, impressionMemoryId, impressionsEnabled,
   type ImpressionPerson, type ImpressionSource, type PersonImpression,
-} from '../memory/impressions.js';
-import { DisclosureGate } from '../inhibition/memoryDisclosure.js';
-import { localDayKey } from '../memory/memoryProjection.js';
-import { MemoryWithholding } from '../memory/memoryVisibility.js';
+} from '../memory/memoryPorts.js';
+import { DisclosureGate } from '../inhibition/disclosurePorts.js';
+import { localDayKey } from '../memory/memoryPorts.js';
+import { MemoryWithholding } from '../memory/memoryPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export const IMPRESSION_HEADER = '[人についての印象 — ボクがやりとりを重ねて気づいてきたこと]';

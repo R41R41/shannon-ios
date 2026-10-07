@@ -20,6 +20,14 @@
       "toExcept": ["mind/*/ports.ts", "mind/action/*/ports.ts", "mind/*/*Ports.ts", "mind/action/*/*Ports.ts"]
     },
     {
+      "id": "ports-types-only-from-stores",
+      "kind": "imports",
+      "description": "A part's window (ports.ts or <component>Ports.ts) re-exports only types from a store/ folder (`export type`, `import type`, or every name marked `type`): a store is handed to a part by wiring, never reached through another part's window (Syzygy ADR-0008 stage 3, S1).",
+      "from": ["mind/*/ports.ts", "mind/action/*/ports.ts", "mind/*/*Ports.ts", "mind/action/*/*Ports.ts"],
+      "to": ["**/store/**"],
+      "typesOnly": true
+    },
+    {
       "id": "sqlite-in-stores",
       "kind": "imports",
       "description": "Only a store/ folder, infra/sqlite and wiring open SQLite.",

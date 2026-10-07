@@ -11,8 +11,8 @@ import {
   type ShannonKnowledgeDocument,
 } from '@shannon/cognition';
 import type { MemoryModelGateway } from './memoryModels.js';
-import type { ShannonKnowledgeStore } from '../memory/store/sqliteShannonKnowledge.js';
-import { conversationStoreOf, MemoryWithholding } from '../memory/memoryVisibility.js';
+import type { ShannonKnowledgeStore } from '../memory/memoryPorts.js';
+import { conversationStoreOf, MemoryWithholding } from '../memory/memoryPorts.js';
 import { fencedRecall, type TreeKnowledgeRecall } from './treeRecall.js';
 
 /** Documents longer than this are navigated by heading instead of projected whole. */

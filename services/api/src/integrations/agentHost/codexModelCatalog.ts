@@ -1,4 +1,4 @@
-import type { AgentModelDescriptor, AgentReasoningEffort } from '../../mind/action/agentTasks/agentTaskStore.js';
+import type { AgentModelDescriptor, AgentReasoningEffort } from '../../mind/action/agentTasks/agentTasksPorts.js';
 import type { CodexAppServerConnection } from './codexAppServerClient.js';
 
 export async function codexModelCatalog(

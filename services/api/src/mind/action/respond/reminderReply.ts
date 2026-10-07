@@ -1,5 +1,5 @@
 import { visibleMemoryText, type CompanionStateSnapshot } from '@shannon/cognition';
-import type { StoredConversationMessage } from '../../memory/store/conversationStore.js';
+import type { StoredConversationMessage } from '../../memory/memoryPorts.js';
 
 /**
  * 「終わったよ」 names nothing, so it can only be bound to a promise by position:

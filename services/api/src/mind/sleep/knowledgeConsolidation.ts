@@ -7,11 +7,11 @@ import {
   type ShannonKnowledgeDocument,
 } from '@shannon/cognition';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
-import type { ConversationStore } from '../memory/store/conversationStore.js';
+import type { ConversationStore } from '../memory/memoryPorts.js';
 import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
-import type { ShannonKnowledgeStore } from '../memory/store/sqliteShannonKnowledge.js';
+import type { ShannonKnowledgeStore } from '../memory/memoryPorts.js';
 import { usableKnowledgeFor } from '../recall/turnKnowledgeRecall.js';
-import { MemoryWithholding } from '../memory/memoryVisibility.js';
+import { MemoryWithholding } from '../memory/memoryPorts.js';
 
 export interface KnowledgeOperation {
   operation: 'create' | 'update' | 'retire';

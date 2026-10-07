@@ -15,6 +15,11 @@
  * best first (`rankedNodes`, descending weight), there is no unused threshold, and a trial is judged against its parent, never
  * against the first version (`skillMemory.revise`: the baseline is the base node's own rate).
  */
+
+/** The lineage node of one version of a skill (`skillId:vN`). Kept here, beside the tree, so the memory window need not reach the store. */
+export function versionRevisionId(skillId: string, version: number): string {
+  return `${skillId}:v${version}`;
+}
 export interface LineageNode {
   revisionId: string;
   version: number;

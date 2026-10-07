@@ -4,11 +4,11 @@ import { BODY_REACTION_LIMITS } from '../../contracts/bodyReactionContract.js';
 import type { SQLiteBodyReactionStore, StoredTouchBurst, TouchRecord } from '../../surfaces/body/store/bodyReactionStore.js';
 import { touchExperience, type TouchExperienceWriter } from '../../surfaces/body/store/bodyTouchMemory.js';
 import { reflexPartWord, type BodyTouchStance } from '../../surfaces/body/bodyTouchReflex.js';
-import { TouchPredictions, stanceOutcome, type TouchPrediction, type TouchPredictionRecord } from '../prediction/bodyTouchPrediction.js';
+import { TouchPredictions, stanceOutcome, type TouchPrediction, type TouchPredictionRecord } from '../prediction/predictionPorts.js';
 
-export { touchPredictionEnabled } from '../prediction/bodyTouchPrediction.js';
+export { touchPredictionEnabled } from '../prediction/predictionPorts.js';
 import { bodyTouchPartWord, bodyTouchRegionWord } from '../../surfaces/body/bodyTouchWords.js';
-import type { PredictionShadow } from '../prediction/predictionShadow.js';
+import type { PredictionShadow } from '../prediction/predictionPorts.js';
 import type { TouchLedger } from '../../contracts/cognitionLedgerContract.js';
 
 /**

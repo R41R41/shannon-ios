@@ -9,7 +9,7 @@ import {
   type ShannonPursuitLink,
   type ShannonPursuitStatus,
 } from '@shannon/cognition';
-import type { AgentTask, AgentTaskStore } from '../agentTasks/agentTaskStore.js';
+import type { AgentTask, AgentTaskStore } from '../agentTasks/agentTasksPorts.js';
 import { formatYen, type AutonomyActivityDay, type AutonomyActivityEntry } from '../../inhibition/store/autonomyActivity.js';
 import { DisabledAutonomyAnnouncer, type AutonomyAnnouncer } from './autonomyAnnouncer.js';
 import { autonomyLoopStatus, type AutonomyLoopStatus } from '../../inhibition/autonomyDayLog.js';
@@ -27,7 +27,7 @@ import { StudyAether } from './studyAether.js';
 import type { MinecraftRequestPort } from '../../tools/shannonMinecraftTools.js';
 import { resolvePhysicalPath, type AutonomyPathResolver } from '../../inhibition/autonomyPaths.js';
 import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './store/autonomyProposals.js';
-import type { PursuitDraft, PursuitRejection } from '../../self/autonomyPursuits.js';
+import type { PursuitDraft, PursuitRejection } from '../../self/selfPorts.js';
 import { autonomyPacing } from './autonomyLoopConfig.js';
 import { autonomySessionView } from './autonomySessionView.js';
 import { SQLiteAutonomyStore, type AutonomyBudgetRequest } from './store/autonomyStore.js';

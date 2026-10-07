@@ -2,18 +2,18 @@ import type { CompanionStateStore, ShannonActionReceipt } from '@shannon/cogniti
 import type { ConversationStore, StoredConversationMessage } from '../../memory/store/conversationStore.js';
 import type { OrganizeSession, OrganizeStore } from '../../../integrations/voyager/organize.js';
 import type { AetherProposalStore } from '../../../integrations/aether/aetherProposal.js';
-import type { AgentTask, AgentTaskStore } from '../agentTasks/agentTaskStore.js';
+import type { AgentTask, AgentTaskStore } from '../agentTasks/agentTasksPorts.js';
 import { applyExplicitCommitmentCommand } from './commitmentCommands.js';
 import {
   boundOwnerTurn, contentPreview, containsUnresolvedConversationReference, isBareConversationReference, keepableStatement,
   resolveConversationContent, type ResolvedConversationContent,
 } from './conversationReference.js';
 import { aetherNoteRequest, asksWhichPlace, memoRequestContent, type AetherNoteRequest } from './memoPlace.js';
-import { TOOL_FOLLOW_UP_MILLISECONDS } from '../../tools/shannonToolTurns.js';
+import { TOOL_FOLLOW_UP_MILLISECONDS } from '../../tools/toolsPorts.js';
 import { ShannonMemoryService } from '../../memory/memoryService.js';
 import { forgetCitedMemories } from '../../memory/memoryForgetCommand.js';
 import type { CognitiveIntentStore } from './cognitiveIntent.js';
-import type { TurnMemoryRecall } from '../../recall/turnMemoryRecall.js';
+import type { TurnMemoryRecall } from '../../recall/recallPorts.js';
 import { resolveReminderReply } from './reminderReply.js';
 
 export interface UserUtterance {

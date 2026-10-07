@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import type { AgentHostProject } from './agentHostConfig.js';
-import type { AgentWorkspaceChangeDescriptor, AgentWorkspaceProjectState } from '../../mind/action/agentTasks/agentTaskStore.js';
+import type { AgentWorkspaceChangeDescriptor, AgentWorkspaceProjectState } from '../../mind/action/agentTasks/agentTasksPorts.js';
 
 export class AgentWorkspaceSnapshotReader {
   private cachedAt = 0;

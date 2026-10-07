@@ -1,4 +1,4 @@
-import { presentCompanionState } from '../emotion/companionPresence.js';
+import { presentCompanionState } from '../emotion/emotionPorts.js';
 import {
   memoryControlFor,
   memoryIdentifier,
@@ -13,11 +13,11 @@ import type { KnowledgeAnswer, KnowledgeStore } from './store/knowledgeStore.js'
 import type { PersonalityProfile } from './store/knowledgeStore.js';
 import type { WorldItem, WorldReader } from '../../integrations/world/store/worldStore.js';
 import { configuredBackgroundBudgetUsd, type LlmUsageReader, type LlmUsageSummaryRow } from '../../infra/models/llmUsage.js';
-import { commitmentDeadline } from '../action/respond/commitmentTime.js';
-import { SNOOZE_MILLISECONDS } from '../action/respond/commitmentInitiative.js';
-import type { CommitmentSleepReview } from '../sleep/sleepCommitmentReview.js';
+import { commitmentDeadline } from '../action/respond/respondPorts.js';
+import { SNOOZE_MILLISECONDS } from '../action/respond/respondPorts.js';
+import type { CommitmentSleepReview } from '../sleep/sleepPorts.js';
 import type { InitiativeEvaluationReader, InitiativeEvaluationSummary } from '../../surfaces/outreach/store/initiativeStore.js';
-import type { DailyMindFocus, DailyMindReader } from '../action/respond/dailyMind.js';
+import type { DailyMindFocus, DailyMindReader } from '../action/respond/respondPorts.js';
 import { isImpressionMemoryId, mutateOwnerImpression, ownerImpressionItems } from './impressionViews.js';
 
 import {

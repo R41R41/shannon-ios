@@ -1,7 +1,7 @@
 import type { PersistedAgentSession } from './agentHostState.js';
 import { resolveAgentProject } from './agentHostConfig.js';
-import type { ClaimedAgentCommand } from '../../mind/action/agentTasks/agentTaskStore.js';
-import type { AgentReasoningEffort } from '../../mind/action/agentTasks/agentTaskStore.js';
+import type { ClaimedAgentCommand } from '../../mind/action/agentTasks/agentTasksPorts.js';
+import type { AgentReasoningEffort } from '../../mind/action/agentTasks/agentTasksPorts.js';
 import type { CodexTaskBridgeOptions } from './codexTaskBridge.js';
 import { CodexTaskEventPublisher } from './codexTaskEvents.js';
 import { CodexTaskRuntimeRegistry, type RuntimeTask } from './codexTaskRuntime.js';

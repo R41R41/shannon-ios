@@ -1,4 +1,4 @@
-import { extractPromiseCaptures, requestsExactTimeAlert } from '../../memory/prospectiveMemory.js';
+import { extractPromiseCaptures, requestsExactTimeAlert } from '../../memory/memoryPorts.js';
 
 /**
  * Turn-scoped capability facts for a request that needs a clock. Shannon can

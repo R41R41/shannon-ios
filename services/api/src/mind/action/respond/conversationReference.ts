@@ -1,5 +1,5 @@
 import { isOwnerOnly, ownerSpoke, visibleMemoryText, type CompanionStateSnapshot } from '@shannon/cognition';
-import type { ConversationStore, StoredConversationMessage } from '../../memory/store/conversationStore.js';
+import type { ConversationStore, StoredConversationMessage } from '../../memory/memoryPorts.js';
 
 const REFERENCE_NOUN_SOURCE = '(?:話|内容|会話|発言|件|計画|予定|作業|タスク|アイデア|案)';
 const REFERENCE_SOURCE = `(?:これ|それ|あれ|(?:この|その)${REFERENCE_NOUN_SOURCE}|(?:さっき|今|直前|先ほど|先程|前|昨日|先日|この前)の${REFERENCE_NOUN_SOURCE}|(?:さっき|今|先ほど|先程)(?:話した|言った)(?:こと|内容|やつ))`;

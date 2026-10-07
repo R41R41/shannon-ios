@@ -261,7 +261,7 @@ export function parseSleepReports(events: readonly MemoryHistoryEvent[]): SleepR
       updated: parseChanges(payload?.updated),
       interestChanges: parseChanges(payload?.interestChanges),
       contradictions: parseContradictions(payload?.contradictions),
-      ...(validCommitmentReview(payload?.commitmentReview) ? { commitmentReview: payload!.commitmentReview as import('../sleep/sleepCommitmentReview.js').CommitmentSleepReview } : {}),
+      ...(validCommitmentReview(payload?.commitmentReview) ? { commitmentReview: payload!.commitmentReview as import('../sleep/sleepPorts.js').CommitmentSleepReview } : {}),
     }];
   });
 }

@@ -1,6 +1,6 @@
 import { isOwnerMemoryEvidence } from '@shannon/cognition';
 import { containsCommitmentTime, promiseGuarded } from './promiseRules.js';
-import { explicitFactStatement } from '../../sleep/sleepConsolidationRules.js';
+import { explicitFactStatement } from '../../sleep/sleepPorts.js';
 
 /**
  * 「…覚えておいて」 is the owner's most common request, but it means two

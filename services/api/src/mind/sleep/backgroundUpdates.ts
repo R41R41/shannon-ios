@@ -12,17 +12,17 @@ import {
   type MemoryAudience,
   type ShannonMessageEmotion,
 } from '@shannon/cognition';
-import type { ConversationStore, TurnPersistenceContext } from '../memory/store/conversationStore.js';
-import type { ShannonExperience } from '../memory/store/conversationStore.js';
+import type { ConversationStore, TurnPersistenceContext } from '../memory/memoryPorts.js';
+import type { ShannonExperience } from '../memory/memoryPorts.js';
 import type { BackgroundJobStore } from './store/backgroundJobStore.js';
 import { captureImmediateExplicitMemory, type UserFactProposal } from './sleepConsolidation.js';
 import type { ShannonGeneratedArtifact, ShannonTaskDecision } from '../../infra/models/chatModel.js';
-import { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert } from '../memory/prospectiveMemory.js';
+import { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert } from '../memory/memoryPorts.js';
 import { extractExplicitUserIntent } from '../action/respond/cognitiveIntent.js';
 import { intentCaptureKey, ownerFacingStatement, turnCaptureId, type TurnCaptureRecord } from '../memory/store/turnCaptures.js';
 import { applyExplicitCommitmentCommand } from '../action/respond/commitmentCommands.js';
-import { sharedTimeEvent } from '../emotion/companionPresence.js';
-import { emotionTiming } from '../emotion/emotionTiming.js';
+import { sharedTimeEvent } from '../emotion/emotionPorts.js';
+import { emotionTiming } from '../emotion/emotionPorts.js';
 
 export interface CompletedTurn {
   timeZone?: string;

@@ -7,9 +7,9 @@ import {
 } from './skillDocument.js';
 import { SQLiteSkillCopyWrites } from './store/sqliteSkillCopyWrites.js';
 import { SQLiteSkillSleepUsage } from './store/sqliteSkillSleepUsage.js';
-import { SKILLS_TABLE, SQLiteSkills, versionRevisionId, type SkillActor, type SkillUse, type StoredPattern, type StoredSkill } from './store/sqliteSkills.js';
+import { SKILLS_TABLE, SQLiteSkills, type SkillActor, type SkillUse, type StoredPattern, type StoredSkill } from './store/sqliteSkills.js';
 import { checkedPage, checkedSkillBody, checkedSkillText, closedSources, digest, iso } from './skillMemoryParts.js';
-import { parentBaseline, type LineageNode } from './skillLineage.js';
+import { parentBaseline, versionRevisionId, type LineageNode } from './skillLineage.js';
 
 /**
  * Her skill memory (Syzygy ADR-0008 stage 2, step 6; `docs/skill-and-routing-contract.md`, 「スキル記憶」). Core: memory.

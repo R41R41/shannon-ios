@@ -1,4 +1,4 @@
-import type { AutonomyLoopHeartbeat } from '../action/ownTime/store/autonomyLoopState.js';
+import type { AutonomyLoopHeartbeat } from '../action/ownTime/ownTimePorts.js';
 
 /**
  * Owner-facing wording computed from the activity record and the loop's heartbeat,

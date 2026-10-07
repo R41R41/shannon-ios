@@ -1,7 +1,7 @@
 import { visibleMemoryText, type CompanionStateSnapshot, type MemoryAudience, type SemanticRecallHit } from '@shannon/cognition';
-import { DisclosureGate } from '../inhibition/memoryDisclosure.js';
+import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import type { MemoryModelGateway } from './memoryModels.js';
-import { conversationStoreOf, MemoryWithholding } from '../memory/memoryVisibility.js';
+import { conversationStoreOf, MemoryWithholding } from '../memory/memoryPorts.js';
 import { cosineSimilarity, type MemoryEmbeddingIndex, type StoredEmbeddingCandidate } from '../memory/store/sqliteMemoryEmbeddings.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 

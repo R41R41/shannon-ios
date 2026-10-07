@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
-import { baselineFrom, compareWithBaseline, componentOf, globRegExp, violations } from './check-api-layers.mjs';
+import { baselineFrom, compareWithBaseline, componentOf, globRegExp, valueSpecifiers, violations } from './check-api-layers.mjs';
 
 // Without node_modules (no typescript) the tests are skipped, and say so, rather than failing the fast lane.
 let typescriptFound = true;
@@ -97,4 +97,33 @@ check('the baseline only shrinks: new violations are reported, fixed ones are dr
   const { fresh, fixed } = compareWithBaseline(now, baseline);
   assert.deepEqual(fresh, [{ rule: 'r', from: 'e.ts', to: 'f.ts' }]);
   assert.deepEqual(fixed, ['r|c.ts -> d.ts']);
+});
+
+check('a window re-exports only types from a store: values are violations, types of any spelling are not (ADR-0008 stage 3, S1)', () => {
+  const root = tree({
+    'src/mind/memory/memoryPorts.ts': [
+      "export type { A } from './store/a.js';",
+      "export { type B } from './store/b.js';",
+      "import type { C } from './store/c.js';",
+      "export { d } from './store/d.js';",
+      "export * from './store/e.js';",
+      "export { type F, g } from './store/f.js';",
+      "export { h } from './h.js';",
+      "export type { C };",
+    ].join('\n'),
+    'src/mind/memory/store/a.ts': 'export type A = 1;\n', 'src/mind/memory/store/b.ts': 'export type B = 1;\n', 'src/mind/memory/store/c.ts': 'export type C = 1;\n',
+    'src/mind/memory/store/d.ts': 'export const d = 1;\n', 'src/mind/memory/store/e.ts': 'export const e = 1;\n',
+    'src/mind/memory/store/f.ts': 'export type F = 1;\nexport const g = 1;\n', 'src/mind/memory/h.ts': 'export const h = 1;\n',
+    'src/mind/recall/user.ts': "import { d } from '../memory/store/d.js';\n",
+  });
+  const typesOnly = { sourceRoot: 'src', rules: [{ id: 'ports-types-only-from-stores', kind: 'imports', from: ['mind/*/*Ports.ts'], to: ['**/store/**'], typesOnly: true }] };
+  const found = violations({ root, config: typesOnly, moves: { entries: [], moves: {} } }).map(item => `${item.from} -> ${item.to}`);
+  assert.deepEqual(found, [
+    'mind/memory/memoryPorts.ts -> mind/memory/store/d.ts',
+    'mind/memory/memoryPorts.ts -> mind/memory/store/e.ts',
+    'mind/memory/memoryPorts.ts -> mind/memory/store/f.ts',
+  ]);
+  // Read from the syntax: a dynamic import is a value; an import type node and a type-only clause are not.
+  assert.deepEqual([...valueSpecifiers("import type { A } from './a.js';\nimport { type B } from './b.js';\nimport { c, type C } from './c.js';\nimport './d.js';\nconst e = () => import('./e.js');\ntype F = import('./f.js').F;\n")].sort(),
+    ['./c.js', './d.js', './e.js']);
 });

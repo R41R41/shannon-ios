@@ -1,4 +1,4 @@
-import type { AutonomyActivityEntry } from '../../inhibition/store/autonomyActivity.js';
+import type { AutonomyActivityEntry } from '../../inhibition/inhibitionPorts.js';
 import { autonomyDayKey, type AutonomyConfig } from '../../inhibition/inhibitionPorts.js';
 import {
   HOST_FOLDER_LIMITS, HOST_STEP_CODES, ROOM_LOOK_GUARD, copyableStudyPiece, roomLookGuard, hostStepContentDigest, studyCopyContent, studyCopyPath,

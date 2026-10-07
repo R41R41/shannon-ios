@@ -2,7 +2,7 @@ import type { AetherAccess } from '../../integrations/aether/aetherAccess.js';
 import type { AetherProposalStore } from '../../integrations/aether/aetherProposal.js';
 import { ROOM_LOOK_GUARD, roomLookGuard } from '../action/ownTime/autonomyHostFolderPath.js';
 import type { SQLiteAutonomyStore } from '../action/ownTime/store/autonomyStore.js';
-import type { SecretCheck } from '../inhibition/conversationSecrets.js';
+import type { SecretCheck } from '../inhibition/disclosurePorts.js';
 import type { HostFolderOperations } from '../action/ownTime/hostFolderOperations.js';
 import { folderExecutors, folderToolForHosts } from './shannonFolderTools.js';
 import { minecraftExecutors, minecraftToolOffered, type MinecraftRequestPort } from './shannonMinecraftTools.js';

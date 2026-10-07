@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { isForgottenCommitmentEvidence } from '../memory/memoryVisibility.js';
+import { isForgottenCommitmentEvidence } from '../memory/memoryPorts.js';
 import { reviewCommitments, type CommitmentSleepReview } from './sleepCommitmentReview.js';
 import {
   memoryIdentifier,
@@ -10,7 +10,7 @@ import {
   type UserFact,
 } from '@shannon/cognition';
 import type { DailyUserMessage } from './store/backgroundJobStore.js';
-import type { SleepChange, SleepContradiction } from '../memory/memoryService.js';
+import type { SleepChange, SleepContradiction } from '../memory/memoryPorts.js';
 import {
   configuredBackgroundBudgetUsd,
   estimatedOpenAICostUsd,
@@ -38,7 +38,7 @@ import {
   parseJson,
   parseProposalRows,
 } from './sleepConsolidationRules.js';
-import { classifyRememberRequest, rememberRequestContent } from '../action/respond/rememberRequest.js';
+import { classifyRememberRequest, rememberRequestContent } from '../action/respond/respondPorts.js';
 
 export interface UserFactProposal {
   kind?: 'user-fact' | 'relationship' | 'interest';

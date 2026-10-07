@@ -16,12 +16,12 @@ import {
   type SemanticRecallOutcome,
   type SemanticRecallStatus,
 } from './semanticMemoryRecall.js';
-import type { MemoryEmbeddingIndex } from '../memory/store/sqliteMemoryEmbeddings.js';
-import type { ShannonKnowledgeStore } from '../memory/store/sqliteShannonKnowledge.js';
+import type { MemoryEmbeddingIndex } from '../memory/memoryPorts.js';
+import type { ShannonKnowledgeStore } from '../memory/memoryPorts.js';
 import { recallShannonKnowledge, usableKnowledgeFor } from './turnKnowledgeRecall.js';
 import type { TreeKnowledgeRecall } from './treeRecall.js';
-import { DisclosureGate } from '../inhibition/memoryDisclosure.js';
-import { conversationStoreOf } from '../memory/memoryVisibility.js';
+import { DisclosureGate } from '../inhibition/disclosurePorts.js';
+import { conversationStoreOf } from '../memory/memoryPorts.js';
 import { withRecalledMemories, type TurnCognitiveContext } from '../action/respond/turnCognitiveContext.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 

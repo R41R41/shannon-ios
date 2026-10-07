@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { ShannonActionReceipt } from '@shannon/cognition';
-import type { AgentTask } from '../agentTasks/agentTaskStore.js';
+import type { AgentTask } from '../agentTasks/agentTasksPorts.js';
 import type { ShannonConversationItem } from '../../../infra/models/chatModel.js';
-import type { StoredConversationMessage } from '../../memory/store/conversationStore.js';
+import type { StoredConversationMessage } from '../../memory/memoryPorts.js';
 
 export type ConversationActionKind = 'inspect' | 'implement' | 'update' | 'complete' | 'other';
 export type ConversationActionStatus = 'pending' | 'proposed' | 'active' | 'paused' | 'completed' | 'failed' | 'cancelled';

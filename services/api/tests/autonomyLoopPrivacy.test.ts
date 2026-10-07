@@ -580,7 +580,14 @@ describe('what reaches the prompts of her own activity', () => {
       // Syzygy ADR-0008 §14: what a refusal of her gate is as a withheld action, and its closed vocabulary; no store.
       'withheldRules.ts', 'withheldActionContract.ts',
     ]);
-    expect(imports('inhibitionPorts.ts').sort()).toEqual(['autonomyBudget.ts', 'autonomyPolicy.ts', 'withheldRules.ts']);
+    // Since Syzygy ADR-0008 stage 3 (S1) the window also re-exports types of the tool gate, the activity record and the day's log
+    // (types only: nothing more of the inhibition part runs in her process through it). The disclosure gate and the
+    // conversation's secrets are in `disclosurePorts.ts`, which no module of her loop imports.
+    expect(imports('inhibitionPorts.ts').sort()).toEqual(['autonomyActivity.ts', 'autonomyBudget.ts', 'autonomyDayLog.ts', 'autonomyPolicy.ts', 'shannonToolGate.ts', 'withheldRules.ts']);
+    const window = read('inhibitionPorts.ts');
+    expect(window.match(/^export \* from '[^']+';$/gmu)).toEqual(["export * from './autonomyBudget.js';", "export * from './autonomyPolicy.js';", "export * from './withheldRules.js';"]);
+    for (const line of window.split('\n').filter(item => /^export \{/u.test(item))) expect(line, line).toMatch(/^export \{ (?:type \w+(?:, )?)+ \} from '/u);
+    for (const name of loopSources) expect(imports(name), name).not.toContain('disclosurePorts.ts');
     expect(imports('withheldRules.ts').sort()).toEqual(['autonomyBudget.ts', 'autonomyPolicy.ts', 'withheldActionContract.ts']);
     expect(imports('withheldActionContract.ts')).toEqual([]);
     expect(imports('serverEnvironment.ts')).toEqual([]);

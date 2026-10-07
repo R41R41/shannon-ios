@@ -6,7 +6,7 @@ import { reminderCapabilityBoundary } from './reminderCapability.js';
 import type { ShannonWebSource } from '../../../infra/models/chatModel.js';
 import { asksAboutNotion, notionTurnProjection } from '../../../integrations/notion/notionConversation.js';
 import type { NotionSource } from '../../../integrations/notion/notionSource.js';
-import type { OwnerUpcoming } from '../../memory/ownerUpcoming.js';
+import type { OwnerUpcoming } from '../../memory/memoryPorts.js';
 import type { OwnOutreach } from '../../../surfaces/outreach/ownOutreach.js';
 
 export type NotionTurnReader = NotionSource;

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { CompanionStateStore } from '@shannon/cognition';
 import type { BackgroundJobStore, ClaimedBackgroundJob } from './store/backgroundJobStore.js';
 import { TurnRefinementProcessor } from './backgroundUpdates.js';
-import type { ConversationStore } from '../memory/store/conversationStore.js';
+import type { ConversationStore } from '../memory/memoryPorts.js';
 import {
   consolidateSleepMemory,
   LocalRuleSleepMemoryAnalyzer,

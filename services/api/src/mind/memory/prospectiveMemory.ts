@@ -1,9 +1,9 @@
 import type { ProspectiveMemory } from '@shannon/cognition';
-import { commitmentDeadline } from '../action/respond/commitmentTime.js';
-import { containsUnresolvedConversationReference } from '../action/respond/conversationReference.js';
-import { isExactTimeAlertRequest, matchPromise } from '../action/respond/promiseRules.js';
-import { classifyRememberRequest, isRememberRequest } from '../action/respond/rememberRequest.js';
-import { extractExplicitUserIntent } from '../action/respond/cognitiveIntent.js';
+import { commitmentDeadline } from '../action/respond/respondPorts.js';
+import { containsUnresolvedConversationReference } from '../action/respond/respondPorts.js';
+import { isExactTimeAlertRequest, matchPromise } from '../action/respond/respondPorts.js';
+import { classifyRememberRequest, isRememberRequest } from '../action/respond/respondPorts.js';
+import { extractExplicitUserIntent } from '../action/respond/respondPorts.js';
 
 /** Shannon speaks to the owner in a throttled daily slot; she has no clock alarm. */
 export const EXACT_TIME_NOTE = '時刻ちょうどにはお知らせできません。1日1回の声かけの枠でお知らせします。';

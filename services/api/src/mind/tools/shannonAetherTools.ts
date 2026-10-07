@@ -3,7 +3,7 @@ import { withAetherAccessCapability, withReadToolsCapability, withSkillsCapabili
 import { aetherErrorCode, aetherIdempotencyKey, type AetherDocument } from '../../integrations/aether/aetherAccess.js';
 import type { AetherSectionHit } from '../../integrations/aether/aetherKnowledgeSearch.js';
 import type { AetherProposalOperation, AetherProposalStore } from '../../integrations/aether/aetherProposal.js';
-import type { StudyAether } from '../action/ownTime/studyAether.js';
+import type { StudyAether } from '../action/ownTime/ownTimePorts.js';
 import { withMinecraftToolLine } from './shannonMinecraftTools.js';
 import { numberInput, stringInput, type ToolInput } from './shannonToolInput.js';
 import { clip, neutralMarkers, type PreparedToolCall, type ToolExecutionContext, type ToolExecutor, type ToolRun } from './shannonToolTypes.js';

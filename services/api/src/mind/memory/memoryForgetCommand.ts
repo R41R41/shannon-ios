@@ -5,9 +5,9 @@ import {
   type CompanionStateStore,
   type ShannonActionReceipt,
 } from '@shannon/cognition';
-import type { CognitiveIntentStore } from '../action/respond/cognitiveIntent.js';
+import type { CognitiveIntentStore } from '../action/respond/respondPorts.js';
 import type { ConversationStore } from './store/conversationStore.js';
-import type { TurnMemoryRecall } from '../recall/turnMemoryRecall.js';
+import type { TurnMemoryRecall } from '../recall/recallPorts.js';
 
 const FOLLOW_UP_WINDOW_MILLISECONDS = 10 * 60_000;
 

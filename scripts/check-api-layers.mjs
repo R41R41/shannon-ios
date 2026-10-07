@@ -66,6 +66,33 @@ function resolveRelative(fromFile, specifier, exists) {
   return candidates.find(exists) ?? null;
 }
 
+/**
+ * The specifiers a text imports or re-exports at run time: everything but `import type`, `export type`, imports and re-exports
+ * whose every name is marked `type`, and `import('…')` types. Read from the syntax, so a type re-exported without `type` counts
+ * as a value (as it does for a transpiler that sees one file at a time).
+ */
+export function valueSpecifiers(text) {
+  const values = new Set();
+  const source = ts.createSourceFile('file.ts', text, ts.ScriptTarget.ES2022, true);
+  const visit = node => {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      const clause = node.importClause;
+      const named = clause?.namedBindings && ts.isNamedImports(clause.namedBindings) ? clause.namedBindings.elements : null;
+      const typeOnly = clause && (clause.isTypeOnly || (!clause.name && named && named.length > 0 && named.every(element => element.isTypeOnly)));
+      if (!typeOnly) values.add(node.moduleSpecifier.text);
+    } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+      const named = node.exportClause && ts.isNamedExports(node.exportClause) ? node.exportClause.elements : null;
+      const typeOnly = node.isTypeOnly || (named && named.length > 0 && named.every(element => element.isTypeOnly));
+      if (!typeOnly) values.add(node.moduleSpecifier.text);
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments[0] && ts.isStringLiteral(node.arguments[0])) {
+      values.add(node.arguments[0].text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return values;
+}
+
 /** Every violation of the rules, as `{ rule, from, to }` with layout paths (relative to the source root). */
 export function violations({ root, config, moves, layout = 'projected' }) {
   const sourceRoot = resolve(root, config.sourceRoot);
@@ -84,12 +111,15 @@ export function violations({ root, config, moves, layout = 'projected' }) {
 
   const texts = new Map(actualPaths.map((path, index) => [path, readFileSync(absolute[index], 'utf8')]));
   const imports = new Map();
+  const typesOnlyFrom = config.rules.filter(rule => rule.typesOnly).flatMap(rule => rule.from);
   for (const [path, text] of texts) {
     const targets = [];
+    // Whether each import is a value import is read only where a rule asks (`typesOnly`).
+    const values = matchesAny(layoutOf(path), typesOnlyFrom) ? valueSpecifiers(text) : null;
     for (const file of ts.preProcessFile(text, true, true).importedFiles) {
       if (!file.fileName.startsWith('.')) { targets.push({ module: file.fileName }); continue; }
       const resolved = resolveRelative(path, file.fileName, candidate => actualSet.has(candidate));
-      if (resolved) targets.push({ path: layoutOf(resolved) });
+      if (resolved) targets.push({ path: layoutOf(resolved), value: values ? values.has(file.fileName) : true });
       else if (!posix.normalize(posix.join(posix.dirname(path), file.fileName)).startsWith('..')) add('unresolved-import', layoutOf(path), file.fileName);
     }
     imports.set(path, targets);
@@ -115,6 +145,8 @@ export function violations({ root, config, moves, layout = 'projected' }) {
           }
           if (!matchesAny(value, patterns(rule.to)) || matchesAny(value, patterns(rule.toExcept))) continue;
           if (rule.crossComponent && (target.module || componentOf(from) === componentOf(value))) continue;
+          // A rule of types only: an import or re-export of types alone is allowed.
+          if (rule.typesOnly && target.value === false) continue;
           add(rule.id, from, value);
         }
       }

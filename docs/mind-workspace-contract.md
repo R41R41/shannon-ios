@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | 0 | This contract, the switches, the core map, `packages/mind`, the switched-off proof recorded on afb38c28 | in place (`packages/mind/src/switches.ts`; tests `switches.test.ts`, `autonomyCore.test.ts`, `stage3SwitchedOff.test.ts`) |
 | F1 | Pure `packages/mind`: envelope, salience, proactive gate, MinHash and topics, evidence decay, identity tiers, temporal rules, compaction, trust fold | in place, not wired (`packages/mind/src/{envelope,salience,minhash,proactiveGate,evidenceDecay,identityTiers,temporalFacts,compaction,trustFold}.ts`; tests beside each; the perception and attention windows re-export them) |
-| S1 | Ports of every part, the types-only rule, the baseline shrunk | not yet |
+| S1 | Ports of every part, the types-only rule, the baseline shrunk | in place: windows `memoryPorts` (extended), `disclosurePorts`, `emotionPorts`, `respondPorts`, `recallPorts`, `ownTimePorts`, `agentTasksPorts`, `selfPorts`, `sleepPorts`, `predictionPorts`, `toolsPorts`, `selectorsPorts` and `inhibitionPorts` (extended); rule `ports-types-only-from-stores`; the baseline 287 → 175 (see "Structure") |
 | S2, F2, F5, F7 | sqlite splits; perception and the audience matrix; the outbox and the writer; compaction | not yet |
 | F3, F4, F6 | the workspace host; the proactive gate at the delivery points; people facts, tiers, decay, the trust ledger | not yet |
 | S3, F8 | surface decisions out of the surfaces; suite v3, latency, review, owner preview, deployment | not yet |
@@ -115,6 +115,12 @@ The writer (`mind/memory/memoryWriter.ts`, in the worker under a lease) reads up
 ## Compaction
 
 The replay summary becomes a JSON template (`packages/mind/src/compaction.ts`) with 目的・制約・済み・途中・詰まり・決めたこと・次・重要な文脈, each at most 5 items of 80 characters, rendered by code: at most 900 characters for text, and 目的・途中・次・重要な文脈 in at most 400 for voice. It renders as `[ここまでの要約]` and one line per section (`目的: …／…`); when it is too long, items leave in the order 済み, 制約, 詰まり, 決めたこと, 重要な文脈, 途中, 次, 目的, the oldest of a section first. It is updated incrementally (a section the summarizer names replaces the previous one, the others stay); a tool call and its result are never split, and the oldest tool outputs are replaced by a fixed line first. `covers_from_id`/`covers_to_id` let recall open the raw range. The summarizer stays luna.
+
+## Structure (S1)
+
+Every part of the mind has a window (`<part>Ports.ts`), and the other parts and the integrations import a part through it (`mind-via-ports`, `integrations-outside-mind`). A window re-exports only types from a `store/` folder (`ports-types-only-from-stores`, read from the syntax: `export type`, `import type`, or every name marked `type`); a store is handed by wiring. The disclosure gate, the conversation's secrets, what Aether text may be shown to others and who is present for a tool are `disclosurePorts.ts`, apart from `inhibitionPorts.ts`, because her own time must not open them.
+
+The move was mechanical and changed no behaviour: an import was routed through a window only when (1) no process loads a module it did not load before (the run-time import closure of every entry file is the same, the windows aside), (2) no window joins an import cycle and no two modules join one cycle that were apart, and (3) the importer is not a module of her loop or the reader of the owner's context, whose imports are pinned (`autonomyLoopPrivacy.test.ts`; her other modules use `selfPorts`, `agentTasksPorts` and types of `inhibitionPorts`). What stays in the baseline (175 entries: `mind-via-ports` 67, `surfaces-without-stores` 52, `surfaces-apart` 37, `sqlite-in-stores` 15, `own-time-without-private-stores` 3, `integrations-outside-mind` 1) is a value from a store (S2 splits those), an import whose window would load more or close a cycle (S2 and S3 split those parts), her own time's pinned imports (stage 4), and the surfaces (S3).
 
 ## Privacy
 

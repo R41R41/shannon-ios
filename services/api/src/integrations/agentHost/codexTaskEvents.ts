@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { HostAgentEvent } from '../../mind/action/agentTasks/agentTaskStore.js';
+import type { HostAgentEvent } from '../../mind/action/agentTasks/agentTasksPorts.js';
 
 export class CodexTaskEventPublisher {
   constructor(

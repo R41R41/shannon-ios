@@ -11,7 +11,7 @@ import {
   type MemoryAudience,
   type MemoryDisclosure,
 } from '@shannon/cognition';
-import type { ConversationStore, ShannonExperience, StoredConversationMessage } from '../memory/store/conversationStore.js';
+import type { ConversationStore, ShannonExperience, StoredConversationMessage } from '../memory/memoryPorts.js';
 
 /**
  * The one gate every prompt-assembly path uses for what reaches the model while `present`

@@ -1,4 +1,4 @@
-import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
+import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import { messagesAfterCursor, type OrganizeExtractor, type OrganizeStore } from './organize.js';
 
 /** One preparation contract. The caller still owns persistence and UI delivery. */

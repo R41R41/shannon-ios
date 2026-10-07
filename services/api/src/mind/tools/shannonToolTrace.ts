@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { SecretCheck } from '../inhibition/conversationSecrets.js';
+import type { SecretCheck } from '../inhibition/disclosurePorts.js';
 import { clip } from './shannonToolTypes.js';
 import type { ToolResult } from './shannonTools.js';
 

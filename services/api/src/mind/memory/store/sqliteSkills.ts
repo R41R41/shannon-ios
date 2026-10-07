@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { SkillStatus } from '../skillDocument.js';
 import { ensureColumns } from '../../../infra/sqlite/schemaColumns.js';
 import { ensureSkillSleepUsageSchema } from './sqliteSkillSleepUsage.js';
+import { versionRevisionId } from '../skillLineage.js';
 
 /**
  * Her skills, their versions, the pattern wiki they come from, and the audit of every change (Syzygy ADR-0008 stage 2, step 6;
@@ -194,9 +195,6 @@ export interface SkillRevision {
 }
 
 /** The revision id of a version of a skill. */
-export function versionRevisionId(skillId: string, version: number): string {
-  return `${skillId}:v${version}`;
-}
 
 export interface StoredPattern {
   patternId: string; scopeKey: string; kind: 'failure' | 'strategy'; title: string; body: string; status: 'active' | 'deprecated';

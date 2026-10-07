@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { TurnBackgroundService } from '../sleep/backgroundUpdates.js';
+import type { TurnBackgroundService } from '../sleep/sleepPorts.js';
 import { saidKey, sameWords } from '../../surfaces/body/bodyLookTurnWait.js';
 import { TRACE_CALLS, UNLINKED_TURN, saidDigest, type ToolTraceCall, type ToolTraceRecord } from './shannonToolTrace.js';
 

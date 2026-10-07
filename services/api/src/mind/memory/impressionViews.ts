@@ -3,7 +3,7 @@ import {
   type CompanionStateSnapshot, type CompanionStateStore, type MemoryControl,
 } from '@shannon/cognition';
 import type { ConversationStore, ShannonExperience } from './store/conversationStore.js';
-import { ImpressionEvidenceCheck, impressionSubject, impressionText, usableImpression } from '../recall/impressionRecall.js';
+import { ImpressionEvidenceCheck, impressionSubject, impressionText, usableImpression } from '../recall/recallPorts.js';
 import {
   IMPRESSION_MEMORY_PREFIX, OWNER_PERSON_KEY, impressionConfidence, impressionMemoryId,
   type ImpressionPerson, type ImpressionSource, type PersonImpression,

@@ -8,7 +8,7 @@ import type {
   AgentTestResult,
   ClaimedAgentCommand,
   HostAgentEvent,
-} from '../../mind/action/agentTasks/agentTaskStore.js';
+} from '../../mind/action/agentTasks/agentTasksPorts.js';
 import type {
   CodexAppServerConnection,
   CodexNotification,
