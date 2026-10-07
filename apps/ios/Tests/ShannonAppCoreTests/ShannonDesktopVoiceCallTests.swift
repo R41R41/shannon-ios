@@ -173,6 +173,14 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
         var taken = 0
         arbiter.microphoneWillBeTaken = { taken += 1 }
         let call = ShannonDesktopVoiceCall()
+        var permissionRequests = 0
+        let permissionRequested = expectation(description: "dictation requested microphone permission")
+        call.dictation.microphoneUsageIsDeclared = { true }
+        call.dictation.requestMicrophonePermission = {
+            permissionRequests += 1
+            permissionRequested.fulfill()
+            return false
+        }
         let conversation = ShannonConversationModel.designPreview()
         call.attach(conversation: conversation, menuBar: nil)
         call.start(threadID: nil)
@@ -180,7 +188,10 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
         call.end()
         call.dictationPrimaryAction { _ in }
         XCTAssertEqual(taken, 2)
+        await fulfillment(of: [permissionRequested], timeout: 2)
         await settle()
+        XCTAssertEqual(permissionRequests, 1)
+        XCTAssertEqual(call.dictation.phase, .denied, "the arbiter is notified without starting the test host's microphone")
         call.dictation.cancel()
         withExtendedLifetime(conversation) {}
     }

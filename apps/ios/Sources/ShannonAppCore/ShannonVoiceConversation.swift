@@ -169,6 +169,11 @@ public final class ShannonVoiceConversationModel: NSObject {
     private var meteringTask: Task<Void, Never>?
     private var diagnosticSessionID: String?
     private let diagnostics: ShannonVoiceDiagnostics
+    /// Keep permission checks injectable so state tests never depend on the test host's microphone.
+    @ObservationIgnored var microphoneUsageIsDeclared: @MainActor () -> Bool = {
+        ShannonVoiceUsageDescriptionPolicy.isPresent(Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription"))
+    }
+    @ObservationIgnored var requestMicrophonePermission: @MainActor () async -> Bool = ShannonMediaPermission.requestMicrophone
     /// Only a session this model activated is deactivated by it; a running voice conversation keeps its own.
     private let audioLease = ShannonVoiceAudioSessionLease()
 
@@ -195,9 +200,7 @@ public final class ShannonVoiceConversationModel: NSObject {
         errorMessage = nil
         phase = .requestingPermission
 
-        let usagePresent = ShannonVoiceUsageDescriptionPolicy.isPresent(
-            Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription")
-        )
+        let usagePresent = microphoneUsageIsDeclared()
         diagnostics.record(
             "permission.declarations",
             sessionID: sessionID,
@@ -209,7 +212,7 @@ public final class ShannonVoiceConversationModel: NSObject {
         }
 
         diagnostics.record("permission.microphone.before", sessionID: sessionID)
-        let permitted = await ShannonMediaPermission.requestMicrophone()
+        let permitted = await requestMicrophonePermission()
         diagnostics.record(
             "permission.microphone.after",
             sessionID: sessionID,
