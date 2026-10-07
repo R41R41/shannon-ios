@@ -132,7 +132,7 @@ A failed report must never delay or fail the runtime's own work: send it in the 
 | `commands` | array | `[]` while commands are switched off. See [stage 2](#what-get-v1ops-adds). |
 | `commandsSupported` | boolean | `false` while commands are switched off. A client shows command controls only when this is `true`. |
 | `allowed` | object | What a command would be accepted for now; nothing while commands are switched off. See [stage 2](#what-get-v1ops-adds). |
-| `server` | object, absent | This API's own self-diagnosis: the models it resolved, the persona hash, its tools, the deployed revision, and which integrations are configured. **Only for the owner's scope** (`SHANNON_OWNER_SCOPE_KEY`, default `owner`); absent for any other scope. See [The server's self-diagnosis](#the-servers-self-diagnosis). |
+| `server` | object, absent | This API's own self-diagnosis: the models it resolved, the persona hash, its tools, the deployed revision, and which integrations are configured. **Only for the owner's scope** (`SHANNON_OWNER_SCOPE_KEY`, default `owner`); absent for any other scope. See [The server's self-diagnosis](#the-servers-self-diagnosis). | With stage 3 of ADR-0008 switched on, `server.mind` adds the mind's state (numbers and booleans only): `workspace` (`faulted`, `faults` since the process started, `busyWrites`: journal writes that met a busy database, which are kept and retried, not faults) and `memoryOutbox` (`pending`, `oldestPendingSeconds`, `failed`); a part switched off is `null`, and with every part off the field is absent.
 
 What the desktop shows:
 

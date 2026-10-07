@@ -76,3 +76,14 @@ export function loggedFailure(what: string, error: unknown): void {
   const code = (error as { code?: unknown } | null)?.code;
   console.error(`Shannon ${what} failed`, error instanceof Error ? error.name : 'unknown', typeof code === 'string' && /^[A-Z_]+$/u.test(code) ? code : '');
 }
+
+/**
+ * Whether an error is SQLite's busy or locked answer (another connection held the write lock past the busy timeout): contention,
+ * not a fault of the caller's own (stage 3 review: the workspace journal's circuit and the memory writer's model failures).
+ */
+export function isSqliteBusy(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = (error as { errcode?: unknown }).errcode;
+  if (typeof code === 'number' && ((code & 0xff) === 5 || (code & 0xff) === 6)) return true;
+  return /database is locked|database table is locked|database schema is locked|SQLITE_BUSY|SQLITE_LOCKED/iu.test(error.message);
+}

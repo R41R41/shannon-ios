@@ -211,6 +211,16 @@ export class SQLiteMemoryOutbox {
     this.database.prepare(`DELETE FROM memory_writer_calls WHERE created_at < ? AND op_seq <= COALESCE((SELECT applied_seq FROM memory_writer_state WHERE id = 1), 0)`).run(before);
   }
 
+  /** The backlog for `/v1/ops` (owner only): pending rows, the age of the oldest in whole seconds, rows that ended `failed`. */
+  backlog(now: string): { pending: number; oldestPendingSeconds: number | null; failed: number } {
+    const row = this.database.prepare(`SELECT
+        (SELECT COUNT(*) FROM memory_outbox WHERE status = 'pending') AS pending,
+        (SELECT MIN(created_at) FROM memory_outbox WHERE status = 'pending') AS oldest,
+        (SELECT COUNT(*) FROM memory_outbox WHERE status = 'failed') AS failed`).get() as { pending: number; oldest: string | null; failed: number };
+    const age = row.oldest ? Math.max(0, Math.floor((Date.parse(now) - Date.parse(row.oldest)) / 1000)) : null;
+    return { pending: Number(row.pending), oldestPendingSeconds: Number.isFinite(age) ? age : null, failed: Number(row.failed) };
+  }
+
   /** The text-free payload of a refused row is replaced (a refused text is never kept). */
   static readonly REFUSED_PAYLOAD = '{}';
 }

@@ -85,7 +85,7 @@ import { SQLiteOwnOutreach } from './surfaces/outreach/ownOutreach.js';
 import { SQLiteOwnerCallFacts, ownerCallElsewhereEnabled } from './surfaces/voice/ownerCallElsewhere.js';
 import { createServerSelfDiagnosis } from './infra/ops/serverSelfDiagnosis.js';
 import { createMinecraftBodyWiring } from './wiring/serverMinecraftBodyWiring.js';
-import { configuredMind } from './wiring/mindWiring.js';
+import { configuredMind, withMindOps } from './wiring/mindWiring.js';
 import { memoryPortsOf } from './wiring/memoryOutboxWiring.js';
 import { peopleFactReaders, stage3StoreOptions } from './wiring/peopleFactsWiring.js';
 const now = () => new Date().toISOString();
@@ -238,7 +238,7 @@ const opsStore = new SQLiteOpsStore(configuredDatabasePath());
 const opsRoute = createOpsRoute({
   store: opsStore, bridge: platformBridge?.configuration ?? null, ingestEnabled: () => opsIngestEnabled(process.env), now,
   commandsEnabled: () => opsCommandsEnabled(process.env),
-  server: scopeKey => selfDiagnosis.forScope(scopeKey),
+  server: scopeKey => withMindOps(selfDiagnosis.forScope(scopeKey), { host: mind?.host ?? null, outbox: persistentStore.memoryOutbox(), now }),
   device: authorization => deviceAuth ? deviceAuth.authenticate(authorization)
     : bearerAuthorized(authorization, apiToken) ? { scopeKey: null } : null,
 });

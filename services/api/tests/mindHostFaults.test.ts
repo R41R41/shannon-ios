@@ -8,6 +8,8 @@ import { textPerception } from '../src/mind/perception/perceptionPorts.js';
 import { MIND_HOST_LIMITS, createMindHost } from '../src/mind/workspace/workspacePorts.js';
 import { SQLiteWorkspaceJournal } from '../src/mind/workspace/store/workspaceJournalStore.js';
 import { MIND_WORLD_START, mindWorld } from './support/mindWorld.js';
+import { configuredMind } from '../src/wiring/mindWiring.js';
+import { withMindOps } from '../src/wiring/mindOpsWiring.js';
 
 /**
  * Syzygy ADR-0008 stage 3, step F3: the mind's fault circuit. A fault falls back to the switched-off path (no item, no block) and
@@ -87,5 +89,64 @@ describe('the mind\'s fault circuit', () => {
     expect(context).not.toContain('[いまの場]');
     expect(context).toBe(expected);
     await off.close(); await faulted.close();
+  });
+
+  it('keeps a batch whose write failed, and does not count a busy database as a fault (review: journal)', () => {
+    const path = join(directory, 'requeue.sqlite');
+    const database = new DatabaseSync(path);
+    const journal = new SQLiteWorkspaceJournal(database, { createSchema: true });
+    const failures: Error[] = [];
+    const append = journal.append.bind(journal);
+    journal.append = rows => { const failure = failures.shift(); if (failure) throw failure; return append(rows); };
+    const host = createMindHost({ switches: { attention: true, workspace: true, dataFrames: true }, now: () => MIND_WORLD_START, schedule: task => task(), journal, inbox: null });
+    const perceived = () => (database.prepare(`SELECT COUNT(*) AS rows FROM mind_workspace_journal WHERE op = 'perceive'`).get() as { rows: number }).rows;
+    const busy = Object.assign(new Error('database is locked'), { errcode: 5 });
+    failures.push(busy, busy);
+    host.perceive('owner', textPerception({ threadId: 't', message: 'ひとつめ', present: OWNER_AUDIENCE, alone: true, at: MIND_WORLD_START }));
+    host.turnEnded();
+    host.perceive('owner', textPerception({ threadId: 't', message: 'ふたつめ', present: OWNER_AUDIENCE, alone: true, at: MIND_WORLD_START }));
+    host.tick();
+    expect(perceived()).toBe(0);
+    expect([host.faulted, host.faultCount, host.busyCount]).toEqual([false, 0, 2]);
+    host.tick();
+    expect(perceived()).toBe(2);
+    // Any other failure is a fault, and its batch is still kept.
+    failures.push(new TypeError('disk'));
+    host.perceive('owner', textPerception({ threadId: 't', message: 'みっつめ', present: OWNER_AUDIENCE, alone: true, at: MIND_WORLD_START }));
+    host.tick();
+    expect([host.faulted, host.faultCount, perceived()]).toEqual([false, 1, 2]);
+    host.tick();
+    expect(perceived()).toBe(3);
+    database.close();
+  });
+
+  it('waits 250 ms on the journal connection, and a write lock held by another process only delays the batch', () => {
+    const path = join(directory, 'locked.sqlite');
+    const wired = configuredMind({ SHANNON_ADR8_STAGE3: 'on' }, { databasePath: path, now: () => MIND_WORLD_START })!;
+    const host = wired.host!;
+    const other = new DatabaseSync(path);
+    other.exec('PRAGMA busy_timeout = 5000;');
+    host.perceive('owner', textPerception({ threadId: 't', message: 'ねえ', present: OWNER_AUDIENCE, alone: true, at: MIND_WORLD_START }));
+    other.exec('BEGIN IMMEDIATE');
+    const started = Date.now();
+    host.tick();
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect([host.faulted, host.faultCount, host.busyCount]).toEqual([false, 0, 1]);
+    other.exec('COMMIT');
+    host.tick();
+    expect((other.prepare(`SELECT COUNT(*) AS rows FROM mind_workspace_journal WHERE op = 'perceive'`).get() as { rows: number }).rows).toBe(1);
+    other.close(); wired.close();
+  });
+
+  it('shows the owner the circuit and the outbox backlog in /v1/ops, and nothing with stage 3 off', () => {
+    const server = { revision: 'r' };
+    const host = { faulted: false, faultCount: 1, busyCount: 2 };
+    const outbox = { backlog: () => ({ pending: 3, oldestPendingSeconds: 40, failed: 0 }) };
+    expect(withMindOps(server, { host, outbox, now: () => MIND_WORLD_START })).toEqual({ revision: 'r', mind: {
+      workspace: { faulted: false, faults: 1, busyWrites: 2 }, memoryOutbox: { pending: 3, oldestPendingSeconds: 40, failed: 0 } } });
+    expect(withMindOps(null, { host, outbox, now: () => MIND_WORLD_START })).toBeNull();
+    expect(withMindOps(server, { host: null, outbox: null, now: () => MIND_WORLD_START })).toBe(server);
+    expect(withMindOps(server, { host: null, outbox: { backlog: () => { throw new Error('x'); } }, now: () => MIND_WORLD_START }))
+      .toEqual({ revision: 'r', mind: { workspace: null, memoryOutbox: null } });
   });
 });

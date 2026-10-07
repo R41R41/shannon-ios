@@ -10,6 +10,7 @@ import {
 } from './workspaceState.js';
 import type { JournalRow, SQLiteWorkspaceJournal } from './store/workspaceJournalStore.js';
 import type { SQLiteMindInbox } from './store/mindInboxStore.js';
+import { isSqliteBusy } from '../../infra/sqlite/lockWaits.js';
 
 /**
  * The mind's host in the API process (Syzygy ADR-0008 stage 3, owner answer 1: in-process behind `MindHost`, so that stage 4 can
@@ -18,7 +19,9 @@ import type { SQLiteMindInbox } from './store/mindInboxStore.js';
  * also tails `mind_inbox`), never on the response path.
  *
  * Faults: any exception falls back to the switched-off path (no item, no block) and writes a `mind_fault` trace; three faults
- * within 10 minutes open the circuit until the process restarts.
+ * within 10 minutes open the circuit until the process restarts. A journal write that SQLite answered busy or locked (another
+ * process held the write lock past the journal connection's short busy timeout) is not a fault: its batch is kept for the next
+ * write and only counted (`busyCount`). A failed write of any kind never drops its batch (at most `pendingRows` are kept).
  */
 export interface WorkspaceTurn {
   scopeKey: string;
@@ -53,6 +56,9 @@ export interface MindHost extends Required<MindTurnPorts> {
   view(scopeKey: string, at: string): { held: Array<{ id: string; kind: string; surface: string; salience: number; ref: string | null }>; notices: string[]; summary: number };
   /** Whether the circuit is open (three faults within 10 minutes). */
   readonly faulted: boolean;
+  /** Faults since the process started, and journal writes that met a busy database (not faults); for `/v1/ops`. */
+  readonly faultCount: number;
+  readonly busyCount: number;
 }
 
 export interface MindHostOptions {
@@ -73,6 +79,8 @@ const DAY = 24 * 60 * MINUTE;
 export const MIND_HOST_LIMITS = Object.freeze({
   snapshotEveryOps: 200, snapshotEveryMilliseconds: 10 * MINUTE, faultWindowMilliseconds: 10 * MINUTE, faultsToOpen: 3,
   keepMilliseconds: 7 * DAY, inboxFreshMilliseconds: 30 * MINUTE, noveltyMilliseconds: 30 * MINUTE, heldTexts: 400,
+  /** Journal rows kept while writes fail; beyond it the oldest are dropped (restore then misses them, as after a crash). */
+  pendingRows: 5_000,
 });
 
 export function createMindHost(options: MindHostOptions): MindHost {
@@ -87,6 +95,8 @@ class InProcessMindHost implements MindHost {
   private pending: Array<Omit<JournalRow, 'seq'>> = [];
   private readonly sinceSnapshot = new Map<string, { ops: number; at: number }>();
   private faults: number[] = [];
+  private faultTotal = 0;
+  private busyTotal = 0;
   private open = false;
   private inboxCursor = 0;
   private lastPrune = 0;
@@ -98,6 +108,8 @@ class InProcessMindHost implements MindHost {
   }
 
   get faulted(): boolean { return this.open; }
+  get faultCount(): number { return this.faultTotal; }
+  get busyCount(): number { return this.busyTotal; }
   get dataFrames(): boolean { return this.options.switches.dataFrames && !this.open; }
 
   perceive(scopeKey: string, event: MindEvent | null, detail?: PerceivedDetail | null): PerceivedItem | null {
@@ -135,12 +147,12 @@ class InProcessMindHost implements MindHost {
   turnEnded(): void {
     if (!this.options.journal || this.open) return;
     const schedule = this.options.schedule ?? (task => { setImmediate(task); });
-    schedule(() => this.guarded('journal', () => this.flush(), undefined));
+    schedule(() => this.guarded('journal', () => this.flush(), undefined, true));
   }
 
   tick(): void {
     if (this.open) return;
-    this.guarded('tick', () => { this.tailInbox(); this.flush(); }, undefined);
+    this.guarded('tick', () => { this.tailInbox(); this.flush(); }, undefined, true);
   }
 
   close(): void {
@@ -227,7 +239,13 @@ class InProcessMindHost implements MindHost {
     if (this.pending.length) {
       const batch = this.pending;
       this.pending = [];
-      journal.append(batch);
+      try {
+        journal.append(batch);
+      } catch (error) {
+        // Kept for the next write, before anything noted since (append rolls the whole batch back).
+        this.pending = [...batch, ...this.pending].slice(-MIND_HOST_LIMITS.pendingRows);
+        throw error;
+      }
       for (const row of batch) {
         const entry = this.sinceSnapshot.get(row.scopeKey) ?? { ops: 0, at: now };
         this.sinceSnapshot.set(row.scopeKey, { ops: entry.ops + 1, at: entry.at });
@@ -275,11 +293,17 @@ class InProcessMindHost implements MindHost {
     }
   }
 
-  private guarded<T>(stage: string, task: () => T, fallback: T): T {
+  /** Runs `task`; a throw is a fault, except a busy database in a background journal write (`background`), which is only counted. */
+  private guarded<T>(stage: string, task: () => T, fallback: T, background = false): T {
     if (this.open) return fallback;
     try {
       return task();
     } catch (error) {
+      if (background && isSqliteBusy(error)) {
+        this.busyTotal += 1;
+        try { this.options.log?.(`mind_busy stage=${stage} pending=${this.pending.length}`); } catch { /* the log is optional */ }
+        return fallback;
+      }
       this.fault(stage, error);
       return fallback;
     }
@@ -289,6 +313,7 @@ class InProcessMindHost implements MindHost {
   private fault(stage: string, error: unknown): void {
     const now = Date.parse(this.options.now()) || Date.now();
     this.faults = [...this.faults.filter(at => now - at < MIND_HOST_LIMITS.faultWindowMilliseconds), now];
+    this.faultTotal += 1;
     const name = error instanceof Error ? error.name : 'unknown';
     if (this.faults.length >= MIND_HOST_LIMITS.faultsToOpen) this.open = true;
     try { this.options.log?.(`mind_fault stage=${stage} error=${name}${this.open ? ' circuit=open' : ''}`); } catch { /* the log is optional */ }

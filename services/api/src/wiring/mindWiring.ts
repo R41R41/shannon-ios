@@ -20,6 +20,11 @@ import {
  *   gets `[いまの場]`, the notices and (with `SHANNON_DATA_FRAMES`) the data frames.
  */
 const PRAGMAS = 'PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;';
+/**
+ * Once its tables exist, the journal's connection waits a short while only (stage 3 review): its writes are off the response path,
+ * a busy write is retried at the next tick with its batch kept, and a long wait would hold the API's event loop.
+ */
+export const JOURNAL_BUSY_TIMEOUT_MILLISECONDS = 250;
 const TICK_MILLISECONDS = 2_000;
 /** How often the producers of the notices of a promise's time and of a task's end look (`noticeProducers.ts`). */
 const NOTICE_MILLISECONDS = 60_000;
@@ -59,6 +64,7 @@ export function configuredMind(
     inbox: database ? new SQLiteMindInbox(database, { createSchema: true }) : null,
     ...(parts.schedule ? { schedule: parts.schedule } : {}), ...(parts.log ? { log: parts.log } : {}), ...(parts.timeZone ? { timeZone: parts.timeZone } : {}),
   });
+  if (database) database.exec(`PRAGMA busy_timeout = ${JOURNAL_BUSY_TIMEOUT_MILLISECONDS};`);
   const timer = parts.ticking && database ? setInterval(() => host.tick(), TICK_MILLISECONDS) : null;
   timer?.unref();
   const inbox = database ? new SQLiteMindInbox(database, { createSchema: false }) : null;
@@ -70,6 +76,7 @@ export function configuredMind(
     close: () => {
       if (timer) clearInterval(timer);
       if (noticeTimer) clearInterval(noticeTimer);
+      if (database?.isOpen) database.exec(PRAGMAS); // The last write may wait as long as any other.
       host.close();
       if (database?.isOpen) database.close();
     },
@@ -78,6 +85,7 @@ export function configuredMind(
 
 // The inbox writer another process is handed lives in `mindInboxWiring.ts`, so such a process loads nothing else of the mind.
 export { configuredMindInbox } from './mindInboxWiring.js';
+export { withMindOps } from './mindOpsWiring.js';
 
 /**
  * Writes into the inbox, once each (by kind and source id), the notices of the owner's promises whose time is near, of his agent
