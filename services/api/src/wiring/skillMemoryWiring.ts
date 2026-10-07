@@ -12,6 +12,8 @@ import { isExperienceSourceVisible, usableKnowledgeFor } from '../mind/recall/tu
 import { ShannonSkillConsolidator, type SkillSeedSources, type SkillSleepModels } from '../mind/sleep/skillConsolidation.js';
 import { createConfiguredSkillSleepModels } from '../mind/sleep/skillSleepModel.js';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
+import { aetherStudyScope, configuredAetherAccess, type AetherAccess } from '../integrations/aether/aetherAccess.js';
+import { exportSkills, type SkillExportResult } from '../integrations/aether/skillExport.js';
 
 /**
  * Wiring of Syzygy ADR-0008 stage 2, step 6 (`docs/skill-and-routing-contract.md`, 「スキル記憶」): her skill memory on its own
@@ -108,3 +110,20 @@ export function skillSeedSources(store: ShannonKnowledgeStore & ConversationStor
   };
 }
 
+/**
+ * Step 7 (`SHANNON_SKILL_EXPORT`, owner answers I-4 and I-5): readable copies of her skills in Aether's シャノン用フォルダ, after the
+ * skill sleep, for the one scope whose study lives in Aether (`aetherStudyScope`). Null while the switch is off, the skills are
+ * off, or Aether is not configured (address and token): then her skills stay in the database only.
+ */
+export function configuredSkillExport(
+  environment: Readonly<Record<string, string | undefined>>,
+  parts: { memory: SkillMemory; store: ConversationStore & Pick<CompanionStateStore, 'snapshot'>; access?: AetherAccess | null; log?: (line: string) => void },
+): ((scopeKey: string, at: string) => Promise<SkillExportResult | null>) | null {
+  if (!skillRoutingSwitches(environment).skillExport) return null;
+  const access = parts.access === undefined ? configuredAetherAccess(environment) : parts.access;
+  if (!access) return null;
+  const scope = aetherStudyScope(environment);
+  return async (scopeKey, at) => scopeKey !== scope ? null : exportSkills({
+    scopeKey, skills: parts.memory, access, at, check: () => skillBodyCheck(parts.store.snapshot(scopeKey), parts.store, scopeKey), ...(parts.log ? { log: parts.log } : {}),
+  });
+}

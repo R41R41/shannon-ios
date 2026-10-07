@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { UNKNOWN_GUEST_PRESENCE, createInitialCompanionState, type CompanionStateSnapshot } from '@shannon/cognition';
 import {
-  judgedFacts, skillAuditScenario, skillFormScenario, skillGuestScenario, skillPatternScenario, skillRetireScenario, skillTrialScenario, skillUseScenario, stableFingerprint,
+  judgedFacts, skillAuditScenario, skillExportScenario, skillFormScenario, skillGuestScenario, skillPatternScenario, skillRetireScenario, skillTrialScenario, skillUseScenario, stableFingerprint,
   type ReachDriver, type ReachScenarioDefinition,
 } from '../../../../packages/evaluation/src/reach/index.js';
 import { createLocalApiKernel } from '../../src/infra/http/apiKernel.js';
@@ -19,7 +19,9 @@ import { ShannonSkillConsolidator, type SkillSleepModels } from '../../src/mind/
 import type { SkillSleepModel } from '../../src/mind/sleep/skillSleepModel.js';
 import { shannonTool } from '../../src/mind/tools/shannonTools.js';
 import { toolSessionMemory } from '../../src/mind/tools/shannonToolTypes.js';
-import { skillBodyCheck, skillSeedSources, skillTurnPorts } from '../../src/wiring/skillMemoryWiring.js';
+import { configuredSkillExport, skillBodyCheck, skillSeedSources, skillTurnPorts } from '../../src/wiring/skillMemoryWiring.js';
+import { encodeSkill } from '../../src/mind/memory/skillDocument.js';
+import { FakeAetherFolder } from '../support/fakeAetherFolder.js';
 import { configuredTurnRouting } from '../../src/wiring/turnRoutingWiring.js';
 
 /**
@@ -300,6 +302,37 @@ async function audit() {
   } finally { world.close(); }
 }
 
+/** Every skill's copy in シャノン用フォルダ, the owner's edit adopted at the next sleep and never overwritten. */
+async function exported() {
+  const world = new SkillWorld();
+  try {
+    const folder = new FakeAetherFolder();
+    const run = configuredSkillExport({}, { memory: world.skills, store: world.store, access: folder, log: () => {} })!;
+    const ok = { carries: () => false };
+    const kept = (world.skills.create(SCOPE, { draft: skill('weekly-review'), evidence: [] }, ok, minutes(0)) as { skillId: string }).skillId;
+    const gone = (world.skills.create(SCOPE, { draft: skill('old-way', { description: '古いやり方' }), evidence: [] }, ok, minutes(0)) as { skillId: string }).skillId;
+    world.skills.retire(SCOPE, gone, 'source_forgotten', minutes(1));
+    await run(SCOPE, minutes(2));
+    const copies = [kept, gone].map(id => world.skills.store.get(SCOPE, id)!).every(item => folder.documents.get(item.aetherDocumentId ?? '')?.body === item.body);
+    const writes = folder.writes.length;
+    await run(SCOPE, minutes(3));
+    const idempotent = folder.writes.length === writes;
+    const documentId = world.skills.store.get(SCOPE, kept)!.aetherDocumentId!;
+    const edited = encodeSkill(skill('weekly-review', { steps: '1. 散歩しながら三つ話す' }));
+    folder.edit(documentId, edited);
+    await run(SCOPE, minutes(24 * 60));
+    await run(SCOPE, minutes(24 * 60 + 1));
+    const after = world.skills.store.get(SCOPE, kept)!;
+    return outcome(skillExportScenario, {
+      'export.copies': copies && idempotent,
+      'export.owner_edit': after.body === edited && after.madeBy === 'owner_edit' && world.skills.store.revisions(SCOPE, kept).at(-1)?.actor === 'owner'
+        && folder.documents.get(documentId)!.body === edited && folder.writes.length === writes,
+      'export.off': configuredSkillExport({}, { memory: world.skills, store: world.store }) === null
+        && configuredSkillExport({ SHANNON_SKILL_EXPORT: 'off' }, { memory: world.skills, store: world.store, access: folder }) === null,
+    }, { writes: folder.writes.length }, 4);
+  } finally { world.close(); }
+}
+
 const driver = (run: () => Promise<ReturnType<typeof outcome>>): ReachDriver => async () => run();
 
 export function skillDrivers(): Record<string, () => ReachDriver> {
@@ -311,6 +344,7 @@ export function skillDrivers(): Record<string, () => ReachDriver> {
     [skillPatternScenario.id]: () => driver(pattern),
     [skillTrialScenario.id]: () => driver(trial),
     [skillAuditScenario.id]: () => driver(audit),
+    [skillExportScenario.id]: () => driver(exported),
   };
 }
 

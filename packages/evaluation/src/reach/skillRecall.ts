@@ -57,6 +57,13 @@ export const skillAuditScenario = definition('skill.audit', 'grow', '同じ失�
     { id: 'audit.shown', judge: 'deterministic', threshold: 1, description: 'The proposer is shown the reverted change before it proposes.' },
   ]);
 
+export const skillExportScenario = definition('skill.export', 'be_useful', 'ライ氏が読めて、直せる',
+  'すべてのスキルの読める写しがAetherのシャノン用フォルダにあり（同じ本文は二度書かない）、ライ氏が写しを直したら次の睡眠で新しい版として取り込み、上書きしないか。Aetherがない時は何も書かないか。', [
+    { id: 'export.copies', judge: 'deterministic', threshold: 1, description: 'Every skill, retired ones included, has a copy whose body is its SKILL.md; a second night writes nothing (idempotent by hash).' },
+    { id: 'export.owner_edit', judge: 'deterministic', threshold: 1, description: 'An owner\'s edit of a copy is adopted at the next sleep as a new version (actor owner) and never written over.' },
+    { id: 'export.off', judge: 'deterministic', threshold: 1, description: 'Without Aether, or with SHANNON_SKILL_EXPORT=off, there is no export.' },
+  ]);
+
 export const SKILL_SCENARIOS: readonly ReachScenarioDefinition[] = Object.freeze([
-  skillFormScenario, skillUseScenario, skillRetireScenario, skillGuestScenario, skillPatternScenario, skillTrialScenario, skillAuditScenario,
+  skillFormScenario, skillUseScenario, skillRetireScenario, skillGuestScenario, skillPatternScenario, skillTrialScenario, skillAuditScenario, skillExportScenario,
 ]);

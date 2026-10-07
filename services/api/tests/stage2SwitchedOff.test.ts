@@ -12,7 +12,7 @@ import { DisabledVoyagerCatalog } from '../src/integrations/voyager/organizeInte
 import { LocalStubChatModel } from '../src/infra/models/chatModel.js';
 import type { DecisionTraceDraft } from '../src/contracts/decisionTraceContract.js';
 import { createInitialCompanionState } from '@shannon/cognition';
-import { configuredSkillMemory, skillTurnPorts } from '../src/wiring/skillMemoryWiring.js';
+import { configuredSkillExport, configuredSkillMemory, skillTurnPorts } from '../src/wiring/skillMemoryWiring.js';
 
 /**
  * Syzygy ADR-0008 stage 2, the switched-off proof (`docs/skill-and-routing-contract.md`): with `SHANNON_ADR8_STAGE2=off` every
@@ -146,6 +146,11 @@ describe('stage 2 switched off with the stage-2 wiring in place', () => {
     expect(configuredTurnRouting({ SHANNON_ADR8_STAGE2: 'off' }, { databasePath: ':memory:', choices: null })).toBeNull();
     // Step 6: no skill memory, so no table, no index and no skill.read.
     expect(configuredSkillMemory({ SHANNON_ADR8_STAGE2: 'off' }, { databasePath: ':memory:', createsSchema: true })).toBeNull();
+    // Step 7: no export, even with Aether configured.
+    const memory = configuredSkillMemory({}, { databasePath: ':memory:', createsSchema: true })!;
+    expect(configuredSkillExport({ SHANNON_ADR8_STAGE2: 'off', SHANNON_AETHER_API_URL: 'http://127.0.0.1:3007', SHANNON_AETHER_SHANNON_TOKEN: 'fake-token-0015' },
+      { memory: memory.memory, store: { snapshot: () => { throw new Error('unused'); }, experienceCandidates: () => [] } as never })).toBeNull();
+    memory.close();
   });
 
   it('also with only its parts switched off, and with stage 2 on but no Jev configured', async () => {

@@ -132,6 +132,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/sleep/skillSleepRules.ts',
     'services/api/src/contracts/skillMemoryContract.ts',
     'services/api/src/wiring/skillMemoryWiring.ts',
+    // Step 7: her skills' readable copies in Aether, and the owner's edits of them adopted.
+    'services/api/src/integrations/aether/skillExport.ts',
     'services/api/src/mind/memory/memoryService.ts',
     'services/api/src/mind/recall/memoryModels.ts',
     'services/api/src/mind/memory/memoryProjection.ts',
