@@ -11,7 +11,8 @@ import { SQLiteMemoryOutbox, type MemoryOutboxRow } from './store/memoryOutboxSt
  * call, where the kind needs one, outside the lock and through `memory_writer_calls`); then `BEGIN IMMEDIATE`, compare-and-set
  * the revision, check the owner's controls again (a forget that came meanwhile wins), write, mark the row and move the cursor, in
  * one transaction. A lost compare-and-set is tried again from a new snapshot, three times, then the row is `superseded`; a row
- * the codec refuses is `rejected`; five model failures make it `failed`. The cursor (`applied_seq`) only moves over final rows,
+ * the codec refuses is `rejected`; five failures (of its model call or of its write, whose transaction rolls back) make it
+ * `failed`, and a failing row holds only its own subject meanwhile. The cursor (`applied_seq`) only moves over final rows,
  * so a restart reads from it again, and `op_id` keeps a replayed proposal from being stored twice.
  *
  * The conversation hot path, emotion, the ledgers, the activity record, skills and embeddings write directly as before. The
@@ -40,6 +41,11 @@ class ModelFailure extends Error {
 
 class LeaseLost extends Error {
   constructor() { super('MEMORY_WRITER_LEASE_LOST'); }
+}
+
+/** A crash the tests stage (`beforeLock`): it stops the run, as a crashed process would, and is not a failure of the row. */
+class StagedCrash extends Error {
+  constructor(readonly error: unknown) { super('MEMORY_WRITER_STAGED_CRASH'); }
 }
 
 const errorCode = (error: unknown) => {
@@ -121,7 +127,16 @@ export class MemoryWriter {
         if (waiting.has(subject)) continue;
         if (row.nextAttemptAt && row.nextAttemptAt > this.now()) { waiting.add(subject); continue; }
         if (!this.outbox.underLock(this.now(), () => this.outbox.acquireLease(this.owner, this.now(), this.leaseUntil()))) throw new LeaseLost();
-        const finished = await this.process(row);
+        let finished: boolean;
+        try {
+          finished = await this.process(row);
+        } catch (error) {
+          if (error instanceof LeaseLost) throw error;
+          if (error instanceof StagedCrash) throw error.error;
+          // One bad row never stops the others: its transaction was rolled back (`underLock`), it is tried again later, and it is
+          // `failed` after five tries; only its own subject waits meanwhile.
+          finished = this.rowFailed(row.seq, row.attempts, row.kind, `apply_${errorCode(error)}`.slice(0, 80));
+        }
         worked = true;
         if (!finished) waiting.add(subject);
       }
@@ -182,7 +197,7 @@ export class MemoryWriter {
       } catch (error) {
         return this.modelFailed(op, errorCode(error));
       }
-      this.options.beforeLock?.(op);
+      try { this.options.beforeLock?.(op); } catch (error) { throw new StagedCrash(error); }
       // Under the lock: compare-and-set, the owner's controls again, the write, the row and the cursor, in one transaction.
       const result = this.outbox.underLock(this.now(), () => {
         if (!this.outbox.holdsLease(this.owner, this.now())) throw new LeaseLost();
@@ -207,14 +222,22 @@ export class MemoryWriter {
   }
 
   private modelFailed(op: MemoryOp, code: string): boolean {
-    const attempts = op.attempts + 1;
+    return this.rowFailed(op.seq, op.attempts, op.kind, code);
+  }
+
+  /**
+   * A row that failed (its model call, or its write): tried again after attempts × the retry time, `failed` after five tries.
+   * Answers whether the row is final (true) or waits for its retry (false: its subject's later rows wait with it).
+   */
+  private rowFailed(seq: number, previousAttempts: number, kind: string, code: string): boolean {
+    const attempts = previousAttempts + 1;
     if (attempts >= MEMORY_WRITER_V1.modelFailures) {
-      this.final(op.seq, 'failed', code, attempts);
-      this.options.log?.(`Shannon memory op failed: kind=${op.kind} code=${code}`);
+      this.final(seq, 'failed', code, attempts);
+      this.options.log?.(`Shannon memory op failed: kind=${kind} code=${code}`);
       return true;
     }
     const next = new Date(Date.parse(this.now()) + attempts * MEMORY_WRITER_V1.retryMilliseconds).toISOString();
-    this.outbox.underLock(this.now(), () => this.outbox.retryLater(op.seq, attempts, next, code));
+    this.outbox.underLock(this.now(), () => this.outbox.retryLater(seq, attempts, next, code));
     return false;
   }
 

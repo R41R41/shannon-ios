@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { memoryWorld, MEMORY_AT } from './support/memoryWorld.js';
 import { MEMORY_WRITER_V1 } from '../src/mind/memory/memoryWriter.js';
 
@@ -134,5 +134,37 @@ describe('the memory writer, row by row', () => {
     w.ports.proposals.propose({ opId: 'f-1', scopeKey: 'owner', kind: 'fact.upsert', origin: 'turn', subjectKey: 'fact:f-1', payload: { fact: fact('user-fact-a', 'ユーザーは犬が好き'), source: 'conversation' } });
     await w.writer().runOnce();
     expect(w.outbox.meter!.summary().writes).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe('one bad row (pre-deploy review, high)', () => {
+  it('does not stop the other rows: a write that throws is rolled back, tried again, and failed after five tries; an unrelated op applies', async () => {
+    const w = world();
+    const original = w.store.apply.bind(w.store);
+    vi.spyOn(w.store, 'apply').mockImplementation(((scopeKey: string, event: { type: string; fact?: { id: string } }) => {
+      if (event.type === 'user-fact-upserted' && event.fact?.id === 'user-fact-bad') throw new Error('disk I/O error');
+      return original(scopeKey, event as never);
+    }) as never);
+    w.ports.proposals.propose({ opId: 'bad', scopeKey: 'owner', kind: 'fact.upsert', origin: 'turn', subjectKey: 'fact:bad', payload: { fact: fact('user-fact-bad', 'ユーザーは海が好き'), source: 'conversation' } });
+    w.ports.proposals.propose({ opId: 'bad-later', scopeKey: 'owner', kind: 'fact.upsert', origin: 'turn', subjectKey: 'fact:bad', payload: { fact: fact('user-fact-bad-2', 'ユーザーは山も好き'), source: 'conversation' } });
+    w.ports.proposals.propose({ opId: 'good', scopeKey: 'owner', kind: 'fact.upsert', origin: 'turn', subjectKey: 'fact:good', payload: { fact: fact('user-fact-good', 'ユーザーは犬が好き'), source: 'conversation' } });
+    const writer = w.writer();
+    expect(await writer.runOnce()).toBe('worked');
+    const [bad, later, good] = w.rows();
+    // The unrelated op applied; the bad one waits for its retry, and so does the later op on its own subject.
+    expect(w.outbox.row(good!.seq)).toMatchObject({ status: 'applied' });
+    expect(w.store.snapshot('owner').userFacts.some(item => item.id === 'user-fact-good')).toBe(true);
+    expect(w.outbox.row(bad!.seq)).toMatchObject({ status: 'pending', attempts: 1, outcomeCode: 'apply_error' });
+    expect(w.outbox.row(later!.seq)).toMatchObject({ status: 'pending', attempts: 0 });
+    expect(w.store.snapshot('owner').userFacts.some(item => item.id === 'user-fact-bad')).toBe(false);
+    // Each retry after its backoff; after the fifth failure the row is final and its subject moves on.
+    for (let attempt = 1; attempt < MEMORY_WRITER_V1.modelFailures; attempt += 1) {
+      w.advance(attempt * MEMORY_WRITER_V1.retryMilliseconds + 1);
+      await writer.runOnce();
+    }
+    expect(w.outbox.row(bad!.seq)).toMatchObject({ status: 'failed', attempts: MEMORY_WRITER_V1.modelFailures });
+    expect(w.outbox.row(later!.seq)).toMatchObject({ status: 'applied' });
+    expect(w.outbox.appliedSeq()).toBe(good!.seq);
+    vi.restoreAllMocks();
   });
 });
