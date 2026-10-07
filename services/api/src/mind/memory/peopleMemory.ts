@@ -50,7 +50,11 @@ const FORGET_REASON = 'ユーザーが忘れるよう指定';
 export interface PeopleMemoryParts {
   proposals: MemoryProposals;
   commands: Pick<MemoryCommands, 'run'> | null;
-  facts?: { closedIds(scopeKey: string): ReadonlySet<string>; candidates(scopeKey: string): readonly { personId: string; candidatePersonId: string; tier: 3 | 4 }[] } | null;
+  facts?: {
+    closedIds(scopeKey: string): ReadonlySet<string>; candidates(scopeKey: string): readonly { personId: string; candidatePersonId: string; tier: 3 | 4 }[];
+    /** The owner reopens a fact the rules closed (review M5); absent where nothing may write. */
+    reopen?(scopeKey: string, itemId: string): boolean;
+  } | null;
   identity?: boolean;
 }
 
@@ -77,6 +81,9 @@ export interface RememberedCall {
 }
 
 export type CallSummarizer = (turns: readonly GuestCallTurn[], names: readonly string[]) => Promise<string | null>;
+
+/** An owner's command was applied, or queued behind the proposals still pending about its people (stage 3 review). */
+const accepted = (outcome: { applied: boolean; code: string }) => outcome.applied || outcome.code === 'queued';
 
 const namesOf = (person: RememberedPerson) => [person.displayName, ...person.aliases].map(personNameKey).filter(Boolean);
 
@@ -287,16 +294,26 @@ export class PeopleMemory {
     const person = this.store.person(scopeKey, personId);
     if (!person) return false;
     const commands = this.memory?.commands;
-    if (commands) return commands.run({ opId: `owner:rename:${personId}:${at}:${createHash('sha256').update(displayName).digest('hex').slice(0, 16)}`, scopeKey, kind: 'person.link', subjectKey: `person:${personId}`,
-      payload: { action: 'rename', personId, displayName } }).applied;
+    if (commands) return accepted(commands.run({ opId: `owner:rename:${personId}:${at}:${createHash('sha256').update(displayName).digest('hex').slice(0, 16)}`, scopeKey, kind: 'person.link', subjectKey: `person:${personId}`,
+      payload: { action: 'rename', personId, displayName } }));
     return Boolean(this.store.updatePerson(scopeKey, personId, { displayName, aliases: [...person.aliases, person.displayName] }, at));
   }
 
   merge(scopeKey: string, intoId: string, fromId: string, at: string): boolean {
     const commands = this.memory?.commands;
-    if (commands) return commands.run({ opId: `owner:merge:${fromId}:${intoId}:${at}`, scopeKey, kind: 'person.link', subjectKey: `person:${intoId}`,
-      payload: { action: 'merge', personId: fromId, intoPersonId: intoId } }).applied;
+    if (commands) return accepted(commands.run({ opId: `owner:merge:${fromId}:${intoId}:${at}`, scopeKey, kind: 'person.link', subjectKey: `person:${intoId}`,
+      payload: { action: 'merge', personId: fromId, intoPersonId: intoId } }));
     return Boolean(this.store.mergePeople(scopeKey, intoId, fromId, at));
+  }
+
+  /** F6: the items recall leaves out now (closed facts), for the owner's view; null while temporal facts are off. */
+  closedItemIds(scopeKey: string): ReadonlySet<string> | null {
+    return this.memory?.facts ? this.memory.facts.closedIds(scopeKey) : null;
+  }
+
+  /** F6 (review M5): the owner reopens a fact the rules closed, at once. False while temporal facts are off or there is no such fact. */
+  reopenFact(scopeKey: string, itemId: string): boolean {
+    return this.memory?.facts?.reopen?.(scopeKey, itemId) ?? false;
   }
 
   forgetItem(scopeKey: string, itemId: string, at: string): boolean {

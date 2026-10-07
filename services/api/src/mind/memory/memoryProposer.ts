@@ -1,5 +1,5 @@
 /** What a proposer is handed, and the proposer on the caller's connection (Syzygy ADR-0008 stage 3, F5; split out of `memoryWriter.ts` after the pre-deploy review so that a process that only proposes, or only opens the store, loads none of the writer). */
-import { memoryOpCodec, type MemoryOpDraft } from './memoryOpCodec.js';
+import { closedKey, memoryOpCodec, type MemoryOpDraft } from './memoryOpCodec.js';
 import { SQLiteMemoryOutbox } from './store/memoryOutboxStore.js';
 
 /**
@@ -48,8 +48,9 @@ export class MemoryProposer implements MemoryProposals {
       if (encoded.ok) this.outbox.insert(encoded.value, at);
       else {
         this.options.log?.(`Shannon memory proposal refused: kind=${String(draft.kind)} code=${encoded.code}`);
-        this.outbox.insert({ opId: String(draft.opId).slice(0, 200), scopeKey: String(draft.scopeKey).slice(0, 120), kind: String(draft.kind).slice(0, 40),
-          origin: String(draft.origin).slice(0, 40), subjectKey: String(draft.subjectKey).slice(0, 240), baseRevision: null,
+        // A refused op keeps no free text in its header either (review): its keys are closed (`closedKey`), its kind and origin words.
+        this.outbox.insert({ opId: closedKey(String(draft.opId), 200), scopeKey: closedKey(String(draft.scopeKey), 120), kind: closedKey(String(draft.kind), 40),
+          origin: closedKey(String(draft.origin), 40), subjectKey: closedKey(String(draft.subjectKey), 240), baseRevision: null,
           payloadJson: SQLiteMemoryOutbox.REFUSED_PAYLOAD, episodeIdsJson: '[]', disclosureJson: null }, at, 'rejected', encoded.code);
       }
     });

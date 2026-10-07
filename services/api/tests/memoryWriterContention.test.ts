@@ -56,14 +56,16 @@ describe('the memory writer under contention', () => {
     try {
       const rows = store.memoryOutbox()!.rows({ limit: 10_000 });
       expect(rows).toHaveLength(PROCESSES * OPS);
-      expect(rows.every(row => row.status === 'applied')).toBe(true);
+      // The shared fact is proposed by every process with its own time: one older than the one already written is stale (review M2).
+      expect(rows.filter(row => row.subjectKey !== 'fact:user-fact-shared').every(row => row.status === 'applied')).toBe(true);
+      expect(rows.filter(row => row.subjectKey === 'fact:user-fact-shared').every(row => row.status === 'applied' || row.outcomeCode === 'stale')).toBe(true);
       expect(new Set(rows.map(row => row.opId)).size).toBe(PROCESSES * OPS);
       expect(store.memoryOutbox()!.appliedSeq()).toBe(Math.max(...rows.map(row => row.seq)));
-      // Each op was written exactly once: one state event per op (the state itself keeps only its newest facts).
+      // Each applied op was written exactly once: one state event per op (the state itself keeps only its newest facts).
       const database = new DatabaseSync(path, { readOnly: true });
       const written = database.prepare(`SELECT COUNT(*) AS count FROM experience_events WHERE event_type = 'state.user-fact-upserted'`).get() as { count: number };
       database.close();
-      expect(Number(written.count)).toBe(PROCESSES * OPS);
+      expect(Number(written.count)).toBe(rows.filter(row => row.status === 'applied').length);
       const facts = store.snapshot('owner').userFacts.map(fact => fact.id);
       expect(new Set(facts).size).toBe(facts.length);
       // Only one process held the lease at a time, so more than one of them did the work over the run.

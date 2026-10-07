@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { MEMORY_SENSITIVITY_CATEGORIES, looksSecret, type MemoryDisclosure } from '@shannon/cognition';
-import { injectionThreats } from './injectionGuard.js';
+import { injectionThreats, neutralizedForFrame } from './injectionGuard.js';
 
 /**
  * The closed-field codec of the memory outbox (Syzygy ADR-0008 stage 3, step F5, `docs/mind-workspace-contract.md`). Every
@@ -24,7 +25,27 @@ export type MemoryOpOrigin = typeof MEMORY_OP_ORIGINS[number];
 export const MEMORY_OP_LIMITS = Object.freeze({ payloadCharacters: 64_000, episodes: 32, idCharacters: 200, subjectCharacters: 240 });
 
 /** What the codec refused, as a closed code (the row keeps the code, never the refused text). */
-export type MemoryOpRefusal = 'unknown_kind' | 'unknown_origin' | 'malformed' | 'unknown_field' | 'too_long' | 'secret' | 'injection' | 'bad_id' | 'bad_time';
+export type MemoryOpRefusal = 'unknown_kind' | 'unknown_origin' | 'malformed' | 'unknown_field' | 'too_long' | 'secret' | 'injection' | 'bad_id' | 'bad_time' | 'owner_only';
+
+/**
+ * A key kept in the outbox's header (`opId`, `subjectKey`) with no free text in it (stage 3 review M1): each `:`-separated part that
+ * is not an id-like token (letters, digits, `_ . @ -`) is replaced by `h-` and 16 hexadecimal characters of its SHA-256, so an
+ * interest such as 「Final Fantasy」 is never stored, refused or not, and the same text always gives the same key.
+ */
+export function closedKey(value: string, maximum: number): string {
+  const key = String(value).split(':').map(part => (/^[A-Za-z0-9_.@-]{1,120}$/u.test(part) ? part : `h-${createHash('sha256').update(part).digest('hex').slice(0, 16)}`)).join(':');
+  return key.length <= maximum ? key : `h-${createHash('sha256').update(key).digest('hex').slice(0, 32)}`;
+}
+
+/** The marker on the owner's own words that read like an instruction (review L5): kept, quoted, never refused. */
+export const OWNER_WORDS_MARKER = '［ライ氏の言葉］';
+
+/**
+ * How a codec call reads its texts (set for the duration of one `encode` or `decode`): the owner's own words (an op of his turn,
+ * his sleep batch, his command, or his impression lane) are quoted when they read like an instruction instead of refused; a list of
+ * someone else's exchanges drops the one exchange that is refused instead of the whole op.
+ */
+let reading: { ownerWords: boolean } = { ownerWords: false };
 
 class Refused extends Error {
   constructor(readonly code: MemoryOpRefusal, readonly path: string) { super(code); }
@@ -43,13 +64,31 @@ const text = (maximum: number): Codec => (value, _mode, path) => {
   if (injectionThreats(value).length) return fail('injection', path);
   return value;
 };
-/** A short closed word or key (a day key, a time zone, a tag): no spaces or control characters. */
+/**
+ * Words as someone said them (a turn's evidence, a capture, what was said to her). The owner's own (see `reading`) that read like an
+ * instruction are kept quoted behind `OWNER_WORDS_MARKER`, their brackets neutralized, instead of refused (review L5); anyone else's
+ * are refused as any text is. The secret check holds for everyone.
+ */
+const said = (maximum: number): Codec => (value, mode, path) => {
+  if (typeof value !== 'string') return fail('malformed', path);
+  if ([...value].length > maximum) return fail('too_long', path);
+  if (looksSecret(value)) return fail('secret', path);
+  if (!injectionThreats(value).length) return value;
+  if (!reading.ownerWords) return fail('injection', path);
+  if (value.startsWith(OWNER_WORDS_MARKER)) return value;
+  if (mode === 'decode') return fail('injection', path);
+  const quoted = `${OWNER_WORDS_MARKER}${neutralizedForFrame(value)}`;
+  return [...quoted].length <= maximum ? quoted : fail('too_long', path);
+};
+/** A short closed word or key (a day key, a time zone, a tag): no spaces or control characters, nothing secret or like an instruction. */
 const word = (maximum: number): Codec => (value, _mode, path) => {
   if (typeof value !== 'string' || !value.length || [...value].length > maximum || /[\s\p{Cc}]/u.test(value)) return fail('malformed', path);
+  if (looksSecret(value)) return fail('secret', path);
+  if (injectionThreats(value).length) return fail('injection', path);
   return value;
 };
 const ID_SHAPE = /^[^\s\p{Cc}]{1,200}$/u;
-const id: Codec = (value, _mode, path) => (typeof value === 'string' && ID_SHAPE.test(value) && !looksSecret(value) ? value : fail('bad_id', path));
+const id: Codec = (value, _mode, path) => (typeof value === 'string' && ID_SHAPE.test(value) && !looksSecret(value) && !injectionThreats(value).length ? value : fail('bad_id', path));
 const time: Codec = (value, _mode, path) => (typeof value === 'string' && value.length <= 40 && /^\d{4}-\d{2}-\d{2}T/u.test(value) && Number.isFinite(Date.parse(value))
   ? value : fail('bad_time', path));
 const number: Codec = (value, _mode, path) => (typeof value === 'number' && Number.isFinite(value) ? value : fail('malformed', path));
@@ -61,6 +100,24 @@ const list = (item: Codec, maximum: number): Codec => (value, mode, path) => {
   if (value.length > maximum) return fail('too_long', path);
   return value.map((entry, index) => item(entry, mode, `${path}[${index}]`));
 };
+/** Someone's exchanges: on encode, one refused as secret or like an instruction is dropped and the rest kept (review: codec leaks). */
+const exchanges = (item: Codec, maximum: number): Codec => (value, mode, path) => {
+  if (!Array.isArray(value)) return fail('malformed', path);
+  if (value.length > maximum) return fail('too_long', path);
+  return value.flatMap((entry, index) => {
+    try { return [item(entry, mode, `${path}[${index}]`)]; } catch (error) {
+      if (mode === 'encode' && error instanceof Refused && (error.code === 'injection' || error.code === 'secret')) return [];
+      throw error;
+    }
+  });
+};
+/** An optional text that, on encode, is left out rather than refusing the op when it is secret or like an instruction. */
+const droppable = (codec: Codec): Codec & { optional: true } => Object.assign(((value: unknown, mode: Mode, path: string) => {
+  try { return codec(value, mode, path); } catch (error) {
+    if (mode === 'encode' && error instanceof Refused && (error.code === 'injection' || error.code === 'secret')) return undefined;
+    throw error;
+  }
+}) as Codec, { optional: true as const });
 const optional = (codec: Codec): Codec & { optional: true } => Object.assign(((value: unknown, mode: Mode, path: string) => codec(value, mode, path)) as Codec, { optional: true as const });
 
 /** A closed object: encode keeps only the named fields; decode refuses any other. Absent (undefined) optional fields are left out. */
@@ -75,7 +132,8 @@ const record = (fields: Readonly<Record<string, Codec & { optional?: true }>>): 
       if (!codec.optional) fail('malformed', `${path}.${key}`);
       continue;
     }
-    out[key] = codec(entry, mode, `${path}.${key}`);
+    const coded = codec(entry, mode, `${path}.${key}`);
+    if (coded !== undefined) out[key] = coded;
   }
   return out;
 };
@@ -96,17 +154,17 @@ const disclosure: Codec = record({
   decidedBy: optional(oneOf(['rule', 'owner'])), speaker: optional(oneOf(['owner', 'unknown'])),
 });
 const statementItem = record({
-  id, statement: text(400), confidence: number, observedAt: time, evidence: optional(text(600)),
+  id, statement: text(400), confidence: number, observedAt: time, evidence: optional(said(600)),
   sourceExperienceId: optional(id), disclosure: optional(disclosure),
 });
 const prospective = record({
   id, summary: text(400), status: oneOf(['pending', 'completed', 'dismissed']), createdAt: time, updatedAt: time,
   dueHint: optional(text(120)), dueAt: optional(time), dueDate: optional(word(10)), timeZone: optional(word(64)),
-  sourceExperienceId: optional(id), evidence: optional(text(600)), remindAfter: optional(time), disclosure: optional(disclosure),
+  sourceExperienceId: optional(id), evidence: optional(said(600)), remindAfter: optional(time), disclosure: optional(disclosure),
 });
 const capture = record({
-  id, turnId: id, kind: oneOf(['commitment', 'knowledge', 'intent', 'notice']), text: text(160), itemId: optional(text(200)),
-  change: optional(oneOf(['created', 'updated', 'confirmed'])), previousText: optional(text(400)), note: optional(text(200)),
+  id, turnId: id, kind: oneOf(['commitment', 'knowledge', 'intent', 'notice']), text: said(160), itemId: optional(text(200)),
+  change: optional(oneOf(['created', 'updated', 'confirmed'])), previousText: optional(said(400)), note: optional(text(200)),
   dueDate: optional(word(10)), dueAt: optional(time), dueHint: optional(text(120)), timeZone: optional(word(64)), createdAt: time,
 });
 const learningSource = oneOf(['conversation', 'sleep']);
@@ -122,9 +180,9 @@ const personCall = record({
   pendingName: optional(text(80)), startedAt: time, updatedAt: time,
 });
 const personPayload = record({
-  callId: id, mode: oneOf(['replace', 'upsert']), items: list(personItem, 200), call: optional(personCall),
-  /** The period's summary: written by code after the items (`text` absent: the deterministic one). */
-  summary: optional(record({ label: text(200), audience, at: time, text: optional(text(800)) })),
+  callId: id, mode: oneOf(['replace', 'upsert']), items: exchanges(personItem, 200), call: optional(personCall),
+  /** The period's summary: written by code after the items (`text` absent, or left out as unsafe: the deterministic one). */
+  summary: optional(record({ label: text(200), audience, at: time, text: droppable(text(800)) })),
 });
 const knowledgeDraft = record({
   title: text(200), bodyMarkdown: text(12_000), status: oneOf(['hypothesis', 'confirmed']), applicability: text(1_000),
@@ -144,7 +202,7 @@ const PAYLOADS: Readonly<Record<MemoryOpKind, Codec>> = Object.freeze({
   turn_capture: record({ captures: list(capture, 24) }),
   'intent.capture': record({ capture }),
   'impression.observe': record({
-    lane: oneOf(['owner', 'platform']), personKey: id, sourceId: id, at: time, said: text(8_000), audience,
+    lane: oneOf(['owner', 'platform']), personKey: id, sourceId: id, at: time, said: said(8_000), audience,
     analysis: record({ observations: list(observation, 40), candidates: list(candidate, 8) }),
   }),
   'impression.merge': record({ personKey: id, keepId: id, mergedIds: list(id, 20) }),
@@ -191,11 +249,26 @@ export type MemoryOp = Omit<MemoryOpDraft, 'baseRevision' | 'episodeIds' | 'disc
   seq: number; baseRevision: string | null; episodeIds: readonly string[]; disclosure: MemoryDisclosure | null; attempts: number;
 };
 
-function checked<T>(operation: () => T): { ok: true; value: T } | { ok: false; code: MemoryOpRefusal; path: string } {
+function checked<T>(operation: () => T, ownerWords = false): { ok: true; value: T } | { ok: false; code: MemoryOpRefusal; path: string } {
+  const previous = reading;
+  reading = { ownerWords };
   try { return { ok: true, value: operation() }; } catch (error) {
     if (error instanceof Refused) return { ok: false, code: error.code, path: error.path };
     return { ok: false, code: 'malformed', path: '' };
-  }
+  } finally { reading = previous; }
+}
+
+/** Whether an op carries the owner's own words (his turn, his sleep batch, his command, his impression lane). */
+function ownerWordsOf(origin: string, payload: unknown): boolean {
+  if (origin === 'turn' || origin === 'sleep' || origin === 'owner') return true;
+  return origin === 'impressions' && Boolean(payload && typeof payload === 'object' && (payload as { lane?: unknown }).lane === 'owner');
+}
+
+/** A rename or a merge is the owner's alone (review, low). */
+function ownerOnly(kind: string, origin: string, payload: unknown): void {
+  if (kind !== 'person.link' || origin === 'owner') return;
+  const action = payload && typeof payload === 'object' ? (payload as { action?: unknown }).action : undefined;
+  if (action === 'merge' || action === 'rename') fail('owner_only', 'origin');
 }
 
 const header = (draft: Pick<MemoryOpDraft, 'opId' | 'scopeKey' | 'kind' | 'origin' | 'subjectKey'>) => {
@@ -211,7 +284,9 @@ export const memoryOpCodec = Object.freeze({
   /** A draft as it is stored, or the refusal. Unknown payload fields are dropped. */
   encode(draft: MemoryOpDraft): { ok: true; value: EncodedMemoryOp } | { ok: false; code: MemoryOpRefusal; path: string } {
     return checked(() => {
-      header(draft);
+      const keys = { opId: closedKey(String(draft.opId), MEMORY_OP_LIMITS.idCharacters), subjectKey: closedKey(String(draft.subjectKey), MEMORY_OP_LIMITS.subjectCharacters) };
+      header({ ...draft, ...keys });
+      ownerOnly(draft.kind, draft.origin, draft.payload);
       const payload = PAYLOADS[draft.kind](draft.payload, 'encode', 'payload');
       const payloadJson = JSON.stringify(payload);
       if (payloadJson.length > MEMORY_OP_LIMITS.payloadCharacters) fail('too_long', 'payload');
@@ -219,9 +294,9 @@ export const memoryOpCodec = Object.freeze({
       const label = draft.disclosure ? disclosure(draft.disclosure, 'encode', 'disclosure') : null;
       const base = draft.baseRevision ?? null;
       if (base !== null && (typeof base !== 'string' || base.length > 120)) fail('malformed', 'baseRevision');
-      return { opId: draft.opId, scopeKey: draft.scopeKey, kind: draft.kind, origin: draft.origin, subjectKey: draft.subjectKey, baseRevision: base,
+      return { opId: keys.opId, scopeKey: draft.scopeKey, kind: draft.kind, origin: draft.origin, subjectKey: keys.subjectKey, baseRevision: base,
         payloadJson, episodeIdsJson: JSON.stringify(episodes), disclosureJson: label ? JSON.stringify(label) : null };
-    });
+    }, ownerWordsOf(draft.origin, draft.payload));
   },
   /** A stored row read back: every field checked again, an unknown field refused. */
   decode(row: { seq: number; opId: string; scopeKey: string; kind: string; origin: string; subjectKey: string; baseRevision: string | null;
@@ -229,7 +304,10 @@ export const memoryOpCodec = Object.freeze({
     return checked(() => {
       header(row as unknown as MemoryOpDraft);
       const parse = (raw: string | null, path: string): unknown => { try { return raw === null ? null : JSON.parse(raw) as unknown; } catch { return fail('malformed', path); } };
-      const payload = PAYLOADS[row.kind as MemoryOpKind](parse(row.payloadJson, 'payload'), 'decode', 'payload') as Record<string, unknown>;
+      const raw = parse(row.payloadJson, 'payload');
+      ownerOnly(row.kind, row.origin, raw);
+      reading = { ownerWords: ownerWordsOf(row.origin, raw) };
+      const payload = PAYLOADS[row.kind as MemoryOpKind](raw, 'decode', 'payload') as Record<string, unknown>;
       const episodes = list(id, MEMORY_OP_LIMITS.episodes)(parse(row.episodeIdsJson, 'episodeIds'), 'decode', 'episodeIds') as string[];
       const label = row.disclosureJson === null ? null : disclosure(parse(row.disclosureJson, 'disclosure'), 'decode', 'disclosure') as MemoryDisclosure;
       return Object.freeze({ seq: row.seq, opId: row.opId, scopeKey: row.scopeKey, kind: row.kind as MemoryOpKind, origin: row.origin as MemoryOpOrigin,

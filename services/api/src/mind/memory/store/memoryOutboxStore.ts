@@ -129,11 +129,47 @@ export class SQLiteMemoryOutbox {
     return Number(row?.applied_seq ?? 0);
   }
 
-  /** Up to `limit` pending rows after the cursor, in seq order. */
-  pending(limit: number): readonly MemoryOutboxRow[] {
-    return Object.freeze((this.database.prepare(`SELECT ${COLUMNS} FROM memory_outbox
-      WHERE status = 'pending' AND seq > (SELECT COALESCE((SELECT applied_seq FROM memory_writer_state WHERE id = 1), 0))
-      ORDER BY seq ASC LIMIT ?`).all(Math.max(1, Math.trunc(limit))) as unknown as Row[]).map(rowOf));
+  /**
+   * Up to `limit` pending rows after the cursor, in seq order, leaving out every row of a subject that waits for a retry after `now`
+   * (stage 3 review M7): a subject waiting does not take the batch's places from the others, and its rows keep their order.
+   */
+  pending(limit: number, now?: string): readonly MemoryOutboxRow[] {
+    const waiting = now ? `AND NOT EXISTS (SELECT 1 FROM memory_outbox w WHERE w.status = 'pending' AND w.scope_key = o.scope_key
+        AND w.subject_key = o.subject_key AND w.seq <= o.seq AND w.next_attempt_at IS NOT NULL AND w.next_attempt_at > ?)` : '';
+    return Object.freeze((this.database.prepare(`SELECT ${COLUMNS} FROM memory_outbox o
+      WHERE status = 'pending' AND seq > (SELECT COALESCE((SELECT applied_seq FROM memory_writer_state WHERE id = 1), 0)) ${waiting}
+      ORDER BY seq ASC LIMIT ?`).all(...(now ? [now] : []), Math.max(1, Math.trunc(limit))) as unknown as Row[]).map(rowOf));
+  }
+
+  /**
+   * Whether a pending row (before `seq`, if given) is about one of these people: its subject is the person, their identity or their
+   * impressions, or its payload names them (a call they were in). An owner's rename or merge waits for such rows (review).
+   */
+  pendingAboutPeople(scopeKey: string, personIds: readonly string[], seq?: number): boolean {
+    const clauses: string[] = [];
+    const values: string[] = [];
+    for (const personId of personIds) {
+      for (const prefix of ['person', 'identity', 'impressions']) { clauses.push('subject_key = ?'); values.push(`${prefix}:${personId}`); }
+      clauses.push(`payload_json LIKE ? ESCAPE '\\'`); values.push(`%${JSON.stringify(personId).replace(/[\\%_]/gu, match => `\\${match}`)}%`);
+    }
+    if (!clauses.length) return false;
+    return Boolean(this.database.prepare(`SELECT 1 AS found FROM memory_outbox WHERE status = 'pending' AND scope_key = ? ${seq === undefined ? '' : 'AND seq < ?'}
+      AND (${clauses.join(' OR ')}) LIMIT 1`).get(scopeKey, ...(seq === undefined ? [] : [seq]), ...values));
+  }
+
+  /**
+   * What the outbox keeps of rows once they are final (stage 3 review H2): after `before` (a day's grace) their payload, episodes and
+   * label are emptied (`{}`, `[]`, null); the closed header stays. Answers how many rows were emptied.
+   */
+  scrubFinal(before: string): number {
+    return Number(this.database.prepare(`UPDATE memory_outbox SET payload_json = '{}', episode_ids_json = '[]', disclosure_json = NULL
+      WHERE status <> 'pending' AND applied_at IS NOT NULL AND applied_at < ? AND (payload_json <> '{}' OR episode_ids_json <> '[]' OR disclosure_json IS NOT NULL)`)
+      .run(before).changes);
+  }
+
+  /** Model answers older than `before` (3 days: review H2), whatever their row; a row still pending asks again. */
+  pruneCallsBefore(before: string): number {
+    return Number(this.database.prepare('DELETE FROM memory_writer_calls WHERE created_at < ?').run(before).changes);
   }
 
   row(seq: number): MemoryOutboxRow | null {

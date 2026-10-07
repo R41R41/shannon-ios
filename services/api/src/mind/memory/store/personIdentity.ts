@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+import { scrubOutboxFor } from './outboxScrub.js';
 
 export type PersonPlatform = 'discord';
 export type PersonLifecycleStatus = 'candidate' | 'active' | 'revoked';
@@ -302,6 +303,8 @@ export class SQLitePersonIdentityStore implements PersonIdentityStore {
       if (person.revision !== expectedRevision) throw new PersonIdentityError('PERSON_STALE');
       this.database.prepare('DELETE FROM people WHERE scope_key = ? AND person_id = ?').run(scopeKey, personId);
       this.appendEvent(scopeKey, personId, 'person-deleted', null, at);
+      // Syzygy ADR-0008 stage 3 (review H2): a person deleted leaves nothing in the memory outbox.
+      scrubOutboxFor(this.database, scopeKey, { personId }, 'forgotten', at);
       return { deleted: true as const, personId };
     });
   }

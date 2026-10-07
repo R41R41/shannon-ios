@@ -621,7 +621,8 @@ describe('what reaches the prompts of her own activity', () => {
     expect(wiring).toMatch(/\): \{ context: AutonomyOwnerContext; close\(\): void \} \{/u);
     expect(wiring).not.toMatch(/\.apply\(|appendConversationMessages|recordTurn|createThread|\.threadId\(|OPENAI_API_KEY|GEMINI_API_KEY|createConfiguredChatModel|Voyager(?:Catalog|Destination)/u);
     const worker = read('autonomyWorker.ts');
-    expect(worker).toContain('loopConfig.ownerContext\n  ? configuredOwnerContext(databasePath, { now, characters: loopConfig.ownerContextCharacters, timeZone: config.timeZone }) : null');
+    // Stage 3 review M4: with temporal facts on, the facts the rules closed are left out of it, as in a conversation.
+    expect(worker).toContain('loopConfig.ownerContext\n  ? configuredOwnerContext(databasePath, { now, characters: loopConfig.ownerContextCharacters, timeZone: config.timeZone, temporalFacts: mindSwitches(process.env).temporalFacts }) : null');
     expect(worker.match(/ownerContext\.context/gu)).toHaveLength(1);
     // The worker is given no conversation model key and no Voyager credential, and names no private store itself.
     expect(worker).not.toMatch(/Voyager(?:Catalog|Destination)|SQLiteShannonStore|createConfiguredChatModel|peopleMemory|OPENAI_API_KEY|GEMINI_API_KEY/u);

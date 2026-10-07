@@ -91,7 +91,13 @@ const factHandler = (field: 'fact' | 'relationship', list: 'userFacts' | 'relati
     const state = targets.state.snapshot(op.scopeKey);
     return digest([state[list].find(entry => entry.id === item.id), controlOf(state, item.id)]);
   },
-  blocked: (_targets, op, state) => statementControls(state, payloadOf<Record<string, UserFact>>(op)[field]!),
+  blocked: (_targets, op, state) => {
+    const item = payloadOf<Record<string, UserFact>>(op)[field]!;
+    // A staleness guard (stage 3 review M2): a proposal older than the statement already there does not overwrite it.
+    const existing = state[list].find(entry => entry.id === item.id);
+    if (existing && typeof existing.observedAt === 'string' && typeof item.observedAt === 'string' && existing.observedAt > item.observedAt) return 'stale';
+    return statementControls(state, item);
+  },
   apply: (targets, op) => {
     const payload = payloadOf<{ fact?: UserFact; relationship?: RelationshipInsight; source: MemoryLearningSource }>(op);
     if (type === 'user-fact-upserted') targets.state.apply(op.scopeKey, { type, fact: payload.fact!, source: payload.source });
@@ -135,7 +141,8 @@ const personRevision = (targets: MemoryTargets, op: MemoryOp) => {
   // With temporal facts, the person's current facts and their revisions too (a contradiction closes them).
   const facts = op.kind === 'person.fact' && targets.personFacts
     ? personIds.map(id => targets.personFacts!.store.facts(op.scopeKey, id, { limit: PERSON_FACTS_V1.rows }).map(row => [row.id, row.revision])) : null;
-  return digest([call?.status ?? null, call?.personIds ?? null, items, personIds.map(id => people.person(op.scopeKey, id)?.forgottenAt ?? null), facts]);
+  // Whether each person still exists is part of it (review): a person merged away or deleted changes the revision.
+  return digest([call?.status ?? null, call?.personIds ?? null, items, personIds.map(id => { const person = people.person(op.scopeKey, id); return person ? person.forgottenAt ?? 'live' : 'absent'; }), facts]);
 };
 
 /**
@@ -143,16 +150,21 @@ const personRevision = (targets: MemoryTargets, op: MemoryOp) => {
  * the writer's cache while the day has calls left, otherwise by the rule. A duplicate is not inserted and gives its episode to the
  * row it repeats; a contradicted row is closed where the new fact begins.
  */
-async function personFactPlan(targets: MemoryTargets, op: MemoryOp, model: MemoryModelCall): Promise<PersonFactPlan | null> {
+async function personFactPlan(targets: MemoryTargets, op: MemoryOp, model: MemoryModelCall, state: CompanionStateSnapshot): Promise<PersonFactPlan | null> {
   const facts = targets.personFacts;
   if (op.kind !== 'person.fact' || !facts) return null;
   const payload = payloadOf<PersonPayload>(op);
   const at = targets.now();
-  const items = payload.items.filter(item => item.personId);
+  // A person forgotten is not judged (review: privacy): none of their facts, old or new, goes to a model or the rule.
+  const live = (personId: string) => { const person = targets.people?.person(op.scopeKey, personId); return Boolean(person && !person.forgottenAt); };
+  const items = payload.items.filter(item => item.personId && live(item.personId));
   const plan: PersonFactPlan = { inserts: [], updates: [], repeated: [], judgedBy: [] };
   if (!items.length) return plan;
   const personIds = [...new Set(items.map(item => item.personId!))];
-  const rows = personIds.flatMap(id => facts.store.facts(op.scopeKey, id, { limit: PERSON_FACTS_V1.rows })).slice(0, PERSON_FACTS_V1.rows);
+  // Only rows the owner's controls leave usable (review H3): a forgotten or hidden row is never shown to the judge, never a
+  // duplicate target and never closed by a new fact.
+  const rows = personIds.flatMap(id => facts.store.facts(op.scopeKey, id, { limit: PERSON_FACTS_V1.rows }))
+    .filter(row => visibleMemoryText(state, personMemoryId(row.id), row.text) !== null).slice(0, PERSON_FACTS_V1.rows);
   const shown = rows.map((row, index) => ({ key: `f${index + 1}`, id: row.id, text: row.text }));
   let answers: Array<{ key: string; duplicates: string[]; contradicts: string[] }> | null = null;
   if (facts.judge && shown.length && facts.callsToday(at) < PERSON_FACTS_V1.callsPerDay) {
@@ -193,11 +205,19 @@ function writableItems(targets: MemoryTargets, op: MemoryOp, state: CompanionSta
 
 const personHandler: MemoryOpHandler = {
   revision: personRevision,
-  prepare: async (targets, op, model) => ({ write: { facts: await personFactPlan(targets, op, model) } }),
+  prepare: async (targets, op, model, state) => ({ write: { facts: await personFactPlan(targets, op, model, state) } }),
   blocked: (targets, op) => {
     if (!targets.people) return 'no_store';
+    const payload = payloadOf<PersonPayload>(op);
+    const call = targets.people.call(op.scopeKey, payload.callId);
     // 「今回は残さない」 wins over anything proposed of that period.
-    return targets.people.call(op.scopeKey, payloadOf<PersonPayload>(op).callId)?.status === 'discarded' ? 'discarded' : null;
+    if (call?.status === 'discarded') return 'discarded';
+    // A staleness guard (stage 3 review M2): a proposal that carries its call as it was older than the call stored now.
+    if (payload.call && call && call.updatedAt > payload.call.updatedAt) return 'stale';
+    // Every person it names forgotten (or gone): nothing of it is written, and nothing is asked of a model.
+    const named = [...new Set(payload.items.flatMap(item => item.personId ?? []))];
+    if (named.length && !payload.summary && named.every(id => { const person = targets.people!.person(op.scopeKey, id); return !person || Boolean(person.forgottenAt); })) return 'forgotten';
+    return null;
   },
   apply: (targets, op, plan) => {
     const people = targets.people!;
@@ -237,6 +257,14 @@ const linkHandler: MemoryOpHandler = {
     if (payload.action === 'suggest') return digest(targets.people?.listPeople(op.scopeKey).map(person => [person.id, person.displayName, person.aliases, person.forgottenAt ?? null]) ?? null);
     const ids = payload.action === 'merge' ? [payload.personId, payload.intoPersonId] : [payload.personId];
     return digest(ids.map(id => targets.people?.person(op.scopeKey, id) ?? null));
+  },
+  blocked: (targets, op) => {
+    const payload = payloadOf<LinkPayload>(op);
+    // A merge or a rename is the owner's alone (review, low): from any other origin it is refused.
+    if (payload.action !== 'suggest') return op.origin === 'owner' ? null : 'owner_only';
+    // A newly met name of a person since forgotten is not matched, and Jev is not asked (review, low).
+    const person = targets.people?.person(op.scopeKey, payload.personId);
+    return person && person.forgottenAt ? 'forgotten' : null;
   },
   prepare: async (targets, op, model) => {
     const payload = payloadOf<LinkPayload>(op);
@@ -455,12 +483,32 @@ export function memoryOpBlocked(targets: MemoryTargets, op: MemoryOp, state: Com
 }
 
 /**
+ * The same check before the op's compute (stage 3 review: privacy): an op its owner's controls already stop asks no model. Every
+ * kind but the replay summary (whose check reads what it would write) is checked; the check under the lock stays.
+ */
+export function memoryOpBlockedBeforePrepare(targets: MemoryTargets, op: MemoryOp, state: CompanionStateSnapshot): string | null {
+  for (const episode of op.episodeIds) if (visibleMemoryText(state, episode, 'visible') === null) return 'forgotten';
+  if (op.kind === 'replay_summary.update') return null;
+  return HANDLERS[op.kind].blocked?.(targets, op, state, undefined) ?? null;
+}
+
+/** The people an owner's rename or merge is about (it waits for every pending row about them), or none for any other row. */
+export function ownerCommandPeople(row: { kind: string; origin: string; payloadJson: string }): string[] {
+  if (row.kind !== 'person.link' || row.origin !== 'owner') return [];
+  try {
+    const payload = JSON.parse(row.payloadJson) as Partial<{ action: string; personId: string; intoPersonId: string }>;
+    if (payload.action !== 'merge' && payload.action !== 'rename') return [];
+    return [payload.personId, payload.intoPersonId].filter((id): id is string => typeof id === 'string' && id.length > 0);
+  } catch { return []; }
+}
+
+/**
  * The one write of an op: the owner's controls checked again, then the kind's write. Called under the writer's lock (and by the
  * owner's synchronous commands under the same lock). Answers the final status and its code.
  */
 export function applyMemoryOp(targets: MemoryTargets, op: MemoryOp, plan: unknown): { status: 'applied' | 'superseded' | 'rejected'; code: string } {
   const blocked = memoryOpBlocked(targets, op, targets.state.snapshot(op.scopeKey), plan);
-  if (blocked) return { status: blocked === 'no_store' ? 'rejected' : 'superseded', code: blocked };
+  if (blocked) return { status: blocked === 'no_store' || blocked === 'owner_only' ? 'rejected' : 'superseded', code: blocked };
   const outcome = HANDLERS[op.kind].apply(targets, op, plan);
   return typeof outcome === 'string' ? { status: 'applied', code: outcome } : outcome;
 }

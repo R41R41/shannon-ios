@@ -14,7 +14,7 @@ import { createConfiguredImpressionAnalyzer, ImpressionUpdater } from './mind/me
 import { valueNightSchedule, valueSleep } from './mind/sleep/valueSleep.js';
 import { memoryWriterOf } from './wiring/memoryOutboxWiring.js';
 import { replayCompaction } from './wiring/compactionWiring.js';
-import { stage3StoreOptions } from './wiring/peopleFactsWiring.js';
+import { peopleFactReaders, stage3StoreOptions } from './wiring/peopleFactsWiring.js';
 import { createConfiguredPersonFactJudge } from './mind/memory/personFacts.js';
 import { configuredJevIdentityChooser } from './infra/models/jev/jevIdentity.js';
 import { configuredSkillExport, configuredSkillMemory, skillSleepConsolidator } from './wiring/skillMemoryWiring.js';
@@ -29,7 +29,8 @@ const skills = skillMemory ? skillSleepConsolidator(process.env, { memory: skill
 // Step 7: their readable copies in Aether's シャノン用フォルダ, and the owner's edits of them adopted; off without Aether.
 const skillExport = skillMemory ? configuredSkillExport(process.env, { memory: skillMemory.memory, store }) : null;
 const peopleStore = new SQLitePeopleMemoryStore(configuredDatabasePath());
-const platformSummaries = new PlatformConversationSummarizer(peopleStore, new PlatformPeople(peopleStore, store, undefined, memory),
+// F6 (review M4): with temporal facts on, the facts the rules closed are left out of what a summary reads, as in a conversation.
+const platformSummaries = new PlatformConversationSummarizer(peopleStore, new PlatformPeople(peopleStore, store, undefined, memory, peopleFactReaders(store, () => new Date().toISOString())),
   createConfiguredPlatformSummaryWriter(process.env, store), store);
 // Her impressions of people: one bounded call after a turn (the owner) and after the sleep batch (people met on a platform).
 const impressions = new ImpressionUpdater(store, store, store.impressionStore(), createConfiguredImpressionAnalyzer(process.env, store), store,
@@ -86,25 +87,33 @@ let stopping = false;
 process.once('SIGINT', () => { stopping = true; });
 process.once('SIGTERM', () => { stopping = true; });
 
+// The memory writer on its own loop (stage 3 review M6): it applies what was proposed every 1.5 seconds, whatever a long sleep job
+// or refinement of the main loop is doing (a failure is logged by code by `drain` and never stops the worker).
+const MEMORY_WRITER_INTERVAL_MILLISECONDS = 1_500;
+const memoryLoop = memoryWriter && !once ? (async () => {
+  while (!stopping) {
+    await memoryWriter.drain();
+    await delay(MEMORY_WRITER_INTERVAL_MILLISECONDS);
+  }
+})() : null;
+
 console.log(`Shannon background worker started (${worker.workerId})`);
 try {
   do {
     valueNightly(new Date().toISOString());
     const result = await worker.runOnce();
-    // The memory writer applies what was proposed (a failure is logged by code and never stops the worker).
-    const memoryRun = memoryWriter ? await memoryWriter.runOnce().catch(error => {
-      console.error('Shannon memory writer failed', error instanceof Error ? error.name : 'unknown');
-      return 'idle' as const;
-    }) : 'idle';
+    // `--once`: the writer's one run follows the main loop's, as before.
+    if (once && memoryWriter) await memoryWriter.runOnce().catch(error => { console.error('Shannon memory writer failed', error instanceof Error ? error.name : 'unknown'); });
     // Embeddings never block turn refinement or sleep; they run only between idle polls.
-    if (result === 'idle' && memoryRun !== 'worked' && Date.now() >= nextEmbeddingAt) {
+    if (result === 'idle' && Date.now() >= nextEmbeddingAt) {
       const embedding = await embeddingWorker.runOnce();
       nextEmbeddingAt = embedding === 'worked' ? 0 : Date.now() + embeddingIntervalMilliseconds;
     }
     if (once) break;
-    if (result === 'idle' && memoryRun !== 'worked') await delay(1_000);
+    if (result === 'idle') await delay(1_000);
   } while (!stopping);
 } finally {
+  await memoryLoop;
   try { memoryWriter?.releaseLease(); } catch { /* the next writer takes it when it expires */ }
   peopleStore.close();
   skillMemory?.close();

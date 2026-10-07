@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { backfilledFact, type TemporalFact } from '@shannon/mind';
 import { ensureColumns } from '../../../infra/sqlite/schemaColumns.js';
+import { closedPersonItemIds } from './closedFacts.js';
 
 /**
  * People facts with the time they were true (Syzygy ADR-0008 stage 3, step F6, `docs/mind-workspace-contract.md`; after Graphiti).
@@ -113,10 +114,16 @@ export class SQLitePersonFacts {
   /** The items recall leaves out at `at`: expired by then, not yet valid, or no longer valid. */
   closedItemIds(scopeKey: string, at: string): ReadonlySet<string> {
     if (!this.parts.temporal) return new Set();
-    const rows = this.database.prepare(`SELECT item_id FROM person_memory_items WHERE scope_key = ?
-      AND ((expired_at IS NOT NULL AND expired_at <= ?) OR (invalid_at IS NOT NULL AND invalid_at <= ?) OR (valid_at IS NOT NULL AND valid_at > ?))`)
-      .all(scopeKey, at, at, at) as Array<{ item_id: string }>;
-    return new Set(rows.map(row => row.item_id));
+    return closedPersonItemIds(this.database, scopeKey, at);
+  }
+
+  /**
+   * The owner reopens a fact the rules closed (stage 3 review M5): its `invalid_at` and `expired_at` cleared, its revision raised.
+   * False when there is no such fact.
+   */
+  reopenFact(scopeKey: string, itemId: string): boolean {
+    return Number(this.database.prepare(`UPDATE person_memory_items SET invalid_at = NULL, expired_at = NULL, fact_revision = fact_revision + 1
+      WHERE scope_key = ? AND item_id = ? AND kind = 'fact' AND (invalid_at IS NOT NULL OR expired_at IS NOT NULL)`).run(scopeKey, itemId).changes) === 1;
   }
 
   /** The temporal fields of a row just written (its own, never another's). */

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { memoryOpCodec, type MemoryOp, type MemoryOpDraft } from './memoryOpCodec.js';
-import { applyMemoryOp, memoryOpHandler, subjectRevision, type MemoryModelCall, type MemoryTargets } from './memoryOps.js';
+import { applyMemoryOp, memoryOpBlockedBeforePrepare, memoryOpHandler, ownerCommandPeople, subjectRevision, type MemoryModelCall, type MemoryTargets } from './memoryOps.js';
+import { isSqliteBusy } from '../../infra/sqlite/lockWaits.js';
 import { SQLiteMemoryOutbox, type MemoryOutboxRow } from './store/memoryOutboxStore.js';
 import { ModelFailure, errorCode } from './memoryProposer.js';
 export { type MemoryProposals, MemoryProposer } from './memoryProposer.js';
@@ -12,7 +13,10 @@ export const MEMORY_WRITER_V1 = Object.freeze({
   leaseMilliseconds: 60_000,
   /** After a model failure: tried again after attempts × this. */
   retryMilliseconds: 30_000,
-  callRetentionDays: 14,
+  /** The writer's model answers are kept this long (review H2: about 3 days), then deleted whatever their row. */
+  callRetentionDays: 3,
+  /** A final row keeps its payload this long (review H2: a day's grace), then only its closed header. */
+  payloadGraceMilliseconds: 24 * 60 * 60_000,
 });
 
 class LeaseLost extends Error {
@@ -60,9 +64,14 @@ export class MemoryWriter {
     const at = this.now();
     const leased = this.outbox.underLock(at, () => this.outbox.acquireLease(this.owner, at, this.leaseUntil()));
     if (!leased) return 'leased_elsewhere';
-    const rows = this.outbox.pending(MEMORY_WRITER_V1.batch);
+    // A subject waiting for its retry is left out of the batch whole, so it takes no place from the others (review M7).
+    const rows = this.outbox.pending(MEMORY_WRITER_V1.batch, at);
     if (!rows.length) {
-      this.outbox.underLock(at, () => { this.outbox.advanceCursor(at); this.outbox.pruneCalls(new Date(Date.parse(at) - MEMORY_WRITER_V1.callRetentionDays * 86_400_000).toISOString()); });
+      this.outbox.underLock(at, () => {
+        this.outbox.advanceCursor(at);
+        this.outbox.pruneCallsBefore(new Date(Date.parse(at) - MEMORY_WRITER_V1.callRetentionDays * 86_400_000).toISOString());
+        this.outbox.scrubFinal(new Date(Date.parse(at) - MEMORY_WRITER_V1.payloadGraceMilliseconds).toISOString());
+      });
       return 'idle';
     }
     // A subject waiting for a model retry keeps its later ops waiting too: ops on one subject are applied in order.
@@ -73,6 +82,9 @@ export class MemoryWriter {
         const subject = `${row.scopeKey}\u0000${row.subjectKey}`;
         if (waiting.has(subject)) continue;
         if (row.nextAttemptAt && row.nextAttemptAt > this.now()) { waiting.add(subject); continue; }
+        // An owner's rename or merge runs after every row still pending about its people (review: commands never overtake them).
+        const people = ownerCommandPeople(row);
+        if (people.length && this.outbox.pendingAboutPeople(row.scopeKey, people, row.seq)) { waiting.add(subject); continue; }
         if (!this.outbox.underLock(this.now(), () => this.outbox.acquireLease(this.owner, this.now(), this.leaseUntil()))) throw new LeaseLost();
         let finished: boolean;
         try {
@@ -80,6 +92,8 @@ export class MemoryWriter {
         } catch (error) {
           if (error instanceof LeaseLost) throw error;
           if (error instanceof StagedCrash) throw error.error;
+          // A busy database is contention, not the row's fault (review L4): it waits for the next batch, its tries unchanged.
+          if (isSqliteBusy(error)) { waiting.add(subject); continue; }
           // One bad row never stops the others: its transaction was rolled back (`underLock`), it is tried again later, and it is
           // `failed` after five tries; only its own subject waits meanwhile.
           finished = this.rowFailed(row.seq, row.attempts, row.kind, `apply_${errorCode(error)}`.slice(0, 80));
@@ -123,6 +137,13 @@ export class MemoryWriter {
     }
     const op = decoded.value;
     const handler = memoryOpHandler(op.kind);
+    // What the owner's controls stop already (a discarded call, a forgotten person or turn) is stopped before any model is asked
+    // (review: privacy), and checked again under the lock below.
+    const before = memoryOpBlockedBeforePrepare(this.targets, op, this.targets.state.snapshot(op.scopeKey));
+    if (before) {
+      this.final(op.seq, before === 'no_store' ? 'rejected' : 'superseded', before);
+      return true;
+    }
     let expected = op.baseRevision;
     for (let attempt = 0; attempt < MEMORY_WRITER_V1.casTries; attempt += 1) {
       // Outside the lock: the snapshot and the compute.
@@ -142,6 +163,7 @@ export class MemoryWriter {
         }
         plan = prepared.write;
       } catch (error) {
+        if (isSqliteBusy(error)) return false; // Contention while it read: tried again, not a model failure (review L4).
         return this.modelFailed(op, errorCode(error));
       }
       try { this.options.beforeLock?.(op); } catch (error) { throw new StagedCrash(error); }
@@ -210,11 +232,19 @@ export class MemoryWriter {
 export class MemoryCommands {
   constructor(private readonly outbox: SQLiteMemoryOutbox, private readonly targets: MemoryTargets) {}
 
+  /**
+   * `queued`: a rename or merge whose people still have proposals pending is not applied ahead of them (stage 3 review): it is
+   * stored pending and the writer applies it after them, in order, under its rules. Answers `applied: false, code: 'queued'`.
+   */
   run(draft: Omit<MemoryOpDraft, 'origin'>): { applied: boolean; code: string } {
     const at = this.targets.now();
     const encoded = memoryOpCodec.encode({ ...draft, origin: 'owner' });
     if (!encoded.ok) return { applied: false, code: encoded.code };
     return this.outbox.underLock(at, () => {
+      const people = ownerCommandPeople({ kind: encoded.value.kind, origin: 'owner', payloadJson: encoded.value.payloadJson });
+      if (people.length && this.outbox.pendingAboutPeople(draft.scopeKey, people)) {
+        return { applied: false, code: this.outbox.insert(encoded.value, at) === null ? 'duplicate' : 'queued' };
+      }
       const seq = this.outbox.insert(encoded.value, at);
       if (seq === null) return { applied: false, code: 'duplicate' };
       const decoded = memoryOpCodec.decode({ ...encoded.value, seq, attempts: 0 });

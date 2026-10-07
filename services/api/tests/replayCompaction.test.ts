@@ -15,6 +15,7 @@ import { replayCompaction, structuredCompactionOn } from '../src/wiring/compacti
 import { runReachScenario, shiritoriScenario } from '../../../packages/evaluation/src/reach/index.js';
 import { ScriptedShiritoriModel, shiritoriDriver } from './reach/reachConversation.js';
 import { STORE_MEMORY_PARTS } from '../src/infra/sqlite/storeMemoryParts.js';
+import { ensureReplaySummaryTemplateColumns, selectReplaySummary, upsertReplaySummary } from '../src/mind/memory/store/sqliteReplaySummary.js';
 
 /**
  * Syzygy ADR-0008 stage 3, step F7: structured compaction. The replay summary is the template of `packages/mind`, updated section
@@ -196,4 +197,24 @@ describe('compact.shiritori', () => {
     // Every update the summarizer made was within the template's bounds (and none of them took part of the game away).
     for (const input of updates) expect(input.messages.length).toBeGreaterThan(0);
   });
+
+  it('off then on: a summary written while it was off clears the template and range that stood for an older one (review M3)', () => {
+    const database = new DatabaseSync(':memory:');
+    database.exec(`CREATE TABLE conversation_replay_summaries (scope_key TEXT NOT NULL, thread_id TEXT NOT NULL, summary TEXT NOT NULL,
+      covered_through_message_id TEXT NOT NULL, chain_started_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (scope_key, thread_id))`);
+    ensureReplaySummaryTemplateColumns(database);
+    const at = '2026-10-07T01:00:00.000Z';
+    upsertReplaySummary(database, 'owner', 'thread', { summary: '古い要約', coveredThroughMessageId: 'm1', chainStartedAt: at, updatedAt: at }, true);
+    database.prepare(`UPDATE conversation_replay_summaries SET template_json = '{"目的":["古い"]}', covers_from_id = 'm0', covers_to_id = 'm1'`).run();
+    // Switched off: the plain summary is written, and the template of the older one is cleared.
+    upsertReplaySummary(database, 'owner', 'thread', { summary: '新しい要約', coveredThroughMessageId: 'm9', chainStartedAt: at, updatedAt: at }, false);
+    expect(database.prepare('SELECT summary, template_json, covers_from_id, covers_to_id FROM conversation_replay_summaries').get())
+      .toEqual({ summary: '新しい要約', template_json: null, covers_from_id: null, covers_to_id: null });
+    // On again: what is read is the plain summary, with no template of the old one.
+    const read = selectReplaySummary(database, 'owner', 'thread', true);
+    expect(read?.summary).toBe('新しい要約');
+    expect(read).not.toHaveProperty('template');
+    database.close();
+  });
 });
+

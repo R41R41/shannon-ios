@@ -35,6 +35,8 @@ export interface PersonItemView {
   decidedBy: 'rule' | 'owner' | 'default';
   reason: string;
   status: 'active' | 'forgotten';
+  /** F6 (`SHANNON_TEMPORAL_FACTS`): a fact the rules closed (no longer true, or not yet); absent otherwise and while it is off. */
+  closed?: true;
 }
 
 export interface PeopleMemoryOverview {
@@ -63,6 +65,7 @@ interface PeopleRouteDependencies {
 export function peopleMemoryOverview(people: PeopleMemory, stateStore: CompanionStateStore, scopeKey: string, impressions?: ImpressionSource): PeopleMemoryOverview {
   const snapshot = stateStore.snapshot(scopeKey);
   const persons = people.listPeople(scopeKey);
+  const closed = people.closedItemIds(scopeKey);
   const nameOf = (id: string) => persons.find(person => person.id === id)?.displayName;
   const calls = new Map<string, PersonCall | null>();
   const callOf = (id: string) => { if (!calls.has(id)) calls.set(id, people.call(scopeKey, id)); return calls.get(id) ?? null; };
@@ -78,6 +81,7 @@ export function peopleMemoryOverview(people: PeopleMemory, stateStore: Companion
       decidedBy: decidedBy ?? 'default',
       reason: decidedBy === 'owner' ? 'ライ氏が選んだ扱い' : category ? `${SENSITIVITY_CATEGORY_LABELS[category]}（${reason ?? ''}）` : reason ?? '',
       status: (memoryControlFor(snapshot, personMemoryId(item.id))?.status ?? 'active') === 'active' ? 'active' : 'forgotten',
+      ...(closed?.has(item.id) ? { closed: true as const } : {}),
     };
   };
   const items = people.allItems(scopeKey);
@@ -140,6 +144,8 @@ export function dispatchPeopleMemoryRequest(request: ApiRequest, dependencies: P
         done = mutatePersonImpression(stateStore, dependencies.impressions, scopeKey, itemId, 'forget', at) ?? people.forgetItem(scopeKey, itemId, at); break;
       case 'restore-item': if (!id(itemId)) return badRequest('itemId is required');
         done = mutatePersonImpression(stateStore, dependencies.impressions, scopeKey, itemId, 'restore', at) ?? people.restoreItem(scopeKey, itemId, at); break;
+      // F6 (review M5): a fact the rules closed is reopened by the owner, at once.
+      case 'reopen-fact': if (!id(itemId)) return badRequest('itemId is required'); done = people.reopenFact(scopeKey, itemId); break;
       case 'mark-sensitive': case 'mark-ordinary':
         if (!id(itemId)) return badRequest('itemId is required');
         done = mutatePersonImpression(stateStore, dependencies.impressions, scopeKey, itemId, action, at)

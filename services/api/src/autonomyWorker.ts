@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { mindSwitches } from '@shannon/mind';
 import { aetherStudyScope, configuredAetherAccess } from './integrations/aether/aetherAccess.js';
 import { SQLiteAutonomyAnnouncer } from './mind/action/ownTime/autonomyAnnouncer.js';
 import { configuredAwakeClock } from './mind/emotion/store/autonomyAwakeClock.js';
@@ -129,7 +130,7 @@ const notion = notionLoopReader(configuredNotionSource(process.env, { log: line 
 // What she may see of the owner's in her own time (owner decision 2026-10-02, ADR-0003): one bounded block, read through the
 // conversation's memory entry points. SHANNON_AUTONOMY_OWNER_CONTEXT=off opens none of it and every prompt is what it was.
 const ownerContext = loopConfig.ownerContext
-  ? configuredOwnerContext(databasePath, { now, characters: loopConfig.ownerContextCharacters, timeZone: config.timeZone }) : null;
+  ? configuredOwnerContext(databasePath, { now, characters: loopConfig.ownerContextCharacters, timeZone: config.timeZone, temporalFacts: mindSwitches(process.env).temporalFacts }) : null;
 // A step of her own is time she is awake: her emotional clock runs through it, and through nothing else of the loop.
 // What that write stores may add a point to her mood history (SHANNON_MOOD_HISTORY); the loop is handed nothing of it.
 // Syzygy ADR-0006 stage 1 (影): what followed a message of hers, and each advance of the awake clock, is handed to the prediction

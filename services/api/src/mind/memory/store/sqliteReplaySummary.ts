@@ -75,6 +75,14 @@ export function upsertReplaySummary(database: DatabaseSync, scopeKey: string, th
       summary = excluded.summary, covered_through_message_id = excluded.covered_through_message_id,
       chain_started_at = excluded.chain_started_at, updated_at = excluded.updated_at
   `).run(scopeKey, threadId, record.summary, record.coveredThroughMessageId, record.chainStartedAt, record.updatedAt);
+  // A summary written without a template, where the columns exist (structured compaction was on before): the old template and its
+  // range no longer stand for this summary, and are cleared, so switching on again never reads a template of an older summary
+  // (stage 3 review M3).
+  const columns = (database.prepare(`PRAGMA table_info(conversation_replay_summaries)`).all() as Array<{ name: string }>).map(column => column.name);
+  if (columns.includes('template_json')) {
+    database.prepare(`UPDATE conversation_replay_summaries SET template_json = NULL, covers_from_id = NULL, covers_to_id = NULL
+      WHERE scope_key = ? AND thread_id = ?`).run(scopeKey, threadId);
+  }
 }
 
 export function selectThreadOfTurn(database: DatabaseSync, scopeKey: string, experienceId: string): string | undefined {

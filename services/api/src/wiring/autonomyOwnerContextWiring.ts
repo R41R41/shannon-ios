@@ -16,7 +16,7 @@ import { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
  */
 export function configuredOwnerContext(
   databasePath: string,
-  options: { now: () => string; characters: number; timeZone: string },
+  options: { now: () => string; characters: number; timeZone: string; temporalFacts?: boolean },
 ): { context: AutonomyOwnerContext; close(): void } {
   const exists = sqliteOwnerSnapshot(databasePath);
   // Read-only here: this store leaves the mood history alone (no table created, nothing pruned, nothing recorded).
@@ -26,7 +26,13 @@ export function configuredOwnerContext(
   const context = createOwnerContext({
     // The state store writes a first state for a scope it has never seen; the loop never causes that write.
     snapshot: (scopeKey, at) => (exists.read(scopeKey, at) ? store.snapshot(scopeKey) : null),
-    conversations: store, profile: store, people: new PeopleMemory(peopleStore, store), dailyMind,
+    // F6 (review M4): with temporal facts on, the facts the rules closed are left out here as in a conversation. Read-only: nothing
+    // is proposed from this process.
+    conversations: store, profile: store, dailyMind,
+    people: new PeopleMemory(peopleStore, store, options.temporalFacts ? {
+      proposals: { propose: () => { throw new Error('OWNER_CONTEXT_READ_ONLY'); } }, commands: null,
+      facts: { closedIds: scopeKey => peopleStore.closedItemIds(scopeKey, options.now()), candidates: () => [] },
+    } : null),
   }, { characters: options.characters, timeZone: options.timeZone });
   return {
     context,

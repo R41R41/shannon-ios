@@ -27,6 +27,7 @@ export function peopleFactReaders(store: SQLiteShannonStore, now: () => string):
   closedIds(scopeKey: string): ReadonlySet<string>;
   candidates(scopeKey: string): readonly { personId: string; candidatePersonId: string; tier: 3 | 4 }[];
   speaker(scopeKey: string, turnId: string, personId: string, at: string): void;
+  reopen(scopeKey: string, itemId: string): boolean;
   identity: boolean;
 } | null {
   const facts = store.personFacts();
@@ -35,6 +36,7 @@ export function peopleFactReaders(store: SQLiteShannonStore, now: () => string):
     closedIds: scopeKey => facts.closedItemIds(scopeKey, now()),
     candidates: scopeKey => facts.candidates(scopeKey),
     speaker: (scopeKey, turnId, personId, at) => facts.recordSpeaker(scopeKey, { turnId, speakerKind: 'person', personId, tier: 1, verified: true, recordedAt: at }),
+    reopen: (scopeKey, itemId) => facts.parts.temporal && facts.reopenFact(scopeKey, itemId),
     identity: facts.parts.identity,
   };
 }

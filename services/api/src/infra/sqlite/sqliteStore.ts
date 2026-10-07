@@ -55,6 +55,7 @@ import { SQLitePeopleMemoryStore } from '../../mind/memory/store/peopleMemorySto
 import type { SQLitePersonFacts } from '../../mind/memory/store/personFactsStore.js';
 import type { SQLiteTrustLedger } from '../../mind/memory/store/trustLedgerStore.js';
 import type { StoreMemoryParts } from './storeMemoryParts.js';
+import { scrubOutboxFor } from '../../mind/memory/store/outboxScrub.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../../../data/shannon.sqlite', import.meta.url)));
 
@@ -223,7 +224,16 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   }
 
   snapshot(scopeKey: string) { return this.companion.snapshot(scopeKey); }
-  apply(scopeKey: string, event: CompanionStateEvent) { return this.companion.apply(scopeKey, event); }
+  apply(scopeKey: string, event: CompanionStateEvent) {
+    const result = this.companion.apply(scopeKey, event);
+    // Syzygy ADR-0008 stage 3 (review H2): what the owner forgot leaves nothing in the memory outbox (only while it is on).
+    if (this.outbox) {
+      const forgotten = (event.type === 'memory-transaction' ? event.events : [event]).flatMap(item =>
+        item.type === 'memory-control-upserted' && item.control.status !== 'active' ? [item.control.memoryId] : []);
+      if (forgotten.length) scrubOutboxFor(this.context.database, scopeKey, { memoryIds: forgotten }, 'forgotten', this.context.now());
+    }
+    return result;
+  }
   synchronizeFact(scopeKey: string, fact: CompanionStateSnapshot['userFacts'][number], source: KnowledgeSource) { return this.companion.synchronizeFact(scopeKey, fact, source); }
   correctKnowledge(scopeKey: string, answerId: string, answer: string, observedAt: string) { return this.companion.correctKnowledge(scopeKey, answerId, answer, observedAt); }
   knowledgeAnswers(scopeKey: string): readonly KnowledgeAnswer[] { return this.companion.knowledgeAnswers(scopeKey); }

@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { normalizeDisclosure, type MemoryDisclosure } from '@shannon/cognition';
+import { scrubOutboxFor } from './outboxScrub.js';
+import { closedPersonItemIds } from './closedFacts.js';
 import type { RememberedPerson, PersonCallStatus, PersonCall, PersonMemoryKind, PersonMemoryItem, PeopleMemoryStore, PlatformPersonLink, PlatformTurnReceipt } from '../peopleMemoryContract.js';
 export { type RememberedPerson, type PersonCallStatus, type PersonCall, type PersonMemoryKind, type PersonMemoryItem, type PeopleMemoryStore, type PlatformPersonLink, type PlatformTurnReceipt } from '../peopleMemoryContract.js';
 
@@ -141,6 +143,9 @@ export class SQLitePeopleMemoryStore implements PeopleMemoryStore {
     return this.person(scopeKey, id)!;
   }
 
+  /** The items recall leaves out now (F6's closed facts), read without people facts; empty while temporal facts never ran. */
+  closedItemIds(scopeKey: string, at: string): ReadonlySet<string> { return closedPersonItemIds(this.database, scopeKey, at); }
+
   updatePerson(scopeKey: string, personId: string, input: { displayName?: string; aliases?: readonly string[]; forgottenAt?: string | null }, at: string): RememberedPerson | null {
     const current = this.person(scopeKey, personId);
     if (!current) return null;
@@ -150,6 +155,8 @@ export class SQLitePeopleMemoryStore implements PeopleMemoryStore {
     `).run((input.displayName ?? current.displayName).slice(0, 80),
       JSON.stringify(uniqueNames(input.aliases ?? current.aliases).filter(alias => alias !== (input.displayName ?? current.displayName))),
       input.forgottenAt === undefined ? current.forgottenAt ?? null : input.forgottenAt, at, scopeKey, personId);
+    // Syzygy ADR-0008 stage 3 (review H2): a person forgotten leaves nothing in the memory outbox.
+    if (input.forgottenAt) scrubOutboxFor(this.database, scopeKey, { personId }, 'forgotten', at);
     return this.person(scopeKey, personId);
   }
 
@@ -335,6 +342,8 @@ export class SQLitePeopleMemoryStore implements PeopleMemoryStore {
         ON CONFLICT(scope_key, call_id) DO UPDATE SET thread_id = NULL, status = 'discarded', person_ids_json = '[]',
           created_person_ids_json = '[]', pending_name = NULL, updated_at = excluded.updated_at
       `).run(scopeKey, callId, call?.startedAt ?? at, at);
+      // Syzygy ADR-0008 stage 3 (review H2): nothing of a discarded call stays in the memory outbox either.
+      scrubOutboxFor(this.database, scopeKey, { callId }, 'discarded', at);
       return call !== null && call.status !== 'discarded';
     });
   }
