@@ -115,12 +115,13 @@ describe('her read tools in the registry and the runner', () => {
 });
 
 describe('the audience matrix of her reads: as today, with the read tools on', () => {
-  it('folds the projections of a text turn of the owner alone into tools, and loses nothing he could read', async () => {
+  it('keeps every projection of a text turn of the owner alone as it was, and offers the tools beside them', async () => {
     const off = await text(kernel(false), ASK_ALL);
     expect(projected(off)).toEqual({ notion: true, tasks: true, schedule: true });
     expect(readToolsOf(off)).toEqual([]);
     const on = await text(kernel(true), ASK_ALL);
-    expect(projected(on)).toEqual({ notion: false, tasks: false, schedule: false });
+    // No turn is slower or poorer than today: the same projections, the same turn context, and the tools in addition.
+    expect(on.turnContext).toBe(off.turnContext);
     expect(readToolsOf(on)).toEqual([...READ_TOOL_DOMAINS].sort());
     // Her description says so in that turn only.
     expect(on.systemPrompt).toContain('読む道具:');
@@ -154,29 +155,21 @@ describe('the audience matrix of her reads: as today, with the read tools on', (
     expect(readToolsOf(onTools)).toEqual([...READ_TOOL_DOMAINS].sort());
   });
 
-  it('reads the old way what the session does not serve in the end: others known to the server, or Jev chose the web', async () => {
-    // The server heard a guest a moment ago: the client says "owner", her tools are withheld, and the projections are read.
+  it('reads as today when the session does not serve the tools: others known to the server, or Jev chose the web', async () => {
     const k = kernel(true);
     await voice(k, 'こんにちは', { participantMode: 'guest' });
     const withheld = await text(k, ASK_ALL);
     expect(readToolsOf(withheld)).toEqual([]);
     expect(projected(withheld)).toEqual({ notion: true, tasks: true, schedule: true });
-    // Jev chose the web entry: a web search, no function tools, and the projections read as before.
     const web: TurnChooser = { choose: async request => ({ menu: { chosen: request.menu.some(item => item.name === WEB_CAPABILITY_ENTRY.name) ? [WEB_CAPABILITY_ENTRY.name] : [] } }) };
     const searched = await text(kernel(true, { turnChooser: web }), ASK_ALL);
     expect(searched.useWebSearch).toBe(true);
     expect(projected(searched)).toEqual({ notion: true, tasks: true, schedule: true });
   });
 
-  it('keeps the plan to the projections\' own audience rules', () => {
-    // The owner alone in the app: everything the projections read becomes a tool; what she did on her own is still told.
+  it('keeps the offer to the projections\' own audience rules', () => {
     expect(readToolPlan(undefined).offer).toEqual({ notion_read: true, voyager_read: true, schedule_read: true, places_search: true });
-    expect(readToolPlan(undefined).remaining).toMatchObject({ notion: false, voyagerTasks: false, upcoming: false, ownOutreach: true, aetherNotes: true });
     // A guarded schedule (others present) is never a tool; nor is a read the selection switched off.
-    const guarded = readToolPlan({ aetherNotes: false, voyagerTasks: false, notion: false, upcoming: 'guarded' });
-    expect(guarded.offer).toMatchObject({ notion_read: false, voyager_read: false, schedule_read: false });
-    expect(guarded.remaining).toMatchObject({ upcoming: 'guarded', ownOutreach: 'guarded' });
-    expect(readToolPlan(undefined).dropped(new Set(READ_TOOL_DOMAINS))).toBeNull();
-    expect(readToolPlan(undefined).dropped(new Set(['notion_read']))).toEqual({ aetherNotes: false, notion: false, voyagerTasks: true, upcoming: true, ownOutreach: false });
+    expect(readToolPlan({ aetherNotes: false, voyagerTasks: false, notion: false, upcoming: 'guarded' }).offer).toMatchObject({ notion_read: false, voyager_read: false, schedule_read: false });
   });
 });

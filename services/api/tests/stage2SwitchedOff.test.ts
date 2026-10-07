@@ -157,7 +157,7 @@ describe('stage 2 switched off with the stage-2 wiring in place', () => {
     const recorded = recordedSwitchedOff();
     expect(current['text-tools']!.openai).not.toEqual(recorded['text-tools']!.openai);
     expect(current['text-tools']!.jev.length).toBe(1);
-    // Her read tools fold the schedule's projection of a text turn of the owner alone.
+    // Her read tools are offered beside the schedule's projection of a text turn of the owner alone.
     expect(current['text-schedule']!.openai).not.toEqual(recorded['text-schedule']!.openai);
     // With the difficulty on, the one call holds the menu and the difficulty questions, traced as `difficulty`.
     expect(traces.some(trace => trace.decision === 'difficulty' && trace.surface === 'text' && trace.answers.tool !== undefined)).toBe(true);

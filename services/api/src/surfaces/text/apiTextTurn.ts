@@ -13,7 +13,7 @@ import { extractExplicitUserIntent, type CognitiveIntentStore } from '../../mind
 import { presentCompanionState, resolveReplyEmotion } from '../../mind/emotion/companionPresence.js';
 import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse } from '../../contracts/contracts.js';
 import {
-  NO_CAPABILITY_CONTEXT, conversationCapabilityContext, readToolPlan, type ConversationCapabilityContext, type ConversationCapabilitySelection, type NotionTurnReader, type ReadToolPlan,
+  NO_CAPABILITY_CONTEXT, conversationCapabilityContext, readToolPlan, type ConversationCapabilityContext, type NotionTurnReader,
 } from '../../mind/action/respond/conversationCapabilities.js';
 import { WEB_CAPABILITY_ENTRY } from '../../mind/tools/shannonTools.js';
 import { withToolMenu } from '../../mind/tools/shannonToolMenu.js';
@@ -203,9 +203,7 @@ export function beginTextTurn(dependencies: TextTurnDependencies, input: TextTur
 export type BegunTextTurn = ReturnType<typeof beginTextTurn>;
 
 /** Her identity, then what she may read this turn: a promise only when a read is asynchronous (`conversationCapabilityContext`). */
-export function textTurnIdentityAndCapability(dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn,
-  /** Syzygy ADR-0008 stage 2: the selection without what her read tools fold (`readToolPlan`); absent, the audience's. */
-  folded?: ConversationCapabilitySelection) {
+export function textTurnIdentityAndCapability(dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn) {
   const { audience, message, surface } = input;
   const body = input.body;
   const { captured, explicitCommand } = begun;
@@ -214,7 +212,7 @@ export function textTurnIdentityAndCapability(dependencies: TextTurnDependencies
   const basePrompt: LayeredIdentityPrompt = { ...identity, identity: dependencies.autonomy.identityProjection(body.scopeKey, identity.identity) };
   const capabilityContext = explicitCommand ? NO_CAPABILITY_CONTEXT : conversationCapabilityContext(body.scopeKey, message,
     { aetherContext: dependencies.aetherContext, voyagerCatalog: dependencies.voyagerCatalog, notion: dependencies.notion, upcoming: dependencies.upcoming,
-      ownOutreach: dependencies.ownOutreach }, folded ?? (surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities));
+      ownOutreach: dependencies.ownOutreach }, surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities);
   return { basePrompt, capabilityContext };
 }
 
@@ -299,32 +297,22 @@ export function storedBySurface(dependencies: TextTurnDependencies, surface: Tex
 }
 
 /**
- * Syzygy ADR-0008 stage 2: the turn's tools once the menu has answered (only awaited when there is a menu or a read-tool plan).
- * The session is narrowed to what Jev chose; Jev's web entry sets the turn's web search; and what her read tools were to read
- * but the session does not serve in the end (no tools after all, others present by the server's knowledge, a web search) is read
- * as the projection it was, and the prompt is built again with it, so nothing the turn could read before is lost.
+ * Syzygy ADR-0008 stage 2: the turn's tools once its Jev call has answered (awaited only when there is one). The session is
+ * narrowed to what Jev chose, and Jev's web entry sets the turn's web search (then no function tools, as before). The turn's
+ * projections are what they always were.
  */
 export async function settleTextTools<T extends { tools?: ShannonModelToolSession; toolsWithheld?: true }>(
-  dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn,
-  turn: { offered: T; choices: Promise<TurnChoiceAnswer> | null; plan: ReadToolPlan | null; capability: ConversationCapabilityContext;
-    prompt: () => TextTurnPrompt; rebuild: (capability: ConversationCapabilityContext) => TextTurnPrompt },
-): Promise<{ offer: T; web: boolean; capability: ConversationCapabilityContext; layered: TextTurnPrompt; answer: TurnChoiceAnswer | null }> {
-  const answer = turn.choices ? await turn.choices : null;
-  const menu = answer?.menu ?? null;
-  const offer = menu && turn.offered.tools ? { ...turn.offered, tools: withToolMenu(turn.offered.tools, menu.chosen) } : turn.offered;
-  const web = menu?.chosen.includes(WEB_CAPABILITY_ENTRY.name) === true;
-  const served = new Set(web ? [] : (turn.offered.tools?.definitions ?? []).map(tool => tool.domain as string));
-  const missing = turn.plan?.dropped(served) ?? null;
-  if (!missing) return { offer, web, capability: turn.capability, layered: turn.prompt(), answer };
-  const late = await conversationCapabilityContext(input.body.scopeKey, input.message, { aetherContext: dependencies.aetherContext, voyagerCatalog: dependencies.voyagerCatalog,
-    notion: dependencies.notion, upcoming: dependencies.upcoming, ownOutreach: dependencies.ownOutreach }, missing);
-  const capability = { prompt: [turn.capability.prompt, late.prompt].filter(Boolean).join('\n\n'), sources: [...turn.capability.sources, ...late.sources] };
-  return { offer, web, capability, layered: turn.rebuild(capability), answer };
+  offered: T, choices: Promise<TurnChoiceAnswer>,
+): Promise<{ offer: T; web: boolean; answer: TurnChoiceAnswer }> {
+  const answer = await choices;
+  const menu = answer.menu;
+  const offer = menu && offered.tools ? { ...offered, tools: withToolMenu(offered.tools, menu.chosen) } : offered;
+  return { offer, web: menu?.chosen.includes(WEB_CAPABILITY_ENTRY.name) === true, answer };
 }
 
 /**
- * Who her tools are offered to in a text turn, and Syzygy ADR-0008 stage 2's start: with her read tools (`readTools`), the plan
- * that folds the projections they serve, for the owner alone in the app; with a chooser, the turn's Jev call (the menu, and the
+ * Who her tools are offered to in a text turn, and Syzygy ADR-0008 stage 2's start: with her read tools (`readTools`), the ones
+ * the projections' rules allow, beside the projections, for the owner alone in the app; with a chooser, the turn's Jev call (the menu, and the
  * web entry beside her read tools), started before recall so that it runs in parallel with it. Neither without the wiring.
  */
 export function textToolStart(input: TextTurnInput, begun: BegunTextTurn, parts: {
@@ -343,5 +331,5 @@ export function textToolStart(input: TextTurnInput, begun: BegunTextTurn, parts:
   };
   const choices = startTurnToolMenu(modelTurn ? parts.turnChooser : null, parts.autonomy, body.scopeKey, 'text', toolAudience, parts.toolServer, `${threadId}\n${message}`,
     toolOptions, plan ? [WEB_CAPABILITY_ENTRY] : []);
-  return { toolAudience, toolOptions, plan, choices };
+  return { toolAudience, toolOptions, choices };
 }

@@ -385,16 +385,15 @@ export class ShannonApiKernel {
     const { occurredAt, captured, provisionalIntent, peopleRecall } = begun;
     // Who her tools are offered to, and (Syzygy ADR-0008 stage 2, none without its wiring) her read tools' plan and the turn's
     // Jev call, started here so that it runs in parallel with recall (`textToolStart`).
-    const { toolAudience, toolOptions, plan, choices } = textToolStart(input, begun, { autonomy: this.autonomy, toolServer: this.toolServer, turnChooser: this.turnChooser, readTools: this.readTools });
+    const { toolAudience, toolOptions, choices } = textToolStart(input, begun, { autonomy: this.autonomy, toolServer: this.toolServer, turnChooser: this.turnChooser, readTools: this.readTools });
     const cognitiveContext = this.memoryRecall && !begun.explicitCommand && !begun.organizeTurn
       ? await this.memoryRecall.enrich(begun.deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }) : begun.deterministicContext;
-    const { basePrompt, capabilityContext } = textTurnIdentityAndCapability(deps, input, begun, plan?.remaining);
-    let capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
+    const { basePrompt, capabilityContext } = textTurnIdentityAndCapability(deps, input, begun);
+    const capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
     // A surface has no look at the room or through the app.
     const roomLook = surface ? NO_LOOK : this.body.turnLooks.turn(body.scopeKey, message, occurredAt, audience.audience, request);
-    const prompt = (with_: typeof capability) => textTurnSystemPrompt(deps, input, begun, { basePrompt, cognitiveContext, capability: with_, roomLook });
-    let layered = prompt(capability);
-    let systemPrompt = layered.prompt;
+    const layered = textTurnSystemPrompt(deps, input, begun, { basePrompt, cognitiveContext, capability, roomLook });
+    const systemPrompt = layered.prompt;
     if (begun.explicitCommand || begun.organizeTurn) return answerTextCommand(deps, input, begun, cognitiveContext, systemPrompt);
     let { orchestrationState } = begun;
     // A summary has no label of its own: none where only open items may be given (a turn someone other than the owner wrote).
@@ -402,10 +401,9 @@ export class ShannonApiKernel {
     const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
     // Her Minecraft body's and Aether's capability lines, in her identity, exactly when this turn's tools include them (`withToolCapabilityLines`).
     let toolOffer = conversationTools(this.autonomy, body.scopeKey, 'text', toolAudience, this.toolServer, `${threadId}\n${message}`, deadline, undefined, toolOptions);
-    // Stage 2: the menu narrows the schemas sent; awaited only with a menu or a plan, so without them nothing changes (not even a tick).
-    const settled = choices || plan ? await settleTextTools(deps, input, begun, { offered: toolOffer, choices, plan, capability, prompt: () => layered, rebuild: prompt }) : null;
-    if (settled) ({ offer: toolOffer, capability, layered } = settled);
-    systemPrompt = layered.prompt;
+    // Stage 2: the menu narrows the schemas sent; awaited only with a Jev call, so without one nothing changes (not even a tick).
+    const settled = choices ? await settleTextTools(toolOffer, choices) : null;
+    if (settled) toolOffer = settled.offer;
     // Stage 2, step 4: the tier from Jev's difficulty answers (none without the routing), and her last turn settled by this one.
     const tier = routeTurn(this.turnRouting, { scopeKey: body.scopeKey, surface: 'text', threadId, answer: settled?.answer ?? null, at: occurredAt });
     const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withToolCapabilityLines({
