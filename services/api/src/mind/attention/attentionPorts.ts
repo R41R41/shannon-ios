@@ -4,7 +4,11 @@
  * (`voiceSilence` stays the only silencer); the proactive gate holds her own messages at the delivery points. Core: response
  * path (the gate: guard).
  *
- * Stage 3, step 0: the part exists so that the core map covers every file of it from the start; whether it runs is
- * `mindSwitches(...).attention` and `.proactiveGate`.
+ * Step F1: salience, the proactive gate and MinHash of the pure package; the gate reaches the delivery points with step F4.
+ * Whether the part runs is `mindSwitches(...).attention` and `.proactiveGate`.
  */
-export { mindSwitches, type MindSwitches } from '@shannon/mind';
+export {
+  PROACTIVE_GATE_V1, PROACTIVE_HOLD_CODES, SALIENCE_V1, admit, decodeSignature, encodeSignature, minHashSignature, mindSwitches, novelty, orderedItems,
+  ownerActiveHoldMilliseconds, persistenceOf, proactiveVerdict, salience,
+  type AttentionItem, type MindSwitches, type ProactiveHistory, type ProactiveHoldCode, type ProactiveIntent, type ProactiveVerdict, type SalienceInputs,
+} from '@shannon/mind';

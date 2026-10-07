@@ -186,6 +186,14 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // What happened to her Minecraft body as an experience, and the replay of her game-chat answers.
     'services/api/src/surfaces/minecraft/store/gameBodyMemory.ts',
     'services/api/src/surfaces/minecraft/store/minecraftTurnStore.ts',
+    // Syzygy ADR-0008 stage 3 (`docs/mind-workspace-contract.md`): the pure rules of what she keeps and forgets about people and
+    // talks, listed by name so they are memory's although `packages/mind/` is the response path's: two-clock decay, the identity
+    // tiers, the temporal rules of facts, the trust fold and the compaction template.
+    'packages/mind/src/evidenceDecay.ts',
+    'packages/mind/src/identityTiers.ts',
+    'packages/mind/src/temporalFacts.ts',
+    'packages/mind/src/trustFold.ts',
+    'packages/mind/src/compaction.ts',
   ]),
   approval_and_budget: Object.freeze([
     'services/api/src/mind/inhibition/autonomyCore.ts',

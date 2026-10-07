@@ -3,7 +3,10 @@
  * what another part of the mind, an integration or a surface may import of it. Perception turns what a surface received into one
  * `mind.event.v1` and copies the surface's audience decision, never recomputing it. Core: response path.
  *
- * Stage 3, step 0: the part exists so that the core map covers every file of it from the start; whether it runs is
- * `mindSwitches(...).mindEvents`.
+ * Step F1: the envelope of the pure package (`packages/mind/src/envelope.ts`); the normalizers per surface arrive with step F2.
+ * Whether the part runs is `mindSwitches(...).mindEvents`.
  */
-export { mindSwitches, type MindSwitches } from '@shannon/mind';
+export {
+  MIND_EVENT_KINDS, MIND_EVENT_SCHEMA, MIND_SURFACES, checkedMindEvent, mindEvent, mindSwitches, withoutText,
+  type MindEvent, type MindEventDraft, type MindEventKind, type MindSurface, type MindSwitches,
+} from '@shannon/mind';
