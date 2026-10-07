@@ -22,7 +22,7 @@ import { SQLitePushNotificationStore } from '../src/surfaces/outreach/pushNotifi
 import { REACH_OUT_OTHERS_AUDIENCE, SQLiteReachOutSpeaker, reachOutOfSource } from '../src/surfaces/outreach/reachOutDelivery.js';
 import { SQLiteReachOutReports, reachOutBodyFacts } from '../src/surfaces/outreach/store/reachOutReports.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { speakTimePrivacyCheck } from '../src/surfaces/voice/voiceCompanionPresence.js';
+import { speakTimePrivacyCheck } from '../src/mind/perception/voiceCompanionPresence.js';
 import { FakeModel, FakeReader, FakeShowing, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'shannon-agentic-'));

@@ -1,7 +1,7 @@
 import type {
   VoiceDecisionInput, VoiceSilenceCategory, VoiceTurnDecision, VoiceTurnFacts,
 } from '../../contracts/voiceDecisionContract.js';
-import { ADDRESS_EVIDENCE, guestAddressDecision, type GuestAddressReason } from './voiceGuestCall.js';
+import { ADDRESS_EVIDENCE, guestAddressDecision, type GuestAddressReason } from '../../surfaces/voice/voiceGuestCall.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**

@@ -19,7 +19,7 @@ import { LocalStubChatModel } from '../src/infra/models/chatModel.js';
 import { GAME_DISCLOSURE, GAME_REQUEST_DISCLOSURE } from '../src/surfaces/minecraft/store/gameBodyMemory.js';
 import { MINECRAFT_BODY_LIMITS } from '../src/contracts/minecraftBodyContract.js';
 import { requestExperience } from '../src/surfaces/minecraft/minecraftBodyRequests.js';
-import { MINECRAFT_TURN_ALLOWANCE, MinecraftTurnAllowance } from '../src/surfaces/minecraft/minecraftTurnAllowance.js';
+import { MINECRAFT_TURN_ALLOWANCE, MinecraftTurnAllowance } from '../src/mind/inhibition/minecraftTurnAllowance.js';
 import { SQLiteSurfaceTurnLog } from '../src/surfaces/minecraft/store/minecraftTurnStore.js';
 import { PLATFORM_REPLY_LIMITS } from '../src/surfaces/platform/platformReply.js';
 import { createMinecraftBodyWiring, gameBodyMayCall } from '../src/wiring/serverMinecraftBodyWiring.js';

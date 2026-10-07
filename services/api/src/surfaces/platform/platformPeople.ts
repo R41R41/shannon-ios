@@ -20,7 +20,7 @@ export { platformSummaryId };
 import type { PeopleMemoryStore, PersonMemoryItem, RememberedPerson } from '../../mind/memory/memoryPorts.js';
 import { extractPromiseCaptures } from '../../mind/memory/prospectiveMemory.js';
 import { extractExplicitMemoryProposals } from '../../mind/sleep/sleepConsolidation.js';
-import { cleanPersonName } from '../voice/voiceGuestNames.js';
+import { cleanPersonName } from '../../mind/perception/voiceGuestNames.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 export type PlatformConversationKind = 'dm' | 'group' | 'channel';

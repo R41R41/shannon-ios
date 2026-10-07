@@ -10,7 +10,7 @@ import {
   PlatformBridgeError,
   type PlatformAudiencePolicy, type PlatformBridgeService, type PlatformTurnRequest, type ShannonPlatform,
 } from './platformBridge.js';
-import { speakTimePrivacyCheck } from '../voice/voiceCompanionPresence.js';
+import { speakTimePrivacyCheck } from '../../mind/perception/voiceCompanionPresence.js';
 import { sharedAudienceHeader } from './platformBridgeBindings.js';
 
 /** The speak-time check of a turn someone other than the owner wrote: nobody there may release a protected line of his. */

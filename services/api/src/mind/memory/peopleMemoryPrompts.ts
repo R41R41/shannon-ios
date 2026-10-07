@@ -1,5 +1,5 @@
 import type { PersonMemoryItem, RememberedPerson } from './store/peopleMemoryStore.js';
-import { personNameKey } from '../../surfaces/voice/voiceGuestNames.js';
+import { personNameKey } from '../perception/guestNamesPorts.js';
 
 /** A person memory that may be used at all, with its audience already put into words. */
 export interface VisiblePersonItem extends PersonMemoryItem {

@@ -12,7 +12,7 @@ import { InMemoryConversationStore } from '../src/mind/memory/store/conversation
 import { visibleConversationHistory } from '../src/mind/memory/memoryVisibility.js';
 import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemoryStore.js';
 import { SQLitePersonIdentityStore } from '../src/mind/memory/store/personIdentity.js';
-import { establishedGuestName, personNameKey } from '../src/surfaces/voice/voiceGuestNames.js';
+import { establishedGuestName, personNameKey } from '../src/mind/perception/voiceGuestNames.js';
 import { promptOf } from './modelPrompt.js';
 
 const delegations = '/v1/voice/gemini/cascade/delegations';

@@ -1,5 +1,5 @@
 import { JevVoiceDecisionGateway } from '../src/mind/selectors/voiceDecision.js';
-import { settleOwnerVoiceTurn } from '../src/surfaces/voice/voiceSilence.js';
+import { settleOwnerVoiceTurn } from '../src/mind/attention/voiceSilence.js';
 import { ownerCallFacts, voiceDecisionEvaluationCases } from './voiceDecisionEvaluationCases.js';
 
 const apiKey = process.env.TYPESAFE_API_KEY?.trim();

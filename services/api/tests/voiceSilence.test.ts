@@ -10,7 +10,7 @@ import {
 import type { VoiceTurnFacts } from '../src/contracts/voiceDecisionContract.js';
 import {
   VOICE_REPLY_DECISION_LINES, notHisWordsToHer, ownerTurnVerdict, ownerVoiceTurnFacts, settleOwnerVoiceTurn, voiceSilenceRules,
-} from '../src/surfaces/voice/voiceSilence.js';
+} from '../src/mind/attention/voiceSilence.js';
 import { promptOf } from './modelPrompt.js';
 
 const START = '2026-10-02T09:00:00.000Z';

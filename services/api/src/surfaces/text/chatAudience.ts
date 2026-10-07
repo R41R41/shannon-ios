@@ -13,7 +13,7 @@ import type { ConversationCapabilitySelection } from '../../mind/action/respond/
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import { identityOnly, type LayeredIdentityPrompt } from '../../mind/memory/store/knowledgeStore.js';
 import { DisclosureGate, sharedDailyFocus } from '../../mind/inhibition/memoryDisclosure.js';
-import { speakTimePrivacyCheck } from '../voice/voiceCompanionPresence.js';
+import { speakTimePrivacyCheck } from '../../mind/perception/voiceCompanionPresence.js';
 
 /** `audience` on `POST /v1/chat`: who can see or hear the reply, as the client reports it. */
 export type ChatAudience = 'owner' | 'others';

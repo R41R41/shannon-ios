@@ -15,7 +15,7 @@ import {
 } from './voiceDecisionValues.js';
 import { roomLookAnswer, roomLookRouterQuestions, roomLookRouterSchema } from '../../surfaces/voice/voiceRoomLook.js';
 import { lookSelfAnswer } from '../../contracts/appLookContract.js';
-import { localTurnSilence, openAIReplyInstruction, replyRequiredQuestion, routerTurnState } from '../../surfaces/voice/voiceSilence.js';
+import { localTurnSilence, openAIReplyInstruction, replyRequiredQuestion, routerTurnState } from '../attention/silencePorts.js';
 import { fallbackWaitingDirection, jevWaitingQuestions } from '../../surfaces/voice/voiceWaitingCue.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 

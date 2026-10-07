@@ -5,7 +5,7 @@ import { recordCompletedCognitiveCycle } from '../../mind/action/respond/cogniti
 import { extractExplicitUserIntent, type CognitiveIntentStore } from '../../mind/action/respond/cognitiveIntent.js';
 import type { executeConversationCommand } from '../../mind/action/respond/conversationCommands.js';
 import { prepareTurnCognitiveContext } from '../../mind/action/respond/turnCognitiveContext.js';
-import { companionPresentInstructions, speakTimePrivacyCheck } from './voiceCompanionPresence.js';
+import { companionPresentInstructions, speakTimePrivacyCheck } from '../../mind/perception/voiceCompanionPresence.js';
 import { voiceDeviceContextPrompt, type VoiceDeviceContext } from './voiceDeviceContext.js';
 import { ownerCompanionPresenceInstructions } from './voiceIntroductionInstructions.js';
 

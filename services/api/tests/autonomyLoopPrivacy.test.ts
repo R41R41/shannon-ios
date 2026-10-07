@@ -569,6 +569,8 @@ describe('what reaches the prompts of her own activity', () => {
       'autonomyLoopOwnerContext.ts',
       // The closed vocabulary of what her body may report about a message of hers: constants of the wire contract, no store.
       'bodyContract.ts',
+      // Syzygy ADR-0008 stage 3 (S2): the closed vocabulary of what her steps led to, moved out of the observations store; no store.
+      'autonomyObservationContract.ts',
       // Syzygy ADR-0008 stage 1: the closed vocabulary of a decision trace and the type of the writer the loop is handed; no store.
       'decisionTraceContract.ts',
       'autonomyBudget.ts', 'autonomyLoopConfig.ts', 'autonomyLoopPlan.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopState.ts',
@@ -590,6 +592,7 @@ describe('what reaches the prompts of her own activity', () => {
     for (const name of loopSources) expect(imports(name), name).not.toContain('disclosurePorts.ts');
     expect(imports('withheldRules.ts').sort()).toEqual(['autonomyBudget.ts', 'autonomyPolicy.ts', 'withheldActionContract.ts']);
     expect(imports('withheldActionContract.ts')).toEqual([]);
+    expect(imports('autonomyObservationContract.ts')).toEqual(['bodyContract.ts']);
     expect(imports('serverEnvironment.ts')).toEqual([]);
     for (const name of loopSources) {
       for (const imported of imports(name)) expect(allowed.has(imported), `${name} imports ${imported}`).toBe(true);
@@ -654,7 +657,8 @@ describe('what reaches the prompts of her own activity', () => {
     expect(worker.match(/ownerState\.read/gu)).toHaveLength(1);
     expect(worker).toContain('configuredOwnerUpcoming(process.env, databasePath, { snapshot: ownerState.read, now })');
     // Her message leaves through a module that writes it and reads none: no stored conversation text comes back that way.
-    const delivery = read('reachOutDelivery.ts');
+    // Split in Syzygy ADR-0008 stage 3 (S2) into its vocabulary and its store, unchanged: the three are read as one.
+    const delivery = ['reachOutDelivery.ts', 'reachOutVocabulary.ts', 'reachOutSpeaker.ts'].map(read).join('\n');
     expect(delivery).not.toMatch(/SELECT\s+\*|FROM conversation_messages|companion_states/u);
     // The one text it reads back is her own message from her own initiative, for the second call (owner decision 2026-10-02, ADR-0003).
     expect([...delivery.matchAll(/SELECT content[^`]*?FROM ([a-z_]+) WHERE ([^`]*?)\n/gu)].map(match => `${match[1]}:${match[2]!.trim()}`))

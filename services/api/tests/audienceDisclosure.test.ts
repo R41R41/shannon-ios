@@ -16,7 +16,7 @@ import { DEFAULT_SEMANTIC_MEMORY_CONFIG, SemanticMemoryRecall } from '../src/min
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { prepareTurnCognitiveContext } from '../src/mind/action/respond/turnCognitiveContext.js';
 import { ShannonTurnMemoryRecall } from '../src/mind/recall/turnMemoryRecall.js';
-import { ownerSaysCompanionPresent, speakTimePrivacyCheck } from '../src/surfaces/voice/voiceCompanionPresence.js';
+import { ownerSaysCompanionPresent, speakTimePrivacyCheck } from '../src/mind/perception/voiceCompanionPresence.js';
 import { promptOf } from './modelPrompt.js';
 
 const at = '2026-10-02T03:00:00.000Z';

@@ -51,13 +51,13 @@ import { guestSpeakerReminder, guestTurnPositionInstruction } from './voiceIntro
 import { applyGuestAddressing, boundedVoiceHistory, guestAddressDecision, guestCallHistory, GUEST_CALL_MODEL_TURNS } from './voiceGuestCall.js';
 export { realtimeVoiceSessionProjection, type VoiceParticipantMode } from './voiceSessionProjection.js';
 import type { VoiceParticipantMode } from './voiceSessionProjection.js';
-import { ownerSaysCompanionPresent } from './voiceCompanionPresence.js';
+import { ownerSaysCompanionPresent } from '../../mind/perception/voiceCompanionPresence.js';
 import { emotionTiming, feelingBeforeTurn, stillFeltLine } from '../../mind/emotion/companionPresence.js';
 import type { PeopleMemory } from '../../mind/memory/peopleMemory.js';
 import { DisclosureGate, sharedDailyFocus } from '../../mind/inhibition/memoryDisclosure.js';
 import { guestPeoplePrompt } from '../../mind/memory/peopleMemoryPrompts.js';
 import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
-import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
+import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from '../../mind/attention/voiceSilence.js';
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
 import { conversationTools, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnWroteHerOwnThings, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
 import { startVoiceStage2, voiceFinished, voiceOfferAndTier } from './voiceStage2.js';

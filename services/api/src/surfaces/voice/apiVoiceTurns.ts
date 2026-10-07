@@ -7,7 +7,7 @@ import type { TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.j
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { ShannonChatModel } from '../../infra/models/chatModel.js';
 import { dispatchVoiceCallSummary } from './apiVoiceCallSummary.js';
-import { ownerSaysCompanionPresent } from './voiceCompanionPresence.js';
+import { ownerSaysCompanionPresent } from '../../mind/perception/voiceCompanionPresence.js';
 
 export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   stateStore: CompanionStateStore; conversationStore: ConversationStore;

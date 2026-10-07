@@ -4,7 +4,7 @@ import { restoreCompanionState } from '@shannon/cognition';
 import type { DailyMindFocus } from '../../../mind/action/respond/dailyMind.js';
 import { commitmentAwaitingTodaySlot, dueCommitmentCandidate } from '../../../mind/action/respond/commitmentInitiative.js';
 import { bodyLookIdOfSource } from '../../body/store/bodyLookDelivery.js';
-import { isRoomLookSource } from '../../body/roomLookSource.js';
+import { isRoomLookSource } from '../../../mind/perception/roomLookSource.js';
 import { reachOutOfSource } from '../reachOutDelivery.js';
 import type { ProactiveDeliveryGate } from '../../../mind/attention/attentionPorts.js';
 import { initiativeIntent, secureDatabaseFiles } from '../initiativeIntent.js';

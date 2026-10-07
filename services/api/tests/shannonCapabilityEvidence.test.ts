@@ -68,7 +68,7 @@ import { asksAboutNotion, notionTurnProjection } from '../src/integrations/notio
 import { BoundedNotionSource, configuredNotionSource } from '../src/integrations/notion/notionSource.js';
 import { isOrganizeCommand } from '../src/integrations/voyager/organizeSupport.js';
 import { PeopleMemory } from '../src/mind/memory/peopleMemory.js';
-import { establishedGuestName } from '../src/surfaces/voice/voiceGuestNames.js';
+import { establishedGuestName } from '../src/mind/perception/voiceGuestNames.js';
 import { wantsPlaceDiscovery } from '../src/integrations/places/placeDiscovery.js';
 import { distributeLatestInternalBuild } from '../src/testflightDistributor.js';
 import { VOICE_SKILLS, mandatorySkillPatterns, type VoiceSkill } from '../src/contracts/voiceDecisionContract.js';

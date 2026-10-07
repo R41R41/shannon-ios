@@ -23,7 +23,8 @@
     "3": "surfaces/* except surfaces/text",
     "4": "mind/inhibition, mind/tools, and mind/action/agentTasks",
     "5": "mind/action/ownTime and wiring/, with infra/config and mind/self; check-api-layers switches to --enforce here",
-    "6": "infra/http (with apiKernel), infra/models (chatModel*), surfaces/text, infra/auth, mind/action/respond, mind/selectors"
+    "6": "infra/http (with apiKernel), infra/models (chatModel*), surfaces/text, infra/auth, mind/action/respond, mind/selectors",
+    "7": "Syzygy ADR-0008 stage 3, S2 and S3: stores split out, decisions out of the surfaces (applied by hand, file by file; the core set only widens)"
   },
   "moves": {
     "aetherAccess.ts": {
@@ -1072,9 +1073,9 @@
       "why": "Minecraft intent reply field"
     },
     "minecraftTurnAllowance.ts": {
-      "to": "surfaces/minecraft/minecraftTurnAllowance.ts",
-      "wave": 3,
-      "why": "Turn allowance for kernel surfaces"
+      "to": "mind/inhibition/minecraftTurnAllowance.ts",
+      "wave": 7,
+      "why": "Turn allowance for kernel surfaces; stage 3 moved it to its part"
     },
     "minecraftTurnStore.ts": {
       "to": "surfaces/minecraft/store/minecraftTurnStore.ts",
@@ -1362,9 +1363,9 @@
       "why": "Binds a done reply to a reminder"
     },
     "roomLookSource.ts": {
-      "to": "surfaces/body/roomLookSource.ts",
-      "wave": 3,
-      "why": "Messages about the room look"
+      "to": "mind/perception/roomLookSource.ts",
+      "wave": 7,
+      "why": "Messages about the room look; stage 3 moved it to its part"
     },
     "semanticMemoryRecall.ts": {
       "to": "mind/recall/semanticMemoryRecall.ts",
@@ -1722,9 +1723,9 @@
       "why": "Look from a voice turn"
     },
     "voiceCompanionPresence.ts": {
-      "to": "surfaces/voice/voiceCompanionPresence.ts",
-      "wave": 3,
-      "why": "Others present in owner-mode call"
+      "to": "mind/perception/voiceCompanionPresence.ts",
+      "wave": 7,
+      "why": "Others present in owner-mode call; stage 3 moved it to its part"
     },
     "voiceConversationInstructions.ts": {
       "to": "surfaces/voice/voiceConversationInstructions.ts",
@@ -1762,9 +1763,9 @@
       "why": "Guest call context"
     },
     "voiceGuestNames.ts": {
-      "to": "surfaces/voice/voiceGuestNames.ts",
-      "wave": 3,
-      "why": "Guest names in calls"
+      "to": "mind/perception/voiceGuestNames.ts",
+      "wave": 7,
+      "why": "Guest names in calls; stage 3 moved it to its part"
     },
     "voiceIdentity.ts": {
       "to": "surfaces/voice/voiceIdentity.ts",
@@ -1787,9 +1788,9 @@
       "why": "Voice session instructions"
     },
     "voiceSilence.ts": {
-      "to": "surfaces/voice/voiceSilence.ts",
-      "wave": 3,
-      "why": "When not to answer in a call"
+      "to": "mind/attention/voiceSilence.ts",
+      "wave": 7,
+      "why": "When not to answer in a call; stage 3 moved it to its part"
     },
     "voiceTranscriptContext.ts": {
       "to": "surfaces/voice/voiceTranscriptContext.ts",

@@ -14,7 +14,7 @@ import type { MinecraftTurnLog } from './store/minecraftTurnStore.js';
 import type { MinecraftBodyRequests } from './minecraftBodyRequests.js';
 import { MINECRAFT_INTENT_GOAL_CHARACTERS } from './minecraftIntent.js';
 import { minecraftBodyStateBlock, type MinecraftBodyState } from './minecraftBodyState.js';
-import { MinecraftTurnAllowance } from './minecraftTurnAllowance.js';
+import { MinecraftTurnAllowance } from '../../mind/inhibition/minecraftTurnAllowance.js';
 import { PlatformBridgeError, PlatformBridgeService, platformBridgeThreadId, type PlatformAudiencePolicy } from '../platform/platformBridge.js';
 import type { PeopleMemoryStore } from '../../mind/memory/memoryPorts.js';
 import { PlatformPeople, platformPeopleEnabled } from '../platform/platformPeople.js';

@@ -165,7 +165,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/memory/impressionViews.ts',
     'services/api/src/surfaces/platform/platformBridge.ts',
     'services/api/src/surfaces/platform/platformBridgeBindings.ts',
-    'services/api/src/surfaces/voice/voiceCompanionPresence.ts',
+    'services/api/src/mind/perception/voiceCompanionPresence.ts',
     'services/api/src/mind/memory/memoryForgetCommand.ts',
     'services/api/src/mind/memory/memoryEmbeddingWorker.ts',
     'services/api/src/mind/memory/prospectiveMemory.ts',
@@ -280,12 +280,17 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // Speaking up on her own: the gated step and the one way its message leaves.
     'services/api/src/mind/action/ownTime/autonomyLoopReachOutStep.ts',
     'services/api/src/surfaces/outreach/reachOutDelivery.ts',
+    // Stage 3 (S2): its vocabulary and its speaker, split out of it unchanged.
+    'services/api/src/surfaces/outreach/reachOutVocabulary.ts',
+    'services/api/src/surfaces/outreach/store/reachOutSpeaker.ts',
     // Phoning the owner's iPhone on her own: the gated step, and asking the API process for the call.
     'services/api/src/mind/action/ownTime/autonomyLoopPhoneStep.ts',
     'services/api/src/surfaces/outreach/incomingCallRequests.ts',
     // Act, observe, think again: what a step led to as closed facts, the wait after a message of hers, the thinking step,
     // the one second call, and what her body reports about a message.
     'services/api/src/mind/action/ownTime/store/autonomyLoopObservations.ts',
+    // Stage 3 (S2): the closed vocabulary of those facts, moved out of the store unchanged.
+    'services/api/src/contracts/autonomyObservationContract.ts',
     'services/api/src/mind/action/ownTime/autonomyLoopObserve.ts',
     'services/api/src/mind/action/ownTime/autonomyLoopThinkStep.ts',
     'services/api/src/mind/action/ownTime/autonomyLoopFollowUpStep.ts',

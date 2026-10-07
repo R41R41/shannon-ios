@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { CALL_ANSWER_OUTCOME, STORY_REACTION_OUTCOME, valueFactsSection } from '@shannon/learning';
 import { PREDICTION_SYMBOL, dayBand, type TouchLedger } from '../contracts/cognitionLedgerContract.js';
-import type { AutonomyPredictionTap, ReachOutFacts } from '../mind/action/ownTime/store/autonomyLoopObservations.js';
+import type { AutonomyPredictionTap, ReachOutFacts } from '../contracts/autonomyObservationContract.js';
 import type { ChoiceLedger } from '../mind/learning/choiceLedger.js';
 import type { PredictionLedger } from '../mind/learning/predictionLedger.js';
 import type { ValueVersions } from '../mind/learning/valueTable.js';

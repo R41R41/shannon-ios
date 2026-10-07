@@ -9,7 +9,7 @@ import { audiencePeople, personMemoryId, placeLabel, type CallSummarizer, type P
 import type { PersonCall, PersonMemoryItem, RememberedPerson } from '../../mind/memory/store/peopleMemoryStore.js';
 import { platformDisplayName } from '../../surfaces/platform/platformPeople.js';
 import { GUEST_CALL_SUMMARY_TURNS, validatedGuestCallTurns } from '../../surfaces/voice/voiceGuestCall.js';
-import { cleanPersonName, personNameKey } from '../../surfaces/voice/voiceGuestNames.js';
+import { cleanPersonName, personNameKey } from '../../mind/perception/voiceGuestNames.js';
 import { mutatePersonImpression, personImpressionViews } from '../../mind/memory/impressionViews.js';
 import type { ImpressionSource } from '../../mind/memory/impressions.js';
 
