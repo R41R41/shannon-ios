@@ -14,17 +14,22 @@ struct ShannonLearningView: View {
 
     var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
-        List {
-            if model.isUnavailable {
-                Section {
-                    quietLine(ShannonGeneratedStrings.yousuLearningUnavailable, palette: palette)
+        ScrollViewReader { proxy in
+            List {
+                if model.isUnavailable {
+                    Section {
+                        quietLine(ShannonGeneratedStrings.yousuLearningUnavailable, palette: palette)
+                    }
+                }
+                if model.skillsPhase != .hidden { skillsSection(palette: palette) }
+                if model.valuesPhase != .hidden {
+                    valuesSection(palette: palette)
+                    versionSection(palette: palette)
                 }
             }
-            if model.skillsPhase != .hidden { skillsSection(palette: palette) }
-            if model.valuesPhase != .hidden {
-                valuesSection(palette: palette)
-                versionSection(palette: palette)
-            }
+#if DEBUG
+            .task(id: model.values != nil) { await previewScroll(proxy) }
+#endif
         }
         .overlay {
             if model.skills == nil, model.values == nil, model.isLoading {
@@ -62,6 +67,15 @@ struct ShannonLearningView: View {
             Text(ShannonGeneratedStrings.yousuLearningVersionResumeConfirmMessage)
         }
     }
+
+#if DEBUG
+    /// Design previews only (`-ShannonPreviewLearningScroll values|version`): brings the lower cards up for screenshots.
+    private func previewScroll(_ proxy: ScrollViewProxy) async {
+        guard model.values != nil, let target = UserDefaults.standard.string(forKey: "ShannonPreviewLearningScroll") else { return }
+        try? await Task.sleep(for: .milliseconds(600))
+        withAnimation { proxy.scrollTo("learning.\(target)", anchor: .top) }
+    }
+#endif
 
     private func quietLine(_ text: String, palette: ShannonPalette) -> some View {
         Text(text)
@@ -208,6 +222,7 @@ struct ShannonLearningView: View {
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(line.accessibilityLabel)
+                    .id(line.id == lines.first?.id ? "learning.values" : "learning.values.\(line.id)")
                 }
             }
         } header: {
@@ -234,6 +249,7 @@ struct ShannonLearningView: View {
                             .foregroundStyle(palette.textSecondary)
                     }
                     .accessibilityElement(children: .combine)
+                    .id("learning.version")
                     if values.frozen {
                         Label(ShannonGeneratedStrings.yousuLearningVersionFrozen, systemImage: "pause.circle")
                             .font(.shannon(.footnote))

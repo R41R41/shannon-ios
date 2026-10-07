@@ -2,7 +2,8 @@ import Foundation
 
 #if DEBUG
 /// Fictional data for design previews and screenshots of 「ようす › 学び」: `-ShannonDesignPreview -ShannonPreviewYousu learning`
-/// (`-ShannonPreviewLearning frozen` for a value table that was rolled back). Never real skills or values, and nothing here
+/// (`-ShannonPreviewLearning frozen` for a value table that was rolled back; `-ShannonPreviewLearningScroll values|version` to
+/// bring the lower cards up). Never real skills or values, and nothing here
 /// reaches a server: a pin, a rollback and a resume answer as a server would, without keeping anything.
 extension ShannonYousuFixtureClient {
     private static var learningVariant: String? {
