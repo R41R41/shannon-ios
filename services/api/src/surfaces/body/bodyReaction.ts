@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import {
-  OWNER_AUDIENCE, holdsFeelingThroughTouch, presentShannonFeeling, presentShannonMood, touchCause, touchFeeling, touchImpact, touchTarget,
-  type CompanionStateSnapshot, type CompanionStateStore,
+  OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE, holdsFeelingThroughTouch, presentShannonFeeling, presentShannonMood, touchCause, touchFeeling, touchImpact, touchTarget,
+  type CompanionStateSnapshot, type CompanionStateStore, type MemoryAudience,
 } from '@shannon/cognition';
+import { bodyPerception, type MindPerceiver } from '../../mind/perception/perceptionPorts.js';
 import { emotionTiming, resolveReplyEmotion } from '../../mind/emotion/companionPresence.js';
 import { BODY_LIMITS, isImpossibleTouch } from '../../contracts/bodyContract.js';
 import {
@@ -50,7 +51,15 @@ export interface BodyReactionDependencies {
   /** One entry in the activity record for a line she said. */
   record: (scopeKey: string, entry: { summary: string; outcome: 'done' }) => void;
   now: () => string;
+  /** Syzygy ADR-0008 stage 3: what a touch hands the mind (`bodyPerception` copies `BODY_PRESENT`); absent, nothing is perceived. */
+  mind?: MindPerceiver;
 }
+
+/**
+ * Who can see her body, as the memory paths read it: the body's own decision (`owner` or `others`) held as one `MemoryAudience`
+ * here, the value the reaction's replay of the Talk receives and the one the mind's normalizer copies (Syzygy ADR-0008 stage 3).
+ */
+export const BODY_PRESENT: Readonly<Record<'owner' | 'others', MemoryAudience>> = Object.freeze({ owner: OWNER_AUDIENCE, others: UNKNOWN_GUEST_PRESENCE });
 
 export type BodyReactionRefusal = 'disabled' | 'ingest_disabled' | 'not_owner' | 'not_a_body' | 'conflict' | 'rate_limited';
 export type BodyReactionOutcome = { kind: 'done'; answer: BodyReactionAnswer } | { kind: BodyReactionRefusal };
@@ -109,6 +118,7 @@ export class BodyReactions {
       return begun.existing.contentHash !== hash ? { kind: 'conflict' }
         : { kind: 'done', answer: begun.existing.answer ?? this.quiet(request.id, this.dependencies.stateStore.snapshot(scopeKey), at) };
     }
+    this.perceive(scopeKey, deviceId, request, at);
     const answer = this.answer(scopeKey, request, at, this.surfaceOf(scopeKey, deviceId));
     this.inflight.set(key, { hash, answer });
     try {
@@ -128,6 +138,15 @@ export class BodyReactions {
   claim(scopeKey: string, reactionId: unknown): ReactionLine | null {
     if (!this.enabled || !validBodyReactionId(reactionId)) return null;
     try { return this.dependencies.store.claim(scopeKey, reactionId, this.dependencies.now()); } catch { return null; }
+  }
+
+  /** Stage 3, step F2: a new touch, as the mind perceives it; never throws, never changes the answer. */
+  private perceive(scopeKey: string, deviceId: string, request: BodyReactionRequest, at: string): void {
+    if (!this.dependencies.mind) return;
+    try {
+      this.dependencies.mind.perceive(scopeKey, bodyPerception({ touchId: request.id, deviceId, audience: request.audience, present: BODY_PRESENT[request.audience],
+        input: request.touch.input === 'hover' ? 'hover' : 'press', at }), { code: request.touch.type });
+    } catch { /* the touch is answered whatever the mind did */ }
   }
 
   private surfaceOf(scopeKey: string, deviceId: string): BodySurface | undefined {
@@ -302,7 +321,7 @@ export class BodyReactions {
       const thread = this.dependencies.conversationStore.listThreads(scopeKey)[0];
       if (!thread || Date.parse(at) - Date.parse(thread.updatedAt) > BODY_REACTION_LIMITS.conversationFreshMilliseconds) return [];
       // Through the same filter as any replay: what the owner had her forget is not re-fed.
-      return visibleReplayMessages(snapshot, this.dependencies.conversationStore as ConversationStore, scopeKey, thread.threadId, OWNER_AUDIENCE,
+      return visibleReplayMessages(snapshot, this.dependencies.conversationStore as ConversationStore, scopeKey, thread.threadId, BODY_PRESENT[request.audience],
         BODY_REACTION_LIMITS.contextMessages).messages.map(entry => entry.item);
     } catch { return []; }
   }

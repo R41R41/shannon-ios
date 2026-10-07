@@ -8,6 +8,9 @@ import type { ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { ScriptedShiritoriModel } from './reach/reachConversation.js';
+import { OWNER_AUDIENCE } from '@shannon/cognition';
+import { bodyPerception } from '../src/mind/perception/perceptionPorts.js';
+import { configuredMind } from '../src/wiring/mindWiring.js';
 
 vi.setConfig({ testTimeout: 120_000 });
 afterEach(() => { vi.unstubAllEnvs(); });
@@ -51,21 +54,24 @@ function prefixShare(requests: readonly ShannonChatModelRequest[], order: (p: Re
  * One Talk of `games` shiritori games of the reach measure (a), one after the other, through the kernel over a SQLite
  * store (so her knowledge projection is there too), and every request the model was given.
  */
-async function shiritoriThread(games: number, seed?: (store: SQLiteShannonStore) => void): Promise<ShannonChatModelRequest[]> {
+async function shiritoriThread(games: number, seed?: (store: SQLiteShannonStore) => void, stage3 = false): Promise<ShannonChatModelRequest[]> {
   const inner = new ScriptedShiritoriModel();
   const requests: ShannonChatModelRequest[] = [];
   const directory = mkdtempSync(join(tmpdir(), 'shannon-prefix-'));
   let clock = Date.parse('2026-10-05T10:00:00.000Z');
   const now = () => new Date(clock).toISOString();
   const store = new SQLiteShannonStore({ path: join(directory, 'prefix.sqlite'), now });
+  // Syzygy ADR-0008 stage 3: the workspace, with a touch of her body now and then, so that its blocks change from turn to turn.
+  const mind = stage3 ? configuredMind({}, { databasePath: join(directory, 'prefix.sqlite'), now, schedule: task => task() }) : null;
   const api = createLocalApiKernel(now, { chatModel: { mode: inner.mode, model: inner.model,
-    generate: request => { requests.push(request); return inner.generate(request); } }, stateStore: store, conversationStore: store, knowledgeStore: store });
+    generate: request => { requests.push(request); return inner.generate(request); } }, stateStore: store, conversationStore: store, knowledgeStore: store, ...(mind ? { mind: mind.mind } : {}) });
   seed?.(store);
   try {
     for (let round = 0; round < games; round += 1) {
       const game = new ShiritoriGame();
       for (let turn = 1; turn <= SHIRITORI_TURNS; turn += 1) {
         clock += 20_000;
+        if (mind && turn % 3 === 1) mind.mind.perceive('prefix:owner', bodyPerception({ touchId: `touch-${round}-${turn}`, deviceId: 'body-pc', audience: 'owner', present: OWNER_AUDIENCE, input: 'press', at: now() }), { code: 'pet' });
         const response = await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'prefix:owner', threadId: 'prefix-shiritori', message: game.ownerMessage(turn) } });
         game.recordReply(turn, { reply: String((response.body as { reply?: unknown }).reply ?? ''), historyComplete: true });
         await new Promise(resolve => setImmediate(resolve));
@@ -73,6 +79,7 @@ async function shiritoriThread(games: number, seed?: (store: SQLiteShannonStore)
       }
     }
   } finally {
+    mind?.close();
     store.close();
     rmSync(directory, { recursive: true, force: true });
   }
@@ -172,5 +179,26 @@ describe('the provider prompt cache (Syzygy ADR-0003 principle 4)', () => {
         expect(commonPrefix(order(parts(requests[index - 1]!)), order(parts(requests[index]!)))).toBeGreaterThanOrEqual(throughHistory(requests[index - 1]!, order));
       }
     }
+  });
+
+  it('keeps the prefix through the history with the workspace of stage 3 on: its blocks follow the turn\'s context', async () => {
+    const plain = await shiritoriThread(1);
+    const requests = await shiritoriThread(1, undefined, true);
+    expect(requests).toHaveLength(plain.length);
+    expect(requests.filter(request => request.turnContext?.includes('【知らせ:触れた】')).length).toBeGreaterThan(SHIRITORI_TURNS / 2);
+    for (const [index, request] of requests.entries()) {
+      const before = plain[index]!.turnContext ?? '';
+      // The turn's context is byte for byte what it is without stage 3, and the workspace's blocks come after it.
+      expect(request.turnContext!.startsWith(before), `turn ${index}`).toBe(true);
+      expect(request.turnContext!.slice(before.length)).toMatch(/^(?:\n\n(?:\[いまの場\]|【知らせ:)[^]*)?$/u);
+      const body = chatTurnRequestBody('gpt-5.6-luna', request, 'shannon-mac') as Body;
+      expect(body.input.at(-1)?.role).toBe('user');
+    }
+    for (const order of Object.values(ORDERS)) {
+      for (let index = 1; index < requests.length; index += 1) {
+        expect(commonPrefix(order(parts(requests[index - 1]!)), order(parts(requests[index]!)))).toBeGreaterThanOrEqual(throughHistory(requests[index - 1]!, order));
+      }
+    }
+    expect(prefixShare(requests, ORDERS.toolsFirst)).toBeGreaterThan(0.85);
   });
 });

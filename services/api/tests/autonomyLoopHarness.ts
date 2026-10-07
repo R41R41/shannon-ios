@@ -7,7 +7,7 @@ import type { AutonomyReachOutObserver } from '../src/mind/action/ownTime/autono
 import type { AutonomyOwnerContext } from '../src/mind/action/ownTime/autonomyLoopOwnerContext.js';
 import { callGateContext, type AutonomyPhone } from '../src/mind/action/ownTime/autonomyLoopPhoneStep.js';
 import type { AutonomyReachOuts, AutonomyUpcoming } from '../src/mind/action/ownTime/autonomyLoopReachOutStep.js';
-import type { AutonomyNotionReader } from '../src/mind/action/ownTime/autonomyLoopSteps.js';
+import type { AutonomyNotionReader, StepDependencies } from '../src/mind/action/ownTime/autonomyLoopSteps.js';
 import type { AutonomyToolResults } from '../src/mind/action/ownTime/autonomyLoopToolStep.js';
 import type { AutonomyPredictionTap } from '../src/mind/action/ownTime/store/autonomyLoopObservations.js';
 import type { DecisionTraceWriter } from '../src/contracts/decisionTraceContract.js';
@@ -144,6 +144,8 @@ export interface LoopHarnessOptions {
   loopEnvironment?: Record<string, string>;
   /** Her registry tools in her own time; absent, as with `SHANNON_OWN_TOOLS=off`, none is offered. */
   toolResults?: AutonomyToolResults;
+  /** Syzygy ADR-0008 stage 3: the one function she is handed of the mind; absent, nothing is written. */
+  emitMindEvent?: StepDependencies['emitMindEvent'];
   /** Syzygy ADR-0006/0008: the write-only taps of the prediction record; absent, as with their switches off. */
   prediction?: AutonomyPredictionTap;
   /** Syzygy ADR-0008 stage 1: the decision trace writer; absent, as with `SHANNON_DECISION_TRACES=off`. */
@@ -196,6 +198,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     ...(options.toolResults ? { toolResults: options.toolResults } : {}),
     ...(options.prediction ? { prediction: options.prediction } : {}), ...(options.trace ? { trace: options.trace } : {}),
     ...(options.valueFacts ? { valueFacts: options.valueFacts } : {}), ...(options.withheldFacts ? { withheldFacts: options.withheldFacts } : {}),
+    ...(options.emitMindEvent ? { emitMindEvent: options.emitMindEvent } : {}),
   });
   const loop = newLoop('runner-a');
   const entries = () => service.activityDays(scope, 30).flatMap(day => day.entries);

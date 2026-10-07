@@ -7,6 +7,7 @@ import { privateReachOutsEnabled } from '../../contracts/privateListeningContrac
 import type { PrivateListener } from '../body/store/privateListeningStore.js';
 import type { SQLiteReachOutClaims } from './store/reachOutClaims.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
+import type { ProactiveDeliveryGate, ProactiveDeliveryIntent, ProactiveHoldCode, ProactiveReason } from '../../mind/attention/attentionPorts.js';
 
 /**
  * Her loop's side of a call (`autonomyLoopPhoneStep.ts`): the facts she chooses with, and asking for the call.
@@ -28,6 +29,8 @@ export interface IncomingCallRequestsDependencies {
   serverReady: boolean;
   minimumIntervalMilliseconds: number;
   newCallId?: () => string;
+  /** Syzygy ADR-0008 stage 3: the proactive gate the call passes before anything rings; absent (switched off), as before. */
+  gate?: ProactiveDeliveryGate | null;
 }
 
 export class IncomingCallRequests implements AutonomyPhone {
@@ -63,7 +66,7 @@ export class IncomingCallRequests implements AutonomyPhone {
   }
 
   /** Asks for the call with one message of hers. `requested`, or why not, as a code. */
-  request(scopeKey: string, initiativeId: string, at: string): 'requested' | 'unavailable' | 'too_soon' | 'ringing' | 'taken' {
+  request(scopeKey: string, initiativeId: string, at: string): 'requested' | 'unavailable' | 'too_soon' | 'ringing' | 'taken' | `held:${ProactiveHoldCode}` {
     const { store, claims } = this.dependencies;
     const facts = this.facts(scopeKey, at);
     if (!facts.switchedOn || !facts.serverReady) return 'unavailable';
@@ -72,6 +75,11 @@ export class IncomingCallRequests implements AutonomyPhone {
     const device = store.devices(scopeKey)[0];
     const message = claims.message(scopeKey, initiativeId);
     if (!device || !message || store.ofMessage(scopeKey, initiativeId)) return 'unavailable';
+    // Syzygy ADR-0008 stage 3: the proactive gate, before the claim and before anything rings. Her line was checked for its topic
+    // where it was written; the call is checked for the owner's activity, its message's age and a repeat of the same call.
+    const intent: ProactiveDeliveryIntent = { point: 'call', reason: message.reason as ProactiveReason, subject: initiativeId, arisenAt: message.createdAt, text: null };
+    const verdict = this.dependencies.gate?.check(scopeKey, intent, at);
+    if (verdict?.verdict === 'hold') return `held:${verdict.code}`;
     const callId = (this.dependencies.newCallId ?? randomUUID)();
     // The ring's end is set when the push leaves; until then the row carries the latest moment it may still be sent.
     const expiresAt = new Date(Date.parse(at) + INCOMING_CALL_LIMITS.pendingMilliseconds + INCOMING_CALL_LIMITS.ringSeconds * 1_000).toISOString();
@@ -89,6 +97,7 @@ export class IncomingCallRequests implements AutonomyPhone {
       claims.release(scopeKey, initiativeId, device.deviceId);
       return 'unavailable';
     }
+    this.dependencies.gate?.delivered(scopeKey, intent, at);
     return 'requested';
   }
 

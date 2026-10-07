@@ -4,6 +4,7 @@ import { UNLABELLED_DISCLOSURE_MARKER } from '@shannon/cognition';
 import { OBSERVED_REACH_OUT_REASONS, type ObservedReachOutReason } from '../../mind/action/ownTime/store/autonomyLoopObservations.js';
 import type { ReachOutReason } from '../../mind/action/ownTime/autonomyLoopPrompts.js';
 import { speakTimePrivacyCheck } from '../voice/voiceCompanionPresence.js';
+import type { ProactiveDeliveryGate, ProactiveDeliveryIntent, ProactiveHoldCode, ProactivePoint } from '../../mind/attention/attentionPorts.js';
 
 /**
  * A message she starts on her own, from her own activity (owner decision 2026-10-02),
@@ -42,7 +43,8 @@ export function reachOutOfSource(sourceItemId: unknown): { kind: 'reach_out'; re
   return (OBSERVED_REACH_OUT_REASONS as readonly string[]).includes(reason ?? '') ? { kind: 'reach_out', reason: reason as ObservedReachOutReason } : null;
 }
 
-export type ReachOutDelivery = 'sent' | 'limit' | 'unavailable';
+/** `held:<code>`: the proactive gate held it at this delivery point (Syzygy ADR-0008 stage 3); nothing was written. */
+export type ReachOutDelivery = 'sent' | 'limit' | 'unavailable' | `held:${ProactiveHoldCode}`;
 
 /**
  * What the prompt of a reach-out receives while someone other than the owner may see or hear her body:
@@ -56,10 +58,20 @@ export const REACH_OUT_OTHERS_AUDIENCE = Object.freeze({
   marker: UNLABELLED_DISCLOSURE_MARKER,
 });
 
+/** The intent of one message at a delivery point: its reason, its subject, when it arose (the thought that chose it) and its words. */
+function intentOf(point: ProactivePoint, reason: ObservedReachOutReason, subject: string | null, input: { text: string; arisenAt?: string }, at: string): ProactiveDeliveryIntent {
+  const arisen = input.arisenAt && Number.isFinite(Date.parse(input.arisenAt)) && input.arisenAt <= at ? input.arisenAt : at;
+  return { point, reason, subject, arisenAt: arisen, text: input.text };
+}
+
 export class SQLiteReachOutSpeaker {
   private readonly database: DatabaseSync;
 
-  constructor(path: string, private readonly others: (scopeKey: string, at: string) => boolean = () => false) {
+  constructor(
+    path: string, private readonly others: (scopeKey: string, at: string) => boolean = () => false,
+    /** Syzygy ADR-0008 stage 3: the proactive gate every message of hers passes here; absent (switched off), as before. */
+    private readonly gate: ProactiveDeliveryGate | null = null,
+  ) {
     this.database = new DatabaseSync(path);
     this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
   }
@@ -135,8 +147,8 @@ export class SQLiteReachOutSpeaker {
     `).get(scopeKey, `${REACH_OUT_FOLLOW_UP_KEY_PREFIX}%:${originId}`));
   }
 
-  say(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; maximumPerDay: number }, at: string): ReachOutDelivery {
-    return this.write(scopeKey, { reason: input.reason, text: input.text, at }, () => {
+  say(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; maximumPerDay: number; arisenAt?: string }, at: string): ReachOutDelivery {
+    return this.write(scopeKey, { reason: input.reason, text: input.text, at, intent: intentOf('say', input.reason, null, input, at) }, () => {
       const taken = new Set((this.database.prepare(`
         SELECT day_key FROM initiative_messages WHERE scope_key = ? AND day_key LIKE ?
       `).all(scopeKey, `${REACH_OUT_SOURCE_PREFIX}${input.dayKey}:%`) as unknown as Array<{ day_key: string }>).map(row => row.day_key));
@@ -151,16 +163,16 @@ export class SQLiteReachOutSpeaker {
   }
 
   /** Her opening line of a call to his iPhone: written like a message of hers, outside the day's count. */
-  sayByPhone(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string }, at: string): ReachOutDelivery {
-    return this.write(scopeKey, { reason: input.reason, text: input.text, at }, () => `${REACH_OUT_CALL_KEY_PREFIX}${input.dayKey}:${randomUUID()}`);
+  sayByPhone(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; arisenAt?: string }, at: string): ReachOutDelivery {
+    return this.write(scopeKey, { reason: input.reason, text: input.text, at, intent: intentOf('say_by_phone', input.reason, null, input, at) }, () => `${REACH_OUT_CALL_KEY_PREFIX}${input.dayKey}:${randomUUID()}`);
   }
 
   /**
    * The one second call after her message `originId` got no answer. It must be one of her own messages that is not
    * itself a second call, not yet called after, and the day's count must have room; otherwise `limit`.
    */
-  sayAgain(scopeKey: string, input: { originId: string; text: string; dayKey: string; maximumPerDay: number; seen?: boolean }, at: string): ReachOutDelivery {
-    return this.write(scopeKey, { reason: 'follow_up', text: input.text, at, seen: input.seen === true }, () => {
+  sayAgain(scopeKey: string, input: { originId: string; text: string; dayKey: string; maximumPerDay: number; seen?: boolean; arisenAt?: string }, at: string): ReachOutDelivery {
+    return this.write(scopeKey, { reason: 'follow_up', text: input.text, at, seen: input.seen === true, intent: intentOf('say_again', 'follow_up', input.originId, input, at) }, () => {
       const origin = this.database.prepare(`
         SELECT source_item_id FROM initiative_messages WHERE scope_key = ? AND initiative_id = ?
       `).get(scopeKey, input.originId) as unknown as { source_item_id: string } | undefined;
@@ -171,12 +183,15 @@ export class SQLiteReachOutSpeaker {
   }
 
   /** One assistant message and one initiative, under the key `slot` hands out inside the transaction; no key, no message. */
-  private write(scopeKey: string, input: { reason: ObservedReachOutReason; text: string; at: string; seen?: boolean }, slot: () => string | null): ReachOutDelivery {
+  private write(scopeKey: string, input: { reason: ObservedReachOutReason; text: string; at: string; seen?: boolean; intent: ProactiveDeliveryIntent }, slot: () => string | null): ReachOutDelivery {
     // The conversation and initiative tables belong to other stores; without them there is nowhere to speak.
     for (const table of ['initiative_messages', 'conversation_messages', 'conversation_threads']) {
       if (!this.tableExists(table)) return 'unavailable';
     }
     const { at } = input;
+    // Syzygy ADR-0008 stage 3: the proactive gate, here where the message would be written (a hold is recorded by the gate).
+    const verdict = this.gate?.check(scopeKey, input.intent, at);
+    if (verdict?.verdict === 'hold') return `held:${verdict.code}`;
     const initiativeId = randomUUID();
     const sourceItemId = input.reason === 'follow_up' && input.seen ? `${REACH_OUT_FOLLOW_UP_SEEN_SOURCE_PREFIX}${initiativeId}` : `${REACH_OUT_SOURCE_PREFIX}${input.reason}:${initiativeId}`;
     this.database.exec('BEGIN IMMEDIATE');
@@ -206,6 +221,7 @@ export class SQLiteReachOutSpeaker {
       }));
       this.database.prepare('UPDATE conversation_threads SET updated_at = ? WHERE scope_key = ? AND thread_id = ?').run(at, scopeKey, threadId);
       this.database.exec('COMMIT');
+      this.gate?.delivered(scopeKey, input.intent, at);
       return 'sent';
     } catch (error) {
       if (this.database.isTransaction) this.database.exec('ROLLBACK');

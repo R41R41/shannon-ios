@@ -65,6 +65,8 @@ import { voiceCommandResponse, voiceTurnGrounding } from './voiceGrounding.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from '../../mind/action/respond/turnDeadline.js';
 import { tierRequest, type TurnRouting } from '../../mind/action/respond/turnRouting.js';
 import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from './ownerCallElsewhere.js';
+import { closedId, voicePerception, type MindPerceiver, type PerceivedItem } from '../../mind/perception/perceptionPorts.js';
+import { withWorkspace, type MindTurnPorts } from '../../mind/workspace/workspacePorts.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
   /** Looking through her body's camera or the app's (`voiceAppLook.ts`); absent, a voice turn never looks. */
@@ -90,6 +92,8 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   toolServer?: ConversationToolServer;
   ownerCalls?: Pick<OwnerCalls, 'admitTurn'>; // The owner in a call on another device (`ownerCallElsewhere.ts`); absent, nothing is refused.
   turnChooser?: ToolMenuChooser; toolHints?: true; turnRouting?: TurnRouting; skills?: Pick<SkillTurnPorts, 'index'>; // Syzygy ADR-0008 stage 2: the second Jev call, the tier and the verifier, her skills' index (step 6); absent, as at ca7cf519.
+  /** Syzygy ADR-0008 stage 3: what the turn hands the mind (`voicePerception` copies `present`); absent, nothing is perceived. */
+  mind?: MindTurnPorts;
 }
 
 export interface LiveVoiceStreamObserver {
@@ -128,6 +132,22 @@ export function dispatchLiveVoiceRequest(
     reaction?.text ?? null, { ...dependencies, looks: dependencies.looks?.of(request) }, observer);
 }
 
+/** Stage 3, step F3: the workspace's blocks for a voice turn (`[いまの場]`, at most two lines), or ''. Never throws. */
+function voiceWorkspace(mind: MindTurnPorts | undefined, turn: { scopeKey: string; threadId: string; present: MemoryAudience; perceived: PerceivedItem | null;
+  snapshot: Parameters<NonNullable<MindTurnPorts['render']>>[0]['snapshot']; store: ConversationStore; at: string }): string {
+  if (!mind?.render) return '';
+  try {
+    return mind.render({ scopeKey: turn.scopeKey, surface: 'voice', present: turn.present, at: turn.at, currentItemId: turn.perceived?.itemId ?? null,
+      current: { surface: 'voice', sourceId: closedId(turn.threadId) }, snapshot: turn.snapshot, store: turn.store });
+  } catch { return ''; }
+}
+
+/** Stage 3, step F2: never throws and never changes the turn. */
+function perceiveVoiceTurn(mind: MindPerceiver | undefined, scopeKey: string, input: Parameters<typeof voicePerception>[0]): PerceivedItem | null {
+  if (!mind) return null;
+  try { return mind.perceive(scopeKey, voicePerception(input)); } catch { return null; }
+}
+
 async function completeLiveVoiceDelegation(
   scopeKey: string,
   requestedThreadId: string | undefined,
@@ -158,6 +178,8 @@ async function completeLiveVoiceDelegation(
     : deviceContext?.companionPresent === true || ownerSaysCompanionPresent(transcript) ? UNKNOWN_GUEST_PRESENCE : OWNER_AUDIENCE;
   const alone = isOwnerOnly(present);
   if (!alone) dependencies.toolServer?.audience.noteOthers(scopeKey);
+  // Stage 3: the turn as the mind perceives it, with the audience decided above, copied (nothing without the wiring).
+  const perceivedTurn = perceiveVoiceTurn(dependencies.mind, scopeKey, { threadId, transcript, present, alone, guest: temporaryGuest, at: occurredAt });
   // A client that predates people memory tells the friend that no owner memory is used; keep that promise for it.
   const legacyGuest = temporaryGuest && guestPresence?.recorded !== true;
   const routingHistory = temporaryGuest ? guestHistory
@@ -338,7 +360,9 @@ async function completeLiveVoiceDelegation(
     } }) : null;
   observer?.signal?.throwIfAborted();
   const turnPrompt = [turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n');
-  const replayed = replay?.request(turnPrompt) ?? { ...(turnPrompt ? { turnContext: turnPrompt } : {}), history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) };
+  // Stage 3: the workspace's blocks (voice: at most two lines) follow the turn's context, which stays byte for byte as it was.
+  const replayed = withWorkspace(replay?.request(turnPrompt) ?? { ...(turnPrompt ? { turnContext: turnPrompt } : {}), history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) },
+    voiceWorkspace(dependencies.mind, { scopeKey, threadId, present, perceived: perceivedTurn, snapshot: captured, store: dependencies.conversationStore, at: occurredAt }));
   const offered = conversationTools(dependencies.autonomy, scopeKey, 'voice', toolAudience, dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline, // 「友人も一緒」: Aether reading tools; a legacy client none.
     { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }, { ...ownerAloneReads(toolAudience), ...(dependencies.toolHints ? { sourceHints: true } : {}) });
   const { offer: toolOffer, tier } = choices ? await voiceOfferAndTier(dependencies.turnRouting, offered, choices, { scopeKey, threadId, deadline, at: occurredAt }) : { offer: offered, tier: null };
@@ -440,6 +464,7 @@ async function completeLiveVoiceDelegation(
       ...taskProposal,
     }];
   }
+  dependencies.mind?.turnEnded?.(); // Stage 3: what the mind noted is written after the response.
   return {
     status: 200,
     body: {

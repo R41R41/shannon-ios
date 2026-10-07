@@ -1,6 +1,6 @@
 import { shannonIdentityPrompt, guardedShannonSeenPrompt, type CompanionStateSnapshot } from '@shannon/cognition';
 import { turnPersistenceContext, type CompletedTurn } from '../../mind/sleep/backgroundUpdates.js';
-import type { TextTurnInput } from '../../infra/http/apiKernel.js';
+import type { TextTurnInput, TextTurnSurface } from '../../infra/http/apiKernel.js';
 import { chatAudienceTurn, type ChatAudienceTurn } from '../text/chatAudience.js';
 import type { ChatResponse } from '../../contracts/contracts.js';
 import type { ConversationStore, ShannonExperience } from '../../mind/memory/store/conversationStore.js';
@@ -85,6 +85,8 @@ export interface PlatformSurfaceTurn {
   /** A turn with others present is offered her Aether reading tools (`TextTurnSurface.othersFolderReading`): a platform reply yes, game chat no. */
   othersFolderReading?: boolean;
   store(turn: CompletedTurn): ShannonExperience | null;
+  /** Syzygy ADR-0008 stage 3: what the mind's normalizer of this surface needs beside the audience (`TextTurnSurface.perception`). */
+  perception?: TextTurnSurface['perception'];
 }
 
 export function platformTextTurnInput(turn: PlatformSurfaceTurn): TextTurnInput {
@@ -102,6 +104,7 @@ export function platformTextTurnInput(turn: PlatformSurfaceTurn): TextTurnInput 
       // Her own outreach is the owner's matter: told only on his own turn, never to anyone else who writes (guest identity).
       ownOutreach: turn.ownOutreach && turn.policy.ownerWrote,
       store: completed => turn.store(completed),
+      ...(turn.perception ? { perception: turn.perception } : {}),
     },
   };
 }

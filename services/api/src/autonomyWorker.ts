@@ -38,6 +38,8 @@ import { ledgerPredictionTap, presenceOf, valueFactsReader } from './wiring/cogn
 import { cognitionLedgerSwitches } from '@shannon/learning';
 import { configuredWithheldActions, gateRefusals, withheldFactsReader } from './wiring/withheldWiring.js';
 import { configuredSkillCopies } from './wiring/skillCopyWiring.js';
+import { configuredMindInbox } from './wiring/mindWiring.js';
+import { configuredProactiveGate } from './wiring/proactiveGateWiring.js';
 import { clock } from './mind/action/ownTime/autonomyLoopPacing.js';
 
 /**
@@ -66,8 +68,16 @@ const looks = new ActivityRoomLooks({
 });
 // Speaking up on her own (話しかける). Her message takes the initiative path; who is around her body decides how guarded its wording is.
 // SHANNON_AUTONOMY_MAX_REACH_OUTS=0 switches it off.
-const reachOuts = new SQLiteReachOutSpeaker(databasePath, (scopeKey, at) => bodyIngestEnabled(process.env)
-  && bodyStore.othersPresent(scopeKey, at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds));
+const othersAroundBody = (scopeKey: string, at: string) => bodyIngestEnabled(process.env)
+  && bodyStore.othersPresent(scopeKey, at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds);
+// Syzygy ADR-0008 stage 3 (owner answer 2): the proactive gate every message of hers passes where it is written (the speaker, the call
+// request). A hold is a withheld action her next thought is shown and a notice for the conversation. SHANNON_PROACTIVE_GATE=off: none.
+const proactiveGate = configuredProactiveGate(process.env, {
+  databasePath, ownerActiveMilliseconds: configuredAutonomyLoop(process.env).ownerActiveMilliseconds,
+  withheld: (scopeKey, draft, at) => withheldActions?.withheld.sink(scopeKey, draft, at), emit: (scopeKey, draft, at) => mindInbox?.emit(scopeKey, draft, at),
+  audience: (scopeKey, at) => (othersAroundBody(scopeKey, at) ? 'others' : 'owner'), log: line => console.log(line),
+});
+const reachOuts = new SQLiteReachOutSpeaker(databasePath, othersAroundBody, proactiveGate?.gate ?? null);
 // After a message of hers she stays with it for a short while (SHANNON_AUTONOMY_REACH_OUT_WAIT_SECONDS): what her body reported about
 // showing it and what the server knows of the body are read here as closed facts. SHANNON_AUTONOMY_MAX_FOLLOW_UPS=0 switches all of it off.
 const reachOutReports = new SQLiteReachOutReports(databasePath);
@@ -80,6 +90,7 @@ const phone = new IncomingCallRequests({
   store: incomingCalls, claims: reachOutClaims, listeners: (scopeKey, at) => privateListening.listeners(scopeKey, at),
   bodyVisible: (scopeKey, at) => bodyIngestEnabled(process.env) && reachOutReports.windowVisible(scopeKey, at),
   serverReady: incomingCallsConfigured(process.env), minimumIntervalMilliseconds: incomingCallMinimumIntervalMilliseconds(process.env),
+  gate: proactiveGate?.gate ?? null,
 });
 const observer = {
   // A report of one of the owner's apps (her message said through his earphones) is read whatever the body switch says.
@@ -139,6 +150,9 @@ const predictionLedger = configuredPredictionLedger(process.env, databasePath);
 // it gives nothing while anyone else may see or hear her.
 const valueFacts = cognitionLedgerSwitches(process.env).valueFacts && predictionLedger?.values ? valueFactsReader(predictionLedger.values, observer.body) : null;
 const shadowTap = shadow ? { reachOut: (...args: Parameters<typeof shadow.reachOut>) => shadow.reachOut(...args) } : null;
+// Syzygy ADR-0008 stage 3: the one function her own time is handed of the mind (rows of closed fields in `mind_inbox`, once the API
+// created it). SHANNON_WORKSPACE=off (or SHANNON_ADR8_STAGE3=off): none, and every step is what it was.
+const mindInbox = configuredMindInbox(process.env, { databasePath, log: line => console.log(line) });
 const loop = new ShannonAutonomyLoop({
   store, service, config, loop: loopConfig, model: configuredAutonomyTextModel(process.env, undefined, line => console.log(line)),
   reader: new BoundedPublicReader({
@@ -157,6 +171,7 @@ const loop = new ShannonAutonomyLoop({
   ...(valueFacts ? { valueFacts } : {}),
   // ADR-0008 §14: her next thought is told what a rule stopped lately, apart from a rest she chose; never with anyone else present.
   ...(withheldActions ? { withheldFacts: withheldFactsReader(withheldActions.withheld, observer.body, at => clock(at, config.timeZone)) } : {}),
+  ...(mindInbox ? { emitMindEvent: mindInbox.emit } : {}),
   // Content-free: a step kind and a closed reason code.
   log: line => console.log(`Shannon autonomy step: ${line.replace(/[^a-z0-9_:., -]/giu, '_').slice(0, 300)}`),
 });
@@ -196,6 +211,8 @@ try {
   decisionTraces?.close();
   predictionLedger?.close();
   withheldActions?.close();
+  mindInbox?.close();
+  proactiveGate?.close();
   skillCopies?.close();
   ownerContext?.close();
   ownerUpcoming.close();

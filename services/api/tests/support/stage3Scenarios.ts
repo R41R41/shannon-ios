@@ -51,6 +51,8 @@ export interface Stage3Hooks {
   loop?: (context: { databasePath: string }) => Partial<LoopHarnessOptions>;
   /** Told of every scenario's unexpected answer, so the test names the scenario. */
   expectStatus?: (status: number, name: string) => void;
+  /** The proactive gate her own messages pass where they are written (a later step's; absent, the speaker is afb38c28's). */
+  reachOutGate?: (context: { databasePath: string }) => ConstructorParameters<typeof SQLiteReachOutSpeaker>[2];
 }
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/giu;
@@ -321,7 +323,8 @@ async function reachOutScenario(hooks: Stage3Hooks): Promise<Stage3Capture> {
   const persistent = new SQLiteShannonStore({ path: w.databasePath, now });
   const initiatives = new SQLiteInitiativeStore(w.databasePath, now);
   let othersPresent = false;
-  const speaker = new SQLiteReachOutSpeaker(w.databasePath, () => othersPresent);
+  const gate = hooks.reachOutGate?.({ databasePath: w.databasePath });
+  const speaker = gate ? new SQLiteReachOutSpeaker(w.databasePath, () => othersPresent, gate) : new SQLiteReachOutSpeaker(w.databasePath, () => othersPresent);
   const showing = new FakeShowing();
   const model = new FakeModel();
   const harness = loopHarness({

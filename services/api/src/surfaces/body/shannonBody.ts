@@ -12,7 +12,7 @@ import { BODY_LOOK_TOOL, BodyLooks, type BodyLookOptions } from './bodyLook.js';
 import { BODY_LOOK_LIMITS } from '../../contracts/bodyLookContract.js';
 import { noteBodyLookSpeaker } from './store/bodyLookDelivery.js';
 import { bodyNudgeCandidates } from './bodyNudges.js';
-import { BodyReactions } from './bodyReaction.js';
+import { BodyReactions, type BodyReactionDependencies } from './bodyReaction.js';
 import { BODY_REACTION_TOOL, configuredBodyReactions, type BodyReactionConfig } from '../../contracts/bodyReactionContract.js';
 import type { BodyReactionSpeaker } from './bodyReactionModel.js';
 import { SQLiteBodyReactionStore } from './store/bodyReactionStore.js';
@@ -55,7 +55,7 @@ export interface ShannonBodyOptions {
   /** `SHANNON_AUTONOMY_MAX_FOLLOW_UPS` above zero. Off, no report is taken and no presence read is noted for the loop. Unset means on. */
   reachOutReportsEnabled?: boolean;
   /** When she is touched (`bodyReaction.ts`): its tables, switch and timings, the fast model, and where a touch becomes an experience. */
-  reactions?: { store?: SQLiteBodyReactionStore; config?: Partial<BodyReactionConfig>; speaker?: BodyReactionSpeaker | null; experiences?: TouchExperienceWriter | null; prediction?: BodyTouchDependencies['prediction']; stage2?: BodyTouchDependencies['stage2']; ledger?: BodyTouchDependencies['ledger'] };
+  reactions?: { store?: SQLiteBodyReactionStore; config?: Partial<BodyReactionConfig>; speaker?: BodyReactionSpeaker | null; experiences?: TouchExperienceWriter | null; prediction?: BodyTouchDependencies['prediction']; stage2?: BodyTouchDependencies['stage2']; ledger?: BodyTouchDependencies['ledger']; mind?: BodyReactionDependencies['mind'] }; // mind: Syzygy ADR-0008 stage 3.
   /**
    * Whether the owner is in a call on another device (`ownerCallElsewhere.ts`): `enabled` is `SHANNON_OWNER_CALL_ELSEWHERE`
    * (unset means on); `surface` says which app a device is (default: her body's registration only).
@@ -199,7 +199,7 @@ export class ShannonBody {
       // Her Minecraft body is never a body that is touched (`docs/minecraft-body-contract.md`).
       isBody: (scopeKey, deviceId) => !this.isGameBody(deviceId) && this.store.capabilities(scopeKey, deviceId) !== null,
       surface: (scopeKey, deviceId) => this.store.surface(scopeKey, deviceId),
-      record: (scopeKey, entry) => { dependencies.autonomy.recordConversationAction(scopeKey, { ...entry, tool: BODY_REACTION_TOOL }); },
+      record: (scopeKey, entry) => { dependencies.autonomy.recordConversationAction(scopeKey, { ...entry, tool: BODY_REACTION_TOOL }); }, ...(dependencies.reactions?.mind ? { mind: dependencies.reactions.mind } : {}),
     });
     const bodySurface = (scopeKey: string, deviceId: string): OwnerCallSurface | undefined => {
       const surface = this.store.surface(scopeKey, deviceId);

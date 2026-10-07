@@ -12,6 +12,7 @@ import { autonomyModelCostUsd } from './autonomyModels.js';
 import { AUTONOMY_REACH_OUT_TOOL } from '../../inhibition/inhibitionPorts.js';
 import { AutonomyModelError, resolveAutonomyModel } from './autonomyTextModel.js';
 import { STUDY_STATUS_LABEL } from './store/studyStore.js';
+import { WITHHELD_REASON_LABELS, isWithheldReason } from '../../../contracts/withheldActionContract.js';
 
 /**
  * The step 「話しかける」 (owner decision 2026-10-02): from her own activity she may write one
@@ -29,12 +30,13 @@ export interface AutonomyReachOuts {
   lastSentAt(scopeKey: string): string | null;
   /** While someone other than the owner may see or hear her body: the speak-time rule text and the marker for owner-private lines. Otherwise null. */
   audience(scopeKey: string, at: string): { instructions: string; marker: string } | null;
-  say(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; maximumPerDay: number }, at: string): 'sent' | 'limit' | 'unavailable';
+  /** `arisenAt`: when the thought that chose it was had (the proactive gate's intent expiry, Syzygy ADR-0008 stage 3). */
+  say(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; maximumPerDay: number; arisenAt?: string }, at: string): ReachOutDeliveryAnswer;
   /**
    * Her opening line of a call to his iPhone (`autonomyLoopPhoneStep.ts`), written as a message of hers. It is not one of
    * the day's messages: calls have no count of their own, and take none of `maximumPerDay`.
    */
-  sayByPhone?(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string }, at: string): 'sent' | 'limit' | 'unavailable';
+  sayByPhone?(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; arisenAt?: string }, at: string): ReachOutDeliveryAnswer;
   /** The newest message she started: its initiative id, when it was written, and whether it is a second call. */
   latest?(scopeKey: string): { id: string; at: string; reason?: string } | null;
   /** The words of one of her own messages (owner decision 2026-10-02, ADR-0003): for the second call that follows it. Null when it is not hers. */
@@ -44,7 +46,30 @@ export interface AutonomyReachOuts {
   /** Whether the message with this id was already called after. */
   followedUp?(scopeKey: string, originId: string): boolean;
   /** The one second call after her message `originId` got no answer. `seen`: its words were written with her note of a look in front of her. */
-  sayAgain?(scopeKey: string, input: { originId: string; text: string; dayKey: string; maximumPerDay: number; seen?: boolean }, at: string): 'sent' | 'limit' | 'unavailable';
+  sayAgain?(scopeKey: string, input: { originId: string; text: string; dayKey: string; maximumPerDay: number; seen?: boolean; arisenAt?: string }, at: string): ReachOutDeliveryAnswer;
+}
+
+/**
+ * What a delivery point answered. `held:<code>`: the proactive gate held the message there (Syzygy ADR-0008 stage 3, owner answer
+ * 2); nothing was written, and the gate recorded it as a withheld action she is shown (`owner_active`, `intent_repeat`,
+ * `intent_expired`, `topic_reused`).
+ */
+export type ReachOutDeliveryAnswer = 'sent' | 'limit' | 'unavailable' | `held:${string}`;
+
+/** The step's result for a message the proactive gate held: not her choice; the rule and its reason, in closed words. */
+export function heldByGate(delivery: string, what: string, usage?: { inputTokens: number; outputTokens: number }): { outcome: 'failed'; summary: string; reasonCode: string; usage?: { inputTokens: number; outputTokens: number } } | null {
+  if (!delivery.startsWith('held:')) return null;
+  const code = delivery.slice('held:'.length);
+  const label = isWithheldReason(code) ? WITHHELD_REASON_LABELS[code] : '決まり';
+  return { outcome: 'failed', reasonCode: isWithheldReason(code) ? code : 'held', summary: `${what}を、決まりが止めました（${label}）。`, ...(usage ? { usage } : {}) };
+}
+
+/** When the thought that chose this step was had: the cycle's latest thought before `at`, or `at`. */
+export function intentArisenAt(dependencies: StepDependencies, cycle: AutonomyLoopCycle, at: string): string {
+  try {
+    const thought = dependencies.store.loop.steps(cycle.id).filter(entry => entry.step.kind === 'think' && entry.createdAt && entry.createdAt <= at).at(-1)?.createdAt;
+    return thought ?? at;
+  } catch { return at; }
 }
 
 /** The owner's upcoming items as bounded lines; `others` leaves out what he keeps from the people present. */
@@ -107,6 +132,7 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
   const costUsd = autonomyModelCostUsd(model, estimate, config.modelPrices);
   if (costUsd === null) return null;
   const label = REACH_OUT_REASON_LABEL[reason];
+  const arisenAt = intentArisenAt(dependencies, cycle, at);
   return {
     request: {
       domain: 'owner_message', summary: `持ち主に、自分から一言話しかけます（理由: ${label}）。`, tool: REACH_OUT_TOOL,
@@ -145,8 +171,11 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
       if (heldForOthers(dependencies, cycle, writeAt)) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, reasonCode: 'others_present', summary: `ほかの人がいるので、話しかけるのをやめておきました（理由: ${label}）。` };
       let delivery: ReturnType<AutonomyReachOuts['say']>;
       try {
-        delivery = adapters.reachOuts.say(cycle.scopeKey, { reason, text, dayKey: autonomyDayKey(writeAt, config), maximumPerDay: config.maximumReachOutsPerDay }, writeAt);
+        delivery = adapters.reachOuts.say(cycle.scopeKey, { reason, text, dayKey: autonomyDayKey(writeAt, config), maximumPerDay: config.maximumReachOutsPerDay, arisenAt }, writeAt);
       } catch { delivery = 'unavailable'; }
+      // Syzygy ADR-0008 stage 3: the proactive gate held it where it would have been written.
+      const held = heldByGate(delivery, `持ち主に話しかけるの（理由: ${label}）`, usage);
+      if (held) return held;
       // What she said is in the Talk; the record keeps only that she spoke and why.
       if (delivery === 'sent') {
         const sent = agentic ? latestOf(adapters.reachOuts, cycle.scopeKey) : null;
