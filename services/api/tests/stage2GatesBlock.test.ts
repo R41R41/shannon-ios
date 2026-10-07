@@ -154,7 +154,7 @@ describe('the skill sleep\'s writes', () => {
     const proposer: SkillSleepModel = { model: 'scripted', json: async () => answers.shift() ?? { ...answers[0], action: 'none' } };
     const before = [pinned, owned].map(skillId => skills.store.get('owner', skillId)!.body);
     const night = await new ShannonSkillConsolidator(skills, { knowledge: () => [], experiences: () => [], choices: () => [], visible: () => () => true, check: () => ok },
-      { maintainer: null, proposer }, { backgroundLlmCostUsd: () => 0 }, { backgroundBudgetUsd: 1, now: () => at(30), log: () => {} }).consolidate('owner', at(-1440), at(30));
+      { maintainer: null, proposer }, { skillBudgetUsd: 1, now: () => at(30), log: () => {} }).consolidate('owner', at(-1440), at(30));
     expect(night.rejections).toEqual(expect.arrayContaining(['pinned', 'owner_edited']));
     expect([pinned, owned].map(skillId => skills.store.get('owner', skillId)!.body)).toEqual(before);
   });

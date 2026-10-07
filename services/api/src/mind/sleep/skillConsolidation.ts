@@ -1,5 +1,5 @@
 import { normalizeKnowledgeDraft } from '@shannon/cognition';
-import { configuredBackgroundBudgetUsd, utcMonthKey } from '../../infra/models/llmUsage.js';
+import { configuredSkillBudgetUsd, utcMonthKey } from '../../infra/models/llmUsage.js';
 import {
   SKILL_CAPACITY, SKILL_LIFECYCLE, type SkillBodyCheck, type SkillDocument, type SkillMemory, type SkillPatch, type SkillRejection, type StoredPattern,
 } from '../memory/memoryPorts.js';
@@ -37,6 +37,8 @@ export interface SkillSeedSources {
   visible(scopeKey: string): (experienceId: string) => boolean;
   /** What a body must not carry; null when it cannot be read now (then nothing is written). */
   check(scopeKey: string): SkillBodyCheck | null;
+  /** Whether sources still pass the seed rule (`skillSourcesPass`): a reverted change built from what fails it is not shown again. */
+  sourcesPass?(scopeKey: string): (sources: readonly string[]) => boolean;
 }
 
 export interface SeedChoice {
@@ -63,20 +65,26 @@ const PROPOSER_ROUNDS = 3;
  */
 export const SKILL_SLEEP_LIMITS = Object.freeze({ proposerCallsPerNight: 3, latestWindowHours: 36 });
 
+/** The night a skill sleep's calls count in: the owner-local day of the sleep (Asia/Tokyo). */
+export function skillSleepNight(at: string): string {
+  return new Date(Date.parse(at) + 9 * 3_600_000).toISOString().slice(0, 10);
+}
+
 export class ShannonSkillConsolidator {
   private readonly budgetUsd: number;
-  /** Proposer calls made per scope and night (UTC date of the sleep), for `SKILL_SLEEP_LIMITS.proposerCallsPerNight`. */
-  private readonly proposerCalls = new Map<string, number>();
 
+  /**
+   * Review M4: skill sleep spends its own monthly budget (`skillBudgetUsd`, `SHANNON_SKILL_MONTHLY_BUDGET_USD`), never the shared
+   * background budget; its spend and its calls are in the skill tables (`skills.sleepUsage`), the calls written before they are made.
+   */
   constructor(
     private readonly skills: SkillMemory,
     private readonly sources: SkillSeedSources,
     private readonly models: SkillSleepModels,
-    private readonly usage: { backgroundLlmCostUsd(monthKey: string): number },
-    private readonly options: { backgroundBudgetUsd?: number; now?: () => string; log?: (line: string) => void;
+    private readonly options: { skillBudgetUsd?: number; now?: () => string; log?: (line: string) => void;
       /** The draw of a patch's base in a skill's lineage (ADR-0008 §14); `Math.random` unless handed. */ random?: () => number } = {},
   ) {
-    this.budgetUsd = options.backgroundBudgetUsd ?? configuredBackgroundBudgetUsd();
+    this.budgetUsd = options.skillBudgetUsd ?? configuredSkillBudgetUsd();
   }
 
   async consolidate(scopeKey: string, startAt: string, endAt: string): Promise<SkillConsolidationResult> {
@@ -103,23 +111,24 @@ export class ShannonSkillConsolidator {
     if (!this.models.maintainer && !this.models.proposer) return finish('disabled');
     // Review M4: the models run on the latest night only, never on a window missed days ago.
     if (Date.parse(endAt) < Date.parse(at) - SKILL_SLEEP_LIMITS.latestWindowHours * 3_600_000) return finish('idle');
-    const affordable = () => this.usage.backgroundLlmCostUsd(utcMonthKey(new Date(at))) < this.budgetUsd;
-    // Review M4: the budget is checked before every call, and the proposer has at most three calls a night; past either, a call
-    // is not made and answers nothing (the run ends as if the model proposed nothing).
-    const night = `${scopeKey}|${at.slice(0, 10)}`;
-    const guarded = (model: SkillSleepModel | null, capped: boolean): SkillSleepModel | null => (model ? {
+    const affordable = () => { try { return this.skills.sleepUsage.monthCostUsd(utcMonthKey(new Date(at))) < this.budgetUsd; } catch { return false; } };
+    // Review M4: the skill budget is checked before every call, and the proposer has at most three calls a night (counted in the
+    // database, before the call); past either, a call is not made and answers nothing (as if the model proposed nothing).
+    const night = skillSleepNight(at);
+    const guarded = (model: SkillSleepModel | null, role: 'maintainer' | 'proposer'): SkillSleepModel | null => (model ? {
       model: model.model,
       json: async (...args) => {
         if (!affordable()) return {};
-        if (capped) {
-          const made = this.proposerCalls.get(night) ?? 0;
-          if (made >= SKILL_SLEEP_LIMITS.proposerCallsPerNight) return {};
-          this.proposerCalls.set(night, made + 1);
-        }
-        return model.json(...args);
+        let allowed = false;
+        this.skills.write(at, () => {
+          if (role === 'proposer' && this.skills.sleepUsage.calls(scopeKey, 'proposer', night) >= SKILL_SLEEP_LIMITS.proposerCallsPerNight) return;
+          this.skills.sleepUsage.call(scopeKey, role, night, model.model, at);
+          allowed = true;
+        });
+        return allowed ? model.json(...args) : {};
       },
     } : null);
-    const models = { maintainer: guarded(this.models.maintainer, false), proposer: guarded(this.models.proposer, true) };
+    const models = { maintainer: guarded(this.models.maintainer, 'maintainer'), proposer: guarded(this.models.proposer, 'proposer') };
     const made = this.skills.madeToday(scopeKey, at);
 
     // 2. The maintainer of the pattern wiki.
@@ -196,7 +205,7 @@ export class ShannonSkillConsolidator {
             uses: skill.uses.length, successes: resolved.filter(use => use.o === 1).length, body: (base?.body ?? skill.body).slice(0, 1_500),
             ...(base ? { branch: { version: base.version, uses: base.uses, successes: base.successes } } : {}) };
         }),
-        reverted: this.skills.store.audits(scopeKey).filter(entry => entry.status === 'reverted').slice(-12)
+        reverted: this.revertedShown(scopeKey).slice(-12)
           .map(entry => ({ target: entry.target, purposes: entry.purposePatternIds, diff: entry.diff.slice(0, 300) })),
         opened: [...opened.values()].map(page => ({ id: page.patternId, kind: page.kind, title: page.title, body: page.body })),
       }, PROPOSER_SCHEMA) as Partial<ProposerAnswer>;
@@ -227,6 +236,21 @@ export class ShannonSkillConsolidator {
       return 'updated';
     }
     return 'none';
+  }
+
+  /**
+   * The reverted changes the proposer is shown (review): never one of a skill retired because a source was forgotten or whose copy
+   * was withdrawn, nor one whose skill or pages are built from what now fails the seed rule; while that rule cannot be read, none.
+   */
+  private revertedShown(scopeKey: string) {
+    let pass: (sources: readonly string[]) => boolean = () => true;
+    try { if (this.sources.sourcesPass) pass = this.sources.sourcesPass(scopeKey); } catch { return []; }
+    const skills = new Map(this.skills.store.all(scopeKey, { includeRetired: true }).map(skill => [skill.skillId, skill]));
+    return this.skills.store.audits(scopeKey).filter(entry => {
+      const skill = skills.get(entry.skillId);
+      if (entry.status !== 'reverted' || !skill || skill.statusReason === 'source_forgotten' || skill.exportHold === 'withdrawn') return false;
+      try { return pass([...skill.sources, ...entry.purposePatternIds.map(id => `pattern:${id}`)]); } catch { return false; }
+    });
   }
 
   /**

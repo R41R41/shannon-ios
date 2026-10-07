@@ -6,6 +6,7 @@ import {
   skillLint, trialVerdict, type SkillDocument, type SkillProblem,
 } from './skillDocument.js';
 import { SQLiteSkillCopyWrites } from './store/sqliteSkillCopyWrites.js';
+import { SQLiteSkillSleepUsage } from './store/sqliteSkillSleepUsage.js';
 import { SKILLS_TABLE, SQLiteSkills, versionRevisionId, type SkillActor, type SkillUse, type StoredPattern, type StoredSkill } from './store/sqliteSkills.js';
 import { checkedPage, checkedSkillBody, checkedSkillText, closedSources, digest, iso } from './skillMemoryParts.js';
 import { parentBaseline, type LineageNode } from './skillLineage.js';
@@ -44,7 +45,7 @@ export interface SkillMemoryOptions {
 
 export type SkillRejection = SkillProblem | 'secret' | 'check_unavailable' | 'name_taken' | 'stale' | 'not_found' | 'unavailable' | 'uncited' | 'copied'
   | 'over_limit' | 'no_purpose' | 'audit_reverted' | 'on_trial' | 'unchanged' | 'empty' | 'pinned' | 'owner_edited' | 'over_capacity' | 'too_young'
-  | 'patch_failed' | 'snapshot_failed';
+  | 'patch_failed' | 'snapshot_failed' | 'too_many_sources';
 
 /** A skill that has never been used is not retired (consolidated away) before this many days (Hermes Agent's minimum age). */
 export const SKILL_MINIMUM_AGE_DAYS = 14;
@@ -62,15 +63,15 @@ export { PATTERN_LIMITS } from './skillMemoryParts.js';
 
 export class SkillMemory {
   readonly store: SQLiteSkills;
-  /** Review M2: her own writes to her skills' copies (`skillCopies.ts`). */
-  readonly copyWrites: SQLiteSkillCopyWrites;
+  /** Review M2: her own writes to her skills' copies (`skillCopies.ts`); review M4: the skill sleep's own spend and calls. */
+  readonly copyWrites: SQLiteSkillCopyWrites; readonly sleepUsage: SQLiteSkillSleepUsage;
   private readonly meter: LockWaitMeter;
   private readonly defer: (task: () => void) => void;
   private present = false;
 
   constructor(private readonly options: SkillMemoryOptions) {
     this.store = new SQLiteSkills(options.database, { createSchema: options.createsSchema });
-    this.copyWrites = new SQLiteSkillCopyWrites(options.database);
+    [this.copyWrites, this.sleepUsage] = [new SQLiteSkillCopyWrites(options.database), new SQLiteSkillSleepUsage(options.database)];
     this.meter = new LockWaitMeter('skills', options.log);
     this.defer = options.defer ?? (task => { setImmediate(task); });
   }
@@ -158,6 +159,8 @@ export class SkillMemory {
       for (const skill of this.store.all(scopeKey)) {
         const outcomes = (version?: number) => skill.uses.filter(use => use.o !== null && (version === undefined || use.v === version)).map(use => use.o as 0 | 1);
         if (skill.status === 'trial') {
+          // Review L3: a pinned skill's trial is not judged (accepted, reverted or retired) while it is pinned.
+          if (skill.pinned) continue;
           const audit = skill.trialAuditId ? this.store.audits(scopeKey).find(entry => entry.auditId === skill.trialAuditId) ?? null : null;
           const trial = outcomes(skill.version).slice(0, SKILL_LIFECYCLE.trialUses);
           const verdict = trialVerdict({ base: skill.trialBaseVersion, baseline: audit?.baselineRate ?? null, outcomes: trial });
@@ -229,7 +232,7 @@ export class SkillMemory {
    * is for (its PURPOSE); only active pages are kept.
    */
   create(scopeKey: string, proposal: SkillCreation, check: SkillBodyCheck | null, at: string): { skillId: string } | { rejected: SkillRejection } {
-    const body = this.checkedBody(proposal.draft, check);
+    const body = checkedSkillBody(proposal.draft, check);
     if ('rejected' in body) return body;
     let outcome: { skillId: string } | { rejected: SkillRejection } = { rejected: 'unavailable' };
     this.now(at, () => {
@@ -241,12 +244,14 @@ export class SkillMemory {
         : !skill.uses.length && Date.parse(at) - Date.parse(skill.createdAt) < SKILL_MINIMUM_AGE_DAYS * 86_400_000 ? 'too_young' : null)).find(Boolean);
       if (refusal) { outcome = { rejected: refusal as SkillRejection }; return; }
       if (this.store.all(scopeKey).length - replaced.length + 1 > SKILL_CAPACITY) { outcome = { rejected: 'over_capacity' }; return; }
+      const sources = closedSources([...proposal.evidence, ...purposes.map(id => `pattern:${id}`)]);
+      if (!sources) { outcome = { rejected: 'too_many_sources' }; return; }
       const skillId = `skill_${digest(`${scopeKey}\n${body.skill.name}\n${at}\n${randomUUID()}`)}`;
       const auditId = `audit_${digest(`${skillId}\n1\n${randomUUID()}`)}`;
       this.store.insertAudit({ auditId, scopeKey, skillId, target: `name:${body.skill.name}`, kind: 'create', fromVersion: null, toVersion: 1, proposalHash: skillHash(body.text),
         diff: lineDiff('', body.text), purposePatternIds: purposes, baselineRate: null, lint: skillLint(body.text), proposedAt: at });
       this.store.insert({ skillId, scopeKey, name: body.skill.name, description: body.skill.description, body: body.text, bodyHash: skillHash(body.text),
-        sources: closedSources([...proposal.evidence, ...purposes.map(id => `pattern:${id}`)]), purposePatternIds: purposes, trialAuditId: auditId },
+        sources, purposePatternIds: purposes, trialAuditId: auditId },
       { actor: 'sleep', evidence: proposal.evidence }, 'built', at);
       for (const skill of replaced) this.store.setStatus(scopeKey, skill!.skillId, 'retired', 'consolidated', at);
       outcome = { skillId };
@@ -283,18 +288,19 @@ export class SkillMemory {
         if ('problem' in parsed) { outcome = { rejected: parsed.problem }; return; }
         draft = parsed.skill;
       } else draft = patch.draft;
-      const body = this.checkedBody(draft, check);
+      const body = checkedSkillBody(draft, check);
       if ('rejected' in body) { outcome = body; return; }
       if (skillHash(body.text) === current.bodyHash) { outcome = { rejected: 'unchanged' }; return; }
       const other = this.store.byName(scopeKey, body.skill.name);
       if (other && other.skillId !== skillId) { outcome = { rejected: 'name_taken' }; return; }
       const purposes = this.purposes(scopeKey, patch.purposePatternIds ?? []);
       if (this.revertedBefore(scopeKey, `skill:${skillId}`, skillHash(body.text), purposes)) { outcome = { rejected: 'audit_reverted' }; return; }
+      const merged = closedSources([...current.sources, ...patch.evidence, ...purposes.map(id => `pattern:${id}`)]);
+      if (!merged) { outcome = { rejected: 'too_many_sources' }; return; }
       const baseline = base ? parentBaseline(base) : baselineRate(current.uses.filter(use => use.o !== null && use.v === current.version).map(use => use.o as 0 | 1));
       const auditId = `audit_${digest(`${skillId}\n${expectedVersion + 1}\n${randomUUID()}`)}`;
       this.store.insertAudit({ auditId, scopeKey, skillId, target: `skill:${skillId}`, kind: 'patch', fromVersion: base?.version ?? expectedVersion, toVersion: expectedVersion + 1, proposalHash: skillHash(body.text),
         diff: lineDiff(base?.body ?? current.body, body.text), purposePatternIds: purposes, baselineRate: baseline, lint: skillLint(body.text), proposedAt: at });
-      const merged = closedSources([...current.sources, ...patch.evidence, ...purposes.map(id => `pattern:${id}`)]);
       outcome = this.store.update(scopeKey, skillId, expectedVersion, {
         name: body.skill.name, description: body.skill.description, body: body.text, bodyHash: skillHash(body.text), madeBy: 'sleep', sources: merged,
         purposePatternIds: [...new Set([...current.purposePatternIds, ...purposes])], trial: { base: expectedVersion, audit: auditId }, actor, evidence: patch.evidence,
@@ -353,12 +359,9 @@ export class SkillMemory {
   /** How many skill changes the sleep proposed in the owner-local day of `at`, and how many pattern edits it made (the nightly limits). */
   madeToday(scopeKey: string, at: string): { created: number; updated: number; patternEdits: number } {
     const full = { created: SKILL_LIFECYCLE.newPerNight, updated: SKILL_LIFECYCLE.updatesPerNight, patternEdits: SKILL_LIFECYCLE.patternEditsPerNight };
-    try {
-      if (!this.ready()) return full;
-      // From the owner-local midnight of `at` (Asia/Tokyo, UTC+9 all year, the ledgers' day).
-      const since = new Date(Date.parse(`${ownerDayKey(at)}T00:00:00+09:00`)).toISOString();
-      return { ...this.store.proposedSince(scopeKey, since), patternEdits: this.store.patternOperationsSince(scopeKey, since) };
-    } catch { return full; }
+    // From the owner-local midnight of `at` (Asia/Tokyo, UTC+9 all year, the ledgers' day).
+    const since = new Date(Date.parse(`${ownerDayKey(at)}T00:00:00+09:00`)).toISOString();
+    try { return this.ready() ? { ...this.store.proposedSince(scopeKey, since), patternEdits: this.store.patternOperationsSince(scopeKey, since) } : full; } catch { return full; }
   }
 
   // The pattern wiki (never given to a turn; it feeds the proposer).
@@ -369,8 +372,10 @@ export class SkillMemory {
     if ('rejected' in valid) return valid;
     let outcome: { patternId: string } | { rejected: SkillRejection } = { rejected: 'unavailable' };
     this.now(at, () => {
+      const closed = closedSources(sources);
+      if (!closed) { outcome = { rejected: 'too_many_sources' }; return; }
       const patternId = `pattern_${digest(`${scopeKey}\n${valid.title}\n${at}\n${randomUUID()}`)}`;
-      this.store.insertPattern({ patternId, scopeKey, kind: page.kind, title: valid.title, body: valid.body, sources: closedSources(sources) }, at);
+      this.store.insertPattern({ patternId, scopeKey, kind: page.kind, title: valid.title, body: valid.body, sources: closed }, at);
       outcome = { patternId };
     });
     return outcome;
@@ -386,7 +391,9 @@ export class SkillMemory {
       const body = edit.operation === 'append' ? `${current.body.trim()}\n\n${edit.text.trim()}` : edit.text;
       const valid = checkedPage(edit.title ?? current.title, body, check);
       if ('rejected' in valid) { outcome = valid; return; }
-      outcome = this.store.updatePattern(scopeKey, patternId, expectedVersion, { title: valid.title, body: valid.body, sources: closedSources([...current.sources, ...sources]) }, edit.operation, null, at)
+      const closed = closedSources([...current.sources, ...sources]);
+      if (!closed) { outcome = { rejected: 'too_many_sources' }; return; }
+      outcome = this.store.updatePattern(scopeKey, patternId, expectedVersion, { title: valid.title, body: valid.body, sources: closed }, edit.operation, null, at)
         ? { version: expectedVersion + 1 } : { rejected: 'stale' };
     });
     return outcome;
@@ -403,6 +410,7 @@ export class SkillMemory {
       if (!target || target.status !== 'active' || !others.length || others.some(page => !page || page.status !== 'active')) { outcome = { rejected: 'not_found' }; return; }
       const pages = others as StoredPattern[];
       const sources = closedSources([...target.sources, ...pages.flatMap(page => page.sources)]);
+      if (!sources) { outcome = { rejected: 'too_many_sources' }; return; }
       if (!this.store.updatePattern(scopeKey, into, target.version, { title: valid.title, body: valid.body, sources }, 'merge', pages.map(page => page.patternId).join(',').slice(0, 300), at)) { outcome = { rejected: 'stale' }; return; }
       for (const page of pages) this.store.deprecatePattern(scopeKey, page.patternId, into, at);
       outcome = { version: target.version + 1 };
@@ -465,10 +473,6 @@ export class SkillMemory {
       name: safe.ok.name, description: safe.ok.description,
       body: base.body, bodyHash: base.bodyHash, madeBy: actor === 'owner' ? 'owner_edit' : base.madeBy, trial: null, actor, evidence, lineage: { restores: base.revisionId },
     }, reason, at, 'active') ? 'restored' : 'not_found';
-  }
-
-  private checkedBody(draft: SkillDocument, check: SkillBodyCheck | null): { skill: SkillDocument; text: string } | { rejected: SkillRejection } {
-    return checkedSkillBody(draft, check);
   }
 
   private writeUses(skill: StoredSkill, uses: readonly SkillUse[]): void {

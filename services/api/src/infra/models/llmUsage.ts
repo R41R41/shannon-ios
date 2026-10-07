@@ -112,6 +112,16 @@ export function configuredBackgroundBudgetUsd(
   return value ?? 0.5;
 }
 
+/**
+ * Review M4: the skill sleep's own monthly budget (USD, owner decision: 5), never the shared background budget's: its maintainer
+ * and proposer calls are checked against it before each call, and their spend is kept apart (`shannon_skill_sleep_usage`).
+ */
+export function configuredSkillBudgetUsd(
+  environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
+): number {
+  return positiveNumber(environment.SHANNON_SKILL_MONTHLY_BUDGET_USD) ?? 5;
+}
+
 function modelPrices(model: string): { input: number; output: number } {
   if (model.startsWith('gpt-5.6-luna')) return { input: 0.2, output: 1.2 };
   if (model.startsWith('text-embedding-3-small')) return { input: 0.02, output: 0 };

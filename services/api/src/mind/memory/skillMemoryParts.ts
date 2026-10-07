@@ -19,9 +19,18 @@ export function checkedPage(title: string, body: string, check: SkillBodyCheck |
   return { title: cleanTitle, body: cleanBody };
 }
 
-/** Sources as ids only (`experience:<id>`, `knowledge:<id>`, `pattern:<id>`, `choice:<id>`, `sequence:<symbols>`), at most 40. */
-export function closedSources(sources: readonly string[]): string[] {
-  return [...new Set(sources.filter(source => /^(?:experience|knowledge|pattern|choice|sequence):[A-Za-z0-9][A-Za-z0-9_.:>-]{0,160}$/u.test(source)))].slice(0, 40);
+/** How many sources a skill or a page may name; the whole list is stored (review N1: never a silent cut). */
+export const SKILL_SOURCES_LIMIT = 2_000;
+const SOURCE = /^(?:experience|knowledge|pattern|choice|sequence):[A-Za-z0-9][A-Za-z0-9_.:>-]{0,160}$/u;
+
+/**
+ * Sources as ids only (`experience:<id>`, `knowledge:<id>`, `pattern:<id>`, `choice:<id>`, `sequence:<symbols>`), every one kept
+ * (review N1): the forget and late-内緒 checks must see all of them. Fail closed: null when one is not such an id or there are
+ * more than `SKILL_SOURCES_LIMIT`, and the change that would store them is refused (`too_many_sources`).
+ */
+export function closedSources(sources: readonly string[]): string[] | null {
+  const unique = [...new Set(sources)];
+  return unique.length <= SKILL_SOURCES_LIMIT && unique.every(source => SOURCE.test(source)) ? unique : null;
 }
 
 export function digest(value: string): string {

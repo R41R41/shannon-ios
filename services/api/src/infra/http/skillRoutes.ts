@@ -12,7 +12,8 @@ import { sendJson } from './serverHttp.js';
  * - `GET /v1/autonomy/skills`: the index's usage against its capacity, and each skill (retired ones too): status, version, whether
  *   it is pinned, on trial (the version a failed trial returns to, its uses so far of three), the owner's version, its uses and
  *   successes, and where its copy is.
- * - `GET /v1/autonomy/skills/{id}`: one skill with its SKILL.md, its versions (actor, reason, lineage) and its audit.
+ * - `GET /v1/autonomy/skills/{id}`: one skill with its SKILL.md, its versions (actor, reason, lineage) and its audit; a skill retired
+ *   because a source was forgotten, or whose copy was withdrawn, without its body (`HIDDEN_BODY`, review N4).
  * - `POST /v1/autonomy/skills/{id}/pin` and `/unpin`: the sleep never writes to a pinned skill (a patch, a branch, a rollback, a
  *   retirement, a consolidation); unpinned, it may again.
  *
@@ -45,6 +46,13 @@ export function ownerSkillRecorder(activity: Pick<AutonomyActivityRecord, 'appen
   };
 }
 
+/** What the 学び tab shows in place of a body that may no longer be shown. */
+export const HIDDEN_BODY = '（このスキルの本文は表示しません。元にした会話が忘れられたか、写しを取り下げたためです）';
+
+function hidden(skill: StoredSkill): boolean {
+  return skill.statusReason === 'source_forgotten' || skill.exportHold === 'withdrawn';
+}
+
 function summary(skill: StoredSkill): Record<string, unknown> {
   const settled = skill.uses.filter(use => use.o !== null);
   const trial = skill.status === 'trial' ? { baseVersion: skill.trialBaseVersion, uses: settled.filter(use => use.v === skill.version).length, of: SKILL_LIFECYCLE.trialUses } : null;
@@ -75,7 +83,8 @@ export function createSkillsRoute(dependencies: SkillsRouteDependencies) {
     if (!action) {
       if (request.method !== 'GET') return sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
       return sendJson(response, 200, {
-        ...summary(skill), body: skill.body,
+        // Review N4: a skill built from something forgotten, or whose copy was withdrawn, is shown without its body.
+        ...summary(skill), ...(hidden(skill) ? { body: HIDDEN_BODY, bodyHidden: true } : { body: skill.body, bodyHidden: false }),
         versions: memory.store.revisions(scopeKey, skill.skillId).map(item => ({ version: item.version, kind: item.kind, actor: item.actor, reason: item.reason,
           parent: item.parentRevisionId, restores: item.variantOf, uses: item.uses, successes: item.successes, createdAt: item.createdAt })),
         audit: memory.store.audits(scopeKey).filter(entry => entry.skillId === skill.skillId).map(entry => ({ kind: entry.kind, status: entry.status, reason: entry.reason,

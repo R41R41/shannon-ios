@@ -257,7 +257,7 @@ describe('the sleep: maintainer and proposer', () => {
   const proposal = (extra: Record<string, unknown>) => ({ action: 'propose', open: [], operation: 'create', skillId: '', expectedVersion: 0, ...skill('find-documents', { description: '資料を探す時' }),
     replacements: [], purposePatternIds: [], consolidates: [], ...extra });
   const builder = (skills: SkillMemory, maintainer: SkillSleepModel | null, proposer: SkillSleepModel | null, extra: Partial<SkillSeedSources> = {}, cost = 0, when = at) =>
-    new ShannonSkillConsolidator(skills, sources(extra), { maintainer, proposer }, { backgroundLlmCostUsd: () => cost }, { backgroundBudgetUsd: 1, now: () => when, log: () => {} });
+    new ShannonSkillConsolidator(skills, sources(extra), { maintainer, proposer }, { skillBudgetUsd: 1 - cost, now: () => when, log: () => {} });
 
   it('turns a failed episode into a failure page by root-cause analysis, then the proposer opens it and writes one skill on trial', async () => {
     const skills = memory();

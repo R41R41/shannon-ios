@@ -9,6 +9,10 @@ import { WITHDRAWN_COPY_BODY } from '../src/integrations/aether/skillExport.js';
 import { encodeSkill, type SkillDocument } from '../src/mind/memory/skillDocument.js';
 import { SkillMemory } from '../src/mind/memory/skillMemory.js';
 import { configuredSkillExport, skillBodyCheck, skillSeedSources } from '../src/wiring/skillMemoryWiring.js';
+import { SKILL_SOURCES_LIMIT } from '../src/mind/memory/skillMemoryParts.js';
+import { createSkillsRoute, HIDDEN_BODY } from '../src/infra/http/skillRoutes.js';
+import { ShannonSkillConsolidator } from '../src/mind/sleep/skillConsolidation.js';
+import type { SkillSleepModel } from '../src/mind/sleep/skillSleepModel.js';
 import { FakeAetherFolder } from './support/fakeAetherFolder.js';
 
 /**
@@ -18,6 +22,8 @@ import { FakeAetherFolder } from './support/fakeAetherFolder.js';
  */
 const AT = '2026-10-07T03:00:00.000Z';
 const SECRET = 'ウォンバット会の集まりに毎月出ている';
+/** A day later: the night's limits on new and patched skills start again. */
+const NEXT_DAY = '2026-10-08T03:00:00.000Z';
 const emotion = { valence: 0, arousal: 0.3, openness: 0.35, expression: 'calm' as const };
 const directory = mkdtempSync(join(tmpdir(), 'shannon-skill-privacy-'));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
@@ -117,5 +123,102 @@ describe('every body checked again (B2)', () => {
     expect(skills.store.get('owner', id)).toMatchObject({ status: 'retired', statusReason: 'restore_unsafe', version: 2 });
     expect(skills.rollback('owner', id, 1, 'owner', AT, check)).toBe('unsafe');
     expect(encodeSkill(doc('x', '1. y'))).toContain('## 手順');
+  });
+});
+
+describe('every source, and only what truly fails (N1, N2, N4, L3, the proposer\'s audit)', () => {
+  const pass = { carries: () => false };
+
+  it('keeps every source of a skill, so a forgotten 41st source still withdraws its copy; past the limit a change is refused', async () => {
+    const { store, viewed, skills, overrides } = world();
+    const thread = store.createThread('owner');
+    const turns = Array.from({ length: 45 }, (_, index) => store.appendTurn('owner', thread, `ふりかえり${index}`, 'うん', new Date(Date.parse('2026-09-01T00:00:00.000Z') + index * 60_000).toISOString(),
+      { capturedStateVersion: 0, messageEmotion: emotion }));
+    const id = (skills.create('owner', { draft: doc('many-sources', '1. 三つ挙げる'), evidence: turns.map(turn => `experience:${turn.id}`) }, pass, AT) as { skillId: string }).skillId;
+    expect(skills.store.get('owner', id)!.sources).toHaveLength(45);
+    const folder = new FakeAetherFolder();
+    const run = configuredSkillExport({}, { memory: skills, store: viewed, access: folder, log: () => {} })!;
+    expect(await run('owner', AT)).toMatchObject({ created: 1 });
+    overrides.state = forgetting(turns[40]!.id);
+    expect(await run('owner', AT)).toMatchObject({ withdrawn: 1 });
+    expect(folder.documents.get(skills.store.get('owner', id)!.aetherDocumentId!)!.body).toBe(WITHDRAWN_COPY_BODY);
+    const tooMany = Array.from({ length: SKILL_SOURCES_LIMIT + 1 }, (_, index) => `choice:c${index}`);
+    expect(skills.create('owner', { draft: doc('too-many', '1. 三つ挙げる'), evidence: tooMany }, pass, AT)).toEqual({ rejected: 'too_many_sources' });
+    expect(skills.createPattern('owner', { kind: 'strategy', title: '多すぎる', body: '多すぎる。' }, tooMany, pass, AT)).toEqual({ rejected: 'too_many_sources' });
+    store.close();
+  });
+
+  it('judges a note retired by consolidation by its own turns: only a turn that fails withdraws (N2)', async () => {
+    const { store, viewed, skills, overrides } = world();
+    const thread = store.createThread('owner');
+    const turn = store.appendTurn('owner', thread, '写真整理の話', 'うん', '2026-09-20T00:00:00.000Z', { capturedStateVersion: 0, messageEmotion: emotion });
+    const note = store.createShannonKnowledge('owner', { title: '写真整理', applicability: '写真の相談', bodyMarkdown: '## 行動\n小さく区切る。', status: 'confirmed', sourceExperienceIds: [turn.id] }, AT, 'test');
+    const id = (skills.create('owner', { draft: doc('photo-sort', '1. 小さく区切る'), evidence: [`knowledge:${note.id}`] }, pass, AT) as { skillId: string }).skillId;
+    const folder = new FakeAetherFolder();
+    const run = configuredSkillExport({}, { memory: skills, store: viewed, access: folder, log: () => {} })!;
+    await run('owner', AT);
+    store.retireShannonKnowledge('owner', note.id, 'merged', AT);
+    expect(await run('owner', AT)).toMatchObject({ withdrawn: 0 });
+    overrides.state = forgetting(turn.id);
+    expect(await run('owner', AT)).toMatchObject({ withdrawn: 1 });
+    expect(skills.store.get('owner', id)!.exportHold).toBe('withdrawn');
+    store.close();
+  });
+
+  it('never shows the body of a skill built from something forgotten, or whose copy was withdrawn (N4)', async () => {
+    const skills = new SkillMemory({ database: new DatabaseSync(':memory:'), createsSchema: true, defer: task => task(), log: () => {} });
+    const id = (skills.create('owner', { draft: doc('weekly-review', '1. 三つ挙げる'), evidence: [] }, pass, AT) as { skillId: string }).skillId;
+    const route = createSkillsRoute({ memory: skills, record: () => {}, ownerScopeKey: 'owner', now: () => AT });
+    const read = async () => {
+      let status = 0;
+      let body = '';
+      const response = { writeHead: (code: number) => { status = code; return response; }, setHeader: () => response, end: (text: string) => { body = text; } } as never;
+      await route({ method: 'GET' } as never, response, { scopeKey: 'owner' }, `/v1/autonomy/skills/${id}`);
+      return { status, body: JSON.parse(body) as Record<string, unknown> };
+    };
+    expect((await read()).body).toMatchObject({ bodyHidden: false, body: expect.stringContaining('三つ挙げる') });
+    skills.holdExport('owner', id, 'withdrawn', AT);
+    expect((await read()).body).toMatchObject({ bodyHidden: true, body: HIDDEN_BODY });
+    skills.retire('owner', id, 'source_forgotten', AT);
+    skills.store.setExportHold('owner', id, null);
+    expect(JSON.stringify((await read()).body)).not.toContain('三つ挙げる');
+  });
+
+  it('never judges a pinned skill\'s trial (L3)', () => {
+    const skills = new SkillMemory({ database: new DatabaseSync(':memory:'), createsSchema: true, defer: task => task(), log: () => {} });
+    const id = (skills.create('owner', { draft: doc('weekly-review', '1. 三つ挙げる'), evidence: [] }, pass, AT) as { skillId: string }).skillId;
+    skills.store.setPinned('owner', id, true);
+    for (const index of [0, 1, 2]) { skills.used('owner', 'weekly-review', { talk: `t${index}`, growth: 0 }, AT); skills.nextTurn('owner', `t${index}`, 0, AT); }
+    expect(skills.lifecycle('owner', AT, pass)).toEqual({ accepted: [], reverted: [], retired: [] });
+    expect(skills.store.get('owner', id)).toMatchObject({ status: 'trial', pinned: true });
+    skills.store.setPinned('owner', id, false);
+    expect(skills.lifecycle('owner', AT, pass)).toMatchObject({ retired: [id] });
+  });
+
+  it('never shows the proposer a reverted change of a forgotten, withdrawn or no longer passing skill', async () => {
+    const skills = new SkillMemory({ database: new DatabaseSync(':memory:'), createsSchema: true, defer: task => task(), log: () => {} });
+    const page = (skills.createPattern('owner', { kind: 'strategy', title: '五つ', body: '五つ挙げる。' }, [], pass, AT) as { patternId: string }).patternId;
+    const make = (name: string, evidence: string[]) => {
+      const id = (skills.create('owner', { draft: doc(name, '1. 三つ挙げる'), evidence }, pass, AT) as { skillId: string }).skillId;
+      skills.store.setStatus('owner', id, 'active', 'test', AT);
+      skills.revise('owner', id, 1, { replacements: [{ find: '三つ', replace: '五つ' }], evidence: [], purposePatternIds: [page] }, pass, AT);
+      for (const index of [0, 1, 2]) { skills.used('owner', name, { talk: `${name}${index}`, growth: 0 }, AT); skills.nextTurn('owner', `${name}${index}`, 0, AT); }
+      return id;
+    };
+    const shown = make('shown-one', []);
+    const forgotten = make('forgotten-one', []);
+    const withdrawn = make('withdrawn-one', []);
+    const failing = make('failing-one', ['experience:gone']);
+    skills.lifecycle('owner', AT, pass);
+    skills.retire('owner', forgotten, 'source_forgotten', AT);
+    skills.holdExport('owner', withdrawn, 'withdrawn', AT);
+    const inputs: Array<Record<string, unknown>> = [];
+    const proposer: SkillSleepModel = { model: 'scripted', json: async (_s, _n, _i, input) => { inputs.push(input as Record<string, unknown>); return { action: 'none' }; } };
+    await new ShannonSkillConsolidator(skills, { knowledge: () => [], experiences: () => [], choices: () => [], visible: () => () => true, check: () => pass,
+      sourcesPass: () => sources => !sources.includes('experience:gone') }, { maintainer: null, proposer }, { skillBudgetUsd: 5, now: () => NEXT_DAY, log: () => {} })
+      .consolidate('owner', AT, NEXT_DAY);
+    const targets = (inputs[0]!.reverted as Array<{ target: string }>).map(item => item.target);
+    expect(targets).toEqual([`skill:${shown}`]);
+    expect([forgotten, withdrawn, failing].every(id => !targets.includes(`skill:${id}`))).toBe(true);
   });
 });

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { SkillStatus } from '../skillDocument.js';
 import { ensureColumns } from '../../../infra/sqlite/schemaColumns.js';
+import { ensureSkillSleepUsageSchema } from './sqliteSkillSleepUsage.js';
 
 /**
  * Her skills, their versions, the pattern wiki they come from, and the audit of every change (Syzygy ADR-0008 stage 2, step 6;
@@ -136,6 +137,7 @@ export function ensureSkillSchema(database: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS shannon_skill_copy_writes_skill ON shannon_skill_copy_writes (scope_key, skill_id, processed_at);
   `);
+  ensureSkillSleepUsageSchema(database);
   // ADR-0008 §14's lineage columns, added when the table already existed without them.
   ensureColumns(database, 'shannon_skill_revisions', { parent_revision_id: 'TEXT', variant_of: 'TEXT', uses: 'INTEGER NOT NULL DEFAULT 0', successes: 'INTEGER NOT NULL DEFAULT 0' });
 }
@@ -440,7 +442,8 @@ export class SQLiteSkills {
 
   private revision(entry: { scopeKey: string; skillId: string; version: number; kind: 'version' | 'snapshot'; body: string; bodyHash: string; madeBy: 'sleep' | 'owner_edit';
     actor: SkillActor; evidence: readonly string[]; before: string | null; pinned: boolean; reason: string; parent?: string | null; variantOf?: string | null }, at: string): void {
-    const evidence = [...new Set(entry.evidence)].filter(id => /^[A-Za-z][A-Za-z0-9_.:>-]{0,160}$/u.test(id)).slice(0, 40);
+    // Provenance of the revision (what this change cited); the skill's own `sources` hold every source for the checks (N1).
+    const evidence = [...new Set(entry.evidence)].filter(id => /^[A-Za-z][A-Za-z0-9_.:>-]{0,160}$/u.test(id));
     const snapshots = entry.kind === 'snapshot'
       ? Number((this.database.prepare("SELECT COUNT(*) AS n FROM shannon_skill_revisions WHERE skill_id = ? AND kind = 'snapshot'").get(entry.skillId) as { n: number }).n) : 0;
     this.database.prepare(`INSERT INTO shannon_skill_revisions (revision_id, skill_id, scope_key, version, kind, body, body_hash, made_by, actor, evidence_json, before_sha256, after_sha256, pinned, reason, created_at, parent_revision_id, variant_of)

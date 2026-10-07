@@ -9,10 +9,10 @@ import { MemoryWithholding } from '../mind/memory/memoryVisibility.js';
 import type { ConversationStore } from '../mind/memory/store/conversationStore.js';
 import type { ShannonKnowledgeStore } from '../mind/memory/store/sqliteShannonKnowledge.js';
 import { isExperienceSourceVisible, usableKnowledgeFor } from '../mind/recall/turnKnowledgeRecall.js';
-import { ShannonSkillConsolidator, type SkillSeedSources, type SkillSleepModels } from '../mind/sleep/skillConsolidation.js';
+import { ShannonSkillConsolidator, skillSleepNight, type SkillSeedSources, type SkillSleepModels } from '../mind/sleep/skillConsolidation.js';
 import { createConfiguredSkillSleepModels } from '../mind/sleep/skillSleepModel.js';
 import { configuredSkillProposer } from './sonnetWiring.js';
-import type { LlmUsageStore } from '../infra/models/llmUsage.js';
+import { configuredSkillBudgetUsd, type LlmUsageStore } from '../infra/models/llmUsage.js';
 import { aetherStudyScope, configuredAetherAccess, type AetherAccess } from '../integrations/aether/aetherAccess.js';
 import { exportSkills, type SkillExportResult } from '../integrations/aether/skillExport.js';
 
@@ -79,10 +79,21 @@ export function skillSleepConsolidator(
     log?: (line: string) => void;
   },
 ): ShannonSkillConsolidator {
-  return new ShannonSkillConsolidator(parts.memory, skillSeedSources(parts.store, parts.choices),
+  // Review M4: the skill sleep's models spend its own budget, written to the skill tables, never to the shared background lane.
+  const spend = skillSleepSpend(parts.memory);
+  return new ShannonSkillConsolidator(parts.memory, skillSeedSources(parts.store, parts.choices, parts.memory),
     // The proposer is Sonnet whenever the Anthropic key is present (step 5); otherwise terra.
-    parts.models ?? createConfiguredSkillSleepModels(environment, parts.store, () => configuredSkillProposer(environment, { usageStore: parts.store })), parts.store,
-    { ...(parts.now ? { now: parts.now } : {}), ...(parts.log ? { log: parts.log } : {}) });
+    parts.models ?? createConfiguredSkillSleepModels(environment, spend, () => configuredSkillProposer(environment, { usageStore: spend })),
+    { skillBudgetUsd: configuredSkillBudgetUsd(environment), ...(parts.now ? { now: parts.now } : {}), ...(parts.log ? { log: parts.log } : {}) });
+}
+
+/** The usage store the skill sleep's models write to: its own spend in the skill tables (`shannon_skill_sleep_usage`). */
+export function skillSleepSpend(memory: SkillMemory): LlmUsageStore {
+  return {
+    recordLlmUsage: event => memory.write(event.occurredAt, () => memory.sleepUsage.cost(event.scopeKey, skillSleepNight(event.occurredAt), event.model, event.estimatedCostUsd, event.occurredAt)),
+    // Never the shared background budget: the skill budget is checked by the consolidator before each call.
+    backgroundLlmCostUsd: () => 0,
+  };
 }
 
 /**
@@ -91,9 +102,11 @@ export function skillSleepConsolidator(
  * note is a seed only when every turn it was built from passes the same rule (a source that cannot be found fails it): every skill
  * has a copy in a folder guests can read (privacy review B1).
  */
-export function skillSeedSources(store: ShannonKnowledgeStore & ConversationStore & Pick<CompanionStateStore, 'snapshot'>, choices: ChoiceLedger | null): SkillSeedSources {
+export function skillSeedSources(store: ShannonKnowledgeStore & ConversationStore & Pick<CompanionStateStore, 'snapshot'>, choices: ChoiceLedger | null,
+  memory?: SkillMemory): SkillSeedSources {
   const seedable = (scopeKey: string) => seedRule(store, scopeKey);
   return {
+    ...(memory ? { sourcesPass: (scopeKey: string) => skillSourcesPass(store, memory, scopeKey) } : {}),
     knowledge: scopeKey => {
       const seeds = seedable(scopeKey);
       return usableKnowledgeFor(store, scopeKey, seeds.snapshot).filter(document => document.status === 'confirmed' && seeds.passes(document.sourceExperienceIds))
@@ -136,13 +149,14 @@ function seedRule(store: ConversationStore & Pick<CompanionStateStore, 'snapshot
 
 /**
  * Whether every source of a skill still passes the seed rule (privacy review B2): its turns, the turns of the notes it was built
- * from, and the sources of its pattern pages. A skill whose source was forgotten, or is now 内緒 or 機微, fails: its copy in Aether
+ * from (a retired note by its own turns, review N2), and the sources of its pattern pages; every source, however many (N1). A skill whose source was forgotten, or is now 内緒 or 機微, fails: its copy in Aether
  * is withdrawn (`skillExport.ts`).
  */
 export function skillSourcesPass(store: ConversationStore & Pick<CompanionStateStore, 'snapshot'> & Partial<ShannonKnowledgeStore>, memory: SkillMemory, scopeKey: string): (sources: readonly string[]) => boolean {
   const rule = seedRule(store, scopeKey);
-  // Without her notes (a store that has none) a skill built from one fails: closed.
-  const notes = new Map(store.listShannonKnowledge ? usableKnowledgeFor(store as ShannonKnowledgeStore, scopeKey, rule.snapshot).map(document => [document.id, document]) : []);
+  // Review N2: a note counts by the turns it was built from, retired or not (consolidation retires notes in normal operation);
+  // only a turn that fails the rule withdraws. Without her notes (a store that has none) a skill built from one fails: closed.
+  const notes = new Map((store.listShannonKnowledge?.(scopeKey, { includeRetired: true }) ?? []).map(document => [document.id, document]));
   const check = (sources: readonly string[], depth: number): boolean => sources.every(source => {
     const [kind, ...rest] = source.split(':');
     const id = rest.join(':');

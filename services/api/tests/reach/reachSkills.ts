@@ -59,8 +59,8 @@ class SkillWorld {
 
   builder(models: SkillSleepModels, at: string, random?: () => number) {
     const sources = skillSeedSources(this.store, this.store.choiceLedger());
-    return new ShannonSkillConsolidator(this.skills, { ...sources, check: () => skillBodyCheck(this.state, this.store, SCOPE) }, models, { backgroundLlmCostUsd: () => 0 },
-      { backgroundBudgetUsd: 1, now: () => at, log: () => {}, ...(random ? { random } : {}) });
+    return new ShannonSkillConsolidator(this.skills, { ...sources, check: () => skillBodyCheck(this.state, this.store, SCOPE) }, models,
+      { skillBudgetUsd: 1, now: () => at, log: () => {}, ...(random ? { random } : {}) });
   }
 
   close(): void {
