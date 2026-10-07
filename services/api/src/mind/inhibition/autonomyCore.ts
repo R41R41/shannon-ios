@@ -207,6 +207,11 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/inhibition/',
     'services/api/src/contracts/withheldActionContract.ts',
     'services/api/src/wiring/withheldWiring.ts',
+    // Syzygy ADR-0008 stage 3 (owner answer 2): the proactive gate at the delivery points of her own messages is the guard's, by
+    // name, although the attention part is the response path's.
+    'services/api/src/mind/attention/proactiveDelivery.ts',
+    'services/api/src/mind/attention/store/proactiveTopicsStore.ts',
+    'services/api/src/wiring/proactiveGateWiring.ts',
     'services/api/src/mind/action/ownTime/autonomyModels.ts',
     'services/api/src/mind/action/ownTime/store/autonomyStore.ts',
     'services/api/src/mind/self/autonomyPursuits.ts',

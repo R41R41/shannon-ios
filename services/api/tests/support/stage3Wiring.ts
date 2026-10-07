@@ -1,4 +1,6 @@
 import { configuredMind, configuredMindInbox } from '../../src/wiring/mindWiring.js';
+import { configuredProactiveGate } from '../../src/wiring/proactiveGateWiring.js';
+import { configuredWithheldActions } from '../../src/wiring/withheldWiring.js';
 import type { Stage3Hooks } from './stage3Scenarios.js';
 
 /**
@@ -11,6 +13,11 @@ export function stage3Hooks(environment: Readonly<Record<string, string | undefi
     kernel: ({ databasePath, now }) => {
       const mind = configuredMind(environment, { databasePath, now, schedule: task => task() });
       return mind ? { mind: mind.mind } : {};
+    },
+    reachOutGate: ({ databasePath }) => {
+      const withheld = configuredWithheldActions(environment, { databasePath, createsSchema: false });
+      const inbox = configuredMindInbox(environment, { databasePath });
+      return configuredProactiveGate(environment, { databasePath, withheld: withheld?.withheld.sink ?? null, emit: inbox?.emit ?? null })?.gate ?? null;
     },
     loop: ({ databasePath }) => {
       const inbox = configuredMindInbox(environment, { databasePath });

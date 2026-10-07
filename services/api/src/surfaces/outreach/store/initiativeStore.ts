@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { chmodSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { restoreCompanionState } from '@shannon/cognition';
 import type { DailyMindFocus } from '../../../mind/action/respond/dailyMind.js';
@@ -7,6 +6,8 @@ import { commitmentAwaitingTodaySlot, dueCommitmentCandidate } from '../../../mi
 import { bodyLookIdOfSource } from '../../body/store/bodyLookDelivery.js';
 import { isRoomLookSource } from '../../body/roomLookSource.js';
 import { reachOutOfSource } from '../reachOutDelivery.js';
+import type { ProactiveDeliveryGate } from '../../../mind/attention/attentionPorts.js';
+import { initiativeIntent, secureDatabaseFiles } from '../initiativeIntent.js';
 import { groundedWorldOpening, topicMatchesSource, worldVisibleInterests } from '../../../integrations/world/worldInterestRelevance.js';
 import {
   intentInitiativeCandidateIsCurrent,
@@ -91,7 +92,8 @@ export interface InitiativeEvaluationReader {
 export class SQLiteInitiativeStore implements InitiativeInbox {
   private readonly database: DatabaseSync;
 
-  constructor(private readonly path: string, private readonly now: () => string = () => new Date().toISOString()) {
+  // gate: Syzygy ADR-0008 stage 3, the proactive gate every message she starts passes where it is written; absent (switched off), as before.
+  constructor(private readonly path: string, private readonly now: () => string = () => new Date().toISOString(), private readonly gate: ProactiveDeliveryGate | null = null) {
     this.database = new DatabaseSync(path);
     this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
     this.database.exec(`
@@ -365,6 +367,8 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       }),
     });
 
+    const intent = initiativeIntent(candidate, content, createdAt); // Syzygy ADR-0008 stage 3: the proactive gate, where it would be written.
+    if (this.gate?.check(scopeKey, intent, createdAt).verdict === 'hold') return false;
     this.database.exec('BEGIN IMMEDIATE');
     try {
       if (candidate.source_id === 'commitment') {
@@ -406,6 +410,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         dailyMindDayKey: dailyFocus?.dayKey ?? null,
       }));
       this.database.exec('COMMIT');
+      this.gate?.delivered(scopeKey, intent, createdAt);
       return true;
     } catch (error) {
       if (this.database.isTransaction) this.database.exec('ROLLBACK');
@@ -488,10 +493,5 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     return Boolean(this.database.prepare(`SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name));
   }
 
-  private secureFiles(): void {
-    if (this.path === ':memory:') return;
-    for (const candidate of [this.path, `${this.path}-wal`, `${this.path}-shm`]) {
-      if (existsSync(candidate)) chmodSync(candidate, 0o600);
-    }
-  }
+  private secureFiles(): void { secureDatabaseFiles(this.path); }
 }

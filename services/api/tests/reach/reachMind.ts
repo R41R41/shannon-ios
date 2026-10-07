@@ -1,11 +1,22 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
-  judgedFacts, stableFingerprint, wsCrossBodyScenario, wsNoticePrefixScenario, wsOthersPresentScenario, wsRestartScenario, wsUntrustedFrameScenario,
+  judgedFacts, proIntentExpiryScenario, proTopicReuseScenario, proWithheldVisibleScenario, stableFingerprint, wsCrossBodyScenario, wsNoticePrefixScenario, wsOthersPresentScenario, wsRestartScenario, wsUntrustedFrameScenario,
   type ReachDriver, type ReachScenarioDefinition,
 } from '../../../../packages/evaluation/src/reach/index.js';
 import { chatTurnRequestBody } from '../../src/infra/models/chatModelTurn.js';
 import { DATA_FRAME_RULE, DATA_FRAME_THREAT, WORKSPACE_PLACE_HEADER } from '../../src/mind/workspace/workspacePorts.js';
-import { configuredMindInbox } from '../../src/wiring/mindWiring.js';
+import { configuredMind, configuredMindInbox } from '../../src/wiring/mindWiring.js';
+import { configuredProactiveGate } from '../../src/wiring/proactiveGateWiring.js';
+import { configuredWithheldActions, withheldFactsReader } from '../../src/wiring/withheldWiring.js';
+import { createLocalApiKernel } from '../../src/infra/http/apiKernel.js';
+import type { ShannonChatModel, ShannonChatModelRequest } from '../../src/infra/models/chatModel.js';
+import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
+import { SQLiteInitiativeStore } from '../../src/surfaces/outreach/store/initiativeStore.js';
+import { SQLiteReachOutSpeaker } from '../../src/surfaces/outreach/reachOutDelivery.js';
+import { FakeModel, loopHarness, runUntilIdle } from '../autonomyLoopHarness.js';
 import { mindWorld } from '../support/mindWorld.js';
 
 /**
@@ -167,6 +178,118 @@ async function untrustedRun() {
   }, 8);
 }
 
+/**
+ * Her own time with the production wiring of the gate (her worker's): her loop over a FakeModel, the gated speaker, the withheld
+ * actions shown to her next thought, the mind's inbox the API process created, and a kernel on the same database for a turn.
+ */
+function gatedWorld(name: string) {
+  const directory = mkdtempSync(join(tmpdir(), `shannon-reach-${name}-`));
+  const path = join(directory, 'shannon.sqlite');
+  const clock = { at: '2026-10-07T01:00:00.000Z' };
+  const now = () => clock.at;
+  const persistent = new SQLiteShannonStore({ path, now });
+  persistent.threadId('owner');
+  const initiatives = new SQLiteInitiativeStore(path, now);
+  const withheld = configuredWithheldActions({}, { databasePath: path, createsSchema: true, defer: task => task() })!;
+  const mind = configuredMind({}, { databasePath: path, now, schedule: task => task() })!;
+  const inbox = configuredMindInbox({}, { databasePath: path })!;
+  const gate = configuredProactiveGate({}, { databasePath: path, withheld: withheld.withheld.sink, emit: inbox.emit })!;
+  const speaker = new SQLiteReachOutSpeaker(path, () => false, gate.gate);
+  const model = new FakeModel();
+  const harness = loopHarness({
+    path: join(directory, 'autonomy.sqlite'), clock, model, reachOuts: speaker,
+    upcoming: { lines: () => [{ kindLabel: '予定', title: '歯医者', when: '今日 14:00〜15:00' }] },
+    loop: { cycleIntervalMilliseconds: MINUTE, cyclesPerDay: 48, reachOutSpacingMilliseconds: 5 * MINUTE },
+    withheldFacts: withheldFactsReader(withheld.withheld, () => ({ others: false }), at => at.slice(11, 16)),
+  });
+  const database = new DatabaseSync(path);
+  const count = (table: string) => Number((database.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n);
+  const requests: ShannonChatModelRequest[] = [];
+  const answer = async (request: ShannonChatModelRequest) => { requests.push(request); return { reply: 'はい。', mode: 'openai' as const, model: 'test' }; };
+  const api = createLocalApiKernel(now, { chatModel: { mode: 'openai', model: 'test', generate: answer } as unknown as ShannonChatModel, stateStore: persistent, conversationStore: persistent, mind: mind.mind });
+  return {
+    path, clock, model, harness, count, database, requests,
+    advance: (milliseconds: number) => { clock.at = new Date(Date.parse(clock.at) + milliseconds).toISOString(); },
+    plan: (reason: string) => { model.plans = [{ thought: '話しかけようかな。', steps: [{ action: 'reach_out', reason }] }]; },
+    record: () => [...harness.entries()].sort((left, right) => left.sequence - right.sequence),
+    withheld: () => database.prepare('SELECT tool, reason, rail FROM shannon_withheld_actions ORDER BY at').all() as Array<Record<string, string>>,
+    chat: async (message: string, extra: Record<string, unknown> = {}) => {
+      await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message, ...extra } });
+      await api.waitForBackground('owner');
+      return requests.at(-1)?.turnContext ?? '';
+    },
+    close: () => { database.close(); harness.store.close(); speaker.close(); gate.close(); inbox.close(); mind.close(); withheld.close(); initiatives.close(); persistent.close(); },
+  };
+}
+
+async function intentExpiryRun() {
+  const late = gatedWorld('pro-expiry');
+  const fresh = gatedWorld('pro-fresh');
+  try {
+    // The thought that chose it, then the owner's half hour elsewhere (the step is not taken), then the step.
+    late.plan('upcoming');
+    for (let index = 0; index < 5 && !late.model.kinds().includes('think'); index += 1) await late.harness.loop.tick();
+    late.advance(31 * MINUTE);
+    await runUntilIdle(late.harness.loop);
+    const held = late.record().find(entry => entry.tool === 'owner.reach_out' && entry.kind === 'action');
+    fresh.plan('upcoming');
+    await runUntilIdle(fresh.harness.loop);
+    return outcome(proIntentExpiryScenario, {
+      'expiry.held': late.model.kinds().includes('reach_out') && late.count('initiative_messages') === 0,
+      'expiry.recorded': JSON.stringify(late.withheld()) === JSON.stringify([{ tool: 'owner.reach_out', reason: 'intent_expired', rail: 'gate' }]) && held?.reasonCode === 'intent_expired',
+      'expiry.fresh': fresh.count('initiative_messages') === 1 && fresh.withheld().length === 0,
+    }, 4);
+  } finally { late.close(); fresh.close(); }
+}
+
+async function topicReuseRun() {
+  const w = gatedWorld('pro-topic');
+  try {
+    w.plan('wonder');
+    await runUntilIdle(w.harness.loop);
+    const first = w.count('initiative_messages');
+    w.advance(40 * MINUTE);
+    w.plan('upcoming');
+    await runUntilIdle(w.harness.loop);
+    const held = w.count('initiative_messages') === first && w.withheld().some(row => row.reason === 'topic_reused');
+    const topics = JSON.stringify(w.database.prepare('SELECT * FROM proactive_topics').all());
+    w.advance(17 * 60 * MINUTE);
+    w.plan('upcoming');
+    await runUntilIdle(w.harness.loop);
+    return outcome(proTopicReuseScenario, {
+      'topic.held': first === 1 && held,
+      'topic.signatures_only': /"signature":"[0-9a-f]{512}"/u.test(topics) && topics.includes('"reason":"wonder"') && !/ライ氏|気になり/u.test(topics),
+      'topic.decays': w.count('initiative_messages') === 2,
+    }, 6);
+  } finally { w.close(); }
+}
+
+async function withheldVisibleRun() {
+  const w = gatedWorld('pro-visible');
+  try {
+    w.plan('wonder');
+    await runUntilIdle(w.harness.loop);
+    w.advance(40 * MINUTE);
+    w.plan('upcoming');
+    await runUntilIdle(w.harness.loop);
+    // Her next thought, in the next cycle.
+    w.advance(10 * MINUTE);
+    await runUntilIdle(w.harness.loop);
+    const thought = w.model.prompts('think').at(-1) ?? '';
+    w.advance(MINUTE);
+    const shared = await w.chat('これ見て', { audience: 'others' });
+    const alone = await w.chat('ただいま');
+    const inbox = w.database.prepare('SELECT kind, code, audience, source, tool, reason FROM mind_inbox').all() as Array<Record<string, string>>;
+    return outcome(proWithheldVisibleScenario, {
+      'visible.thought': thought.includes('止められた：〈owner.reach_out〉〈近い話題を使い回さない〉'),
+      'visible.conversation': /【知らせ:止められた】\d+分前、〈owner\.reach_out〉が止められた（近い話題を使い回さない）/u.test(alone),
+      'visible.not_with_others': !shared.includes('【知らせ:'),
+      'visible.closed': JSON.stringify(inbox.filter(row => row.kind === 'notice')) === JSON.stringify([{ kind: 'notice', code: 'withheld', audience: 'owner', source: 'own_time', tool: 'owner.reach_out', reason: 'topic_reused' }])
+        && JSON.stringify(w.withheld()) === JSON.stringify([{ tool: 'owner.reach_out', reason: 'topic_reused', rail: 'gate' }]),
+    }, 8);
+  } finally { w.close(); }
+}
+
 const driver = (run: () => Promise<ReturnType<typeof outcome>>): ReachDriver => async () => run();
 
 export function mindDrivers(): Record<string, () => ReachDriver> {
@@ -176,5 +299,8 @@ export function mindDrivers(): Record<string, () => ReachDriver> {
     [wsOthersPresentScenario.id]: () => driver(othersRun),
     [wsNoticePrefixScenario.id]: () => driver(noticePrefixRun),
     [wsUntrustedFrameScenario.id]: () => driver(untrustedRun),
+    [proIntentExpiryScenario.id]: () => driver(intentExpiryRun),
+    [proTopicReuseScenario.id]: () => driver(topicReuseRun),
+    [proWithheldVisibleScenario.id]: () => driver(withheldVisibleRun),
   };
 }

@@ -138,13 +138,16 @@ describe('CORE as code', () => {
     // The pure rules of what she keeps and forgets are memory's, by name (F1).
     const MEMORY_RULES = ['evidenceDecay', 'identityTiers', 'temporalFacts', 'trustFold', 'compaction'].map(name => `packages/mind/src/${name}.ts`);
     for (const path of MEMORY_RULES) expect(coreAreaForRepositoryPath(path)?.area, path).toBe('memory');
+    // The proactive gate at the delivery points is the guard's, by name (F4; the contract's table: core area "guard").
+    const GUARD = ['services/api/src/mind/attention/proactiveDelivery.ts', 'services/api/src/mind/attention/store/proactiveTopicsStore.ts', 'services/api/src/wiring/proactiveGateWiring.ts'];
+    for (const path of GUARD) expect(coreAreaForRepositoryPath(path)?.area, path).toBe('approval_and_budget');
     // Whole folders, so a file added there later is core at once (docs/mind-workspace-contract.md).
     for (const folder of ['packages/mind', 'services/api/src/mind/perception', 'services/api/src/mind/attention', 'services/api/src/mind/workspace']) {
       const files = filesBelow(join(repositoryRoot, folder));
       expect(files.length, folder).toBeGreaterThan(0);
       for (const file of files) {
         const path = relative(repositoryRoot, file).split(sep).join('/');
-        expect(coreAreaForRepositoryPath(path)?.area, file).toBe(MEMORY_RULES.includes(path) ? 'memory' : 'response_path');
+        expect(coreAreaForRepositoryPath(path)?.area, file).toBe(MEMORY_RULES.includes(path) ? 'memory' : GUARD.includes(path) ? 'approval_and_budget' : 'response_path');
       }
       expect(coreAreaForRepositoryPath(`${folder}/someFutureFile.ts`)?.area, folder).toBe('response_path');
     }

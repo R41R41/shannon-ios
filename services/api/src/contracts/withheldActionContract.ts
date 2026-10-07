@@ -48,6 +48,11 @@ export const WITHHELD_REASON_LABELS = Object.freeze({
   outside_reach: 'シャノン用フォルダの外',
   // A session's bound.
   session_budget: '一度に使える金額の上限',
+  // Syzygy ADR-0008 stage 3, the proactive gate at the delivery points of her own messages (owner answer 2).
+  owner_active: 'ライ氏がいま話している',
+  intent_repeat: '同じ用件を30分以内に繰り返さない',
+  intent_expired: '用件が古くなった',
+  topic_reused: '近い話題を使い回さない',
 } as const);
 export type WithheldReason = keyof typeof WITHHELD_REASON_LABELS;
 export const WITHHELD_REASONS = Object.freeze(Object.keys(WITHHELD_REASON_LABELS)) as readonly WithheldReason[];

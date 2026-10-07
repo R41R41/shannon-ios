@@ -86,6 +86,8 @@ describe('stage 3 switched off in the environment', () => {
     { part: 'data frames', on: ['SHANNON_DATA_FRAMES'], reaches: [] },
     // The workspace keeps its journal in the conversation's database; her own time alone has no workspace to write to.
     { part: 'workspace', on: ['SHANNON_MIND_EVENTS', 'SHANNON_ATTENTION', 'SHANNON_WORKSPACE', 'SHANNON_DATA_FRAMES'], reaches: CONVERSATION },
+    // The proactive gate is where her own messages are written: her own time alone.
+    { part: 'proactive gate', on: ['SHANNON_PROACTIVE_GATE'], reaches: ['reach-out'] },
   ];
 
   it('reaches, with one part switched on alone, only the surfaces that part is about', async () => {

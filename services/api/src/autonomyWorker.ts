@@ -39,6 +39,7 @@ import { cognitionLedgerSwitches } from '@shannon/learning';
 import { configuredWithheldActions, gateRefusals, withheldFactsReader } from './wiring/withheldWiring.js';
 import { configuredSkillCopies } from './wiring/skillCopyWiring.js';
 import { configuredMindInbox } from './wiring/mindWiring.js';
+import { configuredProactiveGate } from './wiring/proactiveGateWiring.js';
 import { clock } from './mind/action/ownTime/autonomyLoopPacing.js';
 
 /**
@@ -67,8 +68,16 @@ const looks = new ActivityRoomLooks({
 });
 // Speaking up on her own (話しかける). Her message takes the initiative path; who is around her body decides how guarded its wording is.
 // SHANNON_AUTONOMY_MAX_REACH_OUTS=0 switches it off.
-const reachOuts = new SQLiteReachOutSpeaker(databasePath, (scopeKey, at) => bodyIngestEnabled(process.env)
-  && bodyStore.othersPresent(scopeKey, at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds));
+const othersAroundBody = (scopeKey: string, at: string) => bodyIngestEnabled(process.env)
+  && bodyStore.othersPresent(scopeKey, at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds);
+// Syzygy ADR-0008 stage 3 (owner answer 2): the proactive gate every message of hers passes where it is written (the speaker, the call
+// request). A hold is a withheld action her next thought is shown and a notice for the conversation. SHANNON_PROACTIVE_GATE=off: none.
+const proactiveGate = configuredProactiveGate(process.env, {
+  databasePath, ownerActiveMilliseconds: configuredAutonomyLoop(process.env).ownerActiveMilliseconds,
+  withheld: (scopeKey, draft, at) => withheldActions?.withheld.sink(scopeKey, draft, at), emit: (scopeKey, draft, at) => mindInbox?.emit(scopeKey, draft, at),
+  audience: (scopeKey, at) => (othersAroundBody(scopeKey, at) ? 'others' : 'owner'), log: line => console.log(line),
+});
+const reachOuts = new SQLiteReachOutSpeaker(databasePath, othersAroundBody, proactiveGate?.gate ?? null);
 // After a message of hers she stays with it for a short while (SHANNON_AUTONOMY_REACH_OUT_WAIT_SECONDS): what her body reported about
 // showing it and what the server knows of the body are read here as closed facts. SHANNON_AUTONOMY_MAX_FOLLOW_UPS=0 switches all of it off.
 const reachOutReports = new SQLiteReachOutReports(databasePath);
@@ -81,6 +90,7 @@ const phone = new IncomingCallRequests({
   store: incomingCalls, claims: reachOutClaims, listeners: (scopeKey, at) => privateListening.listeners(scopeKey, at),
   bodyVisible: (scopeKey, at) => bodyIngestEnabled(process.env) && reachOutReports.windowVisible(scopeKey, at),
   serverReady: incomingCallsConfigured(process.env), minimumIntervalMilliseconds: incomingCallMinimumIntervalMilliseconds(process.env),
+  gate: proactiveGate?.gate ?? null,
 });
 const observer = {
   // A report of one of the owner's apps (her message said through his earphones) is read whatever the body switch says.
@@ -202,6 +212,7 @@ try {
   predictionLedger?.close();
   withheldActions?.close();
   mindInbox?.close();
+  proactiveGate?.close();
   skillCopies?.close();
   ownerContext?.close();
   ownerUpcoming.close();

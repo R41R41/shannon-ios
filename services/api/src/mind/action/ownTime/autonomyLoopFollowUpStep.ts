@@ -3,7 +3,7 @@ import { callModel, ownerLocalTime, paidCall } from './autonomyLoopCalls.js';
 import { agenticLoop, followUpsRemaining, observeReachOut, ownerRepliedAt, reachOutChain } from './autonomyLoopObserve.js';
 import { AUTONOMY_FOLLOW_UP_MAXIMUM_CHARACTERS, AUTONOMY_JOT_MAXIMUM_CHARACTERS, followUpPrompt, happenedLines } from './autonomyLoopObservePrompts.js';
 import { heldForOthers } from './autonomyLoopProvenance.js';
-import { REACH_OUT_HELD_TOOL, conversationInProgress } from './autonomyLoopReachOutStep.js';
+import { REACH_OUT_HELD_TOOL, conversationInProgress, heldByGate, intentArisenAt, type ReachOutDeliveryAnswer } from './autonomyLoopReachOutStep.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './store/autonomyLoopState.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
 import { AUTONOMY_REACH_OUT_FOLLOW_UP_TOOL } from '../../inhibition/inhibitionPorts.js';
@@ -44,6 +44,7 @@ export function prepareFollowUp(dependencies: StepDependencies, cycle: AutonomyL
     localTime: ownerLocalTime(at, config.timeZone, true), happened, ...(said ? { said } : {}), ...(seen ? { seen } : {}), others,
   }), OUTPUT_TOKENS);
   if (!call) return null;
+  const arisenAt = intentArisenAt(dependencies, cycle, at);
   return {
     request: {
       domain: 'owner_message', summary: '返事がなかったので、持ち主にもう一度だけ声をかけます。', tool: REACH_OUT_FOLLOW_UP_TOOL,
@@ -71,12 +72,15 @@ export function prepareFollowUp(dependencies: StepDependencies, cycle: AutonomyL
       if (after) return after;
       // Someone else may have come while she wrote it: in a marked session she holds it (ADR-0007).
       if (heldForOthers(dependencies, cycle, writeAt)) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, reasonCode: 'others_present', summary: 'ほかの人がいるので、もう一度声をかけるのはやめておきました。' };
-      let delivery: 'sent' | 'limit' | 'unavailable';
+      let delivery: ReachOutDeliveryAnswer;
       try {
         delivery = adapters.reachOuts.sayAgain(cycle.scopeKey, {
-          originId: origin.id, text, dayKey: autonomyDayKey(writeAt, config), maximumPerDay: config.maximumReachOutFollowUpsPerDay, seen: Boolean(seen),
+          originId: origin.id, text, dayKey: autonomyDayKey(writeAt, config), maximumPerDay: config.maximumReachOutFollowUpsPerDay, seen: Boolean(seen), arisenAt,
         }, writeAt);
       } catch { delivery = 'unavailable'; }
+      // Syzygy ADR-0008 stage 3: the proactive gate held it where it would have been written.
+      const held = heldByGate(delivery, 'もう一度声をかけるの', usage);
+      if (held) return held;
       if (delivery !== 'sent') {
         return {
           outcome: 'failed', usage, reasonCode: delivery === 'limit' ? 'daily_limit' : 'nowhere_to_speak',
