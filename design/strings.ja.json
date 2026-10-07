@@ -2967,7 +2967,7 @@
       "text": "（表示しないスキル）",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
       "only": "apple",
-      "note": "元にした会話が忘れられた、または写しを取り下げたスキルの題（行・読み上げ・スキルの頁・頁の題）。サーバーの HIDDEN_TITLE と同じ文。サーバーが hidden を言わなくても、statusReason が source_forgotten か写しが withdrawn なら、これを出す。固定のピンは押せない（学びの独立レビュー、2026-10-07）。"
+      "note": "元にした会話が忘れられた、または写しを取り下げたスキルの題（行・読み上げ・スキルの頁・頁の題）。サーバーの HIDDEN_TITLE と同じ文。サーバーが hidden を言わなくても、statusReason が source_forgotten か写しが withdrawn なら、これを出す。固定はできず、固定されている間だけ「固定を外す」を出す（学びの独立レビュー、2026-10-07）。"
     },
     {
       "key": "yousu.learning.skills.pinned",

@@ -169,7 +169,8 @@ struct ShannonLearningView: View {
             .accessibilityLabel(ShannonLearning.skillAccessibilityLabel(skill))
             .accessibilityHint(ShannonGeneratedStrings.yousuLearningSkillsOpenHint)
             .accessibilityAddTraits(.isButton)
-            if !skill.isRetired { pinButton(skill, palette: palette) }
+            // A withheld skill offers only 「固定を外す」, and only while it is pinned.
+            if !skill.isRetired, !skill.isWithheld || skill.pinned { pinButton(skill, palette: palette) }
         }
     }
 
@@ -185,8 +186,7 @@ struct ShannonLearningView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
-        // A withheld skill offers no pin: what it is cannot be shown.
-        .disabled(sending || skill.isWithheld)
+        .disabled(sending)
         .accessibilityLabel(skill.pinned ? ShannonGeneratedStrings.yousuLearningSkillsUnpin : ShannonGeneratedStrings.yousuLearningSkillsPin)
         .accessibilityValue(skill.pinned ? ShannonGeneratedStrings.yousuLearningSkillsPinned : ShannonGeneratedStrings.yousuLearningSkillsNotPinned)
         .accessibilityHint(ShannonGeneratedStrings.yousuLearningSkillsPinHint)

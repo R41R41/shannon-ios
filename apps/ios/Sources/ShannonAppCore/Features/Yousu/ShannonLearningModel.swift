@@ -106,8 +106,9 @@ public final class ShannonLearningModel {
     /// Pins or unpins a skill at once on screen, then asks the server. When the server does not take it, the switch goes back
     /// and one sentence says so; when it does, the skill is shown as the server answered.
     public func setPinned(_ skillID: String, pinned: Bool) async {
+        // A withheld skill may be unpinned (the owner lets go of it), never pinned: what it is cannot be shown.
         guard let client, !pinsInFlight.contains(skillID), let index = skills?.skills.firstIndex(where: { $0.id == skillID }),
-              !skills!.skills[index].isWithheld else { return }
+              !(skills!.skills[index].isWithheld && pinned) else { return }
         let before = skills!.skills[index].pinned
         guard before != pinned else { return }
         skillNotice = nil

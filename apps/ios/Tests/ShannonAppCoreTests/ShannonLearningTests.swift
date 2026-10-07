@@ -315,15 +315,29 @@ final class ShannonLearningTests: XCTestCase {
     }
 
     @MainActor
-    func testAWithheldSkillCannotBePinned() async {
+    func testAWithheldSkillCanBeUnpinnedButNeverPinned() async {
         let client = FakeLearningClient()
-        let hidden = ShannonSkillDTO(id: "h", name: "（表示しないスキル）", description: "（表示しないスキル）", hidden: true, status: "active", copyHold: "withdrawn", version: 1, pinned: false, uses: 0, successes: 0)
-        client.skills = .success(.init(capacity: .init(used: 1, limit: 20), skills: [hidden]))
+        func withheld(_ id: String, pinned: Bool) -> ShannonSkillDTO {
+            .init(id: id, name: "（表示しないスキル）", description: "（表示しないスキル）", hidden: true, status: "active", copyHold: "withdrawn", version: 1, pinned: pinned, uses: 0, successes: 0)
+        }
+        client.skills = .success(.init(capacity: .init(used: 2, limit: 20), skills: [withheld("h", pinned: false), withheld("p", pinned: true)]))
         let model = ShannonLearningModel(client: client)
         await model.reload()
+
         await model.setPinned("h", pinned: true)
-        XCTAssertTrue(client.pins.isEmpty)
+        XCTAssertTrue(client.pins.isEmpty, "never pinned")
         XCTAssertFalse(model.activeSkills[0].pinned)
+
+        client.pinAnswer = .success(withheld("p", pinned: false))
+        let unpin = Task { await model.setPinned("p", pinned: false) }
+        while !client.pinIsHeld { await Task.yield() }
+        XCTAssertFalse(model.activeSkills[1].pinned, "shown unpinned at once")
+        client.releasePin()
+        await unpin.value
+        XCTAssertEqual(client.pins.map(\.0), ["p"])
+        XCTAssertEqual(client.pins.map(\.1), [false])
+        XCTAssertFalse(model.activeSkills[1].pinned)
+        XCTAssertNil(model.skillNotice)
     }
 
     @MainActor
