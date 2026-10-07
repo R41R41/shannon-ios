@@ -39,8 +39,8 @@ export class TierCompetence {
     });
   }
 
-  /** The owner's next turn in a Talk, as S: settles the turn before. */
-  nextTurn(scopeKey: string, talkId: string, serve: number, at: string): void {
+  /** The owner's next turn in a Talk, as S (null: Jev was unsure, G alone): settles the turn before. */
+  nextTurn(scopeKey: string, talkId: string, serve: number | null, at: string): void {
     this.later(at, () => {
       for (const row of this.store.pendingInTalk(scopeKey, talkId)) {
         if (Date.parse(row.chosenAt) <= Date.parse(at)) this.store.settle(scopeKey, row.outcomeId, tierOutcome(row.growth, serve), 'next_turn', at);

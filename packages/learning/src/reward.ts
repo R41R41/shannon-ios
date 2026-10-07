@@ -149,8 +149,11 @@ export function choiceFamily(choice: string): string {
  * story nobody reacted to, a reading never used, a draft never shown, a draft that inherited such a showing). Void and lost choices have no reward.
  * Staleness in time (an outcome after the learned episode boundary) is judged when the mood exit runs (step 7).
  */
-/** `turn_expired` (stage 2, owner answer I-3): a conversation choice whose next turn never came, credited only because time ran out. */
-export const MOOD_INELIGIBLE_CODES: ReadonlySet<string> = new Set(['stale', 'story_expired', 'inherited_expired', 'reported_expired', 'reply_expired', 'call_expired', 'void', 'lost', 'turn_expired']);
+/**
+ * `turn_expired` (stage 2, owner answer I-3): a conversation choice whose next turn never came, credited only because time ran out;
+ * `next_turn_unsure` (ADR-0008 §14): one whose next turn came but Jev was not sure whether it retried or corrected her (S = ½).
+ */
+export const MOOD_INELIGIBLE_CODES: ReadonlySet<string> = new Set(['stale', 'story_expired', 'inherited_expired', 'reported_expired', 'reply_expired', 'call_expired', 'void', 'lost', 'turn_expired', 'next_turn_unsure']);
 
 export function moodEligible(choice: { status: string; settleCode: string | null; delta: number | null }): boolean {
   return choice.status === 'settled' && choice.delta !== null && !MOOD_INELIGIBLE_CODES.has(choice.settleCode ?? '');

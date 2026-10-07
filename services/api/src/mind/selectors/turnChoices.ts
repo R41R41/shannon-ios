@@ -1,6 +1,6 @@
 import { TASK_KINDS, type DifficultyAnswers } from '@shannon/learning';
-import type { JevChooser, JevQuestion } from '../../infra/models/jev/jevChoice.js';
-import { jevChoice, jevNoul } from '../../infra/models/jev/jevChoice.js';
+import type { JevChooser, JevQuestion, JevQuestionSetId } from '../../infra/models/jev/jevChoice.js';
+import { JEV_QUESTION_SETS, jevChoice, jevNoul } from '../../infra/models/jev/jevChoice.js';
 import { TOOL_MENU_NONE, chosenTools, toolMenuQuestions, type MenuCandidate } from './toolMenu.js';
 
 /**
@@ -88,8 +88,10 @@ export class JevTurnChooser implements TurnChooser {
     const previous = this.difficulty && request.previousReply ? request.previousReply : null;
     if (!menu && !this.difficulty) return { menu: null };
     const questions: Record<string, JevQuestion> = { ...(menu ? toolMenuQuestions(menu) : {}), ...(this.difficulty ? difficultyQuestions(previous !== null) : {}) };
+    const sets: JevQuestionSetId[] = [...(menu ? [JEV_QUESTION_SETS.toolMenu] : []), ...(this.difficulty ? [JEV_QUESTION_SETS.difficulty] : []),
+      ...(previous ? [JEV_QUESTION_SETS.retry] : [])];
     const decided = await this.jev.decide<TurnChoices>({
-      scopeKey: request.scopeKey, surface: request.surface, decision: this.difficulty ? 'difficulty' : 'tool_menu',
+      scopeKey: request.scopeKey, surface: request.surface, decision: this.difficulty ? 'difficulty' : 'tool_menu', sets,
       state: { utterance: request.words.slice(0, TURN_CHOICE_WORDS), surface: request.surface, ...(previous ? { previous_reply: previous } : {}) },
       questions,
       // Each part is read on its own: an unusable menu answer does not lose the difficulty, and the other way round.

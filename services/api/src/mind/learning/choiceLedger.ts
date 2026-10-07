@@ -89,10 +89,10 @@ export class ChoiceLedger {
   }
 
   /** The owner's next turn in a Talk, as S (`nextTurnServe`): settles the conversation choices of the turn before. */
-  settleTalk(scopeKey: string, talkId: string, serve: number, at: string): void {
+  settleTalk(scopeKey: string, talkId: string, serve: number, at: string, code: 'next_turn' | 'next_turn_unsure' = 'next_turn'): void {
     if (!this.conversation) return;
     this.later(() => this.write(at, () => {
-      settleConversation(this.store, scopeKey, talkId, serve, 'next_turn', at);
+      settleConversation(this.store, scopeKey, talkId, serve, code, at);
     }));
   }
 

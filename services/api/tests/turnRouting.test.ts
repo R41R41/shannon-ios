@@ -131,7 +131,7 @@ describe('a routed conversation turn', () => {
     const w = world();
     const model = new RecordingModel('書斎にメモを保存しました。');
     const autonomy = createInMemoryAutonomyService(() => w.clock.at);
-    let chooser = answers(0.8);
+    let chooser = answers(0.95);
     const api = createLocalApiKernel(() => w.clock.at, { chatModel: model, autonomy, turnChooser: { difficulty: true, choose: request => chooser.choose(request) }, turnRouting: w.routing });
     const response = await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message: '書斎にメモを書いて' } });
     const request = model.all.at(-1) as ShannonChatModelRequest;
@@ -162,6 +162,23 @@ describe('a routed conversation turn', () => {
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message: 'これ考えて' } });
     expect(model.all.at(-1)).toMatchObject({ escalation: true });
     expect((model.all.at(-1) as ShannonChatModelRequest).tier).toBeUndefined();
+    w.close();
+  });
+
+  it('settles her last turn from G alone when Jev is not sure he retried (ADR-0008 §14), never moving her mood', async () => {
+    const w = world();
+    const model = new RecordingModel('書斎にメモを保存しました。');
+    let chooser = answers(0.95);
+    const api = createLocalApiKernel(() => w.clock.at, { chatModel: model, autonomy: createInMemoryAutonomyService(() => w.clock.at),
+      turnChooser: { difficulty: true, choose: request => chooser.choose(request) }, turnRouting: w.routing });
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message: '書斎にメモを書いて' } });
+    const tierChoice = w.store.choiceLedger()!.rows('owner').find(row => row.choice.startsWith('tier.'))!;
+    w.clock.at = at(2);
+    chooser = answers(0.1, 0.6);
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message: 'うーん' } });
+    expect(w.store.choiceLedger()!.rows('owner').find(row => row.choiceId === tierChoice.choiceId)).toMatchObject({ status: 'settled', settleCode: 'next_turn_unsure', serve: 0.5 });
+    // G was 2/3 (the verifier flagged it): from G alone the competence table learns a success, as an expired turn would.
+    expect(w.outcomes.all('owner')[0]).toMatchObject({ outcome: 1, settleCode: 'next_turn' });
     w.close();
   });
 

@@ -5,6 +5,7 @@ import { RewardMood } from '../mind/emotion/rewardMood.js';
 import type { PredictionShadow } from '../mind/prediction/predictionShadow.js';
 import type { DecisionTraceWriter } from '../contracts/decisionTraceContract.js';
 import type { VoiceDecisionGateway } from '../contracts/voiceDecisionContract.js';
+import { JEV_QUESTION_LANGUAGE, JEV_QUESTION_SETS } from '../infra/models/jev/jevChoice.js';
 import { countedJevFetch } from '../infra/models/jev/jevClient.js';
 import { jevUsdPerCall } from '../infra/models/jev/jevUsage.js';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
@@ -58,7 +59,8 @@ export function configuredVoiceDecision(
 ): VoiceDecisionGateway {
   if (!write) return createConfiguredVoiceDecisionGateway(environment, usageStore);
   const inner = createConfiguredVoiceDecisionGateway(environment, usageStore, countedJevFetch());
-  return new TracedVoiceDecisionGateway(inner, write, { usdPerJevCall: jevUsdPerCall(environment) });
+  return new TracedVoiceDecisionGateway(inner, write, { usdPerJevCall: jevUsdPerCall(environment),
+    ...(skillRoutingSwitches(environment).stage2 ? { questionSet: { id: JEV_QUESTION_SETS.voiceRoute, language: JEV_QUESTION_LANGUAGE } } : {}) });
 }
 
 /**

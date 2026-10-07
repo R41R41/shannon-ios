@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { emptyJevProbe, withJevProbe, type JevCallProbe } from './jevClient.js';
 
 /**
@@ -11,6 +12,15 @@ import { emptyJevProbe, withJevProbe, type JevCallProbe } from './jevClient.js';
  *   something that cannot be used (the caller's `fallback`, never an exception);
  * - one content-free decision trace per call (stage 1's `shannon_decision_traces`), with the Jev call counted by the probe of
  *   `countedJevFetch` (`jevClient.ts`), its outcome, its size and its cost when the price is set. Never the words of the state.
+ *
+ * ADR-0008 §14 (after Canny and JevBystander):
+ * - **Fixed question sets.** Every question set has a version id and a language (`JEV_QUESTION_SETS`); a change of any wording is
+ *   a new version. Each trace records the sets asked (`qv`), their language (`ql`), a digest of the exact questions (`qh`) and
+ *   of the whole input (`h`: model, state, questions).
+ * - **Replayable.** Each trace also records Jev's raw answers, one per question (`a.<key>`: the probability, or the chosen key),
+ *   so `replayedAnswers` gives back what the selector parsed and every decision can be recomputed from the traces alone.
+ * - **Cached by content.** The same input within `JEV_CACHE_MILLISECONDS` is answered from the last usable answer, without a call
+ *   (traced with `cached: true` and no cost): Jev drifts about 0.05 between runs, and a repeated turn gets the same decision.
  */
 export interface JevQuestion {
   type: 'noul' | 'choice';
@@ -29,6 +39,23 @@ export interface JevChoiceOptions {
 export const JEV_DEFAULT_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 export const JEV_DEFAULT_MODEL = 'jev-latest';
 export const JEV_DEFAULT_TIMEOUT_MILLISECONDS = 900;
+/** How long a usable answer stands for the same input (model, state, questions), and how many inputs are kept. */
+export const JEV_CACHE_MILLISECONDS = 60_000;
+export const JEV_CACHE_ENTRIES = 128;
+
+/**
+ * The fixed question sets (ADR-0008 §14): `<name>.v<version>`, all in English. Bump the version whenever any wording of the
+ * set changes (instructions, criteria, the menu's wording around its entries); the entries of a menu are data, digested in `qh`.
+ */
+export const JEV_QUESTION_SETS = Object.freeze({
+  voiceRoute: 'voice_route.v1',
+  toolMenu: 'tool_menu.v1',
+  difficulty: 'difficulty.v1',
+  retry: 'retry_or_correction.v1',
+  recallBeam: 'recall_beam.v1',
+} as const);
+export type JevQuestionSetId = typeof JEV_QUESTION_SETS[keyof typeof JEV_QUESTION_SETS];
+export const JEV_QUESTION_LANGUAGE = 'en';
 
 export class JevChoiceClient {
   readonly model: string;
@@ -92,6 +119,40 @@ export function jevChoice<const T extends readonly string[]>(answers: Readonly<R
   return choice as T[number];
 }
 
+/** A short closed digest (`<prefix><16 hex>`), a valid trace symbol. */
+export function jevDigest(prefix: 'q' | 'h', value: unknown): string {
+  return `${prefix}${createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16)}`;
+}
+
+const RAW_KEY = /^[A-Za-z0-9_.:-]{1,90}$/u;
+const RAW_SYMBOL = /^[A-Za-z][A-Za-z0-9_.:-]{0,95}$/u;
+
+/**
+ * Jev's raw answers as trace answers (`a.<key>`): a `noul` as its probability, a `choice` as its key when it is one of the
+ * question's criteria; `invalid` otherwise. Keys that are not closed symbols are left out (none of the stage-2 sets has one).
+ */
+export function rawTraceAnswers(answers: Readonly<Record<string, unknown>>, questions: Readonly<Record<string, JevQuestion>>): Record<string, string | number> {
+  const raw: Record<string, string | number> = {};
+  for (const [key, question] of Object.entries(questions)) {
+    if (!RAW_KEY.test(key)) continue;
+    const value = answers[key];
+    const field = value && typeof value === 'object' ? (value as Record<string, unknown>)[question.type] : undefined;
+    if (question.type === 'noul') raw[`a.${key}`] = typeof field === 'number' && Number.isFinite(field) && field >= 0 && field <= 1 ? field : 'invalid';
+    else raw[`a.${key}`] = typeof field === 'string' && Object.hasOwn(question.criteria, field) && RAW_SYMBOL.test(field) ? field : 'invalid';
+  }
+  return raw;
+}
+
+/** The answers as Jev sent them, rebuilt from a trace's raw answers: `parse(replayedAnswers(trace.answers))` replays a decision. */
+export function replayedAnswers(trace: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const answers: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(trace)) {
+    if (!name.startsWith('a.') || value === 'invalid') continue;
+    answers[name.slice(2)] = typeof value === 'number' ? { type: 'noul', noul: value } : { type: 'choice', choice: value };
+  }
+  return answers;
+}
+
 /** What one stage-2 decision writes to the decision traces (`contracts/decisionTraceContract.ts`), as closed values. */
 export interface JevChoiceTrace {
   surface: 'text' | 'voice';
@@ -117,6 +178,8 @@ export interface JevDecision<T> {
  * Never throws. Each decision is one Jev call and one trace, so the usage summary counts calls from the traces as stage 1 does.
  */
 export class JevChooser {
+  private readonly cache = new Map<string, { body: unknown; at: number; contextChars: number | null; questions: number | null }>();
+
   constructor(
     private readonly client: Pick<JevChoiceClient, 'ask' | 'model'>,
     private readonly options: {
@@ -125,6 +188,8 @@ export class JevChooser {
       usdPerCall: number | null;
       now?: () => string;
       clock?: () => number;
+      /** How long a usable answer stands for the same input; 0: no cache. */
+      cacheMilliseconds?: number;
     },
   ) {}
 
@@ -134,6 +199,8 @@ export class JevChooser {
     scopeKey: string;
     surface: 'text' | 'voice';
     decision: JevChoiceTrace['decision'];
+    /** The fixed question sets asked (ADR-0008 §14), in the order their questions are merged. */
+    sets: readonly JevQuestionSetId[];
     state: unknown;
     questions: Readonly<Record<string, JevQuestion>>;
     parse: (answers: Readonly<Record<string, unknown>>) => T;
@@ -144,23 +211,44 @@ export class JevChooser {
     const clock = this.options.clock ?? (() => performance.now());
     const started = clock();
     const probe: JevCallProbe = emptyJevProbe();
+    const input = jevDigest('h', { model: this.client.model, state: request.state, questions: request.questions });
+    const key = `${request.scopeKey}\u0000${input}`;
+    const ttl = this.options.cacheMilliseconds ?? JEV_CACHE_MILLISECONDS;
+    const hit = ttl > 0 ? this.cache.get(key) : undefined;
+    const cached = hit !== undefined && started - hit.at < ttl;
     let decided: JevDecision<T>;
+    let raw: Record<string, string | number> = {};
     try {
-      const body = await withJevProbe(probe, () => this.client.ask(request.state, request.questions));
-      decided = { value: request.parse(jevAnswers(body)), source: 'jev' };
+      const body = cached ? hit.body : await withJevProbe(probe, () => this.client.ask(request.state, request.questions));
+      const answers = jevAnswers(body);
+      raw = rawTraceAnswers(answers, request.questions);
+      decided = { value: request.parse(answers), source: 'jev' };
+      if (!cached && ttl > 0) this.remember(key, { body, at: started, contextChars: probe.stateChars, questions: probe.questions });
     } catch {
       decided = { value: request.fallback(), source: 'fallback' };
     }
     try {
       this.options.trace?.(request.scopeKey, {
-        surface: request.surface, decision: request.decision, answers: request.traceAnswers(decided.value, decided.source),
+        surface: request.surface, decision: request.decision,
+        answers: {
+          ...request.traceAnswers(decided.value, decided.source),
+          qv: [...request.sets], ql: JEV_QUESTION_LANGUAGE, qh: jevDigest('q', request.questions), h: input, cached, ...raw,
+        },
         // Jev's own call failed (timeout or error): that is the outcome; an answer that could not be used is a fallback.
         outcome: decided.source === 'jev' ? 'ok' : probe.outcome === 'timeout' ? 'timeout' : probe.outcome === 'error' ? 'error' : 'fallback',
-        model: this.client.model, questions: probe.questions ?? Object.keys(request.questions).length, contextChars: probe.stateChars,
+        model: this.client.model, questions: (cached ? hit.questions : probe.questions) ?? Object.keys(request.questions).length,
+        contextChars: cached ? hit.contextChars : probe.stateChars,
         latencyMs: Math.max(0, clock() - started),
-        costUsd: this.options.usdPerCall === null ? null : Math.max(1, probe.calls) * this.options.usdPerCall, at,
+        // A cached answer made no call and cost nothing.
+        costUsd: this.options.usdPerCall === null ? null : cached ? 0 : Math.max(1, probe.calls) * this.options.usdPerCall, at,
       });
     } catch { /* a trace never fails a turn */ }
     return decided;
+  }
+
+  private remember(key: string, entry: { body: unknown; at: number; contextChars: number | null; questions: number | null }): void {
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+    while (this.cache.size > JEV_CACHE_ENTRIES) this.cache.delete(this.cache.keys().next().value!);
   }
 }

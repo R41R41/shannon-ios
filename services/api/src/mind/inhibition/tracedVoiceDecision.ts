@@ -12,6 +12,7 @@ import type { DecisionTraceDraft, DecisionTraceWriter, TraceAnswer } from '../..
  * unset, null: 未設定). The transcript, the context and the reply never enter it.
  *
  * With decision traces switched off the configured gateway is used as it was, with the fetch it had (`wiring/cognitionLedgerWiring.ts`).
+ * With stage 2 on (ADR-0008 §14) the trace also names the router's fixed question set and its language (`qv`, `ql`).
  */
 export class TracedVoiceDecisionGateway implements VoiceDecisionGateway {
   readonly mode: VoiceDecisionGateway['mode'];
@@ -20,7 +21,9 @@ export class TracedVoiceDecisionGateway implements VoiceDecisionGateway {
   constructor(
     private readonly inner: VoiceDecisionGateway,
     private readonly write: DecisionTraceWriter,
-    private readonly options: { usdPerJevCall: number | null; now?: () => string; clock?: () => number },
+    private readonly options: { usdPerJevCall: number | null; now?: () => string; clock?: () => number;
+      /** Stage 2 (ADR-0008 §14): the router's question set and language, recorded in each trace; absent, the trace is stage 1's. */
+      questionSet?: { id: string; language: string } },
   ) {
     this.mode = inner.mode;
     this.model = inner.model;
@@ -33,7 +36,9 @@ export class TracedVoiceDecisionGateway implements VoiceDecisionGateway {
     const probe = emptyJevProbe();
     const decision = await withJevProbe(probe, () => this.inner.decide(input));
     try {
-      this.write(input.scopeKey, voiceRouteTrace(this.inner, input, decision, probe, Math.max(0, clock() - started), at, this.options.usdPerJevCall));
+      const trace = voiceRouteTrace(this.inner, input, decision, probe, Math.max(0, clock() - started), at, this.options.usdPerJevCall);
+      const set = this.options.questionSet;
+      this.write(input.scopeKey, set ? { ...trace, answers: { ...trace.answers, qv: [set.id], ql: set.language } } : trace);
     } catch { /* a trace never fails a turn */ }
     return decision;
   }

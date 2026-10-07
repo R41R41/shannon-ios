@@ -1,6 +1,6 @@
 import type { KnowledgeHeadingNode, ShannonKnowledgeDocument } from '@shannon/cognition';
 import type { JevChooser, JevQuestion } from '../../infra/models/jev/jevChoice.js';
-import { jevNoul } from '../../infra/models/jev/jevChoice.js';
+import { JEV_QUESTION_SETS, jevNoul } from '../../infra/models/jev/jevChoice.js';
 import { skillSections } from '../memory/memoryPorts.js';
 import { TREE_BEAM, TREE_PREVIEW_CHARACTERS, beamSearch, beamStop, type BeamStop, type TreeNode } from './treeBeam.js';
 
@@ -91,7 +91,7 @@ export class TreeKnowledgeRecall {
         calls += 1;
         const keys = candidates.map((_, index) => `n${index}`);
         const decision = jev.decide<ReadonlyMap<string, number> | null>({
-          scopeKey: input.scopeKey, surface: input.surface, decision: 'recall_beam',
+          scopeKey: input.scopeKey, surface: input.surface, decision: 'recall_beam', sets: [JEV_QUESTION_SETS.recallBeam],
           state: { utterance: input.message.slice(0, UTTERANCE_CHARACTERS), passages: Object.fromEntries(candidates.map((node, index) => [keys[index], { path: node.path.join(' > '), preview: node.preview }])) },
           questions: Object.fromEntries(keys.map(key => [key, usefulness(key)])),
           parse: answers => new Map(candidates.map((node, index) => [node.id, jevNoul(answers, keys[index]!)])),

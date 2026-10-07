@@ -3,14 +3,20 @@
  * by name in `autonomyCore.ts`, so it is not emotion's although this package is). Pure: no database, network, environment or timer.
  *
  * From Jev's difficulty answers and what the competence table has learned, it decides which tier answers a conversation turn,
- * how many rethinks it may take and whether it is verified. Luna first (owner answer 5, ADR-0008 §2):
- * - `sonnet` when Jev says a strong model is needed (p ≥ 0.65), or when luna's learned success for that kind of task is below
- *   0.6 over at least five outcomes;
- * - in between (0.35 ≤ p < 0.65) luna, which may be escalated once at a round boundary when a tool fails or a round runs out
- *   of time (`escalateOnTrouble`), never after her words have started;
- * - `luna_plus` (luna thinking one step longer) for a multi-step turn that does not need the strong model;
- * - `jev_only` for small talk Jev routed alone (served by luna, never verified or escalated);
+ * how many rethinks it may take and whether it is verified. Luna first (owner answer 5, ADR-0008 §2).
+ *
+ * Jev's probabilities are acted on only inside the confidence band (ADR-0008 §14, after Canny): `yes` at p ≥ 0.9, `no` at
+ * p ≤ 0.1, `unsure` in between (`jevBand`). An unsure answer never decides anything by itself; each question has its own rule:
+ * - `needs_strong_model`: `yes` → `sonnet`; `unsure` → luna, which may be escalated once at a round boundary when a tool fails
+ *   or a round runs out of time (`escalateOnTrouble`: evidence decides, never after her words have started); `no` → on.
+ *   Also `sonnet` when luna's learned success for that kind of task is below 0.6 over at least five outcomes (evidence).
+ * - `multi_step`: `yes` → `luna_plus` (luna thinking one step longer) and one rethink; otherwise luna's own tool rounds.
+ * - `needs_verification`: `yes` → the luna checker and one rethink; otherwise the deterministic verifier alone (which checks
+ *   every turn that offered a write, whatever Jev said).
+ * - small talk (`jev_only`, served by luna, never verified or escalated) only when all three are `no` and the kind is chat.
  * - `luna` otherwise, and whenever Jev could not answer.
+ * Jev never blocks: every confident answer adds care (a stronger tier, a check, a rethink) or, for small talk, leaves the
+ * deterministic verifier in place; a hard verdict on her reply comes only from evidence (the verifier, the tool results).
  *
  * `sonnet` is served only while it is available (the Anthropic key **and** `SHANNON_SONNET_ROUTING=on`, owner answer I-1);
  * otherwise it is served as `luna_plus` and nothing leaves for Anthropic. On voice (owner answer I-2 「声も含めて」) an available
@@ -36,16 +42,19 @@ export interface DifficultyAnswers {
 /** What the competence table holds for a (tier, kind): a Beta posterior from Beta(1, 1). */
 export interface Competence { successes: number; failures: number }
 
+/** Jev's confidence band (ADR-0008 §14): answers between `no` and `yes` are `unsure` and fall back to each site's own rule. */
+export const JEV_BAND = Object.freeze({ yes: 0.9, no: 0.1 });
+export type JevBand = 'yes' | 'no' | 'unsure';
+
+export function jevBand(probability: number): JevBand {
+  return probability >= JEV_BAND.yes ? 'yes' : probability <= JEV_BAND.no ? 'no' : 'unsure';
+}
+
 export const DIFFICULTY_THRESHOLDS = Object.freeze({
-  strong: 0.65,
-  middle: 0.35,
   /** Luna is known to be weak at a kind below this learned success … */
   weakLuna: 0.6,
   /** … over at least this many outcomes. */
   weakLunaN: 5,
-  multiStep: 0.65,
-  verify: 0.5,
-  smallTalk: 0.2,
 });
 
 /** First-token latency assumed for Sonnet on voice until it is measured (step 5's hook), and the room voice keeps for the rest. */
@@ -92,16 +101,18 @@ export function decideTier(context: DifficultyContext): TierDecision {
   });
   const answers = context.answers;
   if (!answers) return plain('luna', 'no_answers');
-  const t = DIFFICULTY_THRESHOLDS;
-  const verify = answers.needsVerification >= t.verify;
-  const rethinks = ((answers.multiStep >= t.multiStep ? 1 : 0) + (answers.needsVerification >= t.strong ? 1 : 0)) as 0 | 1 | 2;
+  const strongBand = jevBand(answers.needsStrongModel);
+  const verifyBand = jevBand(answers.needsVerification);
+  const multiBand = jevBand(answers.multiStep);
+  const verify = verifyBand === 'yes';
+  const rethinks = ((multiBand === 'yes' ? 1 : 0) + (verify ? 1 : 0)) as 0 | 1 | 2;
   const luna = competenceMean(context.lunaCompetence);
-  const strong = answers.needsStrongModel >= t.strong ? 'strong' as const
-    : luna.n >= t.weakLunaN && luna.mean < t.weakLuna ? 'luna_weak' as const : null;
+  const strong = strongBand === 'yes' ? 'strong' as const
+    : luna.n >= DIFFICULTY_THRESHOLDS.weakLunaN && luna.mean < DIFFICULTY_THRESHOLDS.weakLuna ? 'luna_weak' as const : null;
   if (strong) return served({ ...plain('sonnet', strong), rethinks, verify }, context);
-  if (answers.needsStrongModel >= t.middle) return { ...plain('luna', 'middle'), rethinks, verify, escalateOnTrouble: true };
-  if (answers.multiStep >= t.multiStep) return { ...plain('luna_plus', 'multi_step'), rethinks, verify };
-  if (answers.taskKind === 'chat' && answers.needsStrongModel < t.smallTalk && answers.multiStep < t.smallTalk && !verify) return plain('jev_only', 'small_talk');
+  if (strongBand === 'unsure') return { ...plain('luna', 'middle'), rethinks, verify, escalateOnTrouble: true };
+  if (multiBand === 'yes') return { ...plain('luna_plus', 'multi_step'), rethinks, verify };
+  if (answers.taskKind === 'chat' && multiBand === 'no' && verifyBand === 'no') return plain('jev_only', 'small_talk');
   return { ...plain('luna', 'plain'), rethinks, verify };
 }
 
@@ -125,14 +136,17 @@ export function escalatedTier(served: ServedTier, sonnetAvailable: boolean): Ser
  * The closed outcome signals of a conversation choice (owner answer I-3 「報酬にも入れる」):
  * - G, how well it went by itself: the mean of the signals that apply (the tool worked, the turn finished inside its deadline,
  *   the verifier found no claim without a write), each 0 or 1;
- * - S, what the owner did next: the next turn's Jev probability that he retried or corrected her, as 1 (< 0.35), 0.5, or 0 (≥ 0.65).
+ * - S, what the owner did next: the next turn's Jev probability that he retried or corrected her, inside the band only: 0 when
+ *   `yes` (p ≥ 0.9), 1 when `no` (p ≤ 0.1), and null when `unsure`, which settles the turn as if no next turn had told her
+ *   anything (the competence and the skill uses from G alone; the choice ledger at S = ½ as `next_turn_unsure`, never a mood).
  */
 export function conversationGrowth(signals: readonly boolean[]): number {
   return signals.length ? signals.filter(Boolean).length / signals.length : 0;
 }
 
-export function nextTurnServe(retryProbability: number): 1 | 0.5 | 0 {
-  return retryProbability < DIFFICULTY_THRESHOLDS.middle ? 1 : retryProbability >= DIFFICULTY_THRESHOLDS.strong ? 0 : 0.5;
+export function nextTurnServe(retryProbability: number): 1 | 0 | null {
+  const band = jevBand(retryProbability);
+  return band === 'no' ? 1 : band === 'yes' ? 0 : null;
 }
 
 /** A tier's outcome for the competence table: it went well by itself and he did not retry or correct it. */

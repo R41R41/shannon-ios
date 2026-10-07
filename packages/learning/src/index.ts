@@ -111,6 +111,7 @@ export {
 } from './choiceAppraisal.js';
 export {
   DIFFICULTY_THRESHOLDS,
+  JEV_BAND,
   SONNET_FIRST_TOKEN_ESTIMATE_MS,
   TASK_KINDS,
   TIERS,
@@ -119,11 +120,13 @@ export {
   conversationGrowth,
   decideTier,
   escalatedTier,
+  jevBand,
   nextTurnServe,
   tierOutcome,
   type Competence,
   type DifficultyAnswers,
   type DifficultyContext,
+  type JevBand,
   type ServedTier,
   type TaskKind,
   type Tier,

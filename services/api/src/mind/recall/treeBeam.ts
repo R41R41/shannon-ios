@@ -4,10 +4,14 @@
  * scorer (Jev) and the audience are handed in; no clock, store or network here. Child ids extend their parent's (`<parent>:<child>`).
  *
  * Level by level, the scorer gives each candidate node a usefulness in [0, 1]. A leaf (a node without children, or any node at
- * the last level) that scores is a passage; of the others, the `width` best scoring at least `expandAt` are opened and their
- * children are the next level's candidates. The search stops when two passages reach 0.8 (`enough`), when the useful passages
- * sum to 1.6 (`sum`), when the scorer runs out of time or calls (`budget`), when it fails (`failed`), or when nothing is left
- * (`exhausted`). An opened node none of whose children were useful stands as a passage of its own.
+ * the last level) that scores is a passage; of the others, the `width` best that Jev is not sure are useless (above `prune`) are
+ * opened and their children are the next level's candidates. The search stops when two passages are confidently useful
+ * (`enough`), when the useful passages sum to 1.6 (`sum`), when the scorer runs out of time or calls (`budget`), when it fails
+ * (`failed`), or when nothing is left (`exhausted`). An opened node none of whose children were useful stands as a passage of its own.
+ *
+ * Jev's confidence band (ADR-0008 §14): a passage is kept only when Jev is sure it is useful (p ≥ 0.9); a node is left unopened
+ * only when Jev is sure it is useless (p ≤ 0.1). In between, the search keeps looking (opening a node only widens what is read) and
+ * the turn keeps its deterministic sections (`turnKnowledgeRecall.ts`: a note without a chosen section is excerpted as before).
  *
  * The audience is checked before and after each call: a node only the owner may see (`ownerOnly`) is never put to the scorer
  * unless the owner is alone before the call, and is dropped from the results if he is not alone after it.
@@ -28,15 +32,15 @@ export const TREE_PREVIEW_CHARACTERS = 200;
 export const TREE_BEAM = Object.freeze({
   width: 4,
   depth: 3,
-  /** A passage this useful counts towards `enoughCount`. */
-  enough: 0.8,
+  /** A passage this useful counts towards `enoughCount` (Jev's `yes`). */
+  enough: 0.9,
   enoughCount: 2,
   /** Useful passages summing to this stop the search. */
   sum: 1.6,
-  /** What counts as useful at all (a passage kept, a summand). */
-  useful: 0.5,
-  /** A node scoring this much may be opened. */
-  expandAt: 0.3,
+  /** What counts as useful at all (a passage kept, a summand): Jev's `yes`. */
+  useful: 0.9,
+  /** A node scoring at most this is not opened (Jev's `no`); any other may be. */
+  prune: 0.1,
   /** Candidates a call scores (Jev's menu limit, one entry left for the state). */
   candidates: 63,
   passages: 6,
@@ -98,7 +102,7 @@ export async function beamSearch(
     const next: Array<{ node: TreeNode; score: number }> = [];
     for (const item of results) {
       if (!item.node.children.length || level === depth) passages.set(item.node.id, item);
-      else if (item.score >= settings.expandAt) next.push(item);
+      else if (item.score > settings.prune) next.push(item);
     }
     const stop = beamStop([...passages.values()].map(item => item.score), settings);
     if (stop) return finish(stop);

@@ -107,8 +107,8 @@ export class SkillMemory {
     return skillId;
   }
 
-  /** The owner's next turn in a Talk, as S: settles the uses of the turn before. */
-  nextTurn(scopeKey: string, talk: string, serve: number, at: string): void {
+  /** The owner's next turn in a Talk, as S (null: Jev was unsure, G alone): settles the uses of the turn before. */
+  nextTurn(scopeKey: string, talk: string, serve: number | null, at: string): void {
     let waiting = false;
     try { waiting = this.ready() && this.store.all(scopeKey).some(skill => skill.uses.some(use => use.o === null && use.talk === talk)); } catch { waiting = false; }
     if (!waiting) return;

@@ -53,8 +53,9 @@ export function configuredTurnRouting(
     sonnetFirstTokenMs: () => parts.sonnet?.firstTokenLatency.estimate() ?? null,
     competence: (scopeKey, tier, kind) => competence?.competence(scopeKey, tier, kind) ?? null,
     nextTurn: (scopeKey, talk, retryProbability, at) => {
+      // Inside Jev's band only (ADR-0008 §14): unsure settles as if the next turn had said nothing (S = ½ for the ledger, G alone).
       const serve = nextTurnServe(retryProbability);
-      choices?.settleTalk(scopeKey, talk, serve, at);
+      choices?.settleTalk(scopeKey, talk, serve ?? 0.5, at, serve === null ? 'next_turn_unsure' : 'next_turn');
       competence?.nextTurn(scopeKey, talk, serve, at);
       skills?.nextTurn(scopeKey, talk, serve, at);
     },
