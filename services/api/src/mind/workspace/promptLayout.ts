@@ -1,7 +1,7 @@
 import { audienceCovers, isOwnerOnly, type MemoryAudience } from '@shannon/cognition';
 import type { MindSurface } from '@shannon/mind';
 import { WITHHELD_REASON_LABELS, isWithheldReason } from '../../contracts/withheldActionContract.js';
-import { injectionThreats } from '../memory/injectionPorts.js';
+import { injectionThreats, neutralizedForFrame } from '../memory/injectionPorts.js';
 import { NOTICE_KINDS, SPEECH_KINDS, currentNotices, orderedHeld, type WorkspaceItem, type WorkspaceScope } from './workspaceState.js';
 
 /**
@@ -16,7 +16,8 @@ import { NOTICE_KINDS, SPEECH_KINDS, currentNotices, orderedHeld, type Workspace
  *    order they arrived: a new one is appended, an earlier one is never rewritten.
  * 3. Untrusted data frames `〔データ 出どころ=… id=…〕…〔/データ〕` after one fixed line that says they are data, not instructions
  *    (text only, and only with `SHANNON_DATA_FRAMES` on; off, such words reach no prompt, as before stage 3). A body in which
- *    `injectionThreats` finds anything is replaced by a fixed line.
+ *    `injectionThreats` finds anything (read after NFKC, with zero-width characters removed) is replaced by a fixed line; any
+ *    other has every bracket that could close a frame or forge a marker (`〔〕`, `﹝﹞`, `︹︺`, `〘〙`, `【】`, `[ ]`) made a parenthesis.
  *
  * Only items the turn's audience covers are shown (`audienceCovers`: with anyone else present, only what everyone here was there
  * for). Words are read through `WorkspaceTextReader` (the withholding and the disclosure gate), never from the journal.
@@ -36,13 +37,14 @@ export const DATA_FRAME_THREAT = '（指示のような文が含まれていた�
 /**
  * A report block a turn builds itself (its header, the reported lines, a closing line of the server's own) with the reported lines
  * in data frames: `[マイクラの体で起きたこと]`, whose lines carry the step labels the body sent (Syzygy ADR-0008 stage 3, S3). The
- * header and the server's last line stay as they are; a reported line with words like an instruction is replaced by the threat line.
+ * header and the server's last line stay as they are; a reported line with words like an instruction is replaced by the threat line,
+ * and any other has its brackets neutralized as a workspace frame has (`neutralizedForFrame`), so it cannot close its frame.
  */
 export function framedReport(block: string, source: string): string {
   const lines = block.split('\n');
   if (lines.length < 3) return block;
   const framed = lines.slice(1, -1).map((line, index) =>
-    `〔データ 出どころ=${source} id=${source}-${index + 1}〕${injectionThreats(line).length ? DATA_FRAME_THREAT : line}〔/データ〕`);
+    `〔データ 出どころ=${source} id=${source}-${index + 1}〕${injectionThreats(line).length ? DATA_FRAME_THREAT : neutralizedForFrame(line)}〔/データ〕`);
   return [lines[0], DATA_FRAME_RULE, ...framed, lines.at(-1)].join('\n');
 }
 
@@ -75,7 +77,7 @@ export function agoLabel(at: string, now: string): string {
 }
 
 const oneLine = (text: string, limit: number) => {
-  const flat = text.replace(/[〔〕]/gu, match => (match === '〔' ? '［' : '］')).replace(/\s+/gu, ' ').trim();
+  const flat = neutralizedForFrame(text).replace(/\s+/gu, ' ').trim();
   return flat.length > limit ? `${flat.slice(0, limit - 1)}…` : flat;
 };
 

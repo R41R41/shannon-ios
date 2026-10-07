@@ -9,6 +9,12 @@ export function ensureColumns(database: DatabaseSync, table: string, columns: Re
   const present = new Set((database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(row => row.name));
   for (const [name, definition] of Object.entries(columns)) {
     if (!/^[a-z_]+$/u.test(name)) throw new Error('SCHEMA_COLUMN');
-    if (!present.has(name)) database.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+    if (present.has(name)) continue;
+    try {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+    } catch (error) {
+      // Another connection added it between the read and the write (stage 3 review, as stage 2's `addColumn`).
+      if (!(error instanceof Error && /duplicate column/iu.test(error.message))) throw error;
+    }
   }
 }
