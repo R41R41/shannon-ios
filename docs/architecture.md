@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-10-06 / Her figure for OBS from the Mac app, and others present while it is on (roadmap A18 S5); 2026-10-06 / Her folder on the Mac changed through the trash, and the Mac app opens at login (roadmap A18 S3–S4); 2026-10-06 / Her folder on the Mac, read-only, and two hosts (roadmap A18 S1–S2); 2026-10-06 / Her tools run together within one response (Syzygy ADR-0003 stage 4, first slice: reads at once, folder reads one after the other, anything else alone, results in the model's order; several calls asked for only while no write is offered); 2026-10-05 / Prediction and the dynamics of her feeling in shadow (Syzygy ADR-0006 stage 1: computed beside the current emotion code, nothing acts on it); 2026-10-02 / A touch reaches her: feeling, memory, and one line she may say (`POST /v1/body/reactions`, the reflex layer of Syzygy ADR-0003); She paces her own day in sessions (`rest`, the facts of her budget, session bounds) and her own activity may see the owner's context through the conversation's memory entry points (Syzygy ADR-0003); Act, observe, think again in her own activity: step outcomes as facts, a bounded wait after a message of hers, one second call, and the body's delivery report; Calendar snapshots from the apps, one projection of the owner's upcoming items, and messages she starts on her own from her activity (`reach_out`); Opt-in sentence stream for `/v1/chat`, sent while the model writes for owner-alone turns; people and audience-scoped memory, including the `/v1/chat` audience field; bounded autonomy foundation and first activity loop (Syzygy ADR-0002 steps 2–3)
+Revision: 2026-10-07 / Stage 4 shared mind worker and action threads (implemented on codex/shannon/adr8-stage4; production switch remains OFF), see `docs/action-threads-contract.md`; 2026-10-06 / Her figure for OBS from the Mac app, and others present while it is on (roadmap A18 S5); 2026-10-06 / Her folder on the Mac changed through the trash, and the Mac app opens at login (roadmap A18 S3–S4); 2026-10-06 / Her folder on the Mac, read-only, and two hosts (roadmap A18 S1–S2); 2026-10-06 / Her tools run together within one response (Syzygy ADR-0003 stage 4, first slice: reads at once, folder reads one after the other, anything else alone, results in the model's order; several calls asked for only while no write is offered); 2026-10-05 / Prediction and the dynamics of her feeling in shadow (Syzygy ADR-0006 stage 1: computed beside the current emotion code, nothing acts on it); 2026-10-02 / A touch reaches her: feeling, memory, and one line she may say (`POST /v1/body/reactions`, the reflex layer of Syzygy ADR-0003); She paces her own day in sessions (`rest`, the facts of her budget, session bounds) and her own activity may see the owner's context through the conversation's memory entry points (Syzygy ADR-0003); Act, observe, think again in her own activity: step outcomes as facts, a bounded wait after a message of hers, one second call, and the body's delivery report; Calendar snapshots from the apps, one projection of the owner's upcoming items, and messages she starts on her own from her activity (`reach_out`); Opt-in sentence stream for `/v1/chat`, sent while the model writes for owner-alone turns; people and audience-scoped memory, including the `/v1/chat` audience field; bounded autonomy foundation and first activity loop (Syzygy ADR-0002 steps 2–3)
 
 ## System shape
 
@@ -27,6 +27,10 @@ Agent Host
 ```
 
 Production endpoint: `https://sh4nnon.com/companion`.
+
+## Stage 4 execution owner
+
+`SHANNON_ADR8_STAGE4=on` moves the workspace owner to `mindWorker.ts`. The API renders a fresh, privacy-filtered projection and requests one foreground/two background execution slots over an owner-only Unix socket; the autonomy worker, Agent Host and Minecraft body retain their canonical notebooks. Lease generations fence old runners; stopping awaits acknowledgement and unknown outside results are never retried automatically. OFF keeps Stage 3. The full contract and rollout limits are in [`action-threads-contract.md`](action-threads-contract.md).
 
 ## FCA response lane
 
@@ -810,7 +814,6 @@ The distributor records every automatic check in the production SQLite database.
 ## Deferred by design
 
 - per-user LoRA, fine-tuning, or any other training of model weights (value tables that change her choices from outcomes are allowed: Syzygy ADR-0008)
-- action threads: actions run in parallel under the same self, gate, record and budget (Syzygy ADR-0002 addendum 2026-10-07; not replication, built in stage 4 of ADR-0008)
 - applying a source-code change without the owner's approval (proposing one is allowed; see Bounded autonomy)
 - the Windows device side of folder contract v2 (built by the body thread against `docs/host-folder-contract.md`; until then her folder tools answer that the device does not support the operation), the Azure workspace (ADR-0002 step 4), and proposals she raises from the loop (step 5)
 - reading the owner's shared Notion from the loop: the optional interface exists, the `notion_read` domain is added by the Notion source

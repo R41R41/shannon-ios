@@ -9,13 +9,13 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 
 ## 件数
 
-機能は全部で 146 件。
+機能は全部で 147 件。
 
 | 画面 | ○ ある | △ 一部 | × ない | — 当てはまらない | 予定 | ？ 不明 |
 |---|---:|---:|---:|---:|---:|---:|
-| iOS | 120 | 3 | 9 | 12 | 2 | 0 |
-| macOS | 131 | 3 | 8 | 2 | 2 | 0 |
-| Windows | 72 | 21 | 41 | 7 | 4 | 1 |
+| iOS | 120 | 3 | 9 | 12 | 3 | 0 |
+| macOS | 131 | 3 | 8 | 2 | 3 | 0 |
+| Windows | 72 | 21 | 41 | 7 | 4 | 2 |
 
 ## 構成（入口）（`structure`）
 
@@ -64,6 +64,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `talk.reply-read-aloud` | **文字の返事を声で読み上げる（既定は全部）** 文字で話したときの返事を、声でも読む。既定は全部を読む（長さの上限なし）。 | × | × | ○ |
 | `talk.outline-summary` | **会話の目次と要約**【デスクトップの追加】 長い会話の見出しを横に並べ、押すとその場所へ移る。 | × | ○ | × |
 | `talk.artifact-export` | **作ってくれた文書をファイルに保存**【デスクトップの追加】 文書を、選んだ場所へ保存する。 | × | ○ | × |
+| `talk.background-action-threads` | **裏の作業の一覧と停止** 第4段階の小さな入口、由来・状態、個別停止・すべて停止・明示的再開。古い報告・通信断・結果不明・同席者に対応。実装ブランチ、未配布。 | 予定 | 予定 | ？ |
 
 - `talk.thread-search` Windows（×）: 管理画面のトークの一覧に検索は無い。
 - `talk.markdown-code` Windows（△）: Markdown は出る。コードのコピーと折りたたみは無い。
@@ -85,6 +86,9 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `talk.sentence-stream` Windows（△）: 身体の窓だけ。管理画面のトークは一度に出る。
 - `talk.reply-read-aloud` iOS（×）: 文字のトークの返事を読み上げる設定は見つからない（声は音声会話とイヤホンの話しかけだけ）。
 - `talk.reply-read-aloud` Windows（○）: 2026-10-05 12:00 に 350 字の上限を外し、既定で全部を読むようにした（体のスレッドで所有者が決めた）。Windows body thread report 2026-10-05。
+- `talk.background-action-threads` iOS（予定）: ブランチ `codex/shannon/adr8-stage4`。標準シート、会話と向き合う表示の入口。
+- `talk.background-action-threads` macOS（予定）: ブランチ `codex/shannon/adr8-stage4`。標準ポップオーバー、トークとすがたの入口。
+- `talk.background-action-threads` Windows（？）: 第4段階のApple側実装に続くWindows側の表示は、この作業ではコードと実画面を確認していない。
 
 ## 声の会話（`voice`）
 

@@ -387,6 +387,31 @@ describe('CodexTaskBridge', () => {
     expect(events.find(event => event.type === 'paused')?.payload).toEqual({ pauseReason: 'owner' });
     await bridge.stop();
   });
+  it('waits for the real stopped-turn acknowledgement and ignores a completion from the old turn', async () => {
+    const fixture=makeFixture(),events:HostAgentEvent[]=[];
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>true,publish:async batch=>{events.push(...batch);}});
+    await bridge.start();
+    const lease={id:'action-1',holder:'host',generation:1};
+    await bridge.handle({...command('start-1','start',{goal:'Work',projectHint:'fixture'}),actionLease:lease});
+    await bridge.handle(command('stop-1','interrupt',{cancel:true}));
+    expect(events.filter(e=>e.type==='paused')).toHaveLength(0);
+    expect(fixture.state.session('task-1')?.turnId).toBe('turn-1');
+    fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'older-turn',status:'completed'}}});
+    await bridge.whenIdle();expect(fixture.state.session('task-1')?.turnId).toBe('turn-1');
+    fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'turn-1',status:'interrupted'}}});
+    await bridge.whenIdle();expect(events.filter(e=>e.type==='paused')).toHaveLength(1);
+    expect(fixture.state.session('task-1')?.turnId).toBeUndefined();
+    await bridge.stop();
+  });
+  it('sends no paid turn when execution rights have been withdrawn', async () => {
+    const fixture=makeFixture(),events:HostAgentEvent[]=[];
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>false,publish:async batch=>{events.push(...batch);}});
+    await bridge.start();
+    await bridge.handle({...command('start-1','start',{goal:'Work',projectHint:'fixture'}),actionLease:{id:'action-1',holder:'host',generation:1}});
+    expect(fixture.client.requests.filter(r=>r.method==='turn/start')).toHaveLength(0);
+    await bridge.stop();
+  });
+
 });
 
 class FakeCodexConnection implements CodexAppServerConnection {

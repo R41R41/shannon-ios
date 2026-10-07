@@ -19,6 +19,7 @@ const bridge = new CodexTaskBridge({
   client,
   state,
   publish: events => broker.publish(events),
+  permit: taskId => broker.permit(taskId),
   diagnostic: message => console.error(`[agent-host] ${message}`),
 });
 const workspaceSnapshots = new AgentWorkspaceSnapshotReader();
@@ -28,6 +29,11 @@ console.log(`Projects: ${[...config.projects.keys()].join(', ')}`);
 
 let stopping = false;
 let lastHeartbeat = 0;
+let checkingRights=false;
+const executionTimer=setInterval(()=>{
+  if(checkingRights)return;checkingRights=true;
+  void bridge.checkExecutionRights().catch(error=>console.error('[agent-host] execution check failed')).finally(()=>{checkingRights=false;});
+},5_000);executionTimer.unref();
 process.once('SIGINT', () => { stopping = true; });
 process.once('SIGTERM', () => { stopping = true; });
 
@@ -78,6 +84,7 @@ try {
     }
   }
 } finally {
+  clearInterval(executionTimer);
   await bridge.stop();
 }
 

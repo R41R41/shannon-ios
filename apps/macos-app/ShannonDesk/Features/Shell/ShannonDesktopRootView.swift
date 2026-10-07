@@ -31,6 +31,7 @@ public struct ShannonDesktopRootView: View {
     @AppStorage(ShannonDesktopWindowRestoration.lastInspectorVisibleKey) var lastShowsInspector = false
     @AppStorage(ShannonDesktopWindowRestoration.lastAuxiliaryPanelKey) var lastAuxiliaryPanelRawValue = DesktopAuxiliaryPanel.task.rawValue
     /// ようす and 運用 (the mark of 設定), read through the conversation's client and scope.
+    @State var actionThreads: ShannonActionThreadsModel
     @State var yousu: ShannonYousuModel
     @State var searchText = ""
     @State var selectedTaskID: UUID?
@@ -96,6 +97,7 @@ public struct ShannonDesktopRootView: View {
         )
         _showsInspector = State(initialValue: initialChrome.showsInspector)
         _auxiliaryPanel = State(initialValue: initialChrome.auxiliaryPanel)
+        _actionThreads = State(initialValue: ShannonActionThreadsModel.make(for: conversation))
         _yousu = State(initialValue: ShannonYousuModel.make(for: conversation))
         self.conversation = conversation
         self.connection = connection
@@ -109,6 +111,7 @@ public struct ShannonDesktopRootView: View {
 
     public var body: some View {
         observingWindowState(windowContent)
+            .modifier(ShannonActionThreadsPolling(model: actionThreads, connected: connection.isConnected || conversation.isDesignPreview, othersPresent: bodyModel.audience == .others || voiceCall.session.othersMayBeListening))
             .focusedSceneValue(\.shannonDesktopCommandActions, desktopCommandActions)
             .toolbarBackground(Color(nsColor: .textBackgroundColor), for: .windowToolbar)
             .toolbarBackground(.visible, for: .windowToolbar)

@@ -22,6 +22,8 @@ import { skillExecutors } from './shannonSkillTools.js';
 import type { SkillTurnPorts } from '../../contracts/skillMemoryContract.js';
 import { skillHash } from '../memory/memoryPorts.js';
 import { WITHHELD_TOOL, withheldRail, type WithheldRail, type WithheldReason, type WithheldSink } from '../../contracts/withheldActionContract.js';
+import { actionPermit, currentActionExecution } from '../../infra/context/actionExecution.js';
+import { actionResource } from '../../contracts/actionThreadContract.js';
 
 /**
  * Runs the registry's tools. Conversations (text and voice) call `call`; her own time uses `prepare` inside a
@@ -177,7 +179,18 @@ export class ShannonToolRunner {
       const informed = (documentId: string) => this.store.informed.marked(context.scopeKey, documentId);
       const prepared = executor(checked.input, this.aether.access && this.aetherFor(context.scopeKey) ? { ...context, aether: gatedAether(this.aether.access, context, informed) } : context);
       // With anyone else present, what she read reaches the model without the owner's private things.
-      return 'run' in prepared ? { tool, prepared: this.notedCopyWrite(tool, checked.input, context.scopeKey, shownAetherCall(tool, prepared, context)) } : { tool, result: prepared };
+      if(!('run' in prepared))return {tool,result:prepared};
+      const call=this.notedCopyWrite(tool,checked.input,context.scopeKey,shownAetherCall(tool,prepared,context));
+      return {tool,prepared:{...call,run:async signal=>{
+        const resources=tool.effect==='write'?[actionResource(context.scopeKey,call.folder?`folder:${call.folder.host}`:'study')]:[];
+        await actionPermit(resources);
+        // The original gate and live secret predicate are evaluated again after waiting for a resource.
+        const refusedNow=authorizeToolCall(tool,context) ?? authorizeToolInput(tool,checked.input,context);
+        if(refusedNow) return {result:refusedNow,record:{summary:'実行直前の関門で止まりました。',outcome:'failed' as const,reasonCode:'refused'}};
+        const active=currentActionExecution();
+        const combined=active?signal?AbortSignal.any([signal,active.signal]):active.signal:signal;
+        return call.run(combined);
+      }}};
     } catch {
       return { tool, result: toolFailure('failed', 'うまく準備できなかった。', { retryable: true }) };
     }
@@ -282,14 +295,17 @@ export class ShannonToolRunner {
     }
     if (!run.apply) {
       if (!run.recordedElsewhere) record(run.record.summary, run.record.outcome, run.record.reasonCode);
+      if(context.surface!=='autonomy')await currentActionExecution()?.checkpoint?.('tool_returned');
       return run.result;
     }
     try {
+      await actionPermit();
       const added = this.transaction(() => {
         const line = run.apply!();
         this.recorder.recordConversationAction(context.scopeKey, { summary: run.record.summary, tool: ready.tool.name, outcome: 'done' });
         return line;
       });
+      if(context.surface!=='autonomy')await currentActionExecution()?.checkpoint?.('tool_committed');
       return added ? { ...run.result, text: `${run.result.text}\n${added}` } : run.result;
     } catch (error) {
       const code = error instanceof Error ? error.message : '';
@@ -335,4 +351,3 @@ function secretRefusal(name: string, input: Readonly<Record<string, unknown>>, s
     retryable: false, refusal: { why: '内緒のこと・忘れたことを書くことになる', wouldWork: 'そこを除いて書き直す' },
   });
 }
-

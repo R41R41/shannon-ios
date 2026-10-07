@@ -2,9 +2,9 @@ import type { AutonomyLoopCycle, AutonomyPlannedStep } from './store/autonomyLoo
 import type { PreparedStep, StepDependencies, StepResult } from './autonomyLoopSteps.js';
 import type { AutonomyDecision } from '../../inhibition/inhibitionPorts.js';
 import { markEarly, sessionMarked, unlistedIn } from './autonomyLoopProvenance.js';
-import { toolGateRequest, toolRefusal } from '../../inhibition/shannonToolGate.js';
-import { neutralMarkers, toolSessionMemory, type ToolSessionMemory } from '../../tools/shannonToolTypes.js';
-import { providerToolName, type ShannonToolDefinition } from '../../tools/shannonTools.js';
+import { toolGateRequest, toolRefusal } from '../../inhibition/toolGatePorts.js';
+import { neutralMarkers, toolSessionMemory, type ToolSessionMemory } from '../../tools/executionPorts.js';
+import { providerToolName, type ShannonToolDefinition } from '../../tools/toolRegistryPorts.js';
 
 /**
  * The step `tool` of her own time: one call of the registry (`shannonTools.ts`) that her thinking chose, under the

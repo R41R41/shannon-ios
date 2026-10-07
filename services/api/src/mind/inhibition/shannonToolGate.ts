@@ -2,8 +2,8 @@ import { AetherAccessError, type AetherAccess } from '../../integrations/aether/
 import { resultForOthers } from './aetherShownText.js';
 import type { AutonomousActionRequest, AutonomyDecision } from './autonomyPolicy.js';
 import type { ToolInput } from '../tools/toolsPorts.js';
-import type { PreparedToolCall, ToolExecutionContext } from '../tools/toolsPorts.js';
-import { toolFailure, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface } from '../tools/shannonTools.js';
+import type { PreparedToolCall, ToolExecutionContext } from '../tools/executionPorts.js';
+import { toolFailure, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface } from '../tools/toolRegistryPorts.js';
 
 /**
  * The one gate entry of a tool call (Syzygy ADR-0003 stage 1). It decides from the registry entry and the

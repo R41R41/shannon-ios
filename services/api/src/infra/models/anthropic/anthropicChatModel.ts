@@ -1,3 +1,4 @@
+import { actionPermit, currentActionExecution } from '../../context/actionExecution.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { PartialAnswerError, RoundTimer, TURN_OUT_OF_TIME_LINE, type RoundTime } from '../../../mind/action/respond/turnDeadline.js';
 import { completeSpokenSentences } from '../../../surfaces/voice/spokenSentences.js';
@@ -177,8 +178,9 @@ export class AnthropicChatModel implements ShannonChatModel {
   private sender(scopeKey: string, listen: ((delta: string, decoder: ChatReplyStreamDecoder) => Promise<string> | null) | null, caller?: AbortSignal,
     latency: FirstTokenLatency = this.firstTokenLatency, onFirst?: () => void) {
     return async (body: Anthropic.MessageCreateParamsNonStreaming, time: RoundTime | null, round: number): Promise<Anthropic.Message> => {
+      await actionPermit();
       const timer = time ? new RoundTimer(time) : null;
-      const signals = [caller, timer?.signal].filter((value): value is AbortSignal => Boolean(value));
+      const signals = [caller, timer?.signal, currentActionExecution()?.signal].filter((value): value is AbortSignal => Boolean(value));
       const signal = signals.length ? AbortSignal.any(signals) : undefined;
       const started = this.clock();
       let sent = '';

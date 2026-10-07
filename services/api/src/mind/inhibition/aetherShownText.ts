@@ -1,6 +1,6 @@
 import { UNLABELLED_DISCLOSURE_MARKER } from '@shannon/cognition';
 import type { SecretCheck } from './conversationSecrets.js';
-import { toolFailure, type ToolResult } from '../tools/shannonTools.js';
+import { toolFailure, type ToolResult } from '../tools/toolRegistryPorts.js';
 
 /**
  * What she reads of Aether reaches the model this way while anyone but the owner can see or hear the reply (Syzygy

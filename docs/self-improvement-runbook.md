@@ -200,3 +200,7 @@ Report:
 - whether Azure and/or the iPhone were actually updated
 - what was deliberately not run, especially live-LLM tests
 - any remaining blocker without presenting it as completion
+
+## Stage 4 shared mind rollout
+
+The explicit switch, private IPC, device protocol order, stop/unknown recovery, and checks are in [action-threads-contract.md](action-threads-contract.md). Stage 4 is implemented on its own branch; a successful unsigned build is not authorization or evidence of production deployment. Run independent core review and the existing production/Apple gates before enabling `SHANNON_ADR8_STAGE4=on`. Install the API route and updated Agent Host with the switch OFF first. The new `shannon-ios-mind.service` uses `ExecCondition` to stay inactive when OFF rather than crash-loop. Inspect canonical outcomes before reconciling an unknown action; never replay it to test whether the previous attempt worked.

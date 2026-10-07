@@ -1,3 +1,6 @@
+import { prepareShowing } from './autonomyLoopShowStep.js';
+import { actionPermit } from '../../../infra/context/actionExecution.js';
+import { actionResource } from '../../../contracts/actionThreadContract.js';
 import type { ShannonAutonomyDomainId } from '@shannon/cognition';
 import type { AutonomyConfig } from '../../inhibition/inhibitionPorts.js';
 import type { HostFolderDesk } from './autonomyHostFolderDesk.js';
@@ -16,18 +19,18 @@ import { storyNotes, withNoteAfterReading } from './autonomyLoopPlan.js';
 import { AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, revisePrompt } from './autonomyLoopPrompts.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './store/autonomyLoopState.js';
 import { prepareThinking } from './autonomyLoopThinkStep.js';
-import { heldForOthers, markEarly, sessionMarked, shownLater, unmarkedOnly, unmarkedPursuits } from './autonomyLoopProvenance.js';
+import { heldForOthers, markEarly, sessionMarked, unmarkedOnly, unmarkedPursuits } from './autonomyLoopProvenance.js';
 import { prepareToolStep, type AutonomyToolResults } from './autonomyLoopToolStep.js';
 import type { AutonomyModelPurpose } from './autonomyModels.js';
 import { AUTONOMY_CALL_DOMAIN, type AutonomousActionRequest, type AutonomyDecision } from '../../inhibition/inhibitionPorts.js';
 import type { AutonomyPublicReader } from './autonomyReader.js';
 import type { ShannonAutonomyService } from './autonomyService.js';
-import type { ShowingOutcome, StudyShowing } from './autonomyShowing.js';
+import type { StudyShowing } from './autonomyShowing.js';
 import type { SQLiteAutonomyStore } from './store/autonomyStore.js';
 import type { AutonomyTextModel } from './autonomyTextModel.js';
 import type { DecisionTraceWriter } from '../../../contracts/decisionTraceContract.js';
-import { READING_DOCUMENT_PREFIX } from '../../inhibition/store/ownerInformedMarks.js';
-import type { ToolDocuments } from '../../tools/shannonToolTypes.js';
+import { READING_DOCUMENT_PREFIX } from '../../inhibition/autonomyReadPorts.js';
+import type { ToolDocuments } from '../../tools/executionPorts.js';
 import { aetherStep, studyWriteKey, type StudyAether } from './studyAether.js';
 import { STUDY_LIMITS, STUDY_REACTION_LABEL } from './store/studyStore.js';
 import { clip, hostOf, sharesLongPassage, story, text } from './autonomyLoopStepText.js';
@@ -52,6 +55,9 @@ export interface AutonomyNotionReader {
 export const NOTION_READ_DOMAIN = 'notion_read';
 
 export interface StepDependencies {
+  actionSteps?: import('../../../contracts/actionThreadContract.js').ActionStepPort;
+  /** Only true after the scheduler owns this loop's execution rights; outreach still uses its existing gate. */
+  concurrentActions?: boolean;
   store: SQLiteAutonomyStore;
   service: ShannonAutonomyService;
   config: AutonomyConfig;
@@ -297,6 +303,7 @@ function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, s
       const question = text(reply?.question, 120);
       const questionWhy = text(reply?.questionWhy, 400);
       // With Aether her note goes to 「シャノン用フォルダ」 first; what Aether refused is not kept here either.
+      if(adapters.aether?.covers(cycle.scopeKey))await actionPermit([actionResource(cycle.scopeKey,'study')]);
       const pushed = adapters.aether?.covers(cycle.scopeKey) ? await aetherStep(() => adapters.aether!.create(cycle.scopeKey, { kind: 'note', title: clip(title, 80), body: body.slice(0, STUDY_LIMITS.noteBody).trim() }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'note', reading.id), signal)) : null;
       if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: 'メモを書きましたが、Aetherのシャノン用フォルダに置けませんでした。', reasonCode: pushed.reasonCode };
       // A note of a marked page (a shared Notion page) marks its session and itself the moment Aether has it (ADR-0007).
@@ -338,6 +345,7 @@ function prepareDraft(dependencies: StepDependencies, cycle: AutonomyLoopCycle, 
       const body = story(reply?.body);
       if (!title || !body) return { outcome: 'failed', summary: '物語を書こうとしましたが、下書きになりませんでした。', usage };
       // With Aether the story goes to 「シャノンの書斎」 first (`inStudy: true`), the canonical copy.
+      if(adapters.aether?.covers(cycle.scopeKey))await actionPermit([actionResource(cycle.scopeKey,'study')]);
       const pushed = adapters.aether?.covers(cycle.scopeKey) ? await aetherStep(() => adapters.aether!.create(cycle.scopeKey, { kind: 'story', title: clip(title, 80), body, changeNote: text(reply?.note, STUDY_LIMITS.changeNote) ?? '最初の稿です。' }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'draft', title), signal)) : null;
       if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: '物語の下書きを書きましたが、Aetherの書斎に置けませんでした。', reasonCode: pushed.reasonCode };
       if (pushed) markEarly(dependencies, cycle, [pushed.value.documentId], at);
@@ -383,6 +391,7 @@ function prepareRevision(dependencies: StepDependencies, cycle: AutonomyLoopCycl
       if (!body || !change) return { outcome: 'failed', summary: '物語を直そうとしましたが、次の稿になりませんでした。', usage };
       const title = text(reply?.title, 60) ?? piece.title;
       // A story that lives in Aether is revised there first, from the version she read (`baseVersion`); a stale one brings the newer text in.
+      if(adapters.aether?.covers(cycle.scopeKey))await actionPermit([actionResource(cycle.scopeKey,'study')]);
       const pushed = adapters.aether?.covers(cycle.scopeKey) ? await aetherStep(() => adapters.aether!.update(cycle.scopeKey, piece, { title: clip(title, 80), body, changeNote: change }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'revise', piece.id, String(piece.version)), signal)) : null;
       if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: '物語を直しましたが、Aetherの書斎に書けませんでした。', reasonCode: pushed.reasonCode };
       if (pushed?.value) markEarly(dependencies, cycle, [pushed.value.documentId], at);
@@ -396,34 +405,6 @@ function prepareRevision(dependencies: StepDependencies, cycle: AutonomyLoopCycl
           if (pushed?.value) adapters.aether!.commit(cycle.scopeKey, revised, pushed.value);
           store.study.markFeedbackUsed(cycle.scopeKey, feedback.map(item => item.id), commitAt);
         },
-      };
-    },
-  };
-}
-
-function prepareShowing(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep): PreparedStep | null {
-  const { store } = dependencies;
-  const piece = step.pieceId ? store.study.get(cycle.scopeKey, step.pieceId) : null;
-  if (!piece || piece.kind !== 'story' || (piece.status !== 'draft' && piece.status !== 'ready')) return null;
-  return {
-    request: { domain: 'owner_message', summary: '物語を1つ「見せてもいい」にして、持ち主に知らせます。', tool: 'study.show' },
-    async perform(adapters, at) {
-      if (!adapters.showing) return { outcome: 'failed', summary: '知らせる道具が渡されなかったため、見せませんでした。' };
-      // Readable first, so the piece can be opened the moment the message arrives.
-      const ready = store.transaction(() => store.study.markReady(cycle.scopeKey, piece.id, at));
-      if (typeof ready === 'string') return { outcome: 'failed', summary: '物語を「見せてもいい」にできませんでした。' };
-      const revised = store.study.versions(cycle.scopeKey, piece.id).length > 1 && Boolean(piece.shownAt);
-      let told: ShowingOutcome | 'others_present';
-      // A story written after reading the owner's is not named in the Talk while anyone else may see it: told later (ADR-0007).
-      if (shownLater(dependencies, cycle, piece.id, at)) told = 'others_present';
-      else try { told = adapters.showing.tell(cycle.scopeKey, { id: piece.id, title: ready.title, version: ready.version, revised }, at); } catch { told = 'unavailable'; }
-      const sent = told === 'sent' || told === 'already-told';
-      return {
-        outcome: 'done', link: `shannon-study://${piece.id}`, tool: sent ? 'study.show' : 'study.ready',
-        summary: sent ? `物語「${clip(ready.title, 60)}」を持ち主に見せました。`
-          : `物語「${clip(ready.title, 60)}」を「見せてもいい」にしました。知らせるのは、あとにします（${waitingReason(told)}）。`,
-        // Syzygy ADR-0008 stage 1: whether and how the owner reacts is predicted when he is told (`StudyDesk.react` settles it).
-        commit: (_remaining, commitAt) => { if (sent) { store.study.markShown(cycle.scopeKey, piece.id, commitAt); dependencies.prediction?.shown?.(cycle.scopeKey, { id: piece.id, revised }, commitAt); } },
       };
     },
   };
@@ -480,16 +461,4 @@ export function unpreparedCode(dependencies: Pick<StepDependencies, 'store'>, cy
 /** Stories that are open in her study: drafts and those she called 「見せてもいい」. */
 export function openStories(dependencies: Pick<StepDependencies, 'store'>, scopeKey: string): number {
   return dependencies.store.study.list(scopeKey).filter(piece => piece.kind === 'story' && (piece.status === 'draft' || piece.status === 'ready')).length;
-}
-
-function waitingReason(outcome: ShowingOutcome | 'others_present'): string {
-  switch (outcome) {
-    case 'others_present': return 'ほかの人がいるため';
-    case 'quiet-hours': return '夜の静かな時間のため';
-    case 'recent-conversation': return '話している最中のため';
-    case 'today-is-enough': return '今日はもう一度話しかけたため';
-    case 'reserved-for-commitment': return '今日は約束の声かけを先にするため';
-    case 'held': return '自分から話しかけるのを止められたため';
-    default: return '今は知らせる場所がないため';
-  }
 }

@@ -1,3 +1,4 @@
+import { actionPermit } from '../../../infra/context/actionExecution.js';
 import { autonomyDayKey, yenFromUsd } from '../../inhibition/inhibitionPorts.js';
 import { reachOutSubject, storyNotes } from './autonomyLoopPlan.js';
 import {
@@ -150,6 +151,7 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
       let reply: Record<string, unknown> | null = null;
       let usage: { inputTokens: number; outputTokens: number } | undefined;
       try {
+        await actionPermit();
         const result = await adapters.model.generate({ model, system: prompt.system, prompt: prompt.prompt, maximumOutputTokens: OUTPUT_TOKENS, signal });
         reply = parsedModelObject(result.text);
         usage = result.usage;
@@ -173,6 +175,7 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
       if (heldForOthers(dependencies, cycle, writeAt)) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, reasonCode: 'others_present', summary: `ほかの人がいるので、話しかけるのをやめておきました（理由: ${label}）。` };
       let delivery: ReturnType<AutonomyReachOuts['say']>;
       try {
+        await actionPermit();
         delivery = adapters.reachOuts.say(cycle.scopeKey, { reason, text, dayKey: autonomyDayKey(writeAt, config), maximumPerDay: config.maximumReachOutsPerDay, arisenAt, subject }, writeAt);
       } catch { delivery = 'unavailable'; }
       // Syzygy ADR-0008 stage 3: the proactive gate held it where it would have been written.

@@ -200,7 +200,12 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
     };
   }
 
-  claim(hostId: string, now: string, leaseSeconds = 35): ClaimedAgentCommand | null {
+  peekCommand(hostId: string, now: string): ClaimedAgentCommand | null {
+    const id = this.queue.nextCommand(hostId, now);
+    return id ? this.command(id) : null;
+  }
+
+  claim(hostId: string, now: string, leaseSeconds = 35, expectedId?: string): ClaimedAgentCommand | null {
     let commandId: string | null = null;
     const leaseUntil = new Date(Date.parse(now) + Math.max(10, Math.min(120, leaseSeconds)) * 1_000).toISOString();
     this.transaction(() => {
@@ -210,7 +215,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         WHERE status = 'leased' AND lease_until <= ?
       `).run(now);
       const next = this.queue.nextCommand(hostId, now);
-      if (!next) return;
+      if (!next || (expectedId && next !== expectedId)) return;
       const changed = this.database.prepare(`
         UPDATE agent_task_commands
         SET status = 'leased', lease_owner = ?, lease_until = ?, attempts = attempts + 1

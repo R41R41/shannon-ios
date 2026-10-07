@@ -7,3 +7,5 @@ export { REPLAY_SUMMARY_CHARACTERS, nextWindowStart, replayRule, replayWindow, t
 export { ImpressionEvidenceCheck, impressionSubject, impressionText, recallImpressions, usableImpression } from './impressionRecall.js';
 export { type MemoryModelGateway } from './memoryModels.js';
 export { type TurnMemoryRecall } from './turnMemoryRecall.js';
+
+export { usableKnowledgeFor } from './turnKnowledgeRecall.js';

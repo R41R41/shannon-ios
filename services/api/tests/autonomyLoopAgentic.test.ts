@@ -1,3 +1,5 @@
+import { OwnTimeActionRunner } from '../src/wiring/actionExecutionWiring.js';
+import { actionHarness } from './support/actionThreadHarness.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -37,6 +39,7 @@ const REST = { thought: 'そのままにします。', steps: [{ action: 'rest' 
 const SEEN = '椅子は空いていて、画面だけがついていました。';
 const BODY = 'body-pc';
 let databases = 0;
+
 
 function world(options: LoopHarnessOptions & { looking?: boolean } = {}) {
   const path = join(directory, `agentic-${databases += 1}.sqlite`);
@@ -399,6 +402,25 @@ describe('thinking again after any step that did not go as planned', () => {
 });
 
 describe('the gate, the switches and the budget', () => {
+  it('keeps outreach held during conversation even while Stage 4 permits her thinking', async () => {
+    const h=actionHarness(()=>START),runner=new OwnTimeActionRunner(h.actions);
+    try {
+      const w=world({concurrentActions:true,actionSteps:runner});
+      w.showing.ownerActive=true;w.model.plans=[WONDER];
+      expect(await w.loop.tick()).toBe('stepped');await w.loop.tick();
+      expect(w.model.kinds()).toEqual(['think']);expect(w.messages()).toHaveLength(0);
+    }finally{runner.close();h.close();}
+  });
+  it('does not deliver outreach when the owner stopped it while the model was writing', async () => {
+    const h=actionHarness(()=>START),runner=new OwnTimeActionRunner(h.actions);
+    try {
+      const w=world({concurrentActions:true,actionSteps:runner});w.model.plans=[WONDER];
+      await w.loop.tick();
+      w.model.during=async kind=>{if(kind==='reach_out'){const own=(await h.actions.list(scope)).find(a=>a.kind==='ownTime')!;await h.actions.stop(scope,own.id,'stop-writing');}};
+      await w.loop.tick();expect(w.messages()).toHaveLength(0);
+    }finally{runner.close();h.close();}
+  });
+
   const context = {
     enabled: true, paused: false, budget: { capYen: 1_000, spentYen: 0 }, isKnownModel: () => true,
     places: { hostFolders: {}, workspaceRoot: null, productionRoots: [], repositoryRoots: [], protectedPaths: [] },

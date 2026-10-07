@@ -58,7 +58,7 @@ import { ShannonAutonomyService } from './mind/action/ownTime/autonomyService.js
 import { SQLiteAutonomyStore } from './mind/action/ownTime/store/autonomyStore.js';
 import { BODY_CAPABILITIES_PATH, isBodyRoute } from './surfaces/body/apiBodyRoutes.js';
 import { mayHaveDesktopBody, requestDeviceId } from './surfaces/body/desktopBodyIdentity.js';
-import { bodyIngestEnabled } from './contracts/bodyContract.js';
+import { BODY_LIMITS, bodyIngestEnabled } from './contracts/bodyContract.js';
 import { SQLiteBodyStore } from './surfaces/body/store/bodyStore.js';
 import { isFullBody } from './surfaces/body/bodyTouchOnly.js';
 import { bodyLookRequestBytes, closeBodyLookStores, configuredAppLookOptions, configuredBodyLookOptions } from './wiring/bodyLookWiring.js';
@@ -86,6 +86,8 @@ import { SQLiteOwnerCallFacts, ownerCallElsewhereEnabled } from './surfaces/voic
 import { createServerSelfDiagnosis } from './infra/ops/serverSelfDiagnosis.js';
 import { createMinecraftBodyWiring } from './wiring/serverMinecraftBodyWiring.js';
 import { configuredMind, withMindOps } from './wiring/mindWiring.js';
+import { configuredActionRoutes } from './wiring/serverActionThreadsWiring.js';
+import { isActionThreadPath } from './infra/http/actionThreadRoutes.js';
 import { memoryPortsOf } from './wiring/memoryOutboxWiring.js';
 import { peopleFactReaders, stage3StoreOptions } from './wiring/peopleFactsWiring.js';
 const now = () => new Date().toISOString();
@@ -177,6 +179,7 @@ const readTools = readToolPorts(process.env, { notion, voyagerCatalog, upcoming:
 // ADR-0008 stage 3: what every surface perceived, and the notices of promises and tasks (off: none). docs/mind-workspace-contract.md.
 const mind = configuredMind(process.env, { databasePath: configuredDatabasePath(), now, ticking: true, timeZone: autonomyConfig.timeZone, log: line => console.log(line),
   notices: { ownerScopeKey: shannonNowOwnerScope(process.env), snapshot: scopeKey => persistentStore.snapshot(scopeKey), tasks: scopeKey => agentTaskStore.list(scopeKey) } });
+const externalActions=configuredActionRoutes(mind?.actions ?? null,agentTaskStore,minecraft.requests,shannonNowOwnerScope(process.env),now,()=>bodyStore.othersPresent(shannonNowOwnerScope(process.env),now(),BODY_LIMITS.audienceFreshMilliseconds,BODY_LIMITS.audienceEventWindowMilliseconds));
 const kernel = createLocalApiKernel(now, {
   ownOutreach,
   chatModel,
@@ -303,12 +306,9 @@ const server = createServer(async (request, response) => {
         return;
       }
       const hostBody = request.method === 'POST' ? await readJson(request, 256 * 1024) : undefined;
-      const result = await kernel.dispatch({
-        method: request.method,
-        path: url.pathname,
-        query: url.searchParams,
-        body: hostBody,
-      });
+      const hostRequest=await externalActions.filterHostEvents({method:request.method,path:url.pathname,query:url.searchParams,body:hostBody});
+      const result=await externalActions.beforeHost(hostRequest) ?? await kernel.dispatch(hostRequest);
+      await externalActions.afterHost(hostRequest,result);
       sendJson(response, result.status, result.body);
       return;
     }
@@ -329,6 +329,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (await minecraft.serve(request, response, url.pathname, principal)) return; // Her Minecraft body's token reaches its own routes only.
+    if (isActionThreadPath(url.pathname)) { await externalActions.route(request,response,principal,url.pathname); return; }
     if (url.pathname === SHANNON_NOW_PATH) {
       shannonNowRoute(request, response, principal);
       return;
@@ -439,7 +440,6 @@ const server = createServer(async (request, response) => {
     });
   }
 });
-
 server.requestTimeout = 30_000;
 server.headersTimeout = 15_000;
 server.setTimeout(120_000);

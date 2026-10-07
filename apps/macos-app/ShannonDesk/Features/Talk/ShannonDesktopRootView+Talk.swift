@@ -37,6 +37,7 @@ extension ShannonDesktopRootView {
     var talkView: some View {
         VStack(spacing: 0) {
             talkHeader
+            ShannonActionThreadsCapsule(model: actionThreads)
             if !hidesOwnerTalk, let task = conversation.latestActiveAgentTask {
                 DesktopWorkStrip(task: task) {
                     selectedTaskID = task.id

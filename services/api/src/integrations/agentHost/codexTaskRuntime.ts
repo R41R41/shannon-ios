@@ -1,3 +1,4 @@
+import type { ActionLease } from '../../contracts/actionThreadContract.js';
 import type { AgentChangeSummary, AgentReasoningEffort, AgentTestResult } from '../../mind/action/agentTasks/agentTasksPorts.js';
 import type { AgentHostConfig, AgentHostProject } from './agentHostConfig.js';
 import type { AgentHostStateStore, PersistedAgentSession } from './agentHostState.js';
@@ -12,6 +13,7 @@ export interface PendingCodexApproval {
 }
 
 export interface RuntimeTask {
+  actionLease?: ActionLease;
   taskId: string;
   startCommandId: string;
   threadId: string;
@@ -26,6 +28,7 @@ export interface RuntimeTask {
   model?: string;
   reasoningEffort?: AgentReasoningEffort;
   suppressTerminalEvent: boolean;
+  stopRequested?: boolean;
 }
 
 export class CodexTaskRuntimeRegistry {
@@ -42,6 +45,7 @@ export class CodexTaskRuntimeRegistry {
 
   register(session: PersistedAgentSession, project: AgentHostProject): RuntimeTask {
     const runtime: RuntimeTask = {
+      actionLease: session.actionLease,
       taskId: session.taskId,
       startCommandId: session.startCommandId,
       threadId: session.threadId,
@@ -69,6 +73,7 @@ export class CodexTaskRuntimeRegistry {
 
   save(runtime: RuntimeTask): void {
     this.state.saveSession({
+      actionLease: runtime.actionLease,
       taskId: runtime.taskId,
       startCommandId: runtime.startCommandId,
       threadId: runtime.threadId,

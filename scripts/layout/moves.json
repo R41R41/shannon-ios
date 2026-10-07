@@ -7,6 +7,7 @@
     "authCli.ts",
     "autonomyWorker.ts",
     "fakeAgentHost.ts",
+    "mindWorker.ts",
     "server.ts",
     "testflightDistributor.ts",
     "worker.ts",

@@ -94,6 +94,7 @@ extension ShannonConversationView {
                 .padding(.horizontal, ShannonSpacing.large)
                 .accessibilityIdentifier("body-now-line")
 
+            ShannonActionThreadsCapsule(model: actionThreads, compact: true)
             dialogueUserLine(palette)
             dialogueReply(palette, geometry: geometry)
         }

@@ -1,0 +1,27 @@
+#if DEBUG
+import Foundation
+/// Synthetic, isolated preview. Never reads or controls the production server.
+actor ShannonActionFixtureClient: ShannonActionThreadsServing {
+    nonisolated static var isRequested: Bool { UserDefaults.standard.bool(forKey: "ShannonPreviewActionThreads") || (Bundle.main.object(forInfoDictionaryKey: "ShannonPreviewActionThreads") as? Bool == true) }
+    private var states: [String]
+    private let scenario: String
+    init() {
+        scenario = UserDefaults.standard.string(forKey: "ShannonPreviewActionState") ?? (Bundle.main.object(forInfoDictionaryKey: "ShannonPreviewActionState") as? String) ?? "ready"
+        states = scenario == "unknown" ? ["unknown", "stopping", "failed"] : ["running", "waiting", "queued"]
+    }
+    func loadActionThreads(scopeKey: String, othersPresent: Bool) async throws -> ShannonActionThreadsDTO { reading(others: othersPresent) }
+    func controlActionThread(scopeKey: String, id: String?, resume: Bool, requestID: String) async throws -> ShannonActionThreadsDTO {
+        for index in states.indices where id == nil || id == "fixture-\(index)" {
+            if states[index] != "unknown" { states[index] = resume ? "queued" : "cancelled" }
+        }
+        return reading(others: false)
+    }
+    private func reading(others: Bool) -> ShannonActionThreadsDTO {
+        let kinds = ["ownTime", "agentTask", "minecraft"], titles = ["自分の時間", "作業環境での作業", "Minecraft"]
+        let at = Date().formatted(.iso8601)
+        return .init(availability: scenario == "recovering" ? "recovering" : "ready", generatedAt: at, count: states.filter { ["running", "waiting", "queued", "stopping"].contains($0) }.count,
+            threads: (others || scenario == "others") ? [] : states.indices.map { .init(id: "fixture-\($0)", kind: kinds[$0], title: titles[$0], origin: $0 == 0 ? "own_time" : "owner_request",
+                state: states[$0], progress: nil, result: nil, updatedAt: at, failures: scenario == "unknown" && $0 == 2 ? 5 : 0, canResume: $0 == 0 && states[$0] == "cancelled") }, othersPresent: others || scenario == "others")
+    }
+}
+#endif

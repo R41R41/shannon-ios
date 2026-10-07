@@ -63,6 +63,6 @@ export function runtimeCycles(sourceRoot = resolve(import.meta.dirname, '../../s
 }
 
 /** The entry files of the API (moves.json `entries`, the ones a process runs). */
-export const ENTRY_FILES = Object.freeze(['server.ts', 'worker.ts', 'worldWorker.ts', 'autonomyWorker.ts', 'agentHost.ts', 'testflightDistributor.ts', 'authCli.ts']);
+export const ENTRY_FILES = Object.freeze(['server.ts', 'mindWorker.ts', 'worker.ts', 'worldWorker.ts', 'autonomyWorker.ts', 'agentHost.ts', 'testflightDistributor.ts', 'authCli.ts']);
 
 export function sourceRootOf(repository: string): string { return join(repository, 'services/api/src'); }

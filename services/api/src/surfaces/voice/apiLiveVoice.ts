@@ -129,17 +129,19 @@ export function dispatchLiveVoiceRequest(
   const reaction = dependencies.reactions?.link(scopeKey, request.body.reactionId) ?? null;
   const requestedThreadId = typeof request.body.threadId === 'string' ? request.body.threadId.trim()
     : participantMode === 'owner' ? reaction?.threadId ?? undefined : undefined;
-  return completeLiveVoiceDelegation(scopeKey, requestedThreadId, request.body.transcript.trim(), participantMode, deviceContext,
+  const transcript=request.body.transcript.trim();
+  const complete=()=>completeLiveVoiceDelegation(scopeKey, requestedThreadId, transcript, participantMode, deviceContext,
     reaction?.text ?? null, { ...dependencies, looks: dependencies.looks?.of(request) }, observer);
+  return dependencies.mind?.foreground ? dependencies.mind.foreground(scopeKey,complete) : complete();
 }
 
 /** Stage 3, step F3: the workspace's blocks for a voice turn (`[いまの場]`, at most two lines), or ''. Never throws. */
 function voiceWorkspace(mind: MindTurnPorts | undefined, turn: { scopeKey: string; threadId: string; present: MemoryAudience; perceived: PerceivedItem | null;
-  snapshot: Parameters<NonNullable<MindTurnPorts['render']>>[0]['snapshot']; store: ConversationStore; at: string }): string {
+  snapshot: Parameters<NonNullable<MindTurnPorts['render']>>[0]['snapshot']; snapshotNow?:()=>Parameters<NonNullable<MindTurnPorts['render']>>[0]['snapshot']; store: ConversationStore; at: string }): string {
   if (!mind?.render) return '';
   try {
     return mind.render({ scopeKey: turn.scopeKey, surface: 'voice', present: turn.present, at: turn.at, currentItemId: turn.perceived?.itemId ?? null,
-      current: { surface: 'voice', sourceId: closedId(turn.threadId) }, snapshot: turn.snapshot, store: turn.store });
+      current: { surface: 'voice', sourceId: closedId(turn.threadId) }, snapshot: turn.snapshot, snapshotNow:turn.snapshotNow, store: turn.store });
   } catch { return ''; }
 }
 
@@ -364,9 +366,10 @@ async function completeLiveVoiceDelegation(
     } }) : null;
   observer?.signal?.throwIfAborted();
   const turnPrompt = [turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n');
+  if(dependencies.mind?.sync)await dependencies.mind.sync();
   // Stage 3: the workspace's blocks (voice: at most two lines) follow the turn's context, which stays byte for byte as it was.
   const replayed = withWorkspace(replay?.request(turnPrompt) ?? { ...(turnPrompt ? { turnContext: turnPrompt } : {}), history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) },
-    voiceWorkspace(dependencies.mind, { scopeKey, threadId, present, perceived: perceivedTurn, snapshot: captured, store: dependencies.conversationStore, at: occurredAt }));
+    voiceWorkspace(dependencies.mind, { scopeKey, threadId, present, perceived: perceivedTurn, snapshot: captured, snapshotNow:()=>dependencies.stateStore.snapshot(scopeKey), store: dependencies.conversationStore, at: occurredAt }));
   const offered = conversationTools(dependencies.autonomy, scopeKey, 'voice', toolAudience, dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline, // 「友人も一緒」: Aether reading tools; a legacy client none.
     { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }, { ...ownerAloneReads(toolAudience), ...(dependencies.toolHints ? { sourceHints: true } : {}) });
   const { offer: toolOffer, tier } = choices ? await voiceOfferAndTier(dependencies.turnRouting, offered, choices, { scopeKey, threadId, deadline, at: occurredAt }) : { offer: offered, tier: null };

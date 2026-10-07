@@ -538,7 +538,7 @@ describe('what reaches the prompts of her own activity', () => {
     expect(loopSources.sort()).toEqual([
       'autonomyLoop.ts', 'autonomyLoopCalls.ts', 'autonomyLoopConfig.ts', 'autonomyLoopFolderStep.ts', 'autonomyLoopFollowUpStep.ts', 'autonomyLoopLookStep.ts',
       'autonomyLoopObservations.ts', 'autonomyLoopObserve.ts', 'autonomyLoopObservePrompts.ts', 'autonomyLoopOwnerContext.ts', 'autonomyLoopPacing.ts', 'autonomyLoopPhoneStep.ts', 'autonomyLoopPlan.ts',
-      'autonomyLoopPrompts.ts', 'autonomyLoopProvenance.ts', 'autonomyLoopReachOutStep.ts', 'autonomyLoopSessionPrompts.ts', 'autonomyLoopSessions.ts', 'autonomyLoopState.ts', 'autonomyLoopStepText.ts', 'autonomyLoopSteps.ts',
+      'autonomyLoopPrompts.ts', 'autonomyLoopProvenance.ts', 'autonomyLoopReachOutStep.ts', 'autonomyLoopSessionPrompts.ts', 'autonomyLoopSessions.ts', 'autonomyLoopShowStep.ts', 'autonomyLoopState.ts', 'autonomyLoopStepText.ts', 'autonomyLoopSteps.ts',
       'autonomyLoopThinkStep.ts', 'autonomyLoopToolStep.ts',
     ]);
     const allowed = new Set([
@@ -555,7 +555,7 @@ describe('what reaches the prompts of her own activity', () => {
       // Act, observe, think again: what a step led to as closed facts, the words for those facts, the wait after a message of hers,
       // and the one second call. The observer is an interface the step names; the reports and the body store are not imported.
       'autonomyLoopObservations.ts', 'autonomyLoopObserve.ts', 'autonomyLoopObservePrompts.ts', 'autonomyLoopFollowUpStep.ts',
-      'autonomyLoopThinkStep.ts', 'autonomyLoopCalls.ts',
+      'autonomyLoopThinkStep.ts', 'autonomyLoopCalls.ts', 'autonomyLoopShowStep.ts',
       // Phoning his iPhone: the gated step. The phone is an interface the step names; the call store and the push sender are not imported.
       'autonomyLoopPhoneStep.ts',
       // She paces her own day: the bounds of a session, its row, and the words for its facts.
@@ -578,7 +578,9 @@ describe('what reaches the prompts of her own activity', () => {
       'autonomyShowing.ts', 'autonomyStore.ts', 'autonomyTextModel.ts', 'studyStore.ts',
       // Syzygy ADR-0008 §10: the inhibition part's window (it re-exports the budget and the gate and nothing else, held below),
       // and the one reader of the environment (no store).
-      'inhibitionPorts.ts', 'serverEnvironment.ts',
+      'inhibitionPorts.ts', 'autonomyReadPorts.ts', 'serverEnvironment.ts',
+      // Stage 4 closed execution rights and narrow pure tool windows; these open no private notebook.
+      'actionExecution.ts', 'actionThreadContract.ts', 'toolGatePorts.ts', 'toolRegistryPorts.ts', 'executionPorts.ts',
       // Syzygy ADR-0008 §14: what a refusal of her gate is as a withheld action, and its closed vocabulary; no store.
       'withheldRules.ts', 'withheldActionContract.ts',
     ]);
@@ -670,7 +672,7 @@ describe('what reaches the prompts of her own activity', () => {
     expect(read('autonomyLoopReachOutStep.ts')).not.toMatch(/DatabaseSync|SELECT |reachOutDelivery|ownerUpcoming|upcomingStore|calendarContract/u);
     // Watching for an answer, calling again, thinking again and pacing open no private store: an answer is a timestamp from the
     // showing desk, and what her body did with a message is a closed outcome from an interface.
-    for (const name of ['autonomyLoopObserve.ts', 'autonomyLoopObservePrompts.ts', 'autonomyLoopFollowUpStep.ts', 'autonomyLoopPhoneStep.ts', 'autonomyLoopThinkStep.ts', 'autonomyLoopCalls.ts', 'autonomyLoopPacing.ts', 'autonomyLoopSessionPrompts.ts', 'autonomyLoopOwnerContext.ts']) {
+    for (const name of ['autonomyLoopObserve.ts', 'autonomyLoopObservePrompts.ts', 'autonomyLoopFollowUpStep.ts', 'autonomyLoopPhoneStep.ts', 'autonomyLoopThinkStep.ts', 'autonomyLoopCalls.ts', 'autonomyLoopShowStep.ts', 'autonomyLoopPacing.ts', 'autonomyLoopSessionPrompts.ts', 'autonomyLoopOwnerContext.ts']) {
       expect(read(name), name).not.toMatch(/DatabaseSync|SELECT |reachOutDelivery|reachOutReports|bodyStore|conversationStore|sqliteStore/u);
     }
     // An observation has no column and no field for words.

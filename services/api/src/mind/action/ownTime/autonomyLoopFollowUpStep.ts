@@ -1,3 +1,4 @@
+import { actionPermit } from '../../../infra/context/actionExecution.js';
 import { autonomyDayKey } from '../../inhibition/inhibitionPorts.js';
 import { callModel, ownerLocalTime, paidCall } from './autonomyLoopCalls.js';
 import { agenticLoop, followUpsRemaining, observeReachOut, ownerRepliedAt, reachOutChain } from './autonomyLoopObserve.js';
@@ -74,6 +75,7 @@ export function prepareFollowUp(dependencies: StepDependencies, cycle: AutonomyL
       if (heldForOthers(dependencies, cycle, writeAt)) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, reasonCode: 'others_present', summary: 'ほかの人がいるので、もう一度声をかけるのはやめておきました。' };
       let delivery: ReachOutDeliveryAnswer;
       try {
+        await actionPermit();
         delivery = adapters.reachOuts.sayAgain(cycle.scopeKey, {
           originId: origin.id, text, dayKey: autonomyDayKey(writeAt, config), maximumPerDay: config.maximumReachOutFollowUpsPerDay, seen: Boolean(seen), arisenAt,
         }, writeAt);

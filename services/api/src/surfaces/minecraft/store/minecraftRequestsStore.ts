@@ -1,3 +1,4 @@
+import type { MinecraftExecutionPort } from '../../../contracts/actionThreadContract.js';
 /** The requests her Minecraft body is given and what it reported, kept (Syzygy ADR-0008 stage 3, S2: the SQLite part of `minecraftBodyRequests.ts`, moved unchanged into the surface's store folder). */
 import { MINECRAFT_REQUEST_LIMITS, type MinecraftProgressPhase, type MinecraftRequestOrigin, type MinecraftRequestProgress, type MinecraftRequestResult, type MinecraftRequestState, type MinecraftRequestView, OPEN_REQUEST_STATES, requestGoal } from '../../../contracts/minecraftBodyRequestContract.js';
 import { DatabaseSync } from 'node:sqlite';
@@ -18,6 +19,14 @@ const minutes = (value: number) => value * 60_000;
 
 export class MinecraftBodyRequests {
   private readonly database: DatabaseSync;
+  execution: MinecraftExecutionPort | null = null;
+  async executionPresent(scopeKey: string, id: string): Promise<boolean> {
+    if (!this.execution) return true;
+    try { return await this.execution.heartbeat(scopeKey,id); } catch { return false; }
+  }
+  async acknowledgeExecution(scopeKey: string,id: string,state:'completed'|'failed'|'cancelled'):Promise<void> {
+    await this.execution?.acknowledge(scopeKey,id,state);
+  }
   /** Experiences of requests closed in the open transaction, written after it commits (the experience table is another connection's). */
   private pendingExperiences: Array<{ scopeKey: string; experience: GameExperience }> = [];
 
@@ -110,7 +119,14 @@ export class MinecraftBodyRequests {
     try {
       for (;;) {
         if (signal?.aborted) return { request: null, cancel: [] };
-        const answer = this.handOut(scopeKey, deviceId, input.holding);
+        let allowedId: string | null | undefined;
+        if (this.execution) {
+          for (const id of input.holding) if(!await this.executionPresent(scopeKey,id))this.cancel(scopeKey,id);
+          const next=this.database.prepare("SELECT id FROM minecraft_body_requests WHERE scope_key=? AND state='queued' ORDER BY created_at,rowid LIMIT 1").get(scopeKey) as {id:string}|undefined;
+          allowedId=null;
+          if(next && !input.holding.length)try{if(await this.execution.admit(scopeKey,next.id,deviceId))allowedId=next.id;}catch{/* the body waits */}
+        }
+        const answer = this.handOut(scopeKey, deviceId, input.holding,allowedId);
         if (answer.request || answer.cancel.length) return answer;
         const left = deadline - Date.parse(this.now());
         if (left <= 0) return answer;
@@ -244,7 +260,7 @@ export class MinecraftBodyRequests {
     if (this.database.isOpen) this.database.close();
   }
 
-  private handOut(scopeKey: string, deviceId: string, holding: readonly string[]): ClaimResponse {
+  private handOut(scopeKey: string, deviceId: string, holding: readonly string[], allowedId?: string | null): ClaimResponse {
     const at = this.now();
     return this.transaction(() => {
       this.sweep(scopeKey, at);
@@ -266,7 +282,7 @@ export class MinecraftBodyRequests {
       }
       if (cancel.length || holds) return { request: null, cancel };
       const next = this.database.prepare(`SELECT * FROM minecraft_body_requests WHERE scope_key = ? AND state = 'queued' ORDER BY created_at, rowid LIMIT 1`).get(scopeKey) as Row | undefined;
-      if (!next) return { request: null, cancel };
+      if (!next || (allowedId !== undefined && next.id !== allowedId)) return { request: null, cancel };
       const leaseUntil = lease(at);
       this.database.prepare(`UPDATE minecraft_body_requests SET state = 'claimed', device_id = ?, claimed_at = ?, lease_until = ?, updated_at = ? WHERE id = ? AND state = 'queued'`)
         .run(deviceId, at, leaseUntil, at, next.id);

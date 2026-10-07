@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { isForgottenCommitmentEvidence } from '../memory/memoryPorts.js';
+import { isForgottenCommitmentEvidence } from '../memory/memoryVisibilityPorts.js';
 import { reviewCommitments, type CommitmentSleepReview } from './sleepCommitmentReview.js';
 import {
   memoryIdentifier,

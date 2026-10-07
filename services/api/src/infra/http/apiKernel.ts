@@ -360,6 +360,9 @@ export class ShannonApiKernel {
    * and storing are here, in the order they always had.
    */
   async textTurn(input: TextTurnInput): Promise<TextTurnResult> {
+    return this.mind?.foreground ? this.mind.foreground(input.body.scopeKey,()=>this.performTextTurn(input)) : this.performTextTurn(input);
+  }
+  private async performTextTurn(input:TextTurnInput):Promise<TextTurnResult> {
     const { audience, threadId, message, attachments, placeOptions, request, surface } = input;
     const body = input.body;
     const deadline = input.deadline ?? new TurnDeadline(TEXT_TURN_DEADLINE, () => Date.parse(this.now()));
@@ -393,13 +396,14 @@ export class ShannonApiKernel {
     systemPrompt = layered.prompt;
     // Stage 2, step 4: the tier from Jev's difficulty answers (none without the routing), and her last turn settled by this one.
     const tier = routeTurn(this.turnRouting, { scopeKey: body.scopeKey, surface: 'text', threadId, answer: settled?.answer ?? null, at: occurredAt });
+    if(this.mind?.sync)await this.mind.sync();
     const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withToolCapabilityLines({
       // Her fixed identity first, what she knows of the owner next, and the turn's context with the replay (`chatModelTurn.ts`).
       scopeKey: body.scopeKey, systemPrompt: layered.systemPrompt, ...(layered.profilePrompt ? { profilePrompt: layered.profilePrompt } : {}),
       // The history is a character budget; what fell out of it is covered by the replay summary.
       // Stage 3: the workspace's blocks follow the turn's context, which stays byte for byte as it was (none without the wiring).
       ...withWorkspace(conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey), surface?.openOnly)
-        .request([layered.turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n')), textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore)),
+        .request([layered.turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n')), textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey))),
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message,
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,

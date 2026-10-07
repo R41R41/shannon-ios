@@ -146,6 +146,7 @@ async function handleRequests(
   if (progressMatch) {
     const progress = validProgress(body);
     if (typeof progress === 'string') return deny(400, 'BAD_REQUEST', progress);
+    if(!await requests.executionPresent(scopeKey,progressMatch[1]!))requests.cancel(scopeKey,progressMatch[1]!);
     const answer = requests.progress(scopeKey, principal.deviceId, progressMatch[1]!, progress);
     return answer === 'NOT_FOUND' ? deny(404, 'MINECRAFT_REQUEST_NOT_FOUND', 'No such request was handed to this device.') : sendJson(response, 200, answer);
   }
@@ -153,5 +154,6 @@ async function handleRequests(
   const report = validReport(body);
   if (typeof report === 'string') return deny(400, 'BAD_REQUEST', report);
   const answer = requests.report(scopeKey, principal.deviceId, reportMatch[1]!, report);
+  if(answer !== 'NOT_FOUND')await requests.acknowledgeExecution(scopeKey,reportMatch[1]!,report.outcome==='done'?'completed':report.outcome==='stopped'?'cancelled':'failed');
   return answer === 'NOT_FOUND' ? deny(404, 'MINECRAFT_REQUEST_NOT_FOUND', 'No such request was handed to this device.') : sendJson(response, 200, answer);
 }

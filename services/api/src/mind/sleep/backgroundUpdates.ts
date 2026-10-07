@@ -18,10 +18,10 @@ import type { BackgroundJobStore } from './store/backgroundJobStore.js';
 import { captureImmediateExplicitMemory, type UserFactProposal } from './sleepConsolidation.js';
 import type { ShannonGeneratedArtifact, ShannonTaskDecision } from '../../infra/models/chatModel.js';
 import { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert, type MemoryProposals } from '../memory/memoryPorts.js';
-import { extractExplicitUserIntent } from '../action/respond/cognitiveIntent.js';
+import { extractExplicitUserIntent } from '../action/respond/respondPorts.js';
 import { type TurnCaptureRecord } from '../memory/memoryPorts.js';
 import { intentCaptureKey, ownerFacingStatement, turnCaptureId } from '../memory/capturePorts.js';
-import { applyExplicitCommitmentCommand } from '../action/respond/commitmentCommands.js';
+import { applyExplicitCommitmentCommand } from '../action/respond/respondCommandPorts.js';
 import { sharedTimeEvent } from '../emotion/emotionPorts.js';
 import { emotionTiming } from '../emotion/emotionPorts.js';
 

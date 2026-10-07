@@ -6,3 +6,6 @@
 export { type OthersTextCheck } from './aetherShownText.js';
 export { type SecretCheck } from './conversationSecrets.js';
 export { DisclosureGate, sharedDailyFocus, sharedProfilePrompt } from './memoryDisclosure.js';
+
+export { conversationSecrets, othersSecrets } from './conversationSecrets.js';
+export { ToolAudienceWatch, type ToolAudienceSource } from './shannonToolAudience.js';

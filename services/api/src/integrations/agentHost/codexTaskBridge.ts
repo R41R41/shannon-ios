@@ -82,6 +82,7 @@ export interface CodexTaskBridgeOptions {
   publish: (events: readonly HostAgentEvent[]) => Promise<void>;
   now?: () => string;
   diagnostic?: (message: string) => void;
+  permit?: (taskId: string) => Promise<boolean>;
 }
 
 export class CodexTaskBridge {
@@ -134,6 +135,18 @@ export class CodexTaskBridge {
   async handle(command: ClaimedAgentCommand): Promise<void> {
     if (!this.started) await this.start();
     await this.commands.handle(command);
+  }
+
+  /** A lost execution right interrupts the existing turn; it never starts a replacement. */
+  async checkExecutionRights(): Promise<void> {
+    if (!this.options.permit) return;
+    for (const session of this.options.state.resumableSessions()) {
+
+      let allowed = false;
+      try { allowed = await this.options.permit(session.taskId); } catch { /* unavailable: stop */ }
+      if (!allowed) await this.commands.handle({id:`lease-stop-${session.actionLease?.id ?? session.taskId}`,taskId:session.taskId,
+        scopeKey:'execution',type:'interrupt',payload:{},attempts:1,createdAt:this.now(),leaseUntil:this.now()});
+    }
   }
 
   async whenIdle(): Promise<void> {
@@ -316,13 +329,21 @@ export class CodexTaskBridge {
   }
 
   private async completeTurn(runtime: RuntimeTask, turn: Record<string, unknown> | undefined): Promise<void> {
+    const incomingId=stringValue(turn?.id);
+    if(incomingId && runtime.turnId && incomingId!==runtime.turnId)return;
     const status = stringValue(turn?.status);
     runtime.turnId = undefined;
     runtime.approvals.clear();
     runtime.pendingApprovalExternalRequestID = undefined;
     this.runtimes.save(runtime);
-    if (runtime.suppressTerminalEvent) {
+    if (runtime.suppressTerminalEvent && !runtime.stopRequested) {
       runtime.suppressTerminalEvent = false;
+      return;
+    }
+    runtime.suppressTerminalEvent=false;
+    if (runtime.stopRequested) {
+      runtime.stopRequested=false;this.runtimes.save(runtime);
+      await this.events.emit(runtime.taskId,'paused','作業を一時停止','作業環境から停止の応答が届きました。',{pauseReason:'owner'});
       return;
     }
     if (status === 'interrupted') return;

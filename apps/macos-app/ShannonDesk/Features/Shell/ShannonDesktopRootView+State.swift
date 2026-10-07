@@ -119,7 +119,10 @@ extension ShannonDesktopRootView {
             case .task:
                 taskInspector
             case .figure:
-                ShannonTalkFigurePanel(conversation: conversation, memory: memory, voice: voiceCall.session)
+                VStack(spacing: 0) {
+                    ShannonActionThreadsCapsule(model: actionThreads, compact: true)
+                    ShannonTalkFigurePanel(conversation: conversation, memory: memory, voice: voiceCall.session)
+                }
             }
             }
         }

@@ -7,6 +7,7 @@ iPhoneとMacで一人のシャノンへつながる、ネイティブクライ�
 | 関心 | 正本 |
 | --- | --- |
 | Product | このREADMEの[方針](#方針) |
+| Action threads | [`docs/action-threads-contract.md`](docs/action-threads-contract.md) |
 | Architecture | [`docs/architecture.md`](docs/architecture.md) |
 | Design | [`docs/DESIGN.md`](docs/DESIGN.md) |
 | Product spec | [`docs/product/README.md`](docs/product/README.md)（iOS・macOS・Windows で 1 つの仕様: 機能の一覧表、色と余白、文言） |

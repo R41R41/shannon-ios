@@ -56,7 +56,7 @@ describe('tests/support/sources.ts', () => {
   it('names what a module imports by the file it resolves to', () => {
     const imported = importedModules('autonomyLoopOwnerContext.ts');
     expect(imported).toEqual(['@shannon/cognition']);
-    expect(importedModules('autonomyCore.ts')).toEqual(['@shannon/cognition']);
+    expect(importedModules('autonomyCore.ts')).toEqual(['stage4CorePaths.ts', '@shannon/cognition']);
     expect(importedModules('server.ts').length).toBeGreaterThan(20);
     expect(importedModules('server.ts').every(name => !name.startsWith('.'))).toBe(true);
   });

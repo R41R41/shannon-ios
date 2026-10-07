@@ -15,6 +15,7 @@
     "worker": "tsx --env-file-if-exists=../../.env src/worker.ts",
     "worker:world": "tsx --env-file-if-exists=../../.env src/worldWorker.ts",
     "worker:autonomy": "tsx --env-file-if-exists=../../.env src/autonomyWorker.ts",
+    "worker:mind": "tsx --env-file-if-exists=../../.env src/mindWorker.ts",
     "agent:fake": "tsx --env-file-if-exists=../../.env src/fakeAgentHost.ts",
     "agent:host": "tsx --env-file-if-exists=../../.env src/agentHost.ts",
     "testflight:distribute": "tsx --env-file-if-exists=../../.env src/testflightDistributor.ts",

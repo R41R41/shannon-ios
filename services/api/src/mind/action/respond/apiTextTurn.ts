@@ -235,14 +235,14 @@ export function perceiveTextTurn(mind: MindPerceiver | null, input: TextTurnInpu
  * workspace. The turn's own item and its conversation are not repeated: its words close the prompt and its thread is the history.
  */
 export function textTurnWorkspace(mind: MindTurnPorts | null, input: TextTurnInput, perceived: PerceivedItem | null, begun: Pick<BegunTextTurn, 'captured' | 'occurredAt'>,
-  store: ConversationStore): string {
+  store: ConversationStore, snapshotNow?:()=>BegunTextTurn['captured']): string {
   if (!mind?.render) return '';
   try {
     const surface = input.surface?.perception?.surface ?? (input.surface ? null : 'text');
     const blocks = mind.render({
       scopeKey: input.scopeKey, surface: 'text', present: input.audience.present, at: begun.occurredAt, currentItemId: perceived?.itemId ?? null,
       current: surface ? { surface, sourceId: closedId(input.threadId) } : null,
-      snapshot: begun.captured, store,
+      snapshot: begun.captured, snapshotNow, store,
     });
     // A turn whose reply only open items may reach (`openOnly`: someone else's platform turn) gets the blocks as its context is
     // given, without a guarded entry (stage 3 review: latent, since the audience check already holds them out).

@@ -51,7 +51,8 @@ export function startSessionIfDue(dependencies: StepDependencies, scopeKey: stri
 }
 
 /** The owner wrote or spoke within the quiet window: her own activity stands back. */
-export function ownerTalking(dependencies: Pick<StepDependencies, 'loop' | 'showing'>, scopeKey: string, at: string): boolean {
+export function ownerTalking(dependencies: Pick<StepDependencies, 'loop' | 'showing' | 'concurrentActions'>, scopeKey: string, at: string): boolean {
+  if(dependencies.concurrentActions)return false;
   const { loop, showing } = dependencies;
   return loop.ownerActiveMilliseconds > 0
     && showing.ownerActiveSince(scopeKey, new Date(Date.parse(at) - loop.ownerActiveMilliseconds).toISOString());

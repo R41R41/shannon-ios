@@ -4168,6 +4168,174 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/FolderHost/ShannonFolderHostLoginSection.swift",
       "only": "apple",
       "note": "Mac の専用フォルダ。所有者決定（2026-10-06）: 古い版のフォルダと設定は名前を変えて取っておく。"
+    },
+    {
+      "key": "threads.title",
+      "text": "裏の作業",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.generic",
+      "text": "作業中",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsModel.swift"
+    },
+    {
+      "key": "threads.count",
+      "text": "裏で {count} 件",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsModel.swift"
+    },
+    {
+      "key": "threads.recovering",
+      "text": "心との接続を戻しています",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsModel.swift"
+    },
+    {
+      "key": "threads.unknown",
+      "text": "結果不明の作業があります",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsModel.swift"
+    },
+    {
+      "key": "threads.checking",
+      "text": "届いたか確かめています…",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsModel.swift"
+    },
+    {
+      "key": "threads.accepted",
+      "text": "操作を受け付けたことを確認しました。",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsModel.swift"
+    },
+    {
+      "key": "threads.unconfirmed",
+      "text": "操作が届いたか確認できません。状態を読み直してください。",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsModel.swift"
+    },
+    {
+      "key": "threads.empty",
+      "text": "裏の作業はありません。",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.loading",
+      "text": "作業の状態を確認中",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.private",
+      "text": "友人同席・配信中は作業の詳細を隠しています。",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.stop",
+      "text": "止める",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.stopAll",
+      "text": "全部止める",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.resume",
+      "text": "再開する",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.refresh",
+      "text": "読み直す",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.close",
+      "text": "閉じる",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.stale",
+      "text": "古い報告です。読み直すまで操作できません。",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.queued",
+      "text": "順番を待っています",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.running",
+      "text": "作業中",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.waiting",
+      "text": "次の手順を待っています",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.stopping",
+      "text": "止めています",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.completed",
+      "text": "完了",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.failed",
+      "text": "続けられませんでした",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.cancelled",
+      "text": "停止済み",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.unknownDetail",
+      "text": "結果を確かめる必要があります。自動で再試行しません。",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.fiveFailures",
+      "text": "同じ失敗が5回続いたため止まっています。",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.ownerOrigin",
+      "text": "所有者からの依頼",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.ownTimeOrigin",
+      "text": "自分の時間",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
     }
   ]
 }

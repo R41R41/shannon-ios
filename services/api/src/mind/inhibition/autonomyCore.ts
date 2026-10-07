@@ -1,3 +1,4 @@
+import { STAGE4_CORE_PATHS } from './stage4CorePaths.js';
 import type { ShannonCoreAreaId } from '@shannon/cognition';
 
 /**
@@ -237,6 +238,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/action/ownTime/autonomyLoopConfig.ts',
     'services/api/src/mind/action/ownTime/store/autonomyLoopState.ts',
     'services/api/src/mind/action/ownTime/autonomyLoopSteps.ts',
+    'services/api/src/mind/action/ownTime/autonomyLoopShowStep.ts',
     'services/api/src/mind/action/ownTime/autonomyLoopStepText.ts',
     'services/api/src/mind/action/ownTime/autonomyReader.ts',
     'services/api/src/mind/action/ownTime/autonomyShowing.ts',
@@ -420,6 +422,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // Their wiring and the contract of the mind's inbox (what another process may hand the mind).
     'services/api/src/wiring/mindWiring.ts',
     'services/api/src/contracts/mindInboxContract.ts',
+    ...STAGE4_CORE_PATHS,
   ]),
   deployment: Object.freeze([
     'deploy/',

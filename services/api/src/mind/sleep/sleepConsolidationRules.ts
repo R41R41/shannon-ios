@@ -256,4 +256,4 @@ export function extractOutputText(value: unknown): string {
     });
   }).join('').trim();
 }
-import { isForgottenCommitmentEvidence } from '../memory/memoryVisibility.js';
+import { isForgottenCommitmentEvidence } from '../memory/memoryVisibilityPorts.js';

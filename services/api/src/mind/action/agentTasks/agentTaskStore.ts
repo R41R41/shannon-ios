@@ -186,6 +186,8 @@ export interface CreateAgentCommandInput {
   payload?: Record<string, unknown>;
 }
 
+import type { ActionLease } from '../../../contracts/actionThreadContract.js';
+
 export interface ClaimedAgentCommand {
   id: string;
   taskId: string;
@@ -195,6 +197,7 @@ export interface ClaimedAgentCommand {
   attempts: number;
   createdAt: string;
   leaseUntil: string;
+  actionLease?: ActionLease;
 }
 
 export interface HostAgentEvent {
@@ -223,7 +226,8 @@ export interface AgentTaskStore {
     command: ClaimedAgentCommand | null;
     created: boolean;
   };
-  claim(hostId: string, now: string, leaseSeconds?: number): ClaimedAgentCommand | null;
+  peekCommand?(hostId: string, now: string): ClaimedAgentCommand | null;
+  claim(hostId: string, now: string, leaseSeconds?: number, expectedId?: string): ClaimedAgentCommand | null;
   recordHostEvents(hostId: string, events: readonly HostAgentEvent[], now: string): readonly AgentTask[];
   heartbeat(heartbeat: AgentHostHeartbeat, now: string): void;
   resolveHost(
@@ -268,7 +272,8 @@ export class InMemoryAgentTaskStore implements AgentTaskStore {
   enqueue(scopeKey: string, taskId: string, input: CreateAgentCommandInput, now: string) {
     return this.delegate.enqueue(scopeKey, taskId, input, now);
   }
-  claim(hostId: string, now: string, leaseSeconds?: number) { return this.delegate.claim(hostId, now, leaseSeconds); }
+  peekCommand(hostId: string, now: string) { return this.delegate.peekCommand(hostId, now); }
+  claim(hostId: string, now: string, leaseSeconds?: number, expectedId?: string) { return this.delegate.claim(hostId, now, leaseSeconds, expectedId); }
   recordHostEvents(hostId: string, events: readonly HostAgentEvent[], now: string) {
     return this.delegate.recordHostEvents(hostId, events, now);
   }

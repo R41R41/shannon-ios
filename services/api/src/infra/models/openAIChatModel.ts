@@ -1,3 +1,4 @@
+import { actionPermit, currentActionExecution } from '../context/actionExecution.js';
 /** The conversation model's adapters: the OpenAI Responses adapter and the local stub (Syzygy ADR-0008 stage 3, S3: moved unchanged out of `chatModel.ts`, which re-exports them). */
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from './chatModelContract.js';
 import { estimatedOpenAICostUsd, type LlmUsageStore, responseUsage } from './llmUsage.js';
@@ -69,7 +70,14 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     this.model = validModel(options.model ?? 'gpt-5.6-luna');
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 30_000;
-    this.fetcher = options.fetcher ?? fetch;
+    const transport=options.fetcher ?? fetch;
+    this.fetcher=async(input,init)=>{
+      await actionPermit();
+      const active=currentActionExecution();
+      const existing=init?.signal ?? (input instanceof Request ? input.signal : null);
+      const signal=active ? existing ? AbortSignal.any([existing,active.signal]) : active.signal : existing;
+      return transport(input,{...init,...(signal?{signal}:{})});
+    };
     this.voiceStreamBounds = { ...DEFAULT_VOICE_STREAM_BOUNDS, ...options.voiceStreamBounds };
   }
 

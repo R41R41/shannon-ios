@@ -32,11 +32,15 @@ export interface WorkspaceTurn {
   currentItemId: string | null;
   current: { surface: MindSurface; sourceId: string } | null;
   snapshot: CompanionStateSnapshot;
+  snapshotNow?:()=>CompanionStateSnapshot;
   store: ConversationStore | null;
 }
 
 /** What a surface and a turn are handed of the mind. Every method is synchronous and never throws. */
 export interface MindTurnPorts extends MindPerceiver {
+  foreground?<T>(scopeKey:string,work:()=>Promise<T>):Promise<T>;
+  /** Stage 4: drain this turn's IPC events before rendering, bounded by the client. No model call. */
+  sync?(): Promise<void>;
   /** The workspace's blocks to append after the turn's context, or '' (switched off, faulted, nothing to say). */
   render?(turn: WorkspaceTurn): string;
   /** The stored turn of an item, as a reference re-read at render (`experience:<id>`). */
@@ -47,7 +51,7 @@ export interface MindTurnPorts extends MindPerceiver {
   readonly dataFrames?: boolean;
 }
 
-export interface MindHost extends Required<MindTurnPorts> {
+export interface MindHost extends Required<Omit<MindTurnPorts,'foreground'|'sync'>> {
   /** Tails the inbox and writes the journal (every 2 seconds). */
   tick(): void;
   /** Writes what is pending and snapshots every scope (on SIGTERM). */
@@ -59,6 +63,8 @@ export interface MindHost extends Required<MindTurnPorts> {
   /** Faults since the process started, and journal writes that met a busy database (not faults); for `/v1/ops`. */
   readonly faultCount: number;
   readonly busyCount: number;
+  /** A projection for the API process. Words are transient; journal/snapshots still contain references only. */
+  projection(scopeKey: string): { scope: WorkspaceScope; texts: Record<string,string> };
 }
 
 export interface MindHostOptions {
@@ -111,6 +117,10 @@ class InProcessMindHost implements MindHost {
   get faultCount(): number { return this.faultTotal; }
   get busyCount(): number { return this.busyTotal; }
   get dataFrames(): boolean { return this.options.switches.dataFrames && !this.open; }
+  projection(scopeKey: string) {
+    const scope=this.scopes.get(scopeKey) ?? emptyScope();
+    return {scope:structuredClone(scope),texts:Object.fromEntries([...scope.held,...scope.notices].flatMap(item=>this.texts.has(item.id)?[[item.id,this.texts.get(item.id)!]]:[]))};
+  }
 
   perceive(scopeKey: string, event: MindEvent | null, detail?: PerceivedDetail | null): PerceivedItem | null {
     if (!event || !this.options.switches.attention) return null;

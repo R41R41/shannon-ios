@@ -1,4 +1,8 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { stage4Enabled,mindSocketPath } from './infra/config/stage4.js';
+import { MindSocketClient } from './infra/ipc/mindSocket.js';
+import { actionThreadsClient } from './wiring/actionThreadsWiring.js';
+import { OwnTimeActionRunner } from './wiring/actionExecutionWiring.js';
 import { mindSwitches } from '@shannon/mind';
 import { aetherStudyScope, configuredAetherAccess } from './integrations/aether/aetherAccess.js';
 import { SQLiteAutonomyAnnouncer } from './mind/action/ownTime/autonomyAnnouncer.js';
@@ -53,6 +57,8 @@ import { clock } from './mind/action/ownTime/autonomyLoopPacing.js';
  */
 const databasePath = configuredDatabasePath();
 const now = () => new Date().toISOString();
+const actionConnection=stage4Enabled(process.env)?new MindSocketClient(mindSocketPath(process.env,databasePath)):null;
+const actionSteps=actionConnection?new OwnTimeActionRunner(actionThreadsClient(actionConnection.call)):null;
 const store = new SQLiteAutonomyStore(databasePath);
 const config = configuredAutonomy(process.env, { databasePath });
 const announcer = new SQLiteAutonomyAnnouncer(databasePath);
@@ -156,6 +162,7 @@ const shadowTap = shadow ? { reachOut: (...args: Parameters<typeof shadow.reachO
 // created it). SHANNON_WORKSPACE=off (or SHANNON_ADR8_STAGE3=off): none, and every step is what it was.
 const mindInbox = configuredMindInbox(process.env, { databasePath, log: line => console.log(line) });
 const loop = new ShannonAutonomyLoop({
+  ...(actionSteps?{actionSteps,concurrentActions:true}:{}),
   store, service, config, loop: loopConfig, model: configuredAutonomyTextModel(process.env, undefined, line => console.log(line)),
   reader: new BoundedPublicReader({
     maximumBytes: boundedInteger(process.env.SHANNON_AUTONOMY_READ_MAX_BYTES, 10_000, 5_000_000, 1_500_000),
@@ -207,6 +214,7 @@ try {
     }
   } while (!stopping);
 } finally {
+  actionSteps?.close();actionConnection?.close();
   try { loop.release(); } catch { /* the lease runs out by itself */ }
   awakeClock.close();
   prediction?.close();

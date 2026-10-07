@@ -1,9 +1,11 @@
+import type { ActionLease } from '../../contracts/actionThreadContract.js';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { HostAgentEvent } from '../../mind/action/agentTasks/agentTasksPorts.js';
 import type { AgentReasoningEffort } from '../../mind/action/agentTasks/agentTasksPorts.js';
 
 export interface PersistedAgentSession {
+  actionLease?: ActionLease;
   taskId: string;
   startCommandId: string;
   threadId: string;

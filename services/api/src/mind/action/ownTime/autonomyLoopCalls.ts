@@ -1,4 +1,5 @@
 import { yenFromUsd } from '../../inhibition/inhibitionPorts.js';
+import { actionPermit, currentActionExecution } from '../../../infra/context/actionExecution.js';
 import { parsedModelObject, type AutonomyPrompt } from './autonomyLoopPrompts.js';
 import type { StepDependencies } from './autonomyLoopSteps.js';
 import { autonomyModelCostUsd, type AutonomyModelPurpose } from './autonomyModels.js';
@@ -25,12 +26,18 @@ export async function callModel(adapters: { model?: AutonomyTextModel }, call: P
   Promise<{ reply: Record<string, unknown> | null; usage?: { inputTokens: number; outputTokens: number }; failure?: string; /** The reply was cut off at the output ceiling. */ truncated?: boolean; /** The reply as text, when it was not one JSON object. */ text?: string }> {
   if (!adapters.model) return { reply: null, failure: 'AUTONOMY_STEP_NOT_BOUND' };
   try {
+    await actionPermit();
+    const execution=currentActionExecution();
+    if(execution)execution.modelOutcome='unknown';
     const result = await adapters.model.generate({
       model: call.model, system: call.prompt.system, prompt: call.prompt.prompt, maximumOutputTokens: call.maximumOutputTokens, ...(call.reasoning ? { reasoning: call.reasoning } : {}), signal,
     });
+    if(execution)execution.modelOutcome='acknowledged';
     const reply = parsedModelObject(result.text);
     return { reply, usage: result.usage, ...(result.truncated ? { truncated: true } : {}), ...(reply ? {} : { text: result.text }) };
   } catch (error) {
+    const execution=currentActionExecution();
+    if(execution && error instanceof AutonomyModelError)execution.modelOutcome='acknowledged';
     // The provider answered with an error: charged only what it reported. No answer at all (a timeout, a lost
     // connection, a shutdown) leaves the cost unknown, so the estimate is charged and the count errs high.
     const usage = error instanceof AutonomyModelError ? error.usage : call.estimate;

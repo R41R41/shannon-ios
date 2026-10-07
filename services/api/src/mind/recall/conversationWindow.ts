@@ -3,10 +3,10 @@ import { isOwnerOnly, type CompanionStateSnapshot, type MemoryAudience } from '@
 import type { ShannonConversationItem } from '../../infra/models/chatModel.js';
 import { earlierConversationSummaryInstructions } from '../../infra/models/chatModelSupport.js';
 import type { ConversationStore } from '../memory/memoryPorts.js';
-import { replaySummaryFor, visibleReplayMessages, type VisibleMessage } from '../memory/memoryPorts.js';
-import { conversationSecrets, type SecretCheck } from '../inhibition/conversationSecrets.js';
-import { UNLINKED_TURN, maskedTraceCalls, toolTracePrompt, traceLabel, type ToolTraceRecord } from '../tools/shannonToolTrace.js';
-import { shannonTool } from '../tools/shannonTools.js';
+import { replaySummaryFor, visibleReplayMessages, type VisibleMessage } from '../memory/memoryVisibilityPorts.js';
+import { conversationSecrets, type SecretCheck } from '../inhibition/disclosurePorts.js';
+import { UNLINKED_TURN, maskedTraceCalls, toolTracePrompt, traceLabel, type ToolTraceRecord } from '../tools/toolTracePorts.js';
+import { shannonTool } from '../tools/toolRegistryPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**

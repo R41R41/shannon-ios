@@ -50,3 +50,4 @@ export {
   TRUST_KINDS, TRUST_PARAMETERS, trustFold, trustSettlements, validTrustParameters,
   type TrustEntry, type TrustKind, type TrustParameters, type TrustSettlement,
 } from './trustFold.js';
+export * from './actions.js';

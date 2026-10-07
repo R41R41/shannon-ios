@@ -23,9 +23,17 @@ export class AgentHostBrokerClient {
 
   async claim(): Promise<ClaimedAgentCommand | null> {
     const response = await this.post<{ command: ClaimedAgentCommand | null }>(
-      '/v1/agent/host/commands/claim', { hostId: this.hostId },
+      '/v1/agent/host/commands/claim', { hostId: this.hostId, actionThreads: 1 },
     );
     return response.command;
+  }
+
+  async permit(taskId: string): Promise<boolean> {
+    const lease = this.state.session(taskId)?.actionLease;
+    const reply = await this.post<{ allowed: boolean }>('/v1/agent/host/actions/permit', {
+      hostId: this.hostId, taskId, lease: lease ?? null,
+    });
+    return reply.allowed;
   }
 
   async claimProject(): Promise<ClaimedAgentProjectProvisioning | null> {
@@ -51,7 +59,10 @@ export class AgentHostBrokerClient {
   }
 
   async publish(events: readonly HostAgentEvent[]): Promise<void> {
-    this.state.enqueueEvents(events);
+    this.state.enqueueEvents(events.map(event => {
+      const lease=this.state.session(event.taskId)?.actionLease;
+      return lease ? {...event,payload:{...event.payload,actionLease:lease}} : event;
+    }));
     await this.flush();
   }
 

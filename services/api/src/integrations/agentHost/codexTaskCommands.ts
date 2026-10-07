@@ -30,6 +30,11 @@ export class CodexTaskCommandController {
 
   async handle(command: ClaimedAgentCommand): Promise<void> {
     try {
+      if (command.actionLease) {
+        this.options.state.updateSession(command.taskId,{actionLease:command.actionLease});
+        const active=this.runtimes.get(command.taskId);
+        if(active) active.actionLease=command.actionLease;
+      }
       switch (command.type) {
         case 'start': await this.startTask(command); break;
         case 'steer': await this.steerTask(command); break;
@@ -66,6 +71,7 @@ export class CodexTaskCommandController {
     if (!threadId) throw new Error('Codexが作業スレッドを作成できませんでした。');
 
     const session: PersistedAgentSession = {
+      actionLease: command.actionLease,
       taskId: command.taskId,
       startCommandId: command.id,
       threadId,
@@ -110,8 +116,10 @@ export class CodexTaskCommandController {
     const cancel = command.payload.cancel === true || command.payload.cancel === 'true';
     runtime.suppressTerminalEvent = cancel;
     if (runtime.turnId) {
+      if(runtime.actionLease)runtime.stopRequested=true;
       await this.options.client.request('turn/interrupt', { threadId: runtime.threadId, turnId: runtime.turnId });
     }
+    if(runtime.actionLease && runtime.turnId)return; // Wait for the turn/completed acknowledgement.
     runtime.turnId = undefined;
     runtime.approvals.clear();
     runtime.pendingApprovalExternalRequestID = undefined;
@@ -144,7 +152,8 @@ export class CodexTaskCommandController {
     }
     const decision = String(command.payload.decision ?? 'deny');
     const forSession = decision === 'allow_session';
-    const accepted = decision === 'allow_once' || forSession;
+    const accepted = (decision === 'allow_once' || forSession)
+      && (!this.options.permit || await this.options.permit(runtime.taskId));
 
     if (pending.method === 'item/commandExecution/requestApproval'
       || pending.method === 'item/fileChange/requestApproval') {
@@ -259,6 +268,7 @@ export class CodexTaskCommandController {
   }
 
   private async startTurn(runtime: RuntimeTask, text: string): Promise<string> {
+    if(this.options.permit && !await this.options.permit(runtime.taskId))throw new Error('ACTION_STOPPED');
     const result = await this.options.client.request<CodexTurnResult>('turn/start', {
       threadId: runtime.threadId,
       input: [{ type: 'text', text }],

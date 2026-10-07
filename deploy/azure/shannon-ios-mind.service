@@ -1,0 +1,31 @@
+[Unit]
+Description=Shannon shared mind and action scheduler (ADR-0008 stage 4)
+After=shannon-ios.service
+Before=shannon-ios-autonomy.service
+
+[Service]
+Type=simple
+User=azureuser
+Group=azureuser
+WorkingDirectory=/home/azureuser/shannon-ios
+Environment=NODE_ENV=production
+Environment=SHANNON_DATABASE_PATH=/home/azureuser/shannon-ios-data/shannon.sqlite
+EnvironmentFile=/home/azureuser/.config/shannon-ios/api.env
+ExecCondition=/home/azureuser/shannon-ios-runtime/bin/node --import tsx -e "import('./services/api/src/infra/config/stage4.ts').then(m=>process.exit(m.stage4Enabled(process.env)?0:1))"
+ExecStart=/home/azureuser/shannon-ios-runtime/bin/node --import tsx services/api/src/mindWorker.ts
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictSUIDSGID=true
+ReadWritePaths=/home/azureuser/shannon-ios-data
+CPUQuota=25%
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

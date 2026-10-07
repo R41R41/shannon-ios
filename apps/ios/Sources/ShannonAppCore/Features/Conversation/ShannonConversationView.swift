@@ -32,6 +32,7 @@ public struct ShannonConversationView: View {
     @State var showsGeminiLiveVoice = false
     @State var showsSettings = false
     @State var showsThreadList = false
+    @State var actionThreads: ShannonActionThreadsModel
     @State var yousu: ShannonYousuModel
     @State var didApplyYousuPreview = false
     /// 「シャノン › ようす」 is open.
@@ -86,6 +87,7 @@ public struct ShannonConversationView: View {
         _memoryModel = State(initialValue: memoryModel)
         _testFlightDeliveryModel = State(initialValue: testFlightDeliveryModel)
         _worldSubscriptionModel = State(initialValue: worldSubscriptionModel)
+        _actionThreads = State(initialValue: ShannonActionThreadsModel.make(for: model))
         _yousu = State(initialValue: ShannonYousuModel.make(for: model))
     }
 
@@ -93,6 +95,7 @@ public struct ShannonConversationView: View {
         let activeColorScheme = resolvedColorScheme
         workspaceWithPresentations
         .modifier(ShannonBodyAttachment(bodyModel: bodyModel, conversation: model, memory: memoryModel, voice: geminiLiveVoiceModel, listen: bodyListen))
+        .modifier(ShannonActionThreadsPolling(model: actionThreads, connected: model.isDesignPreview || connectionModel?.isConnected == true, othersPresent: bodyModel.audience == .others || geminiLiveVoiceModel.othersMayBeListening))
         .environment(\.colorScheme, activeColorScheme)
         .onAppear {
             syncAppIconBadge(with: model.totalBadgeCount)

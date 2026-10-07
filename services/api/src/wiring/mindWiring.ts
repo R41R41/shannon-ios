@@ -1,4 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
+import { stage4Enabled } from '../infra/config/stage4.js';
+import { configuredRemoteMind } from './remoteMindWiring.js';
+import type { ActionThreads } from '../contracts/actionThreadContract.js';
 import { mindSwitches } from '../mind/perception/perceptionPorts.js';
 import { createMindHost, type MindHost, type MindTurnPorts } from '../mind/workspace/workspacePorts.js';
 import { SQLiteWorkspaceJournal } from '../mind/workspace/store/workspaceJournalStore.js';
@@ -37,6 +40,7 @@ export interface NoticeSources {
 }
 
 export interface MindWiringParts {
+  role?: 'api' | 'worker';
   databasePath: string | null;
   now: () => string;
   /** Runs the journal's write after a response; default `setImmediate`. */
@@ -52,10 +56,20 @@ export interface MindWiringParts {
 export function configuredMind(
   environment: Readonly<Record<string, string | undefined>>,
   parts: MindWiringParts = { databasePath: null, now: () => new Date().toISOString() },
-): { mind: MindTurnPorts; host: MindHost | null; close(): void; produceNotices?(): number } | null {
+): { mind: MindTurnPorts; host: MindHost | null; actions?: ActionThreads; close(): void; produceNotices?(): number } | null {
   const switches = mindSwitches(environment);
   if (!switches.mindEvents) return null;
   if (!switches.attention) return { mind: { perceive: () => null }, host: null, close: () => {} };
+  if(stage4Enabled(environment) && parts.role!=='worker' && parts.databasePath){
+    const remote=configuredRemoteMind(environment,parts.databasePath);
+    // Notice producers remain API readers; they only append closed events, never own the workspace.
+    const db=parts.notices?new DatabaseSync(parts.databasePath):null;
+    if(db)db.exec(PRAGMAS);
+    const inbox=db?new SQLiteMindInbox(db,{createSchema:true}):null;
+    const produceNotices=()=>db&&inbox&&parts.notices?producedNotices(db,inbox,parts.notices,parts.now(),parts.log):0;
+    const timer=parts.ticking&&inbox?setInterval(produceNotices,NOTICE_MILLISECONDS):null;timer?.unref();
+    return {...remote,produceNotices,close:()=>{if(timer)clearInterval(timer);remote.close();db?.close();}};
+  }
   const database = switches.workspace && parts.databasePath ? new DatabaseSync(parts.databasePath) : null;
   if (database) database.exec(PRAGMAS);
   const host = createMindHost({

@@ -1,3 +1,4 @@
+import { actionPermit } from '../../../infra/context/actionExecution.js';
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { autonomyDayKey, yenFromUsd } from '../../inhibition/inhibitionPorts.js';
 import { reachOutSubject, storyNotes } from './autonomyLoopPlan.js';
@@ -213,6 +214,7 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
       let reply: Record<string, unknown> | null = null;
       let usage: { inputTokens: number; outputTokens: number } | undefined;
       try {
+        await actionPermit();
         const result = await adapters.model.generate({ model, system: prompt.system, prompt: prompt.prompt, maximumOutputTokens: OUTPUT_TOKENS, signal });
         reply = parsedModelObject(result.text);
         usage = result.usage;
@@ -232,6 +234,7 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
       if (heldForOthers(dependencies, cycle, writeAt)) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, reasonCode: 'others_present', summary: `ほかの人がいるので、電話はやめておきました（理由: ${label}）。` };
       let written: ReturnType<NonNullable<typeof adapters.reachOuts.sayByPhone>>;
       try {
+        await actionPermit();
         written = adapters.reachOuts.sayByPhone(cycle.scopeKey, { reason: reason as ReachOutReason, text, dayKey: autonomyDayKey(writeAt, config), arisenAt, subject }, writeAt);
       } catch { written = 'unavailable'; }
       // Syzygy ADR-0008 stage 3: the proactive gate held it where it would have been written.
@@ -243,7 +246,7 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
       if (!sent) return { outcome: 'failed', usage, reasonCode: 'call_failed', summary: `電話をかけようとしましたが、つながりませんでした（理由: ${label}）。一言はトークに残っています。` };
       // Her line is in the Talk. Now the call itself: asked for here, sent by the API process.
       let asked: ReturnType<AutonomyPhone['request']> = 'unavailable';
-      try { asked = adapters.phone.request(cycle.scopeKey, sent.id, writeAt, { reason, subject, arisenAt }); } catch { asked = 'unavailable'; }
+      try { await actionPermit(); asked = adapters.phone.request(cycle.scopeKey, sent.id, writeAt, { reason, subject, arisenAt }); } catch { asked = 'unavailable'; }
       // The gate held the call itself: nothing rings; her line is in the Talk.
       const heldCall = heldByGate(asked, `電話を鳴らすの（理由: ${label}）`, usage);
       if (heldCall) return { ...heldCall, summary: `${heldCall.summary}一言はトークに残っています。` };

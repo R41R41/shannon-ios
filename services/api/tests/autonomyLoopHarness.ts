@@ -107,6 +107,8 @@ export interface LoopHarnessOptions {
   /** Her study in Aether (a fake Aether in tests); absent, the SQLite study as before. */
   aether?: AetherAccess;
   enabled?: boolean;
+  actionSteps?: StepDependencies['actionSteps'];
+  concurrentActions?: boolean;
   path?: string;
   environment?: Record<string, string>;
   loop?: Partial<AutonomyLoopConfig>;
@@ -191,6 +193,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
   const showing = options.showing ?? new FakeShowing();
   const newLoop = (workerId: string) => new ShannonAutonomyLoop({
     store, service, config, loop: loopConfig, model, reader, showing, now, workerId, wait,
+    actionSteps:options.actionSteps, concurrentActions:options.concurrentActions,
     ...(options.observer ? { observer: options.observer } : {}),
     ...(options.notion ? { notion: options.notion } : {}), ...(options.looks ? { looks: options.looks } : {}),
     ...(reachOuts ? { reachOuts } : {}), ...(options.upcoming ? { upcoming: options.upcoming } : {}), ...(options.phone ? { phone: options.phone } : {}),

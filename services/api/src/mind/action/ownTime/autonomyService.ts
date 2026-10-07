@@ -11,7 +11,8 @@ import {
 } from '@shannon/cognition';
 import type { AgentTask, AgentTaskStore } from '../agentTasks/agentTasksPorts.js';
 import { DisabledAutonomyAnnouncer, type AutonomyAnnouncer } from './autonomyAnnouncer.js';
-import { autonomyLoopStatus, type AutonomyLoopStatus } from '../../inhibition/autonomyDayLog.js';
+import { type AutonomyLoopStatus } from '../../inhibition/inhibitionPorts.js';
+import { autonomyLoopStatus } from '../../inhibition/autonomyReadPorts.js';
 import {
   authorizeAutonomousAction, autonomyBudgetStatus, autonomyDayKey, configuredAutonomy, formatYen, yenFromUsd, type AutonomousActionRequest, type AutonomyActivityDay,
   type AutonomyActivityEntry, type AutonomyBudgetStatus, type AutonomyConfig, type AutonomyDecision, type GateRefusalObserver,
@@ -24,7 +25,7 @@ import { HostFolderOperations } from './hostFolderOperations.js';
 import { ShannonToolRunner, type ToolAetherPorts } from '../../tools/shannonToolRunner.js';
 import { StudyAether } from './studyAether.js';
 import type { MinecraftRequestPort } from '../../tools/shannonMinecraftTools.js';
-import { resolvePhysicalPath, type AutonomyPathResolver } from '../../inhibition/autonomyPaths.js';
+import { resolvePhysicalPath, type AutonomyPathResolver } from '../../inhibition/autonomyReadPorts.js';
 import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './store/autonomyProposals.js';
 import type { PursuitDraft, PursuitRejection } from '../../self/selfPorts.js';
 import { autonomyPacing } from './autonomyLoopConfig.js';

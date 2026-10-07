@@ -1,5 +1,5 @@
 import { memoryIdentifier, visibleMemoryText, type CompanionStateSnapshot } from '@shannon/cognition';
-import { isForgottenCommitmentEvidence } from '../memory/memoryVisibility.js';
+import { isForgottenCommitmentEvidence } from '../memory/memoryVisibilityPorts.js';
 import type { SleepConsolidationOutcome } from './sleepConsolidation.js';
 
 export interface CommitmentSleepReview {

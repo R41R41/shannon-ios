@@ -10,8 +10,8 @@ import {
 } from './conversationReference.js';
 import { aetherNoteRequest, asksWhichPlace, memoRequestContent, type AetherNoteRequest } from './memoPlace.js';
 import { TOOL_FOLLOW_UP_MILLISECONDS } from '../../tools/toolsPorts.js';
-import { ShannonMemoryService } from '../../memory/memoryService.js';
-import { forgetCitedMemories } from '../../memory/memoryForgetCommand.js';
+import { ShannonMemoryService } from '../../memory/memoryCommandPorts.js';
+import { forgetCitedMemories } from '../../memory/memoryCommandPorts.js';
 import type { CognitiveIntentStore } from './cognitiveIntent.js';
 import type { TurnMemoryRecall } from '../../recall/recallPorts.js';
 import { resolveReminderReply } from './reminderReply.js';

@@ -4209,6 +4209,35 @@
           "read": "2026-10-03"
         }
       }
+    },
+    {
+      "id": "talk.background-action-threads",
+      "area": "talk",
+      "title": "裏の作業の一覧と停止",
+      "description": "第4段階の小さな入口、由来・状態、個別停止・すべて停止・明示的再開。古い報告・通信断・結果不明・同席者に対応。実装ブランチ、未配布。",
+      "surfaces": {
+        "ios": {
+          "status": "planned",
+          "branch": "codex/shannon/adr8-stage4",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift#ShannonActionThreadsCapsule"
+          ],
+          "note": "標準シート、会話と向き合う表示の入口。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "codex/shannon/adr8-stage4",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift#ShannonActionThreadsCapsule",
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift#ShannonActionThreadsCapsule"
+          ],
+          "note": "標準ポップオーバー、トークとすがたの入口。"
+        },
+        "windows": {
+          "status": "unknown",
+          "note": "第4段階のApple側実装に続くWindows側の表示は、この作業ではコードと実画面を確認していない。"
+        }
+      }
     }
   ],
   "decisions": {

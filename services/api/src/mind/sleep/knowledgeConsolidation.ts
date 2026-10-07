@@ -11,8 +11,9 @@ import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from 
 import type { ConversationStore } from '../memory/memoryPorts.js';
 import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
 import type { ShannonKnowledgeStore } from '../memory/memoryPorts.js';
-import { usableKnowledgeFor } from '../recall/turnKnowledgeRecall.js';
-import { MemoryWithholding, type MemoryProposals } from '../memory/memoryPorts.js';
+import { usableKnowledgeFor } from '../recall/recallPorts.js';
+import { MemoryWithholding } from '../memory/memoryVisibilityPorts.js';
+import type { MemoryProposals } from '../memory/memoryPorts.js';
 
 export interface KnowledgeOperation {
   operation: 'create' | 'update' | 'retire';

@@ -1,5 +1,5 @@
 import { isMemoryEvidenceVisible, type CompanionStateSnapshot } from '@shannon/cognition';
-import { conversationSecrets } from '../inhibition/conversationSecrets.js';
+import { conversationSecrets } from '../inhibition/disclosurePorts.js';
 import type { ConversationStore, ShannonExperience } from '../memory/memoryPorts.js';
 import { MemoryWithholding } from '../memory/memoryPorts.js';
 import { saidKey } from '../../surfaces/body/bodyLookTurnWait.js';

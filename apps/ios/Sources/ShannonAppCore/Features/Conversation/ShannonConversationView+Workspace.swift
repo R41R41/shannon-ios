@@ -138,17 +138,20 @@ extension ShannonConversationView {
 
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            if let task = model.latestAgentTaskNotice {
-                ShannonAgentTaskCapsule(
-                    task: task,
-                    actionError: model.agentTaskActionError(task.id),
-                    open: { openAgentTask(task.id) },
-                    approveOnce: { [requestID = task.pendingApproval?.externalRequestID] in
-                        Task { await model.resolveAgentApproval(task.id, accepted: true, requestID: requestID) }
-                    }
-                )
-                .padding(.bottom, ShannonSpacing.extraSmall)
-                .transition(.move(edge: .top).combined(with: .opacity))
+            VStack(spacing: 0) {
+                ShannonActionThreadsCapsule(model: actionThreads)
+                if let task = model.latestAgentTaskNotice {
+                    ShannonAgentTaskCapsule(
+                        task: task,
+                        actionError: model.agentTaskActionError(task.id),
+                        open: { openAgentTask(task.id) },
+                        approveOnce: { [requestID = task.pendingApproval?.externalRequestID] in
+                            Task { await model.resolveAgentApproval(task.id, accepted: true, requestID: requestID) }
+                        }
+                    )
+                    .padding(.bottom, ShannonSpacing.extraSmall)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {

@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { actionPermit, currentActionExecution, inActionExecution } from '../../../infra/context/actionExecution.js';
+import { actionResource } from '../../../contracts/actionThreadContract.js';
+import { sessionMarked } from './autonomyLoopProvenance.js';
 import { autonomyDayKey, yenFromUsd } from '../../inhibition/inhibitionPorts.js';
 import { autonomyModelCostUsd } from './autonomyModels.js';
 import { observeStep, sentBeforeStop } from './autonomyLoopObserve.js';
@@ -35,7 +38,7 @@ import { resolveAutonomyModel } from './autonomyTextModel.js';
  * loop starts no process, no additional runner, and no copy of itself.
  */
 export type AutonomyLoopTick =
-  | 'not-leader' | 'disabled' | 'not-configured' | 'paused' | 'idle' | 'owner-active' | 'budget' | 'stepped' | 'cycle-ended';
+  | 'not-leader' | 'disabled' | 'not-configured' | 'paused' | 'idle' | 'owner-active' | 'budget' | 'stepped' | 'cycle-ended' | 'thread-wait';
 
 export interface AutonomyLoopDependencies extends StepDependencies {
   /** The loop's clock; a step that waits reads the same one. */
@@ -88,7 +91,16 @@ export class ShannonAutonomyLoop {
     // A file handed to a device that never reported back is closed as failed, also when that device stays away.
     try { this.dependencies.service.folder.closeOverdue(this.scopeKey, at); } catch { /* the next claim or tick closes it */ }
     const cycle = store.loop.openCycle(this.scopeKey) ?? this.startCycleIfDue(at);
-    return typeof cycle === 'string' ? cycle : this.advance(cycle, at, signal);
+    if(typeof cycle==='string')return cycle;
+    const runner=this.dependencies.actionSteps;
+    if(!runner)return this.advance(cycle,at,signal);
+    const active=await runner.begin(this.scopeKey,cycle.id,sessionMarked(this.dependencies,cycle),signal);
+    if(!active)return this.standingStill('thread-wait',at);
+    const heartbeat=setInterval(()=>this.renew(),5_000);heartbeat.unref();
+    let tick:AutonomyLoopTick;
+    try{tick=await inActionExecution(active.execution,()=>this.advance(cycle,at,active.execution.signal));}finally{clearInterval(heartbeat);}
+    if(tick==='cycle-ended')await runner.end('completed','cycle_ended');
+    return tick;
   }
 
   /** While she may not act, an open session stands still: that time does not count against its clock. Under `cycles` nothing is read or written. */
@@ -119,7 +131,7 @@ export class ShannonAutonomyLoop {
     const next = store.loop.nextCycleAt(this.scopeKey);
     if (next && Date.parse(at) < Date.parse(next)) return 'idle';
     if (store.loop.activityCyclesOn(this.scopeKey, dayKey) >= loop.cyclesPerDay) return 'idle';
-    if (loop.ownerActiveMilliseconds > 0
+    if (!this.dependencies.concurrentActions && loop.ownerActiveMilliseconds > 0
       && showing.ownerActiveSince(this.scopeKey, new Date(Date.parse(at) - loop.ownerActiveMilliseconds).toISOString())) return 'owner-active';
     // Once the day's cap has stopped a step she rests until tomorrow, or until the owner raises today's cap.
     const budget = service.overview(this.scopeKey).budget;
@@ -182,6 +194,14 @@ export class ShannonAutonomyLoop {
     }
     const current = step!;
     const ready = prepared;
+    const execution=currentActionExecution(),runner=this.dependencies.actionSteps;
+    const reservationId=`call-${randomUUID()}`;
+    // Reservations precede the existing authorization transaction; a denied step releases only this known unused estimate.
+    const paid=ready.request.paid;
+    if(execution && runner && paid){
+      const budget=service.overview(this.scopeKey).budget;
+      if(!await runner.reserve(execution.lease,reservationId,autonomyDayKey(at,this.dependencies.config),paid.estimatedCostYen,budget.capYen,budget.spentYen))return 'thread-wait';
+    }
 
     // Journal the step and ask the gate in one transaction: after a crash either both exist or neither.
     const begun = store.transaction(() => {
@@ -193,21 +213,42 @@ export class ShannonAutonomyLoop {
       else store.loop.finishStep(row.id, 'refused', at, decision.activityId);
       return { row, decision, allowed };
     });
-    if (!begun) return 'not-leader';
-    if (!begun.allowed) return this.refused(cycle, begun.row, plan, ready, begun.decision, at);
+    if (!begun) {
+      if(execution && runner && paid)await runner.checkpoint(execution.lease,reservationId,0,'not_leader');
+      return 'not-leader';
+    }
+    if (!begun.allowed) {
+      if(execution && runner && paid)await runner.checkpoint(execution.lease,reservationId,0,'refused');
+      return this.refused(cycle,begun.row,plan,ready,begun.decision,at);
+    }
     // Syzygy ADR-0008 stage 1: a step the gate allowed is a choice of hers (write-only, closed values; refused ones never are).
     this.choice(tap => tap.chose?.(this.scopeKey, {
       stepId: begun.row.id, kind: current.kind, ...(current.reason ? { reason: current.reason } : {}), ...(current.call ? { call: true } : {}), ...(current.tool ? { tool: current.tool } : {}),
     }, at));
 
     let result: StepResult;
+    if(execution)delete execution.modelOutcome;
     try {
+      const resource=ready.request.host?`folder:${ready.request.host}`:'study';
+      await actionPermit(ready.request.host?[actionResource(this.scopeKey,resource)]:[]);
+      if(execution && (execution.signal.aborted || store.control(this.scopeKey).paused))throw new Error('ACTION_STOPPED');
       result = await ready.perform(adaptersFor(begun.decision, this.dependencies), at, signal);
     } catch {
       result = { outcome: 'failed', summary: '一歩の途中で、うまくいかなくなりました。' };
     }
+    if(execution && !this.renew())result={...result,outcome:'failed',commit:undefined,reasonCode:'action_unknown'};
+    if(execution)try{await actionPermit(result.commit?[actionResource(this.scopeKey,'study')]:[]);}catch{result={...result,outcome:'failed',commit:undefined,reasonCode:'action_unknown'};}
     const reportedAt = now();
+    if(execution?.signal.aborted)result={...result,outcome:'failed',commit:undefined,reasonCode:'action_unknown',summary:'停止を受け取りました。送った処理の結果を確かめる必要があります。'};
     const reported = this.report(cycle, begun.row, begun.decision, ready, result, plan, reportedAt);
+    if(execution && runner){
+      await runner.checkpoint(execution.lease,reservationId,reported.saved===true?this.costYen(ready,result):null,current.kind,result.outcome==='failed' && !execution.signal.aborted ? /^[A-Za-z][A-Za-z0-9_.:-]{0,79}$/u.test(result.reasonCode ?? '') ? result.reasonCode : 'step_failed' : undefined).catch(()=>{});
+      if(execution.signal.aborted){
+        // A pure thought has no external write. A returned provider result and canonical report acknowledge its stop.
+        const acknowledged=current.kind==='think' && reported.saved===true && execution.modelOutcome!=='unknown';
+        await runner.end(acknowledged?'cancelled':'unknown',acknowledged?'stop_acknowledged':'step_interrupted').catch(()=>{});
+      }
+    }
     this.emitStep(current, begun.row.id, result.tool ?? ready.request.tool, result, reportedAt);
     this.choice(tap => tap.reported?.(this.scopeKey, {
       stepId: begun.row.id, outcome: reported.saved === 'unknown' ? 'void' : reported.saved ? result.outcome : 'failed', costYen: this.costYen(ready, result),
@@ -288,7 +329,7 @@ export class ShannonAutonomyLoop {
     try {
       store.transaction(() => {
         // Already closed means another runner took the lease and abandoned it; it is not counted twice.
-        if (!store.loop.finishStep(row.id, 'reported', at)) { state.saved = 'unknown'; return; }
+        if ((currentActionExecution() && !store.loop.holdsLease(this.workerId,at)) || !store.loop.finishStep(row.id, 'reported', at)) { state.saved = 'unknown'; return; }
         state.saved = true;
         const committed = (result.commit?.(plan, at) || undefined) as StepCommit | undefined;
         const link = committed?.link ?? result.link;
@@ -314,7 +355,7 @@ export class ShannonAutonomyLoop {
       const reasonCode = error instanceof Error && error.message === 'STUDY_AETHER_LINKED' ? 'study_aether_linked' : undefined;
       try {
         store.transaction(() => {
-          if (!store.loop.finishStep(row.id, 'reported', at)) return;
+          if ((currentActionExecution() && !store.loop.holdsLease(this.workerId,at)) || !store.loop.finishStep(row.id, 'reported', at)) return;
           service.recordAction(this.scopeKey, {
             decisionId: decision.activityId, summary: 'したことの結果を保存できませんでした。', outcome: 'failed', ...(usage ? { usage } : {}), ...(reasonCode ? { reasonCode } : {}),
           });

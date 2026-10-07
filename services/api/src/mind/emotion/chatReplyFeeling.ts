@@ -1,5 +1,5 @@
 import { SHANNON_EMOTION_KINDS, isMoodLikeEmotion, isShannonEmotionKind, type ShannonEmotionKind } from '@shannon/cognition';
-import { AFFECT_INTENSITY_STEPS, affectIntensityOf, type AffectIntensityStep } from '../selectors/voiceDecisionValues.js';
+import { AFFECT_INTENSITY_STEPS, affectIntensityOf, type AffectIntensityStep } from '../selectors/selectorsValuesPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**
