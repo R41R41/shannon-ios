@@ -5,6 +5,7 @@ import type { AgentReasoningEffort } from '../../mind/action/agentTasks/agentTas
 import type { CodexTaskBridgeOptions } from './codexTaskBridge.js';
 import { CodexTaskEventPublisher } from './codexTaskEvents.js';
 import { CodexTaskRuntimeRegistry, type RuntimeTask } from './codexTaskRuntime.js';
+import type { CodexStartingTurnEvents } from './codexStartingTurnEvents.js';
 import {
   codexThreadParams,
   friendlyError,
@@ -26,6 +27,8 @@ export class CodexTaskCommandController {
     private readonly runtimes: CodexTaskRuntimeRegistry,
     private readonly events: CodexTaskEventPublisher,
     private readonly now: () => string,
+    private readonly startingEvents: CodexStartingTurnEvents,
+    private readonly flushStartingEvents: (runtime:RuntimeTask,owner:string)=>Promise<void>,
   ) {}
 
   async handle(command: ClaimedAgentCommand): Promise<void> {
@@ -51,6 +54,8 @@ export class CodexTaskCommandController {
         });
       } else await this.events.emit(command.taskId, 'failed', '作業を続けられない', friendlyError(error));
     } finally {
+      const runtime=this.runtimes.get(command.taskId);
+      if(runtime)await this.flushStartingEvents(runtime,command.id);
       await this.events.publish([this.events.event(command.taskId, 'command_completed', '命令を作業環境へ反映', undefined, {
         commandId: command.id,
       }, `command:${command.id}:completed`)]);
@@ -90,7 +95,7 @@ export class CodexTaskCommandController {
     };
     this.options.state.saveSession(session);
     const runtime = this.runtimes.register(session, project);
-    const turn = await this.startTurn(runtime, taskPrompt(command, project, this.options.config));
+    const turn = await this.startTurn(runtime, taskPrompt(command, project, this.options.config),command.id);
     runtime.turnId = turn;
     this.runtimes.save(runtime);
     await this.events.emit(command.taskId, 'started', 'Codexが作業を開始', '依頼内容と対象プロジェクトを確認している。', {
@@ -112,7 +117,7 @@ export class CodexTaskCommandController {
       });
       if (runtime.actionLease) { runtime.executionUncertain = false; this.runtimes.save(runtime); }
     } else {
-      runtime.turnId = await this.startTurn(runtime, instruction);
+      runtime.turnId = await this.startTurn(runtime, instruction,command.id);
       this.runtimes.save(runtime);
     }
     await this.events.emit(command.taskId, 'progress', '追加の指示をCodexへ送信', instruction, {
@@ -151,7 +156,7 @@ export class CodexTaskCommandController {
     const runtime = await this.ensureRuntime(command.taskId);
     if (runtime.turnId) throw new Error('Codexの作業はすでに動いています。');
     runtime.suppressTerminalEvent = false;
-    runtime.turnId = await this.startTurn(runtime, resumePrompt(runtime.project, this.options.config, runtime.taskId));
+    runtime.turnId = await this.startTurn(runtime, resumePrompt(runtime.project, this.options.config, runtime.taskId),command.id);
     this.runtimes.save(runtime);
     await this.events.emit(command.taskId, 'started', '作業を再開', '保存済みのCodexスレッドで続きを始めた。', {
       currentAction: '前回の続きから確認中',
@@ -300,11 +305,12 @@ export class CodexTaskCommandController {
     return await this.attach(session);
   }
 
-  private async startTurn(runtime: RuntimeTask, text: string): Promise<string> {
+  private async startTurn(runtime: RuntimeTask, text: string, owner?:string): Promise<string> {
     if(this.options.permit && !await this.options.permit(runtime.taskId))throw new Error('ACTION_STOPPED');
     // Persist the uncertainty before crossing the process boundary. Losing only
     // the response must not turn a paid, still-running turn into a known failure.
     if (runtime.actionLease) { runtime.executionUncertain = true; this.runtimes.save(runtime); }
+    this.startingEvents.begin(runtime,owner);
     const result = await this.options.client.request<CodexTurnResult>('turn/start', {
       threadId: runtime.threadId,
       input: [{ type: 'text', text }],
@@ -312,10 +318,11 @@ export class CodexTaskCommandController {
       ...(runtime.reasoningEffort ?? this.options.config.codexEffort
         ? { effort: runtime.reasoningEffort ?? this.options.config.codexEffort }
         : {}),
-    });
+    }).catch(error=>{this.startingEvents.failed(runtime);throw error;});
     const turnId = stringValue(result.turn?.id);
-    if (!turnId) throw new Error('Codexが作業ターンを開始できませんでした。');
+    if (!turnId) {this.startingEvents.failed(runtime);throw new Error('Codexが作業ターンを開始できませんでした。');}
     if (runtime.actionLease) { runtime.turnId = turnId; runtime.executionUncertain = false; this.runtimes.save(runtime); }
+    this.startingEvents.correlate(runtime,turnId);
     return turnId;
   }
 }

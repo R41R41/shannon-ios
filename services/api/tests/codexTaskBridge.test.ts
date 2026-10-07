@@ -471,6 +471,116 @@ describe('CodexTaskBridge', () => {
     expect(fixture.client.requests.filter(r=>r.method==='turn/start')).toHaveLength(1);
     await bridge.stop();
   });
+  it.each([false,true])('replays an early original result and verification without foreign contamination (outbox loss: %s)',async(outboxLoss)=>{
+    const fixture=makeFixture(),events:HostAgentEvent[]=[],attempted:HostAgentEvent[]=[];
+    const actionLease={id:'action-1',holder:'host',generation:1};
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>true,publish:async batch=>{
+      for(const event of batch){
+        if(event.type==='completed'){attempted.push(event);if(outboxLoss)throw new Error('Terminal outbox transport lost');}
+        events.push(event);
+      }
+    }});
+    fixture.client.beforeTurnStartResponse=async()=>{
+      fixture.client.notify({method:'turn/started',params:{threadId:'thread-1',turn:{id:'foreign'}}});
+      for(const turnId of ['foreign','turn-1']) {
+        fixture.client.notify({method:'item/commandExecution/outputDelta',params:{threadId:'thread-1',turnId,delta:turnId==='foreign'?'FOREIGN PRIVATE OUTPUT':'Original test output'}});
+        fixture.client.notify({method:'item/completed',params:{threadId:'thread-1',turnId,item:{type:'commandExecution',id:`test-${turnId}`,command:'npm test',status:'completed',exitCode:turnId==='foreign'?1:0}}});
+        fixture.client.notify({method:'item/completed',params:{threadId:'thread-1',turnId,item:{type:'agentMessage',text:`SHANNON_TASK_RESULT: {"status":"completed","summary":"${turnId==='foreign'?'FOREIGN PRIVATE RESULT':'Original verified result'}"}`}}});
+      }
+      fixture.client.serverRequest({id:'foreign-approval',method:'item/fileChange/requestApproval',params:{threadId:'thread-1',turnId:'foreign',reason:'FOREIGN PRIVATE APPROVAL'}});
+      fixture.client.notify({method:'item/completed',params:{threadId:'thread-1',item:{type:'agentMessage',text:'UNATTRIBUTED PRIVATE RESULT'}}});
+      fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'foreign',status:'failed'}}});
+      for(let duplicate=0;duplicate<2;duplicate++)fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'turn-1',status:'completed'}}});
+      await bridge.whenIdle();expect(attempted).toHaveLength(0);
+    };
+    await bridge.start();await bridge.handle({...command('start-1','start',{goal:'Work',projectHint:'fixture'}),actionLease});
+    expect(attempted).toHaveLength(1);
+    expect(attempted[0]).toMatchObject({type:'completed',detail:'Original verified result',payload:{actionLease,tests:[{status:'passed'}]}});
+    expect(events.some(e=>e.type==='paused'||e.type==='failed'||e.type==='approval_requested')).toBe(false);
+    expect(JSON.stringify(events)).not.toContain('FOREIGN PRIVATE');expect(JSON.stringify(events)).not.toContain('UNATTRIBUTED PRIVATE');
+    expect(fixture.client.errors).toContainEqual({id:'foreign-approval',code:-32602,message:'Inactive Shannon turn'});
+    expect(fixture.state.session('task-1')?.turnId).toBeUndefined();
+    if(!outboxLoss)expect(events.findIndex(e=>e.type==='started')).toBeLessThan(events.findIndex(e=>e.type==='completed'));
+    await bridge.stop();
+    if(outboxLoss){
+      expect(fixture.state.session('task-1')?.pendingTerminalEvent?.eventId).toBe(attempted[0]?.eventId);
+      const state=new AgentHostStateStore(fixture.config.stateFile),client=new FakeCodexConnection(),delivered:HostAgentEvent[]=[];
+      const restarted=new CodexTaskBridge({...fixture,state,client,permit:async()=>false,publish:async batch=>{delivered.push(...batch);}});
+      await restarted.start();await restarted.checkExecutionRights();
+      expect(delivered).toEqual(attempted);expect(client.requests).toEqual([]);
+      expect(state.session('task-1')?.pendingTerminalEvent).toBeUndefined();await restarted.stop();
+    }
+  });
+  it('preserves the original early approval only after a successful start response identifies its turn',async()=>{
+    const fixture=makeFixture(),events:HostAgentEvent[]=[];
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>true,publish:async batch=>{events.push(...batch);}});
+    fixture.client.beforeTurnStartResponse=async()=>{
+      for(const turnId of ['foreign','turn-1'])fixture.client.serverRequest({id:`approval-${turnId}`,method:'item/fileChange/requestApproval',params:{threadId:'thread-1',turnId,reason:`permission-${turnId}`}});
+      await bridge.whenIdle();expect(events.some(e=>e.type==='approval_requested')).toBe(false);
+    };
+    await bridge.start();await bridge.handle({...command('start-1','start',{goal:'Work',projectHint:'fixture'}),actionLease:{id:'action-1',holder:'host',generation:1}});
+    const approval=events.filter(e=>e.type==='approval_requested');expect(approval).toHaveLength(1);
+    expect(approval[0]?.payload?.approval).toMatchObject({reason:'permission-turn-1'});
+    const externalRequestID=(approval[0]?.payload?.approval as {externalRequestID:string}).externalRequestID;
+    await bridge.handle(command('approve-1','resolve_approval',{externalRequestID,decision:'allow_once'}));
+    expect(fixture.client.responses).toContainEqual({id:'approval-turn-1',result:{decision:'accept'}});
+    expect(fixture.client.errors.some(e=>e.id==='approval-foreign')).toBe(true);await bridge.stop();
+  });
+  it('keeps early original result evidence unknown when the start RPC response is lost',async()=>{
+    const fixture=makeFixture(),events:HostAgentEvent[]=[];fixture.client.loseTurnStartResponse=true;
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>true,publish:async batch=>{events.push(...batch);}});
+    fixture.client.beforeTurnStartResponse=async()=>{
+      fixture.client.notify({method:'turn/started',params:{threadId:'thread-1',turn:{id:'turn-1'}}});
+      fixture.client.notify({method:'item/completed',params:{threadId:'thread-1',turnId:'turn-1',item:{type:'agentMessage',text:'SHANNON_TASK_RESULT: {"status":"completed","summary":"Uncorrelated result"}'}}});
+      fixture.client.serverRequest({id:'unknown-approval',method:'item/fileChange/requestApproval',params:{threadId:'thread-1',turnId:'turn-1'}});
+      fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'turn-1',status:'completed'}}});await bridge.whenIdle();
+    };
+    await bridge.start();await bridge.handle({...command('start-1','start',{goal:'Work',projectHint:'fixture'}),actionLease:{id:'action-1',holder:'host',generation:1}});
+    expect(fixture.state.session('task-1')?.turnId).toBeUndefined();expect(fixture.state.session('task-1')?.executionUncertain).toBe(true);
+    expect(events.some(e=>['completed','paused','failed','approval_requested'].includes(e.type))).toBe(false);
+    expect(fixture.client.errors.some(e=>e.id==='unknown-approval')).toBe(true);await bridge.stop();
+  });
+  it('retains uncertainty if the bounded early event buffer overflows',async()=>{
+    const fixture=makeFixture(),events:HostAgentEvent[]=[];
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>true,publish:async batch=>{events.push(...batch);}});
+    fixture.client.beforeTurnStartResponse=async()=>{
+      for(let count=0;count<513;count++)fixture.client.notify({method:'turn/started',params:{threadId:'thread-1',turn:{id:'foreign'}}});
+      fixture.client.notify({method:'item/completed',params:{threadId:'thread-1',turnId:'turn-1',item:{type:'agentMessage',text:'SHANNON_TASK_RESULT: {"status":"completed","summary":"Overflowed result"}'}}});
+      fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'turn-1',status:'completed'}}});await bridge.whenIdle();
+    };
+    await bridge.start();await bridge.handle({...command('start-1','start',{goal:'Work',projectHint:'fixture'}),actionLease:{id:'action-1',holder:'host',generation:1}});
+    expect(fixture.state.session('task-1')).toMatchObject({turnId:'turn-1',executionUncertain:true});
+    expect(events.some(e=>['completed','paused','failed'].includes(e.type))).toBe(false);await bridge.stop();
+  });
+  it.each(['start-in-flight','started-publishing'] as const)('keeps early terminal ownership when the execution timer stops during %s',async(phase)=>{
+    const fixture=makeFixture(),events:HostAgentEvent[]=[];let allowed=true;
+    const actionLease={id:'action-1',holder:'host',generation:1};
+    const bridge=new CodexTaskBridge({...fixture,permit:async()=>allowed,publish:async batch=>{
+      if(phase==='started-publishing'&&batch.some(e=>e.type==='started')){
+        allowed=false;await bridge.checkExecutionRights();
+        expect(fixture.state.session('task-1')?.stopRequested).toBe(true);
+        expect(events.some(e=>['completed','paused','failed'].includes(e.type))).toBe(false);
+      }
+      events.push(...batch);
+    }});
+    fixture.client.beforeTurnStartResponse=async()=>{
+      fixture.client.notify({method:'turn/started',params:{threadId:'thread-1',turn:{id:'turn-1'}}});
+      fixture.client.notify({method:'item/completed',params:{threadId:'thread-1',turnId:'turn-1',item:{type:'agentMessage',text:'SHANNON_TASK_RESULT: {"status":"completed","summary":"Original result"}'}}});
+      fixture.client.notify({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'turn-1',status:'completed'}}});await bridge.whenIdle();
+      if(phase==='start-in-flight'){
+        allowed=false;await bridge.checkExecutionRights();
+        expect(fixture.state.session('task-1')?.stopRequested).toBe(true);
+        expect(fixture.state.session('task-1')?.turnId).toBeUndefined();
+      }
+    };
+    await bridge.start();await bridge.handle({...command('start-1','start',{goal:'Work',projectHint:'fixture'}),actionLease});
+    expect(events.filter(e=>['completed','paused','failed'].includes(e.type))).toEqual([
+      expect.objectContaining({type:'paused',payload:expect.objectContaining({actionLease,pauseReason:'owner'})}),
+    ]);
+    expect(events.findIndex(e=>e.type==='started')).toBeLessThan(events.findIndex(e=>e.type==='paused'));
+    expect(fixture.state.session('task-1')?.turnId).toBeUndefined();expect(fixture.state.resumableSessions()).toHaveLength(0);
+    expect(fixture.client.requests.filter(r=>r.method==='turn/start')).toHaveLength(1);await bridge.stop();
+  });
   it('recovers the original stopped-turn result after host restart without starting a replacement',async()=>{
     const fixture=makeFixture(),events:HostAgentEvent[]=[];
     const bridge=new CodexTaskBridge({...fixture,permit:async()=>true,publish:async batch=>{events.push(...batch);}});
@@ -606,6 +716,7 @@ describe('CodexTaskBridge', () => {
 class FakeCodexConnection implements CodexAppServerConnection {
   requests: Array<{ method: string; params: Record<string, unknown> }> = [];
   responses: Array<{ id: CodexRequestID; result: Record<string, unknown> }> = [];
+  errors:Array<{id:CodexRequestID;code:number;message:string}>=[];
   resumeActiveTurnID?: string;
   resumeClosedTurn?: Record<string, unknown>;
   loseTurnStartResponse=false;
@@ -626,16 +737,16 @@ class FakeCodexConnection implements CodexAppServerConnection {
       turns: [...(this.resumeActiveTurnID ? [{ id: this.resumeActiveTurnID, status: 'inProgress' }] : []), ...(this.resumeClosedTurn ? [this.resumeClosedTurn] : [])],
     } } as T;
     if (method === 'turn/start') {
-      if(this.loseTurnStartResponse)throw new Error('Response lost after turn started');
       const count = this.requests.filter(request => request.method === 'turn/start').length;
       await this.beforeTurnStartResponse?.();
+      if(this.loseTurnStartResponse)throw new Error('Response lost after turn started');
       return { turn: { id: `turn-${count}`, status: 'inProgress', items: [] } } as T;
     }
     if (method === 'turn/steer') return { turnId: params.expectedTurnId } as T;
     return {} as T;
   }
   respond(id: CodexRequestID, result: Record<string, unknown>) { this.responses.push({ id, result }); }
-  respondError() {}
+  respondError(id:CodexRequestID,code:number,message:string) {this.errors.push({id,code,message});}
   notify(notification: CodexNotification) { this.notificationHandler?.(notification); }
   serverRequest(request: CodexServerRequest) { this.requestHandler?.(request); }
 }

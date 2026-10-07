@@ -1283,6 +1283,7 @@
     "integrations/agentHost/agentWorkspaceSnapshot.ts",
     "integrations/agentHost/codexAppServerClient.ts",
     "integrations/agentHost/codexModelCatalog.ts",
+    "integrations/agentHost/codexStartingTurnEvents.ts",
     "integrations/agentHost/codexTaskBridge.ts",
     "integrations/agentHost/codexTaskCommands.ts",
     "integrations/agentHost/codexTaskEvents.ts",

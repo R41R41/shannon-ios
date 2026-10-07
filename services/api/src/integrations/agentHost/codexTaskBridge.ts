@@ -16,6 +16,7 @@ import type {
   CodexServerRequest,
 } from './codexAppServerClient.js';
 import { CodexTaskCommandController } from './codexTaskCommands.js';
+import { CodexStartingTurnEvents } from './codexStartingTurnEvents.js';
 import { CodexTaskEventPublisher } from './codexTaskEvents.js';
 import {
   CodexTaskRuntimeRegistry,
@@ -89,6 +90,7 @@ export class CodexTaskBridge {
   private readonly runtimes: CodexTaskRuntimeRegistry;
   private readonly events: CodexTaskEventPublisher;
   private readonly commands: CodexTaskCommandController;
+  private readonly startingEvents=new CodexStartingTurnEvents(request=>this.options.client.respondError(request.id,-32602,'Inactive Shannon turn'));
   private readonly now: () => string;
   private notificationQueue: Promise<void> = Promise.resolve();
   private started = false;
@@ -98,7 +100,8 @@ export class CodexTaskBridge {
     this.now = options.now ?? (() => new Date().toISOString());
     this.runtimes = new CodexTaskRuntimeRegistry(options.config, options.state, this.now);
     this.events = new CodexTaskEventPublisher(options.publish, this.now, error => this.diagnostic(error));
-    this.commands = new CodexTaskCommandController(options, this.runtimes, this.events, this.now);
+    this.commands = new CodexTaskCommandController(options, this.runtimes, this.events, this.now,
+      this.startingEvents,(runtime,owner)=>this.flushStartingEvents(runtime,owner));
     options.client.onNotification(notification => {
       this.notificationQueue = this.notificationQueue
         .then(() => this.handleNotification(notification))
@@ -167,6 +170,23 @@ export class CodexTaskBridge {
     await this.notificationQueue;
   }
 
+  private async flushStartingEvents(runtime:RuntimeTask,owner:string):Promise<void> {
+    if(!this.startingEvents.ready(runtime,owner))return;
+    this.notificationQueue=this.notificationQueue.then(async()=>{
+      const ready=this.startingEvents.take(runtime,owner);if(!ready)return;
+      for(const request of ready.rejected)this.options.client.respondError(request.id,-32602,'Inactive Shannon turn');
+      if(ready.uncertain){
+        runtime.executionUncertain=true;this.runtimes.save(runtime);
+        await this.events.emit(runtime.taskId,'progress','作業結果を確認できない',undefined,{executionUncertain:true});return;
+      }
+      for(const event of ready.events){
+        if(event.kind==='notification')await this.handleNotification(event.value);
+        else await this.handleServerRequest(event.value);
+      }
+    }).catch(error=>this.diagnostic(error));
+    await this.notificationQueue;
+  }
+
   private async handleServerRequest(request: CodexServerRequest): Promise<void> {
     const params = request.params ?? {};
     const runtime = this.runtimes.fromParams(params);
@@ -174,6 +194,7 @@ export class CodexTaskBridge {
       this.options.client.respondError(request.id, -32602, 'Unknown Shannon task');
       return;
     }
+    if(this.startingEvents.capture(runtime,{kind:'request',value:request}))return;
     if (!['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/permissions/requestApproval']
       .includes(request.method)) {
       this.options.client.respondError(request.id, -32601, 'Unsupported request');
@@ -212,6 +233,7 @@ export class CodexTaskBridge {
     const params = notification.params ?? {};
     const runtime = this.runtimes.fromParams(params);
     if (!runtime) return;
+    if(this.startingEvents.capture(runtime,{kind:'notification',value:notification}))return;
     const eventTurnId = stringValue(params.turnId);
     if (runtime.actionLease && eventTurnId && eventTurnId !== runtime.turnId) return;
     switch (notification.method) {

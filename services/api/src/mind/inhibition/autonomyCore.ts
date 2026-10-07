@@ -321,6 +321,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/integrations/agentHost/codexTaskCommands.ts',
     'services/api/src/integrations/agentHost/codexTaskEvents.ts',
     'services/api/src/integrations/agentHost/codexTaskRuntime.ts',
+    'services/api/src/integrations/agentHost/codexStartingTurnEvents.ts',
     'services/api/src/agentHost.ts',
     'services/api/src/integrations/agentHost/agentHostConfig.ts',
     // Syzygy ADR-0008 stage 1 (抑制系): one content-free trace per decision, and the gateway wrapper that writes it.
