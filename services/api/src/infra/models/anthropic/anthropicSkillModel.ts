@@ -10,10 +10,13 @@ import { structuredSchema } from './anthropicRequest.js';
  * `SHANNON_SONNET_ROUTING` (which is about conversation turns); otherwise the proposer stays terra.
  *
  * One structured answer per call (`output_config.format`, the schema in the supported subset), adaptive thinking at
- * `SHANNON_SKILL_PROPOSER_EFFORT` (`medium` by default). Usage goes on the background lane (`memory_background`), inside the
+ * `SHANNON_SKILL_PROPOSER_EFFORT` (`medium` by default), at most 4,000 output tokens, 60 s and no retry (review M4). Usage goes on the background lane (`memory_background`), inside the
  * monthly background budget, priced with cache reads (`estimatedAnthropicCostUsd`). A refusal or an empty answer throws, and the
  * consolidator treats it as any failed call.
  */
+/** Review M4: what one call of the Sonnet proposer may take. */
+export const SKILL_PROPOSER_LIMITS = Object.freeze({ maxTokens: 4_000, timeoutMilliseconds: 60_000 });
+
 export class AnthropicSkillSleepModel {
   readonly model: string;
   private readonly client: Anthropic;
@@ -23,12 +26,12 @@ export class AnthropicSkillSleepModel {
   }) {
     if (!options.apiKey.trim()) throw new Error('ANTHROPIC_API_KEY is required');
     this.model = options.model;
-    this.client = new Anthropic({ apiKey: options.apiKey, maxRetries: 1, timeout: options.timeoutMilliseconds ?? 180_000, ...(options.fetch ? { fetch: options.fetch } : {}) });
+    this.client = new Anthropic({ apiKey: options.apiKey, maxRetries: 0, timeout: options.timeoutMilliseconds ?? SKILL_PROPOSER_LIMITS.timeoutMilliseconds, ...(options.fetch ? { fetch: options.fetch } : {}) });
   }
 
   async json(scopeKey: string, _name: string, instructions: string, input: unknown, schema: Readonly<Record<string, unknown>>): Promise<unknown> {
     const message = await this.client.messages.create({
-      model: this.model, max_tokens: 16_000,
+      model: this.model, max_tokens: SKILL_PROPOSER_LIMITS.maxTokens,
       system: [{ type: 'text', text: instructions, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: JSON.stringify(input) }],
       thinking: { type: 'adaptive' },

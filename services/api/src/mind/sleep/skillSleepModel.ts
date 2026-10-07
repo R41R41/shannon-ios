@@ -47,14 +47,15 @@ export class OpenAISkillSleepModel implements SkillSleepModel {
 }
 
 /**
- * The maintainer's and the proposer's models: with a model key and `SHANNON_KNOWLEDGE_ENABLED` not false. The maintainer is
+ * The maintainer's and the proposer's models: only with a model key and `SHANNON_KNOWLEDGE_ENABLED` not false (else neither). The maintainer is
  * `SHANNON_SKILL_MODEL` (else the knowledge model, else terra); the proposer `SHANNON_SKILL_PROPOSER_MODEL` (else the same). The
  * hook for Sonnet 5.5 (step 5): when the Anthropic adapter and its key are present, the proposer is Sonnet.
  */
 export function createConfiguredSkillSleepModels(environment: Readonly<Record<string, string | undefined>>, usageStore?: LlmUsageStore,
   strongest?: () => SkillSleepModel | null): { maintainer: SkillSleepModel | null; proposer: SkillSleepModel | null } {
   const apiKey = environment.OPENAI_API_KEY?.trim();
-  if (!apiKey || environment.SHANNON_KNOWLEDGE_ENABLED?.trim() === 'false') return { maintainer: null, proposer: strongest?.() ?? null };
+  // Review M4: no knowledge sleep (no model key, or switched off), no skill sleep either: no proposer, Sonnet included.
+  if (!apiKey || environment.SHANNON_KNOWLEDGE_ENABLED?.trim() === 'false') return { maintainer: null, proposer: null };
   const model = environment.SHANNON_SKILL_MODEL?.trim() || environment.SHANNON_KNOWLEDGE_MODEL?.trim() || undefined;
   const maintainer = new OpenAISkillSleepModel({ apiKey, ...(model ? { model } : {}), ...(usageStore ? { usageStore } : {}) });
   const proposerModel = environment.SHANNON_SKILL_PROPOSER_MODEL?.trim() || model;

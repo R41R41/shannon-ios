@@ -57,9 +57,16 @@ export interface SkillConsolidationResult {
 /** An episode is two to six choices of one Talk (or of her own time within half an hour of each other). */
 const SEQUENCE_GAP_MS = 30 * 60_000;
 const PROPOSER_ROUNDS = 3;
+/**
+ * Review M4: the proposer's calls in one night (all runs and rounds together), and how old a sleep window may be for the models to
+ * run on it: only the latest night, never a catch-up of missed nights (the model-free part still runs).
+ */
+export const SKILL_SLEEP_LIMITS = Object.freeze({ proposerCallsPerNight: 3, latestWindowHours: 36 });
 
 export class ShannonSkillConsolidator {
   private readonly budgetUsd: number;
+  /** Proposer calls made per scope and night (UTC date of the sleep), for `SKILL_SLEEP_LIMITS.proposerCallsPerNight`. */
+  private readonly proposerCalls = new Map<string, number>();
 
   constructor(
     private readonly skills: SkillMemory,
@@ -94,26 +101,44 @@ export class ShannonSkillConsolidator {
     result.reverted = lifecycle.reverted.length;
     result.retired += lifecycle.retired.length;
     if (!this.models.maintainer && !this.models.proposer) return finish('disabled');
+    // Review M4: the models run on the latest night only, never on a window missed days ago.
+    if (Date.parse(endAt) < Date.parse(at) - SKILL_SLEEP_LIMITS.latestWindowHours * 3_600_000) return finish('idle');
     const affordable = () => this.usage.backgroundLlmCostUsd(utcMonthKey(new Date(at))) < this.budgetUsd;
+    // Review M4: the budget is checked before every call, and the proposer has at most three calls a night; past either, a call
+    // is not made and answers nothing (the run ends as if the model proposed nothing).
+    const night = `${scopeKey}|${at.slice(0, 10)}`;
+    const guarded = (model: SkillSleepModel | null, capped: boolean): SkillSleepModel | null => (model ? {
+      model: model.model,
+      json: async (...args) => {
+        if (!affordable()) return {};
+        if (capped) {
+          const made = this.proposerCalls.get(night) ?? 0;
+          if (made >= SKILL_SLEEP_LIMITS.proposerCallsPerNight) return {};
+          this.proposerCalls.set(night, made + 1);
+        }
+        return model.json(...args);
+      },
+    } : null);
+    const models = { maintainer: guarded(this.models.maintainer, false), proposer: guarded(this.models.proposer, true) };
     const made = this.skills.madeToday(scopeKey, at);
 
     // 2. The maintainer of the pattern wiki.
     const seeds = this.seeds(scopeKey, startAt, endAt);
     const editsLeft = Math.max(0, SKILL_LIFECYCLE.patternEditsPerNight - made.patternEdits);
     let applied = false;
-    if (this.models.maintainer && editsLeft > 0 && seeds.list.length) {
+    if (models.maintainer && editsLeft > 0 && seeds.list.length) {
       if (!affordable()) return finish('budget');
       applied = true;
-      await this.maintain(scopeKey, seeds, editsLeft, check, at, result, reject);
+      await this.maintain(models.maintainer, scopeKey, seeds, editsLeft, check, at, result, reject);
     }
 
     // 3. The proposer, from the pattern index.
     const limits = { create: Math.max(0, SKILL_LIFECYCLE.newPerNight - made.created), update: Math.max(0, SKILL_LIFECYCLE.updatesPerNight - made.updated) };
-    if (this.models.proposer && this.skills.patterns(scopeKey).length) {
+    if (models.proposer && this.skills.patterns(scopeKey).length) {
       for (let run = 0; run < SKILL_LIFECYCLE.proposerRuns && (limits.create > 0 || limits.update > 0); run += 1) {
         if (!affordable()) return finish(applied ? 'applied' : 'budget');
         applied = true;
-        const proposed = await this.propose(scopeKey, limits, check, seeds.texts, at, reject);
+        const proposed = await this.propose(models.proposer, scopeKey, limits, check, seeds.texts, at, reject);
         if (proposed === 'none') break;
         if (proposed === 'created') { limits.create -= 1; result.created += 1; }
         if (proposed === 'updated') { limits.update -= 1; result.updated += 1; }
@@ -122,10 +147,10 @@ export class ShannonSkillConsolidator {
     return finish(applied ? 'applied' : 'idle');
   }
 
-  private async maintain(scopeKey: string, seeds: ReturnType<ShannonSkillConsolidator['seeds']>, limit: number, check: SkillBodyCheck | null, at: string,
+  private async maintain(maintainer: SkillSleepModel, scopeKey: string, seeds: ReturnType<ShannonSkillConsolidator['seeds']>, limit: number, check: SkillBodyCheck | null, at: string,
     result: { patterns: SkillConsolidationResult['patterns'] }, reject: (why: SkillRejection) => void): Promise<void> {
     const pages = this.skills.patterns(scopeKey);
-    const answer = await this.models.maintainer!.json(scopeKey, 'shannon_pattern_operations', MAINTAINER_INSTRUCTIONS, {
+    const answer = await maintainer.json(scopeKey, 'shannon_pattern_operations', MAINTAINER_INSTRUCTIONS, {
       evidence: seeds.list.map(seed => ({ id: seed.id, kind: seed.kind, text: seed.text })),
       pages: pages.slice(-30).map(page => ({ id: page.patternId, version: page.version, kind: page.kind, title: page.title, body: page.body.slice(0, 600) })),
       limit,
@@ -152,14 +177,14 @@ export class ShannonSkillConsolidator {
   }
 
   /** One ReAct run of the proposer: open pages, then one change (or none). */
-  private async propose(scopeKey: string, limits: { create: number; update: number }, check: SkillBodyCheck | null, texts: readonly string[], at: string,
+  private async propose(proposer: SkillSleepModel, scopeKey: string, limits: { create: number; update: number }, check: SkillBodyCheck | null, texts: readonly string[], at: string,
     reject: (why: SkillRejection) => void): Promise<'created' | 'updated' | 'rejected' | 'none'> {
     const opened = new Map<string, StoredPattern>();
     const bases = this.bases(scopeKey);
     for (let round = 1; round <= PROPOSER_ROUNDS; round += 1) {
       const pages = this.skills.patterns(scopeKey);
       const skills = this.skills.store.all(scopeKey);
-      const answer = await this.models.proposer!.json(scopeKey, 'shannon_skill_proposal', PROPOSER_INSTRUCTIONS, {
+      const answer = await proposer.json(scopeKey, 'shannon_skill_proposal', PROPOSER_INSTRUCTIONS, {
         round, rounds: PROPOSER_ROUNDS, limits,
         capacity: { used: skills.length, limit: SKILL_CAPACITY },
         patternIndex: pages.map(page => ({ id: page.patternId, kind: page.kind, title: page.title })),

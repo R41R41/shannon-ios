@@ -237,13 +237,18 @@ describe('the skill proposer of her sleep (the strongest hook)', () => {
   it('is Sonnet whenever the key is present, routing on or off, and terra otherwise; the maintainer stays OpenAI', () => {
     expect(configuredSkillProposer({}, {})).toBeNull();
     expect(configuredSkillProposer({ ANTHROPIC_API_KEY: 'k' }, {})).toBeInstanceOf(AnthropicSkillSleepModel);
-    expect(configuredSkillProposer({ ANTHROPIC_API_KEY: 'k', SHANNON_SONNET_ROUTING: 'off', SHANNON_ADR8_STAGE2: 'off' }, {})!.model).toBe('claude-sonnet-5-5');
+    expect(configuredSkillProposer({ ANTHROPIC_API_KEY: 'k', SHANNON_SONNET_ROUTING: 'off' }, {})!.model).toBe('claude-sonnet-5-5');
+    // Review M4: only while her skills are on.
+    expect(configuredSkillProposer({ ANTHROPIC_API_KEY: 'k', SHANNON_ADR8_STAGE2: 'off' }, {})).toBeNull();
+    expect(configuredSkillProposer({ ANTHROPIC_API_KEY: 'k', SHANNON_SKILLS: 'off' }, {})).toBeNull();
     const strongest = () => configuredSkillProposer({ ANTHROPIC_API_KEY: 'k' }, {});
     const both = createConfiguredSkillSleepModels({ OPENAI_API_KEY: 'o' }, undefined, strongest);
     expect(both.maintainer?.model).toBe('gpt-5.6-terra');
     expect(both.proposer?.model).toBe('claude-sonnet-5-5');
     expect(createConfiguredSkillSleepModels({ OPENAI_API_KEY: 'o' }, undefined, () => configuredSkillProposer({}, {})).proposer?.model).toBe('gpt-5.6-terra');
-    expect(createConfiguredSkillSleepModels({}, undefined, strongest)).toMatchObject({ maintainer: null, proposer: { model: 'claude-sonnet-5-5' } });
+    // Review M4: without the knowledge sleep (no model key, or switched off) there is no proposer, Sonnet included.
+    expect(createConfiguredSkillSleepModels({}, undefined, strongest)).toEqual({ maintainer: null, proposer: null });
+    expect(createConfiguredSkillSleepModels({ OPENAI_API_KEY: 'o', SHANNON_KNOWLEDGE_ENABLED: 'false' }, undefined, strongest)).toEqual({ maintainer: null, proposer: null });
   });
 
   it('answers one structured object, its cost on the background lane, and throws on a refusal', async () => {
@@ -252,7 +257,7 @@ describe('the skill proposer of her sleep (the strongest hook)', () => {
     const proposer = configuredSkillProposer({ ANTHROPIC_API_KEY: 'k' }, { fetch: fetcher, usageStore: { recordLlmUsage: event => { usage.push(event); }, backgroundLlmCostUsd: () => 0 } })!;
     const schema = { type: 'object', properties: { skills: { type: 'array', maxItems: 2, items: { type: 'string' } } }, required: ['skills'], additionalProperties: false };
     expect(await proposer.json('owner', 'skill_proposals', '[手順]', { seeds: [] }, schema)).toEqual({ skills: [] });
-    expect(bodies[0]).toMatchObject({ model: 'claude-sonnet-5-5', thinking: { type: 'adaptive' }, output_config: { effort: 'medium', format: { type: 'json_schema' } } });
+    expect(bodies[0]).toMatchObject({ model: 'claude-sonnet-5-5', max_tokens: 4_000, thinking: { type: 'adaptive' }, output_config: { effort: 'medium', format: { type: 'json_schema' } } });
     expect(JSON.stringify(bodies[0]!.output_config)).not.toContain('maxItems');
     expect(usage[0]).toMatchObject({ lane: 'memory_background', model: 'claude-sonnet-5-5', cachedInputTokens: 2_000 });
     await expect(proposer.json('owner', 'skill_proposals', '[手順]', {}, schema)).rejects.toThrow('ANTHROPIC_SKILLS_REFUSAL');

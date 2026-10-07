@@ -1,3 +1,4 @@
+import { skillRoutingSwitches } from '@shannon/learning';
 import { anthropicApiKey, sonnetRoutingAvailable, sonnetSettings } from '../infra/models/anthropic/anthropicConfig.js';
 import { AnthropicChatModel } from '../infra/models/anthropic/anthropicChatModel.js';
 import { AnthropicSkillSleepModel } from '../infra/models/anthropic/anthropicSkillModel.js';
@@ -36,7 +37,8 @@ export function configuredSkillProposer(
   environment: Readonly<Record<string, string | undefined>>, parts: { usageStore?: LlmUsageStore; fetch?: typeof fetch },
 ): AnthropicSkillSleepModel | null {
   const apiKey = anthropicApiKey(environment);
-  if (!apiKey) return null;
+  // Review M4: only while her skills are on (stage 2 and `SHANNON_SKILLS`).
+  if (!apiKey || !skillRoutingSwitches(environment).skills) return null;
   const effort = environment.SHANNON_SKILL_PROPOSER_EFFORT?.trim().toLowerCase();
   return new AnthropicSkillSleepModel({
     apiKey, model: sonnetSettings(environment).model, effort: effort === 'low' || effort === 'high' ? effort : 'medium',
