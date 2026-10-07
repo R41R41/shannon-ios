@@ -17,6 +17,7 @@ public final class ShannonMemoryModel {
     public private(set) var mutatingPeopleID: String?
     /// Shannon's own pursuits and activity record, shown in 頭の中 and Settings.
     public let autonomy: ShannonAutonomyModel
+    public let interests: ShannonInterestsModel
 
     private let scopeKey: String
     private let client: any ShannonMemoryServing
@@ -29,6 +30,7 @@ public final class ShannonMemoryModel {
         self.scopeKey = scopeKey
         self.client = client
         self.autonomy = ShannonAutonomyModel(scopeKey: scopeKey, client: client as? any ShannonAutonomyServing)
+        self.interests = ShannonInterestsModel(scopeKey: scopeKey, client: client as? any ShannonInterestsServing)
     }
 
     public var activeItems: [ShannonMemoryItemDTO] {
@@ -78,6 +80,7 @@ public final class ShannonMemoryModel {
             cognitionErrorMessage = "目的と認知履歴を読み込めませんでした。前回の表示はそのまま残しています。"
         }
         await reloadPeople()
+        await interests.reload()
     }
 
     /// Independent of the dashboard: a failure here keeps the previous list and the other sections.

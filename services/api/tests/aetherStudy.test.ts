@@ -9,8 +9,8 @@ import { withToolCapabilityLines } from '../src/mind/tools/shannonAetherTools.js
 import { FileAetherProposalStore } from '../src/integrations/aether/aetherProposal.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { dispatchStudyRequest } from '../src/infra/http/apiStudyRoutes.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { asksForParallelCalls, toolInstructions } from '../src/infra/models/chatModelTools.js';

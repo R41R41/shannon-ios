@@ -4,7 +4,7 @@ import { roomLookAvailable } from './autonomyLoopLookStep.js';
 import { OBSERVATION_RETENTION_DAYS, type ObservedStepKind } from './store/autonomyLoopObservations.js';
 import { agenticLoop, followUpsRemaining, ownerRepliedAt, reachOutChain, thinkingSteps } from './autonomyLoopObserve.js';
 import { reachOutMemories, reachOutMemoryExtras, rethinkExtras } from './autonomyLoopObservePrompts.js';
-import type { OwnerContextBlock } from './autonomyLoopOwnerContext.js';
+import { OWNER_CONTEXT_SECRET_MARK, type OwnerContextBlock } from './autonomyLoopOwnerContext.js';
 import { mayRetryThought, sessionFacts, sessionOf } from './autonomyLoopPacing.js';
 import { SESSION_RULES, restAction, sessionFactsSection, unplannedSection } from './autonomyLoopSessionPrompts.js';
 import { reasonedPlan, thinkingMaterials, type ReasonedThought } from './autonomyLoopPlan.js';
@@ -286,9 +286,18 @@ function valueFactsFor(dependencies: StepDependencies, scopeKey: string, at: str
 
 /** The owner's context for this thought, or null: switched off, not wired, nothing there, or not readable just now. */
 function ownerBlock(dependencies: StepDependencies, scopeKey: string, at: string, topic: string): OwnerContextBlock | null {
-  if (!dependencies.loop.ownerContext || !dependencies.ownerContext) return null;
-  try { return dependencies.ownerContext.forThinking(scopeKey, at, topic); } catch { return null; }
+  let owner: OwnerContextBlock | null = null;
+  if (dependencies.loop.ownerContext && dependencies.ownerContext) {
+    try { owner = dependencies.ownerContext.forThinking(scopeKey, at, topic); } catch { /* unavailable */ }
+  }
+  let self: ReturnType<SelfInterestContextRead> = null;
+  try { self = dependencies.selfInterests?.read(scopeKey) ?? null; } catch { /* unavailable */ }
+  if (!self?.index) return owner;
+  const index = self.index.replace(/<<<|>>>/gu, value => value === '<<<' ? '‹‹‹' : '›››');
+  return { section: [owner?.section, `[自己関心（選択の参考。実行の許可にはしない）]\n${self.secrets.length ? OWNER_CONTEXT_SECRET_MARK : ''}<<<\n${index}\n>>>`].filter(Boolean).join('\n\n'),
+    secrets: [...(owner?.secrets ?? []), ...self.secrets] };
 }
+type SelfInterestContextRead = NonNullable<StepDependencies['selfInterests']>['read'];
 
 function upcomingLines(dependencies: StepDependencies, scopeKey: string, at: string) {
   try { return dependencies.upcoming?.lines(scopeKey, at, 'owner') ?? []; } catch { return []; }

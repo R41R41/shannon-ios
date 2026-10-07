@@ -51,3 +51,4 @@ export {
   type TrustEntry, type TrustKind, type TrustParameters, type TrustSettlement,
 } from './trustFold.js';
 export * from './actions.js';
+export * from './taskTree.js';

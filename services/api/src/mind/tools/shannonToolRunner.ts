@@ -1,6 +1,6 @@
 import type { AetherAccess } from '../../integrations/aether/aetherAccess.js';
 import type { AetherProposalStore } from '../../integrations/aether/aetherProposal.js';
-import { ROOM_LOOK_GUARD, roomLookGuard } from '../action/ownTime/autonomyHostFolderPath.js';
+import { ROOM_LOOK_GUARD, roomLookGuard } from '../action/ownTime/ownTimePorts.js';
 import type { SQLiteAutonomyStore } from '../action/ownTime/ownTimePorts.js';
 import type { SecretCheck } from '../inhibition/disclosurePorts.js';
 import type { HostFolderOperations } from '../action/ownTime/ownTimePorts.js';
@@ -9,12 +9,12 @@ import { minecraftExecutors, minecraftToolOffered, type MinecraftRequestPort } f
 import { aetherExecutors } from './shannonAetherTools.js';
 import { ownerDocumentExecutors } from './shannonOwnerDocumentTools.js';
 import { aetherStudyTool, studyExecutors } from './shannonStudyTools.js';
-import { authorizeToolCall, authorizeToolInput, gatedAether, shownAetherCall } from '../inhibition/shannonToolGate.js';
+import { authorizeToolCall, authorizeToolInput, gatedAether, shownAetherCall } from '../inhibition/toolGatePorts.js';
 import type { StudyAether } from '../action/ownTime/ownTimePorts.js';
 import { validToolInput, type ToolInput } from './shannonToolInput.js';
 import type { PreparedToolCall, ToolExecutionContext, ToolExecutor } from './shannonToolTypes.js';
 import {
-  isReadToolDomain, offeredTools, shannonTool, toolFailure, toolForSurface, toolFromProviderName,
+  isReadToolDomain, offeredTools, providerToolName, shannonTool, toolFailure, toolForSurface, toolFromProviderName,
   type ReadToolDomain, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface,
 } from './shannonTools.js';
 import { READ_TOOL_PORT, readToolExecutors, type ReadToolPorts } from './shannonReadTools.js';
@@ -24,6 +24,9 @@ import { skillHash } from '../memory/memoryPorts.js';
 import { WITHHELD_TOOL, withheldRail, type WithheldRail, type WithheldReason, type WithheldSink } from '../../contracts/withheldActionContract.js';
 import { actionPermit, currentActionExecution } from '../../infra/context/actionExecution.js';
 import { actionResource } from '../../contracts/actionThreadContract.js';
+import type { SelfRewriteRuntimePort } from '../inhibition/selfRewritePorts.js';
+import { selfRewriteExecutors } from './shannonSelfRewriteTools.js';
+import { SELF_REWRITE_TOOLS } from './selfRewriteToolDefinitions.js';
 
 /**
  * Runs the registry's tools. Conversations (text and voice) call `call`; her own time uses `prepare` inside a
@@ -82,6 +85,7 @@ export class ShannonToolRunner {
   private reads: ReadToolPorts | null = null;
   /** Syzygy ADR-0008 stage 2, step 6: her skill memory (`useSkills`); null, `skill.read` does not exist on this server. */
   private skills: SkillTurnPorts | null = null;
+  private selfRewrite: SelfRewriteRuntimePort | null = null;
 
   constructor(
     private readonly store: SQLiteAutonomyStore,
@@ -105,13 +109,15 @@ export class ShannonToolRunner {
   offered(surface: ToolSurface, audience: ToolAudience, scopeKey?: string): readonly ShannonToolDefinition[] {
     // Her Aether tools only while the Aether client is configured (URL and token), and a proposal only while the inbox is too:
     // with the inbox alone (or the token alone) every offer is what it was before Aether access. Only to the owner's scope.
-    const tools = offeredTools(surface, audience, tool => isReadToolDomain(tool.domain) ? this.readsFor(tool.domain)
+    const tools = [...offeredTools(surface, audience, tool => isReadToolDomain(tool.domain) ? this.readsFor(tool.domain)
       : tool.domain === 'skill_read' ? this.skills !== null
+      : tool.domain === 'vm_workspace' ? this.selfRewrite !== null
       : tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
       : tool.domain === 'minecraft_body' ? minecraftToolOffered(this.minecraft, tool, scopeKey)
         : tool.domain === 'owner_documents_read' ? this.ownerDocumentsFor(scopeKey)
         : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true && this.aetherFor(scopeKey)
-          : tool.name.startsWith('aether') ? this.aetherFor(scopeKey) : true);
+          : tool.name.startsWith('aether') ? this.aetherFor(scopeKey) : true),
+      ...(this.selfRewrite ? SELF_REWRITE_TOOLS.filter(tool => tool.surfaces.includes(surface) && tool.audiences.includes(audience)) : [])];
     const hosts = this.folder.boundHosts();
     const named = hosts.length > 1 ? tools.map(tool => folderToolForHosts(tool, hosts)) : tools;
     return this.aether.study && (scopeKey === undefined || this.aether.study.covers(scopeKey)) ? named.map(aetherStudyTool) : named;
@@ -136,17 +142,19 @@ export class ShannonToolRunner {
    * The same holds for `ownerDocs.*` while her own time may not read the owner's documents (as before they existed).
    */
   knownTool(name: string): ShannonToolDefinition | null {
-    const tool = toolFromProviderName(name) ?? shannonTool(name);
+    const tool = toolFromProviderName(name) ?? shannonTool(name)
+      ?? (this.selfRewrite ? SELF_REWRITE_TOOLS.find(tool => tool.name === name || providerToolName(tool.name) === name) ?? null : null);
     // Her read tools do not exist without their ports: a call of one is refused as a name that never existed.
     if (tool && isReadToolDomain(tool.domain) && !this.readsFor(tool.domain)) return null;
     if (tool?.domain === 'skill_read' && !this.skills) return null;
+    if (tool?.domain === 'vm_workspace' && !this.selfRewrite) return null;
     if (tool?.domain === 'owner_documents_read' && !(this.aether.ownerDocuments === true && this.aether.access)) return null;
     return tool && !this.aether.access && (tool.name.startsWith('aether') || tool.domain === 'aether_proposal') ? null : tool;
   }
 
   /** The gate, the input check, and the executor's preparation. A result here is the call's answer: nothing ran. */
   prepare(name: string, rawInput: unknown, context: ToolExecutionContext): { tool: ShannonToolDefinition; prepared: PreparedToolCall } | { tool: ShannonToolDefinition | null; result: ToolResult } {
-    const named = shannonTool(name);
+    const named = shannonTool(name) ?? (this.selfRewrite ? SELF_REWRITE_TOOLS.find(tool => tool.name === name) : null);
     const tool = named && this.knownTool(named.name) ? named : null;
     const refused = authorizeToolCall(tool, context);
     if (refused || !tool) return tool && refused ? this.withhold(context, tool, refused, tool.surfaces.includes(context.surface) ? 'audience' : 'not_offered')
@@ -182,7 +190,7 @@ export class ShannonToolRunner {
       if(!('run' in prepared))return {tool,result:prepared};
       const call=this.notedCopyWrite(tool,checked.input,context.scopeKey,shownAetherCall(tool,prepared,context));
       return {tool,prepared:{...call,run:async signal=>{
-        const resources=tool.effect==='write'?[actionResource(context.scopeKey,call.folder?`folder:${call.folder.host}`:'study')]:[];
+        const resources=tool.domain==='vm_workspace' ? [] : tool.effect==='write'?[actionResource(context.scopeKey,call.folder?`folder:${call.folder.host}`:'study')]:[];
         await actionPermit(resources);
         // The original gate and live secret predicate are evaluated again after waiting for a resource.
         const refusedNow=authorizeToolCall(tool,context) ?? authorizeToolInput(tool,checked.input,context);
@@ -256,6 +264,11 @@ export class ShannonToolRunner {
   useSkills(ports: SkillTurnPorts): void {
     this.skills = ports;
     this.executors = Object.freeze({ ...this.executors, ...skillExecutors(ports) });
+  }
+  /** Stage 5 only: no port means no schemas, prompts or effects. */
+  useSelfRewrite(port: SelfRewriteRuntimePort): void {
+    this.selfRewrite = port;
+    this.executors = Object.freeze({ ...this.executors, ...selfRewriteExecutors(port) });
   }
 
   private readsFor(domain: ReadToolDomain): boolean {

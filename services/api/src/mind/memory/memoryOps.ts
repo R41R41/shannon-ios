@@ -22,6 +22,8 @@ import {
   type IdentityChooser, type PersonFactJudge, type PersonFactPlan,
 } from './personFacts.js';
 import { ownerDayKey } from '../../infra/sqlite/lockWaits.js';
+import type { SelfInterestMemoryPort } from '../self/selfPorts.js';
+import { interestChangeHandler, selfInterestHandlers } from './selfInterestHandlers.js';
 
 /**
  * What one memory op does (Syzygy ADR-0008 stage 3, step F5, `docs/mind-workspace-contract.md`): for each closed kind, the
@@ -35,6 +37,7 @@ export interface MemoryTargets {
   knowledge?: ShannonKnowledgeStore | null;
   impressions?: ImpressionStore | null;
   people?: PeopleMemoryStore | null;
+  selfInterests?: SelfInterestMemoryPort | null;
   /** After a fact the sleep batch learned: the owner's profile and its prompt are written again, as the sleep batch did. */
   refreshProfile?: (scopeKey: string) => void;
   /** The replay summary's reading and model calls (`ConversationReplaySummarizer.planned`), through the writer's cache. */
@@ -362,24 +365,8 @@ const impressionMergeHandler: MemoryOpHandler = {
 const HANDLERS: Readonly<Record<MemoryOpKind, MemoryOpHandler>> = Object.freeze({
   'fact.upsert': factHandler('fact', 'userFacts', 'user-fact-upserted'),
   'relationship.upsert': factHandler('relationship', 'relationships', 'relationship-upserted'),
-  'interest.change': {
-    revision: (targets, op) => {
-      const { interest } = payloadOf<{ interest: string }>(op);
-      const state = targets.state.snapshot(op.scopeKey);
-      return digest([state.interests.includes(interest), controlOf(state, memoryIdentifier('interest', interest))]);
-    },
-    blocked: (_targets, op, state) => {
-      const { interest } = payloadOf<{ interest: string }>(op);
-      const control = controlOf(state, memoryIdentifier('interest', interest));
-      return control && control.status !== 'active' ? 'forgotten' : null;
-    },
-    apply: (targets, op) => {
-      const { interest, source } = payloadOf<{ interest: string; source?: MemoryLearningSource }>(op);
-      targets.state.apply(op.scopeKey, { type: 'interest-observed', interest, ...(source ? { source } : {}) });
-      if (source === 'sleep') targets.refreshProfile?.(op.scopeKey);
-      return 'written';
-    },
-  },
+  'interest.change': interestChangeHandler,
+  ...selfInterestHandlers,
   'promise.capture': {
     revision: (targets, op) => {
       const { memory } = payloadOf<{ memory: ProspectiveMemory }>(op);

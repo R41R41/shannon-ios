@@ -4,5 +4,6 @@
  */
 export { type AgentChangeSummary, type AgentHostHeartbeat, type AgentModelDescriptor, type AgentPlanItem, type AgentReasoningEffort, type AgentTask, type AgentTaskStore, type AgentTestResult, type AgentWorkspaceChangeDescriptor, type AgentWorkspaceProjectState, type ClaimedAgentCommand, type HostAgentEvent } from './agentTaskStore.js';
 export { agentTaskNeedsOwner, agentTaskStateLabel } from './agentTaskVocabulary.js';
+export type { TaskTreeOperations, TaskResultProof, TaskTreeOwnerChange, TaskTreeProposal, TaskTreeLearningCallbacks } from './taskTreePorts.js';
 export { type AgentProjectProvisioningEvent, type ClaimedAgentProjectProvisioning } from './store/agentProjectProvisioning.js';
 export { type AgentWorkspaceResourceEvent, type ClaimedAgentWorkspaceResource } from './store/agentWorkspaceResources.js';

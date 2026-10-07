@@ -13,7 +13,7 @@ import {
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import type { PeopleMemoryStore, PersonCall, PersonMemoryItem, RememberedPerson } from './store/peopleMemoryStore.js';
 import { extractPromiseCaptures } from './prospectiveMemory.js';
-import { extractExplicitMemoryProposals } from '../sleep/sleepConsolidation.js';
+import { extractExplicitMemoryProposals } from '../sleep/sleepPorts.js';
 import type { LabelledRecallCandidate } from '../workspace/contextPorts.js';
 import type { GuestCallTurn } from '../../surfaces/voice/voiceGuestCall.js';
 import { establishedGuestName, personNameKey } from '../perception/guestNamesPorts.js';

@@ -1,8 +1,8 @@
 import { voiceLookCamera, type AppLookAsk } from '../../contracts/appLookContract.js';
 import {
   LOOK_NOT_NOW_GUARD, LOOK_NOT_SEEN_GUARD, announcedLook, appLookUnavailablePrompt, voiceAppLookOfferPrompt, voiceAppLookPrompt,
-} from '../body/appLookLines.js';
-import { asksToLook, type BodyLookVoiceTurn } from '../body/bodyLook.js';
+} from '../../mind/perception/lookPorts.js';
+import { asksToLook, type BodyLookVoiceTurn } from '../../mind/perception/lookPorts.js';
 import type { VoiceLooks } from '../../mind/perception/conversationLooks.js';
 import { VOICE_ROOM_LOOK_READY_PROMPT, voiceRoomLookPrompt, voiceRoomLookTurn, type VoiceRoomLookTurn } from './voiceRoomLook.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';

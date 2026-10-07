@@ -1,11 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ShannonDevicePrincipal } from '../infra/auth/deviceAuth.js';
-import { namesDesktopBody } from '../surfaces/body/desktopBodyIdentity.js';
-import { SQLiteGameExperiences } from '../surfaces/minecraft/store/gameBodyMemory.js';
+import { namesDesktopBody } from '../mind/inhibition/desktopBodyIdentity.js';
+import { SQLiteGameExperiences } from '../mind/memory/store/gameExperiences.js';
 import { configuredMinecraftBody } from '../contracts/minecraftBodyContract.js';
 import { MinecraftBodyRequests } from '../surfaces/minecraft/minecraftBodyRequests.js';
 import { readJson, sendJson } from '../infra/http/serverHttp.js';
-import { createMinecraftBodyRoute, type MinecraftBodyRoute } from '../surfaces/minecraft/serverMinecraftBodyRoute.js';
+import type { MinecraftBodyRoute } from '../surfaces/minecraft/serverMinecraftBodyRoute.js';
+import { createMinecraftBodyRoute } from './minecraftBodyRouteWiring.js';
 
 /** Every route of her Minecraft body (`docs/minecraft-body-contract.md`). */
 export const MINECRAFT_BODY_ROUTE_PREFIX = '/v1/body/minecraft/';

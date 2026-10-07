@@ -52,6 +52,14 @@ export class SQLiteValueTable {
   constructor(private readonly database: DatabaseSync, options: { createSchema: boolean }) {
     if (options.createSchema) ensureValueTableSchema(database);
   }
+  /** Additive Stage5 schema, explicitly enabled by root composition; OFF never calls this. */
+  enableFeedback(): void {
+    const columns=(this.database.prepare("PRAGMA table_info('shannon_value_versions')").all() as Array<{name:string}>).map(row=>row.name);
+    for (const [name,sql] of [['feedback_seq','INTEGER'],['feedback_policy','TEXT']]) if (!columns.includes(name!)) {
+      try { this.database.exec(`ALTER TABLE shannon_value_versions ADD COLUMN ${name} ${sql}`); }
+      catch(error) { if (!(error instanceof Error&&/duplicate column/i.test(error.message))) throw error; }
+    }
+  }
 
   /** Writes a version and its cells, and makes it the active one of its scope. */
   insertActive(scopeKey: string, version: ValueVersionRecord, cells: readonly ValueCell[]): void {
@@ -63,6 +71,8 @@ export class SQLiteValueTable {
       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, 'active', ?)
     `).run(version.versionId, scopeKey, version.createdAt, version.madeBy, version.formula, JSON.stringify(version.weights), version.baseVersion,
       version.evidenceFrom, version.evidenceTo, version.frozen ? 1 : 0);
+    if (version.feedbackSeq !== undefined) this.database.prepare('UPDATE shannon_value_versions SET feedback_seq=?, feedback_policy=? WHERE version_id=?')
+      .run(version.feedbackSeq,version.feedbackPolicy??null,version.versionId);
     const insert = this.database.prepare(`
       INSERT INTO shannon_value_cells (version_id, level, choice, context, n, mean, uncertainty, noise, volatility, last_at, mean_world, mean_serve, mean_growth, mean_cost_yen)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -112,5 +122,6 @@ function parsedVersion(row: Record<string, unknown>): ValueVersionRecord {
     versionId: String(row.version_id), createdAt: String(row.created_at), madeBy: String(row.made_by) as ValueVersionRecord['madeBy'], formula: String(row.formula), weights,
     baseVersion: row.base_version === null ? null : String(row.base_version), evidenceFrom: Number(row.evidence_from), evidenceTo: Number(row.evidence_to),
     state: String(row.state) as ValueVersionRecord['state'], frozen: Number(row.frozen) === 1,
+    ...(row.feedback_seq!=null?{feedbackSeq:Number(row.feedback_seq),feedbackPolicy:String(row.feedback_policy)}:{}),
   };
 }

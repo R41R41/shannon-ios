@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore, SHANNON_EMOTION_KINDS, createShannonMessageEmotion, type ReplyEmotion, type ShannonExpressiveEmotion } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { chatSentenceStreamLines } from '../src/surfaces/text/chatSentenceStream.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';

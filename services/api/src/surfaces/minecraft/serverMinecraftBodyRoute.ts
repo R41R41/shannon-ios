@@ -6,7 +6,6 @@ import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
 import { MinecraftBody, type MinecraftBodyDependencies, type MinecraftConversation } from './minecraftBody.js';
 import { MINECRAFT_BODY_LIMITS, MINECRAFT_BODY_TURN_PATH, MinecraftBodyError, configuredMinecraftBody, type MinecraftBodyConfiguration } from '../../contracts/minecraftBodyContract.js';
-import { SQLiteMinecraftTurnLog } from './store/minecraftTurnStore.js';
 import type { PeopleMemoryStore } from '../../mind/memory/memoryPorts.js';
 import { platformPeopleEnabled } from '../../mind/memory/platformPeople.js';
 import type { MemoryProposals } from '../../mind/memory/memoryPorts.js';
@@ -27,29 +26,6 @@ export interface MinecraftBodyRoute {
  * bridge's service token; the service checks it is the one configured device in the owner's scope.
  * `SHANNON_MINECRAFT_BODY_JSON` unset: 503, and nothing is opened.
  */
-export function createMinecraftBodyRoute(
-  environment: Readonly<Record<string, string | undefined>>,
-  databasePath: string,
-  dependencies: {
-    stateStore: CompanionStateStore; conversationStore: ConversationStore; background: TurnBackgroundService; now: CompanionClock;
-    chatModel: ShannonChatModel; peopleStore: PeopleMemoryStore | null;
-    /** The app's conversation kernel; read at call time, so it may be created after this route. */
-    conversation: MinecraftConversation;
-    /** Phase 4: the request queue, made by the server so her tools share it. Absent, the request routes answer 503. */
-    requests?: MinecraftBodyRequests | null;
-    /** Syzygy ADR-0008 stage 3 (F5): the memory outbox (absent: switched off); F6: the people facts' readers. */
-    memory?: MemoryProposals | null;
-    peopleFacts?: MinecraftBodyDependencies['peopleFacts'];
-  },
-): MinecraftBodyRoute {
-  const configuration = configuredMinecraftBody(environment);
-  const turns = configuration ? new SQLiteMinecraftTurnLog(databasePath) : null;
-  const requests = configuration ? dependencies.requests ?? null : null;
-  const service = configuration && turns
-    ? new MinecraftBody({ ...dependencies, configuration, turns, requests, peopleEnabled: () => platformPeopleEnabled(environment) }) : null;
-  return minecraftBodyRoute(service, configuration, () => turns?.close(), requests);
-}
-
 /** The route around a service, also for tests. */
 export function minecraftBodyRoute(service: MinecraftBody | null, configuration: MinecraftBodyConfiguration | null, close: () => void = () => {},
   requests: MinecraftBodyRequests | null = null): MinecraftBodyRoute {

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createInitialCompanionState, type CompanionStateSnapshot, type ProspectiveMemory } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { NOTICE_MARKERS } from '../src/mind/workspace/workspacePorts.js';

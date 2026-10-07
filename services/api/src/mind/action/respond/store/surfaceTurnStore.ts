@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { secureDatabaseFiles } from '../../../infra/sqlite/sqliteStoreContext.js';
+import { secureDatabaseFiles } from '../../../../infra/sqlite/sqliteStoreContext.js';
 
 /**
  * The answer given to each game-chat turn of her Minecraft body, by requestId, so that a retried request gets

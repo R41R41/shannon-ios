@@ -4,18 +4,18 @@ import type { CompletedTurn, TurnBackgroundService } from '../../mind/sleep/back
 import type { TextTurnInput, TextTurnResult } from '../../infra/http/apiKernel.js';
 import type { ShannonChatModel } from '../../infra/models/chatModel.js';
 import type { ConversationStore, ShannonExperience } from '../../mind/memory/memoryPorts.js';
-import { keepOwnerPlatformTurn, platformTextTurnInput, rememberPlatformPerson } from '../platform/platformSurface.js';
+import { keepOwnerPlatformTurn, platformTextTurnInput, rememberPlatformPerson } from '../../mind/memory/platformMemoryPorts.js';
 import {
   MINECRAFT_BODY_LIMITS, MINECRAFT_PLATFORM, MinecraftBodyError, minecraftBridgeConfiguration, minecraftConversationId, minecraftSourceUserId,
   validatedMinecraftTurn,
   type MinecraftBodyConfiguration, type MinecraftConversationKind, type MinecraftIntent, type MinecraftServerBinding, type MinecraftTurnRequest, type MinecraftTurnResponse,
 } from '../../contracts/minecraftBodyContract.js';
-import type { MinecraftTurnLog } from './store/minecraftTurnStore.js';
+import type { MinecraftTurnLog } from '../../mind/action/respond/respondPorts.js';
 import type { MinecraftBodyRequests } from './minecraftBodyRequests.js';
 import { MINECRAFT_INTENT_GOAL_CHARACTERS } from './minecraftIntent.js';
 import { minecraftBodyStateBlock, type MinecraftBodyState } from './minecraftBodyState.js';
 import { MinecraftTurnAllowance } from '../../mind/inhibition/minecraftTurnAllowance.js';
-import { PlatformBridgeError, PlatformBridgeService, platformBridgeThreadId, type PlatformAudiencePolicy } from '../platform/platformBridge.js';
+import { PlatformBridgeError, PlatformBridgeService, platformBridgeThreadId, type PlatformAudiencePolicy } from '../../mind/memory/platformMemoryPorts.js';
 import type { PeopleMemoryStore } from '../../mind/memory/memoryPorts.js';
 import { PlatformPeople, platformPeopleEnabled } from '../../mind/memory/platformPeople.js';
 import type { MemoryProposals } from '../../mind/memory/memoryPorts.js';

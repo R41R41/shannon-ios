@@ -3,7 +3,7 @@ import { createInitialCompanionState } from '@shannon/cognition';
 import { conversationSecrets, type SecretCheck } from '../src/mind/inhibition/conversationSecrets.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { authorizeToolCall, toolRefusal } from '../src/mind/inhibition/shannonToolGate.js';
 import { validToolInput } from '../src/mind/tools/shannonToolInput.js';
 import { providerFunctionTools } from '../src/infra/models/chatModelTools.js';

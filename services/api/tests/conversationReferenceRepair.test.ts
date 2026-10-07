@@ -7,7 +7,7 @@ import type { AetherProposalInput, AetherProposalStore } from '../src/integratio
 import { extractProspectiveMemories } from '../src/mind/memory/prospectiveMemory.js';
 import { commitmentDeadline } from '../src/mind/action/respond/commitmentTime.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 
 const at = '2026-09-24T12:00:00.000Z';
 const earlier = '2026-09-24T11:59:00.000Z';

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import {
   APP_LOOK_CLIENT_STATES, APP_LOOK_LIMITS, APP_LOOK_REFUSAL_CODES, APP_LOOK_SCHEMA, appLookChoice, appLookClient, appLookRequestBytes,
   configuredAppLook, validatedAppLookResult, voiceLookCamera, type AppLookConfig,
@@ -13,14 +13,15 @@ import { SQLiteAppLookSpeaker } from '../src/surfaces/body/store/appLookDelivery
 import {
   APP_LOOK_OFFER_PROMPT, APP_LOOK_SEEN_SUMMARY, VOICE_APP_LOOK_OFFER_PROMPT, LOOK_NOT_NOW_GUARD, LOOK_NOT_SEEN_GUARD, announcedLook, announcesCameraLook, lookAnnouncement, voiceAppLookOfferPrompt, appLookNotSeenLine, appLookNotSeenSummary,
   appLookUnavailablePrompt, appLookUnavailableReason, voiceAppLookPrompt,
-} from '../src/surfaces/body/appLookLines.js';
+} from '../src/mind/perception/appLookLines.js';
 import { SQLiteAppLookStore } from '../src/surfaces/body/store/appLookStore.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
-import { ShannonAutonomyService, createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
+import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { ROOM_LOOK_OFFER_PROMPT } from '../src/surfaces/body/bodyLook.js';
 import { BODY_LOOK_REQUEST_BYTES, configuredBodyLook } from '../src/contracts/bodyLookContract.js';
-import { BODY_LOOK_CUT_OFF_LINE } from '../src/surfaces/body/bodyLookLines.js';
+import { BODY_LOOK_CUT_OFF_LINE } from '../src/mind/perception/bodyLookLines.js';
 import { SQLiteBodyLookStore } from '../src/surfaces/body/store/bodyLookStore.js';
 import { roomLookInstructions, type RoomLookViewRequest, type RoomLookViewer } from '../src/surfaces/body/bodyLookVision.js';
 import { bodyLookRequestBytes } from '../src/wiring/bodyLookWiring.js';

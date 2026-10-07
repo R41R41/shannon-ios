@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildCompanionStatePrompt, InMemoryCompanionStateStore, type CompanionStateStore } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { InMemoryConversationStore, type ConversationStore } from '../src/mind/memory/store/conversationStore.js';

@@ -1,13 +1,11 @@
 import {
-  InMemoryCompanionStateStore,
-  withoutUnshownTitles,
+  withoutUnshownTitles, type ShannonStage5Capabilities,
   type CompanionClock,
   type CompanionStateEvent,
   type CompanionStateStore,
 } from '@shannon/cognition';
 import { agentTaskPromptProjection } from '../../mind/action/respond/apiPromptProjection.js';
 import { presentCompanionState } from '../../mind/emotion/companionPresence.js';
-import { emotionTiming } from '../../mind/emotion/emotionTiming.js';
 export { agentTaskPromptProjection } from '../../mind/action/respond/apiPromptProjection.js';
 import { dispatchAgentRequest } from './apiAgentRoutes.js';
 import { dispatchDataRequest } from './apiDataRoutes.js';
@@ -72,7 +70,7 @@ import {
   InMemoryCognitiveIntentStore,
   type CognitiveIntentStore,
 } from '../../mind/action/respond/cognitiveIntent.js';
-import { createInMemoryAutonomyService, type ShannonAutonomyService } from '../../mind/action/ownTime/autonomyService.js';
+import type { ShannonAutonomyService, AutonomyServiceDependencies } from '../../mind/action/ownTime/autonomyService.js';
 import { dispatchBodyRequest, isBodyRoute } from '../../surfaces/body/apiBodyRoutes.js';
 import { CALENDAR_UPCOMING_PATH, dispatchCalendarRequest, localOwnerUpcoming, type OwnerUpcoming } from './calendarRoutes.js';
 import { ShannonBody, type ShannonBodyOptions } from '../../surfaces/body/shannonBody.js';
@@ -91,7 +89,7 @@ import {
 } from '../../integrations/voyager/organize.js';
 import { InMemoryVoiceIdentityStore, type ShannonVoiceIdentityStore } from '../../surfaces/voice/voiceIdentity.js';
 import { OwnOutreach, type OwnOutreachReader } from '../../surfaces/outreach/ownOutreach.js';
-import { voiceSessionCalls } from '../../surfaces/voice/ownerCallElsewhere.js';
+import { voiceSessionCalls } from '../../mind/perception/ownerCallElsewhere.js';
 import {
   NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type TextTurnInput, type TextTurnResult,
 } from '../../mind/action/respond/apiTextTurn.js';
@@ -101,6 +99,8 @@ import { generateChatTurn, withSentenceStream } from '../../surfaces/text/chatSe
 import { conversationTools, toolTraceReader, turnSkillIndex, turnWroteHerOwnThings, type SkillTurnPorts } from '../../mind/tools/shannonToolSession.js';
 import type { ReadToolPorts } from '../../mind/tools/shannonReadTools.js';
 import { finishTurn, routeTurn, tierRequest, type TurnRouting } from '../../mind/action/respond/turnRouting.js';
+import { bindCompletedFeedback } from '../../mind/action/respond/turnFeedback.js';
+import type { FeedbackPorts } from '../../contracts/feedbackContract.js';
 import type { TurnChooser } from '../../mind/selectors/turnChoices.js';
 import { withToolCapabilityLines } from '../../mind/tools/shannonAetherTools.js';
 import { withCapabilitySources } from '../../mind/action/respond/conversationCapabilities.js';
@@ -114,6 +114,8 @@ import type { ChatResponse } from '../../contracts/contracts.js';
 import { withWorkspace, type MindTurnPorts } from '../../mind/workspace/workspacePorts.js';
 export type { TextTurnInput, TextTurnResult, TextTurnSurface } from '../../mind/action/respond/apiTextTurn.js';
 export interface ShannonApiKernelOptions {
+  /** The composition root supplies the default service, after this kernel's stores are ready. */
+  createAutonomy?: (now: CompanionClock, overrides: Partial<AutonomyServiceDependencies>) => ShannonAutonomyService;
   chatModel?: ShannonChatModel;
   voiceDecision?: VoiceDecisionGateway;
   stateStore?: CompanionStateStore;
@@ -151,7 +153,7 @@ export interface ShannonApiKernelOptions {
    */
   turnChooser?: TurnChooser; toolHints?: true; // toolHints: a search that found nothing names the places to look (stage 2).
   readTools?: ReadToolPorts; // Stage 2, step 3 (SHANNON_READ_TOOLS): her read tools' ports, for her tool runner; the text turn folds its projections.
-  turnRouting?: TurnRouting; skills?: SkillTurnPorts; // Stage 2, step 4: the tier policy's inputs, the verifier, where her conversation choices are learned (turnRoutingWiring.ts); step 6: her skill memory (skillMemoryWiring.ts).
+  turnRouting?: TurnRouting; skills?: SkillTurnPorts; feedback?: FeedbackPorts; stage5Capabilities?: ShannonStage5Capabilities; // Stage2 routing and Stage5 optional, server-bound reaction metadata.
   /**
    * Syzygy ADR-0008 stage 3 (`docs/mind-workspace-contract.md`, `wiring/mindWiring.ts`): what every surface hands the mind. Absent
    * (`SHANNON_ADR8_STAGE3=off`, `SHANNON_MIND_EVENTS=off`), nothing is perceived and every turn is what it was at afb38c28.
@@ -187,7 +189,7 @@ export class ShannonApiKernel {
   private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming; private readonly ownOutreach: OwnOutreach | null;
   private readonly minecraftRequests: { promptBlock(scopeKey: string, at: string): string } | null;
   private readonly turnChooser: TurnChooser | null; private readonly toolHints: boolean;
-  private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null;
+  private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null; private readonly feedback: FeedbackPorts | null; private readonly stage5Capabilities: ShannonStage5Capabilities | undefined;
   private readonly mind: MindTurnPorts | null;
   /** What the server knows when it offers her tools: others present, and what her writes must not repeat (`shannonToolSession.ts`). */
   private readonly toolServer: ConversationToolServer;
@@ -225,10 +227,10 @@ export class ShannonApiKernel {
     this.memoryRecall = options.memoryRecall ?? null;
     this.notion = options.notion ?? null;
     this.minecraftRequests = options.minecraftRequests ?? null;
-    this.turnChooser = options.turnChooser ?? null; this.turnRouting = options.turnRouting ?? null; this.toolHints = options.toolHints === true;
+    this.turnChooser = options.turnChooser ?? null; this.turnRouting = options.turnRouting ?? null; this.toolHints = options.toolHints === true; this.feedback = options.feedback ?? null; this.stage5Capabilities = options.stage5Capabilities;
     this.mind = options.mind ?? null;
     this.people = new PeopleMemory(options.peopleMemory ?? new SQLitePeopleMemoryStore(':memory:'), this.stateStore, options.memory ?? null);
-    this.autonomy = options.autonomy ?? createInMemoryAutonomyService(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) });
+    this.autonomy = options.autonomy ?? options.createAutonomy?.(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) }) ?? missingAutonomyComposition();
     this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now); this.ownOutreach = options.ownOutreach ? new OwnOutreach(options.ownOutreach, this.now) : null;
     this.body = new ShannonBody({ ...options.body, ...(this.mind ? { reactions: { ...options.body?.reactions, mind: this.mind } } : {}), stateStore: this.stateStore, autonomy: this.autonomy, conversationStore: this.conversationStore, now: this.now });
     this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now); this.memoryRecall?.watchAudience?.(this.toolServer.audience); // Stage 2, step 8.
@@ -238,6 +240,10 @@ export class ShannonApiKernel {
     this.background = this.toolServer.turns.watching(this.background); // Each stored turn takes what her tools did with it.
   }
   get voiceSessions() { return voiceSessionCalls(this.body.ownerCalls, this.now); } // A voice session while the owner is in a call elsewhere.
+  ownerAloneForFeedback(scopeKey:string):boolean { return this.ownerPresenceForFeedback(scopeKey)==='alone'; }
+  ownerPresenceForFeedback(scopeKey:string):'alone'|'others'|'unknown' {
+    try {const others=this.toolServer.audience.othersKnown(scopeKey);return others===false?'alone':others===true?'others':'unknown';} catch {return 'unknown';}
+  }
   realtimeVoiceSession(scopeKey: string, requestedThreadId?: string, options: {
     clientDelegation?: boolean;
     participantMode?: VoiceParticipantMode;
@@ -273,7 +279,7 @@ export class ShannonApiKernel {
       return { status: 200, body: presentCompanionState(this.stateStore.snapshot(scopeKey), this.now()) };
     }
 
-    const conversationRead = dispatchConversationRead(request, { conversationStore: this.conversationStore, stateStore: this.stateStore, cognitiveIntents: this.cognitiveIntents, now: this.now });
+    const conversationRead = dispatchConversationRead(request, { conversationStore: this.conversationStore, stateStore: this.stateStore, cognitiveIntents: this.cognitiveIntents, now: this.now, ownerAlone:scope=>this.ownerAloneForFeedback(scope), ...(this.feedback?{feedback:this.feedback}:{}) });
     if (conversationRead) return conversationRead;
 
     if (request.method === 'GET' && request.path === '/v1/agent/tasks') {
@@ -324,7 +330,7 @@ export class ShannonApiKernel {
     if (liveVoiceResponse) return await liveVoiceResponse;
 
     const turnResponse = dispatchVoiceTurn(request, { stateStore: this.stateStore, chatModel: this.chatModel,
-      conversationStore: this.conversationStore, background: this.background, now: this.now, reactions: this.body.reactions, looks: this.body.turnLooks });
+      conversationStore: this.conversationStore, background: this.background, now: this.now, reactions: this.body.reactions, looks: this.body.turnLooks, ...(this.feedback?{feedback:this.feedback}:{}) });
     if (turnResponse) return await turnResponse;
 
     if (request.method === 'POST' && request.path === '/v1/chat') {
@@ -413,8 +419,9 @@ export class ShannonApiKernel {
       generateThreadTitle: surface ? false : this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
     }));
     const answered = completion.outOfTime ? completion.reply : placeSkillReply(withCapabilitySources(completion, capability), placeSkill);
-    const reply = this.turnRouting ? (await finishTurn(this.turnRouting, { scopeKey: body.scopeKey, surface: 'text', threadId, presence: audience.alone ? 'alone' : 'others', reply: answered, // Stage 2: verified, learned.
-      outOfTime: completion.outOfTime === true, escalated: completion.escalated === true, decision: tier, tools: toolOffer.tools, remainingMs: deadline.left(), at: occurredAt, answeredBy: completion.mode })).reply : answered;
+    const finished = this.turnRouting ? await finishTurn(this.turnRouting, { scopeKey: body.scopeKey, surface: 'text', threadId, presence: audience.alone ? 'alone' : 'others', reply: answered,
+      outOfTime: completion.outOfTime === true, escalated: completion.escalated === true, decision: tier, tools: toolOffer.tools, remainingMs: deadline.left(), at: occurredAt, answeredBy: completion.mode }) : null;
+    const reply = finished?.reply ?? answered;
     // A turn that wrote with her own tools has done the request itself: no agent task for it (`turnWroteHerOwnThings`).
     const suppressAgentTaskProposal = !audience.alone || Boolean(surface) || isExplicitVoyagerUpdateRequest(message) || turnWroteHerOwnThings(toolOffer.tools);
     // Her feeling for this reply, from state already in hand; it is stored after the response.
@@ -441,7 +448,7 @@ export class ShannonApiKernel {
     };
     // Another surface decides where its turn is kept (her Minecraft body: the owner's platform thread, or person memory).
     const experience = surface ? storedBySurface(deps, surface, completedTurn) : this.background.recordTurn(completedTurn);
-    if (experience) response.turnId = experience.id;
+    if (experience) { response.turnId = experience.id; const feedback = bindCompletedFeedback(this.feedback,body.scopeKey,finished?.feedbackRecordId,threadId,experience.id,reply); if (feedback) response.feedback=feedback; }
     if (experience && perceived) this.mind?.bind?.(body.scopeKey, perceived.itemId, `experience:${experience.id}`); // Stage 3: re-read at render.
     const completedIntent = experience ? recordCompletedCognitiveCycle(this.cognitiveIntents, body.scopeKey, cognitiveContext.frame, provisionalIntent, experience.id, {
       threadId, channel: 'text', action: 'respond', summary: '現在の状況・記憶・意図を使って返答した。', occurredAt,
@@ -481,12 +488,10 @@ export class ShannonApiKernel {
       aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
       conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people, reactions: this.body.reactions, looks: this.body.turnLooks,
-      toolServer: this.toolServer, ownerCalls: this.body.ownerCalls, ownOutreach: this.ownOutreach, ...(this.mind ? { mind: this.mind } : {}),
+      toolServer: this.toolServer, ownerCalls: this.body.ownerCalls, ownOutreach: this.ownOutreach, ...(this.mind ? { mind: this.mind } : {}), ...(this.feedback ? { feedback: this.feedback } : {}), ...(this.stage5Capabilities ? {stage5Capabilities:this.stage5Capabilities} : {}),
       ...(this.turnChooser ? { turnChooser: this.turnChooser } : {}), ...(this.toolHints ? { toolHints: true as const } : {}), ...(this.turnRouting ? { turnRouting: this.turnRouting } : {}), ...(this.skills ? { skills: this.skills } : {}),
     };
   }
   waitForBackground(scopeKey: string): Promise<void> { return this.background.waitForIdle(scopeKey); }
 }
-export function createLocalApiKernel(now: CompanionClock = () => new Date().toISOString(), options: ShannonApiKernelOptions = {}): ShannonApiKernel {
-  return new ShannonApiKernel(options.stateStore ?? new InMemoryCompanionStateStore(now, emotionTiming()), now, options);
-}
+function missingAutonomyComposition(): never { throw new Error('AUTONOMY_COMPOSITION_REQUIRED'); }

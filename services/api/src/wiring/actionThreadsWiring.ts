@@ -8,6 +8,7 @@ export function actionThreadsClient(call:MindCall,holder=`runner-${randomUUID()}
     renew:(lease:ActionLease,progress?:string)=>call('action.renew',{lease,progress}),
     dispatch:(lease:ActionLease,resources?:readonly string[])=>call('action.dispatch',{lease,resources}),
     finish:(lease:ActionLease,state:string,code:string)=>call('action.finish',{lease,state,code}),
+    get:(scopeKey:string,id:string)=>call<ActionView|null>('action.get',{scopeKey,id}),
     list:(scopeKey:string)=>call<ActionView[]>('action.list',{scopeKey}),
     stop:(scopeKey:string,id:string|null,requestId:string)=>call('action.stop',{scopeKey,id,requestId}),
     resume:(scopeKey,id)=>call('action.resume',{scopeKey,id}),

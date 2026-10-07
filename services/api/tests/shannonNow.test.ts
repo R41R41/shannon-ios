@@ -10,7 +10,7 @@ import { SQLiteBodyLookActivityStore } from '../src/surfaces/body/store/bodyLook
 import { SQLiteBodyLookStore } from '../src/surfaces/body/store/bodyLookStore.js';
 import { SQLiteBodyReactionStore } from '../src/surfaces/body/store/bodyReactionStore.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
-import { SQLiteIncomingCallStore } from '../src/surfaces/outreach/store/incomingCallStore.js';
+import { SQLiteIncomingCallStore } from '../src/mind/attention/store/incomingCallStore.js';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import { SQLiteReachOutReports } from '../src/mind/attention/store/reachOutReports.js';
 import { createShannonNowRoute, shannonNowResponse } from '../src/infra/http/serverShannonNowRoute.js';

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { foldValues, valueCells, valueOf } from '@shannon/learning';
-import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { createValuesRoute, ownerValueRecorder } from '../src/infra/http/learningRoutes.js';
 import { ledgerPredictionTap } from '../src/wiring/cognitionLedgerTaps.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';

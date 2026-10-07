@@ -5,7 +5,7 @@ import { aetherToolFailure } from './shannonAetherTools.js';
 import { numberInput, stringInput, type ToolInput } from './shannonToolInput.js';
 import { clip, type PreparedToolCall, type ToolExecutionContext, type ToolExecutor, type ToolRun } from './shannonToolTypes.js';
 import { toolFailure, toolOk, type ShannonToolDefinition, type ToolResult } from './shannonTools.js';
-import { studyWriteKey, syncedWithin, type StudyAether } from '../action/ownTime/studyAether.js';
+import { studyWriteKey, syncedWithin, type StudyAether } from '../action/ownTime/ownTimePorts.js';
 import { type StudyPiece, type StudyPieceKind, type StudyPieceStatus, type StudyRejection } from '../action/ownTime/ownTimePorts.js';
 import { STUDY_KIND_LABEL, STUDY_LIMITS, STUDY_STATUS_LABEL } from '../action/ownTime/studyPorts.js';
 

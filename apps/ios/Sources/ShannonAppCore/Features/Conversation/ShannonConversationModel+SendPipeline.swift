@@ -53,9 +53,12 @@ extension ShannonConversationModel {
                 emotionSnapshot: ConversationMessage.EmotionSnapshot(emotion, stateVersion: response.snapshotVersion),
                 artifacts: response.artifacts ?? [],
                 places: response.uiBlocks?.flatMap { $0.places ?? [] } ?? [],
-                turnID: response.turnId
+                turnID: response.turnId,
+                feedback: response.feedback
             )
             messages.append(replyMessage)
+            feedback.setContext(threadID: response.threadId, othersPresent: feedback.othersPresent)
+            feedback.install([response.feedback].compactMap { $0 }, threadID: response.threadId)
             // The reply never waits for memory extraction; what was captured is fetched afterwards.
             scheduleCaptureRefresh()
             installAgentTaskProposals(

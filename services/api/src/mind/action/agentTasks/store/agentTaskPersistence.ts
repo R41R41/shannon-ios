@@ -23,6 +23,10 @@ import type {
 import { AgentHostRegistry, isReasoningEffort } from './agentHostRegistry.js';
 import { projectHostEvent } from './agentTaskHostProjection.js';
 import { AgentTaskQueue } from './agentTaskQueue.js';
+import { TaskTreeStore } from './taskTreeStore.js';
+import { taskTreeAuthority } from '@shannon/mind';
+import type { ActionLease } from '../../../../contracts/actionThreadContract.js';
+import type { TaskTreeLearningCallbacks } from '../taskTreePorts.js';
 import {
   AgentProjectProvisioningPersistence,
   type AgentProjectProvisioningEvent,
@@ -54,8 +58,9 @@ export { migrateAgentTasks } from './agentTaskPersistenceSupport.js';
 export class SQLiteAgentTaskStore implements AgentTaskStore {
   private readonly database: DatabaseSync;
   private readonly queue: AgentTaskQueue;
+  readonly taskTrees?: TaskTreeStore;
 
-  constructor(private readonly path: string) {
+  constructor(private readonly path: string, options: { taskTreeEnabled?: boolean; taskTreeCallbacks?: TaskTreeLearningCallbacks } = {}) {
     prepareDatabaseLocation(path);
     this.database = new DatabaseSync(path);
     this.queue = new AgentTaskQueue(this.database, (...event) => this.appendEvent(...event));
@@ -66,10 +71,17 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
       PRAGMA synchronous = NORMAL;
     `);
     migrateAgentTasks(this.database);
+    if (options.taskTreeEnabled) {
+      this.taskTrees = new TaskTreeStore(this.database, options.taskTreeCallbacks);
+      const rows = this.database.prepare('SELECT * FROM agent_tasks').all() as unknown as AgentTaskRow[];
+      this.transaction(() => { for (const row of rows) this.taskTrees!.ensure(this.inflate(row), row.scope_key, row.updated_at); });
+      this.taskTrees.flushLearning();
+    }
     secureDatabaseFiles(path);
   }
 
   create(scopeKey: string, input: CreateAgentTaskInput, now: string): { task: AgentTask; created: boolean } {
+    if (this.taskTrees && input.taskAuthority !== undefined && !taskTreeAuthority(input.taskAuthority)) throw new Error('TREE_AUTHORITY');
     let created = false;
     let taskId = '';
     this.transaction(() => {
@@ -105,6 +117,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         reasoningEffort: input.reasoningEffort,
       }, now);
       this.queue.markWaiting(taskId, input.hostHint?.trim() || undefined, now);
+      this.taskTrees?.ensure({ id: taskId, goal: input.goal, plan: input.plan ?? [], createdAt: now }, scopeKey, now, input.taskAuthority);
       created = true;
     });
     return { task: this.requiredTask(scopeKey, taskId), created };
@@ -216,6 +229,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
       `).run(now);
       const next = this.queue.nextCommand(hostId, now);
       if (!next || (expectedId && next !== expectedId)) return;
+      if (this.taskTrees && !this.taskTrees.allowsCommand(this.command(next)!)) return;
       const changed = this.database.prepare(`
         UPDATE agent_task_commands
         SET status = 'leased', lease_owner = ?, lease_until = ?, attempts = attempts + 1
@@ -224,7 +238,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
       if (Number(changed.changes) === 0) return;
       commandId = next;
       const command = this.command(next);
-      if (command) this.queue.begin(command, hostId, now);
+      if (command) { this.queue.begin(command, hostId, now); this.taskTrees?.bindCommand(command, now); }
     });
     return commandId ? this.command(commandId, leaseUntil) : null;
   }
@@ -245,8 +259,10 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
           } | undefined;
         if (!row) continue;
         if (row.assigned_host_id !== hostId) throw new Error('AGENT_HOST_TASK_MISMATCH');
+        if (this.taskTrees && !this.taskTrees.acceptsEvent(row.scope_key, event)) continue;
         if (['completed', 'failed', 'cancelled'].includes(row.status) && event.type !== 'command_completed') continue;
         projectHostEvent(this.database, event, now);
+        this.taskTrees?.recordEvent(row.scope_key, event, now);
         this.appendEvent(
           event.taskId, `host.${event.type}`, event.title, event.detail,
           event.tone ?? toneForHostEvent(event.type), event.occurredAt, { ...(event.payload ?? {}), hostId }, event.eventId,
@@ -269,12 +285,14 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         changed.add(event.taskId);
       }
     });
+    this.taskTrees?.flushLearning();
     return Object.freeze([...changed].map(taskId => this.taskById(taskId)).filter((task): task is AgentTask => task !== null));
   }
 
   heartbeat(heartbeat: AgentHostHeartbeat, now: string): void {
     new AgentHostRegistry(this.database).heartbeat(heartbeat, now);
   }
+  bindActionLease(commandId: string, lease: ActionLease): void { this.taskTrees?.bindLease(commandId, lease); }
   resolveHost(
     projectHint: string | undefined,
     preference: string | undefined,
@@ -337,6 +355,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
       ...(row.current_action ? { currentAction: row.current_action } : {}),
       ...pauseProjection(row),
       plan: parseArray<AgentPlanItem>(row.plan_json),
+      ...(this.taskTrees ? { taskTree: this.taskTrees.get(row.scope_key, row.task_id) ?? undefined } : {}),
       timeline: eventRows.map(event => {
         const activity = timelineActivity(parseObject<Record<string, unknown>>(event.payload_json).activity);
         return {
@@ -393,12 +412,13 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
     const row = this.database.prepare(`SELECT * FROM agent_task_commands WHERE command_id = ?`)
       .get(commandId) as unknown as AgentCommandRow | undefined;
     if (!row) return null;
+    const tree = this.taskTrees?.get(row.scope_key, row.task_id);
     return Object.freeze({
       id: row.command_id,
       taskId: row.task_id,
       scopeKey: row.scope_key,
       type: row.command_type,
-      payload: parseObject<Record<string, unknown>>(row.payload_json),
+      payload: { ...parseObject<Record<string, unknown>>(row.payload_json), ...(tree && !tree.legacy ? { goal: tree.content, taskTree: tree } : {}) },
       attempts: Number(row.attempts),
       createdAt: row.created_at,
       leaseUntil: row.lease_until ?? fallbackLeaseUntil ?? row.created_at,

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { InMemoryAgentTaskStore } from '../src/mind/action/agentTasks/agentTaskStore.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyService, type AutonomyOverview } from '../src/mind/action/ownTime/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import type { AutonomyActivityDay } from '../src/mind/inhibition/store/autonomyActivity.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { promptOf } from './modelPrompt.js';

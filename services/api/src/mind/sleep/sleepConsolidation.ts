@@ -8,7 +8,9 @@ import {
   type MemoryKind,
   type RelationshipInsight,
   type UserFact,
+  type SelfInterest,
 } from '@shannon/cognition';
+import { SELF_INTEREST_SLEEP_INSTRUCTIONS, SELF_INTEREST_SLEEP_SCHEMA, parseSleepSelfInterests, type SleepSelfInterestDraft } from './sleepSelfInterests.js';
 import type { DailyUserMessage } from './store/backgroundJobStore.js';
 import type { SleepChange, SleepContradiction } from '../memory/memoryPorts.js';
 import {
@@ -38,18 +40,23 @@ import {
   parseJson,
   parseProposalRows,
 } from './sleepConsolidationRules.js';
-import { classifyRememberRequest, rememberRequestContent } from '../action/respond/respondPorts.js';
+import { extractExplicitMemoryProposals } from './explicitMemoryProposals.js';
+export { extractExplicitMemoryProposals } from './explicitMemoryProposals.js';
 
 export interface UserFactProposal {
   kind?: 'user-fact' | 'relationship' | 'interest';
   statement: string;
   evidence: string;
+  selfInterest?: SleepSelfInterestDraft;
 }
 
 export interface SleepConsolidationOutcome {
   facts: readonly UserFact[];
   relationships: readonly RelationshipInsight[];
   interests: readonly string[];
+  /** Only present while stage 5 is on; verified source references for the owner-observation lane. */
+  interestEvidence?: readonly { interest: string; episodeIds: readonly string[] }[];
+  selfInterestDrafts?: readonly SleepSelfInterestDraft[];
   report: {
     commitmentReview?: CommitmentSleepReview;
     learned: readonly SleepChange[];
@@ -67,6 +74,8 @@ export interface SleepMemoryAnalyzer {
 export interface SleepAnalysisContext {
   scopeKey: string;
   occurredAt: string;
+  stage5?: boolean;
+  selfInterests?: readonly SelfInterest[];
 }
 
 export class LocalRuleSleepMemoryAnalyzer implements SleepMemoryAnalyzer {
@@ -105,28 +114,6 @@ export function captureImmediateExplicitMemory(
     0.72,
     { revise: true },
   );
-}
-
-export function extractExplicitMemoryProposals(value: string): UserFactProposal[] {
-  const text = normalize(value).slice(0, 2_000);
-  if (!text) return [];
-  const proposals: UserFactProposal[] = [];
-  const utterances = text.match(/[^。！？!?]+[。！？!?]?/gu) ?? [];
-  let likedSubject: string | undefined;
-  for (const utterance of utterances) {
-    if (/[？?]\s*$/u.test(utterance)) continue;
-    const sentence = utterance.replace(/[。！!]\s*$/u, '').trim();
-    if (!sentence) continue;
-    // 「…、覚えておいて」 states its fact before the request; the request is not part of the fact.
-    const stated = rememberRequestContent(sentence) ?? sentence;
-    for (const pattern of EXPLICIT_FACT_PATTERNS) appendRuleProposal(proposals, stated, pattern, 'user-fact');
-    for (const pattern of RELATIONSHIP_PATTERNS) appendRuleProposal(proposals, stated, pattern, 'relationship');
-    for (const pattern of INTEREST_PATTERNS) appendRuleProposal(proposals, stated, pattern, 'interest');
-    const remembered = classifyRememberRequest(sentence, likedSubject);
-    if (remembered?.kind === 'knowledge') proposals.push({ kind: 'user-fact', statement: remembered.statement, evidence: remembered.evidence.slice(0, 240) });
-    likedSubject = explicitFactStatement(stated)?.match(/^ユーザーは(.{1,40})が好き$/u)?.[1] ?? likedSubject;
-  }
-  return deduplicateProposals(proposals);
 }
 
 interface OpenAISleepMemoryAnalyzerOptions {
@@ -173,8 +160,8 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
       },
       body: JSON.stringify({
         model: this.model,
-        instructions: SLEEP_INSTRUCTIONS,
-        input: transcript,
+        instructions: SLEEP_INSTRUCTIONS + (context?.stage5 ? SELF_INTEREST_SLEEP_INSTRUCTIONS : ''),
+        input: context?.stage5 ? `${transcript}\n現在の自己関心（変更の基準。根拠にはしない）:\n${JSON.stringify(context.selfInterests ?? [])}` : transcript,
         reasoning: { effort: 'none' },
         text: {
           verbosity: 'low',
@@ -186,6 +173,7 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
               type: 'object',
               additionalProperties: false,
               properties: {
+                ...(context?.stage5 ? { selfInterests: SELF_INTEREST_SLEEP_SCHEMA } : {}),
                 facts: {
                   type: 'array',
                   maxItems: 8,
@@ -224,11 +212,11 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
                   },
                 },
               },
-              required: ['facts', 'relationships', 'interests'],
+              required: ['facts', 'relationships', 'interests', ...(context?.stage5 ? ['selfInterests'] : [])],
             },
           },
         },
-        max_output_tokens: 400,
+        max_output_tokens: context?.stage5 ? 1_200 : 400,
         store: false,
       }),
       signal: AbortSignal.timeout(this.timeoutMilliseconds),
@@ -249,14 +237,16 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
     }
     const output = parseJson(extractOutputText(json));
     if (!output || typeof output !== 'object' || Array.isArray(output)) throw new Error('OPENAI_SLEEP_OUTPUT_INVALID');
-    const result = output as { facts?: unknown; relationships?: unknown; interests?: unknown };
+    const result = output as { facts?: unknown; relationships?: unknown; interests?: unknown; selfInterests?: unknown };
     const facts = result.facts;
     if (!Array.isArray(facts)) throw new Error('OPENAI_SLEEP_OUTPUT_INVALID');
-    return deduplicateProposals([
+    const ownerProposals = deduplicateProposals([
       ...parseProposalRows(facts, 'user-fact'),
       ...parseProposalRows(result.relationships, 'relationship'),
       ...parseProposalRows(result.interests, 'interest'),
     ]).slice(0, 20);
+    return [...ownerProposals, ...(context?.stage5 ? parseSleepSelfInterests(result.selfInterests, messages, context.selfInterests ?? [])
+      .map(selfInterest => ({ kind: 'interest' as const, statement: selfInterest.proposal.title ?? '', evidence: selfInterest.evidence, selfInterest })) : [])];
   }
 }
 
@@ -291,7 +281,8 @@ export async function consolidateSleepMemory(
   context?: SleepAnalysisContext,
 ): Promise<SleepConsolidationOutcome> {
   const visibleMessages = messages.filter(message => !isForgottenCommitmentEvidence(current, message.content));
-  const proposals = await analyzer.analyze(visibleMessages, context);
+  const analyzed = await analyzer.analyze(visibleMessages, context);
+  const proposals = analyzed.filter(proposal => !proposal.selfInterest);
   const source = visibleMessages.map(message => normalize(message.content)).join('\n');
   const consolidated = consolidateProposals(proposals, source, current, observedAt, 0.55);
   const withSource = <T extends UserFact | RelationshipInsight>(item: T): T => {
@@ -301,6 +292,10 @@ export async function consolidateSleepMemory(
   const facts = consolidated.facts.map(withSource);
   const relationships = consolidated.relationships.map(withSource);
   const interests = [...consolidated.interests];
+  const interestEvidence = context?.stage5 ? interests.map(interest => ({ interest,
+    episodeIds: [...new Set(proposals.filter(p => p.kind === 'interest' && normalize(p.statement).slice(0, 160) === interest)
+      .flatMap(p => visibleMessages.filter(message => normalize(message.content).includes(normalize(p.evidence)))
+        .flatMap(message => message.sourceExperienceId ? [message.sourceExperienceId] : [])))] })) : undefined;
   const learned: SleepChange[] = [];
   const updated: SleepChange[] = [];
   const interestChanges: SleepChange[] = [];
@@ -343,6 +338,8 @@ export async function consolidateSleepMemory(
     facts: Object.freeze(facts.slice(0, 8)),
     relationships: Object.freeze(relationships.slice(0, 6)),
     interests: Object.freeze(interests.slice(0, 6)),
+    ...(interestEvidence ? { interestEvidence } : {}),
+    ...(context?.stage5 ? { selfInterestDrafts: analyzed.flatMap(proposal => proposal.selfInterest ? [proposal.selfInterest] : []) } : {}),
     report: Object.freeze({
       commitmentReview: reviewCommitments(current, observedAt),
       learned: Object.freeze(learned), updated: Object.freeze(updated),

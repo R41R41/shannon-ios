@@ -24,6 +24,7 @@ struct ShannonAgentTaskRoomView: View {
     var sourceThreadTitle: String?
     var openSourceThread: () -> Void = {}
     var followUp: (ShannonAgentTaskFollowUp) -> Void = { _ in }
+    var taskTree: ShannonTaskTreeModel?
 
     @State var steerText = ""
     @State var showsCancelConfirmation = false
@@ -198,6 +199,7 @@ struct ShannonAgentTaskRoomView: View {
             if !task.plan.isEmpty {
                 AgentTaskPlanSection(task: task, palette: palette)
             }
+            if let taskTree { ShannonTaskTreeView(model: taskTree) }
 
             if let command = task.latestCommandActivity {
                 AgentTaskCommandActivityCard(event: command, palette: palette)

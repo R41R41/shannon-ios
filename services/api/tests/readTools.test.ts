@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createLocalApiKernel, type ShannonApiKernelOptions } from '../src/infra/http/apiKernel.js';
+import { type ShannonApiKernelOptions } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import type { NotionSource } from '../src/integrations/notion/notionSource.js';
 import type { VoyagerCatalog } from '../src/integrations/voyager/organizeIntegrations.js';
 import { readToolPlan } from '../src/mind/action/respond/conversationCapabilities.js';
-import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import { READ_TOOL_DOMAINS, WEB_CAPABILITY_ENTRY, isReadToolDomain } from '../src/mind/tools/shannonTools.js';
 import type { TurnChooser } from '../src/mind/selectors/turnChoices.js';

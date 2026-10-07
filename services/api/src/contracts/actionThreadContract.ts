@@ -16,6 +16,8 @@ export interface ActionThreads {
   renew(lease: ActionLease,progress?: string): Promise<ActionView|null>;
   dispatch(lease: ActionLease,resources?: readonly string[]): Promise<boolean>;
   finish(lease: ActionLease,state: 'completed'|'failed'|'cancelled'|'unknown',code: string): Promise<ActionView|null>;
+  /** Exact canonical receipt read. Unlike the bounded presentation list, it retains original IDs through recovery. */
+  get(scopeKey: string,id: string): Promise<ActionView|null>;
   list(scopeKey: string): Promise<ActionView[]>;
   stop(scopeKey: string,id: string|null,requestId: string): Promise<ActionView[]>;
   resume(scopeKey: string,id: string): Promise<boolean>;

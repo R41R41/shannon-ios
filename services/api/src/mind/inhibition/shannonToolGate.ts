@@ -110,8 +110,10 @@ export function shownAetherCall(tool: ShannonToolDefinition, prepared: PreparedT
 export function toolGateRequest(
   tool: ShannonToolDefinition, summary: string,
   folder?: Pick<AutonomousActionRequest, 'host' | 'relativePath' | 'pathKind' | 'toRelativePath'>,
+  paths?: readonly string[],
 ): AutonomousActionRequest {
-  return { domain: tool.domain, summary, tool: tool.name, ...(tool.domain === 'host_folder' && folder ? folder : {}) };
+  return { domain: tool.name === 'workspace.propose' ? 'thinking' : tool.domain, summary, tool: tool.name,
+    ...(tool.domain === 'host_folder' && folder ? folder : {}), ...(tool.domain === 'vm_workspace' && paths ? { paths } : {}) };
 }
 
 /** A decision of the autonomy gate that did not allow the call, as a tool result she can act on. */

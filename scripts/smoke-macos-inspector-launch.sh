@@ -28,10 +28,19 @@ cleanup() {
 trap cleanup EXIT
 
 # A locked screen opens no window and runs no display cycle, so every case would pass without being tried.
-if ioreg -n Root -d1 2>/dev/null | grep -q '"CGSSessionScreenIsLocked"=Yes'; then
-  echo "The screen is locked: the launch smoke needs an unlocked session (no window opens otherwise)." >&2
-  exit 3
-fi
+require_unlocked_session() {
+  local session_state
+  # Drain ioreg before matching: grep -q exits early, making ioreg fail with SIGPIPE under pipefail.
+  if ! session_state="$(ioreg -n Root -d1 2>/dev/null)"; then
+    echo "The screen lock state could not be read; the launch smoke was not verified." >&2
+    return 3
+  fi
+  if [[ "$session_state" == *'"CGSSessionScreenIsLocked"=Yes'* ]]; then
+    echo "The screen is locked: the launch smoke needs an unlocked session (no window opens otherwise)." >&2
+    return 3
+  fi
+}
+require_unlocked_session
 
 # Counts the on-screen windows of a process, so that a case where the window never opened fails.
 cat >"$temporary_directory/window-count.swift" <<'SWIFT'
@@ -52,6 +61,7 @@ run_case() {
   local label="$page/$panel"
   local output="$temporary_directory/${page}-${panel}.log"
   local elapsed=0
+  require_unlocked_session
   # The page is a default (`-key value`) or a bare preview flag. The bare flags go last: the argument domain reads
   # the word after any `-word` as its value, so a bare flag before a `-key value` pair leaves the value alone as a
   # file to open, and AppKit then opens that "document" instead of the main window (no window, the case not tried).
@@ -76,6 +86,7 @@ run_case() {
   while (( elapsed < survival_seconds )); do
     sleep 1
     elapsed=$((elapsed + 1))
+    require_unlocked_session
     if ! kill -0 "$app_pid" 2>/dev/null; then
       wait "$app_pid" || status=$?
       echo "ShannonDesk exited during the restored $label inspector smoke (status ${status:-0})." >&2
@@ -85,6 +96,7 @@ run_case() {
   done
 
   local windows
+  require_unlocked_session
   windows="$("$temporary_directory/window-count" "$app_pid")"
   kill -TERM "$app_pid"
   wait "$app_pid" 2>/dev/null || true

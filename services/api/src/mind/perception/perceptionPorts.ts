@@ -21,3 +21,8 @@ export { INBOX_PRESENT, inboxDetail, inboxPerception } from './inboxPerception.j
 export type { MindPerceiver, PerceivedDetail, PerceivedItem, PerceivedVerdict } from './perceiver.js';
 export { type ChatAudienceTurn } from './chatAudience.js';
 export { type ConversationLookTurn } from './conversationLooks.js';
+
+export * from './ownerCallElsewhere.js';
+
+export { chatAudienceTurn } from './chatAudience.js';
+export { speakTimePrivacyCheck } from './voiceCompanionPresence.js';

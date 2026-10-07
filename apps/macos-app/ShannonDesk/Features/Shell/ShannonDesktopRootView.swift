@@ -111,6 +111,7 @@ public struct ShannonDesktopRootView: View {
 
     public var body: some View {
         observingWindowState(windowContent)
+            .modifier(ShannonFeedbackContext(conversation: conversation, othersPresent: bodyModel.audience == .others || voiceCall.session.othersMayBeListening, interests: memory.interests))
             .modifier(ShannonActionThreadsPolling(model: actionThreads, connected: connection.isConnected || conversation.isDesignPreview, othersPresent: bodyModel.audience == .others || voiceCall.session.othersMayBeListening))
             .focusedSceneValue(\.shannonDesktopCommandActions, desktopCommandActions)
             .toolbarBackground(Color(nsColor: .textBackgroundColor), for: .windowToolbar)

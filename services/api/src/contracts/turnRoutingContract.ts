@@ -34,11 +34,14 @@ export interface ConversationTurnRecord {
    * otherwise. Absent: null.
    */
   doing?: TurnDoing | null;
+  /** Stage5 server-owned reply provenance, present only while feedback is enabled. Never client-authored. */
+  feedback?: { recordId: string; threadId: string; replyDigest: string };
 }
 
 export type TurnDoing = 'done' | 'described_not_done';
 
 export interface TurnRouting {
+  readonly feedbackEnabled?: true;
   readonly switches: TurnRoutingSwitches;
   /** The Anthropic key and `SHANNON_SONNET_ROUTING=on` (step 5); false in steps 1–4. */
   readonly sonnetAvailable: boolean;

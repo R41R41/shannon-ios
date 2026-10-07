@@ -192,3 +192,12 @@ export function configuredBodyLook(environment: Readonly<Record<string, string |
       BODY_LOOK_LIMITS.conversationPresenceFreshMilliseconds / 1_000, 300, 10) * 1_000,
   };
 }
+
+export const BODY_LOOK_SOURCE_PREFIX = 'body-look:';
+export const BODY_LOOK_SOURCE_TITLE = '部屋を見た';
+
+/** The look a source reference names, or null. `GET /v1/initiatives` returns it as `bodyLookId`. */
+export function bodyLookIdOfSource(sourceItemId: unknown): string | null {
+  return typeof sourceItemId === 'string' && sourceItemId.startsWith(BODY_LOOK_SOURCE_PREFIX)
+    ? sourceItemId.slice(BODY_LOOK_SOURCE_PREFIX.length) || null : null;
+}

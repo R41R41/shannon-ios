@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { createLocalApiKernel, type ShannonApiKernelOptions } from '../src/infra/http/apiKernel.js';
+import { type ShannonApiKernelOptions } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { OpenAIResponsesChatModel } from '../src/infra/models/chatModel.js';
 import { createConfiguredVoiceDecisionGateway, VOICE_SKILLS } from '../src/mind/selectors/voiceDecision.js';
 import { stage2SwitchedOffScenarios } from './support/stage2Scenarios.js';

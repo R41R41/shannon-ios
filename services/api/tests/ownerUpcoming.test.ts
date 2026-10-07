@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore, UNLABELLED_DISCLOSURE_MARKER, type ProspectiveMemory } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { conversationCapabilityPrompt } from '../src/mind/action/respond/conversationCapabilities.js';
 import { DisabledVoyagerCatalog, HttpVoyagerCatalog, createConfiguredVoyagerCatalog, type VoyagerCatalog } from '../src/integrations/voyager/organize.js';

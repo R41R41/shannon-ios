@@ -71,3 +71,12 @@ Gemini試験モードは、同じ文字起こしと通常のShannonテキスト�
 Realtime音声は通話作成の成功単位をSQLiteへ永続予約し、日本時間の日次上限をAPI側で強制する。1回はiPhone側の上限と同じ10分として保守的に予約し、既定は1日60分。上流で通話作成に失敗した予約は取り消し、成功した予約はAPI再起動後も残る。上限は`SHANNON_VOICE_REALTIME_DAILY_MINUTES`で10〜1440分の範囲に変更でき、超過後もテキスト会話は使える。
 
 Voice Identityは`marin`、`cedar`、`coral`の3候補だけを公開する。未選択時は`SHANNON_VOICE_REALTIME_VOICE`が候補内ならそれを使い、それ以外は`marin`へ安全に戻る。選択は`voice_identity_preferences`へscope分離して保存し、進行中の音声を差し替えず次回のRealtime call作成時に読む。試聴は既定`gpt-4o-mini-tts`へサーバー固定文だけを送り、音声・本文を永続化しない。モデルとendpointは`SHANNON_VOICE_PREVIEW_MODEL`、`SHANNON_VOICE_PREVIEW_ENDPOINT`で変更できる。
+
+## ADR-0008 Stage5 owner routes
+
+`SHANNON_ADR8_STAGE5=on` supplies the configured interests, existing-engine task tree, feedback and self-revision ports; OFF has no new schema/ports/tool/prompt effects. Paired owner scope and current owner-alone audience are required, including after body reading and before private response. Exact request fields, durable receipts, learning and unknown recovery are documented in [adr8-stage5-contract.md](../../docs/adr8-stage5-contract.md).
+
+- Interests: `GET /v1/autonomy/interests`, detail, operation-ID read-back and CAS owner controls.
+- Task tree: `GET /v1/agent/tasks/{id}/tree`, replan, proposal read/write and exact approval. Existing task/Host execution remains authoritative.
+- Feedback: `GET|POST /v1/feedback`, server target + thread + revision + operation ID; good/bad/null. Optional reply metadata is attached after the turn and old clients may omit it.
+- Self revision: `/v1/autonomy/self-rewrite/` candidate/work read, exact grant, dispatch and owner resume. These routes never create a new execution lease or permit.

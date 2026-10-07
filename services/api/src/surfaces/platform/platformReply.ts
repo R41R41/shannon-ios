@@ -3,12 +3,12 @@ import { PLATFORM_REPLY_ALLOWANCE, SurfaceTurnAllowance } from '../../mind/inhib
 import { SHANNON_OWNER_NAME, type CompanionClock } from '@shannon/cognition';
 import type { TextTurnInput, TextTurnResult } from '../../infra/http/apiKernel.js';
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
-import type { MinecraftTurnLog } from '../minecraft/store/minecraftTurnStore.js';
+import type { MinecraftTurnLog } from '../../mind/action/respond/respondPorts.js';
 import {
   PlatformBridgeError, type PlatformAudiencePolicy, type PlatformBridgeBinding, type PlatformBridgeService, type ShannonPlatform,
-} from './platformBridge.js';
+} from '../../mind/memory/platformMemoryPorts.js';
 import { platformDisplayName, type PlatformConversationKind } from '../../mind/memory/platformPeople.js';
-import { keepOwnerPlatformTurn, platformTextTurnInput, rememberPlatformPerson } from './platformSurface.js';
+import { keepOwnerPlatformTurn, platformTextTurnInput, rememberPlatformPerson } from '../../mind/memory/platformMemoryPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**

@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { AutonomyActivityRecord } from '../../../inhibition/store/autonomyActivity.js';
+import type { AutonomyActivityRecord, OwnerInformedMarks } from '../../../inhibition/inhibitionStorePorts.js';
 import { roundYen } from '../../../inhibition/inhibitionPorts.js';
 import { AutonomyHostFolderSteps } from './autonomyHostFolderSteps.js';
 import { HostFolderOperationsStore } from './hostFolderOperationsStore.js';
 import { AutonomyLoopState } from './autonomyLoopState.js';
 import { AutonomyProposalLedger } from './autonomyProposals.js';
 import { AutonomyPursuitLedger } from './pursuitLedger.js';
-import { OwnerInformedMarks } from '../../../inhibition/store/ownerInformedMarks.js';
 import { secureDatabaseFiles } from '../../../../infra/sqlite/sqliteStoreContext.js';
 import { StudyStore } from './studyStore.js';
 import type { ActionAcknowledgement } from '../../../../contracts/actionThreadContract.js';
@@ -58,6 +57,12 @@ interface BudgetRequestRow {
   approved_yen: number; created_at: string; decided_at: string | null;
 }
 
+/** Composition supplies these stores on this connection, preserving atomic activity and owner marks. */
+export interface AutonomyStoreParts {
+  activity(connection: DatabaseSync): AutonomyActivityRecord;
+  informed(connection: DatabaseSync): OwnerInformedMarks;
+}
+
 export class SQLiteAutonomyStore {
   private readonly database: DatabaseSync;
   readonly activity: AutonomyActivityRecord;
@@ -73,7 +78,7 @@ export class SQLiteAutonomyStore {
   /** v2 operations in her folder, and the presence of each host's device. */
   readonly hostOperations: HostFolderOperationsStore;
 
-  constructor(private readonly path: string) {
+  constructor(private readonly path: string, parts: AutonomyStoreParts) {
     this.database = new DatabaseSync(path);
     this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
     this.database.exec(`
@@ -124,12 +129,12 @@ export class SQLiteAutonomyStore {
         PRIMARY KEY (scope_key, purpose)
       );
     `);
-    this.activity = new AutonomyActivityRecord(this.database);
+    this.activity = parts.activity(this.database);
     this.pursuits = new AutonomyPursuitLedger(this.database);
     this.proposals = new AutonomyProposalLedger(this.database);
     this.study = new StudyStore(this.database);
     this.loop = new AutonomyLoopState(this.database);
-    this.informed = new OwnerInformedMarks(this.database);
+    this.informed = parts.informed(this.database);
     this.hostSteps = new AutonomyHostFolderSteps(this.database);
     this.hostOperations = new HostFolderOperationsStore(this.database);
     secureDatabaseFiles(path);

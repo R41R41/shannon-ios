@@ -204,7 +204,14 @@ export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
           kind: 'relationship.upsert', origin: 'sleep', subjectKey: `relationship:${relationship.id}`, payload: { relationship, source: 'sleep' },
           episodeIds: episodes(relationship), disclosure: relationship.disclosure ?? null });
         for (const interest of outcome.interests) memory.propose({ opId: `sleep:${job.id}:interest:${interest}`.slice(0, 200), scopeKey: job.scopeKey,
-          kind: 'interest.change', origin: 'sleep', subjectKey: `interest:${interest}`.slice(0, 240), payload: { interest, source: 'sleep' } });
+          kind: 'interest.change', origin: 'sleep', subjectKey: `interest:${interest}`.slice(0, 240), payload: { interest, source: 'sleep',
+            ...(outcome.interestEvidence ? { provenance: 'owner_explicit' } : {}) },
+          ...(outcome.interestEvidence ? { episodeIds: outcome.interestEvidence.find(item => item.interest === interest)?.episodeIds ?? [] } : {}) });
+        for (const [index, draft] of (outcome.selfInterestDrafts ?? []).entries()) memory.propose({ opId: `sleep:${job.id}:self-interest:${index}`, scopeKey: job.scopeKey,
+          kind: 'self.interest.propose', origin: 'sleep', subjectKey: `self-interest:${draft.proposal.itemId ?? draft.proposal.title}`.slice(0, 240),
+          payload: { ...draft.proposal, provenance: 'sleep_self' }, episodeIds: draft.proposal.evidenceRefs, disclosure: draft.proposal.disclosure });
+        if (outcome.interestEvidence) memory.propose({ opId: `sleep:${job.id}:self-interest-night`, scopeKey: job.scopeKey,
+          kind: 'self.interest.night', origin: 'sleep', subjectKey: 'self-interest-night', payload: {} });
       } else {
         for (const fact of outcome.facts) {
           this.companion.apply(job.scopeKey, { type: 'user-fact-upserted', fact, source: 'sleep' });

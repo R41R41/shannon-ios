@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createInitialCompanionState } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { DurableBackgroundDispatcher } from '../src/mind/sleep/backgroundUpdates.js';
 import { ShannonBackgroundWorker } from '../src/mind/sleep/backgroundWorker.js';
 import {

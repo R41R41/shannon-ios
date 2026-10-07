@@ -12,21 +12,8 @@ import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
  * memory only, and never logged; so is the device token. The body is built by `incomingCallPushBody`: identifiers
  * and a time, never her words.
  */
-export interface VoipPushTarget { deviceToken: string; environment: VoipEnvironment; bundleId: string }
-
-export interface VoipPushResult {
-  delivered: boolean;
-  /** APNs says the token is gone or not this app's: it is dropped. */
-  invalidToken: boolean;
-  status: number;
-  reason: string | null;
-}
-
-export interface VoipPushSender {
-  /** False without credentials: nothing can be rung, and the app's settings say so. */
-  readonly enabled: boolean;
-  send(target: VoipPushTarget, payload: IncomingCallPayload): Promise<VoipPushResult>;
-}
+import type { VoipPushTarget, VoipPushResult, VoipPushSender } from '../../contracts/incomingCallContract.js';
+export type { VoipPushTarget, VoipPushResult, VoipPushSender } from '../../contracts/incomingCallContract.js';
 
 /** One HTTP/2 POST to APNs. Tests hand in a fake; nothing in them reaches the network. */
 export type APNsTransport = (origin: string, headers: Readonly<Record<string, string>>, body: string) => Promise<{ status: number; body: string }>;

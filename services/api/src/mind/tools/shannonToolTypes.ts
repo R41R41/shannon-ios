@@ -13,6 +13,8 @@ import type { ToolResult } from './shannonTools.js';
  * with its activity-record entry.
  */
 export interface ToolRun {
+  /** Closed outside outcome; false holds the original action rather than reporting a failed new attempt. */
+  acknowledged?: boolean;
   result: ToolResult;
   /** For the activity record: one sentence with no file contents, no text of hers, and no title of a story she has not shown. */
   record: { summary: string; outcome: 'done' | 'failed'; reasonCode?: string; link?: string };
@@ -36,6 +38,7 @@ export interface ToolDocuments {
 
 export interface PreparedToolCall {
   summary: string;
+  paths?: readonly string[];
   folder?: Pick<AutonomousActionRequest, 'host' | 'relativePath' | 'pathKind' | 'toRelativePath'>;
   run(signal?: AbortSignal): Promise<ToolRun>;
 }

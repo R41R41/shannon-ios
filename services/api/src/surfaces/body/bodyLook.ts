@@ -1,10 +1,12 @@
+import { asksToLook, type BodyLookVoiceTurn } from '../../mind/perception/lookPorts.js';
+export { asksToLook, type BodyLookVoiceTurn } from '../../mind/perception/lookPorts.js';
 import { randomUUID } from 'node:crypto';
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import {
   BODY_LOOK_ACTIVITY_THREAD, BODY_LOOK_LIMITS, configuredBodyLook, roomLookChoice,
   type BodyLookCode, type BodyLookConfig, type BodyLookResult, type RoomLookChoice,
 } from '../../contracts/bodyLookContract.js';
-import { BODY_LOOK_CUT_OFF_LINE, ROOM_LOOK_UNAVAILABLE_REASON, UNOPENED_LINE, bodyLookNotSeenLine, type BodyLookUnavailable } from './bodyLookLines.js';
+import { BODY_LOOK_CUT_OFF_LINE, ROOM_LOOK_UNAVAILABLE_REASON, UNOPENED_LINE, bodyLookNotSeenLine, type BodyLookUnavailable } from '../../mind/perception/bodyLookLines.js';
 import { VoiceTurnWaits, type TurnWait } from './bodyLookTurnWait.js';
 import { SQLiteBodyLookStore, type BodyLookOutcome, type StoredBodyLook } from './store/bodyLookStore.js';
 import type { RoomLookContextLine, RoomLookViewer } from './bodyLookVision.js';
@@ -95,19 +97,6 @@ export interface BodyLookTurn {
   decide(choice: unknown, threadId: string): void;
 }
 
-/** What a voice turn is told about looking (`voiceRoomLook.ts`). */
-export interface BodyLookVoiceTurn {
-  /** Why she cannot look now, or null when she can. */
-  unavailable: BodyLookUnavailable | null;
-  /**
-   * Opens the look once the reply is written; the conditions are checked again. `spoken` is this turn as it was said,
-   * for the model that sees the frame: the client stores a voice turn in a request of its own, which may come later.
-   */
-  open(threadId: string, choice: RoomLookChoice, spoken?: readonly RoomLookContextLine[], turnId?: string): boolean;
-  /** The call was cut off after she had begun to say she would look: no look, and one honest line once the turn (`said`: his words; `turnId`: the client's utterance id) is stored. */
-  cutOff(threadId: string, said: string, turnId?: string): void;
-}
-
 export type BodyLookAnswer =
   | { kind: 'disabled' | 'not_found' | 'wrong_device' | 'answered' | 'expired' }
   | { kind: 'done'; id: string; status: 'seen' | 'refused' | 'discarded' | 'failed'; message: BodyLookMessage | null };
@@ -140,13 +129,7 @@ export const ROOM_LOOK_OFFER_PROMPT = `[部屋を見る]（いまは体のカメ
 export const roomLookUnavailablePrompt = (reason: Unavailable) =>
   `[部屋を見る]（体のカメラで部屋を見てほしいという頼みなら、いまは見られない: ${ROOM_LOOK_UNAVAILABLE_REASON[reason]}。見たふりをせず、見られないと正直に伝える）`;
 
-/**
- * The owner's words ask her to look. This only decides whether the turn is told that she
- * cannot look right now; it never starts a look. Starting one is the model's choice.
- */
-export function asksToLook(message: string): boolean {
-  return /(?:部屋|まわり|周り|こっち|ここ|これ|机|外|カメラ)[^。！？\n]{0,12}(?:見て|見える|見えて|見れる|見られる|のぞいて|写して)|見て(?:みて|ほしい|くれ)|カメラ(?:で|を)/u.test(message);
-}
+
 
 const NO_TURN: BodyLookTurn = Object.freeze({ prompt: '', request: Object.freeze({}), decide: () => undefined });
 /** A look the model is seeing is given up this long after its expiry (the process stopped mid-call). */

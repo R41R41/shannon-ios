@@ -145,6 +145,7 @@ extension ShannonConversationModel {
             if selectedThreadId == requestedThreadID { selectedThreadId = result.threadId }
             if selectedThreadId == result.threadId, let session = result.organizeSession { upsertOrganizeSession(session) }
         }
+        rememberVoiceFeedback(result, participantMode: participantMode)
         return result
     }
 
@@ -181,6 +182,7 @@ extension ShannonConversationModel {
             if selectedThreadId == requestedThreadID { selectedThreadId = result.threadId }
             if selectedThreadId == result.threadId, let session = result.organizeSession { upsertOrganizeSession(session) }
         }
+        rememberVoiceFeedback(result, participantMode: participantMode)
         return result
     }
 
@@ -212,7 +214,10 @@ extension ShannonConversationModel {
             userTranscript: userText,
             shannonTranscript: shannonText,
             emotion: emotion,
-            companionPresent: companionPresent
+            companionPresent: companionPresent,
+            feedbackRecordID: companionPresent ? nil : voiceFeedbackRecords.last(where: {
+                $0.threadID == requestedThreadID && $0.reply == shannonText
+            })?.recordID
         )
         state = response.state
         let emotion = response.messageEmotion
@@ -220,11 +225,14 @@ extension ShannonConversationModel {
             role: .shannon,
             text: shannonText,
             emotionSnapshot: ConversationMessage.EmotionSnapshot(emotion, stateVersion: response.state.version),
-            turnID: response.turnId
+            turnID: response.turnId,
+            feedback: response.feedback
         )]
         if selectedThreadId == requestedThreadID || selectedThreadId == response.threadId {
             selectedThreadId = response.threadId
             messages.append(contentsOf: pair)
+            feedback.setContext(threadID: response.threadId, othersPresent: feedback.othersPresent)
+            feedback.install([response.feedback].compactMap { $0 }, threadID: response.threadId)
             cacheCurrentHistory()
             scheduleCaptureRefresh()
         } else {
@@ -234,6 +242,7 @@ extension ShannonConversationModel {
                 contentsOf: pair.map(ShannonConversationCache.CachedMessage.init)
             )
         }
+        voiceFeedbackRecords.removeAll { $0.threadID == response.threadId && $0.reply == shannonText }
         persistDisplayCache()
         await loadThreads(force: true)
     }

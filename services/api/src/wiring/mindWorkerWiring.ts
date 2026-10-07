@@ -44,6 +44,7 @@ export async function configuredMindWorker(values:Readonly<Record<string,string|
         return actions.finish(lease(),a.state as 'completed'|'failed'|'cancelled'|'unknown',String(a.code),at);
       }
       case 'action.list':return actions.list(text('scopeKey'));
+      case 'action.get':{const scope=text('scopeKey'),action=actions.get(text('id'));return action?.scopeKey===scope?action:null;}
       case 'action.stop':return actions.stop(text('scopeKey'),a.id===null?null:text('id'),text('requestId'),at);
       case 'action.resume':return actions.resume(text('scopeKey'),text('id'),at);
       case 'action.reconcile':{

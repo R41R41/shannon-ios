@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { asksAboutNotes, asksAboutTasks, asksOnlyProductRole, voyagerTaskQuery } from '../src/mind/action/respond/conversationCapabilities.js';
 import { LocalVoiceDecisionGateway, type VoiceSkill } from '../src/mind/selectors/voiceDecision.js';

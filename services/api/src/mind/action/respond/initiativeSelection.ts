@@ -1,3 +1,4 @@
+import { localDateParts, pad } from '../../../infra/time/localDate.js';
 import { filterMeaningfulInterests } from '@shannon/cognition';
 import { topicMatchesSource } from '../../../integrations/world/worldInterestRelevance.js';
 import {
@@ -101,14 +102,6 @@ export function parseState(value: string): CompanionStateShape {
   }
 }
 
-export function localDateParts(date: Date, timeZone: string): { year: number; month: number; day: number; hour: number } {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23',
-  }).formatToParts(date);
-  const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find(part => part.type === type)?.value);
-  return { year: get('year'), month: get('month'), day: get('day'), hour: get('hour') };
-}
-
 export function finite(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
@@ -122,6 +115,4 @@ export function truncate(value: string, maximum: number): string {
   return compact.length <= maximum ? compact : `${compact.slice(0, maximum - 1)}…`;
 }
 
-export function pad(value: number): string {
-  return String(value).padStart(2, '0');
-}
+export { localDateParts, pad } from '../../../infra/time/localDate.js';

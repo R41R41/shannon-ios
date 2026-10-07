@@ -216,6 +216,32 @@ export class SQLiteConversationRepository implements ConversationStore {
     return Object.freeze(rows.map(row => freezeStoredMessage(row)));
   }
 
+  assistantMessage(scopeKey: string, threadId: string, sourceOrMessageId: string): StoredConversationMessage | null {
+    const row = this.context.database.prepare(`
+      SELECT message_id, thread_id, turn_id, role, content, observed_at, metadata_json
+      FROM conversation_messages WHERE scope_key=? AND thread_id=? AND role='assistant'
+        AND (message_id=? OR turn_id=?) ORDER BY sequence DESC LIMIT 1
+    `).get(scopeKey,threadId,sourceOrMessageId,sourceOrMessageId) as unknown as MessageRow | undefined;
+    return row ? freezeStoredMessage(row) : null;
+  }
+
+  appendNoteOnce(scopeKey: string, threadId: string, messageId: string, content: string, observedAt: string, noteKind: string, ownerAlone?: boolean): StoredConversationMessage {
+    return this.context.transaction(() => {
+      const existing = this.assistantMessage(scopeKey,threadId,messageId);
+      if (existing) {
+        if (existing.content!==content || existing.sourceExperienceId!==`${noteKind}:${messageId}`) throw new Error('TASK_NOTE_CONFLICT');
+        return existing;
+      }
+      this.ensureThread(scopeKey,threadId,null);
+      const row:MessageRow={message_id:messageId,thread_id:threadId,turn_id:`${noteKind}:${messageId}`,role:'assistant',content,observed_at:observedAt,metadata_json:JSON.stringify({noteKind,...(typeof ownerAlone === 'boolean' ? {noteOwnerAlone:ownerAlone} : {})})};
+      this.context.database.prepare(`INSERT INTO conversation_messages
+        (message_id,scope_key,thread_id,turn_id,ordinal,role,content,observed_at,metadata_json)
+        VALUES(?,?,?,?,1,'assistant',?,?,?)`).run(messageId,scopeKey,threadId,row.turn_id,content,observedAt,row.metadata_json);
+      this.context.database.prepare('UPDATE conversation_threads SET updated_at=? WHERE scope_key=? AND thread_id=?').run(observedAt,scopeKey,threadId);
+      return freezeStoredMessage(row);
+    });
+  }
+
   experienceCandidates(scopeKey: string): readonly ShannonExperience[] {
     const rows = this.context.database.prepare(`
       SELECT sequence, event_id, scope_key, event_type, observed_at, payload_json

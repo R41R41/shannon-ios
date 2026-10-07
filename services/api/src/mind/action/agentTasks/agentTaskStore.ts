@@ -130,6 +130,8 @@ export interface AgentTestResult {
   name: string;
   status: 'pending' | 'passed' | 'failed';
   detail?: string;
+  /** Closed Host command provenance for Stage5 proof; no command text or output. Older display-only tests omit it. */
+  execution?: { turnId: string; actionLease: import('../../../contracts/actionThreadContract.js').ActionLease; commandHash: string; exitCode: number | null };
 }
 
 export interface AgentTask {
@@ -153,6 +155,7 @@ export interface AgentTask {
   /** Timeline sequence of the host pause, so a client can tell a new pause from one already seen. */
   pauseSequence?: number;
   plan: AgentPlanItem[];
+  taskTree?: import('@shannon/mind').TaskTree;
   timeline: AgentTimelineEvent[];
   pendingApproval?: AgentApproval;
   changes: AgentChangeSummary[];
@@ -165,6 +168,8 @@ export interface AgentTask {
 }
 
 export interface CreateAgentTaskInput {
+  /** Trusted server input. HTTP creation never copies this field from request bodies. */
+  taskAuthority?: import('./taskTreePorts.js').TaskTreeAuthority;
   taskId?: string;
   idempotencyKey: string;
   conversationThreadID: string;
@@ -187,6 +192,7 @@ export interface CreateAgentCommandInput {
 }
 
 import type { ActionLease } from '../../../contracts/actionThreadContract.js';
+import type { TaskTreeOperations, TaskTreeLearningCallbacks } from './taskTreePorts.js';
 
 export interface ClaimedAgentCommand {
   id: string;
@@ -212,6 +218,8 @@ export interface HostAgentEvent {
 }
 
 export interface AgentTaskStore {
+  readonly taskTrees?: TaskTreeOperations;
+  bindActionLease?(commandId: string, lease: ActionLease): void;
   create(scopeKey: string, input: CreateAgentTaskInput, now: string): { task: AgentTask; created: boolean };
   list(scopeKey: string): readonly AgentTask[];
   get(scopeKey: string, taskId: string): AgentTask | null;
@@ -262,7 +270,10 @@ import { SQLiteAgentTaskStore } from './store/agentTaskPersistence.js';
 export { SQLiteAgentTaskStore, migrateAgentTasks } from './store/agentTaskPersistence.js';
 
 export class InMemoryAgentTaskStore implements AgentTaskStore {
-  private readonly delegate = new SQLiteAgentTaskStore(':memory:');
+  private readonly delegate: SQLiteAgentTaskStore;
+  constructor(options: { taskTreeEnabled?: boolean; taskTreeCallbacks?: TaskTreeLearningCallbacks } = {}) { this.delegate = new SQLiteAgentTaskStore(':memory:', options); }
+  get taskTrees() { return this.delegate.taskTrees; }
+  bindActionLease(commandId: string, lease: ActionLease) { this.delegate.bindActionLease(commandId, lease); }
   create(scopeKey: string, input: CreateAgentTaskInput, now: string) { return this.delegate.create(scopeKey, input, now); }
   list(scopeKey: string) { return this.delegate.list(scopeKey); }
   get(scopeKey: string, taskId: string) { return this.delegate.get(scopeKey, taskId); }

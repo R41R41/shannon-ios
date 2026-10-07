@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type {
   AgentHostHeartbeat,
   AgentModelDescriptor,
@@ -177,6 +178,7 @@ export function dispatchAgentRequest(request: ApiRequest, dependencies: ApiAgent
         return { status: 409, body: { error: 'AGENT_HOST_UNAVAILABLE' } };
       }
       const result = dependencies.agentTasks.create(scopeKey, {
+        ...(dependencies.agentTasks.taskTrees ? {taskAuthority:{origin:'owner_request' as const,budgetLane:'owner' as const,ownerInformed:true,permissionId:`request:${createHash('sha256').update(scopeKey).update('\0').update(request.body.idempotencyKey).digest('hex')}`}} : {}),
         ...(typeof request.body.taskId === 'string' ? { taskId: request.body.taskId } : {}),
         idempotencyKey: request.body.idempotencyKey,
         conversationThreadID: request.body.conversationThreadID,

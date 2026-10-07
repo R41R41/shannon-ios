@@ -1,3 +1,5 @@
+import { turnPersistenceContext } from './turnPersistenceContext.js';
+export { turnPersistenceContext } from './turnPersistenceContext.js';
 import {
   deriveEmotionDelta,
   soothingIn,
@@ -49,21 +51,7 @@ export interface CompletedTurn {
   utteranceId?: string;
 }
 
-export function turnPersistenceContext(turn: CompletedTurn): TurnPersistenceContext {
-  return {
-    messageEmotion: turn.messageEmotion,
-    capturedStateVersion: turn.capturedState.version,
-    ...(turn.timeZone ? { timeZone: turn.timeZone } : {}),
-    ...(turn.threadTitle ? { threadTitle: turn.threadTitle } : {}),
-    ...(turn.threadSummary ? { threadSummary: turn.threadSummary } : {}),
-    ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
-    ...(turn.artifacts?.length ? { artifacts: turn.artifacts } : {}),
-    ...(turn.recalledMemoryIds ? { recalledMemoryIds: turn.recalledMemoryIds } : {}),
-    ...(turn.summaryContinuesChain ? { summaryContinuesChain: true } : {}),
-    ...(turn.audience ? { audience: turn.audience } : {}),
-    ...(turn.speaker ? { speaker: turn.speaker } : {}),
-  };
-}
+
 
 export interface TurnBackgroundService {
   readonly mode: 'in-process' | 'durable-queue';
@@ -82,6 +70,7 @@ export class TurnRefinementProcessor {
      * Absent (switched off): everything is written here, as it was.
      */
     private readonly memory: MemoryProposals | null = null,
+    private readonly stage5 = false,
   ) {}
 
   process(
@@ -159,7 +148,7 @@ export class TurnRefinementProcessor {
     }
     for (const interest of immediate.interests) {
       if (proposals) proposals.propose({ opId: opId(`interest:${interest}`), scopeKey, kind: 'interest.change', origin: 'turn',
-        subjectKey: `interest:${interest}`.slice(0, 240), payload: { interest, source: 'conversation' }, episodeIds: episodes });
+        subjectKey: `interest:${interest}`.slice(0, 240), payload: { interest, source: 'conversation', ...(this.stage5 ? { provenance: 'owner_explicit' } : {}) }, episodeIds: episodes });
       else this.stateStore.apply(scopeKey, { type: 'interest-observed', interest, source: 'conversation' });
     }
     for (const promise of extractPromiseCaptures(userMessage, sourceTime, recordedExperienceId, source?.timeZone ?? timeZone)) {
@@ -195,10 +184,14 @@ export class TurnRefinementProcessor {
     const resonantInterest = current.temperament.curiosity >= 0.5
       ? deriveResonantInterest(userMessage, recalled)
       : null;
-    if (resonantInterest && proposals) {
+    if (resonantInterest && proposals && this.stage5) {
+      proposals.propose({ opId: opId(`resonant:${resonantInterest}`), scopeKey, kind: 'self.interest.propose', origin: 'turn',
+        subjectKey: `self-interest:${resonantInterest}`.slice(0, 240), payload: { kind: 'add', provenance: 'resonant_self',
+          title: resonantInterest, description: '', reason: '会話と想起した経験に共鳴した' }, episodeIds: episodes, disclosure: disclosureFor(resonantInterest, audience) });
+    } else if (resonantInterest && proposals) {
       proposals.propose({ opId: opId(`resonant:${resonantInterest}`), scopeKey, kind: 'interest.change', origin: 'turn',
         subjectKey: `interest:${resonantInterest}`.slice(0, 240), payload: { interest: resonantInterest }, episodeIds: episodes });
-    } else if (resonantInterest) {
+    } else if (resonantInterest && !this.stage5) {
       this.stateStore.apply(scopeKey, { type: 'interest-observed', interest: resonantInterest });
     }
     // Last, so the slow traits are recalibrated from what this turn just stored.
@@ -219,8 +212,9 @@ export class BackgroundUpdateCoordinator implements TurnBackgroundService {
     private readonly afterTurn?: (turn: CompletedTurn, recordedExperienceId?: string) => Promise<unknown>,
     /** Syzygy ADR-0008 stage 3 (F5): the memory outbox (absent: switched off, written here as it was). */
     memory?: MemoryProposals | null,
+    stage5 = false,
   ) {
-    this.processor = new TurnRefinementProcessor(stateStore, conversationStore, memory ?? null);
+    this.processor = new TurnRefinementProcessor(stateStore, conversationStore, memory ?? null, stage5);
   }
 
   recordTurn(turn: CompletedTurn): ShannonExperience {

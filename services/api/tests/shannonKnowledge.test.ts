@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { normalizeKnowledgeDraft, type KnowledgeDraft } from '@shannon/cognition';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { ShannonKnowledgeConsolidator, type KnowledgeAnalyzer, type KnowledgeOperation } from '../src/mind/sleep/knowledgeConsolidation.js';
 import { DeterministicMemoryModelGateway } from '../src/mind/recall/memoryModels.js';

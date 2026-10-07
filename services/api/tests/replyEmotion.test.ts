@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { ownerDay, presentCompanionState, sharedTimeEvent } from '../src/mind/emotion/companionPresence.js';

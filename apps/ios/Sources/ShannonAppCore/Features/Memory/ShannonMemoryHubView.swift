@@ -137,6 +137,13 @@ struct ShannonMemoryHubList: View {
     @ViewBuilder
     private func categorySection(_ overview: ShannonMemoryOverview, palette: ShannonPalette) -> some View {
         Section {
+            if model.interests.offered {
+                NavigationLink { ShannonInterestsView(model: model.interests) } label: {
+                    ShannonMemoryCategoryRow(title: "関心の日記", symbol: "book.closed", value: .count(model.interests.snapshot?.capacity.used ?? 0), palette: palette)
+                }
+                .accessibilityIdentifier("memory-interests-entry")
+                .listRowBackground(palette.subtleSurface)
+            }
             ForEach(ShannonMemoryOverview.Category.allCases) { category in
                 NavigationLink {
                     ShannonMemoryCategoryPage(model: model, category: category)

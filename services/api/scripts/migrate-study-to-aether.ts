@@ -20,7 +20,7 @@
  */
 import { aetherStudyScope, configuredAetherAccess } from '../src/integrations/aether/aetherAccess.js';
 import { autonomyDayKey, configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
-import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { configuredDatabasePath } from '../src/infra/sqlite/sqliteStore.js';
 import { DatabaseSync } from 'node:sqlite';
 import { applyMigration, migrationPlan, migrationReport, readOnlyMigrationPlan } from '../src/mind/action/ownTime/store/studyMigration.js';

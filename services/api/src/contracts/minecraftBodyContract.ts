@@ -1,7 +1,7 @@
 import { MINECRAFT_INTENT_GOAL_CHARACTERS, type MinecraftIntent } from '../surfaces/minecraft/minecraftIntent.js';
 import { validatedMinecraftBodyState, type MinecraftBodyState } from '../surfaces/minecraft/minecraftBodyState.js';
-import type { PlatformBridgeBinding, PlatformBridgeConfiguration } from '../surfaces/platform/platformBridge.js';
-import { composedPlatformBridgeConfiguration } from '../surfaces/platform/platformBridgeBindings.js';
+import type { PlatformBridgeBinding, PlatformBridgeConfiguration } from '../mind/memory/platformBridge.js';
+import { composedPlatformBridgeConfiguration } from '../mind/memory/platformBridgeBindings.js';
 
 /**
  * Shannon's Minecraft body (Minebot), phase 1: the wire contract of a game-chat turn and the server's

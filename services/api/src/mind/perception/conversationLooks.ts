@@ -1,6 +1,6 @@
 import type { AppLooks, AppLookTurn } from '../../surfaces/body/appLook.js';
 import { appLookClient, type AppLookAsk, type AppLookClient } from '../../contracts/appLookContract.js';
-import { LOOK_NOT_NOW_GUARD, LOOK_NOT_SEEN_GUARD, announcedLook } from '../../surfaces/body/appLookLines.js';
+import { LOOK_NOT_NOW_GUARD, LOOK_NOT_SEEN_GUARD, announcedLook } from './appLookLines.js';
 import { asksToLook } from '../../surfaces/body/bodyLook.js';
 import type { BodyLooks } from '../../surfaces/body/bodyLook.js';
 

@@ -9,7 +9,7 @@ import { SkillMemory } from '../src/mind/memory/skillMemory.js';
 import { ShannonSkillConsolidator, failedEpisodes, successfulSequences, type SeedChoice, type SkillSeedSources } from '../src/mind/sleep/skillConsolidation.js';
 import type { SkillSleepModel } from '../src/mind/sleep/skillSleepModel.js';
 import { configuredSkillMemory, skillBodyCheck, skillTurnPorts } from '../src/wiring/skillMemoryWiring.js';
-import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import { recordTurn } from '../src/wiring/turnRoutingWiring.js';
 import type { ChoiceLedger } from '../src/mind/learning/choiceLedger.js';
@@ -416,7 +416,7 @@ describe('the index in a turn', () => {
   }
 
   it('is in the profile of a turn the owner alone reads that offers skill.read, with the capability line; never with anyone else present', async () => {
-    const { createLocalApiKernel } = await import('../src/infra/http/apiKernel.js');
+    const { createLocalApiKernel } = await import('../src/wiring/apiKernelWiring.js');
     const { SHANNON_SKILLS_CAPABILITY } = await import('@shannon/cognition');
     const skills = memory();
     skills.create(scope, { draft: skill('weekly-review'), evidence: [] }, pass, at);

@@ -85,6 +85,14 @@ public struct ShannonMemoryView: View {
         // LazyVStack/ScrollView virtualization must not hide the entry in tests.
         managementEntry(palette)
         peopleEntry(palette)
+        if model.interests.offered {
+            NavigationLink { ShannonInterestsView(model: model.interests) } label: {
+                Label("関心の日記", systemImage: "book.closed")
+                    .font(.shannon(.headline))
+                    .frame(minHeight: ShannonTouchTarget.minimum)
+            }
+            .accessibilityIdentifier("memory-interests-entry")
+        }
         if let report = model.latestSleepReport {
             Button { selectedSleepReport = report } label: {
                 SleepSummaryCard(report: report, palette: palette)

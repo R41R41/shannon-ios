@@ -1,6 +1,8 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { CompanionClock, CompanionStateEvent, CompanionStateSnapshot, CompanionStateStore, ShannonEmotionTiming } from '@shannon/cognition';
+import type { DatabaseSync } from 'node:sqlite';
+import type { CompanionClock, CompanionStateEvent, CompanionStateSnapshot, CompanionStateStore, ShannonEmotionTiming, MemoryAudience } from '@shannon/cognition';
+import { ownerSpoke } from '@shannon/cognition';
 import type { BackgroundJobStore, ClaimedBackgroundJob, DailyUserMessage } from '../../mind/sleep/store/backgroundJobStore.js';
 import type { ShannonConversationItem } from '../models/chatModel.js';
 import type {
@@ -56,6 +58,7 @@ import type { SQLitePersonFacts } from '../../mind/memory/store/personFactsStore
 import type { SQLiteTrustLedger } from '../../mind/memory/store/trustLedgerStore.js';
 import type { StoreMemoryParts } from './storeMemoryParts.js';
 import { scrubOutboxFor } from '../../mind/memory/store/outboxScrub.js';
+import type { SelfInterestMemory } from '../../mind/self/selfPorts.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../../../data/shannon.sqlite', import.meta.url)));
 
@@ -106,6 +109,8 @@ export interface SQLiteShannonStoreOptions {
    * not load them otherwise. A part switched on without them is refused.
    */
   memoryParts?: StoreMemoryParts;
+  /** Stage 5 self interests share the existing memory writer; false/absent opens no supplementary-self schema. */
+  stage5?: boolean;
 }
 
 function wiredParts(options: SQLiteShannonStoreOptions): StoreMemoryParts {
@@ -133,6 +138,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   private sharedPeople: SQLitePeopleMemoryStore | null = null;
   private readonly facts: SQLitePersonFacts | null;
   private readonly trust: SQLiteTrustLedger | null;
+  private readonly interestMemory: SelfInterestMemory | null;
 
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
@@ -195,11 +201,23 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     if (facts) this.peopleMemoryOnConnection();
     this.facts = facts ? wiredParts(options).facts(this.context.database, facts) : null;
     this.trust = options.trustLedger ? wiredParts(options).trust(this.context.database) : null;
+    const interestFactory = options.stage5 && this.outbox ? wiredParts(options).selfInterests : null;
+    if (options.stage5 && this.outbox && !interestFactory) throw new Error('SELF_INTEREST_PARTS_REQUIRED');
+    this.interestMemory = interestFactory ? interestFactory(this.context.database, {
+      snapshot: scope => this.snapshot(scope),
+      evidence: (scope, refs) => this.experiencesById(scope, refs).map(row => ({ id: row.id, text: row.userMessage,
+        disclosure: row.disclosure, owner: ownerSpoke(row.disclosure) })),
+    }) : null;
     secureDatabaseFiles(options.path);
   }
 
   /** The memory outbox on this connection (ADR-0008 stage 3), or null while it is switched off. */
   memoryOutbox(): SQLiteMemoryOutbox | null { return this.outbox; }
+  /** Supplementary self on the memory writer's connection; no separate write authority. */
+  selfInterests(): SelfInterestMemory | null { return this.interestMemory; }
+  selfInterestProjection(scope: string, audience: MemoryAudience, openOnly=false): string { return this.interestMemory?.projection(scope,audience,openOnly) ?? ''; }
+  /** Wiring composes the learning service on this connection; it owns no additional connection or writer. */
+  composeLearning<T>(compose: (connection: DatabaseSync) => T): T { return compose(this.context.database); }
   /** Proposals appended on this connection (so a proposal inside this store's transaction is part of it), or null while off. */
   memoryProposals(): MemoryProposer | null {
     if (!this.outbox) return null;
@@ -274,6 +292,8 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   history(scopeKey: string, threadId?: string): readonly ShannonConversationItem[] { return this.conversations.history(scopeKey, threadId); }
   threadSummary(scopeKey: string, threadId: string) { return this.conversations.threadSummary(scopeKey, threadId); }
   conversationHistory(scopeKey: string, threadId?: string): readonly StoredConversationMessage[] { return this.conversations.conversationHistory(scopeKey, threadId); }
+  assistantMessage(scopeKey: string, threadId: string, sourceOrMessageId: string) { return this.conversations.assistantMessage(scopeKey,threadId,sourceOrMessageId); }
+  appendNoteOnce(scopeKey: string, threadId: string, messageId: string, content: string, observedAt: string, noteKind: string, ownerAlone?: boolean) { return this.conversations.appendNoteOnce(scopeKey,threadId,messageId,content,observedAt,noteKind,ownerAlone); }
   experienceCandidates(scopeKey: string): readonly ShannonExperience[] { return this.conversations.experienceCandidates(scopeKey); }
   searchMemory(scopeKey: string, text: string, limit?: number): readonly MemorySearchHit[] { return this.memorySearch.searchMemory(scopeKey, text, limit); }
   embeddingScopes() { return this.embeddings.embeddingScopes(); }

@@ -59,6 +59,7 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
     public let reminder: ShannonReminderDTO?
     /// A piece of her study this message is about.
     public let studyPiece: ShannonStudyPieceLinkDTO?
+    public let feedback: ShannonFeedbackDTO?
 
     public init(
         id: UUID = UUID(),
@@ -73,8 +74,10 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
         turnID: String? = nil,
         captures: [ShannonTurnCaptureDTO] = [],
         reminder: ShannonReminderDTO? = nil,
-        studyPiece: ShannonStudyPieceLinkDTO? = nil
+        studyPiece: ShannonStudyPieceLinkDTO? = nil,
+        feedback: ShannonFeedbackDTO? = nil
     ) {
+        self.feedback = feedback
         self.studyPiece = studyPiece
         self.turnID = turnID
         self.captures = captures
@@ -104,7 +107,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
             turnID: turnID,
             captures: captures,
             reminder: reminder,
-            studyPiece: studyPiece
+            studyPiece: studyPiece,
+            feedback: feedback
         )
     }
 
@@ -122,7 +126,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
             turnID: turnID,
             captures: captures,
             reminder: reminder,
-            studyPiece: studyPiece
+            studyPiece: studyPiece,
+            feedback: feedback
         )
     }
 }

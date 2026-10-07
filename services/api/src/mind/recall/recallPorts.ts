@@ -9,3 +9,5 @@ export { type MemoryModelGateway } from './memoryModels.js';
 export { type TurnMemoryRecall } from './turnMemoryRecall.js';
 
 export { usableKnowledgeFor } from './turnKnowledgeRecall.js';
+
+export { platformImpressionLines } from './impressionRecall.js';

@@ -3,14 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
 import { OWNER_CONTEXT_HEADER, OWNER_CONTEXT_SECRET_MARK, OWNER_CONTEXT_WRITING_HEADER, carriesSecret, ownerPrivateRule } from '../src/mind/action/ownTime/autonomyLoopOwnerContext.js';
 import { planFromThought } from '../src/mind/action/ownTime/autonomyLoopPlan.js';
 import { draftPrompt, notePrompt, reachOutPrompt, revisePrompt, thinkingPrompt } from '../src/mind/action/ownTime/autonomyLoopPrompts.js';
 import { createOwnerContext } from '../src/mind/action/ownTime/autonomyOwnerContext.js';
-import { SQLiteStudyShowing } from '../src/mind/action/ownTime/autonomyShowing.js';
+import { SQLiteStudyShowing } from '../src/wiring/studyShowingWiring.js';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import { OwnerUpcoming } from '../src/mind/memory/ownerUpcoming.js';
 import { sqliteOwnerSnapshot } from '../src/wiring/ownerUpcomingWiring.js';
@@ -567,6 +567,8 @@ describe('what reaches the prompts of her own activity', () => {
       'autonomyLoopProvenance.ts', 'ownerInformedMarks.ts',
       // What she may see of the owner's: the interface the loop is handed, the output rule, and the check of her own free text. No store.
       'autonomyLoopOwnerContext.ts',
+      // Stage5 names only the independent, read-only supplementary-self interface; the loop receives no self store.
+      'selfPorts.ts',
       // The closed vocabulary of what her body may report about a message of hers: constants of the wire contract, no store.
       'bodyContract.ts',
       // Syzygy ADR-0008 stage 3 (S2): the closed vocabulary of what her steps led to, moved out of the observations store; no store.
@@ -578,7 +580,7 @@ describe('what reaches the prompts of her own activity', () => {
       'autonomyShowing.ts', 'autonomyStore.ts', 'autonomyTextModel.ts', 'studyStore.ts',
       // Syzygy ADR-0008 §10: the inhibition part's window (it re-exports the budget and the gate and nothing else, held below),
       // and the one reader of the environment (no store).
-      'inhibitionPorts.ts', 'autonomyReadPorts.ts', 'serverEnvironment.ts',
+      'inhibitionPorts.ts', 'inhibitionStorePorts.ts', 'toolRunnerPorts.ts', 'autonomyReadPorts.ts', 'serverEnvironment.ts',
       // Stage 4 closed execution rights and narrow pure tool windows; these open no private notebook.
       'actionExecution.ts', 'actionThreadContract.ts', 'toolGatePorts.ts', 'toolRegistryPorts.ts', 'executionPorts.ts',
       // ACK-only recovery through the canonical store/runner already handed to the loop; no new reader or model call.
@@ -590,6 +592,8 @@ describe('what reaches the prompts of her own activity', () => {
     // (types only: nothing more of the inhibition part runs in her process through it). The disclosure gate and the
     // conversation's secrets are in `disclosurePorts.ts`, which no module of her loop imports.
     expect(imports('inhibitionPorts.ts').sort()).toEqual(['autonomyActivity.ts', 'autonomyBudget.ts', 'autonomyDayLog.ts', 'autonomyPolicy.ts', 'shannonToolGate.ts', 'withheldRules.ts']);
+    expect(imports('inhibitionStorePorts.ts').sort()).toEqual(['autonomyActivity.ts', 'ownerInformedMarks.ts', 'privateListeningStore.ts']);
+    expect(read('inhibitionStorePorts.ts').split('\n').filter(line => /^export/u.test(line)).every(line => /^export type \{/u.test(line))).toBe(true);
     const window = read('inhibitionPorts.ts');
     expect(window.match(/^export \* from '[^']+';$/gmu)).toEqual(["export * from './autonomyBudget.js';", "export * from './autonomyPolicy.js';", "export * from './withheldRules.js';"]);
     for (const line of window.split('\n').filter(item => /^export \{/u.test(item))) expect(line, line).toMatch(/^export \{ (?:type \w+(?:, )?)+ \} from '/u);
@@ -602,6 +606,8 @@ describe('what reaches the prompts of her own activity', () => {
       'actionExecution.ts', 'actionThreadContract.ts', 'autonomyLoopState.ts', 'autonomyLoopSteps.ts', 'autonomyStore.ts',
     ]);
     expect(read('autonomyActionAcknowledgements.ts')).not.toMatch(/DatabaseSync|node:sqlite|fetch\(|\.generate\(|assembleShannonSystemPrompt|conversationHistory|PeopleMemory/u);
+    expect(read('autonomyLoopSteps.ts').match(/^import[^\n]*selfPorts\.js';$/gmu))
+      .toEqual(["import type { SelfInterestContextPort } from '../../self/selfPorts.js';"]);
     for (const name of loopSources) {
       for (const imported of imports(name)) expect(allowed.has(imported), `${name} imports ${imported}`).toBe(true);
       // The loop itself still builds no state or memory projection: what it is given of the owner's arrives as one finished section.
@@ -613,8 +619,7 @@ describe('what reaches the prompts of her own activity', () => {
     // replay under forgetting and disclosure, the replay window, the deterministic recall of a turn, people memory, today's focus.
     const context = read('autonomyOwnerContext.ts');
     expect(imports('autonomyOwnerContext.ts').sort()).toEqual([
-      '@shannon/cognition', 'autonomyLoopOwnerContext.ts', 'chatModel.ts', 'contextPorts.ts', 'conversationStore.ts', 'conversationWindow.ts',
-      'dailyMind.ts', 'memoryDisclosure.ts', 'memoryVisibility.ts', 'peopleMemory.ts',
+      '@shannon/cognition', 'autonomyLoopOwnerContext.ts', 'chatModel.ts', 'contextPorts.ts', 'disclosurePorts.ts', 'memoryPorts.ts', 'memoryPorts.ts', 'memoryPorts.ts', 'recallPorts.ts', 'respondPorts.ts',
     ]);
     // Syzygy ADR-0008 stage 3 (S3): a turn's cognitive context moved into the workspace; this reader reaches it through a window
     // that re-exports that module alone.
@@ -691,9 +696,9 @@ describe('what reaches the prompts of her own activity', () => {
     expect([...reports.matchAll(/FROM ([a-z_]+)/gu)].map(match => match[1]).sort()).toEqual(['initiative_messages', 'reach_out_body_presence', 'reach_out_deliveries', 'reach_out_deliveries', 'reach_out_deliveries', 'sqlite_master']);
     expect([...reports.matchAll(/SELECT ([^`]*?) FROM initiative_messages/gu)].map(match => match[1]!.trim())).toEqual(['created_at']);
     // The showing desk answers with an outcome, never with content.
-    const showing = read('autonomyShowing.ts');
+    const showing = ['autonomyShowing.ts', 'studyShowingStore.ts', 'studyShowingWiring.ts'].map(read).join('\n');
     expect(showing).not.toMatch(/SELECT\s+(?:content|\*)[^`]*FROM conversation_messages/u);
-    expect([...showing.matchAll(/SELECT ([^`]*?) FROM (conversation_messages|companion_states)/gu)].map(match => `${match[2]}:${match[1]!.trim()}`).sort())
+    expect([...showing.matchAll(/SELECT ([^`']*?) FROM (conversation_messages|companion_states)/gu)].map(match => `${match[2]}:${match[1]!.trim()}`).sort())
       .toEqual(['companion_states:snapshot_json', 'conversation_messages:1 AS found', 'conversation_messages:MIN(observed_at) AS first_at']);
   });
 

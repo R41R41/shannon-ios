@@ -6,7 +6,7 @@ import { reminderReference, type ReminderReference } from '../../mind/memory/sto
 
 export interface MessageRow { message_id: string; thread_id: string; turn_id: string; role: string; content: string; observed_at: string; metadata_json: string | null; }
 export interface TurnPayload { userMessage: string; shannonReply: string; summary: string; timeZone?: string; capturedStateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; recalledMemoryIds?: readonly string[]; disclosure?: MemoryDisclosure; }
-export interface MessageMetadata { stateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; artifacts?: readonly ShannonGeneratedArtifact[]; sourceAttribution?: ShannonSourceAttribution; studyPiece?: { id: string; title: string }; reminder?: ReminderReference; recalledMemoryIds?: readonly string[]; bodyLook?: { id: string; outcome: 'seen' | 'not_seen' }; }
+export interface MessageMetadata { noteOwnerAlone?: boolean; stateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; artifacts?: readonly ShannonGeneratedArtifact[]; sourceAttribution?: ShannonSourceAttribution; studyPiece?: { id: string; title: string }; reminder?: ReminderReference; recalledMemoryIds?: readonly string[]; bodyLook?: { id: string; outcome: 'seen' | 'not_seen' }; }
 
 export function parseSnapshot(raw: string, expectedScopeKey: string, nowIso: string): CompanionStateSnapshot {
   return restoreCompanionState(expectedScopeKey, parseJson(raw), nowIso);
@@ -21,6 +21,7 @@ export function freezeStoredMessage(row: MessageRow): StoredConversationMessage 
     role,
     content: row.content,
     observedAt: row.observed_at,
+    ...(typeof metadata?.noteOwnerAlone === 'boolean' ? {noteOwnerAlone:metadata.noteOwnerAlone} : {}),
     ...(metadata?.messageEmotion ? { messageEmotion: Object.freeze({ ...metadata.messageEmotion }) } : {}),
     ...(metadata?.stateVersion !== undefined ? { stateVersion: metadata.stateVersion } : {}),
     ...(metadata?.taskDecision ? { taskDecision: Object.freeze({ ...metadata.taskDecision }) } : {}),
@@ -42,6 +43,7 @@ export function parseMessageMetadata(raw: string): MessageMetadata | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const row = value as MessageMetadata;
   return {
+    ...(typeof row.noteOwnerAlone === 'boolean' ? {noteOwnerAlone:row.noteOwnerAlone} : {}),
     ...(Number.isSafeInteger(row.stateVersion) ? { stateVersion: row.stateVersion } : {}),
     ...(validMessageEmotion(row.messageEmotion) ? { messageEmotion: storedMessageEmotion(row.messageEmotion) } : {}),
     ...(validTaskDecision(row.taskDecision) ? { taskDecision: row.taskDecision } : {}),

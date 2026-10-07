@@ -47,6 +47,9 @@ export {
   withSkillsCapability,
   SHANNON_SKILLS_CAPABILITY,
   withMinecraftBodyCapability,
+  SHANNON_STAGE5_CAPABILITIES,
+  withStage5Capabilities,
+  type ShannonStage5Capabilities,
   type ShannonCapability,
   type ShannonCapabilityId,
 } from './capabilities.js';
@@ -337,3 +340,7 @@ export type { MemoryAudience, MemoryDisclosure, MemorySensitivity, MemorySensiti
 export { memoryIdentifier, visibleMemoryText, memoryControlFor, isMemoryEvidenceVisible, isOwnerMemoryEvidence } from './memory.js';
 export { memoryKeyTerms, memoryWithholdingRules, restatesWithheldMemory, ruleWithholdsText, type MemoryWithholdingRule } from './withholding.js';
 export { ownerDay } from './ownerDay.js';
+export { SELF_INTEREST_LIMITS, selfInterestTopicKey, selfInterestWeight, selfInterestActive, selfInterestLine,
+  selfInterestIndexUsed, selfInterestNightKey, selfInterestProjection,
+  type SelfInterest, type SelfInterestAction, type SelfInterestProposal, type SelfInterestOwnerCommand,
+  type SelfInterestChange, type SelfInterestSnapshot, type SelfInterestDetail, type SelfInterestEvidenceView, type SelfInterestVisible } from './selfInterests.js';

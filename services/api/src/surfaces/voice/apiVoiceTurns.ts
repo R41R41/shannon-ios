@@ -8,6 +8,8 @@ import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { ShannonChatModel } from '../../infra/models/chatModel.js';
 import { dispatchVoiceCallSummary } from './apiVoiceCallSummary.js';
 import { ownerSaysCompanionPresent } from '../../mind/perception/voiceCompanionPresence.js';
+import { bindCompletedFeedback } from '../../mind/action/respond/turnFeedback.js';
+import type { FeedbackPorts } from '../../contracts/feedbackContract.js';
 
 export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   stateStore: CompanionStateStore; conversationStore: ConversationStore;
@@ -15,6 +17,7 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   /** Her line from a touch (`bodyReaction.ts`): the first voice turn that answers it stores it before his words. */
   reactions?: { claim(scopeKey: string, reactionId: unknown): { text: string; threadId: string | null; audience: 'owner' | 'others'; saidAt: string } | null };
   looks?: { turnStored(scopeKey: string, threadId: string, said: string, turnId?: string): void };
+  feedback?: FeedbackPorts;
 }): ApiResponse | Promise<ApiResponse> | null {
   const summary = dispatchVoiceCallSummary(request, dependencies);
   if (summary) return summary;
@@ -37,6 +40,7 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   // Optional: the `userUtterance.id` the client sent with the delegation of this turn, so the two requests are known as one turn.
   if (request.body.utteranceId !== undefined && !validBoundedString(request.body.utteranceId, 120)) return badRequest('utteranceId is invalid');
   const utteranceId = typeof request.body.utteranceId === 'string' ? request.body.utteranceId : undefined;
+  if (request.body.feedbackRecordId !== undefined && !validBoundedString(request.body.feedbackRecordId,120)) return badRequest('feedbackRecordId is invalid');
   const userMessage = userTranscript.trim();
   const shannonReply = shannonTranscript.trim();
   // Taken once, after the request is known to be valid: an unknown or expired reaction leaves an ordinary turn.
@@ -70,7 +74,8 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   dependencies.background.schedule(turn, experience.id);
   // The face goes back as before; its `kind` is sent only to the owner alone (it is stored either way).
   const shownEmotion = 'audience' in companion ? messageEmotionForOthers(messageEmotion) : messageEmotion;
-  return { status: 201, body: { threadId, turnId: experience.id, messageEmotion: shownEmotion, state: presentCompanionState(captured, completedAt) } };
+  const feedback = 'audience' in companion ? null : bindCompletedFeedback(dependencies.feedback,scopeKey,typeof request.body.feedbackRecordId==='string'?request.body.feedbackRecordId:undefined,threadId,experience.id,shannonReply);
+  return { status: 201, body: { threadId, turnId: experience.id, messageEmotion: shownEmotion, state: presentCompanionState(captured, completedAt), ...(feedback?{feedback}:{}) } };
 }
 
 function decidedEmotion(value: unknown): { decided: { primary: string; intensity: number } } | null {

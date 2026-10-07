@@ -105,3 +105,19 @@ export function incomingCallMinimumIntervalMilliseconds(environment: Readonly<Re
 export function incomingCallsEnabled(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): boolean {
   return !OFF.includes(environment.SHANNON_INCOMING_CALLS?.trim().toLowerCase() ?? '');
 }
+
+export interface VoipPushTarget { deviceToken: string; environment: VoipEnvironment; bundleId: string }
+
+export interface VoipPushResult {
+  delivered: boolean;
+  /** APNs says the token is gone or not this app's: it is dropped. */
+  invalidToken: boolean;
+  status: number;
+  reason: string | null;
+}
+
+export interface VoipPushSender {
+  /** False without credentials: nothing can be rung, and the app's settings say so. */
+  readonly enabled: boolean;
+  send(target: VoipPushTarget, payload: IncomingCallPayload): Promise<VoipPushResult>;
+}

@@ -4,7 +4,7 @@
  * Her own time's own imports go through no window but `selfPorts`, `agentTasksPorts` and types of `inhibitionPorts`: her loop is
  * handed interfaces, and its imports are pinned (`autonomyLoopPrivacy.test.ts`).
  */
-export { hostFolderPath } from './autonomyHostFolderPath.js';
+export { hostFolderPath, HOST_STEP_CODES, hostFolderLabel, hostStepContentDigest, ROOM_LOOK_GUARD, roomLookGuard, type HostStepCode } from './autonomyHostFolderPath.js';
 export { type AutonomyNotionReader } from './autonomyLoopSteps.js';
 export { configuredAutonomyModelPrices, type AutonomyModelPrices } from './autonomyModels.js';
 export { type RecordedDecision, type ShannonAutonomyService } from './autonomyService.js';
@@ -15,3 +15,7 @@ export { type HostFolderOperations, type HostRunOutcome } from './hostFolderOper
 export { type SQLiteAutonomyStore } from './store/autonomyStore.js';
 export { type HostOperation } from './store/hostFolderOperationsStore.js';
 export { type StudyPiece, type StudyPieceKind, type StudyPieceStatus, type StudyRejection } from './store/studyStore.js';
+
+export { studyWriteKey, syncedWithin } from './studyAether.js';
+
+export type { AutonomyPhone, PhoneFacts } from './autonomyLoopPhoneStep.js';

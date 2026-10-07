@@ -35,7 +35,7 @@ vi.mock('../src/mind/memory/memoryVisibility.js', async importOriginal => {
   };
 });
 
-const { createLocalApiKernel } = await import('../src/infra/http/apiKernel.js');
+const { createLocalApiKernel } = await import('../src/wiring/apiKernelWiring.js');
 const { OpenAIResponsesChatModel } = await import('../src/infra/models/chatModel.js');
 const { SQLiteShannonStore } = await import('../src/infra/sqlite/sqliteStore.js');
 const { SQLitePeopleMemoryStore } = await import('../src/mind/memory/store/peopleMemoryStore.js');
@@ -46,10 +46,10 @@ const { SQLiteBodyReactionStore } = await import('../src/surfaces/body/store/bod
 const { SQLiteBodyStore } = await import('../src/surfaces/body/store/bodyStore.js');
 const { OpenAIBodyReactionSpeaker } = await import('../src/surfaces/body/bodyReactionModel.js');
 const { BODY_PRESENT } = await import('../src/surfaces/body/bodyReaction.js');
-const { PlatformBridgeService, configuredPlatformBridge } = await import('../src/surfaces/platform/platformBridge.js');
+const { PlatformBridgeService, configuredPlatformBridge } = await import('../src/mind/memory/platformBridge.js');
 const { PlatformPeople } = await import('../src/mind/memory/platformPeople.js');
 const { PlatformReplyService } = await import('../src/surfaces/platform/platformReply.js');
-const { SQLiteMinecraftTurnLog, SQLiteSurfaceTurnLog } = await import('../src/surfaces/minecraft/store/minecraftTurnStore.js');
+const { SQLiteMinecraftTurnLog, SQLiteSurfaceTurnLog } = await import('../src/mind/action/respond/store/surfaceTurnStore.js');
 const { MinecraftBody } = await import('../src/surfaces/minecraft/minecraftBody.js');
 const { configuredMinecraftBody } = await import('../src/contracts/minecraftBodyContract.js');
 const { chatAudienceTurn } = await import('../src/mind/perception/chatAudience.js');

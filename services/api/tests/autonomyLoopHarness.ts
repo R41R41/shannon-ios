@@ -14,7 +14,7 @@ import type { DecisionTraceWriter } from '../src/contracts/decisionTraceContract
 import type { AutonomyPublicReader, PublicReading } from '../src/mind/action/ownTime/autonomyReader.js';
 import { ShannonAutonomyService, type AutonomyServiceDependencies } from '../src/mind/action/ownTime/autonomyService.js';
 import type { ShowablePiece, ShowingOutcome, StudyShowing } from '../src/mind/action/ownTime/autonomyShowing.js';
-import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import type { AutonomyTextModel, AutonomyTextRequest, AutonomyTextResult } from '../src/mind/action/ownTime/autonomyTextModel.js';
 
 /** Deterministic stand-ins for the activity loop: no network, no real model, a clock the test moves. */
@@ -140,6 +140,7 @@ export interface LoopHarnessOptions {
   sessions?: boolean;
   /** The owner's context for her thinking and her messages; absent, as with `SHANNON_AUTONOMY_OWNER_CONTEXT=off`, no prompt carries it. */
   ownerContext?: AutonomyOwnerContext;
+  selfInterests?: StepDependencies['selfInterests'];
   /** Receives the content-free lines the loop writes to the service log. */
   log?: (line: string) => void;
   /** Environment of the loop's own configuration (`configuredAutonomyLoop`). */
@@ -198,6 +199,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     ...(options.notion ? { notion: options.notion } : {}), ...(options.looks ? { looks: options.looks } : {}),
     ...(reachOuts ? { reachOuts } : {}), ...(options.upcoming ? { upcoming: options.upcoming } : {}), ...(options.phone ? { phone: options.phone } : {}),
     ...(options.ownerContext ? { ownerContext: options.ownerContext } : {}), ...(options.log ? { log: options.log } : {}),
+    ...(options.selfInterests ? { selfInterests: options.selfInterests } : {}),
     ...(options.toolResults ? { toolResults: options.toolResults } : {}),
     ...(options.prediction ? { prediction: options.prediction } : {}), ...(options.trace ? { trace: options.trace } : {}),
     ...(options.valueFacts ? { valueFacts: options.valueFacts } : {}), ...(options.withheldFacts ? { withheldFacts: options.withheldFacts } : {}),

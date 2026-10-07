@@ -4,6 +4,7 @@ import { SQLiteMemoryOutbox } from '../../mind/memory/store/memoryOutboxStore.js
 import { SQLitePersonFacts } from '../../mind/memory/store/personFactsStore.js';
 import { SQLiteTrustLedger } from '../../mind/memory/store/trustLedgerStore.js';
 import { LockWaitMeter } from './lockWaits.js';
+import type { SelfInterestMemory, SelfInterestSources } from '../../mind/self/selfPorts.js';
 
 /**
  * The memory parts of stage 3 that her store opens on its connection (Syzygy ADR-0008 stage 3, F5 and F6): the outbox, its
@@ -16,6 +17,7 @@ export interface StoreMemoryParts {
   proposer(outbox: SQLiteMemoryOutbox, options: { now: () => string; notify?: () => void; log?: (line: string) => void }): MemoryProposer;
   facts(database: DatabaseSync, parts: { temporal: boolean; identity: boolean }): SQLitePersonFacts;
   trust(database: DatabaseSync): SQLiteTrustLedger;
+  selfInterests?: (database: DatabaseSync, sources: SelfInterestSources) => SelfInterestMemory;
 }
 
 export const STORE_MEMORY_PARTS: StoreMemoryParts = {

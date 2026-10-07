@@ -7,10 +7,10 @@ import {
   judgedFacts, skillAuditScenario, skillExportScenario, skillFormScenario, skillLineageScenario, skillGuestScenario, skillPatternScenario, skillRetireScenario, skillTrialScenario, skillUseScenario, stableFingerprint,
   type ReachDriver, type ReachScenarioDefinition,
 } from '../../../../packages/evaluation/src/reach/index.js';
-import { createLocalApiKernel } from '../../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../../src/infra/models/chatModel.js';
 import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
-import { createInMemoryAutonomyService } from '../../src/mind/action/ownTime/autonomyService.js';
+import { createInMemoryAutonomyService } from '../../src/wiring/autonomyServiceWiring.js';
 import { talkId } from '../../src/mind/action/respond/turnRouting.js';
 import { authorizeToolCall } from '../../src/mind/inhibition/shannonToolGate.js';
 import { SKILL_INDEX_HEADER, SKILL_INDEX_LINES, SKILL_INDEX_WIDTH, parseSkill, type SkillDocument } from '../../src/mind/memory/skillDocument.js';

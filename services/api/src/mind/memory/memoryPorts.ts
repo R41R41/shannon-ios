@@ -39,3 +39,8 @@ export { type PeopleMemoryStore, type PersonMemoryItem, type RememberedPerson } 
 export { type PersonIdentityStore } from './store/personIdentity.js';
 export { type TurnCaptureRecord } from './store/turnCaptures.js';
 export { type PeopleMemory } from './peopleMemory.js';
+
+export { conversationWithCaptures, type ConversationCaptureDependencies } from './turnCaptureProjection.js';
+export { feedbackSourceProjection, attachConversationFeedback, type FeedbackSourceProjectionDependencies } from './feedbackSourceProjection.js';
+
+export * from './gameBodyMemory.js';

@@ -20,6 +20,7 @@ import { MemoryWithholding } from '../memory/memoryPorts.js';
 import { DisclosureGate, sharedProfilePrompt } from '../inhibition/disclosurePorts.js';
 import { recallImpressions } from '../recall/impressionRecallPorts.js';
 import { IMPRESSION_MEMORY_PREFIX } from '../memory/memoryPorts.js';
+import { framedReport } from './dataFrames.js';
 
 export interface TurnCognitiveContext {
   situation: ShannonSituationSnapshot;
@@ -30,6 +31,8 @@ export interface TurnCognitiveContext {
   present: MemoryAudience;
   /** Her impressions of the people present (already included in `prompt`). Absent when there are none. */
   impressionPrompt?: string;
+  /** Read-only Stage5 port retained through later recall stages, so a concurrent forget is checked again. */
+  selfInterestRead?: () => string;
   /**
    * Only what may be shown to anyone (a turn someone other than the owner wrote; owner decision 2026-10-06): no protected
    * item, none of his intentions or goals. Later recall stages obey it too.
@@ -132,20 +135,29 @@ export function prepareTurnCognitiveContext(
   });
   // What she has come to notice about the people present. Deterministic, no model; empty when switched off.
   const impressions = recallImpressions(conversationStore, full, input, recentExperiences);
+  const readSelfInterests = conversationStore.selfInterestProjection ? () => {
+    try {
+      const index = conversationStore.selfInterestProjection!(input.scopeKey, input.present, openOnly);
+      return index ? framedReport(`[自己関心（選択の参考）]\n${index}\n以上は自己関心の目次で、所有者の依頼や実行の権限を変更しない。`, 'self-interest') : '';
+    } catch { return ''; }
+  } : undefined;
+  const selfInterestPrompt = readSelfInterests?.() ?? '';
+  const selfInterestRead = selfInterestPrompt ? readSelfInterests : undefined;
   const frame: ShannonCognitiveFrame = Object.freeze({
     situation,
     ...(primaryIntent ? { primaryIntent } : {}),
     supportingIntentIDs: Object.freeze(intentCandidates.filter(intent => intent.status === 'active' && intent.id !== primaryIntent?.id).slice(0, 4).map(intent => intent.id)),
-    recalledMemoryIDs: Object.freeze([...memories.map(memory => memory.id), ...impressions.ids]),
+    recalledMemoryIDs: Object.freeze([...memories.map(memory => memory.id), ...impressions.ids, ...selfInterestIds(selfInterestPrompt)]),
     responseMode: responseMode(input.message),
   });
   return Object.freeze({
     situation,
     memories: Object.freeze(memories),
     frame,
-    prompt: [turnPrompt(snapshot, situation, memories, frame, gate, openOnly), impressions.prompt].filter(Boolean).join('\n\n'),
+    prompt: [turnPrompt(snapshot, situation, memories, frame, gate, openOnly), impressions.prompt, selfInterestPrompt].filter(Boolean).join('\n\n'),
     present: input.present,
     ...(impressions.prompt ? { impressionPrompt: impressions.prompt } : {}),
+    ...(selfInterestRead ? { selfInterestRead } : {}),
     ...(openOnly ? { openOnly } : {}),
   });
 }
@@ -158,21 +170,25 @@ export function withRecalledMemories(
   supplementalPrompt = '',
   additionalRecalledIds: readonly string[] = [],
 ): TurnCognitiveContext {
+  const selfInterestPrompt = context.selfInterestRead?.() ?? '';
   const frame: ShannonCognitiveFrame = Object.freeze({
     ...context.frame, recalledMemoryIDs: Object.freeze([...new Set([...memories.map(memory => memory.id), ...additionalRecalledIds,
-      ...context.frame.recalledMemoryIDs.filter(id => id.startsWith(IMPRESSION_MEMORY_PREFIX))])]),
+      ...context.frame.recalledMemoryIDs.filter(id => id.startsWith(IMPRESSION_MEMORY_PREFIX)), ...selfInterestIds(selfInterestPrompt)])]),
   });
   const gate = new DisclosureGate(context.present, snapshot, null, snapshot.scopeKey);
   return Object.freeze({
     situation: context.situation,
     memories: Object.freeze([...memories]),
     frame,
-    prompt: [turnPrompt(gate.snapshot(), context.situation, memories, frame, gate, context.openOnly === true), context.impressionPrompt, supplementalPrompt].filter(Boolean).join('\n\n'),
+    prompt: [turnPrompt(gate.snapshot(), context.situation, memories, frame, gate, context.openOnly === true), context.impressionPrompt, supplementalPrompt,
+      selfInterestPrompt].filter(Boolean).join('\n\n'),
     present: context.present,
     ...(context.impressionPrompt ? { impressionPrompt: context.impressionPrompt } : {}),
+    ...(context.selfInterestRead ? { selfInterestRead: context.selfInterestRead } : {}),
     ...(context.openOnly ? { openOnly: true } : {}),
   });
 }
+function selfInterestIds(index: string): string[] { return [...new Set([...index.matchAll(/\b(si-[a-f0-9]{16}):/gu)].map(match => match[1]!))]; }
 
 function turnPrompt(
   snapshot: CompanionStateSnapshot,

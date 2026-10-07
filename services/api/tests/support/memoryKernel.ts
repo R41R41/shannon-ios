@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect } from 'vitest';
-import { createLocalApiKernel } from '../../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../../src/wiring/apiKernelWiring.js';
 import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
 import { BackgroundUpdateCoordinator } from '../../src/mind/sleep/backgroundUpdates.js';
 import { SQLitePeopleMemoryStore } from '../../src/mind/memory/store/peopleMemoryStore.js';

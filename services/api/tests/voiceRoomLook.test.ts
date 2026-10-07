@@ -1,11 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
-import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
+import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
 import { ROOM_LOOK_UNAVAILABLE_REASON } from '../src/surfaces/body/bodyLook.js';
 import { configuredBodyLook, type BodyLookConfig } from '../src/contracts/bodyLookContract.js';
-import { BODY_LOOK_CUT_OFF_LINE, UNOPENED_LINE, bodyLookNotSeenLine } from '../src/surfaces/body/bodyLookLines.js';
+import { BODY_LOOK_CUT_OFF_LINE, UNOPENED_LINE, bodyLookNotSeenLine } from '../src/mind/perception/bodyLookLines.js';
 import { VoiceTurnWaits } from '../src/surfaces/body/bodyLookTurnWait.js';
 import { SQLiteBodyLookStore } from '../src/surfaces/body/store/bodyLookStore.js';
 import type { RoomLookViewRequest, RoomLookViewer } from '../src/surfaces/body/bodyLookVision.js';

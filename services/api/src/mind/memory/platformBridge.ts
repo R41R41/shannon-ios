@@ -7,15 +7,15 @@ import {
   type CompanionStateStore,
   type MemoryAudience,
 } from '@shannon/cognition';
-import { resolveReplyEmotion } from '../../mind/emotion/companionPresence.js';
-import { DisclosureGate, sharedProfilePrompt } from '../../mind/inhibition/memoryDisclosure.js';
+import { resolveReplyEmotion } from '../emotion/emotionPorts.js';
+import { DisclosureGate, sharedProfilePrompt } from '../inhibition/disclosurePorts.js';
 import {
   platformConversationLabel, platformPeopleEnabled,
   type PlatformConversationKind, type PlatformPeople, type PlatformSourceKind,
-} from '../../mind/memory/platformPeople.js';
-import type { TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.js';
-import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
-import { platformImpressionLines } from '../../mind/recall/impressionRecall.js';
+} from './platformPeople.js';
+import type { TurnBackgroundService } from '../sleep/sleepPorts.js';
+import type { ConversationStore } from './memoryPorts.js';
+import { platformImpressionLines } from '../recall/recallPorts.js';
 import { bindingFor, composedPlatformBridgeConfiguration, sharedAudienceHeader } from './platformBridgeBindings.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 

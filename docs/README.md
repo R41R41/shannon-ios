@@ -5,6 +5,8 @@
 - Private Gemini / ElevenLabs TTS comparison demo: [`tts-compare-demo.md`](tts-compare-demo.md)
 
 - Product policy and canonical index: [`../README.md`](../README.md)
+- ADR-0008 Stage5 implementation and rollout: [`adr8-stage5-contract.md`](adr8-stage5-contract.md)
+- ADR-0008 Stage5 verified results and remaining native checks: [`adr8-stage5-implementation-report.md`](adr8-stage5-implementation-report.md)
 - Architecture: [`architecture.md`](architecture.md)
 - Design and evidence: [`DESIGN.md`](DESIGN.md)
 - One product spec for iOS, macOS and Windows (feature matrix, design tokens, shared copy, proposed screen map): [`product/README.md`](product/README.md)

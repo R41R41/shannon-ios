@@ -6,7 +6,7 @@ import {
   sameChatStreamLine,
 } from './chatSentenceStream.js';
 import type { ApiRequest, ApiResponse, ChatStreamLine } from '../../contracts/contracts.js';
-import { startStream, writeEvent } from '../voice/serverLiveVoiceStreamRoute.js';
+import { startStream, writeEvent } from '../../infra/http/ndjsonStream.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**

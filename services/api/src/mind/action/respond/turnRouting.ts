@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { decideTier, type DifficultyAnswers, type TierDecision } from '@shannon/learning';
 import type { TurnDoing, TurnRouting } from '../../../contracts/turnRoutingContract.js';
 
@@ -89,7 +89,9 @@ export async function finishTurn(routing: TurnRouting | null | undefined, turn: 
   decision: RoutedTier | null; tools: ShannonModelToolSession | undefined; remainingMs: number; at: string;
   /** The answering model's mode (`anthropic` for Sonnet): a `sonnet` turn that luna answered is learned as luna's (review M5). */
   answeredBy?: string;
-}): Promise<{ reply: string; verdict: TurnVerdict | null; doing: TurnDoing | null }> {
+  /** Server-owned display additions persisted by the voice client; never changes her spoken reply or adds eligibility. */
+  feedbackReplySuffix?: string;
+}): Promise<{ reply: string; verdict: TurnVerdict | null; doing: TurnDoing | null; feedbackRecordId?: string }> {
   if (!routing) return { reply: turn.reply, verdict: null, doing: null };
   const results = turnToolResults(turn.tools);
   const doing = turnDoing(turn.decision?.kind ?? null, turn.reply, results, turnOffersWrites(turn.tools));
@@ -104,14 +106,18 @@ export async function finishTurn(routing: TurnRouting | null | undefined, turn: 
   // The tier that actually answered (review M5): a Sonnet turn that fell back to luna is luna's; an escalated luna turn is luna_plus.
   const served = turn.decision ? (turn.decision.served === 'sonnet' && turn.answeredBy !== undefined && turn.answeredBy !== 'anthropic' ? 'luna'
     : turn.escalated && turn.decision.served === 'luna' ? 'luna_plus' : turn.decision.served) : null;
+  const reply = verdict && turn.surface === 'text' ? verifiedReply(turn.reply, verdict) : turn.reply;
+  const feedbackReply = `${reply.trim()}${turn.surface === 'voice' ? turn.feedbackReplySuffix ?? '' : ''}`;
+  const recordId = routing.feedbackEnabled && turn.presence === 'alone' ? randomUUID() : undefined;
   try {
     routing.record(turn.scopeKey, {
       talk: talkId(turn.threadId), surface: turn.surface, presence: turn.presence, tier: turn.decision && served ? { served, kind: turn.decision.kind } : null,
       tools: results.map(result => ({ name: result.name, ok: result.ok, ...(result.subject ? { subject: result.subject } : {}), ...(result.withheld ? { withheld: true } : {}) })), inDeadline: !turn.outOfTime, verified: verdict === null ? null : verdict === 'ok', doing,
+      ...(recordId ? { feedback: { recordId, threadId: turn.threadId, replyDigest: createHash('sha256').update(`shannon-feedback-reply\n${feedbackReply.trim()}`).digest('hex') } } : {}),
     }, turn.at);
   } catch { /* learning never fails a turn */ }
   // On voice her words were already spoken: the verdict is learned (G), and the reply is not amended after the fact.
-  return { reply: verdict && turn.surface === 'text' ? verifiedReply(turn.reply, verdict) : turn.reply, verdict, doing };
+  return { reply, verdict, doing, ...(recordId ? { feedbackRecordId: recordId } : {}) };
 }
 
 function safe<T>(read: () => T, fallback: T): T { try { return read(); } catch { return fallback; } }

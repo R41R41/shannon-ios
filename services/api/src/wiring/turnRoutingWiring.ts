@@ -8,6 +8,7 @@ import { OpenAITurnChecker } from '../infra/models/turnChecker.js';
 import type { ChoiceLedger } from '../mind/learning/choiceLedger.js';
 import { TierCompetence } from '../mind/selectors/tierCompetence.js';
 import type { SkillTurnPorts } from '../contracts/skillMemoryContract.js';
+import type { FeedbackPorts, FeedbackChoiceLink } from '../contracts/feedbackContract.js';
 
 /**
  * Wiring of Syzygy ADR-0008 stage 2, step 4 (`docs/skill-and-routing-contract.md`): what a conversation turn is handed for its tier,
@@ -30,7 +31,7 @@ export function configuredTurnRouting(
     /** Step 6: her skill memory's turn ports (`skillMemoryWiring.ts`), handed only while `SHANNON_SKILLS` is on. */ skills?: SkillTurnPorts | null;
     /** When writes run (tests: at once). */ defer?: (task: () => void) => void;
     /** Step 5: the Sonnet tier when routing is available (`configuredSonnet`), for its availability and measured first-token latency. */
-    sonnet?: { firstTokenLatency: { estimate(): number | null } } | null },
+    sonnet?: { firstTokenLatency: { estimate(): number | null } } | null; feedback?: Pick<FeedbackPorts, 'captureTurn'> | null },
 ): { routing: TurnRouting; close(): void } | null {
   const switches = skillRoutingSwitches(environment);
   const skills = switches.skills ? parts.skills ?? null : null;
@@ -48,6 +49,7 @@ export function configuredTurnRouting(
     ...(parts.fetcher ? { fetcher: parts.fetcher } : {}), ...(parts.now ? { now: parts.now } : {}),
   }) : null;
   const routing: TurnRouting = {
+    ...(parts.feedback ? { feedbackEnabled: true as const } : {}),
     switches: { difficulty: switches.difficulty, turnVerify: switches.turnVerify, conversationReward: choices !== null },
     sonnetAvailable: Boolean(parts.sonnet),
     sonnetFirstTokenMs: () => parts.sonnet?.firstTokenLatency.estimate() ?? null,
@@ -59,7 +61,7 @@ export function configuredTurnRouting(
       competence?.nextTurn(scopeKey, talk, serve, at);
       skills?.nextTurn(scopeKey, talk, serve, at);
     },
-    record: (scopeKey, turn, at) => recordTurn(choices, competence, scopeKey, turn, at, skills),
+    record: (scopeKey, turn, at) => recordTurn(choices, competence, scopeKey, turn, at, skills, parts.feedback),
     ...(checker ? { checker } : {}),
   };
   return { routing, close: () => { if (database && !parts.database && database.isOpen) database.close(); } };
@@ -72,13 +74,14 @@ export function configuredTurnRouting(
  * an `acts` result that worked; `described_not_done` gives every choice of the turn G = 0 and is kept on the tier's outcome row.
  */
 export function recordTurn(choices: ChoiceLedger | null, competence: TierCompetence | null, scopeKey: string, turn: ConversationTurnRecord, at: string,
-  skills: SkillTurnPorts | null = null): void {
+  skills: SkillTurnPorts | null = null, feedback?: Pick<FeedbackPorts, 'captureTurn'> | null): void {
   const verified = turn.verified === null ? [] : [turn.verified];
   const context = `${dayBand(at)}.${turn.presence}`;
   const undone = turn.doing === 'described_not_done';
   // A call a rule stopped is not a choice of hers (ADR-0008 §14): not learned, not counted against the turn.
   const tools = turn.tools.filter(tool => !tool.withheld);
   const conversationGrowth = (signals: readonly boolean[]) => (undone ? 0 : growthOf(signals));
+  const links: FeedbackChoiceLink[] = [];
   for (const tool of tools) {
     // A skill she opened (step 6): a use of that skill, noted on it and recorded once as `skill.use` with the skill as its source.
     if (tool.name === 'skill.read' && tool.subject && skills) {
@@ -86,14 +89,18 @@ export function recordTurn(choices: ChoiceLedger | null, competence: TierCompete
       let skillId: string | null = null;
       try { skillId = skills.used(scopeKey, tool.subject, { talk: turn.talk, growth }, at); } catch { skillId = null; }
       if (skillId && PREDICTION_SOURCE_ID.test(skillId)) {
-        choices?.recordConversation(scopeKey, { surface: turn.surface, choice: 'skill.use', context, sourceKind: 'skill', sourceId: skillId }, growth, turn.talk, at);
+        const id = choices?.recordConversation(scopeKey, { surface: turn.surface, choice: 'skill.use', context, sourceKind: 'skill', sourceId: skillId }, growth, turn.talk, at);
+        if (id) links.push({ choiceId: id, tool: tool.name, ok: tool.ok });
         continue;
       }
     }
     const choice = PREDICTION_SYMBOL.test(`tool.${tool.name}`) ? `tool.${tool.name}` : 'tool.unknown';
-    choices?.recordConversation(scopeKey, { surface: turn.surface, choice, context, sourceKind: 'tool_call', sourceId: randomUUID() },
+    const id = choices?.recordConversation(scopeKey, { surface: turn.surface, choice, context, sourceKind: 'tool_call', sourceId: randomUUID() },
       conversationGrowth([tool.ok, turn.inDeadline, ...verified]), turn.talk, at);
+    if (id) links.push({ choiceId: id, tool: tool.name, ok: tool.ok });
   }
+  if (turn.feedback && links.length) feedback?.captureTurn(scopeKey, { ...turn.feedback, surface: turn.surface,
+    ownerAlone: turn.presence === 'alone', usable: turn.inDeadline && turn.verified !== false && !undone, choices: links, at });
   if (!turn.tier) return;
   const growth = conversationGrowth([turn.inDeadline, ...verified, tools.every(tool => tool.ok)]);
   const tier = PREDICTION_SYMBOL.test(`tier.${turn.tier.served}`) ? turn.tier.served : 'luna';

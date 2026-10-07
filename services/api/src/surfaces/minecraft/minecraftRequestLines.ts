@@ -2,7 +2,7 @@
 import { gainedWords, MINECRAFT_REPORT_CODES, type MinecraftRequestView } from '../../contracts/minecraftBodyRequestContract.js';
 import { touchWhen } from '../../mind/memory/bodyTouchExperience.js';
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
-import { GAME_REQUEST_DISCLOSURE, type GameExperience, gameExperienceId } from './store/gameBodyMemory.js';
+import { GAME_REQUEST_DISCLOSURE, type GameExperience, gameExperienceId } from '../../mind/memory/memoryPorts.js';
 
 function ago(from: string, at: string): string {
   const elapsed = Math.max(0, Date.parse(at) - Date.parse(from));

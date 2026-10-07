@@ -191,6 +191,7 @@ extension ShannonDesktopRootView {
                                 DesktopPlanTimelineView(task: task)
                             }
                         }
+                        ShannonTaskTreeView(model: conversation.taskTreeModel(for: task.id))
 
                         if !task.timeline.isEmpty {
                             DesktopInspectorSection(title: "最近の進捗") {

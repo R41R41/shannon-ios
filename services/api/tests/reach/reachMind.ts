@@ -11,7 +11,7 @@ import { DATA_FRAME_RULE, DATA_FRAME_THREAT, WORKSPACE_PLACE_HEADER } from '../.
 import { configuredMind, configuredMindInbox } from '../../src/wiring/mindWiring.js';
 import { configuredProactiveGate } from '../../src/wiring/proactiveGateWiring.js';
 import { configuredWithheldActions, withheldFactsReader } from '../../src/wiring/withheldWiring.js';
-import { createLocalApiKernel } from '../../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../../src/infra/models/chatModel.js';
 import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
 import { SQLiteInitiativeStore } from '../../src/surfaces/outreach/store/initiativeStore.js';

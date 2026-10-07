@@ -2,7 +2,7 @@ import type { MinecraftExecutionPort } from '../../../contracts/actionThreadCont
 /** The requests her Minecraft body is given and what it reported, kept (Syzygy ADR-0008 stage 3, S2: the SQLite part of `minecraftBodyRequests.ts`, moved unchanged into the surface's store folder). */
 import { MINECRAFT_REQUEST_LIMITS, type MinecraftProgressPhase, type MinecraftRequestOrigin, type MinecraftRequestProgress, type MinecraftRequestResult, type MinecraftRequestState, type MinecraftRequestView, OPEN_REQUEST_STATES, requestGoal } from '../../../contracts/minecraftBodyRequestContract.js';
 import { DatabaseSync } from 'node:sqlite';
-import type { GameExperience, GameExperienceWriter } from './gameBodyMemory.js';
+import type { GameExperience, GameExperienceWriter } from '../../../mind/memory/memoryPorts.js';
 import type { ClaimResponse, EnqueueOutcome, MinecraftRequestsConfiguration } from '../minecraftBodyRequests.js';
 import { HostFolderSignals } from '../../../mind/action/ownTime/hostFolderOperations.js';
 import { secureDatabaseFiles } from '../../../infra/sqlite/sqliteStoreContext.js';

@@ -167,6 +167,9 @@ struct ShannonApp: App {
                     }
                 }
 #endif
+#if DEBUG
+                .modifier(ShannonStage5PreviewModifier())
+#endif
         }
     }
 

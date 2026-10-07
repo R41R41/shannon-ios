@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CompanionStateStore } from '@shannon/cognition';
+import type { CompanionStateStore, SelfInterest } from '@shannon/cognition';
 import type { BackgroundJobStore, ClaimedBackgroundJob } from './store/backgroundJobStore.js';
 import { TurnRefinementProcessor } from './backgroundUpdates.js';
 import type { ConversationStore, MemoryProposals } from '../memory/memoryPorts.js';
@@ -25,6 +25,8 @@ export interface BackgroundWorkerOptions {
   impressionUpdater?: { observeTurn(scopeKey: string, experienceId: string): Promise<unknown> };
   /** Syzygy ADR-0008 stage 3 (F5): what a turn teaches is proposed to the memory outbox (absent: written here, as it was). */
   memoryProposals?: MemoryProposals | null;
+  stage5?: boolean;
+  selfInterests?: (scopeKey: string) => readonly SelfInterest[];
 }
 
 export class ShannonBackgroundWorker {
@@ -39,6 +41,8 @@ export class ShannonBackgroundWorker {
   private readonly knowledgeConsolidator: BackgroundWorkerOptions['knowledgeConsolidator'];
   private readonly replaySummarizer: BackgroundWorkerOptions['replaySummarizer'];
   private readonly impressionUpdater: BackgroundWorkerOptions['impressionUpdater'];
+  private readonly stage5: boolean;
+  private readonly selfInterests: BackgroundWorkerOptions['selfInterests'];
   private readonly localSleepAnalyzer = new LocalRuleSleepMemoryAnalyzer();
   private nextMaintenanceAt = 0;
 
@@ -50,7 +54,7 @@ export class ShannonBackgroundWorker {
     options: BackgroundWorkerOptions = {},
   ) {
     this.workerId = options.workerId ?? `worker-${randomUUID()}`;
-    this.processor = new TurnRefinementProcessor(stateStore, conversationStore, options.memoryProposals ?? null);
+    this.processor = new TurnRefinementProcessor(stateStore, conversationStore, options.memoryProposals ?? null, options.stage5 ?? false);
     this.timeZone = validTimeZone(options.timeZone ?? 'Asia/Tokyo');
     this.sleepHour = validHour(options.sleepHour ?? 3);
     this.leaseMilliseconds = options.leaseMilliseconds ?? 120_000;
@@ -60,6 +64,8 @@ export class ShannonBackgroundWorker {
     this.knowledgeConsolidator = options.knowledgeConsolidator;
     this.replaySummarizer = options.replaySummarizer;
     this.impressionUpdater = options.impressionUpdater;
+    this.stage5 = options.stage5 ?? false;
+    this.selfInterests = options.selfInterests;
   }
 
   async runOnce(): Promise<'processed' | 'idle' | 'failed'> {
@@ -114,7 +120,7 @@ export class ShannonBackgroundWorker {
       messages,
       this.stateStore.snapshot(job.scopeKey),
       job.payload.endAt,
-      { scopeKey: job.scopeKey, occurredAt: completedAt },
+      { scopeKey: job.scopeKey, occurredAt: completedAt, ...(this.stage5 ? { stage5: true, selfInterests: this.selfInterests?.(job.scopeKey) ?? [] } : {}) },
     );
     this.jobStore.applySleepOutcome(job, this.workerId, completedAt, outcome);
     try {

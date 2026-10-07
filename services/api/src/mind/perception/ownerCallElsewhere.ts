@@ -25,7 +25,6 @@
 import type { OwnerCallSurface, OwnerCallElsewhere } from '../../contracts/ownerCallContract.js';
 export { type OwnerCallSurface, type OwnerCallElsewhere } from '../../contracts/ownerCallContract.js';
 
-export { SQLiteOwnerCallFacts } from './store/ownerCallFacts.js';
 
 export const OWNER_CALL_LIMITS = Object.freeze({
   /** A `callStarted` without its `callEnded` stops counting after this long. */

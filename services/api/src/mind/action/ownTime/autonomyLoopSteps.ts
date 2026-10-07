@@ -12,6 +12,7 @@ import { prepareFollowUp, prepareJot } from './autonomyLoopFollowUpStep.js';
 import type { AutonomyPredictionTap, ReachOutFacts } from './store/autonomyLoopObservations.js';
 import type { AutonomyReachOutObserver } from './autonomyLoopObserve.js';
 import type { AutonomyOwnerContext } from './autonomyLoopOwnerContext.js';
+import type { SelfInterestContextPort } from '../../self/selfPorts.js';
 import { prepareRest, sessionOf } from './autonomyLoopPacing.js';
 import { preparePhoneCall, type AutonomyPhone } from './autonomyLoopPhoneStep.js';
 import { prepareReachOut, type AutonomyReachOuts, type AutonomyUpcoming } from './autonomyLoopReachOutStep.js';
@@ -78,6 +79,8 @@ export interface StepDependencies {
   observer?: AutonomyReachOutObserver;
   /** The owner's context for her thinking, her writing and her messages (owner decisions 2026-10-02, ADR-0003); absent, or switched off in `loop`, no prompt carries it. */
   ownerContext?: AutonomyOwnerContext;
+  /** Stage5's read-only self index is independent of the legacy owner's-context switch. */
+  selfInterests?: SelfInterestContextPort;
   /** Her registry tools in her own time, with what they returned until her next thought; absent, no tool is offered. */
   toolResults?: AutonomyToolResults;
   /** A line for the service log. Only closed codes are ever passed: never a word of a prompt or a reply. */

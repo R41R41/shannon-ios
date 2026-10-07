@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore, OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE, UNLABELLED_DISCLOSURE_MARKER } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { BackgroundUpdateCoordinator, DurableBackgroundDispatcher, TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
 import { ShannonBackgroundWorker } from '../src/mind/sleep/backgroundWorker.js';
 import type { ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';

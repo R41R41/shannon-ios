@@ -95,6 +95,7 @@ public struct ShannonConversationView: View {
         let activeColorScheme = resolvedColorScheme
         workspaceWithPresentations
         .modifier(ShannonBodyAttachment(bodyModel: bodyModel, conversation: model, memory: memoryModel, voice: geminiLiveVoiceModel, listen: bodyListen))
+        .modifier(ShannonFeedbackContext(conversation: model, othersPresent: bodyModel.audience == .others || geminiLiveVoiceModel.othersMayBeListening, interests: memoryModel.interests))
         .modifier(ShannonActionThreadsPolling(model: actionThreads, connected: model.isDesignPreview || connectionModel?.isConnected == true, othersPresent: bodyModel.audience == .others || geminiLiveVoiceModel.othersMayBeListening))
         .environment(\.colorScheme, activeColorScheme)
         .onAppear {

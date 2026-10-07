@@ -27,6 +27,7 @@
     "@anthropic-ai/sdk": "0.131.0",
     "@shannon/cognition": "workspace:*",
     "@shannon/learning": "workspace:*",
-    "@shannon/mind": "workspace:*"
+    "@shannon/mind": "workspace:*",
+    "typescript": "5.9.3"
   }
 }

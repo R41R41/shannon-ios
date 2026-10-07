@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { CALENDAR_LIMITS, CALENDAR_REQUEST_BYTES, calendarIngestEnabled, calendarRequestBytes } from '../src/contracts/calendarContract.js';
 import { SQLiteDeviceAuthStore } from '../src/infra/auth/deviceAuth.js';
 import { OwnerUpcoming } from '../src/mind/memory/ownerUpcoming.js';

@@ -3,6 +3,7 @@ import { disclosureFor, type MemoryAudience, type MemoryDisclosure, type RecallC
 import type { ShannonConversationItem, ShannonGeneratedArtifact, ShannonTaskDecision } from '../../infra/models/chatModel.js';
 import type { ReminderReference, ReminderView, TurnCaptureRecord, TurnCaptureView } from './store/turnCaptures.js';
 import type { MemorySearchHit } from './store/sqliteMemorySearch.js';
+import type { FeedbackState } from '../../contracts/feedbackContract.js';
 
 /** Threads of the platform bridge (`platformBridgeThreadId`): `platform:<platform>:<32 hex>`. Never the default Talk. */
 export const isPlatformThreadId = (threadId: string): boolean => /^platform:[a-z]+:[0-9a-f]{32}$/u.test(threadId);
@@ -69,6 +70,8 @@ export interface StoredConversationMessage extends ShannonConversationItem {
   /** Durable turn.completed event that owns this message, when available. */
   sourceExperienceId?: string;
   observedAt: string;
+  /** Server-only initial audience of a canonical task result note. Older notes omit it. */
+  noteOwnerAlone?: boolean;
   messageEmotion?: ShannonMessageEmotion;
   stateVersion?: number;
   taskDecision?: ShannonTaskDecision;
@@ -82,6 +85,7 @@ export interface StoredConversationMessage extends ShannonConversationItem {
   reminder?: ReminderReference | ReminderView;
   /** What Shannon took in from this turn, attached to her reply once the worker has recorded it. */
   captures?: readonly TurnCaptureView[];
+  feedback?:FeedbackState;
   /** Provenance of a reply: IDs recalled into its prompt. Server-side only; never sent to clients. */
   recalledMemoryIds?: readonly string[];
 }
@@ -122,6 +126,8 @@ export interface PlatformTurnPersistenceResult {
 }
 
 export interface ConversationStore {
+  /** Stage5's bounded supplementary self. Read again under current forgetting/disclosure; absent/OFF yields no prompt. */
+  selfInterestProjection?(scopeKey: string, audience: MemoryAudience, openOnly?: boolean): string;
   listThreads(scopeKey: string): readonly ConversationThread[];
   threadId(scopeKey: string, threadId?: string): string;
   createThread(scopeKey: string, title?: string): string;
@@ -131,6 +137,10 @@ export interface ConversationStore {
   history(scopeKey: string, threadId?: string): readonly ShannonConversationItem[];
   threadSummary(scopeKey: string, threadId: string): string | undefined;
   conversationHistory(scopeKey: string, threadId?: string): readonly StoredConversationMessage[];
+  /** Exact assistant source lookup across the entire persisted thread; never the display window. */
+  assistantMessage?(scopeKey: string, threadId: string, sourceOrMessageId: string): StoredConversationMessage | null;
+  /** Display-only task result written once under a server-owned original-attempt id. */
+  appendNoteOnce?(scopeKey: string, threadId: string, messageId: string, content: string, observedAt: string, noteKind: string, ownerAlone?: boolean): StoredConversationMessage;
   experienceCandidates(scopeKey: string, threadId?: string): readonly ShannonExperience[];
   /** Deterministic full-text recall over all experiences and thread summaries. */
   searchMemory?(scopeKey: string, text: string, limit?: number): readonly MemorySearchHit[];

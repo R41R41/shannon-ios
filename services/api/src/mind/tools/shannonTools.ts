@@ -1,4 +1,5 @@
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
+import { SELF_REWRITE_DOING, SELF_REWRITE_SUMMARIES } from './selfRewriteToolDefinitions.js';
 /**
  * The one list of Shannon's tools (Syzygy ADR-0003 stage 1: one tool registry and one gate).
  *
@@ -59,7 +60,7 @@ export interface ShannonToolDefinition {
    * the owner's documents in her own time is `owner_documents_read` (ADR-0007, owner decision 2026-10-06). `meta` is never a
    * registry tool: it is `tool_open` of the tool menu (Syzygy ADR-0008 stage 2, `shannonToolMenu.ts`), which runs nothing.
    */
-  domain: 'aether_study' | 'host_folder' | 'minecraft_body' | 'aether_proposal' | 'owner_documents_read' | 'meta' | ReadToolDomain | 'skill_read';
+  domain: 'aether_study' | 'host_folder' | 'minecraft_body' | 'aether_proposal' | 'owner_documents_read' | 'meta' | ReadToolDomain | 'skill_read' | 'vm_workspace';
   effect: 'read' | 'write';
   /** `none`: no model or paid API is called by the tool itself. `model`: it calls one (place search asks a model with web search). */
   cost: 'none' | 'model';
@@ -379,12 +380,12 @@ export const TOOL_DOING: Readonly<Record<string, ToolDoing>> = Object.freeze({
 
 /** Whether a tool acts or describes (an unknown name describes: it is never evidence of doing). */
 export function toolDoing(name: string): ToolDoing {
-  return TOOL_DOING[name] ?? 'describes';
+  return TOOL_DOING[name] ?? SELF_REWRITE_DOING[name] ?? 'describes';
 }
 
 /** The summary of a tool (by its registry name), or its name when it has none. */
 export function toolSummary(tool: Pick<ShannonToolDefinition, 'name'>): string {
-  return TOOL_SUMMARIES[tool.name] ?? tool.name;
+  return TOOL_SUMMARIES[tool.name] ?? SELF_REWRITE_SUMMARIES[tool.name] ?? tool.name;
 }
 
 /**

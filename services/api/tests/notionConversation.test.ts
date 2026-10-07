@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { conversationCapabilityContext } from '../src/mind/action/respond/conversationCapabilities.js';
 import { NOTION_TURN_BOUNDS, asksAboutNotion, notionSearchPhrases, notionTurnProjection } from '../src/integrations/notion/notionConversation.js';

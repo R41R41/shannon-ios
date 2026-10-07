@@ -4238,6 +4238,100 @@
           "note": "第4段階のApple側実装に続くWindows側の表示は、この作業ではコードと実画面を確認していない。"
         }
       }
+    },
+    {
+      "id": "yousu.self-interests",
+      "area": "yousu",
+      "title": "関心の日記",
+      "description": "いまの関心と変更、理由・根拠・版を読み、固定・禁止・忘却・選んだ変更の取り消し・再開を行う。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonInterestsView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonInterests.swift",
+            "apps/ios/Sources/ShannonAppCore/API/ShannonAPIClient+Interests.swift"
+          ],
+          "note": "所有者が2026-10-08にC/Bを承認。Stage5 ON時の共有画面。分岐上の実装で、本番・TestFlight確認は未実施。"
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonInterestsView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonInterests.swift",
+            "apps/ios/Sources/ShannonAppCore/API/ShannonAPIClient+Interests.swift"
+          ],
+          "note": "所有者が2026-10-08にC/Bを承認。Stage5 ON時の共有画面。分岐上の実装で、本番・TestFlight確認は未実施。"
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "Stage5 C/B の所有者の承認対象は iPhone と Mac。Windows の体へ追加する決定は無い。"
+        }
+      }
+    },
+    {
+      "id": "talk.owner-feedback",
+      "area": "talk",
+      "title": "返答への反応",
+      "description": "対象の返答だけに役立った・いまひとつを付け、切り替えや取り消しができる。結果不明時は元の操作を確認して自動再送しない。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonFeedbackView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonFeedback.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationModel+Feedback.swift",
+            "apps/ios/Sources/ShannonAppCore/API/ShannonAPIClient+Feedback.swift"
+          ],
+          "note": "所有者が2026-10-08にC/Bを承認。Stage5 ON時の共有画面。分岐上の実装で、本番・TestFlight確認は未実施。"
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonFeedbackView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonFeedback.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationModel+Feedback.swift",
+            "apps/ios/Sources/ShannonAppCore/API/ShannonAPIClient+Feedback.swift"
+          ],
+          "note": "所有者が2026-10-08にC/Bを承認。Stage5 ON時の共有画面。分岐上の実装で、本番・TestFlight確認は未実施。"
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "Stage5 C/B の所有者の承認対象は iPhone と Mac。Windows の体へ追加する決定は無い。"
+        }
+      }
+    },
+    {
+      "id": "tasks.task-tree",
+      "area": "tasks",
+      "title": "作業の道筋と完了条件",
+      "description": "既存の作業詳細で目的、工程、順序、条件と実際の検証結果を読み、条件変更を正確な提案として確認する。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonTaskTreeView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonTaskTreeEditor.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonTaskTree.swift",
+            "apps/ios/Sources/ShannonAppCore/API/ShannonAPIClient+TaskTree.swift"
+          ],
+          "note": "所有者が2026-10-08にC/Bを承認。Stage5 ON時の共有画面。分岐上の実装で、本番・TestFlight確認は未実施。"
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonTaskTreeView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonTaskTreeEditor.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonTaskTree.swift",
+            "apps/ios/Sources/ShannonAppCore/API/ShannonAPIClient+TaskTree.swift"
+          ],
+          "note": "所有者が2026-10-08にC/Bを承認。Stage5 ON時の共有画面。分岐上の実装で、本番・TestFlight確認は未実施。"
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "Stage5 C/B の所有者の承認対象は iPhone と Mac。Windows の体へ追加する決定は無い。"
+        }
+      }
     }
   ],
   "decisions": {

@@ -11,7 +11,7 @@ import {
 } from '../../../../packages/evaluation/src/reach/index.js';
 import type { ReachOutFacts } from '../../src/mind/action/ownTime/store/autonomyLoopObservations.js';
 import { configuredAutonomy } from '../../src/mind/inhibition/autonomyBudget.js';
-import { SQLiteAutonomyStore } from '../../src/mind/action/ownTime/store/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../../src/wiring/autonomyStoreWiring.js';
 import { ownerValueRecorder } from '../../src/infra/http/learningRoutes.js';
 import type { StoredChoice } from '../../src/mind/learning/choiceLedger.js';
 import { ledgerPredictionTap, storyReacted, toolCallChoice, valueFactsReader, type Presence } from '../../src/wiring/cognitionLedgerTaps.js';

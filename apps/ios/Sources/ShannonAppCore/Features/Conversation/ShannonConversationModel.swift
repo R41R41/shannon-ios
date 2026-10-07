@@ -46,6 +46,11 @@ public final class ShannonConversationModel {
     public internal(set) var pendingVoyagerCatalogItemIDs: Set<String> = []
     public internal(set) var voyagerCatalogErrorsByItemID: [String: String] = [:]
 
+    var voiceFeedbackRecords: [VoiceFeedbackRecord] = []
+    var taskTreeModels: [UUID: ShannonTaskTreeModel] = [:]
+    var stage5OthersPresent = false
+    struct VoiceFeedbackRecord { let threadID: String; let reply: String; let recordID: String }
+    public let feedback: ShannonFeedbackModel
     let scopeKey: String
     let client: any ShannonAPIClientProtocol
     /// Her eyes in this app for a turn: the camera state each turn reports, and the one frame of a look.
@@ -75,6 +80,7 @@ public final class ShannonConversationModel {
         messages: [ConversationMessage] = [],
         usesDisplayCache: Bool? = nil
     ) {
+        self.feedback = ShannonFeedbackModel(scopeKey: scopeKey, client: client as? any ShannonFeedbackServing)
         self.scopeKey = scopeKey
         self.client = client
         let shouldUseDisplayCache = usesDisplayCache ?? (client is ShannonAPIClient)

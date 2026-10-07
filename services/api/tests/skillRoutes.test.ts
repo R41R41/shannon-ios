@@ -2,7 +2,7 @@ import { createServer, request as httpRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { SkillMemory } from '../src/mind/memory/skillMemory.js';
 import { SKILL_CAPACITY } from '../src/mind/memory/skillDocument.js';

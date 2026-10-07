@@ -1,7 +1,8 @@
 import { createServer, request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createLocalApiKernel, type ShannonApiKernelOptions } from '../src/infra/http/apiKernel.js';
+import { type ShannonApiKernelOptions } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { OpenAIResponsesChatModel, type ShannonChatModel, type ShannonChatModelRequest, type ShannonChatModelResult } from '../src/infra/models/chatModel.js';
 import { chatStreamEarlyEnabled } from '../src/surfaces/text/chatSentenceStream.js';
 import type { ChatResponse, ChatStreamLine } from '../src/contracts/contracts.js';

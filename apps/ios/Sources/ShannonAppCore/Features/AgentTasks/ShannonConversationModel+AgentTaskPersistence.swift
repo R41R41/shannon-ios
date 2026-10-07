@@ -143,7 +143,7 @@ extension ShannonConversationModel {
             }
         }
         return ConversationMessage(
-            id: UUID(uuidString: message.id) ?? UUID(),
+            id: storedMessageIdentity(message),
             role: role,
             text: message.content,
             sentAt: parseDate(message.observedAt),
@@ -153,8 +153,22 @@ extension ShannonConversationModel {
             turnID: message.sourceExperienceId,
             captures: role == .shannon ? message.captures ?? [] : [],
             reminder: role == .shannon ? message.reminder : nil,
-            studyPiece: role == .shannon ? message.studyPiece : nil
+            studyPiece: role == .shannon ? message.studyPiece : nil,
+            feedback: role == .shannon ? message.feedback : nil
         )
+    }
+
+    private static func storedMessageIdentity(_ message: StoredConversationMessageDTO) -> UUID {
+        if let id = UUID(uuidString: message.id) { return id }
+        // Verified task replies use a canonical SHA256 note ID. Keep a stable display identity across reads;
+        // the full server ID remains in sourceExperienceId/feedback for all authoritative operations.
+        if message.sourceExperienceId == "agent-task-result:\(message.id)", message.id.count == 64,
+           message.id.allSatisfy(\.isHexDigit) {
+            let value = String(message.id.prefix(32))
+            let formatted = "\(value.prefix(8))-\(value.dropFirst(8).prefix(4))-\(value.dropFirst(12).prefix(4))-\(value.dropFirst(16).prefix(4))-\(value.dropFirst(20))"
+            if let id = UUID(uuidString: formatted) { return id }
+        }
+        return UUID()
     }
 
     var threadTitleForLoadedMessages: String {

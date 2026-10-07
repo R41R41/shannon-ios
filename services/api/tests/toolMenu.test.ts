@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { shannonIdentityPrompt } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import { CONVERSATION_TOOL_CALLS, functionCallsOf, toolInstructions, withToolRounds, type ShannonModelToolSession } from '../src/infra/models/chatModelTools.js';
 import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';
@@ -11,7 +11,7 @@ import { TOOL_MENU_LIMIT, chosenTools, toolMenuQuestions } from '../src/mind/sel
 import { JevTurnChooser, type TurnChooser } from '../src/mind/selectors/turnChoices.js';
 import { TOOL_OPEN_PROVIDER_NAME, menuCandidatesOf, nothingFound, sourcesLine, toolMenuInstructions, withToolMenu } from '../src/mind/tools/shannonToolMenu.js';
 import { conversationTools } from '../src/mind/tools/shannonToolSession.js';
-import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
 import { turnWroteHerOwnThings } from '../src/mind/tools/shannonToolSession.js';
 import { ALWAYS_LOADED_TOOL_NAMES, SHANNON_TOOLS, shannonTool, toolSummary } from '../src/mind/tools/shannonTools.js';
 import { withToolCapabilityLines } from '../src/mind/tools/shannonAetherTools.js';

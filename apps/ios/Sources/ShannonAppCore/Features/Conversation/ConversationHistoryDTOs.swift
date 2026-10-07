@@ -11,6 +11,7 @@ public struct StoredConversationMessageDTO: Codable, Equatable, Sendable {
     public let sourceAttribution: ShannonSourceAttributionDTO?
     /// The completed turn this message belongs to; captures are keyed by it.
     public let sourceExperienceId: String?
+    public var feedback: ShannonFeedbackDTO? = nil
     public let captures: [ShannonTurnCaptureDTO]?
     public let reminder: ShannonReminderDTO?
     /// A piece of her study this message is about; the timeline shows a card that opens the reader.

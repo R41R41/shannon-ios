@@ -13,10 +13,13 @@ import { ShannonAutonomyLoop } from './mind/action/ownTime/autonomyLoop.js';
 import { configuredAutonomyLoop } from './mind/action/ownTime/autonomyLoopConfig.js';
 import { AutonomyToolResults } from './mind/action/ownTime/autonomyLoopToolStep.js';
 import { configuredOwnerContext } from './wiring/autonomyOwnerContextWiring.js';
+import { configuredSelfInterestContext } from './wiring/selfInterestContextWiring.js';
+import { stage5Enabled } from './infra/config/stage5Config.js';
+import { selfRewriteRuntimeWiring } from './wiring/selfRewriteRuntimeWiring.js';
 import { BoundedPublicReader } from './mind/action/ownTime/autonomyReader.js';
 import { ShannonAutonomyService } from './mind/action/ownTime/autonomyService.js';
-import { SQLiteStudyShowing } from './mind/action/ownTime/autonomyShowing.js';
-import { SQLiteAutonomyStore } from './mind/action/ownTime/store/autonomyStore.js';
+import { SQLiteStudyShowing } from './wiring/studyShowingWiring.js';
+import { SQLiteAutonomyStore } from './wiring/autonomyStoreWiring.js';
 import { configuredAutonomyTextModel } from './mind/action/ownTime/autonomyTextModel.js';
 import { BODY_LIMITS, bodyIngestEnabled } from './contracts/bodyContract.js';
 import { ActivityRoomLooks } from './surfaces/body/bodyLookActivity.js';
@@ -30,9 +33,9 @@ import { configuredNotionSource } from './integrations/notion/notionSource.js';
 import { configuredOwnerUpcoming, sqliteOwnerSnapshot } from './wiring/ownerUpcomingWiring.js';
 import { SQLiteReachOutSpeaker } from './surfaces/outreach/reachOutDelivery.js';
 import { callGateContext } from './mind/action/ownTime/autonomyLoopPhoneStep.js';
-import { IncomingCallRequests, incomingCallMinimumIntervalMilliseconds, incomingCallsConfigured } from './surfaces/outreach/incomingCallRequests.js';
-import { SQLiteIncomingCallStore } from './surfaces/outreach/store/incomingCallStore.js';
-import { SQLitePrivateListeningStore } from './surfaces/body/store/privateListeningStore.js';
+import { IncomingCallRequests, incomingCallMinimumIntervalMilliseconds, incomingCallsConfigured } from './mind/attention/incomingCallRequests.js';
+import { SQLiteIncomingCallStore } from './mind/attention/store/incomingCallStore.js';
+import { SQLitePrivateListeningStore } from './mind/inhibition/store/privateListeningStore.js';
 import { SQLiteReachOutClaims } from './mind/attention/store/reachOutClaims.js';
 import { SQLiteReachOutReports, reachOutBodyFacts } from './mind/attention/store/reachOutReports.js';
 import { ownToolsEnabled } from './mind/tools/shannonTools.js';
@@ -128,6 +131,9 @@ const service = new ShannonAutonomyService({
   ...(withheldActions ? { withheld: gateRefusals(withheldActions.withheld, config) } : {}),
 });
 if (withheldActions) service.tools.observeWithheld(withheldActions.withheld.sink, now);
+const selfRewrite = selfRewriteRuntimeWiring({ environment: process.env, path: databasePath, ownerScope: loopConfig.scopeKey,
+  now, config, autonomy: service, autonomyStore: store, tasks: null,
+  actions: actionConnection ? actionThreadsClient(actionConnection.call) : null, recoverInterrupted: true });
 // Her own time's edits and deletes of her skills' copies are noted as hers (review M2), once the API created the skill tables.
 const skillCopies = configuredSkillCopies(process.env, databasePath, now);
 if (skillCopies) service.tools.observeCopyWrites((scopeKey, documentId, write) => skillCopies.noted(scopeKey, documentId, write));
@@ -137,6 +143,7 @@ const notion = notionLoopReader(configuredNotionSource(process.env, { log: line 
 // conversation's memory entry points. SHANNON_AUTONOMY_OWNER_CONTEXT=off opens none of it and every prompt is what it was.
 const ownerContext = loopConfig.ownerContext
   ? configuredOwnerContext(databasePath, { now, characters: loopConfig.ownerContextCharacters, timeZone: config.timeZone, temporalFacts: mindSwitches(process.env).temporalFacts }) : null;
+const selfInterests = configuredSelfInterestContext(databasePath, { enabled: stage5Enabled(process.env), now });
 // A step of her own is time she is awake: her emotional clock runs through it, and through nothing else of the loop.
 // What that write stores may add a point to her mood history (SHANNON_MOOD_HISTORY); the loop is handed nothing of it.
 // Syzygy ADR-0006 stage 1 (影): what followed a message of hers, and each advance of the awake clock, is handed to the prediction
@@ -171,6 +178,7 @@ const loop = new ShannonAutonomyLoop({
   showing, now, looks, ...(notion ? { notion } : {}),
   reachOuts, phone, upcoming: { lines: (scopeKey, at, present) => ownerUpcoming.upcoming.loopLines(scopeKey, at, present) }, observer,
   ...(ownerContext ? { ownerContext: ownerContext.context } : {}),
+  ...(selfInterests ? { selfInterests: selfInterests.context } : {}),
   // Her tools over her study and her folder (owner decision 2026-10-05); SHANNON_OWN_TOOLS=off offers none and every prompt is what it was.
   ...(ownToolsEnabled() ? { toolResults: new AutonomyToolResults() } : {}),
   // With the choice ledger (SHANNON_CHOICE_LEDGER) each step the gate allowed is a choice of hers, with who was around (closed facts of her body).
@@ -214,6 +222,7 @@ try {
     }
   } while (!stopping);
 } finally {
+  selfRewrite.close();
   actionSteps?.close();actionConnection?.close();
   try { loop.release(); } catch { /* the lease runs out by itself */ }
   awakeClock.close();
@@ -225,6 +234,7 @@ try {
   proactiveGate?.close();
   skillCopies?.close();
   ownerContext?.close();
+  selfInterests?.close();
   ownerUpcoming.close();
   ownerState.close();
   reachOuts.close();

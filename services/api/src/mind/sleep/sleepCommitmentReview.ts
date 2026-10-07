@@ -43,7 +43,8 @@ export function reconcileSleepOutcome(outcome: SleepConsolidationOutcome, curren
   const interests = outcome.interests.filter(interest => allowed(memoryIdentifier('interest', interest),
     outcome.report.interestChanges.find(change => change.text === interest)?.evidence));
   const ids = new Set([...facts.map(fact => fact.id), ...relationships.map(item => item.id), ...interests.map(item => memoryIdentifier('interest', item))]);
-  return { facts, relationships, interests, report: {
+  return { facts, relationships, interests, ...(outcome.interestEvidence ? { interestEvidence: outcome.interestEvidence.filter(item => interests.includes(item.interest)) } : {}),
+    ...(outcome.selfInterestDrafts ? { selfInterestDrafts: outcome.selfInterestDrafts.filter(draft => allowed(memoryIdentifier('interest', draft.proposal.title ?? ''), draft.evidence)) } : {}), report: {
     ...outcome.report,
     learned: outcome.report.learned.filter(change => ids.has(change.memoryId)),
     updated: outcome.report.updated.filter(change => ids.has(change.memoryId)),

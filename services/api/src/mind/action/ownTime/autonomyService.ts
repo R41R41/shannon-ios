@@ -22,9 +22,9 @@ import {
 } from './autonomyModels.js';
 import { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import { HostFolderOperations } from './hostFolderOperations.js';
-import { ShannonToolRunner, type ToolAetherPorts } from '../../tools/shannonToolRunner.js';
+import { ShannonToolRunner, type ToolAetherPorts } from '../../tools/toolRunnerPorts.js';
 import { StudyAether } from './studyAether.js';
-import type { MinecraftRequestPort } from '../../tools/shannonMinecraftTools.js';
+import type { MinecraftRequestPort } from '../../tools/toolRunnerPorts.js';
 import { resolvePhysicalPath, type AutonomyPathResolver } from '../../inhibition/autonomyReadPorts.js';
 import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './store/autonomyProposals.js';
 import type { PursuitDraft, PursuitRejection } from '../../self/selfPorts.js';
@@ -428,6 +428,7 @@ export class ShannonAutonomyService {
       const hostHint = agentTasks.resolveHost(proposal.projectHint, 'auto', at, this.dependencies.defaultAgentHost ?? null);
       // The same idempotency key makes a retried start return the one task.
       task = agentTasks.create(scopeKey, {
+        ...(agentTasks.taskTrees ? {taskAuthority:{origin:'own_time' as const,budgetLane:'autonomy' as const,ownerInformed:true,permissionId:`proposal:${proposal.id}`}} : {}),
         idempotencyKey: `shannon-proposal:${proposal.id}`, conversationThreadID: threadId,
         title: proposal.title, goal: proposal.goal, summary: `シャノンからの提案です。理由：${proposal.reason}`,
         ...(hostHint ? { hostHint } : {}), ...(proposal.projectHint ? { projectHint: proposal.projectHint } : {}),
@@ -488,12 +489,5 @@ export class ShannonAutonomyService {
     const at = this.now();
     return this.store.activity.append(scopeKey, autonomyDayKey(at, this.config), at, draft);
   }
-}
-
-/** A service over a private in-memory database, switched off, for tests and local runs without persistence. */
-export function createInMemoryAutonomyService(now: () => string, overrides: Partial<AutonomyServiceDependencies> = {}): ShannonAutonomyService {
-  return new ShannonAutonomyService({
-    store: new SQLiteAutonomyStore(':memory:'), config: configuredAutonomy({}), now, ...overrides,
-  });
 }
 

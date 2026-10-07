@@ -98,6 +98,10 @@ public protocol ShannonVoiceServing: Sendable {
         emotion: ShannonVoiceTurnEmotionDTO?,
         companionPresent: Bool
     ) async throws -> ShannonRealtimeVoiceTurnResponseDTO
+    func commitRealtimeVoiceTurn(
+        scopeKey: String, threadId: String?, userTranscript: String, shannonTranscript: String,
+        emotion: ShannonVoiceTurnEmotionDTO?, companionPresent: Bool, feedbackRecordID: String?
+    ) async throws -> ShannonRealtimeVoiceTurnResponseDTO
     /// Remembers one ended 「友人も一緒」 period.
     func rememberVoiceCall(
         scopeKey: String,

@@ -17,6 +17,9 @@ const PAYLOADS: Record<MemoryOpKind, Record<string, unknown>> = {
   'fact.upsert': { fact, source: 'conversation' },
   'relationship.upsert': { relationship: { ...fact, id: 'relationship-1' }, source: 'sleep' },
   'interest.change': { interest: '星の話', source: 'conversation' },
+  'self.interest.propose': { kind: 'add', title: '星の話', reason: '会話に共鳴した', provenance: 'resonant_self' },
+  'self.interest.night': {},
+  'self.interest.owner': { operationId: 'owner-1', itemId: 'si-1', expectedRevision: 1, action: 'pin' },
   'promise.capture': { memory: { id: 'promise-1', summary: '歯医者', status: 'pending', createdAt: AT, updatedAt: AT, dueAt: AT, disclosure: owner } },
   turn_capture: { captures: [{ id: 'capture-1', turnId: 'turn-1', kind: 'knowledge', text: '名前はライ', itemId: 'user-fact-1', change: 'created', createdAt: AT }] },
   'intent.capture': { capture: { id: 'capture-2', turnId: 'turn-1', kind: 'intent', text: '本を書く', itemId: '本を書く', createdAt: AT } },
@@ -38,7 +41,7 @@ const PAYLOADS: Record<MemoryOpKind, Record<string, unknown>> = {
 };
 
 const op = (kind: MemoryOpKind, payload: Record<string, unknown> = PAYLOADS[kind]): MemoryOpDraft => ({
-  opId: `op-${kind}`, scopeKey: 'owner', kind, origin: kind === 'person.link' ? 'owner' : 'turn', subjectKey: `subject:${kind}`, payload, episodeIds: ['turn-1'], disclosure: owner,
+  opId: `op-${kind}`, scopeKey: 'owner', kind, origin: kind === 'person.link' || kind === 'self.interest.owner' ? 'owner' : kind === 'self.interest.night' ? 'sleep' : 'turn', subjectKey: `subject:${kind}`, payload, episodeIds: ['turn-1'], disclosure: owner,
 });
 const roundTrip = (draftOp: MemoryOpDraft) => {
   const encoded = memoryOpCodec.encode(draftOp);
@@ -47,8 +50,8 @@ const roundTrip = (draftOp: MemoryOpDraft) => {
 };
 
 describe('the memory outbox codec', () => {
-  it('has the seventeen closed kinds, and round-trips each with its closed fields', () => {
-    expect(MEMORY_OP_KINDS).toHaveLength(17);
+  it('has the twenty closed kinds, and round-trips each with its closed fields', () => {
+    expect(MEMORY_OP_KINDS).toHaveLength(20);
     for (const kind of MEMORY_OP_KINDS) {
       const decoded = roundTrip(op(kind));
       expect(decoded.ok, kind).toBe(true);

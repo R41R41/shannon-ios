@@ -6,7 +6,7 @@ import { GeminiAutonomyTextModel, OpenAIAutonomyTextModel } from '../src/mind/ac
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
 import { ShannonAutonomyLoop } from '../src/mind/action/ownTime/autonomyLoop.js';
 import { AutonomyToolResults } from '../src/mind/action/ownTime/autonomyLoopToolStep.js';

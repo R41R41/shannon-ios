@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore, OWNER_AUDIENCE } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { OpenAIResponsesChatModel, type ShannonChatModelRequest, type ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
 import {
   REPLAY_BUDGET_DEFAULT, REPLAY_BUDGET_MAXIMUM, REPLAY_BUDGET_MINIMUM, REPLAY_MAXIMUM_MESSAGES, REPLAY_SUMMARY_CHARACTERS,

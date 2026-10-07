@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { withoutUnshownTitles, type CompanionClock, type CompanionStateStore } from '@shannon/cognition';
+import { withStage5Capabilities, type ShannonStage5Capabilities, withoutUnshownTitles, type CompanionClock, type CompanionStateStore } from '@shannon/cognition';
 import { agentTaskPromptProjection } from './apiPromptProjection.js';
 import type { AetherContextReader } from '../../../integrations/aether/aetherContext.js';
 import type { AetherProposalStore } from '../../../integrations/aether/aetherProposal.js';
@@ -61,6 +61,7 @@ export interface TextTurnDependencies {
   minecraftRequests: { promptBlock(scopeKey: string, at: string): string } | null;
   /** Syzygy ADR-0008 stage 3: the mind of the turn, when there is one (its data frames frame the reports a turn builds itself). */
   mind?: MindTurnPorts | null;
+  stage5Capabilities?: ShannonStage5Capabilities;
 }
 
 /** A surface other than the app's text chat, such as her Minecraft body (`minecraftBody.ts`) or a platform reply (`platformReply.ts`). */
@@ -257,7 +258,7 @@ export function textTurnIdentityAndCapability(dependencies: TextTurnDependencies
   const { captured, explicitCommand } = begun;
   // Her Minecraft body's capability line is added to the model request when its tools include `minecraft.request`.
   const identity = audience.identity(() => dependencies.knowledgeStore?.promptProjectionParts(body.scopeKey) ?? companionIdentityPrompt(captured));
-  const basePrompt: LayeredIdentityPrompt = { ...identity, identity: dependencies.autonomy.identityProjection(body.scopeKey, identity.identity) };
+  const basePrompt: LayeredIdentityPrompt = { ...identity, identity: withStage5Capabilities(dependencies.autonomy.identityProjection(body.scopeKey, identity.identity), audience.alone ? dependencies.stage5Capabilities : undefined) };
   const capabilityContext = explicitCommand ? NO_CAPABILITY_CONTEXT : conversationCapabilityContext(body.scopeKey, message,
     { aetherContext: dependencies.aetherContext, voyagerCatalog: dependencies.voyagerCatalog, notion: dependencies.notion, upcoming: dependencies.upcoming,
       ownOutreach: dependencies.ownOutreach }, surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities);

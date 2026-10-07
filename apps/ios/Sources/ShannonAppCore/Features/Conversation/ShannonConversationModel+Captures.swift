@@ -44,6 +44,7 @@ extension ShannonConversationModel {
                 try? await Task.sleep(for: delay)
                 guard !Task.isCancelled else { return }
                 await self?.refreshCaptures()
+                await self?.refreshFeedbackProjection()
             }
         }
     }

@@ -1,3 +1,4 @@
+import { STAGE5_CORE_PATHS } from './stage5CorePaths.js';
 import { STAGE4_CORE_PATHS } from './stage4CorePaths.js';
 import type { ShannonCoreAreaId } from '@shannon/cognition';
 
@@ -14,6 +15,7 @@ import type { ShannonCoreAreaId } from '@shannon/cognition';
  */
 export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly string[]>> = Object.freeze({
   purpose: Object.freeze([
+    ...STAGE5_CORE_PATHS.purpose,
     'AGENTS.md',
     'README.md',
     'docs/architecture.md',
@@ -28,6 +30,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/action/ownTime/autonomyLoopOwnerContext.ts',
   ]),
   persona: Object.freeze([
+    ...STAGE5_CORE_PATHS.persona,
     'packages/cognition/src/persona.ts',
     'packages/cognition/src/capabilities.ts',
     'packages/cognition/src/autonomy.ts',
@@ -40,6 +43,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/surfaces/body/bodyReactionPrompt.ts',
   ]),
   emotion: Object.freeze([
+    ...STAGE5_CORE_PATHS.emotion,
     'packages/cognition/src/affect.ts',
     'packages/cognition/src/emotionState.ts',
     // Her awake clock, the one table of how long feelings last, and what stays underneath the feeling of the moment.
@@ -103,6 +107,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'apps/ios/Sources/ShannonAppCore/Features/Connection/',
   ]),
   memory: Object.freeze([
+    ...STAGE5_CORE_PATHS.memory,
     'packages/cognition/src/memory.ts',
     'packages/cognition/src/withholding.ts',
     'packages/cognition/src/disclosure.ts',
@@ -168,8 +173,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/recall/impressionRecall.ts',
     'services/api/src/mind/memory/impressionUpdater.ts',
     'services/api/src/mind/memory/impressionViews.ts',
-    'services/api/src/surfaces/platform/platformBridge.ts',
-    'services/api/src/surfaces/platform/platformBridgeBindings.ts',
+    'services/api/src/mind/memory/platformBridge.ts',
+    'services/api/src/mind/memory/platformBridgeBindings.ts',
     'services/api/src/mind/perception/voiceCompanionPresence.ts',
     'services/api/src/mind/memory/memoryForgetCommand.ts',
     'services/api/src/mind/memory/memoryEmbeddingWorker.ts',
@@ -189,8 +194,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/memory/store/bodyTouchMemory.ts',
     'services/api/src/surfaces/body/store/bodyReactionStore.ts',
     // What happened to her Minecraft body as an experience, and the replay of her game-chat answers.
-    'services/api/src/surfaces/minecraft/store/gameBodyMemory.ts',
-    'services/api/src/surfaces/minecraft/store/minecraftTurnStore.ts',
+    'services/api/src/mind/memory/gameBodyMemory.ts',
+    'services/api/src/mind/action/respond/store/surfaceTurnStore.ts',
     // Syzygy ADR-0008 stage 3 (`docs/mind-workspace-contract.md`): the pure rules of what she keeps and forgets about people and
     // talks, listed by name so they are memory's although `packages/mind/` is the response path's: two-clock decay, the identity
     // tiers, the temporal rules of facts, the trust fold and the compaction template.
@@ -206,6 +211,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/scripts/peopleMigrationDryRun.ts',
   ]),
   approval_and_budget: Object.freeze([
+    ...STAGE5_CORE_PATHS.approval_and_budget,
     'services/api/src/mind/inhibition/autonomyCore.ts',
     'services/api/src/mind/inhibition/stage4CorePaths.ts',
     'services/api/src/mind/inhibition/autonomyPaths.ts',
@@ -297,7 +303,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/surfaces/outreach/store/reachOutSpeaker.ts',
     // Phoning the owner's iPhone on her own: the gated step, and asking the API process for the call.
     'services/api/src/mind/action/ownTime/autonomyLoopPhoneStep.ts',
-    'services/api/src/surfaces/outreach/incomingCallRequests.ts',
+    'services/api/src/mind/attention/incomingCallRequests.ts',
     // Act, observe, think again: what a step led to as closed facts, the wait after a message of hers, the thinking step,
     // the one second call, and what her body reports about a message.
     'services/api/src/mind/action/ownTime/store/autonomyLoopObservations.ts',
@@ -337,6 +343,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/inhibition/autonomyDayLog.ts',
   ]),
   response_path: Object.freeze([
+    ...STAGE5_CORE_PATHS.response_path,
     'services/api/src/server.ts',
     'services/api/src/infra/http/serverHttp.ts',
     'services/api/src/infra/http/apiKernel.ts',
@@ -381,7 +388,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/surfaces/minecraft/minecraftBodyState.ts',
     'services/api/src/surfaces/minecraft/serverMinecraftBodyRoute.ts',
     // The platform surface both her Minecraft body and the platform reply route answer through, and that route.
-    'services/api/src/surfaces/platform/platformSurface.ts',
+    'services/api/src/mind/memory/platformSurface.ts',
     'services/api/src/surfaces/platform/platformReply.ts',
     'services/api/src/surfaces/platform/serverPlatformBridgeRoute.ts',
     // Syzygy ADR-0008 stage 1: the Jev client's call count and price.
@@ -429,6 +436,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     ...STAGE4_CORE_PATHS,
   ]),
   deployment: Object.freeze([
+    ...STAGE5_CORE_PATHS.deployment,
     'deploy/',
     'scripts/',
     'ci_scripts/',

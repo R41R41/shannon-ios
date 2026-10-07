@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   WITHHELD_FACTS_HEADER, checkedWithheld, withheldFactsSection, withheldRail, type WithheldDraft,
 } from '../src/contracts/withheldActionContract.js';
-import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { nextOwnerDayStart, withheldOfDecision } from '../src/mind/inhibition/withheldRules.js';
 import { WithheldActions } from '../src/mind/inhibition/withheldActions.js';

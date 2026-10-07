@@ -7,7 +7,7 @@ import {
   InMemoryCompanionStateStore, SHANNON_EMOTION_TIME, createInitialCompanionState, livingLingering, presentShannonFeeling,
   type CompanionStateSnapshot,
 } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { configuredAwakeClock } from '../src/mind/emotion/store/autonomyAwakeClock.js';
 import { TurnRefinementProcessor } from '../src/mind/sleep/backgroundUpdates.js';
 import { SHANNON_CORE_PATHS } from '../src/mind/inhibition/autonomyCore.js';

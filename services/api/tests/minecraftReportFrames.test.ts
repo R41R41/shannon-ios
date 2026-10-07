@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/infra/models/chatModel.js';
 import { DATA_FRAME_RULE, DATA_FRAME_THREAT, framedReport } from '../src/mind/workspace/workspacePorts.js';
 import type { MindTurnPorts } from '../src/mind/workspace/workspacePorts.js';

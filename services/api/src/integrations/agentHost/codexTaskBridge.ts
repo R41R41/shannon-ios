@@ -48,6 +48,7 @@ import {
   taskResult,
   taskResultInstructions,
   testFromCommand,
+  taskTestCommandHash,
 } from './codexTaskProjection.js';
 
 interface CodexThreadResult {
@@ -323,7 +324,10 @@ export class CodexTaskBridge {
       const command = stringValue(item.command) ?? '';
       if (completed) {
         const test = testFromCommand(item, command);
-        if (test) runtime.tests.set(test.id, test);
+        if (test) runtime.tests.set(test.id, runtime.actionLease && runtime.turnId ? { ...test, execution: {
+          turnId: runtime.turnId, actionLease: { ...runtime.actionLease }, commandHash: taskTestCommandHash(command),
+          exitCode: typeof item.exitCode === 'number' ? item.exitCode : null,
+        } } : test);
       }
       const commandFailed = item.status === 'failed' || (typeof item.exitCode === 'number' && item.exitCode !== 0);
       await this.events.emit(runtime.taskId, 'progress', completed ? commandCompletionTitle(item) : commandActivity(command), undefined, {
@@ -448,7 +452,7 @@ export class CodexTaskBridge {
 
   private async emitTurnTerminal(runtime: RuntimeTask, type: 'paused'|'completed'|'failed', title: string, detail?: string, payload?: Record<string, unknown>): Promise<void> {
     if (!runtime.actionLease) { await this.events.emit(runtime.taskId,type,title,detail,payload); return; }
-    const event = this.events.event(runtime.taskId,type,title,detail,{...payload,actionLease:runtime.actionLease});
+    const event = this.events.event(runtime.taskId,type,title,detail,{...payload,actionLease:runtime.actionLease, executionTurnId:runtime.turnId});
     // The original result and clearing its live turn are one durable JSON write.
     // A crash before broker enqueue still leaves this exact event for recovery.
     runtime.pendingTerminalEvent=event;runtime.turnId=undefined;runtime.executionUncertain=false;

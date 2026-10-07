@@ -4,7 +4,7 @@ import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatM
 import { sonnetSettings } from '../src/infra/models/anthropic/anthropicConfig.js';
 import { sonnetToolRounds } from '../src/infra/models/anthropic/anthropicRounds.js';
 import { TieredChatModel } from '../src/infra/models/tieredChatModel.js';
-import { createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
 import { TEXT_TURN_DEADLINE, TURN_OUT_OF_TIME_LINE, TurnDeadline } from '../src/mind/action/respond/turnDeadline.js';
 import { VOICE_SONNET_FIRST_TOKEN, tierRequest } from '../src/mind/action/respond/turnRouting.js';
 import { conversationTools, type ConversationToolServer } from '../src/mind/tools/shannonToolSession.js';

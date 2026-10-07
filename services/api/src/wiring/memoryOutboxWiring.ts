@@ -41,6 +41,7 @@ export function memoryTargetsOf(store: SQLiteShannonStore, parts: {
     personFacts: facts?.parts.temporal ? { store: facts, judge: parts.judge ?? null, callsToday: at => outbox?.callsSince('person.fact', dayStart(at)) ?? 0 } : null,
     identity: facts?.parts.identity ? { store: facts, chooser: parts.chooser ?? null } : null,
     state: store, conversations: store, knowledge: store, impressions: store.impressionStore(), people: store.peopleMemoryOnConnection(),
+    selfInterests: store.selfInterests(),
     refreshProfile: scopeKey => store.refreshProfile(scopeKey),
     replaySummaries: parts.replaySummaries ? { planned: (scopeKey, threadId, call) => parts.replaySummaries!.planned(scopeKey, threadId, call) } : null,
     impressionChange: parts.impressions ? (op, state) => parts.impressions!.changeFor(op, state) : null,

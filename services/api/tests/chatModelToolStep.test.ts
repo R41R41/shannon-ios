@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { CONVERSATION_TOOL_CALLS, CUT_OFF_CALL_NOTE, functionCallsOf, withToolRounds, type ShannonModelToolSession, type ToolCallOutcome } from '../src/infra/models/chatModelTools.js';
 import { asksForParallelCalls, parallelToolsEnabled } from '../src/infra/models/chatModelToolStep.js';
 import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';

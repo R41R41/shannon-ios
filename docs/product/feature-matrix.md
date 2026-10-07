@@ -9,13 +9,13 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 
 ## 件数
 
-機能は全部で 147 件。
+機能は全部で 150 件。
 
 | 画面 | ○ ある | △ 一部 | × ない | — 当てはまらない | 予定 | ？ 不明 |
 |---|---:|---:|---:|---:|---:|---:|
-| iOS | 120 | 3 | 9 | 12 | 3 | 0 |
-| macOS | 131 | 3 | 8 | 2 | 3 | 0 |
-| Windows | 72 | 21 | 41 | 7 | 4 | 2 |
+| iOS | 123 | 3 | 9 | 12 | 3 | 0 |
+| macOS | 134 | 3 | 8 | 2 | 3 | 0 |
+| Windows | 72 | 21 | 41 | 10 | 4 | 2 |
 
 ## 構成（入口）（`structure`）
 
@@ -65,6 +65,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `talk.outline-summary` | **会話の目次と要約**【デスクトップの追加】 長い会話の見出しを横に並べ、押すとその場所へ移る。 | × | ○ | × |
 | `talk.artifact-export` | **作ってくれた文書をファイルに保存**【デスクトップの追加】 文書を、選んだ場所へ保存する。 | × | ○ | × |
 | `talk.background-action-threads` | **裏の作業の一覧と停止** 第4段階の小さな入口、由来・状態、個別停止・すべて停止・明示的再開。古い報告・通信断・結果不明・同席者に対応。実装ブランチ、未配布。 | 予定 | 予定 | ？ |
+| `talk.owner-feedback` | **返答への反応** 対象の返答だけに役立った・いまひとつを付け、切り替えや取り消しができる。結果不明時は元の操作を確認して自動再送しない。 | ○ | ○ | — |
 
 - `talk.thread-search` Windows（×）: 管理画面のトークの一覧に検索は無い。
 - `talk.markdown-code` Windows（△）: Markdown は出る。コードのコピーと折りたたみは無い。
@@ -89,6 +90,9 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `talk.background-action-threads` iOS（予定）: ブランチ `codex/shannon/adr8-stage4`。標準シート、会話と向き合う表示の入口。
 - `talk.background-action-threads` macOS（予定）: ブランチ `codex/shannon/adr8-stage4`。標準ポップオーバー、トークとすがたの入口。
 - `talk.background-action-threads` Windows（？）: 第4段階のApple側実装に続くWindows側の表示は、この作業ではコードと実画面を確認していない。
+- `talk.owner-feedback` iOS（○）: 所有者が2026-10-08にC/Bを承認。Stage5 ON時の共有画面。分岐上の実装で、本番・TestFlight確認は未実施。
+- `talk.owner-feedback` macOS（○）: 所有者が2026-10-08にC/Bを承認。Stage5 ON時の共有画面。分岐上の実装で、本番・TestFlight確認は未実施。
+- `talk.owner-feedback` Windows（—）: Stage5 C/B の所有者の承認対象は iPhone と Mac。Windows の体へ追加する決定は無い。
 
 ## 声の会話（`voice`）
 
@@ -150,6 +154,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `tasks.open-origin-thread` | **作業から元の会話を開く** 作業を頼んだトークへ戻る。 | ○ | ○ | ○ |
 | `tasks.hold-to-confirm` | **長く効く許可は、長押しで決める** 「この作業中」と、ネットワーク・権限の「今回だけ許可」は、押し続けて決める（0.6 秒）。キーボードや支援技術では、同じ文の確認で決める。 | ○ | ○ | ○ |
 | `tasks.needs-owner` | **続きが必要** 実行先が持ち主の対応を待って止まった作業を「続きが必要」と見分け（pauseReason、無ければ currentAction）、橙の印と次の一手を出す。 | ○ | △ | ○ |
+| `tasks.task-tree` | **作業の道筋と完了条件** 既存の作業詳細で目的、工程、順序、条件と実際の検証結果を読み、条件変更を正確な提案として確認する。 | ○ | ○ | — |
 
 - `tasks.search-filter-pin-archive` macOS（○）: 作業 と 開発 の両方で、検索・絞り込み・ピン留め（右クリック）・アーカイブ（A14）。
 - `tasks.approval` macOS（○）: 今回だけ許可／この作業中／許可しない（A11）。古い実行先では「許可せず作業を中止」と確認。
@@ -161,6 +166,9 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `tasks.needs-owner` iOS（○）: 作業の現在地に「次にあなたがすること」の枠。トークの上の知らせ「続きが必要：〈題名〉」。
 - `tasks.needs-owner` macOS（△）: 「続きが必要」の作業を、注意の要る作業として数え、状態の名前を出す。次の一手の枠と通知は無い（通知は A13）。
 - `tasks.needs-owner` Windows（○）: 「続きが必要です」の枠と次の一手、橙の印、OS の通知（W5）。Windows body thread report 2026-10-05。
+- `tasks.task-tree` iOS（○）: 所有者が2026-10-08にC/Bを承認。Stage5 ON時の共有画面。分岐上の実装で、本番・TestFlight確認は未実施。
+- `tasks.task-tree` macOS（○）: 所有者が2026-10-08にC/Bを承認。Stage5 ON時の共有画面。分岐上の実装で、本番・TestFlight確認は未実施。
+- `tasks.task-tree` Windows（—）: Stage5 C/B の所有者の承認対象は iPhone と Mac。Windows の体へ追加する決定は無い。
 
 ## 自律活動（`autonomy`）
 
@@ -228,6 +236,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `yousu.mood-history` | **気分の記録** シャノンの気分の記録（14 日分）を本体から読む（GET /v1/shannon/mood-history。所有者の端末だけ）。 | ○ | ○ | ○ |
 | `yousu.mood-trend` | **気分の推移** 気分の記録を、気分の明るさ（青）／元気さ（橙）／心の開き（緑）の 3 つの行に分けた小さな段の線で見る。行ごとに、ふつうの帯、ふだんの値からの面、いまの点と、右にいまの言葉（明るめ／高め／ふつう／低め）。縦の幅は 3 行で同じ（±0.6、はみ出すときは 0.1 きざみで広げ、±1 まで）。1時間／24時間／7日 の切り替え。点が数秒おきに続く所は窓の始まりから数えた区切り（1 分・5 分・30 分）ごとに最後の点にまとめる。記録が始まる前の部分は薄く塗り、上の行に「記録なし」。画面に数字は出さない。読み上げは 明るめ／ふつう／低め（所有者の決定、2026-10-05。3 行・1時間・記録なしは 2026-10-06）。 | ○ | ○ | ○ |
 | `yousu.learning` | **学び** ようす の 学び（ADR-0008 §13 の案 A、所有者の選択 2026-10-07）。スキル（使用数／上限、成功 7/8・試用中 2/3、ライ氏の版、📌 の固定と外し、押すと本文と版の記録）、手応え（最近7日、選んだことごとに値と言葉と回数）、価値表の版（「前の版に戻す」と「更新を再開する」、どちらも確認してから）。所有者の端末だけ（403・404 の部分は出さず、両方ならタブも出さない）。 | ○ | ○ | — |
+| `yousu.self-interests` | **関心の日記** いまの関心と変更、理由・根拠・版を読み、固定・禁止・忘却・選んだ変更の取り消し・再開を行う。 | ○ | ○ | — |
 
 - `yousu.now` iOS（○）: 「シャノン」の先頭のカードから開く。シャノンのいまだけ（運用の切り替えは無くした。A4・A5）。
 - `yousu.now` macOS（○）: シャノン › ようす。iPhone と同じ共通の画面（A10）。
@@ -245,6 +254,9 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `yousu.learning` iOS（○）: 固定はすぐに表示を変え、サーバーが受け付けなければ戻して一文を出す。戻す・再開は送り直さず、失敗したら読み直す。
 - `yousu.learning` macOS（○）: 共通の ようす の画面（ADR-0004）。切り替えは ShannonSegmentedChoice。
 - `yousu.learning` Windows（—）: ADR-0008 §13 の所有者の選択は iPhone と Mac の画面（ADR-0004）。Windows の体に 学び を置く決定は無い。
+- `yousu.self-interests` iOS（○）: 所有者が2026-10-08にC/Bを承認。Stage5 ON時の共有画面。分岐上の実装で、本番・TestFlight確認は未実施。
+- `yousu.self-interests` macOS（○）: 所有者が2026-10-08にC/Bを承認。Stage5 ON時の共有画面。分岐上の実装で、本番・TestFlight確認は未実施。
+- `yousu.self-interests` Windows（—）: Stage5 C/B の所有者の承認対象は iPhone と Mac。Windows の体へ追加する決定は無い。
 
 ## 運用（`ops`）
 

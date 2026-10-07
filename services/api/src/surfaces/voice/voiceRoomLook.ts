@@ -1,5 +1,5 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
-import { ROOM_LOOK_UNAVAILABLE_REASON, asksToLook, type BodyLookUnavailable, type BodyLookVoiceTurn } from '../body/bodyLook.js';
+import { ROOM_LOOK_UNAVAILABLE_REASON, asksToLook, type BodyLookUnavailable, type BodyLookVoiceTurn } from '../../mind/perception/lookPorts.js';
 import { APP_LOOK_ROUTER } from '../../contracts/appLookContract.js';
 import type { VoiceDecisionInput, VoiceTurnDecision } from '../../contracts/voiceDecisionContract.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';

@@ -127,7 +127,26 @@ export const SHANNON_SKILLS_CAPABILITY = Object.freeze({
 } as const satisfies ShannonCapability);
 
 /** Capabilities the API may add to the description while it has them. */
-export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_READ_TOOLS_CAPABILITY, SHANNON_SKILLS_CAPABILITY] as const);
+export const SHANNON_STAGE5_CAPABILITIES = Object.freeze([
+  {id:'self_interests', audience:'owner', text:'関心の日記: ボクの関心を眠っている間に少しずつ見直します。ライ氏は「ようす」で理由と履歴を読み、固定・取り消し・禁止・忘却を選べます。'},
+  {id:'task_tree', audience:'owner', text:'作業の道筋: 頼まれた作業の目的と完了条件を、細かな作業と順序に分けます。条件の変更はライ氏に提案し、採用された条件を満たした記録で完了を確かめます。'},
+  {id:'owner_feedback', audience:'owner', text:'返答への反応: 道具を使った返答や確認済みの作業結果には、ライ氏が「役立った・いまひとつ」を付け、変更や取り消しもできます。同じ選択の手応えに反映します。'},
+  {id:'self_rewrite', audience:'owner', text:'自分の作業場所の改修: 許された隔離場所で、JSON・文書と数値関数のコードを実際にテストし、差分と元の版を残して直します。それ以外のコードは作業提案にします。基幹部や本番への変更は、ライ氏のその差分への承認が必要です。分からない結果は確認するまで保留します。'},
+] as const satisfies readonly ShannonCapability[]);
+
+export type ShannonStage5Capabilities = Partial<Record<typeof SHANNON_STAGE5_CAPABILITIES[number]['id'], boolean>>;
+
+/** The owner description receives only the features supplied by this process. OFF and guest bytes stay unchanged. */
+export function withStage5Capabilities(prompt: string, available: ShannonStage5Capabilities | null | undefined): string {
+  const anchor = `- ${SHANNON_CAPABILITIES.find(item => item.id === 'agent_tasks')!.text}\n`;
+  const at = prompt.indexOf(anchor);
+  if (at < 0 || !available) return prompt;
+  const added = SHANNON_STAGE5_CAPABILITIES.filter(item => available[item.id] === true)
+    .map(item => `- ${item.text}\n`).filter(line => !prompt.includes(line)).join('');
+  return added ? `${prompt.slice(0, at + anchor.length)}${added}${prompt.slice(at + anchor.length)}` : prompt;
+}
+
+export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_READ_TOOLS_CAPABILITY, SHANNON_SKILLS_CAPABILITY, ...SHANNON_STAGE5_CAPABILITIES] as const);
 
 /** The owner's description with the skills' line, after her study's line; any other prompt unchanged. */
 export function withSkillsCapability(prompt: string): string {

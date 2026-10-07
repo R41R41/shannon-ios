@@ -14,6 +14,7 @@ import {
   resumePrompt,
   stringValue,
   taskPrompt,
+  taskTreeInstructions,
 } from './codexTaskProjection.js';
 
 interface CodexThreadResult {
@@ -105,7 +106,8 @@ export class CodexTaskCommandController {
 
   private async steerTask(command: ClaimedAgentCommand): Promise<void> {
     const runtime = await this.ensureRuntime(command.taskId);
-    const instruction = stringValue(command.payload.instruction);
+    const originalInstruction = stringValue(command.payload.instruction);
+    const instruction = originalInstruction ? [originalInstruction, ...taskTreeInstructions(command.payload.taskTree)].join('\n') : undefined;
     if (!instruction) throw new Error('追加の指示が空です。');
     if (runtime.turnId) {
       if (runtime.actionLease && this.options.permit && !await this.options.permit(runtime.taskId)) throw new Error('ACTION_STOPPED');
@@ -156,7 +158,7 @@ export class CodexTaskCommandController {
     const runtime = await this.ensureRuntime(command.taskId);
     if (runtime.turnId) throw new Error('Codexの作業はすでに動いています。');
     runtime.suppressTerminalEvent = false;
-    runtime.turnId = await this.startTurn(runtime, resumePrompt(runtime.project, this.options.config, runtime.taskId),command.id);
+    runtime.turnId = await this.startTurn(runtime, resumePrompt(runtime.project, this.options.config, runtime.taskId, command.payload.taskTree),command.id);
     this.runtimes.save(runtime);
     await this.events.emit(command.taskId, 'started', '作業を再開', '保存済みのCodexスレッドで続きを始めた。', {
       currentAction: '前回の続きから確認中',

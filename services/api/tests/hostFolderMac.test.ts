@@ -4,7 +4,7 @@ import { dispatchHostStepRequest } from '../src/infra/http/apiAutonomyHostStepRo
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { hostFolderLabel, hostFolderPath } from '../src/mind/action/ownTime/autonomyHostFolderPath.js';
 import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { chatTurnRequestBody } from '../src/infra/models/chatModelTurn.js';
 import { FOLDER_OR_AETHER_INSTRUCTIONS, HOST_FOLDER_TOOL_INSTRUCTIONS, toolInstructions } from '../src/infra/models/chatModelTools.js';
 import type { ApiRequest, ApiResponse } from '../src/contracts/contracts.js';

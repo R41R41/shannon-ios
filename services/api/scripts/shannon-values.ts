@@ -13,7 +13,7 @@
  */
 import { DatabaseSync } from 'node:sqlite';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
-import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { ownerValueRecorder, valuesView } from '../src/infra/http/learningRoutes.js';
 import { PredictionLedger } from '../src/mind/learning/predictionLedger.js';
 import { SQLiteChoiceLedger } from '../src/mind/learning/store/sqliteChoiceLedger.js';

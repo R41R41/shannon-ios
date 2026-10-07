@@ -174,7 +174,8 @@ extension ShannonConversationView {
                 advancePreview: nil,
                 sourceThreadTitle: model.threads.first { $0.threadId == task.conversationThreadID }?.title,
                 openSourceThread: { openAgentTaskSourceThread(task, draft: nil) },
-                followUp: { kind in openAgentTaskSourceThread(task, draft: kind.draft(for: task)) }
+                followUp: { kind in openAgentTaskSourceThread(task, draft: kind.draft(for: task)) },
+                taskTree: model.taskTreeModel(for: task.id)
             )
             // Seeing a result or a stop in the room is what acknowledges it, also when the
             // state changes while the room is open. A pending approval is not cleared by this.

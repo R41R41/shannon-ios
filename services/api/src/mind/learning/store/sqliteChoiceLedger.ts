@@ -142,6 +142,12 @@ export class SQLiteChoiceLedger {
       value.expected, value.expectedSd, value.expectedNoise, value.expectedLevel, Math.max(0, Math.round(value.expectedN)), value.costYen);
   }
 
+  /** A granted long task has a subject before its original outcome arrives. Does not report or settle it. */
+  attachTask(scopeKey:string,choiceId:string,taskId:string):void {
+    if (![choiceId,taskId].every(id=>PREDICTION_SOURCE_ID.test(id))) throw new Error('CHOICE_IDENTIFIER');
+    this.database.prepare("UPDATE shannon_choices SET subject_kind='task',subject_id=? WHERE scope_key=? AND choice_id=? AND status='pending' AND success IS NULL AND subject_kind IS NULL").run(taskId,scopeKey,choiceId);
+  }
+
   /** The step's own outcome, its cost and what it was about; only while it is pending and not yet reported. */
   report(scopeKey: string, choiceId: string, report: { success: number; costYen: number; subject?: { kind: string; id: string } }): boolean {
     // 0 or 1 for a step; a conversation choice (stage 2) reports G, the mean of its closed signals, in [0, 1].

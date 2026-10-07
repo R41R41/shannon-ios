@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { wantsNearbyPlaces, wantsPlaceDiscovery } from '../../integrations/places/placeDiscovery.js';
+import { placeReply, wantsNearbyPlaces, wantsPlaceDiscovery } from '../../integrations/places/placeDiscovery.js';
 import { combinedPlaceSources, runPlaceDiscoverySkill, spokenPlaceReply } from '../../integrations/places/placeDiscoverySkill.js';
 import {
   OWNER_AUDIENCE,
@@ -62,10 +62,12 @@ import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from '../
 import type { ShannonToolRunner } from '../../mind/tools/shannonToolRunner.js';
 import { conversationTools, ownerAloneReads, skillProfilePrompt, toolTraceReader, turnWroteHerOwnThings, withToolCapabilityLines, type ConversationToolServer, type SkillTurnPorts, type ToolMenuChooser } from '../../mind/tools/shannonToolSession.js';
 import { startVoiceStage2, voiceFinished, voiceOfferAndTier } from './voiceStage2.js';
+import { withStage5Capabilities, type ShannonStage5Capabilities } from '@shannon/cognition';
+import type { FeedbackPorts } from '../../contracts/feedbackContract.js';
 import { voiceCommandResponse, voiceTurnGrounding } from './voiceGrounding.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from '../../mind/action/respond/turnDeadline.js';
 import { tierRequest, type TurnRouting } from '../../mind/action/respond/turnRouting.js';
-import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from './ownerCallElsewhere.js';
+import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from '../../mind/perception/ownerCallElsewhere.js';
 import { closedId, voicePerception, type MindPerceiver, type PerceivedItem } from '../../mind/perception/perceptionPorts.js';
 import { withWorkspace, type MindTurnPorts } from '../../mind/workspace/workspacePorts.js';
 
@@ -92,7 +94,7 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   /** Others present as the server knows them, and what her writes must not repeat; absent, no tool is offered. */
   toolServer?: ConversationToolServer;
   ownerCalls?: Pick<OwnerCalls, 'admitTurn'>; // The owner in a call on another device (`ownerCallElsewhere.ts`); absent, nothing is refused.
-  turnChooser?: ToolMenuChooser; toolHints?: true; turnRouting?: TurnRouting; skills?: Pick<SkillTurnPorts, 'index'>; // Syzygy ADR-0008 stage 2: the second Jev call, the tier and the verifier, her skills' index (step 6); absent, as at ca7cf519.
+  turnChooser?: ToolMenuChooser; toolHints?: true; turnRouting?: TurnRouting; skills?: Pick<SkillTurnPorts, 'index'>; feedback?: FeedbackPorts; stage5Capabilities?: ShannonStage5Capabilities;
   /** Syzygy ADR-0008 stage 3: what the turn hands the mind (`voicePerception` copies `present`); absent, nothing is perceived. */
   mind?: MindTurnPorts;
 }
@@ -303,7 +305,7 @@ async function completeLiveVoiceDelegation(
     ? dependencies.knowledgeStore?.promptProjectionParts(scopeKey) ?? companionIdentityPrompt(captured) : identityOnly(shannonIdentityPrompt('owner', { othersPresent: !alone }));
   const basePrompt = temporaryGuest
     ? [identity.identity, voiceConversationInstructions(true, false, false), temporaryGuestVoiceInstructions].join('\n\n')
-    : [dependencies.autonomy?.identityProjection(scopeKey, identity.identity) ?? identity.identity, voiceConversationInstructions(true)].join('\n\n');
+    : [withStage5Capabilities(dependencies.autonomy?.identityProjection(scopeKey, identity.identity) ?? identity.identity, alone ? dependencies.stage5Capabilities : undefined), voiceConversationInstructions(true)].join('\n\n');
   // Today's focus is built from the owner's interests, which carry no label: it is marked when others can hear.
   const focus = legacyGuest || !selectedSkills.has('daily_mind') ? '' : dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
   const focusGate = new DisclosureGate(present, captured, dependencies.conversationStore, scopeKey);
@@ -427,7 +429,8 @@ async function completeLiveVoiceDelegation(
     title: '依頼された機能の実装', goal: confirmedImplementationRequest,
   } : undefined);
   const answered = confirmedImplementationRequest ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。' : placeSkill ? spokenPlaceReply(completion.reply) : completion.reply;
-  const reply = dependencies.turnRouting ? await voiceFinished(dependencies.turnRouting, { scopeKey, threadId, alone, reply: answered, completion, tier, tools: toolOffer.tools, deadline, at: occurredAt }) : answered;
+  let feedbackRecordId: string | undefined;
+  const reply = dependencies.turnRouting ? await voiceFinished(dependencies.turnRouting, { scopeKey, threadId, alone, reply: answered, feedbackReplySuffix: placeReply('', placeSkill?.places ?? []), completion, tier, tools: toolOffer.tools, deadline, at: occurredAt, onFeedbackRecord: id=>{feedbackRecordId=id;} }) : answered;
   // Opens the look only if this turn chose one, she said so herself, and its conditions still hold.
   if (!confirmedImplementationRequest) roomLook.open(threadId, reply);
   expressiveEmotion = resolveShannonEmotionState({
@@ -478,6 +481,7 @@ async function completeLiveVoiceDelegation(
       threadId,
       model: completion.model,
       reply: reply.trim(),
+      ...(feedbackRecordId ? { feedbackRecordId } : {}),
       webSources: combinedPlaceSources(placeSkill, withCapabilitySources(completion, capability).webSources),
       ...(uiBlocks ? { uiBlocks } : {}), ...roomLook.ask(), ...(completion.truncated ? { truncated: true } : {}),
       // Tells the iPhone to keep marking this call's owner turns as "someone else may be listening".

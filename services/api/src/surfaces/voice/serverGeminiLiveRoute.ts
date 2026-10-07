@@ -10,7 +10,7 @@ import {
   OpenAITranscriptionError,
 } from '../../infra/models/openaiTranscriptionSession.js';
 import { readJson, sendJson } from '../../infra/http/serverHttp.js';
-import { OWNER_IN_CALL_ELSEWHERE_RESPONSE } from './ownerCallElsewhere.js';
+import { OWNER_IN_CALL_ELSEWHERE_RESPONSE } from '../../mind/perception/ownerCallElsewhere.js';
 
 type ConsumeAllowance = (deviceId: string) => boolean;
 

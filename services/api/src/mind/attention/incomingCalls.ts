@@ -1,7 +1,7 @@
 import { INCOMING_CALL_LIMITS, type IncomingCallOutcome, type IncomingCallRegistration } from '../../contracts/incomingCallContract.js';
 import type { IncomingCall, SQLiteIncomingCallStore } from './store/incomingCallStore.js';
-import type { ClaimedReachOut, SQLiteReachOutClaims } from '../../mind/attention/attentionPorts.js';
-import type { VoipPushSender } from './voipPushSender.js';
+import type { ClaimedReachOut, SQLiteReachOutClaims } from './attentionPorts.js';
+import type { VoipPushSender } from '../../contracts/incomingCallContract.js';
 
 /**
  * A call from Shannon (owner decisions 2026-10-03, `docs/incoming-call-contract.md`).

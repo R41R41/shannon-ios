@@ -13,6 +13,7 @@ export const MEMORY_OP_KINDS = Object.freeze([
   'fact.upsert', 'promise.capture', 'intent.capture', 'turn_capture', 'impression.observe', 'impression.merge',
   'person.fact', 'person.promise', 'person.topic', 'person.summary', 'person.link',
   'knowledge.create', 'knowledge.update', 'knowledge.retire', 'replay_summary.update', 'relationship.upsert', 'interest.change',
+  'self.interest.propose', 'self.interest.night', 'self.interest.owner',
 ] as const);
 export type MemoryOpKind = typeof MEMORY_OP_KINDS[number];
 
@@ -204,7 +205,13 @@ const candidate = record({ kind: word(40), pattern: text(200), keyTerms: list(te
 const PAYLOADS: Readonly<Record<MemoryOpKind, Codec>> = Object.freeze({
   'fact.upsert': record({ fact: statementItem, source: learningSource }),
   'relationship.upsert': record({ relationship: statementItem, source: learningSource }),
-  'interest.change': record({ interest: text(160), source: optional(learningSource) }),
+  'interest.change': record({ interest: text(160), source: optional(learningSource), provenance: optional(oneOf(['owner_explicit'])) }),
+  'self.interest.propose': record({ kind: oneOf(['add', 'patch', 'remove']), provenance: oneOf(['resonant_self', 'sleep_self']),
+    itemId: optional(id), title: optional(text(80)), description: optional(text(600)), weight: optional(number), reason: text(240),
+    expectedRevision: optional(integer), ownerGeneration: optional(integer), relatedIds: optional(list(id, 16)) }),
+  'self.interest.night': record({}),
+  'self.interest.owner': record({ operationId: id, itemId: id, expectedRevision: integer,
+    action: oneOf(['undo', 'pin', 'unpin', 'ban', 'unban', 'forget', 'resume']), changeId: optional(id) }),
   'promise.capture': record({ memory: prospective }),
   turn_capture: record({ captures: list(capture, 24) }),
   'intent.capture': record({ capture }),
@@ -273,6 +280,9 @@ function ownerWordsOf(origin: string, payload: unknown): boolean {
 
 /** A rename or a merge is the owner's alone (review, low). */
 function ownerOnly(kind: string, origin: string, payload: unknown): void {
+  if (kind === 'self.interest.owner' && origin !== 'owner') fail('owner_only', 'origin');
+  if (kind === 'self.interest.night' && origin !== 'sleep') fail('owner_only', 'origin');
+  if (kind === 'self.interest.propose' && origin !== 'turn' && origin !== 'sleep') fail('owner_only', 'origin');
   if (kind !== 'person.link' || origin === 'owner') return;
   const action = payload && typeof payload === 'object' ? (payload as { action?: unknown }).action : undefined;
   if (action === 'merge' || action === 'rename') fail('owner_only', 'origin');

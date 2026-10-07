@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   InMemoryCompanionStateStore, SHANNON_EMOTION_KINDS, livingLingering, presentShannonFeeling,
 } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { SHANNON_CORE_PATHS } from '../src/mind/inhibition/autonomyCore.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
 import { OpenAIResponsesChatModel, type ShannonChatModel, type ShannonChatModelRequest, type ShannonChatModelResult } from '../src/infra/models/chatModel.js';

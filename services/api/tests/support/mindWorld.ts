@@ -1,14 +1,15 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createLocalApiKernel, type ShannonApiKernel } from '../../src/infra/http/apiKernel.js';
+import { type ShannonApiKernel } from '../../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../../src/infra/models/chatModel.js';
 import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
 import { SQLiteBodyStore } from '../../src/surfaces/body/store/bodyStore.js';
 import { SQLiteBodyReactionStore } from '../../src/surfaces/body/store/bodyReactionStore.js';
 import { configuredMind } from '../../src/wiring/mindWiring.js';
 import { BackgroundUpdateCoordinator } from '../../src/mind/sleep/backgroundUpdates.js';
-import { SQLiteMinecraftTurnLog } from '../../src/surfaces/minecraft/store/minecraftTurnStore.js';
+import { SQLiteMinecraftTurnLog } from '../../src/mind/action/respond/store/surfaceTurnStore.js';
 import { MinecraftBody } from '../../src/surfaces/minecraft/minecraftBody.js';
 import { configuredMinecraftBody } from '../../src/contracts/minecraftBodyContract.js';
 import { SQLitePeopleMemoryStore } from '../../src/mind/memory/store/peopleMemoryStore.js';

@@ -1,9 +1,11 @@
+import { QUIET_END_HOUR, QUIET_START_HOUR, USER_COOLDOWN_MILLISECONDS } from '../../../contracts/initiativeTiming.js';
+export { QUIET_END_HOUR, QUIET_START_HOUR, USER_COOLDOWN_MILLISECONDS } from '../../../contracts/initiativeTiming.js';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { restoreCompanionState } from '@shannon/cognition';
 import type { DailyMindFocus } from '../../../mind/action/respond/dailyMind.js';
 import { commitmentAwaitingTodaySlot, dueCommitmentCandidate } from '../../../mind/action/respond/commitmentInitiative.js';
-import { bodyLookIdOfSource } from '../../body/store/bodyLookDelivery.js';
+import { bodyLookIdOfSource } from '../../../contracts/bodyLookContract.js';
 import { isRoomLookSource } from '../../../mind/perception/roomLookSource.js';
 import { reachOutOfSource } from '../reachOutDelivery.js';
 import type { ProactiveDeliveryGate } from '../../../mind/attention/attentionPorts.js';
@@ -31,9 +33,9 @@ import {
   type RecentWorldSignal,
 } from '../../../mind/action/respond/initiativeSelection.js';
 
-export const QUIET_START_HOUR = 23;
-export const QUIET_END_HOUR = 7;
-export const USER_COOLDOWN_MILLISECONDS = 90 * 60_000;
+
+
+
 const CANDIDATE_MAX_AGE_MILLISECONDS = 48 * 60 * 60_000;
 
 interface InitiativeCandidate extends CandidateRow {

@@ -13,3 +13,5 @@ export { isExactTimeAlertRequest, matchPromise } from './promiseRules.js';
 export { classifyRememberRequest, isRememberRequest, rememberRequestContent } from './rememberRequest.js';
 export { type TurnDeadline } from './turnDeadline.js';
 export { type ConversationCapabilitySelection } from './conversationCapabilities.js';
+
+export type { MinecraftTurnLog, StoredMinecraftTurn } from './store/surfaceTurnStore.js';

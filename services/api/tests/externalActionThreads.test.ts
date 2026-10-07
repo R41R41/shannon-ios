@@ -17,6 +17,18 @@ function harness(){let clock=at;const h=actionHarness(()=>clock),tasks=new SQLit
   return {...h,tasks,wiring,now:()=>clock,advance:()=>{clock='2026-10-07T12:00:31.000Z';}};
 }
 describe('canonical outside work under mind execution rights',()=>{
+  it('keeps a trusted self task in the autonomy lane and preserves a prior canonical owner admission',async()=>{
+    const h=actionHarness(()=>at),tasks=new SQLiteAgentTaskStore(':memory:',{taskTreeEnabled:true});cleanups.push(()=>tasks.close(),h.close);
+    const wiring=externalActionWiring(h.actions,tasks,null,'owner',()=>at);
+    const authority={origin:'own_time' as const,budgetLane:'autonomy' as const,ownerInformed:false,permissionId:'proposal:self'};
+    const task=tasks.create('owner',{idempotencyKey:'self',conversationThreadID:'talk',title:'task',goal:'goal',summary:'summary',taskAuthority:authority},at).task;
+    await wiring.beforeHost({method:'POST',path:'/v1/agent/host/commands/claim',body:{hostId:'host-one',actionThreads:1}});
+    expect(h.store.list('owner').find(item=>item.sourceId===task.id)).toMatchObject({origin:'own_time',ownerInformed:false});
+    const another=tasks.create('owner',{idempotencyKey:'prior',conversationThreadID:'talk',title:'task',goal:'goal',summary:'summary',hostHint:'host-two',taskAuthority:authority},at).task;
+    await h.actions.enqueue({scopeKey:'owner',kind:'agentTask',origin:'owner_request',sourceId:another.id,ownerInformed:true});
+    await wiring.beforeHost({method:'POST',path:'/v1/agent/host/commands/claim',body:{hostId:'host-two',actionThreads:1}});
+    expect(h.store.list('owner').find(item=>item.sourceId===another.id)).toMatchObject({origin:'owner_request',ownerInformed:true});
+  });
   it('leaves a third task queued without leasing its canonical command, and admits it when a slot ends',async()=>{
     const h=harness();
     const slots=[];

@@ -23,6 +23,9 @@ export interface ValueVersionRecord {
   evidenceTo: number;
   state: 'active' | 'retired';
   frozen: boolean;
+  /** Stage5's independent owner reaction cursor and immutable fold policy; absent on legacy versions. */
+  feedbackSeq?: number;
+  feedbackPolicy?: string;
 }
 
 export const NIGHTLY_VERSION_RETENTION_DAYS = 30;
@@ -34,11 +37,12 @@ export type NightlyDecision = 'snapshot' | 'frozen' | 'already' | 'unchanged' | 
  * `sleep` version made at or after today's sleep-hour boundary, so a restart later in the day changes nothing), not without
  * evidence, not when nothing new was settled.
  */
-export function nightlyDecision(active: Pick<ValueVersionRecord, 'frozen' | 'evidenceTo'> | null, lastSeq: number, sleptToday = false): NightlyDecision {
+export function nightlyDecision(active: Pick<ValueVersionRecord, 'frozen' | 'evidenceTo' | 'feedbackSeq' | 'feedbackPolicy'> | null, lastSeq: number, sleptToday = false,
+  feedback?: { seq: number; policy: string }): NightlyDecision {
   if (active?.frozen) return 'frozen';
   if (sleptToday) return 'already';
   if (lastSeq <= 0) return 'empty';
-  if (active && active.evidenceTo >= lastSeq) return 'unchanged';
+  if (active && active.evidenceTo >= lastSeq && (!feedback || ((active.feedbackSeq ?? 0) >= feedback.seq && active.feedbackPolicy === feedback.policy))) return 'unchanged';
   return 'snapshot';
 }
 
@@ -52,8 +56,11 @@ export function rollbackTarget(versions: readonly ValueVersionRecord[], active: 
     const found = versions.find(version => version.versionId === requested);
     return found && found.versionId !== active.versionId ? found : 'VALUES_VERSION_NOT_FOUND';
   }
-  const earlier = versions.filter(version => version.versionId !== active.versionId && version.evidenceTo < active.evidenceTo)
-    .sort((left, right) => right.evidenceTo - left.evidenceTo || right.createdAt.localeCompare(left.createdAt));
+  const earlier = versions.filter(version => version.versionId !== active.versionId && version.evidenceTo <= active.evidenceTo
+    && (version.feedbackSeq ?? 0) <= (active.feedbackSeq ?? 0)
+    && (version.evidenceTo < active.evidenceTo || (version.feedbackSeq ?? 0) < (active.feedbackSeq ?? 0)
+      || (version.feedbackPolicy !== active.feedbackPolicy && version.createdAt <= active.createdAt)))
+    .sort((left, right) => right.evidenceTo - left.evidenceTo || (right.feedbackSeq ?? 0) - (left.feedbackSeq ?? 0) || right.createdAt.localeCompare(left.createdAt));
   return earlier[0] ?? 'VALUES_NO_EARLIER_VERSION';
 }
 

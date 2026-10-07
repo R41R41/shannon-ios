@@ -51,8 +51,14 @@ export function externalActionWiring(actions: ActionThreads | null, tasks: Agent
       // The current local Agent Host is the Mac. Its task may reach her Mac folder too;
       // share the same coarse lock as folder tools instead of letting two APIs write it.
       if (host?.kind === 'local') resources.push(actionResource(ownerScope, 'folder:mac'));
-      let view = await actions.enqueue({ scopeKey: ownerScope, kind: 'agentTask', origin: 'owner_request',
-        sourceId: task.id, ownerInformed: true, resources });
+      if (tasks.taskTrees && host?.kind === 'cloud') resources.push(actionResource(ownerScope, 'folder:vm'));
+      const previous = await find('agentTask', task.id);
+      const tree = task.taskTree;
+      // An existing canonical admission retains its rights. Unknown legacy intent is not upgraded by the new planner.
+      let view = await actions.enqueue({ scopeKey: ownerScope, kind: 'agentTask',
+        origin: previous?.origin ?? (tree?.origin === 'own_time' ? 'own_time' : 'owner_request'), sourceId: task.id,
+        ...(previous?.parentId ? { parentId: previous.parentId } : {}),
+        ownerInformed: previous?.ownerInformed || (tree?.origin === 'own_time' ? tree.ownerInformed : true), resources });
       if (['failed', 'cancelled'].includes(view.state) && ['resume', 'steer'].includes(candidate.type)) {
         await actions.resume(ownerScope, view.id);
         view = (await actions.list(ownerScope)).find(item => item.id === view.id)!;
@@ -62,6 +68,7 @@ export function externalActionWiring(actions: ActionThreads | null, tasks: Agent
       const lease = leaseOf(view);
       if (!await actions.dispatch(lease)) return { status: 200, body: { command: null } };
       const command = tasks.claim(body.hostId, now(), 35, candidate.id);
+      if (command) tasks.bindActionLease?.(command.id, lease);
       return { status: 200, body: { command: command ? { ...command, actionLease: lease } : null } };
     },
     async filterHostEvents(request: ApiRequest): Promise<ApiRequest> {

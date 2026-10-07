@@ -14,13 +14,20 @@ import { createConfiguredImpressionAnalyzer, ImpressionUpdater } from './mind/me
 import { valueNightSchedule, valueSleep } from './mind/sleep/valueSleep.js';
 import { memoryWriterOf } from './wiring/memoryOutboxWiring.js';
 import { replayCompaction } from './wiring/compactionWiring.js';
-import { peopleFactReaders, stage3StoreOptions } from './wiring/peopleFactsWiring.js';
+import { peopleFactReaders } from './wiring/peopleFactsWiring.js';
+import { stage5InterestNightSchedule, stage5MemoryReaders, stage5MemoryStoreOptions } from './wiring/stage5MemoryWiring.js';
 import { createConfiguredPersonFactJudge } from './mind/memory/personFacts.js';
 import { configuredJevIdentityChooser } from './infra/models/jev/jevIdentity.js';
 import { configuredSkillExport, configuredSkillMemory, skillSleepConsolidator } from './wiring/skillMemoryWiring.js';
+import { configuredWorkerFeedback } from './wiring/configuredWorkerFeedback.js';
+import { configuredOwnerScope } from './infra/config/ownerScope.js';
 
 // Syzygy ADR-0008 stage 3 (F5): with SHANNON_MEMORY_OUTBOX on, this process's memory writers propose, and the one writer applies.
-const store = new SQLiteShannonStore({ path: configuredDatabasePath(), now: () => new Date().toISOString(), ...stage3StoreOptions(process.env) });
+const store = new SQLiteShannonStore({ path: configuredDatabasePath(), now: () => new Date().toISOString(), ...stage5MemoryStoreOptions(process.env) });
+const feedback = configuredWorkerFeedback(process.env, { path: configuredDatabasePath(), store,
+  ownerScope: configuredOwnerScope(process.env), now: () => new Date().toISOString() });
+const interestNightly = stage5InterestNightSchedule(store, { now: () => new Date().toISOString(),
+  timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo', sleepHour: parseInteger(process.env.SHANNON_SLEEP_HOUR, 3) });
 const memory = store.memoryProposals();
 const knowledge = new ShannonKnowledgeConsolidator(store, store, store, createConfiguredKnowledgeAnalyzer(process.env, store), store, { memory });
 // Syzygy ADR-0008 stage 2, step 6: her skills are built after her knowledge, in the same budget; the API process creates their tables.
@@ -59,6 +66,7 @@ const worker = new ShannonBackgroundWorker(store, store, store, createConfigured
   replaySummarizer,
   impressionUpdater: impressions,
   memoryProposals: memory,
+  ...stage5MemoryReaders(store),
   // All run after a completed sleep batch, inside the shared background budget; none can fail the batch.
   knowledgeConsolidator: { consolidate: async (scopeKey, startAt, endAt) => {
     try { await knowledge.consolidate(scopeKey, startAt, endAt); } finally {
@@ -101,6 +109,7 @@ console.log(`Shannon background worker started (${worker.workerId})`);
 try {
   do {
     valueNightly(new Date().toISOString());
+    interestNightly?.(new Date().toISOString());
     const result = await worker.runOnce();
     // `--once`: the writer's one run follows the main loop's, as before.
     if (once && memoryWriter) await memoryWriter.runOnce().catch(error => { console.error('Shannon memory writer failed', error instanceof Error ? error.name : 'unknown'); });
@@ -117,6 +126,7 @@ try {
   try { memoryWriter?.releaseLease(); } catch { /* the next writer takes it when it expires */ }
   peopleStore.close();
   skillMemory?.close();
+  feedback?.close();
   store.close();
 }
 

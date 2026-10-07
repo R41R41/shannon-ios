@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { BODY_LIMITS } from '../src/contracts/bodyContract.js';
 import { configuredBodyLook } from '../src/contracts/bodyLookContract.js';
 import { SQLiteBodyLookStore } from '../src/surfaces/body/store/bodyLookStore.js';

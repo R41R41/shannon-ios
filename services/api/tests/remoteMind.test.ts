@@ -40,6 +40,26 @@ describe('one mind across the process boundary',()=>{
     await expect(configuredMindWorker(on,path,()=>{constructed=true;return ownerHost(path);},now)).rejects.toThrow('MIND_IPC_ALREADY_RUNNING');
     expect(constructed).toBe(false);
   });
+  it('reads an exact canonical receipt beyond the terminal presentation window and fences its scope',async()=>{
+    const {path,dir}=location(),worker=await configuredMindWorker(on,path,()=>ownerHost(path),now);cleanups.push(worker.close);
+    const client=new MindSocketClient(join(dir,'mind-runtime','mind.sock'));cleanups.push(()=>client.close());
+    const actions=actionThreadsClient(client.call,'api');
+    let original='';
+    for(let index=0;index<41;index++){
+      const action=worker.actions.enqueue({scopeKey:'owner',kind:'agentTask',origin:'owner_request',sourceId:`canonical-${index}`},
+        new Date(Date.parse(at)+index).toISOString());
+      const running=worker.actions.claim(action.id,'original-host',at)!;
+      worker.actions.finish({id:running.id,generation:running.generation,holder:running.holder!},'completed','done',
+        new Date(Date.parse(at)+index).toISOString());
+      if(index===0)original=action.id;
+    }
+    expect(await actions.list('owner')).toHaveLength(40);
+    expect((await actions.list('owner')).some(action=>action.id===original)).toBe(false);
+    expect(await actions.get('owner',original)).toMatchObject({id:original,state:'completed',sourceId:'canonical-0'});
+    expect(await actions.get('other-scope',original)).toBeNull();
+    expect(await actions.get('owner','missing-original')).toBeNull();
+    await expect(actions.get('owner','malformed id')).rejects.toThrow('MIND_IPC_REMOTE');
+  });
   it('rechecks forgetting after IPC, does not persist owner words, and exposes no owner text to others',async()=>{
     const {path}=location(),store=new SQLiteShannonStore({path,now});cleanups.push(()=>store.close());
     store.apply('owner',{type:'user-fact-upserted',source:'conversation',fact:{id:'key',statement:'ユーザーは合鍵を植木鉢の下に置いている',confidence:0.95,observedAt:at,evidence:'合鍵は植木鉢の下'}});

@@ -1,6 +1,6 @@
 # Shannon design authority
 
-Revision: 2026-10-07
+Revision: 2026-10-08
 
 This document is the entrypoint for the currently implemented Shannon design. It records ownership and evidence; it does not propose a redesign.
 
@@ -137,3 +137,13 @@ explicit user actions backed by the server result; a receipt summarizes purpose,
 and outcome without storing or presenting private chain-of-thought. An explicitly stated goal may
 also carry one next step and up to five owner-visible plan stages. The UI labels these as a proposal;
 they never imply execution or completion without an existing verified receipt.
+
+## ADR-0008 Stage 5 (approved C/B, branch implementation)
+
+The existing memory/ようす entry opens 関心の日記: current interests and changes, weights, reasons and current-visible evidence, immutable item history, pin/unpin, ban/unban, forget, selected-change undo and resume. Detail views use native navigation and preserve the receipt if an operation is uncertain. New private content is cleared synchronously when the existing body/voice audience says others are present; delayed reads cannot restore it.
+
+A pair of small role-based controls belongs only to a server-bound tool response or verified owner task result. Selected good/bad can switch or be withdrawn. Pending/checking, stale version, unavailable source and resolved original-operation states remain distinct. An uncertain write is checked with GET, never repeated automatically. Voice keeps the exact trusted delegation response in the same conversation; ordinary or unbound responses have no controls.
+
+The existing work detail shows the root and child task conditions, dependencies and actual proof status. Root purpose/content/deadline changes are reviewed as exact proposals. Pause/resume/steer/cancel and existing approval surfaces remain available. iPhone and Mac share models and meaning through native layouts; no new peer tab or architecture/configuration jargon appears in the product flow.
+
+Sources: `Features/Memory/ShannonInterests*`, `Features/Conversation/ShannonFeedback*`, `Features/AgentTasks/ShannonTaskTree*` under `apps/ios/Sources/ShannonAppCore`; runtime and privacy contract: [adr8-stage5-contract.md](adr8-stage5-contract.md). Native branch QA/build evidence does not imply production/TestFlight acceptance.

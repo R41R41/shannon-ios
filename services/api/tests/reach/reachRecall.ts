@@ -5,11 +5,11 @@ import { UNLABELLED_DISCLOSURE_MARKER } from '@shannon/cognition';
 import {
   judgedFacts, recallGuestScenario, recallTreeScenario, stableFingerprint, type ReachDriver, type ReachScenarioDefinition,
 } from '../../../../packages/evaluation/src/reach/index.js';
-import { createLocalApiKernel } from '../../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../../src/infra/models/chatModel.js';
 import { JevChooser, type JevChoiceTrace } from '../../src/infra/models/jev/jevChoice.js';
 import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
-import { createInMemoryAutonomyService } from '../../src/mind/action/ownTime/autonomyService.js';
+import { createInMemoryAutonomyService } from '../../src/wiring/autonomyServiceWiring.js';
 import type { MemoryModelGateway } from '../../src/mind/recall/memoryModels.js';
 import { TreeKnowledgeRecall } from '../../src/mind/recall/treeRecall.js';
 import { createConfiguredTurnMemoryRecall } from '../../src/mind/recall/turnMemoryRecall.js';

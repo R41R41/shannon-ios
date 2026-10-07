@@ -5,3 +5,7 @@
 export { type CompletedTurn, type TurnBackgroundService } from './backgroundUpdates.js';
 export { type CommitmentSleepReview } from './sleepCommitmentReview.js';
 export { explicitFactStatement } from './sleepConsolidationRules.js';
+
+export { extractExplicitMemoryProposals } from './explicitMemoryProposals.js';
+
+export { turnPersistenceContext } from './turnPersistenceContext.js';

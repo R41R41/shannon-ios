@@ -9,7 +9,7 @@ import { AutonomyActivityRecord, summarizeAutonomyDay } from '../src/mind/inhibi
 import { SQLiteAutonomyAnnouncer, budgetRequestMessage } from '../src/mind/action/ownTime/autonomyAnnouncer.js';
 import { configuredAutonomy, type AutonomyConfig } from '../src/mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { readApiSource } from './support/sources.js';

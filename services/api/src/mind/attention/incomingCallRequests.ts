@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import type { AutonomyPhone, PhoneFacts } from '../../mind/action/ownTime/autonomyLoopPhoneStep.js';
+import type { AutonomyPhone, PhoneFacts } from '../action/ownTime/ownTimePorts.js';
 import { INCOMING_CALL_LIMITS, incomingCallMinimumIntervalMilliseconds, incomingCallsEnabled } from '../../contracts/incomingCallContract.js';
 import type { SQLiteIncomingCallStore } from './store/incomingCallStore.js';
 import { privateReachOutsEnabled } from '../../contracts/privateListeningContract.js';
-import type { PrivateListener } from '../body/store/privateListeningStore.js';
-import type { SQLiteReachOutClaims } from '../../mind/attention/attentionPorts.js';
+import type { PrivateListener } from '../inhibition/inhibitionStorePorts.js';
+import type { SQLiteReachOutClaims } from './attentionPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
-import type { ProactiveDeliveryGate, ProactiveDeliveryIntent, ProactiveDeliveryHold, ProactiveReason } from '../../mind/attention/attentionPorts.js';
+import type { ProactiveDeliveryGate, ProactiveDeliveryIntent, ProactiveDeliveryHold, ProactiveReason } from './attentionPorts.js';
 
 /**
  * Her loop's side of a call (`autonomyLoopPhoneStep.ts`): the facts she chooses with, and asking for the call.

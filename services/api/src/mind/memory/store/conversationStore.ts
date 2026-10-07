@@ -136,6 +136,19 @@ export class InMemoryConversationStore implements ConversationStore {
     })));
   }
 
+  assistantMessage(scopeKey: string, threadId: string, sourceOrMessageId: string): StoredConversationMessage | null {
+    const rows=this.conversations.get(scopeKey)?.get(threadId)??[];
+    return [...rows].reverse().find(row=>row.role==='assistant'&&(row.id===sourceOrMessageId||row.sourceExperienceId===sourceOrMessageId))??null;
+  }
+  appendNoteOnce(scopeKey: string, threadId: string, messageId: string, content: string, observedAt: string, noteKind: string, ownerAlone?: boolean): StoredConversationMessage {
+    const existing=this.assistantMessage(scopeKey,threadId,messageId);
+    if(existing){if(existing.content!==content||existing.sourceExperienceId!==`${noteKind}:${messageId}`)throw new Error('TASK_NOTE_CONFLICT');return existing;}
+    const threads=this.conversations.get(scopeKey)??new Map<string,StoredConversationMessage[]>();
+    const messages=threads.get(threadId)??[];
+    const note=Object.freeze({id:messageId,sourceExperienceId:`${noteKind}:${messageId}`,role:'assistant' as const,content,observedAt,...(typeof ownerAlone === 'boolean' ? {noteOwnerAlone:ownerAlone} : {})});
+    threads.set(threadId,[...messages,note].slice(-this.maximumConversationItems));this.conversations.set(scopeKey,threads);return note;
+  }
+
   experienceCandidates(scopeKey: string, threadId?: string): readonly ShannonExperience[] {
     this.threadId(scopeKey, threadId);
     return Object.freeze((this.experiences.get(scopeKey) ?? []).map(item => Object.freeze({ ...item })));

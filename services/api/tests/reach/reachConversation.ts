@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createLocalApiKernel } from '../../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../../src/infra/models/chatModel.js';
 import { estimatedOpenAICostWithCacheUsd, type LlmUsageEvent, type LlmUsageStore } from '../../src/infra/models/llmUsage.js';
 import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';

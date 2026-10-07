@@ -1,4 +1,4 @@
-import { HOST_STEP_CODES, hostFolderLabel, hostFolderPath, hostStepContentDigest, type HostStepCode } from '../action/ownTime/autonomyHostFolderPath.js';
+import { HOST_STEP_CODES, hostFolderLabel, hostFolderPath, hostStepContentDigest, type HostStepCode } from '../action/ownTime/ownTimePorts.js';
 import type { ListResult, ReadResult, SearchResult, WriteResult } from '../action/ownTime/ownTimePorts.js';
 import type { HostFolderOperations, HostRunOutcome } from '../action/ownTime/ownTimePorts.js';
 import type { HostOperation } from '../action/ownTime/ownTimePorts.js';

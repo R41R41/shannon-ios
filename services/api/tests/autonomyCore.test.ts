@@ -31,6 +31,7 @@ const CORE_AREA_OVERRIDES: readonly string[] = [
   'packages/learning/src/difficultyPolicy.ts: emotion -> response_path',
   'services/api/src/mind/inhibition/autonomyDayLog.ts: approval_and_budget -> activity_record',
   'services/api/src/mind/inhibition/store/autonomyActivity.ts: approval_and_budget -> activity_record',
+  'services/api/src/mind/memory/platformSurface.ts: memory -> response_path',
 ];
 
 /**
@@ -173,6 +174,10 @@ describe('CORE as code', () => {
   it('keeps the value table\'s command line inside core', () => {
     expect(coreAreaForRepositoryPath('services/api/scripts/shannon-values.ts')?.area).toBe('approval_and_budget');
     expect(coreAreaForRepositoryPath('scripts/shannon-values.sh')?.area).toBe('deployment');
+  });
+
+  it('protects the completed-reply feedback binding that controls learning eligibility', () => {
+    expect(coreAreaForRepositoryPath('services/api/src/mind/action/respond/turnFeedback.ts')?.area).toBe('response_path');
   });
 
   it('matches files exactly and directories by prefix, ignoring case', () => {

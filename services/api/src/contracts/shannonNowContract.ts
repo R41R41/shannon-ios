@@ -36,9 +36,7 @@ export function shannonNowEnabled(environment: Readonly<Record<string, string | 
 }
 
 /** The scope that is the owner's; a device paired into any other scope is refused. */
-export function shannonNowOwnerScope(environment: Readonly<Record<string, string | undefined>>): string {
-  return environment.SHANNON_OWNER_SCOPE_KEY?.trim() || 'owner';
-}
+export { configuredOwnerScope as shannonNowOwnerScope } from '../infra/config/ownerScope.js';
 
 /** One of her faces, as every other screen names it (`expression`, and `feeling` for a borrowed face). */
 export interface ShannonNowFace {

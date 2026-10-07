@@ -12,7 +12,7 @@ import { applyExplicitCommitmentCommand, resolveCommitmentCommand } from '../src
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import { SQLiteWorldStore } from '../src/integrations/world/store/worldStore.js';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { promptOf } from './modelPrompt.js';
 

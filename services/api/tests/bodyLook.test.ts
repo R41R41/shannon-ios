@@ -4,10 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore, SHANNON_ROOM_LOOK_RULES } from '@shannon/cognition';
-import { createLocalApiKernel } from '../src/infra/http/apiKernel.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
-import { ShannonAutonomyService, createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
+import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import {
   BODY_LOOK_SEEN_SUMMARY, ROOM_LOOK_OFFER_PROMPT, asksToLook, bodyLookNotSeenSummary, type BodyLookMessage,
 } from '../src/surfaces/body/bodyLook.js';
@@ -16,7 +17,7 @@ import {
   bodyLookResultId, configuredBodyLook, jpegSize, validatedBodyLookResult, type BodyLookConfig,
 } from '../src/contracts/bodyLookContract.js';
 import { SQLiteBodyLookSpeaker } from '../src/surfaces/body/store/bodyLookDelivery.js';
-import { bodyLookNotSeenLine } from '../src/surfaces/body/bodyLookLines.js';
+import { bodyLookNotSeenLine } from '../src/mind/perception/bodyLookLines.js';
 import { SQLiteBodyLookStore } from '../src/surfaces/body/store/bodyLookStore.js';
 import { OpenAIRoomLookViewer, roomLookInstructions, type RoomLookViewRequest, type RoomLookViewer } from '../src/surfaces/body/bodyLookVision.js';
 import { bodyLookRequestBytes } from '../src/wiring/bodyLookWiring.js';
@@ -701,7 +702,7 @@ describe('the frame is never kept', () => {
     // The one reader of the environment (Syzygy ADR-0008 §10), which opens nothing.
     expect(imports('bodyLookContract.ts')).toEqual(['serverEnvironment.ts']);
     expect(imports('serverEnvironment.ts')).toEqual([]);
-    expect(imports('bodyLook.ts').sort()).toEqual(['@shannon/cognition', 'bodyLookContract.ts', 'bodyLookLines.ts', 'bodyLookStore.ts', 'bodyLookTurnWait.ts', 'bodyLookVision.ts', 'node:crypto']);
+    expect(imports('bodyLook.ts').sort()).toEqual(['@shannon/cognition', 'bodyLookContract.ts', 'bodyLookLines.ts', 'bodyLookStore.ts', 'bodyLookTurnWait.ts', 'bodyLookVision.ts', 'lookPorts.ts', 'lookPorts.ts', 'node:crypto']);
     // The wait for a voice turn to be stored knows a Talk and his words, and imports nothing.
     expect(imports('bodyLookTurnWait.ts')).toEqual([]);
     expect(source('bodyLookTurnWait.ts')).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync|BodyLookImage|base64/u);

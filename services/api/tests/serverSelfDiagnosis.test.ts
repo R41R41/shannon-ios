@@ -9,7 +9,7 @@ import { createConfiguredChatModel } from '../src/infra/models/chatModel.js';
 import { configuredNotionSource } from '../src/integrations/notion/notionSource.js';
 import { SQLiteOpsStore } from '../src/infra/ops/store/opsStore.js';
 import { createConfiguredVoyagerCatalog } from '../src/integrations/voyager/organize.js';
-import { configuredPlatformBridge } from '../src/surfaces/platform/platformBridge.js';
+import { configuredPlatformBridge } from '../src/mind/memory/platformBridge.js';
 import { createOpsRoute, OPS_READ_PATH } from '../src/infra/ops/serverOpsRoutes.js';
 import {
   createServerSelfDiagnosis, deployedRevision, personaHash, personaHashSource, reportableModelName, type SelfDiagnosisSources,

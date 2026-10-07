@@ -77,7 +77,7 @@ Real-LLM evaluations are opt-in because they cost money. Run them only for chang
 
 ## Agent Host
 
-The Mac launchd label is `com.shannon.agent-host`; the staged Azure unit is `shannon-agent-host.service`. After changing Agent Host or bridge code:
+The Mac launchd label is `com.shannon.agent-host`; the Azure unit is `shannon-agent-host.service` (present in the recorded Stage 4 production baseline). After changing Agent Host or bridge code:
 
 1. Run API verification.
 2. Restart the launch agent.
@@ -89,9 +89,9 @@ The Agent Host must launch Codex only inside an allowlisted project. Its saved s
 
 For cloud TestFlight delivery, work on `shannon/task-<task-id>`. Do not integrate or push `main` until tests pass and the user explicitly requested delivery. That explicit request authorizes the matching push, integration, and distribution; do not ask for a second approval at execution time. If the target or scope changes, clarify the new action before proceeding. Xcode Cloud, not Azure Linux, performs the iOS build and signing.
 
-An approval belongs to the live Codex connection that requested it. If the Agent Host restarts while waiting for approval, never infer that the old request was accepted and never leave Azure in `waiting_approval`. Discard the expired request, preserve the Shannon task goal, continue from the same working tree in a clean Codex thread, publish a `started` recovery event so Azure clears the stale approval, and ask for a fresh approval only if the remaining operation independently requires one. An explicit delivery request continues to authorize its matching release after recovery. A clean thread is intentional: the expired request can leave an unmatched tool call in the old Codex history.
+An approval belongs to the live Codex connection that requested it. If the Agent Host restarts while waiting for approval, never infer that the old request was accepted and never leave Azure in `waiting_approval`. Clear the stale approval projection, retain the same task and original execution as unknown, and inspect its canonical action/Host receipt. Never create a clean thread or fresh command to replay a possibly dispatched operation. Continue only after a definite original outcome or the owner’s reviewed recovery establishes what remains. Ask for a fresh approval only if the remaining operation independently requires one. An explicit delivery request continues to authorize its matching release after recovery. An unmatched historical tool call is not evidence that its external operation failed to execute.
 
-If a saved turn is no longer active after restart, resume the same Codex thread automatically and inspect the working tree before continuing. Do not create a duplicate task or repeat changes that are already present.
+If a saved turn is no longer active after restart, inspect the original execution receipt and working tree before any resume; do not automatically replay an unknown dispatched action. Do not create a duplicate task or repeat changes that are already present.
 
 ## Azure delivery
 
@@ -212,4 +212,10 @@ Report:
 
 ## Stage 4 shared mind rollout
 
-The explicit switch, private IPC, device protocol order, stop/unknown recovery, and checks are in [action-threads-contract.md](action-threads-contract.md). Stage 4 is implemented on its own branch; a successful unsigned build is not authorization or evidence of production deployment. Run independent core review and the existing production/Apple gates before enabling `SHANNON_ADR8_STAGE4=on`. Install the API route and updated Agent Host with the switch OFF first. The new `shannon-ios-mind.service` exits its main Node launcher successfully when OFF, and imports the existing worker in the same process when ON. `Restart=on-failure` still recovers actual worker failures; a skipped `ExecCondition` would be retried by the VM's systemd 245. Inspect canonical outcomes before reconciling an unknown action; never replay it to test whether the previous attempt worked.
+The explicit switch, private IPC, device protocol order, stop/unknown recovery, and checks are in [action-threads-contract.md](action-threads-contract.md). Stage 4 was released at `8200c128` with its switch ON and Build 169/168 owner-device confirmation recorded 2026-10-08. The following initial rollout procedure remains applicable to a fresh environment; a successful unsigned build is not authorization or evidence of production deployment. Run independent core review and the existing production/Apple gates before enabling `SHANNON_ADR8_STAGE4=on`. Install the API route and updated Agent Host with the switch OFF first. The new `shannon-ios-mind.service` exits its main Node launcher successfully when OFF, and imports the existing worker in the same process when ON. `Restart=on-failure` still recovers actual worker failures; a skipped `ExecCondition` would be retried by the VM's systemd 245. Inspect canonical outcomes before reconciling an unknown action; never replay it to test whether the previous attempt worked.
+
+## Stage 5 rollout and recovery
+
+The maintained implementation contract is [adr8-stage5-contract.md](adr8-stage5-contract.md). The branch is under verification and Stage5 is not deployed. Keep `SHANNON_ADR8_STAGE5` OFF for the initial API/worker/Host installation. After the full existing checks, original proof and current-audience tests, and reviewed backup/health/authentication checks, the reviewed release may enable it. OFF supplies no new ports/tools or prompts; it leaves additive tables and all receipts intact. Never use rollback/OFF to erase bans, forgotten material, uncertain Host effects or original operation IDs.
+
+For uncertain reactions/interests/tree operations, retrieve the saved operation or proposal with GET and its original ID. Do not retry POST to discover its outcome. For task/self-revision unknown state, verify the original action generation/holder, Host turn and physical before/after snapshots before reconciliation; do not create a fresh attempt. A revision failure freeze is attached to the work, survives new candidate IDs and requires explicit owner resume. Host costs remain unreported unless actual per-task accounting becomes available; do not describe the existing zero sentinel as measured free work.

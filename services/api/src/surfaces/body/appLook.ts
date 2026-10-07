@@ -5,11 +5,11 @@ import {
 } from '../../contracts/appLookContract.js';
 import {
   APP_LOOK_OFFER_PROMPT, APP_LOOK_SEEN_SUMMARY, announcedLook, appLookNotSeenLine, lookAnnouncement, appLookNotSeenSummary, appLookUnavailablePrompt, type AppLookUnavailable,
-} from './appLookLines.js';
+} from '../../mind/perception/appLookLines.js';
 import { SQLiteAppLookStore, type AppLookOutcome, type StoredAppLook } from './store/appLookStore.js';
 import { asksToLook, type BodyLookMessage, type BodyLookSpeaker } from './bodyLook.js';
 import { BODY_LOOK_LIMITS } from '../../contracts/bodyLookContract.js';
-import { BODY_LOOK_CUT_OFF_LINE } from './bodyLookLines.js';
+import { BODY_LOOK_CUT_OFF_LINE } from '../../mind/perception/bodyLookLines.js';
 import { VoiceTurnWaits, type TurnWait } from './bodyLookTurnWait.js';
 import type { RoomLookContextLine, RoomLookViewer } from './bodyLookVision.js';
 

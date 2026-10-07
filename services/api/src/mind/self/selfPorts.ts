@@ -4,3 +4,4 @@
  * (`mind/action/ownTime/store/pursuitLedger.ts`, stage 3 S2).
  */
 export { KINDS, STATUSES, normalizedDraft, normalizedLinks, text as pursuitText, titleKey, type PursuitDraft, type PursuitRejection } from './autonomyPursuits.js';
+export { SelfInterestMemory, type SelfInterestMemoryPort, type SelfInterestSources, type SelfInterestEvidence, type SelfInterestContextPort } from './selfInterestMemory.js';

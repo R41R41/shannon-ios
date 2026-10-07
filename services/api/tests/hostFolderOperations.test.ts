@@ -4,7 +4,7 @@ import { closedSignal, dispatchHostStepRequest } from '../src/infra/http/apiAuto
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { hostFolderPath, hostStepContentDigest, roomLookGuard } from '../src/mind/action/ownTime/autonomyHostFolderPath.js';
 import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
-import { SQLiteAutonomyStore } from '../src/mind/action/ownTime/store/autonomyStore.js';
+import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import type { ApiResponse } from '../src/contracts/contracts.js';
 import { validHostOperationResult } from '../src/mind/action/ownTime/hostFolderOperationResults.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';

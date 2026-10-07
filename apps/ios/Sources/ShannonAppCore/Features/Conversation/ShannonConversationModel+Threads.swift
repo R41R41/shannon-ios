@@ -142,6 +142,8 @@ extension ShannonConversationModel {
             guard revision == historyLoadRevision, selectedThreadId == selectionAtStart else { return }
             selectedThreadId = response.threadId
             messages = response.messages.compactMap(Self.conversationMessage)
+            feedback.setContext(threadID: response.threadId, othersPresent: feedback.othersPresent)
+            feedback.install(response.messages.compactMap(\.feedback), threadID: response.threadId)
             state = response.state
             let sessions = (try? await client.loadOrganizeSessions(
                 scopeKey: scopeKey, threadId: response.threadId

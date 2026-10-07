@@ -77,6 +77,7 @@ extension ShannonDesktopRootView {
                                 } : nil
                             )
                                 .id(message.id)
+                            if let target = message.feedback { ShannonFeedbackView(target: target, model: conversation.feedback) }
                             if ShannonTurnCaptureList.hasContent(message) {
                                 ShannonTurnCaptureList(message: message, conversation: conversation, memory: memory)
                             }

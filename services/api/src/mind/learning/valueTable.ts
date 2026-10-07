@@ -14,7 +14,9 @@ import {
   type ValueVersionMaker,
   type ValueVersionRecord,
   skillRoutingSwitches,
+  feedbackReward,
 } from '@shannon/learning';
+import type { FeedbackEvidenceReader, FeedbackEvidenceSnapshot } from '../../contracts/feedbackContract.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import { LockWaitMeter, tableExists, underWriteLock, ownerDayKey, type SqliteConnection } from '../../infra/sqlite/lockWaits.js';
 import { SQLiteChoiceLedger } from './store/sqliteChoiceLedger.js';
@@ -40,6 +42,7 @@ export interface ValueVersionsOptions {
    * into the same cells as her own time's. Default: `SHANNON_CONVERSATION_REWARD` as the environment says.
    */
   conversation?: boolean;
+  feedback?: FeedbackEvidenceReader | null;
 }
 
 export class ValueVersions {
@@ -48,12 +51,17 @@ export class ValueVersions {
   private readonly meter: LockWaitMeter;
   private readonly cellCache = new Map<string, ValueCell[]>();
   private present = false;
+  private feedback: FeedbackEvidenceReader | null;
 
   constructor(private readonly options: ValueVersionsOptions) {
     this.store = new SQLiteValueTable(options.database, { createSchema: options.createsSchema });
     this.choices = new SQLiteChoiceLedger(options.database, { createSchema: false });
     this.meter = new LockWaitMeter('value table', options.log);
+    this.feedback=options.feedback??null;
+    if (this.feedback) this.store.enableFeedback();
   }
+  /** Root enables Stage5 on the API/worker only. The autonomy reader does not create feedback tables or write versions. */
+  readFeedbackFrom(feedback: FeedbackEvidenceReader): void { this.store.enableFeedback(); this.feedback=feedback; }
 
   /** V of a choice in a context from the active version; the root cell while there is none (or the tables are absent). */
   readonly reader = (scopeKey: string, choice: string, context: string): ValueRead => {
@@ -71,19 +79,20 @@ export class ValueVersions {
     if (!this.ready()) return { decision: 'unavailable', pruned: 0 };
     let result: { decision: string; versionId?: string; pruned: number } = { decision: 'empty', pruned: 0 };
     // The fold is made outside the lock; under it, only when nothing was settled or rolled back meanwhile is it written as it is.
-    const seen = { lastSeq: this.choices.lastSeq(scopeKey), active: this.store.activeId(scopeKey) };
-    const folded = valueCells(foldValues(this.evidence(scopeKey, seen.lastSeq)));
+    const seen = { lastSeq: this.choices.lastSeq(scopeKey), active: this.store.activeId(scopeKey), feedback: this.feedback?.snapshot(scopeKey) };
+    const folded = valueCells(foldValues(this.evidence(scopeKey, seen.lastSeq, seen.feedback)));
     underWriteLock(this.options.database, this.meter, ownerDayKey(at), () => {
       const lastSeq = this.choices.lastSeq(scopeKey);
       const active = this.store.active(scopeKey);
+      const feedback=this.feedback?.snapshot(scopeKey);
       const boundary = notBefore === undefined ? Number.NaN : Date.parse(notBefore);
       const sleptToday = Number.isFinite(boundary)
         && this.store.versions(scopeKey).some(version => version.madeBy === 'sleep' && Date.parse(version.createdAt) >= boundary);
-      const decision = nightlyDecision(active, lastSeq, sleptToday);
+      const decision = nightlyDecision(active, lastSeq, sleptToday, feedback);
       result = { decision, pruned: 0 };
       if (decision === 'snapshot') {
-        const same = lastSeq === seen.lastSeq && (active?.versionId ?? null) === seen.active;
-        const version = this.write(scopeKey, at, 'sleep', active?.versionId ?? null, same ? folded : null, scopeKey, lastSeq);
+        const same = lastSeq === seen.lastSeq && (active?.versionId ?? null) === seen.active && feedback?.seq===seen.feedback?.seq && feedback?.policy===seen.feedback?.policy;
+        const version = this.write(scopeKey, at, 'sleep', active?.versionId ?? null, same ? folded : null, scopeKey, lastSeq, feedback);
         result = { decision, versionId: version.versionId, pruned: 0 };
       }
       const prune = versionsToPrune(this.store.versions(scopeKey), at);
@@ -103,6 +112,7 @@ export class ValueVersions {
       result = this.insert(scopeKey, {
         versionId: randomUUID(), createdAt: at, madeBy: 'owner_rollback', formula: REWARD_FORMULA.id, weights: { ...REWARD_FORMULA.weights }, baseVersion: target.versionId,
         evidenceFrom: target.evidenceFrom, evidenceTo: target.evidenceTo, state: 'active', frozen: true,
+        ...(target.feedbackSeq!==undefined?{feedbackSeq:target.feedbackSeq,feedbackPolicy:target.feedbackPolicy}:{}),
       }, this.store.cells(target.versionId));
     }, 'shannon_value_table');
     return result;
@@ -116,7 +126,7 @@ export class ValueVersions {
       const active = this.store.active(scopeKey);
       if (!active?.frozen) return;
       const lastSeq = this.choices.lastSeq(scopeKey);
-      result = this.write(scopeKey, at, 'owner_resume', active.versionId, null, scopeKey, lastSeq);
+      result = this.write(scopeKey, at, 'owner_resume', active.versionId, null, scopeKey, lastSeq, this.feedback?.snapshot(scopeKey));
     }, 'shannon_value_table');
     return result;
   }
@@ -139,23 +149,26 @@ export class ValueVersions {
 
   flushLockWaits(): void { this.meter.flush(); }
 
-  private evidence(scopeKey: string, upTo: number): ValueEvidence[] {
+  private evidence(scopeKey: string, upTo: number, feedback?: FeedbackEvidenceSnapshot): ValueEvidence[] {
     // Her own time's choices; with stage 2's conversation reward also her conversation choices scored by closed signals. A tool
     // call recorded by stage 1 as data only (no subject) is never a value.
     const conversation = this.options.conversation ?? skillRoutingSwitches(serverEnvironment()).conversationReward;
     return this.choices.settledInOrder(scopeKey, upTo).filter(choice => choice.reward !== null
-      && (choice.surface === 'autonomy' || (conversation && choice.subjectKind === 'talk'))).map(choice => ({
-      choice: choice.choice, context: choice.context, reward: choice.reward!, world: choice.world ?? 0, serve: choice.serve ?? 0, growth: choice.growth ?? 0,
+      && (choice.surface === 'autonomy' || (conversation && choice.subjectKind === 'talk') || (feedback && choice.subjectKind==='task'))).map(choice => {
+      const reaction=feedback?.reactions.get(choice.choiceId)??null;
+      const adjusted=reaction?feedbackReward({world:choice.world??0,serve:choice.serve??0,growth:choice.growth??0},reaction):{reward:choice.reward!,serve:choice.serve??0};
+      return { choice: choice.choice, context: choice.context, reward: adjusted.reward, world: choice.world ?? 0, serve: adjusted.serve, growth: choice.growth ?? 0,
       costYen: choice.costYen, settledAt: choice.settledAt ?? choice.chosenAt,
-    }));
+    }; });
   }
 
   /** A new active version from all the evidence up to `lastSeq`: the cells given (folded outside the lock), or folded here. */
-  private write(scopeKey: string, at: string, madeBy: ValueVersionMaker, base: string | null, cells: ValueCell[] | null, evidenceScope: string, lastSeq: number): ValueVersionRecord {
+  private write(scopeKey: string, at: string, madeBy: ValueVersionMaker, base: string | null, cells: ValueCell[] | null, evidenceScope: string, lastSeq: number, feedback?:FeedbackEvidenceSnapshot): ValueVersionRecord {
     return this.insert(scopeKey, {
       versionId: randomUUID(), createdAt: at, madeBy, formula: REWARD_FORMULA.id, weights: { ...REWARD_FORMULA.weights }, baseVersion: base,
       evidenceFrom: lastSeq > 0 ? 1 : 0, evidenceTo: lastSeq, state: 'active', frozen: false,
-    }, cells ?? valueCells(foldValues(this.evidence(evidenceScope, lastSeq))));
+      ...(feedback?{feedbackSeq:feedback.seq,feedbackPolicy:feedback.policy}:{}),
+    }, cells ?? valueCells(foldValues(this.evidence(evidenceScope, lastSeq, feedback))));
   }
 
   private insert(scopeKey: string, version: ValueVersionRecord, cells: readonly ValueCell[]): ValueVersionRecord {

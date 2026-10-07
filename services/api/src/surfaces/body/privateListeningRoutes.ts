@@ -4,10 +4,10 @@ import {
   PRIVATE_LISTENING_LIMITS, PRIVATE_LISTENING_PATH, PRIVATE_LISTENING_SCHEMA_VERSION, PRIVATE_REACH_OUT_PREFIX,
   privateReachOutRoute, validatedPrivateListeningReport, validatedPrivateReachOutReport,
 } from '../../contracts/privateListeningContract.js';
-import type { SQLitePrivateListeningStore } from './store/privateListeningStore.js';
-import type { PrivateReachOuts } from '../outreach/privateReachOuts.js';
+import type { SQLitePrivateListeningStore } from '../../mind/inhibition/inhibitionStorePorts.js';
+import type { PrivateReachOuts } from '../../mind/attention/reachOutPorts.js';
 import { validCallId } from '../../contracts/incomingCallContract.js';
-import type { IncomingCalls } from '../outreach/incomingCalls.js';
+import type { IncomingCalls } from '../../mind/attention/reachOutPorts.js';
 
 export interface PrivateListeningDependencies {
   store: SQLitePrivateListeningStore;

@@ -1,6 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { SHANNON_READ_TOOLS_CAPABILITY, SHANNON_SKILLS_CAPABILITY, withReadToolsCapability, withSkillsCapability } from '@shannon/cognition';
+import { SHANNON_STAGE5_CAPABILITIES, withStage5Capabilities } from '@shannon/cognition';
+import { SelfInterestMemory } from '../src/mind/self/selfInterestMemory.js';
+import { createSelfInterestRoute } from '../src/infra/http/selfInterestRoutes.js';
+import { TaskTreeStore } from '../src/mind/action/agentTasks/store/taskTreeStore.js';
+import { FeedbackService } from '../src/mind/learning/feedbackService.js';
+import { SelfRewriteService } from '../src/mind/inhibition/selfRewriteService.js';
+import { selfRewriteRuntimeWiring } from '../src/wiring/selfRewriteRuntimeWiring.js';
+import { SELF_REWRITE_TOOLS } from '../src/mind/tools/selfRewriteToolDefinitions.js';
+import { stage5Enabled } from '../src/infra/config/stage5Config.js';
 import { skillExecutors } from '../src/mind/tools/shannonSkillTools.js';
 import { configuredSkillMemory, skillBodyCheck } from '../src/wiring/skillMemoryWiring.js';
 import { ShannonSkillConsolidator } from '../src/mind/sleep/skillConsolidation.js';
@@ -28,8 +37,8 @@ import { preparePhoneCall } from '../src/mind/action/ownTime/autonomyLoopPhoneSt
 import { prepareReachOut } from '../src/mind/action/ownTime/autonomyLoopReachOutStep.js';
 import { AUTONOMY_CALL_DOMAIN } from '../src/mind/inhibition/autonomyPolicy.js';
 import { incomingCallsEnabled } from '../src/contracts/incomingCallContract.js';
-import { IncomingCallRequests } from '../src/surfaces/outreach/incomingCallRequests.js';
-import { IncomingCalls } from '../src/surfaces/outreach/incomingCalls.js';
+import { IncomingCallRequests } from '../src/mind/attention/incomingCallRequests.js';
+import { IncomingCalls } from '../src/mind/attention/incomingCalls.js';
 import { APNsVoipPushSender } from '../src/surfaces/outreach/voipPushSender.js';
 import { calendarIngestEnabled } from '../src/contracts/calendarContract.js';
 import { dispatchCalendarRequest } from '../src/infra/http/calendarRoutes.js';
@@ -38,8 +47,9 @@ import { SQLiteReachOutSpeaker } from '../src/surfaces/outreach/reachOutDelivery
 import { SQLiteUpcomingStore } from '../src/mind/memory/store/upcomingStore.js';
 import { roomLookNotePrompt } from '../src/mind/action/ownTime/autonomyLoopPrompts.js';
 import { BoundedPublicReader } from '../src/mind/action/ownTime/autonomyReader.js';
-import { ShannonAutonomyService, createInMemoryAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
-import { SQLiteStudyShowing } from '../src/mind/action/ownTime/autonomyShowing.js';
+import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
+import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
+import { SQLiteStudyShowing } from '../src/wiring/studyShowingWiring.js';
 import { StudyStore } from '../src/mind/action/ownTime/store/studyStore.js';
 import { HostFolderOperations } from '../src/mind/action/ownTime/hostFolderOperations.js';
 import { prepareToolStep } from '../src/mind/action/ownTime/autonomyLoopToolStep.js';
@@ -77,7 +87,7 @@ import { asksForLookAloud, voiceRoomLookTurn } from '../src/surfaces/voice/voice
 import { dispatchAppLookRequest } from '../src/surfaces/body/apiAppLookRoutes.js';
 import { AppLooks } from '../src/surfaces/body/appLook.js';
 import { APP_LOOK_SCHEMA, configuredAppLook } from '../src/contracts/appLookContract.js';
-import { appLookUnavailablePrompt } from '../src/surfaces/body/appLookLines.js';
+import { appLookUnavailablePrompt } from '../src/mind/perception/appLookLines.js';
 import { ConversationLooks } from '../src/mind/perception/conversationLooks.js';
 import { createConfiguredVoiceVisionGateway } from '../src/surfaces/voice/voiceVision.js';
 import { apiSourceFiles } from './support/sources.js';
@@ -94,6 +104,10 @@ const exists = (...values: unknown[]) => values.every(value => typeof value === 
 type ConditionalCapabilityId = typeof SHANNON_CONDITIONAL_CAPABILITIES[number]['id'];
 // The fixed description and the lines the API adds while it has them (`SHANNON_CONDITIONAL_CAPABILITIES`) need the same evidence.
 const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, () => boolean> = {
+  self_interests: () => exists(SelfInterestMemory.prototype.projection, SelfInterestMemory.prototype.ownerWithin, createSelfInterestRoute) && !stage5Enabled({}),
+  task_tree: () => exists(TaskTreeStore.prototype.get, TaskTreeStore.prototype.propose) && !stage5Enabled({}),
+  owner_feedback: () => exists(FeedbackService.prototype.change, FeedbackService.prototype.bindTurn) && !stage5Enabled({}),
+  self_rewrite: () => exists(SelfRewriteService.prototype.dispatch, selfRewriteRuntimeWiring) && SELF_REWRITE_TOOLS.length === 3 && !stage5Enabled({}),
   conversation: () => exists(OpenAIResponsesChatModel.prototype.generate,
     OpenAIResponsesChatModel.prototype.generateVoiceStreaming),
   memory_and_promises: () => voiceSkill('conversation_memory') && exists(executeConversationCommand)
@@ -201,6 +215,23 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
 };
 
 describe('Shannon capability description', () => {
+  it('describes Stage5 abilities only when actual ports supply them, with no OFF or guest change', () => {
+    const owner = shannonCapabilityPrompt('owner'), guest = shannonCapabilityPrompt('guest');
+    expect(withStage5Capabilities(owner, undefined)).toBe(owner);
+    expect(withStage5Capabilities(owner, {})).toBe(owner);
+    expect(withStage5Capabilities(owner, {self_interests:false, task_tree:false, owner_feedback:false, self_rewrite:false})).toBe(owner);
+    const flags = {self_interests:true, task_tree:true, owner_feedback:true, self_rewrite:true};
+    expect(withStage5Capabilities(guest, flags)).toBe(guest);
+    const added = withStage5Capabilities(owner, flags);
+    expect(withStage5Capabilities(added, flags)).toBe(added);
+    for (const item of SHANNON_STAGE5_CAPABILITIES) {
+      expect(owner).not.toContain(item.text);
+      expect(added.split('\n').filter(line => line === `- ${item.text}`)).toHaveLength(1);
+    }
+    const onlyFeedback = withStage5Capabilities(owner, {owner_feedback:true});
+    expect(onlyFeedback).toContain(SHANNON_STAGE5_CAPABILITIES.find(item => item.id === 'owner_feedback')!.text);
+    expect(onlyFeedback).not.toContain(SHANNON_STAGE5_CAPABILITIES.find(item => item.id === 'self_rewrite')!.text);
+  });
   it('names only capabilities that have a code path in this build', () => {
     expect(Object.keys(capabilityEvidence).sort()).toEqual([...SHANNON_CAPABILITIES, ...SHANNON_CONDITIONAL_CAPABILITIES].map(item => item.id).sort());
     for (const capability of [...SHANNON_CAPABILITIES, ...SHANNON_CONDITIONAL_CAPABILITIES]) {
