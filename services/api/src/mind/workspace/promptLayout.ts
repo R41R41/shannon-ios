@@ -1,7 +1,7 @@
 import { audienceCovers, isOwnerOnly, type MemoryAudience } from '@shannon/cognition';
 import type { MindSurface } from '@shannon/mind';
 import { WITHHELD_REASON_LABELS, isWithheldReason } from '../../contracts/withheldActionContract.js';
-import { injectionThreats } from '../memory/memoryPorts.js';
+import { injectionThreats } from '../memory/injectionPorts.js';
 import { NOTICE_KINDS, SPEECH_KINDS, currentNotices, orderedHeld, type WorkspaceItem, type WorkspaceScope } from './workspaceState.js';
 
 /**

@@ -1,6 +1,7 @@
 import { mindSwitches, type SwitchValues } from '@shannon/mind';
 import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
-import { MemoryCommands, MemoryWriter, type MemoryProposals, type MemoryTargets } from '../mind/memory/memoryPorts.js';
+import { MemoryCommands, MemoryWriter, type MemoryProposals } from '../mind/memory/memoryWriter.js';
+import type { MemoryTargets } from '../mind/memory/memoryPorts.js';
 import type { ConversationReplaySummarizer } from '../mind/memory/conversationReplaySummary.js';
 import type { ImpressionUpdater } from '../mind/memory/impressionUpdater.js';
 import type { IdentityChooser, PersonFactJudge } from '../mind/memory/memoryPorts.js';

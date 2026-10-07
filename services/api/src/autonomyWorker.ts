@@ -38,7 +38,7 @@ import { ledgerPredictionTap, presenceOf, valueFactsReader } from './wiring/cogn
 import { cognitionLedgerSwitches } from '@shannon/learning';
 import { configuredWithheldActions, gateRefusals, withheldFactsReader } from './wiring/withheldWiring.js';
 import { configuredSkillCopies } from './wiring/skillCopyWiring.js';
-import { configuredMindInbox } from './wiring/mindWiring.js';
+import { configuredMindInbox } from './wiring/mindInboxWiring.js';
 import { configuredProactiveGate } from './wiring/proactiveGateWiring.js';
 import { clock } from './mind/action/ownTime/autonomyLoopPacing.js';
 

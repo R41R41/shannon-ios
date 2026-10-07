@@ -14,6 +14,7 @@ import { memoryPortsOf, memoryWriterOf } from '../src/wiring/memoryOutboxWiring.
 import { replayCompaction, structuredCompactionOn } from '../src/wiring/compactionWiring.js';
 import { runReachScenario, shiritoriScenario } from '../../../packages/evaluation/src/reach/index.js';
 import { ScriptedShiritoriModel, shiritoriDriver } from './reach/reachConversation.js';
+import { STORE_MEMORY_PARTS } from '../src/infra/sqlite/storeMemoryParts.js';
 
 /**
  * Syzygy ADR-0008 stage 3, step F7: structured compaction. The replay summary is the template of `packages/mind`, updated section
@@ -157,7 +158,7 @@ describe('structured compaction', () => {
     directories.push(directory);
     const clock = { at: AT };
     const now = () => new Date(clock.at).toISOString();
-    const store = new SQLiteShannonStore({ path: join(directory, 'shannon.sqlite'), now, memoryOutbox: true, structuredCompaction: true, moodHistory: null });
+    const store = new SQLiteShannonStore({ path: join(directory, 'shannon.sqlite'), now, memoryOutbox: true, memoryParts: STORE_MEMORY_PARTS, structuredCompaction: true, moodHistory: null });
     const ports = memoryPortsOf(store, now)!;
     const model = templateWriter();
     const summarizer = new ConversationReplaySummarizer(store, store, model.writer, { backgroundLlmCostUsd: () => 0 },

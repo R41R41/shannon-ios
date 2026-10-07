@@ -49,12 +49,12 @@ import { PredictionLedger, predictionLedgerEnabled } from '../../mind/learning/p
 import { ChoiceLedger, choiceLedgerEnabled } from '../../mind/learning/choiceLedger.js';
 import { ValueVersions } from '../../mind/learning/valueTable.js';
 import { serverEnvironment } from '../config/serverEnvironment.js';
-import { SQLiteMemoryOutbox } from '../../mind/memory/store/memoryOutboxStore.js';
-import { MemoryProposer } from '../../mind/memory/memoryWriter.js';
+import type { SQLiteMemoryOutbox } from '../../mind/memory/store/memoryOutboxStore.js';
+import type { MemoryProposer } from '../../mind/memory/memoryProposer.js';
 import { SQLitePeopleMemoryStore } from '../../mind/memory/store/peopleMemoryStore.js';
-import { LockWaitMeter } from './lockWaits.js';
-import { SQLitePersonFacts } from '../../mind/memory/store/personFactsStore.js';
-import { SQLiteTrustLedger } from '../../mind/memory/store/trustLedgerStore.js';
+import type { SQLitePersonFacts } from '../../mind/memory/store/personFactsStore.js';
+import type { SQLiteTrustLedger } from '../../mind/memory/store/trustLedgerStore.js';
+import type { StoreMemoryParts } from './storeMemoryParts.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../../../data/shannon.sqlite', import.meta.url)));
 
@@ -100,6 +100,16 @@ export interface SQLiteShannonStoreOptions {
   peopleFacts?: { temporal: boolean; identity: boolean };
   /** The trust ledger's table (F6; inert: its parameters are unset). Absent or false: no table. */
   trustLedger?: boolean;
+  /**
+   * The modules of those parts (`storeMemoryParts.ts`), handed by wiring with any of them switched on, so that this store does
+   * not load them otherwise. A part switched on without them is refused.
+   */
+  memoryParts?: StoreMemoryParts;
+}
+
+function wiredParts(options: SQLiteShannonStoreOptions): StoreMemoryParts {
+  if (!options.memoryParts) throw new Error('SQLiteShannonStore: a stage 3 memory part is switched on without memoryParts (stage3StoreOptions)');
+  return options.memoryParts;
 }
 
 export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore, MemoryEmbeddingIndex, ShannonKnowledgeStore {
@@ -178,12 +188,12 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       database: this.context.database, createsSchema: true, now: () => this.context.now(), ...(options.cognitionDefer ? { defer: options.cognitionDefer } : {}),
     }) : null;
     // Syzygy ADR-0008 stage 3 (F5): the memory outbox, only while it is switched on.
-    this.outbox = options.memoryOutbox ? new SQLiteMemoryOutbox(this.context.database, { meter: new LockWaitMeter('memory writer') }) : null;
+    this.outbox = options.memoryOutbox ? wiredParts(options).outbox(this.context.database) : null;
     // F6: people facts on the people tables of this connection (made here first), and the inert trust ledger; only while switched on.
     const facts = options.peopleFacts && (options.peopleFacts.temporal || options.peopleFacts.identity) ? options.peopleFacts : null;
     if (facts) this.peopleMemoryOnConnection();
-    this.facts = facts ? new SQLitePersonFacts(this.context.database, facts) : null;
-    this.trust = options.trustLedger ? new SQLiteTrustLedger(this.context.database) : null;
+    this.facts = facts ? wiredParts(options).facts(this.context.database, facts) : null;
+    this.trust = options.trustLedger ? wiredParts(options).trust(this.context.database) : null;
     secureDatabaseFiles(options.path);
   }
 
@@ -192,7 +202,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   /** Proposals appended on this connection (so a proposal inside this store's transaction is part of it), or null while off. */
   memoryProposals(): MemoryProposer | null {
     if (!this.outbox) return null;
-    this.proposer ??= new MemoryProposer(this.outbox, { now: () => this.context.now(), notify: () => this.context.options.memoryNotify?.(), log: line => console.log(line) });
+    this.proposer ??= wiredParts(this.context.options).proposer(this.outbox, { now: () => this.context.now(), notify: () => this.context.options.memoryNotify?.(), log: line => console.log(line) });
     return this.proposer;
   }
   /** People memory on this connection (the memory writer's targets and people facts share it); made when first asked for. */

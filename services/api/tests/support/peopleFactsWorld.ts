@@ -8,6 +8,7 @@ import { PlatformPeople } from '../../src/mind/memory/platformPeople.js';
 import type { IdentityChooser, PersonFactJudge } from '../../src/mind/memory/memoryPorts.js';
 import { memoryPortsOf, memoryWriterOf } from '../../src/wiring/memoryOutboxWiring.js';
 import { peopleFactReaders, peopleFactsStoreOptions } from '../../src/wiring/peopleFactsWiring.js';
+import { STORE_MEMORY_PARTS } from '../../src/infra/sqlite/storeMemoryParts.js';
 
 /**
  * A temporary database with the memory outbox and people facts on (Syzygy ADR-0008 stage 3, F5 and F6), the platform's people
@@ -20,7 +21,7 @@ export function peopleFactsWorld(options: { judge?: PersonFactJudge | null; choo
   const path = join(directory, 'shannon.sqlite');
   const clock = { at: Date.parse(PEOPLE_AT) };
   const now = () => new Date(clock.at).toISOString();
-  const store = new SQLiteShannonStore({ path, now, memoryOutbox: true, moodHistory: null, ...peopleFactsStoreOptions(options.environment ?? {}) });
+  const store = new SQLiteShannonStore({ path, now, memoryOutbox: true, memoryParts: STORE_MEMORY_PARTS, moodHistory: null, ...peopleFactsStoreOptions(options.environment ?? {}) });
   const peopleStore = new SQLitePeopleMemoryStore(path);
   const ports = memoryPortsOf(store, now)!;
   const readers = peopleFactReaders(store, now);

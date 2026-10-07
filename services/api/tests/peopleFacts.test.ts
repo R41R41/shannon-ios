@@ -8,11 +8,12 @@ import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemorySt
 import { SQLiteTrustLedger } from '../src/mind/memory/store/trustLedgerStore.js';
 import { PeopleMemory } from '../src/mind/memory/peopleMemory.js';
 import { peopleMigrationReport } from '../src/mind/memory/store/peopleMigrationReport.js';
-import { identityOf, identityPeople, type IdentityChooser, type PersonFactJudge } from '../src/mind/memory/memoryPorts.js';
+import { identityOf, identityPeople, type IdentityChooser, type PersonFactJudge } from '../src/mind/memory/personFactsPorts.js';
 import { platformImpressionLines } from '../src/mind/recall/impressionRecall.js';
 import { peopleFactsStoreOptions } from '../src/wiring/peopleFactsWiring.js';
 import { peopleFactsWorld, PEOPLE_AT } from './support/peopleFactsWorld.js';
 import { databaseDigests } from './support/stage3Scenarios.js';
+import { STORE_MEMORY_PARTS } from '../src/infra/sqlite/storeMemoryParts.js';
 
 /**
  * Syzygy ADR-0008 stage 3, step F6: people facts with the time they were true, luna's contradiction and duplicate step (with its
@@ -248,7 +249,7 @@ describe('the additive migration', () => {
     before.saveCall('owner', { callId: 'call-1', status: 'remembered', personIds: [person.id], createdPersonIds: [], startedAt: PEOPLE_AT, updatedAt: PEOPLE_AT });
     before.replaceCallItems('owner', 'call-1', [{ id: 'fact-1', kind: 'fact', personId: person.id, text: 'ミナさんは猫が好き', observedAt: PEOPLE_AT, disclosure: {} }]);
     before.close();
-    const store = new SQLiteShannonStore({ path: w.path, now: () => PEOPLE_AT, moodHistory: null, peopleFacts: { temporal: true, identity: false } });
+    const store = new SQLiteShannonStore({ path: w.path, now: () => PEOPLE_AT, moodHistory: null, peopleFacts: { temporal: true, identity: false }, memoryParts: STORE_MEMORY_PARTS });
     const facts = store.personFacts()!.facts('owner', person.id);
     expect(facts).toMatchObject([{ id: 'fact-1', text: 'ミナさんは猫が好き', validAt: PEOPLE_AT, invalidAt: null, expiredAt: null, episodeIds: [], revision: 0 }]);
     store.close();

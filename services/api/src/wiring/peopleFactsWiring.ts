@@ -1,5 +1,6 @@
 import { mindSwitches, type SwitchValues } from '@shannon/mind';
 import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
+import { STORE_MEMORY_PARTS, type StoreMemoryParts } from '../infra/sqlite/storeMemoryParts.js';
 
 /**
  * People facts, wired (Syzygy ADR-0008 stage 3, step F6, `docs/mind-workspace-contract.md`). From the switches:
@@ -11,11 +12,13 @@ import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
  * - `SHANNON_EVIDENCE_DECAY` (off by default) is read where impressions are recalled (`impressionRecall.ts`).
  * Each off: no column, no table, no reader; everything is what it was.
  */
-export function peopleFactsStoreOptions(environment: SwitchValues): { peopleFacts?: { temporal: boolean; identity: boolean }; trustLedger?: true } {
+export function peopleFactsStoreOptions(environment: SwitchValues): { peopleFacts?: { temporal: boolean; identity: boolean }; trustLedger?: true; memoryParts?: StoreMemoryParts } {
   const switches = mindSwitches(environment);
+  const facts = switches.temporalFacts || switches.identityTiers;
   return {
-    ...(switches.temporalFacts || switches.identityTiers ? { peopleFacts: { temporal: switches.temporalFacts, identity: switches.identityTiers } } : {}),
+    ...(facts ? { peopleFacts: { temporal: switches.temporalFacts, identity: switches.identityTiers } } : {}),
     ...(switches.trustLedger ? { trustLedger: true as const } : {}),
+    ...(facts || switches.trustLedger ? { memoryParts: STORE_MEMORY_PARTS } : {}),
   };
 }
 
@@ -40,7 +43,10 @@ export function peopleFactReaders(store: SQLiteShannonStore, now: () => string):
  * The options of the conversation's store for every memory part of stage 3, from the environment: the outbox (F5), structured
  * compaction (F7), and people facts and the trust ledger (F6), each behind its switch. All off: the store of afb38c28.
  */
-export function stage3StoreOptions(environment: SwitchValues): { memoryOutbox: boolean; structuredCompaction: boolean; peopleFacts?: { temporal: boolean; identity: boolean }; trustLedger?: true } {
+export function stage3StoreOptions(environment: SwitchValues): { memoryOutbox: boolean; structuredCompaction: boolean; peopleFacts?: { temporal: boolean; identity: boolean }; trustLedger?: true; memoryParts?: StoreMemoryParts } {
   const switches = mindSwitches(environment); // As memoryOutboxOn and structuredCompactionOn read them.
-  return { memoryOutbox: switches.memoryOutbox, structuredCompaction: switches.structuredCompaction, ...peopleFactsStoreOptions(environment) };
+  return {
+    memoryOutbox: switches.memoryOutbox, structuredCompaction: switches.structuredCompaction, ...peopleFactsStoreOptions(environment),
+    ...(switches.memoryOutbox ? { memoryParts: STORE_MEMORY_PARTS } : {}),
+  };
 }

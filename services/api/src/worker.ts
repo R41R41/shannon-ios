@@ -12,16 +12,15 @@ import { createConfiguredPlatformSummaryWriter, PlatformConversationSummarizer }
 import { ConversationReplaySummarizer, createConfiguredReplaySummaryWriter } from './mind/memory/conversationReplaySummary.js';
 import { createConfiguredImpressionAnalyzer, ImpressionUpdater } from './mind/memory/impressionUpdater.js';
 import { valueNightSchedule, valueSleep } from './mind/sleep/valueSleep.js';
-import { memoryOutboxOn, memoryWriterOf } from './wiring/memoryOutboxWiring.js';
-import { replayCompaction, structuredCompactionOn } from './wiring/compactionWiring.js';
-import { peopleFactsStoreOptions } from './wiring/peopleFactsWiring.js';
+import { memoryWriterOf } from './wiring/memoryOutboxWiring.js';
+import { replayCompaction } from './wiring/compactionWiring.js';
+import { stage3StoreOptions } from './wiring/peopleFactsWiring.js';
 import { createConfiguredPersonFactJudge } from './mind/memory/personFacts.js';
 import { configuredJevIdentityChooser } from './infra/models/jev/jevIdentity.js';
 import { configuredSkillExport, configuredSkillMemory, skillSleepConsolidator } from './wiring/skillMemoryWiring.js';
 
 // Syzygy ADR-0008 stage 3 (F5): with SHANNON_MEMORY_OUTBOX on, this process's memory writers propose, and the one writer applies.
-const store = new SQLiteShannonStore({ path: configuredDatabasePath(), now: () => new Date().toISOString(), memoryOutbox: memoryOutboxOn(process.env),
-  structuredCompaction: structuredCompactionOn(process.env), ...peopleFactsStoreOptions(process.env) });
+const store = new SQLiteShannonStore({ path: configuredDatabasePath(), now: () => new Date().toISOString(), ...stage3StoreOptions(process.env) });
 const memory = store.memoryProposals();
 const knowledge = new ShannonKnowledgeConsolidator(store, store, store, createConfiguredKnowledgeAnalyzer(process.env, store), store, { memory });
 // Syzygy ADR-0008 stage 2, step 6: her skills are built after her knowledge, in the same budget; the API process creates their tables.

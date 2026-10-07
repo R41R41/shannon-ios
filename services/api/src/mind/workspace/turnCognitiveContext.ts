@@ -14,11 +14,11 @@ import {
   type ShannonIntent,
   type ShannonSituationSnapshot,
 } from '@shannon/cognition';
-import { emotionTiming } from '../emotion/emotionPorts.js';
+import { emotionTiming } from '../emotion/timingPorts.js';
 import type { ConversationStore } from '../memory/memoryPorts.js';
 import { MemoryWithholding } from '../memory/memoryPorts.js';
 import { DisclosureGate, sharedProfilePrompt } from '../inhibition/disclosurePorts.js';
-import { recallImpressions } from '../recall/recallPorts.js';
+import { recallImpressions } from '../recall/impressionRecallPorts.js';
 import { IMPRESSION_MEMORY_PREFIX } from '../memory/memoryPorts.js';
 
 export interface TurnCognitiveContext {

@@ -3,7 +3,7 @@ import { delimiter, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SHANNON_AUTONOMY_DAILY_BUDGET_YEN } from '@shannon/cognition';
 import { ownerDay } from '@shannon/cognition';
-import { configuredAutonomyModelPrices, type AutonomyModelPrices } from '../action/ownTime/ownTimePorts.js';
+import { configuredAutonomyModelPrices, type AutonomyModelPrices } from '../action/ownTime/modelPricesPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /**

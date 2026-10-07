@@ -26,10 +26,13 @@ export { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert } f
 export { type ConversationStore, type ShannonExperience, type StoredConversationMessage, type TurnPersistenceContext } from './conversationContract.js';
 export { type MemoryEmbeddingIndex, type StoredEmbeddingCandidate } from './store/sqliteMemoryEmbeddings.js';
 export { type ShannonKnowledgeStore } from './store/sqliteShannonKnowledge.js';
-export { MEMORY_OP_KINDS, MEMORY_OP_ORIGINS, memoryOpCodec, type MemoryOp, type MemoryOpDraft, type MemoryOpKind, type MemoryOpOrigin } from './memoryOpCodec.js';
-export { MemoryCommands, MemoryWriter, type MemoryProposals } from './memoryWriter.js';
+// The writer and its codec are values only to wiring (`wiring/memoryOutboxWiring.ts`, which imports them where they live); here they
+// are types, so a process that reaches this window for skills or impressions does not load the writer (stage 3 closure review).
+export type { MemoryOp, MemoryOpDraft, MemoryOpKind, MemoryOpOrigin } from './memoryOpCodec.js';
+export type { MemoryCommands, MemoryWriter, MemoryProposals } from './memoryWriter.js';
 export { type MemoryTargets } from './memoryOps.js';
-export { decayDryRun, decayedUsable, identityOf, identityPeople, nameCosine, ruleJudgement, type IdentityChooser, type PersonFactJudge } from './personFacts.js';
+export type { IdentityChooser, PersonFactJudge } from './personFacts.js';
+export { decayDryRun, decayedUsable } from './impressionDecay.js';
 export { type IdentityCandidate, type PersonFactRow, type TurnSpeaker } from './store/personFactsStore.js';
 export { type KnowledgeStore } from './store/knowledgeStore.js';
 export { type PeopleMemoryStore, type PersonMemoryItem, type RememberedPerson } from './peopleMemoryContract.js';

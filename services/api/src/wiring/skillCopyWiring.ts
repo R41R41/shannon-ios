@@ -1,6 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { skillRoutingSwitches } from '@shannon/learning';
-import { SkillMemory, noteCopyWrite } from '../mind/memory/memoryPorts.js';
+// The modules themselves (wiring imports what it constructs, not a window that loads the whole memory part).
+import { SkillMemory } from '../mind/memory/skillMemory.js';
+import { noteCopyWrite } from '../mind/memory/skillCopies.js';
 
 /**
  * Review M2 for her own time's process: her own `aetherFolder.update` and `.delete` of one of her skills' copies are noted as hers

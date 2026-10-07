@@ -6,6 +6,7 @@ import { ConversationReplaySummarizer, type ReplaySummaryWriter } from '../../sr
 import type { MemoryWriter } from '../../src/mind/memory/memoryWriter.js';
 import type { MemoryOp } from '../../src/mind/memory/memoryOpCodec.js';
 import { memoryPortsOf, memoryWriterOf } from '../../src/wiring/memoryOutboxWiring.js';
+import { STORE_MEMORY_PARTS } from '../../src/infra/sqlite/storeMemoryParts.js';
 
 /**
  * A temporary database with the memory outbox switched on (Syzygy ADR-0008 stage 3, F5), a moved clock, a replay summarizer over
@@ -21,7 +22,7 @@ export function memoryWorld(options: { summary?: (call: number) => string | null
   const path = join(directory, 'shannon.sqlite');
   const clock = { at: Date.parse(MEMORY_AT) };
   const now = () => new Date(clock.at).toISOString();
-  const store = new SQLiteShannonStore({ path, now, memoryOutbox: true, moodHistory: null, predictionShadow: false, decisionTraces: false,
+  const store = new SQLiteShannonStore({ path, now, memoryOutbox: true, memoryParts: STORE_MEMORY_PARTS, moodHistory: null, predictionShadow: false, decisionTraces: false,
     predictionLedger: false, choiceLedger: false });
   const calls: Array<{ previousSummary: string | null; lines: readonly string[] }> = [];
   const model: ReplaySummaryWriter = { update: async (_scopeKey, input) => {

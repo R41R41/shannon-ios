@@ -7,6 +7,7 @@ import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
 import { BackgroundUpdateCoordinator } from '../../src/mind/sleep/backgroundUpdates.js';
 import { SQLitePeopleMemoryStore } from '../../src/mind/memory/store/peopleMemoryStore.js';
 import { memoryPortsOf, memoryWriterOf } from '../../src/wiring/memoryOutboxWiring.js';
+import { STORE_MEMORY_PARTS } from '../../src/infra/sqlite/storeMemoryParts.js';
 
 /** The API kernel on SQLite with the memory outbox on (Syzygy ADR-0008 stage 3), its writer run only when a scenario says so. */
 export function memoryKernel() {
@@ -14,7 +15,7 @@ export function memoryKernel() {
   const path = join(directory, 'shannon.sqlite');
   const clock = { at: Date.parse('2026-10-07T03:00:00.000Z') };
   const now = () => new Date(clock.at).toISOString();
-  const store = new SQLiteShannonStore({ path, now, memoryOutbox: true, moodHistory: null });
+  const store = new SQLiteShannonStore({ path, now, memoryOutbox: true, memoryParts: STORE_MEMORY_PARTS, moodHistory: null });
   const ports = memoryPortsOf(store, now)!;
   const writer = memoryWriterOf(store, { now, log: () => {} })!;
   const people = new SQLitePeopleMemoryStore(path);

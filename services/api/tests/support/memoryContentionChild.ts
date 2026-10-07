@@ -1,6 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
 import { memoryPortsOf, memoryWriterOf } from '../../src/wiring/memoryOutboxWiring.js';
+import { STORE_MEMORY_PARTS } from '../../src/infra/sqlite/storeMemoryParts.js';
 
 /**
  * One of the processes of `memoryWriterContention.test.ts`: on its own connection it proposes its ops (each fourth one followed
@@ -16,7 +17,7 @@ const caught = (error: unknown) => {
   const code = (error as { code?: unknown } | null)?.code;
   errors.push(`${error instanceof Error ? error.message : String(error)}${typeof code === 'string' ? ` ${code}` : ''}`.slice(0, 200));
 };
-const store = new SQLiteShannonStore({ path: path!, now, memoryOutbox: true, moodHistory: null, predictionShadow: false, decisionTraces: false,
+const store = new SQLiteShannonStore({ path: path!, now, memoryOutbox: true, memoryParts: STORE_MEMORY_PARTS, moodHistory: null, predictionShadow: false, decisionTraces: false,
   predictionLedger: false, choiceLedger: false });
 const ports = memoryPortsOf(store, now)!;
 const writer = memoryWriterOf(store, { now, owner: `writer-${index}`, log: line => errors.push(line) })!;

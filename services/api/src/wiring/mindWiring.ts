@@ -76,27 +76,8 @@ export function configuredMind(
   };
 }
 
-/**
- * What another process (her own time) is handed of the mind: one function that writes a row of closed fields into `mind_inbox`,
- * once the API process has created it. Null unless the workspace is on. It never throws and never delays her step.
- */
-export function configuredMindInbox(
-  environment: Readonly<Record<string, string | undefined>>,
-  parts: { databasePath: string; log?: (line: string) => void },
-): { emit: EmitMindEvent; close(): void } | null {
-  if (!mindSwitches(environment).workspace) return null;
-  const database = new DatabaseSync(parts.databasePath);
-  database.exec(PRAGMAS);
-  const inbox = new SQLiteMindInbox(database, { createSchema: false });
-  return {
-    emit: (scopeKey, draft, at) => {
-      try { inbox.append(scopeKey, draft, at); } catch (error) {
-        try { parts.log?.(`mind_inbox write failed: ${error instanceof Error ? error.message : 'unknown'}`); } catch { /* the log is optional */ }
-      }
-    },
-    close: () => { if (database.isOpen) database.close(); },
-  };
-}
+// The inbox writer another process is handed lives in `mindInboxWiring.ts`, so such a process loads nothing else of the mind.
+export { configuredMindInbox } from './mindInboxWiring.js';
 
 /**
  * Writes into the inbox, once each (by kind and source id), the notices of the owner's promises whose time is near, of his agent

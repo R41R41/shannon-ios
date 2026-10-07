@@ -1,5 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
-import { createProactiveGate, mindSwitches, type ProactiveDeliveryGate, type ProactiveGateDependencies } from '../mind/attention/attentionPorts.js';
+import { mindSwitches } from '@shannon/mind';
+// The gate's module itself, not the attention window: a worker that writes her messages loads the gate and nothing else of attention.
+import { createProactiveGate, type ProactiveDeliveryGate, type ProactiveGateDependencies } from '../mind/attention/proactiveDelivery.js';
 import { SQLiteProactiveTopics } from '../mind/attention/store/proactiveTopicsStore.js';
 
 /**

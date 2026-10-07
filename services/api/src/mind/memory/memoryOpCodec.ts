@@ -1,5 +1,5 @@
 import { MEMORY_SENSITIVITY_CATEGORIES, looksSecret, type MemoryDisclosure } from '@shannon/cognition';
-import { injectionThreats } from './skillDocument.js';
+import { injectionThreats } from './injectionGuard.js';
 
 /**
  * The closed-field codec of the memory outbox (Syzygy ADR-0008 stage 3, step F5, `docs/mind-workspace-contract.md`). Every

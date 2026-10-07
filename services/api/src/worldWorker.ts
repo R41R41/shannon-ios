@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { mindSwitches } from '@shannon/mind';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { configuredDatabasePath, SQLiteShannonStore } from './infra/sqlite/sqliteStore.js';
@@ -12,9 +13,9 @@ import { parseArxivFeed, prepareArxivQuery } from './integrations/world/arxiv.js
 import { parseGithubReleases } from './integrations/world/githubReleases.js';
 import { isPrivateOrReservedAddress } from './integrations/world/ipSafety.js';
 import { SQLiteInitiativeStore } from './surfaces/outreach/store/initiativeStore.js';
-import { configuredMindInbox } from './wiring/mindWiring.js';
+import { configuredMindInbox } from './wiring/mindInboxWiring.js';
 import { configuredProactiveGate } from './wiring/proactiveGateWiring.js';
-import { configuredWithheldActions } from './wiring/withheldWiring.js';
+import { configuredWithheldActions } from './wiring/withheldStoreWiring.js';
 import { nextInitiativeDelayMilliseconds } from './surfaces/outreach/initiativeSchedule.js';
 import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './mind/action/respond/dailyMind.js';
 import {
@@ -28,7 +29,9 @@ const nowISOString = () => new Date().toISOString();
 const store = new SQLiteWorldStore(databasePath);
 // Syzygy ADR-0008 stage 3 (owner answer 2): the proactive gate her initiative passes where it is written; a hold is a withheld action and a
 // notice for the conversation. SHANNON_PROACTIVE_GATE=off (or SHANNON_ADR8_STAGE3=off): none of it, and the initiative is as it was.
-const withheldActions = configuredWithheldActions(process.env, { databasePath, createsSchema: false, log: line => console.log(line) });
+// Its withheld actions are only the gate's holds: opened with the gate alone (stage 3 review L1), never with stage 2 alone.
+const withheldActions = mindSwitches(process.env).proactiveGate
+  ? configuredWithheldActions(process.env, { databasePath, createsSchema: false, log: line => console.log(line) }) : null;
 const mindInbox = configuredMindInbox(process.env, { databasePath, log: line => console.log(line) });
 const proactiveGate = configuredProactiveGate(process.env, {
   databasePath, withheld: withheldActions?.withheld.sink ?? null, emit: mindInbox?.emit ?? null, log: line => console.log(line),

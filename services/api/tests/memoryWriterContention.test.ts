@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
+import { STORE_MEMORY_PARTS } from '../src/infra/sqlite/storeMemoryParts.js';
 
 /**
  * Syzygy ADR-0008 stage 3, step F5: five processes propose to the memory outbox of one database file and each runs a writer at
@@ -42,7 +43,7 @@ describe('the memory writer under contention', () => {
     directories.push(directory);
     const path = join(directory, 'shannon.sqlite');
     // The schema is made once before the processes start (as the API process makes it before the worker runs).
-    new SQLiteShannonStore({ path, now: () => new Date().toISOString(), memoryOutbox: true, moodHistory: null }).close();
+    new SQLiteShannonStore({ path, now: () => new Date().toISOString(), memoryOutbox: true, memoryParts: STORE_MEMORY_PARTS, moodHistory: null }).close();
 
     const results = await Promise.all(Array.from({ length: PROCESSES }, (_, index) => run(path, index)));
     for (const result of results) expect(result.errors, `process ${result.index}`).toEqual([]);
@@ -51,7 +52,7 @@ describe('the memory writer under contention', () => {
     expect(waits.every(item => item.writes > OPS)).toBe(true);
     expect(Math.max(...waits.map(item => item.p99))).toBeLessThan(5_000);
 
-    const store = new SQLiteShannonStore({ path, now: () => new Date().toISOString(), memoryOutbox: true, moodHistory: null });
+    const store = new SQLiteShannonStore({ path, now: () => new Date().toISOString(), memoryOutbox: true, memoryParts: STORE_MEMORY_PARTS, moodHistory: null });
     try {
       const rows = store.memoryOutbox()!.rows({ limit: 10_000 });
       expect(rows).toHaveLength(PROCESSES * OPS);
