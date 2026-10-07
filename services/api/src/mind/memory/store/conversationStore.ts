@@ -40,9 +40,9 @@ export interface ReplaySummaryRecord {
   summary: string;
   /** The newest message the summary accounts for. */
   coveredThroughMessageId: string;
-  /** When it was last built from visible messages only, without a previous summary. */
-  chainStartedAt: string;
-  updatedAt: string;
+  /** When it was last built from visible messages only, without a previous summary; and when it was last written. */
+  chainStartedAt: string; updatedAt: string;
+  template?: import('@shannon/mind').CompactionTemplate; // ADR-0008 stage 3 (F7): what `summary` was rendered from, and its raw range.
 }
 
 export const MAXIMUM_RECALLED_MEMORY_IDS = 40;

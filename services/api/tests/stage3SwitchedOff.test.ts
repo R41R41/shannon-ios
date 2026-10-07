@@ -80,7 +80,9 @@ describe('stage 3 switched off in the environment', () => {
    * prompts; the proactive gate changes only her own messages.
    */
   const CONVERSATION = STAGE3_SCENARIOS.filter(name => name !== 'reach-out');
-  const ALONE: ReadonlyArray<{ part: string; on: readonly string[]; reaches: readonly string[] }> = [
+  // The memory parts (F5–F7) change only the conversation's store: never a request, an answer or a prompt.
+  const STORE = STAGE3_SCENARIOS.filter(name => !['body-touch', 'body-touch-others', 'reach-out'].includes(name));
+  const ALONE: ReadonlyArray<{ part: string; on: readonly string[]; reaches: readonly string[]; stateOnly?: true }> = [
     { part: 'perception', on: ['SHANNON_MIND_EVENTS'], reaches: [] },
     { part: 'attention', on: ['SHANNON_MIND_EVENTS', 'SHANNON_ATTENTION'], reaches: [] },
     { part: 'data frames', on: ['SHANNON_DATA_FRAMES'], reaches: [] },
@@ -88,15 +90,27 @@ describe('stage 3 switched off in the environment', () => {
     { part: 'workspace', on: ['SHANNON_MIND_EVENTS', 'SHANNON_ATTENTION', 'SHANNON_WORKSPACE', 'SHANNON_DATA_FRAMES'], reaches: CONVERSATION },
     // The proactive gate is where her own messages are written: her own time alone.
     { part: 'proactive gate', on: ['SHANNON_PROACTIVE_GATE'], reaches: ['reach-out'] },
+    { part: 'memory outbox', on: ['SHANNON_MEMORY_OUTBOX'], reaches: STORE, stateOnly: true },
+    { part: 'temporal facts', on: ['SHANNON_MEMORY_OUTBOX', 'SHANNON_TEMPORAL_FACTS'], reaches: STORE, stateOnly: true },
+    { part: 'identity tiers', on: ['SHANNON_IDENTITY_TIERS'], reaches: STORE, stateOnly: true },
+    { part: 'trust ledger', on: ['SHANNON_TRUST_LEDGER'], reaches: STORE, stateOnly: true },
+    { part: 'structured compaction', on: ['SHANNON_STRUCTURED_COMPACTION'], reaches: STORE, stateOnly: true },
+    // Two-clock decay is read where impressions are recalled; none of the scenarios has an impression to recall.
+    { part: 'evidence decay', on: ['SHANNON_EVIDENCE_DECAY'], reaches: [] },
   ];
 
   it('reaches, with one part switched on alone, only the surfaces that part is about', async () => {
     const recorded = recordedStage3();
-    for (const { part, on, reaches } of ALONE) {
+    for (const { part, on, reaches, stateOnly } of ALONE) {
       const current = await digestsWith(Object.fromEntries(PART_SWITCHES.map(name => [name, on.includes(name) ? 'on' : 'off'])));
       for (const name of STAGE3_SCENARIOS.filter(item => !reaches.includes(item))) expect(current[name], `${part} alone: ${name}`).toEqual(recorded[name]);
       // Not vacuous: a part that reaches a surface changes what that surface keeps.
       for (const name of reaches) expect(current[name]!.state, `${part} alone: ${name}`).not.toEqual(recorded[name]!.state);
+      if (stateOnly) for (const name of reaches) {
+        const { state: _now, ...sent } = current[name]!;
+        const { state: _then, ...recordedSent } = recorded[name]!;
+        expect(sent, `${part} alone sends and answers as afb38c28: ${name}`).toEqual(recordedSent);
+      }
     }
   });
 });

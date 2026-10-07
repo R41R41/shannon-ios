@@ -4,11 +4,12 @@ import type { TurnBackgroundService } from '../../mind/sleep/backgroundUpdates.j
 import type { ShannonChatModel } from '../../infra/models/chatModel.js';
 import type { ConversationStore } from '../../mind/memory/store/conversationStore.js';
 import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
-import { MinecraftBody, type MinecraftConversation } from './minecraftBody.js';
+import { MinecraftBody, type MinecraftBodyDependencies, type MinecraftConversation } from './minecraftBody.js';
 import { MINECRAFT_BODY_LIMITS, MINECRAFT_BODY_TURN_PATH, MinecraftBodyError, configuredMinecraftBody, type MinecraftBodyConfiguration } from '../../contracts/minecraftBodyContract.js';
 import { SQLiteMinecraftTurnLog } from './store/minecraftTurnStore.js';
 import type { PeopleMemoryStore } from '../../mind/memory/store/peopleMemoryStore.js';
 import { platformPeopleEnabled } from '../platform/platformPeople.js';
+import type { MemoryProposals } from '../../mind/memory/memoryPorts.js';
 import { consumeDeviceAllowance, sendJson } from '../../infra/http/serverHttp.js';
 import { closedSignal } from '../../infra/http/apiAutonomyHostStepRoutes.js';
 import type { MinecraftBodyRequests } from './minecraftBodyRequests.js';
@@ -36,6 +37,9 @@ export function createMinecraftBodyRoute(
     conversation: MinecraftConversation;
     /** Phase 4: the request queue, made by the server so her tools share it. Absent, the request routes answer 503. */
     requests?: MinecraftBodyRequests | null;
+    /** Syzygy ADR-0008 stage 3 (F5): the memory outbox (absent: switched off); F6: the people facts' readers. */
+    memory?: MemoryProposals | null;
+    peopleFacts?: MinecraftBodyDependencies['peopleFacts'];
   },
 ): MinecraftBodyRoute {
   const configuration = configuredMinecraftBody(environment);

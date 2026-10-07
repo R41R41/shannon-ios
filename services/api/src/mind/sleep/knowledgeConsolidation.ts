@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   isOwnerOnly,
   normalizeKnowledgeDraft,
@@ -11,7 +12,7 @@ import type { ConversationStore } from '../memory/memoryPorts.js';
 import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
 import type { ShannonKnowledgeStore } from '../memory/memoryPorts.js';
 import { usableKnowledgeFor } from '../recall/turnKnowledgeRecall.js';
-import { MemoryWithholding } from '../memory/memoryPorts.js';
+import { MemoryWithholding, type MemoryProposals } from '../memory/memoryPorts.js';
 
 export interface KnowledgeOperation {
   operation: 'create' | 'update' | 'retire';
@@ -56,7 +57,11 @@ export class ShannonKnowledgeConsolidator {
     private readonly stateStore: CompanionStateStore,
     private readonly analyzer: KnowledgeAnalyzer | null,
     private readonly usage: { backgroundLlmCostUsd(monthKey: string): number },
-    private readonly options: { backgroundBudgetUsd?: number; maximumOperations?: number; now?: () => string } = {},
+    private readonly options: {
+      backgroundBudgetUsd?: number; maximumOperations?: number; now?: () => string;
+      /** Syzygy ADR-0008 stage 3 (F5): the memory outbox. Absent (switched off): written here, as it was. */
+      memory?: MemoryProposals | null;
+    } = {},
   ) {
     this.budgetUsd = options.backgroundBudgetUsd ?? configuredBackgroundBudgetUsd();
     this.maximumOperations = Math.max(1, Math.min(10, options.maximumOperations ?? 5));
@@ -94,28 +99,48 @@ export class ShannonKnowledgeConsolidator {
     const sourceText = new Map(sources.map(item => [item.id, `${item.userMessage}\n${item.shannonReply}`]));
     const byId = new Map<string, ShannonKnowledgeDocument>(usable.map(document => [document.id, document]));
     for (const operation of operations.slice(0, this.maximumOperations)) {
-      if (!this.apply(scopeKey, operation, sourceText, byId, at)) result.rejected += 1;
+      // The same operation of the same night is one op (a retried job proposes it again and it is stored once).
+      const opId = `knowledge:${scopeKey}:${startAt}:${createHash('sha256').update(JSON.stringify(operation)).digest('hex').slice(0, 32)}`;
+      if (!this.apply(scopeKey, operation, sourceText, byId, at, opId)) result.rejected += 1;
       else result[operation.operation === 'create' ? 'created' : operation.operation === 'update' ? 'updated' : 'retired'] += 1;
     }
     return { ...result, status: 'applied' };
   }
 
   private apply(scopeKey: string, operation: KnowledgeOperation, sources: ReadonlyMap<string, string>,
-    existing: ReadonlyMap<string, ShannonKnowledgeDocument>, at: string): boolean {
+    existing: ReadonlyMap<string, ShannonKnowledgeDocument>, at: string, opId: string): boolean {
     const reason = operation.reason.trim().slice(0, 400) || '睡眠バッチでの知識化';
+    const memory = this.options.memory;
     if (operation.operation === 'retire') {
       const evidence = operation.sourceExperienceIds.filter(id => sources.has(id));
       if (!existing.has(operation.knowledgeId) || !evidence.length) return false;
+      if (memory) {
+        const current = existing.get(operation.knowledgeId)!;
+        memory.propose({ opId, scopeKey, kind: 'knowledge.retire', origin: 'knowledge', subjectKey: `knowledge:${operation.knowledgeId}`,
+          baseRevision: `${current.version}:${current.status}`, payload: { knowledgeId: operation.knowledgeId, reason, at, evidence }, episodeIds: evidence });
+        return true;
+      }
       return this.store.retireShannonKnowledge(scopeKey, operation.knowledgeId, reason, at, evidence) !== null;
     }
     const normalized = normalizeKnowledgeDraft(operation, sources);
     if ('rejected' in normalized) return false;
     if (operation.operation === 'create') {
+      if (memory) {
+        memory.propose({ opId, scopeKey, kind: 'knowledge.create', origin: 'knowledge', subjectKey: `knowledge:new:${opId}`.slice(0, 240),
+          payload: { draft: normalized.draft, reason, at }, episodeIds: normalized.draft.sourceExperienceIds.slice(0, 32) });
+        return true;
+      }
       this.store.createShannonKnowledge(scopeKey, normalized.draft, at, reason);
       return true;
     }
     const current = existing.get(operation.knowledgeId);
     if (!current || current.version !== operation.expectedVersion) return false;
+    if (memory) {
+      memory.propose({ opId, scopeKey, kind: 'knowledge.update', origin: 'knowledge', subjectKey: `knowledge:${current.id}`,
+        baseRevision: `${current.version}:${current.status}`, payload: { knowledgeId: current.id, expectedVersion: current.version, draft: normalized.draft, reason, at },
+        episodeIds: normalized.draft.sourceExperienceIds.slice(0, 32) });
+      return true;
+    }
     return this.store.updateShannonKnowledge(scopeKey, current.id, current.version, normalized.draft, at, reason) !== null;
   }
 }

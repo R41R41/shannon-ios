@@ -31,7 +31,7 @@ import { SQLiteShannonKnowledgeStore, type ShannonKnowledgeStore } from '../../m
 import type { KnowledgeDraft } from '@shannon/cognition';
 import { SQLiteMemoryEmbeddingIndex, type MemoryEmbeddingIndex, type PendingEmbeddingSource } from '../../mind/memory/store/sqliteMemoryEmbeddings.js';
 import { ensureTurnCaptureSchema, type TurnCaptureRecord } from '../../mind/memory/store/turnCaptures.js';
-import { ensureReplaySummarySchema, selectRecentMessages, selectReplaySummary, selectThreadOfTurn, upsertReplaySummary } from '../../mind/memory/store/sqliteReplaySummary.js';
+import { ensureReplaySummarySchema, ensureReplaySummaryTemplateColumns, selectRecentMessages, selectReplaySummary, selectThreadOfTurn, upsertReplaySummary } from '../../mind/memory/store/sqliteReplaySummary.js';
 import { deleteToolTraces, ensureToolTraceSchema, insertToolTrace, pruneToolTraces, selectToolTraceScopes, selectToolTraces, toolTraceRetentionBoundary } from '../../mind/tools/store/sqliteToolTraces.js';
 import type { ToolTraceRecord } from '../../mind/tools/shannonToolTrace.js';
 import type { ReplaySummaryRecord } from '../../mind/memory/store/conversationStore.js';
@@ -48,6 +48,12 @@ import { PredictionLedger, predictionLedgerEnabled } from '../../mind/learning/p
 import { ChoiceLedger, choiceLedgerEnabled } from '../../mind/learning/choiceLedger.js';
 import { ValueVersions } from '../../mind/learning/valueTable.js';
 import { serverEnvironment } from '../config/serverEnvironment.js';
+import { SQLiteMemoryOutbox } from '../../mind/memory/store/memoryOutboxStore.js';
+import { MemoryProposer } from '../../mind/memory/memoryWriter.js';
+import { SQLitePeopleMemoryStore } from '../../mind/memory/store/peopleMemoryStore.js';
+import { LockWaitMeter } from './lockWaits.js';
+import { SQLitePersonFacts } from '../../mind/memory/store/personFactsStore.js';
+import { SQLiteTrustLedger } from '../../mind/memory/store/trustLedgerStore.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../../../data/shannon.sqlite', import.meta.url)));
 
@@ -73,6 +79,26 @@ export interface SQLiteShannonStoreOptions {
   choiceLedger?: boolean;
   /** When the cognition ledger's writes run (traces, predictions). Absent: `setImmediate`. Tests may pass one that runs at once. */
   cognitionDefer?: (task: () => void) => void;
+  /**
+   * The memory outbox on this connection (Syzygy ADR-0008 stage 3, F5): its tables, the proposals of this store's own writers
+   * (the sleep batch) and the writer's targets. Absent or false: nothing of it, every table as it was (the entries pass
+   * `mindSwitches(environment).memoryOutbox`).
+   */
+  memoryOutbox?: boolean;
+  /** Told after each proposal of this connection (the in-process writer drains then). */
+  memoryNotify?: () => void;
+  /**
+   * Structured compaction (Syzygy ADR-0008 stage 3, F7): the replay summary keeps its template and the raw range it covers in
+   * three additive columns. Absent or false: the table as it was (the entries pass `mindSwitches(environment).structuredCompaction`).
+   */
+  structuredCompaction?: boolean;
+  /**
+   * People facts (Syzygy ADR-0008 stage 3, F6): `temporal` adds the validity columns of `person_memory_items` (with their
+   * backfill) and her impressions' temporal fields; `identity` the identity suggestions and the turns' speakers. Absent: nothing.
+   */
+  peopleFacts?: { temporal: boolean; identity: boolean };
+  /** The trust ledger's table (F6; inert: its parameters are unset). Absent or false: no table. */
+  trustLedger?: boolean;
 }
 
 export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore, MemoryEmbeddingIndex, ShannonKnowledgeStore {
@@ -90,6 +116,11 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   private readonly ledger: PredictionLedger | null;
   private readonly choices: ChoiceLedger | null;
   private readonly values: ValueVersions | null;
+  private readonly outbox: SQLiteMemoryOutbox | null;
+  private proposer: MemoryProposer | null = null;
+  private sharedPeople: SQLitePeopleMemoryStore | null = null;
+  private readonly facts: SQLitePersonFacts | null;
+  private readonly trust: SQLiteTrustLedger | null;
 
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
@@ -121,11 +152,12 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     });
     this.realtimeVoice = new SQLiteRealtimeVoiceRepository(this.context);
     this.conversations = new SQLiteConversationRepository(this.context);
-    this.jobs = new SQLiteBackgroundJobRepository(this.context, this.companion);
+    this.jobs = new SQLiteBackgroundJobRepository(this.context, this.companion, () => this.memoryProposals());
     new SQLiteStoreMigrator(this.context, this.companion).migrate();
     ensureTurnCaptureSchema(this.context.database);
     ensureSummaryLineageSchema(this.context.database);
     ensureReplaySummarySchema(this.context.database);
+    if (options.structuredCompaction) ensureReplaySummaryTemplateColumns(this.context.database);
     ensureToolTraceSchema(this.context.database);
     // What her tools did is kept 30 days: older traces go at every open too, in every scope.
     const traceBoundary = toolTraceRetentionBoundary(this.context.now());
@@ -144,7 +176,39 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     this.traces = tracesOn ? new DecisionTraces({
       database: this.context.database, createsSchema: true, now: () => this.context.now(), ...(options.cognitionDefer ? { defer: options.cognitionDefer } : {}),
     }) : null;
+    // Syzygy ADR-0008 stage 3 (F5): the memory outbox, only while it is switched on.
+    this.outbox = options.memoryOutbox ? new SQLiteMemoryOutbox(this.context.database, { meter: new LockWaitMeter('memory writer') }) : null;
+    // F6: people facts on the people tables of this connection (made here first), and the inert trust ledger; only while switched on.
+    const facts = options.peopleFacts && (options.peopleFacts.temporal || options.peopleFacts.identity) ? options.peopleFacts : null;
+    if (facts) this.peopleMemoryOnConnection();
+    this.facts = facts ? new SQLitePersonFacts(this.context.database, facts) : null;
+    this.trust = options.trustLedger ? new SQLiteTrustLedger(this.context.database) : null;
     secureDatabaseFiles(options.path);
+  }
+
+  /** The memory outbox on this connection (ADR-0008 stage 3), or null while it is switched off. */
+  memoryOutbox(): SQLiteMemoryOutbox | null { return this.outbox; }
+  /** Proposals appended on this connection (so a proposal inside this store's transaction is part of it), or null while off. */
+  memoryProposals(): MemoryProposer | null {
+    if (!this.outbox) return null;
+    this.proposer ??= new MemoryProposer(this.outbox, { now: () => this.context.now(), notify: () => this.context.options.memoryNotify?.(), log: line => console.log(line) });
+    return this.proposer;
+  }
+  /** People memory on this connection (the memory writer's targets and people facts share it); made when first asked for. */
+  peopleMemoryOnConnection(): SQLitePeopleMemoryStore {
+    this.sharedPeople ??= new SQLitePeopleMemoryStore(this.context.database);
+    return this.sharedPeople;
+  }
+  /** People facts with time, identity suggestions and the turns' speakers (F6), or null while they are switched off. */
+  personFacts(): SQLitePersonFacts | null { return this.facts; }
+  /** The inert trust ledger (F6), or null while it is switched off. */
+  trustLedger(): SQLiteTrustLedger | null { return this.trust; }
+  /** The owner's profile and its prompt written again from the state as it is (what the sleep batch does after it learned). */
+  refreshProfile(scopeKey: string): void {
+    this.context.transaction(() => {
+      this.companion.writePersonalityProfile(scopeKey, this.companion.snapshot(scopeKey), this.context.now());
+      this.companion.writePromptProjection(scopeKey, this.companion.snapshot(scopeKey));
+    });
   }
 
   snapshot(scopeKey: string) { return this.companion.snapshot(scopeKey); }
@@ -209,8 +273,10 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   threadSummaryLineage(scopeKey: string, threadId: string) { return this.conversations.threadSummaryLineage(scopeKey, threadId); }
   experiencesById(scopeKey: string, experienceIds: readonly string[]) { return this.conversations.experiencesById(scopeKey, experienceIds); }
   recentMessages(scopeKey: string, threadId: string, limit: number) { return selectRecentMessages(this.context.database, scopeKey, this.conversations.threadId(scopeKey, threadId), limit); }
-  replaySummary(scopeKey: string, threadId: string) { return selectReplaySummary(this.context.database, scopeKey, threadId); }
-  saveReplaySummary(scopeKey: string, threadId: string, record: ReplaySummaryRecord) { this.context.transaction(() => upsertReplaySummary(this.context.database, scopeKey, threadId, record)); }
+  replaySummary(scopeKey: string, threadId: string) { return selectReplaySummary(this.context.database, scopeKey, threadId, this.context.options.structuredCompaction === true); }
+  saveReplaySummary(scopeKey: string, threadId: string, record: ReplaySummaryRecord) {
+    this.context.transaction(() => upsertReplaySummary(this.context.database, scopeKey, threadId, record, this.context.options.structuredCompaction === true));
+  }
   threadOfTurn(scopeKey: string, experienceId: string) { return selectThreadOfTurn(this.context.database, scopeKey, experienceId); }
   saveToolTrace(scopeKey: string, record: ToolTraceRecord) { this.context.transaction(() => insertToolTrace(this.context.database, scopeKey, record)); }
   toolTraces(scopeKey: string, threadId: string | null, query: { turnIds?: readonly string[]; since?: string }) { return selectToolTraces(this.context.database, scopeKey, threadId, query); }
@@ -240,7 +306,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   dailyUserMessages(scopeKey: string, startAt: string, endAt: string): readonly DailyUserMessage[] { return this.jobs.dailyUserMessages(scopeKey, startAt, endAt); }
   applySleepOutcome(job: ClaimedBackgroundJob, workerId: string, completedAt: string, outcome: SleepConsolidationOutcome) { return this.jobs.applySleepOutcome(job, workerId, completedAt, outcome); }
   pendingBackgroundJobCount() { return this.jobs.pendingBackgroundJobCount(); }
-  close() { this.traces?.flushLockWaits(); this.ledger?.flushLockWaits(); this.choices?.flushLockWaits(); this.values?.flushLockWaits(); this.context.close(); }
+  close() { this.outbox?.meter?.flush(); this.traces?.flushLockWaits(); this.ledger?.flushLockWaits(); this.choices?.flushLockWaits(); this.values?.flushLockWaits(); this.context.close(); }
 }
 
 export function configuredDatabasePath(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): string {

@@ -5,6 +5,7 @@ import { createLocalApiKernel } from '../../src/infra/http/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../../src/infra/models/chatModel.js';
 import { estimatedOpenAICostWithCacheUsd, type LlmUsageEvent, type LlmUsageStore } from '../../src/infra/models/llmUsage.js';
 import { SQLiteShannonStore } from '../../src/infra/sqlite/sqliteStore.js';
+import type { TurnBackgroundService } from '../../src/mind/sleep/backgroundUpdates.js';
 import {
   SHIRITORI_TURNS, ShiritoriGame, carried, judgeShiritori, sameReading, scriptedShiritoriReply, shiritoriScenario, shiritoriScriptInputs,
   type ReachDriver, type ReachStop,
@@ -59,6 +60,11 @@ class RequestWatch implements ShannonChatModel {
 
 export interface ShiritoriDriverOptions {
   usage?: ReachUsage;
+  /**
+   * Syzygy ADR-0008 stage 3, F7 (`compact.shiritori`): the run's store keeps structured summaries, and this builds the background
+   * work after each turn on it (the replay summary's structured refresh). Absent: the kernel's own background, as it always ran.
+   */
+  compaction?: (store: SQLiteShannonStore, now: () => string) => TurnBackgroundService;
   /** Live: the model and price settings the run used, by name and value (never a credential). */
   inputs?: Readonly<Record<string, string>>;
 }
@@ -69,9 +75,10 @@ export function shiritoriDriver(model: ShannonChatModel, options: ShiritoriDrive
     const directory = mkdtempSync(join(tmpdir(), 'shannon-reach-a-'));
     let clock = Date.parse('2026-10-05T10:00:00.000Z');
     const now = () => new Date(clock).toISOString();
-    const store = new SQLiteShannonStore({ path: join(directory, 'reach.sqlite'), now });
+    const store = new SQLiteShannonStore({ path: join(directory, 'reach.sqlite'), now, ...(options.compaction ? { structuredCompaction: true } : {}) });
     const watch = new RequestWatch(model);
-    const api = createLocalApiKernel(now, { chatModel: watch, stateStore: store, conversationStore: store, knowledgeStore: store });
+    const background = options.compaction?.(store, now);
+    const api = createLocalApiKernel(now, { chatModel: watch, stateStore: store, conversationStore: store, knowledgeStore: store, ...(background ? { background } : {}) });
     // The work a turn leaves behind runs after the reply, as on the server: the feeling of the reply is committed on
     // the next tick, and the memory refinement by the background coordinator. Both finish before the next turn.
     const settle = async () => {

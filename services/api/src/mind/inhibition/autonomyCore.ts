@@ -194,6 +194,11 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'packages/mind/src/temporalFacts.ts',
     'packages/mind/src/trustFold.ts',
     'packages/mind/src/compaction.ts',
+    // Stage 3, F5–F7: the wiring of the memory outbox and its writer, of compaction and of people facts, and the people migration's dry-run.
+    'services/api/src/wiring/memoryOutboxWiring.ts',
+    'services/api/src/wiring/compactionWiring.ts',
+    'services/api/src/wiring/peopleFactsWiring.ts',
+    'services/api/scripts/peopleMigrationDryRun.ts',
   ]),
   approval_and_budget: Object.freeze([
     'services/api/src/mind/inhibition/autonomyCore.ts',

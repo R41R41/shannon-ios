@@ -13,7 +13,10 @@ import {
 } from '@shannon/cognition';
 import { DisclosureGate } from '../../mind/inhibition/memoryDisclosure.js';
 import { localDayKey } from '../../mind/memory/memoryProjection.js';
-import { personMemoryId } from '../../mind/memory/peopleMemory.js';
+import { periodSummaryText, personMemoryId, platformSummaryId } from '../../mind/memory/peopleMemory.js';
+import type { MemoryProposals } from '../../mind/memory/memoryPorts.js';
+
+export { platformSummaryId };
 import type { PeopleMemoryStore, PersonMemoryItem, RememberedPerson } from '../../mind/memory/store/peopleMemoryStore.js';
 import { extractPromiseCaptures } from '../../mind/memory/prospectiveMemory.js';
 import { extractExplicitMemoryProposals } from '../../mind/sleep/sleepConsolidation.js';
@@ -81,6 +84,7 @@ export function platformPeopleEnabled(environment: Readonly<Record<string, strin
 }
 
 const hash = (...parts: string[]) => createHash('sha256').update(parts.join('\u0000')).digest('hex').slice(0, 32);
+const digestOf = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);
 const clip = (text: string, limit: number) => Array.from(text.replace(/\s+/gu, ' ').trim()).slice(0, limit).join('');
 
 /**
@@ -94,6 +98,13 @@ export class PlatformPeople {
     private readonly store: PeopleMemoryStore,
     private readonly stateStore: CompanionStateStore,
     private readonly limits: PlatformPeopleLimits = DEFAULT_PLATFORM_PEOPLE_LIMITS,
+    /** Syzygy ADR-0008 stage 3 (F5): the memory outbox. Absent (switched off): the items are written here, as they were. */
+    private readonly memory: MemoryProposals | null = null,
+    /**
+     * F6: the readers and recorders of people facts and identity: items recall leaves out now, the speaker of each stored message
+     * (tier 1, verified by the platform account), and whether a newly met account goes to identity tiers 3 and 4.
+     */
+    private readonly facts: { closedIds(scopeKey: string): ReadonlySet<string>; speaker?(scopeKey: string, turnId: string, personId: string, at: string): void; identity?: boolean } | null = null,
   ) {}
 
   /** The audience of a conversation a friend wrote in: the friend alone in a DM, otherwise the conversation. */
@@ -128,6 +139,10 @@ export class PlatformPeople {
     const resolved = this.resolvePerson(scopeKey, turn);
     if (!resolved) return done('forgotten_person');
     const { person, created } = resolved;
+    // F6: who wrote it, by the platform account (tier 1, verified); a new account's name goes to tiers 3 and 4 in the background.
+    this.facts?.speaker?.(scopeKey, `pt-${hash(turn.platform, turn.requestId)}`, person.id, turn.observedAt);
+    if (created && this.facts?.identity && this.memory) this.memory.propose({ opId: `identity:${scopeKey}:${person.id}`, scopeKey, kind: 'person.link', origin: 'platform',
+      subjectKey: `identity:${person.id}`, payload: { action: 'suggest', personId: person.id, name: person.displayName, link: `${turn.platform}:${turn.sourceUserId}`.slice(0, 200) } });
     const name = `${person.displayName}さん`;
     const callId = `platform:${turn.threadKey}:${dayKey}`;
     const call = this.store.call(scopeKey, callId);
@@ -153,6 +168,18 @@ export class PlatformPeople {
       proposal.statement.replace(/^ユーザー/u, name), proposal.evidence, 'third_party'));
     extractPromiseCaptures(message, turn.observedAt, undefined, this.limits.timeZone).forEach((promise, index) =>
       add(`pp-${hash(turn.platform, turn.requestId, String(index))}`, 'promise', `${name}と話した時の約束: ${promise.memory.summary}`, promise.memory.evidence ?? message));
+    if (this.memory) {
+      // The exchange and the period's summary, then what the person said of themselves and promised: one op each, in order.
+      const opId = (part: string) => `platform:${scopeKey}:${turn.platform}:${turn.requestId}:${part}`;
+      const of = (kind: PersonMemoryItem['kind']) => items.filter(item => item.kind === kind);
+      this.memory.propose({ opId: opId('turn'), scopeKey, kind: 'person.summary', origin: 'platform', subjectKey: `call:${callId}`,
+        payload: { callId, mode: 'upsert', items: of('turn'), summary: { label: turn.label, audience, at: turn.observedAt } } });
+      if (of('fact').length) this.memory.propose({ opId: opId('facts'), scopeKey, kind: 'person.fact', origin: 'platform', subjectKey: `person:${person.id}`,
+        payload: { callId, mode: 'upsert', items: of('fact').map(item => ({ ...item, validAt: turn.observedAt, episodeIds: [personMemoryId(itemId)] })) } });
+      if (of('promise').length) this.memory.propose({ opId: opId('promises'), scopeKey, kind: 'person.promise', origin: 'platform', subjectKey: `person:${person.id}`,
+        payload: { callId, mode: 'upsert', items: of('promise') } });
+      return done('stored', itemId, { personId: person.id, personCreated: created });
+    }
     this.store.upsertCallItems(scopeKey, callId, items);
     this.writeSummary(scopeKey, callId, turn.label, audience, turn.observedAt);
     return done('stored', itemId, { personId: person.id, personCreated: created });
@@ -160,14 +187,16 @@ export class PlatformPeople {
 
   /** The deterministic summary of one conversation period. The background worker may replace its text. */
   writeSummary(scopeKey: string, callId: string, label: string, audience: MemoryAudience, at: string, text?: string): void {
-    const call = this.store.call(scopeKey, callId);
-    if (!call) return;
-    const names = call.personIds.flatMap(id => this.store.person(scopeKey, id)?.displayName ?? []).map(name => `${name}さん`);
-    const turns = this.store.items(scopeKey).filter(item => item.callId === callId && item.kind === 'turn');
-    const opening = clip(turns.at(-1)?.evidence ?? '', 40);
-    const summary = text ?? `相手: ${names.join('・') || '名前を聞いていない方'}\n話したこと: ${label}で${turns.length}件のやり取り。「${opening}」から始まった。`;
-    this.store.upsertCallItems(scopeKey, callId, [{ id: platformSummaryId(callId), kind: 'summary', text: summary.replace(/\s+/gu, ' ').trim(),
-      observedAt: at, disclosure: disclosureFor(summary, audience) }]);
+    // ADR-0008 stage 3 (F5): with the memory outbox on, the summary is proposed and the one writer writes it.
+    if (this.memory) {
+      this.memory.propose({ opId: `period-summary:${scopeKey}:${callId}:${at}:${text ? digestOf(text) : 'rule'}`, scopeKey, kind: 'person.summary', origin: 'platform',
+        subjectKey: `call:${callId}`, payload: { callId, mode: 'upsert', items: [], summary: { label, audience, at, ...(text ? { text } : {}) } } });
+      return;
+    }
+    const summary = periodSummaryText(this.store, scopeKey, callId, label, text);
+    if (!summary) return;
+    this.store.upsertCallItems(scopeKey, callId, [{ id: summary.id, kind: 'summary', text: summary.text,
+      observedAt: at, disclosure: disclosureFor(summary.labelled, audience) }]);
   }
 
   /**
@@ -187,8 +216,9 @@ export class PlatformPeople {
       if (!labels.has(callId)) labels.set(callId, this.store.call(scopeKey, callId)?.label ?? '');
       return labels.get(callId)!;
     };
+    const closed = this.facts?.closedIds(scopeKey);
     const lines = this.store.items(scopeKey)
-      .filter(item => item.kind !== 'turn' && item.personId !== undefined && ids.has(item.personId))
+      .filter(item => item.kind !== 'turn' && item.personId !== undefined && ids.has(item.personId) && !closed?.has(item.id))
       .filter(item => visibleMemoryText(snapshot, personMemoryId(item.id), item.text) !== null && gate.allows(personMemoryId(item.id), item.disclosure)
         && heardByEveryoneHere(snapshot, personMemoryId(item.id), item.disclosure, present))
       .flatMap(item => {
@@ -231,7 +261,6 @@ export class PlatformPeople {
   }
 }
 
-export const platformSummaryId = (callId: string) => `ps-${hash(callId)}`;
 
 /**
  * Whether a person memory may reach a conversation with others: everyone there already heard it (`audienceCovers`), or

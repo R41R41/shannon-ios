@@ -20,9 +20,14 @@ export { copyDeleted, copyEdit, copyWritesRead, noteCopyWrite } from './skillCop
 export { IMPRESSION_MEMORY_PREFIX, OWNER_PERSON_KEY, comparable, impressionConfidence, impressionConfig, impressionMemoryId, impressionsEnabled, type ImpressionPerson, type ImpressionSource, type PersonImpression } from './impressions.js';
 export { localDayKey } from './memoryProjection.js';
 export { type SleepChange, type SleepContradiction } from './memoryService.js';
-export { MemoryWithholding, conversationStoreOf, isForgottenCommitmentEvidence, usableReplaySummary, visibleReplayMessages, type VisibleMessage } from './memoryVisibility.js';
+export { MemoryWithholding, conversationStoreOf, isForgottenCommitmentEvidence, replaySummaryFor, replaySummaryRawRange, usableReplaySummary, visibleReplayMessages, type VisibleMessage } from './memoryVisibility.js';
 export { type OwnerUpcoming } from './ownerUpcoming.js';
 export { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert } from './prospectiveMemory.js';
 export { type ConversationStore, type ShannonExperience, type StoredConversationMessage, type TurnPersistenceContext } from './store/conversationStore.js';
 export { type MemoryEmbeddingIndex } from './store/sqliteMemoryEmbeddings.js';
 export { type ShannonKnowledgeStore } from './store/sqliteShannonKnowledge.js';
+export { MEMORY_OP_KINDS, MEMORY_OP_ORIGINS, memoryOpCodec, type MemoryOp, type MemoryOpDraft, type MemoryOpKind, type MemoryOpOrigin } from './memoryOpCodec.js';
+export { MemoryCommands, MemoryWriter, type MemoryProposals } from './memoryWriter.js';
+export { type MemoryTargets } from './memoryOps.js';
+export { decayDryRun, decayedUsable, identityOf, identityPeople, nameCosine, ruleJudgement, type IdentityChooser, type PersonFactJudge } from './personFacts.js';
+export { type IdentityCandidate, type PersonFactRow, type TurnSpeaker } from './store/personFactsStore.js';

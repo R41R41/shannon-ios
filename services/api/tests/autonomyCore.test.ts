@@ -151,6 +151,10 @@ describe('CORE as code', () => {
       }
       expect(coreAreaForRepositoryPath(`${folder}/someFutureFile.ts`)?.area, folder).toBe('response_path');
     }
+    for (const file of ['wiring/memoryOutboxWiring.ts', 'wiring/compactionWiring.ts', 'wiring/peopleFactsWiring.ts']) {
+      expect(coreAreaForRepositoryPath(`services/api/src/${file}`)?.area, file).toBe('memory');
+    }
+    expect(coreAreaForRepositoryPath('services/api/scripts/peopleMigrationDryRun.ts')?.area).toBe('memory');
     // The outbox, its codec, its store and the one writer are memory's before they exist (the plan's paths, D).
     for (const file of ['memoryOutbox.ts', 'memoryOpCodec.ts', 'memoryWriter.ts', 'store/memoryOutboxStore.ts', 'store/memoryWriterState.ts']) {
       expect(coreAreaForRepositoryPath(`services/api/src/mind/memory/${file}`)?.area, file).toBe('memory');

@@ -12,21 +12,32 @@ import { createConfiguredPlatformSummaryWriter, PlatformConversationSummarizer }
 import { ConversationReplaySummarizer, createConfiguredReplaySummaryWriter } from './mind/memory/conversationReplaySummary.js';
 import { createConfiguredImpressionAnalyzer, ImpressionUpdater } from './mind/memory/impressionUpdater.js';
 import { valueNightSchedule, valueSleep } from './mind/sleep/valueSleep.js';
+import { memoryOutboxOn, memoryWriterOf } from './wiring/memoryOutboxWiring.js';
+import { replayCompaction, structuredCompactionOn } from './wiring/compactionWiring.js';
+import { peopleFactsStoreOptions } from './wiring/peopleFactsWiring.js';
+import { createConfiguredPersonFactJudge } from './mind/memory/personFacts.js';
+import { configuredJevIdentityChooser } from './infra/models/jev/jevIdentity.js';
 import { configuredSkillExport, configuredSkillMemory, skillSleepConsolidator } from './wiring/skillMemoryWiring.js';
 
-const store = new SQLiteShannonStore({ path: configuredDatabasePath(), now: () => new Date().toISOString() });
-const knowledge = new ShannonKnowledgeConsolidator(store, store, store, createConfiguredKnowledgeAnalyzer(process.env, store), store);
+// Syzygy ADR-0008 stage 3 (F5): with SHANNON_MEMORY_OUTBOX on, this process's memory writers propose, and the one writer applies.
+const store = new SQLiteShannonStore({ path: configuredDatabasePath(), now: () => new Date().toISOString(), memoryOutbox: memoryOutboxOn(process.env),
+  structuredCompaction: structuredCompactionOn(process.env), ...peopleFactsStoreOptions(process.env) });
+const memory = store.memoryProposals();
+const knowledge = new ShannonKnowledgeConsolidator(store, store, store, createConfiguredKnowledgeAnalyzer(process.env, store), store, { memory });
 // Syzygy ADR-0008 stage 2, step 6: her skills are built after her knowledge, in the same budget; the API process creates their tables.
 const skillMemory = configuredSkillMemory(process.env, { databasePath: configuredDatabasePath(), createsSchema: false });
 const skills = skillMemory ? skillSleepConsolidator(process.env, { memory: skillMemory.memory, store, choices: store.choiceLedger() }) : null;
 // Step 7: their readable copies in Aether's シャノン用フォルダ, and the owner's edits of them adopted; off without Aether.
 const skillExport = skillMemory ? configuredSkillExport(process.env, { memory: skillMemory.memory, store }) : null;
 const peopleStore = new SQLitePeopleMemoryStore(configuredDatabasePath());
-const platformSummaries = new PlatformConversationSummarizer(peopleStore, new PlatformPeople(peopleStore, store),
+const platformSummaries = new PlatformConversationSummarizer(peopleStore, new PlatformPeople(peopleStore, store, undefined, memory),
   createConfiguredPlatformSummaryWriter(process.env, store), store);
 // Her impressions of people: one bounded call after a turn (the owner) and after the sleep batch (people met on a platform).
 const impressions = new ImpressionUpdater(store, store, store.impressionStore(), createConfiguredImpressionAnalyzer(process.env, store), store,
-  { people: peopleStore, timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo' });
+  { people: peopleStore, timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo', memory });
+const replayWriter = createConfiguredReplaySummaryWriter(process.env, store);
+// Syzygy ADR-0008 stage 3 (F7): with SHANNON_STRUCTURED_COMPACTION on, the summary is the template rendered by code.
+const replaySummarizer = new ConversationReplaySummarizer(store, store, replayWriter, store, { memory, compaction: replayCompaction(process.env, store) });
 // Syzygy ADR-0008 stage 1: after each sleep batch, the ledgers' nightly pass (expiry, delayed credit, retention); never fails the batch.
 const valueNight = valueSleep({ predictions: store.predictionLedger(), choices: store.choiceLedger(), values: store.valueVersions() });
 // Its own daily trigger at the sleep hour, whether or not a conversation's sleep job ran or succeeded (idempotent per day).
@@ -45,8 +56,9 @@ const worker = new ShannonBackgroundWorker(store, store, store, createConfigured
   sleepHour: parseInteger(process.env.SHANNON_SLEEP_HOUR, 3),
   minimumSleepMessages: parseInteger(process.env.SHANNON_SLEEP_MIN_MESSAGES, 3),
   // What left a thread's replay window is summarized here, after the turn's refinement, inside the shared background budget.
-  replaySummarizer: new ConversationReplaySummarizer(store, store, createConfiguredReplaySummaryWriter(process.env, store), store),
+  replaySummarizer,
   impressionUpdater: impressions,
+  memoryProposals: memory,
   // All run after a completed sleep batch, inside the shared background budget; none can fail the batch.
   knowledgeConsolidator: { consolidate: async (scopeKey, startAt, endAt) => {
     try { await knowledge.consolidate(scopeKey, startAt, endAt); } finally {
@@ -57,6 +69,11 @@ const worker = new ShannonBackgroundWorker(store, store, store, createConfigured
     }
   } },
 });
+// The one memory writer, on this process's connection, under its lease (null while the outbox is switched off).
+const memoryWriter = memoryWriterOf(store, { now: () => new Date().toISOString(), owner: `memory-${worker.workerId}`,
+  replaySummaries: replaySummarizer, impressions,
+  // F6: luna's contradiction and duplicate step (40 calls a day, then the rule) and tier 4's Jev chooser, in the background only.
+  judge: createConfiguredPersonFactJudge(process.env, store), chooser: configuredJevIdentityChooser(process.env) });
 const embeddingWorker = new MemoryEmbeddingWorker(store, store, configuredMemoryModelGateway(process.env, store), store, {
   // Knowledge derived from a forgotten experience is never embedded.
   isSourceEligible: (scopeKey, source) => source.kind !== 'knowledge'
@@ -75,15 +92,21 @@ try {
   do {
     valueNightly(new Date().toISOString());
     const result = await worker.runOnce();
+    // The memory writer applies what was proposed (a failure is logged by code and never stops the worker).
+    const memoryRun = memoryWriter ? await memoryWriter.runOnce().catch(error => {
+      console.error('Shannon memory writer failed', error instanceof Error ? error.name : 'unknown');
+      return 'idle' as const;
+    }) : 'idle';
     // Embeddings never block turn refinement or sleep; they run only between idle polls.
-    if (result === 'idle' && Date.now() >= nextEmbeddingAt) {
+    if (result === 'idle' && memoryRun !== 'worked' && Date.now() >= nextEmbeddingAt) {
       const embedding = await embeddingWorker.runOnce();
       nextEmbeddingAt = embedding === 'worked' ? 0 : Date.now() + embeddingIntervalMilliseconds;
     }
     if (once) break;
-    if (result === 'idle') await delay(1_000);
+    if (result === 'idle' && memoryRun !== 'worked') await delay(1_000);
   } while (!stopping);
 } finally {
+  try { memoryWriter?.releaseLease(); } catch { /* the next writer takes it when it expires */ }
   peopleStore.close();
   skillMemory?.close();
   store.close();

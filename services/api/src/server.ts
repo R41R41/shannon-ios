@@ -86,8 +86,13 @@ import { SQLiteOwnerCallFacts, ownerCallElsewhereEnabled } from './surfaces/voic
 import { createServerSelfDiagnosis } from './infra/ops/serverSelfDiagnosis.js';
 import { createMinecraftBodyWiring } from './wiring/serverMinecraftBodyWiring.js';
 import { configuredMind } from './wiring/mindWiring.js';
+import { memoryPortsOf } from './wiring/memoryOutboxWiring.js';
+import { peopleFactReaders, stage3StoreOptions } from './wiring/peopleFactsWiring.js';
 const now = () => new Date().toISOString();
-const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
+// ADR-0008 stage 3: the outbox (F5; the worker writes it), compaction (F7), people facts and the inert trust ledger (F6), by switch.
+const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now, ...stage3StoreOptions(process.env) });
+const peopleFacts = peopleFactReaders(persistentStore, now);
+const memoryPorts = memoryPortsOf(persistentStore, now);
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
 const initiativeStore = new SQLiteInitiativeStore(configuredDatabasePath(), now);
 const pushStore = new SQLitePushNotificationStore(configuredDatabasePath(), now);
@@ -167,7 +172,7 @@ const chatModel = tieredChatModel(createConfiguredChatModel(process.env, persist
 const voiceDecision = configuredVoiceDecision(process.env, persistentStore, persistentStore.decisionTraces()?.writer ?? null); // ADR-0008: traced; SHANNON_DECISION_TRACES=off: as it was.
 // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
 const notion = configuredNotionSource(process.env, { log: line => console.log(line) });
-minecraft.connect({ stateStore: persistentStore, conversationStore: persistentStore, background: backgroundDispatcher, now, chatModel, peopleStore: peopleMemoryStore, conversation: { textTurn: input => kernel.textTurn(input) } });
+minecraft.connect({ stateStore: persistentStore, conversationStore: persistentStore, background: backgroundDispatcher, now, chatModel, peopleStore: peopleMemoryStore, conversation: { textTurn: input => kernel.textTurn(input) }, memory: memoryPorts?.proposals ?? null, peopleFacts });
 // Syzygy ADR-0008 stage 2, step 3 (SHANNON_READ_TOOLS): her read tools over the same reads as the projections; off, none.
 const readTools = readToolPorts(process.env, { notion, voyagerCatalog, upcoming: ownerUpcoming.upcoming, chatModel });
 // Syzygy ADR-0008 stage 3 (docs/mind-workspace-contract.md): what every surface perceived. SHANNON_ADR8_STAGE3=off: none of it.
@@ -199,6 +204,7 @@ const kernel = createLocalApiKernel(now, {
   voyagerDestination: createConfiguredVoyagerDestination(process.env),
   personIdentities: personIdentityStore,
   peopleMemory: peopleMemoryStore,
+  ...(memoryPorts ? { memory: memoryPorts } : {}),
   worldSubscriptions: worldStore,
   cognitiveIntents: cognitiveIntentStore,
   conversationOrchestration: conversationOrchestrationStore,
@@ -215,7 +221,7 @@ const kernel = createLocalApiKernel(now, {
   ...(readTools ? { readTools } : {}), ...(turnRouting ? { turnRouting: turnRouting.routing } : {}), ...(skills ? { skills } : {}),
   ...(mind ? { mind: mind.mind } : {}),
 });
-const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, chatModel, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input) }, databasePath: configuredDatabasePath() });
+const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, chatModel, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input) }, databasePath: configuredDatabasePath() }, memoryPorts?.proposals ?? null, peopleFacts);
 // What this server resolved (docs/ops-contract.md, `server`): model names, persona hash, tools, revision, integrations as booleans. Owner only.
 const selfDiagnosis = createServerSelfDiagnosis({ environment: process.env, startedAt: now(), chatModel, voiceDecision, dictation: voiceTranscriber, vision: voiceVisionGateway,
   voyagerCatalog, notion, platformBridge, autonomy: { enabled: autonomyConfig.enabled, preferences: scopeKey => autonomyStore.modelPreferences(scopeKey) } });

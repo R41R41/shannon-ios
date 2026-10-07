@@ -3,7 +3,7 @@ import { isOwnerOnly, type CompanionStateSnapshot, type MemoryAudience } from '@
 import type { ShannonConversationItem } from '../../infra/models/chatModel.js';
 import { earlierConversationSummaryInstructions } from '../../infra/models/chatModelSupport.js';
 import type { ConversationStore } from '../memory/memoryPorts.js';
-import { usableReplaySummary, visibleReplayMessages, type VisibleMessage } from '../memory/memoryPorts.js';
+import { replaySummaryFor, visibleReplayMessages, type VisibleMessage } from '../memory/memoryPorts.js';
 import { conversationSecrets, type SecretCheck } from '../inhibition/conversationSecrets.js';
 import { UNLINKED_TURN, maskedTraceCalls, toolTracePrompt, traceLabel, type ToolTraceRecord } from '../tools/shannonToolTrace.js';
 import { shannonTool } from '../tools/shannonTools.js';
@@ -220,12 +220,15 @@ export function conversationReplay(
   }
   const truncated = window.start > 0 || visible.reachedLimit;
   // A summary has no label of its own: with others it is marked, so it is never given where only open items may be.
-  const summary = truncated && !openOnly ? usableReplaySummary(state, store, scopeKey, threadId, present) : undefined;
+  const stored = truncated && !openOnly ? replaySummaryFor(state, store, scopeKey, threadId, present, channel) : undefined;
+  const summary = stored?.text;
   const history = window.history;
   return {
     ...window, truncated, ...(summary ? { summary } : {}),
     request: turnContext => {
-      const context = [turnContext, summary ? earlierConversationSummaryInstructions(summary) : '', toolBlock].filter(Boolean).join('\n\n');
+      // A structured summary (F7) is at most 900 characters with its marker; the 600-character one keeps its 640 limit.
+      const context = [turnContext, summary ? earlierConversationSummaryInstructions(summary, stored?.structured ? Math.max(640, Array.from(summary).length) : undefined) : '', toolBlock]
+        .filter(Boolean).join('\n\n');
       return { ...(context ? { turnContext: context } : {}), history };
     },
   };
