@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// 「シャノン › ようす」: シャノンのいま, and only that (decision 2026-10-03). The services of the
-/// legacy runtime are 「設定 › 管理 › 運用」 (`ShannonOpsView`).
+/// 「シャノン › ようす」: シャノンのいま (decision 2026-10-03), with 学び and 気分 beside it (Syzygy ADR-0008 §13, option A,
+/// owner 2026-10-07): a switch いま／学び／気分 at the top. The services of the legacy runtime are 「設定 › 管理 › 運用」
+/// (`ShannonOpsView`).
 public struct ShannonYousuView: View {
     @Bindable private var model: ShannonYousuModel
     private let fallbackMood: CompanionPresenceDTO.Mood?
@@ -26,14 +27,60 @@ public struct ShannonYousuView: View {
     }
 
     public var body: some View {
-        ShannonNowView(
-            model: model.now, fallbackMood: fallbackMood, approvals: approvals,
-            openApproval: openApproval, autonomy: autonomy
-        )
-        .navigationTitle(ShannonGeneratedStrings.navYousu)
+        let palette = ShannonPalette.resolve(colorScheme)
+        page
+            .safeAreaInset(edge: .top, spacing: 0) {
+                tabPicker
+                    .padding(.horizontal, ShannonSpacing.large)
+                    .padding(.vertical, ShannonSpacing.small)
+                    .frame(maxWidth: .infinity)
+                    .background(.bar)
+            }
+            .navigationTitle(ShannonGeneratedStrings.navYousu)
 #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
 #endif
-        .tint(ShannonPalette.resolve(colorScheme).action)
+            .tint(palette.action)
+            // Whether 学び is offered is learned beside the page: a device that may not read it never sees the tab.
+            .task {
+                if model.learning.skills == nil, model.learning.values == nil { await model.learning.reload() }
+            }
+            .onChange(of: model.learning.isUnavailable) { _, unavailable in
+                if unavailable, model.tab == .learning { model.tab = .now }
+            }
+    }
+
+    @ViewBuilder
+    private var page: some View {
+        switch model.tab {
+        case .now, .mood:
+            ShannonNowView(
+                model: model.now, fallbackMood: fallbackMood, approvals: approvals,
+                openApproval: openApproval, autonomy: autonomy, content: model.tab == .mood ? .mood : .now
+            )
+            .id(model.tab)
+        case .learning:
+            ShannonLearningView(model: model.learning)
+        }
+    }
+
+    /// Above the list, never inside it. On the Mac the switch is drawn by SwiftUI (`ShannonSegmentedChoice`), as elsewhere in ようす.
+    @ViewBuilder
+    private var tabPicker: some View {
+#if os(iOS)
+        Picker(ShannonGeneratedStrings.yousuTabLabel, selection: $model.tab) {
+            ForEach(model.tabs) { tab in
+                Text(tab.title).tag(tab)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(maxWidth: 360)
+#else
+        ShannonSegmentedChoice(
+            ShannonGeneratedStrings.yousuTabLabel, selection: $model.tab,
+            options: model.tabs.map { .init($0.title, value: $0) }
+        )
+#endif
     }
 }

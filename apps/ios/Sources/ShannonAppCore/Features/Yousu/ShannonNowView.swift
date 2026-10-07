@@ -4,8 +4,14 @@ import SwiftUI
 /// feels, what she does in her own time, whether her body is showing, and one quiet
 /// timeline of looks, touches and messages she started. Nothing here can be changed:
 /// decisions are made where they already are.
+///
+/// The same view draws the 「気分」 tab of ようす (`.mood`): her feeling card with 気分の推移 right under it
+/// (beside it on a wide Mac), as the owner placed it on 2026-10-05, and nothing else.
 public struct ShannonNowView: View {
+    public enum Content: Sendable { case now, mood }
+
     @Bindable private var model: ShannonNowModel
+    private let content: Content
     /// The mood of `GET /v1/state`, shown when the server has no 「いま」 read.
     private let fallbackMood: CompanionPresenceDTO.Mood?
     /// Work tasks that wait for a permission.
@@ -21,9 +27,11 @@ public struct ShannonNowView: View {
         fallbackMood: CompanionPresenceDTO.Mood? = nil,
         approvals: [ShannonNowWaitingItem] = [],
         openApproval: ((ShannonNowWaitingItem) -> Void)? = nil,
-        autonomy: ShannonAutonomyModel? = nil
+        autonomy: ShannonAutonomyModel? = nil,
+        content: Content = .now
     ) {
         self.model = model
+        self.content = content
         self.fallbackMood = fallbackMood
         self.approvals = approvals
         self.openApproval = openApproval
@@ -43,17 +51,22 @@ public struct ShannonNowView: View {
                         .listRowBackground(palette.attentionTint)
                 }
             }
-            waitingSection(palette: palette)
-            feelingSection(palette: palette)
+            switch content {
+            case .now:
+                waitingSection(palette: palette)
+                feelingSection(palette: palette)
+                if model.ownTime != nil { ownTimeSection(palette: palette) }
+                if let now = model.now {
+                    bodySection(now.body, palette: palette)
+                    timelineSection(palette: palette)
+                }
+            case .mood:
+                feelingSection(palette: palette)
 #if !os(macOS)
-            if model.moodTrend.isAvailable {
-                Section { ShannonMoodTrendPanel(model: model.moodTrend, palette: palette) }
-            }
+                if model.moodTrend.isAvailable {
+                    Section { ShannonMoodTrendPanel(model: model.moodTrend, palette: palette) }
+                }
 #endif
-            if model.ownTime != nil { ownTimeSection(palette: palette) }
-            if let now = model.now {
-                bodySection(now.body, palette: palette)
-                timelineSection(palette: palette)
             }
         }
         .overlay {
@@ -61,19 +74,21 @@ public struct ShannonNowView: View {
                 ProgressView(ShannonGeneratedStrings.yousuLoading)
             }
         }
-        .refreshable {
-            async let trend: Void = model.moodTrend.reload()
-            await model.reload()
-            await trend
-        }
+        .refreshable { await read() }
         // Read when the page appears and when the app comes back to the front; never in the background.
         .task(id: scenePhase == .active) {
             guard scenePhase == .active else { return }
-            // The trend is read beside the page, not as part of it: the page shows as soon as its own reads answer.
-            async let trend: Void = model.moodTrend.reload()
-            await model.reload()
-            await trend
+            await read()
         }
+    }
+
+    /// The page's reads; on 「気分」 also the trend, read beside the page, not as part of it: the page shows as soon as its
+    /// own reads answer.
+    private func read() async {
+        guard content == .mood else { return await model.reload() }
+        async let trend: Void = model.moodTrend.reload()
+        await model.reload()
+        await trend
     }
 
     // MARK: What waits for the owner
@@ -126,23 +141,28 @@ public struct ShannonNowView: View {
 #if os(macOS)
             // Wide: the trend stands next to the feeling card (owner's pick, 2026-10-05). When the column is too
             // narrow for both, the trend goes under the card instead of being squeezed.
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: ShannonSpacing.extraLarge) {
-                    feelingCard(palette: palette, moodFace: moodFace, presentFace: presentFace, lingering: lingering)
-                        .frame(minWidth: 220, maxWidth: 320, alignment: .leading)
-                    if model.moodTrend.isAvailable {
-                        ShannonMoodTrendPanel(model: model.moodTrend, palette: palette)
-                            .frame(minWidth: 320)
+            if content == .mood {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: ShannonSpacing.extraLarge) {
+                        feelingCard(palette: palette, moodFace: moodFace, presentFace: presentFace, lingering: lingering)
+                            .frame(minWidth: 220, maxWidth: 320, alignment: .leading)
+                        if model.moodTrend.isAvailable {
+                            ShannonMoodTrendPanel(model: model.moodTrend, palette: palette)
+                                .frame(minWidth: 320)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: ShannonSpacing.large) {
+                        feelingCard(palette: palette, moodFace: moodFace, presentFace: presentFace, lingering: lingering)
+                        if model.moodTrend.isAvailable {
+                            ShannonMoodTrendPanel(model: model.moodTrend, palette: palette)
+                        }
                     }
                 }
-                VStack(alignment: .leading, spacing: ShannonSpacing.large) {
-                    feelingCard(palette: palette, moodFace: moodFace, presentFace: presentFace, lingering: lingering)
-                    if model.moodTrend.isAvailable {
-                        ShannonMoodTrendPanel(model: model.moodTrend, palette: palette)
-                    }
-                }
+                .listRowBackground(palette.intelligenceSoft)
+            } else {
+                feelingCard(palette: palette, moodFace: moodFace, presentFace: presentFace, lingering: lingering)
+                    .listRowBackground(palette.intelligenceSoft)
             }
-            .listRowBackground(palette.intelligenceSoft)
 #else
             feelingCard(palette: palette, moodFace: moodFace, presentFace: presentFace, lingering: lingering)
                 .listRowBackground(palette.intelligenceSoft)

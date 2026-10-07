@@ -27,7 +27,7 @@ Until step 7 nothing here changes a prompt, a reply, her feeling or a step of he
 2. **Cost is not subtracted from reward** (c weight 0). `cost_yen` is recorded and shown in breakdowns. The budget gate stays the only brake on spending.
 3. **Jev's price is left unset.** Calls are counted and their cost is shown as unknown (未設定). `SHANNON_JEV_USD_PER_CALL` is optional.
 4. **Before deployment** the owner is shown the scenario-suite report and the actual `[これまでの手応え]` lines and gives a final OK.
-5. Retention: predictions and choices 90 days, decision traces 30 days, nightly value versions 30 days, versions the owner made kept. A rollback freezes evidence until resume. Controls are a CLI and an owner route now; the app button comes in stage 5. A story with no reaction in 14 days gives S = 0 and no mood change.
+5. Retention: predictions and choices 90 days, decision traces 30 days, nightly value versions 30 days, versions the owner made kept. A rollback freezes evidence until resume. Controls are a CLI, an owner route, and (brought forward from stage 5 by the owner, ADR-0008 §13) the buttons of the apps' 学び tab. A story with no reaction in 14 days gives S = 0 and no mood change.
 
 ## Switches
 

@@ -8,7 +8,10 @@ extension ShannonYousuModel {
     public static func make(for conversation: ShannonConversationModel) -> ShannonYousuModel {
 #if DEBUG
         if conversation.isDesignPreview, let variant = ShannonYousuFixtureClient.launchVariant {
-            return ShannonYousuModel(scopeKey: conversation.scopeKey, client: ShannonYousuFixtureClient(stale: variant == "opsStale"))
+            let model = ShannonYousuModel(scopeKey: conversation.scopeKey, client: ShannonYousuFixtureClient(stale: variant == "opsStale"))
+            if variant == "learning" { model.tab = .learning }
+            if variant == "mood" { model.tab = .mood }
+            return model
         }
 #endif
         return ShannonYousuModel(
@@ -56,7 +59,7 @@ extension ShannonConversationView {
                 switch variant {
                 case "tile": showsThreadList = true
                 case "hub": settleWorkspace(on: .shannon)
-                case "now": openLink(.yousu)
+                case "now", "learning", "mood": openLink(.yousu)
                 case "admin": openSettings()
                 default: openLink(.ops)
                 }

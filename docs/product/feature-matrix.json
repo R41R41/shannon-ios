@@ -2245,7 +2245,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift#steps",
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift#bucketed"
           ],
-          "note": "シャノン › ようす の、気持ちのカードのすぐ下。"
+          "note": "シャノン › ようす › 気分 の、気持ちのカードのすぐ下（ようすの切り替え いま／学び／気分 は ADR-0008 §13 の案 A、2026-10-07。それまでは いま の中）。"
         },
         "macos": {
           "status": "yes",
@@ -2253,7 +2253,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift#ShannonMoodTrendPanel",
             "apps/macos-app/ShannonDesk/Features/Shannon/ShannonDesktopRootView+Shannon.swift#ShannonYousuView"
           ],
-          "note": "共通の ようす の画面で、気持ちのカードの横に広く出す（A10 で Mac にも入口ができた）。"
+          "note": "共通の ようす の画面の 気分 で、気持ちのカードの横に広く出す（A10 で Mac にも入口ができた。切り替えは 2026-10-07）。"
         },
         "windows": {
           "status": "yes",
@@ -2262,6 +2262,35 @@
           ],
           "note": "13:06 に入った（同じ段の線・線の形・言葉）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。Windows body thread report 2026-10-05。2026-10-06 の形（3 行・1時間・記録なし）が Windows に入ったかは、まだ知らせが無い。",
           "read": "2026-10-05"
+        }
+      }
+    },
+    {
+      "id": "yousu.learning",
+      "area": "yousu",
+      "title": "学び",
+      "description": "ようす の 学び（ADR-0008 §13 の案 A、所有者の選択 2026-10-07）。スキル（使用数／上限、成功 7/8・試用中 2/3、ライ氏の版、📌 の固定と外し、押すと本文と版の記録）、手応え（最近7日、選んだことごとに値と言葉と回数）、価値表の版（「前の版に戻す」と「更新を再開する」、どちらも確認してから）。所有者の端末だけ（403・404 の部分は出さず、両方ならタブも出さない）。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift#ShannonLearningView",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningModel.swift#ShannonLearningModel",
+            "apps/ios/Sources/ShannonAppCore/API/ShannonAPIClient+Learning.swift"
+          ],
+          "note": "固定はすぐに表示を変え、サーバーが受け付けなければ戻して一文を出す。戻す・再開は送り直さず、失敗したら読み直す。"
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonYousuView.swift#ShannonYousuView",
+            "apps/macos-app/ShannonDesk/Features/Shannon/ShannonDesktopRootView+Shannon.swift#ShannonYousuView"
+          ],
+          "note": "共通の ようす の画面（ADR-0004）。切り替えは ShannonSegmentedChoice。"
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "ADR-0008 §13 の所有者の選択は iPhone と Mac の画面（ADR-0004）。Windows の体に 学び を置く決定は無い。"
         }
       }
     },

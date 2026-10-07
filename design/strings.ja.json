@@ -2730,7 +2730,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift",
       "decided": "2026-10-05",
       "windowsNow": "気分の推移",
-      "note": "シャノン › ようす の、気持ちのカードのすぐ下の区画の見出し。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+      "note": "シャノン › ようす › 気分 の、気持ちのカードのすぐ下の区画の見出し（気分 のタブは 2026-10-07、ADR-0008 §13 の案 A）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
     },
     {
       "key": "yousu.moodTrend.range.day",
@@ -2843,6 +2843,483 @@
       "decided": "2026-10-06",
       "windowsNow": "（無い）",
       "note": "窓の始まりから最初の点までの、記録が始まる前の部分（窓の前の点 carryIn が無いとき）。3 つの行すべてで薄く塗り、いちばん上の行の、その部分の真ん中にだけ小さく出す（幅が約 44pt 未満なら出さない）。所有者が「記録の前は薄く示す」を選んだ（2026-10-06。切り詰めない）。"
+    },
+    {
+      "key": "yousu.tab.now",
+      "text": "いま",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "decided": "2026-10-07",
+      "windowsNow": "（無い）",
+      "note": "所有者が比較ページで選んだ（ADR-0008 §13 の案 A、2026-10-07）。シャノン › ようす の上の切り替え（いま／学び／気分）。シャノンのいまの頁。"
+    },
+    {
+      "key": "yousu.tab.learning",
+      "text": "学び",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "decided": "2026-10-07",
+      "windowsNow": "（無い）",
+      "note": "所有者が比較ページで選んだ（ADR-0008 §13 の案 A、2026-10-07）。ようす の切り替え。スキル・手応え・価値表の版。所有者の端末にだけ出す（読めない端末では切り替えから外す）。"
+    },
+    {
+      "key": "yousu.tab.mood",
+      "text": "気分",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "decided": "2026-10-07",
+      "windowsNow": "（無い）",
+      "note": "所有者が比較ページで選んだ（ADR-0008 §13 の案 A、2026-10-07）。ようす の切り替え。気持ちのカードと、そのすぐ下（Mac の広い画面では横）の気分の推移。"
+    },
+    {
+      "key": "yousu.tab.label",
+      "text": "ようすの表示",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonYousuView.swift",
+      "only": "apple",
+      "note": "ようす の切り替え（いま／学び／気分）の読み上げの名前。"
+    },
+    {
+      "key": "yousu.learning.unavailable",
+      "text": "学びは、この端末では見られません。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "学びの読み口が両方とも 403・404 のとき（所有者以外の端末、サーバーで切られている）。ふつうは切り替えから外すので、まず出ない。"
+    },
+    {
+      "key": "yousu.learning.unreadable",
+      "text": "読めませんでした",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "学びの区画が読めなかったとき（500・届かない・読み取れない）。前に読めた内容は残す。"
+    },
+    {
+      "key": "yousu.learning.cancel",
+      "text": "キャンセル",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "価値表を戻す・再開する確認の取り消し。"
+    },
+    {
+      "key": "yousu.learning.skills.heading",
+      "text": "スキル",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "スキルの区画の見出し（上限がまだ分からないとき）と、スキルの頁の題（読む前）。"
+    },
+    {
+      "key": "yousu.learning.skills.title",
+      "text": "スキル（{used}／{limit}）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "decided": "2026-10-07",
+      "windowsNow": "（無い）",
+      "note": "所有者が比較ページで選んだ（ADR-0008 §13 の案 A、2026-10-07）。スキルの区画の見出し。used はやめていないスキルの数、limit は上限（GET /v1/autonomy/skills の capacity）。"
+    },
+    {
+      "key": "yousu.learning.skills.titleAccessibility",
+      "text": "スキル、上限{limit}のうち{used}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "スキルの見出しの読み上げ。"
+    },
+    {
+      "key": "yousu.learning.skills.empty",
+      "text": "まだスキルはありません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "やめていないスキルが一つもないとき。"
+    },
+    {
+      "key": "yousu.learning.skills.footer",
+      "text": "ピンで固定したスキルは、眠っている間の見直しで変わりません。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "スキルの区画の下の説明。"
+    },
+    {
+      "key": "yousu.learning.skills.success",
+      "text": "成功 {successes}/{uses}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "decided": "2026-10-07",
+      "windowsNow": "（無い）",
+      "note": "所有者が比較ページで選んだ（ADR-0008 §13 の案 A、2026-10-07）。スキルの行の二行目。結果が出た使い方のうち、うまくいった数。"
+    },
+    {
+      "key": "yousu.learning.skills.trial",
+      "text": "試用中 {uses}/{of}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "decided": "2026-10-07",
+      "windowsNow": "（無い）",
+      "note": "所有者が比較ページで選んだ（ADR-0008 §13 の案 A、2026-10-07）。試用中のスキルの行の二行目。試用の使い方のうち、結果が出た数（of は 3）。"
+    },
+    {
+      "key": "yousu.learning.skills.unused",
+      "text": "まだ使っていません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "結果が出た使い方がまだないスキル、版。"
+    },
+    {
+      "key": "yousu.learning.skills.ownerVersion",
+      "text": "ライ氏の版",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "所有者が直した版のスキル（ownerVersion）。行の二行目と読み上げ。"
+    },
+    {
+      "key": "yousu.learning.skills.pinned",
+      "text": "固定中",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "固定したスキルの読み上げ（行と、ピンの値）。"
+    },
+    {
+      "key": "yousu.learning.skills.notPinned",
+      "text": "固定していません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "固定していないスキルのピンの読み上げの値。"
+    },
+    {
+      "key": "yousu.learning.skills.pin",
+      "text": "固定する",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "ピンのボタンの読み上げ（固定していないとき）。押すとすぐ固定の表示になり、サーバーが受け付けなければ戻る。"
+    },
+    {
+      "key": "yousu.learning.skills.unpin",
+      "text": "固定を外す",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "ピンのボタンの読み上げ（固定しているとき）。"
+    },
+    {
+      "key": "yousu.learning.skills.pinHint",
+      "text": "固定したスキルは、眠っている間の見直しで変わりません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "ピンのボタンの読み上げのヒント。"
+    },
+    {
+      "key": "yousu.learning.skills.pinFailed",
+      "text": "固定できませんでした。もう一度お試しください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningModel.swift",
+      "only": "apple",
+      "note": "固定がサーバーに受け付けられなかったとき。ピンは元に戻す。"
+    },
+    {
+      "key": "yousu.learning.skills.unpinFailed",
+      "text": "固定を外せませんでした。もう一度お試しください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningModel.swift",
+      "only": "apple",
+      "note": "固定を外すのがサーバーに受け付けられなかったとき。ピンは元に戻す。"
+    },
+    {
+      "key": "yousu.learning.skills.openHint",
+      "text": "本文と版の記録を開きます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "スキルの行の読み上げのヒント。"
+    },
+    {
+      "key": "yousu.learning.skills.retiredTitle",
+      "text": "やめたスキル（{count}）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "やめたスキルの折りたたみ。開くと行が並ぶ（ピンは出さない）。"
+    },
+    {
+      "key": "yousu.learning.skills.retired.trialFailed",
+      "text": "やめた・試用でうまくいかなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "statusReason trial_failed。"
+    },
+    {
+      "key": "yousu.learning.skills.retired.lowSuccess",
+      "text": "やめた・うまくいかないことが続いた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "statusReason low_success。"
+    },
+    {
+      "key": "yousu.learning.skills.retired.consolidated",
+      "text": "やめた・ほかのスキルにまとめた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "statusReason consolidated。"
+    },
+    {
+      "key": "yousu.learning.skills.retired.sourceForgotten",
+      "text": "やめた・元にした会話が忘れられた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "statusReason source_forgotten（本文は出さない）。"
+    },
+    {
+      "key": "yousu.learning.skills.retired.restoreUnsafe",
+      "text": "やめた・前の版に戻せなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "statusReason restore_unsafe。"
+    },
+    {
+      "key": "yousu.learning.skills.retired.other",
+      "text": "やめた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "ほかの理由、または理由が無いとき。"
+    },
+    {
+      "key": "yousu.learning.skill.name",
+      "text": "名前 {name}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "スキルの頁の、スキルの名前（英字の記号）の読み上げ。"
+    },
+    {
+      "key": "yousu.learning.skill.body",
+      "text": "本文",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "スキルの頁の SKILL.md の区画。"
+    },
+    {
+      "key": "yousu.learning.skill.bodyHidden",
+      "text": "（このスキルの本文は表示しません。元にした会話が忘れられたか、写しを取り下げたためです）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "bodyHidden のとき（サーバーの HIDDEN_BODY と同じ文）。サーバーが bodyHidden を言わないときも、本文は出さずにこれを出す。"
+    },
+    {
+      "key": "yousu.learning.skill.versions",
+      "text": "版の記録",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "スキルの頁の、版の一覧（安全のための写しは出さない）。"
+    },
+    {
+      "key": "yousu.learning.skill.version",
+      "text": "版 {version}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "版の一覧の行。"
+    },
+    {
+      "key": "yousu.learning.skill.actor.sleep",
+      "text": "眠っている間の見直し",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "版を作ったもの：sleep。"
+    },
+    {
+      "key": "yousu.learning.skill.actor.conversation",
+      "text": "会話の中で",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "版を作ったもの：conversation。"
+    },
+    {
+      "key": "yousu.learning.skill.actor.owner",
+      "text": "ライ氏が直した",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "版を作ったもの：owner。"
+    },
+    {
+      "key": "yousu.learning.skill.actor.shannonCopy",
+      "text": "シャノンが写しを直した",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "版を作ったもの：shannon_copy（シャノンが自分のフォルダの写しを直した）。"
+    },
+    {
+      "key": "yousu.learning.values.title",
+      "text": "手応え（最近7日）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "decided": "2026-10-07",
+      "windowsNow": "（無い）",
+      "note": "所有者が比較ページで選んだ（ADR-0008 §13 の案 A、2026-10-07）。価値表のいまの版の、選んだことごとの手応え（最近7日に結果が出たもの、新しい順に8つまで）。"
+    },
+    {
+      "key": "yousu.learning.values.empty",
+      "text": "最近7日の手応えは、まだありません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "最近7日に結果が出たものが無いとき。"
+    },
+    {
+      "key": "yousu.learning.values.wordCount",
+      "text": "{word}・{count}回",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "手応えの行の数字の下。数字には必ず言葉を添える（所有者の「数字だけにしない」）。"
+    },
+    {
+      "key": "yousu.learning.values.level.good",
+      "text": "よい",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "手応えが 0.5 以上（3回以上）。"
+    },
+    {
+      "key": "yousu.learning.values.level.fair",
+      "text": "まずまず",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "手応えが 0.2 以上 0.5 未満（3回以上）。"
+    },
+    {
+      "key": "yousu.learning.values.level.poor",
+      "text": "いまいち",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "手応えが 0.2 未満（3回以上）。"
+    },
+    {
+      "key": "yousu.learning.values.level.few",
+      "text": "まだ少ない",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "結果が3回未満（まだ言えない）。"
+    },
+    {
+      "key": "yousu.learning.values.rowAccessibility",
+      "text": "{label}、手応えは{word}、{value}、{count}回",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "手応えの行の読み上げ。value は「プラス0.53」のように読む。"
+    },
+    {
+      "key": "yousu.learning.values.footer",
+      "text": "数字は、選んだことがどれだけうまくいったかの平均です（−1〜+1。0.5以上は「よい」、0.2以上は「まずまず」）。3回未満は「まだ少ない」と出します。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "手応えの区画の下の説明。"
+    },
+    {
+      "key": "yousu.learning.version.title",
+      "text": "価値表の版",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "価値表の版の区画の見出し。"
+    },
+    {
+      "key": "yousu.learning.version.current",
+      "text": "いまの版：{time}（{maker}）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "いまの版ができた時刻と、どうやってできたか。"
+    },
+    {
+      "key": "yousu.learning.version.maker.sleep",
+      "text": "眠っている間に更新",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "madeBy sleep。"
+    },
+    {
+      "key": "yousu.learning.version.maker.ownerRollback",
+      "text": "前の版に戻した",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "madeBy owner_rollback。"
+    },
+    {
+      "key": "yousu.learning.version.maker.ownerResume",
+      "text": "更新を再開した",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearning.swift",
+      "only": "apple",
+      "note": "madeBy owner_resume。"
+    },
+    {
+      "key": "yousu.learning.version.evidence",
+      "text": "{count}件の結果から",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "いまの版が学んだ結果の数。"
+    },
+    {
+      "key": "yousu.learning.version.none",
+      "text": "まだ版がありません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "価値表の版がまだ一つも無いとき。"
+    },
+    {
+      "key": "yousu.learning.version.frozen",
+      "text": "前の版に戻しています。再開するまで、新しい結果は価値表に使いません。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "いまの版が止まっている（frozen）とき。"
+    },
+    {
+      "key": "yousu.learning.version.rollback",
+      "text": "前の版に戻す",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "decided": "2026-10-07",
+      "windowsNow": "（無い）",
+      "note": "所有者が比較ページで選んだ（ADR-0008 §13 の案 A、2026-10-07）。価値表を前の版に戻すボタンと、確認の決定のボタン。押すと確認が出る。戻す版は、いまの版より少ない結果から学んだ版のうち新しいもの（サーバーと同じ選び方）で、その版の id を送る。"
+    },
+    {
+      "key": "yousu.learning.version.rollbackHint",
+      "text": "{time}の版に戻します。確認があります",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "前の版に戻すボタンの読み上げのヒント。"
+    },
+    {
+      "key": "yousu.learning.version.resume",
+      "text": "更新を再開する",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "止まっているときのボタン。押すと確認が出る。"
+    },
+    {
+      "key": "yousu.learning.version.noEarlier",
+      "text": "戻せる前の版はありません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "戻せる版が無いとき（ボタンの代わり）。"
+    },
+    {
+      "key": "yousu.learning.version.rollbackConfirmTitle",
+      "text": "価値表を前の版に戻しますか？",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "前の版に戻す確認の題。"
+    },
+    {
+      "key": "yousu.learning.version.rollbackConfirmMessage",
+      "text": "{time}の版に戻します。再開するまで、これから出る結果は価値表に使いません。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "前の版に戻す確認の文。"
+    },
+    {
+      "key": "yousu.learning.version.resumeConfirmTitle",
+      "text": "価値表の更新を再開しますか？",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "再開の確認の題。"
+    },
+    {
+      "key": "yousu.learning.version.resumeConfirmMessage",
+      "text": "戻している間に出た結果も含めて、すべての結果から新しい版を作ります。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "再開の確認の文。"
+    },
+    {
+      "key": "yousu.learning.version.resumeConfirm",
+      "text": "再開する",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningView.swift",
+      "only": "apple",
+      "note": "再開の確認の決定のボタン。"
+    },
+    {
+      "key": "yousu.learning.version.failed",
+      "text": "価値表を変えられませんでした。いまの状態を表示しています。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonLearningModel.swift",
+      "only": "apple",
+      "note": "戻す・再開がうまくいかなかったとき（送り直さない）。サーバーのいまの状態を読み直して出す。"
     },
     {
       "key": "emotion.kind.pride",

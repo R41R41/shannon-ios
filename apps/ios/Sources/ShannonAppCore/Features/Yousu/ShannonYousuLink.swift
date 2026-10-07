@@ -83,11 +83,21 @@ public extension Notification.Name {
 public final class ShannonYousuModel {
     public let ops: ShannonOpsModel
     public let now: ShannonNowModel
+    /// 「学び」 (Syzygy ADR-0008 §13): her skills, 手応え and the value table's version.
+    public let learning: ShannonLearningModel
+    /// The page of ようす on screen: いま／学び／気分. Kept here so it is the same when ようす is opened again.
+    public var tab: ShannonYousuTab = .now
 
     /// `defaults` keeps, per scope, only whether a report of 運用 has ever arrived (its mark's rule).
     public init(scopeKey: String = "local-owner", client: (any ShannonYousuServing)? = ShannonAPIClient(), defaults: UserDefaults? = nil) {
         ops = ShannonOpsModel(scopeKey: scopeKey, client: client, defaults: defaults)
         now = ShannonNowModel(scopeKey: scopeKey, client: client)
+        learning = ShannonLearningModel(scopeKey: scopeKey, client: client)
+    }
+
+    /// The tabs offered: 学び only while this device may read some of it (it is the owner's alone).
+    public var tabs: [ShannonYousuTab] {
+        learning.isUnavailable ? [.now, .mood] : ShannonYousuTab.allCases
     }
 
     /// The 運用 mark (top-left button, 設定 tile, 運用 row): something in 運用 deserves a look.

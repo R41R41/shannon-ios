@@ -214,4 +214,138 @@ extension ShannonGeneratedStrings {
     public static let yousuMoodTrendUnreadable = "読めませんでした"
     /// `yousu.moodTrend.unrecorded`
     public static let yousuMoodTrendUnrecorded = "記録なし"
+    /// `yousu.tab.now`
+    public static let yousuTabNow = "いま"
+    /// `yousu.tab.learning`
+    public static let yousuTabLearning = "学び"
+    /// `yousu.tab.mood`
+    public static let yousuTabMood = "気分"
+    /// `yousu.tab.label`
+    public static let yousuTabLabel = "ようすの表示"
+    /// `yousu.learning.unavailable`
+    public static let yousuLearningUnavailable = "学びは、この端末では見られません。"
+    /// `yousu.learning.unreadable`
+    public static let yousuLearningUnreadable = "読めませんでした"
+    /// `yousu.learning.cancel`
+    public static let yousuLearningCancel = "キャンセル"
+    /// `yousu.learning.skills.heading`
+    public static let yousuLearningSkillsHeading = "スキル"
+    /// `yousu.learning.skills.title`
+    public static func yousuLearningSkillsTitle(used: String, limit: String) -> String { "スキル（\(used)／\(limit)）" }
+    /// `yousu.learning.skills.titleAccessibility`
+    public static func yousuLearningSkillsTitleAccessibility(limit: String, used: String) -> String { "スキル、上限\(limit)のうち\(used)" }
+    /// `yousu.learning.skills.empty`
+    public static let yousuLearningSkillsEmpty = "まだスキルはありません"
+    /// `yousu.learning.skills.footer`
+    public static let yousuLearningSkillsFooter = "ピンで固定したスキルは、眠っている間の見直しで変わりません。"
+    /// `yousu.learning.skills.success`
+    public static func yousuLearningSkillsSuccess(successes: String, uses: String) -> String { "成功 \(successes)/\(uses)" }
+    /// `yousu.learning.skills.trial`
+    public static func yousuLearningSkillsTrial(uses: String, of: String) -> String { "試用中 \(uses)/\(of)" }
+    /// `yousu.learning.skills.unused`
+    public static let yousuLearningSkillsUnused = "まだ使っていません"
+    /// `yousu.learning.skills.ownerVersion`
+    public static let yousuLearningSkillsOwnerVersion = "ライ氏の版"
+    /// `yousu.learning.skills.pinned`
+    public static let yousuLearningSkillsPinned = "固定中"
+    /// `yousu.learning.skills.notPinned`
+    public static let yousuLearningSkillsNotPinned = "固定していません"
+    /// `yousu.learning.skills.pin`
+    public static let yousuLearningSkillsPin = "固定する"
+    /// `yousu.learning.skills.unpin`
+    public static let yousuLearningSkillsUnpin = "固定を外す"
+    /// `yousu.learning.skills.pinHint`
+    public static let yousuLearningSkillsPinHint = "固定したスキルは、眠っている間の見直しで変わりません"
+    /// `yousu.learning.skills.pinFailed`
+    public static let yousuLearningSkillsPinFailed = "固定できませんでした。もう一度お試しください。"
+    /// `yousu.learning.skills.unpinFailed`
+    public static let yousuLearningSkillsUnpinFailed = "固定を外せませんでした。もう一度お試しください。"
+    /// `yousu.learning.skills.openHint`
+    public static let yousuLearningSkillsOpenHint = "本文と版の記録を開きます"
+    /// `yousu.learning.skills.retiredTitle`
+    public static func yousuLearningSkillsRetiredTitle(count: String) -> String { "やめたスキル（\(count)）" }
+    /// `yousu.learning.skills.retired.trialFailed`
+    public static let yousuLearningSkillsRetiredTrialFailed = "やめた・試用でうまくいかなかった"
+    /// `yousu.learning.skills.retired.lowSuccess`
+    public static let yousuLearningSkillsRetiredLowSuccess = "やめた・うまくいかないことが続いた"
+    /// `yousu.learning.skills.retired.consolidated`
+    public static let yousuLearningSkillsRetiredConsolidated = "やめた・ほかのスキルにまとめた"
+    /// `yousu.learning.skills.retired.sourceForgotten`
+    public static let yousuLearningSkillsRetiredSourceForgotten = "やめた・元にした会話が忘れられた"
+    /// `yousu.learning.skills.retired.restoreUnsafe`
+    public static let yousuLearningSkillsRetiredRestoreUnsafe = "やめた・前の版に戻せなかった"
+    /// `yousu.learning.skills.retired.other`
+    public static let yousuLearningSkillsRetiredOther = "やめた"
+    /// `yousu.learning.skill.name`
+    public static func yousuLearningSkillName(name: String) -> String { "名前 \(name)" }
+    /// `yousu.learning.skill.body`
+    public static let yousuLearningSkillBody = "本文"
+    /// `yousu.learning.skill.bodyHidden`
+    public static let yousuLearningSkillBodyHidden = "（このスキルの本文は表示しません。元にした会話が忘れられたか、写しを取り下げたためです）"
+    /// `yousu.learning.skill.versions`
+    public static let yousuLearningSkillVersions = "版の記録"
+    /// `yousu.learning.skill.version`
+    public static func yousuLearningSkillVersion(version: String) -> String { "版 \(version)" }
+    /// `yousu.learning.skill.actor.sleep`
+    public static let yousuLearningSkillActorSleep = "眠っている間の見直し"
+    /// `yousu.learning.skill.actor.conversation`
+    public static let yousuLearningSkillActorConversation = "会話の中で"
+    /// `yousu.learning.skill.actor.owner`
+    public static let yousuLearningSkillActorOwner = "ライ氏が直した"
+    /// `yousu.learning.skill.actor.shannonCopy`
+    public static let yousuLearningSkillActorShannonCopy = "シャノンが写しを直した"
+    /// `yousu.learning.values.title`
+    public static let yousuLearningValuesTitle = "手応え（最近7日）"
+    /// `yousu.learning.values.empty`
+    public static let yousuLearningValuesEmpty = "最近7日の手応えは、まだありません"
+    /// `yousu.learning.values.wordCount`
+    public static func yousuLearningValuesWordCount(word: String, count: String) -> String { "\(word)・\(count)回" }
+    /// `yousu.learning.values.level.good`
+    public static let yousuLearningValuesLevelGood = "よい"
+    /// `yousu.learning.values.level.fair`
+    public static let yousuLearningValuesLevelFair = "まずまず"
+    /// `yousu.learning.values.level.poor`
+    public static let yousuLearningValuesLevelPoor = "いまいち"
+    /// `yousu.learning.values.level.few`
+    public static let yousuLearningValuesLevelFew = "まだ少ない"
+    /// `yousu.learning.values.rowAccessibility`
+    public static func yousuLearningValuesRowAccessibility(label: String, word: String, value: String, count: String) -> String { "\(label)、手応えは\(word)、\(value)、\(count)回" }
+    /// `yousu.learning.values.footer`
+    public static let yousuLearningValuesFooter = "数字は、選んだことがどれだけうまくいったかの平均です（−1〜+1。0.5以上は「よい」、0.2以上は「まずまず」）。3回未満は「まだ少ない」と出します。"
+    /// `yousu.learning.version.title`
+    public static let yousuLearningVersionTitle = "価値表の版"
+    /// `yousu.learning.version.current`
+    public static func yousuLearningVersionCurrent(time: String, maker: String) -> String { "いまの版：\(time)（\(maker)）" }
+    /// `yousu.learning.version.maker.sleep`
+    public static let yousuLearningVersionMakerSleep = "眠っている間に更新"
+    /// `yousu.learning.version.maker.ownerRollback`
+    public static let yousuLearningVersionMakerOwnerRollback = "前の版に戻した"
+    /// `yousu.learning.version.maker.ownerResume`
+    public static let yousuLearningVersionMakerOwnerResume = "更新を再開した"
+    /// `yousu.learning.version.evidence`
+    public static func yousuLearningVersionEvidence(count: String) -> String { "\(count)件の結果から" }
+    /// `yousu.learning.version.none`
+    public static let yousuLearningVersionNone = "まだ版がありません"
+    /// `yousu.learning.version.frozen`
+    public static let yousuLearningVersionFrozen = "前の版に戻しています。再開するまで、新しい結果は価値表に使いません。"
+    /// `yousu.learning.version.rollback`
+    public static let yousuLearningVersionRollback = "前の版に戻す"
+    /// `yousu.learning.version.rollbackHint`
+    public static func yousuLearningVersionRollbackHint(time: String) -> String { "\(time)の版に戻します。確認があります" }
+    /// `yousu.learning.version.resume`
+    public static let yousuLearningVersionResume = "更新を再開する"
+    /// `yousu.learning.version.noEarlier`
+    public static let yousuLearningVersionNoEarlier = "戻せる前の版はありません"
+    /// `yousu.learning.version.rollbackConfirmTitle`
+    public static let yousuLearningVersionRollbackConfirmTitle = "価値表を前の版に戻しますか？"
+    /// `yousu.learning.version.rollbackConfirmMessage`
+    public static func yousuLearningVersionRollbackConfirmMessage(time: String) -> String { "\(time)の版に戻します。再開するまで、これから出る結果は価値表に使いません。" }
+    /// `yousu.learning.version.resumeConfirmTitle`
+    public static let yousuLearningVersionResumeConfirmTitle = "価値表の更新を再開しますか？"
+    /// `yousu.learning.version.resumeConfirmMessage`
+    public static let yousuLearningVersionResumeConfirmMessage = "戻している間に出た結果も含めて、すべての結果から新しい版を作ります。"
+    /// `yousu.learning.version.resumeConfirm`
+    public static let yousuLearningVersionResumeConfirm = "再開する"
+    /// `yousu.learning.version.failed`
+    public static let yousuLearningVersionFailed = "価値表を変えられませんでした。いまの状態を表示しています。"
 }

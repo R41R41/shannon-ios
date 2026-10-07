@@ -38,6 +38,18 @@ public protocol ShannonYousuServing: Sendable {
     func loadShannonRecentActivity(scopeKey: String) async throws -> ShannonAutonomyActivityDTO
     /// `GET /v1/shannon/mood-history?hours=` (24 or 168). Only the owner's paired device may read it.
     func loadShannonMoodHistory(scopeKey: String, hours: Int) async throws -> ShannonMoodHistoryDTO
+    /// 学び (Syzygy ADR-0008 §13): `GET /v1/autonomy/values`, owner only.
+    func loadShannonValues(scopeKey: String) async throws -> ShannonValuesDTO
+    /// `POST /v1/autonomy/values/rollback` with the version to return to. One call per confirmed press, never retried.
+    func rollbackShannonValues(scopeKey: String, versionID: String?) async throws -> ShannonValuesDTO
+    /// `POST /v1/autonomy/values/resume`. One call per confirmed press, never retried.
+    func resumeShannonValues(scopeKey: String) async throws -> ShannonValuesDTO
+    /// `GET /v1/autonomy/skills`, owner only.
+    func loadShannonSkills(scopeKey: String) async throws -> ShannonSkillsDTO
+    /// `GET /v1/autonomy/skills/{id}`.
+    func loadShannonSkill(scopeKey: String, id: String) async throws -> ShannonSkillDetailDTO
+    /// `POST /v1/autonomy/skills/{id}/pin` or `/unpin`: the skill as it now is.
+    func setShannonSkillPinned(scopeKey: String, id: String, pinned: Bool) async throws -> ShannonSkillDTO
     /// Whose 運用 a reading is: the server, the connection's scope and this pairing. Nil while this app has no
     /// way to be let in (not paired and no developer token): then nothing about 運用 is remembered or marked.
     func opsReportScope(scopeKey: String) -> String?
@@ -48,6 +60,14 @@ extension ShannonYousuServing {
     public func loadShannonMoodHistory(scopeKey: String, hours: Int) async throws -> ShannonMoodHistoryDTO {
         throw ShannonAPIError.rejected(status: 404)
     }
+
+    /// A reader without 学び answers as an older server does: the parts are left out.
+    public func loadShannonValues(scopeKey: String) async throws -> ShannonValuesDTO { throw ShannonAPIError.rejected(status: 404) }
+    public func rollbackShannonValues(scopeKey: String, versionID: String?) async throws -> ShannonValuesDTO { throw ShannonAPIError.rejected(status: 404) }
+    public func resumeShannonValues(scopeKey: String) async throws -> ShannonValuesDTO { throw ShannonAPIError.rejected(status: 404) }
+    public func loadShannonSkills(scopeKey: String) async throws -> ShannonSkillsDTO { throw ShannonAPIError.rejected(status: 404) }
+    public func loadShannonSkill(scopeKey: String, id: String) async throws -> ShannonSkillDetailDTO { throw ShannonAPIError.rejected(status: 404) }
+    public func setShannonSkillPinned(scopeKey: String, id: String, pinned: Bool) async throws -> ShannonSkillDTO { throw ShannonAPIError.rejected(status: 404) }
 }
 
 extension ShannonAPIClient: ShannonYousuServing {

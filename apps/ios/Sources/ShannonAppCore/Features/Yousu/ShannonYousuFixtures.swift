@@ -2,8 +2,8 @@ import Foundation
 
 #if DEBUG
 /// Fictional data for design previews and screenshots of 「ようす」: `-ShannonDesignPreview
-/// -ShannonPreviewYousu now|ops|opsStale|opsConfirm|tile` (with `-ShannonPreviewMoodHours 1|168` for
-/// the other windows of 気分の推移). Never real conversation or
+/// -ShannonPreviewYousu now|learning|mood|ops|opsStale|opsConfirm|tile` (with `-ShannonPreviewMoodHours 1|168` for
+/// the other windows of 気分の推移; 学び's fixture is in `ShannonLearningFixtures.swift`). Never real conversation or
 /// operational data, and nothing here reaches a server.
 struct ShannonYousuFixtureClient: ShannonYousuServing {
     let stale: Bool
