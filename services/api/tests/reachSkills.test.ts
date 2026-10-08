@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { RECALL_SCENARIOS, SKILL_SCENARIOS } from '../../../packages/evaluation/src/reach/index.js';
 import { REACH_SCENARIOS, runReachSuite, scriptedDrivers } from './reach/reachSuite.js';
 
@@ -13,4 +13,15 @@ describe('the skill and recall scenarios of the reach suite', () => {
     expect(RECALL_SCENARIOS.map(scenario => scenario.id)).toEqual(['recall.tree', 'recall.guest']);
     expect(report.totals.costYen).toBe(0);
   }, 120_000);
+
+  it.each([0, 1 - Number.EPSILON])('keeps the audit scenario deterministic with ambient random draw %s', async draw => {
+    // The high draw would choose the failed branch, where the repeated patch no longer matches.
+    const random = vi.spyOn(Math, 'random').mockReturnValue(draw);
+    try {
+      const report = await runReachSuite(scriptedDrivers(), { mode: 'scripted', revision: 'test', only: ['skill.audit'], now: () => '2026-10-07T00:00:00.000Z' });
+      expect(report.runs.map(run => [run.scenarioId, run.status, run.checks.map(check => [check.id, check.passed])]))
+        .toEqual([['skill.audit', 'passed', [['audit.refused', true], ['audit.shown', true]]]]);
+      expect(random).not.toHaveBeenCalled();
+    } finally { random.mockRestore(); }
+  });
 });

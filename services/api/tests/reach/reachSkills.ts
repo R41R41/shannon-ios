@@ -57,10 +57,11 @@ class SkillWorld {
 
   ports() { return skillTurnPorts(this.skills, () => this.state); }
 
-  builder(models: SkillSleepModels, at: string, random?: () => number) {
+  builder(models: SkillSleepModels, at: string, random: () => number = () => 0) {
     const sources = skillSeedSources(this.store, this.store.choiceLedger());
+    // Scripted patches require a fixed lineage base; production still explores with Math.random.
     return new ShannonSkillConsolidator(this.skills, { ...sources, check: () => skillBodyCheck(this.state, this.store, SCOPE) }, models,
-      { skillBudgetUsd: 1, now: () => at, log: () => {}, ...(random ? { random } : {}) });
+      { skillBudgetUsd: 1, now: () => at, log: () => {}, random });
   }
 
   close(): void {
