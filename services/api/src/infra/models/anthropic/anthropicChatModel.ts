@@ -13,7 +13,7 @@ import type { LlmUsageStore } from '../llmUsage.js';
 import { anthropicPrices, estimatedAnthropicCostUsd, type SonnetSettings } from './anthropicConfig.js';
 import { sonnetChatBody, sonnetVoiceBody } from './anthropicRequest.js';
 import { sonnetToolRounds, type SonnetRoundResult } from './anthropicRounds.js';
-import { isHaikuModel } from './haikuConfig.js';
+import { DEFAULT_HAIKU_MODEL, isHaikuModel } from './haikuConfig.js';
 import { cacheHaikuRequest, validateHaikuCacheUsage } from './haikuCache.js';
 import { DEFAULT_VOICE_STREAM_BOUNDS, VOICE_RESPONSE_TIMEOUT_MILLISECONDS, VOICE_WEB_FIRST_OUTPUT_MILLISECONDS, type VoiceStreamBounds } from '../chatModelVoiceStream.js';
 
@@ -210,12 +210,13 @@ export class AnthropicChatModel implements ShannonChatModel {
       const started = this.clock();
       let sent = '';
       const prepared = isHaikuModel(this.model) ? cacheHaikuRequest(body) : body;
+      const inlineTools = this.model === DEFAULT_HAIKU_MODEL ? { headers: { 'anthropic-beta': 'inline-tools-2026-09-15' } } : {};
       let observedUsage: Anthropic.Message['usage'] | null = null;
       let receivedUsage = false;
       let usageRecorded = false;
       try {
         if (!listen) {
-          const message = await this.client.messages.create(prepared, { ...(signal ? { signal } : {}),
+          const message = await this.client.messages.create(prepared, { ...inlineTools, ...(signal ? { signal } : {}),
             ...(isHaikuModel(this.model) && voiceBounds ? { timeout: this.options.voiceResponseTimeoutMilliseconds ?? VOICE_RESPONSE_TIMEOUT_MILLISECONDS } : {}) });
           // Not streamed: the first response is the first token.
           if (round === 0) onFirst?.();
@@ -226,7 +227,7 @@ export class AnthropicChatModel implements ShannonChatModel {
         }
         const decoder = new ChatReplyStreamDecoder();
         let first = false;
-        const stream = this.client.messages.stream(prepared, signal ? { signal } : {});
+        const stream = this.client.messages.stream(prepared, { ...inlineTools, ...(signal ? { signal } : {}) });
         for await (const event of stream) {
           bounds?.event();
           if (event.type === 'message_start') {

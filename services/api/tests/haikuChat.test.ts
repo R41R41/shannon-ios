@@ -183,11 +183,17 @@ describe('native Haiku conversation migration', () => {
     expect(answer.reply).toBeTruthy();
     expect(h.bodies).toHaveLength(afterUsed ? 3 : 2);
     expect(calls).toBe(afterUsed ? 1 : 0);
-    expect(h.bodies.at(-1)).not.toHaveProperty('tools');
-    expect(h.bodies.at(-1)).not.toHaveProperty('tool_choice');
     if (afterUsed) {
+      expect(h.bodies.at(-1)!.tools).toEqual(h.bodies[0]!.tools);
+      expect(h.bodies.at(-1)!.system).toEqual(h.bodies[0]!.system);
+      expect(h.bodies.at(-1)!.tool_choice).toEqual({ type: 'none' });
+      expect((h.bodies.at(-1)!.messages as unknown[]).slice(0, (h.bodies[1]!.messages as unknown[]).length)).toEqual(h.bodies[1]!.messages);
       expect(JSON.stringify(h.bodies.at(-1)!.messages)).toContain('original result');
-      expect(JSON.stringify(h.bodies.at(-1)!.messages)).not.toContain('"tool_use"');
+      expect(JSON.stringify(h.bodies.at(-1)!.messages)).toContain('"tool_use"');
+      expect(JSON.stringify(h.bodies.at(-1)!.messages)).toContain('"thinking"');
+    } else {
+      expect(h.bodies.at(-1)).not.toHaveProperty('tools');
+      expect(h.bodies.at(-1)).not.toHaveProperty('tool_choice');
     }
   });
 

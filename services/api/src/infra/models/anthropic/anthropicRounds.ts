@@ -4,7 +4,9 @@ import {
 } from '../../../mind/action/respond/turnDeadline.js';
 import { CUT_OFF_CALL_NOTE, TIMED_OUT_ROUND_NOTE, TOOLS_GONE_NOTE, type ShannonModelToolSession } from '../chatModelTools.js';
 import { parallelToolsEnabled, runToolStep, type ToolStepState } from '../chatModelToolStep.js';
-import { sonnetTools } from './anthropicRequest.js';
+import { sonnetTool, sonnetTools } from './anthropicRequest.js';
+import { DEFAULT_HAIKU_MODEL } from './haikuConfig.js';
+import type { BetaRequestToolAdditionBlock, BetaTool } from '@anthropic-ai/sdk/resources/beta/messages/messages';
 
 /**
  * The tool rounds of a Sonnet turn (Syzygy ADR-0008 stage 2, step 5), at parity with luna's `withToolRounds`
@@ -65,6 +67,15 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
   const messages: Anthropic.MessageParam[] = [...body.messages];
   const turns: Anthropic.Message[] = [];
   const session = options.session;
+  const haiku = body.model === DEFAULT_HAIKU_MODEL;
+  // Declare the known menu once. Its lazy visibility still belongs to the session: opening a tool only appends a
+  // reference after its result, never changes the tools/system prefix bound to a returned thinking signature.
+  const visible = new Set(sonnetTools(session).map(tool => tool.name));
+  const declared = session?.menu?.offered.map(sonnetTool);
+  if (haiku && declared) body = { ...body, tools: [
+    ...declared.map(tool => ({ ...tool, ...(!visible.has(tool.name) ? { defer_loading: true } : {}) } satisfies BetaTool)),
+    ...sonnetTools(session).filter(tool => !declared.some(item => item.name === tool.name)),
+  ] };
   const turn: ToolStepState = { used: 0, toolsOff: false };
   let round = 0;
   let pauses = 0;
@@ -77,12 +88,12 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
   };
   const callerStopped = () => options.signal?.aborted === true;
   const request = (extra: Partial<Anthropic.MessageCreateParamsNonStreaming> = {}): Anthropic.MessageCreateParamsNonStreaming => ({
-    ...body, ...(session ? { tools: sonnetTools(session) } : {}), messages: [...messages], ...extra,
+    ...body, ...(!haiku && session ? { tools: sonnetTools(session) } : {}), messages: [...messages], ...extra,
   });
-  // A note to the model joins the system message the turn already ends with, or follows the last user turn.
+  // Haiku appends every note; legacy lanes may join the system message the turn already ends with.
   const note = (text: string) => {
     const last = messages.at(-1);
-    if (last?.role === 'system' && typeof last.content === 'string') messages[messages.length - 1] = { role: 'system', content: `${last.content}\n\n${text}` };
+    if (!haiku && last?.role === 'system' && typeof last.content === 'string') messages[messages.length - 1] = { role: 'system', content: `${last.content}\n\n${text}` };
     else messages.push({ role: 'system', content: text });
   };
   const refused = (message: Anthropic.Message): SonnetRoundResult | null => {
@@ -109,12 +120,16 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
   const answer = async (plain = false): Promise<SonnetRoundResult> => {
     const left = deadline.forAnswer();
     if (left < MINIMUM_ANSWER_MILLISECONDS) return out();
+    // After tools/thinking, the original declarations and every result stay intact. Ask once for an answer with no
+    // further calls rather than replaying thinking against a different system/tools prefix or a rewritten history.
+    const retained = plain && haiku && turns.length > 0;
+    if (retained) note(TOOLS_GONE_NOTE);
     try {
       const { tools: _tools, tool_choice: _choice, ...plainBody } = options.plainBody ?? body;
       const plainRequest = turn.used === 0 ? plainBody : { ...plainBody, messages: [
         ...plainMessages(messages), { role: 'system' as const, content: TOOLS_GONE_NOTE },
       ] };
-      const message = await options.send(plain ? plainRequest : request({ tool_choice: { type: 'none' } }), time(left), round++);
+      const message = await options.send(plain && !retained ? plainRequest : request({ tool_choice: { type: 'none' } }), time(left), round++);
       turns.push(message);
       return refused(message) ?? { final: message, turns, used: turn.used };
     } catch (error) {
@@ -167,6 +182,16 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
       return [{ type: 'tool_result' as const, tool_use_id: value.call_id, content: value.output ?? '', ...(failed(value.output) ? { is_error: true } : {}) }];
     });
     messages.push({ role: 'user', content: results });
+    if (haiku && declared) {
+      const additions: BetaRequestToolAdditionBlock[] = sonnetTools(session).flatMap(tool => {
+        if (visible.has(tool.name) || !declared.some(item => item.name === tool.name)) return [];
+        visible.add(tool.name);
+        return [{ type: 'tool_addition', tool: { type: 'tool_reference', name: tool.name } }];
+      });
+      // The stable Messages types do not yet include beta inline blocks. Keep their schema checked by the SDK's beta
+      // type, then use the same native transport with its inline-tools header (no separate client/retry/session).
+      if (additions.length) messages.push({ role: 'system', content: additions as unknown as Anthropic.ContentBlockParam[] });
+    }
     if (ran.some(item => failed((item as { output?: string }).output))) escalate();
   }
 }
