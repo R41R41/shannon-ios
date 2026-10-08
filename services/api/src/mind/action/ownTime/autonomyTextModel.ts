@@ -10,7 +10,7 @@ import { AnthropicAutonomyTextModel } from './anthropicAutonomyTextModel.js';
  *
  * The credential comes only from the variables named here, which the owner sets to a
  * dedicated key with a provider-side spending cap. The conversation keys
- * (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `SHANNON_ANTHROPIC_API_KEY`, `ANTHROPIC_API_KEY`) are never read as a fallback, and a dedicated
+ * (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `SHANNON_HAIKU_API_KEY`, `SHANNON_ANTHROPIC_API_KEY`, `ANTHROPIC_API_KEY`) are never read as a fallback, and a dedicated
  * variable that merely repeats a conversation key counts as not configured, because the
  * provider-side cap would then not separate her spending from conversation.
  */
@@ -20,7 +20,7 @@ export const AUTONOMY_CREDENTIAL_VARIABLES = Object.freeze({
   anthropic: 'SHANNON_AUTONOMY_ANTHROPIC_API_KEY',
 } as const);
 
-const CONVERSATION_CREDENTIAL_VARIABLES = Object.freeze({ google: ['GEMINI_API_KEY'], openai: ['OPENAI_API_KEY'], anthropic: ['SHANNON_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'] } as const);
+const CONVERSATION_CREDENTIAL_VARIABLES = Object.freeze({ google: ['GEMINI_API_KEY'], openai: ['OPENAI_API_KEY'], anthropic: ['SHANNON_HAIKU_API_KEY', 'SHANNON_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'] } as const);
 
 export type AutonomyModelProvider = AutonomyModel['provider'];
 

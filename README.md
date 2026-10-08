@@ -109,7 +109,7 @@ pnpm worker
 pnpm --filter @shannon/api worker:autonomy
 ```
 
-通常の会話・軽量判断の既定モデルは `claude-haiku-5-5`。`.env.example`を参考に、リポジトリ直下の`.env`または起動するshellへ `SHANNON_ANTHROPIC_API_KEY`（未設定時は `ANTHROPIC_API_KEY`）を設定し、公式SDKのnative Messages APIを使う。自律活動のHaikuには、会話用と値の異なる `SHANNON_AUTONOMY_ANTHROPIC_API_KEY` が必要。1時間キャッシュの実測、費用計算、旧Luna設定の互換解決は [モデルとキャッシュの契約](docs/haiku-model-cache-contract.md) を参照する。`OPENAI_API_KEY` は文字起こし・埋め込み・明示的に選ぶGPTモデルで引き続き使う。
+通常の会話・軽量判断の既定モデルは `claude-haiku-5-5`。`.env.example`を参考に、リポジトリ直下の`.env`または起動するshellへ Haiku専用の `SHANNON_HAIKU_API_KEY` を設定し（互換fallbackは `SHANNON_ANTHROPIC_API_KEY`、次に `ANTHROPIC_API_KEY`）、公式SDKのnative Messages APIを使う。`SHANNON_HAIKU_API_KEY` はHaikuだけに使い、既存のSonnet routing／sleep proposerの有効条件を変えない。自律活動のHaikuには、これら3つの会話用キーすべてと値の異なる `SHANNON_AUTONOMY_ANTHROPIC_API_KEY` が必要。1時間キャッシュの実測、費用計算、旧Luna設定の互換解決は [モデルとキャッシュの契約](docs/haiku-model-cache-contract.md) を参照する。`OPENAI_API_KEY` は文字起こし・埋め込み・明示的に選ぶGPTモデルで引き続き使う。
 
 Gemini音声は、[`docs/gemini-3.8-tts-lab.md`](docs/gemini-3.8-tts-lab.md) の試聴ハーネスと、
 iPhoneの単一の音声会話で評価できる。iPhoneは24 kHz PCMをOpenAI Realtime文字起こし（既定`gpt-4o-mini-transcribe`）へ連続送信し、

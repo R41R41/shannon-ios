@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { shannonCapabilityPrompt, shannonPersonaPrompt } from '@shannon/cognition';
 import { createConfiguredChatModel } from '../src/infra/models/chatModel.js';
+import { DEFAULT_HAIKU_MODEL } from '../src/infra/models/anthropic/haikuConfig.js';
 import { configuredNotionSource } from '../src/integrations/notion/notionSource.js';
 import { SQLiteOpsStore } from '../src/infra/ops/store/opsStore.js';
 import { createConfiguredVoyagerCatalog } from '../src/integrations/voyager/organize.js';
@@ -49,6 +50,10 @@ const SECRETS = Object.freeze({
   SHANNON_APNS_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----fake0023',
   SHANNON_GEMINI_TTS_ENDPOINT: 'https://tts.example.invalid/fake0024',
   SHANNON_VOICE_ROUTER_ENDPOINT: 'https://router.example.invalid/fake0025',
+  SHANNON_HAIKU_API_KEY: 'sk-ant-fake-haiku-conversation-key-0026',
+  SHANNON_ANTHROPIC_API_KEY: 'sk-ant-fake-anthropic-conversation-key-0027',
+  ANTHROPIC_API_KEY: 'sk-ant-fake-anthropic-generic-key-0028',
+  SHANNON_AUTONOMY_ANTHROPIC_API_KEY: 'sk-ant-fake-autonomy-anthropic-key-0029',
 });
 
 /** Models set away from their defaults, so a default can never pass for the resolved name. */
@@ -109,7 +114,7 @@ describe('the self-diagnosis', () => {
         },
         dictation: 'whisper-1',
         autonomy: {
-          enabled: true, prose: 'gemini-3.8-flash', research_reading: 'gpt-5.6-luna', planning: 'gpt-5.6-luna', critique: 'gpt-5.6-terra',
+          enabled: true, prose: 'gemini-3.8-flash', research_reading: DEFAULT_HAIKU_MODEL, planning: DEFAULT_HAIKU_MODEL, critique: 'gpt-5.6-terra',
           roomLook: 'gemini-3.8-flash',
         },
       },
@@ -236,12 +241,20 @@ describe('the self-diagnosis', () => {
     expect(reader.read().models.autonomy.prose).toBe('gemini-3.8-flash');
     expect(new Set(asked)).toEqual(new Set(['owner']));
     // Only the conversation keys: her activity has no model, whatever the conversation has.
-    const conversationOnly = { ...configured(), SHANNON_AUTONOMY_GEMINI_API_KEY: '', SHANNON_AUTONOMY_OPENAI_API_KEY: '' };
+    const conversationOnly = { ...configured(), SHANNON_AUTONOMY_GEMINI_API_KEY: '', SHANNON_AUTONOMY_OPENAI_API_KEY: '', SHANNON_AUTONOMY_ANTHROPIC_API_KEY: '' };
     expect(createServerSelfDiagnosis(sources(conversationOnly)).read().models.autonomy)
       .toEqual({ enabled: true, prose: null, research_reading: null, planning: null, critique: null, roomLook: null });
     // Google only: every purpose falls to the model that provider has.
-    const googleOnly = { ...configured(), SHANNON_AUTONOMY_OPENAI_API_KEY: '' };
+    const googleOnly = { ...configured(), SHANNON_AUTONOMY_OPENAI_API_KEY: '', SHANNON_AUTONOMY_ANTHROPIC_API_KEY: '' };
     expect(createServerSelfDiagnosis(sources(googleOnly)).read().models.autonomy).toMatchObject({ planning: 'gemini-3.8-flash', critique: 'gemini-3.8-flash' });
+  });
+
+  it('reports Haiku for migrated Luna calls and the available own-time fallback without sharing its conversation key', () => {
+    const environment = { ...configured(), SHANNON_LLM_MODEL: 'gpt-5.6-luna', SHANNON_AUTONOMY_ANTHROPIC_API_KEY: '' };
+    const models = expectNoEnvironmentValue(environment).models;
+    expect(models.text).toBe(DEFAULT_HAIKU_MODEL);
+    expect(models.voice.reply).toBe(DEFAULT_HAIKU_MODEL);
+    expect(models.autonomy).toMatchObject({ planning: 'gemini-3.8-flash', research_reading: 'gemini-3.8-flash', critique: 'gpt-5.6-terra' });
   });
 
   it('is for the owner scope only', () => {

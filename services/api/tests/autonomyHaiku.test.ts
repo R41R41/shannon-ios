@@ -47,7 +47,7 @@ describe('Haiku own-time selection and credential separation', () => {
     expect(resolveAutonomyModel('research_reading', [], id => router.canUse(id))).toBeNull();
   });
 
-  it.each(['SHANNON_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'])('refuses a duplicate %s, including whitespace', variable => {
+  it.each(['SHANNON_HAIKU_API_KEY', 'SHANNON_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'])('refuses a duplicate %s, including whitespace', variable => {
     expect(dedicatedAutonomyCredential('anthropic', { [variable]: ' same ', SHANNON_AUTONOMY_ANTHROPIC_API_KEY: 'same' })).toBeNull();
     expect(configuredAutonomyTextModel({ [variable]: 'conversation' }).configuredProviders).toEqual([]);
     expect(dedicatedAutonomyCredential('anthropic', { [variable]: 'conversation', ...key })).toBe(key.SHANNON_AUTONOMY_ANTHROPIC_API_KEY);
@@ -60,7 +60,7 @@ describe('native own-time Messages and closed usage', () => {
     vi.stubEnv('ANTHROPIC_BASE_URL', 'https://unrelated.invalid');
     try {
       const mock = mockFetch(() => native());
-      const router = configuredAutonomyTextModel({ ...key, ANTHROPIC_API_KEY: 'conversation', SHANNON_ANTHROPIC_API_KEY: 'other-conversation' }, mock.fetcher);
+      const router = configuredAutonomyTextModel({ ...key, SHANNON_HAIKU_API_KEY: 'regular-haiku', ANTHROPIC_API_KEY: 'conversation', SHANNON_ANTHROPIC_API_KEY: 'other-conversation' }, mock.fetcher);
       const result = await router.generate({ ...request, model: 'gpt-5.6-luna' });
       expect(result).toEqual({ text: '{"steps":[]}', usage: { inputTokens: 640, outputTokens: 90, cacheCreationInputTokens: 600, cachedInputTokens: 0, cacheCreation5mInputTokens: 0, cacheCreation1hInputTokens: 600 } });
       expect(mock.calls).toHaveLength(1);

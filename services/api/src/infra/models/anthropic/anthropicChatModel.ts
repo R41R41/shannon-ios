@@ -10,7 +10,7 @@ import { VOICE_TOOL_OUTPUT_TOKENS, voiceWaitingPhrase } from '../chatModelTools.
 import { chatTurnResult, offersTools, parsedChatTurn } from '../chatModelTurn.js';
 import { ChatReplyStreamDecoder } from '../chatReplyStreamDecoder.js';
 import type { LlmUsageStore } from '../llmUsage.js';
-import { estimatedAnthropicCostUsd, type SonnetSettings } from './anthropicConfig.js';
+import { anthropicPrices, estimatedAnthropicCostUsd, type SonnetSettings } from './anthropicConfig.js';
 import { sonnetChatBody, sonnetVoiceBody } from './anthropicRequest.js';
 import { sonnetToolRounds, type SonnetRoundResult } from './anthropicRounds.js';
 import { isHaikuModel } from './haikuConfig.js';
@@ -272,10 +272,11 @@ export class AnthropicChatModel implements ShannonChatModel {
       cacheWrite1h: knownCount(usage?.cache_creation?.ephemeral_1h_input_tokens),
     };
     const input = counts.input + counts.cacheWrite + counts.cacheRead;
+    const upperPrice = anthropicPrices(this.model, 1_000_000);
     this.options.usageStore?.recordLlmUsage({
       scopeKey, lane: 'chat', model: this.model, inputTokens: input, cachedInputTokens: counts.cacheRead, outputTokens: counts.output,
       totalTokens: input + counts.output, estimatedCostUsd: Math.max(estimatedAnthropicCostUsd(this.model, counts),
-        isHaikuModel(this.model) && !nativeUsageComplete(usage) ? 1 + maximumOutputTokens * 2.5 / 1_000_000 : 0),
+        isHaikuModel(this.model) && !nativeUsageComplete(usage) ? upperPrice.cacheWrite1h + maximumOutputTokens * upperPrice.output / 1_000_000 : 0),
       occurredAt: this.options.now?.() ?? new Date().toISOString(),
     });
   }

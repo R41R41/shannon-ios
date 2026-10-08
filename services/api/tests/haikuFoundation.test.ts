@@ -1,10 +1,12 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
-import { anthropicPrices, estimatedAnthropicCostUsd } from '../src/infra/models/anthropic/anthropicConfig.js';
+import { anthropicPrices, estimatedAnthropicCostUsd, sonnetRoutingAvailable } from '../src/infra/models/anthropic/anthropicConfig.js';
 import { configuredResponseModel, DEFAULT_HAIKU_MODEL, isHaikuModel, replacementModel } from '../src/infra/models/anthropic/haikuConfig.js';
 import { cacheHaikuRequest, HAIKU_PROTOCOL_PREFIX, validateHaikuCacheUsage } from '../src/infra/models/anthropic/haikuCache.js';
 import { responseModelFetcher, validateResponseModelUsage } from '../src/infra/models/anthropic/haikuResponses.js';
 import { responseUsage } from '../src/infra/models/llmUsage.js';
+import { configuredSonnet, configuredSkillProposer } from '../src/wiring/sonnetWiring.js';
+import { createConfiguredSkillSleepModels } from '../src/mind/sleep/skillSleepModel.js';
 import { message, scriptedAnthropic } from './support/anthropicFixtures.js';
 
 interface Envelope { output_text: string; output: unknown[]; usage: Record<string, unknown>; haiku_cache: { confirmed: boolean }; }
@@ -41,6 +43,47 @@ describe('Haiku credential and model selection', () => {
       .toEqual({ model: 'gpt-5.6-terra', apiKey: 'synthetic-openai' });
     expect(configuredResponseModel({ ANTHROPIC_API_KEY: 'synthetic-anthropic', OPENAI_API_KEY: 'synthetic-openai' }, 'SMALL_MODEL', 'gpt-5.6-terra'))
       .toEqual({ model: 'gpt-5.6-terra', apiKey: 'synthetic-openai' });
+  });
+  it('prioritizes the Haiku-only key for defaults and legacy settings, with regular-key compatibility', () => {
+    const environment = { SHANNON_HAIKU_API_KEY: ' synthetic-haiku-only ', SHANNON_ANTHROPIC_API_KEY: 'synthetic-generic',
+      ANTHROPIC_API_KEY: 'synthetic-fallback', OPENAI_API_KEY: 'synthetic-openai', SMALL_MODEL: 'gpt-5.6-luna' };
+    expect(configuredResponseModel(environment, 'SMALL_MODEL')).toEqual({ model: DEFAULT_HAIKU_MODEL, apiKey: 'synthetic-haiku-only' });
+    expect(configuredResponseModel({ ...environment, SHANNON_HAIKU_API_KEY: ' ' }, 'SMALL_MODEL'))
+      .toEqual({ model: DEFAULT_HAIKU_MODEL, apiKey: 'synthetic-generic' });
+    expect(configuredResponseModel({ SHANNON_HAIKU_API_KEY: '', ANTHROPIC_API_KEY: 'synthetic-fallback' }, 'SMALL_MODEL'))
+      .toEqual({ model: DEFAULT_HAIKU_MODEL, apiKey: 'synthetic-fallback' });
+    expect(configuredResponseModel({ ...environment, SMALL_MODEL: 'gpt-5.6-terra' }, 'SMALL_MODEL'))
+      .toEqual({ model: 'gpt-5.6-terra', apiKey: 'synthetic-openai' });
+  });
+  it('uses the Haiku-only key for native cached work without enabling either Sonnet entry', async () => {
+    const environment = { SHANNON_HAIKU_API_KEY: 'synthetic-haiku-only', SHANNON_ADR8_STAGE2: 'on',
+      SHANNON_SKILLS: 'on', SHANNON_SONNET_ROUTING: 'on' };
+    const selected = configuredResponseModel(environment, 'SMALL_MODEL');
+    expect(selected).toEqual({ model: DEFAULT_HAIKU_MODEL, apiKey: 'synthetic-haiku-only' });
+    const fixture = scriptedAnthropic([answer()]); const headers: Headers[] = [];
+    const fetcher = (async (url, init) => { headers.push(new Headers(init?.headers)); return fixture.fetcher(url, init); }) as typeof fetch;
+    expect(sonnetRoutingAvailable(environment)).toBe(false);
+    expect(configuredSonnet(environment, { fetch: fetcher })).toBeNull();
+    expect(configuredSkillProposer(environment, { fetch: fetcher })).toBeNull();
+    expect(fixture.bodies).toHaveLength(0);
+    const envelope = await (await send(responseModelFetcher({ ...selected!, fetcher }))).json();
+    expect(() => validateResponseModelUsage(DEFAULT_HAIKU_MODEL, envelope)).not.toThrow();
+    expect(headers[0]!.get('x-api-key')).toBe('synthetic-haiku-only');
+    expect(fixture.bodies).toHaveLength(1);
+    expect(fixture.bodies[0]).toMatchObject({ model: DEFAULT_HAIKU_MODEL, cache_control: { ttl: '1h' } });
+  });
+  it('preserves the existing Terra sleep proposer when only a Haiku key is added, with Sonnet routing on or off', () => {
+    for (const routing of ['on', 'off']) {
+      const environment = { SHANNON_HAIKU_API_KEY: 'synthetic-haiku-only', OPENAI_API_KEY: 'synthetic-openai',
+        SHANNON_ADR8_STAGE2: 'on', SHANNON_SKILLS: 'on', SHANNON_SONNET_ROUTING: routing };
+      const models = createConfiguredSkillSleepModels(environment, undefined, () => configuredSkillProposer(environment, {}));
+      expect(models.maintainer?.model).toBe('gpt-5.6-terra');
+      expect(models.proposer?.model).toBe('gpt-5.6-terra');
+      expect(configuredSonnet(environment, {})).toBeNull();
+    }
+    const compatibility = { SHANNON_ANTHROPIC_API_KEY: 'synthetic-generic', SHANNON_ADR8_STAGE2: 'on', SHANNON_SKILLS: 'on', SHANNON_SONNET_ROUTING: 'on' };
+    expect(configuredSonnet(compatibility, {})?.model).toBe('claude-sonnet-5-5');
+    expect(configuredSkillProposer(compatibility, {})?.model).toBe('claude-sonnet-5-5');
   });
 });
 

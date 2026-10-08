@@ -14,6 +14,6 @@ export function replacementModel(value?: string): string {
 
 export function configuredResponseModel(environment: Environment, modelSettingName: string, fallback?: string): { model: string; apiKey: string } | null {
   const model = replacementModel(environment[modelSettingName]?.trim() || fallback);
-  const apiKey = isHaikuModel(model) ? anthropicApiKey(environment) : environment.OPENAI_API_KEY?.trim();
+  const apiKey = isHaikuModel(model) ? environment.SHANNON_HAIKU_API_KEY?.trim() || anthropicApiKey(environment) : environment.OPENAI_API_KEY?.trim();
   return apiKey ? { model, apiKey } : null;
 }

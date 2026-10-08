@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { autonomyDayLog, autonomyDayPhrases } from '../src/mind/inhibition/autonomyDayLog.js';
 import { configuredAutonomyLoop } from '../src/mind/action/ownTime/autonomyLoopConfig.js';
@@ -10,6 +10,12 @@ import { offeredTools } from '../src/mind/tools/shannonTools.js';
 import { ownTimeFullDay, ownTimeWithTools, OWN_TIME_PRICES } from './ownerDocumentsScenario.js';
 import { FakeAether } from './fakeAetherServer.js';
 import { loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
+
+// a10fdedd's prompt bytes include its model names and gate price estimate; pin that historical external policy only.
+vi.mock('../src/mind/action/ownTime/autonomyModels.js', async importOriginal => {
+  const { historicalLunaAutonomyPolicy } = await import('./support/historicalLunaAutonomyPolicy.js');
+  return historicalLunaAutonomyPolicy(await importOriginal<typeof import('../src/mind/action/ownTime/autonomyModels.js')>());
+});
 
 /**
  * Her own time reading the owner's documents (owner decision 2026-10-06, Syzygy ADR-0007 「自分の時間に所有者の文書を読む」):

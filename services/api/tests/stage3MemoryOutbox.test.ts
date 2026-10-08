@@ -1,7 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { capturedStage3Digests, STAGE3_SCENARIOS, type Stage3Capture } from './support/stage3Scenarios.js';
 import { stage3MemoryHook } from './support/stage3MemoryHook.js';
 import { readFileSync } from 'node:fs';
+
+// afb38c28's reach-out state digests include its model IDs/prices. The real outbox/loop/gates/stores remain unchanged.
+vi.mock('../src/mind/action/ownTime/autonomyModels.js', async importOriginal => {
+  const { historicalLunaAutonomyPolicy } = await import('./support/historicalLunaAutonomyPolicy.js');
+  return historicalLunaAutonomyPolicy(await importOriginal<typeof import('../src/mind/action/ownTime/autonomyModels.js')>());
+});
 
 /**
  * Syzygy ADR-0008 stage 3, step F5, wired: the memory outbox built from the environment as the entries build it. Switched off
