@@ -315,6 +315,16 @@ const NODE_SPECS = [
   ['minecraft', 0, 6, 'BODY / WORLD', 'MINECRAFT', '身体から届く出来事'],
   ['agentHost', 1, 6, 'HOST / EXECUTOR', 'AGENT HOST', '依頼された作業の実行'],
 ];
+// Role colour stays stable across running/completed/failed states.
+// Wires and live receipts use the sending processor's role, never a fabricated event type.
+const CIRCUITS = {
+  input: ['pcm', 'stt', 'join', 'perception'],
+  judgment: ['turn', 'jevv', 'jevt', 'context', 'native', 'llm'],
+  action: ['workspace', 'gate', 'tools', 'autonomy', 'minecraft', 'agentHost'],
+  output: ['decode', 'plan', 'sentences', 'tts', 'play'],
+  memory: ['recall', 'store', 'memory', 'sleep', 'embedding'],
+};
+const circuitFor = node => Object.entries(CIRCUITS).find(([, nodes]) => nodes.includes(node))?.[0] ?? 'neutral';
 const LINKS = [
   ['pcm','stt'], ['stt','join'], ['join','perception'], ['perception','jevv'], ['perception','jevt'], ['perception','recall'],
   ['turn','context'], ['jevv','context'], ['jevt','context'], ['recall','context'], ['workspace','context'], ['context','native'],
@@ -336,7 +346,7 @@ function mountObserver() {
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let state = createObserverState(), catalog = null, selectedNode = 'llm', selectedSpan = null, selectedTool = null;
   let priorCatalog = null, runSignature = '', spanSignature = '', toolSignature = '', graphWidth = 0;
-  const nodes = new Map(), paths = new Map(), boxes = new Map(), animations = new Set();
+  const nodes = new Map(), paths = new Map(), boxes = new Map(), animations = new Set(), recent = new Map();
   let viewRuns = null, viewId = null, view = undefined;
   const currentRun = () => {
     if (viewRuns !== state.runs || viewId !== state.selectedRunId) {
@@ -345,7 +355,10 @@ function mountObserver() {
     return view;
   };
   const nodeLabel = id => NODE_SPECS.find(spec => spec[0] === id)?.[4] ?? id;
-  const stopPackets = () => { for (const animation of animations) animation.cancel(); animations.clear(); $('packets').replaceChildren(); };
+  const stopPackets = () => {
+    for (const animation of animations) animation.cancel(); animations.clear(); $('packets').replaceChildren();
+    for (const key of [...recent.keys()]) cancelTrail(key); $('trails').replaceChildren();
+  };
   const clearPrivateView = () => {
     state = createObserverState(); catalog = null; priorCatalog = null; selectedSpan = null; selectedTool = null;
     runSignature = ''; spanSignature = ''; toolSignature = ''; stopPackets();
@@ -354,8 +367,9 @@ function mountObserver() {
   };
 
   for (const [id, , , type, label, role] of NODE_SPECS) {
-    const button = element('button', 'node'); button.type = 'button'; button.dataset.node = id;
+    const button = element('button', 'node'); button.type = 'button'; button.dataset.node = id; button.dataset.circuit = circuitFor(id);
     button.setAttribute('aria-pressed', String(id === selectedNode));
+    const halo = element('span', 'receipt-halo'); halo.setAttribute('aria-hidden', 'true'); button.append(halo);
     button.append(element('span', 'node-type', type), element('strong', '', label), element('span', 'node-role', role), element('span', 'node-value', 'イベント待ち'), element('span', 'node-state', STATE_LABELS.unobserved));
     button.addEventListener('click', () => selectNode(id)); $('nodes').append(button); nodes.set(id, button);
   }
@@ -400,6 +414,7 @@ function mountObserver() {
     const run = currentRun(), value = nodeState(run, selectedNode, state.transport);
     const definition = catalog?.nodes?.find(item => item.id === selectedNode);
     const coverage = catalog?.coverage?.find(item => item.node === selectedNode);
+    document.querySelector('.inspector').dataset.circuit = circuitFor(selectedNode);
     $('detail-title').textContent = nodeLabel(selectedNode);
     $('detail-location').textContent = definition?.location ?? '接続後、カタログの実装場所を表示します。';
     $('coverage-note').textContent = coverage ? `${({ instrumented: '計測対象', external: '外部の処理', unobserved: '未計測' })[coverage.availability] ?? '未計測'}${coverage.reason ? ` · ${coverage.reason}` : ''}` : '計測範囲は接続後に表示します。';
@@ -464,7 +479,7 @@ function mountObserver() {
     $('events-empty').hidden = events.length > 0;
     $('event-list').replaceChildren();
     for (const event of events.slice(-12).reverse()) {
-      const item = element('li'), button = element('button'); button.type = 'button';
+      const item = element('li'), button = element('button'); button.type = 'button'; button.dataset.circuit = circuitFor(event.node);
       const time = element('time', '', timeValue(event.at)); time.dateTime = event.at;
       button.append(time, element('span', '', nodeLabel(event.node)), element('span', 'event-summary', `${event.kind} · ${event.kind === 'handoff' ? `${event.fromNode ?? '?'} → ${event.toNode ?? '?'}` : shortValue(event.output ?? event.input) || event.spanId}`));
       button.addEventListener('click', () => selectNode(event.node, event.kind.startsWith('span.') ? event.spanId : null)); item.append(button); $('event-list').append(item);
@@ -514,7 +529,7 @@ function mountObserver() {
     if (paths.has(key)) return paths.get(key);
     const path = route(from, to, paths.size);
     if (!path) return null;
-    const value = svgElement('path', { d: path, class: `edge${background ? ' background' : ''}`, 'marker-end': 'url(#arrow)' });
+    const value = svgElement('path', { d: path, class: `edge${background ? ' background' : ''}`, 'data-circuit': circuitFor(from), 'marker-end': `url(#arrow-${circuitFor(from)})` });
     $('edges').append(value); paths.set(key, value); return value;
   }
 
@@ -538,11 +553,41 @@ function mountObserver() {
     for (const [from,to,background] of LINKS) addEdge(from,to,background);
   }
 
+  function cancelTrail(key) {
+    const item = recent.get(key); if (!item) return;
+    recent.delete(key); item.animation.cancel(); if (item.remove) item.target.remove();
+  }
+
+  function receiptTrail(key, target, remove = false) {
+    // A renewed receipt starts a fresh three-second window; one animation per box/wire.
+    cancelTrail(key);
+    if (recent.size >= 96) cancelTrail(recent.keys().next().value);
+    const animation = target.animate([{ opacity: .7 }, { opacity: 0 }], { duration: 3000, easing: 'linear' });
+    const item = { animation, target, remove }; recent.set(key, item);
+    const finish = () => { if (recent.get(key) === item) recent.delete(key); if (remove) target.remove(); };
+    animation.addEventListener('finish', finish, { once: true });
+    animation.addEventListener('cancel', finish, { once: true });
+  }
+
+  function receiptGlow(event) {
+    if (event.runId !== state.selectedRunId || document.hidden) return;
+    const touched = event.kind === 'handoff' ? [event.fromNode, event.toNode] : [event.node];
+    for (const node of new Set(touched)) {
+      const halo = nodes.get(node)?.querySelector('.receipt-halo');
+      if (halo) receiptTrail(`node:${node}`, halo);
+    }
+    if (event.kind !== 'handoff') return;
+    const path = addEdge(event.fromNode, event.toNode);
+    if (!path) return;
+    const trail = svgElement('path', { d: path.getAttribute('d'), class: 'edge-receipt', 'data-circuit': circuitFor(event.fromNode) });
+    $('trails').append(trail); receiptTrail(`edge:${event.fromNode}>${event.toNode}`, trail, true);
+  }
+
   function handoffPacket(event) {
     if (event.runId !== state.selectedRunId || reduceMotion.matches || document.hidden || animations.size >= 24) return;
     const path = addEdge(event.fromNode,event.toNode);
     if (!path || typeof path.getTotalLength !== 'function') return;
-    const packet = svgElement('circle',{r:4,class:'packet'}); $('packets').append(packet);
+    const packet = svgElement('circle',{r:4,class:'packet','data-circuit':circuitFor(event.fromNode)}); $('packets').append(packet);
     const length = path.getTotalLength(), frames = [];
     for (let index=0;index<=20;index+=1) { const point=path.getPointAtLength(length*index/20); frames.push({transform:`translate(${point.x}px, ${point.y}px)`}); }
     // A bounded 240 ms receipt visualization; never a measurement or a looping simulated packet.
@@ -565,7 +610,10 @@ function mountObserver() {
       const changed = envelope.events.some(event => !seen.has(event.sequence)) || previous.transport !== state.transport || previous.availability !== state.availability || previous.notice !== state.notice || state.instanceId !== previous.instanceId || envelope.gap;
       if (changed) render();
       // Initial history, a gap and a server restart remain still. Only a new live receipt moves.
-      if (previous.instanceId === state.instanceId && previous.transport === 'live' && !envelope.gap && state.dropped === previous.dropped) for (const event of envelope.events) if (event.kind === 'handoff' && !seen.has(event.sequence)) handoffPacket(event);
+      if (previous.instanceId === state.instanceId && previous.transport === 'live' && !envelope.gap && state.dropped === previous.dropped) for (const event of envelope.events) if (!seen.has(event.sequence)) {
+        receiptGlow(event);
+        if (event.kind === 'handoff') handoffPacket(event);
+      }
     },
     onConnection: connection => {
       const previous = state.transport; state = {...state,transport:connection}; root.dataset.connection=connection;

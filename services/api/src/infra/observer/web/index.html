@@ -31,10 +31,19 @@
     <label class="follow"><input id="follow-runs" type="checkbox" checked>新しいrunを追う</label>
   </div>
   <p id="notice" class="notice" role="status" hidden></p>
+  <section class="circuit-legend" aria-label="処理の役割と線の色">
+    <span class="legend-caption">SIGNAL MAP / 処理の役割</span>
+    <span data-circuit="input"><i aria-hidden="true"></i>入力・知覚</span>
+    <span data-circuit="judgment"><i aria-hidden="true"></i>Jev・文脈・LLM</span>
+    <span data-circuit="action"><i aria-hidden="true"></i>道具・制御・実行</span>
+    <span data-circuit="output"><i aria-hidden="true"></i>返答・音声出力</span>
+    <span data-circuit="memory"><i aria-hidden="true"></i>記憶・学習</span>
+    <p>矢印と流れる点は、送り元の箱と同じ色です。通過後は3秒かけて残光が消えます。処理状態は箱の記号とラベルで表示します。</p>
+  </section>
   <div class="workspace">
     <section class="graph" aria-label="シャノンの処理系">
       <div id="canvas" class="canvas">
-        <svg class="wires" id="wires" aria-hidden="true"><defs><marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6"/></marker></defs><g id="zones"></g><g id="edges"></g><g id="packets"></g></svg>
+        <svg class="wires" id="wires" aria-hidden="true"><defs><marker id="arrow-input" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path data-circuit="input" d="M0 0 L6 3 L0 6"/></marker><marker id="arrow-judgment" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path data-circuit="judgment" d="M0 0 L6 3 L0 6"/></marker><marker id="arrow-action" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path data-circuit="action" d="M0 0 L6 3 L0 6"/></marker><marker id="arrow-output" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path data-circuit="output" d="M0 0 L6 3 L0 6"/></marker><marker id="arrow-memory" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path data-circuit="memory" d="M0 0 L6 3 L0 6"/></marker><marker id="arrow-neutral" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path data-circuit="neutral" d="M0 0 L6 3 L0 6"/></marker></defs><g id="zones"></g><g id="edges"></g><g id="trails"></g><g id="packets"></g></svg>
         <div id="nodes"></div>
       </div>
       <div class="legend"><span>● ACTIVE 処理中・出力待ち</span><span>✓ DONE 完了イベントあり</span><span>! FAILED 失敗</span><span>? UNKNOWN 状態不明</span><span>破線：別の実行系</span></div>

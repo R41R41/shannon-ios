@@ -143,3 +143,34 @@ and the temporary viewport override reset. Its former temporary URL is
 not a product endpoint. For a real observation session, open `/observer` (or
 `/companion/observer` behind the existing proxy) on the running Shannon API and
 pair there. The validation script is only for repeating this isolated check.
+
+## Role colours and three-second receipt trails (2026-10-09)
+
+The owner's reference uses dark boxes, light text and consistent coloured
+circuits. The viewer now assigns stable role colours: gold for input/perception,
+coral for Jev/context/response reasoning, mint for tools/control/execution,
+blue for reply/audio output, and lavender for memory/learning. Node type labels,
+box borders and backgrounds, inspector headings and event labels retain this
+role even when state changes. Wires, arrowheads and receipt packets use the
+sending node's role. A text legend explains the colours; state still has a
+symbol and label, so colour is not the only source of information.
+
+Each newly received selected-run event illuminates its observed node. A handoff
+also illuminates its two endpoints and its actual wire. The glow fades linearly
+from 0.7 opacity to zero over the owner's requested 3000ms; another receipt
+renews the window without adding another animation for that box/wire. At most
+96 trails exist. The existing 240ms packet motion remains separate. Opacity-only
+glow is retained under Reduced Motion while moving packets stay suppressed.
+History loading, gaps, losses and server changes do not replay trails. Run
+changes, disconnection, audience hold, resize and page hiding clear them.
+
+The isolated fixture's `handoff-burst` sends 30 actual fixture handoffs at 250ms
+intervals, then stops. Browser inspection showed the LLM-to-TOOL wire and both
+halos at opacity 0.676649 during receipts, and zero halos/no overlay paths after
+the window. There were no browser warning/error entries. The existing TOOL
+view retained two concurrent ACTIVE spans and offered-tool filtering. The
+1280px desktop and 390px compact viewports had no horizontal document overflow;
+all compact boxes fitted within the viewport. Audience hold during a receipt
+burst removed every trail, packet, lit halo and private run option. Evidence:
+[Role colours and actual receipt glow](observer-evidence/desktop-colors-receipt-glow.png).
+This is controlled local transport evidence, not a production flow or model call.

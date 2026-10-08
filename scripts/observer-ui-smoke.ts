@@ -89,17 +89,27 @@ function runFixture() {
   });
   console.log(`Started ${runId} and a separate background run`);
 }
+let burst: ReturnType<typeof setInterval> | undefined;
 const input = createInterface({ input: process.stdin });
 input.on('line', line => {
   switch (line.trim()) {
     case 'run': runFixture(); break;
     case 'client-links': void clientLinksFixture().catch(() => console.error('LOCAL_FIXTURE_CLIENT_LINKS_FAILED')); break;
     case 'handoff': for (const emit of handoffs) emit(); console.log('Sent a fixture handoff receipt'); break;
+    case 'handoff-burst': {
+      if (burst) clearInterval(burst);
+      let remaining = 30;
+      burst = setInterval(() => {
+        for (const emit of handoffs) emit();
+        if (--remaining === 0) { clearInterval(burst); burst = undefined; console.log('Finite fixture handoff burst ended'); }
+      }, 250);
+      console.log('Started 30 real fixture handoff receipts, 250ms apart'); break;
+    }
     case 'finish': for (const finish of [...finishers]) finish(); break;
     case 'hold': ownerAlone = false; console.log('Owner visibility held'); break;
     case 'ready': ownerAlone = true; console.log('Owner alone'); break;
     case 'pair': console.log(`Temporary fixture pairing code: ${auth.issuePairingCode('ui-fixture-owner').code}`); break;
-    case 'close': for (const finish of [...finishers]) finish(); input.close(); server.closeAllConnections(); server.close(); publisher.close(); break;
+    case 'close': if (burst) clearInterval(burst); for (const finish of [...finishers]) finish(); input.close(); server.closeAllConnections(); server.close(); publisher.close(); break;
     default: console.log('Commands: run / client-links / handoff / finish / hold / ready / close');
   }
 });
