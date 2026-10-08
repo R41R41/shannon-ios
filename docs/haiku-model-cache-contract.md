@@ -43,6 +43,8 @@ A cache-control block alone is not proof of caching. After a real response, requ
 
 Requests use one-hour cache controls. Provider server tools can additionally produce five-minute cache writes; valid native five-minute/one-hour usage breakdowns are accepted and charged at their actual TTL. An absent breakdown uses the conservative one-hour write price for Haiku. This preserves existing web-search/tool behavior. See the [official prompt caching documentation](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
 
+For a streamed native web-search request, the SDK can retain the start TTL split while final cumulative creation grows and `message_delta` omits that split. Capture the initial counters and TTLs as immutable values, before the SDK mutates its snapshot. After `finalMessage`, a matched server search/result (including an original pending call across a bounded pause) permits only the additional creation to be classified as the provider's [automatic five-minute server-result cache](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-use-with-prompt-caching#server-tool-results-are-cached-automatically). Preserve the initial one-hour creation and all signed content. This is a derived TTL breakdown, not an explicit final provider split. Explicit final TTL data remains authoritative; a legal null keeps conservative one-hour pricing, and a malformed object still fails after recording spend. Ordinary/nonstreamed requests and incomplete usage are not repaired by this rule.
+
 ## Cost and budget accounting
 
 The implementation's Haiku prices are USD per million tokens, selected by total input = uncached + cache creation + cache read:

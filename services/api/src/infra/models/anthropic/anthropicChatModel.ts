@@ -17,7 +17,7 @@ import { anthropicPrices, estimatedAnthropicCostUsd, type SonnetSettings } from 
 import { sonnetChatBody, sonnetVoiceBody } from './anthropicRequest.js';
 import { sonnetToolRounds, type SonnetRoundResult } from './anthropicRounds.js';
 import { isAppendOnlyAnthropicModel, isHaikuModel, usesOneHourAnthropicCache } from './haikuConfig.js';
-import { AnthropicUsageEvidenceError, cacheHaikuRequest, validateHaikuCacheUsage } from './haikuCache.js';
+import { AnthropicUsageEvidenceError, cacheHaikuRequest, serverSearchCacheStart, settledServerSearchUsage, validateHaikuCacheUsage, type HaikuCacheUsage, type ServerSearchCacheStart } from './haikuCache.js';
 import { DEFAULT_VOICE_STREAM_BOUNDS, VOICE_RESPONSE_TIMEOUT_MILLISECONDS, VOICE_WEB_FIRST_OUTPUT_MILLISECONDS, type VoiceStreamBounds } from '../chatModelVoiceStream.js';
 import { webSearchContext, webSearchFailure, webSearchFailedTurn, type WebSearchOperation } from '../webSearch.js';
 import { nativeWebSearchBody, nativeWebSearchResult, searchNeedsInput } from './anthropicWebSearch.js';
@@ -301,6 +301,8 @@ export class AnthropicChatModel implements ShannonChatModel {
       const prepared = usesOneHourAnthropicCache(body.model) ? cacheHaikuRequest(body) : body;
       const inlineTools = isAppendOnlyAnthropicModel(body.model) ? { headers: { 'anthropic-beta': 'inline-tools-2026-09-15' } } : {};
       let observedUsage: Anthropic.Message['usage'] | null = null;
+      let searchCacheStart: ServerSearchCacheStart | null = null;
+      let explicitSearchTtl: HaikuCacheUsage['cache_creation'] | undefined;
       let receivedUsage = false;
       let usageRecorded = false;
       observerHandoff('native', 'llm', { model: prepared.model, round });
@@ -324,9 +326,11 @@ export class AnthropicChatModel implements ShannonChatModel {
           if (event.type === 'message_start') {
             receivedUsage = true;
             observedUsage = event.message.usage;
+            if (searchAllowance(prepared) && prepared.tools?.length === 1) searchCacheStart = serverSearchCacheStart(observedUsage);
             if (usesOneHourAnthropicCache(body.model)) validateNativeUsage(observedUsage);
           } else if (event.type === 'message_delta' && observedUsage) {
             observedUsage = mergeUsage(observedUsage, event.usage);
+            if (Object.hasOwn(event.usage, 'cache_creation')) explicitSearchTtl = (event.usage as HaikuCacheUsage).cache_creation;
           }
           const text = event.type === 'content_block_delta' && event.delta.type === 'text_delta' ? event.delta.text : null;
           if (!first && round === 0 && (text !== null || (event.type === 'content_block_start' && event.content_block.type === 'tool_use'))) {
@@ -340,7 +344,7 @@ export class AnthropicChatModel implements ShannonChatModel {
           const handed = listen(text, decoder);
           if (handed) { timer?.answering(); bounds?.pause(); sent += await handed; signal?.throwIfAborted(); bounds?.output(); }
         }
-        const message = await stream.finalMessage();
+        const message = settledServerSearchUsage(await stream.finalMessage(), searchCacheStart, explicitSearchTtl, prepared.messages);
         this.recordUsage(scopeKey, message, prepared.max_tokens, true, body.model, searchAllowance(body));
         usageRecorded = true;
         if (usesOneHourAnthropicCache(body.model)) validateNativeUsage(message.usage);

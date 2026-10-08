@@ -28,6 +28,55 @@ export interface HaikuCacheUsage {
   cache_creation?: { ephemeral_5m_input_tokens: number; ephemeral_1h_input_tokens: number } | null;
 }
 
+export interface ServerSearchCacheStart {
+  readonly input: number;
+  readonly output: number;
+  readonly creation: number;
+  readonly read: number;
+  readonly five: number;
+  readonly hour: number;
+}
+
+/** The SDK mutates its start usage in place. Keep the original counters and TTLs as values. */
+export function serverSearchCacheStart(usage: Anthropic.Message['usage']): ServerSearchCacheStart | null {
+  const { input_tokens: input, output_tokens: output, cache_creation_input_tokens: creation, cache_read_input_tokens: read, cache_creation: ttl } = usage;
+  const safe = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  if (![input, output, creation, read, ttl?.ephemeral_5m_input_tokens, ttl?.ephemeral_1h_input_tokens].every(safe)
+    || ttl!.ephemeral_5m_input_tokens + ttl!.ephemeral_1h_input_tokens !== creation) return null;
+  return Object.freeze({ input, output, creation: creation!, read: read!, five: ttl!.ephemeral_5m_input_tokens, hour: ttl!.ephemeral_1h_input_tokens });
+}
+
+/**
+ * Only for a streamed request whose sole server tool is web search, after finalMessage.
+ * MessageDeltaUsage omits TTLs, while the SDK retains the start split. Server results' additional
+ * cache writes use the provider's automatic 5m breakpoint, independent of our manual 1h markers.
+ * An explicit delta split is authoritative, including malformed values that validation must reject.
+ */
+export function settledServerSearchUsage(message: Anthropic.Message, start: ServerSearchCacheStart | null,
+  explicitTtl: HaikuCacheUsage['cache_creation'] | undefined, priorMessages: readonly Anthropic.MessageParam[] = []): Anthropic.Message {
+  if (!start) return message;
+  if (explicitTtl !== undefined) return { ...message, usage: { ...message.usage, cache_creation: explicitTtl } };
+  const usage = message.usage, ttl = usage.cache_creation;
+  const safe = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  if (![usage.input_tokens, usage.output_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens].every(safe)
+    || usage.input_tokens < start.input || usage.output_tokens < start.output || usage.cache_read_input_tokens! < start.read
+    || usage.cache_creation_input_tokens! <= start.creation || ttl?.ephemeral_5m_input_tokens !== start.five || ttl.ephemeral_1h_input_tokens !== start.hour) return message;
+  const calls = message.content.filter((block): block is Anthropic.ServerToolUseBlock => block.type === 'server_tool_use' && block.name === 'web_search');
+  const ids = new Set(calls.map(block => block.id));
+  const previous = priorMessages.filter(turn => turn.role === 'assistant').flatMap(turn => Array.isArray(turn.content) ? turn.content : []);
+  const answered = new Set(previous.filter(block => block.type === 'web_search_tool_result').map(block => block.tool_use_id));
+  for (const block of previous) if (block.type === 'server_tool_use' && block.name === 'web_search' && !answered.has(block.id)) ids.add(block.id);
+  const results = message.content.filter(block => block.type === 'web_search_tool_result');
+  const searches = usage.server_tool_use?.web_search_requests;
+  if (!safe(searches) || searches < results.length || !results.length || new Set(calls.map(block => block.id)).size !== calls.length
+    || new Set(results.map(block => block.tool_use_id)).size !== results.length
+    || results.some(block => !ids.has(block.tool_use_id) || !Array.isArray(block.content))) return message;
+  const additional = usage.cache_creation_input_tokens! - start.creation;
+  return { ...message, usage: { ...usage, cache_creation: {
+    ephemeral_5m_input_tokens: start.five + additional, ephemeral_1h_input_tokens: start.hour,
+  } } };
+}
+
 export type AnthropicUsageEvidenceCode = 'HAIKU_CACHE_TTL_CONFLICT' | 'HAIKU_CACHE_BREAKPOINT_LIMIT' | 'HAIKU_CACHE_PROTOCOL_INVALID'
   | 'HAIKU_CACHE_USAGE_INVALID' | 'HAIKU_CACHE_UNCONFIRMED' | 'HAIKU_RESPONSE_USAGE_INVALID';
 
