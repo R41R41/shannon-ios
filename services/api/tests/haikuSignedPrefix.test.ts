@@ -53,7 +53,7 @@ function unchangedPrefix(previous: Body, next: Body, assistant: AnthropicMessage
 }
 
 describe('Haiku signed thinking with a lazy tool menu', () => {
-  it.each([false, true])('opens deferred schemas append-only and runs only an opened tool (voice=%s)', async voice => {
+  it.each([false, true])('opens strict schemas by value append-only and runs only an opened tool (voice=%s)', async voice => {
     const opened = signed('open-list', 'tool_open', { name: 'study_list' });
     const read = signed('read-list', 'study_list');
     const answer = voice ? paid(message([{ type: 'text', text: 'メモがあります。' }], 'end_turn')) : paid(anthropicFixture('structured-answer'));
@@ -63,7 +63,7 @@ describe('Haiku signed thinking with a lazy tool menu', () => {
       unchangedPrefix(h.bodies[index - 1]!, body, index === 1 ? opened : read);
       if (index === 1) {
         expect((body.messages as Messages).at(-1)).toEqual({ role: 'system', content: [
-          { type: 'tool_addition', tool: { type: 'tool_reference', name: 'study_list' } },
+          { type: 'tool_addition', tool: { type: 'tool_definition', definition: expect.objectContaining({ name: 'study_list', strict: true }) } },
         ] });
         return read;
       }
@@ -75,11 +75,7 @@ describe('Haiku signed thinking with a lazy tool menu', () => {
     expect(result.outOfTime).toBeUndefined();
     expect(t.calls).toEqual(['study_list']);
     expect(h.bodies).toHaveLength(3);
-    expect(h.bodies[0]!.tools).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: 'tool_open' }),
-      expect.objectContaining({ name: 'study_list', defer_loading: true }),
-      expect.objectContaining({ name: 'study_read', defer_loading: true }),
-    ]));
+    expect(h.bodies[0]!.tools).toEqual([expect.objectContaining({ name: 'tool_open', strict: true })]);
     expect(h.bodies.every(body => body.cache_control && (body.cache_control as { ttl: string }).ttl === '1h')).toBe(true);
     expect(h.headers.every(header => header.get('anthropic-beta') === 'inline-tools-2026-09-15')).toBe(true);
   });
@@ -116,7 +112,7 @@ describe('Haiku signed thinking with a lazy tool menu', () => {
       const prior = h.bodies[1]!.messages as Messages;
       expect((body.messages as Messages).slice(0, prior.length)).toEqual(prior);
       expect((body.messages as Messages).slice(-2)).toEqual([
-        { role: 'system', content: [{ type: 'tool_addition', tool: { type: 'tool_reference', name: 'study_list' } }] },
+        { role: 'system', content: [{ type: 'tool_addition', tool: { type: 'tool_definition', definition: expect.objectContaining({ name: 'study_list', strict: true }) } }] },
         { role: 'system', content: expect.any(String) },
       ]);
       expect(body.tool_choice).toEqual({ type: 'none' });

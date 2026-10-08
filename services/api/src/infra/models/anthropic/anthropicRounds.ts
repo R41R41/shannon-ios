@@ -4,9 +4,9 @@ import {
 } from '../../../mind/action/respond/turnDeadline.js';
 import { CUT_OFF_CALL_NOTE, TIMED_OUT_ROUND_NOTE, TOOLS_GONE_NOTE, type ShannonModelToolSession } from '../chatModelTools.js';
 import { parallelToolsEnabled, runToolStep, type ToolStepState } from '../chatModelToolStep.js';
-import { sonnetTool, sonnetTools } from './anthropicRequest.js';
+import { sonnetTools } from './anthropicRequest.js';
 import { DEFAULT_HAIKU_MODEL } from './haikuConfig.js';
-import type { BetaRequestToolAdditionBlock, BetaTool } from '@anthropic-ai/sdk/resources/beta/messages/messages';
+import type { BetaRequestToolAdditionBlock } from '@anthropic-ai/sdk/resources/beta/messages/messages';
 
 /**
  * The tool rounds of a Sonnet turn (Syzygy ADR-0008 stage 2, step 5), at parity with luna's `withToolRounds`
@@ -68,14 +68,12 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
   const turns: Anthropic.Message[] = [];
   const session = options.session;
   const haiku = body.model === DEFAULT_HAIKU_MODEL;
-  // Declare the known menu once. Its lazy visibility still belongs to the session: opening a tool only appends a
-  // reference after its result, never changes the tools/system prefix bound to a returned thinking signature.
-  const visible = new Set(sonnetTools(session).map(tool => tool.name));
-  const declared = session?.menu?.offered.map(sonnetTool);
-  if (haiku && declared) body = { ...body, tools: [
-    ...declared.map(tool => ({ ...tool, ...(!visible.has(tool.name) ? { defer_loading: true } : {}) } satisfies BetaTool)),
-    ...sonnetTools(session).filter(tool => !declared.some(item => item.name === tool.name)),
-  ] };
+  // Every offered schema is strict, including deferred ones, and the API accepts at most 20 strict tools per request.
+  // Keep only the initially visible menu in the fixed prefix. Opening another tool appends its full strict definition
+  // after the result; it never changes signed tools/system/history or the session's visibility and execution gate.
+  const initial = sonnetTools(session);
+  const visible = new Set(initial.map(tool => tool.name));
+  if (haiku && session?.menu) body = { ...body, tools: initial };
   const turn: ToolStepState = { used: 0, toolsOff: false };
   let round = 0;
   let pauses = 0;
@@ -135,7 +133,7 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     } catch (error) {
       if (callerStopped()) throw error;
       if (error instanceof PartialAnswerError) return out(error.sent);
-      if (!plain && options.plainBody && refusedOffer(error)) return answer(true);
+      if (!plain && options.plainBody && refusedOffer(error)) { reportRefusedOffer(error); return answer(true); }
       if (turn.used === 0 && !timedOut(error) && !(error instanceof SonnetRefusalError)) throw error;
       if (error instanceof SonnetRefusalError && turn.used === 0) throw error;
       return out();
@@ -152,7 +150,7 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     } catch (error) {
       if (callerStopped()) throw error;
       if (error instanceof PartialAnswerError) return out(error.sent);
-      if (options.plainBody && refusedOffer(error)) return answer(true);
+      if (options.plainBody && refusedOffer(error)) { reportRefusedOffer(error); return answer(true); }
       if (!timedOut(error) && turn.used === 0) throw error;
       if (options.timedOutRound === 'fail' && turn.used === 0) throw error;
       note(TIMED_OUT_ROUND_NOTE);
@@ -182,11 +180,11 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
       return [{ type: 'tool_result' as const, tool_use_id: value.call_id, content: value.output ?? '', ...(failed(value.output) ? { is_error: true } : {}) }];
     });
     messages.push({ role: 'user', content: results });
-    if (haiku && declared) {
+    if (haiku && session.menu) {
       const additions: BetaRequestToolAdditionBlock[] = sonnetTools(session).flatMap(tool => {
-        if (visible.has(tool.name) || !declared.some(item => item.name === tool.name)) return [];
+        if (visible.has(tool.name)) return [];
         visible.add(tool.name);
-        return [{ type: 'tool_addition', tool: { type: 'tool_reference', name: tool.name } }];
+        return [{ type: 'tool_addition', tool: { type: 'tool_definition', definition: tool } }];
       });
       // The stable Messages types do not yet include beta inline blocks. Keep their schema checked by the SDK's beta
       // type, then use the same native transport with its inline-tools header (no separate client/retry/session).
@@ -203,6 +201,12 @@ function failed(output: string | undefined): boolean {
 function refusedOffer(error: unknown): boolean {
   return error instanceof Anthropic.APIError && error.status !== undefined && error.status >= 400 && error.status < 500
     && ![401, 403, 408, 409, 429].includes(error.status);
+}
+
+/** Provider diagnostics contain no message, body, model input, identifiers or provider-supplied category. */
+function reportRefusedOffer(error: unknown): void {
+  if (!(error instanceof Anthropic.APIError)) return;
+  console.warn(JSON.stringify({ event: 'anthropic_tool_offer_refused', status: error.status, category: 'offered_request_rejected' }));
 }
 
 /** Keep original results as quoted data while removing tool references that a plain request cannot declare. */
