@@ -1,3 +1,4 @@
+import { observeAsync } from '../../infra/observer/observerContext.js';
 import { configuredResponseModel } from '../../infra/models/anthropic/haikuConfig.js';
 import { type LlmUsageStore } from '../../infra/models/llmUsage.js';
 import { VOICE_AFFECTS, VOICE_SKILLS, type VoiceAffect, type VoiceConversationClass, type VoiceDecisionGateway, type VoiceDecisionInput, type VoiceDelivery, type VoiceLatencyClass, type VoiceSkill, type VoiceTurnDecision } from '../../contracts/voiceDecisionContract.js';
@@ -35,7 +36,7 @@ export function createConfiguredVoiceDecisionGateway(
     usageStore,
   }) : undefined;
   const jevApiKey = environment.TYPESAFE_API_KEY?.trim();
-  if (jevApiKey) return new JevVoiceDecisionGateway({
+  if (jevApiKey) return observedVoiceGateway(new JevVoiceDecisionGateway({
     apiKey: jevApiKey,
     endpoint: environment.SHANNON_JEV_ENDPOINT?.trim() || undefined,
     model: environment.SHANNON_JEV_MODEL?.trim() || 'jev-latest',
@@ -43,7 +44,21 @@ export function createConfiguredVoiceDecisionGateway(
     skillThreshold,
     fallbackGateway: modelFallback,
     ...(jevFetcher ? { fetcher: jevFetcher } : {}),
-  });
-  if (modelFallback) return modelFallback;
-  return new LocalVoiceDecisionGateway(skillThreshold);
+  }));
+  if (modelFallback) return observedVoiceGateway(modelFallback);
+  return observedVoiceGateway(new LocalVoiceDecisionGateway(skillThreshold));
+}
+
+/** The existing configured router decides once. No words/context or free-form model output are projected. */
+function observedVoiceGateway(gateway: VoiceDecisionGateway): VoiceDecisionGateway {
+  const decide = gateway.decide.bind(gateway);
+  gateway.decide = input => observeAsync('jevv', { participantMode: input.participantMode, contextMessages: input.context?.length ?? 0 },
+      () => decide(input), value => ({ source: value.source, shouldRespond: value.shouldRespond,
+        replyRequiredProbability: value.replyRequiredProbability, solutionWantedProbability: value.solutionWantedProbability,
+        conversationClass: value.conversationClass, latencyClass: value.latencyClass, affect: value.affect,
+        affectIntensity: value.affectIntensity, delivery: value.delivery, selectedSkills: value.selectedSkills,
+        skillScores: value.skillScores, transcriptReliabilityProbability: value.transcriptReliabilityProbability,
+        roomLookProbability: value.roomLookProbability, lookSelfProbability: value.lookSelfProbability, silence: value.silence }),
+      { model: gateway.model });
+  return gateway;
 }

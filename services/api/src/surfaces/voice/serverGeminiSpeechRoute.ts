@@ -9,6 +9,7 @@ import type { LlmUsageStore } from '../../infra/models/llmUsage.js';
 import type { GeminiSpeechGateway } from '../../infra/models/geminiSpeech.js';
 import { createConfiguredElevenSpeechGateway, ElevenSpeechError, validatedElevenTags } from '../../infra/models/elevenSpeech.js';
 import { readJson, sendJson } from '../../infra/http/serverHttp.js';
+import { observeAsync } from '../../infra/observer/observerContext.js';
 
 type ConsumeAllowance = (deviceId: string) => boolean;
 
@@ -94,7 +95,9 @@ export function createGeminiSpeechRoute(
         }
         if (provider === 'eleven') return sendJson(response, 400, { error: 'ELEVEN_SPEECH_STREAM_REQUIRED' });
         if (!gateway) throw new ElevenSpeechError('ELEVEN_SPEECH_NOT_CONFIGURED');
-        const result = await gateway.synthesize({ scopeKey: principal.scopeKey, text, style });
+        const result = await observeAsync('tts', { provider, text, delivery: 'unary' },
+          () => gateway.synthesize({ scopeKey: principal.scopeKey, text, style }),
+          value => ({ provider, model: value.model, byteCount: value.audio.byteLength, durationSeconds: value.durationSeconds }));
         response.writeHead(200, {
           'content-type': result.contentType,
           'content-length': String(result.audio.byteLength),
@@ -138,53 +141,68 @@ export async function streamSpeech(
   speechRequest: { scopeKey: string; text: string; style?: string },
   provider: 'gemini' | 'eleven' = 'gemini',
 ): Promise<void> {
-  const controller = new AbortController();
-  let iterator: AsyncIterator<Uint8Array> | undefined;
-  const abort = () => controller.abort();
-  request.once('aborted', abort);
-  response.once('close', abort);
-  try {
-    const stream = await gateway.stream(speechRequest, controller.signal);
-    iterator = stream.chunks[Symbol.asyncIterator]();
-    const first = await iterator.next();
-    if (first.done) throw provider === 'eleven'
-      ? new ElevenSpeechError('ELEVEN_SPEECH_FAILED') : new GeminiSpeechError('GEMINI_SPEECH_FAILED');
-    response.writeHead(200, {
-      'content-type': `${stream.contentType};rate=${stream.sampleRate};channels=${stream.channels}`,
-      'cache-control': 'no-store',
-      'x-content-type-options': 'nosniff',
-      'x-accel-buffering': 'no',
-      'x-shannon-voice-engine': provider,
-      'x-shannon-voice-model': stream.model,
-      'x-shannon-voice-name': provider === 'eleven' ? 'Shannon Clone 02' : stream.voice,
-      ...(provider === 'gemini' ? {
-        'x-shannon-gemini-model': stream.model,
-        'x-shannon-gemini-voice': stream.voice,
-      } : {}),
-      'x-shannon-audio-sample-rate': String(stream.sampleRate),
-      'x-shannon-audio-channels': String(stream.channels),
-      'x-shannon-audio-bits-per-sample': String(stream.bitsPerSample),
-      'x-shannon-output-usd-per-10-seconds': stream.outputUsdPerTenSeconds.toFixed(8),
-      'x-shannon-cost-estimate-available': provider === 'gemini' ? 'true' : 'false',
-    });
-    await writeChunk(response, first.value);
-    while (!controller.signal.aborted) {
-      const next = await iterator.next();
-      if (next.done) break;
-      await writeChunk(response, next.value);
-    }
-    if (!controller.signal.aborted) response.end();
-  } catch (error) {
-    // Caller cancellation (barge-in/closing the session) is not a provider failure.
-    // Provider timeouts use a separate gateway controller and still propagate.
-    if (!controller.signal.aborted) throw error;
-  } finally {
-    request.off('aborted', abort);
-    response.off('close', abort);
-    try { await iterator?.return?.(); } catch (error) {
+  // The authenticated route supplies the audience/run; an unscoped speech request records nothing.
+  const measured: { provider: 'gemini' | 'eleven'; model?: string; byteCount: number; sampleCount: number;
+    sampleRate?: number; channels?: number; bitsPerSample?: number; cancelled: boolean } = {
+    provider, byteCount: 0, sampleCount: 0, cancelled: false,
+  };
+  return observeAsync('tts', { provider, text: speechRequest.text, delivery: 'stream' }, async () => {
+    const controller = new AbortController();
+    let iterator: AsyncIterator<Uint8Array> | undefined;
+    const abort = () => controller.abort();
+    request.once('aborted', abort);
+    response.once('close', abort);
+    try {
+      const stream = await gateway.stream(speechRequest, controller.signal);
+      measured.model = stream.model;
+      measured.sampleRate = stream.sampleRate;
+      measured.channels = stream.channels;
+      measured.bitsPerSample = stream.bitsPerSample;
+      iterator = stream.chunks[Symbol.asyncIterator]();
+      const first = await iterator.next();
+      if (first.done) throw provider === 'eleven'
+        ? new ElevenSpeechError('ELEVEN_SPEECH_FAILED') : new GeminiSpeechError('GEMINI_SPEECH_FAILED');
+      response.writeHead(200, {
+        'content-type': `${stream.contentType};rate=${stream.sampleRate};channels=${stream.channels}`,
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+        'x-accel-buffering': 'no',
+        'x-shannon-voice-engine': provider,
+        'x-shannon-voice-model': stream.model,
+        'x-shannon-voice-name': provider === 'eleven' ? 'Shannon Clone 02' : stream.voice,
+        ...(provider === 'gemini' ? {
+          'x-shannon-gemini-model': stream.model,
+          'x-shannon-gemini-voice': stream.voice,
+        } : {}),
+        'x-shannon-audio-sample-rate': String(stream.sampleRate),
+        'x-shannon-audio-channels': String(stream.channels),
+        'x-shannon-audio-bits-per-sample': String(stream.bitsPerSample),
+        'x-shannon-output-usd-per-10-seconds': stream.outputUsdPerTenSeconds.toFixed(8),
+        'x-shannon-cost-estimate-available': provider === 'gemini' ? 'true' : 'false',
+      });
+      await writeChunk(response, first.value);
+      measured.byteCount += first.value.byteLength;
+      while (!controller.signal.aborted) {
+        const next = await iterator.next();
+        if (next.done) break;
+        await writeChunk(response, next.value);
+        measured.byteCount += next.value.byteLength;
+      }
+      if (!controller.signal.aborted) response.end();
+    } catch (error) {
+      // Caller cancellation (barge-in/closing the session) is not a provider failure.
+      // Provider timeouts use a separate gateway controller and still propagate.
       if (!controller.signal.aborted) throw error;
+    } finally {
+      measured.cancelled = controller.signal.aborted;
+      measured.sampleCount = measured.bitsPerSample ? Math.floor(measured.byteCount / (measured.bitsPerSample / 8)) : 0;
+      request.off('aborted', abort);
+      response.off('close', abort);
+      try { await iterator?.return?.(); } catch (error) {
+        if (!controller.signal.aborted) throw error;
+      }
     }
-  }
+  }, () => measured);
 }
 
 async function writeChunk(response: ServerResponse, chunk: Uint8Array): Promise<void> {

@@ -1,10 +1,9 @@
 import { STAGE5_CORE_PATHS } from './stage5CorePaths.js';
 import { STAGE4_CORE_PATHS } from './stage4CorePaths.js';
+import { OBSERVER_CORE_PATHS } from './observerCorePaths.js';
 import type { ShannonCoreAreaId } from '@shannon/cognition';
-
 /**
  * CORE, as code (Syzygy ADR-0002).
- *
  * The nine core areas mapped to repository paths. A path ending in `/` covers the
  * whole directory. Shannon may propose a change to any of these from background
  * activity; applying one needs the owner's approval, and `authorizeAutonomousAction`
@@ -97,6 +96,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/wiring/turnRoutingWiring.ts',
   ]),
   authentication: Object.freeze([
+    ...OBSERVER_CORE_PATHS,
     'services/api/src/infra/auth/apiAuth.ts',
     'services/api/src/infra/auth/deviceAuth.ts',
     // Syzygy ADR-0008 stage 3 (S2): its SQLite part, split out unchanged.

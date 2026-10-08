@@ -127,6 +127,7 @@ extension ShannonGeminiLiveSessionModel {
 
     /// The owner's words still being assembled at the tap become a turn of his now, hidden and answered in the call.
     private func finishOwnerBufferAtSwitch() {
+        voiceObservation?.discardUnjoined()
         finalizeTask?.cancel()
         finalizeTask = nil
         guard let envelope = turnAssembler.finish() else { return }

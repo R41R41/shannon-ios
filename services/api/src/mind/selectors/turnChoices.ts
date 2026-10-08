@@ -1,3 +1,5 @@
+import { observedToolName } from '../../infra/models/anthropic/observerProjection.js';
+import { observeAsync } from '../../infra/observer/observerContext.js';
 import { TASK_KINDS, type DifficultyAnswers } from '@shannon/learning';
 import type { JevChooser, JevQuestion, JevQuestionSetId } from '../../infra/models/jev/jevChoice.js';
 import { JEV_QUESTION_SETS, jevChoice, jevNoul } from '../../infra/models/jev/jevChoice.js';
@@ -90,7 +92,9 @@ export class JevTurnChooser implements TurnChooser {
     const questions: Record<string, JevQuestion> = { ...(menu ? toolMenuQuestions(menu) : {}), ...(this.difficulty ? difficultyQuestions(previous !== null) : {}) };
     const sets: JevQuestionSetId[] = [...(menu ? [JEV_QUESTION_SETS.toolMenu] : []), ...(this.difficulty ? [JEV_QUESTION_SETS.difficulty] : []),
       ...(previous ? [JEV_QUESTION_SETS.retry] : [])];
-    const decided = await this.jev.decide<TurnChoices>({
+    let observation: { cached: boolean; model: string; source: 'jev' | 'fallback' } | undefined;
+    const decided = await observeAsync('jevt', { surface: request.surface, offeredTools: menu?.map(tool => observedToolName(tool.name)) ?? [], difficulty: this.difficulty }, () => this.jev.decide<TurnChoices>({
+      observe: metadata => { observation = metadata; },
       scopeKey: request.scopeKey, surface: request.surface, decision: this.difficulty ? 'difficulty' : 'tool_menu', sets,
       state: { utterance: request.words.slice(0, TURN_CHOICE_WORDS), surface: request.surface, ...(previous ? { previous_reply: previous } : {}) },
       questions,
@@ -112,7 +116,8 @@ export class JevTurnChooser implements TurnChooser {
           multi: value.difficulty?.multiStep ?? -1, retry: value.retry ?? -1,
         } : {}),
       }),
-    });
+    }), decision => ({ ...observation, source: decision.source, selectedTools: decision.value.menu?.chosen.map(observedToolName) ?? null,
+      difficulty: decision.value.difficulty ?? null, retry: decision.value.retry ?? null }));
     return decided.value;
   }
 }

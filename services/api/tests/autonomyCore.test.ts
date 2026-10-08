@@ -64,6 +64,13 @@ function trackedFiles(): { files: string[] } | { reason: string } {
 }
 
 describe('CORE as code', () => {
+  it('requires owner approval for observer privacy, transport and future browser changes', () => {
+    for (const path of ['services/api/src/contracts/observerContract.ts', 'services/api/src/infra/observer/futureProjection.ts',
+      'services/api/src/wiring/serverObserverWiring.ts', 'services/api/src/surfaces/voice/voiceObservation.ts',
+      'apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceObservation.swift', 'docs/signal-observer-contract.md']) {
+      expect(coreAreaForRepositoryPath(path)?.area, path).toBe('authentication');
+    }
+  });
   it('covers the nine core areas of ADR-0002, each with at least one path', () => {
     expect(Object.keys(SHANNON_CORE_PATHS)).toEqual(Object.keys(SHANNON_CORE_AREA_LABELS));
     expect(Object.keys(SHANNON_CORE_PATHS)).toEqual([

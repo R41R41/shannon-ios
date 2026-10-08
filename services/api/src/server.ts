@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { configuredServerObserver } from './wiring/serverObserverWiring.js';
 import { handleDeviceManagement, handlePushRegistration } from './infra/auth/serverDeviceRoutes.js';
 import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readJson, sendJson, VoiceRequestAllowances } from './infra/http/serverHttp.js';
 import { bearerAuthorized, configuredApiToken, configuredAuthMode } from './infra/auth/apiAuth.js';
@@ -243,6 +244,7 @@ const deviceAuth = authMode === 'paired'
   ? new SQLiteDeviceAuthStore({ path: configuredDatabasePath(), pepper: configuredAuthPepper() })
   : null;
 const pairingRoute = createPairingRoute(authMode, deviceAuth);
+const signalObserver = configuredServerObserver(configuredDatabasePath(),kernel,shannonNowOwnerScope(process.env),principal=>minecraft.isGameDevice(principal));
 // Operations console (docs/ops-contract.md). This store is held by the ops route only, never by the kernel.
 const opsStore = new SQLiteOpsStore(configuredDatabasePath());
 const opsRoute = createOpsRoute({
@@ -291,6 +293,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    if (signalObserver.asset(request,response,url.pathname)) return;
     // DELETE exists for one path: a device taking its calendar snapshot away. It carries no body.
     const calendarDelete = request.method === 'DELETE';
     if ((calendarDelete && url.pathname !== CALENDAR_UPCOMING_PATH)
@@ -336,6 +339,7 @@ const server = createServer(async (request, response) => {
       sendJson(response, 401, { error: 'PAIRING_REQUIRED', message: '接続コードでシャノンと接続してください。' });
       return;
     }
+    if(url.pathname.startsWith('/v1/observer/')){await signalObserver.route(request,response,url.pathname,principal,url);return;}
     if (await minecraft.serve(request, response, url.pathname, principal)) return; // Her Minecraft body's token reaches its own routes only.
     if (isActionThreadPath(url.pathname)) { await externalActions.route(request,response,principal,url.pathname); return; }
     if (url.pathname === SHANNON_NOW_PATH) {
@@ -360,12 +364,7 @@ const server = createServer(async (request, response) => {
     if (url.pathname === '/v1/voice/gemini/speech' ||
         url.pathname === '/v1/voice/gemini/speech/stream' ||
         url.pathname === '/v1/voice/speech/stream') {
-      await geminiSpeechRoute(
-        request,
-        response,
-        principal,
-        url.pathname.endsWith('/stream') ? 'stream' : 'unary',
-      );
+      await signalObserver.speech(principal,()=>geminiSpeechRoute(request,response,principal,url.pathname.endsWith('/stream')?'stream':'unary'),request.headers['x-shannon-observer-run']);
       return;
     }
     if (url.pathname === '/v1/voice/gemini/cascade/sessions') {
@@ -442,7 +441,6 @@ const server = createServer(async (request, response) => {
 server.requestTimeout = 30_000;
 server.headersTimeout = 15_000;
 server.setTimeout(120_000);
-
 server.listen(port, host, () => {
   incomingCallRoute?.start();
   console.log(`Shannon API listening on http://${host}:${port}`);
@@ -456,6 +454,7 @@ function shutdown(): void {
   if (shuttingDown) return;
   shuttingDown = true;
   server.close(() => {
+    signalObserver?.close();
     deviceAuth?.close();
     pushStore.close();
     worldStore.close();
@@ -494,6 +493,5 @@ function shutdown(): void {
     process.exitCode = 0;
   });
 }
-
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);

@@ -1,3 +1,5 @@
+import { observeAsync, observeSync, observerHandoff } from '../../observer/observerContext.js';
+import { observedAnthropicRequest, observedAnthropicResponse } from './observerProjection.js';
 import { actionPermit, currentActionExecution } from '../../context/actionExecution.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { PartialAnswerError, RoundTimer, TURN_OUT_OF_TIME_LINE, type RoundTime } from '../../../mind/action/respond/turnDeadline.js';
@@ -113,7 +115,8 @@ export class AnthropicChatModel implements ShannonChatModel {
 
   private async text(request: ShannonChatModelRequest, onReplyText: ((text: string) => void | Promise<void>) | null): Promise<ShannonChatModelResult> {
     request = this.boundedToolMenu(request);
-    const body = sonnetChatBody(this.options.settings, request, this.options.agentHostHint);
+    observerHandoff('context', 'native', { surface: 'text', model: this.model });
+    const body = observeSync('native', { surface: 'text' }, () => sonnetChatBody(this.options.settings, request, this.options.agentHostHint), observedAnthropicRequest, { model: this.model });
     let written = '';
     const escalation = this.escalation(request, () => written === '');
     const watch = watchdog(request.firstTokenBudgetMs);
@@ -133,7 +136,11 @@ export class AnthropicChatModel implements ShannonChatModel {
     const outOfTime = (sent?: string): ShannonChatModelResult => ({ ...this.outOfTimeTurn(request, sent ?? written), ...(escalation?.happened() ? { escalated: true } : {}) });
     if (result.outOfTime || !result.final) return outOfTime(result.outOfTime?.sent);
     let structured: ReturnType<typeof parsedChatTurn>;
-    try { structured = parsedChatTurn({ output_text: textOf(result.final) }); } catch (error) {
+    try {
+      observerHandoff('llm', 'decode', { surface: 'text' });
+      structured = observeSync('decode', { surface: 'text' }, () => parsedChatTurn({ output_text: textOf(result.final!) }),
+        value => ({ reply: value.reply.slice(0, 4_000) }));
+    } catch (error) {
       // Before any tool ran or word went out, the turn is luna's; after, her fixed line.
       if (result.used === 0 && !written) throw error;
       return outOfTime();
@@ -156,7 +163,8 @@ export class AnthropicChatModel implements ShannonChatModel {
     request = this.boundedToolMenu(request);
     const tools = request.tools?.definitions.length && !request.useWebSearch ? request.tools : undefined;
     const ceiling = tools ? Math.max(VOICE_MAX_OUTPUT_TOKENS[request.conversationClass], VOICE_TOOL_OUTPUT_TOKENS) : VOICE_MAX_OUTPUT_TOKENS[request.conversationClass];
-    const body = sonnetVoiceBody(this.options.settings, request, ceiling);
+    observerHandoff('context', 'native', { surface: 'voice', model: this.model });
+    const body = observeSync('native', { surface: 'voice' }, () => sonnetVoiceBody(this.options.settings, request, ceiling), observedAnthropicRequest, { model: this.model });
     let spoken = '';
     let replyStarted = false;
     const escalation = this.escalation(request, () => !replyStarted);
@@ -182,12 +190,15 @@ export class AnthropicChatModel implements ShannonChatModel {
       if (onTextDelta) await speak(TURN_OUT_OF_TIME_LINE);
       return { mode: this.mode, model: this.model, reply: `${standing}${TURN_OUT_OF_TIME_LINE}`, outOfTime: true, ...(escalation?.happened() ? { escalated: true } : {}) };
     }
+    observerHandoff('llm', 'decode', { surface: 'voice' });
+    return observeSync('decode', { surface: 'voice' }, () => {
     const said = (onTextDelta ? spoken : result.turns.map(textOf).filter(Boolean).join('')).trim();
-    const truncated = result.final.stop_reason === 'max_tokens';
+    const truncated = result.final!.stop_reason === 'max_tokens';
     const reply = truncated ? completeSpokenSentences(said) || said : said;
     if (!reply) throw new Error('ANTHROPIC_RESPONSE_EMPTY');
     const webSources = webSourcesOf(result);
     return { mode: this.mode, model: this.model, reply, ...(webSources.length ? { webSources } : {}), ...(truncated ? { truncated: true } : {}), ...(escalation?.happened() ? { escalated: true } : {}) };
+    }, value => ({ reply: value.reply.slice(0, 4_000), truncated: value.truncated === true }));
   }
 
   /** A Jev timeout/no-menu still offers every tool, but cannot send more than 20 strict schemas to Haiku at once. */
@@ -225,7 +236,9 @@ export class AnthropicChatModel implements ShannonChatModel {
       let observedUsage: Anthropic.Message['usage'] | null = null;
       let receivedUsage = false;
       let usageRecorded = false;
+      observerHandoff('native', 'llm', { model: prepared.model, round });
       try {
+        return await observeAsync('llm', { ...observedAnthropicRequest(prepared), round, streaming: listen !== null }, async () => {
         if (!listen) {
           const message = await this.client.messages.create(prepared, { ...inlineTools, ...(signal ? { signal } : {}),
             ...(isHaikuModel(this.model) && voiceBounds ? { timeout: this.options.voiceResponseTimeoutMilliseconds ?? VOICE_RESPONSE_TIMEOUT_MILLISECONDS } : {}) });
@@ -266,6 +279,7 @@ export class AnthropicChatModel implements ShannonChatModel {
         if (isHaikuModel(this.model)) validateNativeUsage(message.usage);
         if (message.stop_reason === 'refusal' && sent) throw new PartialAnswerError(sent);
         return message;
+        }, observedAnthropicResponse, { model: prepared.model });
       } catch (error) {
         if (receivedUsage && !usageRecorded) this.recordUsage(scopeKey, { usage: observedUsage }, prepared.max_tokens);
         if (bounds?.signal.aborted && !caller?.aborted) error = bounds.signal.reason;

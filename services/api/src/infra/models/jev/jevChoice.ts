@@ -1,3 +1,4 @@
+import { observeAsync } from '../../observer/observerContext.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { emptyJevProbe, withJevProbe, type JevCallProbe } from './jevClient.js';
 
@@ -78,6 +79,7 @@ export class JevChoiceClient {
    * read, in that order, as the voice gateway always did).
    */
   async ask(state: unknown, questions: Readonly<Record<string, unknown>>): Promise<unknown> {
+    return observeAsync('llm', { provider: 'jev', questionCount: Object.keys(questions).length }, async () => {
     const response = await this.fetcher(this.endpoint, {
       method: 'POST',
       headers: {
@@ -94,6 +96,7 @@ export class JevChoiceClient {
     const body = await response.json() as unknown;
     if (!response.ok) throw new Error(`JEV_RESPONSE_${response.status}`);
     return body;
+    }, () => ({ provider: 'jev', answered: true }), { model: this.model });
   }
 }
 
@@ -213,6 +216,8 @@ export class JevChooser {
     parse: (answers: Readonly<Record<string, unknown>>) => T;
     fallback: () => T;
     traceAnswers: (value: T, source: JevDecision<T>['source']) => JevChoiceTrace['answers'];
+    /** Observation only; never changes the decision or the cognition trace. */
+    observe?: (metadata: { cached: boolean; model: string; source: JevDecision<T>['source'] }) => void;
   }): Promise<JevDecision<T>> {
     const at = (this.options.now ?? (() => new Date().toISOString()))();
     const clock = this.options.clock ?? (() => performance.now());
@@ -250,6 +255,7 @@ export class JevChooser {
         costUsd: this.options.usdPerCall === null ? null : cached ? 0 : Math.max(1, probe.calls) * this.options.usdPerCall, at,
       });
     } catch { /* a trace never fails a turn */ }
+    try { request.observe?.({ cached, model: this.client.model, source: decided.source }); } catch { /* observation never fails a turn */ }
     return decided;
   }
 

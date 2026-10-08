@@ -94,6 +94,7 @@ import {
   NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type TextTurnInput, type TextTurnResult,
 } from '../../mind/action/respond/apiTextTurn.js';
 import { randomUUID } from 'node:crypto';
+import { withObserverRun, observeAsync, observeSync, observerHandoff } from '../observer/observerContext.js';
 import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
 import { generateChatTurn, withSentenceStream } from '../../surfaces/text/chatSentenceStream.js';
 import { conversationTools, toolTraceReader, turnSkillIndex, turnWroteHerOwnThings, type SkillTurnPorts } from '../../mind/tools/shannonToolSession.js';
@@ -366,27 +367,28 @@ export class ShannonApiKernel {
    * and storing are here, in the order they always had.
    */
   async textTurn(input: TextTurnInput): Promise<TextTurnResult> {
-    return this.mind?.foreground ? this.mind.foreground(input.body.scopeKey,()=>this.performTextTurn(input)) : this.performTextTurn(input);
+    return withObserverRun({scopeKey:input.body.scopeKey,surface:input.surface?'platform':'text',audience:input.audience.alone?'owner':'others'},()=>this.mind?.foreground ? this.mind.foreground(input.body.scopeKey,()=>this.performTextTurn(input)) : this.performTextTurn(input));
   }
   private async performTextTurn(input:TextTurnInput):Promise<TextTurnResult> {
     const { audience, threadId, message, attachments, placeOptions, request, surface } = input;
     const body = input.body;
     const deadline = input.deadline ?? new TurnDeadline(TEXT_TURN_DEADLINE, () => Date.parse(this.now()));
     const deps = this.textTurnDependencies();
-    const begun = beginTextTurn(deps, input);
+    const begun = observeSync('recall',{message,threadId},()=>beginTextTurn(deps, input),value=>({snapshotVersion:value.captured.version,peopleCount:value.peopleRecall.ids.length,explicitCommand:Boolean(value.explicitCommand),organizeTurn:Boolean(value.organizeTurn)}));
     const { occurredAt, captured, provisionalIntent, peopleRecall } = begun;
     // Stage 3: the turn as the mind perceives it, with the audience the surface decided (nothing without the wiring).
-    const perceived = perceiveTextTurn(this.mind, input, occurredAt);
+    const perceived = observeSync('perception',{message,audience:audience.audience},()=>perceiveTextTurn(this.mind, input, occurredAt),value=>({eventId:value?.itemId??null}));
     // Who her tools are offered to, and (Syzygy ADR-0008 stage 2, none without its wiring) her read tools' plan and the turn's
     // Jev call, started here so that it runs in parallel with recall (`textToolStart`).
     const { toolAudience, toolOptions, choices } = textToolStart(input, begun, { autonomy: this.autonomy, toolServer: this.toolServer, turnChooser: this.turnChooser, readTools: this.readTools, toolHints: this.toolHints });
     const cognitiveContext = this.memoryRecall && !begun.explicitCommand && !begun.organizeTurn
-      ? await this.memoryRecall.enrich(begun.deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }) : begun.deterministicContext;
+      ? await observeAsync('recall',{message,semantic:true},()=>this.memoryRecall!.enrich(begun.deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }),value=>({recalledCount:value.frame.recalledMemoryIDs.length})) : begun.deterministicContext;
     const { basePrompt, capabilityContext } = textTurnIdentityAndCapability(deps, input, begun);
     const capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
     // A surface has no look at the room or through the app.
     const roomLook = surface ? NO_LOOK : this.body.turnLooks.turn(body.scopeKey, message, occurredAt, audience.audience, request);
-    let layered = textTurnSystemPrompt(deps, input, begun, { basePrompt, cognitiveContext, capability, roomLook });
+    observerHandoff('recall','context',{recalledCount:cognitiveContext.frame.recalledMemoryIDs.length});
+    let layered = observeSync('context',{threadId},()=>textTurnSystemPrompt(deps, input, begun, { basePrompt, cognitiveContext, capability, roomLook }),value=>({contextCharacters:value.turnContext.length}));
     let systemPrompt = layered.prompt;
     if (begun.explicitCommand || begun.organizeTurn) return answerTextCommand(deps, input, begun, cognitiveContext, systemPrompt);
     let { orchestrationState } = begun;
@@ -398,6 +400,7 @@ export class ShannonApiKernel {
     // Stage 2: the menu narrows the schemas sent; awaited only with a Jev call, so without one nothing changes (not even a tick).
     const settled = choices ? await settleTextTools(toolOffer, choices) : null;
     if (settled) toolOffer = settled.offer;
+    if(settled)observerHandoff('jevt','context',{tools:toolOffer.tools?.definitions.map(tool=>tool.name)??[]});
     layered = turnSkillIndex(layered, this.skills, body.scopeKey, toolOffer.tools, body.webSearch === true || Boolean(placeSkill) || settled?.web === true); // Step 6: her skills' index.
     systemPrompt = layered.prompt;
     // Stage 2, step 4: the tier from Jev's difficulty answers (none without the routing), and her last turn settled by this one.
@@ -409,7 +412,7 @@ export class ShannonApiKernel {
       // The history is a character budget; what fell out of it is covered by the replay summary.
       // Stage 3: the workspace's blocks follow the turn's context, which stays byte for byte as it was (none without the wiring).
       ...withWorkspace(conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey), surface?.openOnly)
-        .request([layered.turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n')), textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey))),
+        .request([layered.turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n')), observeSync('workspace',{threadId},()=>textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey)),value=>({available:value!==undefined&&value!==null}))),
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message,
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,
@@ -447,7 +450,8 @@ export class ShannonApiKernel {
       completedAt: occurredAt, recalledMemoryIds: [...cognitiveContext.frame.recalledMemoryIDs, ...peopleRecall.ids], summaryContinuesChain: Boolean(priorThreadSummary && completion.threadSummary),
     };
     // Another surface decides where its turn is kept (her Minecraft body: the owner's platform thread, or person memory).
-    const experience = surface ? storedBySurface(deps, surface, completedTurn) : this.background.recordTurn(completedTurn);
+    observerHandoff('decode','store',{reply});
+    const experience = observeSync('store',{threadId,reply},()=>surface ? storedBySurface(deps, surface, completedTurn) : this.background.recordTurn(completedTurn),value=>({experienceId:value?.id??null}));
     if (experience) { response.turnId = experience.id; const feedback = bindCompletedFeedback(this.feedback,body.scopeKey,finished?.feedbackRecordId,threadId,experience.id,reply); if (feedback) response.feedback=feedback; }
     if (experience && perceived) this.mind?.bind?.(body.scopeKey, perceived.itemId, `experience:${experience.id}`); // Stage 3: re-read at render.
     const completedIntent = experience ? recordCompletedCognitiveCycle(this.cognitiveIntents, body.scopeKey, cognitiveContext.frame, provisionalIntent, experience.id, {
@@ -468,13 +472,12 @@ export class ShannonApiKernel {
     }
     response.thread = this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId);
     Object.assign(response, roomLook.decide({ ...completion, reply }, threadId)); // One look, only if this turn offered it (conversationLooks.ts).
-    if (experience) this.background.schedule(completedTurn, experience.id);
+    if (experience) {this.background.schedule(completedTurn, experience.id);observerHandoff('store','memory',{experienceId:experience.id,status:'scheduled'});}
     // Her stored feeling toward the owner moves only on a turn that is his alone.
     if (audience.alone) commitReplyEmotionLater(this.stateStore, body.scopeKey, expressiveEmotion);
     this.mind?.turnEnded?.(); // Stage 3: what the mind noted is written after the response.
     return { response: withSentenceStream(completion, { status: 200, body: audience.visible(response) }), completion, ...(experience ? { experienceId: experience.id } : {}) };
   }
-
   private textTurnDependencies() {
     return { ...this.liveVoiceDependencies(), background: this.background, organizeExtractor: this.organizeExtractor, body: this.body, minecraftRequests: this.minecraftRequests };
   }

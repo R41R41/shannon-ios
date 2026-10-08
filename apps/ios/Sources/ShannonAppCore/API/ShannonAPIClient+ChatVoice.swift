@@ -73,6 +73,9 @@ extension ShannonAPIClient {
         request.timeoutInterval = 75
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         authorize(&request, connection: connection)
+        if let runID = ShannonObserverCorrelation.runID {
+            request.setValue(runID.uuidString, forHTTPHeaderField: "x-shannon-observer-run")
+        }
         request.httpBody = try JSONEncoder().encode(GeminiSpeechRequestDTO(text: text, style: style, provider: provider))
         let requestStartedAtUptime = ProcessInfo.processInfo.systemUptime
         let (bytes, response) = try await session.bytes(for: request)

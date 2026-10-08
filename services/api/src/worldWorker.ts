@@ -1,4 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { observeAsync, observeSync, observerHandoff, withObserverRun } from './infra/observer/observerContext.js';
+import { startObserverPublisher } from './infra/observer/store/observerStore.js';
+import { configuredOwnerScope } from './infra/config/ownerScope.js';
 import { mindSwitches } from '@shannon/mind';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
@@ -25,6 +28,8 @@ import {
 } from './surfaces/outreach/pushNotifications.js';
 
 const databasePath = configuredDatabasePath();
+const observation=startObserverPublisher(databasePath);
+const observationScope=configuredOwnerScope(process.env);
 const nowISOString = () => new Date().toISOString();
 const store = new SQLiteWorldStore(databasePath);
 // Syzygy ADR-0008 stage 3 (owner answer 2): the proactive gate her initiative passes where it is written; a hold is a withheld action and a
@@ -39,7 +44,8 @@ const proactiveGate = configuredProactiveGate(process.env, {
 const initiativeStore = new SQLiteInitiativeStore(databasePath, undefined, proactiveGate?.gate ?? null);
 const stateStore = new SQLiteShannonStore({ path: databasePath, now: nowISOString });
 const dailyMindStore = new SQLiteDailyMindStore(databasePath);
-const dailyMindModel = createConfiguredDailyMindModel(process.env, stateStore);
+const dailyMindDelegate = createConfiguredDailyMindModel(process.env, stateStore);
+const dailyMindModel:typeof dailyMindDelegate={generate:input=>withObserverRun({scopeKey:input.scopeKey,surface:'world-focus'},()=>observeAsync('context',{operation:'daily-focus',candidate:input.candidate!==null,interestCount:input.recentInterests.length},()=>dailyMindDelegate.generate(input),value=>({selected:value!==null})))};
 const pushStore = new SQLitePushNotificationStore(databasePath);
 const pushSender = createConfiguredPushNotificationSender(process.env);
 const once = process.argv.includes('--once');
@@ -60,8 +66,12 @@ try {
     for (const source of sources) {
       if (stopping) break;
       try {
-        const items = await fetchSource(source);
-        store.recordSuccess(source, items);
+        const items = await withObserverRun({scopeKey:observationScope,surface:'world-source'},async()=>{
+          const found=await observeAsync('perception',{sourceKind:source.kind},()=>fetchSource(source),value=>({itemCount:value.length}));
+          observerHandoff('perception','store',{itemCount:found.length});
+          observeSync('store',{operation:'world-source'},()=>store.recordSuccess(source,found),()=>({itemCount:found.length}));
+          return found;
+        });
         if (source.kind === 'hacker-news') await discoverOneTrialFeed(items, store);
       } catch (error) {
         if (stopping) break;
@@ -90,6 +100,7 @@ try {
     }
   } while (!stopping);
 } finally {
+  observation?.close();
   pushStore.close();
   dailyMindStore.close();
   stateStore.close();

@@ -25,6 +25,12 @@ extension ShannonVoiceWorkspaceState {
         restoreOwnerMessage()
         geminiVoiceModel.finishGuestPeriod()
         geminiVoiceModel.stop()
+        geminiVoiceModel.voiceObservation = (conversationModel.client as? ShannonAPIClient).map { client in
+            ShannonVoiceObservation(allowed: { [weak geminiVoiceModel, weak conversationModel] in
+                guard let model = geminiVoiceModel, conversationModel?.isDesignPreview == false else { return false }
+                return Self.callAudience(model.participantMode) == .owner && !model.companionSuspected
+            }, send: { events, dropped in await client.sendObserverEvents(events, droppedEvents: dropped) })
+        }
         let context = ShannonVoiceThreadContext(threadID: threadID)
         let requestID = UUID()
         connectionRequestID = requestID

@@ -43,6 +43,8 @@ import { configuredDatabasePath } from './infra/sqlite/sqliteStore.js';
 import { configuredPredictionShadow } from './mind/prediction/store/predictionShadow.js';
 import { configuredDecisionTraces, configuredPredictionLedger } from './wiring/cognitionLedgerWiring.js';
 import { ledgerPredictionTap, presenceOf, valueFactsReader } from './wiring/cognitionLedgerTaps.js';
+import { observeAsync, withObserverRun } from './infra/observer/observerContext.js';
+import { startObserverPublisher } from './infra/observer/store/observerStore.js';
 import { cognitionLedgerSwitches } from '@shannon/learning';
 import { configuredWithheldActions, gateRefusals, withheldFactsReader } from './wiring/withheldWiring.js';
 import { configuredSkillCopies } from './wiring/skillCopyWiring.js';
@@ -59,6 +61,7 @@ import { clock } from './mind/action/ownTime/autonomyLoopPacing.js';
  * She paces her own day in sessions (`SHANNON_AUTONOMY_PACING`, default `sessions`; `cycles` restores the fixed cycles).
  */
 const databasePath = configuredDatabasePath();
+const observation = startObserverPublisher(databasePath);
 const now = () => new Date().toISOString();
 const actionConnection=stage4Enabled(process.env)?new MindSocketClient(mindSocketPath(process.env,databasePath)):null;
 const actionSteps=actionConnection?new OwnTimeActionRunner(actionThreadsClient(actionConnection.call)):null;
@@ -206,7 +209,10 @@ try {
   do {
     let tick: string;
     try {
-      tick = await loop.tick(shutdown.signal);
+      let observationAudience: 'owner' | 'others' = 'others';
+      try { observationAudience = observer.body(loopConfig.scopeKey, now()).others ? 'others' : 'owner'; } catch { /* unknown audience: record nothing */ }
+      tick = await withObserverRun({ scopeKey: loopConfig.scopeKey, surface: 'autonomy', audience: observationAudience }, () =>
+        observeAsync('autonomy', { operation: 'tick' }, () => loop.tick(shutdown.signal), status => ({ status })));
     } catch (error) {
       tick = `failed:${error instanceof Error ? error.message.replace(/[^A-Z0-9_:-]/giu, '_').slice(0, 80) : 'UNKNOWN'}`;
     }
@@ -247,6 +253,7 @@ try {
   bodyStore.close();
   showing.close();
   announcer.close();
+  observation?.close();
   store.close();
 }
 

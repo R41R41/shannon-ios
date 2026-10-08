@@ -22,6 +22,7 @@ extension ShannonGeminiLiveSessionModel {
         finalizeTask?.cancel()
         finalizeTask = nil
         guard let envelope = turnAssembler.finish() else { return }
+        voiceObservation?.joined(id: envelope.id, characterCount: envelope.normalizedText.count, segmentCount: envelope.segments.count)
         ShannonVoiceTurnDiagnostics.recordAssembled(envelope, turnComplete: turnComplete)
         appendUtterance(id: envelope.id, rawText: envelope.rawText, text: envelope.normalizedText,
             source: .speech, addressedByName: envelope.addressee == "shannon",
@@ -38,6 +39,7 @@ extension ShannonGeminiLiveSessionModel {
     /// mixes the two.
     /// A new session or the end of the call: nothing of the last call's speech or ownership carries over.
     func resetSpeechOwnership() {
+        voiceObservation?.discardUnjoined()
         // Words still being assembled when a call ends belong to that call.
         turnAssembler.reset()
         heardRightAfterShannon = false

@@ -1,3 +1,5 @@
+import { observeAsync, observeSync, observerHandoff } from '../../observer/observerContext.js';
+import { observedAnthropicRequest, observedAnthropicResponse } from './observerProjection.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { structuredSchema } from './anthropicSchema.js';
 import { anthropicPrices } from './anthropicConfig.js';
@@ -32,9 +34,11 @@ export function responseModelFetcher(options: { model: string; apiKey: string; f
     if (method.toUpperCase() !== 'POST') throw new Error('HAIKU_RESPONSES_UNSUPPORTED_METHOD');
     const raw = init?.body ?? (input instanceof Request ? await input.clone().text() : undefined);
     if (typeof raw !== 'string' || Buffer.byteLength(raw) > MAXIMUM_REQUEST_BYTES) throw new Error('HAIKU_RESPONSES_INVALID_BODY');
-    const body = requestBody(JSON.parse(raw), options.model);
+    const body = observeSync('native', { format: 'responses' }, () => requestBody(JSON.parse(raw), options.model), observedAnthropicRequest, { model: options.model });
     try {
-      const { data: message, response } = await client.messages.create(body, signal ? { signal } : {}).withResponse();
+      observerHandoff('native', 'llm', { model: body.model });
+      const { data: message, response } = await observeAsync('llm', { ...observedAnthropicRequest(body), round: 0, streaming: false },
+        () => client.messages.create(body, signal ? { signal } : {}).withResponse(), value => observedAnthropicResponse(value.data), { model: body.model });
       const headers = new Headers({ 'content-type': 'application/json' });
       const requestID = response.headers.get('request-id');
       if (requestID) headers.set('request-id', requestID);

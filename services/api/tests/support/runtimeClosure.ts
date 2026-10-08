@@ -22,6 +22,8 @@ export function runtimeClosure(entry: string, sourceRoot = resolve(import.meta.d
 
 /** The API source files one file imports at run time (absolute paths). */
 function runtimeImports(file: string): string[] {
+  // Ambient declarations describe the browser module but never load code at runtime.
+  if (file.endsWith('.d.ts')) return [];
   const output = ts.transpileModule(readFileSync(file, 'utf8'), {
     fileName: file, compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, verbatimModuleSyntax: false },
   }).outputText;

@@ -1,0 +1,47 @@
+# Shannon signal observer
+
+Status: implemented on `codex/shannon/signal-observer`, initially from accepted main `8a40ef03`, rebased onto `59e83f20` to retain the Jev-fallback lazy-tool-discovery fix; deployment and Apple distribution are separate gates.
+
+## Owner experience
+
+`GET /observer` is a detailed dark architecture map. Each converter, voice and tool Jev selector, actual provider call, tool gate/executor, voice sentence/plan/TTS stage and worker has a separate box. Selecting a box shows actual observed input/output projections, model, duration, run, span, parent, implementation path and server/client provenance. TOOL expands the canonical registry including `tool.open`; filters distinguish definitions, offered, selected and executed names. Registry presence grants no permission.
+
+The graph polls authenticated events every 400 ms. A 240 ms dot depicts receipt of an **explicit handoff**, not transport speed or the time the original transfer occurred. Boxes remain active until their own terminal event. Overlapping spans are independent. Initial history is still. Gaps, server restarts and publisher/client losses clear uncertain state; transport loss marks unfinished spans unknown. Hidden pages stop polling and clear private projections. Reduced motion suppresses moving dots. The product generates no demonstration events or paid calls.
+
+Open the API's HTTPS path (for example `/companion/observer`), then pair using the existing code flow or enter a paired token. The token stays in page memory, never a URL, browser storage or log. `/observer/` redirects to `/observer`. Static assets are public and contain no data. Data endpoints require a paired principal in the exact configured owner scope, exclude Minecraft credentials, and recheck owner-alone presence at delivery. Unknown/other audience holds and clears the view. Fixed/dev bearer, bridge and Host tokens cannot read it.
+
+## Event and correlation contract
+
+Version 1: `contracts/observerContract.ts`. `GET /v1/observer/events?after=<sequence>&limit=1..200` returns bounded ordered events, cursor, oldest cursor, gap, server instance, availability, generated time and loss count. `GET /v1/observer/catalog` returns actual definitions, locations and coverage. Capacity: 300 requests/device/minute. Scope overrides are ignored.
+
+Events have run/span/parent IDs, node, kind, origin and timestamps; spans have optional model/input/output/elapsed time. Explicit handoffs name source/destination and source span when known. AsyncLocalStorage separates turns and copies each branch's source map; neighboring timestamps do not establish causation. An explicit different scope/run gets a separate run; a nested shared audience cannot enable private capture. Helpers call the original operation once, preserve its result/error and ignore observation failures. Each actual provider request round is recorded. A cached Jev decision has a cached selector outcome and no fabricated provider request.
+
+The Apple cascade reports transmitted PCM counts, item-ID-bound transcription start/final counts, normalized utterance IDs, delegation handoffs and actual `.dataPlayedBack` completion/cancellation. No PCM buffers, transcript text or images are sent. Capture session UUIDs and utterance UUIDs stay distinct. Join events reference source capture/STT spans. The voice request's `deviceContext.userUtterance.id` seeds the server run; the originating reply UUID travels through TaskLocal and `x-shannon-observer-run` to TTS. Waiting speech and a final utterance need not share a run. No timestamp-based join is invented.
+
+`POST /v1/observer/client-events` accepts max 16 events/32 KiB, timestamps within two minutes, UUID IDs, native nodes `pcm/stt/join/play`, restricted handoff endpoints and forced client origin. It cannot report server root lifecycle, Jev, LLM or tool execution. Optional `droppedEvents` is integer 0..4096 alongside real events, or as a loss-only batch. Native queue cap 64, tracking caps 32, one-second batches, one attempt per event batch/no payload replay. Failed sends discard payloads and carry only a bounded loss count. Automatic draining permits one loss-only report attempt, then waits for the next real batch if still offline. Audience is checked at enqueue/send. The viewer rejects node/origin changes to an existing span ID. Authenticated client telemetry is an observation, never an execution receipt or action command.
+
+## Data and performance boundaries
+
+This is an owner tool, separate from cognition ledgers and activity authority. Projections contain visible reply/sentence text, closed decisions, names, counts, cache usage and executor outcome fields. They exclude system/profile prompts, hidden reasoning, signed thinking blocks, private recall/knowledge/draft contents, credentials, audio and images. Arbitrary tool arguments/results are not copied. The final guard bounds strings to 2000 characters, arrays to 64, objects to 32 keys, depth to five and projected JSON to 12,000 characters. Values are bounded projections, not complete prompt/provider bodies.
+
+Each API/worker installs a non-awaiting publisher: queue cap 512, batches 64 on `setImmediate`. A single bounded sidecar counter makes worker loss visible to the API reader; expired cursors clear even if every retained event has expired. Failure/overflow cannot change chat, action gates, receipts, provider requests, signed prefixes, caches or budgets. Separate `<SHANNON_DATABASE_PATH>.observer` SQLite stores at most 2000 events globally and a 15-minute read window. Startup and an unref'ed minute timer prune expired rows even when no new event arrives. Permissions 0600, secure-delete and passive WAL checkpoint are used. Logical retention is not a forensic-erasure guarantee for filesystem/backups. No conversation database migration is needed. A sidecar startup failure leaves the API alive and the viewer unavailable. Instrumented coverage is not proof a process is online.
+
+## Coverage and limits
+
+Native Haiku/Sonnet Messages rounds and native Responses conversion, Jev voice/tool choices, tool permission/execution/commit, text/voice recall/context, workspace **projection**, reply decode, emitted voice sentences, TTS, memory outbox, sleep/refinement, embedding batches, autonomy steps and world-source/focus work are instrumented. Workspace scheduler/lease internals, external Minebot execution and Agent Host internals lack an end-to-end span bridge. Deliberate legacy OpenAI/Gemini response overrides are not universally instrumented. External/unobserved boundaries are explicit. Inactive boxes are not assumed busy or complete.
+
+Workers have separate runs: existing queues/IPC do not carry the originating turn run ID. Scheduled experience IDs are recorded without invented background parentage. PCM/STT is a capture-session run; an utterance links explicit source spans, not every audio chunk. Native events require the changed Apple build to be installed. Deterministic tests prove contracts and behavior preservation; they do not establish a live-device/production connection before distribution.
+
+## Verification
+
+Backend tests cover request equivalence ON/OFF, caching/no extra calls, signed prefixes, withholding/commit outcomes, source isolation, bounds/retention, loss/cursor/restart, actual HTTP auth/audience and client forgery controls. Frontend tests cover overlap, deduplication, tool evidence, provenance, transport races and clearing. Swift tests cover bounds, IDs, audience, TaskLocal and playback callbacks.
+
+`pnpm exec tsx scripts/observer-ui-smoke.ts` starts an **isolated UI fixture** using real assets, pairing/auth, routes and publisher with in-memory storage and controlled deterministic operations. It contacts no model or production/external data. Commands exercise concurrent runs, handoffs, completion and audience changes. [Browser evidence](observer-ui-validation.md) is fixture evidence, not production/device evidence. Final verification follows `AGENTS.md`.
+
+### Local verification record (2026-10-08)
+
+- `scripts/verify.sh all`: fast guards, API typecheck/272 files/3575 tests and cognition/evaluation/learning/mind typechecks/39 files/425 tests passed. The Apple phase reported one failure in the unchanged `theWatchdogBoundsAStallNotTheLengthOfATalk` timing test.
+- Without code changes, `scripts/verify.sh ios` reran the complete Apple suite: 777 XCTest and 175 Swift Testing tests passed (952 total), including all nine observer tests and the previously failed watchdog test. No test was removed, skipped or relaxed.
+- Browser fixture verification includes desktop/compact, keyboard/tool expansion, packet receipt, disconnection/audience erasure and explicit cross-run client references. See the linked UI record and safe screenshots.
+- `scripts/verify.sh app`, `scripts/verify.sh mac`, and `scripts/verify.sh release-runner` completed in sequence with exit 0: unsigned iOS app build, Mac debug build/28 tests, seven restored-inspector launch cases (12 seconds each), and eight release-runner tests passed. Physical-device installation, TestFlight and production are unverified for this branch.
+- After rebasing onto main `59e83f20`, `scripts/verify.sh api` passed with API typecheck, all fast guards, and 272 files/3585 tests. Both the fallback lazy-tool-menu behavior and the observer were retained at the overlapping native request boundary. Apple/shared-package code did not change in that rebase.

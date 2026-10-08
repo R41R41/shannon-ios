@@ -1,3 +1,5 @@
+import { observeAsync } from '../../observer/observerContext.js';
+import { observedAnthropicResponse } from './observerProjection.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { parseJson } from '../chatModelSupport.js';
 import type { LlmUsageStore } from '../llmUsage.js';
@@ -30,13 +32,13 @@ export class AnthropicSkillSleepModel {
   }
 
   async json(scopeKey: string, _name: string, instructions: string, input: unknown, schema: Readonly<Record<string, unknown>>): Promise<unknown> {
-    const message = await this.client.messages.create({
+    const message = await observeAsync('llm', { purpose: 'skill_proposer', round: 0, streaming: false }, () => this.client.messages.create({
       model: this.model, max_tokens: SKILL_PROPOSER_LIMITS.maxTokens,
       system: [{ type: 'text', text: instructions, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: JSON.stringify(input) }],
       thinking: { type: 'adaptive' },
       output_config: { effort: this.options.effort ?? 'medium', format: { type: 'json_schema', schema: structuredSchema(schema) as Record<string, unknown> } },
-    });
+    }), observedAnthropicResponse, { model: this.model });
     const usage = message.usage;
     const counts = { input: usage.input_tokens ?? 0, cacheWrite: usage.cache_creation_input_tokens ?? 0, cacheRead: usage.cache_read_input_tokens ?? 0,
       output: usage.output_tokens ?? 0, searches: 0 };

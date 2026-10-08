@@ -3,6 +3,7 @@ import type { CompanionStateStore, SelfInterest } from '@shannon/cognition';
 import type { BackgroundJobStore, ClaimedBackgroundJob } from './store/backgroundJobStore.js';
 import { TurnRefinementProcessor } from './backgroundUpdates.js';
 import type { ConversationStore, MemoryProposals } from '../memory/memoryPorts.js';
+import { observeAsync, observeSync, observerHandoff, withObserverRun } from '../../infra/observer/observerContext.js';
 import {
   consolidateSleepMemory,
   LocalRuleSleepMemoryAnalyzer,
@@ -80,7 +81,9 @@ export class ShannonBackgroundWorker {
     const job = this.jobStore.claimNextBackgroundJob(this.workerId, nowIso, leaseUntil);
     if (!job) return 'idle';
     try {
-      await this.process(job, nowIso);
+      await withObserverRun({ scopeKey: job.scopeKey, surface: 'background' }, () =>
+        observeAsync(job.payload.kind === 'turn-refinement' ? 'memory' : 'sleep',
+          { operation: job.payload.kind, attempt: job.attempts }, () => this.process(job, nowIso), () => ({ processed: true })));
       return 'processed';
     } catch (error) {
       const code = safeErrorCode(error);
@@ -93,7 +96,8 @@ export class ShannonBackgroundWorker {
   private async process(job: ClaimedBackgroundJob, completedAt: string): Promise<void> {
     if (job.payload.kind === 'turn-refinement') {
       const payload = job.payload;
-      this.jobStore.completeClaimedBackgroundJob(job, this.workerId, completedAt, () => {
+      let processed = false;
+      observeSync('store', { operation: payload.kind }, () => this.jobStore.completeClaimedBackgroundJob(job, this.workerId, completedAt, () => {
         this.processor.process(
           job.scopeKey,
           payload.userMessage,
@@ -101,30 +105,39 @@ export class ShannonBackgroundWorker {
           payload.observedAt ?? completedAt,
           [], payload.timeZone,
         );
-      });
+        processed = true;
+      }), () => ({ processed }));
       try {
-        await this.replaySummarizer?.refreshForTurn(job.scopeKey, payload.experienceId);
+        if (this.replaySummarizer) await observeAsync('memory', { operation: 'replay-summary' },
+          () => this.replaySummarizer!.refreshForTurn(job.scopeKey, payload.experienceId), () => ({ completed: true }));
       } catch (error) {
         this.reportError(`REPLAY_SUMMARY_${safeErrorCode(error)}`);
       }
       try {
-        await this.impressionUpdater?.observeTurn(job.scopeKey, payload.experienceId);
+        if (this.impressionUpdater) await observeAsync('memory', { operation: 'impression-update' },
+          () => this.impressionUpdater!.observeTurn(job.scopeKey, payload.experienceId), () => ({ completed: true }));
       } catch (error) {
         this.reportError(`IMPRESSIONS_${safeErrorCode(error)}`);
       }
       return;
     }
-    const messages = this.jobStore.dailyUserMessages(job.scopeKey, job.payload.startAt, job.payload.endAt);
-    const outcome = await consolidateSleepMemory(
+    const payload = job.payload;
+    const messages = this.jobStore.dailyUserMessages(job.scopeKey, payload.startAt, payload.endAt);
+    const outcome = await observeAsync('sleep', { operation: 'consolidate', messageCount: messages.length,
+      analyzer: messages.length >= this.minimumSleepMessages ? this.sleepAnalyzer.mode : this.localSleepAnalyzer.mode }, () => consolidateSleepMemory(
       messages.length >= this.minimumSleepMessages ? this.sleepAnalyzer : this.localSleepAnalyzer,
       messages,
       this.stateStore.snapshot(job.scopeKey),
-      job.payload.endAt,
+      payload.endAt,
       { scopeKey: job.scopeKey, occurredAt: completedAt, ...(this.stage5 ? { stage5: true, selfInterests: this.selfInterests?.(job.scopeKey) ?? [] } : {}) },
-    );
-    this.jobStore.applySleepOutcome(job, this.workerId, completedAt, outcome);
+    ), value => ({ factCount: value.facts.length, relationshipCount: value.relationships.length,
+      interestCount: value.interests.length, learnedCount: value.report.learned.length, updatedCount: value.report.updated.length }));
+    observerHandoff('sleep', 'store', { operation: 'sleep-outcome' });
+    observeSync('store', { operation: 'sleep-outcome' }, () => this.jobStore.applySleepOutcome(job, this.workerId, completedAt, outcome),
+      () => ({ submitted: true }));
     try {
-      await this.knowledgeConsolidator?.consolidate(job.scopeKey, job.payload.startAt, job.payload.endAt);
+      if (this.knowledgeConsolidator) await observeAsync('memory', { operation: 'knowledge-consolidation' },
+        () => this.knowledgeConsolidator!.consolidate(job.scopeKey, payload.startAt, payload.endAt), () => ({ completed: true }));
     } catch (error) {
       this.reportError(`KNOWLEDGE_CONSOLIDATION_${safeErrorCode(error)}`);
     }

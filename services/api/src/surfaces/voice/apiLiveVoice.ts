@@ -34,7 +34,6 @@ import { recordCompletedCognitiveCycle } from '../../mind/action/respond/cogniti
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type ConversationReadCapabilities } from '../../mind/action/respond/conversationCapabilities.js';
 import { asksAboutNotion } from '../../integrations/notion/notionConversation.js';
 import type { PersonIdentityStore } from '../../mind/memory/memoryPorts.js';
-import { voicePlanResponse } from '../../mind/emotion/voiceEmotionPlan.js';
 import { transcriptNeedsInterpretation, transcriptTrust, voiceTranscriptInterpretationPrompt } from './voiceTranscriptContext.js';
 import {
   buildConversationOrchestrationPrompt,
@@ -68,8 +67,9 @@ import { voiceCommandResponse, voiceTurnGrounding } from './voiceGrounding.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from '../../mind/action/respond/turnDeadline.js';
 import { tierRequest, type TurnRouting } from '../../mind/action/respond/turnRouting.js';
 import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from '../../mind/perception/ownerCallElsewhere.js';
-import { closedId, voicePerception, type MindPerceiver, type PerceivedItem } from '../../mind/perception/perceptionPorts.js';
 import { withWorkspace, type MindTurnPorts } from '../../mind/workspace/workspacePorts.js';
+import { observeAsync, observeSync, observerHandoff, withObserverRun } from '../../infra/observer/observerContext.js';
+import { observedVoicePlan, perceiveVoiceTurn, visibleVoiceResponse, voiceObservationOptions, voiceWorkspace } from './voiceObservation.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
   /** Looking through her body's camera or the app's (`voiceAppLook.ts`); absent, a voice turn never looks. */
@@ -134,23 +134,8 @@ export function dispatchLiveVoiceRequest(
   const transcript=request.body.transcript.trim();
   const complete=()=>completeLiveVoiceDelegation(scopeKey, requestedThreadId, transcript, participantMode, deviceContext,
     reaction?.text ?? null, { ...dependencies, looks: dependencies.looks?.of(request) }, observer);
-  return dependencies.mind?.foreground ? dependencies.mind.foreground(scopeKey,complete) : complete();
-}
-
-/** Stage 3, step F3: the workspace's blocks for a voice turn (`[いまの場]`, at most two lines), or ''. Never throws. */
-function voiceWorkspace(mind: MindTurnPorts | undefined, turn: { scopeKey: string; threadId: string; present: MemoryAudience; perceived: PerceivedItem | null;
-  snapshot: Parameters<NonNullable<MindTurnPorts['render']>>[0]['snapshot']; snapshotNow?:()=>Parameters<NonNullable<MindTurnPorts['render']>>[0]['snapshot']; store: ConversationStore; at: string }): string {
-  if (!mind?.render) return '';
-  try {
-    return mind.render({ scopeKey: turn.scopeKey, surface: 'voice', present: turn.present, at: turn.at, currentItemId: turn.perceived?.itemId ?? null,
-      current: { surface: 'voice', sourceId: closedId(turn.threadId) }, snapshot: turn.snapshot, snapshotNow:turn.snapshotNow, store: turn.store });
-  } catch { return ''; }
-}
-
-/** Stage 3, step F2: never throws and never changes the turn. */
-function perceiveVoiceTurn(mind: MindPerceiver | undefined, scopeKey: string, input: Parameters<typeof voicePerception>[0]): PerceivedItem | null {
-  if (!mind) return null;
-  try { return mind.perceive(scopeKey, voicePerception(input)); } catch { return null; }
+  return withObserverRun(voiceObservationOptions(scopeKey, { transcript, participantMode, deviceContext }),
+  () => dependencies.mind?.foreground ? dependencies.mind.foreground(scopeKey,complete) : complete());
 }
 
 async function completeLiveVoiceDelegation(
@@ -244,7 +229,7 @@ async function completeLiveVoiceDelegation(
     : null;
   if (command) {
     if (orchestrationState && command.receipt) orchestrationState = dependencies.conversationOrchestration.save(recordConversationReceipt(orchestrationState, command.receipt));
-    return voiceCommandResponse(dependencies, { scopeKey, threadId, transcript, deviceContext, occurredAt, present, command });
+    return visibleVoiceResponse(() => voiceCommandResponse(dependencies, { scopeKey, threadId, transcript, deviceContext, occurredAt, present, command }));
   }
   const emotionState = temporaryGuest ? null : dependencies.stateStore.snapshot(scopeKey);
   const previousExpressiveEmotion = emotionState ? feelingBeforeTurn(emotionState, occurredAt) : undefined;
@@ -258,11 +243,11 @@ async function completeLiveVoiceDelegation(
     target: temporaryGuest ? '現在の話者' : 'ライ氏',
   });
   let expressiveEmotion = provisionalExpressiveEmotion;
-  let voicePlan = voicePlanResponse(decision, expressiveEmotion, voiceMood, { ownerAlone: alone && !temporaryGuest });
+  let voicePlan = observedVoicePlan(decision, expressiveEmotion, voiceMood, { ownerAlone: alone && !temporaryGuest });
   await observer?.onPlan(voicePlan);
   observer?.signal?.throwIfAborted();
   if (!decision.shouldRespond) {
-    return {
+    return visibleVoiceResponse(() => ({
       status: 200,
       body: {
         threadId,
@@ -271,7 +256,7 @@ async function completeLiveVoiceDelegation(
         webSources: [], ...(!temporaryGuest && !alone ? { companionPresent: true } : {}),
         voicePlan,
       },
-    };
+    }));
   }
   const contextStartedAt = performance.now();
   const selectedSkills = new Set(decision.selectedSkills);
@@ -283,7 +268,7 @@ async function completeLiveVoiceDelegation(
   // Every mode builds its memory through the same gate; `present` decides what passes.
   // While a name is unresolved between two remembered people, nothing about anyone is recalled.
   const peopleRecall = guestPresence?.ambiguousName ? undefined : dependencies.people?.recall(scopeKey, captured, transcript, present);
-  const deterministicContext = prepareTurnCognitiveContext(
+  const deterministicContext = observeSync('recall', { strategy: 'deterministic', surface: 'voice' }, () => prepareTurnCognitiveContext(
     captured,
     dependencies.conversationStore,
     { scopeKey, message: transcript, occurredAt, channel: 'voice', threadId, present,
@@ -291,12 +276,14 @@ async function completeLiveVoiceDelegation(
       timeZone: deviceContext?.timeZoneIdentifier, additionalCandidates: peopleRecall?.candidates ?? [],
       participants: temporaryGuest ? [] : dependencies.personIdentities?.list(scopeKey).filter(person => person.status === 'active' && transcript.includes(person.displayName)).map(person => person.displayName),
     },
-  );
+  ), value => ({ characterCount: value.prompt.length }));
   const complexTurn = decision.conversationClass === 'skill_complex' || dependencies.memoryRecall?.walksTree?.(decision.conversationClass) === true; // Stage 2, step 8: a skill_* turn walks the tree.
   const recalled = !legacyGuest && dependencies.memoryRecall
     && (semanticMemoryTurn || complexTurn || decision.selectedSkills.includes('conversation_memory'))
-    ? await dependencies.memoryRecall.enrich(deterministicContext, { scopeKey, message: transcript, snapshot: captured, threadId,
-      memoryTurn: semanticMemoryTurn, complexTurn, voiceClass: decision.conversationClass, ...(observer?.signal ? { signal: observer.signal } : {}) }) : null;
+    ? await observeAsync('recall', { strategy: 'semantic', surface: 'voice', memoryTurn: semanticMemoryTurn, complexTurn },
+      () => dependencies.memoryRecall!.enrich(deterministicContext, { scopeKey, message: transcript, snapshot: captured, threadId,
+        memoryTurn: semanticMemoryTurn, complexTurn, voiceClass: decision.conversationClass, ...(observer?.signal ? { signal: observer.signal } : {}) }),
+      value => ({ characterCount: value.prompt.length })) : null;
   const cognitiveContext = recalled ?? deterministicContext;
   // Fixed first, what changes last (`ShannonPromptLayers`): her profile follows the fixed blocks, the state opens the turn's context.
   // The slim path drops owner state, never the identity: persona, suite roles and capabilities stay.
@@ -375,14 +362,16 @@ async function completeLiveVoiceDelegation(
   const offered = conversationTools(dependencies.autonomy, scopeKey, 'voice', toolAudience, dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline, // 「友人も一緒」: Aether reading tools; a legacy client none.
     { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }, { ...ownerAloneReads(toolAudience), ...(dependencies.toolHints ? { sourceHints: true } : {}) });
   const { offer: toolOffer, tier } = choices ? await voiceOfferAndTier(dependencies.turnRouting, offered, choices, { scopeKey, threadId, deadline, at: occurredAt }) : { offer: offered, tier: null };
-  const modelRequest = withToolCapabilityLines({ // Her Minecraft body's and Aether's lines, in her identity, exactly when their tools are offered.
+  observerHandoff('recall', 'context', { surface: 'voice', semantic: recalled !== null });
+  const modelRequest = observeSync('context', { surface: 'voice' }, () => withToolCapabilityLines({ // Her Minecraft body's and Aether's lines, in her identity, exactly when their tools are offered.
     scopeKey, systemPrompt: basePrompt, ...skillProfilePrompt(identity.profile, dependencies.skills, scopeKey, toolOffer.tools, selectedSkills.has('current_web') || Boolean(placeSkill)), ...replayed,
     // What she said when she was touched is what he is answering: it directly precedes his words, in every mode, as context only.
     ...(reactionLine ? { precedingReply: reactionLine } : {}),
     message: transcript, ...toolOffer, ...tierRequest(tier, deadline.left()),
     useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
-  });
+  }), value => ({ messageCharacterCount: value.message.length, historyCount: value.history?.length ?? 0,
+    contextCharacterCount: value.turnContext?.length ?? 0, toolCount: value.tools?.definitions.length ?? 0 }));
   const modelStartedAt = performance.now();
   const contextMilliseconds = Math.max(0, Math.round(modelStartedAt - contextStartedAt));
   let firstModelTokenMilliseconds: number | undefined;
@@ -413,7 +402,7 @@ async function completeLiveVoiceDelegation(
               now: occurredAt,
               target: temporaryGuest ? '現在の話者' : 'ライ氏',
             });
-            voicePlan = voicePlanResponse(decision, expressiveEmotion, voiceMood, { ownerAlone: alone && !temporaryGuest });
+            voicePlan = observedVoicePlan(decision, expressiveEmotion, voiceMood, { ownerAlone: alone && !temporaryGuest });
             await observer.onPlan(voicePlan);
           }
         },
@@ -442,7 +431,7 @@ async function completeLiveVoiceDelegation(
     now: occurredAt,
     target: temporaryGuest ? '現在の話者' : 'ライ氏',
   });
-  voicePlan = voicePlanResponse(decision, expressiveEmotion, voiceMood, { ownerAlone: alone && !temporaryGuest });
+  voicePlan = observedVoicePlan(decision, expressiveEmotion, voiceMood, { ownerAlone: alone && !temporaryGuest });
   // Her stored feeling toward the owner moves only on his own words.
   if (alone) {
     dependencies.stateStore.apply(scopeKey, {
@@ -475,7 +464,7 @@ async function completeLiveVoiceDelegation(
     }];
   }
   dependencies.mind?.turnEnded?.(); // Stage 3: what the mind noted is written after the response.
-  return {
+  return visibleVoiceResponse(() => ({
     status: 200,
     body: {
       threadId,
@@ -495,5 +484,5 @@ async function completeLiveVoiceDelegation(
         turnToModelCompleteMilliseconds: Math.max(0, Math.round(performance.now() - turnStartedAt)),
       },
     },
-  };
+  }));
 }

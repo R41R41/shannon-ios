@@ -1,3 +1,4 @@
+import { observeAsync, observeSync, observerHandoff } from '../../infra/observer/observerContext.js';
 import type { AetherAccess } from '../../integrations/aether/aetherAccess.js';
 import type { AetherProposalStore } from '../../integrations/aether/aetherProposal.js';
 import { ROOM_LOOK_GUARD, roomLookGuard } from '../action/ownTime/ownTimePorts.js';
@@ -154,6 +155,13 @@ export class ShannonToolRunner {
 
   /** The gate, the input check, and the executor's preparation. A result here is the call's answer: nothing ran. */
   prepare(name: string, rawInput: unknown, context: ToolExecutionContext): { tool: ShannonToolDefinition; prepared: PreparedToolCall } | { tool: ShannonToolDefinition | null; result: ToolResult } {
+    const observedName = this.knownTool(name)?.name ?? 'unknown';
+    return observeSync('gate', { name: observedName, surface: context.surface, audience: context.audience },
+      () => this.prepareOnce(name, rawInput, context), value => 'result' in value
+        ? observedToolResult(observedName, value.result, 'not_run') : { name: value.tool.name, allowed: true, status: 'prepared' });
+  }
+
+  private prepareOnce(name: string, rawInput: unknown, context: ToolExecutionContext): ReturnType<ShannonToolRunner['prepare']> {
     const named = shannonTool(name) ?? (this.selfRewrite ? SELF_REWRITE_TOOLS.find(tool => tool.name === name) : null);
     const tool = named && this.knownTool(named.name) ? named : null;
     const refused = authorizeToolCall(tool, context);
@@ -191,13 +199,18 @@ export class ShannonToolRunner {
       const call=this.notedCopyWrite(tool,checked.input,context.scopeKey,shownAetherCall(tool,prepared,context));
       return {tool,prepared:{...call,run:async signal=>{
         const resources=tool.domain==='vm_workspace' ? [] : tool.effect==='write'?[actionResource(context.scopeKey,call.folder?`folder:${call.folder.host}`:'study')]:[];
-        await actionPermit(resources);
-        // The original gate and live secret predicate are evaluated again after waiting for a resource.
-        const refusedNow=authorizeToolCall(tool,context) ?? authorizeToolInput(tool,checked.input,context);
+        const refusedNow = await observeAsync('gate', { name: tool.name, phase: 'before_execution' }, async () => {
+          await actionPermit(resources);
+          // The original gate and live secret predicate are evaluated again after waiting for a resource.
+          return authorizeToolCall(tool,context) ?? authorizeToolInput(tool,checked.input,context);
+        }, refusal => refusal ? observedToolResult(tool.name, refusal, 'not_run') : { name: tool.name, allowed: true });
         if(refusedNow) return {result:refusedNow,record:{summary:'実行直前の関門で止まりました。',outcome:'failed' as const,reasonCode:'refused'}};
         const active=currentActionExecution();
         const combined=active?signal?AbortSignal.any([signal,active.signal]):active.signal:signal;
-        return call.run(combined);
+        observerHandoff('gate', 'tools', { name: tool.name });
+        return observeAsync('tools', { name: tool.name, phase: 'execute', argumentFields: Object.keys(tool.input.properties).filter(key => Object.hasOwn(checked.input, key)) },
+          () => call.run(combined), run => ({ ...observedToolResult(tool.name, run.result, run.apply ? 'awaiting_commit' : 'returned'),
+            acknowledged: run.acknowledged ?? null, commitPending: Boolean(run.apply) }));
       }}};
     } catch {
       return { tool, result: toolFailure('failed', 'うまく準備できなかった。', { retryable: true }) };
@@ -313,11 +326,11 @@ export class ShannonToolRunner {
     }
     try {
       await actionPermit();
-      const added = this.transaction(() => {
+      const added = observeSync('tools', { name: ready.tool.name, phase: 'commit' }, () => this.transaction(() => {
         const line = run.apply!();
         this.recorder.recordConversationAction(context.scopeKey, { summary: run.record.summary, tool: ready.tool.name, outcome: 'done' });
         return line;
-      });
+      }), () => ({ name: ready.tool.name, ok: true, status: 'committed' }));
       if(context.surface!=='autonomy')await currentActionExecution()?.checkpoint?.('tool_committed');
       return added ? { ...run.result, text: `${run.result.text}\n${added}` } : run.result;
     } catch (error) {
@@ -363,4 +376,9 @@ function secretRefusal(name: string, input: Readonly<Record<string, unknown>>, s
   return toolFailure('refused', 'ライ氏に内緒と言われたこと、または忘れてと頼まれたことと同じ言い回しが入っているので、書かなかった。', {
     retryable: false, refusal: { why: '内緒のこと・忘れたことを書くことになる', wouldWork: 'そこを除いて書き直す' },
   });
+}
+
+/** A result's content can be private recall, an unshown story or file contents; retain only the execution outcome. */
+function observedToolResult(name: string, result: ToolResult, status: 'not_run' | 'awaiting_commit' | 'returned') {
+  return { name, ok: result.ok, failureKind: result.failure ?? null, retryable: result.retryable, status, withheld: wasWithheld(result) };
 }

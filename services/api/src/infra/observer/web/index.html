@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="referrer" content="no-referrer">
+  <title>シャノン / Mind Observer</title>
+  <link rel="stylesheet" href="observer/observer.css">
+  <script type="module" src="observer/observer.js"></script>
+</head>
+<body>
+<main id="observer">
+  <header class="header">
+    <div><p class="eyebrow">SHANNON / SYSTEM SIGNALS</p><h1>MIND OBSERVER</h1></div>
+    <div class="connection"><span class="connection-light" aria-hidden="true"></span><span id="connection-state" role="status">未接続</span><button id="disconnect" type="button" hidden>接続を切る</button></div>
+  </header>
+  <section class="connect-panel" id="connect-panel" aria-labelledby="connect-heading">
+    <div><h2 id="connect-heading">シャノンの処理を観測する</h2><p>接続後に届く入力・出力と、処理の受け渡しを表示します。</p></div>
+    <form id="pair-form" autocomplete="off">
+      <label for="pair-code">12桁の接続コード</label>
+      <div class="form-row"><input id="pair-code" name="code" type="password" inputmode="text" maxlength="18" autocomplete="off" spellcheck="false" required aria-describedby="pair-hint"><button type="submit">接続する</button></div>
+      <p id="pair-hint" class="hint">接続情報はこのページを閉じると消えます。</p>
+    </form>
+    <details class="token-connect"><summary>ペアリング済みトークンで接続</summary><form id="token-form" autocomplete="off"><label for="pair-token">接続トークン</label><div class="form-row"><input id="pair-token" name="token" type="password" autocomplete="off" spellcheck="false" required maxlength="2048"><button type="submit">接続する</button></div></form></details>
+    <p id="connect-error" role="alert" hidden></p>
+  </section>
+  <div class="toolbar">
+    <label class="run-picker" for="run-picker"><span class="eyebrow">RUN / 観測した実行</span><select id="run-picker" disabled><option value="">イベント待ち</option></select></label>
+    <span class="run-summary" id="run-summary">処理の箱を選ぶと、入力と出力を確認できます。</span>
+    <label class="follow"><input id="follow-runs" type="checkbox" checked>新しいrunを追う</label>
+  </div>
+  <p id="notice" class="notice" role="status" hidden></p>
+  <div class="workspace">
+    <section class="graph" aria-label="シャノンの処理系">
+      <div id="canvas" class="canvas">
+        <svg class="wires" id="wires" aria-hidden="true"><defs><marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6"/></marker></defs><g id="zones"></g><g id="edges"></g><g id="packets"></g></svg>
+        <div id="nodes"></div>
+      </div>
+      <div class="legend"><span>● ACTIVE 処理中・出力待ち</span><span>✓ DONE 完了イベントあり</span><span>! FAILED 失敗</span><span>? UNKNOWN 状態不明</span><span>破線：別の実行系</span></div>
+    </section>
+    <aside class="inspector" aria-label="選択した処理の入出力">
+      <div class="inspector-heading"><span class="eyebrow">SIGNAL INSPECTOR</span><h2 id="detail-title">LLM</h2><p id="detail-location" class="location">接続後、カタログの実装場所を表示します。</p></div>
+      <label class="span-picker" for="span-picker">処理を選択<select id="span-picker" disabled><option value="">観測した処理なし</option></select></label>
+      <dl class="metadata"><dt>状態</dt><dd id="detail-state">未観測</dd><dt>出典</dt><dd id="detail-origin">—</dd><dt>実行</dt><dd id="detail-run">—</dd><dt>処理</dt><dd id="detail-span">—</dd><dt>親処理</dt><dd id="detail-parent">—</dd><dt>モデル</dt><dd id="detail-model">—</dd><dt>開始</dt><dd id="detail-start">—</dd><dt>終了</dt><dd id="detail-end">—</dd><dt>所要時間</dt><dd id="detail-elapsed">—</dd></dl>
+      <p id="coverage-note" class="hint">計測範囲は接続後に表示します。</p>
+      <div class="detail-grid"><section><h3>INPUT / 受信した値</h3><pre id="detail-input">観測した入力はありません。</pre></section><section><h3>OUTPUT / 出した値</h3><pre id="detail-output">観測した出力はありません。</pre></section></div>
+      <section id="tool-panel" class="tool-panel" hidden><h3>TOOL REGISTRY / 道具の定義</h3><p class="hint">カタログは定義一覧です。各runで提示・選択された道具は、その実イベントから表示します。</p><label for="tool-filter" class="sr-only">道具の表示範囲</label><select id="tool-filter"><option value="all">全定義</option><option value="offered">このrunで提示された道具</option><option value="chosen">このrunで選択された道具</option><option value="called">このrunで実行された道具</option></select><p id="tool-count" class="hint"></p><div id="tool-list"></div><div id="tool-detail" hidden><h3 id="tool-name"></h3><p id="tool-description" class="hint"></p><pre id="tool-schema"></pre></div></section>
+    </aside>
+  </div>
+  <section class="events" aria-labelledby="events-heading"><div class="events-heading"><h2 id="events-heading">EVENT STREAM</h2><span id="event-count" class="eyebrow">0 events</span></div><p id="events-empty" class="hint">観測する実行はまだありません。</p><ol id="event-list"></ol></section>
+  <footer>この画面は観測専用です。画面を閉じてもシャノンの処理は続きます。点の移動は受け渡しの通知を表し、通信の所要時間を表しません。</footer>
+  <p class="sr-only" id="announcement" role="status" aria-live="polite" aria-atomic="true"></p>
+  <noscript><p class="notice">観測画面にはJavaScriptが必要です。</p></noscript>
+</main>
+</body>
+</html>

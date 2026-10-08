@@ -9,6 +9,7 @@ extension ShannonGeminiLiveSessionModel {
             return
         }
         responseTask?.cancel()
+        voiceObservation?.cancelPlayback()
         transport?.discardPlayback()
         let generation = UUID()
         responseGenerationID = generation
@@ -34,10 +35,14 @@ extension ShannonGeminiLiveSessionModel {
                         ? ShannonGeminiCascadeSpeech.style(for: text, plan: plan)
                         : ShannonElevenCascadeSpeech.style(for: text, plan: plan)
                 },
-                streamSpeech: streamSpeech,
+                streamSpeech: { text, style in
+                    try await ShannonObserverCorrelation.$runID.withValue(batch.id) {
+                        try await streamSpeech(text, style)
+                    }
+                },
                 consumeSpeech: { [weak self] speech, text in
                     guard let self else { throw CancellationError() }
-                    try await self.consumeResponseSpeech(speech, text: text, generation: generation)
+                    try await self.consumeResponseSpeech(speech, text: text, generation: generation, runID: batch.id)
                 }
             )
             defer { coordinator.cancel() }
@@ -78,6 +83,7 @@ extension ShannonGeminiLiveSessionModel {
                     self.responseDelivery.spoken.queued(segment, waitingPhrase: plan?.waitingPhrase, emotion: plan?.turnEmotion)
                     await coordinator.enqueue(segment, plan: plan)
                 }
+                if localReply == nil { voiceObservation?.delegating(id: batch.id, utteranceIDs: batch.turns.map(\.id)) }
                 let response = if let localReply {
                     await ShannonVoiceLocalReply.deliver(localReply, onSegment: onSegment)
                 } else {
@@ -244,7 +250,7 @@ extension ShannonGeminiLiveSessionModel {
     }
 
     private func consumeResponseSpeech(
-        _ speech: ShannonGeminiSpeechStream, text: String, generation: UUID
+        _ speech: ShannonGeminiSpeechStream, text: String, generation: UUID, runID: UUID
     ) async throws {
         try requireCurrentResponse(generation)
         voice = speech.voice
@@ -253,6 +259,9 @@ extension ShannonGeminiLiveSessionModel {
         }
         var segmentDuration = 0.0
         var receivedFirstChunk = false
+        var observedPlayback: ShannonObservedPlayback?
+        var scheduledAll = false
+        defer { if !scheduledAll { observedPlayback?.cancel() } }
         for try await chunk in speech.chunks {
             try requireCurrentResponse(generation)
             guard !chunk.isEmpty, chunk.count % 2 == 0 else { throw ShannonAPIError.invalidResponse }
@@ -264,8 +273,15 @@ extension ShannonGeminiLiveSessionModel {
                         metadata: ["provider": speechProvider.rawValue, "request_ms": String(milliseconds)])
                 }
             }
-            let duration = try transport?.schedulePCM(chunk, onPlayed: segmentDuration == 0
-                ? rememberWhenPlayed(text, generation: generation) : nil) ?? Double(chunk.count) / 48_000
+            let remembered = segmentDuration == 0 ? rememberWhenPlayed(text, generation: generation) : nil
+            let byteCount = chunk.count
+            if observedPlayback == nil, transport != nil { observedPlayback = voiceObservation?.beginPlayback(runID: runID, model: speech.model) }
+            let playedSpan = observedPlayback
+            let duration = try transport?.schedulePCM(chunk, onPlayed: {
+                remembered?()
+                playedSpan?.played(byteCount)
+            }) ?? Double(chunk.count) / 48_000
+            observedPlayback?.scheduled(byteCount)
             voiceScheduled()
             let firstAudio = latencyMeasurements.firstAudioMilliseconds == nil
             latencyMeasurements.recordFirstAudio()
@@ -282,6 +298,8 @@ extension ShannonGeminiLiveSessionModel {
             responseDelivery.scheduledAudio(seconds: duration)
         }
         guard segmentDuration > 0 else { throw ShannonAPIError.invalidResponse }
+        scheduledAll = true
+        observedPlayback?.finishScheduling()
         if !speech.costEstimateAvailable { ttsCostEstimateAvailable = false }
         ttsCostUsd += segmentDuration / 10 * speech.outputUsdPerTenSeconds
         updateCost()

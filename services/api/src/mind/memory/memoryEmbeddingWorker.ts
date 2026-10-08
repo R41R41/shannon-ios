@@ -3,6 +3,7 @@ import { configuredBackgroundBudgetUsd, utcMonthKey } from '../../infra/models/l
 import type { MemoryModelGateway } from '../recall/recallPorts.js';
 import type { MemoryEmbeddingIndex, PendingEmbeddingSource } from './store/sqliteMemoryEmbeddings.js';
 import { conversationStoreOf, MemoryWithholding } from './memoryVisibility.js';
+import { observeAsync, observeSync, observerHandoff, withObserverRun } from '../../infra/observer/observerContext.js';
 
 export type MemoryEmbeddingRunResult = 'disabled' | 'idle' | 'budget' | 'worked' | 'failed';
 
@@ -61,8 +62,15 @@ export class MemoryEmbeddingWorker {
       if (!visible.length) continue;
       if (this.usage.backgroundLlmCostUsd(utcMonthKey(new Date(updatedAt))) >= this.budgetUsd) return 'budget';
       try {
-        const vectors = await this.gateway.embed(scopeKey, visible.map(source => source.text), 'memory_background');
-        visible.forEach((source, position) => this.index.storeEmbedding(source, model, vectors[position]!, snapshot.version, updatedAt));
+        await withObserverRun({ scopeKey, surface: 'embedding-worker' }, async () => {
+          const vectors = await observeAsync('embedding', { sourceCount: visible.length, lane: 'memory_background' },
+            () => this.gateway!.embed(scopeKey, visible.map(source => source.text), 'memory_background'),
+            value => ({ vectorCount: value.length, dimensions: value[0]?.length ?? 0 }), { model });
+          observerHandoff('embedding', 'store', { vectorCount: vectors.length });
+          observeSync('store', { operation: 'embedding', sourceCount: visible.length }, () =>
+            visible.forEach((source, position) => this.index.storeEmbedding(source, model, vectors[position]!, snapshot.version, updatedAt)),
+          () => ({ storedCount: visible.length }));
+        });
         worked = true;
       } catch {
         return 'failed';

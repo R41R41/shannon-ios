@@ -1,0 +1,268 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ObserverBatch, ObserverEvent } from '../src/contracts/observerContract.js';
+import {
+  MAX_EVENTS, createObserverClient, createObserverState, linkedRunView, nodeState, observerBasePath,
+  reduceObserverEnvelope, runToolEvidence, spanState, validEnvelope,
+  type ObserverRequest,
+} from '../src/infra/observer/web/observer.js';
+
+const at = '2026-10-08T00:00:00.000Z';
+function event(sequence: number, values: Partial<ObserverEvent> = {}): ObserverEvent {
+  return { sequence, runId: 'run-a', spanId: 'span-a', parentSpanId: null, node: 'llm', kind: 'span.started', at, ...values };
+}
+function batch(events: ObserverEvent[] = [], values: Partial<ObserverBatch> = {}): ObserverBatch {
+  return { schemaVersion: 1, instanceId: 'instance-a', events, cursor: Math.max(0, ...events.map(item => item.sequence)),
+    oldestCursor: 1, gap: false, availability: 'ready', generatedAt: at, ...values };
+}
+const catalog = { schemaVersion: 1, tools: [], nodes: [], coverage: [] };
+const response = (body: unknown, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
+async function flush(): Promise<void> { for (let i = 0; i < 12; i += 1) await Promise.resolve(); }
+afterEach(() => vi.useRealTimers());
+
+describe('observer event reduction', () => {
+  it('sorts incremental out-of-order arrivals, deduplicates delivery and preserves the selected run', () => {
+    let state = reduceObserverEnvelope(createObserverState(), batch([
+      event(1, { kind: 'run.started', spanId: 'run' }),
+      event(3, { kind: 'span.completed', output: { reply: '実出力' }, elapsedMs: 80 }),
+    ]));
+    state = reduceObserverEnvelope(state, batch([
+      event(3, { kind: 'span.completed', output: { reply: '重複による置換' } }),
+      event(2, { input: { words: '実入力' }, model: 'measured-model' }),
+      event(4, { runId: 'run-b', kind: 'run.started', spanId: 'run' }),
+    ]));
+    expect(state.events.map(item => item.sequence)).toEqual([1, 2, 3, 4]);
+    expect(state.cursor).toBe(4);
+    expect(state.selectedRunId).toBe('run-a');
+    const span = state.runs.get('run-a')!.spans.get('span-a')!;
+    expect(span.input).toEqual({ words: '実入力' });
+    expect(span.output).toEqual({ reply: '実出力' });
+    expect(span.model).toBe('measured-model');
+    expect(spanState(span, state.runs.get('run-a'))).toBe('completed');
+    expect(reduceObserverEnvelope(state, batch([], { cursor: 4 }), true).selectedRunId).toBe('run-b');
+  });
+
+  it('never mixes same-named spans across runs and preserves overlapping processing in one node', () => {
+    const state = reduceObserverEnvelope(createObserverState(), batch([
+      event(1, { kind: 'run.started' }), event(2), event(3, { spanId: 'span-b', input: { branch: 'parallel' } }),
+      event(4, { runId: 'run-b', input: { branch: 'different-run' } }),
+    ]));
+    const active = nodeState(state.runs.get('run-a'), 'llm');
+    expect(active.activeCount).toBe(2); expect(active.state).toBe('running');
+    expect(state.runs.get('run-a')!.spans.get('span-a')!.input).toBeUndefined();
+    expect(state.runs.get('run-b')!.spans.get('span-a')!.input).toEqual({ branch: 'different-run' });
+  });
+
+  it('shows the actual root run as a TURN span and closes a failed root without inventing success', () => {
+    let state = reduceObserverEnvelope(createObserverState(), batch([event(1, { node: 'turn', kind: 'run.started', spanId: 'root', input: { surface: 'voice' } })]));
+    expect(nodeState(state.runs.get('run-a'), 'turn').state).toBe('running');
+    state = reduceObserverEnvelope(state, batch([event(2, { node: 'turn', kind: 'span.failed', spanId: 'root', output: { status: 'failed' } })]));
+    expect(state.runs.get('run-a')!.state).toBe('failed'); expect(state.runs.get('run-a')!.endedAt).toBe(at);
+    expect(nodeState(state.runs.get('run-a'), 'turn').state).toBe('failed');
+  });
+
+  it('preserves source provenance and refuses client closure of server spans or runs', () => {
+    const state = reduceObserverEnvelope(createObserverState(), batch([
+      event(1, { spanId: 'root', node: 'turn', kind: 'run.started', origin: 'server' }),
+      event(2, { origin: 'server' }),
+      event(3, { node: 'pcm', origin: 'client', kind: 'span.completed', output: { spoofed: true } }),
+      event(4, { node: 'pcm', origin: 'client', spanId: 'client-root', kind: 'run.completed' }),
+      event(5, { node: 'stt', origin: 'client', spanId: 'stt-span', kind: 'span.completed', output: { model: 'actual-transcription-model', characterCount: 4 } }),
+    ]));
+    const run = state.runs.get('run-a')!;
+    expect(run.state).toBe('running'); expect(run.endedAt).toBeNull();
+    expect(nodeState(run, 'llm').state).toBe('running'); expect(run.spans.get('span-a')!.output).toBeUndefined();
+    expect(run.spans.get('span-a')!.origin).toBe('server');
+    expect(run.spans.get('stt-span')!.origin).toBe('client'); expect(run.spans.get('stt-span')!.model).toBe('actual-transcription-model');
+  });
+
+  it('does not infer successful output or a wait state from a start or handoff', () => {
+    const state = reduceObserverEnvelope(createObserverState(), batch([
+      event(1, { input: { request: true }, output: { premature: true } }),
+      event(2, { kind: 'handoff', fromNode: 'llm', toNode: 'tools', sourceSpanId: 'span-a', output: { handoff: true } }),
+    ]));
+    const value = nodeState(state.runs.get('run-a'), 'llm');
+    expect(value.state).toBe('running'); expect(value.latest?.output).toBeUndefined();
+    expect(nodeState(state.runs.get('run-a'), 'tools').state).toBe('unobserved');
+  });
+
+  it('marks unfinished work unknown after lost transport or its completed parent; failures stay failures', () => {
+    let state = reduceObserverEnvelope(createObserverState(), batch([event(1, { kind: 'run.started', spanId: 'root', node: 'turn' }), event(2, { parentSpanId: 'root' }), event(3, { spanId: 'failure', node: 'tools', kind: 'span.failed' })]));
+    expect(nodeState(state.runs.get('run-a'), 'llm', 'lost').state).toBe('unknown');
+    expect(nodeState(state.runs.get('run-a'), 'tools', 'lost').state).toBe('failed');
+    state = reduceObserverEnvelope(state, batch([event(4, { kind: 'run.completed', spanId: 'root', node: 'turn' })]));
+    expect(nodeState(state.runs.get('run-a'), 'llm').state).toBe('unknown');
+  });
+
+  it('keeps later speech roots and native playback active after the correlated voice response completes', () => {
+    let state = reduceObserverEnvelope(createObserverState(), batch([
+      event(1, { node: 'turn', kind: 'run.started', spanId: 'voice-root', origin: 'server' }),
+      event(2, { node: 'turn', kind: 'run.completed', spanId: 'voice-root', origin: 'server' }),
+      event(3, { node: 'turn', kind: 'run.started', spanId: 'speech-root', origin: 'server' }),
+      event(4, { node: 'tts', spanId: 'speech', parentSpanId: 'speech-root', origin: 'server' }),
+      event(5, { node: 'play', spanId: 'player', origin: 'client' }),
+    ]));
+    expect(state.runs.get('run-a')!.state).toBe('running'); expect(state.runs.get('run-a')!.endedAt).toBeNull();
+    expect(nodeState(state.runs.get('run-a'), 'tts').state).toBe('running');
+    expect(nodeState(state.runs.get('run-a'), 'play').state).toBe('running');
+    state = reduceObserverEnvelope(state, batch([
+      event(6, { node: 'tts', spanId: 'speech', parentSpanId: 'speech-root', kind: 'span.completed', origin: 'server' }),
+      event(7, { node: 'turn', kind: 'run.completed', spanId: 'speech-root', origin: 'server' }),
+    ]));
+    expect(state.runs.get('run-a')!.state).toBe('running'); expect(nodeState(state.runs.get('run-a'), 'play').state).toBe('running');
+    state = reduceObserverEnvelope(state, batch([event(8, { node: 'play', spanId: 'player', kind: 'span.completed', origin: 'client' })]));
+    expect(state.runs.get('run-a')!.state).toBe('completed'); expect(nodeState(state.runs.get('run-a'), 'play').state).toBe('completed');
+  });
+
+  it('erases all private event state while held, even if an invalid producer includes events', () => {
+    const initial = reduceObserverEnvelope(createObserverState(), batch([event(1, { input: { private: 'owner input' } })]));
+    const held = reduceObserverEnvelope(initial, batch([event(2, { output: 'must not appear' })], { availability: 'held', cursor: 2 }));
+    expect(held.events).toEqual([]); expect(held.runs.size).toBe(0); expect(held.selectedRunId).toBeNull();
+    expect(JSON.stringify(held)).not.toContain('owner input'); expect(JSON.stringify(held)).not.toContain('must not appear');
+    const resumed = reduceObserverEnvelope(held, batch([event(3, { runId: 'next' })]));
+    expect(resumed.runs.has('run-a')).toBe(false); expect(resumed.notice).toBe('');
+  });
+
+  it.each(['restart', 'cursor-gap', 'publisher-loss'] as const)('resets stale active state after %s', reason => {
+    const initial = reduceObserverEnvelope(createObserverState(), batch([event(10, { input: 'private old state' })]));
+    const values: Partial<ObserverBatch> = reason === 'restart' ? { instanceId: 'instance-b' } : reason === 'cursor-gap' ? { gap: true } : { dropped: 1 };
+    const next = reduceObserverEnvelope(initial, batch([event(reason === 'restart' ? 1 : 12, { runId: 'new-run' })], values));
+    expect(next.runs.has('run-a')).toBe(false); expect(next.events).toHaveLength(1);
+    expect(next.notice).not.toBe(''); expect(next.cursor).toBe(reason === 'restart' ? 1 : 12);
+  });
+
+  it('bounds browser event retention and reports partial history', () => {
+    let state = createObserverState();
+    for (let base = 0; base < MAX_EVENTS + 200; base += 200) {
+      state = reduceObserverEnvelope(state, batch(Array.from({ length: 200 }, (_, index) => event(base + index + 1, { spanId: `s${base + index}`, kind: 'span.completed' }))));
+    }
+    expect(state.events).toHaveLength(MAX_EVENTS); expect(state.events[0]!.sequence).toBe(201);
+    expect(state.runs.get('run-a')!.incomplete).toBe(true); expect(state.notice).toContain('表示上限');
+  });
+
+  it('derives tool evidence only from the selected run and named evidence fields', () => {
+    const state = reduceObserverEnvelope(createObserverState(), batch([
+      event(1, { node: 'jevt', input: { offeredTools: ['study.search', 'study.read'] } }),
+      event(2, { node: 'jevt', kind: 'span.completed', output: { selectedTools: ['study.search'] } }),
+      event(3, { node: 'tools', spanId: 'tool', input: { name: 'study.search' } }),
+      event(4, { node: 'tools', runId: 'elsewhere', input: { name: 'folder.delete' } }),
+    ]));
+    const evidence = runToolEvidence(state.runs.get('run-a'));
+    expect([...evidence.offered]).toEqual(['study.search', 'study.read']);
+    expect([...evidence.chosen]).toEqual(['study.search']); expect([...evidence.called]).toEqual(['study.search']);
+  });
+
+  it('links exact retained STT source and parent spans while excluding unrelated capture-session PCM and transcripts', () => {
+    const state = reduceObserverEnvelope(createObserverState(), batch([
+      event(1, { runId: 'capture', node: 'pcm', spanId: 'pcm-chunk', kind: 'span.completed', origin: 'client' }),
+      event(2, { runId: 'capture', node: 'stt', spanId: 'accepted-stt', kind: 'span.completed', origin: 'client', output: { characterCount: 5 } }),
+      event(3, { runId: 'capture', node: 'stt', spanId: 'other-stt', kind: 'span.completed', origin: 'client' }),
+      event(4, { runId: 'utterance', node: 'join', spanId: 'join', parentSpanId: 'accepted-stt', kind: 'span.completed', origin: 'client', input: { captureRunId: 'capture' } }),
+      event(5, { runId: 'utterance', node: 'join', spanId: 'handoff', kind: 'handoff', origin: 'client', sourceSpanId: 'accepted-stt', fromNode: 'stt', toNode: 'join', output: { captureRunId: 'capture' } }),
+    ]));
+    const view = linkedRunView(state, 'utterance')!;
+    expect(view.linkedCount).toBe(1); expect([...view.spans.keys()]).toEqual(['join', 'accepted-stt']);
+    expect(nodeState(view, 'pcm').state).toBe('unobserved'); expect(nodeState(view, 'stt').state).toBe('completed');
+    expect(nodeState(view, 'stt').latest).toMatchObject({ id: 'accepted-stt', runId: 'capture', origin: 'client', linked: true });
+    expect(state.runs.get('utterance')!.spans.has('accepted-stt')).toBe(false);
+    expect(view.events.every(item => item.runId === 'utterance')).toBe(true);
+  });
+
+  it('leaves ambiguous and missing source references unobserved without a matching explicit source run', () => {
+    const sourceEvents = [
+      event(1, { runId: 'capture-a', node: 'stt', spanId: 'same-id', kind: 'span.completed', origin: 'client' }),
+      event(2, { runId: 'capture-b', node: 'stt', spanId: 'same-id', kind: 'span.completed', origin: 'client' }),
+    ];
+    const link = event(3, { runId: 'utterance', node: 'join', spanId: 'handoff', kind: 'handoff', origin: 'client', sourceSpanId: 'same-id', fromNode: 'stt', toNode: 'join' });
+    const ambiguous = reduceObserverEnvelope(createObserverState(), batch([...sourceEvents, link]));
+    expect(linkedRunView(ambiguous, 'utterance')!.linkedCount).toBe(0);
+    const explicit = reduceObserverEnvelope(createObserverState(), batch([...sourceEvents, { ...link, output: { captureRunId: 'capture-b' } }]));
+    expect(nodeState(linkedRunView(explicit, 'utterance'), 'stt').latest?.runId).toBe('capture-b');
+    const wrong = reduceObserverEnvelope(createObserverState(), batch([...sourceEvents, { ...link, output: { captureRunId: 'missing' } }]));
+    expect(linkedRunView(wrong, 'utterance')!.linkedCount).toBe(0);
+  });
+
+  it('rejects unsupported or malformed envelopes', () => {
+    expect(validEnvelope(batch())).toBe(true);
+    expect(validEnvelope({ ...batch(), schemaVersion: 2 })).toBe(false);
+    expect(validEnvelope(batch([event(1, { at: 'not-a-time' })]))).toBe(false);
+    expect(validEnvelope(batch([], { cursor: -1 }))).toBe(false);
+  });
+});
+
+describe('observer connection lifecycle', () => {
+  it('pairs through the existing contract, uses a memory bearer header, and preserves reverse-proxy prefixes', async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn(async (url: string, _init: ObserverRequest) => response(url.endsWith('/pair') ? { token: 'paired-test-token' } : url.endsWith('/catalog') ? catalog : batch()));
+    const client = createObserverClient({ fetch, basePath: observerBasePath('/companion/observer'), onEnvelope: vi.fn() });
+    await client.pair('ABCD-EFGH-IJKL'); await flush();
+    expect(fetch.mock.calls[0]![0]).toBe('/companion/v1/pair');
+    expect(JSON.parse(fetch.mock.calls[0]![1].body!)).toEqual({ code: 'ABCD-EFGH-IJKL', deviceName: 'Shannon Observer' });
+    expect(fetch.mock.calls[1]![1].headers).toEqual({ Authorization: 'Bearer paired-test-token' });
+    expect(fetch.mock.calls.every(([url, init]) => !url.includes('token') && init.credentials === 'omit' && init.cache === 'no-store' && init.redirect === 'error')).toBe(true);
+    expect(observerBasePath('/observer/')).toBe(''); expect(() => observerBasePath('/unrelated')).toThrow();
+    client.disconnect(); expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('discards late response bodies after disconnect even when fetch ignores abort', async () => {
+    vi.useFakeTimers();
+    let complete!: (value: ReturnType<typeof response>) => void;
+    const deferred = new Promise<ReturnType<typeof response>>(resolve => { complete = resolve; });
+    const fetch = vi.fn(async (url: string, _init: ObserverRequest) => url.endsWith('/catalog') ? response(catalog) : deferred);
+    const onEnvelope = vi.fn(), onReset = vi.fn();
+    const client = createObserverClient({ fetch, onEnvelope, onReset });
+    client.connect('session-one'); await flush();
+    const signal = fetch.mock.calls[1]![1].signal;
+    client.disconnect(); expect(signal.aborted).toBe(true);
+    complete(response(batch([event(1, { input: 'private delayed body' })]))); await flush();
+    expect(onEnvelope).not.toHaveBeenCalled(); expect(onReset).toHaveBeenCalledTimes(2); expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('fences responses from an old authenticated session after changing credentials', async () => {
+    vi.useFakeTimers();
+    let complete!: (value: ReturnType<typeof response>) => void;
+    const deferred = new Promise<ReturnType<typeof response>>(resolve => { complete = resolve; });
+    const fetch = vi.fn(async (url: string, init: ObserverRequest) => {
+      if (url.endsWith('/catalog')) return response(catalog);
+      return init.headers?.Authorization === 'Bearer old-session' ? deferred : response(batch([event(2, { runId: 'new-session-run' })]));
+    });
+    const onEnvelope = vi.fn(); const client = createObserverClient({ fetch, onEnvelope });
+    client.connect('old-session'); await flush(); client.connect('new-session'); await flush();
+    complete(response(batch([event(1, { runId: 'private-old-run' })]))); await flush();
+    expect(onEnvelope).toHaveBeenCalledTimes(1); expect(onEnvelope.mock.calls[0]![0].events[0].runId).toBe('new-session-run');
+    client.disconnect();
+  });
+
+  it('clears held state immediately from the catalog endpoint without requesting events', async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn(async () => response(batch([], { availability: 'held' })));
+    const onEnvelope = vi.fn(), onCatalog = vi.fn(), onConnection = vi.fn();
+    const client = createObserverClient({ fetch, onEnvelope, onCatalog, onConnection }); client.connect('test'); await flush();
+    expect(fetch).toHaveBeenCalledTimes(1); expect(onEnvelope.mock.calls[0]![0].availability).toBe('held');
+    expect(onCatalog).toHaveBeenLastCalledWith(null); expect(onConnection).toHaveBeenLastCalledWith('held');
+    client.disconnect();
+  });
+
+  it('aborts observing while hidden, resumes one poll chain and retries with bounded backoff', async () => {
+    vi.useFakeTimers();
+    let fail = false;
+    const fetch = vi.fn(async (url: string, _init: ObserverRequest) => { if (fail) throw new Error('network'); return response(url.endsWith('/catalog') ? catalog : batch()); });
+    const onConnection = vi.fn(); const client = createObserverClient({ fetch, onEnvelope: vi.fn(), onConnection });
+    client.connect('test'); await flush(); expect(fetch).toHaveBeenCalledTimes(2);
+    client.pause(); client.pause(); await vi.advanceTimersByTimeAsync(10_000); expect(fetch).toHaveBeenCalledTimes(2);
+    client.resume(); client.resume(); await flush(); expect(fetch).toHaveBeenCalledTimes(4);
+    fail = true; await vi.advanceTimersByTimeAsync(400); expect(onConnection).toHaveBeenLastCalledWith('lost');
+    const failedCalls = fetch.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(799); expect(fetch).toHaveBeenCalledTimes(failedCalls);
+    await vi.advanceTimersByTimeAsync(1); expect(fetch).toHaveBeenCalledTimes(failedCalls + 1);
+    client.disconnect(); expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('clears authentication on refusal and does not retry a rejected session', async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn(async () => response({ error: 'OBSERVER_OWNER_ONLY' }, 403));
+    const onConnection = vi.fn(), onReset = vi.fn();
+    const client = createObserverClient({ fetch, onEnvelope: vi.fn(), onConnection, onReset }); client.connect('test'); await flush();
+    expect(onConnection).toHaveBeenLastCalledWith('disconnected'); expect(onReset.mock.calls.at(-1)![0]).toContain('認証');
+    await vi.advanceTimersByTimeAsync(30_000); expect(fetch).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(0);
+  });
+});

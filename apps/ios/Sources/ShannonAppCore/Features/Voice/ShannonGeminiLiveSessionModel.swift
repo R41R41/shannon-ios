@@ -37,6 +37,7 @@ public final class ShannonGeminiLiveSessionModel {
     private var session: ShannonGeminiLiveSessionDTO?
     private(set) var sessionGenerationID: UUID?
     var transport: ShannonGeminiLiveTransport?
+    var voiceObservation: ShannonVoiceObservation?
     var pendingTurns = ShannonPendingVoiceTurns()
     var responseGenerationID: UUID?
     var turnAssembler = ShannonVoiceTurnAssembler()
@@ -217,6 +218,7 @@ public final class ShannonGeminiLiveSessionModel {
                 }
             )
             transport = next
+            next.observation = voiceObservation
             next.playbackProgress = { [weak self] stillPlaying in
                 guard self?.sessionGenerationID == generation else { return }
                 self?.voicePlaybackProgressed(stillPlaying: stillPlaying)
@@ -316,6 +318,7 @@ public final class ShannonGeminiLiveSessionModel {
     }
 
     func handle(_ event: ShannonTranscriptionEvent) {
+        let observedTranscript = voiceObservation?.transcription(event)
         switch event {
         case .sessionReady:
             phase = .listening
@@ -350,6 +353,7 @@ public final class ShannonGeminiLiveSessionModel {
             // Whose words these are follows when their speech began; the buffer never mixes the two.
             takeOwnership(of: claim, at: ProcessInfo.processInfo.systemUptime)
             turnAssembler.appendFinal(text)
+            voiceObservation?.acceptedTranscript(observedTranscript)
             userTranscript = previewInput(turnAssembler.finalText)
             // Only a completed transcript that is not Shannon's own voice interrupts her reply.
             interruptResponse()
@@ -410,6 +414,7 @@ public final class ShannonGeminiLiveSessionModel {
 
     func interruptResponse() {
         guard responseTask != nil else { return }
+        voiceObservation?.cancelPlayback()
         ShannonVoiceDiagnostics.shared.record("gemini.response.interrupted",
             sessionID: responseGenerationID?.uuidString,
             metadata: ["reply_complete": String(responseDelivery.response != nil),
@@ -434,6 +439,7 @@ public final class ShannonGeminiLiveSessionModel {
 
     /// Speech heard but not yet turned into a turn must not cross a participant switch.
     func discardUnfinalizedInput() {
+        voiceObservation?.discardUnjoined()
         finalizeTask?.cancel()
         finalizeTask = nil
         turnAssembler.reset()

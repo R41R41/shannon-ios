@@ -21,9 +21,11 @@ import { configuredJevIdentityChooser } from './infra/models/jev/jevIdentity.js'
 import { configuredSkillExport, configuredSkillMemory, skillSleepConsolidator } from './wiring/skillMemoryWiring.js';
 import { configuredWorkerFeedback } from './wiring/configuredWorkerFeedback.js';
 import { configuredOwnerScope } from './infra/config/ownerScope.js';
+import { startObserverPublisher } from './infra/observer/store/observerStore.js';
 
 // Syzygy ADR-0008 stage 3 (F5): with SHANNON_MEMORY_OUTBOX on, this process's memory writers propose, and the one writer applies.
 const store = new SQLiteShannonStore({ path: configuredDatabasePath(), now: () => new Date().toISOString(), ...stage5MemoryStoreOptions(process.env) });
+const observation = startObserverPublisher(configuredDatabasePath());
 const feedback = configuredWorkerFeedback(process.env, { path: configuredDatabasePath(), store,
   ownerScope: configuredOwnerScope(process.env), now: () => new Date().toISOString() });
 const interestNightly = stage5InterestNightSchedule(store, { now: () => new Date().toISOString(),
@@ -127,6 +129,7 @@ try {
   peopleStore.close();
   skillMemory?.close();
   feedback?.close();
+  observation?.close();
   store.close();
 }
 

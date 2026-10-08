@@ -6,6 +6,8 @@ import type { ShannonDevicePrincipal } from '../../infra/auth/deviceAuth.js';
 import { bindScope, readJson, sendJson } from '../../infra/http/serverHttp.js';
 import { SpokenSentenceSegmenter } from './spokenSentences.js';
 import { VOICE_CONTENT_FILTERED } from '../../infra/models/chatModelVoiceStream.js';
+import { withObserverRun } from '../../infra/observer/observerContext.js';
+import { voiceObservationOptions, writeObservedVoiceSegment } from './voiceObservation.js';
 
 export { SpokenSentenceSegmenter } from './spokenSentences.js';
 
@@ -54,65 +56,65 @@ export function createLiveVoiceStreamRoute(
     let spokenReplySegments = 0;
     try {
       const body = bindScope(await readJson(request, 64 * 1024), principal.scopeKey);
-      const apiResponse = await kernel.streamLiveVoiceDelegation({
-        method: 'POST',
-        path: '/v1/voice/gemini/cascade/delegations',
-        body, deviceId: principal.deviceId,
-      }, {
-        signal: controller.signal,
-        onPlan: async plan => {
-          if (controller.signal.aborted) return;
-          const firstPlan = !receivedPlan;
-          receivedPlan = true;
-          voicePlan = plan;
-          startStream(response);
-          await writeEvent(response, { type: 'plan', voicePlan: plan });
-          if (firstPlan && typeof plan.waitingPhrase === 'string' && plan.waitingPhrase.trim()) {
-            await writeEvent(response, {
-              type: 'segment', text: plan.waitingPhrase, voicePlan: waitingSegmentPlan(plan),
-            });
-          }
-        },
-        onTextDelta: async delta => {
-          if (controller.signal.aborted) return;
-          receivedDelta = true;
-          for (const segment of segmenter.append(delta)) {
+      await withObserverRun(voiceObservationOptions(scopeKey, body), async () => {
+        const apiResponse = await kernel.streamLiveVoiceDelegation({
+          method: 'POST',
+          path: '/v1/voice/gemini/cascade/delegations',
+          body, deviceId: principal.deviceId,
+        }, {
+          signal: controller.signal,
+          onPlan: async plan => {
+            if (controller.signal.aborted) return;
+            const firstPlan = !receivedPlan;
+            receivedPlan = true;
+            voicePlan = plan;
             startStream(response);
-            spokenReplySegments += 1;
-            await writeEvent(response, { type: 'segment', text: segment, voicePlan });
-          }
-        },
-      });
-      if (controller.signal.aborted) return;
+            await writeEvent(response, { type: 'plan', voicePlan: plan });
+            if (firstPlan && typeof plan.waitingPhrase === 'string' && plan.waitingPhrase.trim()) {
+              await writeObservedVoiceSegment(response, plan.waitingPhrase, waitingSegmentPlan(plan), 'plan');
+            }
+          },
+          onTextDelta: async delta => {
+            if (controller.signal.aborted) return;
+            receivedDelta = true;
+            for (const segment of segmenter.append(delta)) {
+              startStream(response);
+              spokenReplySegments += 1;
+              await writeObservedVoiceSegment(response, segment, voicePlan, 'llm');
+            }
+          },
+        });
+        if (controller.signal.aborted) return;
 
-      if (apiResponse.status < 200 || apiResponse.status >= 300) {
-        if (!response.headersSent) return sendJson(response, apiResponse.status, apiResponse.body);
-        await writeEvent(response, { type: 'error', status: apiResponse.status });
-        response.end();
-        return;
-      }
-      const bodyRecord = record(apiResponse.body);
-      const reply = typeof bodyRecord?.reply === 'string' ? bodyRecord.reply : '';
-      if (!receivedDelta && reply) {
-        for (const segment of segmenter.append(reply)) {
-          startStream(response);
-          await writeEvent(response, { type: 'segment', text: segment, voicePlan });
+        if (apiResponse.status < 200 || apiResponse.status >= 300) {
+          if (!response.headersSent) return sendJson(response, apiResponse.status, apiResponse.body);
+          await writeEvent(response, { type: 'error', status: apiResponse.status });
+          response.end();
+          return;
         }
-      }
-      // A reply cut at its length limit ends at its last complete sentence (`truncated`, the
-      // reply in the body is cut the same way); with no complete sentence yet, the words are kept.
-      const truncated = bodyRecord?.truncated === true;
-      if (truncated) {
-        console.info('Shannon live voice reply reached its length limit', { segments: spokenReplySegments });
-        if (spokenReplySegments > 0) segmenter.discard();
-      }
-      for (const segment of segmenter.flush()) {
+        const bodyRecord = record(apiResponse.body);
+        const reply = typeof bodyRecord?.reply === 'string' ? bodyRecord.reply : '';
+        if (!receivedDelta && reply) {
+          for (const segment of segmenter.append(reply)) {
+            startStream(response);
+            await writeObservedVoiceSegment(response, segment, voicePlan);
+          }
+        }
+        // A reply cut at its length limit ends at its last complete sentence (`truncated`, the
+        // reply in the body is cut the same way); with no complete sentence yet, the words are kept.
+        const truncated = bodyRecord?.truncated === true;
+        if (truncated) {
+          console.info('Shannon live voice reply reached its length limit', { segments: spokenReplySegments });
+          if (spokenReplySegments > 0) segmenter.discard();
+        }
+        for (const segment of segmenter.flush()) {
+          startStream(response);
+          await writeObservedVoiceSegment(response, segment, voicePlan);
+        }
         startStream(response);
-        await writeEvent(response, { type: 'segment', text: segment, voicePlan });
-      }
-      startStream(response);
-      await writeEvent(response, { type: 'completed', response: apiResponse.body });
-      response.end();
+        await writeEvent(response, { type: 'completed', response: apiResponse.body });
+        response.end();
+      });
     } catch (error) {
       if (controller.signal.aborted) return;
       console.warn('Shannon live voice stream failed', {

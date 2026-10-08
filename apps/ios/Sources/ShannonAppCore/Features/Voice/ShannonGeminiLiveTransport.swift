@@ -68,6 +68,7 @@ final class ShannonGeminiLiveTransport {
 #endif
     private(set) var sentAudioSeconds: Double = 0
     private(set) var receivedAudioSeconds: Double = 0
+    var observation: ShannonVoiceObservation?
     init(
         session: ShannonGeminiLiveSessionDTO,
         eventHandler: @escaping EventHandler,
@@ -82,6 +83,7 @@ final class ShannonGeminiLiveTransport {
         self.audioStateHandler = audioStateHandler
     }
     func start() async throws {
+        observation?.beginCapture(id: UUID(), model: session.model)
         stopped = false
         sentAudioSeconds = 0
         didRecordFirstAudioSend = false
@@ -105,6 +107,7 @@ final class ShannonGeminiLiveTransport {
                     try Task.checkCancellation()
                     try await nextSocket.send(.string(String(decoding: payload.data, as: UTF8.self)))
                     if payload.kind == .audio {
+                        self?.observation?.pcmSent(byteCount: payload.audioByteCount)
                         self?.sentAudioSeconds += Double(payload.audioByteCount) / 48_000
                         if self?.didRecordFirstAudioSend == false {
                             self?.didRecordFirstAudioSend = true
@@ -203,6 +206,7 @@ final class ShannonGeminiLiveTransport {
     }
 
     func stop() {
+        observation?.endCapture()
         guard !stopped else { return }
         playbackDrain.cancel()
         stopped = true

@@ -1,3 +1,5 @@
+import { observerHandoff } from '../../observer/observerContext.js';
+import { observedToolName } from './observerProjection.js';
 import Anthropic from '@anthropic-ai/sdk';
 import {
   MINIMUM_ANSWER_MILLISECONDS, MINIMUM_ROUND_MILLISECONDS, PartialAnswerError, timedOut, type RoundTime,
@@ -180,6 +182,7 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
       return [{ type: 'tool_result' as const, tool_use_id: value.call_id, content: value.output ?? '', ...(failed(value.output) ? { is_error: true } : {}) }];
     });
     messages.push({ role: 'user', content: results });
+    observerHandoff('tools', 'llm', { resultCount: results.length, selectedTools: uses.map(use => observedToolName(use.name)) });
     if (haiku && session.menu) {
       const additions: BetaRequestToolAdditionBlock[] = sonnetTools(session).flatMap(tool => {
         if (visible.has(tool.name)) return [];

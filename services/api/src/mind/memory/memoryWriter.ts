@@ -5,6 +5,7 @@ import { isSqliteBusy } from '../../infra/sqlite/lockWaits.js';
 import { SQLiteMemoryOutbox, type MemoryOutboxRow } from './store/memoryOutboxStore.js';
 import { deferredSelfInterestKinds } from './selfInterestHandlers.js';
 import { ModelFailure, errorCode } from './memoryProposer.js';
+import { observeAsync, observeSync, withObserverRun } from '../../infra/observer/observerContext.js';
 export { type MemoryProposals, MemoryProposer } from './memoryProposer.js';
 
 export const MEMORY_WRITER_V1 = Object.freeze({
@@ -89,7 +90,9 @@ export class MemoryWriter {
         if (!this.outbox.underLock(this.now(), () => this.outbox.acquireLease(this.owner, this.now(), this.leaseUntil()))) throw new LeaseLost();
         let finished: boolean;
         try {
-          finished = await this.process(row);
+          finished = await withObserverRun({ scopeKey: row.scopeKey, surface: 'memory-writer' }, () =>
+            observeAsync('memory', { operation: row.kind, origin: row.origin, attempt: row.attempts },
+              () => this.process(row), final => ({ final })));
         } catch (error) {
           if (error instanceof LeaseLost) throw error;
           if (error instanceof StagedCrash) throw error.error;
@@ -169,14 +172,14 @@ export class MemoryWriter {
       }
       try { this.options.beforeLock?.(op); } catch (error) { throw new StagedCrash(error); }
       // Under the lock: compare-and-set, the owner's controls again, the write, the row and the cursor, in one transaction.
-      const result = this.outbox.underLock(this.now(), () => {
+      const result = observeSync('store', { operation: op.kind }, () => this.outbox.underLock(this.now(), () => {
         if (!this.outbox.holdsLease(this.owner, this.now())) throw new LeaseLost();
         if (subjectRevision(this.targets, op) !== revision) return 'lost' as const;
         const outcome = applyMemoryOp(this.targets, op, plan);
         this.outbox.finish(op.seq, outcome.status, outcome.code, this.now());
         this.outbox.advanceCursor(this.now());
         return outcome;
-      });
+      }), value => value === 'lost' ? { status: 'cas-lost' } : { status: value.status, code: value.code });
       if (result !== 'lost') return true;
       expected = null;
     }
