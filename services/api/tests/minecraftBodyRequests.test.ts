@@ -20,6 +20,8 @@ import { SQLiteMinecraftTurnLog } from '../src/mind/action/respond/store/surface
 import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemoryStore.js';
 import { minecraftBodyRoute } from '../src/surfaces/minecraft/serverMinecraftBodyRoute.js';
 import { asksAboutMinecraftBody } from '../src/mind/tools/shannonToolSession.js';
+import { TOOL_OPEN_PROVIDER_NAME } from '../src/mind/tools/shannonToolMenu.js';
+import type { TurnChooser } from '../src/mind/selectors/turnChoices.js';
 import { toolSessionMemory } from '../src/mind/tools/shannonToolTypes.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { promptOf } from './modelPrompt.js';
@@ -307,7 +309,7 @@ class Model implements ShannonChatModel {
 }
 
 describe('one mind: the phone, the game chat and the result', () => {
-  function world() {
+  function world(turnChooser?: TurnChooser) {
     const harness = queue();
     const autonomyStore = new SQLiteAutonomyStore(':memory:');
     const autonomy = createInMemoryAutonomyService(harness.now, { store: autonomyStore, minecraftBody: harness.requests });
@@ -315,7 +317,7 @@ describe('one mind: the phone, the game chat and the result', () => {
     const background = new BackgroundUpdateCoordinator(harness.store, harness.store);
     const peopleStore = new SQLitePeopleMemoryStore(harness.path);
     const api = createLocalApiKernel(harness.now, { chatModel: model, stateStore: harness.store, conversationStore: harness.store, background,
-      autonomy, minecraftRequests: harness.requests, peopleMemory: peopleStore });
+      autonomy, minecraftRequests: harness.requests, peopleMemory: peopleStore, ...(turnChooser ? { turnChooser } : {}) });
     const turns = new SQLiteMinecraftTurnLog(harness.path);
     const configuration = configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify(CONFIGURATION) })!;
     const body = new MinecraftBody({ configuration, stateStore: harness.store, conversationStore: harness.store, background, now: harness.now, chatModel: model,
@@ -357,6 +359,43 @@ describe('one mind: the phone, the game chat and the result', () => {
     expect(promptOf(shared)).not.toContain('[マイクラの体で起きたこと]');
     expect(shared.tools).toBeUndefined();
     await done();
+  });
+
+  it.each(['エンドラを討伐してください', 'マイクラで村を探して拠点を建ててください'])('can open a present body after Jev chose none and queue the original long goal: %s', async goal => {
+    const { chat, claim, requests, done } = world({ choose: async () => ({ menu: { chosen: [] } }) });
+    try {
+      await claim();
+      const offered = await chat(goal);
+      const tools = offered.tools!;
+      expect(tools.menu!.offered.map(tool => tool.name)).toContain('minecraft.request');
+      expect(tools.definitions.map(tool => tool.name)).not.toContain('minecraft.request');
+      expect(toolInstructions(tools, false)).toContain(MINECRAFT_TOOL_INSTRUCTIONS);
+      // Opening recovers a missed preload, but executes nothing and does not turn none into a forced call.
+      expect(requests.recent('owner')).toEqual([]);
+      expect(JSON.parse(tools.meta!(TOOL_OPEN_PROVIDER_NAME, JSON.stringify({ name: 'minecraft_request' }))!)).toMatchObject({ ok: true });
+      expect(requests.recent('owner')).toEqual([]);
+      expect(tools.definitions.map(tool => tool.name)).toContain('minecraft.request');
+      expect(JSON.parse(await tools.call('minecraft_request', JSON.stringify({ goal })))).toMatchObject({ ok: true });
+      expect(requests.recent('owner')).toHaveLength(1);
+      expect(requests.recent('owner')[0]).toMatchObject({ goal, state: 'queued', origin: { surface: 'text', threadId: 'talk-1' } });
+      expect((await claim()).request).toMatchObject({ goal });
+      expect(requests.recent('owner')[0]).toMatchObject({ goal, state: 'claimed' });
+    } finally { await done(); }
+  });
+
+  it('cannot open a Minecraft request that presence or audience did not offer, even after Jev chose none', async () => {
+    const { chat, claim, requests, done } = world({ choose: async () => ({ menu: { chosen: [] } }) });
+    try {
+      const goal = 'エンドラを討伐してください';
+      const absent = (await chat(goal)).tools!;
+      expect(absent.menu!.offered.map(tool => tool.name)).not.toContain('minecraft.request');
+      expect(JSON.parse(absent.meta!(TOOL_OPEN_PROVIDER_NAME, JSON.stringify({ name: 'minecraft_request' }))!)).toMatchObject({ ok: false, failure: 'not_offered' });
+      expect(JSON.parse(await absent.call('minecraft_request', JSON.stringify({ goal })))).toMatchObject({ ok: false, failure: 'not_offered' });
+      expect(requests.recent('owner')).toEqual([]);
+      await claim();
+      expect((await chat(goal, { audience: 'others' })).tools).toBeUndefined();
+      expect(requests.recent('owner')).toEqual([]);
+    } finally { await done(); }
   });
 
   it('the owner\'s game-chat task becomes a request while the body claims; a friend\'s never does; 「止まって」 stops what is open', async () => {

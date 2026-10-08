@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { shannonIdentityPrompt } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/infra/models/chatModel.js';
@@ -120,7 +120,26 @@ describe('a session narrowed by the menu', () => {
 });
 
 describe('the Jev chooser', () => {
+  afterEach(() => { vi.unstubAllEnvs(); });
   const trace = () => { const traces: JevChoiceTrace[] = []; return { traces, write: (_scope: string, item: JevChoiceTrace) => { traces.push(item); } }; };
+
+  it('sends the same current v2 menu with Stage3 on or off and honors none for an unsupported action', async () => {
+    const bodies: unknown[] = [];
+    for (const stage3 of ['on', 'off']) {
+      vi.stubEnv('SHANNON_ADR8_STAGE3', stage3);
+      const { traces, write } = trace();
+      const fetcher = (async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)));
+        return new Response(JSON.stringify({ answers: { tool: { choice: 'none' } } }));
+      }) as unknown as typeof fetch;
+      const chooser = new JevTurnChooser(new JevChooser(new JevChoiceClient({ apiKey: 'jev', fetcher }), { trace: write, usdPerCall: null }), { toolMenu: true });
+      const candidates = menuCandidatesOf([shannonTool('minecraft.request')!]);
+      expect(await chooser.choose({ scopeKey: 'owner', surface: 'text', words: '現実の荷物を配達してください', menu: candidates })).toEqual({ menu: { chosen: [] } });
+      expect(traces[0]!.answers).toMatchObject({ qv: ['tool_menu.v2'], chosen: 0, offered: 1, tool: 'none' });
+    }
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toEqual(bodies[0]);
+  });
 
   it('asks once with the menu and traces it without a word of the turn', async () => {
     const bodies: string[] = [];
@@ -135,7 +154,7 @@ describe('the Jev chooser', () => {
     expect(result.menu).toEqual({ chosen: ['study_read'] });
     expect(JSON.parse(bodies[0]!)).toMatchObject({ model: 'jev-latest', state: { utterance: '書斎の「秘密の話」を読んで', surface: 'text' } });
     expect(traces).toHaveLength(1);
-    expect(traces[0]).toMatchObject({ decision: 'tool_menu', surface: 'text', outcome: 'ok', questions: 1, costUsd: null, answers: { tool: 'study_read', offered: 2, groups: 1 } });
+    expect(traces[0]).toMatchObject({ decision: 'tool_menu', surface: 'text', outcome: 'ok', questions: 1, costUsd: null, answers: { tool: 'study_read', offered: 2, groups: 1, qv: ['tool_menu.v2'] } });
     expect(JSON.stringify(traces)).not.toContain('秘密');
     // Nothing to choose from: no call.
     expect(await chooser.choose({ scopeKey: 'owner', surface: 'text', words: 'x', menu: [] })).toEqual({ menu: null });
