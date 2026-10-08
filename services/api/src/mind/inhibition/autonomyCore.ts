@@ -360,7 +360,6 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/infra/models/chatModel.ts',
     // Stage 3 (S3): its contract, its adapters and the fixed words of a voice reply, split out of it unchanged.
     'services/api/src/infra/models/chatModelContract.ts',
-    'services/api/src/infra/models/webSearch.ts',
     'services/api/src/infra/models/openAIChatModel.ts',
     'services/api/src/mind/action/respond/respondInstructions.ts',
     'services/api/src/contracts/contracts.ts',
