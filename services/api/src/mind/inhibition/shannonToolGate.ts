@@ -112,7 +112,7 @@ export function toolGateRequest(
   folder?: Pick<AutonomousActionRequest, 'host' | 'relativePath' | 'pathKind' | 'toRelativePath'>,
   paths?: readonly string[],
 ): AutonomousActionRequest {
-  return { domain: tool.name === 'workspace.propose' ? 'thinking' : tool.domain, summary, tool: tool.name,
+  return { domain: tool.name === 'workspace.propose' || tool.domain === 'task_runtime' ? 'thinking' : tool.domain, summary, tool: tool.name,
     ...(tool.domain === 'host_folder' && folder ? folder : {}), ...(tool.domain === 'vm_workspace' && paths ? { paths } : {}) };
 }
 

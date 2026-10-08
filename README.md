@@ -7,6 +7,7 @@ iPhoneとMacで一人のシャノンへつながる、ネイティブクライ�
 | 関心 | 正本 |
 | --- | --- |
 | Product | このREADMEの[方針](#方針) |
+| Common FCA runtime (opt-in first slice) | [`docs/fca-runtime-contract.md`](docs/fca-runtime-contract.md) |
 | Action threads | [`docs/action-threads-contract.md`](docs/action-threads-contract.md) |
 | Architecture | [`docs/architecture.md`](docs/architecture.md) |
 | Model and cache | [`docs/haiku-model-cache-contract.md`](docs/haiku-model-cache-contract.md) |

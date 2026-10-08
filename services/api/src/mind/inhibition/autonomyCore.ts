@@ -1,3 +1,4 @@
+import { FCA_CORE_PATHS } from './fcaCorePaths.js';
 import { STAGE5_CORE_PATHS } from './stage5CorePaths.js';
 import { STAGE4_CORE_PATHS } from './stage4CorePaths.js';
 import { OBSERVER_CORE_PATHS } from './observerCorePaths.js';
@@ -212,6 +213,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/scripts/peopleMigrationDryRun.ts',
   ]),
   approval_and_budget: Object.freeze([
+    ...FCA_CORE_PATHS,
     ...STAGE5_CORE_PATHS.approval_and_budget,
     'services/api/src/mind/inhibition/autonomyCore.ts',
     'services/api/src/mind/inhibition/stage4CorePaths.ts',
@@ -467,7 +469,6 @@ export function normalizedRepositoryPath(path: string): string | null {
   if (!segments.length || segments.includes('..')) return null;
   return segments.join('/');
 }
-
 /**
  * The core area that owns a repository-relative path, or null when it is not core.
  * Comparison ignores case because the owner's Mac and Windows file systems do.
@@ -494,7 +495,6 @@ export function coreAreaForRepositoryPath(path: string): CorePathMatch | null {
   }
   return best ? { area: best.area, entry: best.entry } : null;
 }
-
 export function allCorePaths(): readonly string[] {
   return Object.values(SHANNON_CORE_PATHS).flat();
 }

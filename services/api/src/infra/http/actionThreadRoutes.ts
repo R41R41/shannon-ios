@@ -19,7 +19,7 @@ export function publicActionThreads(views: readonly ActionView[], at: string, ot
 
 /** Authenticated owner's route. No resource keys, paths, source text, runner identities or stored task notes leave it. */
 export function createActionThreadRoute(actions: ActionThreads | null, ownerScope: string,
-  stopOutside: (views: readonly ActionView[], requestId: string) => Promise<void>, now: () => string, audienceNow:()=>boolean=()=>false) {
+  stopOutside: (views: readonly ActionView[], requestId: string) => Promise<void>, now: () => string, audienceNow:()=>boolean=()=>false, beforeStop?: (target: string | null) => Promise<void>) {
   const usage = new Map<string, { startedAt: number; count: number }>();
   return async (request: IncomingMessage, response: ServerResponse,
     principal: { deviceId: string; scopeKey: string } | null, path: string) => {
@@ -46,6 +46,7 @@ export function createActionThreadRoute(actions: ActionThreads | null, ownerScop
         const view = before.find(item => item.id === target)!;
         if (view.kind !== 'ownTime' || !await actions.resume(ownerScope, target!)) return sendJson(response, 409, { error: 'ACTION_CANNOT_RESUME' });
       } else {
+        await beforeStop?.(target);
         const views = await actions.stop(ownerScope, target, body.requestId);
         await stopOutside(views, body.requestId);
       }

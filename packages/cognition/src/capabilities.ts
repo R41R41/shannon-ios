@@ -126,6 +126,12 @@ export const SHANNON_SKILLS_CAPABILITY = Object.freeze({
   text: 'スキル: よくすることの手順を、眠っている間に自分で手順書（スキル）にまとめる。目次から要る時に道具で開いて使い、うまくいかないものはやめる。写しはAetherのシャノン用フォルダにあり、ライ氏が直したらその版を使う。ライ氏に内緒と言われたことはスキルに書かない。',
 } as const satisfies ShannonCapability);
 
+/** Only the opt-in common FCA runner receives this line; ordinary conversation is not migrated yet. */
+export const SHANNON_FCA_TASK_CAPABILITY = Object.freeze({
+  id: 'fca_tasks', audience: 'owner',
+  text: 'タスクの協力: この実行経路では、まとまった仕事を子タスクへ任せて並行して進め、タスクの一覧・状態・結果を確認し、IDで連絡できます。渡された道具でできる仕事だけを扱い、依頼の受付と完了を区別します。',
+} as const satisfies ShannonCapability);
+
 /** Capabilities the API may add to the description while it has them. */
 export const SHANNON_STAGE5_CAPABILITIES = Object.freeze([
   {id:'self_interests', audience:'owner', text:'関心の日記: ボクの関心を眠っている間に少しずつ見直します。ライ氏は「ようす」で理由と履歴を読み、固定・取り消し・禁止・忘却を選べます。'},
@@ -146,7 +152,7 @@ export function withStage5Capabilities(prompt: string, available: ShannonStage5C
   return added ? `${prompt.slice(0, at + anchor.length)}${added}${prompt.slice(at + anchor.length)}` : prompt;
 }
 
-export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_READ_TOOLS_CAPABILITY, SHANNON_SKILLS_CAPABILITY, ...SHANNON_STAGE5_CAPABILITIES] as const);
+export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_FCA_TASK_CAPABILITY, SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_READ_TOOLS_CAPABILITY, SHANNON_SKILLS_CAPABILITY, ...SHANNON_STAGE5_CAPABILITIES] as const);
 
 /** The owner's description with the skills' line, after her study's line; any other prompt unchanged. */
 export function withSkillsCapability(prompt: string): string {

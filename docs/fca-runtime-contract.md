@@ -1,0 +1,44 @@
+# Common FCA runtime — first implementation slice
+
+Status: implemented on `codex/shannon/common-fca-runtime`, opt-in, not deployed. Design source: Syzygy `docs/architecture/shannon-fca-loop.md`.
+
+## What runs
+
+`configuredServerFca` attaches a durable Task Hub and one-step FCA runner to the existing API. `SHANNON_FCA_RUNTIME=on` explicitly enables it; absent/off creates no FCA connection, runtime tables, model client or polling loop. Stage4's existing mind worker is required and remains the sole scheduler writer. Normal text, voice, own-time and Minecraft keep their existing execution paths during this first migration slice.
+
+There is one ancestor task per scope. The same `runFcaStep` handles every child. Each task has its own goal, completion criteria, inbox and complete native model rounds. The first tool set is `task.create`, `task.list`, `task.get`, `task.send`, registered in the common tool registry but excluded from legacy runners that have no trusted task identity. Parent/scope/operation identity comes from execution context, never tool arguments. These tools contact other tasks inside Shannon; they do not send messages to people.
+
+A first-class API at `/v1/fca/tasks` supports GET list (offset) or one task (id), and POST commands `create`, `send`, `stop`, `resume`. It requires a paired principal in the configured owner scope and a fresh owner-alone check. The Minecraft device-token filter executes before this route. Mutation bodies cannot supply scope, parent or audience. Create takes title, goal, completionCriteria and requestId; send takes target id, message and requestId. Calls acknowledge durable admission rather than task completion. Responses expose task projections, never native history, signed thinking blocks or inbox contents. Existing action-thread stop and stop-all also stop the corresponding FCA task or ancestor and descendants, including dormant tasks.
+
+## State, execution rights and recovery
+
+- `agent_tasks` and `agent_task_events` remain canonical. Additive `fca_*` columns distinguish these from Agent Host tasks. FCA rows never enqueue Host start/steer/interrupt commands, never receive Host results, and never enter Host task-tree migration, offline/busy accounting or command-lease recovery.
+- `fca_task_checkpoints`, `fca_task_messages`, `fca_task_history` and `fca_task_segment_receipts` hold subordinate state. The canonical authority and subordinate writes commit on one SQLite transaction. Task phase is derived: ready is queued; executing is running with an active step; waiting is running without a step; a known stop is paused/fca_stopped; unresolved execution is paused/fca_unknown.
+- Each bounded segment obtains an existing `agentTask` lease with source `fca:<taskId>:<admissionRevision>` and a hashed per-task resource. Task ancestry is independent of action ancestry. Waiting commits and releases its segment; a dormant parent occupies no inference slot. The existing background limit remains two, leaving the existing foreground slot available. This slice does not add a competing lease manager or redesign concurrency capacity.
+- Child creation and its initial context commit atomically; retry identity includes that context even after it has been consumed. Inbox receipt/wake is atomic. Message identity includes source, target and text; a conflicting reuse is refused. A message received during a model call remains available to the next round. A final answer with unconsumed new input cannot prematurely finish the task.
+- History, result and the original segment-completion receipt are committed atomically. A lost finish response is recovered by exact lease read-back or acknowledgement reconciliation, never by rerunning the model/tool. No new segment starts while its predecessor has an undelivered receipt.
+- A dispatched operation whose outcome was lost stays unknown and cannot auto-resume. A proven not-sent expired lease can safely return to ready. Cancellation is durably receipted only after local model/tool promises unwind; the original-lease outbox then reconciles the worker acknowledgement, including a request lost before it was applied. A task whose admission claim reply was lost can retry only a proven unsent, expired admission.
+- Stops are persisted before cancellation. Descendants cannot start new work. Active tasks remain stopping until the model/tool promises unwind and the existing action owner acknowledges cancellation. Parent completion cannot orphan unfinished children; a completion proposal with unfinished children yields instead. Resume is explicit for known stops; unknown execution needs reconciliation, not a new attempt.
+
+Initial engineering bounds are depth eight, 64 nonterminal direct children, 256 nonterminal tasks per scope, eight tool calls per decision, and 1 MB of native history per committed segment (total-history compaction is a later slice). Five consecutive rounds in which every tool fails pause the task and its children for inspection, preserving the repeated-failure safeguard across segment IDs. These are bounded first-slice limits, not a claim that those values are optimal. The financial-budget redesign remains deferred; paid own-time FCA execution is not admitted.
+
+## Model and observation
+
+`anthropicFcaModel` makes one native Anthropic call per decision, with the shared Shannon persona. It returns task tool calls, a wait proposal or a completion proposal. Internal control-call receipts mean only that the decision was received; the runtime owns lifecycle acceptance. Provider-required content/signatures and matching tool results remain intact. There is no nested hidden tool loop.
+
+The existing configured small-model credential policy supplies the key. `SHANNON_FCA_MODEL` can explicitly select a supported native 1h-cache model; the absent value uses the existing Haiku default. This first opt-in endpoint is not yet routed through the native app's primary-model switch. `cacheHaikuRequest` establishes mandatory one-hour caching; actual native usage is recorded to the existing chat usage ledger before cache validation. No read/write cache evidence means no accepted result. Unknown paid outcomes retain a conservative accounting estimate, and SDK retries are disabled. Deterministic cache tests establish request/receipt behavior; live cache hits and live cost for this new loop have not been measured.
+
+Each segment has a distinct Observer run. Real context/native/LLM/tool/store spans carry task, parent, step, revision and operation correlation; output projection omits prompts, message bodies, native thinking/signatures and tool-result text. Observer remains a projection, not task authority. New task-tree UI/layout changes are outside this slice.
+
+## Remaining migration
+
+The agreed one-stage multi-tool Jev, tool-definition recovery, shared emotion, automatic recall, pre-action prediction, history compaction, voice, sleep and Minecraft normal/reflex adapters are later slices. The initial four task tools are all loaded. Research/game completion cannot yet be claimed from this runtime; those executors remain on their current paths. The paused Minecraft trial remains paused. Automatic task submission from ordinary conversation is also a later connection.
+
+## Verification and rollout
+
+Deterministic tests cover concurrent decisions with real SQLite action admission, dormant-parent/child progress, scoped task messaging, lost wakeups, descendant stop acknowledgement, unknown outcomes, original receipt recovery, Host isolation, privacy at response time, native replay/cache accounting and Observer provenance. Relevant suites are `fcaTaskHub`, `fcaTaskRuntime`, `fcaHostIsolation`, `fcaTaskRoutes`, `actionThreadFcaStop`, `anthropicFcaModel`, plus existing action/tool/model regressions.
+
+Before enabling in production: finish the next intended migration slice, review its authority/audience/forgetting and billing integration, back up the database, verify bounded real-model cache behavior and task outcomes, then use the existing deployment runbook. Disabling admission does not erase FCA data. Stop/reconcile admitted tasks before turning the feature off. Do not remove memory, pairing or canonical task rows as rollback.
+
+
+Implementation verification (2026-10-09): `verify.sh fast`, API typecheck, all 287 API files / 3,826 tests, and all 39 shared-package files / 425 tests passed. The final child-context atomicity change was then checked by the seven focused FCA suites (104 tests), API typecheck and `verify.sh fast`. Swift package tests passed (777 XCTest + 199 Swift Testing); the unsigned iPhone build and Mac build/test passed. The restored-inspector launch smoke passed all seven cases (12 seconds each), and the release-runner checks passed (8 tests); `verify.sh all` exited 0. These checks use deterministic local fixtures; no live model calls, production migration or distribution was performed.

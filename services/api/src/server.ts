@@ -1,3 +1,4 @@
+import { configuredServerFca, serveFcaTaskRoute } from './wiring/serverFcaWiring.js';
 import { createServer } from 'node:http';
 import { configuredServerObserver } from './wiring/serverObserverWiring.js';
 import { handleDeviceManagement, handlePushRegistration } from './infra/auth/serverDeviceRoutes.js';
@@ -188,7 +189,7 @@ const readTools = readToolPorts(process.env, { notion, voyagerCatalog, upcoming:
 // ADR-0008 stage 3: what every surface perceived, and the notices of promises and tasks (off: none). docs/mind-workspace-contract.md.
 const mind = configuredMind(process.env, { databasePath: configuredDatabasePath(), now, ticking: true, timeZone: autonomyConfig.timeZone, log: line => console.log(line),
   notices: { ownerScopeKey: shannonNowOwnerScope(process.env), snapshot: scopeKey => persistentStore.snapshot(scopeKey), tasks: scopeKey => agentTaskStore.list(scopeKey) } });
-const externalActions=configuredActionRoutes(mind?.actions ?? null,agentTaskStore,minecraft.requests,shannonNowOwnerScope(process.env),now,()=>bodyStore.othersPresent(shannonNowOwnerScope(process.env),now(),BODY_LIMITS.audienceFreshMilliseconds,BODY_LIMITS.audienceEventWindowMilliseconds));
+const externalActions=configuredActionRoutes(mind?.actions ?? null,agentTaskStore,minecraft.requests,shannonNowOwnerScope(process.env),now,()=>bodyStore.othersPresent(shannonNowOwnerScope(process.env),now(),BODY_LIMITS.audienceFreshMilliseconds,BODY_LIMITS.audienceEventWindowMilliseconds),async target=>{await fca?.stopActions(target);});
 const kernel = createLocalApiKernel(now, {
   ownOutreach,
   ...(stage5.feedback ? {feedback:stage5.feedback.ports} : {}), ...(stage5.capabilities ? {stage5Capabilities:stage5.capabilities} : {}),
@@ -276,6 +277,7 @@ const valuesRoute = createValuesRoute({
   values: persistentStore.valueVersions(), calibration: scopeKey => predictionLedger?.calibration(scopeKey) ?? null, now, ownerScopeKey: shannonNowOwnerScope(process.env),
   choices: scopeKey => choiceLedger?.store.counts(scopeKey) ?? {}, record: ownerValueRecorder(autonomyStore.activity, autonomyConfig),
 });
+const fca = configuredServerFca(process.env, { path: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env), ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), usage: persistentStore });
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 const bodyUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
@@ -298,7 +300,6 @@ const server = createServer(async (request, response) => {
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
     if (signalObserver.asset(request,response,url.pathname)) return;
-    // DELETE exists for one path: a device taking its calendar snapshot away. It carries no body.
     const calendarDelete = request.method === 'DELETE';
     if ((calendarDelete && url.pathname !== CALENDAR_UPCOMING_PATH)
       || (request.method === 'PUT' && url.pathname !== BODY_CAPABILITIES_PATH && url.pathname !== CALENDAR_UPCOMING_PATH && url.pathname !== MODEL_MODE_PATH)) {
@@ -345,6 +346,7 @@ const server = createServer(async (request, response) => {
     }
     if(url.pathname.startsWith('/v1/observer/')){await signalObserver.route(request,response,url.pathname,principal,url);return;}
     if (await minecraft.serve(request, response, url.pathname, principal)) return; // Her Minecraft body's token reaches its own routes only.
+    if (await serveFcaTaskRoute(fca, request, response, principal, url)) return;
     if (url.pathname === MODEL_MODE_PATH) { await modelModes.route(request, response, principal); return; }
     if (isActionThreadPath(url.pathname)) { await externalActions.route(request,response,principal,url.pathname); return; }
     if (url.pathname === SHANNON_NOW_PATH) {
@@ -384,7 +386,6 @@ const server = createServer(async (request, response) => {
       await handleVoiceVisionSnapshot(request, response, principal, { gateway: voiceVisionGateway, kernel });
       return;
     }
-    // One ended 「友人も一緒」 period carries up to sixty turns of text.
     const body = request.method !== 'GET' && !calendarDelete ? await readJson(request, url.pathname === VOICE_CALL_MEMORY_PATH ? 192 * 1024 : bodyLookRequestBytes(url.pathname) ?? calendarRequestBytes(url.pathname) ?? hostStepRequestBytes(url.pathname) ?? 64 * 1024) : undefined;
     const query = new URLSearchParams(url.searchParams);
     if (principal) query.set('scopeKey', principal.scopeKey);
@@ -453,12 +454,12 @@ server.listen(port, host, () => {
   console.log('Shannon persistence ready: sqlite');
   console.log(selfDiagnosis.startupLine());
 });
-
 let shuttingDown = false;
 function shutdown(): void {
   if (shuttingDown) return;
   shuttingDown = true;
-  server.close(() => {
+  server.close(async () => {
+    await fca?.close();
     signalObserver?.close(); deviceAuth?.close();
     pushStore.close(); worldStore.close();
     initiativeStore.close();

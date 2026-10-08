@@ -18,6 +18,8 @@ import { migrateAgentWorkspaceResources } from './agentWorkspaceResources.js';
 
 export interface AgentTaskRow {
   task_id: string;
+  /** Absent while FCA has never been enabled; NULL identifies the existing Agent Host executor. */
+  fca_kind?: string | null;
   scope_key: string;
   conversation_thread_id: string;
   source_message_id: string | null;

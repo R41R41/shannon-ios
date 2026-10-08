@@ -110,7 +110,7 @@ export class ShannonToolRunner {
   offered(surface: ToolSurface, audience: ToolAudience, scopeKey?: string): readonly ShannonToolDefinition[] {
     // Her Aether tools only while the Aether client is configured (URL and token), and a proposal only while the inbox is too:
     // with the inbox alone (or the token alone) every offer is what it was before Aether access. Only to the owner's scope.
-    const tools = [...offeredTools(surface, audience, tool => isReadToolDomain(tool.domain) ? this.readsFor(tool.domain)
+    const tools = [...offeredTools(surface, audience, tool => tool.domain === 'task_runtime' ? false : isReadToolDomain(tool.domain) ? this.readsFor(tool.domain)
       : tool.domain === 'skill_read' ? this.skills !== null
       : tool.domain === 'vm_workspace' ? this.selfRewrite !== null
       : tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0

@@ -11,6 +11,8 @@ Existing task detail/command/metadata and owner-private task-tree HTTP reference
 
 The isolated self-revision writer uses an exclusive0600 temporary file and the same descriptor for writing, setting the original permission bits, and fsync before atomic replacement. New files remain0600 under either normal or restrictive umask. Physical-path, live permission, snapshot and approval checks remain before writing; partial effects remain unknown, and cleanup touches only an owned temporary file.
 
+The opt-in [common FCA runtime first slice](fca-runtime-contract.md) adds a canonical Task Hub, native one-step model adapter, child tasks and durable inter-task messaging under existing action leases. It is implemented on its branch; ordinary conversation/voice/autonomy/Minecraft migration and production rollout remain separate.
+
 ## System shape
 
 The owner-selected [primary model mode](model-mode-contract.md) is shared through owner-scoped SQLite and the paired settings API. Normal mode selects Haiku; high-precision mode prefers Sonnet for primary conversation and supported planning. Each response/step pins its model before asynchronous preparation, retaining its native signed prefix through tool rounds. Auxiliary models, permission gates, spending limits and stopped physical worlds retain their existing boundaries. Implementation and live readiness are separate gates.

@@ -232,8 +232,8 @@ describe('the tools the menu never hides, and what a search that found nothing s
   it('always sends the ways to stop and to ask for approval that the turn offers, and invents none that do not exist', () => {
     expect(ALWAYS_LOADED_TOOL_NAMES).toEqual(['minecraft.cancel', 'aether.propose']);
     for (const name of ALWAYS_LOADED_TOOL_NAMES) expect(shannonTool(name), name).not.toBeNull();
-    // No registry tool asks the owner, clarifies, speaks or sends.
-    expect(SHANNON_TOOLS.some(tool => /^(?:ask|clarify|confirm|speak|send|say|notify|message|reply)$/u.test(tool.name.split('.')[1]!))).toBe(false);
+    // Task-to-task send is internal; no registry tool sends a message to a person.
+    expect(SHANNON_TOOLS.some(tool => tool.name !== 'task.send' && /^(?:ask|clarify|confirm|speak|send|say|notify|message|reply)$/u.test(tool.name.split('.')[1]!))).toBe(false);
     const { session } = baseSession(['study.list', 'study.create', 'minecraft.request', 'minecraft.cancel', 'aether.propose']);
     expect(withToolMenu(session, []).definitions.map(tool => tool.name)).toEqual(['minecraft.cancel', 'aether.propose', 'tool.open']);
     expect(withToolMenu(session, ['study_list']).definitions.map(tool => tool.name)).toEqual(['study.list', 'minecraft.cancel', 'aether.propose', 'tool.open']);

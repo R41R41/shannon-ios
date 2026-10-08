@@ -1,3 +1,7 @@
+import { SHANNON_FCA_TASK_CAPABILITY } from '@shannon/cognition';
+import { configuredServerFca } from '../src/wiring/serverFcaWiring.js';
+import { runFcaStep } from '../src/mind/action/fca/fcaRunner.js';
+import { TASK_TOOLS, executeTaskTool } from '../src/mind/tools/shannonTaskTools.js';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { SHANNON_READ_TOOLS_CAPABILITY, SHANNON_SKILLS_CAPABILITY, withReadToolsCapability, withSkillsCapability } from '@shannon/cognition';
@@ -104,6 +108,10 @@ const exists = (...values: unknown[]) => values.every(value => typeof value === 
 type ConditionalCapabilityId = typeof SHANNON_CONDITIONAL_CAPABILITIES[number]['id'];
 // The fixed description and the lines the API adds while it has them (`SHANNON_CONDITIONAL_CAPABILITIES`) need the same evidence.
 const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, () => boolean> = {
+  fca_tasks: () => exists(runFcaStep, executeTaskTool) && configuredServerFca({}, {} as never) === null
+    && ['task.create', 'task.list', 'task.get', 'task.send'].every(name => TASK_TOOLS.some(tool => tool.name === name))
+    && !shannonCapabilityPrompt('owner').includes(SHANNON_FCA_TASK_CAPABILITY.text)
+    && createInMemoryAutonomyService(() => '2026-10-09T00:00:00.000Z').tools.offered('text', 'owner_alone').every(tool => tool.domain !== 'task_runtime'),
   self_interests: () => exists(SelfInterestMemory.prototype.projection, SelfInterestMemory.prototype.ownerWithin, createSelfInterestRoute) && !stage5Enabled({}),
   task_tree: () => exists(TaskTreeStore.prototype.get, TaskTreeStore.prototype.propose) && !stage5Enabled({}),
   owner_feedback: () => exists(FeedbackService.prototype.change, FeedbackService.prototype.bindTurn) && !stage5Enabled({}),
