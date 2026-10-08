@@ -1,3 +1,5 @@
+import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
+import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import { EVIDENCE_DECAY_V1, IDENTITY_TIERS_V1, identify, identityChoice, identityNameKey, joinedEpisodes, resolvedFact, type FactJudgement, type IdentityMenuItem, type IdentityOutcome, type IdentityPerson, type TemporalFact } from '@shannon/mind';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
@@ -59,7 +61,7 @@ export interface PersonFactPlan {
   updates: Array<{ fact: TemporalFact; expectedRevision: number }>;
   /** Items left out because they repeated a row. */
   repeated: string[];
-  /** How each item was judged: by luna, or by the rule. */
+  /** `luna` is the historical judge-role symbol; the actual provider/model is recorded in LlmUsage. */
   judgedBy: Array<'luna' | 'rule' | 'none'>;
 }
 
@@ -86,21 +88,23 @@ const JUDGE_SCHEMA = {
     properties: { key: { type: 'string' }, duplicates: keys, contradicts: keys } } } },
 };
 
-/** The luna judge (`SHANNON_PEOPLE_FACTS_MODEL`, default `gpt-5.6-luna`), in the `memory_background` lane. */
+/** The small-model judge (`SHANNON_PEOPLE_FACTS_MODEL`, default Claude Haiku 5.5), in the `memory_background` lane. */
 export class OpenAIPersonFactJudge implements PersonFactJudge {
   private readonly model: string;
+  private readonly fetcher: typeof fetch;
 
   constructor(private readonly options: {
     apiKey: string; model?: string; endpoint?: string; fetcher?: typeof fetch; usageStore?: LlmUsageStore;
     usage?: { backgroundLlmCostUsd(monthKey: string): number }; backgroundBudgetUsd?: number;
   }) {
-    this.model = validModel(options.model ?? 'gpt-5.6-luna');
+    this.model = validModel(options.model ?? DEFAULT_HAIKU_MODEL);
+    this.fetcher = responseModelFetcher({ ...options, model: this.model });
   }
 
   async judge(scopeKey: string, input: PersonFactJudgeInput): Promise<PersonFactJudgeAnswer | null> {
     // Inside the shared background budget: spent, the rule decides.
     if (this.options.usage && this.options.usage.backgroundLlmCostUsd(utcMonthKey(new Date())) >= (this.options.backgroundBudgetUsd ?? configuredBackgroundBudgetUsd())) return null;
-    const response = await (this.options.fetcher ?? fetch)(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
+    const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -116,6 +120,7 @@ export class OpenAIPersonFactJudge implements PersonFactJudge {
     const usage = responseUsage(envelope);
     this.options.usageStore?.recordLlmUsage({ scopeKey, lane: 'memory_background', model: this.model, ...usage,
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString() });
+    validateResponseModelUsage(this.model, envelope);
     const output = parseJson(extractOutputText(envelope)) as { judgements?: unknown } | null;
     if (!output || !Array.isArray(output.judgements)) return null;
     const strings = (value: unknown) => (Array.isArray(value) ? value.filter((key): key is string => typeof key === 'string') : []);
@@ -127,8 +132,8 @@ export class OpenAIPersonFactJudge implements PersonFactJudge {
 export function createConfiguredPersonFactJudge(
   environment: Readonly<Record<string, string | undefined>>, usageStore?: LlmUsageStore & { backgroundLlmCostUsd(monthKey: string): number },
 ): PersonFactJudge | null {
-  const apiKey = environment.OPENAI_API_KEY?.trim();
-  return apiKey ? new OpenAIPersonFactJudge({ apiKey, model: environment.SHANNON_PEOPLE_FACTS_MODEL?.trim() || undefined, ...(usageStore ? { usageStore, usage: usageStore } : {}) }) : null;
+  const selected = configuredResponseModel(environment, 'SHANNON_PEOPLE_FACTS_MODEL');
+  return selected ? new OpenAIPersonFactJudge({ ...selected, ...(usageStore ? { usageStore, usage: usageStore } : {}) }) : null;
 }
 
 // --- identity ---------------------------------------------------------------------------------------------------------

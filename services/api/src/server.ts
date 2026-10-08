@@ -108,7 +108,7 @@ const testFlightDeliveryStore = new SQLiteTestFlightDeliveryStore(configuredData
 const dailyMindStore = new SQLiteDailyMindStore(configuredDatabasePath(), now);
 const organizeStore = new SQLiteOrganizeStore(configuredDatabasePath());
 const voiceTranscriber = createConfiguredVoiceTranscriber(process.env, persistentStore);
-const voiceVisionGateway = createConfiguredVoiceVisionGateway(process.env);
+const voiceVisionGateway = createConfiguredVoiceVisionGateway(process.env, persistentStore);
 const personIdentityStore = new SQLitePersonIdentityStore(configuredDatabasePath());
 const peopleMemoryStore = new SQLitePeopleMemoryStore(configuredDatabasePath());
 const cognitiveIntentStore = new SQLiteCognitiveIntentStore(configuredDatabasePath());
@@ -208,7 +208,7 @@ const kernel = createLocalApiKernel(now, {
   defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST,
   dailyMind: dailyMindStore,
   organizeStore,
-  organizeExtractor: createConfiguredOrganizeExtractor(process.env),
+  organizeExtractor: createConfiguredOrganizeExtractor(process.env, persistentStore),
   voyagerCatalog, upcoming: ownerUpcoming.upcoming,
   voyagerDestination: createConfiguredVoyagerDestination(process.env),
   personIdentities: personIdentityStore,

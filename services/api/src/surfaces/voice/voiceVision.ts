@@ -1,3 +1,6 @@
+import { estimatedOpenAICostUsd, responseUsage, type LlmUsageStore } from '../../infra/models/llmUsage.js';
+import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
+import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import {
   errorDetail,
   extractOutputText,
@@ -31,6 +34,7 @@ interface OpenAIVoiceVisionGatewayOptions {
   endpoint?: string;
   timeoutMilliseconds?: number;
   fetcher?: typeof fetch;
+  usageStore?: LlmUsageStore;
 }
 
 export class OpenAIVoiceVisionGateway implements VoiceVisionGateway {
@@ -41,10 +45,10 @@ export class OpenAIVoiceVisionGateway implements VoiceVisionGateway {
 
   constructor(private readonly options: OpenAIVoiceVisionGatewayOptions) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
-    this.model = validModel(options.model ?? 'gpt-5.6-luna');
+    this.model = validModel(options.model ?? DEFAULT_HAIKU_MODEL);
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
     this.timeoutMilliseconds = boundedTimeout(options.timeoutMilliseconds);
-    this.fetcher = options.fetcher ?? fetch;
+    this.fetcher = responseModelFetcher({ ...options, model: this.model });
   }
 
   async analyze(request: VoiceVisionRequest): Promise<VoiceVisionResult> {
@@ -95,6 +99,10 @@ export class OpenAIVoiceVisionGateway implements VoiceVisionGateway {
     if (!response.ok) {
       throw new VoiceVisionError('VOICE_VISION_UPSTREAM_FAILED', response.status, errorDetail(parsed));
     }
+    const usage = responseUsage(parsed);
+    this.options.usageStore?.recordLlmUsage({ scopeKey: request.scopeKey, lane: 'chat', model: this.model, ...usage,
+      estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString() });
+    validateResponseModelUsage(this.model, parsed);
     const description = extractOutputText(parsed);
     if (!description) throw new VoiceVisionError('VOICE_VISION_UPSTREAM_FAILED', response.status, 'empty response');
     return { description, model: this.model };
@@ -113,12 +121,13 @@ export class VoiceVisionError extends Error {
 
 export function createConfiguredVoiceVisionGateway(
   environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
+  usageStore?: LlmUsageStore,
 ): VoiceVisionGateway | null {
-  const apiKey = environment.OPENAI_API_KEY?.trim();
-  if (!apiKey) return null;
+  const selected = configuredResponseModel(environment, 'SHANNON_VISION_MODEL', environment.SHANNON_LLM_MODEL);
+  if (!selected) return null;
   return new OpenAIVoiceVisionGateway({
-    apiKey,
-    model: environment.SHANNON_VISION_MODEL?.trim() || environment.SHANNON_LLM_MODEL?.trim(),
+    ...selected,
+    usageStore,
     endpoint: environment.SHANNON_VISION_ENDPOINT,
     timeoutMilliseconds: optionalInteger(environment.SHANNON_VISION_TIMEOUT_MS),
   });

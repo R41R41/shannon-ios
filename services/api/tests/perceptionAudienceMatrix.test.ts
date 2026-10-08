@@ -84,7 +84,7 @@ function world(name: string) {
   const store = new SQLiteShannonStore({ path, now });
   const peopleStore = new SQLitePeopleMemoryStore(path);
   const background = new BackgroundUpdateCoordinator(store, store);
-  const chatModel = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher, now });
+  const chatModel = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher, now });
   // Semantic recall is wrapped at its one entry: the audience it is asked with is recorded, and it answers nothing.
   const semantic = new SemanticMemoryRecall({ embeddingModel: 'test' } as never, store);
   vi.spyOn(SemanticMemoryRecall.prototype, 'recall').mockImplementation(async input => {
@@ -189,7 +189,7 @@ describe('perception copies every surface\'s audience (stage 3, step F2)', () =>
     const w = world('body');
     const reactionStore = new SQLiteBodyReactionStore(w.path);
     const bodyStore = new SQLiteBodyStore(w.path);
-    const speaker = new OpenAIBodyReactionSpeaker({ apiKey: 'test-only', fetcher: w.fetcher, now: w.now });
+    const speaker = new OpenAIBodyReactionSpeaker({ model: 'gpt-5.6-terra', apiKey: 'test-only', fetcher: w.fetcher, now: w.now });
     const api = createLocalApiKernel(w.now, {
       chatModel: w.chatModel, stateStore: w.store, conversationStore: w.store, knowledgeStore: w.store, mind: w.mind,
       body: { store: bodyStore, ingestEnabled: true, reactions: { store: reactionStore, speaker, config: {}, experiences: null } },

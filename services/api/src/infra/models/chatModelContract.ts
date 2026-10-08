@@ -85,6 +85,8 @@ export interface ShannonGeneratedArtifact {
 }
 
 export interface ShannonChatModelResult {
+  /** The actual server-owned execution tier, independent of the provider shared by Haiku and Sonnet. */
+  servedTier?: 'luna' | 'luna_plus' | 'sonnet';
   threadTitle?: string;
   threadSummary?: string;
   mode: ShannonChatMode;

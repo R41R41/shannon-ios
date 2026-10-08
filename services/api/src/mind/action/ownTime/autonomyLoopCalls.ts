@@ -2,7 +2,7 @@ import { yenFromUsd } from '../../inhibition/inhibitionPorts.js';
 import { actionPermit, currentActionExecution } from '../../../infra/context/actionExecution.js';
 import { parsedModelObject, type AutonomyPrompt } from './autonomyLoopPrompts.js';
 import type { StepDependencies } from './autonomyLoopSteps.js';
-import { autonomyModelCostUsd, type AutonomyModelPurpose } from './autonomyModels.js';
+import { autonomyInputTokensEstimate, autonomyModelCostUsd, type AutonomyModelPurpose, type AutonomyModelUsage } from './autonomyModels.js';
 import { AutonomyModelError, resolveAutonomyModel, type AutonomyTextModel, type AutonomyTextRequest, type AutonomyTextResult } from './autonomyTextModel.js';
 
 /**
@@ -15,15 +15,14 @@ export interface PaidCall { model: string; estimate: { inputTokens: number; outp
 export function paidCall(dependencies: StepDependencies, scopeKey: string, purpose: AutonomyModelPurpose, prompt: AutonomyPrompt, maximumOutputTokens: number): PaidCall | null {
   const model = resolveAutonomyModel(purpose, dependencies.store.modelPreferences(scopeKey), id => dependencies.model.canUse(id));
   if (!model) return null;
-  // Japanese runs near one token per character; the estimate assumes more so the gate errs high.
-  const estimate = { inputTokens: Math.ceil((prompt.system.length + prompt.prompt.length) * 1.5) + 64, outputTokens: maximumOutputTokens };
+  const estimate = { inputTokens: autonomyInputTokensEstimate(model, prompt.system, prompt.prompt), outputTokens: maximumOutputTokens };
   const costUsd = autonomyModelCostUsd(model, estimate, dependencies.config.modelPrices);
   if (costUsd === null) return null;
   return { model, estimate, estimatedCostYen: yenFromUsd(costUsd, dependencies.config), prompt, maximumOutputTokens };
 }
 
 export async function callModel(adapters: { model?: AutonomyTextModel }, call: PaidCall, signal?: AbortSignal):
-  Promise<{ reply: Record<string, unknown> | null; usage?: { inputTokens: number; outputTokens: number }; failure?: string; /** The reply was cut off at the output ceiling. */ truncated?: boolean; /** The reply as text, when it was not one JSON object. */ text?: string }> {
+  Promise<{ reply: Record<string, unknown> | null; usage?: AutonomyModelUsage; failure?: string; /** The reply was cut off at the output ceiling. */ truncated?: boolean; /** The reply as text, when it was not one JSON object. */ text?: string }> {
   if (!adapters.model) return { reply: null, failure: 'AUTONOMY_STEP_NOT_BOUND' };
   try {
     const result = await generateModel(adapters.model,{

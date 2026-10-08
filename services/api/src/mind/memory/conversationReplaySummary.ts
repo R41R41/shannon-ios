@@ -1,3 +1,5 @@
+import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
+import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import { OWNER_AUDIENCE, type CompanionStateStore } from '@shannon/cognition';
 import {
   COMPACTION_SECTIONS, COMPACTION_V1, checkedTemplate, mergedTemplate, renderedCompaction, summaryInput,
@@ -279,13 +281,15 @@ export const REPLAY_SUMMARY_INSTRUCTIONS = [
 
 export class OpenAIReplaySummaryWriter implements ReplaySummaryWriter {
   private readonly model: string;
+  private readonly fetcher: typeof fetch;
 
   constructor(private readonly options: { apiKey: string; model?: string; endpoint?: string; fetcher?: typeof fetch; usageStore?: LlmUsageStore }) {
-    this.model = validModel(options.model ?? 'gpt-5.6-luna');
+    this.model = validModel(options.model ?? DEFAULT_HAIKU_MODEL);
+    this.fetcher = responseModelFetcher({ ...options, model: this.model });
   }
 
   async update(scopeKey: string, input: { previousSummary: string | null; lines: readonly string[] }): Promise<string | null> {
-    const response = await (this.options.fetcher ?? fetch)(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
+    const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -301,12 +305,13 @@ export class OpenAIReplaySummaryWriter implements ReplaySummaryWriter {
     const usage = responseUsage(envelope);
     this.options.usageStore?.recordLlmUsage({ scopeKey, lane: 'memory_background', model: this.model, ...usage,
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString() });
+    validateResponseModelUsage(this.model, envelope);
     return extractOutputText(envelope) || null;
   }
 
   /** F7: the template's update (`REPLAY_TEMPLATE_INSTRUCTIONS`), strict JSON with every section a list or null. */
   async updateTemplate(scopeKey: string, input: ReplayTemplateInput): Promise<string | null> {
-    const response = await (this.options.fetcher ?? fetch)(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
+    const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -322,6 +327,7 @@ export class OpenAIReplaySummaryWriter implements ReplaySummaryWriter {
     const usage = responseUsage(envelope);
     this.options.usageStore?.recordLlmUsage({ scopeKey, lane: 'memory_background', model: this.model, ...usage,
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString() });
+    validateResponseModelUsage(this.model, envelope);
     return extractOutputText(envelope) || null;
   }
 }
@@ -340,10 +346,10 @@ const TEMPLATE_SCHEMA = {
   properties: Object.fromEntries(COMPACTION_SECTIONS.map(section => [section, { anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'null' }] }])),
 };
 
-/** `SHANNON_CONVERSATION_SUMMARY_MODEL` (default `gpt-5.6-luna`); no writer without an API key. */
+/** `SHANNON_CONVERSATION_SUMMARY_MODEL` (default Claude Haiku 5.5); no writer without an API key. */
 export function createConfiguredReplaySummaryWriter(
   environment: Readonly<Record<string, string | undefined>>, usageStore?: LlmUsageStore,
 ): ReplaySummaryWriter | null {
-  const apiKey = environment.OPENAI_API_KEY?.trim();
-  return apiKey ? new OpenAIReplaySummaryWriter({ apiKey, model: environment.SHANNON_CONVERSATION_SUMMARY_MODEL?.trim() || undefined, usageStore }) : null;
+  const selected = configuredResponseModel(environment, 'SHANNON_CONVERSATION_SUMMARY_MODEL');
+  return selected ? new OpenAIReplaySummaryWriter({ ...selected, usageStore }) : null;
 }

@@ -89,6 +89,8 @@ export async function finishTurn(routing: TurnRouting | null | undefined, turn: 
   decision: RoutedTier | null; tools: ShannonModelToolSession | undefined; remainingMs: number; at: string;
   /** The answering model's mode (`anthropic` for Sonnet): a `sonnet` turn that luna answered is learned as luna's (review M5). */
   answeredBy?: string;
+  /** The actual tier returned by the server adapter; Haiku and Sonnet both use Anthropic. */
+  servedTier?: 'luna' | 'luna_plus' | 'sonnet';
   /** Server-owned display additions persisted by the voice client; never changes her spoken reply or adds eligibility. */
   feedbackReplySuffix?: string;
 }): Promise<{ reply: string; verdict: TurnVerdict | null; doing: TurnDoing | null; feedbackRecordId?: string }> {
@@ -104,7 +106,7 @@ export async function finishTurn(routing: TurnRouting | null | undefined, turn: 
     }
   }
   // The tier that actually answered (review M5): a Sonnet turn that fell back to luna is luna's; an escalated luna turn is luna_plus.
-  const served = turn.decision ? (turn.decision.served === 'sonnet' && turn.answeredBy !== undefined && turn.answeredBy !== 'anthropic' ? 'luna'
+  const served = turn.decision ? (turn.decision.served === 'sonnet' && (turn.servedTier !== undefined ? turn.servedTier !== 'sonnet' : turn.answeredBy !== undefined && turn.answeredBy !== 'anthropic') ? 'luna'
     : turn.escalated && turn.decision.served === 'luna' ? 'luna_plus' : turn.decision.served) : null;
   const reply = verdict && turn.surface === 'text' ? verifiedReply(turn.reply, verdict) : turn.reply;
   const feedbackReply = `${reply.trim()}${turn.surface === 'voice' ? turn.feedbackReplySuffix ?? '' : ''}`;

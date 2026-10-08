@@ -12,6 +12,7 @@ import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { SESSION_FACTS_HEADER, sessionFactsSection, type SessionFacts } from '../src/mind/action/ownTime/autonomyLoopSessionPrompts.js';
 import { AutonomyModelError, type AutonomyTextRequest, type AutonomyTextResult } from '../src/mind/action/ownTime/autonomyTextModel.js';
 import { planFromThought } from '../src/mind/action/ownTime/autonomyLoopPlan.js';
+import { autonomyInputTokensEstimate } from '../src/mind/action/ownTime/autonomyModels.js';
 import { FakeModel, FakeShowing, callKind, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
 
 /**
@@ -29,7 +30,8 @@ const PRICES = { SHANNON_AUTONOMY_MODEL_PRICES_JSON: '{"gemini-3.8-flash":{"inpu
 /** A model whose every call uses exactly what the gate was asked to make room for: the most a step can cost. */
 class WorstCaseModel extends FakeModel {
   override async generate(request: AutonomyTextRequest): Promise<AutonomyTextResult> {
-    this.usage = { inputTokens: Math.ceil((request.system.length + request.prompt.length) * 1.5) + 64, outputTokens: request.maximumOutputTokens };
+    const inputTokens = autonomyInputTokensEstimate(request.model, request.system, request.prompt);
+    this.usage = { inputTokens, outputTokens: request.maximumOutputTokens, ...(request.model.startsWith('claude-haiku-') ? { cacheCreationInputTokens: inputTokens } : {}) };
     return super.generate(request);
   }
 }
@@ -228,7 +230,7 @@ describe('a session: a thought that leads to no step', () => {
 
   it('charges and names a reply whose whole ceiling went to the model\'s own reasoning, and does not ask again at the same ceiling', async () => {
     const { loop, model, entries, service, store } = sessions();
-    model.during = kind => { if (kind === 'think') throw new AutonomyModelError('AUTONOMY_MODEL_TRUNCATED', { inputTokens: 4_600, outputTokens: 4_000 }); };
+    model.during = kind => { if (kind === 'think') throw new AutonomyModelError('AUTONOMY_MODEL_TRUNCATED', { inputTokens: 4_600, outputTokens: 4_000, cacheCreationInputTokens: 0, cachedInputTokens: 0 }); };
     expect(await runUntilIdle(loop)).toEqual(['stepped', 'cycle-ended']);
     // No hint of hers can make the model reason less: one call, named, charged once, and the session ends.
     expect(model.kinds()).toEqual(['think']);
@@ -423,15 +425,16 @@ describe('a session: a thought that leads to no step', () => {
 
 describe('a session: what stops it when she does not', () => {
   it('stops at what one session may spend, before the step that would not fit, and says so in her record', async () => {
-    const { loop, model, store, entries, service, loopConfig, advance } = sessions({ loop: { sessionMaximumYen: 60 }, model: new WorstCaseModel() });
+    // The native Haiku cache prefix and a full 1h write now belong to the reservation as well.
+    const { loop, model, store, entries, service, loopConfig, advance } = sessions({ loop: { sessionMaximumYen: 80 }, model: new WorstCaseModel() });
     model.plans = Array.from({ length: 6 }, () => ({ thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }, { action: 'draft', idea: '橋の話' }] }));
     const ticks = await runUntilIdle(loop);
     expect(ticks.at(-1)).toBe('cycle-ended');
     const session = store.loop.sessions.latestClosed(scope)!;
     expect(session.endCode).toBe('session_budget');
     const spent = store.loop.sessions.spentYen(session.cycleId);
-    expect(spent).toBeGreaterThan(30);
-    expect(spent).toBeLessThanOrEqual(60);
+    expect(spent).toBeGreaterThan(40);
+    expect(spent).toBeLessThanOrEqual(80);
     expect(spent).toBe(service.overview(scope).budget.spentYen);
     // No step was allowed whose estimate did not fit: every call here costs exactly its estimate, and the sum stayed inside the cap.
     expect(store.loop.steps(session.cycleId).filter(step => step.estimate).length).toBeGreaterThanOrEqual(3);
@@ -513,12 +516,12 @@ describe('a session: what stops it when she does not', () => {
   });
 
   it('is stopped by the day\'s budget at the gate, asks for more as before, and goes on the next day', async () => {
-    const { loop, model, store, entries, service, advance } = sessions({ environment: { SHANNON_AUTONOMY_DAILY_BUDGET_YEN: '30' }, model: new WorstCaseModel() });
+    const { loop, model, store, entries, service, advance } = sessions({ environment: { SHANNON_AUTONOMY_DAILY_BUDGET_YEN: '60' }, model: new WorstCaseModel() });
     model.plans = [{ thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }, { action: 'draft', idea: '橋の話' }, { action: 'draft', idea: '川の話' }] }];
     const ticks = await runUntilIdle(loop);
     expect(ticks.at(-1)).toBe('budget');
     expect(entries().filter(entry => entry.kind === 'decision' && entry.reasonCode === 'budget_exhausted')).toHaveLength(1);
-    expect(service.overview(scope).budget.spentYen).toBeLessThanOrEqual(30);
+    expect(service.overview(scope).budget.spentYen).toBeLessThanOrEqual(60);
     expect(service.overview(scope).budgetRequest).toMatchObject({ status: 'pending', requestedYen: 300 });
     expect(service.overview(scope).loop.state).toBe('budget_exhausted');
     expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'budget' });
@@ -701,7 +704,7 @@ describe('a session: she sees her budget as facts', () => {
     const first = model.calls[0]!;
     const reserve = Number(/約(\d+)円の空きが要る/u.exec(first.prompt)![1]);
     const step = store.loop.steps(store.loop.openCycle(scope)!.id)[0]!;
-    const asked = (step.estimate!.inputTokens + step.estimate!.outputTokens) * 0.0016;
+    const asked = (2 * step.estimate!.inputTokens + step.estimate!.outputTokens) * 0.0016;
     // Nothing has been spent: the estimates come from the price list.
     expect(facts(first.prompt)).toBe([
       '[いまのこと・お金のこと]（サーバーが数えた事実）',
@@ -710,7 +713,7 @@ describe('a session: she sees her budget as facts', () => {
       '- 予算が新しくなるのは次の0時（あと9時間55分）。残した分は明日に持ち越せない。',
       '- この時間: 14:05に始めて、ここまで0歩、0円使った。この時間のうちに使えるのはあと400円、あと39歩、あと約40分。',
       '- 動いた回数: この日はこれで1回目（1日12回まで）。',
-      '- 一歩にかかるお金のめやす: 考える 約12円、読んだもののメモ 約9円、物語を書く 約10円、物語を直す 約13円。公開ページを読むこと自体は0円。',
+      '- 一歩にかかるお金のめやす: 考える 約23円、読んだもののメモ 約17円、物語を書く 約10円、物語を直す 約13円。公開ページを読むこと自体は0円。',
       `- 考える一歩を始めるには、約${reserve}円の空きが要る（使うのは、ふつうそれより少ない）。`,
       '- 読める回数: 今日あと200回',
     ].join('\n'));
@@ -734,7 +737,7 @@ describe('a session: she sees her budget as facts', () => {
     expect(budget.spentYen).toBe(4.48);
     expect(second).toContain(`- 今日の予算: 2,000円。ここまでに${spent}円使って、あと${Math.floor(budget.remainingYen).toLocaleString('en-US')}円（物語の下書き約${Math.floor(budget.remainingYen / 2.24)}回分）。`);
     expect(second).toContain(`- この時間: 14:05に始めて、ここまで2歩、${spent}円使った。この時間のうちに使えるのはあと${Math.floor(400 - budget.spentYen)}円、あと37歩、あと約25分。`);
-    expect(second).toContain('考える 約2円、読んだもののメモ 約9円、物語を書く 約2円');
+    expect(second).toContain('考える 約2円、読んだもののメモ 約17円、物語を書く 約2円');
     expect(second).toContain('- いま: 2026年10月2日(金) 14:20');
     expect(second).toContain('（あと9時間40分）');
 

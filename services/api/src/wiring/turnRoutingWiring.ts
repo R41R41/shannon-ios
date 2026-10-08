@@ -1,3 +1,4 @@
+import { configuredResponseModel } from '../infra/models/anthropic/haikuConfig.js';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { conversationGrowth as growthOf, nextTurnServe, skillRoutingSwitches } from '@shannon/learning';
@@ -43,9 +44,9 @@ export function configuredTurnRouting(
   }
   const competence = database ? new TierCompetence({ database, createsSchema: true, ...(parts.defer ? { defer: parts.defer } : {}) }) : null;
   const choices = switches.conversationReward && parts.choices?.conversation ? parts.choices : null;
-  const apiKey = environment.OPENAI_API_KEY?.trim();
-  const checker = apiKey && switches.turnVerify && switches.difficulty ? new OpenAITurnChecker({
-    apiKey, model: environment.SHANNON_LLM_MODEL?.trim() || 'gpt-5.6-luna', ...(parts.usageStore ? { usageStore: parts.usageStore } : {}),
+  const selected = configuredResponseModel(environment, 'SHANNON_LLM_MODEL');
+  const checker = selected && switches.turnVerify && switches.difficulty ? new OpenAITurnChecker({
+    ...selected, ...(parts.usageStore ? { usageStore: parts.usageStore } : {}),
     ...(parts.fetcher ? { fetcher: parts.fetcher } : {}), ...(parts.now ? { now: parts.now } : {}),
   }) : null;
   const routing: TurnRouting = {

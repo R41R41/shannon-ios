@@ -21,7 +21,7 @@ describe('OpenAI Responses chat adapter', () => {
         taskDecision: { disposition: 'none', reason: '場所探し' }, taskProposal: null,
       }) }));
     });
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
     const result = await model.generate({ scopeKey: 'owner', systemPrompt: 'system', history: [],
       message: '近くの公園を探して', placeSearch: { latitude: 34.7, longitude: 137.7 } });
     expect(result.places).toMatchObject([{ name: '浜松城公園',
@@ -41,7 +41,7 @@ describe('OpenAI Responses chat adapter', () => {
       expect(body.instructions).not.toContain('人格');
       return new Response(JSON.stringify({ output_text: 'うん、今日はゆっくり話そう。' }));
     });
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
     const result = await model.generateVoice({
       scopeKey: 'owner', systemPrompt: 'system', history: [], message: '話そう',
       useWebSearch: false, conversationClass: 'direct',
@@ -55,7 +55,7 @@ describe('OpenAI Responses chat adapter', () => {
       body = JSON.parse(String(init?.body));
       return new Response(JSON.stringify({ output_text: 'はい。' }));
     });
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
     await model.generateVoice({
       scopeKey: 'owner', systemPrompt: 'identity', profilePrompt: 'profile', turnContext: 'state and context',
       history: [{ role: 'user', content: 'さっきの話' }, { role: 'assistant', content: 'はい。' }], message: '続けて',
@@ -92,7 +92,7 @@ describe('OpenAI Responses chat adapter', () => {
       return new Response(stream, { headers: { 'content-type': 'text/event-stream' } });
     });
     const deltas: string[] = [];
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
 
     const result = await model.generateVoiceStreaming({
       scopeKey: 'owner', systemPrompt: 'system', history: [], message: '聞こえる？',
@@ -112,7 +112,7 @@ describe('OpenAI Responses chat adapter', () => {
       expect(body.max_tool_calls).toBe(3);
       return new Response(JSON.stringify({ output_text: '確認した結果だよ。' }));
     });
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
     await model.generateVoice({
       scopeKey: 'owner', systemPrompt: 'system', history: [], message: '比較して',
       useWebSearch: true, conversationClass: 'skill_complex',
@@ -138,7 +138,7 @@ describe('OpenAI Responses chat adapter', () => {
         taskDecision: { disposition: 'none', reason: '旅行の会話' }, taskProposal: null,
       }) }));
     });
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
     const result = await model.generate({
       scopeKey: 'owner', systemPrompt: 'system', history: [], message: '週末は京都に行きたい', generateThreadTitle: true,
     });
@@ -155,7 +155,7 @@ describe('OpenAI Responses chat adapter', () => {
       reply: '聞いてるよ。', threadTitle,
       taskDecision: { disposition: 'none', reason: '会話' }, taskProposal: null,
     }) })));
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
     const result = await model.generate({
       scopeKey: 'owner', systemPrompt: 'system', history: [], message: 'こんにちは', generateThreadTitle: true,
     });
@@ -168,7 +168,7 @@ describe('OpenAI Responses chat adapter', () => {
       reply: 'いいね。', threadTitle: `  ${'🌸'.repeat(40)}\nお花見 `,
       taskDecision: { disposition: 'none', reason: '会話' }, taskProposal: null,
     }) })));
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
     const request = { scopeKey: 'owner', systemPrompt: 'system', history: [], message: 'お花見しよう' };
     expect((await model.generate({ ...request, generateThreadTitle: true })).threadTitle).toBe(`${'🌸'.repeat(29)}…`);
     expect((await model.generate(request)).threadTitle).toBeUndefined();
@@ -186,7 +186,7 @@ describe('OpenAI Responses chat adapter', () => {
         taskDecision: { disposition: 'none', reason: '会話' }, taskProposal: null,
       }) }));
     });
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
     const result = await model.generate({
       scopeKey: 'owner', systemPrompt: 'system', history: [], message: '続きを進めて',
       priorThreadSummary: '以前に画面構成を決めた。',
@@ -216,7 +216,7 @@ describe('OpenAI Responses chat adapter', () => {
         taskDecision: { disposition: 'none', reason: '資料の要約' }, taskProposal: null,
       }) }));
     });
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
 
     await model.generate({
       scopeKey: 'owner', systemPrompt: 'system', history: [],
@@ -254,7 +254,7 @@ describe('OpenAI Responses chat adapter', () => {
         ],
       }));
     });
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
 
     const result = await model.generate({
       scopeKey: 'owner', systemPrompt: 'system', history: [], message: '今日の状況を調べて', useWebSearch: true,
@@ -280,7 +280,7 @@ describe('OpenAI Responses chat adapter', () => {
         }],
       }) }));
     });
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
 
     const result = await model.generate({
       scopeKey: 'owner', systemPrompt: 'system', history: [], message: 'Markdownファイルにして',
@@ -306,7 +306,7 @@ describe('OpenAI Responses chat adapter', () => {
         },
       }) }));
     });
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
 
     const result = await model.generate({
       scopeKey: 'owner', systemPrompt: 'system', history: [], message: '音声対話を改善したい',
@@ -324,7 +324,7 @@ describe('OpenAI Responses chat adapter', () => {
       taskDecision: { disposition: 'none', reason: '目的の整理' }, taskProposal: null,
       intentPlan: { nextStep: '確認する', steps: ['確認する', '確認する'] },
     }) })));
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
 
     await expect(model.generate({
       scopeKey: 'owner', systemPrompt: 'system', history: [], message: '改善したい',
@@ -337,7 +337,7 @@ describe('OpenAI Responses chat adapter', () => {
       taskDecision: { disposition: 'none', reason: '生成物作成' }, taskProposal: null,
       artifacts: [{ name: '../secret.md', mimeType: 'text/markdown', content: '# no', summary: null }],
     }) })));
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
 
     await expect(model.generate({
       scopeKey: 'owner', systemPrompt: 'system', history: [], message: 'Markdownにして',
@@ -388,7 +388,7 @@ describe('OpenAI Responses chat adapter', () => {
         },
       }), { status: 200 });
     });
-    const model = new OpenAIResponsesChatModel({
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna',
       apiKey: 'test-only', fetcher: fetcher as typeof fetch, usageStore,
       now: () => '2026-09-02T00:00:00.000Z',
     });
@@ -428,7 +428,7 @@ describe('OpenAI Responses chat adapter', () => {
         }),
       }), { status: 200 });
     });
-    const model = new OpenAIResponsesChatModel({
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna',
       apiKey: 'test-only', fetcher: fetcher as typeof fetch, agentHostHint: 'shannon-cloud',
     });
 
@@ -448,7 +448,7 @@ describe('OpenAI Responses chat adapter', () => {
       }),
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     }), { status: 200 }));
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
 
     const result = await model.generate({ scopeKey: 'owner', systemPrompt: 'system', history: [], message: '接続を直して' });
 
@@ -471,7 +471,7 @@ describe('OpenAI Responses chat adapter', () => {
         },
       }),
     }), { status: 200 }));
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
 
     await expect(model.generate({
       scopeKey: 'owner', systemPrompt: 'system', history: [], message: '直して',
@@ -482,7 +482,7 @@ describe('OpenAI Responses chat adapter', () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
       error: { message: 'invalid key' },
     }), { status: 401 }));
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
     await expect(model.generate({
       scopeKey: 'owner', systemPrompt: 'system', history: [], message: 'hello',
     })).rejects.toThrow('OPENAI_RESPONSE_401');

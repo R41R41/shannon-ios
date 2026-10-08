@@ -61,9 +61,9 @@ export class TieredChatModel implements ShannonChatModel {
   private async route<T extends { tier?: string; escalation?: true; firstTokenBudgetMs?: number; tools?: ShannonChatModelRequest['tools'] }>(request: T,
     sonnet: () => Promise<ShannonChatModelResult>, luna: (request: T) => Promise<ShannonChatModelResult>,
     sent: () => string, fixedLine: (sent: string) => ShannonChatModelResult | Promise<ShannonChatModelResult>, signal?: AbortSignal): Promise<ShannonChatModelResult> {
-    if (request.tier !== 'sonnet') return luna(request);
+    if (request.tier !== 'sonnet') return { ...await luna(request), servedTier: request.tier === 'luna_plus' ? 'luna_plus' : 'luna' };
     try {
-      return await sonnet();
+      return { ...await sonnet(), servedTier: 'sonnet' };
     } catch (error) {
       if (signal?.aborted) throw error;
       const said = sent();
@@ -72,11 +72,11 @@ export class TieredChatModel implements ShannonChatModel {
       // Words went out, or a tool ran: luna would repeat them (or run a write twice). Her fixed line ends the turn.
       if (said || ran > 0) {
         this.log(`Shannon sonnet tier ended with the fixed line: ${reason} said=${said ? 1 : 0} tools=${ran}`);
-        return fixedLine(said);
+        return { ...await fixedLine(said), servedTier: 'sonnet' };
       }
       this.log(`Shannon sonnet tier fell back to luna: ${reason}`);
       const { tier: _tier, escalation: _escalation, firstTokenBudgetMs: _budget, ...plain } = request;
-      return luna(plain as T);
+      return { ...await luna(plain as T), servedTier: 'luna' };
     }
   }
 }

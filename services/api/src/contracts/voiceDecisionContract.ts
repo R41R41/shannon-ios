@@ -91,7 +91,7 @@ export interface VoiceDecisionInput {
 }
 
 export interface VoiceTurnDecision {
-  source: 'jev' | 'openai' | 'fallback';
+  source: 'jev' | 'openai' | 'anthropic' | 'fallback';
   shouldRespond: boolean;
   replyRequiredProbability: number;
   solutionWantedProbability: number;
@@ -115,7 +115,7 @@ export interface VoiceTurnDecision {
 }
 
 export interface VoiceDecisionGateway {
-  readonly mode: 'jev' | 'openai' | 'fallback';
+  readonly mode: 'jev' | 'openai' | 'anthropic' | 'fallback';
   readonly model: string;
   decide(input: VoiceDecisionInput): Promise<VoiceTurnDecision>;
 }

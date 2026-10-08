@@ -1,3 +1,5 @@
+import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
+import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import {
   OWNER_AUDIENCE, SHANNON_EMOTION_KINDS, UNKNOWN_GUEST_PRESENCE, classifySensitivity, isMemoryEvidenceVisible, mayDisclose, memoryControlFor, ownerSpoke,
   peopleAudience, resolveDisclosure, visibleMemoryText,
@@ -303,13 +305,15 @@ const IMPRESSION_SCHEMA = {
 
 export class OpenAIImpressionAnalyzer implements ImpressionAnalyzer {
   private readonly model: string;
+  private readonly fetcher: typeof fetch;
 
   constructor(private readonly options: { apiKey: string; model?: string; endpoint?: string; fetcher?: typeof fetch; usageStore?: LlmUsageStore }) {
-    this.model = validModel(options.model ?? 'gpt-5.6-luna');
+    this.model = validModel(options.model ?? DEFAULT_HAIKU_MODEL);
+    this.fetcher = responseModelFetcher({ ...options, model: this.model });
   }
 
   async analyze(scopeKey: string, input: ImpressionAnalysisInput): Promise<ImpressionAnalysisOutput | null> {
-    const response = await (this.options.fetcher ?? fetch)(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
+    const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -326,16 +330,17 @@ export class OpenAIImpressionAnalyzer implements ImpressionAnalyzer {
     const usage = responseUsage(envelope);
     this.options.usageStore?.recordLlmUsage({ scopeKey, lane: 'memory_background', model: this.model, ...usage,
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString() });
+    validateResponseModelUsage(this.model, envelope);
     const output = parseJson(extractOutputText(envelope)) as ImpressionAnalysisOutput | null;
     return output && typeof output === 'object' ? output : null;
   }
 }
 
-/** `SHANNON_IMPRESSIONS_MODEL` (default `gpt-5.6-luna`); no analyzer without an API key or while impressions are off. */
+/** `SHANNON_IMPRESSIONS_MODEL` (default Claude Haiku 5.5); no analyzer without an API key or while impressions are off. */
 export function createConfiguredImpressionAnalyzer(
   environment: Readonly<Record<string, string | undefined>>, usageStore?: LlmUsageStore,
 ): ImpressionAnalyzer | null {
-  const apiKey = environment.OPENAI_API_KEY?.trim();
-  return apiKey && impressionsEnabled(environment)
-    ? new OpenAIImpressionAnalyzer({ apiKey, model: environment.SHANNON_IMPRESSIONS_MODEL?.trim() || undefined, usageStore }) : null;
+  const selected = configuredResponseModel(environment, 'SHANNON_IMPRESSIONS_MODEL');
+  return selected && impressionsEnabled(environment)
+    ? new OpenAIImpressionAnalyzer({ ...selected, usageStore }) : null;
 }

@@ -4,6 +4,26 @@ import { MIND_SWITCH_NAMES, mindSwitches } from '@shannon/mind';
 import { capturedStage3Digests, STAGE3_SCENARIOS, type Stage3Capture } from './support/stage3Scenarios.js';
 import { stage3Hooks } from './support/stage3Wiring.js';
 
+// afb38c28's state digests include the then-current own-time model ID, input estimate and price. Pin those external
+// model-policy inputs so this proof remains about Stage3 switches, independently of the intentional Haiku replacement.
+// The real loop, budget gate, stores and Stage3 wiring still run; the current native policy is covered by autonomyHaiku.
+vi.mock('../src/mind/action/ownTime/autonomyModels.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../src/mind/action/ownTime/autonomyModels.js')>();
+  const legacy = { id: 'gpt-5.6-luna', provider: 'openai' as const, label: 'GPT-5.6 Luna', purposes: ['research_reading', 'planning'] as const, usdPerMillion: null };
+  return {
+    ...actual,
+    AUTONOMY_MODELS: actual.AUTONOMY_MODELS.map(model => model.provider === 'anthropic' ? legacy : model),
+    AUTONOMY_DEFAULT_MODEL: { ...actual.AUTONOMY_DEFAULT_MODEL, research_reading: legacy.id, planning: legacy.id },
+    autonomyModel: (id: unknown) => id === legacy.id ? legacy : actual.autonomyModel(id),
+    autonomyInputTokensEstimate: (model: string, system: string, prompt: string) => model === legacy.id ? Math.ceil((system.length + prompt.length) * 1.5) + 64 : actual.autonomyInputTokensEstimate(model, system, prompt),
+    autonomyModelCostUsd: (model: string, usage: import('../src/mind/action/ownTime/autonomyModels.js').AutonomyModelUsage, prices: import('../src/mind/action/ownTime/autonomyModels.js').AutonomyModelPrices = {}) => {
+      if (model !== legacy.id) return actual.autonomyModelCostUsd(model, usage, prices);
+      const price = prices[legacy.id] ?? { input: 0.2, output: 1.2 };
+      return (usage.inputTokens * price.input + usage.outputTokens * price.output) / 1_000_000;
+    },
+  };
+});
+
 /**
  * Syzygy ADR-0008 stage 3, the switched-off proof (`docs/mind-workspace-contract.md`): with `SHANNON_ADR8_STAGE3=off` every
  * provider and Jev request, every answer and prompt, and every table of every database of text, voice, a touch of her body, the

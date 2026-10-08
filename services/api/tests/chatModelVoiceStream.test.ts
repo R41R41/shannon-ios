@@ -47,7 +47,7 @@ function voiceModel(
 ) {
   const recorded: LlmUsageEvent[] = [];
   const bodies: Array<Record<string, unknown>> = [];
-  const model = new OpenAIResponsesChatModel({
+  const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna',
     apiKey: 'test-only', now: () => '2026-10-05T03:00:00.000Z',
     ...(voiceStreamBounds ? { voiceStreamBounds } : {}),
     usageStore: { recordLlmUsage: (event: LlmUsageEvent) => { recorded.push(event); } } as never,
@@ -201,7 +201,7 @@ describe('voice stream time bounds', () => {
     await model.generateVoice(request);
     expect(VOICE_RESPONSE_TIMEOUT_MILLISECONDS).toBe(90_000);
     expect(signal?.aborted).toBe(false);
-    const slow = new OpenAIResponsesChatModel({
+    const slow = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna',
       apiKey: 'test-only', voiceResponseTimeoutMilliseconds: 30,
       fetcher: (async (_url: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
         init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason));

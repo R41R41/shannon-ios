@@ -18,7 +18,7 @@ import {
   type AutonomyActivityEntry, type AutonomyBudgetStatus, type AutonomyConfig, type AutonomyDecision, type GateRefusalObserver,
 } from '../../inhibition/inhibitionPorts.js';
 import {
-  autonomyModel, autonomyModelAllowedFor, autonomyModelChoices, autonomyModelCostUsd, isAutonomyModelPurpose,
+  autonomyModel, autonomyModelAllowedFor, autonomyModelChoices, autonomyModelCostUsd, isAutonomyModelPurpose, type AutonomyModelUsage,
 } from './autonomyModels.js';
 import { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import { HostFolderOperations } from './hostFolderOperations.js';
@@ -89,7 +89,7 @@ export interface ActionReport {
   link?: string;
   tool?: string;
   /** Actual usage of a paid step, from the provider response. */
-  usage?: { inputTokens: number; outputTokens: number; purpose?: string };
+  usage?: AutonomyModelUsage & { purpose?: string };
   /** Why a step failed, as a code from a closed set. */
   reasonCode?: string;
 }
@@ -490,4 +490,3 @@ export class ShannonAutonomyService {
     return this.store.activity.append(scopeKey, autonomyDayKey(at, this.config), at, draft);
   }
 }
-

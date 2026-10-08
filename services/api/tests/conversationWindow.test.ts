@@ -264,7 +264,7 @@ describe('a short thread sends what it sent before', () => {
         sent = String(init?.body);
         return new Response(JSON.stringify({ output_text: JSON.stringify({ reply: 'はい', threadSummary: null, taskDecision: { disposition: 'none', reason: 'r' }, taskProposal: null, intentPlan: null, artifacts: null }) }));
       };
-      await new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch, now: () => at }).generate({ ...request, history });
+      await new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch, now: () => at }).generate({ ...request, history });
       return sent;
     };
     expect(await body(request.history)).toBe(await body(before));

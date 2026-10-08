@@ -331,7 +331,7 @@ describe('the replay summary is written off the response path', () => {
       sent = { url: String(url), body: JSON.parse(String(init?.body)) as Record<string, unknown> };
       return new Response(JSON.stringify({ output_text: 'しりとりの途中', usage: { input_tokens: 900, output_tokens: 120 } }));
     };
-    const writer = new OpenAIReplaySummaryWriter({ apiKey: 'test-only', fetcher: fetcher as typeof fetch,
+    const writer = new OpenAIReplaySummaryWriter({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch,
       usageStore: { recordLlmUsage: event => { usage.push(event); }, backgroundLlmCostUsd: () => 0 } });
     expect(await writer.update('owner', { previousSummary: '前の要約', lines: ['ユーザー: りんご', 'シャノン: ごりら'] })).toBe('しりとりの途中');
     expect(sent?.url).toBe('https://api.openai.com/v1/responses');

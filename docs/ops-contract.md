@@ -153,6 +153,10 @@ What the desktop shows:
 
 If the API itself is unreachable (the same VM), the request fails at the network level; the client treats that as the API being down, which is a different message from `stale`.
 
+## Model and cache operations
+
+[haiku-model-cache-contract.md](haiku-model-cache-contract.md) owns the current Haiku/native SDK credentials, one-hour cache and usage rules. The diagnostics report the resolved actual model, not an obsolete Luna default. Haiku and Sonnet both use provider `mode: anthropic`; inspect `servedTier` for tier outcomes. `SHANNON_SONNET_ROUTING=off` prevents Sonnet conversation requests while permitting the Haiku base model. Presence of a model/key or cache-control block is not evidence of a real cache write or read; deployment requires content-free native usage receipts.
+
 ## The server's self-diagnosis
 
 Added 2026-10-05 (coordinator task taken over from Voyager, approved by the owner the same day). `GET /v1/ops` answers the owner's scope with one more field, `server`: what this API process resolved when it started. It describes the Shannon API itself, not the legacy runtime, and it is read-only. No app shows it yet (server only); read it with an owner device token. Everything else in the answer is unchanged, and the field is absent for a device of any other scope. `GET /health` is unchanged: a request without a device token still answers `401`, which is what the liveness check looks for.
@@ -168,13 +172,13 @@ The same summary is written once to the service log at startup, as one line that
     "startedAt": "2026-10-05T12:00:00.000Z",
     "build": { "revision": "5943c29" },
     "models": {
-      "text": "gpt-5.6-luna",
+      "text": "claude-haiku-5-5",
       "voice": {
-        "reply": "gpt-5.6-luna",
+        "reply": "claude-haiku-5-5",
         "routing": "jev-latest",
         "transcription": { "gemini": "gemini-3.5-transcribe-live", "openai": "gpt-4o-mini-transcribe" },
         "speech": { "gemini": "gemini-3.8-flash-lite-tts", "eleven": null },
-        "vision": "gpt-5.6-luna"
+        "vision": "claude-haiku-5-5"
       },
       "dictation": "gpt-transcribe",
       "autonomy": { "enabled": true, "prose": "gemini-3.8-flash", "research_reading": "gemini-3.8-flash", "planning": "gemini-3.8-flash", "critique": "gemini-3.8-flash", "roomLook": "gemini-3.8-flash" }
@@ -201,7 +205,7 @@ The same summary is written once to the service log at startup, as one line that
 | `build.revision` | string \| `null` | The revision this process loaded: the first word of the file `DEPLOYED_REVISION` in the service's working directory (the deployed source, `/home/azureuser/shannon-ios`), **read once when the process starts** and not again. The deployment writes that file after the source sync and before the restart, atomically (a temporary file in the same directory, then `mv`; `docs/self-improvement-runbook.md`, Azure delivery), so after a restart it names the source the process loaded. A file changed while the process runs is not seen until the next restart. `null` when the file is missing or its first word is not revision-like (`[A-Za-z0-9][A-Za-z0-9._+-]{0,79}`). |
 | `models.text` | string \| `null` | The chat model of text replies (`SHANNON_LLM_MODEL` as resolved). `local-stub` when no model key is configured. |
 | `models.voice.reply` | string | Spoken replies use the same chat model. |
-| `models.voice.routing` | string \| `null` | The voice turn router: the JEV model, the OpenAI router model, or `local-rules`. `null` when the configured name fails the model-name rule above. |
+| `models.voice.routing` | string \| `null` | The voice turn router: the JEV model, the native Haiku fallback (or an explicit GPT router override), or `local-rules`. `null` when the configured name fails the model-name rule above. |
 | `models.voice.transcription.gemini`, `.openai` | string \| `null` | Live transcription of a voice call, per provider the app may ask for. `null`: that provider is not configured. |
 | `models.voice.speech.gemini`, `.eleven` | string \| `null` | Speech synthesis, per provider. |
 | `models.voice.vision` | string \| `null` | A look through the camera during a voice turn. |

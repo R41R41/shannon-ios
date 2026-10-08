@@ -36,7 +36,7 @@ async function capturedRequests() {
       out[name] = { url: String(url), headers: init?.headers, body: String(init?.body) };
       return new Response(JSON.stringify(GOLDEN_RESPONSES.plain!.envelope));
     };
-    await new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch, now: () => at,
+    await new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch, now: () => at,
       ...(entry.agentHostHint ? { agentHostHint: entry.agentHostHint } : {}), ...(entry.model ? { model: entry.model } : {}) }).generate(entry.request);
   }
   return out;
@@ -46,7 +46,7 @@ async function capturedResults() {
   const out: Record<string, { result?: unknown; error?: string; usage: LlmUsageEvent[] }> = {};
   for (const [name, entry] of Object.entries(GOLDEN_RESPONSES)) {
     const recorded: LlmUsageEvent[] = [];
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', now: () => at,
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', now: () => at,
       usageStore: { recordLlmUsage: (event: LlmUsageEvent) => { recorded.push(event); } } as never,
       fetcher: (async () => new Response(JSON.stringify(entry.envelope), { status: entry.status ?? 200 })) as typeof fetch });
     try {

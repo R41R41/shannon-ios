@@ -123,11 +123,11 @@ describe('model adapters for her own activity', () => {
   const environment = { [AUTONOMY_CREDENTIAL_VARIABLES.google]: 'dedicated-gemini-credential', [AUTONOMY_CREDENTIAL_VARIABLES.openai]: 'dedicated-openai-credential' };
 
   it('takes the credential only from the dedicated variables, never from the conversation keys', () => {
-    expect(AUTONOMY_CREDENTIAL_VARIABLES).toEqual({ google: 'SHANNON_AUTONOMY_GEMINI_API_KEY', openai: 'SHANNON_AUTONOMY_OPENAI_API_KEY' });
+    expect(AUTONOMY_CREDENTIAL_VARIABLES).toEqual({ google: 'SHANNON_AUTONOMY_GEMINI_API_KEY', openai: 'SHANNON_AUTONOMY_OPENAI_API_KEY', anthropic: 'SHANNON_AUTONOMY_ANTHROPIC_API_KEY' });
     const conversationOnly = configuredAutonomyTextModel({ OPENAI_API_KEY: 'conversation-openai', GEMINI_API_KEY: 'conversation-gemini' });
     expect(conversationOnly.configuredProviders).toEqual([]);
     expect(conversationOnly.canUse('gemini-3.8-flash')).toBe(false);
-    expect(conversationOnly.canUse('gpt-5.6-luna')).toBe(false);
+    expect(conversationOnly.canUse('gpt-5.6-terra')).toBe(false);
     // A dedicated variable that only repeats the conversation key is not a dedicated credential.
     expect(dedicatedAutonomyCredential('openai', { OPENAI_API_KEY: 'same', SHANNON_AUTONOMY_OPENAI_API_KEY: 'same' })).toBeNull();
     expect(dedicatedAutonomyCredential('google', { GEMINI_API_KEY: 'conversation', SHANNON_AUTONOMY_GEMINI_API_KEY: ' dedicated ' })).toBe('dedicated');
@@ -160,12 +160,12 @@ describe('model adapters for her own activity', () => {
       output: [{ type: 'message', content: [{ type: 'output_text', text: '{"steps":[]}' }] }], usage: { input_tokens: 800, output_tokens: 90 },
     }));
     const model = configuredAutonomyTextModel({ ...environment, OPENAI_API_KEY: 'conversation-openai' }, fetcher);
-    const result = await model.generate({ model: 'gpt-5.6-luna', system: '規則', prompt: '材料', maximumOutputTokens: 500 });
+    const result = await model.generate({ model: 'gpt-5.6-terra', system: '規則', prompt: '材料', maximumOutputTokens: 500 });
     expect(result).toEqual({ text: '{"steps":[]}', usage: { inputTokens: 800, outputTokens: 90 } });
     expect(calls[0]!.url).toBe('https://api.openai.com/v1/responses');
     expect(calls[0]!.init.headers).toEqual({ authorization: 'Bearer dedicated-openai-credential', 'content-type': 'application/json' });
     expect(JSON.parse(calls[0]!.init.body as string)).toEqual({
-      model: 'gpt-5.6-luna', instructions: '規則', input: '材料', text: { format: { type: 'json_object' } }, max_output_tokens: 500, store: false,
+      model: 'gpt-5.6-terra', instructions: '規則', input: '材料', text: { format: { type: 'json_object' } }, max_output_tokens: 500, store: false,
       // Routed by a digest of the system text, as the conversation routes by a digest of its scope.
       prompt_cache_key: autonomyPromptCacheKey('規則'),
     });
@@ -178,7 +178,7 @@ describe('model adapters for her own activity', () => {
       output: [{ type: 'message', content: [{ type: 'output_text', text: '{"steps":[]}' }] }],
       usage: { input_tokens: 800, output_tokens: 90, input_tokens_details: { cached_tokens: 512 } },
     }));
-    expect(await configuredAutonomyTextModel(environment, openai.fetcher).generate({ model: 'gpt-5.6-luna', system: '規則', prompt: '材料', maximumOutputTokens: 500 }))
+    expect(await configuredAutonomyTextModel(environment, openai.fetcher).generate({ model: 'gpt-5.6-terra', system: '規則', prompt: '材料', maximumOutputTokens: 500 }))
       .toEqual({ text: '{"steps":[]}', usage: { inputTokens: 800, outputTokens: 90, cachedInputTokens: 512 } });
     const gemini = fakeFetch(() => Response.json({
       candidates: [{ content: { parts: [{ text: '{"steps":[]}' }] } }],
@@ -208,13 +208,13 @@ describe('model adapters for her own activity', () => {
       status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' },
       output: [{ type: 'message', content: [{ type: 'output_text', text: '{"steps":[{"act' }] }], usage: { input_tokens: 800, output_tokens: 500 },
     }));
-    expect(await configuredAutonomyTextModel(environment, incomplete.fetcher).generate({ model: 'gpt-5.6-luna', system: 's', prompt: 'p', maximumOutputTokens: 500 }))
+    expect(await configuredAutonomyTextModel(environment, incomplete.fetcher).generate({ model: 'gpt-5.6-terra', system: 's', prompt: 'p', maximumOutputTokens: 500 }))
       .toMatchObject({ truncated: true, usage: { inputTokens: 800, outputTokens: 500 } });
     const reasoned = fakeFetch(() => Response.json({ status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' }, output: [], usage: { input_tokens: 800, output_tokens: 500 } }));
-    await expect(configuredAutonomyTextModel(environment, reasoned.fetcher).generate({ model: 'gpt-5.6-luna', system: 's', prompt: 'p', maximumOutputTokens: 500 }))
+    await expect(configuredAutonomyTextModel(environment, reasoned.fetcher).generate({ model: 'gpt-5.6-terra', system: 's', prompt: 'p', maximumOutputTokens: 500 }))
       .rejects.toMatchObject({ code: 'AUTONOMY_MODEL_TRUNCATED', usage: { inputTokens: 800, outputTokens: 500 } });
     const filtered = fakeFetch(() => Response.json({ status: 'incomplete', incomplete_details: { reason: 'content_filter' }, output: [], usage: { input_tokens: 800, output_tokens: 0 } }));
-    await expect(configuredAutonomyTextModel(environment, filtered.fetcher).generate({ model: 'gpt-5.6-luna', system: 's', prompt: 'p', maximumOutputTokens: 500 }))
+    await expect(configuredAutonomyTextModel(environment, filtered.fetcher).generate({ model: 'gpt-5.6-terra', system: 's', prompt: 'p', maximumOutputTokens: 500 }))
       .rejects.toMatchObject({ code: 'AUTONOMY_MODEL_EMPTY' });
   });
 
@@ -261,14 +261,14 @@ describe('model adapters for her own activity', () => {
     // 422 is the same refusal, and OpenAI falls back the same way.
     const unprocessable = fakeFetch((_url, init) => (JSON.parse(init.body as string).reasoning ? new Response('{}', { status: 422 })
       : Response.json({ output: [{ type: 'message', content: [{ type: 'output_text', text: '{"steps":[]}' }] }], usage: { input_tokens: 8, output_tokens: 2 } })));
-    expect(await configuredAutonomyTextModel(environment, unprocessable.fetcher).generate({ model: 'gpt-5.6-luna', system: 's', prompt: 'p', maximumOutputTokens: 10, reasoning: 'low' }))
+    expect(await configuredAutonomyTextModel(environment, unprocessable.fetcher).generate({ model: 'gpt-5.6-terra', system: 's', prompt: 'p', maximumOutputTokens: 10, reasoning: 'low' }))
       .toEqual({ text: '{"steps":[]}', usage: { inputTokens: 8, outputTokens: 2 } });
     expect(unprocessable.calls).toHaveLength(2);
     // OpenAI: the field the conversation's own calls use.
     const openai = fakeFetch(() => Response.json({ output: [{ type: 'message', content: [{ type: 'output_text', text: '{"steps":[]}' }] }], usage: { input_tokens: 8, output_tokens: 2 } }));
-    await configuredAutonomyTextModel(environment, openai.fetcher).generate({ model: 'gpt-5.6-luna', system: '規則', prompt: '材料', maximumOutputTokens: 500, reasoning: 'low' });
+    await configuredAutonomyTextModel(environment, openai.fetcher).generate({ model: 'gpt-5.6-terra', system: '規則', prompt: '材料', maximumOutputTokens: 500, reasoning: 'low' });
     expect(JSON.parse(openai.calls[0]!.init.body as string)).toEqual({
-      model: 'gpt-5.6-luna', instructions: '規則', input: '材料', text: { format: { type: 'json_object' } }, max_output_tokens: 500, reasoning: { effort: 'low' }, store: false, prompt_cache_key: autonomyPromptCacheKey('規則'),
+      model: 'gpt-5.6-terra', instructions: '規則', input: '材料', text: { format: { type: 'json_object' } }, max_output_tokens: 500, reasoning: { effort: 'low' }, store: false, prompt_cache_key: autonomyPromptCacheKey('規則'),
     });
   });
 

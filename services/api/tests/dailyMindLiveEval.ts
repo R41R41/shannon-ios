@@ -1,14 +1,12 @@
+import { configuredResponseModel } from '../src/infra/models/anthropic/haikuConfig.js';
 import { OpenAIDailyMindModel } from '../src/mind/action/respond/dailyMind.js';
 
-const apiKey = process.env.OPENAI_API_KEY?.trim();
-if (!apiKey) throw new Error('OPENAI_API_KEY is required for the live daily-mind evaluation');
+const selected = configuredResponseModel(process.env, 'SHANNON_BACKGROUND_LLM_MODEL', process.env.SHANNON_LLM_MODEL);
+if (!selected) throw new Error('The configured daily-mind provider credential is required for the live evaluation');
 
 const usage: unknown[] = [];
 const model = new OpenAIDailyMindModel({
-  apiKey,
-  model: process.env.SHANNON_BACKGROUND_LLM_MODEL?.trim()
-    || process.env.SHANNON_LLM_MODEL?.trim()
-    || 'gpt-5.6-luna',
+  ...selected,
   usageStore: {
     backgroundLlmCostUsd: () => 0,
     recordLlmUsage: event => usage.push(event),

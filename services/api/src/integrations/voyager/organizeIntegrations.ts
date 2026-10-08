@@ -1,3 +1,6 @@
+import { estimatedOpenAICostUsd, responseUsage, type LlmUsageStore } from '../../infra/models/llmUsage.js';
+import { configuredResponseModel, isHaikuModel } from '../../infra/models/anthropic/haikuConfig.js';
+import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import { createHash } from 'node:crypto';
 import type { ShannonConversationItem } from '../../infra/models/chatModel.js';
 import type {
@@ -43,17 +46,23 @@ export class LocalOrganizeExtractor implements OrganizeExtractor {
 }
 
 export class OpenAIOrganizeExtractor implements OrganizeExtractor {
-  readonly mode = 'openai';
-  constructor(private readonly options: { apiKey: string; model: string; endpoint?: string; fetcher?: typeof fetch; }) {}
+  readonly mode: 'openai' | 'anthropic';
+  readonly model: string;
+  private readonly fetcher: typeof fetch;
+  constructor(private readonly options: { apiKey: string; model: string; endpoint?: string; fetcher?: typeof fetch; usageStore?: LlmUsageStore; }) {
+    this.model = options.model;
+    this.mode = isHaikuModel(this.model) ? 'anthropic' : 'openai';
+    this.fetcher = responseModelFetcher({ ...options, model: this.model });
+  }
   async extract(scopeKey: string, messages: readonly ShannonConversationItem[]): Promise<OrganizeTaskDraft[]> {
     if (!messages.length) return [];
     const explicitUpdate = explicitVoyagerUpdateDraft(messages);
     if (explicitUpdate) return [explicitUpdate];
-    const response = await (this.options.fetcher ?? fetch)(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
+    const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
-        model: this.options.model,
+        model: this.model,
         instructions: `会話から、ユーザーが実際に行いたい未完了の行動だけをVoyager Task案へ変換する。\n
 各案は単独で着手できる粒度にする。単なる話題、完了済み事項、Shannonの相槌、内部推論はTaskにしない。\n
 新規Taskはoperation=create、targetQuery=""、updateFields=[]、projectSelectionRequired=falseとする。titleは動詞で終わる短い日本語、detailsは具体的な実行内容にする。\n
@@ -85,6 +94,10 @@ export class OpenAIOrganizeExtractor implements OrganizeExtractor {
     });
     const envelope = await response.json().catch(() => ({})) as Record<string, unknown>;
     if (!response.ok) throw new OrganizeError('EXTRACTION_UNAVAILABLE', 502, true);
+    const usage = responseUsage(envelope);
+    this.options.usageStore?.recordLlmUsage({ scopeKey, lane: 'chat', model: this.model, ...usage,
+      estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString() });
+    validateResponseModelUsage(this.model, envelope);
     const direct = typeof envelope.output_text === 'string' ? envelope.output_text : extractResponseText(envelope.output);
     let decoded: unknown;
     try { decoded = JSON.parse(direct); } catch { throw new OrganizeError('EXTRACTION_RESPONSE_INVALID', 502); }
@@ -117,12 +130,11 @@ export class OpenAIOrganizeExtractor implements OrganizeExtractor {
   }
 }
 
-export function createConfiguredOrganizeExtractor(environment: Readonly<Record<string, string | undefined>> = serverEnvironment()): OrganizeExtractor {
-  const apiKey = environment.OPENAI_API_KEY?.trim();
-  if (!apiKey) return new LocalOrganizeExtractor();
-  const model = environment.SHANNON_ORGANIZE_MODEL?.trim() || environment.SHANNON_LLM_MODEL?.trim() || 'gpt-5.6-luna';
-  if (!/^[A-Za-z0-9._:-]{1,100}$/u.test(model)) throw new Error('SHANNON_ORGANIZE_MODEL is invalid');
-  return new OpenAIOrganizeExtractor({ apiKey, model });
+export function createConfiguredOrganizeExtractor(environment: Readonly<Record<string, string | undefined>> = serverEnvironment(), usageStore?: LlmUsageStore): OrganizeExtractor {
+  const selected = configuredResponseModel(environment, 'SHANNON_ORGANIZE_MODEL', environment.SHANNON_LLM_MODEL);
+  if (!selected) return new LocalOrganizeExtractor();
+  if (!/^[A-Za-z0-9._:-]{1,100}$/u.test(selected.model)) throw new Error('SHANNON_ORGANIZE_MODEL is invalid');
+  return new OpenAIOrganizeExtractor({ ...selected, usageStore });
 }
 
 export interface VoyagerTaskDestination {

@@ -1,3 +1,4 @@
+import { configuredResponseModel } from '../../infra/models/anthropic/haikuConfig.js';
 import { type LlmUsageStore } from '../../infra/models/llmUsage.js';
 import { VOICE_AFFECTS, VOICE_SKILLS, type VoiceAffect, type VoiceConversationClass, type VoiceDecisionGateway, type VoiceDecisionInput, type VoiceDelivery, type VoiceLatencyClass, type VoiceSkill, type VoiceTurnDecision } from '../../contracts/voiceDecisionContract.js';
 import { optionalPositiveInteger, optionalProbability } from './voiceDecisionValues.js';
@@ -25,11 +26,10 @@ export function createConfiguredVoiceDecisionGateway(
   const skillThreshold = optionalProbability(
     environment.SHANNON_VOICE_SKILL_THRESHOLD ?? environment.SHANNON_JEV_SKILL_THRESHOLD,
   ) ?? 0.85;
-  const openAIApiKey = environment.OPENAI_API_KEY?.trim();
-  const openAIFallback = openAIApiKey ? new OpenAIVoiceDecisionGateway({
-    apiKey: openAIApiKey,
+  const selected = configuredResponseModel(environment, 'SHANNON_VOICE_ROUTER_MODEL');
+  const modelFallback = selected ? new OpenAIVoiceDecisionGateway({
+    ...selected,
     endpoint: environment.SHANNON_VOICE_ROUTER_ENDPOINT?.trim() || undefined,
-    model: environment.SHANNON_VOICE_ROUTER_MODEL?.trim() || 'gpt-5.6-luna',
     timeoutMilliseconds: optionalPositiveInteger(environment.SHANNON_VOICE_ROUTER_TIMEOUT_MS) ?? 1_200,
     skillThreshold,
     usageStore,
@@ -41,9 +41,9 @@ export function createConfiguredVoiceDecisionGateway(
     model: environment.SHANNON_JEV_MODEL?.trim() || 'jev-latest',
     timeoutMilliseconds: optionalPositiveInteger(environment.SHANNON_JEV_TIMEOUT_MS) ?? 900,
     skillThreshold,
-    fallbackGateway: openAIFallback,
+    fallbackGateway: modelFallback,
     ...(jevFetcher ? { fetcher: jevFetcher } : {}),
   });
-  if (openAIFallback) return openAIFallback;
+  if (modelFallback) return modelFallback;
   return new LocalVoiceDecisionGateway(skillThreshold);
 }

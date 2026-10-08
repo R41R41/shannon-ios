@@ -99,7 +99,7 @@ describe('activity record', () => {
     const { service, clock } = harness();
     clock.at = '2026-10-01T14:59:00.000Z'; // 23:59 on 1 October in Tokyo
     const first = service.authorize(scope, { domain: 'thinking', summary: '構成を考えます。', paid: { model: 'gpt-5.6-luna', estimatedCostYen: 1 } });
-    service.recordAction(scope, { decisionId: first.activityId, summary: '物語の構成を三つ考えました。', outcome: 'done', usage: { inputTokens: 100_000, outputTokens: 50_000 } });
+    service.recordAction(scope, { decisionId: first.activityId, summary: '物語の構成を三つ考えました。', outcome: 'done', usage: { inputTokens: 100_000, outputTokens: 50_000, cacheCreationInputTokens: 0, cachedInputTokens: 0 } });
     clock.at = '2026-10-01T15:01:00.000Z'; // 00:01 on 2 October in Tokyo
     service.authorize(scope, { domain: 'core', summary: '記憶の仕組みを直したいです。' });
     service.authorize(scope, { domain: 'spending', summary: '本を買います。' });
@@ -107,9 +107,9 @@ describe('activity record', () => {
     const days = service.activityDays(scope, 7);
     expect(days.map(day => day.dayKey)).toEqual(['2026-10-02', '2026-10-01']);
     expect(days[0]!.summary).toBe('承認が必要1件、止めたこと1件、所有者の操作1件。使った費用は0円です。');
-    // 100k input at $0.2/M + 50k output at $1.2/M = $0.08, at 160 yen per dollar.
-    expect(days[1]!.costYen).toBe(12.8);
-    expect(days[1]!.summary).toBe('したこと1件。使った費用は12.80円です。');
+    // Closed Haiku usage: 100k input at $0.10/M + 50k output at $0.50/M = $0.035, at 160 yen per dollar.
+    expect(days[1]!.costYen).toBe(5.6);
+    expect(days[1]!.summary).toBe('したこと1件。使った費用は5.60円です。');
     expect(days[1]!.entries.map(entry => entry.kind)).toEqual(['action', 'decision']);
     expect(summarizeAutonomyDay('2026-10-03', []).summary).toBe('記録0件。使った費用は0円です。');
   });
@@ -360,8 +360,8 @@ describe('model choice', () => {
     const { service, entries } = harness();
     const defaults = service.overview(scope).modelChoices;
     expect(defaults.map(choice => [choice.purpose, choice.modelId, choice.chosenBy])).toEqual([
-      ['prose', 'gemini-3.8-flash', 'default'], ['research_reading', 'gpt-5.6-luna', 'default'],
-      ['planning', 'gpt-5.6-luna', 'default'], ['critique', 'gpt-5.6-terra', 'default'],
+      ['prose', 'gemini-3.8-flash', 'default'], ['research_reading', 'claude-haiku-5-5', 'default'],
+      ['planning', 'claude-haiku-5-5', 'default'], ['critique', 'gpt-5.6-terra', 'default'],
     ]);
     expect(defaults[0]!.recommendation).toContain('Gemini');
     expect(service.setModelPreference(scope, { purpose: 'prose', modelId: 'gpt-5.6-luna', reason: '安いから' }).rejection).toBe('MODEL_PREFERENCE_INVALID');

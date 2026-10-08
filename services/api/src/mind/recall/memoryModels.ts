@@ -1,3 +1,5 @@
+import { DEFAULT_HAIKU_MODEL, isHaikuModel } from '../../infra/models/anthropic/haikuConfig.js';
+import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import { createHash } from 'node:crypto';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageLane, type LlmUsageStore } from '../../infra/models/llmUsage.js';
@@ -21,6 +23,8 @@ export interface OpenAIMemoryModelOptions {
   embeddingModel?: string;
   embeddingDimensions?: number;
   reasoningModel?: string;
+  /** A separate text-model credential; null keeps embeddings available without remote reasoning. */
+  reasoningApiKey?: string | null;
   embeddingEndpoint?: string;
   responsesEndpoint?: string;
   fetcher?: typeof fetch;
@@ -35,13 +39,18 @@ export class OpenAIMemoryModelGateway implements MemoryModelGateway {
   private readonly reasoningModel: string;
   private readonly dimensions: number;
   private readonly fetcher: typeof fetch;
+  private readonly reasoningFetcher: typeof fetch | null;
 
   constructor(private readonly options: OpenAIMemoryModelOptions) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
     this.embeddingModel = validModel(options.embeddingModel ?? 'text-embedding-3-small');
-    this.reasoningModel = validModel(options.reasoningModel ?? 'gpt-5.6-luna');
+    this.reasoningModel = validModel(options.reasoningModel ?? DEFAULT_HAIKU_MODEL);
     this.dimensions = options.embeddingDimensions ?? 512;
     this.fetcher = options.fetcher ?? fetch;
+    const apiKey = options.reasoningApiKey === undefined
+      ? isHaikuModel(this.reasoningModel) ? null : options.apiKey
+      : options.reasoningApiKey;
+    this.reasoningFetcher = apiKey ? responseModelFetcher({ model: this.reasoningModel, apiKey, fetcher: options.fetcher, endpoint: options.responsesEndpoint }) : null;
   }
 
   async embed(scopeKey: string, texts: readonly string[], lane: LlmUsageLane, signal?: AbortSignal): Promise<readonly Float32Array[]> {
@@ -119,9 +128,10 @@ export class OpenAIMemoryModelGateway implements MemoryModelGateway {
   }
 
   private async structured(scopeKey: string, name: string, instructions: string, input: unknown, schema: unknown, signal?: AbortSignal): Promise<unknown> {
-    const response = await this.fetcher(this.options.responsesEndpoint ?? 'https://api.openai.com/v1/responses', {
+    if (!this.reasoningFetcher) throw new Error('MEMORY_REASONING_NOT_CONFIGURED');
+    const response = await this.reasoningFetcher(this.options.responsesEndpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
-      headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
+      headers: { authorization: `Bearer ${this.options.reasoningApiKey ?? this.options.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
         model: this.reasoningModel, instructions, input: JSON.stringify(input),
         reasoning: { effort: 'none' },
@@ -134,6 +144,7 @@ export class OpenAIMemoryModelGateway implements MemoryModelGateway {
     const envelope = parseJson(await response.text());
     if (!response.ok) throw new Error(`OPENAI_MEMORY_${response.status}`);
     this.record(scopeKey, 'memory', this.reasoningModel, responseUsage(envelope));
+    validateResponseModelUsage(this.reasoningModel, envelope);
     return parseJson(extractOutputText(envelope));
   }
 

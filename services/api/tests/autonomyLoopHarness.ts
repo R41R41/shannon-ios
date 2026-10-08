@@ -39,7 +39,7 @@ export class FakeModel implements AutonomyTextModel {
   /** Replies of the thinking step, in order; when it runs out she rests. */
   plans: unknown[] = [];
   replies: Partial<Record<Exclude<ModelCallKind, 'think'>, unknown>> = {};
-  usage = { inputTokens: 1_000, outputTokens: 400 };
+  usage: AutonomyTextResult['usage'] = { inputTokens: 1_000, outputTokens: 400 };
   /** Calls, by their place in `calls`, whose reply the provider cut off at the output ceiling. */
   truncatedCalls = new Set<number>();
   /** Runs inside the call, before the reply: lets a test pause, crash, or move the clock mid-step. */
@@ -53,7 +53,7 @@ export class FakeModel implements AutonomyTextModel {
     await this.during?.(kind, request);
     const reply = kind === 'think' ? this.plans.shift() ?? { thought: '今日はここまでにします。', pursuits: [], steps: [{ action: 'rest' }] }
       : this.replies[kind] ?? DEFAULT_REPLIES[kind];
-    return { text: typeof reply === 'string' ? reply : JSON.stringify(reply), usage: { ...this.usage }, ...(this.truncatedCalls.has(this.calls.length - 1) ? { truncated: true as const } : {}) };
+    return { text: typeof reply === 'string' ? reply : JSON.stringify(reply), usage: { ...(request.model.startsWith('claude-haiku-') ? { cacheCreationInputTokens: 0, cachedInputTokens: 0 } : {}), ...this.usage }, ...(this.truncatedCalls.has(this.calls.length - 1) ? { truncated: true as const } : {}) };
   }
 
   kinds(): ModelCallKind[] { return this.calls.map(callKind); }

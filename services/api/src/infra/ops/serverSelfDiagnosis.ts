@@ -170,7 +170,8 @@ function toolSummary(environment: Environment): ServerSelfDiagnosis['tools'] {
 export function createServerSelfDiagnosis(sources: SelfDiagnosisSources) {
   const environment = sources.environment;
   const ownerScopeKey = shannonNowOwnerScope(environment);
-  const credentials = { google: dedicatedAutonomyCredential('google', environment) !== null, openai: dedicatedAutonomyCredential('openai', environment) !== null };
+  const credentials = { google: dedicatedAutonomyCredential('google', environment) !== null, openai: dedicatedAutonomyCredential('openai', environment) !== null,
+    anthropic: dedicatedAutonomyCredential('anthropic', environment) !== null };
   const canUse = (id: string) => { const model = autonomyModel(id); return model !== null && credentials[model.provider]; };
   const fixed = {
     schemaVersion: SELF_DIAGNOSIS_SCHEMA_VERSION,

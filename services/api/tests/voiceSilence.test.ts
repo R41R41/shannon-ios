@@ -331,7 +331,7 @@ describe('what the two model tiers are told', () => {
         skillScores: Object.fromEntries(VOICE_SKILLS.map(skill => [skill, 0])),
       }) }));
     };
-    const openai = new OpenAIVoiceDecisionGateway({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const openai = new OpenAIVoiceDecisionGateway({ model: 'gpt-5.6-terra', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
     const decision = await openai.decide(input);
     for (const line of VOICE_REPLY_DECISION_LINES) expect(payload.instructions).toContain(line);
     expect(JSON.parse(payload.input).turn).toEqual({ she_just_asked: true, follows_shannon: true, others_present: false, seconds_since_shannon_spoke: 4 });

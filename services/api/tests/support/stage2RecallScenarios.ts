@@ -98,10 +98,10 @@ export async function capturedRecallDigests(options: {
         return new Response(JSON.stringify({ answers: Object.fromEntries(Object.entries(asked).map(([key, question]) => [key, router[key]
           ?? (question.type === 'choice' ? { type: 'choice', choice: Object.keys(question.criteria)[0] } : { type: 'noul', noul: key === 'n1' ? 0.9 : 0.2 })])) }));
       }) as typeof fetch;
-      const gateway = new OpenAIMemoryModelGateway({ apiKey: 'test-only', fetcher: openai, now: () => at });
+      const gateway = new OpenAIMemoryModelGateway({ reasoningModel: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: openai, now: () => at });
       const tree = options.tree?.({ jev });
       const memoryRecall = (createConfiguredTurnMemoryRecall as (...args: unknown[]) => ReturnType<typeof createConfiguredTurnMemoryRecall>)(store, {}, gateway, ...(tree ? [tree] : []));
-      const chatModel = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: openai, now: () => at });
+      const chatModel = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: openai, now: () => at });
       const voiceDecision = createConfiguredVoiceDecisionGateway({ TYPESAFE_API_KEY: 'jev-test' }, undefined, jev);
       const api = createLocalApiKernel(() => at, { chatModel, voiceDecision, knowledgeStore: store, memoryRecall, ...options.extra?.({ jev }) });
       for (const turn of scenario.turns) {

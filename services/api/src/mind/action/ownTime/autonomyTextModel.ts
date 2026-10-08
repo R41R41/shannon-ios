@@ -1,24 +1,26 @@
 import { createHash } from 'node:crypto';
-import { AUTONOMY_DEFAULT_MODEL, AUTONOMY_MODELS, autonomyModel, autonomyModelAllowedFor, type AutonomyModel, type AutonomyModelPurpose } from './autonomyModels.js';
+import { AUTONOMY_DEFAULT_MODEL, AUTONOMY_MODELS, autonomyModel, autonomyModelAllowedFor, type AutonomyModel, type AutonomyModelPurpose, type AutonomyModelUsage } from './autonomyModels.js';
 import { responseUsage } from '../../../infra/models/llmUsage.js';
 import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
 import { actionPermit, currentActionExecution } from '../../../infra/context/actionExecution.js';
+import { AnthropicAutonomyTextModel } from './anthropicAutonomyTextModel.js';
 
 /**
  * The model adapters of Shannon's own activity, behind one interface.
  *
  * The credential comes only from the variables named here, which the owner sets to a
  * dedicated key with a provider-side spending cap. The conversation keys
- * (`OPENAI_API_KEY`, `GEMINI_API_KEY`) are never read as a fallback, and a dedicated
+ * (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `SHANNON_ANTHROPIC_API_KEY`, `ANTHROPIC_API_KEY`) are never read as a fallback, and a dedicated
  * variable that merely repeats a conversation key counts as not configured, because the
  * provider-side cap would then not separate her spending from conversation.
  */
 export const AUTONOMY_CREDENTIAL_VARIABLES = Object.freeze({
   google: 'SHANNON_AUTONOMY_GEMINI_API_KEY',
   openai: 'SHANNON_AUTONOMY_OPENAI_API_KEY',
+  anthropic: 'SHANNON_AUTONOMY_ANTHROPIC_API_KEY',
 } as const);
 
-const CONVERSATION_CREDENTIAL_VARIABLES = Object.freeze({ google: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY' } as const);
+const CONVERSATION_CREDENTIAL_VARIABLES = Object.freeze({ google: ['GEMINI_API_KEY'], openai: ['OPENAI_API_KEY'], anthropic: ['SHANNON_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'] } as const);
 
 export type AutonomyModelProvider = AutonomyModel['provider'];
 
@@ -39,11 +41,10 @@ export interface AutonomyTextRequest {
 export interface AutonomyTextResult {
   text: string;
   /**
-   * What the provider reported for this call. Output includes the model's own reasoning tokens. `cachedInputTokens`, the
-   * part of the input the provider read from its prompt cache, is reported here only (absent when none) and is not
-   * persisted: `autonomy_spend` has no column for it, and every charge still prices the whole input at the full rate.
+   * What the provider reported for this call, including thinking output and cache input. Cache counts are transient;
+   * the spend record retains total input/output and the cost calculated from the separate native cache counts.
    */
-  usage: { inputTokens: number; outputTokens: number; cachedInputTokens?: number };
+  usage: AutonomyModelUsage;
   /** The provider stopped at the output ceiling: the text is cut off. Reasoning tokens count against that ceiling. */
   truncated?: true;
 }
@@ -228,7 +229,7 @@ export class AutonomyModelRouter implements AutonomyTextModel {
     const model = autonomyModel(request.model);
     const provider = model ? this.providers[model.provider] : undefined;
     if (!provider) return Promise.reject(new AutonomyModelError('AUTONOMY_MODEL_NOT_CONFIGURED'));
-    return provider.generate(request);
+    return provider.generate({ ...request, model: model!.id });
   }
 
   get configuredProviders(): readonly AutonomyModelProvider[] {
@@ -243,8 +244,7 @@ export function dedicatedAutonomyCredential(
 ): string | null {
   const key = environment[AUTONOMY_CREDENTIAL_VARIABLES[provider]]?.trim();
   if (!key) return null;
-  const conversationKey = environment[CONVERSATION_CREDENTIAL_VARIABLES[provider]]?.trim();
-  return conversationKey && conversationKey === key ? null : key;
+  return CONVERSATION_CREDENTIAL_VARIABLES[provider].some(variable => environment[variable]?.trim() === key) ? null : key;
 }
 
 export function configuredAutonomyTextModel(
@@ -254,10 +254,12 @@ export function configuredAutonomyTextModel(
 ): AutonomyModelRouter {
   const google = dedicatedAutonomyCredential('google', environment);
   const openai = dedicatedAutonomyCredential('openai', environment);
+  const anthropic = dedicatedAutonomyCredential('anthropic', environment);
   const timeoutMilliseconds = boundedInteger(environment.SHANNON_AUTONOMY_MODEL_TIMEOUT_MS, 5_000, 180_000, 90_000);
   return new AutonomyModelRouter({
     ...(google ? { google: new GeminiAutonomyTextModel({ apiKey: google, endpoint: environment.SHANNON_AUTONOMY_GEMINI_ENDPOINT?.trim() || undefined, fetcher, timeoutMilliseconds, log }) } : {}),
     ...(openai ? { openai: new OpenAIAutonomyTextModel({ apiKey: openai, endpoint: environment.SHANNON_AUTONOMY_OPENAI_ENDPOINT?.trim() || undefined, fetcher, timeoutMilliseconds, log }) } : {}),
+    ...(anthropic ? { anthropic: new AnthropicAutonomyTextModel({ apiKey: anthropic, fetcher, timeoutMilliseconds }) } : {}),
   });
 }
 
@@ -270,7 +272,8 @@ export function resolveAutonomyModel(
   preferences: readonly { purpose: string; modelId: string }[],
   canUse: (modelId: string) => boolean,
 ): string | null {
-  const preferred = preferences.find(item => item.purpose === purpose && autonomyModelAllowedFor(item.modelId, purpose))?.modelId;
+  const preference = preferences.find(item => item.purpose === purpose && autonomyModelAllowedFor(item.modelId, purpose));
+  const preferred = preference ? autonomyModel(preference.modelId)?.id : undefined;
   const candidates = [preferred, AUTONOMY_DEFAULT_MODEL[purpose], ...AUTONOMY_MODELS.filter(model => model.purposes.includes(purpose)).map(model => model.id)];
   return candidates.find((id): id is string => typeof id === 'string' && canUse(id)) ?? null;
 }

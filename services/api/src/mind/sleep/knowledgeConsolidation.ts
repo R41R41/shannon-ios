@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { configuredResponseModel } from '../../infra/models/anthropic/haikuConfig.js';
+import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import {
   isOwnerOnly,
   normalizeKnowledgeDraft,
@@ -160,14 +162,16 @@ const operationSchema = {
 
 export class OpenAIKnowledgeAnalyzer implements KnowledgeAnalyzer {
   private readonly model: string;
+  private readonly fetcher: typeof fetch;
 
   constructor(private readonly options: { apiKey: string; model?: string; endpoint?: string; fetcher?: typeof fetch; usageStore?: LlmUsageStore; timeoutMilliseconds?: number }) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
     this.model = validModel(options.model ?? 'gpt-5.6-terra');
+    this.fetcher = responseModelFetcher({ ...options, model: this.model });
   }
 
   async analyze(scopeKey: string, input: KnowledgeAnalysisInput): Promise<readonly KnowledgeOperation[]> {
-    const response = await (this.options.fetcher ?? fetch)(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
+    const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -198,6 +202,7 @@ export class OpenAIKnowledgeAnalyzer implements KnowledgeAnalyzer {
       scopeKey, lane: 'memory_background', model: this.model, ...usage,
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString(),
     });
+    validateResponseModelUsage(this.model, envelope);
     const output = parseJson(extractOutputText(envelope)) as { operations?: unknown };
     return Array.isArray(output.operations) ? output.operations.filter(isOperation) : [];
   }
@@ -216,7 +221,7 @@ function isOperation(value: unknown): value is KnowledgeOperation {
 export function createConfiguredKnowledgeAnalyzer(
   environment: Readonly<Record<string, string | undefined>>, usageStore?: LlmUsageStore,
 ): KnowledgeAnalyzer | null {
-  const apiKey = environment.OPENAI_API_KEY?.trim();
-  if (!apiKey || environment.SHANNON_KNOWLEDGE_ENABLED?.trim() === 'false') return null;
-  return new OpenAIKnowledgeAnalyzer({ apiKey, model: environment.SHANNON_KNOWLEDGE_MODEL?.trim() || undefined, ...(usageStore ? { usageStore } : {}) });
+  if (environment.SHANNON_KNOWLEDGE_ENABLED?.trim() === 'false') return null;
+  const selected = configuredResponseModel(environment, 'SHANNON_KNOWLEDGE_MODEL', 'gpt-5.6-terra');
+  return selected ? new OpenAIKnowledgeAnalyzer({ ...selected, ...(usageStore ? { usageStore } : {}) }) : null;
 }

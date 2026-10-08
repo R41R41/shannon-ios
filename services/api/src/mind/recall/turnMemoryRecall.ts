@@ -1,3 +1,4 @@
+import { configuredResponseModel, replacementModel } from '../../infra/models/anthropic/haikuConfig.js';
 import {
   UNLABELLED_DISCLOSURE_MARKER,
   isMemoryInquiry,
@@ -164,12 +165,14 @@ export function configuredMemoryModelGateway(
 ): MemoryModelGateway | null {
   const apiKey = environment.OPENAI_API_KEY?.trim();
   if (!apiKey) return null;
+  const reasoning = configuredResponseModel(environment, 'SHANNON_MEMORY_MODEL');
   const dimensions = Number(environment.SHANNON_MEMORY_EMBEDDING_DIMENSIONS);
   return new OpenAIMemoryModelGateway({
     apiKey,
     embeddingModel: environment.SHANNON_MEMORY_EMBEDDING_MODEL?.trim() || undefined,
     embeddingDimensions: Number.isInteger(dimensions) && dimensions >= 64 && dimensions <= 3_072 ? dimensions : undefined,
-    reasoningModel: environment.SHANNON_MEMORY_MODEL?.trim() || undefined,
+    reasoningModel: reasoning?.model ?? replacementModel(environment.SHANNON_MEMORY_MODEL),
+    reasoningApiKey: reasoning?.apiKey ?? null,
     usageStore,
   });
 }

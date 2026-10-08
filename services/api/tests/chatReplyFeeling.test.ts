@@ -207,7 +207,7 @@ describe('reading the field', () => {
       sse({ type: 'response.completed', response: { output_text: text } }),
     ].join('')));
     const bodies: string[] = [];
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: (async (_url: unknown, init?: RequestInit) => {
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: (async (_url: unknown, init?: RequestInit) => {
       bodies.push(String(init?.body));
       return JSON.parse(String(init?.body)).stream ? stream() : new Response(JSON.stringify({ output_text: text }));
     }) as typeof fetch });

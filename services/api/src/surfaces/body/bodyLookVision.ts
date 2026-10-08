@@ -1,3 +1,5 @@
+import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
+import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import { SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_OWNER_NAME, SHANNON_ROOM_LOOK_RULES } from '@shannon/cognition';
 import { BODY_LOOK_LIMITS, type BodyLookImage } from '../../contracts/bodyLookContract.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
@@ -71,10 +73,10 @@ export class OpenAIRoomLookViewer implements RoomLookViewer {
 
   constructor(private readonly options: OpenAIRoomLookViewerOptions) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
-    this.model = validModel(options.model ?? 'gpt-5.6-luna');
+    this.model = validModel(options.model ?? DEFAULT_HAIKU_MODEL);
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 20_000;
-    this.fetcher = options.fetcher ?? fetch;
+    this.fetcher = responseModelFetcher({ ...options, model: this.model });
   }
 
   async see(request: RoomLookViewRequest): Promise<string> {
@@ -114,6 +116,7 @@ export class OpenAIRoomLookViewer implements RoomLookViewer {
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage),
       occurredAt: this.options.now?.() ?? new Date().toISOString(),
     });
+    validateResponseModelUsage(this.model, json);
     const text = boundedLookMessage(extractOutputText(json));
     if (!text) throw new Error('ROOM_LOOK_EMPTY');
     return text;
@@ -125,7 +128,6 @@ export function createConfiguredRoomLookViewer(
   environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
   usageStore?: OpenAIRoomLookViewerOptions['usageStore'],
 ): RoomLookViewer | null {
-  const apiKey = environment.OPENAI_API_KEY?.trim();
-  if (!apiKey) return null;
-  return new OpenAIRoomLookViewer({ apiKey, model: environment.SHANNON_LLM_MODEL?.trim() || 'gpt-5.6-luna', usageStore });
+  const selected = configuredResponseModel(environment, 'SHANNON_LLM_MODEL');
+  return selected ? new OpenAIRoomLookViewer({ ...selected, usageStore }) : null;
 }

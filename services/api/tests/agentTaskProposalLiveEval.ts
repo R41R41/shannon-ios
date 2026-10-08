@@ -1,5 +1,5 @@
 import {
-  OpenAIResponsesChatModel,
+  createConfiguredChatModel,
   type ShannonConversationItem,
   type ShannonTaskDisposition,
 } from '../src/infra/models/chatModel.js';
@@ -12,8 +12,6 @@ interface EvalCase {
   expectedProject?: string;
 }
 
-const apiKey = process.env.OPENAI_API_KEY?.trim();
-if (!apiKey) throw new Error('OPENAI_API_KEY is required for the live agent-task evaluation');
 
 const cases: readonly EvalCase[] = [
   {
@@ -64,11 +62,8 @@ const cases: readonly EvalCase[] = [
   },
 ];
 
-const model = new OpenAIResponsesChatModel({
-  apiKey,
-  model: process.env.SHANNON_LLM_MODEL?.trim() || 'gpt-5.6-luna',
-  timeoutMilliseconds: 60_000,
-});
+const model = createConfiguredChatModel(process.env);
+if (model.mode === 'local-stub') throw new Error('The configured chat provider credential is required for the live agent-task evaluation');
 const results = [];
 
 for (const testCase of cases) {

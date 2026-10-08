@@ -22,7 +22,7 @@ import type { AutonomyLoopCycle, AutonomyPlannedStep } from './store/autonomyLoo
 import { prepareThinking } from './autonomyLoopThinkStep.js';
 import { heldForOthers, markEarly, sessionMarked, unmarkedOnly, unmarkedPursuits } from './autonomyLoopProvenance.js';
 import { prepareToolStep, type AutonomyToolResults } from './autonomyLoopToolStep.js';
-import type { AutonomyModelPurpose } from './autonomyModels.js';
+import type { AutonomyModelPurpose, AutonomyModelUsage } from './autonomyModels.js';
 import { AUTONOMY_CALL_DOMAIN, type AutonomousActionRequest, type AutonomyDecision } from '../../inhibition/inhibitionPorts.js';
 import type { AutonomyPublicReader } from './autonomyReader.js';
 import type { ShannonAutonomyService } from './autonomyService.js';
@@ -161,7 +161,7 @@ export interface StepResult {
   acknowledged?:boolean;
   /** One plain Japanese sentence for the activity record. */
   summary: string;
-  usage?: { inputTokens: number; outputTokens: number };
+  usage?: AutonomyModelUsage;
   link?: string;
   /** Replaces the tool name of the request in the record, when the step ended as something narrower. */
   tool?: string;

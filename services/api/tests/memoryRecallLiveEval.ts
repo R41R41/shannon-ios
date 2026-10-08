@@ -1,3 +1,4 @@
+import { configuredResponseModel } from '../src/infra/models/anthropic/haikuConfig.js';
 import { OWNER_AUDIENCE } from '@shannon/cognition';
 /**
  * Opt-in, billable comparison of the current deterministic recall and Memory
@@ -17,6 +18,7 @@ import { ShannonTurnMemoryRecall, configuredMemoryModelGateway } from '../src/mi
 import { memoryRecallEvaluationCases, syntheticHistory } from './memoryRecallEvaluationCases.js';
 
 if (!process.env.OPENAI_API_KEY?.trim()) throw new Error('OPENAI_API_KEY is required for the live memory-recall evaluation');
+if (!configuredResponseModel(process.env, 'SHANNON_MEMORY_MODEL')) throw new Error('The configured recall reasoning provider credential is also required for the live memory-recall evaluation');
 const directory = mkdtempSync(join(tmpdir(), 'shannon-memory-eval-'));
 const now = '2026-09-30T00:00:00.000Z';
 const scopeKey = 'synthetic:memory-eval';

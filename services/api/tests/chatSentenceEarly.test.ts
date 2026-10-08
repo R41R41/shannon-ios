@@ -315,7 +315,7 @@ describe('the provider adapter under the sentence stream', () => {
       events.push(sse({ type: 'response.completed', response: { output_text: json, usage: { input_tokens: 9, output_tokens: 5 } } }));
       return new Response(new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new TextEncoder().encode(events.join(''))); controller.close(); } }));
     }) as typeof fetch;
-    return { model: new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher, now: () => at }), bodies };
+    return { model: new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher, now: () => at }), bodies };
   }
 
   it('sentences join to the trimmed reply for every way the provider cuts the completion', async () => {

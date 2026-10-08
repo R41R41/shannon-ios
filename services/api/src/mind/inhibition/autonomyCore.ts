@@ -252,6 +252,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/mind/action/ownTime/autonomyReader.ts',
     'services/api/src/mind/action/ownTime/autonomyShowing.ts',
     'services/api/src/mind/action/ownTime/autonomyTextModel.ts',
+    'services/api/src/mind/action/ownTime/anthropicAutonomyTextModel.ts',
     'services/api/src/autonomyWorker.ts',
     // Her folder on the owner's machines: what may leave, the queue, and the device routes.
     'services/api/src/mind/action/ownTime/autonomyHostFolderPath.ts',

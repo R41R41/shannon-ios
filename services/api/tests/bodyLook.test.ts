@@ -512,7 +512,7 @@ describe('what the model is asked', () => {
       schemas.push(JSON.parse(String(init?.body)).text.format.schema);
       return reply('asked');
     });
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
     const base = { scopeKey: scope, systemPrompt: 'system', history: [], message: '部屋を見て' };
     expect((await model.generate({ ...base, offerRoomLook: true })).roomLook).toBe('asked');
     expect((await model.generate(base)).roomLook).toBeUndefined();
@@ -540,7 +540,7 @@ describe('what the model is asked', () => {
       expect(body.instructions).not.toContain('古い話');
       return new Response(JSON.stringify({ output_text: `  ${SEEN_TEXT}\n`, usage: { input_tokens: 400, output_tokens: 40 } }));
     });
-    const viewer = new OpenAIRoomLookViewer({ apiKey: 'test-only', fetcher: fetcher as typeof fetch, usageStore: { recordLlmUsage: event => usage.push(event) }, now: () => START });
+    const viewer = new OpenAIRoomLookViewer({ model: 'gpt-5.6-terra', apiKey: 'test-only', fetcher: fetcher as typeof fetch, usageStore: { recordLlmUsage: event => usage.push(event) }, now: () => START });
     const context = [{ role: 'user' as const, content: '古い話' }, { role: 'assistant' as const, content: 'はい' }, { role: 'user' as const, content: 'それで' },
       { role: 'user' as const, content: '机を片づけました' }, { role: 'assistant' as const, content: '見てみますね。' }];
     expect(await viewer.see({ scopeKey: scope, image, context })).toBe(SEEN_TEXT);
@@ -548,7 +548,7 @@ describe('what the model is asked', () => {
     expect(usage).toMatchObject([{ scopeKey: scope, lane: 'chat', inputTokens: 400, outputTokens: 40, occurredAt: START }]);
     expect(roomLookInstructions([{ role: 'user', content: 'あ'.repeat(500) }]).length).toBeLessThan(700);
 
-    const failing = new OpenAIRoomLookViewer({ apiKey: 'test-only', fetcher: (async () => new Response('{"error":{"message":"bad image"}}', { status: 400 })) as typeof fetch });
+    const failing = new OpenAIRoomLookViewer({ model: 'gpt-5.6-terra', apiKey: 'test-only', fetcher: (async () => new Response('{"error":{"message":"bad image"}}', { status: 400 })) as typeof fetch });
     await expect(failing.see({ scopeKey: scope, image, context: [] })).rejects.toThrow(/^ROOM_LOOK_UPSTREAM_400$/u);
   });
 });
@@ -706,7 +706,7 @@ describe('the frame is never kept', () => {
     // The wait for a voice turn to be stored knows a Talk and his words, and imports nothing.
     expect(imports('bodyLookTurnWait.ts')).toEqual([]);
     expect(source('bodyLookTurnWait.ts')).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync|BodyLookImage|base64/u);
-    expect(imports('bodyLookVision.ts').sort()).toEqual(['@shannon/cognition', 'bodyLookContract.ts', 'chatModelSupport.ts', 'llmUsage.ts', 'serverEnvironment.ts']);
+    expect(imports('bodyLookVision.ts').sort()).toEqual(['@shannon/cognition', 'bodyLookContract.ts', 'chatModelSupport.ts', 'haikuConfig.ts', 'haikuResponses.ts', 'llmUsage.ts', 'serverEnvironment.ts']);
     expect(imports('apiBodyRoutes.ts').sort()).toEqual(['apiAppLookRoutes.ts', 'apiValidation.ts', 'appLookContract.ts', 'bodyContract.ts', 'bodyLook.ts', 'bodyLookContract.ts', 'bodyReaction.ts', 'bodyReactionContract.ts', 'contracts.ts', 'shannonBody.ts']);
     for (const name of ['bodyLookContract.ts', 'bodyLook.ts', 'bodyLookVision.ts', 'apiBodyRoutes.ts']) {
       expect(source(name), name).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync/u);

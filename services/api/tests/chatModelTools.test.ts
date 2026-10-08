@@ -65,7 +65,7 @@ describe('her tools in a text turn', () => {
       { output: [functionCall('study_list', '{"kind":"note"}')], usage: { input_tokens: 10, output_tokens: 5 } },
       { output: [message(TURN)], usage: { input_tokens: 20, output_tokens: 8 } },
     ]);
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test', fetcher });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher });
     const result = await model.generate({ ...base, tools: tools.value });
     expect(result.reply).toBe('書斎にメモが1つあります。');
     expect(tools.calls).toEqual([{ name: 'study_list', args: '{"kind":"note"}' }]);
@@ -83,7 +83,7 @@ describe('her tools in a text turn', () => {
   it('stops offering tools after the turn\'s calls are used up', async () => {
     const tools = session(1);
     const { fetcher, bodies } = scriptedFetch([{ output: [functionCall('study_list')] }, { output: [message(TURN)] }]);
-    const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher }).generate({ ...base, tools: tools.value });
+    const result = await new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher }).generate({ ...base, tools: tools.value });
     expect(result.reply).toBe('書斎にメモが1つあります。');
     expect(tools.calls).toHaveLength(1);
     expect(bodies[0]!.tool_choice).toBe('auto');
@@ -92,7 +92,7 @@ describe('her tools in a text turn', () => {
     // line and the turn is saved; nothing more runs.
     const stubborn = scriptedFetch([{ output: [functionCall('study_list')] }, { output: [functionCall('study_read', '{}', 'call-2')] }]);
     const counted = session(1);
-    const ended = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: stubborn.fetcher }).generate({ ...base, tools: counted.value });
+    const ended = await new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher: stubborn.fetcher }).generate({ ...base, tools: counted.value });
     expect(ended).toMatchObject({ reply: TURN_OUT_OF_TIME_LINE, outOfTime: true });
     expect(counted.calls).toHaveLength(1);
   });
@@ -129,7 +129,7 @@ describe('her tools in a voice turn', () => {
       ]),
     ]);
     const deltas: string[] = [];
-    const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher }).generateVoiceStreaming(
+    const result = await new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher }).generateVoiceStreaming(
       { ...base, useWebSearch: false, conversationClass: 'direct', tools: tools.value }, delta => { deltas.push(delta); });
     expect(deltas).toEqual(['ちょっと見てみるね。', 'メモが1つあります。']);
     expect(result.reply).toBe('ちょっと見てみるね。メモが1つあります。');
@@ -137,7 +137,7 @@ describe('her tools in a voice turn', () => {
     expect(String(bodies[0]!.instructions)).toContain('ちょっと見てみますね');
     // A voice turn that searches the web offers no tools.
     const searching = scriptedFetch([sse([{ type: 'response.output_text.delta', delta: 'はい。' }, { type: 'response.completed', response: { output: [message('はい。')] } }])]);
-    await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: searching.fetcher }).generateVoiceStreaming(
+    await new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher: searching.fetcher }).generateVoiceStreaming(
       { ...base, useWebSearch: true, conversationClass: 'direct', tools: tools.value }, () => {});
     expect((searching.bodies[0]!.tools as Array<{ type: string }>).map(tool => tool.type)).toEqual(['web_search']);
   });
@@ -153,7 +153,7 @@ describe('a write that does not fit one response', () => {
       cutOff([{ ...functionCall('study_create', '{"kind":"story","title":"長い話","body":"むかしむかし'), status: 'incomplete' }]),
       { output: [message(TURN)] },
     ]);
-    const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher }).generate({ ...base, tools: tools.value });
+    const result = await new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher }).generate({ ...base, tools: tools.value });
     expect(tools.calls).toEqual([]);
     expect(result.reply).toBe('書斎にメモが1つあります。');
     expect(bodies).toHaveLength(2);
@@ -243,7 +243,7 @@ describe('a write that does not fit one response', () => {
       return timeouts.fetcher(url, init as never);
     }) as unknown as typeof fetch;
     const tools = session();
-    const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: failing }).generate({ ...base, tools: { ...tools.value, deadline: new TurnDeadline(TEXT_TURN_DEADLINE) } as ShannonModelToolSession });
+    const result = await new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher: failing }).generate({ ...base, tools: { ...tools.value, deadline: new TurnDeadline(TEXT_TURN_DEADLINE) } as ShannonModelToolSession });
     expect(result.reply).toBe(TURN_OUT_OF_TIME_LINE);
     expect(tools.calls).toHaveLength(1);
   });
@@ -277,7 +277,7 @@ describe('a write that does not fit one response', () => {
         { type: 'response.completed', response: { output: [message('長すぎたので、分けて書きます。')] } },
       ]),
     ]);
-    const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher }).generateVoiceStreaming(
+    const result = await new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher }).generateVoiceStreaming(
       { ...base, useWebSearch: false, conversationClass: 'direct', tools: tools.value }, () => {});
     expect(result.reply).toBe('ちょっと書いてみるね。長すぎたので、分けて書きます。');
     expect(tools.calls).toEqual([]);
@@ -308,7 +308,7 @@ describe('a write that does not fit one response', () => {
       });
       return new Response(stream, { status: 200 });
     }) as unknown as typeof fetch;
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: slowFetch, voiceStreamBounds: { firstOutputMilliseconds: 60, idleMilliseconds: 1_000 } });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher: slowFetch, voiceStreamBounds: { firstOutputMilliseconds: 60, idleMilliseconds: 1_000 } });
     const tooled = { ...tools.value, maximumCalls: 1 };
     const result = await model.generateVoiceStreaming({ ...base, useWebSearch: false, conversationClass: 'direct', tools: tooled }, () => {});
     expect(tools.calls).toHaveLength(1);
@@ -328,7 +328,7 @@ describe('a voice round that begins a call before she said anything', () => {
       sse([{ type: 'response.output_text.delta', delta: 'メモが1つあります。' }, { type: 'response.completed', response: { output: [message('メモが1つあります。')] } }]),
     ]);
     const deltas: string[] = [];
-    const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher }).generateVoiceStreaming(
+    const result = await new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher }).generateVoiceStreaming(
       { ...base, useWebSearch: false, conversationClass: 'direct', tools: tools.value }, delta => { deltas.push(delta); });
     expect(deltas).toEqual(['ちょっと見てみますね。', 'メモが1つあります。']);
     expect(result.reply).toBe('ちょっと見てみますね。メモが1つあります。');
@@ -342,7 +342,7 @@ describe('a provider that refuses the request offering her tools', () => {
     const original = console.warn;
     console.warn = () => {};
     try {
-      const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher }).generate({ ...base, tools: tools.value });
+      const result = await new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher }).generate({ ...base, tools: tools.value });
       expect(result.reply).toBe('書斎にメモが1つあります。');
     } finally { console.warn = original; }
     expect(tools.calls).toHaveLength(1);
@@ -360,19 +360,19 @@ describe('a provider that refuses the request offering her tools', () => {
     const original = console.warn;
     console.warn = (line: string) => { lines.push(line); };
     try {
-      const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: text.fetcher }).generate({ ...base, tools: tools.value });
+      const result = await new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher: text.fetcher }).generate({ ...base, tools: tools.value });
       expect(result.reply).toBe('書斎にメモが1つあります。');
       expect(text.bodies[0]).toHaveProperty('tools');
       expect(text.bodies[1]).not.toHaveProperty('tools');
       expect(String(text.bodies[1]!.instructions)).not.toContain('[ボクの道具]');
       const voice = scriptedFetch([{ status: 422 }, sse([{ type: 'response.output_text.delta', delta: 'はい。' }, { type: 'response.completed', response: { output: [message('はい。')] } }])]);
-      const spoken = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: voice.fetcher }).generateVoiceStreaming(
+      const spoken = await new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher: voice.fetcher }).generateVoiceStreaming(
         { ...base, useWebSearch: false, conversationClass: 'direct', tools: tools.value }, () => {});
       expect(spoken.reply).toBe('はい。');
       expect(voice.bodies[1]).not.toHaveProperty('tools');
       // Not for a rate limit: that is not about the tools.
       const limited = scriptedFetch([{ status: 429 }]);
-      await expect(new OpenAIResponsesChatModel({ apiKey: 'test', fetcher: limited.fetcher }).generate({ ...base, tools: tools.value })).rejects.toThrow('OPENAI_RESPONSE_429');
+      await expect(new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher: limited.fetcher }).generate({ ...base, tools: tools.value })).rejects.toThrow('OPENAI_RESPONSE_429');
       expect(limited.bodies).toHaveLength(1);
     } finally { console.warn = original; }
     expect(lines).toEqual(['Shannon tools offer refused by provider: 400', 'Shannon tools offer refused by provider: 422']);
@@ -461,7 +461,7 @@ describe('an answer under way is never cut at a step\'s time and asked again', (
     const tools = session();
     const sent: string[] = [];
     const splitter = new ChatSentenceSplitter();
-    const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher }).generateStreaming(
+    const result = await new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher }).generateStreaming(
       { ...base, tools: { ...tools.value, deadline: new TurnDeadline(TEXT_TURN_DEADLINE, () => now) } as ShannonModelToolSession },
       text => { sent.push(...splitter.append(text)); });
     expect(round).toBe(2);
@@ -496,7 +496,7 @@ describe('an answer under way is never cut at a step\'s time and asked again', (
   it('non-streaming voice (the body\'s /delegations): after a tool ran, an empty answer is the fixed line, and the turn is saved', async () => {
     const tools = session();
     const { fetcher, bodies } = scriptedFetch([{ output: [functionCall('study_list')] }, { output: [] }]);
-    const result = await new OpenAIResponsesChatModel({ apiKey: 'test', fetcher }).generateVoice({ ...base, useWebSearch: false, conversationClass: 'direct', tools: tools.value });
+    const result = await new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher }).generateVoice({ ...base, useWebSearch: false, conversationClass: 'direct', tools: tools.value });
     expect(result.reply).toBe(TURN_OUT_OF_TIME_LINE);
     expect(bodies).toHaveLength(2);
     expect(tools.calls).toHaveLength(1);

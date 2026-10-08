@@ -1,3 +1,5 @@
+import { configuredResponseModel, DEFAULT_HAIKU_MODEL, isHaikuModel } from '../../infra/models/anthropic/haikuConfig.js';
+import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import { createHash } from 'node:crypto';
 import { isForgottenCommitmentEvidence } from '../memory/memoryVisibilityPorts.js';
 import { reviewCommitments, type CommitmentSleepReview } from './sleepCommitmentReview.js';
@@ -67,7 +69,7 @@ export interface SleepConsolidationOutcome {
 }
 
 export interface SleepMemoryAnalyzer {
-  readonly mode: 'openai' | 'local-rules';
+  readonly mode: 'openai' | 'anthropic' | 'local-rules';
   analyze(messages: readonly DailyUserMessage[], context?: SleepAnalysisContext): Promise<readonly UserFactProposal[]>;
 }
 
@@ -128,7 +130,7 @@ interface OpenAISleepMemoryAnalyzerOptions {
 }
 
 export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
-  readonly mode = 'openai' as const;
+  readonly mode: 'openai' | 'anthropic';
   private readonly model: string;
   private readonly endpoint: string;
   private readonly fetcher: typeof fetch;
@@ -136,10 +138,11 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
 
   constructor(private readonly options: OpenAISleepMemoryAnalyzerOptions) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
-    this.model = options.model?.trim() || 'gpt-5.6-luna';
+    this.model = options.model?.trim() || DEFAULT_HAIKU_MODEL;
+    this.mode = isHaikuModel(this.model) ? 'anthropic' : 'openai';
     if (!/^[A-Za-z0-9._:-]{1,100}$/.test(this.model)) throw new Error('SHANNON_SLEEP_MODEL is invalid');
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
-    this.fetcher = options.fetcher ?? fetch;
+    this.fetcher = responseModelFetcher({ ...options, model: this.model });
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 30_000;
   }
 
@@ -235,6 +238,7 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
         occurredAt: context.occurredAt,
       });
     }
+    validateResponseModelUsage(this.model, json);
     const output = parseJson(extractOutputText(json));
     if (!output || typeof output !== 'object' || Array.isArray(output)) throw new Error('OPENAI_SLEEP_OUTPUT_INVALID');
     const result = output as { facts?: unknown; relationships?: unknown; interests?: unknown; selfInterests?: unknown };
@@ -254,11 +258,10 @@ export function createConfiguredSleepMemoryAnalyzer(
   environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
   usageStore?: LlmUsageStore,
 ): SleepMemoryAnalyzer {
-  const apiKey = environment.OPENAI_API_KEY?.trim();
-  if (!apiKey) return new LocalRuleSleepMemoryAnalyzer();
+  const selected = configuredResponseModel(environment, 'SHANNON_SLEEP_MODEL', environment.SHANNON_LLM_MODEL);
+  if (!selected) return new LocalRuleSleepMemoryAnalyzer();
   return new OpenAISleepMemoryAnalyzer({
-    apiKey,
-    model: environment.SHANNON_SLEEP_MODEL?.trim() || environment.SHANNON_LLM_MODEL?.trim(),
+    ...selected,
     usageStore,
     backgroundBudgetUsd: configuredBackgroundBudgetUsd(environment),
   });

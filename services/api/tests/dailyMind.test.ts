@@ -149,7 +149,7 @@ describe('daily Shannon mind', () => {
     let spent = 0;
     let calls = 0;
     let instructions = '';
-    const model = new OpenAIDailyMindModel({
+    const model = new OpenAIDailyMindModel({ model: 'gpt-5.6-terra',
       apiKey: 'test-key',
       now: () => '2026-09-05T02:00:00.000Z',
       backgroundBudgetUsd: 0.5,

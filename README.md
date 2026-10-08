@@ -9,6 +9,7 @@ iPhoneとMacで一人のシャノンへつながる、ネイティブクライ�
 | Product | このREADMEの[方針](#方針) |
 | Action threads | [`docs/action-threads-contract.md`](docs/action-threads-contract.md) |
 | Architecture | [`docs/architecture.md`](docs/architecture.md) |
+| Model and cache | [`docs/haiku-model-cache-contract.md`](docs/haiku-model-cache-contract.md) |
 | Design | [`docs/DESIGN.md`](docs/DESIGN.md) |
 | Product spec | [`docs/product/README.md`](docs/product/README.md)（iOS・macOS・Windows で 1 つの仕様: 機能の一覧表、色と余白、文言） |
 | Implementation plan | [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) |
@@ -102,13 +103,13 @@ scripts/verify.sh all
 pnpm worker
 ```
 
-シャノン自身の活動（Syzygy ADR-0002）は別のworkerで動く。`SHANNON_AUTONOMY_ENABLED=true` と専用キー（`SHANNON_AUTONOMY_GEMINI_API_KEY` など）がない限り、起動しても何もしない。
+シャノン自身の活動（Syzygy ADR-0002）は別のworkerで動く。`SHANNON_AUTONOMY_ENABLED=true` と専用キー（Haiku は `SHANNON_AUTONOMY_ANTHROPIC_API_KEY`、Gemini・GPT は各専用キー）がない限り、起動しても何もしない。
 
 ```sh
 pnpm --filter @shannon/api worker:autonomy
 ```
 
-実際のLLMを使う場合は`.env.example`を参考に、リポジトリ直下の`.env`または起動するshellへ`OPENAI_API_KEY`を設定する。v1の既定モデルは`gpt-5.6-luna`。
+通常の会話・軽量判断の既定モデルは `claude-haiku-5-5`。`.env.example`を参考に、リポジトリ直下の`.env`または起動するshellへ `SHANNON_ANTHROPIC_API_KEY`（未設定時は `ANTHROPIC_API_KEY`）を設定し、公式SDKのnative Messages APIを使う。自律活動のHaikuには、会話用と値の異なる `SHANNON_AUTONOMY_ANTHROPIC_API_KEY` が必要。1時間キャッシュの実測、費用計算、旧Luna設定の互換解決は [モデルとキャッシュの契約](docs/haiku-model-cache-contract.md) を参照する。`OPENAI_API_KEY` は文字起こし・埋め込み・明示的に選ぶGPTモデルで引き続き使う。
 
 Gemini音声は、[`docs/gemini-3.8-tts-lab.md`](docs/gemini-3.8-tts-lab.md) の試聴ハーネスと、
 iPhoneの単一の音声会話で評価できる。iPhoneは24 kHz PCMをOpenAI Realtime文字起こし（既定`gpt-4o-mini-transcribe`）へ連続送信し、
@@ -118,7 +119,7 @@ iPhoneの単一の音声会話で評価できる。iPhoneは24 kHz PCMをOpenAI 
 永続APIキーを`0600`の秘密ファイルだけに保持し、端末へ返すのは短寿命の認識クライアントシークレットだけである。
 OpenAIの音声通話と音声選択UIは廃止し、通常のテキスト会話モデルとは独立して音声プロバイダーをGeminiへ一本化した。
 音声ターンの分類・複数スキル採点・感情・読み方は、TypeSafeキーがない間は軽量な
-`gpt-5.6-luna`のstrict structured outputで判定し、キー設定後は同じ契約のJevへ自動的に切り替わる。
+`claude-haiku-5-5`のnative structured outputで判定し、キー設定後は同じ契約のJevへ自動的に切り替わる。
 
 別のターミナルでiOSコアを検証する。
 

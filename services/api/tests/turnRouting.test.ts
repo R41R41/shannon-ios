@@ -93,7 +93,7 @@ describe('the tiers in the model adapter', () => {
     }) as unknown as typeof fetch;
     const tools: ShannonModelToolSession = { definitions: [shannonTool('study.list')!], maximumCalls: 6, deadline: new TurnDeadline(TEXT_TURN_DEADLINE),
       async call() { return JSON.stringify({ ok: false, text: 'だめ', failure: 'failed', retryable: true }); } };
-    const model = new OpenAIResponsesChatModel({ apiKey: 'test', fetcher });
+    const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test', fetcher });
     const result = await model.generate({ ...base, tools, escalation: true });
     expect(result.escalated).toBe(true);
     expect(bodies.map(body => (body.reasoning as { effort: string }).effort)).toEqual(['none', 'low']);
@@ -215,11 +215,12 @@ describe('a routed conversation turn', () => {
   it('learns a Sonnet turn that luna answered as luna\'s (review M5)', async () => {
     const w = world();
     const decision = { tier: 'sonnet', served: 'sonnet', reason: 'strong', mappedDown: 'none', rethinks: 0, verify: false, escalateOnTrouble: false, kind: 'analysis' } as const;
-    const finish = (answeredBy: string, threadId: string) => finishTurn(w.routing, { scopeKey: 'owner', surface: 'text', threadId, presence: 'alone', reply: 'はい。', outOfTime: false,
-      escalated: false, decision, tools: undefined, remainingMs: 30_000, at: at(0), answeredBy });
+    const finish = (answeredBy: string, threadId: string, servedTier?: 'luna' | 'sonnet') => finishTurn(w.routing, { scopeKey: 'owner', surface: 'text', threadId, presence: 'alone', reply: 'はい。', outOfTime: false,
+      escalated: false, decision, tools: undefined, remainingMs: 30_000, at: at(0), answeredBy, servedTier });
     await finish('openai', 'fell-back');
     await finish('anthropic', 'sonnet');
-    expect(w.outcomes.all('owner').map(row => [row.talkId, row.tier]).sort()).toEqual([['fell-back', 'luna'], ['sonnet', 'sonnet']]);
+    await finish('anthropic', 'haiku-fell-back', 'luna');
+    expect(w.outcomes.all('owner').map(row => [row.talkId, row.tier]).sort()).toEqual([['fell-back', 'luna'], ['haiku-fell-back', 'luna'], ['sonnet', 'sonnet']]);
     w.close();
   });
 

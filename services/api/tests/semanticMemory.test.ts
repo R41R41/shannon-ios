@@ -172,7 +172,7 @@ describe('memory embedding worker', () => {
     const fetcher = (async () => new Response(JSON.stringify({
       data: [{ index: 0, embedding: [0.1, 0.2] }, { index: 1, embedding: [0.3, 0.1] }], usage: { prompt_tokens: 10, total_tokens: 10 },
     }))) as typeof fetch;
-    const gateway = new OpenAIMemoryModelGateway({ apiKey: 'test-key', fetcher, usageStore: persistent, now: () => at });
+    const gateway = new OpenAIMemoryModelGateway({ reasoningModel: 'gpt-5.6-terra', apiKey: 'test-key', fetcher, usageStore: persistent, now: () => at });
     expect(await new MemoryEmbeddingWorker(persistent, persistent, gateway, persistent, { backgroundBudgetUsd: 0, now: () => at }).runOnce()).toBe('budget');
     expect(await new MemoryEmbeddingWorker(persistent, persistent, gateway, persistent, { backgroundBudgetUsd: 1, now: () => at }).runOnce()).toBe('worked');
     expect(persistent.llmUsageSummary('owner', '2026-09').map(row => row.lane)).toContain('memory_background');
@@ -222,7 +222,7 @@ describe('voice memory turns', () => {
       return new Response(JSON.stringify({ output_text: JSON.stringify({ queries: ['旅行計画'] }),
         usage: { input_tokens: 20, output_tokens: 5, total_tokens: 25 } }));
     }) as unknown as typeof fetch;
-    const gateway = new OpenAIMemoryModelGateway({ apiKey: 'test-key', fetcher, usageStore: persistent, now: () => at });
+    const gateway = new OpenAIMemoryModelGateway({ reasoningModel: 'gpt-5.6-terra', apiKey: 'test-key', fetcher, usageStore: persistent, now: () => at });
     expect(await gateway.rewriteQuery('owner', '旅の予定は？')).toEqual(['旅行計画']);
     expect(JSON.parse(bodies[0]!)).toMatchObject({ store: false, text: { format: { type: 'json_schema', strict: true } } });
     expect(persistent.llmUsageSummary('owner', '2026-09').map(row => row.lane)).toEqual(['memory']);

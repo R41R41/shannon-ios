@@ -729,7 +729,7 @@ describe('switches and the gateway question', () => {
     }) });
     let extra: Record<string, unknown> = { roomLookProbability: 0.88 };
     const fetcher = async (_url: unknown, init?: RequestInit) => { payload = JSON.parse(String(init?.body)); return new Response(answer(extra)); };
-    const openai = new OpenAIVoiceDecisionGateway({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const openai = new OpenAIVoiceDecisionGateway({ model: 'gpt-5.6-terra', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
     expect(await openai.decide(input)).toMatchObject({ source: 'openai', roomLookProbability: 0.88 });
     expect(payload.text.format.schema.properties.roomLookProbability).toEqual({ type: 'number', minimum: 0, maximum: 1 });
     expect(payload.text.format.schema.required).toContain('roomLookProbability');

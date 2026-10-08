@@ -5,7 +5,7 @@ import type { DecisionTraceDraft, DecisionTraceWriter, TraceAnswer } from '../..
 /**
  * The voice turn's routing decision, traced (Syzygy ADR-0008 stage 1: 「判断ごとの記録」). Core: approval and budget.
  *
- * `TracedVoiceDecisionGateway` wraps the configured gateway (Jev → luna → the local rules, unchanged) and returns its decision
+ * `TracedVoiceDecisionGateway` wraps the configured gateway (Jev → the configured small model → the local rules) and returns its decision
  * untouched. Beside it, one trace: which decider was configured, whether its answer was used or a fallback decided (and
  * which), how long it took, how many questions and characters of context Jev was given (counted by the Jev client's fetch,
  * `countedJevFetch`), what was decided as closed enums, and Jev's cost when its price is set (`SHANNON_JEV_USD_PER_CALL`;
@@ -44,7 +44,7 @@ export class TracedVoiceDecisionGateway implements VoiceDecisionGateway {
   }
 }
 
-const DECIDER: Readonly<Record<VoiceTurnDecision['source'], DecisionTraceDraft['decider']>> = Object.freeze({ jev: 'jev', openai: 'openai', fallback: 'local' });
+const DECIDER: Readonly<Record<VoiceTurnDecision['source'], DecisionTraceDraft['decider']>> = Object.freeze({ jev: 'jev', openai: 'openai', anthropic: 'anthropic', fallback: 'local' });
 
 export function voiceRouteTrace(
   inner: Pick<VoiceDecisionGateway, 'mode' | 'model'>, input: VoiceDecisionInput, decision: VoiceTurnDecision,

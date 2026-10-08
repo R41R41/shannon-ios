@@ -79,7 +79,7 @@ export async function capturedScenarioDigests(extra: (fetchers: { jev: typeof fe
       return new Response(JSON.stringify({ answers: Object.fromEntries(Object.entries(asked).map(([key, question]) => [key, router[key]
         ?? (question.type === 'choice' ? { type: 'choice', choice: Object.keys(question.criteria)[0] } : { type: 'noul', noul: 0.2 })])) }));
     }) as typeof fetch;
-    const chatModel = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: openai, now: () => at });
+    const chatModel = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: openai, now: () => at });
     const voiceDecision = createConfiguredVoiceDecisionGateway({ TYPESAFE_API_KEY: 'jev-test' }, undefined, jev);
     const api = createLocalApiKernel(() => at, { chatModel, voiceDecision, ...extra({ jev }) });
     for (const turn of scenario.turns) {

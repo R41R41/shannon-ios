@@ -8,7 +8,7 @@ Azure VMで動かす専用APIとworkerの置き場所。
 - `GET /v1/state?scopeKey=...`
 - `GET /v1/conversation?scopeKey=...`
 - `POST /v1/events`
-- `POST /v1/chat`（`OPENAI_API_KEY`設定時はResponses API、未設定時は`local-stub`。`stream: "sentences"`で文単位のNDJSON）
+- `POST /v1/chat`（既定HaikuはAnthropic専用のnative Messages API、明示的なGPT設定はResponses API。選択モデルのキー未設定時は`local-stub`。`stream: "sentences"`で文単位のNDJSON）
 - `POST /v1/voice/transcriptions`（ペアリング済み端末のM4Aを一時的に受け取り、既定`gpt-transcribe`で日本語文字起こし）
 - `POST /v1/voice/gemini/speech`（ペアリング済み端末のShannon返答を、サーバー側Gemini 3.8 TTSで24 kHz WAVへ変換）
 - `POST /v1/voice/gemini/speech/stream`（同じ返答を24 kHz mono PCMとして生成中からchunked転送）
@@ -47,7 +47,7 @@ loopback以外で起動するときは32文字以上の`SHANNON_API_TOKEN`が必
 
 1. 確定済み共有状態を不変スナップショットとして取得
 2. 最小固定プロンプト、可変状態、直近20件の会話を結合
-3. 固定LLMへ送信（既定は`gpt-5.6-luna`、Web・スキルなし）
+3. 固定LLMへ送信（既定は `claude-haiku-5-5` のnative Messages API。Web・スキルは各関所とターンの選択に従う）
 4. 返信と入力への反応表情を返す
 5. LLM完了後、HTTP返却前に会話と経験をSQLiteへ短いトランザクションで追記
 6. 永続ジョブをSQLiteへ投入してHTTP応答（感情・想起は実行しない）
@@ -60,7 +60,7 @@ loopback以外で起動するときは32文字以上の`SHANNON_API_TOKEN`が必
 4. ユーザー発言だけを構造化分析し、原文根拠が一致する情報だけを共有状態へ反映
 5. 失敗は最大5回まで再試行し、process再起動時は期限切れleaseから再開
 
-OpenAIキーがある場合、睡眠分析はResponses APIのstrict JSON Schemaを1日・scopeあたり通常1ジョブ使う。一時障害では最大5回まで再試行する。キーがない場合は明示的な「僕は〜が好き」等だけを扱うローカル規則へ退避する。
+選択モデルのキーがある場合、睡眠分析は既定Haikuのnative structured outputを1日・scopeあたり通常1ジョブ使う（明示的なGPT設定はResponses API）。一時障害では最大5回まで再試行する。キーがない場合は明示的な「僕は〜が好き」等だけを扱うローカル規則へ退避する。
 
 音声入力は会話とは別の`voice`費用レーンで記録する。1リクエストは60秒・5 MiBまで、既定の日次上限は`$0.10`。APIは音声をファイルへ保存せず、OpenAIへの文字起こし要求が終わるとメモリから破棄する。上限は`SHANNON_VOICE_DAILY_BUDGET_USD`で変更できる。
 
@@ -71,6 +71,10 @@ Gemini試験モードは、同じ文字起こしと通常のShannonテキスト�
 Realtime音声は通話作成の成功単位をSQLiteへ永続予約し、日本時間の日次上限をAPI側で強制する。1回はiPhone側の上限と同じ10分として保守的に予約し、既定は1日60分。上流で通話作成に失敗した予約は取り消し、成功した予約はAPI再起動後も残る。上限は`SHANNON_VOICE_REALTIME_DAILY_MINUTES`で10〜1440分の範囲に変更でき、超過後もテキスト会話は使える。
 
 Voice Identityは`marin`、`cedar`、`coral`の3候補だけを公開する。未選択時は`SHANNON_VOICE_REALTIME_VOICE`が候補内ならそれを使い、それ以外は`marin`へ安全に戻る。選択は`voice_identity_preferences`へscope分離して保存し、進行中の音声を差し替えず次回のRealtime call作成時に読む。試聴は既定`gpt-4o-mini-tts`へサーバー固定文だけを送り、音声・本文を永続化しない。モデルとendpointは`SHANNON_VOICE_PREVIEW_MODEL`、`SHANNON_VOICE_PREVIEW_ENDPOINT`で変更できる。
+
+## Model and cache
+
+通常のHaikuは `SHANNON_ANTHROPIC_API_KEY`（次に `ANTHROPIC_API_KEY`）、自律活動のHaikuは会話用と値の異なる `SHANNON_AUTONOMY_ANTHROPIC_API_KEY` だけを使う。native SDK、1時間の有用な固定prefix、実測cache creation/read、費用とunknownの扱いは [haiku-model-cache-contract.md](../../docs/haiku-model-cache-contract.md)。Stage2/3 OFFの過去のbyte goldenは明示的な旧GPTモデル・価格のfixtureで検証し、通常設定のHaiku移行とは独立して維持する。
 
 ## ADR-0008 Stage5 owner routes
 

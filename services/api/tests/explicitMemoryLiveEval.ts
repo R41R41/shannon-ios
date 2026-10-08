@@ -1,12 +1,12 @@
+import { configuredResponseModel } from '../src/infra/models/anthropic/haikuConfig.js';
 import { OpenAISleepMemoryAnalyzer } from '../src/mind/sleep/sleepConsolidation.js';
 import { EXPLICIT_MEMORY_DIALOGUE_CASES } from './explicitMemoryDialogueCases.js';
 
-const apiKey = process.env.OPENAI_API_KEY?.trim();
-if (!apiKey) throw new Error('OPENAI_API_KEY is required for the live memory evaluation');
+const selected = configuredResponseModel(process.env, 'SHANNON_SLEEP_MODEL', process.env.SHANNON_LLM_MODEL);
+if (!selected) throw new Error('The configured sleep provider credential is required for the live memory evaluation');
 
 const analyzer = new OpenAISleepMemoryAnalyzer({
-  apiKey,
-  model: process.env.SHANNON_SLEEP_MODEL?.trim() || process.env.SHANNON_LLM_MODEL?.trim(),
+  ...selected,
   timeoutMilliseconds: 60_000,
 });
 const failures: { id: string; reason: string }[] = [];
@@ -41,7 +41,7 @@ for (let offset = 0; offset < EXPLICIT_MEMORY_DIALOGUE_CASES.length; offset += 5
 }
 
 const summary = {
-  model: process.env.SHANNON_SLEEP_MODEL?.trim() || process.env.SHANNON_LLM_MODEL?.trim() || 'gpt-5.6-luna',
+  model: selected.model,
   cases: EXPLICIT_MEMORY_DIALOGUE_CASES.length,
   proposals: proposalCount,
   passed: EXPLICIT_MEMORY_DIALOGUE_CASES.length - new Set(failures.map(failure => failure.id)).size,

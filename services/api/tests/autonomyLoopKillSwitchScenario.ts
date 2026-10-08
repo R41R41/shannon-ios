@@ -20,6 +20,9 @@ import { FULL_PLAN, FakeModel, FakeShowing, callKind, loopHarness, runUntilIdle,
  * taken out before digesting, so the digests of 78c3493 and a10fdedd still prove that nothing else changed. Nothing else is.
  */
 const MINUTE = 60_000;
+// These historical prompt digests also pin the historical spending that each later prompt prints. Replacing Luna with
+// Haiku changes today's default price, so keep that fixture price explicit rather than changing any golden prompt.
+const HISTORICAL_SMALL_MODEL_PRICE = { SHANNON_AUTONOMY_MODEL_PRICES_JSON: '{"gpt-5.6-luna":{"input":0.2,"output":1.2}}' };
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gu;
 
 const PERSONA_HEADER = '[シャノンの人格]';
@@ -58,7 +61,7 @@ export async function agenticDay(directory: string, extra: Partial<LoopHarnessOp
     path, clock, model, showing: new FakeShowing(), reachOuts: speaker, agentic: true, looks, notion,
     roomLooks: () => ({ lastHour: 0, maximumPerHour: 6, today: 0, maximumPerDay: 30 }),
     upcoming: { lines: () => [{ kindLabel: '予定', title: '歯医者', when: '今日 15:00〜16:00' }, { kindLabel: '約束', title: '母に電話する', when: '今日 17:00' }] },
-    ...extra, environment: { SHANNON_AUTONOMY_MAX_REACH_OUTS: '6', SHANNON_AUTONOMY_HOST_FOLDERS_JSON: '{"mac":{"deviceId":"0123456789abcdef"}}', ...extra.environment },
+    ...extra, environment: { ...HISTORICAL_SMALL_MODEL_PRICE, SHANNON_AUTONOMY_MAX_REACH_OUTS: '6', SHANNON_AUTONOMY_HOST_FOLDERS_JSON: '{"mac":{"deviceId":"0123456789abcdef"}}', ...extra.environment },
     loop: { cycleIntervalMilliseconds: MINUTE, cyclesPerDay: 24, reachOutSpacingMilliseconds: 0, ...extra.loop },
   });
   const cycle = async (plans: unknown[], minutes = 10) => {
@@ -105,7 +108,7 @@ export async function plainDay(directory: string, extra: Partial<LoopHarnessOpti
   const harness = loopHarness({
     path, clock, model, reachOuts: speaker,
     upcoming: { lines: () => [{ kindLabel: '予定', title: '歯医者', when: '今日 15:00〜16:00' }] },
-    ...extra, loop: { cycleIntervalMilliseconds: MINUTE, cyclesPerDay: 24, reachOutSpacingMilliseconds: 0, ...extra.loop },
+    ...extra, environment: { ...HISTORICAL_SMALL_MODEL_PRICE, ...extra.environment }, loop: { cycleIntervalMilliseconds: MINUTE, cyclesPerDay: 24, reachOutSpacingMilliseconds: 0, ...extra.loop },
   });
   model.plans = [{ ...FULL_PLAN, steps: [...FULL_PLAN.steps, { action: 'reach_out', reason: 'upcoming' }] }];
   await runUntilIdle(harness.loop);

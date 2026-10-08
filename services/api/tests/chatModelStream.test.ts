@@ -35,7 +35,7 @@ function bytesResponse(chunks: readonly Uint8Array[], status = 200): Response {
 function streamingModel(respond: (init: RequestInit) => Response | Promise<Response>, options: { timeoutMilliseconds?: number; agentHostHint?: string; model?: string } = {}) {
   const usage: LlmUsageEvent[] = [];
   const requests: Array<{ url: string; headers: unknown; body: string }> = [];
-  const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', now: () => at, ...options,
+  const model = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', now: () => at, ...options,
     usageStore: { recordLlmUsage: (event: LlmUsageEvent) => { usage.push(event); } } as never,
     fetcher: (async (url: string | URL | Request, init?: RequestInit) => {
       requests.push({ url: String(url), headers: init?.headers, body: String(init?.body) });

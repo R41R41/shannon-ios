@@ -1,3 +1,5 @@
+import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
+import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import { BODY_REACTION_SCHEMA, BODY_REACTION_SCHEMA_WITH_STANCE, parsedBodyReaction, type BodyReactionDecision } from './bodyReactionPrompt.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageEvent } from '../../infra/models/llmUsage.js';
@@ -40,9 +42,9 @@ export class OpenAIBodyReactionSpeaker implements BodyReactionSpeaker {
 
   constructor(private readonly options: OpenAIBodyReactionSpeakerOptions) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
-    this.model = validModel(options.model ?? 'gpt-5.6-luna');
+    this.model = validModel(options.model ?? DEFAULT_HAIKU_MODEL);
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
-    this.fetcher = options.fetcher ?? fetch;
+    this.fetcher = responseModelFetcher({ ...options, model: this.model });
   }
 
   async decide(request: BodyReactionSpeakRequest): Promise<BodyReactionDecision> {
@@ -75,6 +77,7 @@ export class OpenAIBodyReactionSpeaker implements BodyReactionSpeaker {
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage),
       occurredAt: this.options.now?.() ?? new Date().toISOString(),
     });
+    validateResponseModelUsage(this.model, json);
     const decision = parsedBodyReaction(parseJson(extractOutputText(json)));
     if (!decision) throw new Error('BODY_REACTION_EMPTY');
     return decision;
@@ -86,7 +89,6 @@ export function createConfiguredBodyReactionSpeaker(
   environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
   usageStore?: OpenAIBodyReactionSpeakerOptions['usageStore'],
 ): BodyReactionSpeaker | null {
-  const apiKey = environment.OPENAI_API_KEY?.trim();
-  if (!apiKey) return null;
-  return new OpenAIBodyReactionSpeaker({ apiKey, model: environment.SHANNON_LLM_MODEL?.trim() || 'gpt-5.6-luna', usageStore });
+  const selected = configuredResponseModel(environment, 'SHANNON_LLM_MODEL');
+  return selected ? new OpenAIBodyReactionSpeaker({ ...selected, usageStore }) : null;
 }

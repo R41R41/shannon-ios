@@ -336,7 +336,7 @@ describe('Shannon durable background worker', () => {
 
   it('uses strict structured output for OpenAI sleep analysis', async () => {
     let requestBody: Record<string, unknown> | undefined;
-    const analyzer = new OpenAISleepMemoryAnalyzer({
+    const analyzer = new OpenAISleepMemoryAnalyzer({ model: 'gpt-5.6-terra',
       apiKey: 'test-key',
       fetcher: async (_input, init) => {
         requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
@@ -358,7 +358,7 @@ describe('Shannon durable background worker', () => {
 
   it('stops background OpenAI analysis when the monthly budget is exhausted', async () => {
     let fetchCalls = 0;
-    const analyzer = new OpenAISleepMemoryAnalyzer({
+    const analyzer = new OpenAISleepMemoryAnalyzer({ model: 'gpt-5.6-terra',
       apiKey: 'test-key',
       backgroundBudgetUsd: 0.5,
       now: () => new Date('2026-09-02T00:00:00.000Z'),

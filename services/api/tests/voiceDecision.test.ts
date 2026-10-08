@@ -284,7 +284,7 @@ describe('OpenAI voice decision compatibility routing', () => {
   it('uses a lightweight structured-output model while Jev is unavailable', async () => {
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const request = JSON.parse(String(init?.body)) as Record<string, any>;
-      expect(request.model).toBe('gpt-5.6-luna');
+      expect(request.model).toBe('gpt-5.6-terra');
       expect(request.reasoning).toEqual({ effort: 'none' });
       expect(request.store).toBe(false);
       expect(request.text.format.schema.properties.skillScores.required).toEqual(VOICE_SKILLS);
@@ -303,7 +303,7 @@ describe('OpenAI voice decision compatibility routing', () => {
         }),
       }));
     });
-    const gateway = new OpenAIVoiceDecisionGateway({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const gateway = new OpenAIVoiceDecisionGateway({ model: 'gpt-5.6-terra', apiKey: 'test-only', fetcher: fetcher as typeof fetch });
 
     const decision = await gateway.decide({
       scopeKey: 'owner-a', transcript: '前の話も踏まえて考えて', participantMode: 'owner',
@@ -332,7 +332,7 @@ describe('OpenAI voice decision compatibility routing', () => {
         skillScores: Object.fromEntries(VOICE_SKILLS.map(skill => [skill, 0.1])),
       }),
     })));
-    const fallback = new OpenAIVoiceDecisionGateway({
+    const fallback = new OpenAIVoiceDecisionGateway({ model: 'gpt-5.6-terra',
       apiKey: 'openai-test', fetcher: openAIFetcher as typeof fetch,
     });
     const gateway = new JevVoiceDecisionGateway({
@@ -355,7 +355,7 @@ describe('OpenAI voice decision compatibility routing', () => {
     expect(createConfiguredVoiceDecisionGateway({
       TYPESAFE_API_KEY: 'jev-key', OPENAI_API_KEY: 'openai-key',
     }).mode).toBe('jev');
-    expect(createConfiguredVoiceDecisionGateway({ OPENAI_API_KEY: 'openai-key' }).mode).toBe('openai');
+    expect(createConfiguredVoiceDecisionGateway({ OPENAI_API_KEY: 'openai-key', SHANNON_VOICE_ROUTER_MODEL: 'gpt-5.6-terra' }).mode).toBe('openai');
     expect(createConfiguredVoiceDecisionGateway({}).mode).toBe('fallback');
   });
 });

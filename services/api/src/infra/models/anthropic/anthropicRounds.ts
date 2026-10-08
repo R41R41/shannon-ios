@@ -1,8 +1,8 @@
-import type Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import {
   MINIMUM_ANSWER_MILLISECONDS, MINIMUM_ROUND_MILLISECONDS, PartialAnswerError, timedOut, type RoundTime,
 } from '../../../mind/action/respond/turnDeadline.js';
-import { CUT_OFF_CALL_NOTE, TIMED_OUT_ROUND_NOTE, type ShannonModelToolSession } from '../chatModelTools.js';
+import { CUT_OFF_CALL_NOTE, TIMED_OUT_ROUND_NOTE, TOOLS_GONE_NOTE, type ShannonModelToolSession } from '../chatModelTools.js';
 import { parallelToolsEnabled, runToolStep, type ToolStepState } from '../chatModelToolStep.js';
 import { sonnetTools } from './anthropicRequest.js';
 
@@ -43,6 +43,10 @@ export interface SonnetRoundOptions {
    * the tiered model answers with luna instead of asking Sonnet again (voice, review H3).
    */
   timedOutRound?: 'answer' | 'fail';
+  /** The base Haiku lane retains the turn's single, pre-answer increase in reasoning effort. */
+  escalate?: { allowed: () => boolean; onEscalated: () => void };
+  /** Base Haiku only: retain recovery from an explicit 4xx refusal of offered schemas, once without tools. */
+  plainBody?: Anthropic.MessageCreateParamsNonStreaming;
 }
 
 export interface SonnetRoundResult {
@@ -64,6 +68,13 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
   const turn: ToolStepState = { used: 0, toolsOff: false };
   let round = 0;
   let pauses = 0;
+  let escalated = false;
+  const escalate = () => {
+    if (escalated || !options.escalate?.allowed()) return;
+    escalated = true;
+    body = { ...body, output_config: { ...body.output_config, effort: 'medium' } };
+    options.escalate.onEscalated();
+  };
   const callerStopped = () => options.signal?.aborted === true;
   const request = (extra: Partial<Anthropic.MessageCreateParamsNonStreaming> = {}): Anthropic.MessageCreateParamsNonStreaming => ({
     ...body, ...(session ? { tools: sonnetTools(session) } : {}), messages: [...messages], ...extra,
@@ -95,16 +106,21 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
 
   const deadline = session.deadline;
   const time = (milliseconds: number): RoundTime => ({ milliseconds, answer: () => deadline.forAnswer() });
-  const answer = async (): Promise<SonnetRoundResult> => {
+  const answer = async (plain = false): Promise<SonnetRoundResult> => {
     const left = deadline.forAnswer();
     if (left < MINIMUM_ANSWER_MILLISECONDS) return out();
     try {
-      const message = await options.send(request({ tool_choice: { type: 'none' } }), time(left), round++);
+      const { tools: _tools, tool_choice: _choice, ...plainBody } = options.plainBody ?? body;
+      const plainRequest = turn.used === 0 ? plainBody : { ...plainBody, messages: [
+        ...plainMessages(messages), { role: 'system' as const, content: TOOLS_GONE_NOTE },
+      ] };
+      const message = await options.send(plain ? plainRequest : request({ tool_choice: { type: 'none' } }), time(left), round++);
       turns.push(message);
       return refused(message) ?? { final: message, turns, used: turn.used };
     } catch (error) {
       if (callerStopped()) throw error;
       if (error instanceof PartialAnswerError) return out(error.sent);
+      if (!plain && options.plainBody && refusedOffer(error)) return answer(true);
       if (turn.used === 0 && !timedOut(error) && !(error instanceof SonnetRefusalError)) throw error;
       if (error instanceof SonnetRefusalError && turn.used === 0) throw error;
       return out();
@@ -121,10 +137,12 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     } catch (error) {
       if (callerStopped()) throw error;
       if (error instanceof PartialAnswerError) return out(error.sent);
+      if (options.plainBody && refusedOffer(error)) return answer(true);
       if (!timedOut(error) && turn.used === 0) throw error;
       if (options.timedOutRound === 'fail' && turn.used === 0) throw error;
       note(TIMED_OUT_ROUND_NOTE);
       turn.toolsOff = true;
+      escalate();
       continue;
     }
     turns.push(message);
@@ -149,9 +167,26 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
       return [{ type: 'tool_result' as const, tool_use_id: value.call_id, content: value.output ?? '', ...(failed(value.output) ? { is_error: true } : {}) }];
     });
     messages.push({ role: 'user', content: results });
+    if (ran.some(item => failed((item as { output?: string }).output))) escalate();
   }
 }
 
 function failed(output: string | undefined): boolean {
-  try { return (JSON.parse(output ?? '{}') as { ok?: unknown }).ok === false; } catch { return false; }
+  try { const value = JSON.parse(output ?? '{}') as { ok?: unknown; failure?: unknown }; return value.ok === false && value.failure !== 'not_offered'; } catch { return false; }
+}
+
+function refusedOffer(error: unknown): boolean {
+  return error instanceof Anthropic.APIError && error.status !== undefined && error.status >= 400 && error.status < 500
+    && ![401, 403, 408, 409, 429].includes(error.status);
+}
+
+/** Keep original results as quoted data while removing tool references that a plain request cannot declare. */
+function plainMessages(messages: readonly Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  return messages.flatMap(message => {
+    if (!Array.isArray(message.content)) return [message];
+    const content = message.content.flatMap<Anthropic.ContentBlockParam>(block => block.type === 'tool_use' ? [] : block.type === 'tool_result'
+      ? [{ type: 'text' as const, text: `[道具の結果] ${typeof block.content === 'string' ? block.content.slice(0, 8_000) : JSON.stringify(block.content ?? []).slice(0, 8_000)}` }]
+      : [block]);
+    return content.length ? [{ ...message, content }] : [];
+  });
 }

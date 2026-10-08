@@ -188,7 +188,7 @@ async function kernelScenario(name: string, turns: readonly Turn[], hooks: Stage
   const background = memory ? new BackgroundUpdateCoordinator(store, store, undefined, undefined, memory.proposals) : new BackgroundUpdateCoordinator(store, store);
   const autonomyStore = new SQLiteAutonomyStore(w.databasePath);
   const autonomy = createInMemoryAutonomyService(w.now, { store: autonomyStore });
-  const chatModel = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: w.openai, now: w.now });
+  const chatModel = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: w.openai, now: w.now });
   const voiceDecision = createConfiguredVoiceDecisionGateway({ TYPESAFE_API_KEY: 'jev-test' }, undefined, w.jev);
   const stage2 = stage2Parts(w.databasePath, w.jev, w.now);
   const api = createLocalApiKernel(w.now, {
@@ -222,8 +222,8 @@ async function bodyScenario(name: string, audience: 'owner' | 'others', hooks: S
   const autonomy = createInMemoryAutonomyService(w.now, { store: autonomyStore });
   const reactionStore = new SQLiteBodyReactionStore(w.databasePath);
   const bodyStore = new SQLiteBodyStore(w.databasePath);
-  const speaker = new OpenAIBodyReactionSpeaker({ apiKey: 'test-only', fetcher: w.openai, now: w.now });
-  const chatModel = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: w.openai, now: w.now });
+  const speaker = new OpenAIBodyReactionSpeaker({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: w.openai, now: w.now });
+  const chatModel = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: w.openai, now: w.now });
   const api = createLocalApiKernel(w.now, {
     chatModel, stateStore: store, conversationStore: store, knowledgeStore: store, autonomy,
     body: { store: bodyStore, ingestEnabled: true, reactions: { store: reactionStore, speaker, config: {}, experiences: null } },
@@ -266,7 +266,7 @@ async function platformScenario(hooks: Stage3Hooks): Promise<Stage3Capture> {
   const background = memory ? new BackgroundUpdateCoordinator(store, store, undefined, undefined, memory.proposals) : new BackgroundUpdateCoordinator(store, store);
   const autonomyStore = new SQLiteAutonomyStore(w.databasePath);
   const autonomy = createInMemoryAutonomyService(w.now, { store: autonomyStore });
-  const chatModel = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: w.openai, now: w.now });
+  const chatModel = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: w.openai, now: w.now });
   const api = createLocalApiKernel(w.now, { chatModel, stateStore: store, conversationStore: store, knowledgeStore: store, background, peopleMemory: peopleStore, autonomy,
     ...hooks.kernel?.({ jev: w.jev, databasePath: w.databasePath, now: w.now }), ...(memory ? { memory } : {}) });
   const people = memory ? new PlatformPeople(peopleStore, store, undefined, memory.proposals) : new PlatformPeople(peopleStore, store);
@@ -306,7 +306,7 @@ async function minecraftScenario(hooks: Stage3Hooks): Promise<Stage3Capture> {
   const memory = memoryHook?.attach(store) ?? null;
   const peopleStore = new SQLitePeopleMemoryStore(w.databasePath);
   const background = memory ? new BackgroundUpdateCoordinator(store, store, undefined, undefined, memory.proposals) : new BackgroundUpdateCoordinator(store, store);
-  const chatModel = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: w.openai, now: w.now });
+  const chatModel = new OpenAIResponsesChatModel({ model: 'gpt-5.6-luna', apiKey: 'test-only', fetcher: w.openai, now: w.now });
   const api = createLocalApiKernel(w.now, { chatModel, stateStore: store, conversationStore: store, knowledgeStore: store, background, peopleMemory: peopleStore,
     ...hooks.kernel?.({ jev: w.jev, databasePath: w.databasePath, now: w.now }), ...(memory ? { memory } : {}) });
   const configuration = configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify({ deviceId: 'minebot-dev', servers: [

@@ -132,6 +132,7 @@ describe('CORE as code', () => {
       'services/api/src/mind/tools/shannonReadTools.ts': 'approval_and_budget',
       'packages/learning/src/difficultyPolicy.ts': 'response_path',
       'services/api/src/infra/models/anthropic/anthropicChatModel.ts': 'response_path',
+      'services/api/src/mind/action/ownTime/anthropicAutonomyTextModel.ts': 'approval_and_budget',
       'services/api/src/infra/models/tieredChatModel.ts': 'response_path',
       'services/api/src/wiring/sonnetWiring.ts': 'response_path',
       'services/api/package.json': 'deployment',

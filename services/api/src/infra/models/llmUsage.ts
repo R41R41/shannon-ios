@@ -1,4 +1,6 @@
 import { serverEnvironment } from '../config/serverEnvironment.js';
+import { isHaikuModel } from './anthropic/haikuConfig.js';
+import { estimatedAnthropicCostUsd } from './anthropic/anthropicConfig.js';
 /**
  * `memory` is response-path recall; `memory_background` shares the monthly background budget with `sleep`. `jev` is only a row
  * of the summary, counted from the decision traces (Syzygy ADR-0008 stage 1): `llm_usage_events` and its CHECK never hold it,
@@ -51,6 +53,12 @@ export interface ResponseUsage {
   cachedInputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  /** Native Anthropic cache writes; charged separately from cached reads. No private prompt is retained. */
+  cacheCreationInputTokens?: number;
+  cacheCreationInputTokens5m?: number;
+  cacheCreationInputTokens1h?: number;
+  /** Missing native usage: keep known token counts and charge the bounded worst-case estimate, never a free success. */
+  unknownCostUpperBoundUsd?: number;
 }
 
 export function responseUsage(value: unknown): ResponseUsage {
@@ -61,11 +69,20 @@ export function responseUsage(value: unknown): ResponseUsage {
   const inputDetails = object(row.input_tokens_details);
   const inputTokens = integer(row.input_tokens);
   const outputTokens = integer(row.output_tokens);
+  const creation = integer(row.cache_creation_input_tokens);
+  const cacheCreation = object(row.cache_creation);
   return Object.freeze({
     inputTokens,
     cachedInputTokens: Math.min(inputTokens, integer(inputDetails?.cached_tokens)),
     outputTokens,
     totalTokens: integer(row.total_tokens) || inputTokens + outputTokens,
+    ...(row.cache_creation_input_tokens !== undefined ? {
+      cacheCreationInputTokens: creation,
+      cacheCreationInputTokens5m: integer(cacheCreation?.ephemeral_5m_input_tokens),
+      cacheCreationInputTokens1h: integer(cacheCreation?.ephemeral_1h_input_tokens),
+    } : {}),
+    ...(row.usage_complete === false && typeof row.unknown_cost_upper_bound_usd === 'number' && Number.isFinite(row.unknown_cost_upper_bound_usd) && row.unknown_cost_upper_bound_usd > 0
+      ? { unknownCostUpperBoundUsd: row.unknown_cost_upper_bound_usd } : {}),
   });
 }
 
@@ -74,6 +91,12 @@ export function estimatedOpenAICostUsd(
   usage: ResponseUsage,
   environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): number {
+  if (isHaikuModel(model)) return Math.max(usage.unknownCostUpperBoundUsd ?? 0, estimatedAnthropicCostUsd(model, {
+    input: Math.max(0, usage.inputTokens - usage.cachedInputTokens - (usage.cacheCreationInputTokens ?? 0)),
+    cacheRead: usage.cachedInputTokens, cacheWrite: usage.cacheCreationInputTokens ?? 0,
+    cacheWrite5m: usage.cacheCreationInputTokens5m ?? 0, cacheWrite1h: usage.cacheCreationInputTokens1h ?? 0,
+    output: usage.outputTokens, searches: 0,
+  }));
   const configuredInput = positiveNumber(environment.SHANNON_LLM_INPUT_USD_PER_MILLION);
   const configuredOutput = positiveNumber(environment.SHANNON_LLM_OUTPUT_USD_PER_MILLION);
   const prices = configuredInput !== null && configuredOutput !== null
@@ -99,6 +122,7 @@ export function estimatedOpenAICostWithCacheUsd(
   usage: ResponseUsage,
   environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): number {
+  if (isHaikuModel(model)) return estimatedOpenAICostUsd(model, usage, environment);
   const full = estimatedOpenAICostUsd(model, { ...usage, inputTokens: 1_000_000, outputTokens: 0 }, environment);
   const cachedPrice = positiveNumber(environment.SHANNON_LLM_CACHED_INPUT_USD_PER_MILLION) ?? full * CACHED_INPUT_PRICE_SHARE;
   const cached = Math.min(usage.inputTokens, usage.cachedInputTokens);

@@ -1,3 +1,5 @@
+import { DEFAULT_HAIKU_MODEL, isHaikuModel } from '../../infra/models/anthropic/haikuConfig.js';
+import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 /** The voice router asking an OpenAI model (Syzygy ADR-0008 stage 3, S3: moved unchanged out of `voiceDecision.ts`, which re-exports it). */
 import { estimatedOpenAICostUsd, type LlmUsageStore, responseUsage } from '../../infra/models/llmUsage.js';
 import { emptySkillScores, skillInstructions, VOICE_AFFECTS, VOICE_SKILLS, type VoiceDecisionGateway, type VoiceDecisionInput, type VoiceTurnDecision } from '../../contracts/voiceDecisionContract.js';
@@ -21,7 +23,7 @@ export interface OpenAIVoiceDecisionOptions {
 }
 
 export class OpenAIVoiceDecisionGateway implements VoiceDecisionGateway {
-  readonly mode = 'openai' as const;
+  readonly mode: 'openai' | 'anthropic';
   readonly model: string;
   private readonly endpoint: string;
   private readonly timeoutMilliseconds: number;
@@ -31,11 +33,12 @@ export class OpenAIVoiceDecisionGateway implements VoiceDecisionGateway {
 
   constructor(private readonly options: OpenAIVoiceDecisionOptions) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
-    this.model = validModel(options.model ?? 'gpt-5.6-luna');
+    this.mode = isHaikuModel(options.model ?? DEFAULT_HAIKU_MODEL) ? 'anthropic' : 'openai';
+    this.model = validModel(options.model ?? DEFAULT_HAIKU_MODEL);
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 1_200;
     this.skillThreshold = boundedProbability(options.skillThreshold, 0.85);
-    this.fetcher = options.fetcher ?? fetch;
+    this.fetcher = responseModelFetcher({ ...options, model: this.model });
     this.nowMilliseconds = options.nowMilliseconds ?? Date.now;
   }
 
@@ -119,9 +122,6 @@ export class OpenAIVoiceDecisionGateway implements VoiceDecisionGateway {
       const raw = await response.text();
       const envelope = parseJson(raw);
       if (!response.ok) throw new Error(`OPENAI_VOICE_ROUTER_${response.status}`);
-      const decision = parsedOpenAIDecision(
-        extractOutputText(envelope), input, this.skillThreshold, this.nowMilliseconds() - startedAt,
-      );
       const usage = responseUsage(envelope);
       this.options.usageStore?.recordLlmUsage({
         scopeKey: input.scopeKey,
@@ -131,7 +131,8 @@ export class OpenAIVoiceDecisionGateway implements VoiceDecisionGateway {
         estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage),
         occurredAt: new Date().toISOString(),
       });
-      return decision;
+      validateResponseModelUsage(this.model, envelope);
+      return parsedOpenAIDecision(extractOutputText(envelope), input, this.skillThreshold, this.nowMilliseconds() - startedAt, this.mode);
     } catch {
       return localDecision(input, this.skillThreshold, this.nowMilliseconds() - startedAt);
     }
@@ -143,6 +144,7 @@ function parsedOpenAIDecision(
   input: VoiceDecisionInput,
   skillThreshold: number,
   elapsedMilliseconds: number,
+  source: 'openai' | 'anthropic',
 ): VoiceTurnDecision {
   const parsed = parseJson(outputText);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -172,7 +174,7 @@ function parsedOpenAIDecision(
     rawConversationClass, replyRequiredProbability, selected, input.transcript,
   );
   return {
-    source: 'openai',
+    source,
     ...(value.transcriptReliabilityProbability === undefined ? {} : {
       transcriptReliabilityProbability: probabilityValue(value.transcriptReliabilityProbability),
     }),

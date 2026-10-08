@@ -13,6 +13,8 @@ import { completeSpokenSentences } from '../../surfaces/voice/spokenSentences.js
 import { streamedVoiceToolTurn } from './chatModelVoiceTools.js';
 import { serverEnvironment } from '../config/serverEnvironment.js';
 import { VOICE_REPLY_INSTRUCTIONS } from '../../mind/action/respond/respondInstructions.js';
+import { AnthropicChatModel } from './anthropic/anthropicChatModel.js';
+import { configuredResponseModel, isHaikuModel } from './anthropic/haikuConfig.js';
 export { VOICE_REPLY_INSTRUCTIONS } from '../../mind/action/respond/respondInstructions.js';
 
 const LOCAL_REPLY = 'はい、聞こえています。LLMの鍵を設定すると、ここからボクが会話できるようになります。';
@@ -32,7 +34,7 @@ export class LocalStubChatModel implements ShannonChatModel {
 
 export interface OpenAIResponsesModelOptions {
   apiKey: string;
-  model?: string;
+  model: string;
   endpoint?: string;
   timeoutMilliseconds?: number;
   fetcher?: typeof fetch;
@@ -67,7 +69,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
 
   constructor(private readonly options: OpenAIResponsesModelOptions) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
-    this.model = validModel(options.model ?? 'gpt-5.6-luna');
+    this.model = validModel(options.model);
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 30_000;
     const transport=options.fetcher ?? fetch;
@@ -322,11 +324,16 @@ export function createConfiguredChatModel(
   environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
   usageStore?: LlmUsageStore,
 ): ShannonChatModel {
-  const apiKey = environment.OPENAI_API_KEY?.trim();
-  if (!apiKey) return new LocalStubChatModel();
+  const configured = configuredResponseModel(environment, 'SHANNON_LLM_MODEL');
+  if (!configured) return new LocalStubChatModel();
+  const { apiKey, model } = configured;
+  if (isHaikuModel(model)) return new AnthropicChatModel({
+    apiKey, settings: { model, effort: 'low', textThinking: 'adaptive', voiceThinking: 'adaptive' },
+    agentHostHint: environment.SHANNON_AGENT_DEFAULT_HOST?.trim() || 'shannon-mac', usageStore,
+  });
   return new OpenAIResponsesChatModel({
     apiKey,
-    model: environment.SHANNON_LLM_MODEL?.trim() || 'gpt-5.6-luna',
+    model,
     agentHostHint: environment.SHANNON_AGENT_DEFAULT_HOST?.trim() || 'shannon-mac',
     usageStore,
   });

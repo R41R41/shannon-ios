@@ -1,3 +1,5 @@
+import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../../infra/models/anthropic/haikuConfig.js';
+import { responseModelFetcher, validateResponseModelUsage } from '../../../infra/models/anthropic/haikuResponses.js';
 import { createHash } from 'node:crypto';
 import { SHANNON_ONE_LINE_VOICE } from '@shannon/cognition';
 import {
@@ -68,9 +70,9 @@ export class OpenAIDailyMindModel implements DailyMindModel {
 
   constructor(private readonly options: OpenAIDailyMindModelOptions) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
-    this.model = /^[A-Za-z0-9._:-]{1,100}$/u.test(options.model ?? '') ? options.model! : 'gpt-5.6-luna';
+    this.model = /^[A-Za-z0-9._:-]{1,100}$/u.test(options.model ?? '') ? options.model! : DEFAULT_HAIKU_MODEL;
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
-    this.fetcher = options.fetcher ?? fetch;
+    this.fetcher = responseModelFetcher({ ...options, model: this.model });
     this.now = options.now ?? (() => new Date().toISOString());
     this.backgroundBudgetUsd = options.backgroundBudgetUsd ?? configuredBackgroundBudgetUsd();
   }
@@ -114,7 +116,6 @@ export class OpenAIDailyMindModel implements DailyMindModel {
     const raw = await response.text();
     const json = parseJson(raw);
     if (!response.ok) throw new Error(`DAILY_MIND_MODEL_${response.status}`);
-    const result = parsedResult(outputText(json));
     const usage = responseUsage(json);
     this.options.usageStore.recordLlmUsage({
       scopeKey: input.scopeKey,
@@ -123,7 +124,8 @@ export class OpenAIDailyMindModel implements DailyMindModel {
       lane: 'sleep', model: this.model, ...usage,
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: at,
     });
-    return result;
+    validateResponseModelUsage(this.model, json);
+    return parsedResult(outputText(json));
   }
 }
 
@@ -131,11 +133,10 @@ export function createConfiguredDailyMindModel(
   environment: Readonly<Record<string, string | undefined>>,
   usageStore: LlmUsageStore,
 ): DailyMindModel {
-  const apiKey = environment.OPENAI_API_KEY?.trim();
-  if (!apiKey) return new DisabledDailyMindModel();
+  const selected = configuredResponseModel(environment, 'SHANNON_BACKGROUND_LLM_MODEL', environment.SHANNON_LLM_MODEL);
+  if (!selected) return new DisabledDailyMindModel();
   return new OpenAIDailyMindModel({
-    apiKey,
-    model: environment.SHANNON_BACKGROUND_LLM_MODEL?.trim() || environment.SHANNON_LLM_MODEL?.trim() || 'gpt-5.6-luna',
+    ...selected,
     usageStore,
     backgroundBudgetUsd: configuredBackgroundBudgetUsd(environment),
   });

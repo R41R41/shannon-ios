@@ -13,7 +13,7 @@ describe('Shannon voice camera snapshot gateway', () => {
       expect(headers.get('authorization')).toBe('Bearer server-key-only');
       const body = JSON.parse(String(init?.body)) as Record<string, any>;
       expect(body).toMatchObject({
-        model: 'gpt-5.6-luna',
+        model: 'gpt-5.6-terra',
         reasoning: { effort: 'none' },
         text: { verbosity: 'low' },
         store: false,
@@ -28,7 +28,7 @@ describe('Shannon voice camera snapshot gateway', () => {
       expect(body.safety_identifier).toBe(body.prompt_cache_key);
       return new Response(JSON.stringify({ output_text: '青い案内板と歩道が見えます。' }));
     });
-    const gateway = new OpenAIVoiceVisionGateway({
+    const gateway = new OpenAIVoiceVisionGateway({ model: 'gpt-5.6-terra',
       apiKey: 'server-key-only',
       fetcher: fetcher as typeof fetch,
     });
@@ -40,14 +40,14 @@ describe('Shannon voice camera snapshot gateway', () => {
       conversationContext: '旅行中の会話です。',
     })).resolves.toEqual({
       description: '青い案内板と歩道が見えます。',
-      model: 'gpt-5.6-luna',
+      model: 'gpt-5.6-terra',
     });
     expect(fetcher).toHaveBeenCalledOnce();
   });
 
   it('rejects an invalid image before calling the upstream service', async () => {
     const fetcher = vi.fn();
-    const gateway = new OpenAIVoiceVisionGateway({
+    const gateway = new OpenAIVoiceVisionGateway({ model: 'gpt-5.6-terra',
       apiKey: 'server-key-only',
       fetcher: fetcher as typeof fetch,
     });
@@ -65,7 +65,7 @@ describe('Shannon voice camera snapshot gateway', () => {
     expect(createConfiguredVoiceVisionGateway({})).toBeNull();
     expect(createConfiguredVoiceVisionGateway({
       OPENAI_API_KEY: 'server-key-only',
-      SHANNON_VISION_MODEL: 'gpt-5.6-luna',
+      SHANNON_VISION_MODEL: 'gpt-5.6-terra',
     })).toBeInstanceOf(OpenAIVoiceVisionGateway);
   });
 });

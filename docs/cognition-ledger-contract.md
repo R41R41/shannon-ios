@@ -6,6 +6,8 @@ This file is the contract. The pure parts are in `packages/learning` (`@shannon/
 
 **Model weights are never trained.** The value table changes which choices look good from their outcomes; the models stay fixed (`AGENTS.md`, product invariants).
 
+Current provider/model selection and cache cost accounting are specified in [haiku-model-cache-contract.md](haiku-model-cache-contract.md). Logical tier symbols such as `luna`, `luna_plus` and `judgedBy: luna` remain durable; provider `mode: anthropic` is shared by Haiku and Sonnet, so `servedTier` identifies the tier that answered. A known failed cache contract retains actual spend, while incomplete usage stays unknown and does not free an own-time reservation.
+
 ## Status
 
 | Step | Content | State |
@@ -68,18 +70,18 @@ One row per decision, content-free (ADR-0008 §3 抑制系: 「判断ごとの�
 | `scope_key`, `at` | The scope and the instant the decision began. |
 | `surface` | `voice`, `autonomy`; `text` from stage 2. |
 | `decision` | `voice_route` (the voice turn's routing decision), `autonomy_think` (a thought of her own); from stage 2 `tool_menu`, `difficulty`, `recall_beam` (`docs/skill-and-routing-contract.md`). |
-| `decider` | `jev`, `openai`, `local` (the local rules), `model` (her own time's planning model). |
-| `model` | The model the decider asked (`jev-latest`, `gpt-5.6-luna`, `local-rules`, …). |
+| `decider` | `jev`, `openai`, `anthropic`, `local` (the local rules), `model` (her own time's planning model). Historical `openai` rows remain unchanged; new native Haiku gateway decisions use `anthropic`. |
+| `model` | The model the decider asked (`jev-latest`, `claude-haiku-5-5`, `local-rules`, …). Historical rows retain their actual `gpt-5.6-luna` value. |
 | `questions` | How many questions were asked (Jev); null when not counted. |
 | `context_chars` | How many characters of context the decider was given (Jev: the JSON of its state; a thought: its prompt); never the characters themselves. |
 | `latency_ms` | Wall time of the decision. |
 | `outcome` | `ok`; `timeout` or `error` (the configured decider failed and a fallback answered); `fallback` (it answered but could not be used, and a fallback decided). |
-| `fallback_decider` | Who decided instead (`openai`, `local`); null otherwise. |
+| `fallback_decider` | Who decided instead (`openai`, `anthropic`, `local`); null otherwise. |
 | `answers_json` | The decision as closed enums and numbers (voice: respond, class, latency, affect, intensity, delivery, skills, silence; a thought: the step kinds she planned and a closed code). |
 | `cost_usd` | Voice: Jev's cost of this decision, `SHANNON_JEV_USD_PER_CALL` × its calls; **null while the price is unset**; 0 when no Jev call was made. A thought: its cost by the autonomy price table. |
 | `related_id` | A related record (a thought's cycle id); null for a voice turn, whose turn is stored later. |
 
-- **Voice.** `TracedVoiceDecisionGateway` wraps the configured gateway (Jev → luna → rules, unchanged) and returns its decision untouched. The Jev client's fetch is counted (`infra/models/jev/jevClient.ts`): each HTTP call, its outcome (ok, timeout, error) and the number of questions and characters of state it carried.
+- **Voice.** `TracedVoiceDecisionGateway` wraps the configured gateway (Jev → Haiku → rules; the decision contract and existing historical rows are preserved) and returns its decision untouched. The Jev client's fetch is counted (`infra/models/jev/jevClient.ts`): each HTTP call, its outcome (ok, timeout, error) and the number of questions and characters of state it carried.
 - **Her own time.** The thinking step writes one trace through the function it is handed.
 - **Jev usage.** `llmUsageSummary` gains one `jev` row from the traces (decider `jev`): `calls`, zero tokens, `estimatedCostUsd` the sum of known costs, and `costUnknown: true` while any call has no price (shown as 未設定). The `LlmUsageLane` type gains `jev`; `llm_usage_events` and its CHECK do not, so **the transcription cap of 0.10 USD a day (`voiceTranscription.ts`, lane `voice`) is untouched**.
 - Retention 30 days, pruned at every open and once a day.

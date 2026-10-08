@@ -1,3 +1,5 @@
+import { configuredResponseModel } from '../../infra/models/anthropic/haikuConfig.js';
+import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageStore } from '../../infra/models/llmUsage.js';
 
@@ -17,14 +19,16 @@ export interface SkillSleepModel {
 
 export class OpenAISkillSleepModel implements SkillSleepModel {
   readonly model: string;
+  private readonly fetcher: typeof fetch;
 
   constructor(private readonly options: { apiKey: string; model?: string; endpoint?: string; fetcher?: typeof fetch; usageStore?: LlmUsageStore; timeoutMilliseconds?: number }) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
     this.model = validModel(options.model ?? 'gpt-5.6-terra');
+    this.fetcher = responseModelFetcher({ ...options, model: this.model });
   }
 
   async json(scopeKey: string, name: string, instructions: string, input: unknown, schema: Readonly<Record<string, unknown>>): Promise<unknown> {
-    const response = await (this.options.fetcher ?? fetch)(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
+    const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -42,6 +46,7 @@ export class OpenAISkillSleepModel implements SkillSleepModel {
     this.options.usageStore?.recordLlmUsage({
       scopeKey, lane: 'memory_background', model: this.model, ...usage, estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString(),
     });
+    validateResponseModelUsage(this.model, envelope);
     return parseJson(extractOutputText(envelope));
   }
 }
@@ -53,12 +58,12 @@ export class OpenAISkillSleepModel implements SkillSleepModel {
  */
 export function createConfiguredSkillSleepModels(environment: Readonly<Record<string, string | undefined>>, usageStore?: LlmUsageStore,
   strongest?: () => SkillSleepModel | null): { maintainer: SkillSleepModel | null; proposer: SkillSleepModel | null } {
-  const apiKey = environment.OPENAI_API_KEY?.trim();
-  // Review M4: no knowledge sleep (no model key, or switched off), no skill sleep either: no proposer, Sonnet included.
-  if (!apiKey || environment.SHANNON_KNOWLEDGE_ENABLED?.trim() === 'false') return { maintainer: null, proposer: null };
-  const model = environment.SHANNON_SKILL_MODEL?.trim() || environment.SHANNON_KNOWLEDGE_MODEL?.trim() || undefined;
-  const maintainer = new OpenAISkillSleepModel({ apiKey, ...(model ? { model } : {}), ...(usageStore ? { usageStore } : {}) });
-  const proposerModel = environment.SHANNON_SKILL_PROPOSER_MODEL?.trim() || model;
-  const proposer = strongest?.() ?? new OpenAISkillSleepModel({ apiKey, ...(proposerModel ? { model: proposerModel } : {}), ...(usageStore ? { usageStore } : {}) });
+  const selected = configuredResponseModel(environment, 'SHANNON_SKILL_MODEL', environment.SHANNON_KNOWLEDGE_MODEL?.trim() || 'gpt-5.6-terra');
+  // Review M4: no knowledge sleep (no selected model key, or switched off), no skill sleep either: no proposer, Sonnet included.
+  if (!selected || environment.SHANNON_KNOWLEDGE_ENABLED?.trim() === 'false') return { maintainer: null, proposer: null };
+  const maintainer = new OpenAISkillSleepModel({ ...selected, ...(usageStore ? { usageStore } : {}) });
+  const strongestModel = strongest?.();
+  const proposerSelection = strongestModel ? null : configuredResponseModel(environment, 'SHANNON_SKILL_PROPOSER_MODEL', selected.model);
+  const proposer = strongestModel ?? (proposerSelection ? new OpenAISkillSleepModel({ ...proposerSelection, ...(usageStore ? { usageStore } : {}) }) : null);
   return { maintainer, proposer };
 }

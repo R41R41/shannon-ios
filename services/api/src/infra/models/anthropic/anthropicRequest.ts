@@ -5,6 +5,9 @@ import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions, type ShannonModelToolSes
 import { chatTurnRequestBody, offersTools, precedingReplyMessage, turnContextMessage } from '../chatModelTurn.js';
 import { WEB_SEARCH_INSTRUCTIONS } from '../chatModelSupport.js';
 import type { SonnetSettings } from './anthropicConfig.js';
+import { isHaikuModel } from './haikuConfig.js';
+import { structuredSchema } from './anthropicSchema.js';
+export { structuredSchema } from './anthropicSchema.js';
 
 /**
  * The Sonnet tier's request (Syzygy ADR-0008 stage 2, step 5; `docs/skill-and-routing-contract.md`). Core: response path.
@@ -48,23 +51,6 @@ function strictProperty(property: ToolInputProperty): Record<string, unknown> {
   return { type: 'boolean', description: property.description };
 }
 
-/** A JSON schema in the subset structured outputs supports: nullable types as `anyOf`, length and size limits in words. */
-export function structuredSchema(node: unknown): unknown {
-  if (Array.isArray(node)) return node.map(structuredSchema);
-  if (!node || typeof node !== 'object') return node;
-  const { type, minItems, maxItems, minLength, maxLength, minimum, maximum, ...rest } = node as Record<string, unknown>;
-  const limits = [minItems !== undefined || maxItems !== undefined ? `${minItems ?? 0}〜${maxItems ?? ''}件` : '',
-    maxLength !== undefined ? `${maxLength}字まで` : '', minimum !== undefined || maximum !== undefined ? `${minimum ?? ''}〜${maximum ?? ''}` : ''].filter(Boolean).join('、');
-  const mapped: Record<string, unknown> = Object.fromEntries(Object.entries(rest).map(([key, value]) => [key,
-    key === 'properties' && value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([name, child]) => [name, structuredSchema(child)])) : structuredSchema(value)]));
-  if (limits) mapped.description = `${typeof mapped.description === 'string' ? mapped.description : ''}（${limits}）`;
-  void minLength; // a minimum length is not said: the schema keeps only what it can hold
-  if (Array.isArray(type)) {
-    const { description, ...shape } = mapped;
-    return { ...(description !== undefined ? { description } : {}), anyOf: type.map(item => (item === 'null' ? { type: 'null' } : { ...shape, type: item })) };
-  }
-  return type === undefined ? mapped : { type, ...mapped };
-}
 
 /**
  * Luna's input items as Anthropic messages: the history (consecutive turns of one role joined, and a first turn of hers
@@ -101,7 +87,7 @@ export function webSearchTool(maxUses: number): Anthropic.WebSearchTool20260209 
   return { type: 'web_search_20260209', name: 'web_search', max_uses: maxUses };
 }
 
-const system = (text: string): Anthropic.TextBlockParam[] => [{ type: 'text', text, cache_control: { type: 'ephemeral' } }];
+const system = (text: string, model: string): Anthropic.TextBlockParam[] => [{ type: 'text', text, cache_control: { type: 'ephemeral', ...(isHaikuModel(model) ? { ttl: '1h' as const } : {}) } }];
 
 /** The text turn's request (non-streaming shape; the stream sends the same body). */
 export function sonnetChatBody(settings: SonnetSettings, request: ShannonChatModelRequest, agentHostHint: string | undefined): Anthropic.MessageCreateParamsNonStreaming {
@@ -112,11 +98,11 @@ export function sonnetChatBody(settings: SonnetSettings, request: ShannonChatMod
   return {
     model: settings.model,
     max_tokens: 16_000,
-    system: system([String(luna.instructions), SONNET_TEXT_LINES, ...(web ? [SONNET_WEB_LINE] : [])].join('\n\n')),
+    system: system([String(luna.instructions), SONNET_TEXT_LINES, ...(web ? [SONNET_WEB_LINE] : [])].join('\n\n'), settings.model),
     messages: sonnetMessages(luna.input as unknown[]),
     ...(tools.length ? { tools, tool_choice: { type: 'auto' as const } } : {}),
     thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,
-    output_config: { effort: settings.effort, format: { type: 'json_schema', schema: structuredSchema(schema) as Record<string, unknown> } },
+    output_config: { effort: isHaikuModel(settings.model) && request.tier === 'luna_plus' ? 'medium' : settings.effort, format: { type: 'json_schema', schema: structuredSchema(schema) as Record<string, unknown> } },
   };
 }
 
@@ -140,10 +126,10 @@ export function sonnetVoiceBody(settings: SonnetSettings, request: ShannonVoiceM
     model: settings.model,
     // Thinking counts toward the ceiling: room for it beside the spoken reply.
     max_tokens: maximumOutputTokens + (settings.voiceThinking === 'adaptive' ? 4_000 : 1_000),
-    system: system(instructions),
+    system: system(instructions, settings.model),
     messages: sonnetMessages(input),
     ...(tools.length ? { tools, tool_choice: { type: 'auto' as const } } : {}),
     thinking: { type: settings.voiceThinking } as Anthropic.ThinkingConfigParam,
-    output_config: { effort: settings.effort },
+    output_config: { effort: isHaikuModel(settings.model) && request.tier === 'luna_plus' ? 'medium' : settings.effort },
   };
 }

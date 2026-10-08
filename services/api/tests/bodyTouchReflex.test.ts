@@ -98,7 +98,7 @@ describe('a touch in the old shape (touch vocabulary 1)', () => {
       bodies.push(JSON.parse(init.body) as Record<string, unknown>);
       return new Response(JSON.stringify({ output_text: JSON.stringify({ say: false, text: '', feeling: 'surprised', stance: 'unsure' }) }), { status: 200 });
     }) as unknown as typeof fetch;
-    const speaker = new OpenAIBodyReactionSpeaker({ apiKey: 'k', fetcher });
+    const speaker = new OpenAIBodyReactionSpeaker({ model: 'gpt-5.6-terra', apiKey: 'k', fetcher });
     expect(await speaker.decide({ scopeKey: scope, prompt: 'P', signal: new AbortController().signal }))
       .toEqual({ say: false, text: '', feeling: 'surprised', stance: 'unsure' });
     await speaker.decide({ scopeKey: scope, prompt: 'P', signal: new AbortController().signal, stance: true });

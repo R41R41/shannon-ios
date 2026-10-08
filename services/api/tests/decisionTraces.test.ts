@@ -54,7 +54,7 @@ function collect(): { write: (scopeKey: string, draft: DecisionTraceDraft) => vo
 function jevGateway(jevFetch: typeof fetch, fallback: 'openai' | 'local' = 'openai') {
   return new JevVoiceDecisionGateway({
     apiKey: 'jev-test', fetcher: countedJevFetch(jevFetch),
-    ...(fallback === 'openai' ? { fallbackGateway: new OpenAIVoiceDecisionGateway({ apiKey: 'openai-test', fetcher: openAIOk }) } : {}),
+    ...(fallback === 'openai' ? { fallbackGateway: new OpenAIVoiceDecisionGateway({ model: 'gpt-5.6-terra', apiKey: 'openai-test', fetcher: openAIOk }) } : {}),
   });
 }
 
@@ -92,7 +92,7 @@ describe('the traced voice gateway', () => {
   it('traces a gateway without Jev as its own decider, at no Jev cost', async () => {
     const { write, drafts } = collect();
     await new TracedVoiceDecisionGateway(new LocalVoiceDecisionGateway(), write, { usdPerJevCall: 0.001, now: () => AT }).decide(input);
-    await new TracedVoiceDecisionGateway(new OpenAIVoiceDecisionGateway({ apiKey: 'openai-test', fetcher: openAIOk }), write, { usdPerJevCall: null, now: () => AT }).decide(input);
+    await new TracedVoiceDecisionGateway(new OpenAIVoiceDecisionGateway({ model: 'gpt-5.6-terra', apiKey: 'openai-test', fetcher: openAIOk }), write, { usdPerJevCall: null, now: () => AT }).decide(input);
     expect(drafts.map(trace => [trace.decider, trace.outcome, trace.fallbackDecider, trace.costUsd, trace.questions])).toEqual([
       ['local', 'ok', null, 0, null], ['openai', 'ok', null, 0, null],
     ]);

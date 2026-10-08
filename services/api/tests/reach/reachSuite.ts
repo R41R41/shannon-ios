@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { configuredAutonomyTextModel, dedicatedAutonomyCredential, resolveAutonomyModel } from '../../src/mind/action/ownTime/autonomyTextModel.js';
 import { createConfiguredChatModel } from '../../src/infra/models/chatModel.js';
 import { estimatedOpenAICostUsd } from '../../src/infra/models/llmUsage.js';
+import { configuredResponseModel, isHaikuModel, replacementModel } from '../../src/infra/models/anthropic/haikuConfig.js';
+import { HAIKU_PROTOCOL_PREFIX } from '../../src/infra/models/anthropic/haikuCache.js';
 import {
   COGNITION_SCENARIOS, RECALL_SCENARIOS, SKILL_SCENARIOS, TIER_SCENARIOS, WORKSPACE_SCENARIOS, PROACTIVE_SCENARIOS, autonomyDayScenario, buildReachReport, cappedEstimate, compareReachReports, conversationEstimate, estimateTotal,
   isReachReport, pendingEstimate, reachReportMarkdown, runReachScenario, shiritoriScenario, stableFingerprint, threeToolsScenario,
@@ -50,8 +52,8 @@ export function scriptedDrivers(): Record<string, ReachDriverFactory> {
 /** What a live run would use, by name only: which scenarios have the credential they need. */
 export function liveReadiness(environment: Environment) {
   return {
-    conversation: Boolean(environment.OPENAI_API_KEY?.trim()),
-    autonomy: Boolean(dedicatedAutonomyCredential('google', environment) || dedicatedAutonomyCredential('openai', environment)),
+    conversation: configuredResponseModel(environment, 'SHANNON_LLM_MODEL') !== null,
+    autonomy: Boolean(dedicatedAutonomyCredential('google', environment) || dedicatedAutonomyCredential('openai', environment) || dedicatedAutonomyCredential('anthropic', environment)),
     sonnet: anthropicApiKey(environment) !== null,
   };
 }
@@ -77,7 +79,7 @@ export function liveDrivers(environment: Environment): Record<string, ReachDrive
   const table = environment.SHANNON_AUTONOMY_MODEL_PRICES_JSON?.trim();
   return {
     [shiritoriScenario.id]: () => {
-      if (!ready.conversation) return pending('credential: OPENAI_API_KEY is not set');
+      if (!ready.conversation) return pending('credential: no key for the selected conversation model is set');
       const usage = new ReachUsage();
       return shiritoriDriver(createConfiguredChatModel(environment, usage), { usage, inputs: prices.conversation });
     },
@@ -121,14 +123,18 @@ export async function runReachSuite(
  */
 export function liveEstimate(scripted: ReachReport, environment: Environment): ReachEstimateLine[] {
   const ready = liveReadiness(environment);
-  const model = environment.SHANNON_LLM_MODEL?.trim() || 'gpt-5.6-luna';
-  const usdPerMillion = (input: number, output: number) => estimatedOpenAICostUsd(model, { inputTokens: input, outputTokens: output, cachedInputTokens: 0, totalTokens: input + output }, environment);
+  const model = replacementModel(environment.SHANNON_LLM_MODEL);
+  // Estimate a cold one-hour write and the added stable protocol, rather than assuming an already-warm cache.
+  const haiku = isHaikuModel(model);
+  const coldPrice = anthropicPrices(model, 1_000_000);
+  const usdPerMillion = (input: number, output: number) => haiku ? (input * coldPrice.cacheWrite1h + output * coldPrice.output) / 1_000_000
+    : estimatedOpenAICostUsd(model, { inputTokens: input, outputTokens: output, cachedInputTokens: 0, totalTokens: input + output }, environment);
   const unready = (line: ReachEstimateLine, present: boolean) => present ? line : { ...line, basis: `${line.basis}; no credential, so it would be pending now` };
   const lines: ReachEstimateLine[] = [];
   for (const run of scripted.runs) {
     if (run.scenarioId === shiritoriScenario.id) {
       lines.push(unready(conversationEstimate({
-        scenarioId: run.scenarioId, calls: run.cost.calls, promptCharacters: run.cost.promptCharacters,
+        scenarioId: run.scenarioId, calls: run.cost.calls, promptCharacters: run.cost.promptCharacters + (haiku ? run.cost.calls * HAIKU_PROTOCOL_PREFIX.length : 0),
         inputUsdPerMillion: usdPerMillion(1_000_000, 0), outputUsdPerMillion: usdPerMillion(0, 1_000_000),
       }, REACH_YEN_PER_USD), ready.conversation));
     } else if (run.scenarioId === threeToolsScenario.id) {

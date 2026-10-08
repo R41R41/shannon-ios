@@ -58,7 +58,7 @@ describe('self interest producer and memory-writer routing', () => {
     const at = '2026-10-07T01:00:00.000Z';
     const original = w.store.appendTurn('owner', 'thread', '天文と音楽と鉱物を調べたい。', 'いいですね。', at).id;
     const messages = w.store.dailyUserMessages('owner', '2026-10-06T15:00:00.000Z', '2026-10-07T15:00:00.000Z');
-    const analyzer = new OpenAISleepMemoryAnalyzer({ apiKey: 'synthetic', fetcher: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
+    const analyzer = new OpenAISleepMemoryAnalyzer({ model: 'gpt-5.6-terra', apiKey: 'synthetic', fetcher: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
       facts: [], relationships: [], interests: [], selfInterests: ['天文', '音楽', '鉱物'].map(title => ({ kind: 'add', itemId: null, title,
         description: `${title}を調べる`, reason: '会話から考えた', weight: 0.5, evidence: messages[0]!.content })),
     }) }), { status: 200 }) });
@@ -95,7 +95,7 @@ describe('self interest producer and memory-writer routing', () => {
   it('preserves OFF model request bytes and output shape, and reuses the same monthly usage gate while ON', async () => {
     const calls: string[] = [];
     let monthlyCost = 0;
-    const analyzer = new OpenAISleepMemoryAnalyzer({ apiKey: 'synthetic', now: () => new Date('2026-10-07T19:00:00.000Z'),
+    const analyzer = new OpenAISleepMemoryAnalyzer({ model: 'gpt-5.6-terra', apiKey: 'synthetic', now: () => new Date('2026-10-07T19:00:00.000Z'),
       usageStore: { backgroundLlmCostUsd: () => monthlyCost, recordLlmUsage: () => {} },
       fetcher: async (_url, init) => { calls.push(String(init?.body)); return new Response(JSON.stringify({ output_text: JSON.stringify({ facts: [], relationships: [], interests: [] }) }), { status: 200 }); } });
     const messages = [{ content: '天文を調べたい。', observedAt: '2026-10-07T10:00:00.000Z', sourceExperienceId: 'turn' }];

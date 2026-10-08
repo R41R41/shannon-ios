@@ -1,3 +1,5 @@
+import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
+import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import { estimatedOpenAICostUsd, configuredBackgroundBudgetUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import type { PeopleMemoryStore } from '../../mind/memory/memoryPorts.js';
@@ -68,13 +70,15 @@ export function acceptedPlatformSummary(text: string, messages: readonly string[
 
 export class OpenAIPlatformSummaryWriter implements PlatformSummaryWriter {
   private readonly model: string;
+  private readonly fetcher: typeof fetch;
 
   constructor(private readonly options: { apiKey: string; model?: string; endpoint?: string; fetcher?: typeof fetch; usageStore?: LlmUsageStore }) {
-    this.model = validModel(options.model ?? 'gpt-5.6-luna');
+    this.model = validModel(options.model ?? DEFAULT_HAIKU_MODEL);
+    this.fetcher = responseModelFetcher({ ...options, model: this.model });
   }
 
   async summarize(scopeKey: string, input: { place: string; names: readonly string[]; lines: readonly string[] }): Promise<string | null> {
-    const response = await (this.options.fetcher ?? fetch)(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
+    const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -94,6 +98,7 @@ export class OpenAIPlatformSummaryWriter implements PlatformSummaryWriter {
     const usage = responseUsage(envelope);
     this.options.usageStore?.recordLlmUsage({ scopeKey, lane: 'memory_background', model: this.model, ...usage,
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString() });
+    validateResponseModelUsage(this.model, envelope);
     return extractOutputText(envelope) || null;
   }
 }
@@ -101,6 +106,6 @@ export class OpenAIPlatformSummaryWriter implements PlatformSummaryWriter {
 export function createConfiguredPlatformSummaryWriter(
   environment: Readonly<Record<string, string | undefined>>, usageStore?: LlmUsageStore,
 ): PlatformSummaryWriter | null {
-  const apiKey = environment.OPENAI_API_KEY?.trim();
-  return apiKey ? new OpenAIPlatformSummaryWriter({ apiKey, model: environment.SHANNON_PEOPLE_SUMMARY_MODEL?.trim() || undefined, usageStore }) : null;
+  const selected = configuredResponseModel(environment, 'SHANNON_PEOPLE_SUMMARY_MODEL');
+  return selected ? new OpenAIPlatformSummaryWriter({ ...selected, usageStore }) : null;
 }

@@ -537,24 +537,24 @@ describe('the activity record and the cost', () => {
         output_text: JSON.stringify({ say: true, text: HEHE, feeling: 'bashful' }), usage: { input_tokens: 420, output_tokens: 30, total_tokens: 450 },
       }), { status: 200 });
     }) as unknown as typeof fetch;
-    const speaker = new OpenAIBodyReactionSpeaker({ apiKey: 'test-key', fetcher, usageStore: { recordLlmUsage: event => usage.push(event) }, now: () => START });
+    const speaker = new OpenAIBodyReactionSpeaker({ model: 'gpt-5.6-terra', apiKey: 'test-key', fetcher, usageStore: { recordLlmUsage: event => usage.push(event) }, now: () => START });
     const decision = await speaker.decide({ scopeKey: scope, prompt: 'PROMPT', signal: new AbortController().signal });
     expect(decision).toEqual({ say: true, text: HEHE, feeling: 'bashful' });
     expect(requests).toHaveLength(1);
     expect(requests[0]!.url).toBe('https://api.openai.com/v1/responses');
     expect(requests[0]!.body).toMatchObject({
-      model: 'gpt-5.6-luna', instructions: 'PROMPT', reasoning: { effort: 'none' }, store: false, max_output_tokens: 160,
+      model: 'gpt-5.6-terra', instructions: 'PROMPT', reasoning: { effort: 'none' }, store: false, max_output_tokens: 160,
       text: { verbosity: 'low', format: { type: 'json_schema', name: 'shannon_body_reaction', strict: true, schema: BODY_REACTION_SCHEMA } },
     });
     expect(requests[0]!.body.tools).toBeUndefined();
-    expect(usage).toEqual([expect.objectContaining({ scopeKey: scope, lane: 'chat', model: 'gpt-5.6-luna', inputTokens: 420, outputTokens: 30, occurredAt: START })]);
+    expect(usage).toEqual([expect.objectContaining({ scopeKey: scope, lane: 'chat', model: 'gpt-5.6-terra', inputTokens: 420, outputTokens: 30, occurredAt: START })]);
     expect(usage[0]!.estimatedCostUsd).toBeGreaterThan(0);
 
     // A provider failure names no content and records nothing.
-    const failing = new OpenAIBodyReactionSpeaker({ apiKey: 'k', fetcher: (async () => new Response('{"error":{"message":"secret detail"}}', { status: 500 })) as unknown as typeof fetch,
+    const failing = new OpenAIBodyReactionSpeaker({ model: 'gpt-5.6-terra', apiKey: 'k', fetcher: (async () => new Response('{"error":{"message":"secret detail"}}', { status: 500 })) as unknown as typeof fetch,
       usageStore: { recordLlmUsage: event => usage.push(event) } });
     await expect(failing.decide({ scopeKey: scope, prompt: 'P', signal: new AbortController().signal })).rejects.toThrow('BODY_REACTION_UPSTREAM_500');
-    const broken = new OpenAIBodyReactionSpeaker({ apiKey: 'k', fetcher: (async () => { throw new Error('socket: PROMPT'); }) as unknown as typeof fetch });
+    const broken = new OpenAIBodyReactionSpeaker({ model: 'gpt-5.6-terra', apiKey: 'k', fetcher: (async () => { throw new Error('socket: PROMPT'); }) as unknown as typeof fetch });
     await expect(broken.decide({ scopeKey: scope, prompt: 'P', signal: new AbortController().signal })).rejects.toThrow('BODY_REACTION_UPSTREAM_FAILED');
     expect(usage).toHaveLength(1);
     expect(new FakeSpeaker().calls).toEqual([]);
