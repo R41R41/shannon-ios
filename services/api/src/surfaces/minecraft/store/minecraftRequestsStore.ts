@@ -1,3 +1,5 @@
+import { minecraftPrimaryModel, type MinecraftPrimaryModelReader } from '../../../contracts/minecraftPrimaryModelContract.js';
+import { migrateMinecraftPrimaryModels, readMinecraftPrimaryModel, supportsMinecraftPrimaryModel, recordMinecraftPrimaryModels, pinnedMinecraftRequestSupported } from './minecraftPrimaryModels.js';
 import type { MinecraftExecutionPort } from '../../../contracts/actionThreadContract.js';
 /** The requests her Minecraft body is given and what it reported, kept (Syzygy ADR-0008 stage 3, S2: the SQLite part of `minecraftBodyRequests.ts`, moved unchanged into the surface's store folder). */
 import { MINECRAFT_REQUEST_LIMITS, type MinecraftProgressPhase, type MinecraftRequestOrigin, type MinecraftRequestProgress, type MinecraftRequestResult, type MinecraftRequestState, type MinecraftRequestView, OPEN_REQUEST_STATES, requestGoal } from '../../../contracts/minecraftBodyRequestContract.js';
@@ -10,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { requestExperience, requestLine } from '../minecraftRequestLines.js';
 
 interface Row {
+  primary_model_json: string | null;
   id: string; scope_key: string; dedupe_key: string; goal: string; state: MinecraftRequestState; origin_json: string;
   device_id: string | null; progress_json: string | null; result_json: string | null; cancel_requested: number;
   created_at: string; updated_at: string; claimed_at: string | null; lease_until: string | null; finished_at: string | null;
@@ -35,6 +38,7 @@ export class MinecraftBodyRequests {
     private readonly now: () => string,
     private readonly experiences: GameExperienceWriter | null = null,
     private readonly signals: HostFolderSignals = new HostFolderSignals(),
+    private readonly primaryModel?: MinecraftPrimaryModelReader,
   ) {
     this.database = new DatabaseSync(path);
     this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
@@ -72,6 +76,7 @@ export class MinecraftBodyRequests {
         delivered INTEGER NOT NULL DEFAULT 0 CHECK (delivered IN (0,1))
       );
     `);
+    migrateMinecraftPrimaryModels(this.database);
     secureDatabaseFiles(path);
     this.writeExperiences();
   }
@@ -88,6 +93,12 @@ export class MinecraftBodyRequests {
     return !!row && row.device_id === this.configuration.deviceId && Date.parse(this.now()) - Date.parse(row.seen_at) <= MINECRAFT_REQUEST_LIMITS.presenceMilliseconds;
   }
 
+  requiresPrimaryModel(): boolean { return this.primaryModel !== undefined; }
+
+  primaryModelAvailable(scopeKey: string, model: string): boolean {
+    return this.present(scopeKey) && supportsMinecraftPrimaryModel(this.database, scopeKey, model);
+  }
+
   /** Queues one request. Fails at once when the body is not present, so nothing waits to run later by surprise. */
   enqueue(scopeKey: string, input: { goal: string; origin: MinecraftRequestOrigin; dedupeKey: string }): EnqueueOutcome {
     if (!this.configuredFor(scopeKey)) return { kind: 'not_configured' };
@@ -101,13 +112,18 @@ export class MinecraftBodyRequests {
         .get(scopeKey, input.dedupeKey.slice(0, 200), new Date(Date.parse(at) - minutes(MINECRAFT_REQUEST_LIMITS.retryMinutes)).toISOString()) as Row | undefined;
       if (known) return { kind: 'queued', request: view(known), duplicate: true };
       if (!this.present(scopeKey)) return { kind: 'absent' };
+      let pin = null;
+      if (this.primaryModel) {
+        try { pin = minecraftPrimaryModel(this.primaryModel(scopeKey)); } catch { /* unavailable fails closed */ }
+        if (!pin || !this.primaryModelAvailable(scopeKey, pin.model)) return { kind: 'model_unavailable' };
+      }
       if (this.openCount(scopeKey) >= MINECRAFT_REQUEST_LIMITS.open) return { kind: 'limit' };
       const id = randomUUID();
       const origin: MinecraftRequestOrigin = { surface: input.origin.surface, ...(input.origin.threadId ? { threadId: input.origin.threadId.slice(0, 200) } : {}),
         ...(input.origin.messageId ? { messageId: input.origin.messageId.slice(0, 200) } : {}) };
       this.database.prepare(`
-        INSERT INTO minecraft_body_requests (id, scope_key, dedupe_key, goal, state, origin_json, created_at, updated_at) VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)
-      `).run(id, scopeKey, input.dedupeKey.slice(0, 200), goal, JSON.stringify(origin), at, at);
+        INSERT INTO minecraft_body_requests (id, scope_key, dedupe_key, goal, state, origin_json, created_at, updated_at, primary_model_json) VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?)
+      `).run(id, scopeKey, input.dedupeKey.slice(0, 200), goal, JSON.stringify(origin), at, at, pin ? JSON.stringify(pin) : null);
       return { kind: 'queued', request: view(this.row(scopeKey, id)!), duplicate: false };
     });
     if (outcome.kind === 'queued' && !outcome.duplicate) this.signals.notify(queueKey(scopeKey));
@@ -119,10 +135,11 @@ export class MinecraftBodyRequests {
    * request it was handed is closed (it lost it). A cancel of a held request answers at once. A new request is handed
    * out only while the body holds none.
    */
-  async claim(scopeKey: string, deviceId: string, input: { waitSeconds: number; holding: readonly string[] }, signal?: AbortSignal): Promise<ClaimResponse | 'DEVICE_DENIED' | 'SCOPE_DENIED'> {
+  async claim(scopeKey: string, deviceId: string, input: { waitSeconds: number; holding: readonly string[]; supportedPrimaryModels?: readonly string[] }, signal?: AbortSignal): Promise<ClaimResponse | 'DEVICE_DENIED' | 'SCOPE_DENIED'> {
     if (deviceId !== this.configuration.deviceId) return 'DEVICE_DENIED';
     if (!this.configuredFor(scopeKey)) return 'SCOPE_DENIED';
     this.markSeen(scopeKey, deviceId);
+    recordMinecraftPrimaryModels(this.database, scopeKey, input.supportedPrimaryModels);
     if (this.execution) {
       this.recordAbandonedRequests(scopeKey, deviceId, input.holding);
       try { await this.flushExecutionAcknowledgements(scopeKey); } catch { /* locks remain until the next authenticated handshake */ }
@@ -134,11 +151,11 @@ export class MinecraftBodyRequests {
         let allowedId: string | null | undefined;
         if (this.execution) {
           for (const id of input.holding) if(!await this.executionPresent(scopeKey,id))this.cancel(scopeKey,id);
-          const next=this.database.prepare("SELECT id FROM minecraft_body_requests WHERE scope_key=? AND state='queued' ORDER BY created_at,rowid LIMIT 1").get(scopeKey) as {id:string}|undefined;
+          const next=this.database.prepare("SELECT id, primary_model_json FROM minecraft_body_requests WHERE scope_key=? AND state='queued' ORDER BY created_at,rowid LIMIT 1").get(scopeKey) as {id:string;primary_model_json:string|null}|undefined;
           allowedId=null;
-          if(next && !input.holding.length)try{if(await this.execution.admit(scopeKey,next.id,deviceId))allowedId=next.id;}catch{/* the body waits */}
+          if(next && pinnedMinecraftRequestSupported(input.supportedPrimaryModels,next.primary_model_json) && !input.holding.length)try{if(await this.execution.admit(scopeKey,next.id,deviceId))allowedId=next.id;}catch{/* the body waits */}
         }
-        const answer = this.handOut(scopeKey, deviceId, input.holding,allowedId);
+        const answer = this.handOut(scopeKey, deviceId, input.holding,input.supportedPrimaryModels,allowedId);
         if (answer.request || answer.cancel.length) return answer;
         const left = deadline - Date.parse(this.now());
         if (left <= 0) return answer;
@@ -288,7 +305,7 @@ export class MinecraftBodyRequests {
     if (this.database.isOpen) this.database.close();
   }
 
-  private handOut(scopeKey: string, deviceId: string, holding: readonly string[], allowedId?: string | null): ClaimResponse {
+  private handOut(scopeKey: string, deviceId: string, holding: readonly string[], supportedPrimaryModels: readonly string[] | undefined, allowedId?: string | null): ClaimResponse {
     const at = this.now();
     return this.transaction(() => {
       this.sweep(scopeKey, at);
@@ -310,12 +327,14 @@ export class MinecraftBodyRequests {
       }
       if (cancel.length || holds) return { request: null, cancel };
       const next = this.database.prepare(`SELECT * FROM minecraft_body_requests WHERE scope_key = ? AND state = 'queued' ORDER BY created_at, rowid LIMIT 1`).get(scopeKey) as Row | undefined;
-      if (!next || (allowedId !== undefined && next.id !== allowedId)) return { request: null, cancel };
+      if (!next) return { request: null, cancel };
+      if (!pinnedMinecraftRequestSupported(supportedPrimaryModels, next.primary_model_json)) return { request: null, cancel, blocked: { id: next.id, reason: 'model_unavailable' } };
+      if (allowedId !== undefined && next.id !== allowedId) return { request: null, cancel };
       const leaseUntil = lease(at);
       this.database.prepare(`UPDATE minecraft_body_requests SET state = 'claimed', device_id = ?, claimed_at = ?, lease_until = ?, updated_at = ? WHERE id = ? AND state = 'queued'`)
         .run(deviceId, at, leaseUntil, at, next.id);
       const origin = parseJson<MinecraftRequestOrigin>(next.origin_json);
-      return { request: { id: next.id, goal: next.goal, surface: origin?.surface ?? 'text', createdAt: next.created_at, leaseExpiresAt: leaseUntil }, cancel };
+      return { request: { id: next.id, goal: next.goal, surface: origin?.surface ?? 'text', createdAt: next.created_at, leaseExpiresAt: leaseUntil, ...(next.primary_model_json ? { primaryModel: readMinecraftPrimaryModel(next.primary_model_json)! } : {}) }, cancel };
     });
   }
 
@@ -452,6 +471,7 @@ function view(row: Row): MinecraftRequestView {
     id: row.id, goal: row.goal, state: row.state, origin: parseJson<MinecraftRequestOrigin>(row.origin_json) ?? { surface: 'text' },
     createdAt: row.created_at, updatedAt: row.updated_at, cancelRequested: row.cancel_requested === 1,
     ...(row.claimed_at ? { claimedAt: row.claimed_at } : {}), ...(row.finished_at ? { finishedAt: row.finished_at } : {}),
+    ...(row.primary_model_json ? { primaryModel: readMinecraftPrimaryModel(row.primary_model_json)! } : {}),
     ...(progress ? { progress } : {}), ...(result ? { result } : {}),
   };
 }

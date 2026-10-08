@@ -5,7 +5,7 @@ import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions, type ShannonModelToolSes
 import { chatTurnRequestBody, offersTools, precedingReplyMessage, turnContextMessage } from '../chatModelTurn.js';
 import { WEB_SEARCH_INSTRUCTIONS } from '../chatModelSupport.js';
 import type { SonnetSettings } from './anthropicConfig.js';
-import { isHaikuModel } from './haikuConfig.js';
+import { isHaikuModel, usesOneHourAnthropicCache } from './haikuConfig.js';
 import { structuredSchema } from './anthropicSchema.js';
 export { structuredSchema } from './anthropicSchema.js';
 
@@ -19,7 +19,7 @@ export { structuredSchema } from './anthropicSchema.js';
  *   owner's words as a mid-conversation `system` message (operator authority, after the history, the cache untouched).
  * - Her registry tools are `strict` (the constraints the strict schema does not support are written into the description);
  *   `tool_choice` is `auto`, and `none` for the answer without tools (forced use is a 400 on this model).
- * - A web search is the server tool `web_search_20260209` offered with a line that asks for it, not a forced search.
+ * - Voice offers native web search. Structured text receives a separate non-JSON search receipt through a read tool.
  * - Text: the structured reply through `output_config.format` (the same schema, in the subset Anthropic supports).
  * - Thinking `adaptive` (text) or `between_tools` (voice) at the configured effort (`low` by default).
  */
@@ -87,18 +87,23 @@ export function webSearchTool(maxUses: number): Anthropic.WebSearchTool20260209 
   return { type: 'web_search_20260209', name: 'web_search', max_uses: maxUses };
 }
 
-const system = (text: string, model: string): Anthropic.TextBlockParam[] => [{ type: 'text', text, cache_control: { type: 'ephemeral', ...(isHaikuModel(model) ? { ttl: '1h' as const } : {}) } }];
+const system = (text: string, model: string): Anthropic.TextBlockParam[] => [{ type: 'text', text, cache_control: { type: 'ephemeral', ...(usesOneHourAnthropicCache(model) ? { ttl: '1h' as const } : {}) } }];
 
 /** The text turn's request (non-streaming shape; the stream sends the same body). */
 export function sonnetChatBody(settings: SonnetSettings, request: ShannonChatModelRequest, agentHostHint: string | undefined): Anthropic.MessageCreateParamsNonStreaming {
   const luna = chatTurnRequestBody(settings.model, request, agentHostHint);
   const web = !offersTools(request) && Boolean(request.useWebSearch || request.placeSearch);
-  const tools: Anthropic.ToolUnion[] = offersTools(request) ? sonnetTools(request.tools) : web ? [webSearchTool(3)] : [];
-  const schema = ((luna.text as { format?: { schema?: unknown } }).format?.schema) ?? {};
+  // Web evidence was obtained by the non-JSON auxiliary operation before this structured answer.
+  const tools: Anthropic.ToolUnion[] = offersTools(request) ? sonnetTools(request.tools) : [];
+  const schema = ((luna.text as { format?: { schema?: Record<string, unknown> } }).format?.schema) ?? {};
+  if (request.requireWebSearch) {
+    schema.properties = { ...schema.properties as object, webSearchNeedsInput: { type: 'boolean', description: '検索に必要な対象や地域が不明で、replyでその不足を短く質問する場合だけtrue。検索の約束や結果はfalse。検索未実行を完了としない。' } };
+    schema.required = [...schema.required as string[], 'webSearchNeedsInput'];
+  }
   return {
     model: settings.model,
     max_tokens: 16_000,
-    system: system([String(luna.instructions), SONNET_TEXT_LINES, ...(web ? [SONNET_WEB_LINE] : [])].join('\n\n'), settings.model),
+    system: system([String(luna.instructions), SONNET_TEXT_LINES, ...(web ? ['[Web検索の回答] このターンの検索結果だけに基づいて答える。調べる予定だけで返事を終えない。確認できない情報は断定しない。'] : [])].join('\n\n'), settings.model),
     messages: sonnetMessages(luna.input as unknown[]),
     ...(tools.length ? { tools, tool_choice: { type: 'auto' as const } } : {}),
     thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,

@@ -1,3 +1,4 @@
+import { validMinecraftPrimaryModels, type MinecraftPrimaryModel } from './minecraftPrimaryModelContract.js';
 import { MINECRAFT_INTENT_GOAL_CHARACTERS } from '../surfaces/minecraft/minecraftIntent.js';
 
 /**
@@ -89,6 +90,7 @@ export interface MinecraftRequestResult { outcome: MinecraftReportOutcome; code?
 export interface MinecraftRequestView {
   id: string;
   goal: string;
+  primaryModel?: MinecraftPrimaryModel;
   state: MinecraftRequestState;
   origin: MinecraftRequestOrigin;
   createdAt: string;
@@ -107,6 +109,7 @@ export interface ClaimedMinecraftRequest {
   surface: MinecraftRequestSurface;
   createdAt: string;
   leaseExpiresAt: string;
+  primaryModel?: MinecraftPrimaryModel;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -127,15 +130,16 @@ export function requestGoal(value: unknown): string | null {
   return goal ? goal : null;
 }
 
-export function validClaim(body: Record<string, unknown>): { waitSeconds: number; holding: string[] } | string {
-  const unknown = Object.keys(body).find(key => !['scopeKey', 'waitSeconds', 'holding'].includes(key));
+export function validClaim(body: Record<string, unknown>): { waitSeconds: number; holding: string[]; supportedPrimaryModels?: string[] } | string {
+  const unknown = Object.keys(body).find(key => !['scopeKey', 'waitSeconds', 'holding', 'supportedPrimaryModels'].includes(key));
   if (unknown) return `${unknown.slice(0, 40)} is not allowed`;
   const { waitSeconds, holding } = body;
   if (waitSeconds !== undefined && (typeof waitSeconds !== 'number' || !Number.isInteger(waitSeconds) || waitSeconds < 0
     || waitSeconds > MINECRAFT_REQUEST_LIMITS.claimMaximumWaitSeconds)) return 'waitSeconds is invalid';
   if (holding !== undefined && (!Array.isArray(holding) || holding.length > MINECRAFT_REQUEST_LIMITS.holding
     || holding.some(id => typeof id !== 'string' || !UUID.test(id)))) return 'holding is invalid';
-  return { waitSeconds: waitSeconds ?? 0, holding: [...new Set((holding as string[] | undefined) ?? [])] };
+  if (body.supportedPrimaryModels !== undefined && !validMinecraftPrimaryModels(body.supportedPrimaryModels)) return 'supportedPrimaryModels is invalid';
+  return { ...(body.supportedPrimaryModels !== undefined ? { supportedPrimaryModels: body.supportedPrimaryModels as string[] } : {}), waitSeconds: waitSeconds ?? 0, holding: [...new Set((holding as string[] | undefined) ?? [])] };
 }
 
 export function validProgress(body: Record<string, unknown>): { phase: MinecraftProgressPhase; step?: string } | string {

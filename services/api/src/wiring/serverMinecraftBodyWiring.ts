@@ -1,3 +1,4 @@
+import type { MinecraftPrimaryModelReader } from '../contracts/minecraftPrimaryModelContract.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ShannonDevicePrincipal } from '../infra/auth/deviceAuth.js';
 import { namesDesktopBody } from '../mind/inhibition/desktopBodyIdentity.js';
@@ -28,10 +29,10 @@ type RouteDependencies = Omit<Parameters<typeof createMinecraftBodyRoute>[2], 'r
  * fill (phase 4), the game-chat route, and the gate on its device token. `SHANNON_MINECRAFT_BODY_JSON` unset: none of it
  * exists, its routes answer 503, and no device is held back.
  */
-export function createMinecraftBodyWiring(environment: Readonly<Record<string, string | undefined>>, databasePath: string, now: () => string) {
+export function createMinecraftBodyWiring(environment: Readonly<Record<string, string | undefined>>, databasePath: string, now: () => string, primaryModel?: MinecraftPrimaryModelReader) {
   const configuration = configuredMinecraftBody(environment);
   const experiences = configuration ? new SQLiteGameExperiences(databasePath) : null;
-  const requests = configuration ? new MinecraftBodyRequests(databasePath, configuration, now, experiences) : null;
+  const requests = configuration ? new MinecraftBodyRequests(databasePath, configuration, now, experiences, undefined, primaryModel) : null;
   const stopMaintenance = requests?.startMaintenance() ?? (() => {});
   const isGameBody = (principal: ShannonDevicePrincipal | null) => Boolean(configuration && principal?.deviceId === configuration.deviceId);
   let route: MinecraftBodyRoute | null = null;

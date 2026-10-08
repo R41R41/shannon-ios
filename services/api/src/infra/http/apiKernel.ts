@@ -117,7 +117,7 @@ export type { TextTurnInput, TextTurnResult, TextTurnSurface } from '../../mind/
 export interface ShannonApiKernelOptions {
   /** The composition root supplies the default service, after this kernel's stores are ready. */
   createAutonomy?: (now: CompanionClock, overrides: Partial<AutonomyServiceDependencies>) => ShannonAutonomyService;
-  chatModel?: ShannonChatModel;
+  chatModel?: ShannonChatModel; auxiliaryChatModel?: ShannonChatModel;
   voiceDecision?: VoiceDecisionGateway;
   stateStore?: CompanionStateStore;
   conversationStore?: ConversationStore;
@@ -162,7 +162,7 @@ export interface ShannonApiKernelOptions {
   mind?: MindTurnPorts;
 }
 export class ShannonApiKernel {
-  private readonly chatModel: ShannonChatModel;
+  private readonly chatModel: ShannonChatModel; private readonly auxiliaryChatModel: ShannonChatModel;
   private readonly voiceDecision: VoiceDecisionGateway;
   private readonly conversationStore: ConversationStore;
   private readonly background: TurnBackgroundService;
@@ -199,7 +199,7 @@ export class ShannonApiKernel {
     private readonly now: CompanionClock,
     options: ShannonApiKernelOptions = {},
   ) {
-    this.chatModel = options.chatModel ?? new LocalStubChatModel();
+    this.chatModel = options.chatModel ?? new LocalStubChatModel(); this.auxiliaryChatModel = options.auxiliaryChatModel ?? this.chatModel;
     this.voiceDecision = options.voiceDecision ?? new LocalVoiceDecisionGateway();
     this.conversationStore = options.conversationStore ?? new InMemoryConversationStore();
     this.background = options.background
@@ -310,7 +310,7 @@ export class ShannonApiKernel {
     });
     if (agentResponse) return agentResponse;
 
-    const peopleResponse = dispatchPeopleMemoryRequest(request, { people: this.people, stateStore: this.stateStore, chatModel: this.chatModel, now: this.now, impressions: this.conversationStore.impressionStore?.() });
+    const peopleResponse = dispatchPeopleMemoryRequest(request, { people: this.people, stateStore: this.stateStore, chatModel: this.auxiliaryChatModel, now: this.now, impressions: this.conversationStore.impressionStore?.() });
     if (peopleResponse) return await peopleResponse;
 
     const dataResponse = dispatchDataRequest(request, {
@@ -330,7 +330,7 @@ export class ShannonApiKernel {
     const liveVoiceResponse = dispatchLiveVoiceRequest(request, this.liveVoiceDependencies());
     if (liveVoiceResponse) return await liveVoiceResponse;
 
-    const turnResponse = dispatchVoiceTurn(request, { stateStore: this.stateStore, chatModel: this.chatModel,
+    const turnResponse = dispatchVoiceTurn(request, { stateStore: this.stateStore, chatModel: this.auxiliaryChatModel,
       conversationStore: this.conversationStore, background: this.background, now: this.now, reactions: this.body.reactions, looks: this.body.turnLooks, ...(this.feedback?{feedback:this.feedback}:{}) });
     if (turnResponse) return await turnResponse;
 
@@ -359,7 +359,6 @@ export class ShannonApiKernel {
     }
     return { status: 404, body: { error: 'NOT_FOUND' } };
   }
-
   /**
    * One text turn of the conversation: recall, replay, identity, mood, tools, storing and background work. `POST /v1/chat`
    * is its first caller; another surface (her Minecraft body, a platform reply) passes its audience policy and a
@@ -367,9 +366,10 @@ export class ShannonApiKernel {
    * and storing are here, in the order they always had.
    */
   async textTurn(input: TextTurnInput): Promise<TextTurnResult> {
-    return withObserverRun({scopeKey:input.body.scopeKey,surface:input.surface?'platform':'text',audience:input.audience.alone?'owner':'others'},()=>this.mind?.foreground ? this.mind.foreground(input.body.scopeKey,()=>this.performTextTurn(input)) : this.performTextTurn(input));
+    const model = this.chatModel.forTurn?.(input.body.scopeKey) ?? this.chatModel;
+    return withObserverRun({scopeKey:input.body.scopeKey,surface:input.surface?'platform':'text',audience:input.audience.alone?'owner':'others'},()=>this.mind?.foreground ? this.mind.foreground(input.body.scopeKey,()=>this.performTextTurn(input, model)) : this.performTextTurn(input, model));
   }
-  private async performTextTurn(input:TextTurnInput):Promise<TextTurnResult> {
+  private async performTextTurn(input:TextTurnInput, model: ShannonChatModel):Promise<TextTurnResult> {
     const { audience, threadId, message, attachments, placeOptions, request, surface } = input;
     const body = input.body;
     const deadline = input.deadline ?? new TurnDeadline(TEXT_TURN_DEADLINE, () => Date.parse(this.now()));
@@ -394,7 +394,7 @@ export class ShannonApiKernel {
     let { orchestrationState } = begun;
     // A summary has no label of its own: none where only open items may be given (a turn someone other than the owner wrote).
     const priorThreadSummary = surface?.openOnly ? undefined : usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId, audience.present);
-    const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
+    const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.auxiliaryChatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
     // Her Minecraft body's and Aether's capability lines, in her identity, exactly when this turn's tools include them (`withToolCapabilityLines`).
     let toolOffer = conversationTools(this.autonomy, body.scopeKey, 'text', toolAudience, this.toolServer, `${threadId}\n${message}`, deadline, undefined, toolOptions);
     // Stage 2: the menu narrows the schemas sent; awaited only with a Jev call, so without one nothing changes (not even a tick).
@@ -406,7 +406,7 @@ export class ShannonApiKernel {
     // Stage 2, step 4: the tier from Jev's difficulty answers (none without the routing), and her last turn settled by this one.
     const tier = routeTurn(this.turnRouting, { scopeKey: body.scopeKey, surface: 'text', threadId, answer: settled?.answer ?? null, at: occurredAt });
     if(this.mind?.sync)await this.mind.sync();
-    const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withToolCapabilityLines({
+    const completion = await generateChatTurn(model, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withToolCapabilityLines({
       // Her fixed identity first, what she knows of the owner next, and the turn's context with the replay (`chatModelTurn.ts`).
       scopeKey: body.scopeKey, systemPrompt: layered.systemPrompt, ...(layered.profilePrompt ? { profilePrompt: layered.profilePrompt } : {}),
       // The history is a character budget; what fell out of it is covered by the replay summary.
@@ -416,7 +416,7 @@ export class ShannonApiKernel {
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message,
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,
-      ...(body.webSearch === true || placeSkill || settled?.web ? { useWebSearch: true } : {}),
+      ...(body.webSearch === true || placeSkill || settled?.web ? { useWebSearch: true } : {}), ...(settled?.answer.menu?.chosen.includes('web_search') ? { requireWebSearch: true as const } : {}),
       ...(surface?.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}), ...tierRequest(tier),
       // A surface's conversation has its own fixed title.
       generateThreadTitle: surface ? false : this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
@@ -484,7 +484,7 @@ export class ShannonApiKernel {
 
   private liveVoiceDependencies() {
     return {
-      chatModel: this.chatModel, voiceDecision: this.voiceDecision,
+      chatModel: this.chatModel, auxiliaryChatModel: this.auxiliaryChatModel, voiceDecision: this.voiceDecision,
       stateStore: this.stateStore, conversationStore: this.conversationStore,
       knowledgeStore: this.knowledgeStore, dailyMind: this.dailyMind, autonomy: this.autonomy, agentTasks: this.agentTasks,
       aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion, upcoming: this.upcoming,

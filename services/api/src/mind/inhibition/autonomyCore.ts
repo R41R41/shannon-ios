@@ -1,6 +1,7 @@
 import { STAGE5_CORE_PATHS } from './stage5CorePaths.js';
 import { STAGE4_CORE_PATHS } from './stage4CorePaths.js';
 import { OBSERVER_CORE_PATHS } from './observerCorePaths.js';
+import { MODEL_MODE_CORE_PATHS } from './modelModeCorePaths.js';
 import type { ShannonCoreAreaId } from '@shannon/cognition';
 /**
  * CORE, as code (Syzygy ADR-0002).
@@ -345,6 +346,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
   ]),
   response_path: Object.freeze([
     ...STAGE5_CORE_PATHS.response_path,
+    ...MODEL_MODE_CORE_PATHS,
     'services/api/src/server.ts',
     'services/api/src/infra/http/serverHttp.ts',
     'services/api/src/infra/http/apiKernel.ts',
@@ -358,6 +360,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/infra/models/chatModel.ts',
     // Stage 3 (S3): its contract, its adapters and the fixed words of a voice reply, split out of it unchanged.
     'services/api/src/infra/models/chatModelContract.ts',
+    'services/api/src/infra/models/webSearch.ts',
     'services/api/src/infra/models/openAIChatModel.ts',
     'services/api/src/mind/action/respond/respondInstructions.ts',
     'services/api/src/contracts/contracts.ts',
@@ -454,13 +457,11 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'Shannon.xcworkspace/',
   ]),
 });
-
 export interface CorePathMatch {
   area: ShannonCoreAreaId;
   /** The listed entry that matched. */
   entry: string;
 }
-
 /** Normalizes a repository-relative path: `/` separators, no leading `./`, no empty segments. */
 export function normalizedRepositoryPath(path: string): string | null {
   const segments = path.replace(/\\/gu, '/').split('/').filter(segment => segment && segment !== '.');

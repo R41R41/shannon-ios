@@ -106,8 +106,8 @@ export async function finishTurn(routing: TurnRouting | null | undefined, turn: 
     }
   }
   // The tier that actually answered (review M5): a Sonnet turn that fell back to luna is luna's; an escalated luna turn is luna_plus.
-  const served = turn.decision ? (turn.decision.served === 'sonnet' && (turn.servedTier !== undefined ? turn.servedTier !== 'sonnet' : turn.answeredBy !== undefined && turn.answeredBy !== 'anthropic') ? 'luna'
-    : turn.escalated && turn.decision.served === 'luna' ? 'luna_plus' : turn.decision.served) : null;
+  const served = turn.decision ? (turn.servedTier ?? (turn.decision.served === 'sonnet' && turn.answeredBy !== undefined && turn.answeredBy !== 'anthropic' ? 'luna'
+    : turn.escalated && turn.decision.served === 'luna' ? 'luna_plus' : turn.decision.served)) : null;
   const reply = verdict && turn.surface === 'text' ? verifiedReply(turn.reply, verdict) : turn.reply;
   const feedbackReply = `${reply.trim()}${turn.surface === 'voice' ? turn.feedbackReplySuffix ?? '' : ''}`;
   const recordId = routing.feedbackEnabled && turn.presence === 'alone' ? randomUUID() : undefined;

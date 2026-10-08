@@ -65,7 +65,7 @@ struct ShannonAutonomyPursuitsPage: View {
                 } header: {
                     Text(ShannonGeneratedStrings.autonomyModelsTitle)
                 } footer: {
-                    Text("何にどのモデルを使うかは、シャノンが選びます。使った分は今日の予算から引かれます。")
+                    Text("ここは用途ごとにシャノンが希望するモデルです。計画のモデルは、設定の「判断モデル」で確認・変更できます。使った分は今日の予算から引かれます。")
                 }
             }
         }

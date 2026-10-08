@@ -20,7 +20,8 @@ import { BoundedPublicReader } from './mind/action/ownTime/autonomyReader.js';
 import { ShannonAutonomyService } from './mind/action/ownTime/autonomyService.js';
 import { SQLiteStudyShowing } from './wiring/studyShowingWiring.js';
 import { SQLiteAutonomyStore } from './wiring/autonomyStoreWiring.js';
-import { configuredAutonomyTextModel } from './mind/action/ownTime/autonomyTextModel.js';
+import { configuredAutonomyTextModel, resolveAutonomyModel } from './mind/action/ownTime/autonomyTextModel.js';
+import { configuredPlanningMode } from './wiring/modelModePlanningWiring.js';
 import { BODY_LIMITS, bodyIngestEnabled } from './contracts/bodyContract.js';
 import { ActivityRoomLooks } from './surfaces/body/bodyLookActivity.js';
 import { SQLiteBodyLookActivityStore } from './surfaces/body/store/bodyLookActivityStore.js';
@@ -171,9 +172,12 @@ const shadowTap = shadow ? { reachOut: (...args: Parameters<typeof shadow.reachO
 // Syzygy ADR-0008 stage 3: the one function her own time is handed of the mind (rows of closed fields in `mind_inbox`, once the API
 // created it). SHANNON_WORKSPACE=off (or SHANNON_ADR8_STAGE3=off): none, and every step is what it was.
 const mindInbox = configuredMindInbox(process.env, { databasePath, log: line => console.log(line) });
+const model = configuredAutonomyTextModel(process.env, undefined, line => console.log(line));
+const planningMode = configuredPlanningMode(process.env, { path: databasePath, ownerScope: loopConfig.scopeKey, model,
+  fallbackPlanning: scope => resolveAutonomyModel('planning', store.modelPreferences(scope), id => model.canUse(id)) });
 const loop = new ShannonAutonomyLoop({
   ...(actionSteps?{actionSteps,concurrentActions:true}:{}),
-  store, service, config, loop: loopConfig, model: configuredAutonomyTextModel(process.env, undefined, line => console.log(line)),
+  store, service, config, loop: loopConfig, model, ...(planningMode ? { planningModel: planningMode.planningModel } : {}),
   reader: new BoundedPublicReader({
     maximumBytes: boundedInteger(process.env.SHANNON_AUTONOMY_READ_MAX_BYTES, 10_000, 5_000_000, 1_500_000),
     timeoutMilliseconds: boundedInteger(process.env.SHANNON_AUTONOMY_READ_TIMEOUT_MS, 1_000, 60_000, 10_000),
@@ -241,6 +245,7 @@ try {
   skillCopies?.close();
   ownerContext?.close();
   selfInterests?.close();
+  planningMode?.close();
   ownerUpcoming.close();
   ownerState.close();
   reachOuts.close();

@@ -7,7 +7,8 @@ import {
 import { CUT_OFF_CALL_NOTE, TIMED_OUT_ROUND_NOTE, TOOLS_GONE_NOTE, type ShannonModelToolSession } from '../chatModelTools.js';
 import { parallelToolsEnabled, runToolStep, type ToolStepState } from '../chatModelToolStep.js';
 import { sonnetTools } from './anthropicRequest.js';
-import { DEFAULT_HAIKU_MODEL } from './haikuConfig.js';
+import { isAppendOnlyAnthropicModel } from './haikuConfig.js';
+import { isAnthropicUsageEvidenceError } from './haikuCache.js';
 import type { BetaRequestToolAdditionBlock } from '@anthropic-ai/sdk/resources/beta/messages/messages';
 
 /**
@@ -49,8 +50,10 @@ export interface SonnetRoundOptions {
   timedOutRound?: 'answer' | 'fail';
   /** The base Haiku lane retains the turn's single, pre-answer increase in reasoning effort. */
   escalate?: { allowed: () => boolean; onEscalated: () => void };
-  /** Base Haiku only: retain recovery from an explicit 4xx refusal of offered schemas, once without tools. */
+  /** Haiku and native Sonnet 5.5 retain one recovery from an explicit 4xx refusal of offered schemas. */
   plainBody?: Anthropic.MessageCreateParamsNonStreaming;
+  /** A selected external read is unfinished until its server-owned receipt exists. One bounded recovery, never a replay. */
+  missingRequiredRead?: (message: Anthropic.Message) => boolean;
 }
 
 export interface SonnetRoundResult {
@@ -69,17 +72,18 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
   const messages: Anthropic.MessageParam[] = [...body.messages];
   const turns: Anthropic.Message[] = [];
   const session = options.session;
-  const haiku = body.model === DEFAULT_HAIKU_MODEL;
+  const appendOnly = isAppendOnlyAnthropicModel(body.model);
   // Every offered schema is strict, including deferred ones, and the API accepts at most 20 strict tools per request.
   // Keep only the initially visible menu in the fixed prefix. Opening another tool appends its full strict definition
   // after the result; it never changes signed tools/system/history or the session's visibility and execution gate.
   const initial = sonnetTools(session);
   const visible = new Set(initial.map(tool => tool.name));
-  if (haiku && session?.menu) body = { ...body, tools: initial };
+  if (appendOnly && session?.menu) body = { ...body, tools: initial };
   const turn: ToolStepState = { used: 0, toolsOff: false };
   let round = 0;
   let pauses = 0;
   let escalated = false;
+  let readRecovery = false;
   const escalate = () => {
     if (escalated || !options.escalate?.allowed()) return;
     escalated = true;
@@ -88,12 +92,12 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
   };
   const callerStopped = () => options.signal?.aborted === true;
   const request = (extra: Partial<Anthropic.MessageCreateParamsNonStreaming> = {}): Anthropic.MessageCreateParamsNonStreaming => ({
-    ...body, ...(!haiku && session ? { tools: sonnetTools(session) } : {}), messages: [...messages], ...extra,
+    ...body, ...(!appendOnly && session ? { tools: sonnetTools(session) } : {}), messages: [...messages], ...extra,
   });
-  // Haiku appends every note; legacy lanes may join the system message the turn already ends with.
+  // Native 5.5 sessions append every note; legacy lanes may join the system message the turn already ends with.
   const note = (text: string) => {
     const last = messages.at(-1);
-    if (!haiku && last?.role === 'system' && typeof last.content === 'string') messages[messages.length - 1] = { role: 'system', content: `${last.content}\n\n${text}` };
+    if (!appendOnly && last?.role === 'system' && typeof last.content === 'string') messages[messages.length - 1] = { role: 'system', content: `${last.content}\n\n${text}` };
     else messages.push({ role: 'system', content: text });
   };
   const refused = (message: Anthropic.Message): SonnetRoundResult | null => {
@@ -122,7 +126,7 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     if (left < MINIMUM_ANSWER_MILLISECONDS) return out();
     // After tools/thinking, the original declarations and every result stay intact. Ask once for an answer with no
     // further calls rather than replaying thinking against a different system/tools prefix or a rewritten history.
-    const retained = plain && haiku && turns.length > 0;
+    const retained = plain && appendOnly && turns.length > 0;
     if (retained) note(TOOLS_GONE_NOTE);
     try {
       const { tools: _tools, tool_choice: _choice, ...plainBody } = options.plainBody ?? body;
@@ -135,6 +139,7 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     } catch (error) {
       if (callerStopped()) throw error;
       if (error instanceof PartialAnswerError) return out(error.sent);
+      if (isAnthropicUsageEvidenceError(error)) { if (turn.used === 0) throw error; return out(); }
       if (!plain && options.plainBody && refusedOffer(error)) { reportRefusedOffer(error); return answer(true); }
       if (turn.used === 0 && !timedOut(error) && !(error instanceof SonnetRefusalError)) throw error;
       if (error instanceof SonnetRefusalError && turn.used === 0) throw error;
@@ -152,6 +157,7 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     } catch (error) {
       if (callerStopped()) throw error;
       if (error instanceof PartialAnswerError) return out(error.sent);
+      if (isAnthropicUsageEvidenceError(error)) { if (turn.used === 0) throw error; return out(); }
       if (options.plainBody && refusedOffer(error)) { reportRefusedOffer(error); return answer(true); }
       if (!timedOut(error) && turn.used === 0) throw error;
       if (options.timedOutRound === 'fail' && turn.used === 0) throw error;
@@ -165,7 +171,13 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     if (stop) return stop;
     if (message.stop_reason === 'pause_turn' && pauses++ < MAXIMUM_PAUSES) { messages.push({ role: 'assistant', content: message.content }); continue; }
     const uses = message.content.filter((block): block is Anthropic.ToolUseBlock => block.type === 'tool_use');
-    if (!uses.length || options.isAnswer(message)) return { final: message, turns, used: turn.used };
+    if (!uses.length && message.stop_reason === 'end_turn' && options.missingRequiredRead?.(message) && !readRecovery) {
+      readRecovery = true;
+      messages.push({ role: 'assistant', content: message.content });
+      note('依頼されたWeb検索はまだ実行されていない。調べる約束だけでは完了しない。必要な地域や対象が分かっているならweb_searchを使ってから答える。不明なら必要なことだけを短く聞く。');
+      continue;
+    }
+    if (!uses.length || (options.isAnswer(message) && !options.missingRequiredRead?.(message))) return { final: message, turns, used: turn.used };
     if (message.stop_reason === 'max_tokens') {
       // Cut off at its ceiling: a call may carry half its input. Nothing runs; the turn answers without tools.
       note(CUT_OFF_CALL_NOTE);
@@ -183,7 +195,7 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     });
     messages.push({ role: 'user', content: results });
     observerHandoff('tools', 'llm', { resultCount: results.length, selectedTools: uses.map(use => observedToolName(use.name)) });
-    if (haiku && session.menu) {
+    if (appendOnly && session.menu) {
       const additions: BetaRequestToolAdditionBlock[] = sonnetTools(session).flatMap(tool => {
         if (visible.has(tool.name)) return [];
         visible.add(tool.name);

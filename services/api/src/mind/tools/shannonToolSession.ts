@@ -9,8 +9,10 @@ import { wasWithheld, type ShannonToolRunner } from './shannonToolRunner.js';
 import { toolTraceCall } from './shannonToolTrace.js';
 import { InMemoryToolTraces, TOOL_FOLLOW_UP_MILLISECONDS, ToolTurnLog, type ToolTraceStore } from './shannonToolTurns.js';
 import { toolSessionMemory } from './shannonToolTypes.js';
+import { webReadResult } from './shannonReadTools.js';
+import { webSearchFailure, type WebSearchResult } from '../../infra/models/webSearch.js';
 import { baseToolSession, nothingFound, sourcesLine, startToolMenu, type ToolMenuChooser } from './shannonToolMenu.js';
-import { isReadToolDomain, ownToolsEnabled, providerToolName, toolFailure, toolFromProviderName, toolResultForModel, type ReadToolDomain, type ShannonToolDefinition } from './shannonTools.js';
+import { isReadToolDomain, ownToolsEnabled, providerToolName, toolFailure, toolSummary, toolFromProviderName, toolResultForModel, type ReadToolDomain, type ShannonToolDefinition } from './shannonTools.js';
 import type { TurnDeadline } from '../action/respond/respondPorts.js';
 import { answersWithPlace, asksForMemo, asksWhichPlace, namesAether } from '../action/respond/respondPorts.js';
 import { SKILL_LIMITS, SKILL_NAME } from '../memory/memoryPorts.js';
@@ -88,12 +90,14 @@ export function conversationTools(
   let check: SecretCheck | null | undefined;
   let others: OthersTextCheck | null | undefined;
   const session = { definitions, maximumCalls: CONVERSATION_TOOL_CALLS } as unknown as ShannonModelToolSession;
+  TURN_WEB_READS.set(session, () => webReadResult(memory));
   Object.defineProperty(session, 'deadline', { enumerable: false, value: deadline });
   if (!writes) Object.defineProperty(session, 'writesWithheld', { enumerable: false, value: true });
   if (othersPresent) Object.defineProperty(session, 'othersPresent', { enumerable: false, value: true });
   if (ownerAlone === 'guests') Object.defineProperty(session, 'guestTurn', { enumerable: false, value: true });
   /** A call of a name this turn does not offer, with the reason that is true for it. */
   const refuse = (providerName: string): string => {
+    if (providerName === 'web_search') WEB_REFUSED.add(session);
     // As this server has it: without the Aether client an Aether name is a name that does not exist (as before Aether).
     const tool = runner.knownTool(providerName);
     const refusal = !tool ? { why: 'そういう名前の道具はない', wouldWork: '出してある道具の名前（folder_list のような形）で呼ぶ' }
@@ -159,6 +163,18 @@ function readOffered(tool: ShannonToolDefinition, reads: ReadToolOffer | undefin
 
 /** The calls that ran in each turn's session, in the order they ended: name, effect, whether it worked, and the skill a `skill.read` opened. */
 const TURN_RESULTS = new WeakMap<object, ReadonlyArray<TurnToolResult>>();
+const WEB_REFUSED = new WeakSet<object>();
+/** Closed, successful write receipts preserve confirmations without leaking private result text or unshown story titles. */
+export function turnCompletedWriteReceipts(tools: ShannonModelToolSession | undefined): readonly string[] {
+  return turnToolResults(tools).filter(result => result.ok && result.effect === 'write').map(result => `実行済み: ${toolSummary(result)}`);
+}
+const TURN_WEB_READS = new WeakMap<object, () => WebSearchResult | null>();
+/** Actual search receipts remain server-owned; a model's source list cannot replace them. */
+export function turnWebSearchResult(tools: ShannonModelToolSession | undefined): WebSearchResult | null {
+  if (!tools) return null;
+  const session = baseToolSession(tools), receipt = TURN_WEB_READS.get(session)?.();
+  return receipt ?? (WEB_REFUSED.has(session) || turnToolResults(tools).some(result => result.name === 'web.search' && !result.ok) ? webSearchFailure('not_searched') : null);
+}
 export interface TurnToolResult { name: string; effect: 'read' | 'write'; ok: boolean; subject?: string; withheld?: true }
 
 /** The name of the skill a `skill.read` call asked for, when it is a skill's closed name. */
@@ -356,5 +372,5 @@ export function startTurnToolMenu(
  * while the runner has their ports.
  */
 export function ownerAloneReads(ownerAlone: boolean | 'others' | 'guests' | 'shared'): { reads?: ReadToolOffer } {
-  return ownerAlone === true ? { reads: { notion_read: true, voyager_read: true, schedule_read: true, places_search: true } } : {};
+  return ownerAlone === true ? { reads: { notion_read: true, voyager_read: true, schedule_read: true, places_search: true, web_search: true } } : {};
 }

@@ -2,6 +2,7 @@ import { estimatedOpenAICostUsd } from '../../../infra/models/llmUsage.js';
 import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
 import { estimatedAnthropicCostUsd } from '../../../infra/models/anthropic/anthropicConfig.js';
 import { DEFAULT_HAIKU_MODEL, replacementModel } from '../../../infra/models/anthropic/haikuConfig.js';
+import { DEFAULT_SONNET_MODEL } from '../../../infra/models/anthropic/anthropicConfig.js';
 import { HAIKU_PROTOCOL_PREFIX } from '../../../infra/models/anthropic/haikuCache.js';
 
 /**
@@ -39,6 +40,7 @@ export const AUTONOMY_FAIL_SAFE_USD_PER_MILLION = Object.freeze({ input: 5, outp
 export const AUTONOMY_MODELS: readonly AutonomyModel[] = Object.freeze([
   { id: 'gemini-3.8-flash', provider: 'google', label: 'Gemini 3.8 Flash', purposes: ['prose', 'research_reading', 'planning', 'critique'], usdPerMillion: null },
   { id: DEFAULT_HAIKU_MODEL, provider: 'anthropic', label: 'Claude Haiku 5.5', purposes: ['research_reading', 'planning'], usdPerMillion: null },
+  { id: DEFAULT_SONNET_MODEL, provider: 'anthropic', label: 'Claude Sonnet 5.5', purposes: ['planning'], usdPerMillion: null },
   { id: 'gpt-5.6-terra', provider: 'openai', label: 'GPT-5.6 Terra', purposes: ['prose', 'planning', 'critique'], usdPerMillion: null },
   { id: 'gpt-5.6-sol', provider: 'openai', label: 'GPT-5.6 Sol', purposes: ['prose', 'critique'], usdPerMillion: null },
 ]);
@@ -145,9 +147,10 @@ export function autonomyModelCostUsd(
     const hour = tokenCount(usage.cacheCreation1hInputTokens ?? 0);
     const knownTtl = reported && usage.cacheCreation5mInputTokens !== undefined && usage.cacheCreation1hInputTokens !== undefined && five + hour === cacheWrite;
     if (configured) {
-      const tier = totalInput > 100_000 ? 5 : 1;
+      const tier = model.id === DEFAULT_HAIKU_MODEL && totalInput > 100_000 ? 5 : 1;
       const written = knownTtl ? 1.25 * five + 2 * hour : 2 * cacheWrite;
-      return ((ordinaryInput + written + 0.1 * cacheRead) * configured.input + outputTokens * configured.output) * tier / 1_000_000;
+      const readRatio = model.id === DEFAULT_SONNET_MODEL ? 0.05 : 0.1;
+      return ((ordinaryInput + written + readRatio * cacheRead) * configured.input + outputTokens * configured.output) * tier / 1_000_000;
     }
     return estimatedAnthropicCostUsd(model.id, { input: ordinaryInput, cacheWrite, cacheRead, output: outputTokens, searches: 0,
       ...(knownTtl ? { cacheWrite5m: five, cacheWrite1h: hour } : {}),

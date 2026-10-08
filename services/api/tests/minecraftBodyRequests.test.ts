@@ -1,3 +1,4 @@
+import type { MinecraftPrimaryModelReader } from '../src/contracts/minecraftPrimaryModelContract.js';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -40,7 +41,7 @@ const CONFIGURATION = {
 const directories: string[] = [];
 afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
 
-function queue() {
+function queue(primaryModel?: MinecraftPrimaryModelReader) {
   const directory = mkdtempSync(join(tmpdir(), 'shannon-minecraft-requests-'));
   directories.push(directory);
   const path = join(directory, 'shannon.sqlite');
@@ -48,7 +49,7 @@ function queue() {
   const now = () => new Date(clock).toISOString();
   const store = new SQLiteShannonStore({ path, now });
   const experiences = new SQLiteGameExperiences(path);
-  const requests = new MinecraftBodyRequests(path, { deviceId: DEVICE, ownerScopeKey: 'owner' }, now, experiences);
+  const requests = new MinecraftBodyRequests(path, { deviceId: DEVICE, ownerScopeKey: 'owner' }, now, experiences, undefined, primaryModel);
   const memories = () => store.experienceCandidates('owner').filter(item => item.userMessage.startsWith('body-game-'));
   const claim = async (holding: string[] = [], waitSeconds = 0) => {
     const answer = await requests.claim('owner', DEVICE, { waitSeconds, holding });
@@ -309,8 +310,8 @@ class Model implements ShannonChatModel {
 }
 
 describe('one mind: the phone, the game chat and the result', () => {
-  function world(turnChooser?: TurnChooser) {
-    const harness = queue();
+  function world(turnChooser?: TurnChooser, primaryModel?: MinecraftPrimaryModelReader) {
+    const harness = queue(primaryModel);
     const autonomyStore = new SQLiteAutonomyStore(':memory:');
     const autonomy = createInMemoryAutonomyService(harness.now, { store: autonomyStore, minecraftBody: harness.requests });
     const model = new Model();
@@ -395,6 +396,24 @@ describe('one mind: the phone, the game chat and the result', () => {
       await claim();
       expect((await chat(goal, { audience: 'others' })).tools).toBeUndefined();
       expect(requests.recent('owner')).toEqual([]);
+    } finally { await done(); }
+  });
+
+  it('never falls back to direct game execution when the selected model cannot enter its queue', async () => {
+    const { turn, model, requests, claim, done } = world(undefined, () => ({ mode: 'sonnet', model: 'claude-sonnet-5-5', revision: 5 }));
+    model.intent = { kind: 'task', goal: 'オークの原木を16個集める' };
+    try {
+      const absent = await turn({ requestId: 'mode-absent' });
+      expect(absent.intent).toEqual({ kind: 'none', goal: '', rejected: 'queue_unavailable' });
+      await claim();
+      const oldBody = await turn({ requestId: 'mode-old-body' });
+      expect(oldBody.intent).toEqual({ kind: 'none', goal: '', rejected: 'model_unavailable' });
+      expect(oldBody.reply).toContain('渡せなかった');
+      expect(requests.recent('owner')).toHaveLength(0);
+      await requests.claim('owner', DEVICE, { holding: [], waitSeconds: 0, supportedPrimaryModels: ['claude-sonnet-5-5'] });
+      const accepted = await turn({ requestId: 'mode-supported' });
+      expect(accepted.intent).toMatchObject({ kind: 'task', request: { id: expect.any(String) } });
+      expect(requests.recent('owner')[0].primaryModel).toEqual({ mode: 'sonnet', model: 'claude-sonnet-5-5', revision: 5 });
     } finally { await done(); }
   });
 

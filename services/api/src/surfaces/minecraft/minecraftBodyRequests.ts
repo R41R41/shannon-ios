@@ -18,6 +18,6 @@ export interface MinecraftRequestsConfiguration { deviceId: string; ownerScopeKe
 
 export type EnqueueOutcome =
   | { kind: 'queued'; request: MinecraftRequestView; duplicate: boolean }
-  | { kind: 'not_configured' | 'absent' | 'limit' | 'invalid' };
+  | { kind: 'not_configured' | 'absent' | 'limit' | 'invalid' | 'model_unavailable' };
 
-export interface ClaimResponse { request: ClaimedMinecraftRequest | null; cancel: string[] }
+export interface ClaimResponse { request: ClaimedMinecraftRequest | null; cancel: string[]; blocked?: { id: string; reason: 'model_unavailable' } }

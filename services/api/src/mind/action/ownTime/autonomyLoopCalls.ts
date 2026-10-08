@@ -12,9 +12,11 @@ import { AutonomyModelError, resolveAutonomyModel, type AutonomyTextModel, type 
 export interface PaidCall { model: string; estimate: { inputTokens: number; outputTokens: number }; estimatedCostYen: number; prompt: AutonomyPrompt; maximumOutputTokens: number; /** A planning call asks the provider for little reasoning. */ reasoning?: 'low' }
 
 /** Null when no usable model serves the purpose or its price is unknown. */
-export function paidCall(dependencies: StepDependencies, scopeKey: string, purpose: AutonomyModelPurpose, prompt: AutonomyPrompt, maximumOutputTokens: number): PaidCall | null {
-  const model = resolveAutonomyModel(purpose, dependencies.store.modelPreferences(scopeKey), id => dependencies.model.canUse(id));
-  if (!model) return null;
+export function paidCall(dependencies: StepDependencies, scopeKey: string, purpose: AutonomyModelPurpose, prompt: AutonomyPrompt, maximumOutputTokens: number, pinnedPlanning?: string | null): PaidCall | null {
+  const model = purpose === 'planning' && pinnedPlanning !== undefined ? pinnedPlanning : purpose === 'planning' && dependencies.planningModel
+    ? dependencies.planningModel(scopeKey)
+    : resolveAutonomyModel(purpose, dependencies.store.modelPreferences(scopeKey), id => dependencies.model.canUse(id));
+  if (!model || !dependencies.model.canUse(model)) return null;
   const estimate = { inputTokens: autonomyInputTokensEstimate(model, prompt.system, prompt.prompt), outputTokens: maximumOutputTokens };
   const costUsd = autonomyModelCostUsd(model, estimate, dependencies.config.modelPrices);
   if (costUsd === null) return null;

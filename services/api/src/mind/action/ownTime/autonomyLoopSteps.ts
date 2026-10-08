@@ -64,6 +64,8 @@ export interface StepDependencies {
   config: AutonomyConfig;
   loop: AutonomyLoopConfig;
   model: AutonomyTextModel;
+  /** Owner-selected primary planning model, captured while preparing one step; auxiliary purposes retain their preferences. */
+  planningModel?: (scopeKey: string) => string | null;
   reader: AutonomyPublicReader;
   showing: StudyShowing;
   notion?: AutonomyNotionReader;

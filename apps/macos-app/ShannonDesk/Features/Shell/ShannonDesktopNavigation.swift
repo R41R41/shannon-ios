@@ -121,6 +121,7 @@ enum DesktopSettingsPage: String, CaseIterable, Hashable {
     case camera
     case earphones
     case voice
+    case modelMode
     case calendar
     case folder
     case appearance
@@ -128,7 +129,7 @@ enum DesktopSettingsPage: String, CaseIterable, Hashable {
     case sources
 
     static let admin: [DesktopSettingsPage] = [.ops, .devices, .delivery, .diagnostics]
-    static let others: [DesktopSettingsPage] = [.figure, .camera, .earphones, .voice, .calendar, .folder, .appearance, .connection, .sources]
+    static let others: [DesktopSettingsPage] = [.figure, .camera, .earphones, .voice, .modelMode, .calendar, .folder, .appearance, .connection, .sources]
 
     /// 運用 is offered only by a server that has it; the page falls back to the next part of 管理.
     static func restoring(_ rawValue: String?, opsSupported: Bool) -> DesktopSettingsPage {

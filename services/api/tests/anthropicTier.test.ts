@@ -73,7 +73,7 @@ describe('the Sonnet request', () => {
     expect(body.model).toBe('claude-sonnet-5-5');
     const system = body.system as Array<{ text: string; cache_control?: unknown }>;
     expect(system).toHaveLength(1);
-    expect(system[0]!.cache_control).toEqual({ type: 'ephemeral' });
+    expect(system[0]!.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
     expect(system[0]!.text.startsWith('[シャノン]')).toBe(true);
     expect(system[0]!.text).toContain('[ライ氏のこと]');
     expect(system[0]!.text.endsWith(SONNET_TEXT_LINES)).toBe(true);
@@ -88,11 +88,12 @@ describe('the Sonnet request', () => {
     expect(JSON.stringify(body.output_config!.format)).not.toContain('"type":["string","null"]');
   });
 
-  it('asks for a web search with the server tool and a line, never by force, and offers no function tool beside it', () => {
+  it('never mixes native web citations with the structured final answer', () => {
     const body = sonnetChatBody(settings, { ...base, useWebSearch: true, tools: session().value }, undefined);
-    expect(body.tools).toEqual([{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }]);
-    expect(body.tool_choice).toEqual({ type: 'auto' });
-    expect((body.system as Array<{ text: string }>)[0]!.text).toContain(SONNET_WEB_LINE);
+    expect(body.tools).toBeUndefined();
+    expect(body.tool_choice).toBeUndefined();
+    expect(body.output_config).toHaveProperty('format');
+    expect((body.system as Array<{ text: string }>)[0]!.text).toContain('[Web検索の回答]');
   });
 
   it('speaks on voice with between_tools thinking at low effort and room for it', () => {
@@ -120,11 +121,12 @@ describe('a Sonnet turn', () => {
     expect(usage[0]).toMatchObject({ lane: 'chat', model: 'claude-sonnet-5-5', inputTokens: 312 + 4_100, cachedInputTokens: 0, outputTokens: 58 });
     expect(usage[1]!.cachedInputTokens).toBe(4_100);
     expect(usage[1]!.estimatedCostUsd).toBeCloseTo(estimatedAnthropicCostUsd('claude-sonnet-5-5', { input: 420, cacheWrite: 0, cacheRead: 4_100, output: 96, searches: 0 }), 9);
-    expect(estimatedAnthropicCostUsd('claude-sonnet-5-5', { input: 1_000_000, cacheWrite: 0, cacheRead: 1_000_000, output: 1_000_000, searches: 1 })).toBeCloseTo(2 + 0.2 + 10 + 0.01, 9);
+    expect(estimatedAnthropicCostUsd('claude-sonnet-5-5', { input: 1_000_000, cacheWrite: 0, cacheRead: 1_000_000, output: 1_000_000, searches: 1 })).toBeCloseTo(2 + 0.1 + 10 + 0.01, 9);
   });
 
   it('reads the web search\'s pages as her sources', async () => {
-    const { model } = sonnet([anthropicFixture('web-search-answer')]);
+    const web = anthropicFixture('web-search-answer');
+    const { model } = sonnet([web, message(web.content.filter(block => block.type === 'text'), 'end_turn')]);
     const result = await model.generate({ ...base, useWebSearch: true });
     expect(result.reply).toBe('今日は晴れです。');
     expect(result.webSources).toEqual([{ title: '今日の天気', url: 'https://example.com/weather' }]);

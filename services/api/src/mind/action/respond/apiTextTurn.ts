@@ -362,7 +362,7 @@ export async function settleTextTools<T extends { tools?: ShannonModelToolSessio
   const answer = await choices;
   const menu = answer.menu;
   const offer = menu && offered.tools ? { ...offered, tools: withToolMenu(offered.tools, menu.chosen) } : offered;
-  return { offer, web: menu?.chosen.includes(WEB_CAPABILITY_ENTRY.name) === true, answer };
+  return { offer, web: menu?.chosen.includes(WEB_CAPABILITY_ENTRY.name) === true && !offered.tools?.definitions.some(tool => tool.name === 'web.search'), answer };
 }
 
 /**
@@ -378,13 +378,13 @@ export function textToolStart(input: TextTurnInput, begun: BegunTextTurn, parts:
   // his turn in a shared platform conversation) as 'shared', someone else's as 'guests'.
   const toolAudience = audience.alone || (!surface ? 'shared' as const : !surface.othersFolderReading ? false : surface.openOnly ? 'guests' as const : 'shared' as const);
   const modelTurn = !begun.explicitCommand && !begun.organizeTurn && body.webSearch !== true && !placeOptions.placeSearch;
-  const plan = parts.readTools && modelTurn && audience.alone && !surface ? readToolPlan(audience.capabilities) : null;
+  const plan = parts.readTools && !begun.explicitCommand && !begun.organizeTurn && audience.alone && !surface ? readToolPlan(audience.capabilities) : null;
   // Game chat asks her Minecraft body through the turn's intent, not through her tools.
   const toolOptions = {
     ...(surface && !surface.minecraftTools ? { withoutDomains: ['minecraft_body'], ...(surface.openOnly ? { openOnly: true } : {}) } : {}),
     ...(plan ? { reads: plan.offer } : {}), ...(parts.toolHints ? { sourceHints: true } : {}),
   };
   const choices = startTurnToolMenu(modelTurn ? parts.turnChooser : null, parts.autonomy, body.scopeKey, 'text', toolAudience, parts.toolServer, `${threadId}\n${message}`,
-    toolOptions, plan ? [WEB_CAPABILITY_ENTRY] : []);
+    toolOptions, plan && !parts.autonomy.tools?.knownTool(WEB_CAPABILITY_ENTRY.name) ? [WEB_CAPABILITY_ENTRY] : []);
   return { toolAudience, toolOptions, choices };
 }

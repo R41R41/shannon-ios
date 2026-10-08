@@ -123,7 +123,7 @@ describe('the audience matrix of her reads: as today, with the read tools on', (
     const on = await text(kernel(true), ASK_ALL);
     // No turn is slower or poorer than today: the same projections, the same turn context, and the tools in addition.
     expect(on.turnContext).toBe(off.turnContext);
-    expect(readToolsOf(on)).toEqual([...READ_TOOL_DOMAINS].sort());
+    expect(readToolsOf(on)).toEqual(READ_TOOL_DOMAINS.filter(domain => domain !== 'web_search').sort()); // This recording model has no native search port.
     // Her description says so in that turn only.
     expect(on.systemPrompt).toContain('読む道具:');
     expect(off.systemPrompt).not.toContain('読む道具:');
@@ -153,7 +153,7 @@ describe('the audience matrix of her reads: as today, with the read tools on', (
     const offTools = await voice(kernel(false), '書斎のメモと今日の予定を見せて');
     const onTools = await voice(kernel(true), '書斎のメモと今日の予定を見せて');
     expect(projected(onTools)).toEqual(projected(offTools));
-    expect(readToolsOf(onTools)).toEqual([...READ_TOOL_DOMAINS].sort());
+    expect(readToolsOf(onTools)).toEqual(READ_TOOL_DOMAINS.filter(domain => domain !== 'web_search').sort());
   });
 
   it('reads as today when the session does not serve the tools: others known to the server, or Jev chose the web', async () => {
@@ -169,7 +169,7 @@ describe('the audience matrix of her reads: as today, with the read tools on', (
   });
 
   it('keeps the offer to the projections\' own audience rules', () => {
-    expect(readToolPlan(undefined).offer).toEqual({ notion_read: true, voyager_read: true, schedule_read: true, places_search: true });
+    expect(readToolPlan(undefined).offer).toEqual({ notion_read: true, voyager_read: true, schedule_read: true, places_search: true, web_search: true });
     // A guarded schedule (others present) is never a tool; nor is a read the selection switched off.
     expect(readToolPlan({ aetherNotes: false, voyagerTasks: false, notion: false, upcoming: 'guarded' }).offer).toMatchObject({ notion_read: false, voyager_read: false, schedule_read: false });
   });

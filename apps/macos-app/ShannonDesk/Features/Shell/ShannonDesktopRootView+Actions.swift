@@ -152,6 +152,9 @@ extension ShannonDesktopRootView {
                 restoredDestinationRawValue = DesktopDestination.release.rawValue
             } else if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDevelopment") {
                 restoredDestinationRawValue = DesktopDestination.development.rawValue
+            } else if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewModelMode") {
+                restoredDestinationRawValue = DesktopDestination.settings.rawValue
+                settingsPageRawValue = DesktopSettingsPage.modelMode.rawValue
             }
         }
 #endif

@@ -92,13 +92,14 @@ describe('native Haiku conversation migration', () => {
   });
 
   it('keeps web citations and voice text without exposing thinking or cache metadata', async () => {
-    const h = model([haikuMessage(anthropicFixture('web-search-answer')), haikuMessage(message([{ type: 'text', text: 'おはようございます。' }], 'end_turn'))]);
+    const web = haikuMessage(anthropicFixture('web-search-answer'));
+    const h = model([web, haikuMessage(message(web.content.filter(block => block.type === 'text'), 'end_turn')), haikuMessage(message([{ type: 'text', text: 'おはようございます。' }], 'end_turn'))]);
     expect((await h.chat.generate({ ...base, useWebSearch: true })).webSources).toEqual([{ title: '今日の天気', url: 'https://example.com/weather' }]);
     const parts: string[] = [];
     const reply = await h.chat.generateVoiceStreaming({ ...base, conversationClass: 'direct', useWebSearch: false }, text => { parts.push(text); });
     expect(reply.reply).toBe('おはようございます。');
     expect(parts.join('')).toBe(reply.reply);
-    expect(h.bodies[1]!.thinking).toEqual({ type: 'adaptive' });
+    expect(h.bodies[2]!.thinking).toEqual({ type: 'adaptive' });
   });
 
   it('identifies Sonnet fallback by the execution lane even though both providers are Anthropic', async () => {
@@ -153,11 +154,11 @@ describe('native Haiku conversation migration', () => {
     value.usage.output_tokens = 16_000;
     value.usage.server_tool_use = { web_search_requests: 3 };
     const h = model([value]);
-    await expect(h.chat.generate({ ...base, useWebSearch: true })).rejects.toThrow('HAIKU_CACHE_UNCONFIRMED');
+    expect((await h.chat.generate({ ...base, useWebSearch: true })).reply).toBe('検索の完了を確認できませんでした。');
     expect(h.bodies).toHaveLength(1);
     expect(h.usage).toHaveLength(1);
-    expect(h.usage[0]).toMatchObject({ inputTokens: 0, cachedInputTokens: 0, outputTokens: 16_000 });
-    expect(h.usage[0]!.estimatedCostUsd).toBeCloseTo(1.07, 10);
+    expect(h.usage[0]).toMatchObject({ inputTokens: 0, cachedInputTokens: 0, outputTokens: 1 }); // The stream stops at the first invalid receipt, before its unseen final output count.
+    expect(h.usage[0]!.estimatedCostUsd).toBeCloseTo(1.04, 10); // Raw helper reserves at most 4,000 output tokens, plus all three searches.
   });
 
   it('records the unknown upper bound when the provider omits its entire usage receipt', async () => {
@@ -195,6 +196,20 @@ describe('native Haiku conversation migration', () => {
       expect(h.bodies.at(-1)).not.toHaveProperty('tools');
       expect(h.bodies.at(-1)).not.toHaveProperty('tool_choice');
     }
+  });
+
+  it('preserves offered-tool recovery for an explicit older Haiku override', async () => {
+    const older = 'claude-haiku-4-5-20251001';
+    const h = model((_body, index) => index === 0
+      ? new Response(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'unsupported tool schema' } }),
+        { status: 400, headers: { 'content-type': 'application/json' } })
+      : { ...haikuMessage(anthropicFixture('structured-answer')), model: older }, { settings: { ...settings, model: older } });
+    const answer = await h.chat.generate({ ...base, tools: { definitions: [shannonTool('study.list')!], maximumCalls: 6,
+      deadline: new TurnDeadline(TEXT_TURN_DEADLINE), async call() { throw new Error('must not run'); } } });
+    expect(answer.reply).toBeTruthy();
+    expect(h.bodies).toHaveLength(2);
+    expect(h.bodies[1]!.model).toBe(older);
+    expect(h.bodies[1]).not.toHaveProperty('tools');
   });
 
   it.each([400, 401, 403, 408, 409, 429, 500])('does not repeatedly recover a plain refusal or an excluded status %s', async status => {

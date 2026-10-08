@@ -19,7 +19,9 @@ import { configuredVoiceDecision, startRewardMood } from './wiring/cognitionLedg
 import { readToolPorts, skillRoutingParts } from './wiring/skillRoutingWiring.js';
 import { configuredTurnRouting } from './wiring/turnRoutingWiring.js';
 import { configuredWithheldActions, gateRefusals } from './wiring/withheldWiring.js';
-import { configuredSonnet, tieredChatModel } from './wiring/sonnetWiring.js';
+import { configuredSonnet } from './wiring/sonnetWiring.js';
+import { createModelModeWiring } from './wiring/modelModeWiring.js';
+import { MODEL_MODE_PATH } from './infra/http/modelModeRoutes.js';
 import { configuredSkillMemory, skillTurnPorts } from './wiring/skillMemoryWiring.js';
 import { noteCopyWrite } from './mind/memory/memoryPorts.js';
 import { installSalt } from './wiring/installSalt.js';
@@ -120,7 +122,10 @@ const bodyStore = new SQLiteBodyStore(configuredDatabasePath());
 // Bounded autonomy (ADR-0002): the gate, record, budget and stop switch. No activity loop runs in this process.
 const autonomyConfig = configuredAutonomy(process.env, { databasePath: configuredDatabasePath() });
 const ownerTurns = new SQLiteStudyShowing(configuredDatabasePath());
-const minecraft = createMinecraftBodyWiring(process.env, configuredDatabasePath(), now); // Her Minecraft body (docs/minecraft-body-contract.md); unset SHANNON_MINECRAFT_BODY_JSON: none of it.
+const haiku = createConfiguredChatModel(process.env, persistentStore), sonnet = configuredSonnet(process.env, { usageStore: persistentStore, now, webSearch: haiku.searchWeb?.bind(haiku) });
+const modelModes = createModelModeWiring(process.env, { path: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env), haiku, sonnet,
+  minecraftReady: (scope, model) => minecraft.requests?.primaryModelAvailable(scope, model) === true });
+const minecraft = createMinecraftBodyWiring(process.env, configuredDatabasePath(), now, modelModes.primarySelection); // Original requests pin the owner's mode; the body still needs its own capability and execution rights.
 const aetherPorts = configuredAetherPorts(process.env, now); // Aether (Syzygy ADR-0007): unset SHANNON_AETHER_API_URL/_SHANNON_TOKEN, none of it.
 // Syzygy ADR-0008 stage 1 (docs/cognition-ledger-contract.md): the prediction and choice ledgers; each null while switched off.
 const predictionLedger = persistentStore.predictionLedger();
@@ -134,8 +139,6 @@ const autonomy = new ShannonAutonomyService({
   ...(predictionLedger ? { storyReacted: (scopeKey, pieceId, reaction, at) => storyReacted(predictionLedger, scopeKey, pieceId, reaction, at, choiceLedger) } : {}),
   ...(withheldActions ? { withheld: gateRefusals(withheldActions.withheld, autonomyConfig) } : {}) });
 if (withheldActions) autonomy.tools.observeWithheld(withheldActions.withheld.sink, now);
-// Syzygy ADR-0008 stage 2, step 5: the Sonnet tier, only with the Anthropic key and SHANNON_SONNET_ROUTING=on (default off); else luna as it was.
-const sonnet = configuredSonnet(process.env, { usageStore: persistentStore, now });
 // Syzygy ADR-0008 stage 2, step 6 (docs/skill-and-routing-contract.md): her skill memory, its tables created here. SHANNON_SKILLS=off: none of it.
 const skillMemory = configuredSkillMemory(process.env, { databasePath: configuredDatabasePath(), createsSchema: true });
 const skills = skillMemory ? skillTurnPorts(skillMemory.memory, scopeKey => persistentStore.snapshot(scopeKey)) : null;
@@ -176,12 +179,12 @@ const incomingCallRoute: IncomingCallRoute | null = createIncomingCallRoute(proc
 // What she did on her own to reach the owner (ownOutreach.ts), and which app a device is (ownerCallElsewhere.ts): read-only connections.
 const ownOutreach = new SQLiteOwnOutreach(configuredDatabasePath());
 const ownerCallFacts = new SQLiteOwnerCallFacts(configuredDatabasePath());
-const chatModel = tieredChatModel(createConfiguredChatModel(process.env, persistentStore), sonnet);
+const chatModel = modelModes.chatModel;
 const voiceDecision = configuredVoiceDecision(process.env, persistentStore, persistentStore.decisionTraces()?.writer ?? null); // ADR-0008: traced; SHANNON_DECISION_TRACES=off: as it was.
 // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
 const notion = configuredNotionSource(process.env, { log: line => console.log(line) });
-minecraft.connect({ stateStore: persistentStore, conversationStore: persistentStore, background: backgroundDispatcher, now, chatModel, peopleStore: peopleMemoryStore, conversation: { textTurn: input => kernel.textTurn(input) }, memory: memoryPorts?.proposals ?? null, peopleFacts });
-const readTools = readToolPorts(process.env, { notion, voyagerCatalog, upcoming: ownerUpcoming.upcoming, chatModel }); // ADR-0008 stage 2, step 3 (SHANNON_READ_TOOLS); off, none.
+minecraft.connect({ stateStore: persistentStore, conversationStore: persistentStore, background: backgroundDispatcher, now, chatModel: haiku, peopleStore: peopleMemoryStore, conversation: { textTurn: input => kernel.textTurn(input) }, memory: memoryPorts?.proposals ?? null, peopleFacts });
+const readTools = readToolPorts(process.env, { notion, voyagerCatalog, upcoming: ownerUpcoming.upcoming, chatModel: haiku }); // Read-tool helpers remain auxiliary regardless of primary mode.
 // ADR-0008 stage 3: what every surface perceived, and the notices of promises and tasks (off: none). docs/mind-workspace-contract.md.
 const mind = configuredMind(process.env, { databasePath: configuredDatabasePath(), now, ticking: true, timeZone: autonomyConfig.timeZone, log: line => console.log(line),
   notices: { ownerScopeKey: shannonNowOwnerScope(process.env), snapshot: scopeKey => persistentStore.snapshot(scopeKey), tasks: scopeKey => agentTaskStore.list(scopeKey) } });
@@ -190,6 +193,7 @@ const kernel = createLocalApiKernel(now, {
   ownOutreach,
   ...(stage5.feedback ? {feedback:stage5.feedback.ports} : {}), ...(stage5.capabilities ? {stage5Capabilities:stage5.capabilities} : {}),
   chatModel,
+  auxiliaryChatModel: haiku,
   voiceDecision,
   stateStore: persistentStore,
   conversationStore: persistentStore,
@@ -232,7 +236,7 @@ const kernel = createLocalApiKernel(now, {
   ...(mind ? { mind: mind.mind } : {}),
 });
 stage5.attach({ownerAlone:scope => kernel.ownerAloneForFeedback(scope),presence:scope => kernel.ownerPresenceForFeedback(scope),actions:mind?.actions ?? null,autonomy,autonomyStore,config:autonomyConfig});
-const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, chatModel, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input) }, databasePath: configuredDatabasePath() }, memoryPorts?.proposals ?? null, peopleFacts);
+const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, haiku, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input) }, databasePath: configuredDatabasePath() }, memoryPorts?.proposals ?? null, peopleFacts);
 // What this server resolved (docs/ops-contract.md, `server`): model names, persona hash, tools, revision, integrations as booleans. Owner only.
 const selfDiagnosis = createServerSelfDiagnosis({ environment: process.env, startedAt: now(), chatModel, voiceDecision, dictation: voiceTranscriber, vision: voiceVisionGateway,
   voyagerCatalog, notion, platformBridge, autonomy: { enabled: autonomyConfig.enabled, preferences: scopeKey => autonomyStore.modelPreferences(scopeKey) } });
@@ -297,7 +301,7 @@ const server = createServer(async (request, response) => {
     // DELETE exists for one path: a device taking its calendar snapshot away. It carries no body.
     const calendarDelete = request.method === 'DELETE';
     if ((calendarDelete && url.pathname !== CALENDAR_UPCOMING_PATH)
-      || (request.method === 'PUT' && url.pathname !== BODY_CAPABILITIES_PATH && url.pathname !== CALENDAR_UPCOMING_PATH)) {
+      || (request.method === 'PUT' && url.pathname !== BODY_CAPABILITIES_PATH && url.pathname !== CALENDAR_UPCOMING_PATH && url.pathname !== MODEL_MODE_PATH)) {
       sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
       return;
     }
@@ -341,6 +345,7 @@ const server = createServer(async (request, response) => {
     }
     if(url.pathname.startsWith('/v1/observer/')){await signalObserver.route(request,response,url.pathname,principal,url);return;}
     if (await minecraft.serve(request, response, url.pathname, principal)) return; // Her Minecraft body's token reaches its own routes only.
+    if (url.pathname === MODEL_MODE_PATH) { await modelModes.route(request, response, principal); return; }
     if (isActionThreadPath(url.pathname)) { await externalActions.route(request,response,principal,url.pathname); return; }
     if (url.pathname === SHANNON_NOW_PATH) {
       shannonNowRoute(request, response, principal);
@@ -454,10 +459,8 @@ function shutdown(): void {
   if (shuttingDown) return;
   shuttingDown = true;
   server.close(() => {
-    signalObserver?.close();
-    deviceAuth?.close();
-    pushStore.close();
-    worldStore.close();
+    signalObserver?.close(); deviceAuth?.close();
+    pushStore.close(); worldStore.close();
     initiativeStore.close();
     stage5.close();
     testFlightDeliveryStore.close();
@@ -486,9 +489,8 @@ function shutdown(): void {
     opsStore.close();
     shannonNowReader.close();
     moodHistoryReader.close();
-    ownOutreach.close();
-    ownerCallFacts.close();
-    autonomyStore.close();
+    ownOutreach.close(); ownerCallFacts.close();
+    autonomyStore.close(); modelModes.close();
     persistentStore.close();
     process.exitCode = 0;
   });

@@ -46,6 +46,8 @@ export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPre
   message: string;
   attachments?: readonly ShannonChatAttachment[];
   useWebSearch?: boolean;
+  /** The turn chooser selected the real read tool; do not accept a promise in place of its receipt. */
+  requireWebSearch?: true;
   placeSearch?: PlaceSearchContext;
   /** The structured reply gets a `roomLook` field: she may choose one look at the room (`bodyLook.ts`). */
   offerRoomLook?: boolean;
@@ -136,6 +138,10 @@ export interface ShannonTaskProposal {
 export interface ShannonChatModel {
   readonly mode: ShannonChatMode;
   readonly model: string;
+  /** Query-only external read; used by the ordinary read tool, without the conversation's private context. */
+  searchWeb?: import('./webSearch.js').WebSearchOperation;
+  /** Capture a primary model once at admission, before recall/routing awaits. The returned view never rereads preferences. */
+  forTurn?(scopeKey: string): ShannonChatModel;
   generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult>;
   /** `generate` with the reply reported while it is written. The pieces are a prefix of the returned `reply`. */
   generateStreaming?(

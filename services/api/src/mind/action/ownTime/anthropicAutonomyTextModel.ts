@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { actionPermit, currentActionExecution } from '../../../infra/context/actionExecution.js';
 import { cacheHaikuRequest, validateHaikuCacheUsage } from '../../../infra/models/anthropic/haikuCache.js';
-import { isHaikuModel } from '../../../infra/models/anthropic/haikuConfig.js';
+import { usesOneHourAnthropicCache } from '../../../infra/models/anthropic/haikuConfig.js';
 import { AutonomyModelError, type AutonomyTextRequest, type AutonomyTextResult } from './autonomyTextModel.js';
 
 interface AnthropicAutonomyOptions { apiKey: string; fetcher?: typeof fetch; timeoutMilliseconds?: number }
@@ -21,7 +21,7 @@ export class AnthropicAutonomyTextModel {
   }
 
   async generate(request: AutonomyTextRequest): Promise<AutonomyTextResult> {
-    if (!isHaikuModel(request.model) || !Number.isSafeInteger(request.maximumOutputTokens) || request.maximumOutputTokens < 1) {
+    if (!usesOneHourAnthropicCache(request.model) || !Number.isSafeInteger(request.maximumOutputTokens) || request.maximumOutputTokens < 1) {
       throw new AutonomyModelError('AUTONOMY_MODEL_INVALID', ZERO_USAGE);
     }
     const execution = currentActionExecution();

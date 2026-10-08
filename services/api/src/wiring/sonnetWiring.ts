@@ -14,12 +14,13 @@ import { TieredChatModel } from '../infra/models/tieredChatModel.js';
  */
 export function configuredSonnet(
   environment: Readonly<Record<string, string | undefined>>,
-  parts: { usageStore?: LlmUsageStore; now?: () => string; fetch?: typeof fetch },
+  parts: { usageStore?: LlmUsageStore; now?: () => string; fetch?: typeof fetch; webSearch?: import('../infra/models/webSearch.js').WebSearchOperation },
 ): AnthropicChatModel | null {
   const apiKey = anthropicApiKey(environment);
   if (!apiKey || !sonnetRoutingAvailable(environment)) return null;
   return new AnthropicChatModel({
     apiKey, settings: sonnetSettings(environment), agentHostHint: environment.SHANNON_AGENT_DEFAULT_HOST?.trim() || 'shannon-mac',
+    ...(parts.webSearch ? { webSearch: parts.webSearch } : {}),
     ...(parts.usageStore ? { usageStore: parts.usageStore } : {}), ...(parts.now ? { now: parts.now } : {}), ...(parts.fetch ? { fetch: parts.fetch } : {}),
   });
 }

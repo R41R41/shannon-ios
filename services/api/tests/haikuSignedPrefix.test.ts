@@ -5,7 +5,7 @@ import { shannonTool } from '../src/mind/tools/shannonTools.js';
 import { TurnDeadline, TEXT_TURN_DEADLINE } from '../src/mind/action/respond/turnDeadline.js';
 import { anthropicFixture, message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
 
-const model = 'claude-haiku-5-5';
+describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('native 5.5 compatibility: %s', model => {
 const base = { scopeKey: 'owner', systemPrompt: 'Identity', history: [], message: 'Read the study' };
 const signed = (id: string, name: string, input: unknown = {}): AnthropicMessage => paid(message([
   { type: 'thinking', thinking: '', signature: `signed-${id}` }, { type: 'tool_use', id, name, input },
@@ -124,7 +124,7 @@ describe('Haiku signed thinking with a lazy tool menu', () => {
     expect(h.headers.every(header => header.get('anthropic-beta') === 'inline-tools-2026-09-15')).toBe(true);
   });
 
-  it.each(['claude-sonnet-5-5', 'claude-haiku-4-5-20251001'])('retains %s menu loading without the 5.5 inline-tools feature', async selected => {
+  it.each(['claude-sonnet-5', 'claude-haiku-4-5-20251001'])('retains %s menu loading without the 5.5 inline-tools feature', async selected => {
     const opened = signed('open', 'tool_open', { name: 'study_list' });
     const t = tools();
     const h = native((_body, index) => ({ ...(index === 0 ? opened : paid(anthropicFixture('structured-answer'))), model: selected }), selected);
@@ -135,4 +135,6 @@ describe('Haiku signed thinking with a lazy tool menu', () => {
     expect(JSON.stringify(h.bodies[1]!.messages)).not.toContain('tool_addition');
     expect(t.calls).toEqual([]);
   });
+});
+
 });

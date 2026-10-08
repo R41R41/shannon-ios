@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import { isHaikuModel } from './haikuConfig.js';
+import { usesOneHourAnthropicCache } from './haikuConfig.js';
 
 /**
  * A reusable transport protocol, not Shannon's persona or a task prompt. Its meaningful fixed text puts even a short task
@@ -28,9 +28,21 @@ export interface HaikuCacheUsage {
   cache_creation?: { ephemeral_5m_input_tokens: number; ephemeral_1h_input_tokens: number } | null;
 }
 
+export type AnthropicUsageEvidenceCode = 'HAIKU_CACHE_TTL_CONFLICT' | 'HAIKU_CACHE_BREAKPOINT_LIMIT' | 'HAIKU_CACHE_PROTOCOL_INVALID'
+  | 'HAIKU_CACHE_USAGE_INVALID' | 'HAIKU_CACHE_UNCONFIRMED' | 'HAIKU_RESPONSE_USAGE_INVALID';
+
+/** A rejected evidence receipt ends this paid round; it is never an output repair or a tool timeout. */
+export class AnthropicUsageEvidenceError extends Error {
+  constructor(readonly code: AnthropicUsageEvidenceCode) { super(code); this.name = 'AnthropicUsageEvidenceError'; }
+}
+
+export function isAnthropicUsageEvidenceError(error: unknown): error is AnthropicUsageEvidenceError {
+  return error instanceof AnthropicUsageEvidenceError;
+}
+
 /** Keep caller blocks and authority order; add two 1h breakpoints, including the growing conversation. */
 export function cacheHaikuRequest<T extends Anthropic.MessageCreateParamsNonStreaming>(body: T): T {
-  if (!isHaikuModel(body.model)) return body;
+  if (!usesOneHourAnthropicCache(body.model)) return body;
   const system = typeof body.system === 'string' ? [{ type: 'text' as const, text: body.system }] : [...(body.system ?? [])];
   const installed = system[0]?.type === 'text' && system[0].text === HAIKU_PROTOCOL_PREFIX;
   let existing = 0;
@@ -40,7 +52,7 @@ export function cacheHaikuRequest<T extends Anthropic.MessageCreateParamsNonStre
     for (const [key, child] of Object.entries(value)) {
       if (key === 'cache_control' && child !== null && child !== undefined) {
         if (!child || typeof child !== 'object' || (child as { type?: unknown }).type !== 'ephemeral' || (child as { ttl?: unknown }).ttl !== '1h') {
-          throw new Error('HAIKU_CACHE_TTL_CONFLICT');
+          throw new AnthropicUsageEvidenceError('HAIKU_CACHE_TTL_CONFLICT');
         }
         existing += 1;
       } else if (key === 'content' && (value as { type?: unknown }).type === 'tool_result' && Array.isArray(child)) inspect(child);
@@ -48,10 +60,10 @@ export function cacheHaikuRequest<T extends Anthropic.MessageCreateParamsNonStre
   }
   inspect(body.tools); inspect(system);
   for (const message of body.messages) if (Array.isArray(message.content)) inspect(message.content);
-  if (existing > (installed ? 3 : 2)) throw new Error('HAIKU_CACHE_BREAKPOINT_LIMIT');
-  if (body.cache_control && (body.cache_control.type !== 'ephemeral' || body.cache_control.ttl !== '1h')) throw new Error('HAIKU_CACHE_TTL_CONFLICT');
+  if (existing > (installed ? 3 : 2)) throw new AnthropicUsageEvidenceError('HAIKU_CACHE_BREAKPOINT_LIMIT');
+  if (body.cache_control && (body.cache_control.type !== 'ephemeral' || body.cache_control.ttl !== '1h')) throw new AnthropicUsageEvidenceError('HAIKU_CACHE_TTL_CONFLICT');
   if (installed) {
-    if (system[0]?.cache_control?.ttl !== '1h' || body.cache_control?.ttl !== '1h') throw new Error('HAIKU_CACHE_PROTOCOL_INVALID');
+    if (system[0]?.cache_control?.ttl !== '1h' || body.cache_control?.ttl !== '1h') throw new AnthropicUsageEvidenceError('HAIKU_CACHE_PROTOCOL_INVALID');
     return body;
   }
   return { ...body, system: [{ type: 'text', text: HAIKU_PROTOCOL_PREFIX, cache_control: { type: 'ephemeral', ttl: '1h' } }, ...system],
@@ -63,10 +75,10 @@ export function validateHaikuCacheUsage(usage: HaikuCacheUsage | null | undefine
   const creation = usage?.cache_creation_input_tokens;
   const read = usage?.cache_read_input_tokens;
   const count = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
-  if (!count(creation) || !count(read)) throw new Error('HAIKU_CACHE_USAGE_INVALID');
+  if (!count(creation) || !count(read)) throw new AnthropicUsageEvidenceError('HAIKU_CACHE_USAGE_INVALID');
   if (usage?.cache_creation) {
     const five = usage.cache_creation.ephemeral_5m_input_tokens; const hour = usage.cache_creation.ephemeral_1h_input_tokens;
-    if (!count(five) || !count(hour) || five + hour !== creation) throw new Error('HAIKU_CACHE_USAGE_INVALID');
+    if (!count(five) || !count(hour) || five + hour !== creation) throw new AnthropicUsageEvidenceError('HAIKU_CACHE_USAGE_INVALID');
   }
-  if (creation + read <= 0) throw new Error('HAIKU_CACHE_UNCONFIRMED');
+  if (creation + read <= 0) throw new AnthropicUsageEvidenceError('HAIKU_CACHE_UNCONFIRMED');
 }

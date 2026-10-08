@@ -76,6 +76,11 @@ extension ShannonConversationView {
                     Text("声と読み上げの変更は、通話中の会話を変えず次の通話から反映されます。")
                 }
 
+                ShannonModelModeSettingsSection(scopeKey: model.scopeKey,
+                    client: model.client as? any ShannonModelModeServing,
+                    connected: connectionModel?.isConnected == true, isDesignPreview: model.isDesignPreview)
+                    .id(model.scopeKey)
+
                 ShannonFigureSettingsSection(showInTalk: showFigureInTalk)
 
                 ShannonCalendarSharingSettingsSection()

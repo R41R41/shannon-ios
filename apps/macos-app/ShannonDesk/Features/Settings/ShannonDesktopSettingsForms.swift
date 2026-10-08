@@ -40,6 +40,8 @@ extension ShannonDesktopRootView {
                 } header: {
                     Text(ShannonGeneratedStrings.settingsSectionVoice)
                 }
+            case .modelMode:
+                ShannonModelModeSettingsSection(conversation: conversation, connected: connection.isConnected)
             case .calendar:
                 ShannonCalendarSharingSettingsSection()
             case .folder:

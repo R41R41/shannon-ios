@@ -13,6 +13,8 @@ The isolated self-revision writer uses an exclusive0600 temporary file and the s
 
 ## System shape
 
+The owner-selected [primary model mode](model-mode-contract.md) is shared through owner-scoped SQLite and the paired settings API. Normal mode selects Haiku; high-precision mode prefers Sonnet for primary conversation and supported planning. Each response/step pins its model before asynchronous preparation, retaining its native signed prefix through tool rounds. Auxiliary models, permission gates, spending limits and stopped physical worlds retain their existing boundaries. Implementation and live readiness are separate gates.
+
 ```text
 iPhone app + Shannon Desk for Mac
   ├─ shared conversation, thread, memory, and agent-task models

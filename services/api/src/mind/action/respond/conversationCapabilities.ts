@@ -194,7 +194,7 @@ async function readTaskContext(message: string, dependencies: ConversationReadCa
  * for a deeper or another read than the projection made, so what the projection already answers needs no extra model round.
  */
 export interface ReadToolPlan {
-  offer: Readonly<Record<'notion_read' | 'voyager_read' | 'schedule_read' | 'places_search', boolean>>;
+  offer: Readonly<Record<'notion_read' | 'voyager_read' | 'schedule_read' | 'places_search' | 'web_search', boolean>>;
 }
 
 export function readToolPlan(selection: ConversationCapabilitySelection | undefined): ReadToolPlan {
@@ -203,7 +203,7 @@ export function readToolPlan(selection: ConversationCapabilitySelection | undefi
     offer: Object.freeze({
       notion_read: base.notion !== false, voyager_read: base.voyagerTasks !== false,
       // The owner alone hears every line of the schedule; `guarded` (others present) stays a projection only.
-      schedule_read: base.upcoming === undefined || base.upcoming === true, places_search: true,
+      schedule_read: base.upcoming === undefined || base.upcoming === true, places_search: true, web_search: true,
     }),
   };
 }

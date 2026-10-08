@@ -156,7 +156,8 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
   const valued = !dependencies.valueFacts ? null : valueFactsFor(dependencies, cycle.scopeKey, at, offeredChoices(materials, phone?.offered === true, tooling ? offeredOwnTools(dependencies, cycle.scopeKey).map(tool => tool.name) : [], { followUp: again && rethink.followUp !== null, jot: again && rethink.jot }));
   // ADR-0008 §14: what a rule stopped lately, last of all; none while stage 2 is off.
   const counted = [valued, withheldFactsFor(dependencies, cycle.scopeKey, at)].filter(Boolean).join('\n\n') || null;
-  const priced = (reserveYen?: number) => paidCall(dependencies, cycle.scopeKey, 'planning', thinkingPrompt(materials, withTools(extrasWith(reserveYen)), counted), session ? loop.sessionThinkOutputTokens : OUTPUT_TOKENS);
+  const pinnedPlanning = dependencies.planningModel?.(cycle.scopeKey);
+  const priced = (reserveYen?: number) => paidCall(dependencies, cycle.scopeKey, 'planning', thinkingPrompt(materials, withTools(extrasWith(reserveYen)), counted), session ? loop.sessionThinkOutputTokens : OUTPUT_TOKENS, pinnedPlanning);
   // In a session she is told what the gate reserves for a thought: the estimate of this very prompt, priced once without that line.
   const first = priced();
   const estimated = first && session ? priced(first.estimatedCostYen) : first;

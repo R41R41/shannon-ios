@@ -62,6 +62,8 @@ extension ShannonDesktopRootView {
                     .tag(DesktopSettingsPage.earphones)
                 Label(ShannonGeneratedStrings.settingsSectionVoice, systemImage: "speaker.wave.2")
                     .tag(DesktopSettingsPage.voice)
+                Label("判断モデル", systemImage: "slider.horizontal.3")
+                    .tag(DesktopSettingsPage.modelMode)
                 Label(ShannonCalendarSharingCopy.sectionTitle, systemImage: "calendar")
                     .tag(DesktopSettingsPage.calendar)
                 // Her folder on this Mac (A18), as on Windows.
@@ -157,7 +159,7 @@ extension ShannonDesktopRootView {
             ShannonConnectionView(model: connection, part: .connection)
         case .sources:
             ShannonWorldSubscriptionView(model: worldSubscriptions)
-        case .figure, .camera, .earphones, .voice, .calendar, .folder, .appearance:
+        case .figure, .camera, .earphones, .voice, .modelMode, .calendar, .folder, .appearance:
             settingsForm
         }
     }

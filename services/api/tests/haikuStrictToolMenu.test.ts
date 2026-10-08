@@ -15,7 +15,7 @@ import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiri
 import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { anthropicFixture, message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
 
-const model = 'claude-haiku-5-5';
+describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('native 5.5 compatibility: %s', model => {
 const goal = 'エンダードラゴンを討伐してください';
 const base = { scopeKey: 'owner', systemPrompt: 'Synthetic owner identity', history: [], message: goal };
 const paid = (value: AnthropicMessage): AnthropicMessage => ({ ...value, model, usage: { ...value.usage,
@@ -281,4 +281,6 @@ describe('Haiku full registry and strict tool admission', () => {
     expect(h.usage).toEqual([]);
     expect(t.requests.recent('owner')).toEqual([]);
   });
+});
+
 });

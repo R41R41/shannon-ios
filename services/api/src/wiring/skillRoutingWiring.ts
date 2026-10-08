@@ -83,6 +83,7 @@ export function readToolPorts(
 ): ReadToolPorts | null {
   if (!skillRoutingSwitches(environment).readTools) return null;
   return {
+    ...(parts.chatModel.searchWeb ? { web: parts.chatModel.searchWeb.bind(parts.chatModel) } : {}),
     notion: async query => {
       const read = await notionTurnProjection(parts.notion, `Notionの「${query}」`);
       return { text: read?.prompt ?? '', sources: read?.sources ?? [] };

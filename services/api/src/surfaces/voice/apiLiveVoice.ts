@@ -75,7 +75,7 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   /** Looking through her body's camera or the app's (`voiceAppLook.ts`); absent, a voice turn never looks. */
   looks?: VoiceLooks;
   personIdentities?: PersonIdentityStore;
-  chatModel: ShannonChatModel;
+  chatModel: ShannonChatModel; auxiliaryChatModel?: ShannonChatModel;
   voiceDecision: VoiceDecisionGateway;
   stateStore: CompanionStateStore;
   conversationStore: ConversationStore;
@@ -132,8 +132,9 @@ export function dispatchLiveVoiceRequest(
   const requestedThreadId = typeof request.body.threadId === 'string' ? request.body.threadId.trim()
     : participantMode === 'owner' ? reaction?.threadId ?? undefined : undefined;
   const transcript=request.body.transcript.trim();
+  const chatModel = dependencies.chatModel.forTurn?.(scopeKey) ?? dependencies.chatModel;
   const complete=()=>completeLiveVoiceDelegation(scopeKey, requestedThreadId, transcript, participantMode, deviceContext,
-    reaction?.text ?? null, { ...dependencies, looks: dependencies.looks?.of(request) }, observer);
+    reaction?.text ?? null, { ...dependencies, chatModel, looks: dependencies.looks?.of(request) }, observer);
   return withObserverRun(voiceObservationOptions(scopeKey, { transcript, participantMode, deviceContext }),
   () => dependencies.mind?.foreground ? dependencies.mind.foreground(scopeKey,complete) : complete());
 }
@@ -348,7 +349,7 @@ async function completeLiveVoiceDelegation(
   const replay = temporaryGuest ? null
     : conversationReplay('voice', captured, dependencies.conversationStore, scopeKey, threadId, present, undefined, toolTraceReader(dependencies.toolServer, scopeKey));
   const placeSkill = selectedSkills.has('place_discovery') || wantsPlaceDiscovery(transcript)
-    ? await runPlaceDiscoverySkill(dependencies.chatModel, { scopeKey, message: transcript, context: {
+    ? await runPlaceDiscoverySkill(dependencies.auxiliaryChatModel ?? dependencies.chatModel, { scopeKey, message: transcript, context: {
       ...(wantsNearbyPlaces(transcript) && deviceContext?.location ? {
         latitude: deviceContext.location.latitude, longitude: deviceContext.location.longitude,
       } : {}), spoken: true,

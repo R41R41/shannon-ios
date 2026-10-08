@@ -24,8 +24,9 @@ export function observedAnthropicResponse(message: Anthropic.Message) {
   const usage = message.usage;
   return { model: message.model, stopReason: stopReasons.has(message.stop_reason ?? '') ? message.stop_reason : 'unknown',
     textCharacters: message.content.reduce((sum, block) => sum + (block.type === 'text' ? block.text.length : 0), 0),
-    selectedTools: message.content.flatMap(block => block.type === 'tool_use' ? [observedToolName(block.name)] : []),
+    selectedTools: message.content.flatMap(block => block.type === 'tool_use' || block.type === 'server_tool_use' ? [observedToolName(block.name)] : []),
     usage: { inputTokens: count(usage?.input_tokens), outputTokens: count(usage?.output_tokens),
       cacheReadTokens: count(usage?.cache_read_input_tokens), cacheCreationTokens: count(usage?.cache_creation_input_tokens),
-      cacheCreation1hTokens: count(usage?.cache_creation?.ephemeral_1h_input_tokens), cacheCreation5mTokens: count(usage?.cache_creation?.ephemeral_5m_input_tokens) } };
+      cacheCreation1hTokens: count(usage?.cache_creation?.ephemeral_1h_input_tokens), cacheCreation5mTokens: count(usage?.cache_creation?.ephemeral_5m_input_tokens),
+      webSearchRequests: count(usage?.server_tool_use?.web_search_requests) } };
 }

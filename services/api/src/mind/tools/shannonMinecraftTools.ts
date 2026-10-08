@@ -73,6 +73,8 @@ export function minecraftExecutors(requests: MinecraftRequestPort | null | undef
               record: failed('マイクラの体に頼もうとしましたが、体がいませんでした。', 'absent'),
             };
           }
+          if (outcome.kind === 'model_unavailable') return { result: toolFailure('unavailable', '選択中のモデルをマイクラの体で使えないので、頼みごとは受け付けなかった。', { retryable: false }),
+            record: failed('選択中のモデルをマイクラの体で使えませんでした。', 'model_unavailable') };
           if (outcome.kind === 'limit') {
             return {
               result: toolFailure('limit', 'マイクラの体への頼みごとが、もういっぱいたまっている。', {

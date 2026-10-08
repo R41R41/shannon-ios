@@ -54,7 +54,7 @@ export interface MinecraftBodyDependencies {
    * Phase 4: the request queue (`minecraftBodyRequests.ts`). The owner's game-chat task becomes one more entrance to it
    * while the body is claiming; his 「止まって」 asks every open request to stop.
    */
-  requests?: Pick<MinecraftBodyRequests, 'present' | 'enqueue' | 'cancelOpen'> | null;
+  requests?: Pick<MinecraftBodyRequests, 'present' | 'enqueue' | 'cancelOpen'> & Partial<Pick<MinecraftBodyRequests, 'requiresPrimaryModel'>> | null;
 }
 
 /** A turn is answered only while it is fresh; game chat older than this is past. A retry of an answered turn is replayed whatever its age. */
@@ -150,9 +150,10 @@ export class MinecraftBody {
     }));
     const completion = result.completion;
     if (!completion) throw new Error('MINECRAFT_TURN_WITHOUT_COMPLETION');
+    const intent = owner ? this.queuedIntent(scopeKey, request, threadId, completion.minecraftIntent ?? { kind: 'none' as const, goal: '' }) : undefined;
     return {
-      reply: completion.reply.trim().slice(0, MINECRAFT_BODY_LIMITS.replyCharacters),
-      ...(owner ? { intent: this.queuedIntent(scopeKey, request, threadId, completion.minecraftIntent ?? { kind: 'none' as const, goal: '' }) } : {}),
+      reply: intent?.rejected ? '選択中のモデルでマイクラの体に頼みごとを渡せなかった。体が対応してつながったあとで、もう一度頼んでほしい。' : completion.reply.trim().slice(0, MINECRAFT_BODY_LIMITS.replyCharacters),
+      ...(intent ? { intent } : {}),
       threadId,
       duplicate: false,
       ...(ignored ? { ignored } : {}),
@@ -169,14 +170,16 @@ export class MinecraftBody {
     if (!requests) return intent;
     try {
       if (intent.kind === 'stop') { requests.cancelOpen(scopeKey); return intent; }
-      if (intent.kind !== 'task' || !requests.present(scopeKey)) return intent;
+      if (intent.kind !== 'task') return intent;
+      if (!requests.present(scopeKey)) return requests.requiresPrimaryModel?.() ? { kind: 'none', goal: '', rejected: 'queue_unavailable' } : intent;
       const queued = requests.enqueue(scopeKey, {
         goal: intent.goal, dedupeKey: `mc:${request.requestId}`, origin: { surface: 'minecraft', threadId, messageId: `mc:${request.requestId}` },
       });
-      return queued.kind === 'queued' ? { ...intent, request: { id: queued.request.id } } : intent;
+      if (queued.kind === 'queued') return { ...intent, request: { id: queued.request.id } };
+      return requests.requiresPrimaryModel?.() ? { kind: 'none', goal: '', rejected: queued.kind === 'model_unavailable' ? 'model_unavailable' : 'queue_unavailable' } : intent;
     } catch (error) {
       console.error('Shannon Minecraft request queue failed', error instanceof Error ? error.message : 'unknown');
-      return intent;
+      return requests.requiresPrimaryModel?.() && intent.kind === 'task' ? { kind: 'none', goal: '', rejected: 'queue_unavailable' } : intent;
     }
   }
 

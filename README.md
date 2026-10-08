@@ -10,6 +10,7 @@ iPhoneとMacで一人のシャノンへつながる、ネイティブクライ�
 | Action threads | [`docs/action-threads-contract.md`](docs/action-threads-contract.md) |
 | Architecture | [`docs/architecture.md`](docs/architecture.md) |
 | Model and cache | [`docs/haiku-model-cache-contract.md`](docs/haiku-model-cache-contract.md) |
+| Owner model mode | [`docs/model-mode-contract.md`](docs/model-mode-contract.md) |
 | Design | [`docs/DESIGN.md`](docs/DESIGN.md) |
 | Product spec | [`docs/product/README.md`](docs/product/README.md)（iOS・macOS・Windows で 1 つの仕様: 機能の一覧表、色と余白、文言） |
 | Implementation plan | [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) |

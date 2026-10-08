@@ -109,8 +109,21 @@ describe('Haiku mandatory prefix caching', () => {
     const markers = Array.from({ length: 3 }, () => ({ type: 'text' as const, text: 'static', cache_control: { type: 'ephemeral' as const, ttl: '1h' as const } }));
     expect(() => cacheHaikuRequest({ ...body(), system: markers })).toThrow('HAIKU_CACHE_BREAKPOINT_LIMIT');
     expect(() => cacheHaikuRequest({ ...body(), system: [{ type: 'text', text: 'static', cache_control: { type: 'ephemeral' } }] })).toThrow('HAIKU_CACHE_TTL_CONFLICT');
-    const other = { ...body(), model: 'claude-sonnet-5-5' };
+    const other = { ...body(), model: 'claude-sonnet-5' };
     expect(cacheHaikuRequest(other)).toBe(other);
+  });
+  it('shares mandatory one-hour caching with owner-selectable Sonnet 5.5, preserving the original task and idempotency', () => {
+    const original = { ...body(), model: 'claude-sonnet-5-5' };
+    const before = JSON.stringify(original);
+    const cached = cacheHaikuRequest(original);
+    expect(JSON.stringify(original)).toBe(before);
+    expect(cached.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+    expect(cached.system).toEqual([{ type: 'text', text: HAIKU_PROTOCOL_PREFIX, cache_control: { type: 'ephemeral', ttl: '1h' } },
+      { type: 'text', text: original.system }]);
+    expect(cacheHaikuRequest(cached)).toBe(cached);
+    expect(estimatedAnthropicCostUsd(original.model, { input: 0, cacheWrite: 1_000_000, cacheRead: 0, output: 0, searches: 0 })).toBe(4);
+    expect(anthropicPrices(original.model, 100_001).cacheRead).toBe(0.1);
+    expect(anthropicPrices('claude-sonnet-5', 100_001).cacheRead).toBe(0.2);
   });
   it('requires actual positive native cache usage, including consistent mixed TTL accounting', () => {
     expect(() => validateHaikuCacheUsage(usage())).not.toThrow();

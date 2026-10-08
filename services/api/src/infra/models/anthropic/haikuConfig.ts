@@ -6,6 +6,16 @@ type Environment = Readonly<Record<string, string | undefined>>;
 
 export function isHaikuModel(model: string): boolean { return model.startsWith('claude-haiku-'); }
 
+/** Supported native 5.5 sessions require an append-only signed prefix and by-value inline tool definitions. */
+export function isAppendOnlyAnthropicModel(model: string): boolean {
+  return model === DEFAULT_HAIKU_MODEL || model === 'claude-sonnet-5-5';
+}
+
+/** Preserve historical overrides while making the owner-selectable Sonnet 5.5 use the same mandatory 1h cache. */
+export function usesOneHourAnthropicCache(model: string): boolean {
+  return isHaikuModel(model) || model === 'claude-sonnet-5-5';
+}
+
 /** Preserve deliberate overrides; only the replaced Luna family and an absent setting select Haiku. */
 export function replacementModel(value?: string): string {
   const model = value?.trim();
