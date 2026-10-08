@@ -35,7 +35,7 @@ function idIn(result: ToolResult): string {
 }
 
 /** Her read tools of Syzygy ADR-0008 stage 2, step 3, and their own gate domains. */
-const READ_TOOL_DOMAIN_OF: Readonly<Record<string, string>> = { 'notion.read': 'notion_read', 'voyager.tasks': 'voyager_read', 'schedule.upcoming': 'schedule_read', 'places.search': 'places_search' };
+const READ_TOOL_DOMAIN_OF: Readonly<Record<string, string>> = { 'notion.read': 'notion_read', 'voyager.tasks': 'voyager_read', 'schedule.upcoming': 'schedule_read', 'places.search': 'places_search', 'web.search': 'web_search' };
 
 describe('the tool registry (ADR-0003 stage 1)', () => {
   it('tags every tool as acting or describing (ADR-0008 §14): today exactly the write effect, and an unknown name never acts', () => {
@@ -65,13 +65,13 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
     expect(providerFunctionTools(SHANNON_TOOLS).every(item => Object.keys(item).join() === 'type,name,description,parameters,strict')).toBe(true);
   });
 
-  it('lists every tool once with a Japanese description, an object schema, a gate domain, no cost of its own, and the owner alone as audience', () => {
+  it('lists every tool once with a Japanese description, an object schema, a gate domain, its declared cost and allowed audiences/surfaces', () => {
     expect(new Set(SHANNON_TOOLS.map(tool => tool.name)).size).toBe(SHANNON_TOOLS.length);
     expect(SHANNON_TOOLS.map(tool => tool.name).sort()).toEqual([
       'aether.propose', 'aether.read', 'aether.search', 'aetherFolder.create', 'aetherFolder.delete', 'aetherFolder.list', 'aetherFolder.update',
       'folder.create', 'folder.delete', 'folder.list', 'folder.move', 'folder.read', 'folder.rename', 'folder.search', 'folder.update',
       'minecraft.cancel', 'minecraft.request', 'minecraft.status', 'notion.read', 'ownerDocs.read', 'ownerDocs.search', 'places.search', 'schedule.upcoming',
-      'skill.read', 'study.create', 'study.delete', 'study.list', 'study.move', 'study.read', 'study.rename', 'study.restore', 'study.search', 'study.update', 'voyager.tasks',
+      'skill.read', 'study.create', 'study.delete', 'study.list', 'study.move', 'study.read', 'study.rename', 'study.restore', 'study.search', 'study.update', 'voyager.tasks', 'web.search',
     ]);
     // Conversation only: her Minecraft body (phase 4) and a proposal to the owner's Aether inbox.
     // and her read tools of ADR-0008 stage 2.
@@ -88,20 +88,20 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
       expect(tool.domain).toBe(tool.name.startsWith('study.') || tool.name.startsWith('aetherFolder.') || tool.name === 'aether.search' || tool.name === 'aether.read' ? 'aether_study'
         : tool.name.startsWith('minecraft.') ? 'minecraft_body' : tool.name === 'aether.propose' ? 'aether_proposal' : tool.name.startsWith('ownerDocs.') ? 'owner_documents_read'
           : tool.name === 'skill.read' ? 'skill_read' : READ_TOOL_DOMAIN_OF[tool.name] ?? 'host_folder');
-      // Place search (ADR-0008 stage 2) asks a model with web search; every other tool calls none itself.
-      expect(tool.cost).toBe(tool.name === 'places.search' ? 'model' : 'none');
+      // Place and current-web searches call bounded model helpers; every other tool calls no model itself.
+      expect(tool.cost).toBe(['places.search', 'web.search'].includes(tool.name) ? 'model' : 'none');
       if (READ_TOOL_DOMAIN_OF[tool.name]) expect(tool.effect).toBe('read');
       expect(tool.audiences).toEqual(shared.has(tool.name) ? ['owner_alone', 'others'] : ['owner_alone']);
       if (shared.has(tool.name)) expect(tool.effect).toBe('read');
-      expect(tool.surfaces).toEqual(conversationOnly(tool) ? ['text', 'voice'] : ownTimeOnly(tool) ? ['autonomy'] : ['text', 'voice', 'autonomy']);
+      expect(tool.surfaces).toEqual(tool.name === 'web.search' ? ['text'] : conversationOnly(tool) ? ['text', 'voice'] : ownTimeOnly(tool) ? ['autonomy'] : ['text', 'voice', 'autonomy']);
       if (ownTimeOnly(tool)) expect(tool).toMatchObject({ effect: 'read', input: { required: expect.arrayContaining(['pursuitId']) } });
       expect(toolFromProviderName(providerToolName(tool.name))).toBe(tool);
       expect(providerToolName(tool.name)).toMatch(/^[A-Za-z_]+$/u);
     }
-    // Text, voice and her own time are given the same tools (a conversation's writes shorter); with anyone else present only the shared reading.
+    // The real web read is text-only; voice retains native current_web search. Other surface/audience contracts are unchanged.
     expect(offeredTools('autonomy', 'owner_alone')).toEqual(SHANNON_TOOLS.filter(tool => !conversationOnly(tool)));
     for (const surface of ['text', 'voice', 'autonomy'] as const) {
-      expect(offeredTools(surface, 'owner_alone').map(tool => tool.name)).toEqual(SHANNON_TOOLS.filter(tool => (surface !== 'autonomy' || !conversationOnly(tool)) && (surface === 'autonomy' || !ownTimeOnly(tool))).map(tool => tool.name));
+      expect(offeredTools(surface, 'owner_alone').map(tool => tool.name)).toEqual(SHANNON_TOOLS.filter(tool => (tool.name !== 'web.search' || surface === 'text') && (surface !== 'autonomy' || !conversationOnly(tool)) && (surface === 'autonomy' || !ownTimeOnly(tool))).map(tool => tool.name));
       expect(offeredTools(surface, 'others').map(tool => tool.name)).toEqual([...shared]);
     }
     // No tool shows a story to the owner, marks it 「見せてもいい」, or reaches anyone else.

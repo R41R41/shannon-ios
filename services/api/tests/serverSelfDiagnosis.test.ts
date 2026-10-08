@@ -124,7 +124,8 @@ describe('the self-diagnosis', () => {
         enabled: true, count: BEFORE_AETHER.length, names: BEFORE_AETHER.map(tool => tool.name),
         offered: {
           text: { owner_alone: BEFORE_AETHER.length, others: 0 },
-          voice: { owner_alone: BEFORE_AETHER.length, others: 0 },
+          // The real web.search tool is text-only; voice keeps its separate native search path.
+          voice: { owner_alone: BEFORE_AETHER.filter(tool => tool.surfaces.includes('voice')).length, others: 0 },
           // Her Minecraft body's tools exist only in conversations (`shannonTools.ts`, `conversationTool`), never in her own time.
           autonomy: { owner_alone: BEFORE_AETHER.filter(tool => tool.surfaces.includes('autonomy')).length, others: 0 },
         },

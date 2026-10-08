@@ -378,7 +378,7 @@ export const TOOL_DOING: Readonly<Record<string, ToolDoing>> = Object.freeze({
   'ownerDocs.search': 'describes', 'ownerDocs.read': 'describes',
   'aether.propose': 'acts',
   'minecraft.request': 'acts', 'minecraft.status': 'describes', 'minecraft.cancel': 'acts',
-  'notion.read': 'describes', 'voyager.tasks': 'describes', 'schedule.upcoming': 'describes', 'places.search': 'describes',
+  'notion.read': 'describes', 'voyager.tasks': 'describes', 'schedule.upcoming': 'describes', 'places.search': 'describes', 'web.search': 'describes',
   'skill.read': 'describes',
 });
 
