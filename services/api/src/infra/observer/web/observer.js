@@ -192,6 +192,42 @@ export function observerBasePath(pathname) {
   return pathname.replace(/\/observer\/?$/, '');
 }
 
+/** Tab-scoped credentials only: never persist codes, events, inputs or outputs. */
+export function createObserverSession(getStorage, key, now = Date.now) {
+  const clear = () => { try { getStorage().removeItem(key); } catch { /* Private/blocked storage keeps the memory-only path. */ } };
+  const read = () => {
+    try {
+      const saved = JSON.parse(getStorage().getItem(key) ?? 'null');
+      if (!record(saved) || typeof saved.token !== 'string' || !saved.token.trim() || saved.token.length > 2048
+          || (saved.expiresAt !== null && (typeof saved.expiresAt !== 'string' || !Number.isFinite(Date.parse(saved.expiresAt)) || Date.parse(saved.expiresAt) <= now()))) {
+        clear(); return null;
+      }
+      return { token: saved.token, expiresAt: saved.expiresAt };
+    } catch { clear(); return null; }
+  };
+  const write = credential => {
+    if (!credential) { clear(); return true; }
+    try { getStorage().setItem(key, JSON.stringify({ token: credential.token, expiresAt: credential.expiresAt ?? null })); return true; }
+    catch { return false; }
+  };
+  return { read, write, clear };
+}
+
+/** Drain every history page before admitting live receipt effects, including after recovery. */
+export function createReceiptGate() {
+  let ready = false, instance = null, dropped = 0;
+  const reset = () => { ready = false; instance = null; dropped = 0; };
+  const accept = envelope => {
+    const losses = envelope.dropped ?? 0;
+    const live = ready && instance === envelope.instanceId && envelope.availability === 'ready'
+      && !envelope.gap && dropped === losses;
+    ready = envelope.availability === 'ready' && (live || envelope.events.length < 200);
+    instance = envelope.instanceId; dropped = losses;
+    return live;
+  };
+  return { accept, reset };
+}
+
 function validCatalog(value) {
   return record(value) && value.schemaVersion === 1 && Array.isArray(value.tools) && Array.isArray(value.nodes) && Array.isArray(value.coverage)
     && value.tools.every(tool => record(tool) && typeof tool.name === 'string' && typeof tool.domain === 'string')
@@ -212,9 +248,10 @@ export function createObserverClient(options) {
     timer = null; deadline = null;
     controller?.abort(); controller = null;
   };
-  const state = value => options.onConnection?.(value);
+  const receipts = createReceiptGate();
+  const state = value => { if (value !== 'live') receipts.reset(); options.onConnection?.(value); };
   const disconnect = (reason = '') => {
-    stopWork(); token = ''; catalog = null; options.onReset?.(reason); state('disconnected');
+    stopWork(); token = ''; catalog = null; options.onCredential?.(null); options.onReset?.(reason); state('disconnected');
   };
   const json = async (path, init, activeEpoch) => {
     const response = await fetcher(`${base}${path}`, { cache: 'no-store', credentials: 'omit', redirect: 'error', ...init, signal: controller.signal });
@@ -239,7 +276,7 @@ export function createObserverClient(options) {
       if (!catalog) {
         const candidate = await json('/v1/observer/catalog', { headers }, activeEpoch);
         if (validEnvelope(candidate) && candidate.availability === 'held') {
-          options.onEnvelope(candidate); options.onCatalog?.(null); state('held'); delay = 800; return;
+          options.onEnvelope(candidate, { liveReceipts: receipts.accept(candidate) }); options.onCatalog?.(null); state('held'); delay = 800; return;
         }
         if (!validCatalog(candidate)) throw new Error('OBSERVER_PROTOCOL');
         catalog = candidate;
@@ -247,7 +284,7 @@ export function createObserverClient(options) {
       const cursor = options.getCursor?.() ?? 0;
       const envelope = await json(`/v1/observer/events?after=${cursor}&limit=200`, { headers }, activeEpoch);
       if (!validEnvelope(envelope)) throw new Error('OBSERVER_PROTOCOL');
-      options.onEnvelope(envelope);
+      options.onEnvelope(envelope, { liveReceipts: receipts.accept(envelope) });
       if (envelope.availability === 'held') { catalog = null; options.onCatalog?.(null); state('held'); }
       else { options.onCatalog?.(catalog); state('live'); }
       delay = envelope.availability === 'held' ? 800 : 400;
@@ -262,10 +299,11 @@ export function createObserverClient(options) {
       }
     }
   };
-  const connect = value => {
+  const connect = (value, expiresAt = null) => {
     stopWork(); token = String(value).trim(); catalog = null; delay = 400;
     options.onReset?.(''); state(paused ? 'paused' : 'connecting');
     if (!token) { disconnect('接続情報を入力してください。'); return; }
+    options.onCredential?.({ token, expiresAt });
     if (!paused) void poll();
   };
   const pair = async code => {
@@ -275,7 +313,7 @@ export function createObserverClient(options) {
     try {
       const result = await json('/v1/pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, deviceName: 'Shannon Observer' }) }, activeEpoch);
       if (typeof result.token !== 'string' || !result.token) throw new Error('OBSERVER_PROTOCOL');
-      if (activeEpoch === epoch) connect(result.token);
+      if (activeEpoch === epoch) connect(result.token, typeof result.expiresAt === 'string' ? result.expiresAt : null);
     } catch (error) {
       if (activeEpoch !== epoch) return;
       disconnect(error.status === 429 ? '接続コードの試行が多いため、少し待ってから再度接続してください。'
@@ -343,6 +381,7 @@ function mountObserver() {
   if (!root) return;
   const element = (name, className, text) => { const value = document.createElement(name); if (className) value.className = className; if (text !== undefined) value.textContent = text; return value; };
   const svgElement = (name, attrs) => { const value = document.createElementNS('http://www.w3.org/2000/svg', name); for (const [key, content] of Object.entries(attrs)) value.setAttribute(key, String(content)); return value; };
+  const session = createObserverSession(() => window.sessionStorage, `shannon.observer.connection.v1:${observerBasePath(window.location.pathname)}`);
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let state = createObserverState(), catalog = null, selectedNode = 'llm', selectedSpan = null, selectedTool = null;
   let priorCatalog = null, runSignature = '', spanSignature = '', toolSignature = '', graphWidth = 0;
@@ -601,7 +640,11 @@ function mountObserver() {
     getCursor: () => state.cursor,
     onReset: reason => { clearPrivateView(); $('connect-error').textContent = reason; $('connect-error').hidden = !reason; },
     onCatalog: value => { if (priorCatalog === value) return; catalog = value; priorCatalog = value; toolSignature = ''; renderNodes(); renderDetail(); },
-    onEnvelope: envelope => {
+    onCredential: credential => {
+      const saved = session.write(credential);
+      $('pair-hint').textContent = saved ? '同じタブでは再読み込みしても接続を維持します。「接続を切る」で保存した接続情報を消します。' : 'このブラウザでは接続情報を保存できません。再読み込み後は再接続が必要です。';
+    },
+    onEnvelope: (envelope, delivery) => {
       const previous = state, seen = new Set(previous.events.map(event => event.sequence));
       state = reduceObserverEnvelope(previous,envelope,$('follow-runs').checked);
       if (previous.transport === 'lost' && state.transport === 'live' && !envelope.gap && previous.instanceId === state.instanceId) state.notice = '接続が回復しました。受信したイベントから表示を更新しました。';
@@ -610,7 +653,7 @@ function mountObserver() {
       const changed = envelope.events.some(event => !seen.has(event.sequence)) || previous.transport !== state.transport || previous.availability !== state.availability || previous.notice !== state.notice || state.instanceId !== previous.instanceId || envelope.gap;
       if (changed) render();
       // Initial history, a gap and a server restart remain still. Only a new live receipt moves.
-      if (previous.instanceId === state.instanceId && previous.transport === 'live' && !envelope.gap && state.dropped === previous.dropped) for (const event of envelope.events) if (!seen.has(event.sequence)) {
+      if (delivery?.liveReceipts && previous.instanceId === state.instanceId && previous.transport === 'live' && !envelope.gap && state.dropped === previous.dropped) for (const event of envelope.events) if (!seen.has(event.sequence)) {
         receiptGlow(event);
         if (event.kind === 'handoff') handoffPacket(event);
       }
@@ -636,11 +679,14 @@ function mountObserver() {
   $('span-picker').addEventListener('change',()=>{selectedSpan=$('span-picker').value;renderDetail();});
   $('tool-filter').addEventListener('change',()=>{toolSignature='';renderTools(currentRun());});
   document.addEventListener('visibilitychange',()=>document.hidden?client.pause():client.resume());
-  window.addEventListener('pagehide',()=>client.disconnect());
+  window.addEventListener('pagehide',()=>client.pause());
+  window.addEventListener('pageshow',event=>{if(event.persisted&&!document.hidden)client.resume();});
   reduceMotion.addEventListener('change',stopPackets);
   if (typeof ResizeObserver==='function') new ResizeObserver(layout).observe($('canvas')); else window.addEventListener('resize',layout);
   render(); layout();
   if(document.hidden)client.pause();
+  const saved = session.read();
+  if (saved) client.connect(saved.token, saved.expiresAt);
 }
 
 if (typeof document !== 'undefined') mountObserver();

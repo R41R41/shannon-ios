@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ObserverBatch, ObserverEvent } from '../src/contracts/observerContract.js';
 import {
-  MAX_EVENTS, createObserverClient, createObserverState, linkedRunView, nodeState, observerBasePath,
+  MAX_EVENTS, createObserverClient, createObserverState, createObserverSession, createReceiptGate, linkedRunView, nodeState, observerBasePath,
   reduceObserverEnvelope, runToolEvidence, spanState, validEnvelope,
   type ObserverRequest,
 } from '../src/infra/observer/web/observer.js';
@@ -264,5 +264,64 @@ describe('observer connection lifecycle', () => {
     const client = createObserverClient({ fetch, onEnvelope: vi.fn(), onConnection, onReset }); client.connect('test'); await flush();
     expect(onConnection).toHaveBeenLastCalledWith('disconnected'); expect(onReset.mock.calls.at(-1)![0]).toContain('認証');
     await vi.advanceTimersByTimeAsync(30_000); expect(fetch).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+
+describe('receipt history and recovery', () => {
+  it('drains more than one page of old events without presenting them as live, then admits new receipts', () => {
+    const gate = createReceiptGate();
+    expect(gate.accept(batch(Array.from({length: 200}, (_, i) => event(i + 1))))).toBe(false);
+    expect(gate.accept(batch([event(201)]))).toBe(false);
+    expect(gate.accept(batch([event(202, {kind: 'handoff', fromNode: 'llm', toNode: 'tools'})]))).toBe(true);
+  });
+  it('resets catch-up after disconnect, gaps, lost events and a different server instance', () => {
+    const gate = createReceiptGate(); gate.accept(batch());
+    expect(gate.accept(batch([event(1)]))).toBe(true);
+    gate.reset(); expect(gate.accept(batch(Array.from({length: 200}, (_, i) => event(i + 2))))).toBe(false);
+    expect(gate.accept(batch([event(202)]))).toBe(false);
+    expect(gate.accept(batch([event(203)]))).toBe(true);
+    expect(gate.accept(batch([event(204)], {gap: true}))).toBe(false);
+    expect(gate.accept(batch([event(205)], {dropped: 1}))).toBe(false);
+    expect(gate.accept(batch([event(206)], {dropped: 1}))).toBe(true);
+    expect(gate.accept(batch([event(207)], {instanceId: 'new-server', dropped: 1}))).toBe(false);
+  });
+});
+
+describe('owner-requested tab connection retention', () => {
+  function storage() {
+    const values = new Map<string, string>();
+    return {getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => {values.set(key, value);}, removeItem: (key: string) => {values.delete(key);}};
+  }
+  it('restores the same tab credential across a new viewer instance and clears it on explicit disconnect', async () => {
+    vi.useFakeTimers(); const tab = storage(), key = 'observer-tab';
+    const first = createObserverSession(() => tab, key);
+    const fetch = vi.fn(async (url: string, _init: ObserverRequest) => response(url.endsWith('/pair') ? {token:'controlled-fixture-token',expiresAt:'2099-01-01T00:00:00Z'} : url.endsWith('/catalog') ? catalog : batch()));
+    const client = createObserverClient({fetch, onEnvelope: vi.fn(), onCredential: first.write});
+    await client.pair('CONTROLLED-FIXTURE-CODE'); await flush();
+    // Page hiding/reload aborts polling but keeps this tab's connection.
+    client.pause(); expect(first.read()?.token).toBe('controlled-fixture-token');
+    expect(tab.getItem(key)).not.toContain('CONTROLLED-FIXTURE-CODE');
+    const reloaded = createObserverSession(() => tab, key);
+    const second = createObserverClient({fetch, onEnvelope: vi.fn(), onCredential: reloaded.write});
+    const saved = reloaded.read()!; second.connect(saved.token, saved.expiresAt); await flush();
+    expect(fetch.mock.calls.filter(([url]) => url.endsWith('/pair'))).toHaveLength(1);
+    expect(fetch.mock.calls.at(-1)![1].headers).toEqual({Authorization:'Bearer controlled-fixture-token'});
+    second.disconnect(); expect(reloaded.read()).toBeNull(); expect(vi.getTimerCount()).toBe(0);
+  });
+  it('removes refused credentials instead of restoring a revoked connection forever', async () => {
+    vi.useFakeTimers(); const tab=storage(), session=createObserverSession(()=>tab,'observer-tab');
+    session.write({token:'revoked-fixture-token',expiresAt:null});
+    const fetch=vi.fn(async()=>response({error:'AUTH_REFUSED'},401));
+    const client=createObserverClient({fetch,onEnvelope:vi.fn(),onCredential:session.write});
+    client.connect(session.read()!.token); await flush();
+    expect(session.read()).toBeNull(); expect(vi.getTimerCount()).toBe(0);
+  });
+  it('drops expired/malformed credentials and tolerates unavailable browser storage', () => {
+    const tab=storage(), session=createObserverSession(()=>tab,'observer-tab',()=>Date.parse(at));
+    session.write({token:'expired-fixture-token',expiresAt:'2000-01-01T00:00:00Z'}); expect(session.read()).toBeNull();
+    tab.setItem('observer-tab','malformed'); expect(session.read()).toBeNull();
+    const unavailable=createObserverSession(()=>{throw new Error('storage blocked');},'observer-tab');
+    expect(unavailable.write({token:'fixture-token',expiresAt:null})).toBe(false); expect(unavailable.read()).toBeNull();
   });
 });

@@ -20,7 +20,7 @@
     <form id="pair-form" autocomplete="off">
       <label for="pair-code">12桁の接続コード</label>
       <div class="form-row"><input id="pair-code" name="code" type="password" inputmode="text" maxlength="18" autocomplete="off" spellcheck="false" required aria-describedby="pair-hint"><button type="submit">接続する</button></div>
-      <p id="pair-hint" class="hint">接続情報はこのページを閉じると消えます。</p>
+      <p id="pair-hint" class="hint">同じタブでは再読み込みしても接続を維持します。「接続を切る」で保存した接続情報を消します。</p>
     </form>
     <details class="token-connect"><summary>ペアリング済みトークンで接続</summary><form id="token-form" autocomplete="off"><label for="pair-token">接続トークン</label><div class="form-row"><input id="pair-token" name="token" type="password" autocomplete="off" spellcheck="false" required maxlength="2048"><button type="submit">接続する</button></div></form></details>
     <p id="connect-error" role="alert" hidden></p>

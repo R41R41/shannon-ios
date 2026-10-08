@@ -34,7 +34,8 @@ export interface ObserverClientOptions {
   fetch(url: string, init: ObserverRequest): Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
   basePath?: string;
   getCursor?(): number;
-  onEnvelope(envelope: ObserverBatch): void;
+  onEnvelope(envelope: ObserverBatch, delivery?: { liveReceipts: boolean }): void;
+  onCredential?(credential: { token: string; expiresAt: string | null } | null): void;
   onCatalog?(catalog: unknown): void;
   onConnection?(state: ConnectionState): void;
   onReset?(reason: string): void;
@@ -42,6 +43,13 @@ export interface ObserverClientOptions {
   clearTimer?: typeof clearTimeout;
 }
 export function createObserverClient(options: ObserverClientOptions): {
-  connect(token: string): void; pair(code: string): Promise<void>; disconnect(reason?: string): void;
+  connect(token: string, expiresAt?: string | null): void; pair(code: string): Promise<void>; disconnect(reason?: string): void;
   pause(): void; resume(): void;
 };
+
+export function createObserverSession(getStorage: () => Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>, key: string, now?: () => number): {
+  read(): { token: string; expiresAt: string | null } | null;
+  write(credential: { token: string; expiresAt: string | null } | null): boolean;
+  clear(): void;
+};
+export function createReceiptGate(): { accept(envelope: ObserverBatch): boolean; reset(): void };

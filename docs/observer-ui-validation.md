@@ -174,3 +174,17 @@ all compact boxes fitted within the viewport. Audience hold during a receipt
 burst removed every trail, packet, lit halo and private run option. Evidence:
 [Role colours and actual receipt glow](observer-evidence/desktop-colors-receipt-glow.png).
 This is controlled local transport evidence, not a production flow or model call.
+
+The independent review found that the old packet predicate (also used by the
+first glow implementation) treated page two of retained history as live. A
+receipt catch-up gate now drains every full 200-event page before enabling
+effects. Deterministic regression covers 201 old events, subsequent fresh
+handoffs, gap/loss/restart and reconnect. No event time is used as causation.
+
+The owner also requested reload without entering another code. The browser now
+keeps only the token/expiry in tab-scoped sessionStorage, never pairing codes or
+observed payloads. Controlled fixture pairing reached LIVE; reload returned to
+LIVE with the pairing panel hidden and no historic trails; explicit disconnect
+followed by reload stayed disconnected. Tests cover restored credentials,
+one-time-code reuse avoidance, revoked/expired/malformed credentials and blocked
+storage. The original authentication and audience checks remain in force.
