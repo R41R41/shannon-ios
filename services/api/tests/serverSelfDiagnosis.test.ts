@@ -257,6 +257,15 @@ describe('the self-diagnosis', () => {
     expect(models.autonomy).toMatchObject({ planning: 'gemini-3.8-flash', research_reading: 'gemini-3.8-flash', critique: 'gpt-5.6-terra' });
   });
 
+  it('reports shared Haiku for her planning and research only with the owner opt-in, without exposing the key', () => {
+    const environment = { ...configured(), SHANNON_AUTONOMY_ANTHROPIC_API_KEY: SECRETS.SHANNON_HAIKU_API_KEY };
+    const refused = expectNoEnvironmentValue(environment).models.autonomy;
+    expect(refused).toMatchObject({ planning: 'gemini-3.8-flash', research_reading: 'gemini-3.8-flash' });
+    const allowed = expectNoEnvironmentValue({ ...environment, SHANNON_AUTONOMY_ANTHROPIC_SHARED_KEY: 'on' }).models.autonomy;
+    expect(allowed).toEqual({ ...refused, planning: DEFAULT_HAIKU_MODEL, research_reading: DEFAULT_HAIKU_MODEL });
+    expect(createServerSelfDiagnosis(sources({ ...environment, SHANNON_AUTONOMY_ANTHROPIC_SHARED_KEY: 'off' })).read().models.autonomy).toEqual(refused);
+  });
+
   it('is for the owner scope only', () => {
     const reader = createServerSelfDiagnosis(sources(configured()));
     expect(reader.forScope('owner')).toEqual(reader.read());

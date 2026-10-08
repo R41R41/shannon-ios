@@ -74,7 +74,7 @@ Voice Identityは`marin`、`cedar`、`coral`の3候補だけを公開する。�
 
 ## Model and cache
 
-通常のHaikuは `SHANNON_HAIKU_API_KEY` を優先し、互換fallbackとして `SHANNON_ANTHROPIC_API_KEY`、次に `ANTHROPIC_API_KEY` を使う。Sonnetは既存の共有Anthropicキー2変数だけを読み、Haiku専用キーの追加では有効にならない。自律活動のHaikuは、この3変数すべてと値の異なる `SHANNON_AUTONOMY_ANTHROPIC_API_KEY` だけを使う。native SDK、1時間の有用な固定prefix、実測cache creation/read、費用とunknownの扱いは [haiku-model-cache-contract.md](../../docs/haiku-model-cache-contract.md)。Stage2/3 OFFの過去のbyte goldenは明示的な旧GPTモデル・価格のfixtureで検証し、通常設定のHaiku移行とは独立して維持する。
+通常のHaikuは `SHANNON_HAIKU_API_KEY` を優先し、互換fallbackとして `SHANNON_ANTHROPIC_API_KEY`、次に `ANTHROPIC_API_KEY` を使う。Sonnetは既存の共有Anthropicキー2変数だけを読み、Haiku専用キーの追加では有効にならない。自律活動のHaikuは、明示した `SHANNON_AUTONOMY_ANTHROPIC_API_KEY` だけを使い、通常キーへのfallbackはしない。この3変数との同値は既定で拒否し、所有者承認の `SHANNON_AUTONOMY_ANTHROPIC_SHARED_KEY=on` がある時だけ許可する。Google/OpenAIの専用別値と既存の予算・停止判定は維持し、共有Anthropicキーのprovider上限を自主行動専用の分離上限とは扱わない。native SDK、1時間の有用な固定prefix、実測cache creation/read、費用とunknownの扱いは [haiku-model-cache-contract.md](../../docs/haiku-model-cache-contract.md)。Stage2/3 OFFの過去のbyte goldenは明示的な旧GPTモデル・価格のfixtureで検証し、通常設定のHaiku移行とは独立して維持する。
 
 ## ADR-0008 Stage5 owner routes
 

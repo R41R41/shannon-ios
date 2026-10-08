@@ -7,6 +7,8 @@ import { AutonomyModelError, configuredAutonomyTextModel, dedicatedAutonomyCrede
 import { loopHarness, scope } from './autonomyLoopHarness.js';
 
 const key = { SHANNON_AUTONOMY_ANTHROPIC_API_KEY: 'dedicated-autonomy-anthropic' };
+const sharedKey = { SHANNON_AUTONOMY_ANTHROPIC_API_KEY: 'shared-anthropic', SHANNON_HAIKU_API_KEY: 'shared-anthropic', SHANNON_AUTONOMY_ANTHROPIC_SHARED_KEY: 'on' };
+const credentialModes = [['dedicated', key], ['explicitly shared', sharedKey]] as const;
 const request: AutonomyTextRequest = { model: DEFAULT_HAIKU_MODEL, system: 'ひとりで計画を立てます。JSONで返してください。', prompt: '今できることを考えてください。', maximumOutputTokens: 800, reasoning: 'low' };
 function execution(permit = async () => true): ActionExecution {
   return { lease: { id: 'original-action', generation: 1, holder: 'original-holder' }, signal: new AbortController().signal, permit };
@@ -52,21 +54,48 @@ describe('Haiku own-time selection and credential separation', () => {
     expect(configuredAutonomyTextModel({ [variable]: 'conversation' }).configuredProviders).toEqual([]);
     expect(dedicatedAutonomyCredential('anthropic', { [variable]: 'conversation', ...key })).toBe(key.SHANNON_AUTONOMY_ANTHROPIC_API_KEY);
   });
+
+  it.each(['SHANNON_HAIKU_API_KEY', 'SHANNON_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'])('requires explicit sharing permission for a duplicate %s', variable => {
+    const environment = { [variable]: ' same ', SHANNON_AUTONOMY_ANTHROPIC_API_KEY: 'same' };
+    for (const flag of ['', 'off', 'ON', 'true']) {
+      expect(dedicatedAutonomyCredential('anthropic', { ...environment, SHANNON_AUTONOMY_ANTHROPIC_SHARED_KEY: flag })).toBeNull();
+    }
+    const permitted = { ...environment, SHANNON_AUTONOMY_ANTHROPIC_SHARED_KEY: ' on ' };
+    expect(dedicatedAutonomyCredential('anthropic', permitted)).toBe('same');
+    expect(configuredAutonomyTextModel(permitted).configuredProviders).toEqual(['anthropic']);
+  });
+
+  it.each([undefined, '', '  '])('never falls back to a regular key with shared permission and an absent own-time key: %j', async ownKey => {
+    const mock = mockFetch(() => native());
+    const router = configuredAutonomyTextModel({ ...sharedKey, SHANNON_AUTONOMY_ANTHROPIC_API_KEY: ownKey }, mock.fetcher);
+    expect(router.configuredProviders).toEqual([]);
+    await expect(router.generate(request)).rejects.toMatchObject({ code: 'AUTONOMY_MODEL_NOT_CONFIGURED' });
+    expect(mock.calls).toHaveLength(0);
+  });
+
+  it('keeps Google and OpenAI separated even when Anthropic sharing is permitted', () => {
+    const router = configuredAutonomyTextModel({ ...sharedKey, GEMINI_API_KEY: 'google', SHANNON_AUTONOMY_GEMINI_API_KEY: ' google ', OPENAI_API_KEY: 'openai', SHANNON_AUTONOMY_OPENAI_API_KEY: ' openai ' });
+    expect(router.configuredProviders).toEqual(['anthropic']);
+    expect(router.canUse('gemini-3.8-flash')).toBe(false);
+    expect(router.canUse('gpt-5.6-terra')).toBe(false);
+    expect(resolveAutonomyModel('prose', [], id => router.canUse(id))).toBeNull();
+  });
+
 });
 
 describe('native own-time Messages and closed usage', () => {
-  it('uses the official SDK with only its dedicated key, native cache and bounded thinking/output', async () => {
+  it.each(credentialModes)('uses the official SDK with its %s key, native cache and bounded thinking/output', async (_mode, credentials) => {
     vi.stubEnv('ANTHROPIC_AUTH_TOKEN', 'unrelated-bearer');
     vi.stubEnv('ANTHROPIC_BASE_URL', 'https://unrelated.invalid');
     try {
       const mock = mockFetch(() => native());
-      const router = configuredAutonomyTextModel({ ...key, SHANNON_HAIKU_API_KEY: 'regular-haiku', ANTHROPIC_API_KEY: 'conversation', SHANNON_ANTHROPIC_API_KEY: 'other-conversation' }, mock.fetcher);
+      const router = configuredAutonomyTextModel({ SHANNON_HAIKU_API_KEY: 'regular-haiku', ANTHROPIC_API_KEY: 'conversation', SHANNON_ANTHROPIC_API_KEY: 'other-conversation', ...credentials }, mock.fetcher);
       const result = await router.generate({ ...request, model: 'gpt-5.6-luna' });
       expect(result).toEqual({ text: '{"steps":[]}', usage: { inputTokens: 640, outputTokens: 90, cacheCreationInputTokens: 600, cachedInputTokens: 0, cacheCreation5mInputTokens: 0, cacheCreation1hInputTokens: 600 } });
       expect(mock.calls).toHaveLength(1);
       expect(mock.calls[0]!.url).toBe('https://api.anthropic.com/v1/messages');
       const headers = new Headers(mock.calls[0]!.init.headers);
-      expect(headers.get('x-api-key')).toBe(key.SHANNON_AUTONOMY_ANTHROPIC_API_KEY);
+      expect(headers.get('x-api-key')).toBe(credentials.SHANNON_AUTONOMY_ANTHROPIC_API_KEY);
       expect(headers.has('authorization')).toBe(false);
       const body = JSON.parse(mock.calls[0]!.init.body as string);
       expect(body).toMatchObject({ model: DEFAULT_HAIKU_MODEL, max_tokens: 800, thinking: { type: 'adaptive' }, output_config: { effort: 'low' }, cache_control: { type: 'ephemeral', ttl: '1h' } });
@@ -120,24 +149,24 @@ describe('native own-time Messages and closed usage', () => {
     expect(mock.calls).toHaveLength(1);
   });
 
-  it('rechecks the action permit at the adapter boundary and sends nothing after a stop', async () => {
+  it.each(credentialModes)('rechecks the action permit at the adapter boundary and sends nothing after a stop (%s key)', async (_mode, credentials) => {
     let checks = 0;
     const context = execution(async () => ++checks < 2);
     const mock = mockFetch(() => native());
-    await expect(inActionExecution(context, () => generateModel(configuredAutonomyTextModel(key, mock.fetcher), request))).rejects.toMatchObject({ code: 'ACTION_STOPPED', usage: { inputTokens: 0, outputTokens: 0 } });
+    await expect(inActionExecution(context, () => generateModel(configuredAutonomyTextModel(credentials, mock.fetcher), request))).rejects.toMatchObject({ code: 'ACTION_STOPPED', usage: { inputTokens: 0, outputTokens: 0 } });
     expect(checks).toBe(2);
     expect(mock.calls).toHaveLength(0);
     expect(context.modelOutcome).toBe('acknowledged');
   });
 
-  it('aborts an in-flight SDK request and keeps the original uncertain outcome without retry', async () => {
+  it.each(credentialModes)('aborts an in-flight SDK request and keeps the original uncertain outcome without retry (%s key)', async (_mode, credentials) => {
     const controller = new AbortController();
     const mock = mockFetch(init => new Promise<Response>((_resolve, reject) => {
       init.signal?.addEventListener('abort', () => reject(new Error('provider echoes private prompt')), { once: true });
       controller.abort();
     }));
     const context = execution();
-    await expect(inActionExecution(context, () => generateModel(configuredAutonomyTextModel(key, mock.fetcher), { ...request, signal: controller.signal }))).rejects.toThrow('AUTONOMY_MODEL_ABORTED');
+    await expect(inActionExecution(context, () => generateModel(configuredAutonomyTextModel(credentials, mock.fetcher), { ...request, signal: controller.signal }))).rejects.toThrow('AUTONOMY_MODEL_ABORTED');
     expect(context.modelOutcome).toBe('unknown');
     expect(context.modelUsage).toBeUndefined();
     expect(mock.calls).toHaveLength(1);
@@ -174,10 +203,10 @@ describe('Haiku cache costs in the existing autonomy budget', () => {
     }
   });
 
-  it('uses the same worst reservation at the gate, and records actual cache failure spend once', async () => {
+  it.each(credentialModes)('uses the same worst reservation at the gate, and records actual cache failure spend once (%s key)', async (_mode, credentials) => {
     const harness = loopHarness();
     const mock = mockFetch(() => native({ cache_creation_input_tokens: 0, cache_read_input_tokens: 0, cache_creation: null }));
-    const model = configuredAutonomyTextModel(key, mock.fetcher);
+    const model = configuredAutonomyTextModel(credentials, mock.fetcher);
     const deps = { store: harness.store, service: harness.service, config: harness.config, loop: harness.loopConfig, now: () => harness.clock.at, reader: harness.reader, showing: harness.showing, model };
     const call = paidCall(deps, scope, 'planning', { system: request.system, prompt: request.prompt }, 800)!;
     expect(call.model).toBe(DEFAULT_HAIKU_MODEL);
@@ -192,10 +221,10 @@ describe('Haiku cache costs in the existing autonomy budget', () => {
     harness.store.close();
   });
 
-  it('refuses a cap that could cover ordinary input but not the full prefix cache write, before any RPC', () => {
+  it.each(credentialModes)('refuses a cap that could cover ordinary input but not the full prefix cache write, before any RPC (%s key)', (_mode, credentials) => {
     const harness = loopHarness({ environment: { SHANNON_AUTONOMY_MODEL_PRICES_JSON: JSON.stringify({ [DEFAULT_HAIKU_MODEL]: { input: 10, output: 10 } }), SHANNON_AUTONOMY_DAILY_BUDGET_YEN: '20' } });
     const mock = mockFetch(() => native());
-    const model = configuredAutonomyTextModel(key, mock.fetcher);
+    const model = configuredAutonomyTextModel(credentials, mock.fetcher);
     const call = paidCall({ store: harness.store, service: harness.service, config: harness.config, loop: harness.loopConfig, reader: harness.reader, showing: harness.showing, model }, scope, 'planning', { system: request.system, prompt: request.prompt }, 800)!;
     const ordinaryYen = (call.estimate.inputTokens + call.estimate.outputTokens) * 10 / 1_000_000 * 160;
     expect(ordinaryYen).toBeLessThan(20);

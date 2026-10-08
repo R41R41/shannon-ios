@@ -1,6 +1,6 @@
 # Haiku model and cache contract
 
-Status: implementation authority for the Haiku migration candidate. Production activation and Apple delivery require their own verified gates and owner approval; this contract does not assert that the candidate is deployed.
+Status: implementation authority for the Haiku migration candidate. Production activation and Apple delivery require their own verified gates and owner approval; this contract does not assert that the candidate is deployed. Own-time shared-key activation requires a separate verified environment receipt.
 
 This contract owns the current small-model provider, credentials, cache and cost boundary. [architecture.md](architecture.md) owns response/worker boundaries, [skill-and-routing-contract.md](skill-and-routing-contract.md) owns logical tier selection, and [self-improvement-runbook.md](self-improvement-runbook.md) owns delivery.
 
@@ -18,8 +18,10 @@ Text, voice reply, Jev's lightweight fallback and the migrated small-model backg
 | --- | --- | --- |
 | Regular Haiku | `SHANNON_HAIKU_API_KEY`, else `SHANNON_ANTHROPIC_API_KEY`, else `ANTHROPIC_API_KEY` | The first setting is Haiku-only; the existing shared-key fallback remains for compatibility. Server only; no key is returned to a client or prompt. |
 | Existing Sonnet hooks | `SHANNON_ANTHROPIC_API_KEY`, else `ANTHROPIC_API_KEY` | Haiku-only key addition does not activate Sonnet routing or the sleep proposer; their existing gates and Terra fallback remain. |
-| Own-time Haiku | `SHANNON_AUTONOMY_ANTHROPIC_API_KEY` only | A dedicated value equal to any of the three regular Haiku/Anthropic keys is unavailable. There is no regular-key fallback. |
-| Own-time Gemini/GPT | Their existing `SHANNON_AUTONOMY_GEMINI_API_KEY` / `SHANNON_AUTONOMY_OPENAI_API_KEY` | Existing dedicated-key and registry boundaries remain. |
+| Own-time Haiku | `SHANNON_AUTONOMY_ANTHROPIC_API_KEY` only | The setting is always required explicitly. Equality with any of the three regular Haiku/Anthropic values is unavailable by default; only owner-authorized `SHANNON_AUTONOMY_ANTHROPIC_SHARED_KEY=on` permits equality. There is no regular-key fallback. |
+| Own-time Gemini/GPT | Their existing `SHANNON_AUTONOMY_GEMINI_API_KEY` / `SHANNON_AUTONOMY_OPENAI_API_KEY` | Existing dedicated-key, distinct-value and registry boundaries remain; the Anthropic opt-in does not apply to Google/OpenAI. |
+
+The owner's current instruction may authorize the Anthropic same-value opt-in above; it does not authorize regular-key fallback or a different provider's sharing. The shared key's provider cap is not a separate own-time-only spending limit. Existing application daily/session budgets, reservations, caller stop checks, unknown outcomes and mandatory cache requirements still apply.
 
 Native clients explicitly select the official API origin, `authToken: null`, `webhookKey: null`, `logLevel: off` and `maxRetries: 0`. Ambient SDK bearer-token/base-URL/log settings must not change the credential or transport boundary. Model failures expose closed codes, never SDK error text containing request material or a credential.
 
@@ -56,6 +58,6 @@ Stage2/3 switches control those architecture features, independently of the inte
 
 Deterministic verification covers native Messages/cache shape, credentials, unconditional low effort, required usage counts, paid error outcomes, action stop/abort, no retry, configured prices, long-context tiers, real budget refusal and the historical OFF proofs. These mocked/offline checks cannot establish live provider availability or cache reuse.
 
-For readiness in the intended environment, retain content-free receipts for the native model/API response, native prefix token count, a real cache creation and a repeated-request cache read. Distinguish the Haiku-only/shared regular credential's proof from own-time dedicated-key readiness. Prefer the Haiku-only setting for a Luna-to-Haiku deployment so installing its key does not enable an otherwise unavailable Sonnet hook. A regular/Minebot key probe does not establish that own-time Haiku is configured. Until the distinct dedicated key is installed and verified, own-time Haiku remains unavailable and configured Gemini behavior continues under the existing registry selection rule.
+For readiness in the intended environment, retain content-free receipts for the native model/API response, native prefix token count, a real cache creation and a repeated-request cache read. Distinguish the Haiku-only/shared regular credential's proof from own-time dedicated-key readiness. Prefer the Haiku-only setting for a Luna-to-Haiku deployment so installing its key does not enable an otherwise unavailable Sonnet hook. A regular/Minebot key probe does not establish that own-time Haiku is configured. Until the explicit own-time key and its policy are installed and verified (a distinct value by default, or the owner-authorized same-value opt-in), own-time Haiku remains unavailable and configured Gemini behavior continues under the existing registry selection rule. Same-value sharing readiness must not be described as a separate provider spending cap or inferred from a regular-key probe alone.
 
 Production deployment and a main push remain separate from implementation/testing. Present the exact candidate, scope, full verification and credential readiness for owner approval according to the runbook. A server-only main push can start Xcode Cloud/TestFlight and therefore needs the same explicit delivery decision.

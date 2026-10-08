@@ -11,8 +11,10 @@ import { AnthropicAutonomyTextModel } from './anthropicAutonomyTextModel.js';
  * The credential comes only from the variables named here, which the owner sets to a
  * dedicated key with a provider-side spending cap. The conversation keys
  * (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `SHANNON_HAIKU_API_KEY`, `SHANNON_ANTHROPIC_API_KEY`, `ANTHROPIC_API_KEY`) are never read as a fallback, and a dedicated
- * variable that merely repeats a conversation key counts as not configured, because the
- * provider-side cap would then not separate her spending from conversation.
+ * variable that merely repeats a conversation key normally counts as not configured.
+ * The owner may explicitly permit the Anthropic value to match a regular key with
+ * SHANNON_AUTONOMY_ANTHROPIC_SHARED_KEY=on; this never adds a conversation-key fallback
+ * or a separate provider spending cap. Google/OpenAI still require distinct values.
  */
 export const AUTONOMY_CREDENTIAL_VARIABLES = Object.freeze({
   google: 'SHANNON_AUTONOMY_GEMINI_API_KEY',
@@ -50,7 +52,7 @@ export interface AutonomyTextResult {
 }
 
 export interface AutonomyTextModel {
-  /** Whether a dedicated credential exists for the provider of this model. */
+  /** Whether an explicitly permitted credential exists for the provider of this model. */
   canUse(modelId: string): boolean;
   generate(request: AutonomyTextRequest): Promise<AutonomyTextResult>;
 }
@@ -216,7 +218,7 @@ export function autonomyPromptCacheKey(system: string): string {
   return `shannon_autonomy_${createHash('sha256').update(system).digest('hex').slice(0, 32)}`;
 }
 
-/** Routes a registry model to the adapter of its provider. A model whose provider has no dedicated credential cannot be used. */
+/** Routes a registry model to the adapter of its provider. A model without a permitted credential cannot be used. */
 export class AutonomyModelRouter implements AutonomyTextModel {
   constructor(private readonly providers: Partial<Record<AutonomyModelProvider, Pick<AutonomyTextModel, 'generate'>>>) {}
 
@@ -237,13 +239,14 @@ export class AutonomyModelRouter implements AutonomyTextModel {
   }
 }
 
-/** The dedicated key of a provider, or null. Never the conversation key, and never a copy of it. */
+/** The explicit own-time key, or null. Anthropic equality needs the owner's opt-in; no regular-key fallback. */
 export function dedicatedAutonomyCredential(
   provider: AutonomyModelProvider,
   environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): string | null {
   const key = environment[AUTONOMY_CREDENTIAL_VARIABLES[provider]]?.trim();
   if (!key) return null;
+  if (provider === 'anthropic' && environment.SHANNON_AUTONOMY_ANTHROPIC_SHARED_KEY?.trim() === 'on') return key;
   return CONVERSATION_CREDENTIAL_VARIABLES[provider].some(variable => environment[variable]?.trim() === key) ? null : key;
 }
 
@@ -265,7 +268,7 @@ export function configuredAutonomyTextModel(
 
 /**
  * The model for a purpose: her stored preference, else the default, else any registry
- * model for that purpose whose provider has a dedicated credential. Null when none has.
+ * model for that purpose whose provider has a permitted credential. Null when none has.
  */
 export function resolveAutonomyModel(
   purpose: AutonomyModelPurpose,

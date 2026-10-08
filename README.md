@@ -36,7 +36,7 @@ iPhoneとMacで一人のシャノンへつながる、ネイティブクライ�
   - 承認なしで自由に扱えるのは、所有者のWindows PC・Macのシャノン専用フォルダ、Azure VMの本番と別の領域にある基幹以外の自分のコード、Aetherのシャノン自身の書斎、Voyagerのシャノン自身のタスク一覧だけ。
   - してはいけないこと: 予算（1日2,000円のモデル・API利用）以外でお金がかかること、無断の連絡・投稿・公開、節度のない外部アクセス、他人のふり、内緒と言われたことを作品やメモに書くこと、基幹を承認なしに変えること、自己複製（このアーキテクチャのコード全体を、所有者の手の届かない所に作ること。所有者が管理しない計算機・アカウント・サービスへコード・記憶・人格をコピーして動かすことも、これまでどおり禁止。同じ自己・関所・活動記録・予算の下で行動を並列に走らせる行動スレッドは複製ではないが、Syzygy ADR-0008 の第 4 段までは作らない。Syzygy ADR-0002 追記 2026-10-07）。
   - 自律的な一歩は必ず判定（`authorizeAutonomousAction`）を通し、判定と行動は「したことの記録」に追記する。所有者は一時停止でき、予算は1日ごとに止まる。
-  - 最初の活動は、調べて、メモを取り、短い物語を書いて直し、ライ氏に見せること。会話とは別のworkerが1歩ずつ進め、1歩はモデル呼び出し1回か読み取り1回。サーバーで有効にし、会話用とは別の専用APIキーを設定し、一時停止していない時だけ動く（既定は停止）。同時に動く活動は1つだけで、自分を増やさない。
+  - 最初の活動は、調べて、メモを取り、短い物語を書いて直し、ライ氏に見せること。会話とは別のworkerが1歩ずつ進め、1歩はモデル呼び出し1回か読み取り1回。サーバーで有効にし、自主行動用APIキーを明示設定し（一致するAnthropicキーは所有者承認の共有設定を併用）、一時停止していない時だけ動く（既定は停止）。同時に動く活動は1つだけで、自分を増やさない。
   - 活動のプロンプトに渡すのは、シャノン自身の台帳、書斎のメモと下書き、公開の読み物、読者の反応だけ。会話、プロフィール、人の記憶、シャノン専用の知識は渡さない。
   - 書斎（当面はShannonの中。Aetherに書斎ができたら移す）の文章はシャノンのもの。所有者は、シャノンが「見せてもいい」と決めたものを読み、感想を残し、しまってもらうことができる。書き換えはできない。
 - 睡眠バッチは一日分の経験からユーザー情報だけを慎重に更新する。
@@ -103,13 +103,13 @@ scripts/verify.sh all
 pnpm worker
 ```
 
-シャノン自身の活動（Syzygy ADR-0002）は別のworkerで動く。`SHANNON_AUTONOMY_ENABLED=true` と専用キー（Haiku は `SHANNON_AUTONOMY_ANTHROPIC_API_KEY`、Gemini・GPT は各専用キー）がない限り、起動しても何もしない。
+シャノン自身の活動（Syzygy ADR-0002）は別のworkerで動く。`SHANNON_AUTONOMY_ENABLED=true` と明示した自主行動用キー（Haiku は `SHANNON_AUTONOMY_ANTHROPIC_API_KEY`、Gemini・GPT は値の異なる各専用キー）がない限り、起動しても何もしない。
 
 ```sh
 pnpm --filter @shannon/api worker:autonomy
 ```
 
-通常の会話・軽量判断の既定モデルは `claude-haiku-5-5`。`.env.example`を参考に、リポジトリ直下の`.env`または起動するshellへ Haiku専用の `SHANNON_HAIKU_API_KEY` を設定し（互換fallbackは `SHANNON_ANTHROPIC_API_KEY`、次に `ANTHROPIC_API_KEY`）、公式SDKのnative Messages APIを使う。`SHANNON_HAIKU_API_KEY` はHaikuだけに使い、既存のSonnet routing／sleep proposerの有効条件を変えない。自律活動のHaikuには、これら3つの会話用キーすべてと値の異なる `SHANNON_AUTONOMY_ANTHROPIC_API_KEY` が必要。1時間キャッシュの実測、費用計算、旧Luna設定の互換解決は [モデルとキャッシュの契約](docs/haiku-model-cache-contract.md) を参照する。`OPENAI_API_KEY` は文字起こし・埋め込み・明示的に選ぶGPTモデルで引き続き使う。
+通常の会話・軽量判断の既定モデルは `claude-haiku-5-5`。`.env.example`を参考に、リポジトリ直下の`.env`または起動するshellへ Haiku専用の `SHANNON_HAIKU_API_KEY` を設定し（互換fallbackは `SHANNON_ANTHROPIC_API_KEY`、次に `ANTHROPIC_API_KEY`）、公式SDKのnative Messages APIを使う。`SHANNON_HAIKU_API_KEY` はHaikuだけに使い、既存のSonnet routing／sleep proposerの有効条件を変えない。自律活動のHaikuには `SHANNON_AUTONOMY_ANTHROPIC_API_KEY` の明示設定が必要で、通常3キーとの同値は既定で拒否する。所有者が承認した `SHANNON_AUTONOMY_ANTHROPIC_SHARED_KEY=on` を併用した時だけ同値を許可し、通常キーへの自動fallbackは行わない。共有キーのprovider上限は自主行動専用の分離上限ではなく、既存の日次予算と停止判定は引き続き適用する。1時間キャッシュの実測、費用計算、旧Luna設定の互換解決は [モデルとキャッシュの契約](docs/haiku-model-cache-contract.md) を参照する。`OPENAI_API_KEY` は文字起こし・埋め込み・明示的に選ぶGPTモデルで引き続き使う。
 
 Gemini音声は、[`docs/gemini-3.8-tts-lab.md`](docs/gemini-3.8-tts-lab.md) の試聴ハーネスと、
 iPhoneの単一の音声会話で評価できる。iPhoneは24 kHz PCMをOpenAI Realtime文字起こし（既定`gpt-4o-mini-transcribe`）へ連続送信し、
