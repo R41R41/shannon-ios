@@ -26,6 +26,8 @@ export interface GameExperience {
 export interface GameExperienceWriter {
   /** Writes the experience once. False when there is nowhere to remember (no experience table) or it is already there. */
   write(scopeKey: string, experience: GameExperience): boolean;
+  /** Exact acknowledgement after a duplicate write. Absence or a failed read leaves delivery pending. */
+  recorded?(scopeKey: string, experienceId: string): boolean;
 }
 
 /** Minecraft's death causes (damage types) in her words. Anything else is remembered without a cause. */

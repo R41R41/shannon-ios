@@ -23,6 +23,12 @@ export class SQLiteGameExperiences implements GameExperienceWriter {
     return Number(inserted.changes) > 0;
   }
 
+  recorded(scopeKey: string, experienceId: string): boolean {
+    if (!this.database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'experience_events'").get()) return false;
+    return Boolean(this.database.prepare(`SELECT 1 FROM experience_events WHERE event_id = ? AND scope_key = ?
+      AND event_type = 'turn.completed' AND json_extract(payload_json, '$.source') = ?`).get(experienceId, scopeKey, BODY_GAME_SOURCE));
+  }
+
   close(): void {
     if (this.database.isOpen) this.database.close();
   }

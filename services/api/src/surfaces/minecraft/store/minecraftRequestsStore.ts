@@ -2,7 +2,7 @@ import type { MinecraftExecutionPort } from '../../../contracts/actionThreadCont
 /** The requests her Minecraft body is given and what it reported, kept (Syzygy ADR-0008 stage 3, S2: the SQLite part of `minecraftBodyRequests.ts`, moved unchanged into the surface's store folder). */
 import { MINECRAFT_REQUEST_LIMITS, type MinecraftProgressPhase, type MinecraftRequestOrigin, type MinecraftRequestProgress, type MinecraftRequestResult, type MinecraftRequestState, type MinecraftRequestView, OPEN_REQUEST_STATES, requestGoal } from '../../../contracts/minecraftBodyRequestContract.js';
 import { DatabaseSync } from 'node:sqlite';
-import type { GameExperience, GameExperienceWriter } from '../../../mind/memory/memoryPorts.js';
+import type { GameExperienceWriter } from '../../../mind/memory/memoryPorts.js';
 import type { ClaimResponse, EnqueueOutcome, MinecraftRequestsConfiguration } from '../minecraftBodyRequests.js';
 import { HostFolderSignals } from '../../../mind/action/ownTime/hostFolderOperations.js';
 import { secureDatabaseFiles } from '../../../infra/sqlite/sqliteStoreContext.js';
@@ -29,9 +29,6 @@ export class MinecraftBodyRequests {
     // result, not replace it with the retry's possibly contradictory outcome.
     await this.flushExecutionAcknowledgements(scopeKey);
   }
-  /** Experiences of requests closed in the open transaction, written after it commits (the experience table is another connection's). */
-  private pendingExperiences: Array<{ scopeKey: string; experience: GameExperience }> = [];
-
   constructor(
     path: string,
     private readonly configuration: MinecraftRequestsConfiguration,
@@ -70,8 +67,13 @@ export class MinecraftBodyRequests {
         request_id TEXT PRIMARY KEY, scope_key TEXT NOT NULL, state TEXT NOT NULL,
         delivered INTEGER NOT NULL DEFAULT 0
       );
+      CREATE TABLE IF NOT EXISTS minecraft_experience_outbox (
+        request_id TEXT PRIMARY KEY, scope_key TEXT NOT NULL,
+        delivered INTEGER NOT NULL DEFAULT 0 CHECK (delivered IN (0,1))
+      );
     `);
     secureDatabaseFiles(path);
+    this.writeExperiences();
   }
 
   /** Whether this scope has a Minecraft body at all (the owner's scope, with a configured body). */
@@ -264,9 +266,12 @@ export class MinecraftBodyRequests {
         for (const { scope_key: scopeKey } of scopes) this.sweep(scopeKey, at);
         const acknowledged = this.execution ? `AND (claimed_at IS NULL OR EXISTS (
           SELECT 1 FROM minecraft_execution_acknowledgements a WHERE a.request_id=minecraft_body_requests.id AND a.delivered=1))` : '';
-        this.database.prepare(`DELETE FROM minecraft_body_requests WHERE finished_at IS NOT NULL AND finished_at < ? ${acknowledged}`)
+        this.database.prepare(`DELETE FROM minecraft_body_requests WHERE finished_at IS NOT NULL AND finished_at < ? ${acknowledged}
+          AND NOT EXISTS (SELECT 1 FROM minecraft_experience_outbox e WHERE e.request_id=minecraft_body_requests.id AND e.delivered=0)`)
           .run(new Date(Date.parse(at) - MINECRAFT_REQUEST_LIMITS.keepDays * 86_400_000).toISOString());
         this.database.prepare(`DELETE FROM minecraft_execution_acknowledgements WHERE delivered=1
+          AND request_id NOT IN (SELECT id FROM minecraft_body_requests)`).run();
+        this.database.prepare(`DELETE FROM minecraft_experience_outbox WHERE delivered=1
           AND request_id NOT IN (SELECT id FROM minecraft_body_requests)`).run();
       });
       void this.flushExecutionAcknowledgements(this.configuration.ownerScopeKey).catch(() => {});
@@ -370,19 +375,27 @@ export class MinecraftBodyRequests {
     if (Number(changed.changes) && this.execution && !row.claimed_at && ['cancelled','expired'].includes(state)) {
       this.queueExecutionAcknowledgement(row, 'cancelled');
     }
-    if (!Number(changed.changes) || !row.claimed_at || !this.experiences) return;
-    const closed = this.row(row.scope_key, row.id);
-    if (closed) this.pendingExperiences.push({ scopeKey: row.scope_key, experience: requestExperience(row.scope_key, this.configuration.deviceId, view(closed)) });
+    if (!Number(changed.changes) || !row.claimed_at) return;
+    // Only closed references are copied. The original request remains the authority for its first result and private goal.
+    this.database.prepare('INSERT OR IGNORE INTO minecraft_experience_outbox(request_id,scope_key) VALUES(?,?)').run(row.id, row.scope_key);
   }
 
-  /** After the commit: each closed request that reached the body becomes one experience (written once, by its id). */
+  /** After commit, at startup and on maintenance: original IDs retry only memory delivery, never the body action. */
   private writeExperiences(): void {
-    const pending = this.pendingExperiences;
-    this.pendingExperiences = [];
-    for (const { scopeKey, experience } of pending) {
-      try { this.experiences?.write(scopeKey, experience); } catch (error) {
-        // The memory of one request is lost, never the request's state.
-        console.error('Shannon Minecraft request memory failed', error instanceof Error ? error.message : 'unknown');
+    if (!this.experiences) return;
+    const pending = this.database.prepare(`SELECT r.* FROM minecraft_experience_outbox e JOIN minecraft_body_requests r
+      ON r.id=e.request_id AND r.scope_key=e.scope_key WHERE e.delivered=0 ORDER BY r.created_at,r.id LIMIT 32`).all() as unknown as Row[];
+    for (const row of pending) {
+      if (!row.device_id || !row.claimed_at || !row.finished_at) continue;
+      try {
+        const experience = requestExperience(row.scope_key, row.device_id, view(row));
+        if (this.experiences.write(row.scope_key, experience) || this.experiences.recorded?.(row.scope_key, experience.id) === true) {
+          this.database.prepare('UPDATE minecraft_experience_outbox SET delivered=1 WHERE request_id=? AND scope_key=?')
+            .run(row.id, row.scope_key);
+        }
+      } catch {
+        // Keep the durable reference, including a crash after the experience insert but before its acknowledgement.
+        console.error('Shannon Minecraft request memory delivery deferred');
       }
     }
   }
@@ -412,7 +425,6 @@ export class MinecraftBodyRequests {
       this.database.exec('COMMIT');
     } catch (error) {
       this.database.exec('ROLLBACK');
-      this.pendingExperiences = [];
       throw error;
     }
     this.writeExperiences();
