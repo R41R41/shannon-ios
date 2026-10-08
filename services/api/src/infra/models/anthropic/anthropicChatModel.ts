@@ -6,7 +6,8 @@ import { ChatSentenceSplitter } from '../../../surfaces/text/chatSentenceSplitte
 import {
   VOICE_MAX_OUTPUT_TOKENS, type ShannonChatModel, type ShannonChatModelRequest, type ShannonChatModelResult, type ShannonVoiceModelRequest, type ShannonWebSource,
 } from '../chatModel.js';
-import { VOICE_TOOL_OUTPUT_TOKENS, voiceWaitingPhrase } from '../chatModelTools.js';
+import { VOICE_TOOL_OUTPUT_TOKENS, voiceWaitingPhrase, type ShannonModelToolSession } from '../chatModelTools.js';
+import { baseToolSession, withToolMenu } from '../../../mind/tools/shannonToolMenu.js';
 import { chatTurnResult, offersTools, parsedChatTurn } from '../chatModelTurn.js';
 import { ChatReplyStreamDecoder } from '../chatReplyStreamDecoder.js';
 import type { LlmUsageStore } from '../llmUsage.js';
@@ -111,6 +112,7 @@ export class AnthropicChatModel implements ShannonChatModel {
   }
 
   private async text(request: ShannonChatModelRequest, onReplyText: ((text: string) => void | Promise<void>) | null): Promise<ShannonChatModelResult> {
+    request = this.boundedToolMenu(request);
     const body = sonnetChatBody(this.options.settings, request, this.options.agentHostHint);
     let written = '';
     const escalation = this.escalation(request, () => written === '');
@@ -151,6 +153,7 @@ export class AnthropicChatModel implements ShannonChatModel {
   }
 
   private async voice(request: ShannonVoiceModelRequest, onTextDelta: ((delta: string) => void | Promise<void>) | null, signal?: AbortSignal): Promise<ShannonChatModelResult> {
+    request = this.boundedToolMenu(request);
     const tools = request.tools?.definitions.length && !request.useWebSearch ? request.tools : undefined;
     const ceiling = tools ? Math.max(VOICE_MAX_OUTPUT_TOKENS[request.conversationClass], VOICE_TOOL_OUTPUT_TOKENS) : VOICE_MAX_OUTPUT_TOKENS[request.conversationClass];
     const body = sonnetVoiceBody(this.options.settings, request, ceiling);
@@ -185,6 +188,14 @@ export class AnthropicChatModel implements ShannonChatModel {
     if (!reply) throw new Error('ANTHROPIC_RESPONSE_EMPTY');
     const webSources = webSourcesOf(result);
     return { mode: this.mode, model: this.model, reply, ...(webSources.length ? { webSources } : {}), ...(truncated ? { truncated: true } : {}), ...(escalation?.happened() ? { escalated: true } : {}) };
+  }
+
+  /** A Jev timeout/no-menu still offers every tool, but cannot send more than 20 strict schemas to Haiku at once. */
+  private boundedToolMenu<T extends { tools?: ShannonModelToolSession }>(request: T): T {
+    if (this.model !== DEFAULT_HAIKU_MODEL || !request.tools || request.tools.definitions.length <= 20) return request;
+    // Build before the body so the same session supplies full discovery instructions, always-loaded controls,
+    // lazy visibility and the native rounds. Opening still delegates to the original deadline/audience/gate/runner.
+    return { ...request, tools: withToolMenu(baseToolSession(request.tools), []) };
   }
 
   private escalation(request: ShannonChatModelRequest | ShannonVoiceModelRequest, allowed: () => boolean) {
