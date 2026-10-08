@@ -6,6 +6,7 @@ import type { AgentTask, ClaimedAgentCommand, HostAgentEvent } from '../agentTas
 import type { TaskTreeOperations, TaskTreeOwnerChange, TaskTreeProposal, TaskResultProof, TaskTreeLearningCallbacks, TaskDispatchExpectation } from '../taskTreePorts.js';
 import { recordTreeHostEvent, verifyTreeEvidence, treeProofForTask } from './taskTreeEvidence.js';
 import { migrateTaskTreeCallbacks, queueTaskTreeLearning, flushTaskTreeLearning, type TaskTreeLearningEvent } from './taskTreeCallbacks.js';
+import { withAgentTaskRequest } from './agentTaskRequestWindow.js';
 
 export interface TreeAttempt {
   id: string; taskId: string; commandId: string; lease: ActionLease | null;
@@ -58,6 +59,13 @@ export class TaskTreeStore implements TaskTreeOperations {
   get(scopeKey: string, taskId: string): TaskTree | null {
     const row = this.database.prepare('SELECT tree_json FROM agent_task_trees WHERE scope_key=? AND task_id=?').get(scopeKey, taskId) as { tree_json: string } | undefined;
     return row ? JSON.parse(row.tree_json) as TaskTree : null;
+  }
+  withRequestTaskId<T>(scopeKey: string, requestTaskId: string, operation: (storedTaskId: string) => T): T {
+    try { return withAgentTaskRequest(this.database, scopeKey, requestTaskId, operation); }
+    catch (error) {
+      if (error instanceof Error && error.message === 'AGENT_TASK_NOT_FOUND') throw new Error('TREE_NOT_FOUND');
+      throw error;
+    }
   }
   proposals(scopeKey: string, taskId: string): readonly TaskTreeProposal[] {
     const rows = this.database.prepare('SELECT proposal_json FROM agent_task_tree_proposals WHERE scope_key=? AND task_id=? ORDER BY rowid DESC LIMIT 32')

@@ -24,6 +24,7 @@ import { AgentHostRegistry, isReasoningEffort } from './agentHostRegistry.js';
 import { projectHostEvent } from './agentTaskHostProjection.js';
 import { AgentTaskQueue } from './agentTaskQueue.js';
 import { TaskTreeStore } from './taskTreeStore.js';
+import { withAgentTaskRequest } from './agentTaskRequestWindow.js';
 import { taskTreeAuthority } from '@shannon/mind';
 import type { ActionLease } from '../../../../contracts/actionThreadContract.js';
 import type { TaskTreeLearningCallbacks } from '../taskTreePorts.js';
@@ -135,6 +136,12 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
       SELECT * FROM agent_tasks WHERE scope_key = ? AND task_id = ?
     `).get(scopeKey, taskId) as unknown as AgentTaskRow | undefined;
     return row ? this.inflate(row) : null;
+  }
+
+  withRequestTaskId<T>(scopeKey: string, requestTaskId: string, operation: (storedTaskId: string) => T): T {
+    const result = withAgentTaskRequest(this.database, scopeKey, requestTaskId, operation);
+    secureDatabaseFiles(this.path);
+    return result;
   }
 
   updateMetadata(
@@ -449,6 +456,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
   }
 
   private transaction(operation: () => void): void {
+    if (this.database.isTransaction) { operation(); return; }
     this.database.exec('BEGIN IMMEDIATE');
     try {
       operation();

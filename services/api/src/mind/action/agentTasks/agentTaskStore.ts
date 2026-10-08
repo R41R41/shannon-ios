@@ -218,6 +218,8 @@ export interface HostAgentEvent {
 }
 
 export interface AgentTaskStore {
+  /** Resolve UUID spelling only at synchronous owner HTTP boundaries, on the original scoped transaction. */
+  withRequestTaskId<T>(scopeKey: string, requestTaskId: string, operation: (storedTaskId: string) => T): T;
   readonly taskTrees?: TaskTreeOperations;
   bindActionLease?(commandId: string, lease: ActionLease): void;
   create(scopeKey: string, input: CreateAgentTaskInput, now: string): { task: AgentTask; created: boolean };
@@ -273,6 +275,9 @@ export class InMemoryAgentTaskStore implements AgentTaskStore {
   private readonly delegate: SQLiteAgentTaskStore;
   constructor(options: { taskTreeEnabled?: boolean; taskTreeCallbacks?: TaskTreeLearningCallbacks } = {}) { this.delegate = new SQLiteAgentTaskStore(':memory:', options); }
   get taskTrees() { return this.delegate.taskTrees; }
+  withRequestTaskId<T>(scopeKey: string, requestTaskId: string, operation: (storedTaskId: string) => T): T {
+    return this.delegate.withRequestTaskId(scopeKey, requestTaskId, operation);
+  }
   bindActionLease(commandId: string, lease: ActionLease) { this.delegate.bindActionLease(commandId, lease); }
   create(scopeKey: string, input: CreateAgentTaskInput, now: string) { return this.delegate.create(scopeKey, input, now); }
   list(scopeKey: string) { return this.delegate.list(scopeKey); }

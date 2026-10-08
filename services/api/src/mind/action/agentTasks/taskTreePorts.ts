@@ -17,6 +17,8 @@ export interface TaskTreeProposal {
 }
 /** Only wiring's canonical task/claim/event paths call mutation and evidence methods. */
 export interface TaskTreeOperations {
+  /** Synchronous HTTP task UUID spelling only. Resolve a unique owner-scoped original ID and hold its snapshot through the operation. */
+  withRequestTaskId<T>(scopeKey: string, requestTaskId: string, operation: (storedTaskId: string) => T): T;
   flushLearning(): void;
   /** Original IDs only, from the same bounded undelivered window that flushLearning processes. */
   pendingLearningActions(scopeKey: string): readonly { taskId: string; actionId: string }[];

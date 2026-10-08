@@ -120,13 +120,18 @@ export function dispatchAgentRequest(request: ApiRequest, dependencies: ApiAgent
   if (request.method === 'GET' && agentTaskMatch) {
     const scopeKey = request.query?.get('scopeKey');
     if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
-    const task = dependencies.agentTasks.get(scopeKey, decodeURIComponent(agentTaskMatch[1] ?? ''));
-    if (!task) return { status: 404, body: { error: 'AGENT_TASK_NOT_FOUND' } };
-    const afterSequence = Number(request.query?.get('afterSequence') ?? '-1');
-    if (Number.isInteger(afterSequence) && afterSequence >= task.latestSequence) {
-      return { status: 304, body: null };
+    try {
+      return dependencies.agentTasks.withRequestTaskId(scopeKey, decodeURIComponent(agentTaskMatch[1] ?? ''), taskId => {
+        const task = dependencies.agentTasks.get(scopeKey, taskId);
+        if (!task) return { status: 404, body: { error: 'AGENT_TASK_NOT_FOUND' } };
+        const afterSequence = Number(request.query?.get('afterSequence') ?? '-1');
+        if (Number.isInteger(afterSequence) && afterSequence >= task.latestSequence) return { status: 304, body: null };
+        return { status: 200, body: { task } };
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === 'AGENT_TASK_NOT_FOUND') return { status: 404, body: { error: error.message } };
+      throw error;
     }
-    return { status: 200, body: { task } };
   }
 
   if (request.method === 'POST' && request.path === '/v1/agent/tasks') {
@@ -218,17 +223,14 @@ export function dispatchAgentRequest(request: ApiRequest, dependencies: ApiAgent
     if (!validBoundedString(request.body.idempotencyKey, 160)) return badRequest('idempotencyKey is invalid');
     if (!validAgentCommandType(request.body.type)) return badRequest('type is invalid');
     if (request.body.payload !== undefined && !objectBody(request.body.payload)) return badRequest('payload is invalid');
+    const input = {
+      idempotencyKey: request.body.idempotencyKey,
+      type: request.body.type,
+      ...(objectBody(request.body.payload) ? { payload: request.body.payload } : {}),
+    };
     try {
-      const result = dependencies.agentTasks.enqueue(
-        scopeKey,
-        decodeURIComponent(agentCommandMatch[1] ?? ''),
-        {
-          idempotencyKey: request.body.idempotencyKey,
-          type: request.body.type,
-          ...(objectBody(request.body.payload) ? { payload: request.body.payload } : {}),
-        },
-        dependencies.now(),
-      );
+      const result = dependencies.agentTasks.withRequestTaskId(scopeKey, decodeURIComponent(agentCommandMatch[1] ?? ''),
+        taskId => dependencies.agentTasks.enqueue(scopeKey, taskId, input, dependencies.now()));
       return { status: result.created ? 202 : 200, body: result };
     } catch (error) {
       if (error instanceof Error && error.message === 'AGENT_TASK_NOT_FOUND') {
@@ -253,15 +255,15 @@ export function dispatchAgentRequest(request: ApiRequest, dependencies: ApiAgent
     if (isPinned !== undefined && typeof isPinned !== 'boolean') return badRequest('isPinned is invalid');
     if (isArchived !== undefined && typeof isArchived !== 'boolean') return badRequest('isArchived is invalid');
     try {
-      const task = dependencies.agentTasks.updateMetadata(
+      const task = dependencies.agentTasks.withRequestTaskId(scopeKey, decodeURIComponent(agentMetadataMatch[1] ?? ''), taskId => dependencies.agentTasks.updateMetadata(
         scopeKey,
-        decodeURIComponent(agentMetadataMatch[1] ?? ''),
+        taskId,
         {
           ...(typeof isPinned === 'boolean' ? { isPinned } : {}),
           ...(typeof isArchived === 'boolean' ? { isArchived } : {}),
         },
         dependencies.now(),
-      );
+      ));
       return { status: 200, body: { task } };
     } catch (error) {
       if (error instanceof Error && error.message === 'AGENT_TASK_NOT_FOUND') {

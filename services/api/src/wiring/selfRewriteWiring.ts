@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { chmodSync, closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, fchmodSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { coreAreaForRepositoryPath } from '../mind/inhibition/autonomyCore.js';
@@ -96,13 +96,19 @@ export async function applyIsolatedRewrite(candidate: SelfRewriteCandidate, targ
         // Require an already-existing physical parent; never create a path outside the verified workspace.
         if (!existsSync(dirname(path)) || !lstatSync(dirname(path)).isDirectory()) return wrote ? 'unknown' : 'failed';
         const temporary = join(dirname(path), `.shannon-rewrite-${randomUUID()}`);
+        const mode = existsSync(path) ? lstatSync(path).mode & 0o777 : 0o600;
+        let temporaryCreated = false;
         try {
-          writeFileSync(temporary, file.content, { flag: 'wx', mode: existsSync(path) ? lstatSync(path).mode & 0o777 : 0o600 });
-          const fileHandle = openSync(temporary, 'r'); try { fsyncSync(fileHandle); } finally { closeSync(fileHandle); }
+          const fileHandle = openSync(temporary, 'wx', 0o600); temporaryCreated = true;
+          try {
+            writeFileSync(fileHandle, file.content);
+            // Creation modes are masked by umask; set the original permissions on our descriptor before publishing.
+            fchmodSync(fileHandle, mode); fsyncSync(fileHandle);
+          } finally { closeSync(fileHandle); }
           renameSync(temporary, path); wrote = true;
           const directoryHandle = openSync(dirname(path), 'r'); try { fsyncSync(directoryHandle); } finally { closeSync(directoryHandle); }
         }
-        finally { if (existsSync(temporary)) rmSync(temporary); }
+        finally { if (temporaryCreated && existsSync(temporary)) rmSync(temporary); }
       }
     }
     return 'completed';

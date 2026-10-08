@@ -5,6 +5,10 @@ Revision: 2026-10-08 / Stage 5 initial production ON at `057eaa23`, with a verif
 
 Stage 5 ownership, routes, checks, UI and rollout: [adr8-stage5-contract.md](adr8-stage5-contract.md).
 
+Existing task detail/command/metadata and owner-private task-tree HTTP references resolve UUID spelling only within the validated request scope, with an unambiguous stored task ID held through one short synchronous SQLite transaction. Internal task/tree/Host/proof/learning identities stay binary and original; public tree/proposal `taskId` alone mirrors the request spelling. UUID collisions fail closed even for an exact spelling, and opaque IDs stay exact. No database migration or permission change accompanies this compatibility boundary. Task-tree current audience is still checked before and after its private route; existing ordinary task authorization is unchanged. The shared request window also exists with Stage5 OFF.
+
+The isolated self-revision writer uses an exclusive0600 temporary file and the same descriptor for writing, setting the original permission bits, and fsync before atomic replacement. New files remain0600 under either normal or restrictive umask. Physical-path, live permission, snapshot and approval checks remain before writing; partial effects remain unknown, and cleanup touches only an owned temporary file.
+
 ## System shape
 
 ```text
