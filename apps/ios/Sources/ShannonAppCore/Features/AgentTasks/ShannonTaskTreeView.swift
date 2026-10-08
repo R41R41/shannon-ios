@@ -9,7 +9,7 @@ public struct ShannonTaskTreeView: View {
     public init(model: ShannonTaskTreeModel) { self.model = model }
     public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
             if let read = model.read, !model.hidden {
                 VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
                     Label("作業の条件と道筋", systemImage: "list.bullet.indent").font(.shannon(.headline))
@@ -69,7 +69,13 @@ public struct ShannonTaskTreeView: View {
                 .accessibilityIdentifier("task-tree-initial-read-error")
             }
         }
-        .task(id: model.othersPresent) { if !model.othersPresent { await model.reload() } }
+        .task(id: ReadIdentity(model: ObjectIdentifier(model), othersPresent: model.othersPresent)) {
+            if !model.othersPresent { await model.reload() }
+        }
+        .onChange(of: ObjectIdentifier(model)) { _, _ in
+            showsEditor = false
+            selectedProposal = nil
+        }
         .sheet(isPresented: $showsEditor) {
             if let tree = model.read?.tree { ShannonTaskTreeEditor(tree: tree, model: model) }
         }
@@ -86,6 +92,7 @@ public struct ShannonTaskTreeView: View {
 #endif
         }
     }
+    private struct ReadIdentity: Hashable { let model: ObjectIdentifier; let othersPresent: Bool }
     private struct Entry: Identifiable { let node: ShannonTaskTreeNodeDTO; let depth: Int; var id: String { node.id } }
     private func ordered(_ tree: ShannonTaskTreeDTO) -> [Entry] {
         var result: [Entry] = []; var visited: Set<String> = []
