@@ -9,6 +9,12 @@ vi.mock('../src/mind/action/ownTime/autonomyModels.js', async importOriginal => 
   return historicalLunaAutonomyPolicy(await importOriginal<typeof import('../src/mind/action/ownTime/autonomyModels.js')>());
 });
 
+// Match the explicit historical menu profile of stage3SwitchedOff; current v2 on/off behavior is tested unmocked.
+vi.mock('../src/mind/selectors/toolMenu.js', async importOriginal => {
+  const { historicalToolMenuPolicy } = await import('./support/historicalToolMenuPolicy.js');
+  return historicalToolMenuPolicy(await importOriginal<typeof import('../src/mind/selectors/toolMenu.js')>());
+});
+
 /**
  * Syzygy ADR-0008 stage 3, step F5, wired: the memory outbox built from the environment as the entries build it. Switched off
  * (the master switch, or `SHANNON_MEMORY_OUTBOX` alone) every scenario keeps afb38c28's digests. On, every scenario still sends
