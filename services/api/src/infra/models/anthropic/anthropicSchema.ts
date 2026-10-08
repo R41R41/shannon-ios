@@ -15,4 +15,3 @@ export function structuredSchema(node: unknown): unknown {
   }
   return type === undefined ? mapped : { type, ...mapped };
 }
-
