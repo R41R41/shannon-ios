@@ -123,7 +123,7 @@ export function dispatchAgentRequest(request: ApiRequest, dependencies: ApiAgent
     try {
       return dependencies.agentTasks.withRequestTaskId(scopeKey, decodeURIComponent(agentTaskMatch[1] ?? ''), taskId => {
         const task = dependencies.agentTasks.get(scopeKey, taskId);
-        if (!task) return { status: 404, body: { error: 'AGENT_TASK_NOT_FOUND' } };
+        if (!task || task.conversationThreadID?.startsWith('fca:')) return { status: 404, body: { error: 'AGENT_TASK_NOT_FOUND' } };
         const afterSequence = Number(request.query?.get('afterSequence') ?? '-1');
         if (Number.isInteger(afterSequence) && afterSequence >= task.latestSequence) return { status: 304, body: null };
         return { status: 200, body: { task } };

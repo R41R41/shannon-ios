@@ -4,6 +4,7 @@ import { readJson, sendJson } from './serverHttp.js';
 export const FCA_TASK_PATH = '/v1/fca/tasks';
 export function createFcaTaskRoute(parts: {
   runtime: TaskRuntime; ownerScope: string; ownerAlone(): boolean;
+  visible?(id: string): boolean;
   stop(id: string, reason: string): Promise<unknown>; wake(): void;
 }) {
   return async (request: IncomingMessage, response: ServerResponse, principal: { scopeKey: string } | null, url: URL) => {
@@ -13,7 +14,8 @@ export function createFcaTaskRoute(parts: {
     try {
       if (request.method === 'GET') {
         const id = url.searchParams.get('id');
-        const value = id ? parts.runtime.get(scope, id) : parts.runtime.list(scope, { offset: Number(url.searchParams.get('offset') ?? 0), limit: 50 });
+        const visible = (id: string) => parts.visible?.(id) ?? true;
+        const value = id ? visible(id) ? parts.runtime.get(scope, id) : null : parts.runtime.list(scope, { offset: Number(url.searchParams.get('offset') ?? 0), limit: 50 }).filter(task => visible(task.id));
         return sendJson(response, value ? 200 : 404, value ?? { error: 'FCA_TASK_NOT_FOUND' });
       }
       if (request.method !== 'POST') return sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
@@ -24,6 +26,7 @@ export function createFcaTaskRoute(parts: {
       const string = (key: string) => { const value = input[key]; if (typeof value !== 'string' || !value.trim()) throw new Error('FCA_INPUT'); return value; };
       // Recheck after asynchronous body read; caller-controlled audience/scope are never accepted.
       if (!parts.ownerAlone()) return sendJson(response, 403, { error: 'FCA_OWNER_ALONE_REQUIRED' });
+      if (['send', 'resume'].includes(String(input.command)) && parts.visible && !parts.visible(string('id'))) return sendJson(response, 404, { error: 'FCA_TASK_NOT_FOUND' });
       let result: unknown;
       switch (input.command) {
         case 'create': {
@@ -40,6 +43,7 @@ export function createFcaTaskRoute(parts: {
         default: throw new Error('FCA_INPUT');
       }
       if (!parts.ownerAlone()) return sendJson(response, 403, { error: 'FCA_OWNER_ALONE_REQUIRED' });
+      if (input.command === 'stop') result = { stopped: true };
       parts.wake();
       return sendJson(response, result ? 202 : 409, result ?? { error: 'FCA_NOT_RESUMABLE' });
     } catch (error) {

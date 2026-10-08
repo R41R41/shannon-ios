@@ -52,6 +52,7 @@ export const JEV_CACHE_ENTRIES = 128;
 export const JEV_QUESTION_SETS = Object.freeze({
   voiceRoute: 'voice_route.v1',
   toolMenu: 'tool_menu.v2',
+  fcaToolMenu: 'fca_tool_menu.v1',
   difficulty: 'difficulty.v1',
   retry: 'retry_or_correction.v1',
   recallBeam: 'recall_beam.v1',

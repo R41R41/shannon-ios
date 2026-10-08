@@ -1,3 +1,4 @@
+import { createFcaConversationBridge } from '../src/mind/action/fca/fcaConversationPorts.js';
 import { SHANNON_FCA_TASK_CAPABILITY } from '@shannon/cognition';
 import { configuredServerFca } from '../src/wiring/serverFcaWiring.js';
 import { runFcaStep } from '../src/mind/action/fca/fcaRunner.js';
@@ -108,7 +109,7 @@ const exists = (...values: unknown[]) => values.every(value => typeof value === 
 type ConditionalCapabilityId = typeof SHANNON_CONDITIONAL_CAPABILITIES[number]['id'];
 // The fixed description and the lines the API adds while it has them (`SHANNON_CONDITIONAL_CAPABILITIES`) need the same evidence.
 const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, () => boolean> = {
-  fca_tasks: () => exists(runFcaStep, executeTaskTool) && configuredServerFca({}, {} as never) === null
+  fca_tasks: () => exists(runFcaStep, executeTaskTool, createFcaConversationBridge) && configuredServerFca({}, {} as never) === null
     && ['task.create', 'task.list', 'task.get', 'task.send'].every(name => TASK_TOOLS.some(tool => tool.name === name))
     && !shannonCapabilityPrompt('owner').includes(SHANNON_FCA_TASK_CAPABILITY.text)
     && createInMemoryAutonomyService(() => '2026-10-09T00:00:00.000Z').tools.offered('text', 'owner_alone').every(tool => tool.domain !== 'task_runtime'),

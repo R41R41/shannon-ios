@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { ActionLease } from '@shannon/mind';
-import type { TaskAuthority, TaskCommit, TaskMessage, TaskQuery, TaskRecord, TaskRuntime, TaskRuntimeOptions,
+import type { TaskAuthority, TaskCommit, TaskConversationSource, TaskHistoryCommit, TaskHistoryWindow, TaskMessage, TaskQuery, TaskRecord, TaskRuntime, TaskRuntimeOptions, TaskSource,
   TaskSegmentReceipt, TaskSnapshot, TaskSpec, TaskStep, TaskView } from '../taskRuntimePorts.js';
+import { TaskSourceStore } from './taskSourceStore.js';
+import { TaskHistoryStore } from './taskHistoryStore.js';
 
 interface Checkpoint {
   checkpoint_json: string | null; wait_reason: string | null; stop_requested: number;
-  step_id: string | null; lease_json: string | null;
+  step_id: string | null; lease_json: string | null; last_admission: number; observed_messages_json: string | null;
 }
 const terminal = (task: TaskRecord): boolean => ['completed', 'failed', 'cancelled'].includes(task.status);
 const limits = { depth: 8, children: 64, activeTasks: 256, text: 16_000, historyBytes: 1_000_000 };
@@ -15,13 +17,17 @@ const limits = { depth: 8, children: 64, activeTasks: 256, text: 16_000, history
 export class SQLiteTaskRuntimeStore implements TaskRuntime {
   private readonly authority: TaskAuthority;
   private readonly now: () => string;
+  private readonly sources: TaskSourceStore;
+  private readonly histories: TaskHistoryStore;
   constructor(private readonly db: DatabaseSync, private readonly options: TaskRuntimeOptions) {
     this.authority = options.authority;
     this.now = options.now ?? (() => new Date().toISOString());
     db.exec(`CREATE TABLE IF NOT EXISTS fca_task_checkpoints (
       task_id TEXT PRIMARY KEY REFERENCES agent_tasks(task_id) ON DELETE CASCADE,
       checkpoint_json TEXT, wait_reason TEXT, stop_requested INTEGER NOT NULL DEFAULT 0,
-      step_id TEXT, lease_json TEXT);
+      step_id TEXT, lease_json TEXT, last_admission INTEGER NOT NULL DEFAULT 0, observed_messages_json TEXT);
+      CREATE TABLE IF NOT EXISTS fca_task_dispatch_order (
+      scope_key TEXT PRIMARY KEY, last_admission INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS fca_task_messages (
       scope_key TEXT NOT NULL, message_id TEXT NOT NULL, source_task_id TEXT NOT NULL REFERENCES agent_tasks(task_id),
       target_task_id TEXT NOT NULL REFERENCES agent_tasks(task_id), text TEXT NOT NULL, received_at TEXT NOT NULL,
@@ -34,10 +40,18 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       step_id TEXT PRIMARY KEY, scope_key TEXT NOT NULL, task_id TEXT NOT NULL REFERENCES agent_tasks(task_id),
       lease_json TEXT NOT NULL, created_at TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'completed');`);
     this.authority.transaction(() => {
+      if (!db.prepare('PRAGMA table_info(fca_task_checkpoints)').all().some(row => row.name === 'observed_messages_json')) {
+        db.exec('ALTER TABLE fca_task_checkpoints ADD COLUMN observed_messages_json TEXT');
+      }
+      if (!db.prepare('PRAGMA table_info(fca_task_checkpoints)').all().some(row => row.name === 'last_admission')) {
+        db.exec('ALTER TABLE fca_task_checkpoints ADD COLUMN last_admission INTEGER NOT NULL DEFAULT 0');
+      }
       if (!db.prepare('PRAGMA table_info(fca_task_segment_receipts)').all().some(row => row.name === 'state')) {
         db.exec("ALTER TABLE fca_task_segment_receipts ADD COLUMN state TEXT NOT NULL DEFAULT 'completed'");
       }
     });
+    this.sources = new TaskSourceStore(db);
+    this.histories = new TaskHistoryStore(db);
   }
   ensureRoot(scopeKey: string): TaskView {
     bounded(scopeKey, 160, 'SCOPE');
@@ -78,6 +92,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       const child = this.authority.create({ id: randomUUID(), scopeKey, parentId, kind: spec.kind ?? 'generic', origin: parent.origin,
         title: spec.title, goal: spec.goal, completionCriteria: spec.completionCriteria ?? '', status: 'queued', pauseReason: null,
         summary: '', requestKey, createdAt: this.now() });
+      this.sources.inherit(parent, this.checkpoint(parentId).step_id, child.id, '', this.observedMessages(parent));
       this.initialize(child.id, null);
       if (spec.context) this.sendInTransaction(scopeKey, parentId, child.id, spec.context, `context:${child.id}`);
       this.authority.event(scopeKey, parentId, 'fca_child_created', this.now(), {}, { childId: child.id });
@@ -92,6 +107,125 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       || !Number.isInteger(query.offset ?? 0) || (query.offset ?? 0) < 0) throw new Error('FCA_PAGE');
     return this.authority.list(scopeKey, query).map(task => this.view(task));
   }
+  readyTasks(scopeKey: string, limit = 100): TaskView[] {
+    if (!Number.isInteger(limit) || limit < 1 || limit > limits.activeTasks) throw new Error('FCA_PAGE');
+    return this.authority.transaction(() => {
+      const pending = new Set(this.pendingReceipts(scopeKey).map(receipt => receipt.taskId));
+      return this.all(scopeKey).filter(task => task.status === 'queued' && task.kind !== 'conversation' && !pending.has(task.id)
+        && !this.sources.hasUnboundOrigin(task.id))
+        .map(task => ({ task, checkpoint: this.checkpoint(task.id) }))
+        .filter(({ checkpoint }) => !checkpoint.step_id && !checkpoint.stop_requested)
+        .sort((left, right) => left.checkpoint.last_admission - right.checkpoint.last_admission
+          || left.task.createdAt.localeCompare(right.task.createdAt) || left.task.id.localeCompare(right.task.id))
+        .slice(0, limit).map(({ task }) => this.view(task));
+    });
+  }
+  beginConversation(scopeKey: string, threadId: string, lease: ActionLease): TaskStep | null {
+    bounded(threadId, 160, 'THREAD');
+    if (!this.options.conversationLeaseValid?.(scopeKey, lease, this.now())) return null;
+    const root = this.ensureRoot(scopeKey);
+    return this.authority.transaction(() => {
+      if (!this.options.conversationLeaseValid?.(scopeKey, lease, this.now())
+        || ['stopped', 'stopping', 'unknown'].includes(this.get(scopeKey, root.id)!.phase)) return null;
+      const requestKey = `fca:conversation:${threadId}`;
+      let task = this.authority.byRequest(scopeKey, requestKey);
+      if (!task) {
+        if (this.all(scopeKey).filter(candidate => !terminal(candidate)).length >= limits.activeTasks) return null;
+        task = this.authority.create({ id: randomUUID(), scopeKey, parentId: root.id, kind: 'conversation', origin: 'owner_request',
+          title: '会話', goal: 'このトークの会話を続ける', completionCriteria: '', status: 'running', pauseReason: null,
+          summary: '', requestKey, createdAt: this.now() });
+        this.initialize(task.id, 'message');
+      }
+      if (task.kind !== 'conversation' || terminal(task) || this.checkpoint(task.id).step_id
+        || ['stopped', 'stopping', 'unknown'].includes(this.view(task).phase)) return null;
+      const id = randomUUID();
+      this.db.prepare('UPDATE fca_task_checkpoints SET step_id=?,lease_json=?,wait_reason=NULL,observed_messages_json=NULL WHERE task_id=?')
+        .run(id, JSON.stringify(lease), task.id);
+      this.sources.begin(task, id, threadId, this.now());
+      this.authority.event(scopeKey, task.id, 'fca_conversation_started', this.now(), { status: 'running', pauseReason: null },
+        { stepId: id, actionId: lease.id, generation: lease.generation });
+      const snapshot = this.snapshotInTransaction(scopeKey, task.id)!;
+      return { id, scopeKey, taskId: task.id, lease, revision: snapshot.revision, messageIds: snapshot.messages.map(message => message.id), snapshot };
+    });
+  }
+  observeConversationMessages(step: TaskStep, messageIds: readonly string[]): boolean {
+    if (messageIds.some(id => !step.messageIds.includes(id))) throw new Error('FCA_MESSAGE_NOT_OBSERVED');
+    return this.authority.transaction(() => {
+      if (!this.matches(step) || this.required(step.scopeKey, step.taskId).kind !== 'conversation') return false;
+      const value = JSON.stringify([...new Set(messageIds)]), prior = this.checkpoint(step.taskId).observed_messages_json;
+      if (prior !== null) return prior === value;
+      if (messageIds.some(id => !this.sources.messageVisible(step.taskId, id))) return false;
+      this.db.prepare('UPDATE fca_task_checkpoints SET observed_messages_json=? WHERE task_id=?').run(value, step.taskId);
+      return true;
+    });
+  }
+  completeConversation(step: TaskStep, source: TaskConversationSource, consumedMessageIds: readonly string[] = []): boolean {
+    bounded(source.experienceId, 160, 'EXPERIENCE'); bounded(source.threadId, 160, 'THREAD');
+    if (!Number.isFinite(Date.parse(source.observedAt)) || !Array.isArray(source.recalledMemoryIds)
+      || source.recalledMemoryIds.length > 5000 || source.recalledMemoryIds.some(id => typeof id !== 'string' || !id || id.length > 240)
+      || (source.readSourceIds !== undefined && (!Array.isArray(source.readSourceIds) || source.readSourceIds.length > 5000
+        || source.readSourceIds.some(id => typeof id !== 'string' || !id || id.length > 240)))) throw new Error('FCA_SOURCE');
+    if (consumedMessageIds.some(id => !step.messageIds.includes(id))) throw new Error('FCA_MESSAGE_NOT_OBSERVED');
+    return this.authority.transaction(() => {
+      if (!this.matches(step) || this.required(step.scopeKey, step.taskId).kind !== 'conversation') return false;
+      const observed = this.observedMessages(this.required(step.scopeKey, step.taskId))!;
+      if (consumedMessageIds.some(id => !observed.includes(id))) throw new Error('FCA_MESSAGE_NOT_OBSERVED');
+      if (!this.sources.bind(step.scopeKey, step.id, source)) return false;
+      for (const id of consumedMessageIds) this.db.prepare('UPDATE fca_task_messages SET consumed_by=? WHERE scope_key=? AND target_task_id=? AND message_id=? AND consumed_by IS NULL')
+        .run(step.id, step.scopeKey, step.taskId, id);
+      this.db.prepare("UPDATE fca_task_checkpoints SET step_id=NULL,lease_json=NULL,wait_reason='message' WHERE task_id=?").run(step.taskId);
+      this.authority.event(step.scopeKey, step.taskId, 'fca_conversation_completed', this.now(), { status: 'running', pauseReason: null }, { stepId: step.id, experienceId: source.experienceId });
+      for (const id of this.sources.dependents(step.scopeKey, step.id)) {
+        if (id === step.taskId) continue;
+        const task = this.required(step.scopeKey, id), row = this.checkpoint(id);
+        const wake = task.kind !== 'conversation' && !terminal(task) && task.status !== 'paused' && !row.step_id && !row.stop_requested
+          && !this.sources.hasUnboundOrigin(id) && (task.status === 'queued' || this.messages(id).length > 0);
+        if (wake) this.db.prepare('UPDATE fca_task_checkpoints SET wait_reason=NULL WHERE task_id=?').run(id);
+        this.authority.event(step.scopeKey, id, 'fca_source_bound', this.now(), wake ? { status: 'queued' } : {}, { sourceStepId: step.id });
+      }
+      if (this.checkpoint(step.taskId).stop_requested) this.finishStops(this.required(step.scopeKey, step.taskId));
+      return true;
+    });
+  }
+  failConversation(step: TaskStep): void {
+    this.authority.transaction(() => this.failConversationInTransaction(step));
+  }
+  private failConversationInTransaction(step: TaskStep): void {
+    if (!this.matches(step) || this.required(step.scopeKey, step.taskId).kind !== 'conversation') return;
+    this.sources.fail(step.scopeKey, step.id);
+    for (const id of this.sources.dependents(step.scopeKey, step.id, true)) {
+      if (id === step.taskId) continue;
+      const task = this.required(step.scopeKey, id); if (terminal(task)) continue;
+      this.db.prepare('UPDATE fca_task_checkpoints SET stop_requested=1,wait_reason=NULL WHERE task_id=?').run(id);
+      this.authority.event(step.scopeKey, id, 'fca_source_failed', this.now(), { status: 'paused', pauseReason: 'fca_stopped' }, { sourceStepId: step.id });
+    }
+    for (const id of this.sources.dependents(step.scopeKey, step.id)) {
+      if (id === step.taskId) continue;
+      const task = this.required(step.scopeKey, id), row = this.checkpoint(id);
+      if (task.status !== 'running' || row.wait_reason !== 'source' || row.step_id || row.stop_requested || this.sources.hasPendingMessage(id)) continue;
+      this.db.prepare('UPDATE fca_task_checkpoints SET wait_reason=NULL WHERE task_id=?').run(id);
+      this.authority.event(step.scopeKey, id, 'fca_source_rejected', this.now(), { status: 'queued' }, { sourceStepId: step.id });
+    }
+    this.db.prepare("UPDATE fca_task_checkpoints SET step_id=NULL,lease_json=NULL,wait_reason='message' WHERE task_id=?").run(step.taskId);
+    this.authority.event(step.scopeKey, step.taskId, 'fca_conversation_failed', this.now(), { status: 'running', pauseReason: null }, { stepId: step.id });
+    if (this.checkpoint(step.taskId).stop_requested) this.finishStops(this.required(step.scopeKey, step.taskId));
+  }
+  taskSources(scopeKey: string, taskId: string, messageIds?: readonly string[]): TaskSource[] {
+    const task = this.authority.get(scopeKey, taskId);
+    return task ? this.sources.refs(task, this.checkpoint(taskId).step_id, messageIds ?? this.observedMessages(task)) : [];
+  }
+  inheritTaskSources(step: TaskStep, sourceTaskIds: readonly string[]): boolean {
+    if (sourceTaskIds.length > 100) throw new Error('FCA_SOURCE');
+    return this.authority.transaction(() => {
+      if (!this.matches(step) || this.get(step.scopeKey, step.taskId)?.phase !== 'executing'
+        || !this.options.leaseValid(step.scopeKey, step.taskId, step.lease, this.now())) return false;
+      const sources = [...new Set(sourceTaskIds)].map(id => this.authority.get(step.scopeKey, id));
+      if (sources.some(task => !task || this.taskSources(step.scopeKey, task.id).some(source => !source.experienceId))) return false;
+      for (const task of sources) this.sources.inherit(task!, this.checkpoint(task!.id).step_id, step.taskId, '', this.observedMessages(task!));
+      this.authority.event(step.scopeKey, step.taskId, 'fca_sources_inherited', this.now(), {}, { sourceTaskIds: [...new Set(sourceTaskIds)] });
+      return true;
+    });
+  }
   send(scopeKey: string, sourceTaskId: string, targetId: string, text: string, messageId: string):
     { accepted: true; duplicate: boolean; task: TaskView } {
     bounded(text, limits.text, 'MESSAGE'); bounded(messageId, 160, 'MESSAGE_ID');
@@ -100,15 +234,29 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
   snapshot(scopeKey: string, taskId: string): TaskSnapshot | null {
     return this.authority.transaction(() => this.snapshotInTransaction(scopeKey, taskId));
   }
+  history(scopeKey: string, taskId: string, messageIds?: readonly string[]): TaskHistoryWindow | null {
+    return this.authority.transaction(() => this.authority.get(scopeKey, taskId)
+      ? this.histories.window(taskId, this.taskSources(scopeKey, taskId, messageIds)) : null);
+  }
+  commitCompaction(step: TaskStep, request: TaskHistoryCommit, sourcesVisible: () => boolean): boolean {
+    return this.authority.transaction(() => {
+      if (!this.matches(step) || this.get(step.scopeKey, step.taskId)?.phase !== 'executing'
+        || !this.options.leaseValid(step.scopeKey, step.taskId, step.lease, this.now()) || !sourcesVisible()) return false;
+      return this.histories.commit(step.taskId, request, this.taskSources(step.scopeKey, step.taskId, step.messageIds), this.now());
+    });
+  }
   beginStep(scopeKey: string, taskId: string, lease: ActionLease, expectedRevision?: number): TaskStep | null {
     return this.authority.transaction(() => {
       const task = this.get(scopeKey, taskId);
-      if (!task || task.phase !== 'ready' || (expectedRevision !== undefined && task.revision !== expectedRevision)
+      if (!task || task.phase !== 'ready' || task.kind === 'conversation' || this.sources.hasUnboundOrigin(taskId)
+        || (expectedRevision !== undefined && task.revision !== expectedRevision)
         || !this.options.leaseValid(scopeKey, taskId, lease, this.now()) || this.checkpoint(taskId).step_id
         || this.db.prepare('SELECT 1 FROM fca_task_segment_receipts WHERE task_id=?').get(taskId)) return null;
       const id = randomUUID();
-      this.db.prepare('UPDATE fca_task_checkpoints SET step_id=?,lease_json=?,wait_reason=NULL WHERE task_id=?')
-        .run(id, JSON.stringify(lease), taskId);
+      const order = this.db.prepare(`INSERT INTO fca_task_dispatch_order(scope_key,last_admission) VALUES(?,1)
+        ON CONFLICT(scope_key) DO UPDATE SET last_admission=last_admission+1 RETURNING last_admission`).get(scopeKey)!;
+      this.db.prepare('UPDATE fca_task_checkpoints SET step_id=?,lease_json=?,wait_reason=NULL,last_admission=? WHERE task_id=?')
+        .run(id, JSON.stringify(lease), Number(order.last_admission), taskId);
       this.authority.event(scopeKey, taskId, 'fca_step_started', this.now(), { status: 'running', pauseReason: null },
         { stepId: id, actionId: lease.id, generation: lease.generation });
       const snapshot = this.snapshotInTransaction(scopeKey, taskId)!;
@@ -133,17 +281,16 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       }
       for (const id of consumed) this.db.prepare('UPDATE fca_task_messages SET consumed_by=? WHERE scope_key=? AND message_id=? AND target_task_id=? AND consumed_by IS NULL')
         .run(step.id, step.scopeKey, id, step.taskId);
-      this.db.prepare('INSERT INTO fca_task_history(task_id,step_id,entries_json,committed_at) VALUES(?,?,?,?)')
-        .run(step.taskId, step.id, history, this.now());
       this.db.prepare('INSERT INTO fca_task_segment_receipts(step_id,scope_key,task_id,lease_json,created_at) VALUES(?,?,?,?,?)')
         .run(step.id, step.scopeKey, step.taskId, JSON.stringify(step.lease), this.now());
       if (checkpoint !== undefined) this.db.prepare('UPDATE fca_task_checkpoints SET checkpoint_json=? WHERE task_id=?').run(checkpoint, step.taskId);
-      const pending = this.messages(step.taskId).length > 0;
-      const complete = commit.disposition === 'complete' && task.kind !== 'root' && !pending;
-      const waiting = !pending && (commit.disposition === 'wait' || (commit.disposition === 'complete' && task.kind === 'root'));
+      const pending = this.messages(step.taskId).length > 0, awaitingSource = this.sources.hasPendingMessage(step.taskId);
+      const complete = commit.disposition === 'complete' && task.kind !== 'root' && !pending && !awaitingSource;
+      const waiting = !pending && (commit.disposition === 'wait' || (commit.disposition === 'complete' && (task.kind === 'root' || awaitingSource)));
       const status = commit.disposition === 'fail' ? 'failed' : complete ? 'completed' : waiting ? 'running' : 'queued';
+      this.histories.append(step.taskId, step.id, history, this.now(), status, step.snapshot.sources);
       this.db.prepare('UPDATE fca_task_checkpoints SET step_id=NULL,lease_json=NULL,wait_reason=? WHERE task_id=?')
-        .run(waiting ? 'message' : null, step.taskId);
+        .run(waiting ? awaitingSource && commit.disposition === 'complete' ? 'source' : 'message' : null, step.taskId);
       this.authority.event(step.scopeKey, step.taskId, 'fca_step_committed', this.now(), { status, summary: commit.summary },
         { stepId: step.id, actionId: step.lease.id, generation: step.lease.generation, disposition: commit.disposition });
       if (terminal({ ...task, status }) && task.parentId) {
@@ -216,7 +363,8 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
   }
   resume(scopeKey: string, taskId: string): TaskView | null {
     return this.authority.transaction(() => {
-      const task = this.get(scopeKey, taskId); if (!task || task.phase !== 'stopped') return null;
+      const task = this.get(scopeKey, taskId);
+      if (!task || task.phase !== 'stopped' || (task.kind !== 'conversation' && this.sources.hasUnboundOrigin(taskId))) return null;
       if (this.ancestors(task).some(parent => ['stopped', 'stopping', 'unknown'].includes(this.view(parent).phase))) return null;
       this.db.prepare('UPDATE fca_task_checkpoints SET stop_requested=0,wait_reason=NULL WHERE task_id=?').run(taskId);
       return this.view(this.authority.event(scopeKey, taskId, 'fca_resumed', this.now(), { status: 'queued', pauseReason: null }));
@@ -238,6 +386,9 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
         if (outcome === 'unknown') {
           if (task.pauseReason !== 'fca_unknown') this.authority.event(scopeKey, taskId, 'fca_recovery_unknown', this.now(),
             { status: 'paused', pauseReason: 'fca_unknown' }, { actionId: lease.id, generation: lease.generation });
+        } else if (task.kind === 'conversation') {
+          const snapshot = this.snapshotInTransaction(scopeKey, taskId)!;
+          this.failConversationInTransaction({ id: row.step_id!, scopeKey, taskId, lease, revision: snapshot.revision, messageIds: [], snapshot });
         } else {
           this.db.prepare('UPDATE fca_task_checkpoints SET step_id=NULL,lease_json=NULL WHERE task_id=?').run(taskId);
           this.authority.event(scopeKey, taskId, 'fca_recovered_safe', this.now(),
@@ -255,6 +406,9 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
   private checkpoint(id: string): Checkpoint {
     const row = this.db.prepare('SELECT * FROM fca_task_checkpoints WHERE task_id=?').get(id);
     if (!row) throw new Error('FCA_CHECKPOINT_MISSING'); return row as unknown as Checkpoint;
+  }
+  private observedMessages(task: TaskRecord): string[] | undefined {
+    return task.kind === 'conversation' ? JSON.parse(this.checkpoint(task.id).observed_messages_json ?? '[]') as string[] : undefined;
   }
   private required(scope: string, id: string): TaskRecord {
     const task = this.authority.get(scope, id); if (!task) throw new Error('FCA_TASK_NOT_FOUND'); return task;
@@ -284,13 +438,14 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
   }
   private messages(taskId: string): TaskMessage[] {
     return this.db.prepare('SELECT * FROM fca_task_messages WHERE target_task_id=? AND consumed_by IS NULL ORDER BY rowid').all(taskId)
+      .filter(row => this.sources.messageVisible(taskId, String(row.message_id)))
       .map(row => ({ id: String(row.message_id), sourceTaskId: String(row.source_task_id), targetTaskId: String(row.target_task_id),
         text: String(row.text), receivedAt: String(row.received_at) }));
   }
   private snapshotInTransaction(scope: string, id: string): TaskSnapshot | null {
     const task = this.get(scope, id); if (!task) return null;
-    const row = this.checkpoint(id);
-    return { task, revision: task.revision, messages: this.messages(id), checkpoint: row.checkpoint_json ? JSON.parse(row.checkpoint_json) : null,
+    const row = this.checkpoint(id), messages = this.messages(id);
+    return { task, revision: task.revision, messages, sources: this.sources.refs(task, row.step_id, messages.map(message => message.id)), checkpoint: row.checkpoint_json ? JSON.parse(row.checkpoint_json) : null,
       history: this.db.prepare('SELECT entries_json FROM fca_task_history WHERE task_id=? ORDER BY sequence').all(id)
         .flatMap(entry => JSON.parse(String(entry.entries_json)) as unknown[]) };
   }
@@ -303,7 +458,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
   }
   private sendInTransaction(scope: string, source: string, target: string, text: string, id: string):
     { accepted: true; duplicate: boolean; task: TaskView } {
-    this.required(scope, source); const task = this.required(scope, target);
+    const sourceTask = this.required(scope, source), task = this.required(scope, target);
     const known = this.db.prepare('SELECT * FROM fca_task_messages WHERE scope_key=? AND message_id=?').get(scope, id);
     if (known) {
       if (known.source_task_id !== source || known.target_task_id !== target || known.text !== text) throw new Error('FCA_MESSAGE_CONFLICT');
@@ -312,7 +467,9 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
     if (terminal(task)) throw new Error('FCA_TARGET_FINISHED');
     this.db.prepare('INSERT INTO fca_task_messages(scope_key,message_id,source_task_id,target_task_id,text,received_at) VALUES(?,?,?,?,?,?)')
       .run(scope, id, source, target, text, this.now());
-    const row = this.checkpoint(target), wake = !row.step_id && !row.stop_requested && task.status !== 'paused';
+    this.sources.inherit(sourceTask, this.checkpoint(source).step_id, target, id, this.observedMessages(sourceTask));
+    const row = this.checkpoint(target), wake = !row.step_id && !row.stop_requested && task.status !== 'paused'
+      && this.sources.messageVisible(target, id) && !this.sources.hasUnboundOrigin(target);
     if (wake) this.db.prepare('UPDATE fca_task_checkpoints SET wait_reason=NULL WHERE task_id=?').run(target);
     const updated = this.authority.event(scope, target, 'fca_message_received', this.now(), wake ? { status: 'queued' } : {}, { messageId: id, sourceTaskId: source });
     return { accepted: true, duplicate: false, task: this.view(updated) };

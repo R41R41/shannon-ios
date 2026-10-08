@@ -3,11 +3,11 @@ import { shannonIdentityPrompt, SHANNON_FCA_TASK_CAPABILITY } from '@shannon/cog
 import type { FcaDecision, FcaModel, FcaModelInput, FcaModelOutput } from '../../../mind/action/fca/fcaPorts.js';
 import { providerToolName } from '../../../mind/tools/toolRegistryPorts.js';
 import { anthropicPrices, estimatedAnthropicCostUsd } from './anthropicConfig.js';
-import { sonnetTool } from './anthropicRequest.js';
 import { AnthropicUsageEvidenceError, cacheHaikuRequest, validateHaikuCacheUsage } from './haikuCache.js';
-import { DEFAULT_HAIKU_MODEL, usesOneHourAnthropicCache } from './haikuConfig.js';
+import { DEFAULT_HAIKU_MODEL, isAppendOnlyAnthropicModel, usesOneHourAnthropicCache } from './haikuConfig.js';
 import { observeAsync, observeSync, observerHandoff } from '../../observer/observerContext.js';
 import { observedAnthropicResponse, observedToolName } from './observerProjection.js';
+import { FCA_MENU_INSTRUCTIONS, isFcaToolChangeMessage, nativeFcaTools } from './anthropicFcaTools.js';
 
 /** Only content-free accounting leaves this adapter; signed history belongs to the task's private replay. */
 export interface AnthropicFcaUsage {
@@ -23,7 +23,7 @@ export interface AnthropicFcaUsage {
 
 export interface AnthropicFcaClient {
   messages: {
-    create(body: Anthropic.MessageCreateParamsNonStreaming, options: { signal: AbortSignal; maxRetries: number }): PromiseLike<Anthropic.Message>;
+    create(body: Anthropic.MessageCreateParamsNonStreaming, options: { signal: AbortSignal; maxRetries: number; headers?: Record<string, string> }): PromiseLike<Anthropic.Message>;
   };
 }
 
@@ -82,21 +82,17 @@ export class AnthropicFcaModel implements FcaModel {
     const combined = AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMilliseconds)]);
     if (combined.aborted) throw new Error('FCA_MODEL_ABORTED');
     const history = nativeHistory(input.history);
-    const names = new Map<string, string>();
-    const tools = input.tools.map(tool => {
-      const name = providerToolName(tool.name);
-      if (names.has(name) || CONTROL_TOOLS.some(control => control.name === name)) throw new Error('FCA_MODEL_TOOL_CONFLICT');
-      names.set(name, tool.name);
-      return sonnetTool(tool);
-    });
-    const { current, body } = observeSync('native', {
+    if (input.catalog && !isAppendOnlyAnthropicModel(this.model)) throw new Error('FCA_MODEL_INLINE_TOOLS_UNSUPPORTED');
+    const { current, body, menu } = observeSync('native', {
       model: this.model, historyMessageCount: history.length, deliveredMessageCount: input.messages.length,
-      offeredTools: [...tools, ...CONTROL_TOOLS].map(tool => observedFcaToolName(tool.name)),
+      offeredTools: input.tools.map(tool => observedFcaToolName(tool.name)),
     }, () => {
-      const current: Anthropic.MessageParam = { role: 'user', content: JSON.stringify({ task: input.task, children: input.children ?? [], messages: input.messages }) };
-      return { current, body: cacheHaikuRequest({
-        model: this.model, max_tokens: this.maximumOutputTokens, system: this.system,
-        messages: [...history, current], tools: [...tools, ...CONTROL_TOOLS], tool_choice: { type: 'auto' as const },
+      const menu = nativeFcaTools(input, history, CONTROL_TOOLS);
+      const current: Anthropic.MessageParam = { role: 'user', content: JSON.stringify({ task: input.task, children: input.children ?? [], messages: input.messages,
+        ...(input.catalog ? { catalog: input.catalog.map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}) }) };
+      return { current, menu, body: cacheHaikuRequest({
+        model: this.model, max_tokens: this.maximumOutputTokens, system: input.catalog ? `${this.system}\n\n${FCA_MENU_INSTRUCTIONS}` : this.system,
+        messages: [...history, ...menu.appended, current], tools: menu.tools, tool_choice: { type: 'auto' as const },
         thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const },
       }) };
     }, value => observedFcaRequest(value.body), { model: this.model });
@@ -104,7 +100,8 @@ export class AnthropicFcaModel implements FcaModel {
     try {
       observerHandoff('native', 'llm', { model: this.model });
       message = await observeAsync('llm', observedFcaRequest(body),
-        async () => this.client.messages.create(body, { signal: combined, maxRetries: 0 }), observedFcaResponse, { model: this.model });
+        async () => this.client.messages.create(body, { signal: combined, maxRetries: 0,
+          ...(input.catalog ? { headers: { 'anthropic-beta': 'inline-tools-2026-09-15' } } : {}) }), observedFcaResponse, { model: this.model });
     } catch (error) {
       // No hidden resend, including after an abort. Never expose provider error text containing request material.
       if (error instanceof Anthropic.APIError && error.status !== undefined && error.status >= 400 && error.status < 500) {
@@ -121,8 +118,8 @@ export class AnthropicFcaModel implements FcaModel {
     if (message.stop_reason === 'max_tokens') throw new Error('FCA_MODEL_TRUNCATED');
     if (message.stop_reason === 'refusal') throw new Error('FCA_MODEL_REFUSED');
     if (message.stop_reason !== 'tool_use') throw new Error('FCA_MODEL_DECISION_MISSING');
-    const decision = decodeDecision(message.content, names, history);
-    const appended: Anthropic.MessageParam[] = [current, { role: 'assistant', content: message.content }];
+    const decision = decodeDecision(message.content, menu.names, history);
+    const appended: Anthropic.MessageParam[] = [...menu.appended, current, { role: 'assistant', content: message.content }];
     if (decision.kind !== 'tools') {
       const control = message.content.find(block => block.type === 'tool_use') as Anthropic.ToolUseBlock;
       appended.push(this.toolResults([{ id: control.id, text: JSON.stringify({ received: true, requestedDecision: decision.kind }), ok: true }]));
@@ -178,7 +175,8 @@ function observedFcaResponse(message: Anthropic.Message) {
 function nativeHistory(history: readonly unknown[]): Anthropic.MessageParam[] {
   return history.map(item => {
     const message = object(item);
-    if (!message || !['user', 'assistant'].includes(String(message.role)) || !(typeof message.content === 'string' || Array.isArray(message.content))) {
+    if (!message || (!['user', 'assistant'].includes(String(message.role)) && !isFcaToolChangeMessage(message))
+      || !(typeof message.content === 'string' || Array.isArray(message.content))) {
       throw new Error('FCA_MODEL_HISTORY_INVALID');
     }
     // Preserve signed, redacted and future native blocks verbatim. Never normalize or summarize this prefix.

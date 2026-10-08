@@ -76,6 +76,7 @@ type ReadObject = { kind: 'page'; page: NotionPageText } | { kind: 'database'; d
  */
 export async function notionTurnProjection(
   source: NotionSource | null | undefined, message: string, clock: () => number = Date.now,
+  observeSources?: (ids: readonly string[]) => void,
 ): Promise<NotionTurnProjection | null> {
   if (!asksAboutNotion(message)) return null;
   if (!source?.connected) {
@@ -133,6 +134,7 @@ export async function notionTurnProjection(
     if (used + entry.length > NOTION_TURN_BOUNDS.promptCharacters - 900) continue;
     used += entry.length;
     entries.push(entry);
+    observeSources?.([summary.id, ...(item.kind === 'database' ? item.database.rows.slice(0, rows.length).map(row => row.id) : [])]);
     if (summary.url && sources.length < NOTION_TURN_BOUNDS.sources) sources.push({ title: summary.title, url: summary.url });
   }
   if (!entries.length) return state('unavailable', 'Notion pages were found but were too large to show within the bound. Say plainly that they could not be read this time. Do not guess any page content.');

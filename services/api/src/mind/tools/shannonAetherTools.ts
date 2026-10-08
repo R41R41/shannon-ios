@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { withAetherAccessCapability, withReadToolsCapability, withSkillsCapability } from '@shannon/cognition';
+import { withAetherAccessCapability, withReadToolsCapability, withSkillsCapability, SHANNON_FCA_TASK_CAPABILITY } from '@shannon/cognition';
 import { aetherErrorCode, aetherIdempotencyKey, type AetherDocument } from '../../integrations/aether/aetherAccess.js';
 import type { AetherSectionHit } from '../../integrations/aether/aetherKnowledgeSearch.js';
 import type { AetherProposalOperation, AetherProposalStore } from '../../integrations/aether/aetherProposal.js';
@@ -71,6 +71,7 @@ export function aetherExecutors(proposals: AetherProposalStore | null, study: Pi
           `- id: ${entry.documentId}｜「${clip(entry.title || '（無題）', 60)}」｜${entry.inStudy ? '書斎' : 'シャノン用フォルダ'}｜第${entry.version}版｜更新 ${entry.updatedAt.slice(0, 10)}`),
         ...(entries.length > 60 ? ['（ほかにもある）'] : [])].join('\n') : 'シャノン用フォルダはまだ空。'),
         record: { summary: `Aetherのシャノン用フォルダの一覧を見ました（${entries.length}件）。`, outcome: 'done' },
+        documents: { sourceIds: entries.slice(0, 60).map(entry => `aether-document://${encodeURIComponent(entry.documentId)}`) },
       };
     })(input, context),
     'aetherFolder.create': (input, context) => reading('Aetherのシャノン用フォルダに文書を1つ書きます。', async ({ aether }, signal) => {
@@ -213,5 +214,6 @@ export function withToolCapabilityLines<T extends { systemPrompt: string; tools?
   const withReads = offered?.some(tool => tool.domain !== undefined && isReadToolDomain(tool.domain))
     ? { ...withAether, systemPrompt: withReadToolsCapability(withAether.systemPrompt) } : withAether;
   // Her skills (stage 2, step 6): their line only in a turn that offers `skill.read`.
-  return offered?.some(tool => tool.domain === 'skill_read') ? { ...withReads, systemPrompt: withSkillsCapability(withReads.systemPrompt) } : withReads;
+  const withSkills = offered?.some(tool => tool.domain === 'skill_read') ? { ...withReads, systemPrompt: withSkillsCapability(withReads.systemPrompt) } : withReads;
+  return offered?.some(tool => tool.domain === 'task_runtime') ? { ...withSkills, systemPrompt: `${withSkills.systemPrompt}\n\n${SHANNON_FCA_TASK_CAPABILITY.text}` } : withSkills;
 }

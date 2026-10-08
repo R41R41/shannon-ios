@@ -14,7 +14,7 @@ export function voiceHistoryProjection(history: readonly { role: 'user' | 'assis
 
 export function agentTaskPromptProjection(tasks: readonly AgentTask[], currentThreadID?: string): string {
   const relevant = tasks
-    .filter(task => task.status !== 'proposed')
+    .filter(task => task.status !== 'proposed' && !task.conversationThreadID?.startsWith('fca:'))
     .sort((left, right) => {
       const leftActive = ['queued', 'starting', 'running', 'waiting_approval', 'paused'].includes(left.status) ? 1 : 0;
       const rightActive = ['queued', 'starting', 'running', 'waiting_approval', 'paused'].includes(right.status) ? 1 : 0;

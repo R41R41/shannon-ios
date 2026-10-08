@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { HOST_STEP_CODES, hostFolderLabel, hostFolderPath, hostStepContentDigest, type HostStepCode } from '../action/ownTime/ownTimePorts.js';
 import type { ListResult, ReadResult, SearchResult, WriteResult } from '../action/ownTime/ownTimePorts.js';
 import type { HostFolderOperations, HostRunOutcome } from '../action/ownTime/ownTimePorts.js';
@@ -160,6 +161,9 @@ function runResult(outcome: HostRunOutcome, operation: HostOperation, target: { 
   }
   return {
     result: toolOk(text), record: { summary: `${place}で「${target.path || 'いちばん上'}」を扱いました。`, outcome: 'done' },
+    ...(!writes ? { documents: { sourceIds: [
+      `shannon-folder://${encodeURIComponent(target.host)}/${createHash('sha256').update(target.path).digest('hex')}`,
+    ] } } : {}),
     ...(context.surface !== 'autonomy' ? { recordedElsewhere: true as const } : {}),
   };
 }

@@ -201,7 +201,7 @@ const WROTE_HER_OWN_THINGS = new WeakSet<object>();
 
 /** A write with her own tools: her study, her Aether folder, her PC or Mac folder, or a proposal to the owner's Aether inbox. */
 function writesHerOwnThings(tool: ShannonToolDefinition | undefined): boolean {
-  return tool?.effect === 'write' && (tool.domain === 'aether_study' || tool.domain === 'host_folder' || tool.domain === 'aether_proposal');
+  return tool?.effect === 'write' && (tool.domain === 'aether_study' || tool.domain === 'host_folder' || tool.domain === 'aether_proposal' || tool.domain === 'task_runtime');
 }
 
 /**

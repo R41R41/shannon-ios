@@ -1,4 +1,4 @@
-import type { ShannonToolDefinition } from '../../tools/toolRegistryPorts.js';
+import type { ShannonToolDefinition, ToolResult } from '../../tools/toolRegistryPorts.js';
 
 /** Public decisions only. Native history is opaque to the runtime and is never an Observer payload. */
 export interface FcaToolCall { id: string; name: string; input: unknown }
@@ -12,13 +12,21 @@ export interface FcaModelInput {
   children?: readonly { id: string; title: string; phase: string; summary: string }[];
   history: readonly unknown[];
   tools: readonly ShannonToolDefinition[];
+  /** Selection mode: every currently allowed tool's metadata; tools contains only selected/opened schemas. */
+  catalog?: readonly { name: string; description: string }[];
 }
 export interface FcaModelOutput {
   decision: FcaDecision;
-  /** Complete native user/assistant blocks appended by this one model call. */
+  /** Complete native messages appended by this call, including provider-supported schema changes. */
   history: readonly unknown[];
 }
 export interface FcaModel {
   decide(input: FcaModelInput, signal: AbortSignal): Promise<FcaModelOutput>;
   toolResults(results: readonly { id: string; text: string; ok: boolean }[]): unknown;
+}
+
+export interface FcaExternalTools {
+  definitions: readonly ShannonToolDefinition[];
+  /** Existing source/audience/action gates still apply. Uncertain failures throw and must never become retryable results. */
+  execute(request: { scopeKey: string; taskId: string; operationId: string; name: string; input: unknown; signal: AbortSignal }): Promise<ToolResult>;
 }

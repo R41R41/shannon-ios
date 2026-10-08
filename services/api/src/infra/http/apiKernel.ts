@@ -1,9 +1,4 @@
-import {
-  withoutUnshownTitles, type ShannonStage5Capabilities,
-  type CompanionClock,
-  type CompanionStateEvent,
-  type CompanionStateStore,
-} from '@shannon/cognition';
+import { withoutUnshownTitles, type ShannonStage5Capabilities, type CompanionClock, type CompanionStateEvent, type CompanionStateStore } from '@shannon/cognition';
 import { agentTaskPromptProjection } from '../../mind/action/respond/apiPromptProjection.js';
 import { presentCompanionState } from '../../mind/emotion/companionPresence.js';
 export { agentTaskPromptProjection } from '../../mind/action/respond/apiPromptProjection.js';
@@ -39,14 +34,7 @@ import type { KnowledgeStore } from '../../mind/memory/store/knowledgeStore.js';
 import type { InitiativeInbox } from '../../surfaces/outreach/store/initiativeStore.js';
 import type { AetherContextReader } from '../../integrations/aether/aetherContext.js';
 import { DisabledAetherProposalStore, type AetherProposalStore } from '../../integrations/aether/aetherProposal.js';
-import {
-  InMemoryAgentTaskStore,
-  type AgentCommandType,
-  type AgentPlanItem,
-  type AgentTask,
-  type AgentTaskStore,
-  type HostAgentEvent,
-} from '../../mind/action/agentTasks/agentTaskStore.js';
+import { InMemoryAgentTaskStore, type AgentCommandType, type AgentPlanItem, type AgentTask, type AgentTaskStore, type HostAgentEvent } from '../../mind/action/agentTasks/agentTaskStore.js';
 import { validatedPlaceSearchOptions } from '../../integrations/places/placeDiscovery.js';
 import { chatAudienceTurn } from '../../mind/perception/chatAudience.js';
 import { validChatStream } from '../../surfaces/text/chatSentenceStream.js';
@@ -90,9 +78,7 @@ import {
 import { InMemoryVoiceIdentityStore, type ShannonVoiceIdentityStore } from '../../surfaces/voice/voiceIdentity.js';
 import { OwnOutreach, type OwnOutreachReader } from '../../surfaces/outreach/ownOutreach.js';
 import { voiceSessionCalls } from '../../mind/perception/ownerCallElsewhere.js';
-import {
-  NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type TextTurnInput, type TextTurnResult,
-} from '../../mind/action/respond/apiTextTurn.js';
+import { NO_LOOK, answerTextCommand, beginTextTurn, perceiveTextTurn, settleTextTools, textTurnWorkspace, textToolStart, storedBySurface, textTurnIdentityAndCapability, textTurnSystemPrompt, type TextTurnInput, type TextTurnResult } from '../../mind/action/respond/apiTextTurn.js';
 import { randomUUID } from 'node:crypto';
 import { withObserverRun, observeAsync, observeSync, observerHandoff } from '../observer/observerContext.js';
 import { commitReplyEmotionLater, replyFeelingOffer, resolveTextReplyEmotion } from '../../mind/emotion/companionPresence.js';
@@ -113,6 +99,7 @@ import { isExplicitVoyagerUpdateRequest } from '../../integrations/voyager/organ
 import { optionalPlaceDiscoverySkill, placeSkillReply } from '../../integrations/places/placeDiscoverySkill.js';
 import type { ChatResponse } from '../../contracts/contracts.js';
 import { withWorkspace, type MindTurnPorts } from '../../mind/workspace/workspacePorts.js';
+import { conversationFcaProvenance, type FcaConversationPort } from '../../mind/action/fca/fcaConversationPorts.js';
 export type { TextTurnInput, TextTurnResult, TextTurnSurface } from '../../mind/action/respond/apiTextTurn.js';
 export interface ShannonApiKernelOptions {
   /** The composition root supplies the default service, after this kernel's stores are ready. */
@@ -160,6 +147,8 @@ export interface ShannonApiKernelOptions {
    * (`SHANNON_ADR8_STAGE3=off`, `SHANNON_MIND_EVENTS=off`), nothing is perceived and every turn is what it was at afb38c28.
    */
   mind?: MindTurnPorts;
+  /** Explicit opt-in; the normal text model/stream remains the foreground conversation executor. */
+  fcaConversation?: () => FcaConversationPort | null;
 }
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel; private readonly auxiliaryChatModel: ShannonChatModel;
@@ -191,7 +180,7 @@ export class ShannonApiKernel {
   private readonly minecraftRequests: { promptBlock(scopeKey: string, at: string): string } | null;
   private readonly turnChooser: TurnChooser | null; private readonly toolHints: boolean;
   private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null; private readonly feedback: FeedbackPorts | null; private readonly stage5Capabilities: ShannonStage5Capabilities | undefined;
-  private readonly mind: MindTurnPorts | null;
+  private readonly mind: MindTurnPorts | null; private readonly fcaConversation: (() => FcaConversationPort | null) | null;
   /** What the server knows when it offers her tools: others present, and what her writes must not repeat (`shannonToolSession.ts`). */
   private readonly toolServer: ConversationToolServer;
   constructor(
@@ -229,7 +218,7 @@ export class ShannonApiKernel {
     this.notion = options.notion ?? null;
     this.minecraftRequests = options.minecraftRequests ?? null;
     this.turnChooser = options.turnChooser ?? null; this.turnRouting = options.turnRouting ?? null; this.toolHints = options.toolHints === true; this.feedback = options.feedback ?? null; this.stage5Capabilities = options.stage5Capabilities;
-    this.mind = options.mind ?? null;
+    this.mind = options.mind ?? null; this.fcaConversation = options.fcaConversation ?? null;
     this.people = new PeopleMemory(options.peopleMemory ?? new SQLitePeopleMemoryStore(':memory:'), this.stateStore, options.memory ?? null);
     this.autonomy = options.autonomy ?? options.createAutonomy?.(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) }) ?? missingAutonomyComposition();
     this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now); this.ownOutreach = options.ownOutreach ? new OwnOutreach(options.ownOutreach, this.now) : null;
@@ -286,7 +275,7 @@ export class ShannonApiKernel {
     if (request.method === 'GET' && request.path === '/v1/agent/tasks') {
       const scopeKey = request.query?.get('scopeKey');
       if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
-      return { status: 200, body: { tasks: this.agentTasks.list(scopeKey) } };
+      return { status: 200, body: { tasks: this.agentTasks.list(scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')) } };
     }
 
     const testFlightResponse = dispatchTestFlightRequest(request, { testFlightDelivery: this.testFlightDelivery, now: this.now });
@@ -371,7 +360,7 @@ export class ShannonApiKernel {
   }
   private async performTextTurn(input:TextTurnInput, model: ShannonChatModel):Promise<TextTurnResult> {
     const { audience, threadId, message, attachments, placeOptions, request, surface } = input;
-    const body = input.body;
+    const body = input.body; const fca = !surface && audience.alone ? this.fcaConversation?.() : null;
     const deadline = input.deadline ?? new TurnDeadline(TEXT_TURN_DEADLINE, () => Date.parse(this.now()));
     const deps = this.textTurnDependencies();
     const begun = observeSync('recall',{message,threadId},()=>beginTextTurn(deps, input),value=>({snapshotVersion:value.captured.version,peopleCount:value.peopleRecall.ids.length,explicitCommand:Boolean(value.explicitCommand),organizeTurn:Boolean(value.organizeTurn)}));
@@ -380,10 +369,10 @@ export class ShannonApiKernel {
     const perceived = observeSync('perception',{message,audience:audience.audience},()=>perceiveTextTurn(this.mind, input, occurredAt),value=>({eventId:value?.itemId??null}));
     // Who her tools are offered to, and (Syzygy ADR-0008 stage 2, none without its wiring) her read tools' plan and the turn's
     // Jev call, started here so that it runs in parallel with recall (`textToolStart`).
-    const { toolAudience, toolOptions, choices } = textToolStart(input, begun, { autonomy: this.autonomy, toolServer: this.toolServer, turnChooser: this.turnChooser, readTools: this.readTools, toolHints: this.toolHints });
+    const { toolAudience, toolOptions, choices } = textToolStart(input, begun, { autonomy: this.autonomy, toolServer: this.toolServer, turnChooser: this.turnChooser, commonFca: !surface && audience.alone && Boolean(this.fcaConversation?.()), readTools: this.readTools, toolHints: this.toolHints });
     const cognitiveContext = this.memoryRecall && !begun.explicitCommand && !begun.organizeTurn
       ? await observeAsync('recall',{message,semantic:true},()=>this.memoryRecall!.enrich(begun.deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }),value=>({recalledCount:value.frame.recalledMemoryIDs.length})) : begun.deterministicContext;
-    const { basePrompt, capabilityContext } = textTurnIdentityAndCapability(deps, input, begun);
+    const { basePrompt, capabilityContext } = textTurnIdentityAndCapability(deps, input, begun, Boolean(fca));
     const capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
     // A surface has no look at the room or through the app.
     const roomLook = surface ? NO_LOOK : this.body.turnLooks.turn(body.scopeKey, message, occurredAt, audience.audience, request);
@@ -395,11 +384,16 @@ export class ShannonApiKernel {
     // A summary has no label of its own: none where only open items may be given (a turn someone other than the owner wrote).
     const priorThreadSummary = surface?.openOnly ? undefined : usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId, audience.present);
     const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.auxiliaryChatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
+    const fcaTurn = fca?.begin({ scopeKey: body.scopeKey, threadId, observedAt: occurredAt,
+      recalledMemoryIds: conversationFcaProvenance(captured, this.conversationStore, body.scopeKey, threadId,
+        [...cognitiveContext.frame.recalledMemoryIDs, ...peopleRecall.ids]),
+      readSourceIds: capability.readSourceIds, ownerAlone: () => this.ownerAloneForFeedback(body.scopeKey) });
+    try {
     // Her Minecraft body's and Aether's capability lines, in her identity, exactly when this turn's tools include them (`withToolCapabilityLines`).
     let toolOffer = conversationTools(this.autonomy, body.scopeKey, 'text', toolAudience, this.toolServer, `${threadId}\n${message}`, deadline, undefined, toolOptions);
     // Stage 2: the menu narrows the schemas sent; awaited only with a Jev call, so without one nothing changes (not even a tick).
     const settled = choices ? await settleTextTools(toolOffer, choices) : null;
-    if (settled) toolOffer = settled.offer;
+    if (settled) toolOffer = settled.offer; if (fcaTurn?.selectTools && toolOffer.tools) toolOffer = { ...toolOffer, tools: await fcaTurn.selectTools(toolOffer.tools, { goal: message, state: cognitiveContext.prompt }) };
     if(settled)observerHandoff('jevt','context',{tools:toolOffer.tools?.definitions.map(tool=>tool.name)??[]});
     layered = turnSkillIndex(layered, this.skills, body.scopeKey, toolOffer.tools, body.webSearch === true || Boolean(placeSkill) || settled?.web === true); // Step 6: her skills' index.
     systemPrompt = layered.prompt;
@@ -412,7 +406,7 @@ export class ShannonApiKernel {
       // The history is a character budget; what fell out of it is covered by the replay summary.
       // Stage 3: the workspace's blocks follow the turn's context, which stays byte for byte as it was (none without the wiring).
       ...withWorkspace(conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey), surface?.openOnly)
-        .request([layered.turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n')), observeSync('workspace',{threadId},()=>textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey)),value=>({available:value!==undefined&&value!==null}))),
+        .request([layered.turnContext, placeSkill?.prompt ?? '', fcaTurn?.context() ?? ''].filter(Boolean).join('\n\n')), observeSync('workspace',{threadId},()=>textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey)),value=>({available:value!==undefined&&value!==null}))),
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message,
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,
@@ -452,6 +446,7 @@ export class ShannonApiKernel {
     // Another surface decides where its turn is kept (her Minecraft body: the owner's platform thread, or person memory).
     observerHandoff('decode','store',{reply});
     const experience = observeSync('store',{threadId,reply},()=>surface ? storedBySurface(deps, surface, completedTurn) : this.background.recordTurn(completedTurn),value=>({experienceId:value?.id??null}));
+    if (experience) fcaTurn?.commit(experience.id); else fcaTurn?.abort();
     if (experience) { response.turnId = experience.id; const feedback = bindCompletedFeedback(this.feedback,body.scopeKey,finished?.feedbackRecordId,threadId,experience.id,reply); if (feedback) response.feedback=feedback; }
     if (experience && perceived) this.mind?.bind?.(body.scopeKey, perceived.itemId, `experience:${experience.id}`); // Stage 3: re-read at render.
     const completedIntent = experience ? recordCompletedCognitiveCycle(this.cognitiveIntents, body.scopeKey, cognitiveContext.frame, provisionalIntent, experience.id, {
@@ -460,7 +455,7 @@ export class ShannonApiKernel {
     if (completion.taskProposal && !suppressAgentTaskProposal) {
       if (orchestrationState) {
         orchestrationState = this.conversationOrchestration.save(recordConversationProposal(
-          orchestrationState, completion.taskProposal.goal, occurredAt, this.agentTasks.list(body.scopeKey),
+          orchestrationState, completion.taskProposal.goal, occurredAt, this.agentTasks.list(body.scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')),
         ));
       }
       response.uiBlocks = [...(response.uiBlocks ?? []), {
@@ -477,6 +472,10 @@ export class ShannonApiKernel {
     if (audience.alone) commitReplyEmotionLater(this.stateStore, body.scopeKey, expressiveEmotion);
     this.mind?.turnEnded?.(); // Stage 3: what the mind noted is written after the response.
     return { response: withSentenceStream(completion, { status: 200, body: audience.visible(response) }), completion, ...(experience ? { experienceId: experience.id } : {}) };
+    } catch (error) {
+      try { fcaTurn?.abort(); } catch { /* Unbound source references remain ineligible for research admission. */ }
+      throw error;
+    }
   }
   private textTurnDependencies() {
     return { ...this.liveVoiceDependencies(), background: this.background, organizeExtractor: this.organizeExtractor, body: this.body, minecraftRequests: this.minecraftRequests };

@@ -219,7 +219,7 @@ async function completeLiveVoiceDelegation(
   let orchestrationState = !alone || uncertainTranscript || notHisWordsToHer(decision) ? null : observeConversationTurn({
     previous: dependencies.conversationOrchestration.read(scopeKey, threadId),
     scopeKey, threadId, message: transcript, occurredAt, participantMode,
-    tasks: dependencies.agentTasks.list(scopeKey),
+    tasks: dependencies.agentTasks.list(scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')),
   });
   if (orchestrationState) orchestrationState = dependencies.conversationOrchestration.save(orchestrationState);
   // Commands that act (tasks, notes, remember, forget, promises) run only for the owner alone, on words that can be trusted.
@@ -301,7 +301,7 @@ async function completeLiveVoiceDelegation(
   // Agent work, notes and tasks keep their bounded projections; the speak-time check says how far to go aloud.
   const taskPrompt = legacyGuest || !selectedSkills.has('agent_status')
     ? ''
-    : agentTaskPromptProjection(dependencies.agentTasks.list(scopeKey), threadId);
+    : agentTaskPromptProjection(dependencies.agentTasks.list(scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')), threadId);
   const capability = legacyGuest
     ? NO_CAPABILITY_CONTEXT
     : await conversationCapabilityContext(scopeKey, transcript, dependencies, {
@@ -337,7 +337,7 @@ async function completeLiveVoiceDelegation(
     buildExpressiveEmotionPrompt(provisionalExpressiveEmotion, temporaryGuest ? 'guest' : alone ? 'owner' : 'others'),
     alone && emotionState && !includeCognitiveContext ? stillFeltLine(emotionState, occurredAt) : '',
     temporaryGuest ? guestSpeakerReminder : '',
-    buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(scopeKey)),
+    buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:'))),
     confirmedImplementationRequest
       ? `[Confirmed implementation clarification]\nThe owner's immediately preceding request was: ${confirmedImplementationRequest}\nYour previous reply explicitly asked whether to show an implementation proposal; the owner has now confirmed. Return a concrete taskProposal for that request. The visible proposal card is the start boundary; do not claim code work has begun.`
       : '',
@@ -454,7 +454,7 @@ async function completeLiveVoiceDelegation(
   if (alone && !uncertainTranscript && taskProposal && !isExplicitVoyagerUpdateRequest(transcript) && !turnWroteHerOwnThings(toolOffer.tools)) {
     if (orchestrationState) {
       orchestrationState = dependencies.conversationOrchestration.save(recordConversationProposal(
-        orchestrationState, taskProposal.goal, occurredAt, dependencies.agentTasks.list(scopeKey),
+        orchestrationState, taskProposal.goal, occurredAt, dependencies.agentTasks.list(scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')),
       ));
     }
     uiBlocks = [...(uiBlocks ?? []), {

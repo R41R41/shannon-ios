@@ -177,7 +177,7 @@ export function beginTextTurn(dependencies: TextTurnDependencies, input: TextTur
   let orchestrationState = surface ? null : observeConversationTurn({
     previous: dependencies.conversationOrchestration.read(body.scopeKey, threadId),
     scopeKey: body.scopeKey, threadId, message, occurredAt, participantMode: audience.participantMode,
-    tasks: dependencies.agentTasks.list(body.scopeKey),
+    tasks: dependencies.agentTasks.list(body.scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')),
   });
   if (orchestrationState) orchestrationState = dependencies.conversationOrchestration.save(orchestrationState);
   const explicitCommand = !audience.alone || surface ? null : executeConversationCommand(body.scopeKey, threadId,
@@ -252,7 +252,7 @@ export function textTurnWorkspace(mind: MindTurnPorts | null, input: TextTurnInp
 }
 
 /** Her identity, then what she may read this turn: a promise only when a read is asynchronous (`conversationCapabilityContext`). */
-export function textTurnIdentityAndCapability(dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn) {
+export function textTurnIdentityAndCapability(dependencies: TextTurnDependencies, input: TextTurnInput, begun: BegunTextTurn, collectReadSources = false) {
   const { audience, message, surface } = input;
   const body = input.body;
   const { captured, explicitCommand } = begun;
@@ -261,7 +261,7 @@ export function textTurnIdentityAndCapability(dependencies: TextTurnDependencies
   const basePrompt: LayeredIdentityPrompt = { ...identity, identity: withStage5Capabilities(dependencies.autonomy.identityProjection(body.scopeKey, identity.identity), audience.alone ? dependencies.stage5Capabilities : undefined) };
   const capabilityContext = explicitCommand ? NO_CAPABILITY_CONTEXT : conversationCapabilityContext(body.scopeKey, message,
     { aetherContext: dependencies.aetherContext, voyagerCatalog: dependencies.voyagerCatalog, notion: dependencies.notion, upcoming: dependencies.upcoming,
-      ownOutreach: dependencies.ownOutreach }, surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities);
+      ownOutreach: dependencies.ownOutreach }, surface ? { ...audience.capabilities, ownOutreach: surfaceOwnOutreach(surface, audience) } : audience.capabilities, collectReadSources);
   return { basePrompt, capabilityContext };
 }
 
@@ -301,8 +301,8 @@ export function textTurnSystemPrompt(dependencies: TextTurnDependencies, input: 
   const ownerWork = !surface || audience.alone;
   const turnContext = [
     basePrompt.state, memory(cognitiveContext.prompt), memory(peopleRecall.prompt), memory(dailyMindPrompt), memory(capability.prompt),
-    ...(ownerWork ? [buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(body.scopeKey)),
-      agentTaskPromptProjection(dependencies.agentTasks.list(body.scopeKey), threadId)] : []), audience.instructions, surface?.prompt ?? '',
+    ...(ownerWork ? [buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(body.scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:'))),
+      agentTaskPromptProjection(dependencies.agentTasks.list(body.scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')), threadId)] : []), audience.instructions, surface?.prompt ?? '',
   ].filter(Boolean).join('\n\n');
   return {
     prompt: [basePrompt.identity, basePrompt.profile, turnContext].filter(Boolean).join('\n\n'),
@@ -371,7 +371,7 @@ export async function settleTextTools<T extends { tools?: ShannonModelToolSessio
  * web entry beside her read tools), started before recall so that it runs in parallel with it. Neither without the wiring.
  */
 export function textToolStart(input: TextTurnInput, begun: BegunTextTurn, parts: {
-  autonomy: { tools?: ShannonToolRunner }; toolServer: ConversationToolServer; turnChooser: ToolMenuChooser | null; readTools: boolean; toolHints?: boolean;
+  autonomy: { tools?: ShannonToolRunner }; toolServer: ConversationToolServer; turnChooser: ToolMenuChooser | null; readTools: boolean; toolHints?: boolean; commonFca?: boolean;
 }) {
   const { audience, surface, body, message, threadId, placeOptions } = input;
   // With others present, her Aether reading tools (owner decisions 2026-10-06): the owner's own turn (app text marked `others`,
@@ -384,7 +384,8 @@ export function textToolStart(input: TextTurnInput, begun: BegunTextTurn, parts:
     ...(surface && !surface.minecraftTools ? { withoutDomains: ['minecraft_body'], ...(surface.openOnly ? { openOnly: true } : {}) } : {}),
     ...(plan ? { reads: plan.offer } : {}), ...(parts.toolHints ? { sourceHints: true } : {}),
   };
-  const choices = startTurnToolMenu(modelTurn ? parts.turnChooser : null, parts.autonomy, body.scopeKey, 'text', toolAudience, parts.toolServer, `${threadId}\n${message}`,
+  const chooser: ToolMenuChooser | null = parts.commonFca && parts.turnChooser ? { difficulty: parts.turnChooser.difficulty, choose: request => parts.turnChooser!.choose({ ...request, menu: [] }) } : parts.turnChooser;
+  const choices = startTurnToolMenu(modelTurn ? chooser : null, parts.autonomy, body.scopeKey, 'text', toolAudience, parts.toolServer, `${threadId}\n${message}`,
     toolOptions, plan && !parts.autonomy.tools?.knownTool(WEB_CAPABILITY_ENTRY.name) ? [WEB_CAPABILITY_ENTRY] : []);
   return { toolAudience, toolOptions, choices };
 }

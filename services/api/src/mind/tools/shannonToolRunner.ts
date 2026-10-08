@@ -13,7 +13,7 @@ import { aetherStudyTool, studyExecutors } from './shannonStudyTools.js';
 import { authorizeToolCall, authorizeToolInput, gatedAether, shownAetherCall } from '../inhibition/toolGatePorts.js';
 import type { StudyAether } from '../action/ownTime/ownTimePorts.js';
 import { validToolInput, type ToolInput } from './shannonToolInput.js';
-import type { PreparedToolCall, ToolExecutionContext, ToolExecutor } from './shannonToolTypes.js';
+import type { PreparedToolCall, ToolExecutionContext, ToolExecutor, ToolDocuments } from './shannonToolTypes.js';
 import {
   isReadToolDomain, offeredTools, providerToolName, shannonTool, toolFailure, toolForSurface, toolFromProviderName,
   type ReadToolDomain, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface,
@@ -27,6 +27,7 @@ import { actionPermit, currentActionExecution } from '../../infra/context/action
 import { actionResource } from '../../contracts/actionThreadContract.js';
 import type { SelfRewriteRuntimePort } from '../inhibition/selfRewritePorts.js';
 import { selfRewriteExecutors } from './shannonSelfRewriteTools.js';
+import { TASK_TOOLS } from './taskToolDefinitions.js';
 import { SELF_REWRITE_TOOLS } from './selfRewriteToolDefinitions.js';
 
 /**
@@ -72,7 +73,13 @@ export function wasWithheld(result: ToolResult): boolean {
   return WITHHELD_RESULTS.has(result);
 }
 
+export interface TaskRuntimeToolPort {
+  available(scopeKey: string): boolean;
+  execute(name: string, input: unknown, context: ToolExecutionContext): ToolResult;
+  observeRead?(scopeKey: string, receipt: { name: string; documents?: ToolDocuments; ok: boolean }): void;
+}
 export class ShannonToolRunner {
+  private taskRuntime: TaskRuntimeToolPort | null = null;
   private executors: Readonly<Record<string, ToolExecutor>>;
   /**
    * Review M2 (owner: 「できるようにする」): told of each of her own `aetherFolder.update` and `.delete` that worked
@@ -110,7 +117,7 @@ export class ShannonToolRunner {
   offered(surface: ToolSurface, audience: ToolAudience, scopeKey?: string): readonly ShannonToolDefinition[] {
     // Her Aether tools only while the Aether client is configured (URL and token), and a proposal only while the inbox is too:
     // with the inbox alone (or the token alone) every offer is what it was before Aether access. Only to the owner's scope.
-    const tools = [...offeredTools(surface, audience, tool => tool.domain === 'task_runtime' ? false : isReadToolDomain(tool.domain) ? this.readsFor(tool.domain)
+    const tools = [...offeredTools(surface, audience, tool => tool.domain === 'task_runtime' ? !!scopeKey && (this.taskRuntime?.available(scopeKey) ?? false) : isReadToolDomain(tool.domain) ? this.readsFor(tool.domain)
       : tool.domain === 'skill_read' ? this.skills !== null
       : tool.domain === 'vm_workspace' ? this.selfRewrite !== null
       : tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
@@ -168,6 +175,7 @@ export class ShannonToolRunner {
     if (refused || !tool) return tool && refused ? this.withhold(context, tool, refused, tool.surfaces.includes(context.surface) ? 'audience' : 'not_offered')
       : { tool, result: refused ?? toolFailure('not_offered', 'そういう道具はない。', { retryable: false }) };
     const executor = this.executors[tool.name];
+    if (tool.domain === 'task_runtime' && !this.taskRuntime?.available(context.scopeKey)) return { tool, result: toolFailure('not_offered', 'この実行ではタスクの道具を使えない。', { retryable: false }) };
     if ((tool.name.startsWith('aether') || tool.domain === 'aether_proposal') && !this.aetherFor(context.scopeKey)) {
       return this.withhold(context, tool, toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'Aetherの道具はライ氏のscopeだけ', wouldWork: 'ライ氏との会話か、ボクの時間で使う' } }), 'not_offered');
     }
@@ -198,7 +206,7 @@ export class ShannonToolRunner {
       if(!('run' in prepared))return {tool,result:prepared};
       const call=this.notedCopyWrite(tool,checked.input,context.scopeKey,shownAetherCall(tool,prepared,context));
       return {tool,prepared:{...call,run:async signal=>{
-        const resources=tool.domain==='vm_workspace' ? [] : tool.effect==='write'?[actionResource(context.scopeKey,call.folder?`folder:${call.folder.host}`:'study')]:[];
+        const resources=tool.domain==='vm_workspace' || tool.domain==='task_runtime' ? [] : tool.effect==='write'?[actionResource(context.scopeKey,call.folder?`folder:${call.folder.host}`:'study')]:[];
         const refusedNow = await observeAsync('gate', { name: tool.name, phase: 'before_execution' }, async () => {
           await actionPermit(resources);
           // The original gate and live secret predicate are evaluated again after waiting for a resource.
@@ -207,6 +215,7 @@ export class ShannonToolRunner {
         if(refusedNow) return {result:refusedNow,record:{summary:'実行直前の関門で止まりました。',outcome:'failed' as const,reasonCode:'refused'}};
         const active=currentActionExecution();
         const combined=active?signal?AbortSignal.any([signal,active.signal]):active.signal:signal;
+        context.beforeExecution?.();
         observerHandoff('gate', 'tools', { name: tool.name });
         return observeAsync('tools', { name: tool.name, phase: 'execute', argumentFields: Object.keys(tool.input.properties).filter(key => Object.hasOwn(checked.input, key)) },
           () => call.run(combined), run => ({ ...observedToolResult(tool.name, run.result, run.apply ? 'awaiting_commit' : 'returned'),
@@ -265,6 +274,15 @@ export class ShannonToolRunner {
    * Syzygy ADR-0008 stage 2, step 3 (`SHANNON_READ_TOOLS`): her read tools exist from now on, over these ports (the wiring hands
    * them only while the switch is on). Never called, every offer, name and refusal is what it was.
    */
+  useTaskRuntime(port: TaskRuntimeToolPort): void {
+    this.taskRuntime = port;
+    this.executors = Object.freeze({ ...this.executors, ...Object.fromEntries(TASK_TOOLS.map(tool => [tool.name,
+      (input: ToolInput, context: ToolExecutionContext): PreparedToolCall => ({ summary: '共通タスクを操作します。', run: async () => {
+        const result = port.execute(tool.name, input, context);
+        return { result, record: { summary: '共通タスクの操作結果を記録しました。', outcome: result.ok ? 'done' : 'failed' } };
+      } })])) });
+  }
+
   useReads(ports: ReadToolPorts): void {
     this.reads = ports;
     this.executors = Object.freeze({ ...this.executors, ...readToolExecutors(ports) });
@@ -319,9 +337,11 @@ export class ShannonToolRunner {
       record(`会話の中で道具「${ready.tool.name}」を使おうとしましたが、うまくいきませんでした。`, 'failed', 'failed');
       return toolFailure('failed', 'うまくいかなかった。', { retryable: true });
     }
+    if (ready.tool.effect === 'read') this.taskRuntime?.observeRead?.(context.scopeKey,
+      { name: ready.tool.name, documents: run.documents, ok: run.result.ok });
     if (!run.apply) {
       if (!run.recordedElsewhere) record(run.record.summary, run.record.outcome, run.record.reasonCode);
-      if(context.surface!=='autonomy')await currentActionExecution()?.checkpoint?.('tool_returned');
+      if(context.surface!=='autonomy' && context.acknowledgementOwner !== 'fca')await currentActionExecution()?.checkpoint?.('tool_returned');
       return run.result;
     }
     try {
@@ -331,7 +351,7 @@ export class ShannonToolRunner {
         this.recorder.recordConversationAction(context.scopeKey, { summary: run.record.summary, tool: ready.tool.name, outcome: 'done' });
         return line;
       }), () => ({ name: ready.tool.name, ok: true, status: 'committed' }));
-      if(context.surface!=='autonomy')await currentActionExecution()?.checkpoint?.('tool_committed');
+      if(context.surface!=='autonomy' && context.acknowledgementOwner !== 'fca')await currentActionExecution()?.checkpoint?.('tool_committed');
       return added ? { ...run.result, text: `${run.result.text}\n${added}` } : run.result;
     } catch (error) {
       const code = error instanceof Error ? error.message : '';

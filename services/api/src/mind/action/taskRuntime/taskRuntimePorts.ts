@@ -1,4 +1,6 @@
 import type { ActionLease } from '@shannon/mind';
+import type { TaskHistoryCommit, TaskHistoryWindow } from './taskHistoryPorts.js';
+export type { TaskHistoryCommit, TaskHistoryPublicRound, TaskHistoryRound, TaskHistorySummary, TaskHistoryWindow } from './taskHistoryPorts.js';
 
 export type TaskKind = 'root' | 'conversation' | 'research' | 'generic';
 export type TaskPhase = 'ready' | 'executing' | 'waiting' | 'stopping' | 'unknown' | 'stopped' | 'completed' | 'failed';
@@ -17,8 +19,15 @@ export interface TaskView extends TaskRecord { phase: TaskPhase; childIds: strin
 export interface TaskMessage {
   id: string; sourceTaskId: string; targetTaskId: string; text: string; receivedAt: string;
 }
+export interface TaskConversationSource {
+  experienceId: string; threadId: string; observedAt: string; recalledMemoryIds: readonly string[];
+  readSourceIds?: readonly string[];
+}
+export interface TaskSource extends Omit<TaskConversationSource, 'experienceId'> {
+  stepId: string; experienceId: string | null;
+}
 export interface TaskSnapshot {
-  task: TaskView; messages: TaskMessage[]; history: unknown[]; checkpoint: unknown | null; revision: number;
+  task: TaskView; messages: TaskMessage[]; sources: TaskSource[]; history: unknown[]; checkpoint: unknown | null; revision: number;
 }
 export interface TaskStep {
   id: string; scopeKey: string; taskId: string; lease: ActionLease;
@@ -47,6 +56,8 @@ export interface TaskRuntimeOptions {
   authority: TaskAuthority;
   /** Wiring validates the existing action lease, scope, origin and source task synchronously, on the same database. */
   leaseValid(scopeKey: string, taskId: string, lease: ActionLease, at: string): boolean;
+  /** Existing foreground respond lease. Absent validation refuses conversation attachment. */
+  conversationLeaseValid?(scopeKey: string, lease: ActionLease, at: string): boolean;
   now?: () => string;
 }
 export interface TaskRuntime {
@@ -54,9 +65,21 @@ export interface TaskRuntime {
   createChild(scopeKey: string, parentId: string, spec: TaskSpec, requestId: string): TaskView;
   get(scopeKey: string, taskId: string): TaskView | null;
   list(scopeKey: string, query?: TaskQuery): TaskView[];
+  /** Fair admission candidates, oldest successful admission first; canonical task status still determines readiness. */
+  readyTasks(scopeKey: string, limit?: number): TaskView[];
+  beginConversation(scopeKey: string, threadId: string, lease: ActionLease): TaskStep | null;
+  observeConversationMessages(step: TaskStep, messageIds: readonly string[]): boolean;
+  completeConversation(step: TaskStep, source: TaskConversationSource, consumedMessageIds?: readonly string[]): boolean;
+  failConversation(step: TaskStep): void;
+  taskSources(scopeKey: string, taskId: string, messageIds?: readonly string[]): TaskSource[];
+  /** The running native segment observed these visible task projections; their lineage must follow its history and children. */
+  inheritTaskSources(step: TaskStep, sourceTaskIds: readonly string[]): boolean;
   send(scopeKey: string, sourceTaskId: string, targetId: string, text: string, messageId: string):
     { accepted: true; duplicate: boolean; task: TaskView };
   snapshot(scopeKey: string, taskId: string): TaskSnapshot | null;
+  history(scopeKey: string, taskId: string, messageIds?: readonly string[]): TaskHistoryWindow | null;
+  /** Installs a derived summary only under the current segment's lease and fresh source visibility. */
+  commitCompaction(step: TaskStep, request: TaskHistoryCommit, sourcesVisible: () => boolean): boolean;
   beginStep(scopeKey: string, taskId: string, lease: ActionLease, expectedRevision?: number): TaskStep | null;
   commitStep(step: TaskStep, commit: TaskCommit): TaskSnapshot | null;
   /** Record local cancellation only after model/tool promises have actually unwound. */

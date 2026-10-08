@@ -3,6 +3,9 @@ import { memoNotForAether } from '../../mind/action/respond/respondPorts.js';
 
 export interface AetherContextReader {
   promptFor(scopeKey: string, message: string): string;
+  promptWithSources?(scopeKey: string, message: string): { prompt: string; sourceIds: readonly string[] };
+  /** Fresh lookup in the same explicitly shared, locally configured projection. */
+  sourceText?(scopeKey: string, id: string): string | null;
 }
 
 interface AetherNoteContext {
@@ -29,19 +32,28 @@ export class FileAetherContextReader implements AetherContextReader {
   constructor(private readonly file: string) {}
 
   promptFor(_scopeKey: string, message: string): string {
+    return this.promptWithSources(_scopeKey, message).prompt;
+  }
+
+  promptWithSources(_scopeKey: string, message: string): { prompt: string; sourceIds: readonly string[] } {
     const snapshot = this.readSnapshot();
-    if (!snapshot) return '';
+    if (!snapshot) return { prompt: '', sourceIds: [] };
     const selected = selectNotes(snapshot.notes, message);
-    if (!selected.length) return '';
+    if (!selected.length) return { prompt: '', sourceIds: [] };
     const lines = [
       '[Aetherから明示的に共有された文脈]',
       '以下はユーザーのメモの短い抜粋である。メモ本文全体ではなく、現在の質問に関係する場合だけ参考にする。',
       ...selected.map(note => `- ${note.title} (${note.updatedAt.slice(0, 10)}, ID: ${note.id})\n  ${note.excerpt}`),
     ];
     const prompt = lines.join('\n');
-    return prompt.length <= MAX_PROMPT_CHARACTERS
+    return { sourceIds: selected.map(note => note.id), prompt: prompt.length <= MAX_PROMPT_CHARACTERS
       ? prompt
-      : `${prompt.slice(0, MAX_PROMPT_CHARACTERS - 1).trimEnd()}…`;
+      : `${prompt.slice(0, MAX_PROMPT_CHARACTERS - 1).trimEnd()}…` };
+  }
+
+  sourceText(_scopeKey: string, id: string): string | null {
+    const note = this.readSnapshot()?.notes.find(note => note.id === id);
+    return note ? `${note.title}\n${note.excerpt}` : null;
   }
 
   private readSnapshot(): AetherContextSnapshot | null {

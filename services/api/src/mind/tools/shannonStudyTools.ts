@@ -109,6 +109,7 @@ function buildStudyExecutors(store: SQLiteAutonomyStore, now: () => string, aeth
       return immediate('書斎の一覧を見ます。', () => ({
         result: toolOk(all.length ? [`${all.length}件${all.length > limit ? `（新しい順に${limit}件）` : ''}:`, ...all.slice(0, limit).map(pieceLine)].join('\n') : '当てはまるものはない。'),
         record: { summary: '書斎の一覧を見ました。', outcome: 'done' },
+        documents: { sourceIds: all.slice(0, limit).map(item => `shannon-study://${item.id}`) },
       }));
     },
     'study.search': (input, context) => {

@@ -31,6 +31,8 @@ export interface ToolRun {
  * and whether it read something of the owner's (`informs`). Never text.
  */
 export interface ToolDocuments {
+  /** Closed read receipts for the common task bridge; independent of own-time informed-write marks. */
+  sourceIds?: readonly string[];
   informs?: true;
   read?: readonly string[];
   wrote?: readonly string[];
@@ -57,6 +59,10 @@ export function toolSessionMemory(turnKey?: string): ToolSessionMemory {
 
 export interface ToolExecutionContext extends ToolCallContext {
   memory: ToolSessionMemory;
+  /** Trusted FCA runner commits tool receipts with its whole native round before acknowledging the action. */
+  acknowledgementOwner?: 'fca';
+  /** Trusted caller rechecks live source/query rights after an awaited action permit. */
+  beforeExecution?(): void;
   /**
    * In a conversation: the check against what the owner asked to keep secret or to forget (`conversationSecrets.ts`).
    * A write that repeats it is refused; `null` means his memory could not be read just now, and that write is refused

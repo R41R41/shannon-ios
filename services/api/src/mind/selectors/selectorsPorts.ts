@@ -8,3 +8,4 @@ export {
   type TurnChecker, type TurnToolResult, type TurnVerdict,
 } from './turnVerifier.js';
 export { type VoiceTurnDecision } from './voiceDecision.js';
+export { JevFcaToolSelector, type FcaToolSelector, type FcaToolSelectionRequest, type FcaToolSelectionResult } from './fcaToolSelection.js';

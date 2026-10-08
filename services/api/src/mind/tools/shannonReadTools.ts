@@ -19,14 +19,16 @@ export function webReadResult(memory: ToolSessionMemory): WebSearchResult | null
 export interface ReadToolPorts {
   web?: WebSearchOperation;
   /** The Notion projection for one search word: its text, and the pages it showed. */
-  notion?: (query: string) => Promise<{ text: string; sources: readonly { title: string; url: string }[] }>;
+  notion?: (query: string) => Promise<{ text: string; sources: readonly { title: string; url: string }[]; sourceIds?: readonly string[] }>;
   /** The Voyager task read for one search phrase (empty: the generic word). */
-  voyagerTasks?: (query: string) => Promise<string>;
+  voyagerTasks?: (query: string) => Promise<ReadToolText>;
   /** The owner's upcoming items as the conversation's projection gives them to him alone. */
-  upcoming?: (scopeKey: string, range: 'day' | 'week') => string;
+  upcoming?: (scopeKey: string, range: 'day' | 'week') => ReadToolText;
   /** The place skill for a query in an area; `spoken` for a voice turn. */
   places?: (scopeKey: string, query: string, spoken: boolean) => Promise<string>;
 }
+/** Optional closed receipts accompany the identical text from an existing projection. */
+export type ReadToolText = string | { text: string; sourceIds: readonly string[] };
 
 /** Which port a read domain needs. */
 export const READ_TOOL_PORT: Readonly<Record<ReadToolDomain, keyof ReadToolPorts>> = Object.freeze({
@@ -35,13 +37,14 @@ export const READ_TOOL_PORT: Readonly<Record<ReadToolDomain, keyof ReadToolPorts
 
 const UNAVAILABLE = toolFailure('unavailable', 'いまは読めなかった。', { retryable: true, refusal: { why: '読む先に届かなかった', wouldWork: '少しあとでもう一度' } });
 
-function prepared(summary: string, read: () => Promise<string> | string): PreparedToolCall {
+function prepared(summary: string, read: () => Promise<ReadToolText> | ReadToolText): PreparedToolCall {
   return {
     summary,
     run: async () => {
       try {
-        const text = await read();
-        return { result: toolOk(text.trim() ? text : '（何も見つからなかった）'), record: { summary, outcome: 'done' } };
+        const readResult = await read(), text = typeof readResult === 'string' ? readResult : readResult.text;
+        return { result: toolOk(text.trim() ? text : '（何も見つからなかった）'), record: { summary, outcome: 'done' },
+          ...(typeof readResult === 'string' ? {} : { documents: { sourceIds: readResult.sourceIds } }) };
       } catch {
         return { result: UNAVAILABLE, record: { summary: `${summary}（読めませんでした）`, outcome: 'failed', reasonCode: 'unavailable' } };
       }
@@ -76,7 +79,11 @@ export function readToolExecutors(ports: ReadToolPorts | null): Readonly<Record<
       if (!query) return toolFailure('invalid_input', '探す言葉（query）が空だった。', { retryable: false });
       return prepared('会話の中でNotionの共有ページを読みました。', async () => {
         const read = await ports.notion!(query);
-        return [read.text, ...read.sources.map(source => `- ${clip(source.title, 80)}: ${source.url}`)].join('\n');
+        return { text: [read.text, ...read.sources.map(source => `- ${clip(source.title, 80)}: ${source.url}`)].join('\n'),
+          sourceIds: read.sourceIds ?? read.sources.map(source => {
+            const id = source.url.match(/(?:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|[a-f0-9]{32})(?=[/?#]|$)/iu)?.[0];
+            return id ? `notion-page://${id.replaceAll('-', '').toLowerCase()}` : 'fca-unresolved://notion-page';
+          }) };
       });
     },
     'voyager.tasks': input => {

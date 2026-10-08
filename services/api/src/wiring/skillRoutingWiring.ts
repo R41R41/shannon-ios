@@ -9,7 +9,7 @@ import { conversationCapabilityPrompt } from '../mind/action/respond/conversatio
 import { notionTurnProjection } from '../integrations/notion/notionConversation.js';
 import type { NotionSource } from '../integrations/notion/notionSource.js';
 import type { VoyagerCatalog } from '../integrations/voyager/organize.js';
-import type { OwnerUpcoming } from '../mind/memory/ownerUpcoming.js';
+import { type OwnerUpcoming } from '../mind/memory/ownerUpcoming.js';
 import type { ShannonChatModel } from '../infra/models/chatModel.js';
 import { runPlaceDiscoverySkill } from '../integrations/places/placeDiscoverySkill.js';
 
@@ -79,18 +79,30 @@ export function configuredJevChooser(
  */
 export function readToolPorts(
   environment: Readonly<Record<string, string | undefined>>,
-  parts: { notion: NotionSource | null; voyagerCatalog: VoyagerCatalog; upcoming: Pick<OwnerUpcoming, 'promptFor'>; chatModel: ShannonChatModel },
+  parts: { notion: NotionSource | null; voyagerCatalog: VoyagerCatalog;
+    upcoming: Pick<OwnerUpcoming, 'promptFor'> & Partial<Pick<OwnerUpcoming, 'promptWithSources'>>; chatModel: ShannonChatModel; now?: () => string },
 ): ReadToolPorts | null {
   if (!skillRoutingSwitches(environment).readTools) return null;
   return {
     ...(parts.chatModel.searchWeb ? { web: parts.chatModel.searchWeb.bind(parts.chatModel) } : {}),
     notion: async query => {
-      const read = await notionTurnProjection(parts.notion, `Notionの「${query}」`);
-      return { text: read?.prompt ?? '', sources: read?.sources ?? [] };
+      const sourceIds = new Set<string>();
+      const read = await notionTurnProjection(parts.notion, `Notionの「${query}」`, Date.now,
+        ids => ids.forEach(id => sourceIds.add(`notion-page://${id.replaceAll('-', '').toLowerCase()}`)));
+      return { text: read?.prompt ?? '', sources: read?.sources ?? [], sourceIds: [...sourceIds] };
     },
-    voyagerTasks: async query => conversationCapabilityPrompt('', query ? `「${query}」のタスク` : 'タスク', { voyagerCatalog: parts.voyagerCatalog },
-      { aetherNotes: false, voyagerTasks: true, upcoming: false, ownOutreach: false }),
-    upcoming: (scopeKey, range) => parts.upcoming.promptFor(scopeKey, range === 'week' ? '今週の予定' : 'これからの予定', 'owner'),
+    voyagerTasks: async query => {
+      const sourceIds: string[] = [];
+      const text = await conversationCapabilityPrompt('', query ? `「${query}」のタスク` : 'タスク', { voyagerCatalog: parts.voyagerCatalog },
+        { aetherNotes: false, voyagerTasks: true, upcoming: false, ownOutreach: false }, ids => sourceIds.push(...ids));
+      return { text, sourceIds };
+    },
+    upcoming: (scopeKey, range) => {
+      const message = range === 'week' ? '今週の予定' : 'これからの予定';
+      const projection = parts.upcoming.promptWithSources?.(scopeKey, message, 'owner');
+      return projection ? { text: projection.prompt, sourceIds: projection.sourceIds.map(id => `calendar-item://${encodeURIComponent(id)}`) }
+        : parts.upcoming.promptFor(scopeKey, message, 'owner');
+    },
     places: async (scopeKey, query, spoken) => (await runPlaceDiscoverySkill(parts.chatModel, { scopeKey, message: query, context: spoken ? { spoken: true } : {} })).prompt,
   };
 }
