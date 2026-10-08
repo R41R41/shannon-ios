@@ -147,6 +147,19 @@ describe('native Haiku conversation migration', () => {
     expect(estimatedOpenAICostUsd(settings.model, usage)).toBe(1.00256);
   });
 
+  it('adds acknowledged search fees to an incomplete native token receipt upper bound without adopting or retrying it', async () => {
+    const value = haikuMessage(anthropicFixture('structured-answer'), 0, 0);
+    value.usage.input_tokens = null;
+    value.usage.output_tokens = 16_000;
+    value.usage.server_tool_use = { web_search_requests: 3 };
+    const h = model([value]);
+    await expect(h.chat.generate({ ...base, useWebSearch: true })).rejects.toThrow('HAIKU_CACHE_UNCONFIRMED');
+    expect(h.bodies).toHaveLength(1);
+    expect(h.usage).toHaveLength(1);
+    expect(h.usage[0]).toMatchObject({ inputTokens: 0, cachedInputTokens: 0, outputTokens: 16_000 });
+    expect(h.usage[0]!.estimatedCostUsd).toBeCloseTo(1.07, 10);
+  });
+
   it('records the unknown upper bound when the provider omits its entire usage receipt', async () => {
     const value = { ...haikuMessage(anthropicFixture('structured-answer')), usage: undefined } as unknown as AnthropicMessage;
     const h = model([value]);

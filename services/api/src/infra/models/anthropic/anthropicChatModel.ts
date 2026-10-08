@@ -276,7 +276,8 @@ export class AnthropicChatModel implements ShannonChatModel {
     this.options.usageStore?.recordLlmUsage({
       scopeKey, lane: 'chat', model: this.model, inputTokens: input, cachedInputTokens: counts.cacheRead, outputTokens: counts.output,
       totalTokens: input + counts.output, estimatedCostUsd: Math.max(estimatedAnthropicCostUsd(this.model, counts),
-        isHaikuModel(this.model) && !nativeUsageComplete(usage) ? upperPrice.cacheWrite1h + maximumOutputTokens * upperPrice.output / 1_000_000 : 0),
+        isHaikuModel(this.model) && !nativeUsageComplete(usage)
+          ? upperPrice.cacheWrite1h + maximumOutputTokens * upperPrice.output / 1_000_000 + counts.searches * upperPrice.searchUsd : 0),
       occurredAt: this.options.now?.() ?? new Date().toISOString(),
     });
   }
