@@ -1,3 +1,6 @@
+import { observedTaskRuntime } from '../src/infra/observer/observerTaskRuntime.js';
+import type { ObserverDraft } from '../src/contracts/observerContract.js';
+import { installObserverSink } from '../src/infra/observer/observerContext.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
@@ -19,7 +22,7 @@ afterEach(async () => { for (const cleanup of cleanups.splice(0)) await cleanup(
 async function fixture(options: { off?: boolean; capability?: boolean; select?: (input: FcaTouchInput) => Promise<string | null> } = {}) {
   let time = Date.parse('2026-10-09T00:00:00.000Z'), visible = true;
   const now = () => new Date(time).toISOString(), h = actionHarness(now); migrateAgentTasks(h.db);
-  const runtime = new SQLiteTaskRuntimeStore(h.db, { authority: new SQLiteFcaTaskAuthority(h.db), now, leaseValid: () => true, conversationLeaseValid: () => true });
+  const runtime = observedTaskRuntime(new SQLiteTaskRuntimeStore(h.db, { authority: new SQLiteFcaTaskAuthority(h.db), now, leaseValid: () => true, conversationLeaseValid: () => true }), () => true);
   const root = runtime.ensureRoot('owner'), state = new InMemoryCompanionStateStore(now), speaker = new FakeSpeaker();
   const reactionStore = new SQLiteBodyReactionStore(':memory:'), bodyStore = new SQLiteBodyStore(':memory:');
   const experiences = new Map<string, unknown>(), calls: FcaTouchInput[] = [];
@@ -44,6 +47,40 @@ async function fixture(options: { off?: boolean; capability?: boolean; select?: 
 }
 
 describe('body contact through the common FCA', () => {
+  it('observes a pending touch choice and its return without claiming device execution', async () => {
+    let release!: () => void, entered!: () => void;
+    const waiting = new Promise<void>(resolve => { release = resolve; }), ready = new Promise<void>(resolve => { entered = resolve; });
+    const f = await fixture({ select: async () => { entered(); await waiting; return 'wave'; } }), events: ObserverDraft[] = [];
+    const restore = installObserverSink(event => events.push(event));
+    try {
+      await f.event(); await ready;
+      const handoffs = () => events.filter(event => event.kind === 'handoff' && (event.fromNode === 'reflexJev' || event.toNode === 'reflexJev'));
+      expect(handoffs().map(event => [event.fromNode, event.toNode])).toEqual([['reflex', 'reflexJev']]);
+      release();
+      expect((await f.claim()).body).toMatchObject({ directive: { gesture: 'wave' } });
+      expect(handoffs().map(event => [event.fromNode, event.toNode])).toEqual([['reflex', 'reflexJev'], ['reflexJev', 'reflex']]);
+      expect(handoffs().every(event => event.taskId === f.root.id && event.sourceSpanId)).toBe(true);
+      expect(handoffs()[1]!.output).toEqual({ phase: 'touch_selection_result', selected: true });
+      expect(events.some(event => event.node === 'bodyControl')).toBe(false);
+      expect(f.calls).toHaveLength(1);
+    } finally { release(); restore(); }
+  });
+
+  it('preserves shared-audience touch processing without owner observer events', async () => {
+    const f = await fixture(), events: ObserverDraft[] = [];
+    const restore = installObserverSink(event => events.push(event));
+    try {
+      expect((await f.send('/v1/body/events', { events: [{ id: 'touch-others', type: 'pet', durationMs: 1500, audience: 'others', occurredAt: '2026-10-09T00:00:00.000Z' }] })).status).toBe(200);
+      const answer = await f.claim('touch-others');
+      expect(f.calls).toHaveLength(1); expect(f.calls[0]!.audience).toBe('others');
+      const directive = (answer.body as { directive: { gesture: string; operationId: string } }).directive;
+      expect(directive.gesture).toBe('wave');
+      expect((await f.send('/v1/body/touch-reflex/report', { operationId: directive.operationId, outcome: 'applied' })).status).toBe(200);
+      await f.touch().tick();
+      expect(events).toEqual([]);
+    } finally { restore(); }
+  });
+
   it('keeps the immediate ingress and existing feeling/writer independent of a pending selector, and delivers one acknowledged gesture', async () => {
     let release!: () => void; const waiting = new Promise<void>(resolve => { release = resolve; });
     const f = await fixture({ select: async () => { await waiting; return 'wave'; } });

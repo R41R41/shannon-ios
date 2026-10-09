@@ -1,3 +1,5 @@
+import type { ObserverDraft } from '../src/contracts/observerContract.js';
+import { installObserverSink, withObserverRunSync } from '../src/infra/observer/observerContext.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { OWNER_AUDIENCE } from '@shannon/cognition';
 import { memoryWorld } from './support/memoryWorld.js';
@@ -37,6 +39,19 @@ function fixture(decide: (input: FcaModelInput) => FcaModelOutput | Promise<FcaM
 }
 const history = [{ role: 'assistant', content: 'public fixture round' }];
 describe('FCA shared context through actual execution and existing state/memory writers', () => {
+  it('attributes replayed memory proposals to their original tasks, not the task triggering the outbox flush', async () => {
+    const f = fixture(() => ({ decision: { kind: 'complete', summary: 'PRIVATE_RESULT' }, history }));
+    const first = f.create('PRIVATE_FIRST'), second = f.create('PRIVATE_SECOND');
+    await f.tick();
+    f.actions.db.prepare('UPDATE fca_action_evidence SET outcome_delivered=0').run();
+    const events: ObserverDraft[] = [], restore = installObserverSink(event => events.push(event));
+    try { withObserverRunSync({ scopeKey: 'owner', surface: 'fixture', taskId: 'trigger-task', stepId: 'trigger-step', actionId: 'trigger-action' }, () => f.shared.evidence!.flush()); }
+    finally { restore(); }
+    const proposals = events.filter(event => event.node === 'memory' && event.kind === 'span.started');
+    expect(new Set(proposals.map(event => event.taskId))).toEqual(new Set([first.id, second.id]));
+    expect(proposals.every(event => event.stepId && event.stepId !== 'trigger-step' && event.actionId === undefined)).toBe(true);
+    expect(JSON.stringify(events)).not.toContain('PRIVATE_');
+  });
   it('records a pre-action expectation, compares facts, applies one shared feeling, and recalls committed experience in a new task', async () => {
     const seen: FcaModelInput[] = [];
     const f = fixture(input => {

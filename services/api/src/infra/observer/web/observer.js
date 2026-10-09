@@ -1,3 +1,5 @@
+import { NODE_SPECS, LANES, LINKS, ROUTES, circuitFor, routeIncludes, mapLayout } from './observerMap.js';
+import { observedTasks, taskRunView, timingSummary, streamTimingSummary, timingGroups, timelineRows, createElapsedClock, spanKey } from './observerAnalysis.js';
 // This module has no network or DOM effects when imported by deterministic tests.
 export const MAX_EVENTS = 1600;
 const KINDS = new Set(['run.started', 'run.completed', 'span.started', 'span.completed', 'span.failed', 'span.cancelled', 'handoff']);
@@ -66,6 +68,7 @@ export function reduceObserverEnvelope(previous, envelope, followLatest = false)
       run.spans.set(event.spanId, span);
     }
     span.lastSequence = event.sequence;
+    for (const key of ['taskId', 'parentTaskId', 'stepId', 'actionId']) if (typeof event[key] === 'string' && event[key]) span[key] ??= event[key];
     if (event.kind === 'span.started' || event.kind === 'run.started') { span.startedAt = event.at; if (!span.endedAt) span.state = 'running'; }
     if (event.kind === 'run.completed') { span.endedAt = event.at; span.state = 'completed'; }
     if (event.kind.startsWith('run.') || event.node === 'turn' && event.parentSpanId === null) span.isRunRoot = true;
@@ -107,13 +110,19 @@ export function spanState(span, run, transport = 'live') {
   if (span.endedAt) return span.state;
   if (transport !== 'live' || !span.startedAt) return 'unknown';
   const visited = new Set([span.id]);
-  let parent = run?.spans.get(span.parentSpanId);
+  const parentOf = child => [...(run?.spans.values() ?? [])].find(item => item.id === child.parentSpanId && item.runId === child.runId);
+  let parent = parentOf(span);
   while (parent && !visited.has(parent.id)) {
     if (parent.endedAt) return 'unknown';
-    visited.add(parent.id); parent = run.spans.get(parent.parentSpanId);
+    visited.add(parent.id); parent = parentOf(parent);
   }
   // A handoff does not establish that its source is blocked or waiting.
   return 'running';
+}
+
+/** Resolve each span against its real run even when a selected task projects several runs. */
+export function effectiveObservedSpans(state, spans) {
+  return [...spans].map(span => ({ ...span, state: spanState(span, state.runs.get(span.runId), state.transport) }));
 }
 
 export function nodeState(run, node, transport = 'live') {
@@ -325,51 +334,6 @@ export function createObserverClient(options) {
   return { connect, pair, disconnect, pause, resume };
 }
 
-const NODE_SPECS = [
-  ['pcm', 0, 0, 'CLIENT / CONVERTER', 'PCM CONVERTER', 'マイク → 音声チャンク'],
-  ['stt', 1, 0, 'TRANSCRIPTION / MODEL', 'TRANSCRIPTION', '音声 → 文字起こし'],
-  ['join', 2, 0, 'CLIENT / CONVERTER', 'UTTERANCE', '発話結合・語彙正規化'],
-  ['perception', 3, 0, 'API / CONVERTER', 'PERCEPTION', '知覚 → MindEvent'],
-  ['turn', 0, 1, 'API / RUN', 'TURN', '会話の実行単位'],
-  ['jevv', 1, 1, 'JEV / VOICE ROUTER', 'JEV · VOICE', '返答・能力・読み方'],
-  ['jevt', 2, 1, 'JEV / TOOL CHOOSER', 'JEV · TOOLS', '道具・難易度の選択'],
-  ['recall', 3, 1, 'API / RETRIEVAL', 'RECALL', '関連する記憶を想起'],
-  ['workspace', 0, 2, 'MIND WORKER / CONTROL', 'WORKSPACE', '共有の場・実行枠'],
-  ['context', 1, 2, 'API / CONVERTER', 'CONTEXT', '知覚・想起・選択を統合'],
-  ['native', 2, 2, 'API / CONVERTER', 'MODEL I/O', 'Messages・道具定義へ変換'],
-  ['llm', 3, 2, 'RESPONSE / LLM', 'LLM', '返答・tool_useを生成'],
-  ['store', 0, 3, 'API / STORE', 'CONVERSATION', '会話の保存'],
-  ['gate', 1, 3, 'API / POLICY', 'TOOL GATE', '許可・入力・実行条件'],
-  ['tools', 2, 3, 'EXECUTOR / EXPANDABLE', 'TOOL ▾', '道具一覧・実行結果を開く'],
-  ['decode', 3, 3, 'API / CONVERTER', 'REPLY DECODER', '構造化回答・検証'],
-  ['autonomy', 0, 4, 'WORKER / EXECUTOR', 'OWN-TIME', '自律活動の実行'],
-  ['memory', 1, 4, 'WORKER / STORE', 'MEMORY WRITER', '返答後の記憶更新'],
-  ['plan', 2, 4, 'API / CONVERTER', 'VOICE PLAN', '感情・読み方へ投影'],
-  ['sentences', 3, 4, 'API / CONVERTER', 'SENTENCE SPLIT', '生成途中の文を取り出す'],
-  ['sleep', 0, 5, 'WORKER / CONSOLIDATION', 'SLEEP / LEARN', '記憶・価値・スキルの整理'],
-  ['embedding', 1, 5, 'WORKER / MODEL', 'EMBEDDING', '想起用のベクトル更新'],
-  ['tts', 2, 5, 'VOICE / TTS MODEL', 'TTS', '文ごとの音声合成'],
-  ['play', 3, 5, 'CLIENT / CONVERTER', 'PCM PLAYBACK', '再生順・端末出力'],
-  ['minecraft', 0, 6, 'BODY / WORLD', 'MINECRAFT', '身体から届く出来事'],
-  ['agentHost', 1, 6, 'HOST / EXECUTOR', 'AGENT HOST', '依頼された作業の実行'],
-];
-// Role colour stays stable across running/completed/failed states.
-// Wires and live receipts use the sending processor's role, never a fabricated event type.
-const CIRCUITS = {
-  input: ['pcm', 'stt', 'join', 'perception'],
-  judgment: ['turn', 'jevv', 'jevt', 'context', 'native', 'llm'],
-  action: ['workspace', 'gate', 'tools', 'autonomy', 'minecraft', 'agentHost'],
-  output: ['decode', 'plan', 'sentences', 'tts', 'play'],
-  memory: ['recall', 'store', 'memory', 'sleep', 'embedding'],
-};
-const circuitFor = node => Object.entries(CIRCUITS).find(([, nodes]) => nodes.includes(node))?.[0] ?? 'neutral';
-const LINKS = [
-  ['pcm','stt'], ['stt','join'], ['join','perception'], ['perception','jevv'], ['perception','jevt'], ['perception','recall'],
-  ['turn','context'], ['jevv','context'], ['jevt','context'], ['recall','context'], ['workspace','context'], ['context','native'],
-  ['native','llm'], ['llm','gate'], ['gate','tools'], ['tools','native'], ['llm','decode'], ['decode','sentences'], ['sentences','plan'],
-  ['plan','tts'], ['tts','play'], ['decode','store'], ['store','memory'], ['memory','embedding',true], ['embedding','recall',true],
-  ['autonomy','workspace',true], ['sleep','memory',true], ['minecraft','workspace',true], ['agentHost','workspace',true],
-];
 const STATE_LABELS = { running: '● ACTIVE', completed: '✓ DONE', failed: '! FAILED', cancelled: '× CANCELLED', unknown: '? UNKNOWN', unobserved: '— 未観測' };
 const textValue = value => value === undefined ? null : typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 const shortValue = value => (textValue(value) ?? '').replace(/\s+/g, ' ').slice(0, 140);
@@ -384,10 +348,13 @@ function mountObserver() {
   const session = createObserverSession(() => window.sessionStorage, `shannon.observer.connection.v1:${observerBasePath(window.location.pathname)}`);
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let state = createObserverState(), catalog = null, selectedNode = 'llm', selectedSpan = null, selectedTool = null;
+  let selectedTask = null, selectedStep = null, selectedRoute = 'all', analysisSignature = '', taskSignature = '';
+  const elapsedClock = createElapsedClock(); let clockTimer = null;
   let priorCatalog = null, runSignature = '', spanSignature = '', toolSignature = '', graphWidth = 0;
   const nodes = new Map(), paths = new Map(), boxes = new Map(), animations = new Set(), recent = new Map();
   let viewRuns = null, viewId = null, view = undefined;
   const currentRun = () => {
+    if (selectedTask) return taskRunView(state, selectedTask, selectedStep);
     if (viewRuns !== state.runs || viewId !== state.selectedRunId) {
       viewRuns = state.runs; viewId = state.selectedRunId; view = linkedRunView(state, state.selectedRunId);
     }
@@ -400,7 +367,9 @@ function mountObserver() {
   };
   const clearPrivateView = () => {
     state = createObserverState(); catalog = null; priorCatalog = null; selectedSpan = null; selectedTool = null;
-    runSignature = ''; spanSignature = ''; toolSignature = ''; stopPackets();
+    runSignature = ''; spanSignature = ''; toolSignature = ''; taskSignature = ''; analysisSignature = ''; selectedTask = null; selectedStep = null;
+    elapsedClock.clear(); if (clockTimer !== null) clearTimeout(clockTimer); clockTimer = null;
+    viewRuns = null; view = undefined; stopPackets(); graphWidth=0; layout();
     $('pair-code').value = ''; $('pair-token').value = '';
     render();
   };
@@ -409,7 +378,7 @@ function mountObserver() {
     const button = element('button', 'node'); button.type = 'button'; button.dataset.node = id; button.dataset.circuit = circuitFor(id);
     button.setAttribute('aria-pressed', String(id === selectedNode));
     const halo = element('span', 'receipt-halo'); halo.setAttribute('aria-hidden', 'true'); button.append(halo);
-    button.append(element('span', 'node-type', type), element('strong', '', label), element('span', 'node-role', role), element('span', 'node-value', 'イベント待ち'), element('span', 'node-state', STATE_LABELS.unobserved));
+    button.append(element('span', 'node-type', type), element('strong', '', label), element('span', 'node-role', role), element('span', 'node-value', 'イベント待ち'), element('span', 'node-time', '— 未計測'), element('span', 'node-state', STATE_LABELS.unobserved));
     button.addEventListener('click', () => selectNode(id)); $('nodes').append(button); nodes.set(id, button);
   }
 
@@ -435,17 +404,106 @@ function mountObserver() {
     $('run-summary').textContent = run ? `${run.spans.size} spans${run.linkedCount ? `（${run.linkedCount} 参照）` : ''} · ${state.transport === 'live' && !run.endedAt ? `${active} active` : active ? `${active} unknown` : 'closed'} · ${parallel} open runs${run.incomplete ? ' · 開始未観測' : ''}` : '処理の箱を選ぶと、入力と出力を確認できます。';
   }
 
+  function timingText(span) {
+    if (typeof span?.elapsedMs === 'number' && span.endedAt) return `${span.elapsedMs.toFixed(1)} ms · 実測`;
+    const elapsed = span && spanState(span,state.runs.get(span.runId),state.transport)==='running' ? elapsedClock.elapsed(span, performance.now()) : null;
+    return elapsed === null ? '— 未計測' : `≥ ${Math.floor(elapsed)} ms · 受信後`;
+  }
+
+  function renderTasks() {
+    const tasks=observedTasks(state);
+    if (selectedTask && !tasks.some(task=>task.id===selectedTask)) { selectedTask=null; selectedStep=null; }
+    const selected=tasks.find(task=>task.id===selectedTask);
+    const signature=JSON.stringify([tasks.map(task=>[task.id,task.parentId,task.lastSequence]),selectedTask,selectedStep,state.transport]);
+    $('task-count').textContent=`${tasks.length} tasks / ${tasks.filter(task=>task.spans.some(span=>spanState(span,state.runs.get(span.runId),state.transport)==='running')).length} tasksに処理中span（保持範囲）`;
+    $('task-empty').hidden=tasks.length>0; $('clear-task').disabled=!selectedTask;
+    if (signature===taskSignature) return;
+    const focusedTask=$('task-tree').contains(document.activeElement)?document.activeElement.dataset.task:null;
+    $('task-tree').replaceChildren();
+    for (const task of tasks) {
+      const item=element('li','task-item'), button=element('button','task-button'); button.type='button';button.dataset.task=task.id;
+      item.style.setProperty('--depth',Math.min(task.depth,8)); button.setAttribute('aria-pressed',String(task.id===selectedTask));
+      const active=task.spans.filter(span=>spanState(span,state.runs.get(span.runId),state.transport)==='running').length;
+      const phase = task.phase ? `記録phase: ${task.phase}${task.phaseRevision!==null?' / rev '+task.phaseRevision:''} · #${task.phaseSequence}` : 'task phase 未観測';
+      button.append(element('span','task-id',`${task.depth?'↳ ':''}${task.id}`),element('span','task-phase',phase),element('span','hint',`${active?'● '+active+' active spans':'保持された観測'} · ${task.stepIds.size} steps · ${task.runIds.size} runs${task.orphan?' · 親は保持範囲外':''}${task.cycle||task.parentConflict?' · 親相関不明':''}`));
+      button.addEventListener('click',()=>{selectedTask=task.id;selectedStep=null;selectedSpan=null;$('follow-runs').checked=false;spanSignature='';analysisSignature='';stopPackets();render();});
+      item.append(button); $('task-tree').append(item);
+    }
+    if(focusedTask) [...$('task-tree').querySelectorAll('button')].find(button=>button.dataset.task===focusedTask)?.focus({preventScroll:true});
+    const picker=$('step-picker'); picker.replaceChildren(new Option('task内の全step','')); picker.disabled=!selected;
+    for (const id of selected?.stepIds??[]) picker.append(new Option(id,id)); picker.value=selectedStep??'';
+    taskSignature=signature;
+  }
+
+  function analysisSpans() {
+    const spans=$('metric-scope').value==='window' ? [...state.runs.values()].flatMap(run=>[...run.spans.values()]) : [...(currentRun()?.spans.values()??[])].filter(span=>!span.linked);
+    return effectiveObservedSpans(state,spans);
+  }
+
+  function renderAnalysis() {
+    const spans=analysisSpans(), selected=[...(currentRun()?.spans.values()??[])];
+    const signature=JSON.stringify([state.cursor,state.transport,state.selectedRunId,selectedTask,selectedStep,$('metric-scope').value,spans.length]);
+    if (signature===analysisSignature) return;
+    const summary=timingSummary(spans), times=spans.flatMap(span=>[span.startedAt,span.endedAt]).filter(Boolean).sort();
+    const scope=$('metric-scope').value==='window'?'現在保持window':selectedTask?`選択task ${selectedTask}${selectedStep?' / step '+selectedStep:''}`:`選択run ${state.selectedRunId??'—'}（参照spanは集計除外）`;
+    $('metric-summary').textContent=`${scope} · ${times.length?timeValue(times[0])+'–'+timeValue(times.at(-1)):'時刻なし'} · 完了実測 n=${summary.n} / ${summary.total} spans · ${state.events.length}/${MAX_EVENTS} events保持`;
+    $('metric-rows').replaceChildren(); $('stream-metric-rows').replaceChildren();
+    const ms=value=>value===null?'—':`${value.toFixed(1)} ms`;
+    for (const group of timingGroups(spans)) {
+      const row=element('tr'), title=element('td'); title.append(element('strong','',nodeLabel(group.node)),element('span','metric-source',`${group.model??'モデル指定なし'} / ${group.origin}`)); row.append(title);
+      const cache=group.cache;
+      for (const value of [`${group.n} / ${group.total}`,ms(group.median),ms(group.p95),`${group.unmeasured} / ${group.failed} / ${group.running} / ${group.unknown}`,cache.providerN?`${cache.readN?cache.readTokens:'—'} / ${cache.writeN?cache.writeTokens:'—'} tokens (n=${cache.readN}/${cache.writeN}, requests=${cache.providerN})`:'—']) row.append(element('td','',value));
+      $('metric-rows').append(row);
+      if (group.node==='llm') {
+        const stream=streamTimingSummary(group.spans),line=element('tr');
+        line.append(element('td','',`${group.model??'モデル指定なし'} / ${group.origin}`),element('td','',String(stream.completedRequests)));
+        for(const part of [stream.firstVisible,stream.finalUsage]) for(const value of [String(part.n),ms(part.median),ms(part.p95)]) line.append(element('td','',value));
+        $('stream-metric-rows').append(line);
+      }
+    }
+    $('timeline').replaceChildren(); $('timeline-count').textContent=`${Math.min(120,selected.length)} / ${selected.length} spans · 最新120件まで`;
+    const rows=timelineRows(selected).slice(-120), scales=new Map();
+    for (const row of rows) { const origin=row.span.origin??'unknown'; scales.set(origin,Math.max(scales.get(origin)??1,(row.offsetMs??0)+(row.durationMs??0))); }
+    for (const origin of ['server','client','unknown']) {
+      const subset=rows.filter(row=>(row.span.origin??'unknown')===origin); if (!subset.length) continue;
+      const heading=element('li','timeline-domain',`${origin.toUpperCase()} / この出典内の開始時刻を基準`); $('timeline').append(heading);
+      for (const row of subset) {
+        const span=row.span, item=element('li'), button=element('button','timeline-row'); button.type='button'; button.dataset.circuit=circuitFor(span.node);
+        const title=element('span','timeline-label',nodeLabel(span.node)); title.append(element('small','',`${span.stepId??span.id}${span.linked?' / 別run参照':''}`));
+        const track=element('span','timeline-track'), bar=element('i','timeline-bar'); bar.setAttribute('aria-hidden','true');
+        if (row.offsetMs!==null) { bar.style.left=`${row.offsetMs/scales.get(origin)*100}%`; bar.style.width=`${Math.max(.25,(row.durationMs??0)/scales.get(origin)*100)}%`; }
+        else bar.hidden=true;
+        bar.dataset.measured=String(row.provenance==='observed'); track.append(bar);
+        button.append(title,track,element('span','timeline-time',`${row.offsetMs===null?'開始未観測':'+'+row.offsetMs.toFixed(1)+' ms'} / ${row.durationMs===null?row.provenance==='open'?'処理中・未確定':'未計測':ms(row.durationMs)} · ${STATE_LABELS[spanState(span,currentRun(),state.transport)]}`));
+        button.addEventListener('click',()=>selectNode(span.node,spanKey(span))); item.append(button); $('timeline').append(item);
+      }
+    }
+    analysisSignature=signature;
+  }
+
+  function tick() {
+    clockTimer=null;
+    if (document.hidden || state.transport!=='live') return;
+    renderNodes();
+    const span=[...(currentRun()?.spans.values()??[])].find(item=>spanKey(item)===selectedSpan);
+    $('detail-elapsed').textContent=timingText(span);
+    if (effectiveObservedSpans(state,[...state.runs.values()].flatMap(run=>[...run.spans.values()])).some(span=>span.state==='running')) clockTimer=setTimeout(tick,250);
+  }
+
   function renderNodes() {
     const run = currentRun();
     for (const [id, button] of nodes) {
       const value = nodeState(run, id, state.transport);
       const coverage = catalog?.coverage?.find(item => item.node === id);
       button.dataset.state = value.state;
+      button.dataset.dimmed = String(!routeIncludes(selectedRoute, id));
+      button.querySelector('.node-time').textContent = timingText([...value.spans].reverse().find(span=>spanState(span,run,state.transport)==='running')??value.latest);
+      button.dataset.coverage = coverage?.availability ?? 'unobserved';
       const suffix = (value.activeCount > 1 ? ` / ×${value.activeCount}` : '') + (value.latest?.linked ? ' / ↗ 参照' : '');
       button.querySelector('.node-state').textContent = STATE_LABELS[value.state] + suffix;
       const output = value.latest?.output;
       button.querySelector('.node-value').textContent = output !== undefined ? shortValue(output) : value.activeCount ? '出力イベント待ち' : coverage?.availability === 'external' ? '外部 · 未計測' : coverage?.availability === 'unobserved' ? '未計測' : 'イベント待ち';
-      button.title = `${nodeLabel(id)} / ${STATE_LABELS[value.state]}${suffix}`;
+      button.title = `${nodeLabel(id)} / ${STATE_LABELS[value.state]}${suffix} / ${NODE_SPECS.find(spec=>spec[0]===id)?.[5]??''}`;
     }
   }
 
@@ -457,13 +515,13 @@ function mountObserver() {
     $('detail-title').textContent = nodeLabel(selectedNode);
     $('detail-location').textContent = definition?.location ?? '接続後、カタログの実装場所を表示します。';
     $('coverage-note').textContent = coverage ? `${({ instrumented: '計測対象', external: '外部の処理', unobserved: '未計測' })[coverage.availability] ?? '未計測'}${coverage.reason ? ` · ${coverage.reason}` : ''}` : '計測範囲は接続後に表示します。';
-    if (!value.spans.some(span => span.id === selectedSpan)) selectedSpan = value.spans.at(-1)?.id ?? null;
-    const span = value.spans.find(item => item.id === selectedSpan);
+    if (!value.spans.some(span => spanKey(span) === selectedSpan)) selectedSpan = value.spans.length ? spanKey(value.spans.at(-1)) : null;
+    const span = value.spans.find(item => spanKey(item) === selectedSpan);
     const signature = value.spans.map(item => `${item.id}:${item.state}`).join('|') + selectedSpan + state.transport;
     if (signature !== spanSignature) {
       const picker = $('span-picker'); picker.replaceChildren();
       if (!value.spans.length) picker.append(new Option('観測した処理なし', ''));
-      for (const item of [...value.spans].reverse()) picker.append(new Option(`${STATE_LABELS[spanState(item, run, state.transport)]}${item.linked ? ' ↗ 参照' : ''} / ${item.id}`, item.id));
+      for (const item of [...value.spans].reverse()) picker.append(new Option(`${STATE_LABELS[spanState(item, run, state.transport)]}${item.linked ? ' ↗ 参照' : ''} / ${item.id}`, spanKey(item)));
       picker.value = selectedSpan ?? ''; picker.disabled = !value.spans.length; spanSignature = signature;
     }
     $('detail-state').textContent = STATE_LABELS[spanState(span, run, state.transport)];
@@ -471,7 +529,15 @@ function mountObserver() {
     $('detail-run').textContent = span?.runId ?? run?.id ?? '—'; $('detail-span').textContent = span?.id ?? '—';
     $('detail-parent').textContent = span?.parentSpanId ?? '—'; $('detail-model').textContent = span?.model ?? 'モデル指定のイベントなし';
     $('detail-start').textContent = timeValue(span?.startedAt); $('detail-end').textContent = timeValue(span?.endedAt);
-    $('detail-elapsed').textContent = typeof span?.elapsedMs === 'number' ? `${span.elapsedMs.toFixed(1)} ms` : span?.endedAt && span?.startedAt ? `${Math.max(0, Date.parse(span.endedAt) - Date.parse(span.startedAt))} ms（時刻差）` : '完了時に表示';
+    $('detail-elapsed').textContent = timingText(span);
+    $('detail-task').textContent = span?.taskId ?? 'task相関なし（既存経路等）';
+    $('detail-step').textContent = span?.stepId ?? '—';
+    $('detail-action').textContent = span?.actionId ?? '—';
+    const cache = timingSummary(span ? [span] : []).cache;
+    const stream = streamTimingSummary(span ? [span] : []);
+    $('detail-first-visible').textContent = stream.firstVisible.n ? `${stream.firstVisible.median.toFixed(1)} ms · サーバーcallback` : '未計測';
+    $('detail-final-usage').textContent = stream.finalUsage.n ? `${stream.finalUsage.median.toFixed(1)} ms · 最終usage受信` : '未計測';
+    $('detail-cache').textContent = cache.providerN ? `read ${cache.readN ? cache.readTokens : '未計測'} / write ${cache.writeN ? cache.writeTokens : '未計測'} tokens` : 'provider usageなし';
     $('detail-input').textContent = textValue(span?.input) ?? '観測した入力はありません。';
     $('detail-output').textContent = textValue(span?.output) ?? (span && !span.endedAt ? spanState(span, run, state.transport) === 'running' ? '出力イベント待ち' : '状態不明 · 完了は未確認' : '観測した出力はありません。');
     $('tool-panel').hidden = !['tools', 'jevt', 'gate'].includes(selectedNode);
@@ -521,12 +587,12 @@ function mountObserver() {
       const item = element('li'), button = element('button'); button.type = 'button'; button.dataset.circuit = circuitFor(event.node);
       const time = element('time', '', timeValue(event.at)); time.dateTime = event.at;
       button.append(time, element('span', '', nodeLabel(event.node)), element('span', 'event-summary', `${event.kind} · ${event.kind === 'handoff' ? `${event.fromNode ?? '?'} → ${event.toNode ?? '?'}` : shortValue(event.output ?? event.input) || event.spanId}`));
-      button.addEventListener('click', () => selectNode(event.node, event.kind.startsWith('span.') ? event.spanId : null)); item.append(button); $('event-list').append(item);
+      button.addEventListener('click', () => selectNode(event.node, event.kind.startsWith('span.') ? `${event.runId}/${event.spanId}` : null)); item.append(button); $('event-list').append(item);
     }
   }
 
   function render() {
-    renderRuns(); renderNodes(); renderDetail(); renderEvents();
+    renderTasks(); renderRuns(); renderNodes(); renderDetail(); renderAnalysis(); renderEvents(); updateRoute();
     $('notice').textContent = state.notice; $('notice').hidden = !state.notice;
   }
 
@@ -547,20 +613,18 @@ function mountObserver() {
   function route(from, to, index) {
     const a = boxes.get(from), b = boxes.get(to);
     if (!a || !b || from === to) return null;
-    let points;
+    const outgoing = LINKS.filter(link => link[0] === from), incoming = LINKS.filter(link => link[1] === to);
+    const port = (links, other, axis) => Math.max(0, links.findIndex(link => link[axis] === other)) + 1;
+    const ax = a.x + a.w * port(outgoing,to,1) / (outgoing.length + 1), bx = b.x + b.w * port(incoming,from,0) / (incoming.length + 1);
     if (a.row === b.row && Math.abs(a.col - b.col) === 1) {
-      const right = b.col > a.col, p = [a.x + (right ? a.w : 0), a.y + 51], q = [b.x + (right ? 0 : b.w), b.y + 51];
-      points = [p, [(p[0]+q[0])/2,p[1]], [(p[0]+q[0])/2,q[1]], q];
-    } else if (a.col === b.col && Math.abs(a.row - b.row) === 1) {
-      const down = b.row > a.row, p = [a.x+a.w/2,a.y+(down ? 104 : 0)], q = [b.x+b.w/2,b.y+(down ? 0 : 104)];
-      points = [p,[p[0],(p[1]+q[1])/2],[q[0],(p[1]+q[1])/2],q];
-    } else {
-      const down = b.row > a.row, start = [a.x + a.w*.6, a.y + (down || a.row === b.row ? 104 : 0)], end = [b.x + b.w*.4, b.y + (down ? 0 : 104)];
-      const startY = start[1] + (down || a.row === b.row ? 12 : -12), endY = end[1] + (down ? -12 : 12);
-      const lane = a.col === b.col ? a.x - 9 : Math.min(a.x,b.x)+a.w+16+(index%3-1)*5;
-      points = [start,[start[0],startY],[lane,startY],[lane,endY],[end[0],endY],end];
+      const right = b.col > a.col, y = a.y + a.h / 2;
+      return rounded([[a.x+(right?a.w:0),y],[b.x+(right?0:b.w),y]]);
     }
-    return rounded(points);
+    const down = b.row >= a.row, p = [ax,a.y+(down?a.h:0)], q = [bx,b.y+(down&&a.row!==b.row?0:b.h)];
+    const py = p[1]+(down?12:-12), qy=q[1]+(down&&a.row!==b.row?-12:12);
+    // Long vertical runs use a column gutter; never cross an unrelated processor box.
+    const rail = a.x + a.w + 10 + index % 3 * 10;
+    return rounded([p,[ax,py],[rail,py],[rail,qy],[bx,qy],q]);
   }
 
   function addEdge(from, to, background = false) {
@@ -568,28 +632,33 @@ function mountObserver() {
     if (paths.has(key)) return paths.get(key);
     const path = route(from, to, paths.size);
     if (!path) return null;
-    const value = svgElement('path', { d: path, class: `edge${background ? ' background' : ''}`, 'data-circuit': circuitFor(from), 'marker-end': `url(#arrow-${circuitFor(from)})` });
-    $('edges').append(value); paths.set(key, value); return value;
+    const shield = svgElement('path', { d:path, class:'edge-shield' });
+    const value = svgElement('path', { d:path, class:`edge${background?' background':''}`, 'data-from':from, 'data-to':to, 'data-circuit':circuitFor(from), 'marker-end':`url(#arrow-${circuitFor(from)})` });
+    value.dataset.dimmed = String(!routeIncludes(selectedRoute,from,to));
+    $('edges').append(shield,value); paths.set(key,value); return value;
+  }
+
+  function updateRoute() {
+    for (const [key, path] of paths) { const [from,to]=key.split('>'); path.dataset.dimmed=String(!routeIncludes(selectedRoute,from,to)); }
+    for (const button of $('route-picker').children) button.setAttribute('aria-pressed',String(button.dataset.route===selectedRoute));
+    $('route-note').textContent = selectedRoute==='all' ? '配線は実装上の経路。光と点は新しく届いた実handoffだけです。' : `${ROUTES[selectedRoute].label}の代表経路を強調中。稼働・移行済みを意味しません。薄い箱も選択できます。`;
   }
 
   function layout() {
-    const width = $('canvas').clientWidth;
+    const width = $('graph-scroll').clientWidth;
     if (!width || width === graphWidth) return;
     graphWidth = width; stopPackets(); boxes.clear(); paths.clear(); $('edges').replaceChildren(); $('zones').replaceChildren();
-    const compact = width < 640, columns = compact ? 2 : 4, gap = compact ? 24 : 32, margin = compact ? 14 : 20;
-    const nodeWidth = (width - 2*margin - gap*(columns-1))/columns, pitch = 148, rows = compact ? Math.ceil(nodes.size/2) : 7;
-    NODE_SPECS.forEach(([id, column, row], index) => {
-      const col = compact ? index%2 : column, r = compact ? Math.floor(index/2) : row;
-      const box = { x: margin + col*(nodeWidth+gap), y: 38+r*pitch, w: nodeWidth, row: r, col };
-      boxes.set(id,box); const button = nodes.get(id); button.style.left = `${box.x}px`; button.style.top = `${box.y}px`; button.style.width = `${nodeWidth}px`;
-    });
-    const height = rows*pitch + 44; $('canvas').style.height = `${height}px`; $('wires').setAttribute('viewBox',`0 0 ${width} ${height}`);
-    const zones = compact ? [[0,rows,'SIGNAL PROCESSORS']] : [[0,1,'01 / INPUT'],[1,3,'02 / JEV · CONTEXT · LLM · TOOL'],[4,2,'03 / VOICE OUTPUT · BACKGROUND'],[6,1,'04 / BODIES · HOSTS']];
-    for (const [row,count,label] of zones) {
-      $('zones').append(svgElement('rect',{x:6,y:row*pitch+8,width:width-12,height:count*pitch-4,rx:5,class:'zone'}));
-      const text = svgElement('text',{x:16,y:row*pitch+24,class:'zone-label'}); text.textContent = label; $('zones').append(text);
+    const layout = mapLayout(width);
+    for (const [id,box] of layout.boxes) {
+      boxes.set(id,box); const button=nodes.get(id); button.style.left=`${box.x}px`; button.style.top=`${box.y}px`; button.style.width=`${box.w}px`;
+    }
+    $('canvas').style.width=`${layout.width}px`; $('canvas').style.height=`${layout.height}px`; $('wires').setAttribute('viewBox',`0 0 ${layout.width} ${layout.height}`);
+    for (const [row,label] of LANES.entries()) {
+      $('zones').append(svgElement('rect',{x:8,y:row*layout.pitch+8,width:layout.width-16,height:layout.pitch-8,rx:5,class:'zone'}));
+      const text=svgElement('text',{x:24,y:row*layout.pitch+28,class:'zone-label'}); text.textContent=label; $('zones').append(text);
     }
     for (const [from,to,background] of LINKS) addEdge(from,to,background);
+    updateRoute();
   }
 
   function cancelTrail(key) {
@@ -608,8 +677,10 @@ function mountObserver() {
     animation.addEventListener('cancel', finish, { once: true });
   }
 
+  function eventInView(event) { return selectedTask ? event.taskId === selectedTask && (!selectedStep || event.stepId === selectedStep) : event.runId === state.selectedRunId; }
+
   function receiptGlow(event) {
-    if (event.runId !== state.selectedRunId || document.hidden) return;
+    if (!eventInView(event) || document.hidden || !routeIncludes(selectedRoute,event.node)) return;
     const touched = event.kind === 'handoff' ? [event.fromNode, event.toNode] : [event.node];
     for (const node of new Set(touched)) {
       const halo = nodes.get(node)?.querySelector('.receipt-halo');
@@ -623,7 +694,7 @@ function mountObserver() {
   }
 
   function handoffPacket(event) {
-    if (event.runId !== state.selectedRunId || reduceMotion.matches || document.hidden || animations.size >= 24) return;
+    if (!eventInView(event) || !routeIncludes(selectedRoute,event.fromNode,event.toNode) || reduceMotion.matches || document.hidden || animations.size >= 24) return;
     const path = addEdge(event.fromNode,event.toNode);
     if (!path || typeof path.getTotalLength !== 'function') return;
     const packet = svgElement('circle',{r:4,class:'packet','data-circuit':circuitFor(event.fromNode)}); $('packets').append(packet);
@@ -646,10 +717,13 @@ function mountObserver() {
     },
     onEnvelope: (envelope, delivery) => {
       const previous = state, seen = new Set(previous.events.map(event => event.sequence));
-      state = reduceObserverEnvelope(previous,envelope,$('follow-runs').checked);
+      if(previous.instanceId!==envelope.instanceId||envelope.gap||(envelope.dropped??0)>previous.dropped||envelope.availability==='held') elapsedClock.clear();
+      state = reduceObserverEnvelope(previous,envelope,$('follow-runs').checked && !selectedTask);
+      elapsedClock.observe(effectiveObservedSpans(state,[...state.runs.values()].flatMap(run=>[...run.spans.values()])), performance.now());
+      if (!clockTimer && state.transport==='live') clockTimer=setTimeout(tick,250);
       if (previous.transport === 'lost' && state.transport === 'live' && !envelope.gap && previous.instanceId === state.instanceId) state.notice = '接続が回復しました。受信したイベントから表示を更新しました。';
-      if (envelope.availability === 'held') { selectedSpan = null; selectedTool = null; catalog = null; priorCatalog = null; toolSignature = ''; stopPackets(); }
-      if (state.selectedRunId !== previous.selectedRunId || state.instanceId !== previous.instanceId || envelope.gap || state.dropped > previous.dropped) { selectedSpan = null; spanSignature = ''; stopPackets(); }
+      if (envelope.availability === 'held') { selectedTask=null; selectedStep=null; taskSignature=''; analysisSignature=''; elapsedClock.clear(); selectedSpan = null; selectedTool = null; catalog = null; priorCatalog = null; toolSignature = ''; stopPackets(); graphWidth=0; layout(); }
+      if (state.selectedRunId !== previous.selectedRunId || state.instanceId !== previous.instanceId || envelope.gap || state.dropped > previous.dropped) { selectedSpan = null; spanSignature = ''; stopPackets(); graphWidth=0; layout(); }
       const changed = envelope.events.some(event => !seen.has(event.sequence)) || previous.transport !== state.transport || previous.availability !== state.availability || previous.notice !== state.notice || state.instanceId !== previous.instanceId || envelope.gap;
       if (changed) render();
       // Initial history, a gap and a server restart remain still. Only a new live receipt moves.
@@ -665,24 +739,28 @@ function mountObserver() {
       $('disconnect').hidden=connection==='disconnected';
       for (const button of document.querySelectorAll('#connect-panel button')) button.disabled=connection==='connecting';
       if (connection==='paused') { const cursor=state.cursor,instanceId=state.instanceId; clearPrivateView(); state={...state,cursor,instanceId,transport:'paused'}; }
-      if (connection==='lost') { stopPackets(); state.notice='接続が途切れています。処理中だった箇所の結果は未確認です。自動で接続を再確認します。'; }
+      if (connection==='lost') { const cursor=state.cursor,instanceId=state.instanceId; clearPrivateView(); state={...state,cursor,instanceId,transport:'lost'}; state.notice='接続が途切れています。処理中だった箇所の結果は未確認です。自動で接続を再確認します。'; }
       if (connection==='live' && previous==='lost') state.notice='接続が回復しました。受信したイベントから表示を更新しました。';
       if (previous!==connection) { runSignature=''; render(); }
     },
   });
 
+  for (const [id,route] of Object.entries(ROUTES)) { const button=element('button','',route.label);button.type='button';button.dataset.route=id;button.addEventListener('click',()=>{selectedRoute=id;stopPackets();renderNodes();updateRoute();});$('route-picker').append(button); }
+  $('clear-task').addEventListener('click',()=>{selectedTask=null;selectedStep=null;selectedSpan=null;spanSignature='';stopPackets();render();});
+  $('step-picker').addEventListener('change',()=>{selectedStep=$('step-picker').value||null;selectedSpan=null;spanSignature='';stopPackets();render();});
+  $('metric-scope').addEventListener('change',renderAnalysis);
   $('pair-form').addEventListener('submit',event=>{event.preventDefault(); const code=$('pair-code').value; $('pair-code').value=''; void client.pair(code);});
   $('token-form').addEventListener('submit',event=>{event.preventDefault(); const token=$('pair-token').value; $('pair-token').value=''; client.connect(token);});
   $('disconnect').addEventListener('click',()=>client.disconnect());
-  $('run-picker').addEventListener('change',()=>{state={...state,selectedRunId:$('run-picker').value}; $('follow-runs').checked=false; selectedSpan=null; spanSignature=''; toolSignature=''; stopPackets(); render();});
-  $('follow-runs').addEventListener('change',()=>{if($('follow-runs').checked){const latest=[...state.runs.values()].sort((a,b)=>b.firstSequence-a.firstSequence)[0]; state={...state,selectedRunId:latest?.id??null};selectedSpan=null;spanSignature='';stopPackets();render();}});
+  $('run-picker').addEventListener('change',()=>{selectedTask=null;selectedStep=null;state={...state,selectedRunId:$('run-picker').value}; $('follow-runs').checked=false; selectedSpan=null; spanSignature=''; toolSignature=''; stopPackets(); render();});
+  $('follow-runs').addEventListener('change',()=>{if($('follow-runs').checked){selectedTask=null;selectedStep=null;const latest=[...state.runs.values()].sort((a,b)=>b.firstSequence-a.firstSequence)[0]; state={...state,selectedRunId:latest?.id??null};selectedSpan=null;spanSignature='';stopPackets();render();}});
   $('span-picker').addEventListener('change',()=>{selectedSpan=$('span-picker').value;renderDetail();});
   $('tool-filter').addEventListener('change',()=>{toolSignature='';renderTools(currentRun());});
   document.addEventListener('visibilitychange',()=>document.hidden?client.pause():client.resume());
   window.addEventListener('pagehide',()=>client.pause());
   window.addEventListener('pageshow',event=>{if(event.persisted&&!document.hidden)client.resume();});
   reduceMotion.addEventListener('change',stopPackets);
-  if (typeof ResizeObserver==='function') new ResizeObserver(layout).observe($('canvas')); else window.addEventListener('resize',layout);
+  if (typeof ResizeObserver==='function') new ResizeObserver(layout).observe($('graph-scroll')); else window.addEventListener('resize',layout);
   render(); layout();
   if(document.hidden)client.pause();
   const saved = session.read();

@@ -1,6 +1,6 @@
 import type { TaskRuntime, TaskStep, TaskSnapshot } from '../taskRuntime/taskRuntimePorts.js';
 import { TASK_TOOLS, executeTaskTool } from '../../tools/toolRunnerPorts.js';
-import { observeAsync, observerHandoff, observeSync } from '../../../infra/observer/observerContext.js';
+import { observeAsync, observerHandoff, observeSync, withObserverTask } from '../../../infra/observer/observerContext.js';
 import { observedToolName } from '../../../infra/models/anthropic/observerProjection.js';
 import type { FcaToolSelector } from '../../selectors/selectorsPorts.js';
 import { TOOL_OPEN_NAME, toolFailure } from '../../tools/toolRegistryPorts.js';
@@ -40,14 +40,17 @@ export interface FcaStepPorts {
 }
 /** One bounded model decision; waiting and completed segments release their inference slot in wiring. */
 export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
-  try { ports.body?.start(signal); return await executeFcaStep(step, ports, signal); }
-  finally { try { await ports.body?.close(); } finally { await ports.recall?.finishSegment(step.scopeKey, step.taskId); } }
+  return withObserverTask({ taskId: step.taskId, parentTaskId: step.snapshot.task.parentId, stepId: step.id, actionId: step.lease.id }, () =>
+    observeAsync('fca', { phase: 'step', kind: step.snapshot.task.kind, revision: step.revision }, async () => {
+      try { ports.body?.start(signal); return await executeFcaStep(step, ports, signal); }
+      finally { try { await ports.body?.close(); } finally { await ports.recall?.finishSegment(step.scopeKey, step.taskId); } }
+    }, value => ({ phase: value.task.phase, revision: value.revision })));
 }
 async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
   const { runtime } = ports;
   const maintenance = step.snapshot.task.origin === 'maintenance' && step.snapshot.task.kind === 'sleep';
   const allowed = () => maintenance ? ports.executionAllowed?.() === true : ports.ownerAlone() && (ports.executionAllowed?.() ?? true);
-  const checked = async () => {
+  const checked = () => observeAsync('gate', { phase: 'step_permit' }, async () => {
     signal.throwIfAborted();
     if (!allowed()) throw new Error('FCA_EXECUTION_HELD');
     if (ports.sourcesVisible && !ports.sourcesVisible()) throw new Error('FCA_SOURCE_WITHHELD');
@@ -56,12 +59,12 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     if (!allowed()) throw new Error('FCA_EXECUTION_HELD');
     if (ports.sourcesVisible && !ports.sourcesVisible()) throw new Error('FCA_SOURCE_WITHHELD');
     if (runtime.get(step.scopeKey, step.taskId)?.phase !== 'executing') throw new Error('FCA_TASK_STOPPING');
-  };
+  }, () => ({ allowed: true }));
   await checked();
   const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object'
     ? step.snapshot.checkpoint as Record<string, unknown> : {};
   const recallContext = ports.recall ? fcaRecallContext(step, prior, signal) : null;
-  if (recallContext) ports.recall!.start(recallContext.input);
+  if (recallContext) { observerHandoff('fca', 'recall', { phase: 'start' }); ports.recall!.start(recallContext.input); }
   const catalog = [...(maintenance || ports.taskTools === false ? [] : TASK_TOOLS), ...(ports.tools?.definitions ?? [])];
   if (new Set(catalog.map(tool => tool.name)).size !== catalog.length || catalog.some(tool => tool.name === TOOL_OPEN_NAME)) throw new Error('FCA_TOOL_CATALOG_INVALID');
   const replay = ports.history ? await prepareFcaHistory(step, {
@@ -84,17 +87,22 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     input.tools = selectedFcaTools(catalog, selection);
   }
   await checked();
-  const recall = recallContext ? await ports.recall!.packet(recallContext.input, { waitMilliseconds: recallContext.waitMilliseconds }) : undefined;
+  const recall = recallContext ? await observeAsync('recall', { phase: 'decision_packet', maximumWaitMs: recallContext.waitMilliseconds },
+    () => ports.recall!.packet(recallContext.input, { waitMilliseconds: recallContext.waitMilliseconds }),
+    value => ({ status: value.status, itemCount: value.items.length, sourceCount: value.sourceIds.length })) : undefined;
   if (recall?.sourceIds.length && (!ports.observeMemory || !ports.observeMemory(recall.sourceIds))) throw new Error('FCA_SOURCE_WITHHELD');
   await checked();
-  const sharedContext = ports.evidence?.prepare(step);
+  if (recall) observerHandoff('recall', 'context', { phase: 'decision_packet', status: recall.status, itemCount: recall.items.length, sourceCount: recall.sourceIds.length });
+  const sharedContext = ports.evidence ? observeSync('emotion', { phase: 'shared_context' }, () => ports.evidence!.prepare(step),
+    value => ({ outcomeCount: value.recentOutcomes.length })) : undefined;
   if (ports.body) await ports.body.guard(ports.body.revision());
   const bodyRevision = ports.body?.revision() ?? 0;
   observerHandoff('context', 'native', provenance);
   const output = await ports.model.decide({ ...input, ...(ports.body ? { body: ports.body.context() } : {}), ...(recall ? { recall } : {}), ...(sharedContext ? { sharedContext } : {}), ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) }, signal);
   await checked();
   let bodyStale = ports.body ? !await ports.body.guard(bodyRevision) : false;
-  if (ports.evidence && !ports.evidence.beforeActions(step, bodyStale ? { ...output, expectations: [], appraisals: [] } : output)) throw new Error('FCA_EVIDENCE_FENCED');
+  if (ports.evidence && !observeSync('prediction', { phase: 'before_actions', expectationCount: output.expectations?.length ?? 0, appraisalCount: output.appraisals?.length ?? 0 },
+    () => ports.evidence!.beforeActions(step, bodyStale ? { ...output, expectations: [], appraisals: [] } : output), value => ({ accepted: value }))) throw new Error('FCA_EVIDENCE_FENCED');
   const history = [...output.history];
   let consecutiveToolFailures = Number(prior.consecutiveToolFailures ?? 0);
   if (!Number.isSafeInteger(consecutiveToolFailures) || consecutiveToolFailures < 0) consecutiveToolFailures = 0;
@@ -133,7 +141,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
           ...(ports.observeTasks ? { observed: ports.observeTasks } : {}) });
       },
       value => ({ ...provenance, operationId, ok: value.ok, failure: value.failure ?? null })).catch(error => { ports.evidence?.unknown(step, call); throw error; });
-      ports.evidence?.observed(step, call, result);
+      if (ports.evidence) observeSync('prediction', { phase: 'observed', ok: result.ok }, () => ports.evidence!.observed(step, call, result));
       ports.body?.noteResult?.(call, result);
       if (ports.body && !await ports.body.guard(bodyRevision)) bodyStale = true;
       results.push({ id: call.id, text: result.text, ok: result.ok });
@@ -162,6 +170,10 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     history, disposition, checkpoint: { ...prior, ...ports.checkpoint?.(), consecutiveToolFailures, ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: decision.summary } : {}),
   }), value => ({ ...provenance, committed: value !== null, phase: value?.task.phase ?? null }));
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
+  if (saved.task.phase === 'waiting') {
+    observerHandoff('store', 'wait', { phase: saved.task.phase });
+    observeSync('wait', { phase: 'checkpoint', measured: 'state' }, () => undefined, () => ({ phase: saved.task.phase }));
+  }
   // These callbacks drain durable outboxes; their failure must never undo/repeat committed tools.
   try { ports.evidence?.committed(step); } catch { /* Retried by the existing maintenance tick. */ }
   if (saved.task.phase === 'completed' || saved.task.phase === 'failed') ports.recall?.cancel(step.scopeKey, step.taskId);

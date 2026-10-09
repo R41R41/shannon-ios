@@ -1,3 +1,4 @@
+import { observeAsync, observerHandoff } from '../../infra/observer/observerContext.js';
 import { randomUUID } from 'node:crypto';
 import type { CompactionMessage } from '@shannon/mind';
 import type { FcaHistoryCodec } from '../action/fca/fcaHistoryPorts.js';
@@ -53,7 +54,9 @@ export function createSleepFcaStep(options: SleepFcaStepOptions): SleepFcaStep {
         while (checkpoint.phase !== 'done' && !options.handlers[checkpoint.phase]) checkpoint = { ...checkpoint, phase: next(checkpoint.phase), state: null };
         if (checkpoint.phase === 'done') return { decision: { kind: 'complete', summary: '睡眠整理の各工程を確認しました。' }, history: [{ sleepFca: 1, kind: 'complete', text: 'Sleep phases completed.' }] };
         const phase = checkpoint.phase;
-        const answer = await options.handlers[phase]!.decide({ job: options.job, state: structuredClone(checkpoint.state), signal });
+        observerHandoff('fca', 'sleep', { phase, operation: 'decide' });
+        const answer = await observeAsync('sleep', { phase, operation: 'decide' },
+          () => options.handlers[phase]!.decide({ job: options.job, state: structuredClone(checkpoint.state), signal }));
         check(signal);
         pending = { phase, answer, id: `sleep-${randomUUID()}` };
         return { decision: { kind: 'tools', calls: [{ id: pending.id, name: APPLY, input: { receipt: pending.id } }] },
@@ -71,8 +74,10 @@ export function createSleepFcaStep(options: SleepFcaStepOptions): SleepFcaStep {
       if (request.scopeKey !== options.job.scopeKey || request.name !== APPLY || !pending || applied
         || !input || Object.keys(input).length !== 1 || input.receipt !== pending.id) throw new Error('SLEEP_FCA_OPERATION_MISMATCH');
       applied = true; // An uncertain apply never runs twice, even before the parent commits its checkpoint.
-      const outcome = await options.handlers[pending.phase]!.apply(pending.answer, { job: options.job, state: structuredClone(checkpoint.state),
-        operationId: request.operationId, signal: request.signal });
+      const phase = pending.phase, answer = pending.answer;
+      observerHandoff('tools', 'sleep', { phase, operation: 'apply' });
+      const outcome = await observeAsync('sleep', { phase, operation: 'apply' }, () => options.handlers[phase]!.apply(answer, { job: options.job, state: structuredClone(checkpoint.state),
+        operationId: request.operationId, signal: request.signal }), value => ({ done: value.done }));
       check(request.signal);
       if (!outcome || typeof outcome.done !== 'boolean' || typeof outcome.summary !== 'string') throw new Error('SLEEP_FCA_OUTCOME_INVALID');
       checkpoint = checkedCheckpoint({ schemaVersion: 1, jobId: options.job.id,

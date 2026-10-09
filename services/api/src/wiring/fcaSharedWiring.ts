@@ -1,3 +1,4 @@
+import { observeSync, observerHandoff, withScopedObserverTask } from '../infra/observer/observerContext.js';
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CompanionStateStore } from '@shannon/cognition';
@@ -39,11 +40,14 @@ export function createFcaSharedWiring(parts: {
         : actualStatus === 'completed' ? 'success' : outcome.result ? outcome.result.ok ? 'success' : 'failure' : 'unobserved';
       const sourceIds = [...new Set(outcome.sources.flatMap(source => [...source.experienceId ? [source.experienceId] : [], ...source.recalledMemoryIds]))];
       const readSourceIds = [...new Set(outcome.sources.flatMap(source => source.readSourceIds ?? []))];
-      parts.memory!.propose(taskExperienceDraft({ scopeKey: outcome.scopeKey, taskId: outcome.taskId, outcomeId: outcome.outcomeId,
+      withScopedObserverTask(outcome.scopeKey, { taskId: outcome.taskId, stepId: outcome.stepId }, () => {
+      observerHandoff('prediction', 'memory', { phase: 'propose', status });
+      observeSync('memory', { phase: 'task_episode_proposal', status, sourceCount: sourceIds.length, readSourceCount: readSourceIds.length }, () => parts.memory!.propose(taskExperienceDraft({ scopeKey: outcome.scopeKey, taskId: outcome.taskId, outcomeId: outcome.outcomeId,
         observedAt: outcome.observedAt, status,
         goal: outcome.goal.slice(0, 1000), context: `task:${outcome.taskId}`, action: JSON.stringify(outcome.action).slice(0, 1000),
         prediction: outcome.expectation ? JSON.stringify(outcome.expectation).slice(0, 1000) : '', observedResult: outcome.result?.text.slice(0, 4000) ?? '',
-        interpretation: outcome.comparison ? JSON.stringify(outcome.comparison).slice(0, 2000) : '結果はこの操作の観測であり、目的全体の達成や原因の証明ではない。', sourceIds, readSourceIds }));
+        interpretation: outcome.comparison ? JSON.stringify(outcome.comparison).slice(0, 2000) : '結果はこの操作の観測であり、目的全体の達成や原因の証明ではない。', sourceIds, readSourceIds })));
+      });
     } } : {}),
   }) : undefined;
   return { memory, recall, evidence,

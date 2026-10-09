@@ -1,3 +1,5 @@
+import type { ObserverDraft } from '../src/contracts/observerContract.js';
+import { installObserverSink, withObserverRunSync } from '../src/infra/observer/observerContext.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
 import { SQLiteTaskRuntimeStore } from '../src/mind/action/taskRuntime/store/taskRuntimeStore.js';
@@ -35,16 +37,16 @@ function fixture() {
     taskVisible: () => visible, observeContext: (_step: TaskStep, _ids: readonly string[]) => visible,
     onOutcome: (outcome: FcaDurableOutcome) => { deliveries.push(outcome); } };
   let evidence = new SQLiteFcaEvidenceStore(options);
-  async function begin(taskId = task.id) {
-    const current = runtime.get('owner', taskId)!;
-    const action = await h.actions.claim((await h.actions.enqueue({ scopeKey: 'owner', kind: 'agentTask', origin: 'owner_request',
-      sourceId: `fca:${taskId}:${current.revision}`, resources: [actionResource('owner', `fca:${taskId}`)] })).id);
-    expect(action).not.toBeNull(); const step = runtime.beginStep('owner', taskId, leaseOf(action!)); expect(step).not.toBeNull(); return step!;
+  async function begin(taskId = task.id, scope = 'owner') {
+    const current = runtime.get(scope, taskId)!;
+    const action = await h.actions.claim((await h.actions.enqueue({ scopeKey: scope, kind: 'agentTask', origin: 'owner_request',
+      sourceId: `fca:${taskId}:${current.revision}`, resources: [actionResource(scope, `fca:${taskId}`)] })).id);
+    expect(action).not.toBeNull(); const step = runtime.beginStep(scope, taskId, leaseOf(action!)); expect(step).not.toBeNull(); return step!;
   }
   async function commit(step: TaskStep, disposition: 'continue' | 'complete' | 'wait' = 'continue') {
     const saved = runtime.commitStep(step, { disposition, history: [{ role: 'assistant', content: 'public durable round' }] });
     expect(saved).not.toBeNull(); await h.actions.finish(step.lease, 'completed', 'fca_segment_committed');
-    runtime.acknowledgeReceipt('owner', step.id); return saved!;
+    runtime.acknowledgeReceipt(step.scopeKey, step.id); return saved!;
   }
   const row = (step: TaskStep, id = call.id) => h.db.prepare('SELECT * FROM fca_action_evidence WHERE event_id=?').get(`${step.id}:${id}`)!;
   return { ...world, ...h, runtime, root, task, options, begin, commit, row, deliveries,
@@ -93,6 +95,30 @@ describe('concrete optional FCA predictions', () => {
 });
 
 describe('durable FCA observation and appraisal outboxes', () => {
+  it('flushes all original appraisal rows while observing only the active scope and the actual task/step', async () => {
+    const f = fixture();
+    const foreignRoot = f.runtime.ensureRoot('foreign');
+    const foreign = f.runtime.createChild('foreign', foreignRoot.id, { title: 'Foreign private task', goal: 'Foreign private goal' }, 'foreign');
+    const pending = async (scope: string, taskId: string) => {
+      const action = await f.begin(taskId, scope); f.evidence.beforeActions(action, output());
+      f.evidence.observed(action, call, observed()); await f.commit(action);
+      const appraisal = await f.begin(taskId, scope);
+      f.evidence.beforeActions(appraisal, { decision: { kind: 'complete', summary: 'PRIVATE_FINAL' }, history: [],
+        appraisals: [{ eventId: `${action.id}:${call.id}`, revision: 1, value: 0.7, cause: 'PRIVATE_CAUSE', target: 'PRIVATE_TARGET' }] });
+      await f.commit(appraisal, 'complete'); return appraisal;
+    };
+    const ownerStep = await pending('owner', f.task.id), foreignStep = await pending('foreign', foreign.id);
+    const events: ObserverDraft[] = [], restore = installObserverSink(event => events.push(event));
+    try { withObserverRunSync({ scopeKey: 'owner', surface: 'fixture', taskId: 'unrelated-task', stepId: 'unrelated-step', actionId: 'unrelated-action' }, () => f.evidence.flush()); }
+    finally { restore(); }
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM fca_affect_outbox WHERE done=1').get()?.n).toBe(2);
+    const affect = events.filter(event => event.node === 'emotion');
+    expect(affect).toHaveLength(2);
+    expect(affect.every(event => event.taskId === f.task.id && event.stepId === ownerStep.id && event.actionId === undefined)).toBe(true);
+    expect(JSON.stringify(events)).not.toContain(foreignStep.id);
+    expect(JSON.stringify(events)).not.toContain(foreign.id);
+    expect(JSON.stringify(events)).not.toContain('PRIVATE_');
+  });
   it('delivers only canonically committed results, replays after restart, and never repeats an action', async () => {
     const f = fixture(), step = await f.begin();
     f.evidence.beforeActions(step, output()); f.evidence.observed(step, call, observed());

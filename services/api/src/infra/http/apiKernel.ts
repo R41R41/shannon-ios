@@ -100,7 +100,7 @@ import { optionalPlaceDiscoverySkill, placeSkillReply } from '../../integrations
 import type { ChatResponse } from '../../contracts/contracts.js';
 import { withWorkspace, type MindTurnPorts } from '../../mind/workspace/workspacePorts.js';
 import type { FcaVoicePort } from '../../mind/action/fca/fcaVoicePorts.js';
-import { conversationFcaProvenance, type FcaConversationPort } from '../../mind/action/fca/fcaConversationPorts.js';
+import { conversationFcaProvenance, observeFcaConversation, type FcaConversationPort } from '../../mind/action/fca/fcaConversationPorts.js';
 export type { TextTurnInput, TextTurnResult, TextTurnSurface } from '../../mind/action/respond/apiTextTurn.js';
 export interface ShannonApiKernelOptions {
   /** The composition root supplies the default service, after this kernel's stores are ready. */
@@ -401,7 +401,7 @@ export class ShannonApiKernel {
     // Stage 2, step 4: the tier from Jev's difficulty answers (none without the routing), and her last turn settled by this one.
     const tier = routeTurn(this.turnRouting, { scopeKey: body.scopeKey, surface: 'text', threadId, answer: settled?.answer ?? null, at: occurredAt });
     if(this.mind?.sync)await this.mind.sync();
-    const completion = await generateChatTurn(model, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withToolCapabilityLines({
+    const completion = await observeFcaConversation(fcaTurn, () => generateChatTurn(model, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, withToolCapabilityLines({
       // Her fixed identity first, what she knows of the owner next, and the turn's context with the replay (`chatModelTurn.ts`).
       scopeKey: body.scopeKey, systemPrompt: layered.systemPrompt, ...(layered.profilePrompt ? { profilePrompt: layered.profilePrompt } : {}),
       // The history is a character budget; what fell out of it is covered by the replay summary.
@@ -415,7 +415,7 @@ export class ShannonApiKernel {
       ...(surface?.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}), ...tierRequest(tier),
       // A surface's conversation has its own fixed title.
       generateThreadTitle: surface ? false : this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
-    }));
+    })));
     const answered = completion.outOfTime ? completion.reply : placeSkillReply(withCapabilitySources(completion, capability), placeSkill);
     const finished = this.turnRouting ? await finishTurn(this.turnRouting, { scopeKey: body.scopeKey, surface: 'text', threadId, presence: audience.alone ? 'alone' : 'others', reply: answered,
       outOfTime: completion.outOfTime === true, escalated: completion.escalated === true, decision: tier, tools: toolOffer.tools, remainingMs: deadline.left(), at: occurredAt, answeredBy: completion.mode, servedTier: completion.servedTier }) : null;

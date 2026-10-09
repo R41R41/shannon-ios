@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { observerHandoff } from '../../../infra/observer/observerContext.js';
 import type { FcaToolSelector } from '../../selectors/selectorsPorts.js';
 import { providerToolName, toolFailure, type ShannonToolDefinition, type ToolResult } from '../../tools/toolRegistryPorts.js';
 import type { FcaModelInput } from './fcaPorts.js';
@@ -20,6 +21,7 @@ export async function selectFcaTools(input: FcaModelInput, catalog: readonly Sha
   if (previous && !previous.refresh && previous.key === key && [...previous.names, ...previous.opened].every(name => known.has(name))) return previous;
   let result: { names: readonly string[]; source: 'jev' | 'fallback' };
   try {
+    observerHandoff('context', 'jevt', { phase: 'fca_selection', offeredCount: catalog.length });
     result = await selector.select({ scopeKey, signal, goal: `${input.task.goal}\nCompletion criteria: ${input.task.completionCriteria}`,
       state: JSON.stringify({ children: input.children ?? [], messages: input.messages }),
       recentResults: previous?.recentResults ?? [], tools: catalog.map(tool => ({ name: tool.name, description: tool.description })) });
@@ -31,6 +33,7 @@ export async function selectFcaTools(input: FcaModelInput, catalog: readonly Sha
   const valid = Array.isArray(result?.names) && result.names.every(name => typeof name === 'string' && known.has(name))
     && new Set(result.names).size === result.names.length && ['jev', 'fallback'].includes(result.source);
   const wanted = new Set(valid ? result.names : [...known]);
+  observerHandoff('jevt', 'context', { phase: 'fca_selection_result', source: valid ? result.source : 'fallback', selectedCount: wanted.size });
   return { version: 1, key, inputKey, names: catalog.filter(tool => wanted.has(tool.name)).map(tool => tool.name),
     opened: previous?.key === key ? previous.opened.filter(name => known.has(name)) : [],
     refresh: false, recentResults: previous?.recentResults ?? [] };

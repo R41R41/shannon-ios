@@ -12,7 +12,7 @@
 <body>
 <main id="observer">
   <header class="header">
-    <div><p class="eyebrow">SHANNON / SYSTEM SIGNALS</p><h1>MIND OBSERVER</h1></div>
+    <div><p class="eyebrow">SHANNON / SYSTEM SIGNALS</p><h1>FCA / MIND OBSERVER</h1></div>
     <div class="connection"><span class="connection-light" aria-hidden="true"></span><span id="connection-state" role="status">未接続</span><button id="disconnect" type="button" hidden>接続を切る</button></div>
   </header>
   <section class="connect-panel" id="connect-panel" aria-labelledby="connect-heading">
@@ -40,23 +40,43 @@
     <span data-circuit="memory"><i aria-hidden="true"></i>記憶・学習</span>
     <p>矢印と流れる点は、送り元の箱と同じ色です。通過後は3秒かけて残光が消えます。処理状態は箱の記号とラベルで表示します。</p>
   </section>
+  <section class="task-section" aria-labelledby="task-heading">
+    <div class="section-heading"><div><p class="eyebrow">ONE ENGINE / MANY TASKS</p><h2 id="task-heading">共通FCAと並列タスク</h2></div><span id="task-count" class="hint">task相関イベント待ち</span></div>
+    <p class="hint">同じFCAを使うタスクを、明示された親子IDで表示します。選択すると、そのtaskのloopと実イベントへ切り替わります。phaseは最後に届いた記録です。未観測の更新や欠落後の状態は反映できません。</p>
+    <div class="task-controls"><button id="clear-task" type="button" disabled>選択runへ戻る</button><label for="step-picker">STEP / loop<select id="step-picker" disabled><option value="">task内の全step</option></select></label></div>
+    <ol id="task-tree" class="task-tree"></ol><p id="task-empty" class="hint">タスクをまだ観測していません。既存経路のrunは上の選択欄で確認できます。</p>
+  </section>
+  <section class="route-section" aria-label="代表経路の強調"><div id="route-picker" class="route-picker"></div><p id="route-note" class="hint"></p></section>
   <div class="workspace">
     <section class="graph" aria-label="シャノンの処理系">
-      <div id="canvas" class="canvas">
+      <div id="graph-scroll" class="graph-scroll" tabindex="0" aria-label="処理図。狭い画面では横にスクロールできます。"><div id="canvas" class="canvas">
         <svg class="wires" id="wires" aria-hidden="true"><defs><marker id="arrow-input" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path data-circuit="input" d="M0 0 L6 3 L0 6"/></marker><marker id="arrow-judgment" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path data-circuit="judgment" d="M0 0 L6 3 L0 6"/></marker><marker id="arrow-action" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path data-circuit="action" d="M0 0 L6 3 L0 6"/></marker><marker id="arrow-output" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path data-circuit="output" d="M0 0 L6 3 L0 6"/></marker><marker id="arrow-memory" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path data-circuit="memory" d="M0 0 L6 3 L0 6"/></marker><marker id="arrow-neutral" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path data-circuit="neutral" d="M0 0 L6 3 L0 6"/></marker></defs><g id="zones"></g><g id="edges"></g><g id="trails"></g><g id="packets"></g></svg>
         <div id="nodes"></div>
       </div>
-      <div class="legend"><span>● ACTIVE 処理中・出力待ち</span><span>✓ DONE 完了イベントあり</span><span>! FAILED 失敗</span><span>? UNKNOWN 状態不明</span><span>破線：別の実行系</span></div>
+      </div><div class="legend"><span>● ACTIVE 処理中・出力待ち</span><span>✓ DONE 完了イベントあり</span><span>! FAILED 失敗</span><span>? UNKNOWN 状態不明</span><span>破線：別の実行系</span></div>
     </section>
     <aside class="inspector" aria-label="選択した処理の入出力">
       <div class="inspector-heading"><span class="eyebrow">SIGNAL INSPECTOR</span><h2 id="detail-title">LLM</h2><p id="detail-location" class="location">接続後、カタログの実装場所を表示します。</p></div>
       <label class="span-picker" for="span-picker">処理を選択<select id="span-picker" disabled><option value="">観測した処理なし</option></select></label>
-      <dl class="metadata"><dt>状態</dt><dd id="detail-state">未観測</dd><dt>出典</dt><dd id="detail-origin">—</dd><dt>実行</dt><dd id="detail-run">—</dd><dt>処理</dt><dd id="detail-span">—</dd><dt>親処理</dt><dd id="detail-parent">—</dd><dt>モデル</dt><dd id="detail-model">—</dd><dt>開始</dt><dd id="detail-start">—</dd><dt>終了</dt><dd id="detail-end">—</dd><dt>所要時間</dt><dd id="detail-elapsed">—</dd></dl>
+      <dl class="metadata"><dt>状態</dt><dd id="detail-state">未観測</dd><dt>出典</dt><dd id="detail-origin">—</dd><dt>実行</dt><dd id="detail-run">—</dd><dt>処理</dt><dd id="detail-span">—</dd><dt>親処理</dt><dd id="detail-parent">—</dd><dt>task</dt><dd id="detail-task">—</dd><dt>step</dt><dd id="detail-step">—</dd><dt>action</dt><dd id="detail-action">—</dd><dt>モデル</dt><dd id="detail-model">—</dd><dt>cache</dt><dd id="detail-cache">—</dd><dt>開始</dt><dd id="detail-start">—</dd><dt>終了</dt><dd id="detail-end">—</dd><dt>所要時間</dt><dd id="detail-elapsed">—</dd><dt>可視返答</dt><dd id="detail-first-visible">未計測</dd><dt>最終usage</dt><dd id="detail-final-usage">未計測</dd></dl>
+      <p class="hint">可視返答：最初に復号した返答をサーバーcallbackへ渡すまで。最終usage：呼出開始から最終usage受信まで。端末表示・発音開始・prefillの時間は未計測です。</p>
       <p id="coverage-note" class="hint">計測範囲は接続後に表示します。</p>
       <div class="detail-grid"><section><h3>INPUT / 受信した値</h3><pre id="detail-input">観測した入力はありません。</pre></section><section><h3>OUTPUT / 出した値</h3><pre id="detail-output">観測した出力はありません。</pre></section></div>
       <section id="tool-panel" class="tool-panel" hidden><h3>TOOL REGISTRY / 道具の定義</h3><p class="hint">カタログは定義一覧です。各runで提示・選択された道具は、その実イベントから表示します。</p><label for="tool-filter" class="sr-only">道具の表示範囲</label><select id="tool-filter"><option value="all">全定義</option><option value="offered">このrunで提示された道具</option><option value="chosen">このrunで選択された道具</option><option value="called">このrunで実行された道具</option></select><p id="tool-count" class="hint"></p><div id="tool-list"></div><div id="tool-detail" hidden><h3 id="tool-name"></h3><p id="tool-description" class="hint"></p><pre id="tool-schema"></pre></div></section>
     </aside>
   </div>
+  <section class="analysis" aria-labelledby="analysis-heading">
+    <div class="section-heading"><div><p class="eyebrow">OBSERVED DURATIONS</p><h2 id="analysis-heading">区間時間とタイムライン</h2></div><label for="metric-scope">集計範囲<select id="metric-scope"><option value="selection">選択task / run</option><option value="window">現在保持しているwindow</option></select></label></div>
+    <p id="metric-summary" class="hint">実測イベント待ち</p>
+    <p class="hint">中央値・p95は完了済みelapsedMsのみ（p95はnearest-rank）。失敗・未計測・処理中は母数から除外します。並列区間の和はwall timeではありません。</p>
+    <div class="metric-table-scroll"><table class="metric-table"><caption class="sr-only">処理・モデル・出典別の所要時間</caption><thead><tr><th scope="col">区間 / モデル / 出典</th><th scope="col">実測 n / 全件</th><th scope="col">中央値</th><th scope="col">p95</th><th scope="col">未計測 / 失敗 / active / unknown</th><th scope="col">cache read / write</th></tr></thead><tbody id="metric-rows"></tbody></table></div>
+    <div class="section-heading timeline-heading"><h3>LLM / STREAM MILESTONES</h3></div>
+    <p class="hint">上と同じ集計範囲・モデル・出典別。可視返答は復号した最初の返答をサーバーcallbackへ渡すまで、最終usageは呼出開始からusage受信まで。各列のnは値のある完了呼出だけです。toolのみの応答や非stream呼出に値がなければ除外し、0msで補完しません。</p>
+    <div class="metric-table-scroll"><table class="metric-table"><caption class="sr-only">LLM可視返答と最終usageまでの実測時間</caption><thead><tr><th scope="col">モデル / 出典</th><th scope="col">完了呼出</th><th scope="col">可視返答 n</th><th scope="col">中央値</th><th scope="col">p95</th><th scope="col">最終usage n</th><th scope="col">中央値</th><th scope="col">p95</th></tr></thead><tbody id="stream-metric-rows"></tbody></table></div>
+    <div class="section-heading timeline-heading"><h3>SELECTED TASK / RUN TIMELINE</h3><span id="timeline-count" class="hint">0 spans</span></div>
+    <p class="hint">サーバーと端末は時計を分けて表示。横位置は各出典の最初の開始時刻との差、棒の長さは実測elapsedMsです。「受信後」はブラウザの補助時計で、実際の処理時間・通信時間ではありません。</p>
+    <ol id="timeline" class="timeline"></ol>
+  </section>
   <section class="events" aria-labelledby="events-heading"><div class="events-heading"><h2 id="events-heading">EVENT STREAM</h2><span id="event-count" class="eyebrow">0 events</span></div><p id="events-empty" class="hint">観測する実行はまだありません。</p><ol id="event-list"></ol></section>
   <footer>この画面は観測専用です。画面を閉じてもシャノンの処理は続きます。点の移動は受け渡しの通知を表し、通信の所要時間を表しません。</footer>
   <p class="sr-only" id="announcement" role="status" aria-live="polite" aria-atomic="true"></p>

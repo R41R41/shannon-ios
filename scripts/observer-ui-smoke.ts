@@ -1,6 +1,6 @@
 /** Explicit local UI test fixture. No model, app, production database, or external service is contacted.
  * pnpm exec tsx scripts/observer-ui-smoke.ts
- * stdin: run | client-links | handoff | finish | hold | ready | close
+ * stdin: run | fca-run | fca-next | fca-finish | client-links | handoff | finish | hold | ready | close
  * The browser uses the real assets, pairing route, authentication, observer publisher, and routes.
  */
 import { createServer } from 'node:http';
@@ -12,11 +12,13 @@ import { createPairingRoute } from '../services/api/src/infra/auth/serverPairing
 import { serveObserverAsset, createObserverRoute } from '../services/api/src/infra/observer/observerRoutes.js';
 import { startObserverPublisher } from '../services/api/src/infra/observer/store/observerStore.js';
 import { observeAsync, observeSync, observerHandoff, withObserverRun } from '../services/api/src/infra/observer/observerContext.js';
+import { createObserverFcaFixture } from './observer-fca-fixture.js';
 
 const auth = new SQLiteDeviceAuthStore({ path: ':memory:', pepper: randomBytes(32).toString('hex') });
 const publisher = startObserverPublisher(':memory:');
 if (!publisher) throw new Error('LOCAL_FIXTURE_PUBLISHER_UNAVAILABLE');
 let ownerAlone = true;
+const fcaFixture = createObserverFcaFixture('ui-fixture-owner', () => ownerAlone);
 const pairing = createPairingRoute('paired', auth);
 const observer = createObserverRoute({ store: publisher.store, ownerScope: 'ui-fixture-owner', ownerAlone: () => ownerAlone, isGame: () => false });
 const server = createServer(async (request, response) => {
@@ -31,7 +33,7 @@ const address = server.address();
 if (!address || typeof address === 'string') throw new Error('LOCAL_FIXTURE_ADDRESS');
 console.log(`LOCAL UI TEST FIXTURE ONLY: http://127.0.0.1:${address.port}/observer`);
 console.log(`Temporary fixture pairing code: ${auth.issuePairingCode('ui-fixture-owner').code}`);
-console.log('Commands: run / client-links / handoff / finish / hold / ready / close');
+console.log('Commands: run / fca-run / fca-next / fca-finish / client-links / handoff / finish / hold / ready / close');
 
 /** Uses the real native-client ingestion contract. All values are controlled test fixtures. */
 async function clientLinksFixture() {
@@ -94,6 +96,9 @@ const input = createInterface({ input: process.stdin });
 input.on('line', line => {
   switch (line.trim()) {
     case 'run': runFixture(); break;
+    case 'fca-run': void fcaFixture.start().then(ids => console.log('REAL LOCAL FCA FIXTURE:', ids)).catch(error => console.error('LOCAL_FCA_FIXTURE_START_FAILED', error instanceof Error ? error.message : 'unknown')); break;
+    case 'fca-next': void fcaFixture.next().then(() => console.log('REAL LOCAL FCA FIXTURE:', fcaFixture.summary())).catch(() => console.error('LOCAL_FCA_FIXTURE_NEXT_FAILED')); break;
+    case 'fca-finish': void fcaFixture.finish().then(() => console.log('REAL LOCAL FCA FIXTURE:', fcaFixture.summary())).catch(() => console.error('LOCAL_FCA_FIXTURE_FINISH_FAILED')); break;
     case 'client-links': void clientLinksFixture().catch(() => console.error('LOCAL_FIXTURE_CLIENT_LINKS_FAILED')); break;
     case 'handoff': for (const emit of handoffs) emit(); console.log('Sent a fixture handoff receipt'); break;
     case 'handoff-burst': {
@@ -109,7 +114,7 @@ input.on('line', line => {
     case 'hold': ownerAlone = false; console.log('Owner visibility held'); break;
     case 'ready': ownerAlone = true; console.log('Owner alone'); break;
     case 'pair': console.log(`Temporary fixture pairing code: ${auth.issuePairingCode('ui-fixture-owner').code}`); break;
-    case 'close': if (burst) clearInterval(burst); for (const finish of [...finishers]) finish(); input.close(); server.closeAllConnections(); server.close(); publisher.close(); break;
-    default: console.log('Commands: run / client-links / handoff / finish / hold / ready / close');
+    case 'close': if (burst) clearInterval(burst); for (const finish of [...finishers]) finish(); input.close(); void fcaFixture.close().finally(() => { server.closeAllConnections(); server.close(); publisher.close(); }); break;
+    default: console.log('Commands: run / fca-run / fca-next / fca-finish / client-links / handoff / finish / hold / ready / close');
   }
 });

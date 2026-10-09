@@ -1,3 +1,4 @@
+import { observeAsync, observeSync, observerHandoff } from '../../../infra/observer/observerContext.js';
 import { renderedCompaction, type CompactionMessage } from '@shannon/mind';
 import type { TaskHistoryWindow, TaskStep } from '../taskRuntime/taskRuntimePorts.js';
 import type { FcaHistoryCodec, FcaHistoryPlan, FcaHistoryPolicy, FcaHistoryPorts, FcaHistoryReplay } from './fcaHistoryPorts.js';
@@ -64,11 +65,17 @@ export async function prepareFcaHistory(step: TaskStep, ports: FcaHistoryPorts, 
     const window = ports.runtime.history(step.scopeKey, step.taskId, step.messageIds);
     if (!window) throw new Error('FCA_TASK_NOT_FOUND');
     const plan = planFcaHistory(window, ports.codec, policy);
-    if (plan.kind === 'ready') return plan.replay;
+    if (plan.kind === 'ready') {
+      if (batches > 0) observerHandoff('compact', 'context', { phase: 'history_replay', compactedBatches: batches });
+      return plan.replay;
+    }
     if (!ports.summarizer) throw new Error('FCA_HISTORY_SUMMARIZER_REQUIRED');
     if (batches >= policy.maximumBatches) throw new Error('FCA_HISTORY_COMPACTION_LIMIT');
-    const template = await ports.summarizer.summarize(plan.input, signal);
+    observerHandoff('fca', 'compact', { roundCount: plan.input.rounds.length, batch: batches });
+    const template = await observeAsync('compact', { phase: 'summarize', roundCount: plan.input.rounds.length, batch: batches },
+      () => ports.summarizer!.summarize(plan.input, signal));
     await checked();
-    if (!ports.runtime.commitCompaction(step, { ...plan.request, template }, ports.sourcesVisible)) throw new Error('FCA_HISTORY_COMMIT_FENCED');
+    if (!observeSync('compact', { phase: 'commit', roundCount: plan.input.rounds.length },
+      () => ports.runtime.commitCompaction(step, { ...plan.request, template }, ports.sourcesVisible), committed => ({ committed }))) throw new Error('FCA_HISTORY_COMMIT_FENCED');
   }
 }

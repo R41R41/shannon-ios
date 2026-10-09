@@ -1,3 +1,4 @@
+import { observeAsync, observerHandoff, withObserverRun, withObserverRunSync, withScopedObserverTask } from '../infra/observer/observerContext.js';
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { actionResource, type ActionThreads, type ActionLease, type RunningAction } from '../contracts/actionThreadContract.js';
@@ -49,11 +50,12 @@ export function createFcaTouchWiring(parts: {
   function deliver(saved: Row) {
     const input = JSON.parse(saved.input_json) as FcaTouchInput;
     if (!sourcesVisible(input)) return;
-    const send = (phase: string, payload: unknown) => parts.runtime.observeExternal(saved.scope_key, saved.target_id, {
+    const send = (phase: string, payload: unknown) => withObserverRunSync({ scopeKey: saved.scope_key, surface: 'reflex_touch_receipt',
+      audience: input.audience === 'owner' ? 'owner' : 'others' }, () => withScopedObserverTask(saved.scope_key, { taskId: saved.target_id }, () => parts.runtime.observeExternal(saved.scope_key, saved.target_id, {
       eventId: `${saved.operation_id}:${phase}`, experienceIds: [input.experienceId, ...input.stanceSourceIds], observedAt: input.observedAt,
       text: JSON.stringify({ kind: 'body.touch', eventId: input.touchId, experienceId: input.experienceId, phase, toucher: 'unknown',
         touch: input.touch, ...payload as object, instruction: 'Observed body event only. Existing touch reaction already owns feeling, memory and any speech. Do not repeat it.' }),
-    });
+    })));
     try {
       if (!saved.observed_delivered) { send('observed', { immediateReflex: input.touch.reflex ?? 'not_reported' }); db.prepare('UPDATE fca_touch_receipts SET observed_delivered=1 WHERE operation_id=?').run(saved.operation_id); }
       if (!saved.result_delivered && ['applied', 'not_applied', 'unknown', 'none'].includes(saved.state)) {
@@ -73,7 +75,10 @@ export function createFcaTouchWiring(parts: {
       jobs.get(id)!.action = active;
       db.prepare('UPDATE fca_touch_receipts SET lease_json=? WHERE operation_id=?').run(JSON.stringify(active.execution.lease), id);
       if (!usable(input) || !await active.execution.permit()) return;
-      const gesture = await inActionExecution(active.execution, () => parts.selector.select(input, active!.execution.signal));
+      observerHandoff('reflex', 'reflexJev', { phase: 'touch_select', candidateCount: input.gestures.length });
+      const gesture = await inActionExecution(active.execution, () => observeAsync('reflexJev', { phase: 'touch_select', candidateCount: input.gestures.length },
+        () => parts.selector.select(input, active!.execution.signal), value => ({ selected: value !== null })));
+      observerHandoff('reflexJev', 'reflex', { phase: 'touch_selection_result', selected: gesture !== null });
       if (!usable(input, gesture ?? undefined) || active.execution.signal.aborted || row(id)!.expires_at <= now()
         || !await active.execution.permit()) return;
       const selected = gesture !== null && input.gestures.includes(gesture) ? gesture : null;
@@ -99,7 +104,8 @@ export function createFcaTouchWiring(parts: {
         .run(id, input.scopeKey, input.deviceId, input.touchId, JSON.stringify(input), targetId, new Date(Date.parse(now()) + 5_000).toISOString());
       deliver(row(id)!);
       const controller = new AbortController(), job = { controller, done: Promise.resolve() };
-      jobs.set(id, job); job.done = choose(input, id, controller);
+      jobs.set(id, job); job.done = withObserverRun({ scopeKey: input.scopeKey, surface: 'reflex_touch', taskId: targetId, audience: input.audience === 'owner' ? 'owner' : 'others' }, () =>
+        withScopedObserverTask(input.scopeKey, { taskId: targetId }, () => observeAsync('reflex', { phase: 'touch_selection' }, () => choose(input, id, controller))));
     },
     reacted(scope, device, touchId, result) {
       const saved = byTouch(scope, touchId); if (!saved || saved.device_id !== device) return;

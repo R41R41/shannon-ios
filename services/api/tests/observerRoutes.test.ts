@@ -190,7 +190,7 @@ describe('observer HTTP request and asset limits', () => {
   });
   it('serves only allowlisted GET assets with no-store and a restrictive CSP', async () => {
     const h = await fixture();
-    for (const path of ['/observer', '/observer/observer.js', '/observer/observer.css']) {
+    for (const path of ['/observer', '/observer/observer.js', '/observer/observer.css', '/observer/observerAnalysis.js', '/observer/observerMap.js']) {
       const response = await h.call(path); expect(response.status).toBe(200); expect(response.headers.get('cache-control')).toBe('no-store');
       expect(response.headers.get('content-security-policy')).toContain("default-src 'none'"); expect(response.headers.get('x-content-type-options')).toBe('nosniff');
       expect((await h.call(path, { method: 'POST' })).status).toBe(405);

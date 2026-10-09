@@ -5,6 +5,7 @@ export type ConnectionState = 'disconnected' | 'connecting' | 'live' | 'held' | 
 export interface ObservedSpan {
   id: string; runId: string; node: string; parentSpanId: string | null; startedAt: string | null; endedAt: string | null;
   state: ObservationState; firstSequence: number; lastSequence: number; elapsedMs?: number;
+  taskId?: string; parentTaskId?: string; stepId?: string; actionId?: string;
   model?: string; input?: ObserverJson; output?: ObserverJson; origin?: 'server' | 'client'; isRunRoot?: boolean; linked?: boolean;
 }
 export interface ObservedRun {
@@ -22,6 +23,7 @@ export function createObserverState(): ObserverState;
 export function validEnvelope(value: unknown): value is ObserverBatch;
 export function reduceObserverEnvelope(previous: ObserverState, envelope: ObserverBatch, followLatest?: boolean): ObserverState;
 export function spanState(span?: ObservedSpan, run?: ObservedRun, transport?: ConnectionState): ObservationState;
+export function effectiveObservedSpans(state: ObserverState, spans: Iterable<ObservedSpan>): ObservedSpan[];
 export function nodeState(run: ObservedRun | undefined, node: string, transport?: ConnectionState): { spans: ObservedSpan[]; latest?: ObservedSpan; activeCount: number; state: ObservationState };
 export function linkedRunView(state: ObserverState, runId: string | null): ObservedRun | undefined;
 export function runToolEvidence(run?: ObservedRun): { offered: Set<string>; chosen: Set<string>; called: Set<string>; schemas: Map<string, ObserverJson> };

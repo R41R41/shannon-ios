@@ -1,3 +1,4 @@
+import { observedTaskRuntime } from '../infra/observer/observerTaskRuntime.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { actionResource, type ActionThreads, type ActionLease } from '../contracts/actionThreadContract.js';
@@ -8,7 +9,7 @@ import type { TaskStep, TaskRuntime, TaskView, TaskSleepTicket } from '../mind/a
 import type { FcaModel } from '../mind/action/fca/fcaPorts.js';
 import { runFcaStep, type FcaStepPorts } from '../mind/action/fca/fcaRunner.js';
 import { inActionExecution } from '../infra/context/actionExecution.js';
-import { withObserverRun } from '../infra/observer/observerContext.js';
+import { observeAsync, observeSync, observerHandoff, withObserverRun } from '../infra/observer/observerContext.js';
 import { acquireAction } from './actionExecutionWiring.js';
 
 export interface TaskRuntimeWiringOptions {
@@ -25,7 +26,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
   const now = options.now ?? (() => new Date().toISOString());
   migrateAgentTasks(db);
   const authority = new SQLiteFcaTaskAuthority(db);
-  const runtime: TaskRuntime = new SQLiteTaskRuntimeStore(db, { authority, now, sleepTicket: options.sleepTicket, leaseValid: (scope, taskId, lease, at) => {
+  const runtime: TaskRuntime = observedTaskRuntime(new SQLiteTaskRuntimeStore(db, { authority, now, sleepTicket: options.sleepTicket, leaseValid: (scope, taskId, lease, at) => {
     const row = db.prepare('SELECT * FROM mind_actions WHERE id=?').get(lease.id);
     const task = authority.get(scope, taskId);
     const originMatches = !!task && row?.origin === task.origin && (task.origin === 'owner_request'
@@ -40,7 +41,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     return !!row && row.scope_key === scope && row.origin === 'owner_request' && row.kind === 'respond'
       && row.holder === lease.holder && row.generation === lease.generation && row.state === 'running'
       && typeof row.lease_until === 'string' && row.lease_until > at;
-  } });
+  } }), options.ownerAlone);
   function executionAllowed(task: TaskView): boolean {
     if (task.origin === 'owner_request') return options.ownerAlone();
     if (task.origin !== 'maintenance' || task.kind !== 'sleep' || !options.maintenanceAllowed?.(runtime, task)) return false;
@@ -106,21 +107,23 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
   async function execute(taskId: string, controller: AbortController): Promise<void> {
     const task = recoverAdmission(taskId);
     if (!task || task.phase !== 'ready' || !executionAllowed(task) || options.canRunTask?.(runtime, taskId) === false) return;
-    const active = await acquireAction(actions, { scopeKey, kind: 'agentTask', origin: task.origin,
-      sourceId: `fca:${taskId}:${task.revision}`, resources: [actionResource(scopeKey, `fca:${taskId}`)] }, controller.signal);
+    return withObserverRun({ scopeKey, surface: 'fca', runId: randomUUID(), audience: options.ownerAlone() ? 'owner' : 'others', taskId, parentTaskId: task.parentId }, async () => {
+    observerHandoff('taskHub', 'queue', { phase: 'admission' });
+    const active = await observeAsync('queue', { phase: 'admission', revision: task.revision }, () => acquireAction(actions, { scopeKey, kind: 'agentTask', origin: task.origin,
+      sourceId: `fca:${taskId}:${task.revision}`, resources: [actionResource(scopeKey, `fca:${taskId}`)] }, controller.signal), value => ({ admitted: value !== null }));
     if (!active) return;
     let step: TaskStep | null = null;
     let stepPorts: ReturnType<NonNullable<TaskRuntimeWiringOptions['stepPorts']>> | undefined;
     try {
-      step = runtime.beginStep(scopeKey, taskId, active.execution.lease, task.revision);
+      step = observeSync('taskHub', { phase: 'begin_step', actionId: active.execution.lease.id }, () => runtime.beginStep(scopeKey, taskId, active.execution.lease, task.revision), value => ({ admitted: value !== null, stepId: value?.id ?? null }));
       if (!step) { await active.finish('cancelled', 'fca_not_ready'); return; }
       const admitted = step;
       stepPorts = options.stepPorts?.(runtime, admitted);
       if (task.origin === 'maintenance' && !stepPorts?.model) throw new Error('FCA_MAINTENANCE_MODEL_REQUIRED');
-      await withObserverRun({ scopeKey, surface: 'fca', runId: randomUUID(), audience: options.ownerAlone() ? 'owner' : 'others' }, () =>
-        inActionExecution(active.execution, () => runFcaStep(admitted, { runtime, model: options.model,
+      observerHandoff('queue', 'fca', { stepId: admitted.id });
+      await inActionExecution(active.execution, () => runFcaStep(admitted, { runtime, model: options.model,
           ...stepPorts, ...(task.origin === 'maintenance' ? { taskTools: false } : {}), ownerAlone: options.ownerAlone,
-          executionAllowed: () => executionAllowed(task) && (stepPorts?.executionAllowed?.() ?? true), permit: () => active.execution.permit([actionResource(scopeKey, `fca:${taskId}`)]) }, active.execution.signal)));
+          executionAllowed: () => executionAllowed(task) && (stepPorts?.executionAllowed?.() ?? true), permit: () => active.execution.permit([actionResource(scopeKey, `fca:${taskId}`)]) }, active.execution.signal));
       // Task completion/wait was committed; this is only the completion of its execution segment.
       await flushReceipts();
     } catch {
@@ -137,6 +140,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
         runtime.recover(scopeKey, classify);
       }
     } finally { active.stop(); }
+    });
   }
   async function tick(): Promise<void> {
     if (closing || ticking) return;

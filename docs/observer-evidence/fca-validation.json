@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "baseRevision": "eaf6b84f3fc3414312bf490a205c0f15b7441fae",
+  "branch": "codex/shannon/fca-observer",
+  "validation": {
+    "api": {
+      "files": 337,
+      "passed": 4209,
+      "failed": 0,
+      "durationSeconds": 239.68,
+      "scope": "integration before final handoff-only additions"
+    },
+    "apiTypecheck": true,
+    "fast": true,
+    "frontendFocused": 41,
+    "browser": {
+      "isolatedRuntimeFixture": true,
+      "providerCalls": 0,
+      "viewports": [
+        1408,
+        390
+      ],
+      "checks": [
+        "pair",
+        "parallel-task-selection",
+        "queued-task-state",
+        "explicit-parent-ids",
+        "step-filter",
+        "actual-tool-projection",
+        "measured-duration-table",
+        "active-receipt-clock",
+        "representative-route-dimming",
+        "reload-retention",
+        "held-erasure",
+        "final-caller-handoff-map"
+      ],
+      "clockClaims": "server/client separated; no acoustic onset or inferred prefill"
+    },
+    "finalHandoffFocused": {
+      "files": 6,
+      "passed": 86,
+      "failed": 0,
+      "apiTypecheck": true,
+      "fast": true
+    },
+    "finalUiRoutesFixtureFocused": {
+      "files": 4,
+      "passed": 95,
+      "failed": 0
+    }
+  },
+  "logs": {
+    "api": {
+      "sha256": "d5bc183c9f23d7c365559f2f2504484fa6f91e646270e887ff11d93f66009358",
+      "exitCode": 0
+    },
+    "fast": {
+      "sha256": "4efde7a710441404998e39ee7b225417f3eb8f17c621b65eff385e1544957dd7",
+      "exitCode": 0
+    }
+  },
+  "productionReflected": false,
+  "paidProbe": false,
+  "gameRestarted": false
+}

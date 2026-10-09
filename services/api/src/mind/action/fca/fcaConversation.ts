@@ -1,3 +1,4 @@
+import { observerSpan, withObserverTask } from '../../../infra/observer/observerContext.js';
 import { createHash } from 'node:crypto';
 import { currentActionExecution } from '../../../infra/context/actionExecution.js';
 import { executeTaskTool as runTaskTool } from '../../tools/toolRunnerPorts.js';
@@ -53,12 +54,19 @@ export function createFcaConversationBridge(parts: {
       active.set(leaseKey, turn);
       observe(input.scopeKey, { readSourceIds: input.readSourceIds });
       let closed = false;
+      const observation = { taskId: step.taskId, parentTaskId: step.snapshot.task.parentId, stepId: step.id, actionId: step.lease.id };
       return {
+        observe: work => withObserverTask(observation, () => {
+          const span = observerSpan('fca', { phase: 'foreground_generation', admission: 'existing_respond' });
+          const promise = span.run(work);
+          void promise.then(() => span.complete({ status: 'generated' }), error => span.failed(error));
+          return promise;
+        }),
         ...(parts.selector ? { async selectTools(tools, input) {
           if (closed || !current(step.scopeKey)) throw new Error('FCA_CONVERSATION_CONTEXT_FENCED');
           const base = baseToolSession(tools), signal = execution.signal;
-          const selected = await parts.selector!.select({ scopeKey: step.scopeKey, ...input,
-            recentResults: [], tools: base.definitions.map(tool => ({ name: tool.name, description: tool.description })), signal });
+          const selected = await withObserverTask(observation, () => parts.selector!.select({ scopeKey: step.scopeKey, ...input,
+            recentResults: [], tools: base.definitions.map(tool => ({ name: tool.name, description: tool.description })), signal }));
           if (!current(step.scopeKey)) throw new Error('FCA_CONVERSATION_CONTEXT_FENCED');
           return withToolMenu(base, selected.names.map(providerToolName));
         } } : {}),

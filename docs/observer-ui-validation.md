@@ -1,5 +1,72 @@
 # Mind Observer UI validation
 
+## Common-FCA revision (2026-10-09)
+
+Branch: `codex/shannon/fca-observer`, base `eaf6b84f`. The owner's compact dark
+layout, semantic role colours, detailed processors, tool inspection, real
+handoff packets, three-second receipt trails and reload retention are preserved.
+The change adds task/parent/step/action correlation, seven processing lanes with
+38 boxes, representative-path dimming, completed-duration statistics and
+independent server/client timelines. The underlying conversation, action gates,
+body release acknowledgement and native telemetry protocol remain in place.
+
+| Preserve | Change | Do not change |
+| --- | --- | --- |
+| Detailed dark map, actual events, auth/audience checks, reload, tool registry and receipt motion | Common-FCA task selection and measured stage/stream/cache evidence | User task execution, permissions, body control or receipt authority |
+
+The root used the actual routes and runtime through `scripts/observer-ui-smoke.ts`
+in an isolated Chrome tab. `fca-run` creates real parent/child/sibling tasks in
+in-memory stores and admits two FCA segments concurrently. The fixture model
+is named `local-ui-fixture-no-provider`; its first decision waits on an explicit
+manual gate. `fca-next` releases that gate, exercises a deterministic local
+tool result and permits subsequent FCA segments. `fca-finish` completes the
+controlled work; the ancestor may correctly return to waiting. These long
+manual model intervals are UI test durations, not provider latency samples.
+No production data, native client, paid API, external search or game is used.
+
+Browser checks confirm populated parallel task selection, explicit child IDs,
+step selection, tool-result projection, measured duration table, active receipt
+clock, model-labelled missing cache usage, reload returning to LIVE without a
+new code, and representative-path dimming with retained node inspection. At
+the normal 1408px width and a temporary 390px viewport, document width equals
+viewport width; the detailed map has a separately labelled horizontal scroller
+on narrow screens. Audience HELD removes task IDs, inspector values, metrics
+and timeline content. Console warnings/errors were absent during those checks.
+
+The inspector and stream table distinguish first decoded reply handed to the
+server callback from final usage receipt. Their missing samples remain missing.
+Parallel span lengths are never presented as a wall-time sum; origin clocks are
+not synchronized by this UI. WAIT is a state checkpoint; no dormant-wait or
+acoustic-onset duration is manufactured. Static route choices do not demonstrate
+that a path ran or that a legacy path was migrated.
+
+This local record cannot establish live provider cache hits, production speed,
+Minecraft internal telemetry or device installation. Production reflection and
+live before/after measurements remain separate. The records below describe
+earlier Observer revisions, not the new source's deployment.
+
+Integration checks: API typecheck and `verify.sh fast` passed; full API
+regression passed 337 files / 4209 tests with one worker (exit 0, 239.68 seconds).
+After the final caller-boundary handoff additions, 6 affected files / 86 tests,
+API typecheck and fast passed again. The final map/asset/fixture regression passed
+4 files / 95 tests, including 41 frontend tests. The screenshots were refreshed
+against that final local fixture. Independent review checked scope/task
+isolation, others-touch receipt delivery, detached Promise timing, native
+request equality, signed history and permission preservation. The reviewed
+runtime-closure fixture adds only the new menu/observer modules and their menu
+dependency; worker exclusions and import-cycle checks remain enforced.
+
+Jev selection emits context-to-selector and selector-to-context handoffs only
+when selection actually runs. Validated recall and committed compaction emit
+return edges; reuse, rejected sources and cancelled work do not invent packets.
+Reflex entry and touch selection expose their real conditional return paths.
+
+Safe screenshots contain only the controlled local fixture:
+
+- [Common-FCA map and task selection](observer-evidence/fca-overview.jpg)
+- [Tool result, measured stages and detailed loop](observer-evidence/fca-tools-timing.jpg)
+- [Duration statistics and timeline](observer-evidence/fca-stage-timings.jpg)
+
 Date: 2026-10-08. Branch: `codex/shannon/signal-observer`.
 
 ## Scope and preservation

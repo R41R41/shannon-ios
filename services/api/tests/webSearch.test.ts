@@ -173,11 +173,21 @@ describe('search is a discoverable conversation read', () => {
     const h = client([requestTool('tool_open', { name: 'web_search' }), requestTool('web_search', { query: '横浜 明日の天気' }), search(), answer()]);
     const result = await chat(kernel(h, []));
     expect(result.status).toBe(200); expect((result.body as { reply: string }).reply).toContain('https://example.com/forecast');
-    const tools = h.bodies[0]!.tools as Array<{ name: string; input_schema?: { properties: { name: { enum: string[] } } } }>;
-    expect(tools.some(tool => tool.name === 'web_search')).toBe(false);
-    expect(tools.find(tool => tool.name === 'tool_open')!.input_schema!.properties.name.enum).toContain('web_search');
+    const tools = h.bodies[0]!.tools as Array<{ name: string; input_schema?: { properties: { name: { enum?: string[] } } } }>;
+    expect(tools.map(tool => tool.name)).toEqual(['tool_open']);
+    expect(tools[0]!.input_schema!.properties.name.enum).toBeUndefined();
+    const initial = h.bodies[0]!.messages as Array<{ role: string; content: string | Array<{ type: string; tool?: { definition?: { name: string } } }> }>;
+    expect(JSON.stringify(initial)).toContain('- web_search: '); // Full discovery now lives after the cached prefix.
+    const initialSchemas = initial.flatMap(item => Array.isArray(item.content) ? item.content.flatMap(block =>
+      block.type === 'tool_addition' && block.tool?.definition ? [block.tool.definition.name] : []) : []);
+    expect(initialSchemas).not.toContain('web_search'); // Jev chose none; the schema is still unavailable until opened.
     expect(h.bodies[1]!.tools).toEqual(h.bodies[0]!.tools);
-    expect(JSON.stringify(h.bodies[1]!.messages)).toContain('tool_addition');
+    expect(h.bodies[1]!.system).toEqual(h.bodies[0]!.system);
+    const opened = h.bodies[1]!.messages as Array<unknown>;
+    expect(opened.slice(0, initial.length)).toEqual(initial);
+    expect(opened.at(-1)).toEqual({ role: 'system', content: [{ type: 'tool_addition', tool: { type: 'tool_definition',
+      definition: expect.objectContaining({ name: 'web_search', strict: true }) } }] });
+    expect(h.bodies).toHaveLength(4); // Open, selected call, one actual auxiliary search, then synthesis.
     expect(h.bodies.filter(body => !(body.output_config as object)?.hasOwnProperty('format'))).toHaveLength(1);
   });
 

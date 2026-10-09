@@ -21,6 +21,8 @@ export interface FcaConversationPort {
   observeSources(scopeKey: string, sources: FcaObservedSources): boolean;
 }
 export interface FcaConversationTurn {
+  /** Owner observer linkage for the existing foreground generation; creates no execution or admission. */
+  observe?<T>(work: () => Promise<T>): Promise<T>;
   /** Freshly guarded inbox data for this existing model call; only these messages are consumed at commit. */
   context(): string;
   selectTools?(tools: ShannonModelToolSession, input: { goal: string; state: string }): Promise<ShannonModelToolSession>;
@@ -40,3 +42,8 @@ export interface FcaSourceGuard {
 
 export { createFcaConversationBridge } from './fcaConversation.js';
 export { createFcaSourceGuard, conversationFcaProvenance } from './fcaConversationSources.js';
+
+/** Observation is optional and preserves the original model promise when the bridge is absent. */
+export function observeFcaConversation<T>(turn: FcaConversationTurn | null | undefined, work: () => Promise<T>): Promise<T> {
+  return turn?.observe ? turn.observe(work) : work();
+}

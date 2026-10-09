@@ -69,7 +69,7 @@ import { tierRequest, type TurnRouting } from '../../mind/action/respond/turnRou
 import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from '../../mind/perception/ownerCallElsewhere.js';
 import { withWorkspace, type MindTurnPorts } from '../../mind/workspace/workspacePorts.js';
 import { observeAsync, observeSync, observerHandoff, withObserverRun } from '../../infra/observer/observerContext.js';
-import { conversationFcaProvenance } from '../../mind/action/fca/fcaConversationPorts.js';
+import { conversationFcaProvenance, observeFcaConversation } from '../../mind/action/fca/fcaConversationPorts.js';
 import type { FcaVoicePort } from '../../mind/action/fca/fcaVoicePorts.js';
 import { confirmedFcaVoiceInput, stageFcaVoice, voiceFcaChooser, voiceFcaDuplicate } from './fcaVoiceContext.js';
 import { observedVoicePlan, perceiveVoiceTurn, visibleVoiceResponse, voiceObservationOptions, voiceWorkspace } from './voiceObservation.js';
@@ -392,10 +392,10 @@ async function completeLiveVoiceDelegation(
     && (orchestrationState.pendingAction.status === 'pending'
       || (orchestrationState.pendingAction.status === 'proposed'
         && /^(?:あと|それと|それも|ついでに|追加で|もう一つ|違う|ちがう|訂正|そうじゃなく|そうではなく)/u.test(transcript)));
-  const completion = placeSkill || provisionalIntent || requiresStructuredTaskDecision || confirmedImplementationRequest
-    ? await dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false })
+  const completion = await observeFcaConversation(fcaTurn, () => placeSkill || provisionalIntent || requiresStructuredTaskDecision || confirmedImplementationRequest
+    ? dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false })
     : observer && dependencies.chatModel.generateVoiceStreaming
-      ? await dependencies.chatModel.generateVoiceStreaming(
+      ? dependencies.chatModel.generateVoiceStreaming(
         modelRequest,
         async delta => {
           firstModelTokenMilliseconds ??= Math.max(0, Math.round(performance.now() - modelStartedAt));
@@ -419,8 +419,8 @@ async function completeLiveVoiceDelegation(
         observer.signal,
       )
     : dependencies.chatModel.generateVoice
-      ? await dependencies.chatModel.generateVoice(modelRequest)
-      : await dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false });
+      ? dependencies.chatModel.generateVoice(modelRequest)
+      : dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false }));
   observer?.signal?.throwIfAborted();
   const modelCompleteMilliseconds = Math.max(0, Math.round(performance.now() - modelStartedAt));
   firstModelTokenMilliseconds ??= modelCompleteMilliseconds;

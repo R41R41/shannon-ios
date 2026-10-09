@@ -6,7 +6,7 @@ import type { SQLiteObserverStore } from './store/observerStore.js';
 import { observerCatalog } from './observerCatalog.js';
 import { ingestObserverClientEvents } from './observerClientEvents.js';
 
-const assets=new Map<string,{file:string;type:string}>([['/observer',{file:'index.html',type:'text/html; charset=utf-8'}],['/observer/',{file:'index.html',type:'text/html; charset=utf-8'}],['/observer/observer.css',{file:'observer.css',type:'text/css; charset=utf-8'}],['/observer/observer.js',{file:'observer.js',type:'text/javascript; charset=utf-8'}]]);
+const assets=new Map<string,{file:string;type:string}>([['/observer',{file:'index.html',type:'text/html; charset=utf-8'}],['/observer/',{file:'index.html',type:'text/html; charset=utf-8'}],['/observer/observer.css',{file:'observer.css',type:'text/css; charset=utf-8'}],['/observer/observer.js',{file:'observer.js',type:'text/javascript; charset=utf-8'}],['/observer/observerAnalysis.js',{file:'observerAnalysis.js',type:'text/javascript; charset=utf-8'}],['/observer/observerMap.js',{file:'observerMap.js',type:'text/javascript; charset=utf-8'}]]);
 export function serveObserverAsset(request:IncomingMessage,response:ServerResponse,path:string):boolean {
   const asset=assets.get(path);if(!asset)return false;
   response.setHeader('Cache-Control','no-store');response.setHeader('X-Content-Type-Options','nosniff');response.setHeader('Referrer-Policy','no-referrer');

@@ -1,3 +1,4 @@
+import { observerSpan, observeSync } from '../../infra/observer/observerContext.js';
 import { isOwnerOnly, type CompanionStateStore } from '@shannon/cognition';
 import { prepareTurnCognitiveContext } from '../workspace/contextPorts.js';
 import type { ConversationStore } from '../memory/memoryPorts.js';
@@ -32,17 +33,19 @@ export function createTaskRecall(parts: {
     input.signal?.addEventListener('abort', () => { entry.controller.abort(); if (entries.get(key) === entry) entries.delete(key); }, { once: true });
     try {
       const snapshot = parts.state.snapshot(input.scopeKey);
-      const context = prepareTurnCognitiveContext(snapshot, parts.conversations, { scopeKey: input.scopeKey, message: input.cue,
-        occurredAt: parts.now(), channel: 'system', present: input.present, currentGoal: input.cue });
+      const context = observeSync('recall', { phase: 'task_deterministic' }, () => prepareTurnCognitiveContext(snapshot, parts.conversations, { scopeKey: input.scopeKey, message: input.cue,
+        occurredAt: parts.now(), channel: 'system', present: input.present, currentGoal: input.cue }), value => ({ memoryCount: value.memories.length }));
       entry.ids = [...new Set([...parts.memory.search(input.scopeKey, input.cue, input.present).map(item => item.id), ...context.memories.map(item => item.id)])];
       if (!parts.enrich) { entry.status = entry.ids.length ? 'ready' : 'no_match'; return; }
       const running = pending.get(key) ?? new Set<Entry>(); running.add(entry); pending.set(key, running);
-      entry.done = parts.enrich.enrich(context, { scopeKey: input.scopeKey, message: input.cue, snapshot, memoryTurn: true, signal: entry.controller.signal })
+      const span = observerSpan('recall', { phase: 'task_semantic' });
+      entry.done = span.run(() => parts.enrich!.enrich(context, { scopeKey: input.scopeKey, message: input.cue, snapshot, memoryTurn: true, signal: entry.controller.signal }))
         .then(result => {
+          span.complete({ status: valueStatus(result.memoryRecall.status, entry.controller.signal.aborted), memoryCount: result.memories.length });
           if (entry.controller.signal.aborted || entries.get(key) !== entry) return;
           entry.ids = [...new Set([...entry.ids, ...result.memories.map(item => item.id), ...result.frame.recalledMemoryIDs])];
           entry.status = ['failed', 'timeout'].includes(result.memoryRecall.status) ? 'failed' : entry.ids.length ? 'ready' : 'no_match';
-        }).catch(() => { if (!entry.controller.signal.aborted && entries.get(key) === entry) entry.status = 'failed'; })
+        }).catch(error => { span.failed(error); if (!entry.controller.signal.aborted && entries.get(key) === entry) entry.status = 'failed'; })
         .finally(() => { running.delete(entry); if (!running.size && pending.get(key) === running) pending.delete(key); });
     } catch { entry.status = 'failed'; pending.get(key)?.delete(entry); if (!pending.get(key)?.size) pending.delete(key); }
   };
@@ -75,3 +78,5 @@ export function createTaskRecall(parts: {
     return Object.freeze({ contextVersion: input.contextVersion, observedAt: parts.now(), status, items: Object.freeze(items), sourceIds: Object.freeze(parts.memory.sources(input.scopeKey, items.map(item => item.id))) });
   } };
 }
+
+const valueStatus = (status: string, aborted: boolean) => aborted ? 'cancelled' : status;

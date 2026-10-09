@@ -10,6 +10,8 @@ import { planFcaHistory, prepareFcaHistory } from '../src/mind/action/fca/fcaHis
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummaryInput } from '../src/mind/action/fca/fcaHistoryPorts.js';
 import type { TaskStep } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import { actionHarness } from './support/actionThreadHarness.js';
+import type { ObserverDraft } from '../src/contracts/observerContract.js';
+import { installObserverSink, observeAsync, withObserverRun, withObserverTask } from '../src/infra/observer/observerContext.js';
 
 const at = '2026-10-09T00:00:00.000Z', closers = new Set<() => void>(), directories: string[] = [];
 afterEach(() => { for (const close of closers) close(); closers.clear(); for (const path of directories.splice(0)) rmSync(path, { recursive: true, force: true }); });
@@ -56,6 +58,39 @@ function fixture(path = ':memory:', legacy = false) {
 }
 
 describe('exact complete-round FCA history compaction', () => {
+  it.each(['working', 'throwing'] as const)('hands back only freshly committed compaction with a %s observer', async mode => {
+    const f = fixture(); await f.append(10); const step = await f.begin();
+    const original = f.db.prepare('SELECT sequence,entries_json FROM fca_task_history ORDER BY sequence').all();
+    const events: ObserverDraft[] = []; let summaries = 0;
+    const restore = installObserverSink(event => { if (mode === 'throwing') throw new Error('sink failed'); events.push(event); });
+    try {
+      const prepare = () => withObserverRun({ scopeKey: 'owner', surface: 'fixture' }, () => withObserverTask({ taskId: step.taskId, stepId: step.id }, () =>
+        observeAsync('fca', {}, () => prepareFcaHistory(step, f.ports(async () => { summaries++; return summary; }), new AbortController().signal, policy))));
+      const replay = await prepare(); expect(await prepare()).toEqual(replay);
+      expect(summaries).toBeGreaterThan(0);
+      expect(f.db.prepare('SELECT sequence,entries_json FROM fca_task_history ORDER BY sequence').all()).toEqual(original);
+      if (mode === 'working') {
+        const returns = events.filter(event => event.kind === 'handoff' && event.fromNode === 'compact' && event.toNode === 'context');
+        expect(returns).toHaveLength(1);
+        expect(returns[0]).toMatchObject({ taskId: step.taskId, stepId: step.id, output: { phase: 'history_replay', compactedBatches: summaries } });
+        expect(events.find(event => event.spanId === returns[0]!.sourceSpanId && event.kind === 'span.completed')?.output).toEqual({ committed: true });
+        expect(JSON.stringify(events)).not.toMatch(/private-|signed-|public input|public result/u);
+      } else expect(events).toEqual([]);
+    } finally { restore(); }
+  });
+
+  it('does not hand back a cancelled compaction as replayable history', async () => {
+    const f = fixture(); await f.append(10); const step = await f.begin(), abort = new AbortController();
+    const events: ObserverDraft[] = [], restore = installObserverSink(event => events.push(event));
+    try {
+      await expect(withObserverRun({ scopeKey: 'owner', surface: 'fixture' }, () => prepareFcaHistory(step,
+        f.ports(async () => { abort.abort(); return summary; }), abort.signal, policy))).rejects.toThrow();
+      expect(events.some(event => event.kind === 'handoff' && event.fromNode === 'fca' && event.toNode === 'compact')).toBe(true);
+      expect(events.some(event => event.kind === 'handoff' && event.fromNode === 'compact')).toBe(false);
+      expect(f.window().summary).toBeNull();
+    } finally { restore(); }
+  });
+
   it('covers an exact 100-round prefix in bounded batches and preserves every original signed byte', async () => {
     const f = fixture(); await f.append(100); const step = await f.begin();
     const original = f.db.prepare('SELECT sequence,entries_json FROM fca_task_history ORDER BY sequence').all();

@@ -1,3 +1,4 @@
+import { observeSync, withScopedObserverTask } from '../../../../infra/observer/observerContext.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { AffectCoordinator, validFcaAffectEvidence, type FcaAffectEvidence, type FcaAffectWriter } from '../../../emotion/emotionPorts.js';
 import { compareFcaOutcome, validFcaExpectation, type FcaActionExpectation, type FcaExpectationComparison } from '../../../prediction/predictionPorts.js';
@@ -106,7 +107,8 @@ export class SQLiteFcaEvidenceStore implements FcaEvidence {
       WHERE h.step_id=o.step_id AND h.task_id=o.task_id AND t.scope_key=o.scope_key) ORDER BY o.revision,o.rowid`).all();
     for (const row of queued) {
       const evidence = JSON.parse(String(row.evidence_json)) as FcaAffectEvidence;
-      const result = this.affect.submit(String(row.scope_key), evidence);
+      const result = withScopedObserverTask(String(row.scope_key), { taskId: String(row.task_id), stepId: String(row.step_id) }, () =>
+        observeSync('emotion', { phase: 'apply_appraisal', revision: Number(row.revision) }, () => this.affect.submit(String(row.scope_key), evidence), status => ({ status })));
       if (result !== 'withheld') this.options.db.prepare('UPDATE fca_affect_outbox SET done=1 WHERE scope_key=? AND event_id=? AND revision=? AND step_id=?')
         .run(String(row.scope_key), String(row.event_id), Number(row.revision), String(row.step_id));
     }

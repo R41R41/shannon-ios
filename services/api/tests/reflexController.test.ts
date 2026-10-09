@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  createReflexController, runReflexSession, returnReflexControl, ReflexHandoffNotSent, type BodyActionReceipt, type BodyObservation, type BodyOperation,
+  createReflexController, evaluateReflexEntry, runReflexSession, returnReflexControl, ReflexHandoffNotSent, type BodyActionReceipt, type BodyObservation, type BodyOperation,
   type BodyStopAcknowledgement, type BodyStopRequest, type ReflexChoice, type ReflexChoiceInput, type ReflexPorts, type ReflexSessionRequest,
 } from '../src/mind/action/reflex/reflexPorts.js';
+import type { ObserverDraft } from '../src/contracts/observerContract.js';
+import { installObserverSink, observeAsync, withObserverRun, withObserverTask } from '../src/infra/observer/observerContext.js';
 
 const at = Date.parse('2026-10-09T00:00:00.000Z');
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
@@ -54,6 +56,36 @@ function fixture() {
 afterEach(() => vi.useRealTimers());
 
 describe('short body control under the existing action authority', () => {
+  it.each(['observation', 'explicit', 'stale', 'cancelled', 'failed'] as const)('emits entry handoffs only for a real evaluation (%s)', async mode => {
+    const f = fixture(), input = request(), abort = new AbortController(), events: ObserverDraft[] = [];
+    const failure = new Error('PRIVATE_PROVIDER_ERROR'); let calls = 0;
+    const selector = { async evaluate() {
+      calls++;
+      if (mode === 'failed') throw failure;
+      if (mode === 'cancelled') abort.abort();
+      return { sessionId: input.context.sessionId, generation: input.context.generation, decision: 'enter' as const, reason: 'danger' as const };
+    } };
+    if (mode === 'stale') f.current(false);
+    const restore = installObserverSink(event => events.push(event));
+    try {
+      const run = withObserverRun({ scopeKey: 'owner', surface: 'fixture' }, () => withObserverTask({ taskId: input.context.taskId, stepId: 'step' }, () =>
+        observeAsync('fca', {}, () => evaluateReflexEntry(input, { context: input.context, observation: f.observation(),
+          trigger: mode === 'explicit' ? 'explicit' : 'observation', recent: [] }, selector, f.ports, abort.signal))));
+      if (mode === 'failed') await expect(run).rejects.toBe(failure);
+      else expect(await run).toBe(mode === 'observation' || mode === 'explicit');
+      const skipped = mode === 'explicit' || mode === 'stale';
+      expect(calls).toBe(skipped ? 0 : 1);
+      const handoffs = events.filter(event => event.kind === 'handoff');
+      expect(handoffs.map(event => [event.fromNode, event.toNode])).toEqual(skipped ? [] : mode === 'failed'
+        ? [['fca', 'reflexJev']] : [['fca', 'reflexJev'], ['reflexJev', 'fca']]);
+      expect(handoffs.every(event => event.taskId === input.context.taskId && event.stepId === 'step' && event.sourceSpanId)).toBe(true);
+      if (!skipped && mode !== 'failed') expect(handoffs[1]!.output).toEqual({ phase: 'entry_result', enter: mode === 'observation' });
+      expect(events.some(event => event.node === 'reflex' || event.node === 'bodyControl')).toBe(false);
+      expect(JSON.stringify(events)).not.toContain('PRIVATE_PROVIDER_ERROR');
+      expect(f.ports.handoff.acquire).not.toHaveBeenCalled();
+    } finally { restore(); }
+  });
+
   it('waits for actual normal-executor stop ACK before acquiring or choosing, then returns new state without resuming it', async () => {
     const f = fixture(), stopped = deferred<BodyStopAcknowledgement>();
     f.ports.handoff.stopNormal = vi.fn(input => { void input; return stopped.promise; });

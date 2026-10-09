@@ -10,6 +10,9 @@ import type { FcaDecision, FcaModelInput } from '../src/mind/action/fca/fcaPorts
 import type { FcaToolSelectionRequest } from '../src/mind/selectors/selectorsPorts.js';
 import { shannonTool } from '../src/mind/tools/toolRegistryPorts.js';
 import { anthropicFcaHistoryCodec } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
+import type { ObserverDraft } from '../src/contracts/observerContract.js';
+import { installObserverSink, withObserverRun } from '../src/infra/observer/observerContext.js';
+import type { TaskRecallPacket } from '../src/mind/recall/taskRecallPorts.js';
 
 const databases: DatabaseSync[] = [];
 const at = '2026-10-09T00:00:00.000Z';
@@ -38,6 +41,29 @@ function fixture(decide: (input: FcaModelInput) => FcaDecision | Promise<FcaDeci
 const tools = (name: string, id = 'call', input: unknown = {}): FcaDecision => ({ kind: 'tools', calls: [{ id, name, input }] });
 
 describe('FCA selection checkpoints and tool recovery', () => {
+  it.each(['working', 'throwing', 'held'] as const)('observes only actual selection boundaries with a %s observer', async mode => {
+    const f = fixture(() => tools('task.list')), events: ObserverDraft[] = [];
+    let calls = 0;
+    f.ports.selector = { async select() { calls++; return { names: ['task.list'], source: 'jev' }; } };
+    f.runtime.send('owner', f.root.id, f.task.id, 'PRIVATE_SELECTION_INPUT', 'input');
+    const restore = installObserverSink(event => { if (mode === 'throwing') throw new Error('sink failed'); events.push(event); });
+    try {
+      const run = () => withObserverRun({ scopeKey: 'owner', surface: 'fixture', audience: mode === 'held' ? 'others' : 'owner' }, f.run);
+      await run(); const firstCount = events.length; await run();
+      expect(calls).toBe(1);
+      expect(f.inputs.map(input => input.tools.map(tool => tool.name))).toEqual([['task.list'], ['task.list']]);
+      expect(f.runtime.snapshot('owner', f.task.id)!.checkpoint).toMatchObject({ fcaToolSelection: { names: ['task.list'] } });
+      if (mode === 'working') {
+        const handoffs = events.filter(event => event.kind === 'handoff' && (event.fromNode === 'jevt' || event.toNode === 'jevt'));
+        expect(handoffs.map(event => [event.fromNode, event.toNode])).toEqual([['context', 'jevt'], ['jevt', 'context']]);
+        expect(handoffs.every(event => event.taskId === f.task.id && event.stepId && event.actionId)).toBe(true);
+        expect(handoffs[1]!.output).toEqual({ phase: 'fca_selection_result', source: 'jev', selectedCount: 1 });
+        expect(events.slice(firstCount).some(event => event.node === 'jevt' || event.node === 'llm')).toBe(false);
+        expect(JSON.stringify(events)).not.toContain('PRIVATE_SELECTION_INPUT');
+      } else expect(events).toEqual([]);
+    } finally { restore(); }
+  });
+
   it('reuses selection across successful rounds and reselects on admitted input, child state, catalog changes and failures', async () => {
     let invalid = false;
     const f = fixture(() => tools('task.list', 'list', invalid ? { unknown: true } : {}));
@@ -119,6 +145,32 @@ describe('FCA selection checkpoints and tool recovery', () => {
 });
 
 describe('FCA external-tool source and unknown-outcome boundaries', () => {
+  it.each([true, false])('hands a recall packet to context only after its source fence accepts it (%s)', async visible => {
+    const f = fixture(() => ({ kind: 'wait', summary: 'waiting' })), events: ObserverDraft[] = [];
+    let resolve!: (value: TaskRecallPacket) => void, entered!: () => void;
+    const packet = new Promise<TaskRecallPacket>(done => { resolve = done; }), ready = new Promise<void>(done => { entered = done; });
+    const value: TaskRecallPacket = { contextVersion: 'PRIVATE_VERSION', observedAt: at, status: 'ready', items: [], sourceIds: ['PRIVATE_SOURCE'] };
+    f.ports.recall = { start() {}, packet() { entered(); return packet; }, async finishSegment() {}, cancel() {}, async cancelAll() {} };
+    f.ports.observeMemory = () => visible;
+    const restore = installObserverSink(event => events.push(event));
+    try {
+      const running = withObserverRun({ scopeKey: 'owner', surface: 'fixture' }, f.run);
+      await ready;
+      const returned = () => events.filter(event => event.kind === 'handoff' && event.fromNode === 'recall' && event.toNode === 'context');
+      expect(returned()).toEqual([]); resolve(value);
+      if (visible) {
+        await running; expect(f.inputs[0]!.recall).toBe(value);
+        expect(returned()).toHaveLength(1);
+        expect(returned()[0]).toMatchObject({ taskId: f.task.id, output: { phase: 'decision_packet', status: 'ready', itemCount: 0, sourceCount: 1 } });
+        expect(events.find(event => event.spanId === returned()[0]!.sourceSpanId && event.kind === 'span.completed')?.node).toBe('recall');
+      } else {
+        await expect(running).rejects.toThrow('FCA_SOURCE_WITHHELD');
+        expect(returned()).toEqual([]); expect(f.inputs).toEqual([]);
+      }
+      expect(JSON.stringify(events)).not.toContain('PRIVATE_');
+    } finally { restore(); }
+  });
+
   it('checks source visibility before selection and again after selection, before the model', async () => {
     const f = fixture(() => tools('task.list'));
     let visible = false, selections = 0, permits = 0;
