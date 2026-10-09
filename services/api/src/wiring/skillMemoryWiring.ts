@@ -1,3 +1,4 @@
+import { fcaSleepTaskEvidenceFor } from './fcaSleepTaskEvidence.js';
 import { DatabaseSync } from 'node:sqlite';
 import { isOwnerOnly, ownerSpoke, visibleMemoryText, type CompanionStateSnapshot, type CompanionStateStore } from '@shannon/cognition';
 import { skillRoutingSwitches } from '@shannon/learning';
@@ -105,6 +106,7 @@ export function skillSleepSpend(memory: SkillMemory): LlmUsageStore {
 export function skillSeedSources(store: ShannonKnowledgeStore & ConversationStore & Pick<CompanionStateStore, 'snapshot'>, choices: ChoiceLedger | null,
   memory?: SkillMemory): SkillSeedSources {
   const seedable = (scopeKey: string) => seedRule(store, scopeKey);
+  const taskEvidence = fcaSleepTaskEvidenceFor(store);
   return {
     ...(memory ? { sourcesPass: (scopeKey: string) => skillSourcesPass(store, memory, scopeKey) } : {}),
     knowledge: scopeKey => {
@@ -116,7 +118,7 @@ export function skillSeedSources(store: ShannonKnowledgeStore & ConversationStor
       const seeds = seedable(scopeKey);
       // Only turns the owner had with her alone, that he spoke in, that are visible, not withheld, and not kept secret.
       return seeds.candidates.filter(item => item.observedAt >= startAt && item.observedAt < endAt && seeds.ok(item))
-        .map(item => ({ id: item.id, observedAt: item.observedAt, summary: item.summary, text: `${item.userMessage}\n${item.shannonReply}` }));
+        .map(item => ({ id: item.id, observedAt: item.observedAt, summary: item.summary, text: taskEvidence(scopeKey, item.id) ? item.summary : `${item.userMessage}\n${item.shannonReply}` }));
     },
     choices: (scopeKey, startAt, endAt) => (choices?.rows(scopeKey) ?? []).filter(row => row.chosenAt >= startAt && row.chosenAt < endAt).map(row => ({
       choiceId: row.choiceId, settleCode: row.settleCode, choice: row.choice, surface: row.surface, subjectKind: row.subjectKind, subjectId: row.subjectId, chosenAt: row.chosenAt, status: row.status,
@@ -133,9 +135,10 @@ export function skillSeedSources(store: ShannonKnowledgeStore & ConversationStor
 /** The seed rule over a scope's turns now; a turn outside the recent window is read by its id (a turn not found fails). */
 function seedRule(store: ConversationStore & Pick<CompanionStateStore, 'snapshot'>, scopeKey: string) {
   const snapshot = store.snapshot(scopeKey);
+  const taskEvidence = fcaSleepTaskEvidenceFor(store);
   const candidates = store.experienceCandidates(scopeKey);
   const withholding = new MemoryWithholding(snapshot, store, scopeKey, candidates);
-  const ok = (item: (typeof candidates)[number]) => isOwnerOnly(item.disclosure?.audience) && ownerSpoke(item.disclosure)
+  const ok = (item: (typeof candidates)[number]) => isOwnerOnly(item.disclosure?.audience) && (item.id.startsWith('task:') ? taskEvidence(scopeKey, item.id) : ownerSpoke(item.disclosure))
     && item.disclosure?.category !== 'secret' && !(item.disclosure?.decidedBy === 'owner' && item.disclosure.sensitivity === 'sensitive')
     && visibleMemoryText(snapshot, item.id, item.summary) !== null && !withholding.withholdsExperience(item);
   const known = new Map(candidates.map(item => [item.id, item]));
@@ -178,13 +181,13 @@ export function skillSourcesPass(store: ConversationStore & Pick<CompanionStateS
 export function configuredSkillExport(
   environment: Readonly<Record<string, string | undefined>>,
   parts: { memory: SkillMemory; store: ConversationStore & Pick<CompanionStateStore, 'snapshot'> & Partial<ShannonKnowledgeStore>; access?: AetherAccess | null; log?: (line: string) => void },
-): ((scopeKey: string, at: string) => Promise<SkillExportResult | null>) | null {
+): ((scopeKey: string, at: string, signal?: AbortSignal) => Promise<SkillExportResult | null>) | null {
   if (!skillRoutingSwitches(environment).skillExport) return null;
   const access = parts.access === undefined ? configuredAetherAccess(environment) : parts.access;
   if (!access) return null;
   const scope = aetherStudyScope(environment);
-  return async (scopeKey, at) => scopeKey !== scope ? null : exportSkills({
-    scopeKey, skills: parts.memory, access, at, check: () => skillBodyCheck(parts.store.snapshot(scopeKey), parts.store, scopeKey),
+  return async (scopeKey, at, signal) => scopeKey !== scope ? null : exportSkills({
+    scopeKey, skills: parts.memory, access, at, signal, check: () => skillBodyCheck(parts.store.snapshot(scopeKey), parts.store, scopeKey),
     sources: () => skillSourcesPass(parts.store, parts.memory, scopeKey), ...(parts.log ? { log: parts.log } : {}),
   });
 }

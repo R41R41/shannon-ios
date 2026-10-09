@@ -72,6 +72,13 @@ private struct ShannonActionThreadsList: View {
 #endif
         }
     }
+    private func originText(_ origin: String) -> String {
+        switch origin {
+        case "maintenance": ShannonGeneratedStrings.threadsMaintenanceOrigin
+        case "own_time": ShannonGeneratedStrings.threadsOwnTimeOrigin
+        default: ShannonGeneratedStrings.threadsOwnerOrigin
+        }
+    }
     @ViewBuilder private func rows(stale: Bool) -> some View {
         if model.othersPresent { Text(ShannonGeneratedStrings.threadsPrivate) }
         else {
@@ -83,7 +90,7 @@ private struct ShannonActionThreadsList: View {
                 VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                     Text(thread.title).font(.headline)
                     Label(stateText(thread.state), systemImage: stateSymbol(thread.state))
-                    Text(thread.origin == "own_time" ? ShannonGeneratedStrings.threadsOwnTimeOrigin : ShannonGeneratedStrings.threadsOwnerOrigin)
+                    Text(originText(thread.origin))
                         .font(.caption).foregroundStyle(ShannonPalette.resolve(colorScheme).textSecondary)
                     if thread.state == "unknown" { Text(ShannonGeneratedStrings.threadsUnknownDetail).font(.callout) }
                     if thread.failures >= 5 { Text(ShannonGeneratedStrings.threadsFiveFailures).font(.callout) }

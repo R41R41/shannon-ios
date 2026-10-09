@@ -12,6 +12,8 @@ import {
 
 export interface BackgroundWorkerOptions {
   workerId?: string;
+  /** Fresh owner nights are admitted by the API Task Hub; durable bound jobs never return to this worker. */
+  fcaSleepScope?: string;
   timeZone?: string;
   sleepHour?: number;
   leaseMilliseconds?: number;
@@ -46,6 +48,7 @@ export class ShannonBackgroundWorker {
   private readonly selfInterests: BackgroundWorkerOptions['selfInterests'];
   private readonly localSleepAnalyzer = new LocalRuleSleepMemoryAnalyzer();
   private nextMaintenanceAt = 0;
+  private readonly fcaSleepScope?: string;
 
   constructor(
     private readonly stateStore: CompanionStateStore,
@@ -54,6 +57,7 @@ export class ShannonBackgroundWorker {
     private readonly sleepAnalyzer: SleepMemoryAnalyzer,
     options: BackgroundWorkerOptions = {},
   ) {
+    this.fcaSleepScope = options.fcaSleepScope;
     this.workerId = options.workerId ?? `worker-${randomUUID()}`;
     this.processor = new TurnRefinementProcessor(stateStore, conversationStore, options.memoryProposals ?? null, options.stage5 ?? false);
     this.timeZone = validTimeZone(options.timeZone ?? 'Asia/Tokyo');
@@ -78,7 +82,7 @@ export class ShannonBackgroundWorker {
     }
     const nowIso = current.toISOString();
     const leaseUntil = new Date(current.getTime() + this.leaseMilliseconds).toISOString();
-    const job = this.jobStore.claimNextBackgroundJob(this.workerId, nowIso, leaseUntil);
+    const job = this.jobStore.claimNextBackgroundJob(this.workerId, nowIso, leaseUntil, this.fcaSleepScope);
     if (!job) return 'idle';
     try {
       await withObserverRun({ scopeKey: job.scopeKey, surface: 'background' }, () =>

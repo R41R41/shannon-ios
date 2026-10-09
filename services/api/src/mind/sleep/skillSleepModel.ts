@@ -1,3 +1,4 @@
+import { backgroundModelAttempt, requireBackgroundUsage } from '../../infra/models/backgroundModelAttempt.js';
 import { configuredResponseModel } from '../../infra/models/anthropic/haikuConfig.js';
 import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
@@ -14,7 +15,7 @@ import { estimatedOpenAICostUsd, responseUsage, type LlmUsageStore } from '../..
  */
 export interface SkillSleepModel {
   readonly model: string;
-  json(scopeKey: string, name: string, instructions: string, input: unknown, schema: Readonly<Record<string, unknown>>): Promise<unknown>;
+  json(scopeKey: string, name: string, instructions: string, input: unknown, schema: Readonly<Record<string, unknown>>, signal?: AbortSignal): Promise<unknown>;
 }
 
 export class OpenAISkillSleepModel implements SkillSleepModel {
@@ -27,7 +28,8 @@ export class OpenAISkillSleepModel implements SkillSleepModel {
     this.fetcher = responseModelFetcher({ ...options, model: this.model });
   }
 
-  async json(scopeKey: string, name: string, instructions: string, input: unknown, schema: Readonly<Record<string, unknown>>): Promise<unknown> {
+  async json(scopeKey: string, name: string, instructions: string, input: unknown, schema: Readonly<Record<string, unknown>>, signal?: AbortSignal): Promise<unknown> {
+    return backgroundModelAttempt({ ...this.options, model: this.model, scopeKey, lane: 'memory_background', maxOutputTokens: 4000, signal }, async accounted => {
     const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
@@ -38,16 +40,21 @@ export class OpenAISkillSleepModel implements SkillSleepModel {
         max_output_tokens: 4_000, store: false,
         prompt_cache_key: stableScopeIdentifier(scopeKey), safety_identifier: stableScopeIdentifier(scopeKey),
       }),
-      signal: AbortSignal.timeout(this.options.timeoutMilliseconds ?? 120_000),
+      signal: AbortSignal.any([AbortSignal.timeout(this.options.timeoutMilliseconds ?? 120_000), ...(signal ? [signal] : [])]),
     });
     const envelope = parseJson(await response.text());
-    if (!response.ok) throw new Error(`OPENAI_SKILLS_${response.status}`);
+    if (!response.ok) throw Object.assign(new Error(`OPENAI_SKILLS_${response.status}`), { status: response.status });
     const usage = responseUsage(envelope);
     this.options.usageStore?.recordLlmUsage({
       scopeKey, lane: 'memory_background', model: this.model, ...usage, estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString(),
     });
+    if (usage.unknownCostUpperBoundUsd) accounted();
+    requireBackgroundUsage((envelope as { usage?: unknown })?.usage, signal);
+    accounted();
     validateResponseModelUsage(this.model, envelope);
+    signal?.throwIfAborted();
     return parseJson(extractOutputText(envelope));
+    });
   }
 }
 

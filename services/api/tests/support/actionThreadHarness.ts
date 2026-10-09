@@ -1,8 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { SQLiteActionStore } from '../../src/mind/action/threads/store/actionStore.js';
 import type { ActionThreads } from '../../src/contracts/actionThreadContract.js';
-export function actionHarness(now:()=>string,path=':memory:') {
-  const db=new DatabaseSync(path),store=new SQLiteActionStore(db);
+export function actionHarness(now:()=>string,path=':memory:',borrowedDatabase?:DatabaseSync) {
+  const db=borrowedDatabase??new DatabaseSync(path),store=new SQLiteActionStore(db);
   const actions:ActionThreads={
     admitRespond:async draft=>store.admitRespond(draft,'test-runner',now()),
     enqueue:async draft=>store.enqueue(draft,now()),claim:async id=>store.claim(id,'test-runner',now()),
@@ -14,5 +14,5 @@ export function actionHarness(now:()=>string,path=':memory:') {
     reserve:async(lease,id,day,yen,cap,spent)=>store.reserve(lease,id,day,yen,cap,spent,now()),settle:async(lease,id,yen)=>store.settle(lease,id,yen,now()),
     acknowledge:async report=>store.acknowledge(report,now()),
   };
-  return {db,store,actions,close:()=>db.close()};
+  return {db,store,actions,close:()=>{if(!borrowedDatabase)db.close();}};
 }

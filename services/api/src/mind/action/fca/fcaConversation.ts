@@ -104,10 +104,13 @@ export function createFcaConversationBridge(parts: {
       const visible = (taskId: string) => parts.visible(context.scopeKey, taskId, step.id);
       const projection = (task: TaskView | null) => {
         if (!task || !visible(task.id)) return null;
-        const sources = parts.runtime.taskSources(context.scopeKey, task.id);
-        observe(context.scopeKey, { recalledMemoryIds: sources.flatMap(source => [
-          ...source.experienceId ? [source.experienceId] : [], ...source.recalledMemoryIds,
-        ]), readSourceIds: sources.flatMap(source => source.readSourceIds ?? []) });
+        // Runtime.view verifies the immutable sleep schedule projection; it reveals none of the internal nightly reads.
+        if (task.kind !== 'sleep' || task.origin !== 'maintenance') {
+          const sources = parts.runtime.taskSources(context.scopeKey, task.id);
+          observe(context.scopeKey, { recalledMemoryIds: sources.flatMap(source => [
+            ...source.experienceId ? [source.experienceId] : [], ...source.recalledMemoryIds,
+          ]), readSourceIds: sources.flatMap(source => source.readSourceIds ?? []) });
+        }
         return { ...task, childIds: task.childIds.filter(visible) };
       };
       // Scope, parent and source rights come exclusively from the bound foreground segment.

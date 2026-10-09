@@ -83,9 +83,13 @@ export interface MemoryToolPort {
   available(scopeKey: string, context?: ToolExecutionContext): boolean;
   execute(name: string, input: unknown, context: ToolExecutionContext, signal?: AbortSignal): Promise<ToolResult>;
 }
+export interface MinecraftTaskToolPort extends MemoryToolPort {
+  /** Trusted per-call read metadata is kept outside the result shown to the model. */
+  execute(name: string, input: unknown, context: ToolExecutionContext, signal?: AbortSignal): Promise<ToolResult & { documents?: ToolDocuments }>;
+}
 export class ShannonToolRunner {
-  private minecraftTasks: MemoryToolPort | null = null;
-  useMinecraftTasks(port: MemoryToolPort): void { this.minecraftTasks = port; }
+  private minecraftTasks: MinecraftTaskToolPort | null = null;
+  useMinecraftTasks(port: MinecraftTaskToolPort): void { this.minecraftTasks = port; }
   private taskMemory: MemoryToolPort | null = null;
   private taskRuntime: TaskRuntimeToolPort | null = null;
   private executors: Readonly<Record<string, ToolExecutor>>;
@@ -185,8 +189,8 @@ export class ShannonToolRunner {
       : { tool, result: refused ?? toolFailure('not_offered', 'そういう道具はない。', { retryable: false }) };
     const executor: ToolExecutor | undefined = tool.domain === 'minecraft_body' && this.minecraftTasks ? (input, context) => ({
       summary: '共通タスクのマイクラ作業を操作する。', run: async signal => {
-        const result = await this.minecraftTasks!.execute(tool.name, input, context, signal);
-        return { result, record: { summary: '共通タスクへのマイクラ操作を受け付けました。', outcome: result.ok ? 'done' as const : 'failed' as const } };
+        const { documents, ...result } = await this.minecraftTasks!.execute(tool.name, input, context, signal);
+        return { result, ...(documents ? { documents } : {}), record: { summary: '共通タスクへのマイクラ操作を受け付けました。', outcome: result.ok ? 'done' as const : 'failed' as const } };
       },
     }) : this.executors[tool.name];
     if (tool.domain === 'memory_read' && !this.taskMemory?.available(context.scopeKey, context)) return { tool, result: toolFailure('not_offered', 'この実行では記憶の道具を使えません。', { retryable: false }) };

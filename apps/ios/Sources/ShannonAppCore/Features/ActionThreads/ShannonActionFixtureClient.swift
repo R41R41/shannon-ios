@@ -17,11 +17,12 @@ actor ShannonActionFixtureClient: ShannonActionThreadsServing {
         return reading(others: false)
     }
     private func reading(others: Bool) -> ShannonActionThreadsDTO {
-        let kinds = ["ownTime", "agentTask", "minecraft"], titles = ["自分の時間", "作業環境での作業", "Minecraft"]
+        let kinds = [scenario == "sleep" ? "agentTask" : "ownTime", "agentTask", "minecraft"]
+        let titles = [scenario == "sleep" ? "睡眠整理" : "自分の時間", "作業環境での作業", "Minecraft"]
         let at = Date().formatted(.iso8601)
         return .init(availability: scenario == "recovering" ? "recovering" : "ready", generatedAt: at, count: states.filter { ["running", "waiting", "queued", "stopping"].contains($0) }.count,
-            threads: (others || scenario == "others") ? [] : states.indices.map { .init(id: "fixture-\($0)", kind: kinds[$0], title: titles[$0], origin: $0 == 0 ? "own_time" : "owner_request",
-                state: states[$0], progress: nil, result: nil, updatedAt: at, failures: scenario == "unknown" && $0 == 2 ? 5 : 0, canResume: $0 == 0 && states[$0] == "cancelled") }, othersPresent: others || scenario == "others")
+            threads: (others || scenario == "others") ? [] : states.indices.map { .init(id: "fixture-\($0)", kind: kinds[$0], title: titles[$0], origin: $0 == 0 ? (scenario == "sleep" ? "maintenance" : "own_time") : "owner_request",
+                state: states[$0], progress: nil, result: nil, updatedAt: at, failures: scenario == "unknown" && $0 == 2 ? 5 : 0, canResume: kinds[$0] == "ownTime" && states[$0] == "cancelled") }, othersPresent: others || scenario == "others")
     }
 }
 #endif

@@ -1,3 +1,4 @@
+import { backgroundModelAttempt, requireBackgroundUsage } from '../backgroundModelAttempt.js';
 import { observeAsync } from '../../observer/observerContext.js';
 import { observedAnthropicResponse } from './observerProjection.js';
 import Anthropic from '@anthropic-ai/sdk';
@@ -31,14 +32,15 @@ export class AnthropicSkillSleepModel {
     this.client = new Anthropic({ apiKey: options.apiKey, maxRetries: 0, timeout: options.timeoutMilliseconds ?? SKILL_PROPOSER_LIMITS.timeoutMilliseconds, ...(options.fetch ? { fetch: options.fetch } : {}) });
   }
 
-  async json(scopeKey: string, _name: string, instructions: string, input: unknown, schema: Readonly<Record<string, unknown>>): Promise<unknown> {
+  async json(scopeKey: string, _name: string, instructions: string, input: unknown, schema: Readonly<Record<string, unknown>>, signal?: AbortSignal): Promise<unknown> {
+    return backgroundModelAttempt({ ...this.options, model: this.model, scopeKey, lane: 'memory_background', maxOutputTokens: 4000, signal }, async accounted => {
     const message = await observeAsync('llm', { purpose: 'skill_proposer', round: 0, streaming: false }, () => this.client.messages.create({
       model: this.model, max_tokens: SKILL_PROPOSER_LIMITS.maxTokens,
       system: [{ type: 'text', text: instructions, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: JSON.stringify(input) }],
       thinking: { type: 'adaptive' },
       output_config: { effort: this.options.effort ?? 'medium', format: { type: 'json_schema', schema: structuredSchema(schema) as Record<string, unknown> } },
-    }), observedAnthropicResponse, { model: this.model });
+    }, signal ? { signal } : {}), observedAnthropicResponse, { model: this.model });
     const usage = message.usage;
     const counts = { input: usage.input_tokens ?? 0, cacheWrite: usage.cache_creation_input_tokens ?? 0, cacheRead: usage.cache_read_input_tokens ?? 0,
       output: usage.output_tokens ?? 0, searches: 0 };
@@ -47,10 +49,14 @@ export class AnthropicSkillSleepModel {
       scopeKey, lane: 'memory_background', model: this.model, inputTokens, cachedInputTokens: counts.cacheRead, outputTokens: counts.output,
       totalTokens: inputTokens + counts.output, estimatedCostUsd: estimatedAnthropicCostUsd(this.model, counts), occurredAt: this.options.now?.() ?? new Date().toISOString(),
     });
+    requireBackgroundUsage(usage, signal, true);
+    accounted();
+    signal?.throwIfAborted();
     if (message.stop_reason === 'refusal') throw new Error('ANTHROPIC_SKILLS_REFUSAL');
     const text = message.content.filter((block): block is Anthropic.TextBlock => block.type === 'text').map(block => block.text).join('');
     const parsed = parseJson(text);
     if (parsed === null || parsed === undefined) throw new Error('ANTHROPIC_SKILLS_EMPTY');
     return parsed;
+    });
   }
 }

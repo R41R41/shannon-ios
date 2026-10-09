@@ -2,7 +2,7 @@ import type { FcaConversationPort, FcaSourceGuard } from '../mind/action/fca/fca
 import type { TaskRuntime, TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import type { MinecraftBodyDependencies } from '../surfaces/minecraft/minecraftBody.js';
-import type { MemoryToolPort } from '../mind/tools/shannonToolRunner.js';
+import type { MinecraftTaskToolPort } from '../mind/tools/shannonToolRunner.js';
 import { toolOk, toolFailure } from '../mind/tools/shannonTools.js';
 
 /** Existing conversation tools now refer to common tasks. No legacy queue or planner fallback in this mode. */
@@ -11,7 +11,7 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
   sourceVisible(id: string): boolean;
   /** Same SQLite connection as task authority and body bindings; nested authority writes use savepoints. */
   atomic<T>(work: () => T): T;
-}): { tools: MemoryToolPort; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']> } {
+}): { tools: MinecraftTaskToolPort; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']> } {
   const bound = (visible: (id: string) => boolean = id => parts.visible(parts.ownerScope, id)) => {
     const tasks: TaskView[] = [];
     for (let offset = 0; ; offset += 100) {
@@ -43,7 +43,10 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
       const tasks = reads.map(item => item.task);
       if (name === 'minecraft.status') {
         // Reuse the trusted read so provenance follows this foreground conversation and its descendants.
-        return toolOk(reads.map(item => item.result.text).join('\n') || 'マイクラに結び付いたタスクはまだない。');
+        // task.get already observed canonical memory/experience lineage; close the external-read receipt too.
+        const sourceIds = [...new Set(tasks.flatMap(task => parts.runtime.taskSources(context.scopeKey, task.id)
+          .flatMap(source => source.readSourceIds ?? [])))];
+        return { ...toolOk(reads.map(item => item.result.text).join('\n') || 'マイクラに結び付いたタスクはまだない。'), documents: { sourceIds } };
       }
       if (name !== 'minecraft.cancel') throw new Error('FCA_TOOL_NOT_OFFERED');
       const targets = tasks.filter(task => value.id ? task.id === value.id : !['stopped', 'completed', 'failed'].includes(task.phase));

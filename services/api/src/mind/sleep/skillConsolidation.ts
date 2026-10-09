@@ -1,11 +1,14 @@
-import { normalizeKnowledgeDraft } from '@shannon/cognition';
 import { configuredSkillBudgetUsd, utcMonthKey } from '../../infra/models/llmUsage.js';
 import {
   SKILL_CAPACITY, SKILL_LIFECYCLE, type SkillBodyCheck, type SkillDocument, type SkillMemory, type SkillPatch, type SkillRejection, type StoredPattern,
 } from '../memory/memoryPorts.js';
 import { MAINTAINER_INSTRUCTIONS, PROPOSER_INSTRUCTIONS } from './skillSleepRules.js';
+import { copiesConversation, safe, failedEpisodes, successfulSequences, MAINTAINER_SCHEMA, PROPOSER_SCHEMA, isPatternOperation, isProposerAnswer, type ProposerAnswer } from './skillSleepProtocol.js';
+export { failedEpisodes, successfulSequences } from './skillSleepProtocol.js';
 import { chosenBase, versionRevisionId } from '../memory/memoryPorts.js';
 import type { SkillSleepModel } from './skillSleepModel.js';
+import { createSkillSleepFcaPhase, type SkillFcaOptions } from './skillFcaPhase.js';
+import type { SleepFcaPhaseHandler } from './sleepFcaPorts.js';
 
 /**
  * The skill sleep (Syzygy ADR-0008 stage 2, step 6; `docs/skill-and-routing-contract.md`, 「スキル記憶」), after WikiSkill's three
@@ -56,8 +59,6 @@ export interface SkillConsolidationResult {
   rejections: readonly SkillRejection[];
 }
 
-/** An episode is two to six choices of one Talk (or of her own time within half an hour of each other). */
-const SEQUENCE_GAP_MS = 30 * 60_000;
 const PROPOSER_ROUNDS = 3;
 /**
  * Review M4: the proposer's calls in one night (all runs and rounds together), and how old a sleep window may be for the models to
@@ -85,6 +86,17 @@ export class ShannonSkillConsolidator {
       /** The draw of a patch's base in a skill's lineage (ADR-0008 §14); `Math.random` unless handed. */ random?: () => number } = {},
   ) {
     this.budgetUsd = options.skillBudgetUsd ?? configuredSkillBudgetUsd();
+  }
+
+  /** Same models and memory methods; the common FCA owns every open/propose continuation. */
+  fcaPhase(options: SkillFcaOptions): SleepFcaPhaseHandler {
+    return createSkillSleepFcaPhase({ skills: this.skills, sources: this.sources, models: this.models, budgetUsd: this.budgetUsd,
+      now: () => this.options.now?.() ?? new Date().toISOString(), seeds: (...args) => this.seeds(...args), bases: scope => this.bases(scope),
+      proposerInput: (...args) => this.proposerInput(...args), revertedSources: scope => this.revertedShown(scope).slice(-12).flatMap(entry => [
+        ...entry.purposePatternIds.map(id => `pattern:${id}`),
+        ...this.skills.store.revisions(scope, entry.skillId).filter(revision => [entry.fromVersion, entry.toVersion].includes(revision.version)).flatMap(revision => revision.evidence),
+      ]), applyMaintenance: (...args) => this.applyMaintenance(...args),
+      applyProposal: (...args) => this.applyProposal(...args) }, options);
   }
 
   async consolidate(scopeKey: string, startAt: string, endAt: string): Promise<SkillConsolidationResult> {
@@ -164,7 +176,12 @@ export class ShannonSkillConsolidator {
       pages: pages.slice(-30).map(page => ({ id: page.patternId, version: page.version, kind: page.kind, title: page.title, body: page.body.slice(0, 600) })),
       limit,
     }, MAINTAINER_SCHEMA) as { operations?: unknown };
-    const operations = Array.isArray(answer.operations) ? answer.operations.filter(isPatternOperation).slice(0, limit) : [];
+    this.applyMaintenance(answer, scopeKey, seeds, limit, check, at, result, reject);
+  }
+
+  private applyMaintenance(answer: { operations?: unknown }, scopeKey: string, seeds: ReturnType<ShannonSkillConsolidator['seeds']>, limit: number,
+    check: SkillBodyCheck | null, at: string, result: { patterns: SkillConsolidationResult['patterns'] }, reject: (why: SkillRejection) => void): void {
+    const operations = Array.isArray(answer?.operations) ? answer.operations.filter(isPatternOperation).slice(0, limit) : [];
     for (const operation of operations) {
       const cited = operation.evidence.flatMap(id => seeds.byId.get(id) ?? []);
       const sources = cited.map(seed => seed.source);
@@ -192,29 +209,44 @@ export class ShannonSkillConsolidator {
     const bases = this.bases(scopeKey);
     for (let round = 1; round <= PROPOSER_ROUNDS; round += 1) {
       const pages = this.skills.patterns(scopeKey);
-      const skills = this.skills.store.all(scopeKey);
-      const answer = await proposer.json(scopeKey, 'shannon_skill_proposal', PROPOSER_INSTRUCTIONS, {
-        round, rounds: PROPOSER_ROUNDS, limits,
-        capacity: { used: skills.length, limit: SKILL_CAPACITY },
-        patternIndex: pages.map(page => ({ id: page.patternId, kind: page.kind, title: page.title })),
-        skills: skills.map(skill => {
-          const resolved = skill.uses.filter(use => use.o !== null);
-          const base = bases.get(skill.skillId);
-          return { id: skill.skillId, version: skill.version, name: skill.name, description: skill.description, status: skill.status,
-            editable: skill.madeBy !== 'owner_edit' && !skill.pinned && skill.status !== 'trial', purposes: skill.purposePatternIds,
-            uses: skill.uses.length, successes: resolved.filter(use => use.o === 1).length, body: (base?.body ?? skill.body).slice(0, 1_500),
-            ...(base ? { branch: { version: base.version, uses: base.uses, successes: base.successes } } : {}) };
-        }),
-        reverted: this.revertedShown(scopeKey).slice(-12)
-          .map(entry => ({ target: entry.target, purposes: entry.purposePatternIds, diff: entry.diff.slice(0, 300) })),
-        opened: [...opened.values()].map(page => ({ id: page.patternId, kind: page.kind, title: page.title, body: page.body })),
-      }, PROPOSER_SCHEMA) as Partial<ProposerAnswer>;
+      const answer = await proposer.json(scopeKey, 'shannon_skill_proposal', PROPOSER_INSTRUCTIONS,
+        this.proposerInput(scopeKey, round, limits, opened, bases), PROPOSER_SCHEMA) as Partial<ProposerAnswer>;
       if (!isProposerAnswer(answer)) return 'none';
       if (answer.action === 'open' && round < PROPOSER_ROUNDS) {
         for (const id of answer.open.slice(0, 4)) { const page = pages.find(item => item.patternId === id); if (page) opened.set(id, page); }
         continue;
       }
       if (answer.action !== 'propose') return 'none';
+      return this.applyProposal(answer, scopeKey, limits, check, texts, at, reject, bases);
+    }
+    return 'none';
+  }
+
+  private proposerInput(scopeKey: string, round: number, limits: { create: number; update: number }, opened: ReadonlyMap<string, StoredPattern>,
+    bases: ReturnType<ShannonSkillConsolidator['bases']>): unknown {
+    const pages = this.skills.patterns(scopeKey);
+    const skills = this.skills.store.all(scopeKey);
+    return {
+      round, rounds: PROPOSER_ROUNDS, limits,
+      capacity: { used: skills.length, limit: SKILL_CAPACITY },
+      patternIndex: pages.map(page => ({ id: page.patternId, kind: page.kind, title: page.title })),
+      skills: skills.map(skill => {
+        const resolved = skill.uses.filter(use => use.o !== null);
+        const base = bases.get(skill.skillId);
+        return { id: skill.skillId, version: skill.version, name: skill.name, description: skill.description, status: skill.status,
+          editable: skill.madeBy !== 'owner_edit' && !skill.pinned && skill.status !== 'trial', purposes: skill.purposePatternIds,
+          uses: skill.uses.length, successes: resolved.filter(use => use.o === 1).length, body: (base?.body ?? skill.body).slice(0, 1_500),
+          ...(base ? { branch: { version: base.version, uses: base.uses, successes: base.successes } } : {}) };
+      }),
+      reverted: this.revertedShown(scopeKey).slice(-12)
+        .map(entry => ({ target: entry.target, purposes: entry.purposePatternIds, diff: entry.diff.slice(0, 300) })),
+      opened: [...opened.values()].map(page => ({ id: page.patternId, kind: page.kind, title: page.title, body: page.body })),
+    };
+  }
+
+  private applyProposal(answer: ProposerAnswer, scopeKey: string, limits: { create: number; update: number }, check: SkillBodyCheck | null,
+    texts: readonly string[], at: string, reject: (why: SkillRejection) => void, bases: ReturnType<ShannonSkillConsolidator['bases']>): 'created' | 'updated' | 'rejected' {
+    const pages = this.skills.patterns(scopeKey);
       const purposes = answer.purposePatternIds.filter(id => pages.some(page => page.patternId === id));
       if (!purposes.length) { reject('no_purpose'); return 'rejected'; }
       // A skill's evidence is its pages' own evidence (so forgetting reaches it) and the pages themselves.
@@ -234,8 +266,6 @@ export class ShannonSkillConsolidator {
       const revised = this.skills.revise(scopeKey, answer.skillId, answer.expectedVersion, patch, check, at);
       if ('rejected' in revised) { reject(revised.rejected); return 'rejected'; }
       return 'updated';
-    }
-    return 'none';
   }
 
   /**
@@ -295,120 +325,4 @@ export class ShannonSkillConsolidator {
   private log(scopeKey: string, result: SkillConsolidationResult): void {
     (this.options.log ?? (line => console.log(line)))(`Shannon skill sleep: scope=${/^[A-Za-z0-9_:-]{1,80}$/u.test(scopeKey) ? scopeKey : 'other'} status=${result.status} settled=${result.settled} accepted=${result.accepted} reverted=${result.reverted} retired=${result.retired} patterns=${result.patterns.created}/${result.patterns.edited}/${result.patterns.merged}/${result.patterns.deprecated} created=${result.created} updated=${result.updated} rejected=${result.rejected}`);
   }
-}
-
-const ok = (choice: SeedChoice) => choice.status === 'settled' && (choice.growth ?? 0) >= 2 / 3 && (choice.serve === null || choice.serve >= 0.5);
-
-/** Her choices grouped into episodes: one Talk's in order (a conversation), or her own steps less than half an hour apart. */
-function episodes(choices: readonly SeedChoice[]): SeedChoice[][] {
-  const groups: SeedChoice[][] = [];
-  const talks = new Map<string, SeedChoice[]>();
-  const own: SeedChoice[] = [];
-  for (const choice of [...choices].sort((left, right) => left.chosenAt.localeCompare(right.chosenAt))) {
-    if (choice.status !== 'settled') continue;
-    if (choice.subjectKind === 'talk' && choice.subjectId) talks.set(choice.subjectId, [...talks.get(choice.subjectId) ?? [], choice]);
-    else if (choice.surface === 'autonomy') own.push(choice);
-  }
-  groups.push(...talks.values());
-  let run: SeedChoice[] = [];
-  for (const choice of own) {
-    if (run.length && Date.parse(choice.chosenAt) - Date.parse(run.at(-1)!.chosenAt) > SEQUENCE_GAP_MS) { groups.push(run); run = []; }
-    run.push(choice);
-  }
-  if (run.length) groups.push(run);
-  // A Talk's tier choices say how hard a turn was, not what she did: only what she did makes an episode.
-  return groups.map(group => group.filter(choice => !choice.choice.startsWith('tier.'))).filter(group => group.length >= 1 && group.length <= 6);
-}
-
-/** Sequences of her choices that went well, as closed symbols; the same sequence on several occasions is one seed with its count. */
-export function successfulSequences(choices: readonly SeedChoice[]): Array<{ symbols: string[]; surface: string; count: number }> {
-  const counted = new Map<string, { symbols: string[]; surface: string; count: number }>();
-  for (const steps of episodes(choices)) {
-    if (steps.length < 2 || !steps.every(ok)) continue;
-    const symbols = steps.map(choice => choice.choice);
-    const surface = steps[0]!.surface === 'autonomy' ? 'autonomy' : 'conversation';
-    const key = `${surface}|${symbols.join('>')}`;
-    counted.set(key, { symbols, surface, count: (counted.get(key)?.count ?? 0) + 1 });
-  }
-  return [...counted.values()].sort((left, right) => right.count - left.count || left.symbols.join().localeCompare(right.symbols.join()));
-}
-
-/** Episodes in which a choice failed (for root-cause analysis), as closed symbols with which step failed and how it was settled. */
-export function failedEpisodes(choices: readonly SeedChoice[]): Array<{ steps: Array<{ choice: string; ok: boolean; code: string | null }>; surface: string; count: number; source: string }> {
-  const counted = new Map<string, { steps: Array<{ choice: string; ok: boolean; code: string | null }>; surface: string; count: number; source: string }>();
-  for (const group of episodes(choices)) {
-    if (group.every(ok)) continue;
-    const steps = group.map(choice => ({ choice: choice.choice, ok: ok(choice), code: choice.settleCode && /^[a-z_]{1,40}$/u.test(choice.settleCode) ? choice.settleCode : null }));
-    const surface = group[0]!.surface === 'autonomy' ? 'autonomy' : 'conversation';
-    const key = `${surface}|${steps.map(step => `${step.choice}:${step.ok}`).join('>')}`;
-    const failed = group.find(choice => !ok(choice));
-    const source = failed?.choiceId ? `choice:${failed.choiceId}` : `sequence:${steps.map(step => step.choice).join('>').slice(0, 150)}`;
-    counted.set(key, { steps, surface, count: (counted.get(key)?.count ?? 0) + 1, source: counted.get(key)?.source ?? source });
-  }
-  return [...counted.values()].sort((left, right) => right.count - left.count);
-}
-
-/** Whether a text copies a run of a turn's words (the knowledge notes' check, `normalizeKnowledgeDraft`). */
-function copiesConversation(text: string, texts: readonly string[]): boolean {
-  if (!texts.length || !text.trim()) return false;
-  const sources = new Map(texts.map((item, index) => [`t${index}`, item]));
-  const normalized = normalizeKnowledgeDraft({ title: '-', applicability: '-', bodyMarkdown: text, status: 'hypothesis', sourceExperienceIds: [...sources.keys()] }, sources);
-  return 'rejected' in normalized && normalized.rejected === 'verbatim-conversation';
-}
-
-function safe<T>(read: () => T, fallback: T): T {
-  try { return read(); } catch { return fallback; }
-}
-
-interface PatternOperation {
-  operation: 'create' | 'patch' | 'append' | 'merge' | 'deprecate'; patternId: string; expectedVersion: number; kind: string; title: string; text: string;
-  mergeIds: string[]; evidence: string[];
-}
-
-const MAINTAINER_SCHEMA = {
-  type: 'object', additionalProperties: false, required: ['operations'],
-  properties: { operations: { type: 'array', items: {
-    type: 'object', additionalProperties: false, required: ['operation', 'patternId', 'expectedVersion', 'kind', 'title', 'text', 'mergeIds', 'evidence'],
-    properties: {
-      operation: { type: 'string', enum: ['create', 'patch', 'append', 'merge', 'deprecate'] }, patternId: { type: 'string' }, expectedVersion: { type: 'integer' },
-      kind: { type: 'string', enum: ['failure', 'strategy'] }, title: { type: 'string' }, text: { type: 'string' },
-      mergeIds: { type: 'array', items: { type: 'string' } }, evidence: { type: 'array', items: { type: 'string' } },
-    },
-  } } },
-} as const;
-
-function isPatternOperation(value: unknown): value is PatternOperation {
-  if (!value || typeof value !== 'object') return false;
-  const row = value as Record<string, unknown>;
-  return ['create', 'patch', 'append', 'merge', 'deprecate'].includes(String(row.operation)) && typeof row.patternId === 'string' && typeof row.expectedVersion === 'number'
-    && typeof row.kind === 'string' && typeof row.title === 'string' && typeof row.text === 'string'
-    && Array.isArray(row.mergeIds) && row.mergeIds.every(id => typeof id === 'string') && Array.isArray(row.evidence) && row.evidence.every(id => typeof id === 'string');
-}
-
-interface ProposerAnswer {
-  action: 'open' | 'propose' | 'none'; open: string[]; operation: 'create' | 'patch'; skillId: string; expectedVersion: number;
-  name: string; description: string; steps: string; aids: string; references: string;
-  replacements: Array<{ find: string; replace: string }>; purposePatternIds: string[]; consolidates: string[];
-}
-
-const PROPOSER_SCHEMA = {
-  type: 'object', additionalProperties: false,
-  required: ['action', 'open', 'operation', 'skillId', 'expectedVersion', 'name', 'description', 'steps', 'aids', 'references', 'replacements', 'purposePatternIds', 'consolidates'],
-  properties: {
-    action: { type: 'string', enum: ['open', 'propose', 'none'] }, open: { type: 'array', items: { type: 'string' } },
-    operation: { type: 'string', enum: ['create', 'patch'] }, skillId: { type: 'string' }, expectedVersion: { type: 'integer' },
-    name: { type: 'string' }, description: { type: 'string' }, steps: { type: 'string' }, aids: { type: 'string' }, references: { type: 'string' },
-    replacements: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['find', 'replace'], properties: { find: { type: 'string' }, replace: { type: 'string' } } } },
-    purposePatternIds: { type: 'array', items: { type: 'string' } }, consolidates: { type: 'array', items: { type: 'string' } },
-  },
-} as const;
-
-function isProposerAnswer(value: Partial<ProposerAnswer> | null | undefined): value is ProposerAnswer {
-  if (!value || typeof value !== 'object') return false;
-  const strings = ['skillId', 'name', 'description', 'steps', 'aids', 'references'] as const;
-  return ['open', 'propose', 'none'].includes(String(value.action)) && Array.isArray(value.open) && value.open.every(id => typeof id === 'string')
-    && (value.operation === 'create' || value.operation === 'patch') && typeof value.expectedVersion === 'number' && strings.every(key => typeof value[key] === 'string')
-    && Array.isArray(value.replacements) && value.replacements.every(item => item && typeof item.find === 'string' && typeof item.replace === 'string')
-    && Array.isArray(value.purposePatternIds) && value.purposePatternIds.every(id => typeof id === 'string')
-    && Array.isArray(value.consolidates) && value.consolidates.every(id => typeof id === 'string');
 }

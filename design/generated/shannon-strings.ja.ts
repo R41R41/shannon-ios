@@ -607,6 +607,7 @@ export const shannonStrings = {
   "threads.fiveFailures": "同じ失敗が5回続いたため止まっています。",
   "threads.ownerOrigin": "所有者からの依頼",
   "threads.ownTimeOrigin": "自分の時間",
+  "threads.maintenanceOrigin": "内部の記憶整理",
 } as const;
 
 export type ShannonStringKey = keyof typeof shannonStrings;

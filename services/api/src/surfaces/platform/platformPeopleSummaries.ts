@@ -1,3 +1,4 @@
+import { backgroundModelAttempt, requireBackgroundUsage } from '../../infra/models/backgroundModelAttempt.js';
 import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
 import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import { estimatedOpenAICostUsd, configuredBackgroundBudgetUsd, responseUsage, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
@@ -7,7 +8,7 @@ import { platformSummaryId, type PlatformPeople } from '../../mind/memory/platfo
 
 /** Writes what one platform conversation period was about, from the stored exchanges only. */
 export interface PlatformSummaryWriter {
-  summarize(scopeKey: string, input: { place: string; names: readonly string[]; lines: readonly string[] }): Promise<string | null>;
+  summarize(scopeKey: string, input: { place: string; names: readonly string[]; lines: readonly string[] }, signal?: AbortSignal): Promise<string | null>;
 }
 
 const MAXIMUM_PERIODS_PER_RUN = 8;
@@ -28,6 +29,50 @@ export class PlatformConversationSummarizer {
     private readonly usage: { backgroundLlmCostUsd(monthKey: string): number },
     private readonly options: { backgroundBudgetUsd?: number; now?: () => string } = {},
   ) {}
+
+  fcaTargets(scopeKey: string, startAt: string, endAt: string): string[] {
+    return this.writer ? this.store.platformCalls(scopeKey, startAt, endAt).slice(-MAXIMUM_PERIODS_PER_RUN).map(call => call.callId) : [];
+  }
+
+  /** One inference only; the returned closure uses the existing summary writer after the FCA fence. */
+  async prepareFca(scopeKey: string, callId: string, signal: AbortSignal,
+    observeSources: (ids: readonly string[]) => boolean, sourcesVisible: (ids: readonly string[]) => boolean): Promise<() => 'written' | 'skipped' | 'budget'> {
+    signal.throwIfAborted();
+    if (!this.writer) return () => 'skipped';
+    const at = this.options.now?.() ?? new Date().toISOString();
+    if (this.usage.backgroundLlmCostUsd(utcMonthKey(new Date(at))) >= (this.options.backgroundBudgetUsd ?? configuredBackgroundBudgetUsd())) return () => 'budget';
+    const read = () => {
+      const call = this.store.call(scopeKey, callId);
+      if (!call || call.status !== 'remembered' || !call.source) return null;
+      const items = this.store.items(scopeKey).filter(item => item.callId === callId);
+      const summary = items.find(item => item.id === platformSummaryId(callId));
+      if (!summary?.disclosure.audience || !sourcesVisible([`person:${summary.id}`])) return null;
+      const turns = items.filter(item => item.kind === 'turn' && sourcesVisible([`person:${item.id}`])).reverse().slice(-MAXIMUM_LINES);
+      const people = call.personIds.map(id => this.store.person(scopeKey, id));
+      if (!turns.length || people.some(person => !person || person.forgottenAt)) return null;
+      return { call, summary, turns, names: people.map(person => person!.displayName) };
+    };
+    const prepared = read();
+    if (!prepared) return () => 'skipped';
+    const sources = [`person:${prepared.summary.id}`, ...prepared.turns.map(turn => `person:${turn.id}`)];
+    if (!observeSources(sources)) throw new Error('PEOPLE_SUMMARY_FCA_SOURCE_FENCED');
+    const text = await this.writer.summarize(scopeKey, { place: prepared.call.label ?? prepared.call.source ?? '',
+      names: prepared.names, lines: prepared.turns.map(turn => turn.text) }, signal);
+    signal.throwIfAborted();
+    const accepted = text ? acceptedPlatformSummary(text, prepared.turns.map(turn => turn.evidence ?? '')) : null;
+    let applied = false;
+    return () => {
+      signal.throwIfAborted();
+      if (applied) throw new Error('PEOPLE_SUMMARY_FCA_ALREADY_APPLIED');
+      const fresh = read();
+      if (!fresh || JSON.stringify(fresh) !== JSON.stringify(prepared) || !sourcesVisible(sources)) throw new Error('PEOPLE_SUMMARY_FCA_SOURCE_CHANGED');
+      applied = true;
+      if (!accepted) return 'skipped';
+      this.people.writeSummary(scopeKey, callId, prepared.call.label ?? '', prepared.summary.disclosure.audience!, prepared.summary.observedAt,
+        `相手: ${prepared.names.map(name => `${name}さん`).join('・')}\n話したこと: ${accepted}`, sources);
+      return 'written';
+    };
+  }
 
   async consolidate(scopeKey: string, startAt: string, endAt: string): Promise<{ status: 'disabled' | 'budget' | 'applied'; written: number }> {
     if (!this.writer) return { status: 'disabled', written: 0 };
@@ -77,7 +122,8 @@ export class OpenAIPlatformSummaryWriter implements PlatformSummaryWriter {
     this.fetcher = responseModelFetcher({ ...options, model: this.model });
   }
 
-  async summarize(scopeKey: string, input: { place: string; names: readonly string[]; lines: readonly string[] }): Promise<string | null> {
+  async summarize(scopeKey: string, input: { place: string; names: readonly string[]; lines: readonly string[] }, signal?: AbortSignal): Promise<string | null> {
+    return backgroundModelAttempt({ ...this.options, model: this.model, scopeKey, lane: 'memory_background', maxOutputTokens: 300, signal }, async accounted => {
     const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
@@ -91,15 +137,20 @@ export class OpenAIPlatformSummaryWriter implements PlatformSummaryWriter {
         input: JSON.stringify(input), reasoning: { effort: 'none' }, text: { verbosity: 'low' }, max_output_tokens: 300, store: false,
         prompt_cache_key: stableScopeIdentifier(scopeKey), safety_identifier: stableScopeIdentifier(scopeKey),
       }),
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.any([AbortSignal.timeout(60_000), ...(signal ? [signal] : [])]),
     });
     const envelope = parseJson(await response.text());
-    if (!response.ok) throw new Error(`OPENAI_PLATFORM_SUMMARY_${response.status}`);
+    if (!response.ok) throw Object.assign(new Error(`OPENAI_PLATFORM_SUMMARY_${response.status}`), { status: response.status });
     const usage = responseUsage(envelope);
     this.options.usageStore?.recordLlmUsage({ scopeKey, lane: 'memory_background', model: this.model, ...usage,
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString() });
+    if (usage.unknownCostUpperBoundUsd) accounted();
+    requireBackgroundUsage((envelope as { usage?: unknown })?.usage, signal);
+    accounted();
     validateResponseModelUsage(this.model, envelope);
+    signal?.throwIfAborted();
     return extractOutputText(envelope) || null;
+    });
   }
 }
 

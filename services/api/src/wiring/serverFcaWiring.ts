@@ -1,3 +1,5 @@
+import { createFcaSleepWiring } from './fcaSleepWiring.js';
+import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
 import { createMinecraftTaskBody } from '../surfaces/minecraft/minecraftReflexAdapter.js';
 import { configuredFcaMinecraft } from './fcaBodyWiring.js';
 import { fcaMinecraftTools, combineFcaTools } from './fcaMinecraftTools.js';
@@ -38,7 +40,7 @@ import { createTaskRuntimeWiring } from './taskRuntimeWiring.js';
 
 /** Explicit opt-in: owner tasks plus existing foreground text/voice binding; own-time keeps its current path. */
 export function configuredServerFca(values: Readonly<Record<string, string | undefined>>, parts: {
-  path: string; ownerScope: string; ownerAlone(): boolean; usage: LlmUsageStore;
+  path: string; ownerScope: string; ownerAlone(): boolean; usage: LlmUsageStore; sleepStore?: SQLiteShannonStore;
   state?: Pick<CompanionStateStore, 'snapshot'>; conversations?: ConversationStore; tools?: ShannonToolRunner;
   affect?: FcaAffectWriter; memory?: MemoryProposals | null; enrich?: TurnMemoryRecall | null;
   minecraftConfiguration?: MinecraftBodyConfiguration | null; touchAllowed?(scope: string, device: string, gesture?: string): boolean;
@@ -53,10 +55,15 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
   const nativeKey = modelName === 'claude-sonnet-5-5' ? anthropicApiKey(values) : null;
   const provider = modelName === 'claude-sonnet-5-5' ? nativeKey ? { model: modelName, apiKey: nativeKey } : null : configuredResponseModel(values, 'SHANNON_FCA_MODEL');
   if (!provider) throw new Error('FCA_PROVIDER_REQUIRED');
-  const db = new DatabaseSync(parts.path);
+  const sleepEnabled = values.SHANNON_FCA_SLEEP === 'on';
+  if (sleepEnabled && !parts.sleepStore) throw new Error('FCA_SLEEP_STORE_REQUIRED');
+  const borrowed = sleepEnabled ? parts.sleepStore!.fcaDatabase() : null;
+  const db = borrowed ?? new DatabaseSync(parts.path);
   db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;');
   const client = new MindSocketClient(mindSocketPath(values, parts.path));
+  let sleep: ReturnType<typeof createFcaSleepWiring> | null = null;
   try {
+    sleep = sleepEnabled ? createFcaSleepWiring({ values, store: parts.sleepStore!, ownerScope: parts.ownerScope }) : null;
     const recordUsage: Parameters<typeof createAnthropicFcaModel>[0]['recordUsage'] = usage => {
       parts.usage.recordLlmUsage({ scopeKey: parts.ownerScope, lane: 'chat', model: usage.model,
         inputTokens: usage.inputTokens, cachedInputTokens: usage.cachedInputTokens, outputTokens: usage.outputTokens,
@@ -72,7 +79,9 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     let visible: ReturnType<typeof createFcaSourceGuard> | undefined;
     const runtime = createTaskRuntimeWiring({ db, actions, model,
       scopeKey: parts.ownerScope, ownerAlone: parts.ownerAlone,
-      canRunTask: (_runtime, id) => visible?.(parts.ownerScope, id) ?? _runtime.taskSources(parts.ownerScope, id).length === 0, stepPorts: (_runtime, step) => {
+      ...(sleep ? { sleepTicket: sleep.jobs.ticket, maintenanceAllowed: sleep.jobs.allowed } : {}),
+      canRunTask: (_runtime, id) => { const task = _runtime.get(parts.ownerScope, id); return task?.kind === 'sleep' ? Boolean(sleep?.visible(_runtime, task)) : visible?.(parts.ownerScope, id) ?? _runtime.taskSources(parts.ownerScope, id).length === 0; }, stepPorts: (_runtime, step) => {
+        if (step.snapshot.task.kind === 'sleep') { if (!sleep) throw new Error('FCA_SLEEP_DISABLED'); return sleep.step(_runtime, step); }
         const body = minecraft ? createMinecraftTaskBody({ ...minecraft, evidence: shared?.evidence, runtime: _runtime, step, ownerAlone: parts.ownerAlone, sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? false }) : null;
         return ({ selector, ...(body ? { body: body.body, safeToAcknowledgeStop: body.safeToAcknowledgeStop } : {}), ...(shared ? { recall: shared.recall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
         sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources ?? []) ?? step.snapshot.sources.length === 0,
@@ -85,6 +94,13 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     visible = parts.state && parts.conversations ? createFcaSourceGuard({ runtime: runtime.runtime, state: parts.state,
       conversations: parts.conversations, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone,
       readSourceVisible }) : undefined;
+    if (visible && sleep) {
+      const foregroundVisible = visible;
+      visible = Object.assign((scope: string, id: string, pending?: string) => {
+        const task = runtime.runtime.get(scope, id);
+        return task?.kind === 'sleep' ? scope === parts.ownerScope && parts.ownerAlone() && sleep!.visible(runtime.runtime, task) : foregroundVisible(scope, id, pending);
+      }, { sources: foregroundVisible.sources });
+    }
     const conversation = visible ? createFcaConversationBridge({ runtime: runtime.runtime, ownerScope: parts.ownerScope, visible, selector }) : null;
     if (visible && parts.state && parts.conversations && readSourceVisible) shared = createFcaSharedWiring({ ...parts, db, runtime: runtime.runtime, state: parts.state, conversations: parts.conversations, visible, readSourceVisible });
     if (conversation && shared && parts.tools) connectFcaMemoryTools({ tools: parts.tools, memory: shared.memory, conversation, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone });
@@ -103,7 +119,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       atomic: work => underWriteLock(db, null, '', work, 'fca_minecraft_admission') }) : null;
     if (minecraft && !requests) throw new Error('FCA_MINECRAFT_REQUIRES_CONVERSATION');
     if (requests && parts.tools) parts.tools.useMinecraftTasks(requests.tools);
-    const wake = () => { void touch?.tick().catch(() => {}); if (!parts.ownerAlone()) void shared?.recall.cancelAll(); try { shared?.evidence?.flush(); } catch { /* Durable evidence remains for retry. */ } void runtime.tick().catch(() => {}); };
+    const wake = () => { try { sleep?.jobs.reconcile(runtime.runtime); sleep?.jobs.admit(runtime.runtime); } catch { /* Atomic admission retries; unknown task outcomes remain held. */ } void touch?.tick().catch(() => {}); if (!parts.ownerAlone()) void shared?.recall.cancelAll(); try { shared?.evidence?.flush(); } catch { /* Durable evidence remains for retry. */ } void runtime.tick().catch(() => {}); };
     const timer = setInterval(wake, 1000); timer.unref();
     const route = createFcaTaskRoute({ runtime: runtime.runtime, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, stop: runtime.stop, wake, visible: id => visible?.(parts.ownerScope, id) ?? runtime.runtime.taskSources(parts.ownerScope, id).length === 0 });
     return { route, conversation, voice, touch, minecraft: minecraft && requests ? { control: minecraft.control, intent: requests.intent } : null, async stopActions(target: string | null) {
@@ -111,8 +127,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       const action = await actions.get(parts.ownerScope, target);
       const taskId = action?.kind === 'agentTask' ? /^fca:([^:]+):[0-9]+$/.exec(action.sourceId)?.[1] : null;
       if (taskId) await runtime.stop(taskId, 'owner_stop');
-    }, async close() { clearInterval(timer); await Promise.all([runtime.close(), shared?.recall.cancelAll(), touch?.close()]); client.close(); db.close(); } };
-  } catch (error) { client.close(); db.close(); throw error; }
+    }, async close() { clearInterval(timer); await Promise.all([runtime.close(), shared?.recall.cancelAll(), touch?.close()]); sleep?.close(); client.close(); if (!borrowed) db.close(); } };
+  } catch (error) { sleep?.close(); client.close(); if (!borrowed) db.close(); throw error; }
 }
 export async function serveFcaTaskRoute(service: ReturnType<typeof configuredServerFca>, request: IncomingMessage,
   response: ServerResponse, principal: { scopeKey: string } | null, url: URL): Promise<boolean> {

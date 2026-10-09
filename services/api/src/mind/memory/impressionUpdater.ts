@@ -1,3 +1,4 @@
+import { backgroundModelAttempt, requireBackgroundUsage } from '../../infra/models/backgroundModelAttempt.js';
 import { configuredResponseModel, DEFAULT_HAIKU_MODEL } from '../../infra/models/anthropic/haikuConfig.js';
 import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import {
@@ -45,7 +46,7 @@ export interface ImpressionAnalysisOutput {
 
 /** One bounded model call. Null: nothing usable came back. */
 export interface ImpressionAnalyzer {
-  analyze(scopeKey: string, input: ImpressionAnalysisInput): Promise<ImpressionAnalysisOutput | null>;
+  analyze(scopeKey: string, input: ImpressionAnalysisInput, signal?: AbortSignal): Promise<ImpressionAnalysisOutput | null>;
 }
 
 export type ImpressionOutcome = 'disabled' | 'skipped' | 'duplicate' | 'cap' | 'budget' | 'failed' | 'unchanged' | 'updated' | 'proposed';
@@ -127,29 +128,10 @@ export class ImpressionUpdater {
     if (!this.analyzer || !people || !impressionsEnabled(this.environment)) return { status: 'disabled', updated: 0 };
     let updated = 0;
     for (const call of people.platformCalls(scopeKey, startAt, endAt).slice(-PLATFORM_PERIODS)) {
-      const summaryId = personMemoryId(platformSummaryId(call.callId));
       for (const personId of call.personIds.slice(0, PLATFORM_PEOPLE)) {
-        const usable = () => {
-          const state = this.stateStore.snapshot(scopeKey);
-          const person = people.person(scopeKey, personId);
-          const items = people.items(scopeKey).filter(item => item.callId === call.callId);
-          const summary = items.find(item => personMemoryId(item.id) === summaryId);
-          // The period's summary stands for the period: forgetting it takes the period out of every impression.
-          if (!person || person.forgottenAt || !summary || visibleMemoryText(state, summaryId, summary.text) === null) return null;
-          const turns = items.filter(item => item.kind === 'turn' && item.personId === personId
-            && visibleMemoryText(state, personMemoryId(item.id), item.text) !== null
-            && mayDisclose(resolveDisclosure(state, personMemoryId(item.id), item.disclosure), UNKNOWN_GUEST_PRESENCE)).reverse().slice(-PLATFORM_LINES);
-          return turns.length ? { person, turns, audience: summary.disclosure.audience ?? peopleAudience([personId]) } : null;
-        };
-        const period = usable();
-        if (!period) continue;
-        const outcome = await this.observe(scopeKey, {
-          lane: 'platform', personKey: personId, person: `${period.person.displayName}さん`, sourceId: summaryId, at: call.updatedAt,
-          said: period.turns.map(turn => turn.evidence ?? '').join('\n'), audience: period.audience,
-          lines: period.turns.map(turn => clip(turn.text, PLATFORM_LINE_CHARACTERS)),
-          label: platformImpressionLabel(period.audience),
-          stillUsable: () => usable() !== null,
-        });
+        const input = this.platformInput(scopeKey, call.callId, personId);
+        if (!input) continue;
+        const outcome = await this.observe(scopeKey, input);
         if (outcome === 'updated') updated += 1;
         if (outcome === 'budget' || outcome === 'cap') return { status: 'applied', updated };
       }
@@ -157,21 +139,72 @@ export class ImpressionUpdater {
     return { status: 'applied', updated };
   }
 
-  private async observe(scopeKey: string, input: {
-    lane: 'owner' | 'platform'; personKey: string; person: string; sourceId: string; at: string; said: string; audience: MemoryAudience; lines: readonly string[];
+  /** Stable target IDs only; one bounded platform-person analysis is a separate FCA decision. */
+  fcaTargets(scopeKey: string, startAt: string, endAt: string): Array<{ callId: string; personId: string }> {
+    if (!this.analyzer || !this.options.people || !impressionsEnabled(this.environment)) return [];
+    return this.options.people.platformCalls(scopeKey, startAt, endAt).slice(-PLATFORM_PERIODS)
+      .flatMap(call => call.personIds.slice(0, PLATFORM_PEOPLE).map(personId => ({ callId: call.callId, personId })));
+  }
+
+  async prepareFca(scopeKey: string, callId: string, personId: string, signal: AbortSignal,
+    observeSources: (ids: readonly string[]) => boolean): Promise<() => ImpressionOutcome> {
+    signal.throwIfAborted();
+    if (!this.analyzer || !this.options.people || !impressionsEnabled(this.environment)) return () => 'disabled';
+    const input = this.platformInput(scopeKey, callId, personId);
+    if (!input) return () => 'skipped';
+    return this.prepareObservation(scopeKey, input, signal, observeSources);
+  }
+
+  private platformInput(scopeKey: string, callId: string, personId: string) {
+    const people = this.options.people;
+    const call = people?.call(scopeKey, callId);
+    if (!people || !call || call.status !== 'remembered' || !call.source || !call.personIds.includes(personId)) return null;
+    const summaryId = personMemoryId(platformSummaryId(call.callId));
+    const usable = () => {
+      const state = this.stateStore.snapshot(scopeKey);
+      const person = people.person(scopeKey, personId);
+      const items = people.items(scopeKey).filter(item => item.callId === call.callId);
+      const summary = items.find(item => personMemoryId(item.id) === summaryId);
+      // The period's summary stands for the period: forgetting it takes the period out of every impression.
+      if (!person || person.forgottenAt || !summary || visibleMemoryText(state, summaryId, summary.text) === null) return null;
+      const turns = items.filter(item => item.kind === 'turn' && item.personId === personId
+        && visibleMemoryText(state, personMemoryId(item.id), item.text) !== null
+        && mayDisclose(resolveDisclosure(state, personMemoryId(item.id), item.disclosure), UNKNOWN_GUEST_PRESENCE)).reverse().slice(-PLATFORM_LINES);
+      return turns.length ? { person, turns, audience: summary.disclosure.audience ?? peopleAudience([personId]) } : null;
+    };
+    const period = usable();
+    if (!period) return null;
+    return {
+          lane: 'platform' as const, personKey: personId, person: `${period.person.displayName}さん`, sourceId: summaryId, sourceIds: [summaryId, ...period.turns.map(turn => personMemoryId(turn.id))], at: call.updatedAt,
+          said: period.turns.map(turn => turn.evidence ?? '').join('\n'), audience: period.audience,
+          lines: period.turns.map(turn => clip(turn.text, PLATFORM_LINE_CHARACTERS)),
+          label: platformImpressionLabel(period.audience),
+          stillUsable: () => { const fresh = usable(); return !!fresh && JSON.stringify(fresh) === JSON.stringify(period); },
+    };
+  }
+
+  private async observe(scopeKey: string, input: Parameters<ImpressionUpdater['prepareObservation']>[1]): Promise<ImpressionOutcome> {
+    return (await this.prepareObservation(scopeKey, input))();
+  }
+
+  private async prepareObservation(scopeKey: string, input: {
+    lane: 'owner' | 'platform'; personKey: string; person: string; sourceId: string; sourceIds?: readonly string[]; at: string; said: string; audience: MemoryAudience; lines: readonly string[];
     label: (pattern: string, feeling: string) => MemoryDisclosure; stillUsable: () => boolean;
-  }): Promise<ImpressionOutcome> {
+  }, signal?: AbortSignal, observeSources?: (ids: readonly string[]) => boolean): Promise<() => ImpressionOutcome> {
     const config = impressionConfig(this.environment);
-    if (this.impressions.turnProcessed(scopeKey, input.sourceId, input.personKey)) return 'duplicate';
+    if (this.impressions.turnProcessed(scopeKey, input.sourceId, input.personKey)) return () => 'duplicate';
     const now = this.now();
     // The nightly reading of platform people has its own daily cap, so it never uses up the owner's turns.
     const dayKey = `${input.lane === 'platform' ? 'platform:' : ''}${localDayKey(now, this.timeZone)}`;
-    if (this.impressions.modelCallsOn(scopeKey, dayKey) >= config.callsPerDay) return 'cap';
+    if (this.impressions.modelCallsOn(scopeKey, dayKey) >= config.callsPerDay) return () => 'cap';
     const budget = this.options.backgroundBudgetUsd ?? configuredBackgroundBudgetUsd(this.environment);
-    if (this.usage.backgroundLlmCostUsd(utcMonthKey(new Date(now))) >= budget * config.budgetFraction) return 'budget';
+    if (this.usage.backgroundLlmCostUsd(utcMonthKey(new Date(now))) >= budget * config.budgetFraction) return () => 'budget';
 
     const held = this.held(scopeKey, input.personKey, this.stateStore.snapshot(scopeKey), input.said, config);
     const keys = new Map(held.shown.map((item, index) => [`i${index + 1}`, item]));
+    signal?.throwIfAborted();
+    const sources = [...input.sourceIds ?? [input.sourceId], ...held.shown.map(item => impressionMemoryId(item.row.id))];
+    if (observeSources && !observeSources(sources)) throw new Error('IMPRESSION_FCA_SOURCE_FENCED');
     // Written before the call: a retried job never pays for the same turn twice, and a failing provider cannot
     // be called without limit. The price is that a turn whose call failed is not looked at again.
     this.impressions.recordTurn(scopeKey, input.sourceId, input.personKey, dayKey, now);
@@ -182,7 +215,14 @@ export class ImpressionUpdater {
         seen: item.supportCount, contradicted: item.row.contraCount,
         firstSeen: localDayKey(item.firstSeenAt, this.timeZone), lastSeen: localDayKey(item.lastSeenAt, this.timeZone),
       })),
-    }).catch(() => null);
+    }, signal).catch(error => { if (signal) throw error; return null; });
+    signal?.throwIfAborted();
+    let applied = false;
+    return () => {
+    signal?.throwIfAborted();
+    if (applied) return 'duplicate';
+    if (observeSources && !observeSources(sources)) throw new Error('IMPRESSION_FCA_SOURCE_FENCED');
+    applied = true;
     if (!output || !Array.isArray(output.observations) || !Array.isArray(output.candidates)) return 'failed';
     // The owner may have forgotten the turn, or an impression, while the model ran. What he decided wins.
     if (!input.stillUsable()) return 'skipped';
@@ -203,7 +243,7 @@ export class ImpressionUpdater {
       // ADR-0008 stage 3 (F5): the analysis is proposed; the one writer applies it to the rows as they are then.
       const clipped = (value: string, limit: number) => Array.from(value).slice(0, limit).join('');
       this.options.memory.propose({ opId: `impression:${scopeKey}:${input.personKey}:${input.sourceId}`.slice(0, 200), scopeKey, kind: 'impression.observe',
-        origin: 'impressions', subjectKey: `impressions:${input.personKey}`, baseRevision: null, episodeIds: [input.sourceId],
+        origin: 'impressions', subjectKey: `impressions:${input.personKey}`, baseRevision: null, episodeIds: signal ? sources : [input.sourceId],
         payload: { lane: input.lane, personKey: input.personKey, sourceId: input.sourceId, at: input.at, said: clipped(input.said, 8_000), audience: input.audience,
           analysis: {
             observations: analysis.observations.slice(0, 40).map(item => ({ id: item.id, stance: item.stance,
@@ -220,6 +260,7 @@ export class ImpressionUpdater {
     }, input.label);
     this.impressions.saveImpressions(scopeKey, change.upserts, change.deleteIds);
     return change.upserts.length || change.deleteIds.length ? 'updated' : 'unchanged';
+    };
   }
 
   /**
@@ -312,7 +353,8 @@ export class OpenAIImpressionAnalyzer implements ImpressionAnalyzer {
     this.fetcher = responseModelFetcher({ ...options, model: this.model });
   }
 
-  async analyze(scopeKey: string, input: ImpressionAnalysisInput): Promise<ImpressionAnalysisOutput | null> {
+  async analyze(scopeKey: string, input: ImpressionAnalysisInput, signal?: AbortSignal): Promise<ImpressionAnalysisOutput | null> {
+    return backgroundModelAttempt({ ...this.options, model: this.model, scopeKey, lane: 'memory_background', maxOutputTokens: 800, signal }, async accounted => {
     const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
@@ -323,16 +365,21 @@ export class OpenAIImpressionAnalyzer implements ImpressionAnalyzer {
         max_output_tokens: 800, store: false,
         prompt_cache_key: stableScopeIdentifier(scopeKey), safety_identifier: stableScopeIdentifier(scopeKey),
       }),
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.any([AbortSignal.timeout(60_000), ...(signal ? [signal] : [])]),
     });
     const envelope = parseJson(await response.text());
-    if (!response.ok) throw new Error(`OPENAI_IMPRESSIONS_${response.status}`);
+    if (!response.ok) throw Object.assign(new Error(`OPENAI_IMPRESSIONS_${response.status}`), { status: response.status });
     const usage = responseUsage(envelope);
     this.options.usageStore?.recordLlmUsage({ scopeKey, lane: 'memory_background', model: this.model, ...usage,
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString() });
+    if (usage.unknownCostUpperBoundUsd) accounted();
+    requireBackgroundUsage((envelope as { usage?: unknown })?.usage, signal);
+    accounted();
     validateResponseModelUsage(this.model, envelope);
+    signal?.throwIfAborted();
     const output = parseJson(extractOutputText(envelope)) as ImpressionAnalysisOutput | null;
     return output && typeof output === 'object' ? output : null;
+    });
   }
 }
 

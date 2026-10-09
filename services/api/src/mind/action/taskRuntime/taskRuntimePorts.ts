@@ -1,4 +1,6 @@
 import type { TaskConversationDeliveryRuntime } from './taskConversationDeliveryPorts.js';
+import type { TaskSleepTicket } from './taskMaintenancePorts.js';
+export type { TaskSleepTicket } from './taskMaintenancePorts.js';
 import type { TaskExternalEvent } from './taskExternalEventPorts.js';
 export type { TaskExternalEvent } from './taskExternalEventPorts.js';
 export type { TaskConversationDelivery, TaskConversationDeliveryInput, TaskConversationDeliveryStage } from './taskConversationDeliveryPorts.js';
@@ -6,16 +8,17 @@ import type { ActionLease } from '@shannon/mind';
 import type { TaskHistoryCommit, TaskHistoryWindow } from './taskHistoryPorts.js';
 export type { TaskHistoryCommit, TaskHistoryPublicRound, TaskHistoryRound, TaskHistorySummary, TaskHistoryWindow } from './taskHistoryPorts.js';
 
-export type TaskKind = 'root' | 'conversation' | 'research' | 'generic';
+export type TaskKind = 'root' | 'conversation' | 'research' | 'generic' | 'sleep';
+export type TaskOrigin = 'owner_request' | 'own_time' | 'maintenance';
 export type TaskPhase = 'ready' | 'executing' | 'waiting' | 'stopping' | 'unknown' | 'stopped' | 'completed' | 'failed';
 export type TaskStatus = 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
 export interface TaskSpec {
   title: string; goal: string; completionCriteria?: string; context?: string;
-  kind?: Exclude<TaskKind, 'root'>; origin?: 'owner_request' | 'own_time';
+  kind?: Exclude<TaskKind, 'root' | 'sleep'>; origin?: 'owner_request' | 'own_time';
 }
 export interface TaskRecord {
   id: string; scopeKey: string; parentId: string | null; kind: TaskKind;
-  origin: 'owner_request' | 'own_time'; title: string; goal: string; completionCriteria: string;
+  origin: TaskOrigin; title: string; goal: string; completionCriteria: string;
   status: TaskStatus; pauseReason: string | null; summary: string;
   revision: number; createdAt: string; updatedAt: string;
 }
@@ -63,10 +66,14 @@ export interface TaskRuntimeOptions {
   leaseValid(scopeKey: string, taskId: string, lease: ActionLease, at: string): boolean;
   /** Existing foreground respond lease. Absent validation refuses conversation attachment. */
   conversationLeaseValid?(scopeKey: string, lease: ActionLease, at: string): boolean;
+  /** Trusted read-only schedule authority; absent means maintenance admission is disabled. */
+  sleepTicket?(scopeKey: string, jobId: string): TaskSleepTicket | null;
   now?: () => string;
 }
 export interface TaskRuntime extends TaskConversationDeliveryRuntime {
   observeExternal(scopeKey: string, targetTaskId: string, event: TaskExternalEvent): { accepted: true; duplicate: boolean; task: TaskView };
+  admitSleep(scopeKey: string, jobId: string): TaskView | null;
+  sleepTicketForTask(scopeKey: string, taskId: string): TaskSleepTicket | null;
   ensureRoot(scopeKey: string): TaskView;
   createChild(scopeKey: string, parentId: string, spec: TaskSpec, requestId: string): TaskView;
   get(scopeKey: string, taskId: string): TaskView | null;

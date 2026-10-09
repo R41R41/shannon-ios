@@ -1,3 +1,5 @@
+import { backgroundModelAttempt, requireBackgroundUsage } from '../../infra/models/backgroundModelAttempt.js';
+import type { SleepFcaPhaseHandler } from './sleepFcaPorts.js';
 import { createHash } from 'node:crypto';
 import { configuredResponseModel } from '../../infra/models/anthropic/haikuConfig.js';
 import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
@@ -35,7 +37,7 @@ export interface KnowledgeAnalysisInput {
 }
 
 export interface KnowledgeAnalyzer {
-  analyze(scopeKey: string, input: KnowledgeAnalysisInput): Promise<readonly KnowledgeOperation[]>;
+  analyze(scopeKey: string, input: KnowledgeAnalysisInput, signal?: AbortSignal): Promise<readonly KnowledgeOperation[]>;
 }
 
 export interface KnowledgeConsolidationResult {
@@ -64,25 +66,27 @@ export class ShannonKnowledgeConsolidator {
       backgroundBudgetUsd?: number; maximumOperations?: number; now?: () => string;
       /** Syzygy ADR-0008 stage 3 (F5): the memory outbox. Absent (switched off): written here, as it was. */
       memory?: MemoryProposals | null;
+      /** Trusted common task observations, with canonical committed outcome proof; never owner speech. */
+      taskEvidence?(scope: string, id: string): boolean;
     } = {},
   ) {
     this.budgetUsd = options.backgroundBudgetUsd ?? configuredBackgroundBudgetUsd();
     this.maximumOperations = Math.max(1, Math.min(10, options.maximumOperations ?? 5));
   }
 
-  async consolidate(scopeKey: string, startAt: string, endAt: string): Promise<KnowledgeConsolidationResult> {
-    const result: KnowledgeConsolidationResult = { status: 'idle', created: 0, updated: 0, retired: 0, rejected: 0 };
-    if (!this.analyzer) return { ...result, status: 'disabled' };
+  private prepare(scopeKey: string, startAt: string, endAt: string, checkBudget = true) {
     const at = this.options.now?.() ?? new Date().toISOString();
+    const result: KnowledgeConsolidationResult = { status: 'idle', created: 0, updated: 0, retired: 0, rejected: 0 };
+    if (!this.analyzer) return { result: { ...result, status: 'disabled' as const }, at, sources: [], usable: [] };
     const snapshot = this.stateStore.snapshot(scopeKey);
     const candidates = this.conversations.experienceCandidates(scopeKey);
     // A turn whose reply used a forgotten item is not a source for new knowledge either.
     const withholding = new MemoryWithholding(snapshot, this.conversations, scopeKey, candidates);
     // Shannon's private notes carry no audience of their own, so they are built only from turns the owner had alone.
-    const visible = candidates.filter(item => isOwnerOnly(item.disclosure?.audience) && ownerSpoke(item.disclosure)
+    const visible = candidates.filter(item => isOwnerOnly(item.disclosure?.audience) && (item.id.startsWith('task:') ? this.options.taskEvidence?.(scopeKey, item.id) === true : ownerSpoke(item.disclosure))
       && visibleMemoryText(snapshot, item.id, item.summary) !== null && !withholding.withholdsExperience(item));
     const today = visible.filter(item => item.observedAt >= startAt && item.observedAt < endAt).slice(-60);
-    if (!today.length) return result;
+    if (!today.length) return { result, at, sources: [], usable: [] };
     // Earlier related experiences let the analyzer see repetition across days.
     const todayIds = new Set(today.map(item => item.id));
     const visibleById = new Map(visible.map(item => [item.id, item]));
@@ -90,16 +94,49 @@ export class ShannonKnowledgeConsolidator {
       .filter(hit => hit.kind === 'experience' && !todayIds.has(hit.id) && visibleById.has(hit.id)).map(hit => hit.id)))]
       .slice(0, 40).map(id => visibleById.get(id)!);
     const sources = [...related, ...today];
-    if (this.usage.backgroundLlmCostUsd(utcMonthKey(new Date(at))) >= this.budgetUsd) return { ...result, status: 'budget' };
+    if (checkBudget && this.usage.backgroundLlmCostUsd(utcMonthKey(new Date(at))) >= this.budgetUsd) return { result: { ...result, status: 'budget' as const }, at, sources: [], usable: [] };
     const usable = usableKnowledgeFor(this.store, scopeKey, snapshot);
-    const operations = await this.analyzer.analyze(scopeKey, {
-      experiences: sources.map(item => ({ id: item.id, observedAt: item.observedAt, summary: item.summary })),
-      knowledge: usable.map(document => ({
-        id: document.id, version: document.version, status: document.status, title: document.title,
-        applicability: document.applicability, excerpt: document.bodyMarkdown.slice(0, 600), sourceCount: document.sourceExperienceIds.length,
-      })),
-    });
-    const sourceText = new Map(sources.map(item => [item.id, `${item.userMessage}\n${item.shannonReply}`]));
+    return { result, at, sources, usable };
+  }
+
+  private async analyze(scopeKey: string, prepared: ReturnType<ShannonKnowledgeConsolidator['prepare']>, signal?: AbortSignal) {
+    if (!prepared.sources.length) return [];
+    return this.analyzer!.analyze(scopeKey, {
+      experiences: prepared.sources.map(item => ({ id: item.id, observedAt: item.observedAt, summary: item.summary })),
+      knowledge: prepared.usable.map(document => ({ id: document.id, version: document.version, status: document.status,
+        title: document.title, applicability: document.applicability, excerpt: document.bodyMarkdown.slice(0, 600), sourceCount: document.sourceExperienceIds.length })),
+    }, signal);
+  }
+
+  async consolidate(scopeKey: string, startAt: string, endAt: string): Promise<KnowledgeConsolidationResult> {
+    const prepared = this.prepare(scopeKey, startAt, endAt);
+    return this.applyPrepared(scopeKey, startAt, prepared, await this.analyze(scopeKey, prepared));
+  }
+
+  /** One inference, followed by a separately fenced proposal step in the common FCA. */
+  fcaPhase(observeSources: (ids: readonly string[]) => void): SleepFcaPhaseHandler {
+    let prepared: ReturnType<ShannonKnowledgeConsolidator['prepare']> | null = null;
+    return {
+      decide: async ({ job, signal }) => {
+        signal.throwIfAborted(); prepared = this.prepare(job.scopeKey, job.startAt, job.endAt);
+        observeSources([...prepared.sources.map(item => item.id), ...prepared.usable.map(item => item.id)]);
+        return this.analyze(job.scopeKey, prepared, signal);
+      },
+      apply: async (answer, { job, signal }) => {
+        signal.throwIfAborted(); if (!prepared) throw new Error('SLEEP_KNOWLEDGE_RECEIPT_LOST');
+        const fresh = this.prepare(job.scopeKey, job.startAt, job.endAt, false);
+        const stillVisible = new Set(fresh.sources.map(item => item.id));
+        if (prepared.sources.some(item => !stillVisible.has(item.id))) throw new Error('SLEEP_KNOWLEDGE_SOURCE_WITHHELD');
+        const result = this.applyPrepared(job.scopeKey, job.startAt, { ...prepared, usable: fresh.usable }, answer as readonly KnowledgeOperation[]);
+        return { done: true, summary: `知識整理: ${result.status}, 作成${result.created}・更新${result.updated}・退役${result.retired}・保留${result.rejected}` };
+      },
+    };
+  }
+
+  private applyPrepared(scopeKey: string, startAt: string, prepared: ReturnType<ShannonKnowledgeConsolidator['prepare']>, operations: readonly KnowledgeOperation[]): KnowledgeConsolidationResult {
+    const { result, at, sources, usable } = prepared;
+    if (!sources.length) return result;
+    const sourceText = new Map(sources.map(item => [item.id, this.options.taskEvidence?.(scopeKey, item.id) ? item.summary : `${item.userMessage}\n${item.shannonReply}`]));
     const byId = new Map<string, ShannonKnowledgeDocument>(usable.map(document => [document.id, document]));
     for (const operation of operations.slice(0, this.maximumOperations)) {
       // The same operation of the same night is one op (a retried job proposes it again and it is stored once).
@@ -107,7 +144,7 @@ export class ShannonKnowledgeConsolidator {
       if (!this.apply(scopeKey, operation, sourceText, byId, at, opId)) result.rejected += 1;
       else result[operation.operation === 'create' ? 'created' : operation.operation === 'update' ? 'updated' : 'retired'] += 1;
     }
-    return { ...result, status: 'applied' };
+    return { ...result, status: 'applied' as const };
   }
 
   private apply(scopeKey: string, operation: KnowledgeOperation, sources: ReadonlyMap<string, string>,
@@ -170,7 +207,8 @@ export class OpenAIKnowledgeAnalyzer implements KnowledgeAnalyzer {
     this.fetcher = responseModelFetcher({ ...options, model: this.model });
   }
 
-  async analyze(scopeKey: string, input: KnowledgeAnalysisInput): Promise<readonly KnowledgeOperation[]> {
+  async analyze(scopeKey: string, input: KnowledgeAnalysisInput, signal?: AbortSignal): Promise<readonly KnowledgeOperation[]> {
+    return backgroundModelAttempt({ ...this.options, model: this.model, scopeKey, lane: 'memory_background', maxOutputTokens: 4000, signal }, async accounted => {
     const response = await this.fetcher(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
@@ -193,18 +231,23 @@ export class OpenAIKnowledgeAnalyzer implements KnowledgeAnalyzer {
         max_output_tokens: 4_000, store: false,
         prompt_cache_key: stableScopeIdentifier(scopeKey), safety_identifier: stableScopeIdentifier(scopeKey),
       }),
-      signal: AbortSignal.timeout(this.options.timeoutMilliseconds ?? 120_000),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.options.timeoutMilliseconds ?? 120_000)]) : AbortSignal.timeout(this.options.timeoutMilliseconds ?? 120_000),
     });
     const envelope = parseJson(await response.text());
-    if (!response.ok) throw new Error(`OPENAI_KNOWLEDGE_${response.status}`);
+    if (!response.ok) throw Object.assign(new Error(`OPENAI_KNOWLEDGE_${response.status}`), { status: response.status });
     const usage = responseUsage(envelope);
     this.options.usageStore?.recordLlmUsage({
       scopeKey, lane: 'memory_background', model: this.model, ...usage,
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage), occurredAt: new Date().toISOString(),
     });
+    if (usage.unknownCostUpperBoundUsd) accounted();
+    requireBackgroundUsage((envelope as { usage?: unknown })?.usage, signal);
+    accounted();
     validateResponseModelUsage(this.model, envelope);
+    signal?.throwIfAborted();
     const output = parseJson(extractOutputText(envelope)) as { operations?: unknown };
     return Array.isArray(output.operations) ? output.operations.filter(isOperation) : [];
+    });
   }
 }
 

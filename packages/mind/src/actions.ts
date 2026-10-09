@@ -1,7 +1,7 @@
 /** ADR-0008 stage 4. Closed execution vocabulary, independent of transport and persistence. */
 export const ACTION_KINDS = ['respond', 'ownTime', 'agentTask', 'minecraft'] as const;
 export type ActionKind = typeof ACTION_KINDS[number];
-export type ActionOrigin = 'owner_request' | 'own_time';
+export type ActionOrigin = 'owner_request' | 'own_time' | 'maintenance';
 export const ACTION_STATES = ['queued', 'running', 'waiting', 'stopping', 'completed', 'failed', 'cancelled', 'unknown'] as const;
 export type ActionState = typeof ACTION_STATES[number];
 export const ACTION_TERMINAL: readonly ActionState[] = ['completed', 'failed', 'cancelled', 'unknown'];
@@ -23,7 +23,8 @@ export const ACTION_CODE = /^[A-Za-z][A-Za-z0-9_.:-]{0,79}$/u;
 export function validActionDraft(draft: ActionDraft): boolean {
   return typeof draft.scopeKey === 'string' && typeof draft.sourceId === 'string'
     && ACTION_ID.test(draft.scopeKey) && ACTION_ID.test(draft.sourceId)
-    && ACTION_KINDS.includes(draft.kind) && ['owner_request', 'own_time'].includes(draft.origin)
+    && ACTION_KINDS.includes(draft.kind) && ['owner_request', 'own_time', 'maintenance'].includes(draft.origin)
+    && (draft.origin !== 'maintenance' || draft.kind === 'agentTask')
     && (draft.kind !== 'ownTime' || draft.origin === 'own_time')
     && (draft.kind !== 'respond' || draft.origin === 'owner_request')
     && (!draft.parentId || ACTION_ID.test(draft.parentId))

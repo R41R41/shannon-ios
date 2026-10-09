@@ -186,11 +186,11 @@ export class PlatformPeople {
   }
 
   /** The deterministic summary of one conversation period. The background worker may replace its text. */
-  writeSummary(scopeKey: string, callId: string, label: string, audience: MemoryAudience, at: string, text?: string): void {
+  writeSummary(scopeKey: string, callId: string, label: string, audience: MemoryAudience, at: string, text?: string, sourceIds?: readonly string[]): void {
     // ADR-0008 stage 3 (F5): with the memory outbox on, the summary is proposed and the one writer writes it.
     if (this.memory) {
       this.memory.propose({ opId: `period-summary:${scopeKey}:${callId}:${at}:${text ? digestOf(text) : 'rule'}`, scopeKey, kind: 'person.summary', origin: 'platform',
-        subjectKey: `call:${callId}`, payload: { callId, mode: 'upsert', items: [], summary: { label, audience, at, ...(text ? { text } : {}) } } });
+        subjectKey: `call:${callId}`, ...(sourceIds ? { episodeIds: sourceIds } : {}), payload: { callId, mode: 'upsert', items: [], summary: { label, audience, at, ...(text ? { text } : {}) } } });
       return;
     }
     const summary = periodSummaryText(this.store, scopeKey, callId, label, text);

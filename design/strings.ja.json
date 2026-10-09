@@ -4336,6 +4336,12 @@
       "text": "自分の時間",
       "only": "apple",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.maintenanceOrigin",
+      "text": "内部の記憶整理",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
     }
   ]
 }

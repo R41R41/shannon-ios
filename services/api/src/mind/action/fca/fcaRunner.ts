@@ -15,6 +15,11 @@ import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './
 export interface FcaStepPorts {
   runtime: TaskRuntime; model: FcaModel;
   ownerAlone(): boolean;
+  /** Trusted policy for internal maintenance; never changes disclosure or tool audience. */
+  executionAllowed?(): boolean;
+  taskTools?: boolean;
+  /** Code-owned phase state, committed with history under the same action lease. */
+  checkpoint?(): Readonly<Record<string, unknown>>;
   /** Existing lease/resource gate, rechecked before each model or tool operation. */
   permit(): Promise<boolean>;
   selector?: FcaToolSelector;
@@ -40,13 +45,15 @@ export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Ab
 }
 async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
   const { runtime } = ports;
+  const maintenance = step.snapshot.task.origin === 'maintenance' && step.snapshot.task.kind === 'sleep';
+  const allowed = () => maintenance ? ports.executionAllowed?.() === true : ports.ownerAlone() && (ports.executionAllowed?.() ?? true);
   const checked = async () => {
     signal.throwIfAborted();
-    if (!ports.ownerAlone()) throw new Error('FCA_EXECUTION_HELD');
+    if (!allowed()) throw new Error('FCA_EXECUTION_HELD');
     if (ports.sourcesVisible && !ports.sourcesVisible()) throw new Error('FCA_SOURCE_WITHHELD');
     if (!await ports.permit()) throw new Error('FCA_EXECUTION_HELD');
     signal.throwIfAborted();
-    if (!ports.ownerAlone()) throw new Error('FCA_EXECUTION_HELD');
+    if (!allowed()) throw new Error('FCA_EXECUTION_HELD');
     if (ports.sourcesVisible && !ports.sourcesVisible()) throw new Error('FCA_SOURCE_WITHHELD');
     if (runtime.get(step.scopeKey, step.taskId)?.phase !== 'executing') throw new Error('FCA_TASK_STOPPING');
   };
@@ -55,7 +62,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     ? step.snapshot.checkpoint as Record<string, unknown> : {};
   const recallContext = ports.recall ? fcaRecallContext(step, prior, signal) : null;
   if (recallContext) ports.recall!.start(recallContext.input);
-  const catalog = [...TASK_TOOLS, ...(ports.tools?.definitions ?? [])];
+  const catalog = [...(maintenance || ports.taskTools === false ? [] : TASK_TOOLS), ...(ports.tools?.definitions ?? [])];
   if (new Set(catalog.map(tool => tool.name)).size !== catalog.length || catalog.some(tool => tool.name === TOOL_OPEN_NAME)) throw new Error('FCA_TOOL_CATALOG_INVALID');
   const replay = ports.history ? await prepareFcaHistory(step, {
     runtime, codec: ports.history.codec, summarizer: ports.history.summarizer,
@@ -107,6 +114,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
         const staleResult = () => toolFailure('failed', '身体の状態が変わりました。最新の観測から判断し直してください。', { retryable: false });
         if (bodyStale) return staleResult();
         if (call.name === TOOL_OPEN_NAME && selection) return openFcaTool(call.input, catalog, selection);
+        if (!catalog.some(definition => definition.name === call.name)) return toolFailure('not_offered', 'このタスクでは利用できない道具です。');
         if (selection && !input.tools.some(definition => definition.name === call.name)) return toolFailure('not_offered', '定義が必要な道具は、先に tool_open で開いてください。');
         if (ports.tools?.definitions.some(definition => definition.name === call.name)) {
           // Never turn an unknown outside outcome into a retryable tool result.
@@ -151,7 +159,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   await checked();
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
   const saved = observeSync('store', provenance, () => runtime.commitStep(step, {
-    history, disposition, checkpoint: { ...prior, consecutiveToolFailures, ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: decision.summary } : {}),
+    history, disposition, checkpoint: { ...prior, ...ports.checkpoint?.(), consecutiveToolFailures, ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: decision.summary } : {}),
   }), value => ({ ...provenance, committed: value !== null, phase: value?.task.phase ?? null }));
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
   // These callbacks drain durable outboxes; their failure must never undo/repeat committed tools.

@@ -1,3 +1,4 @@
+import { backgroundModelAttempt, requireBackgroundUsage } from '../../infra/models/backgroundModelAttempt.js';
 import { configuredResponseModel, DEFAULT_HAIKU_MODEL, isHaikuModel } from '../../infra/models/anthropic/haikuConfig.js';
 import { responseModelFetcher, validateResponseModelUsage } from '../../infra/models/anthropic/haikuResponses.js';
 import { createHash } from 'node:crypto';
@@ -78,6 +79,7 @@ export interface SleepAnalysisContext {
   occurredAt: string;
   stage5?: boolean;
   selfInterests?: readonly SelfInterest[];
+  signal?: AbortSignal;
 }
 
 export class LocalRuleSleepMemoryAnalyzer implements SleepMemoryAnalyzer {
@@ -155,6 +157,8 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
       .map((message, index) => `[${index + 1}] ${message.content.replace(/\s+/g, ' ').trim().slice(0, 2_000)}`)
       .join('\n')
       .slice(0, 24_000);
+    return backgroundModelAttempt({ ...this.options, model: this.model, scopeKey: context?.scopeKey ?? '', lane: 'sleep',
+      maxOutputTokens: context?.stage5 ? 1200 : 400, signal: context?.signal, now: () => context?.occurredAt ?? current.toISOString() }, async accounted => {
     const response = await this.fetcher(this.endpoint, {
       method: 'POST',
       headers: {
@@ -222,11 +226,11 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
         max_output_tokens: context?.stage5 ? 1_200 : 400,
         store: false,
       }),
-      signal: AbortSignal.timeout(this.timeoutMilliseconds),
+      signal: context?.signal ? AbortSignal.any([context.signal, AbortSignal.timeout(this.timeoutMilliseconds)]) : AbortSignal.timeout(this.timeoutMilliseconds),
     });
     const raw = await response.text();
     const json = parseJson(raw);
-    if (!response.ok) throw new Error(`OPENAI_SLEEP_RESPONSE_${response.status}`);
+    if (!response.ok) throw Object.assign(new Error(`OPENAI_SLEEP_RESPONSE_${response.status}`), { status: response.status });
     const usage = responseUsage(json);
     if (context) {
       this.options.usageStore?.recordLlmUsage({
@@ -238,7 +242,11 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
         occurredAt: context.occurredAt,
       });
     }
+    if (usage.unknownCostUpperBoundUsd) accounted();
+    requireBackgroundUsage((json as { usage?: unknown })?.usage, context?.signal);
+    accounted();
     validateResponseModelUsage(this.model, json);
+    context?.signal?.throwIfAborted();
     const output = parseJson(extractOutputText(json));
     if (!output || typeof output !== 'object' || Array.isArray(output)) throw new Error('OPENAI_SLEEP_OUTPUT_INVALID');
     const result = output as { facts?: unknown; relationships?: unknown; interests?: unknown; selfInterests?: unknown };
@@ -251,6 +259,7 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
     ]).slice(0, 20);
     return [...ownerProposals, ...(context?.stage5 ? parseSleepSelfInterests(result.selfInterests, messages, context.selfInterests ?? [])
       .map(selfInterest => ({ kind: 'interest' as const, statement: selfInterest.proposal.title ?? '', evidence: selfInterest.evidence, selfInterest })) : [])];
+    });
   }
 }
 

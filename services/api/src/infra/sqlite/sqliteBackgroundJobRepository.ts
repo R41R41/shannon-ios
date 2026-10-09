@@ -104,8 +104,10 @@ export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
     return inserted;
   }
 
-  claimNextBackgroundJob(workerId: string, nowIso: string, leaseUntilIso: string): ClaimedBackgroundJob | null {
+  claimNextBackgroundJob(workerId: string, nowIso: string, leaseUntilIso: string, excludedSleepScope?: string): ClaimedBackgroundJob | null {
     return this.context.transaction(() => {
+      const bound = Boolean(this.context.database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fca_task_maintenance'").get());
+      const exclusion = bound ? 'AND NOT EXISTS (SELECT 1 FROM fca_task_maintenance m WHERE m.scope_key=background_jobs.scope_key AND m.job_id=background_jobs.job_id)' : '';
       const row = this.context.database.prepare(`
         SELECT job_id, scope_key, payload_json, attempts
         FROM background_jobs
@@ -116,10 +118,13 @@ export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
             WHERE active.scope_key = background_jobs.scope_key
               AND active.status = 'leased'
               AND active.lease_until > ?
+              ${bound ? 'AND NOT EXISTS (SELECT 1 FROM fca_task_maintenance m WHERE m.scope_key=active.scope_key AND m.job_id=active.job_id)' : ''}
           )
+        ${exclusion}
+        AND NOT (job_kind='sleep-consolidation' AND scope_key=? AND attempts=0 AND status='pending')
         ORDER BY sequence ASC
         LIMIT 1
-      `).get(nowIso, nowIso, nowIso) as unknown as BackgroundJobRow | undefined;
+      `).get(nowIso, nowIso, nowIso, excludedSleepScope ?? '') as unknown as BackgroundJobRow | undefined;
       if (!row) return null;
       const changed = this.context.database.prepare(`
         UPDATE background_jobs
@@ -191,8 +196,9 @@ export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
     workerId: string,
     completedAt: string,
     outcome: SleepConsolidationOutcome,
+    finishJob = true,
   ): void {
-    this.completeClaimedBackgroundJob(job, workerId, completedAt, () => {
+    const apply = () => {
       outcome = reconcileSleepOutcome(outcome, this.companion.snapshot(job.scopeKey), completedAt);
       const memory = this.memory();
       if (memory) {
@@ -223,7 +229,7 @@ export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
           this.companion.apply(job.scopeKey, { type: 'interest-observed', interest, source: 'sleep' });
         }
       }
-      this.context.insertEvent(job.scopeKey, 'sleep.completed', completedAt, {
+      this.context.insertEvent(job.scopeKey, finishJob ? 'sleep.completed' : 'sleep.memory_consolidated', completedAt, {
         dayKey: job.payload.kind === 'sleep-consolidation' ? job.payload.dayKey : null,
         appliedFactIds: outcome.facts.map(fact => fact.id),
         appliedRelationshipIds: outcome.relationships.map(relationship => relationship.id),
@@ -234,14 +240,16 @@ export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
       this.context.database.prepare(`
         INSERT INTO sleep_runs
           (sleep_run_id, scope_key, day_key, status, summary_json, started_at, completed_at)
-        VALUES (?, ?, ?, 'completed', ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(scope_key, day_key) DO UPDATE SET
-          status = 'completed', summary_json = excluded.summary_json, completed_at = excluded.completed_at
-      `).run(job.id, job.scopeKey, dayKey, JSON.stringify(outcome.report), completedAt, completedAt);
+          status = excluded.status, summary_json = excluded.summary_json, completed_at = excluded.completed_at
+      `).run(job.id, job.scopeKey, dayKey, finishJob ? 'completed' : 'running', JSON.stringify(outcome.report), completedAt, finishJob ? completedAt : null);
       this.companion.writePersonalityProfile(job.scopeKey, this.companion.snapshot(job.scopeKey), completedAt);
       this.companion.writePromptProjection(job.scopeKey, this.companion.snapshot(job.scopeKey));
-      this.context.insertActivity(job.scopeKey, 'sleep', '睡眠バッチ', dayKey, completedAt, outcome.report);
-    });
+      if (finishJob) this.context.insertActivity(job.scopeKey, 'sleep', '睡眠バッチ', dayKey, completedAt, outcome.report);
+    };
+    if (finishJob) this.completeClaimedBackgroundJob(job, workerId, completedAt, apply);
+    else this.context.transaction(() => { this.assertJobLease(job.id, workerId); apply(); });
   }
 
   pendingBackgroundJobCount(): number {

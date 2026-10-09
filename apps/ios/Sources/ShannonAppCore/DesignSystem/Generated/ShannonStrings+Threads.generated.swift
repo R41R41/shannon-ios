@@ -58,4 +58,6 @@ extension ShannonGeneratedStrings {
     public static let threadsOwnerOrigin = "所有者からの依頼"
     /// `threads.ownTimeOrigin`
     public static let threadsOwnTimeOrigin = "自分の時間"
+    /// `threads.maintenanceOrigin`
+    public static let threadsMaintenanceOrigin = "内部の記憶整理"
 }

@@ -310,7 +310,7 @@ export const memoryOpCodec = Object.freeze({
       const payload = PAYLOADS[draft.kind](draft.payload, 'encode', 'payload');
       const payloadJson = JSON.stringify(payload);
       if (payloadJson.length > (draft.kind === 'task.experience' ? 1_500_000 : MEMORY_OP_LIMITS.payloadCharacters)) fail('too_long', 'payload');
-      const episodes = list(id, draft.kind === 'task.experience' ? 5000 : MEMORY_OP_LIMITS.episodes)([...new Set(draft.episodeIds ?? [])], 'encode', 'episodeIds');
+      const episodes = list(id, draft.kind === 'task.experience' ? 5000 : draft.kind === 'person.summary' ? 64 : MEMORY_OP_LIMITS.episodes)([...new Set(draft.episodeIds ?? [])], 'encode', 'episodeIds');
       const label = draft.disclosure ? disclosure(draft.disclosure, 'encode', 'disclosure') : null;
       const base = draft.baseRevision ?? null;
       if (base !== null && (typeof base !== 'string' || base.length > 120)) fail('malformed', 'baseRevision');
@@ -328,7 +328,7 @@ export const memoryOpCodec = Object.freeze({
       ownerOnly(row.kind, row.origin, raw);
       reading = { ownerWords: ownerWordsOf(row.origin, raw) };
       const payload = PAYLOADS[row.kind as MemoryOpKind](raw, 'decode', 'payload') as Record<string, unknown>;
-      const episodes = list(id, row.kind === 'task.experience' ? 5000 : MEMORY_OP_LIMITS.episodes)(parse(row.episodeIdsJson, 'episodeIds'), 'decode', 'episodeIds') as string[];
+      const episodes = list(id, row.kind === 'task.experience' ? 5000 : row.kind === 'person.summary' ? 64 : MEMORY_OP_LIMITS.episodes)(parse(row.episodeIdsJson, 'episodeIds'), 'decode', 'episodeIds') as string[];
       const label = row.disclosureJson === null ? null : disclosure(parse(row.disclosureJson, 'disclosure'), 'decode', 'disclosure') as MemoryDisclosure;
       return Object.freeze({ seq: row.seq, opId: row.opId, scopeKey: row.scopeKey, kind: row.kind as MemoryOpKind, origin: row.origin as MemoryOpOrigin,
         subjectKey: row.subjectKey, baseRevision: row.baseRevision, payload, episodeIds: Object.freeze(episodes), disclosure: label, attempts: row.attempts });

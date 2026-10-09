@@ -34,7 +34,7 @@ export interface BackgroundJobStore {
   enqueueTurnRefinement(scopeKey: string, experienceId: string, userMessage: string, observedAt: string, timeZone?: string): void;
   recoverUnqueuedTurnRefinements(nowIso: string): number;
   enqueueSleepConsolidations(dayKey: string, startAt: string, endAt: string, nowIso: string): number;
-  claimNextBackgroundJob(workerId: string, nowIso: string, leaseUntilIso: string): ClaimedBackgroundJob | null;
+  claimNextBackgroundJob(workerId: string, nowIso: string, leaseUntilIso: string, excludedSleepScope?: string): ClaimedBackgroundJob | null;
   completeClaimedBackgroundJob(
     job: ClaimedBackgroundJob,
     workerId: string,
