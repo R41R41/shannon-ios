@@ -10,6 +10,7 @@ import {
 } from '../chatModel.js';
 import { VOICE_TOOL_OUTPUT_TOKENS, voiceWaitingPhrase, type ShannonModelToolSession } from '../chatModelTools.js';
 import { baseToolSession, withToolMenu } from '../../../mind/tools/shannonToolMenu.js';
+import { providerToolName } from '../../../mind/tools/shannonTools.js';
 import { chatTurnResult, offersTools, parsedChatTurn } from '../chatModelTurn.js';
 import { ChatReplyStreamDecoder } from '../chatReplyStreamDecoder.js';
 import type { LlmUsageStore } from '../llmUsage.js';
@@ -268,12 +269,14 @@ export class AnthropicChatModel implements ShannonChatModel {
     }, value => ({ reply: value.reply.slice(0, 4_000), truncated: value.truncated === true }));
   }
 
-  /** A Jev timeout/no-menu still offers every tool, but cannot send more than 20 strict schemas to a native 5.5 model at once. */
+  /** Keep the native 5.5 opener stable, including a Jev timeout/no-menu, within the 20 strict-schema limit. */
   private boundedToolMenu<T extends { tools?: ShannonModelToolSession }>(request: T): T {
-    if (!isAppendOnlyAnthropicModel(this.model) || !request.tools || request.tools.definitions.length <= 20) return request;
+    if (!isAppendOnlyAnthropicModel(this.model) || !request.tools || !request.tools.definitions.length) return request;
+    if (request.tools.menu && request.tools.definitions.length <= 20) return request;
     // Build before the body so the same session supplies full discovery instructions, always-loaded controls,
     // lazy visibility and the native rounds. Opening still delegates to the original deadline/audience/gate/runner.
-    return { ...request, tools: withToolMenu(baseToolSession(request.tools), []) };
+    const chosen = request.tools.definitions.length < 20 ? request.tools.definitions.map(tool => providerToolName(tool.name)) : [];
+    return { ...request, tools: withToolMenu(baseToolSession(request.tools), chosen) };
   }
 
   private escalation(request: ShannonChatModelRequest | ShannonVoiceModelRequest, allowed: () => boolean) {
@@ -305,6 +308,8 @@ export class AnthropicChatModel implements ShannonChatModel {
       let explicitSearchTtl: HaikuCacheUsage['cache_creation'] | undefined;
       let receivedUsage = false;
       let usageRecorded = false;
+      let firstVisibleOutputAfterMs: number | undefined;
+      let finalUsageAfterMs: number | undefined;
       observerHandoff('native', 'llm', { model: prepared.model, round });
       try {
         return await observeAsync('llm', { ...observedAnthropicRequest(prepared), round, streaming: listen !== null }, async () => {
@@ -320,6 +325,7 @@ export class AnthropicChatModel implements ShannonChatModel {
         }
         const decoder = new ChatReplyStreamDecoder();
         let first = false;
+        const streamStarted = this.clock();
         const stream = this.client.messages.stream(prepared, { ...inlineTools, ...(signal ? { signal } : {}) });
         for await (const event of stream) {
           bounds?.event();
@@ -341,16 +347,28 @@ export class AnthropicChatModel implements ShannonChatModel {
           if (event.type === 'content_block_start' && event.content_block.type === 'tool_use'
             || event.type === 'content_block_delta' && event.delta.type === 'input_json_delta') bounds?.output();
           if (text === null) continue;
+          const outputAt = this.clock();
           const handed = listen(text, decoder);
-          if (handed) { timer?.answering(); bounds?.pause(); sent += await handed; signal?.throwIfAborted(); bounds?.output(); }
+          if (handed) {
+            timer?.answering(); bounds?.pause();
+            const visible = await handed;
+            // Only decoded text accepted by the reply callback, never JSON syntax, thinking or a tool call. This is
+            // server handoff latency, not proof of device display/playback or a provider prefill/queue breakdown.
+            if (visible && firstVisibleOutputAfterMs === undefined) firstVisibleOutputAfterMs = Math.max(0, outputAt - streamStarted);
+            sent += visible; signal?.throwIfAborted(); bounds?.output();
+          }
         }
-        const message = settledServerSearchUsage(await stream.finalMessage(), searchCacheStart, explicitSearchTtl, prepared.messages);
+        const completed = await stream.finalMessage();
+        finalUsageAfterMs = Math.max(0, this.clock() - streamStarted);
+        const message = settledServerSearchUsage(completed, searchCacheStart, explicitSearchTtl, prepared.messages);
         this.recordUsage(scopeKey, message, prepared.max_tokens, true, body.model, searchAllowance(body));
         usageRecorded = true;
         if (usesOneHourAnthropicCache(body.model)) validateNativeUsage(message.usage);
         if (message.stop_reason === 'refusal' && sent) throw new PartialAnswerError(sent);
         return message;
-        }, observedAnthropicResponse, { model: prepared.model });
+        }, message => ({ ...observedAnthropicResponse(message),
+          ...(firstVisibleOutputAfterMs !== undefined ? { firstVisibleOutputAfterMs } : {}),
+          ...(finalUsageAfterMs !== undefined ? { finalUsageAfterMs } : {}) }), { model: prepared.model });
       } catch (error) {
         // message_start/delta counts are lower bounds until finalMessage: aborting the stream does not prove its final bill.
         if (receivedUsage && !usageRecorded) this.recordUsage(scopeKey, { usage: observedUsage }, prepared.max_tokens, false, body.model, searchAllowance(body));

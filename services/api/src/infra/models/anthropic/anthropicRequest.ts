@@ -7,6 +7,7 @@ import { WEB_SEARCH_INSTRUCTIONS } from '../chatModelSupport.js';
 import type { SonnetSettings } from './anthropicConfig.js';
 import { isHaikuModel, usesOneHourAnthropicCache } from './haikuConfig.js';
 import { structuredSchema } from './anthropicSchema.js';
+import { appendForegroundMenu, stableForegroundMenu } from './anthropicForegroundMenu.js';
 export { structuredSchema } from './anthropicSchema.js';
 
 /**
@@ -91,7 +92,8 @@ const system = (text: string, model: string): Anthropic.TextBlockParam[] => [{ t
 
 /** The text turn's request (non-streaming shape; the stream sends the same body). */
 export function sonnetChatBody(settings: SonnetSettings, request: ShannonChatModelRequest, agentHostHint: string | undefined): Anthropic.MessageCreateParamsNonStreaming {
-  const luna = chatTurnRequestBody(settings.model, request, agentHostHint);
+  const inline = offersTools(request) && stableForegroundMenu(settings.model, request.tools);
+  const luna = chatTurnRequestBody(settings.model, inline ? { ...request, tools: undefined, toolsWithheld: undefined } : request, agentHostHint);
   const web = !offersTools(request) && Boolean(request.useWebSearch || request.placeSearch);
   // Web evidence was obtained by the non-JSON auxiliary operation before this structured answer.
   const tools: Anthropic.ToolUnion[] = offersTools(request) ? sonnetTools(request.tools) : [];
@@ -100,7 +102,7 @@ export function sonnetChatBody(settings: SonnetSettings, request: ShannonChatMod
     schema.properties = { ...schema.properties as object, webSearchNeedsInput: { type: 'boolean', description: '検索に必要な対象や地域が不明で、replyでその不足を短く質問する場合だけtrue。検索の約束や結果はfalse。検索未実行を完了としない。' } };
     schema.required = [...schema.required as string[], 'webSearchNeedsInput'];
   }
-  return {
+  const body: Anthropic.MessageCreateParamsNonStreaming = {
     model: settings.model,
     max_tokens: 16_000,
     system: system([String(luna.instructions), SONNET_TEXT_LINES, ...(web ? ['[Web検索の回答] このターンの検索結果だけに基づいて答える。調べる予定だけで返事を終えない。確認できない情報は断定しない。'] : [])].join('\n\n'), settings.model),
@@ -109,14 +111,16 @@ export function sonnetChatBody(settings: SonnetSettings, request: ShannonChatMod
     thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,
     output_config: { effort: isHaikuModel(settings.model) && request.tier === 'luna_plus' ? 'medium' : settings.effort, format: { type: 'json_schema', schema: structuredSchema(schema) as Record<string, unknown> } },
   };
+  return inline ? appendForegroundMenu(body, toolInstructions(request.tools!, false)) : body;
 }
 
 /** The voice turn's request: the parts of luna's voice payload, spoken text only. */
 export function sonnetVoiceBody(settings: SonnetSettings, request: ShannonVoiceModelRequest, maximumOutputTokens: number): Anthropic.MessageCreateParamsNonStreaming {
   const toolsOffered = request.tools?.definitions.length && !request.useWebSearch ? request.tools : undefined;
+  const inline = stableForegroundMenu(settings.model, toolsOffered);
   const instructions = [
     request.systemPrompt, VOICE_REPLY_INSTRUCTIONS,
-    ...(toolsOffered ? [toolInstructions(toolsOffered, true)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
+    ...(toolsOffered ? inline ? [] : [toolInstructions(toolsOffered, true)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
     ...(request.profilePrompt ? [request.profilePrompt] : []), SONNET_VOICE_LINES, ...(request.useWebSearch ? [SONNET_WEB_LINE] : []),
   ].join('\n\n');
   const input = [
@@ -127,7 +131,7 @@ export function sonnetVoiceBody(settings: SonnetSettings, request: ShannonVoiceM
   ];
   const complex = request.conversationClass === 'skill_complex';
   const tools: Anthropic.ToolUnion[] = toolsOffered ? sonnetTools(toolsOffered) : request.useWebSearch ? [webSearchTool(complex ? 3 : 2)] : [];
-  return {
+  const body: Anthropic.MessageCreateParamsNonStreaming = {
     model: settings.model,
     // Thinking counts toward the ceiling: room for it beside the spoken reply.
     max_tokens: maximumOutputTokens + (settings.voiceThinking === 'adaptive' ? 4_000 : 1_000),
@@ -137,4 +141,5 @@ export function sonnetVoiceBody(settings: SonnetSettings, request: ShannonVoiceM
     thinking: { type: settings.voiceThinking } as Anthropic.ThinkingConfigParam,
     output_config: { effort: isHaikuModel(settings.model) && request.tier === 'luna_plus' ? 'medium' : settings.effort },
   };
+  return inline ? appendForegroundMenu(body, toolInstructions(toolsOffered!, true)) : body;
 }

@@ -74,11 +74,10 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
   const session = options.session;
   const appendOnly = isAppendOnlyAnthropicModel(body.model);
   // Every offered schema is strict, including deferred ones, and the API accepts at most 20 strict tools per request.
-  // Keep only the initially visible menu in the fixed prefix. Opening another tool appends its full strict definition
-  // after the result; it never changes signed tools/system/history or the session's visibility and execution gate.
+  // The request already appended the initially selected schemas after its stable opener and history. Opening another
+  // tool appends only its new definition, preserving signed tools/system/history and the original execution gate.
   const initial = sonnetTools(session);
   const visible = new Set(initial.map(tool => tool.name));
-  if (appendOnly && session?.menu) body = { ...body, tools: initial };
   const turn: ToolStepState = { used: 0, toolsOff: false };
   let round = 0;
   let pauses = 0;

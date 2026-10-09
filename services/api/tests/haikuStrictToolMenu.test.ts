@@ -27,6 +27,10 @@ const signed = (id: string, name: string, input: unknown) => paid(message([
 type Tool = { name: string; strict?: boolean; input_schema?: { properties?: Record<string, { enum?: string[] }>; required?: string[] } };
 type Body = Record<string, unknown>;
 type Messages = Array<{ role: string; content: Array<Record<string, unknown>> | string }>;
+function schemas(body: Body): Tool[] {
+  return [...(body.tools ?? []) as Tool[], ...(body.messages as Messages).flatMap(item => Array.isArray(item.content)
+    ? item.content.flatMap(block => block.type === 'tool_addition' ? [(block.tool as { definition: Tool }).definition] : []) : [])];
+}
 function complexity(node: unknown): { optional: number; unions: number } {
   if (!node || typeof node !== 'object') return { optional: 0, unions: 0 };
   if (Array.isArray(node)) return node.reduce((sum, child) => {
@@ -131,15 +135,16 @@ describe('Haiku full registry and strict tool admission', () => {
       return script[index]!;
     });
     await h.chat.generate({ ...base, tools: offer.tools });
-    expect((h.bodies[0]!.tools as Tool[]).map(tool => tool.name)).toEqual(['aether_propose', 'minecraft_cancel', 'memory_search', 'memory_read', 'tool_open']);
+    expect((h.bodies[0]!.tools as Tool[]).map(tool => tool.name)).toEqual(['tool_open']);
+    expect(schemas(h.bodies[0]!).map(tool => tool.name)).toEqual(['tool_open', 'aether_propose', 'minecraft_cancel', 'memory_search', 'memory_read']);
     expect(h.counts[0]).toEqual({ strict: 5, optional: 4, unions: 9 });
-    expect((h.bodies[0]!.tools as Tool[]).filter(tool => tool.name.startsWith('memory_'))).toMatchObject([
+    expect(schemas(h.bodies[0]!).filter(tool => tool.name.startsWith('memory_'))).toMatchObject([
       { name: 'memory_search', strict: true, input_schema: { required: ['query'], additionalProperties: false } },
       { name: 'memory_read', strict: true, input_schema: { required: ['id'], additionalProperties: false } },
     ]);
     const open = (h.bodies[0]!.tools as Tool[]).find(tool => tool.name === 'tool_open')!;
-    expect(open.input_schema!.properties!.name!.enum).toEqual(menuCandidatesOf(t.definitions).map(tool => tool.name));
-    for (const candidate of menuCandidatesOf(t.definitions)) expect(JSON.stringify(h.bodies[0]!.system)).toContain(`- ${candidate.name}: `);
+    expect(open.input_schema!.properties!.name!.enum).toBeUndefined();
+    for (const candidate of menuCandidatesOf(t.definitions)) expect(JSON.stringify(h.bodies[0]!.messages)).toContain(`- ${candidate.name}: `);
     expect((h.bodies[1]!.messages as Messages).at(-1)).toMatchObject({ role: 'system', content: [{ type: 'tool_addition',
       tool: { type: 'tool_definition', definition: expect.objectContaining({ name: 'minecraft_request', strict: true }) } }] });
     expect(t.calls).toEqual(['minecraft_request']);
@@ -161,7 +166,8 @@ describe('Haiku full registry and strict tool admission', () => {
     expect(h.bodies).toHaveLength(3);
     expect(t.calls).toEqual(['minecraft_request']);
     expect(t.requests.recent('owner')).toHaveLength(1);
-    expect((h.bodies[0]!.tools as Tool[]).find(tool => tool.name === 'tool_open')!.input_schema!.properties!.name!.enum).toHaveLength(t.definitions.length);
+    expect((h.bodies[0]!.tools as Tool[]).find(tool => tool.name === 'tool_open')!.input_schema!.properties!.name!.enum).toBeUndefined();
+    for (const tool of t.definitions) expect(JSON.stringify(h.bodies[0]!.messages)).toContain(`- ${providerToolName(tool.name)}: `);
   });
 
   it.each(['text-stream', 'voice', 'voice-stream'] as const)('normalizes a direct all-tools %s request before building instructions, retaining one final reply', async lane => {
@@ -173,8 +179,10 @@ describe('Haiku full registry and strict tool admission', () => {
     const request = { ...base, tools: t.tools, conversationClass: 'skill_simple' as const, useWebSearch: false };
     const result = lane === 'text-stream' ? await h.chat.generateStreaming(request, part => { parts.push(part); })
       : lane === 'voice-stream' ? await h.chat.generateVoiceStreaming(request, part => { parts.push(part); }) : await h.chat.generateVoice(request);
-    expect((h.bodies[0]!.tools as Tool[]).map(tool => tool.name)).toEqual(['aether_propose', 'minecraft_cancel', 'memory_search', 'memory_read', 'tool_open']);
-    expect(JSON.stringify(h.bodies[0]!.system)).toContain('- minecraft_request: ');
+    expect((h.bodies[0]!.tools as Tool[]).map(tool => tool.name)).toEqual(['tool_open']);
+    expect(schemas(h.bodies[0]!).map(tool => tool.name)).toEqual(['tool_open', 'aether_propose', 'minecraft_cancel', 'memory_search', 'memory_read']);
+    expect(JSON.stringify(h.bodies[0]!.system)).not.toContain('- minecraft_request: ');
+    expect(JSON.stringify(h.bodies[0]!.messages)).toContain('- minecraft_request: ');
     expect(h.bodies.every(body => digest(body.tools) === digest(h.bodies[0]!.tools) && digest(body.system) === digest(h.bodies[0]!.system))).toBe(true);
     expect(t.calls).toEqual(['minecraft_request']);
     expect(t.requests.recent('owner')).toHaveLength(1);
@@ -198,10 +206,11 @@ describe('Haiku full registry and strict tool admission', () => {
     const h = native((_body, index) => [signed('open-denied', 'tool_open', { name: 'minecraft_request' }),
       signed('execute-denied', 'minecraft_request', { goal }), paid(anthropicFixture('structured-answer'))][index]!);
     await h.chat.generate({ ...base, tools });
-    expect((h.bodies[0]!.tools as Tool[]).find(tool => tool.name === 'tool_open')!.input_schema!.properties!.name!.enum).not.toContain('minecraft_request');
+    expect((h.bodies[0]!.tools as Tool[]).find(tool => tool.name === 'tool_open')!.input_schema!.properties!.name!.enum).toBeUndefined();
+    expect(JSON.stringify(h.bodies[0]!.messages)).not.toContain('- minecraft_request: ');
     expect(JSON.stringify(h.bodies[0]!.system)).not.toContain('- minecraft_request: ');
     expect(JSON.stringify(h.bodies[1]!.messages)).toContain('not_offered');
-    expect(JSON.stringify(h.bodies[2]!.messages)).not.toContain('tool_addition');
+    expect(schemas(h.bodies[2]!).map(tool => tool.name)).not.toContain('minecraft_request');
     expect(t.calls).toEqual([]);
     expect(t.requests.recent('owner')).toEqual([]);
   });
@@ -212,10 +221,11 @@ describe('Haiku full registry and strict tool admission', () => {
     const h = native((_body, index) => index === 0 ? signed('original-request', 'minecraft_request', { goal }) : paid(anthropicFixture('structured-answer')));
     await h.chat.generate({ ...base, tools: t.tools });
     const initial = h.bodies[0]!.tools as Tool[];
-    expect(initial.map(tool => tool.name)).toEqual(['aether_propose', 'minecraft_request', 'minecraft_cancel', 'memory_search', 'memory_read', 'tool_open']);
-    expect(initial.every(tool => tool.strict === true)).toBe(true);
+    expect(initial.map(tool => tool.name)).toEqual(['tool_open']);
+    expect(schemas(h.bodies[0]!).map(tool => tool.name)).toEqual(['tool_open', 'aether_propose', 'minecraft_request', 'minecraft_cancel', 'memory_search', 'memory_read']);
+    expect(schemas(h.bodies[0]!).every(tool => tool.strict === true)).toBe(true);
     expect(initial.find(tool => tool.name === 'tool_open')!.input_schema!.properties!.name!.enum)
-      .toEqual(t.definitions.map(tool => providerToolName(tool.name)));
+      .toBeUndefined();
     expect(h.bodies).toHaveLength(2);
     expect(t.calls).toEqual(['minecraft_request']);
     expect(t.requests.recent('owner')).toHaveLength(1);

@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { shannonTool, toolFromProviderName } from '../../../mind/tools/shannonTools.js';
 import { SELF_REWRITE_TOOLS } from '../../../mind/tools/selfRewriteToolDefinitions.js';
+import { activeAnthropicToolNames } from './anthropicForegroundMenu.js';
 
 /** Only registry/built-in tool symbols may cross the observer boundary, never arbitrary provider text. */
 export function observedToolName(name: string, allowed: readonly { name: string }[] = []): string {
@@ -15,7 +16,7 @@ export function observedToolName(name: string, allowed: readonly { name: string 
 /** Counts and actual offered names only: system, history, schemas and signed blocks stay in the request. */
 export function observedAnthropicRequest(body: Anthropic.MessageCreateParamsNonStreaming) {
   return { model: body.model, messageCount: body.messages.length, maximumOutputTokens: body.max_tokens,
-    offeredTools: (body.tools ?? []).map(tool => 'name' in tool ? observedToolName(tool.name) : 'unknown') };
+    offeredTools: activeAnthropicToolNames(body).map(name => observedToolName(name)) };
 }
 
 const stopReasons = new Set(['end_turn', 'max_tokens', 'stop_sequence', 'tool_use', 'pause_turn', 'refusal', 'model_context_window_exceeded']);
