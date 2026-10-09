@@ -1,4 +1,4 @@
-import { NODE_SPECS, LANES, LINKS, ROUTES, circuitFor, routeIncludes, mapLayout } from './observerMap.js';
+import { NODE_SPECS, LINKS, ROUTES, circuitFor, routeIncludes, mapLayout, createMapRouter } from './observerMap.js';
 import { observedTasks, taskRunView, timingSummary, streamTimingSummary, timingGroups, timelineRows, createElapsedClock, spanKey } from './observerAnalysis.js';
 // This module has no network or DOM effects when imported by deterministic tests.
 export const MAX_EVENTS = 1600;
@@ -246,7 +246,8 @@ function validCatalog(value) {
 
 /** One abortable polling chain owns credentials in memory. An epoch fences every late response. */
 export function createObserverClient(options) {
-  const fetcher = options.fetch;
+  const fetcher = options.fetch, bridge = options.desktopBridge;
+  let existingConnection = false;
   const setTimer = options.setTimer ?? setTimeout, clearTimer = options.clearTimer ?? clearTimeout;
   const base = options.basePath ?? '';
   let token = '', epoch = 0, controller = null, timer = null, deadline = null, paused = false, catalog = null, delay = 400;
@@ -260,9 +261,19 @@ export function createObserverClient(options) {
   const receipts = createReceiptGate();
   const state = value => { if (value !== 'live') receipts.reset(); options.onConnection?.(value); };
   const disconnect = (reason = '') => {
-    stopWork(); token = ''; catalog = null; options.onCredential?.(null); options.onReset?.(reason); state('disconnected');
+    stopWork(); token = ''; existingConnection = false; catalog = null; options.onCredential?.(null); options.onReset?.(reason); state('disconnected');
   };
   const json = async (path, init, activeEpoch) => {
+    if (bridge) {
+      const url = new URL(path, 'https://observer.invalid');
+      const request = url.pathname === '/v1/observer/catalog' ? { kind: 'catalog' }
+        : url.pathname === '/v1/observer/events' ? { kind: 'events', after: Number(url.searchParams.get('after')), limit: 200 } : null;
+      if (!request || init.method) throw new Error('OBSERVER_DESKTOP_READ_ONLY');
+      const response = await bridge.request(request);
+      if (activeEpoch !== epoch || controller?.signal.aborted) throw new Error('STALE_RESPONSE');
+      if (!response.ok) { const error = new Error('OBSERVER_HTTP'); error.status = response.status; throw error; }
+      return response.body;
+    }
     const response = await fetcher(`${base}${path}`, { cache: 'no-store', credentials: 'omit', redirect: 'error', ...init, signal: controller.signal });
     if (activeEpoch !== epoch) throw new Error('STALE_RESPONSE');
     if (!response.ok) { const error = new Error('OBSERVER_HTTP'); error.status = response.status; throw error; }
@@ -277,7 +288,7 @@ export function createObserverClient(options) {
   const endRequest = () => { if (deadline !== null) clearTimer(deadline); deadline = null; controller = null; };
   const poll = async () => {
     timer = null;
-    if (!token || paused) return;
+    if ((!token && !existingConnection) || paused) return;
     const activeEpoch = epoch;
     beginRequest();
     try {
@@ -299,16 +310,24 @@ export function createObserverClient(options) {
       delay = envelope.availability === 'held' ? 800 : 400;
     } catch (error) {
       if (activeEpoch !== epoch) return;
-      if (error.status === 401 || error.status === 403) { disconnect('接続の認証を確認できませんでした。接続コードでつなぎ直してください。'); return; }
+      if (!bridge && (error.status === 401 || error.status === 403)) { disconnect('接続の認証を確認できませんでした。接続コードでつなぎ直してください。'); return; }
+      if (bridge && (error.status === 401 || error.status === 403)) options.onReset?.('アプリの接続と、所有者だけがいる状態を確認してください。');
       state('lost'); delay = Math.min(Math.max(800, delay * 2), 8000);
     } finally {
       if (activeEpoch === epoch) {
         endRequest();
-        if (token && !paused) timer = setTimer(poll, delay);
+        if ((token || existingConnection) && !paused) timer = setTimer(poll, delay);
       }
     }
   };
+  const connectExisting = () => {
+    if (!bridge) throw new Error('OBSERVER_DESKTOP_UNAVAILABLE');
+    stopWork(); token = ''; existingConnection = true; catalog = null; delay = 400;
+    options.onReset?.(''); state(paused ? 'paused' : 'connecting');
+    if (!paused) void poll();
+  };
   const connect = (value, expiresAt = null) => {
+    if (bridge) throw new Error('OBSERVER_DESKTOP_READ_ONLY');
     stopWork(); token = String(value).trim(); catalog = null; delay = 400;
     options.onReset?.(''); state(paused ? 'paused' : 'connecting');
     if (!token) { disconnect('接続情報を入力してください。'); return; }
@@ -316,6 +335,7 @@ export function createObserverClient(options) {
     if (!paused) void poll();
   };
   const pair = async code => {
+    if (bridge) throw new Error('OBSERVER_DESKTOP_READ_ONLY');
     stopWork(); token = ''; catalog = null; options.onReset?.(''); state('connecting');
     const activeEpoch = epoch;
     beginRequest();
@@ -329,9 +349,9 @@ export function createObserverClient(options) {
         : error.status === 401 || error.status === 400 ? '接続コードが無効か、期限切れです。コードを確認してください。' : '接続できませんでした。サーバーへの接続を確認してください。');
     }
   };
-  const pause = () => { paused = true; stopWork(); catalog = null; if (token) state('paused'); else { options.onReset?.(''); state('disconnected'); } };
-  const resume = () => { if (!paused) return; paused = false; if (token) { state('connecting'); void poll(); } };
-  return { connect, pair, disconnect, pause, resume };
+  const pause = () => { paused = true; stopWork(); catalog = null; if (token || existingConnection) state('paused'); else { options.onReset?.(''); state('disconnected'); } };
+  const resume = () => { if (!paused) return; paused = false; if (token || existingConnection) { state('connecting'); void poll(); } };
+  return { connect, connectExisting, pair, disconnect, pause, resume };
 }
 
 const STATE_LABELS = { running: '● ACTIVE', completed: '✓ DONE', failed: '! FAILED', cancelled: '× CANCELLED', unknown: '? UNKNOWN', unobserved: '— 未観測' };
@@ -345,13 +365,15 @@ function mountObserver() {
   if (!root) return;
   const element = (name, className, text) => { const value = document.createElement(name); if (className) value.className = className; if (text !== undefined) value.textContent = text; return value; };
   const svgElement = (name, attrs) => { const value = document.createElementNS('http://www.w3.org/2000/svg', name); for (const [key, content] of Object.entries(attrs)) value.setAttribute(key, String(content)); return value; };
+  const desktopBridge = window.shannonObserver;
   const session = createObserverSession(() => window.sessionStorage, `shannon.observer.connection.v1:${observerBasePath(window.location.pathname)}`);
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let state = createObserverState(), catalog = null, selectedNode = 'llm', selectedSpan = null, selectedTool = null;
   let selectedTask = null, selectedStep = null, selectedRoute = 'all', analysisSignature = '', taskSignature = '';
   const elapsedClock = createElapsedClock(); let clockTimer = null;
   let priorCatalog = null, runSignature = '', spanSignature = '', toolSignature = '', graphWidth = 0;
-  const nodes = new Map(), paths = new Map(), boxes = new Map(), animations = new Set(), recent = new Map();
+  const nodes = new Map(), paths = new Map(), animations = new Set(), recent = new Map();
+  let mapRouter = null, routedWidth = 0;
   let viewRuns = null, viewId = null, view = undefined;
   const currentRun = () => {
     if (selectedTask) return taskRunView(state, selectedTask, selectedStep);
@@ -369,7 +391,7 @@ function mountObserver() {
     state = createObserverState(); catalog = null; priorCatalog = null; selectedSpan = null; selectedTool = null;
     runSignature = ''; spanSignature = ''; toolSignature = ''; taskSignature = ''; analysisSignature = ''; selectedTask = null; selectedStep = null;
     elapsedClock.clear(); if (clockTimer !== null) clearTimeout(clockTimer); clockTimer = null;
-    viewRuns = null; view = undefined; stopPackets(); graphWidth=0; layout();
+    viewRuns = null; view = undefined; stopPackets(); mapRouter?.reset(); paths.clear(); $('edges').replaceChildren(); graphWidth=0; layout();
     $('pair-code').value = ''; $('pair-token').value = '';
     render();
   };
@@ -596,44 +618,14 @@ function mountObserver() {
     $('notice').textContent = state.notice; $('notice').hidden = !state.notice;
   }
 
-  function rounded(points) {
-    let path = `M${points[0].join(' ')}`;
-    for (let index = 1; index < points.length - 1; index += 1) {
-      const point = points[index], before = points[index - 1], after = points[index + 1];
-      const incoming = Math.hypot(point[0] - before[0], point[1] - before[1]), outgoing = Math.hypot(after[0] - point[0], after[1] - point[1]);
-      if (incoming < 1 || outgoing < 1) continue;
-      const radius = Math.min(7, incoming / 2, outgoing / 2);
-      const a = point.map((value, axis) => value + (before[axis] - value) * radius / incoming);
-      const b = point.map((value, axis) => value + (after[axis] - value) * radius / outgoing);
-      path += ` L${a.join(' ')} Q${point.join(' ')} ${b.join(' ')}`;
-    }
-    return `${path} L${points.at(-1).join(' ')}`;
-  }
-
-  function route(from, to, index) {
-    const a = boxes.get(from), b = boxes.get(to);
-    if (!a || !b || from === to) return null;
-    const outgoing = LINKS.filter(link => link[0] === from), incoming = LINKS.filter(link => link[1] === to);
-    const port = (links, other, axis) => Math.max(0, links.findIndex(link => link[axis] === other)) + 1;
-    const ax = a.x + a.w * port(outgoing,to,1) / (outgoing.length + 1), bx = b.x + b.w * port(incoming,from,0) / (incoming.length + 1);
-    if (a.row === b.row && Math.abs(a.col - b.col) === 1) {
-      const right = b.col > a.col, y = a.y + a.h / 2;
-      return rounded([[a.x+(right?a.w:0),y],[b.x+(right?0:b.w),y]]);
-    }
-    const down = b.row >= a.row, p = [ax,a.y+(down?a.h:0)], q = [bx,b.y+(down&&a.row!==b.row?0:b.h)];
-    const py = p[1]+(down?12:-12), qy=q[1]+(down&&a.row!==b.row?-12:12);
-    // Long vertical runs use a column gutter; never cross an unrelated processor box.
-    const rail = a.x + a.w + 10 + index % 3 * 10;
-    return rounded([p,[ax,py],[rail,py],[rail,qy],[bx,qy],q]);
-  }
-
   function addEdge(from, to, background = false) {
     const key = `${from}>${to}`;
     if (paths.has(key)) return paths.get(key);
-    const path = route(from, to, paths.size);
-    if (!path) return null;
+    const routed = mapRouter?.route(from,to);
+    if (!routed) return null;
+    const path = routed.path;
     const shield = svgElement('path', { d:path, class:'edge-shield' });
-    const value = svgElement('path', { d:path, class:`edge${background?' background':''}`, 'data-from':from, 'data-to':to, 'data-circuit':circuitFor(from), 'marker-end':`url(#arrow-${circuitFor(from)})` });
+    const value = svgElement('path', { d:path, class:`edge${background?' background':''}`, 'data-from':from, 'data-to':to, 'data-points':JSON.stringify(routed.points), 'data-circuit':circuitFor(from), 'marker-end':`url(#arrow-${circuitFor(from)})` });
     value.dataset.dimmed = String(!routeIncludes(selectedRoute,from,to));
     $('edges').append(shield,value); paths.set(key,value); return value;
   }
@@ -647,15 +639,23 @@ function mountObserver() {
   function layout() {
     const width = $('graph-scroll').clientWidth;
     if (!width || width === graphWidth) return;
-    graphWidth = width; stopPackets(); boxes.clear(); paths.clear(); $('edges').replaceChildren(); $('zones').replaceChildren();
+    graphWidth = width; stopPackets(); paths.clear(); $('edges').replaceChildren(); $('zones').replaceChildren();
     const layout = mapLayout(width);
+    // A run/privacy reset drops observed routes but can reuse the public structural routing work.
+    if (!mapRouter || routedWidth !== layout.width) { mapRouter=createMapRouter(layout);routedWidth=layout.width; }
+    else mapRouter.reset();
     for (const [id,box] of layout.boxes) {
-      boxes.set(id,box); const button=nodes.get(id); button.style.left=`${box.x}px`; button.style.top=`${box.y}px`; button.style.width=`${box.w}px`;
+      const button=nodes.get(id); button.style.left=`${box.x}px`; button.style.top=`${box.y}px`; button.style.width=`${box.w}px`;button.style.height=`${box.h}px`;
     }
     $('canvas').style.width=`${layout.width}px`; $('canvas').style.height=`${layout.height}px`; $('wires').setAttribute('viewBox',`0 0 ${layout.width} ${layout.height}`);
-    for (const [row,label] of LANES.entries()) {
-      $('zones').append(svgElement('rect',{x:8,y:row*layout.pitch+8,width:layout.width-16,height:layout.pitch-8,rx:5,class:'zone'}));
-      const text=svgElement('text',{x:24,y:row*layout.pitch+28,class:'zone-label'}); text.textContent=label; $('zones').append(text);
+    let labels=$('zone-labels');
+    if(!labels) {labels=svgElement('g',{id:'zone-labels'});$('wires').insertBefore(labels,$('trails'));}
+    labels.replaceChildren();
+    for (const zone of layout.zones) {
+      $('zones').append(svgElement('rect',{x:zone.x,y:zone.y,width:zone.w,height:zone.h,rx:6,class:'zone'}));
+      const labelWidth=Math.min(zone.w-16,[...zone.label].reduce((sum,char)=>sum+(char.codePointAt(0)>255?10:6),0)+16);
+      labels.append(svgElement('rect',{x:zone.x+8,y:zone.y+5,width:labelWidth,height:19,rx:2,class:'zone-label-mask'}));
+      const text=svgElement('text',{x:zone.x+16,y:zone.y+19,class:'zone-label'});text.textContent=zone.label;labels.append(text);
     }
     for (const [from,to,background] of LINKS) addEdge(from,to,background);
     updateRoute();
@@ -707,11 +707,12 @@ function mountObserver() {
   }
 
   const client = createObserverClient({
-    basePath: observerBasePath(window.location.pathname), fetch: window.fetch.bind(window),
+    basePath: observerBasePath(window.location.pathname), fetch: window.fetch.bind(window), desktopBridge,
     getCursor: () => state.cursor,
-    onReset: reason => { clearPrivateView(); $('connect-error').textContent = reason; $('connect-error').hidden = !reason; },
+    onReset: reason => { clearPrivateView(); $('connect-error').textContent = reason; $('connect-error').hidden = !reason; if (desktopBridge && reason) state.notice = reason; },
     onCatalog: value => { if (priorCatalog === value) return; catalog = value; priorCatalog = value; toolSignature = ''; renderNodes(); renderDetail(); },
     onCredential: credential => {
+      if (desktopBridge) return;
       const saved = session.write(credential);
       $('pair-hint').textContent = saved ? '同じタブでは再読み込みしても接続を維持します。「接続を切る」で保存した接続情報を消します。' : 'このブラウザでは接続情報を保存できません。再読み込み後は再接続が必要です。';
     },
@@ -735,11 +736,11 @@ function mountObserver() {
     onConnection: connection => {
       const previous = state.transport; state = {...state,transport:connection}; root.dataset.connection=connection;
       const labels = {disconnected:'未接続',connecting:'接続中',live:'LIVE / 観測中',held:'HELD / 非表示',paused:'PAUSED / 観測休止',lost:'接続を再確認中'};
-      $('connection-state').textContent=labels[connection]; $('connect-panel').hidden=!['disconnected','connecting'].includes(connection);
-      $('disconnect').hidden=connection==='disconnected';
+      $('connection-state').textContent=labels[connection]; $('connect-panel').hidden=!!desktopBridge || !['disconnected','connecting'].includes(connection);
+      $('disconnect').hidden=!!desktopBridge || connection==='disconnected';
       for (const button of document.querySelectorAll('#connect-panel button')) button.disabled=connection==='connecting';
       if (connection==='paused') { const cursor=state.cursor,instanceId=state.instanceId; clearPrivateView(); state={...state,cursor,instanceId,transport:'paused'}; }
-      if (connection==='lost') { const cursor=state.cursor,instanceId=state.instanceId; clearPrivateView(); state={...state,cursor,instanceId,transport:'lost'}; state.notice='接続が途切れています。処理中だった箇所の結果は未確認です。自動で接続を再確認します。'; }
+      if (connection==='lost') { const cursor=state.cursor,instanceId=state.instanceId; clearPrivateView(); state={...state,cursor,instanceId,transport:'lost'}; state.notice=desktopBridge && $('connect-error').textContent || '接続が途切れています。処理中だった箇所の結果は未確認です。自動で接続を再確認します。'; }
       if (connection==='live' && previous==='lost') state.notice='接続が回復しました。受信したイベントから表示を更新しました。';
       if (previous!==connection) { runSignature=''; render(); }
     },
@@ -763,8 +764,21 @@ function mountObserver() {
   if (typeof ResizeObserver==='function') new ResizeObserver(layout).observe($('graph-scroll')); else window.addEventListener('resize',layout);
   render(); layout();
   if(document.hidden)client.pause();
-  const saved = session.read();
-  if (saved) client.connect(saved.token, saved.expiresAt);
+  if (desktopBridge) {
+    let desktopEpoch = -1;
+    const applyConnection = value => {
+      if (!record(value) || typeof value.connected !== 'boolean' || !Number.isSafeInteger(value.epoch) || value.epoch <= desktopEpoch) return;
+      desktopEpoch = value.epoch;
+      if (value.connected) client.connectExisting();
+      else { client.disconnect(); state.notice = 'Windowsアプリの設定からシャノンに接続してください。'; render(); }
+    };
+    const unsubscribe = desktopBridge.onState(applyConnection);
+    void desktopBridge.getState().then(applyConnection).catch(() => client.disconnect('Windowsアプリの接続を確認してください。'));
+    window.addEventListener('pagehide', event => { if (!event.persisted) unsubscribe(); });
+  } else {
+    const saved = session.read();
+    if (saved) client.connect(saved.token, saved.expiresAt);
+  }
 }
 
 if (typeof document !== 'undefined') mountObserver();

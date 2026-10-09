@@ -255,3 +255,25 @@ LIVE with the pairing panel hidden and no historic trails; explicit disconnect
 followed by reload stayed disconnected. Tests cover restored credentials,
 one-time-code reuse avoidance, revoked/expired/malformed credentials and blocked
 storage. The original authentication and audience checks remain in force.
+
+
+## Adopted compact processing lanes (2026-10-09)
+
+The owner adopted layout 1. The implementation retains 38 nodes and 49 base
+connections, grouped in seven compact lanes. The tool loop is a rectangular
+MODEL I/O → LLM → TOOL GATE → TOOL → MODEL I/O path. A pure orthogonal router
+avoids processor bounds for base and observed dynamic paths. Width-specific
+regressions cover 390, 1088, 1400, 1441 and 1920 pixels, including clearances,
+ports, straight segments and router reset.
+
+The local real-FCA fixture (no paid model) verified concurrent tasks, the selected
+loop, state/output inspection and reload using the retained tab credential.
+The canvas is 1032 pixels tall, without the proposal carousel's spare rows;
+the 1408-pixel browser page has no horizontal overflow or console warnings/errors.
+[Compact lane evidence](observer-evidence/fca-compact-lanes.jpg) is an isolated
+fixture screenshot, not production or live provider timing evidence.
+
+Desktop transport regressions verify credential-free IPC reads, pause/resume,
+late-response fencing during connection replacement and recovery from Observer
+refusal without revoking the shared app credential. Real Windows installation
+and acceptance are tracked separately from these deterministic checks.

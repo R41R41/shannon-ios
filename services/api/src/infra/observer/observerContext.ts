@@ -54,7 +54,13 @@ export function withObserverTask<T>(link: ObserverTaskLink, work: () => T): T {
   const sameTask = link.taskId && link.taskId === parent.taskId;
   const inherited = sameTask ? taskLink(parent) : {};
   if (link.stepId && link.stepId !== parent.stepId) delete inherited.actionId;
-  return context.run({ ...run, ...inherited, ...taskLink(link) }, work);
+  // Every task branch owns its source map. A different known task/step has no
+  // causal right to the caller's latest outcome (for example an older outbox row).
+  // Initial binding may retain the real untagged foreground caller's ancestry.
+  const sameContext = !parent.taskId || sameTask && (!link.stepId || link.stepId === parent.stepId);
+  const provenance = sameContext ? { latest: new Map(parent.latest) }
+    : { latest: new Map<ObserverNodeId, string>(), parent: parent.root, activeNode: undefined, activeSpan: undefined };
+  return context.run({ ...run, ...inherited, ...taskLink(link), ...provenance }, work);
 }
 /** Outbox flushes can process other scopes/tasks. Suppress foreign observation without suppressing the writer. */
 export function withScopedObserverTask<T>(scopeKey: string, link: ObserverTaskLink, work: () => T): T {

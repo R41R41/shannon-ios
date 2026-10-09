@@ -64,7 +64,8 @@ h1 { margin-top: 3px; font-size: 21px; font-weight: 500; letter-spacing: .1em; }
 .edge.background { stroke-dasharray: 4 4; }
 .edge-receipt { fill: none; stroke: var(--circuit); stroke-width: 3; opacity: 0; filter: drop-shadow(0 0 4px var(--circuit)); pointer-events: none; }
 .packet { fill: var(--circuit); stroke: var(--canvas); stroke-width: 1.5; }
-.zone { fill: none; stroke: var(--border); stroke-dasharray: 2 8; }
+.zone { fill:color-mix(in srgb,var(--panel) 35%,transparent); stroke:var(--border); }
+.zone-label-mask { fill:var(--canvas); }
 .zone-label { fill: var(--muted); font: 10px ui-monospace, SFMono-Regular, monospace; letter-spacing: .08em; }
 .node { position: absolute; padding: 8px 10px; min-width: 0; min-height: 104px; height: 104px; border-radius: 4px; background: var(--node); background: color-mix(in srgb, var(--circuit) 9%, var(--canvas)); border: 1.5px solid var(--circuit); text-align: left; }
 .node .receipt-halo { position: absolute; inset: -1px; display: block; overflow: visible; border: 1px solid var(--circuit); border-radius: inherit; background: color-mix(in srgb, var(--circuit) 8%, transparent); box-shadow: 0 0 14px color-mix(in srgb, var(--circuit) 45%, transparent); opacity: 0; pointer-events: none; }
@@ -120,9 +121,11 @@ footer { padding: 0 26px 20px; color: var(--muted); font-size: 11px; }
 /* Detailed lanes retain horizontal reading order, with local scroll on small screens. */
 .graph-scroll { overflow-x: auto; outline-offset: -3px; }
 .graph-scroll:focus-visible { outline: 2px solid var(--focus); }
-.canvas { min-width: 1080px; }
-.node { height:112px; min-height:112px; padding:7px 9px; }
-.node strong { font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; font-size:12px; font-weight:600; }
+.canvas { min-width: 1088px; }
+.node { height:96px; min-height:96px; padding:6px 8px; border-left-width:3px; }
+.node strong { font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; font-size:12px; font-weight:600; line-height:1.35; }
+.node-type { font-size:9px; line-height:1.25; }
+.node-role,.node-value,.node .node-time,.node .node-state { font-size:10px; line-height:1.25; }
 .node .node-time { color:var(--text); font-size:10px; font-variant-numeric:tabular-nums; }
 .node-value { color:var(--muted); }
 .node[data-dimmed="true"] { opacity:.4; }

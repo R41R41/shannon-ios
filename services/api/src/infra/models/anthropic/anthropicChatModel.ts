@@ -347,14 +347,13 @@ export class AnthropicChatModel implements ShannonChatModel {
           if (event.type === 'content_block_start' && event.content_block.type === 'tool_use'
             || event.type === 'content_block_delta' && event.delta.type === 'input_json_delta') bounds?.output();
           if (text === null) continue;
-          const outputAt = this.clock();
           const handed = listen(text, decoder);
           if (handed) {
             timer?.answering(); bounds?.pause();
             const visible = await handed;
             // Only decoded text accepted by the reply callback, never JSON syntax, thinking or a tool call. This is
             // server handoff latency, not proof of device display/playback or a provider prefill/queue breakdown.
-            if (visible && firstVisibleOutputAfterMs === undefined) firstVisibleOutputAfterMs = Math.max(0, outputAt - streamStarted);
+            if (visible && firstVisibleOutputAfterMs === undefined) firstVisibleOutputAfterMs = Math.max(0, this.clock() - streamStarted);
             sent += visible; signal?.throwIfAborted(); bounds?.output();
           }
         }

@@ -57,3 +57,34 @@ Backend tests cover request equivalence ON/OFF, caching/no extra calls, signed p
 - Browser fixture verification includes desktop/compact, keyboard/tool expansion, packet receipt, disconnection/audience erasure and explicit cross-run client references. See the linked UI record and safe screenshots.
 - `scripts/verify.sh app`, `scripts/verify.sh mac`, and `scripts/verify.sh release-runner` completed in sequence with exit 0: unsigned iOS app build, Mac debug build/28 tests, seven restored-inspector launch cases (12 seconds each), and eight release-runner tests passed. Physical-device installation, TestFlight and production are unverified for this branch.
 - After rebasing onto main `59e83f20`, `scripts/verify.sh api` passed with API typecheck, all fast guards, and 272 files/3585 tests. Both the fallback lazy-tool-menu behavior and the observer were retained at the overlapping native request boundary. Apple/shared-package code did not change in that rebase.
+
+
+## Compact lane layout and Windows transport (2026-10-09)
+
+The owner selected the compact processing lanes. The main tool loop is arranged
+as MODEL I/O → LLM → TOOL GATE → TOOL → MODEL I/O, with related processors grouped
+in seven lanes. Orthogonal wires avoid processor boxes; route highlighting and
+actual receipt motion remain independent. Layout does not create processing events.
+
+The Windows viewer uses the same allowlisted static viewer assets, bundled with
+the desktop app. A dedicated sandboxed window receives a narrow preload bridge
+for `catalog` and `events` reads and content-free connection state. The existing
+paired desktop credential stays in the main process and its encrypted store;
+no token or pairing code reaches the observer page, URL or session storage.
+Connection replacement advances an epoch, clears prior observations and rejects
+late responses. Pause/hidden states stop polling. Owner/audience and server
+projection checks remain unchanged. Observer refusal does not revoke the shared
+desktop connection. Browser pairing and tab-scoped credential retention remain
+available through the existing HTTPS viewer.
+
+Source integration, package generation, Windows installation and real Windows
+runtime acceptance are separate evidence gates. Importing a dated source handoff
+cannot establish which executable is currently running on the owner's computer.
+
+
+Each bound task branch owns a copied source-span map. The initial binding of an
+untagged foreground run can retain its actual caller ancestry. Switching an
+already known task or step clears source/active-span provenance and resumes only
+under the run root; an older outbox outcome cannot claim the current task's
+prediction as its source. Visible-output timing includes awaited server callback
+backpressure, rather than using the earlier provider delta arrival timestamp.

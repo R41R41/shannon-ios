@@ -34,6 +34,7 @@ export interface ObserverRequest {
 }
 export interface ObserverClientOptions {
   fetch(url: string, init: ObserverRequest): Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
+  desktopBridge?: { request(value: { kind: string; after?: number; limit?: number }): Promise<{ok: boolean; status: number; body?: unknown}> };
   basePath?: string;
   getCursor?(): number;
   onEnvelope(envelope: ObserverBatch, delivery?: { liveReceipts: boolean }): void;
@@ -45,6 +46,7 @@ export interface ObserverClientOptions {
   clearTimer?: typeof clearTimeout;
 }
 export function createObserverClient(options: ObserverClientOptions): {
+  connectExisting(): void;
   connect(token: string, expiresAt?: string | null): void; pair(code: string): Promise<void>; disconnect(reason?: string): void;
   pause(): void; resume(): void;
 };

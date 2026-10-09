@@ -325,3 +325,46 @@ describe('owner-requested tab connection retention', () => {
     expect(unavailable.write({token:'fixture-token',expiresAt:null})).toBe(false); expect(unavailable.read()).toBeNull();
   });
 });
+
+
+describe('desktop observer uses the existing main-process connection', () => {
+  it('polls only the narrow read bridge without fetching or retaining credentials', async () => {
+    vi.useFakeTimers();
+    const request = vi.fn(async (value: {kind: string}) => ({ok:true,status:200,body:value.kind === 'catalog' ? catalog : batch()}));
+    const fetch = vi.fn(), onCredential = vi.fn(), onConnection = vi.fn();
+    const client = createObserverClient({fetch, desktopBridge:{request}, onCredential, onEnvelope:vi.fn(), onConnection});
+    client.connectExisting(); await flush();
+    expect(request.mock.calls.map(([value]) => value)).toEqual([{kind:'catalog'},{kind:'events',after:0,limit:200}]);
+    expect(fetch).not.toHaveBeenCalled(); expect(onCredential).not.toHaveBeenCalled();
+    expect(onConnection).toHaveBeenLastCalledWith('live');
+    expect(() => client.connect('unavailable-token')).toThrow('READ_ONLY');
+    await expect(client.pair('unavailable-code')).rejects.toThrow('READ_ONLY');
+    client.pause(); await vi.advanceTimersByTimeAsync(5000); expect(request).toHaveBeenCalledTimes(2);
+    client.resume(); await flush(); expect(request).toHaveBeenCalledTimes(4);
+    client.disconnect(); expect(vi.getTimerCount()).toBe(0);
+  });
+  it('drops old IPC responses when an app connection is replaced', async () => {
+    vi.useFakeTimers();
+    let resolveOld!: (value: {ok:boolean,status:number,body:unknown}) => void;
+    const request = vi.fn().mockImplementationOnce(() => new Promise(resolve => {resolveOld=resolve;}))
+      .mockImplementation(async (value: {kind:string}) => ({ok:true,status:200,body:value.kind === 'catalog' ? catalog : batch()}));
+    const onCatalog=vi.fn(), onEnvelope=vi.fn();
+    const client=createObserverClient({fetch:vi.fn(),desktopBridge:{request},onCatalog,onEnvelope});
+    client.connectExisting(); client.connectExisting(); await flush();
+    expect(onEnvelope).toHaveBeenCalledTimes(1);
+    resolveOld({ok:true,status:200,body:{...catalog,tools:[{name:'old',domain:'old'}]}}); await flush();
+    expect(onEnvelope).toHaveBeenCalledTimes(1); expect(onCatalog).toHaveBeenLastCalledWith(catalog);
+    client.disconnect();
+  });
+  it('clears denied observation without deleting the shared app credential and can recover', async () => {
+    vi.useFakeTimers(); let refused=true;
+    const request=vi.fn(async (value:{kind:string}) => refused ? {ok:false,status:403} : {ok:true,status:200,body:value.kind === 'catalog' ? catalog : batch()});
+    const onReset=vi.fn(), onConnection=vi.fn(), onCredential=vi.fn();
+    const client=createObserverClient({fetch:vi.fn(),desktopBridge:{request},onReset,onConnection,onCredential,onEnvelope:vi.fn()});
+    client.connectExisting(); await flush();
+    expect(onConnection).toHaveBeenLastCalledWith('lost'); expect(onReset.mock.calls.at(-1)![0]).toContain('所有者');
+    expect(onCredential).not.toHaveBeenCalled(); refused=false;
+    await vi.advanceTimersByTimeAsync(800); expect(onConnection).toHaveBeenLastCalledWith('live');
+    client.disconnect();
+  });
+});

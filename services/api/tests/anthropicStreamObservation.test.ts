@@ -62,3 +62,20 @@ describe('native stream timing evidence', () => {
     } finally { restore(); }
   });
 });
+
+
+it.each(['text','voice'] as const)('includes %s callback backpressure in visible handoff timing', async lane => {
+  const events:ObserverDraft[]=[],restore=installObserverSink(event=>events.push(event));
+  let clock=0;
+  const final=lane==='text'?anthropicFixture('structured-answer'):message([{type:'text',text:'確認しました。'}],'end_turn');
+  const fixture=scriptedAnthropic([final]);
+  const model=new AnthropicChatModel({apiKey:'synthetic',fetch:fixture.fetcher,clock:()=>clock,
+    settings:{model:'claude-haiku-5-5',effort:'low',textThinking:'adaptive',voiceThinking:'adaptive'}});
+  const accepted=async()=>{await Promise.resolve();clock=125;};
+  try {
+    await withObserverRun({scopeKey:'owner',surface:lane},()=>lane==='text'?model.generateStreaming(request,accepted):model.generateVoiceStreaming(request,accepted));
+    const output=events.find(event=>event.node==='llm'&&event.kind==='span.completed')!.output as Output;
+    expect(output.firstVisibleOutputAfterMs).toBe(125);
+    expect(output.finalUsageAfterMs).toBeGreaterThanOrEqual(125);
+  } finally {restore();}
+});
