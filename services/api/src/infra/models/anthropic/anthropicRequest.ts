@@ -85,7 +85,9 @@ export function sonnetTools(session: ShannonModelToolSession | undefined): Anthr
 }
 
 export function webSearchTool(maxUses: number): Anthropic.WebSearchTool20260209 {
-  return { type: 'web_search_20260209', name: 'web_search', max_uses: maxUses };
+  // 20260209 otherwise defaults to code-execution filtering. Both voice and the auxiliary text read
+  // use direct web receipts; keep the caller explicit without changing search limits or cache markers.
+  return { type: 'web_search_20260209', name: 'web_search', max_uses: maxUses, allowed_callers: ['direct'] };
 }
 
 const system = (text: string, model: string): Anthropic.TextBlockParam[] => [{ type: 'text', text, cache_control: { type: 'ephemeral', ...(usesOneHourAnthropicCache(model) ? { ttl: '1h' as const } : {}) } }];
