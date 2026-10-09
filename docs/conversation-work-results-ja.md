@@ -45,10 +45,10 @@ Jevが間違った際にも、LLMが許可された道具の名前・説明を�
 - TypeScriptの5型チェックと回帰、パッケージ39ファイル425件は通過。構造・画面契約・Xcode workspace・semantic roleのfast検査も最終版で通過。
 - 独立レビューで、元の位置が違う依頼の誤った再利用、ハイフンを含むMinecraftの道具名、古い報告による音声配送の停滞、TTS送信直前の失効確認を修正した。
 - 全体API試験で見つかった旧OFFモードの音声プロンプト互換と入口許可リストを修正した。既存の記録は変更せず、最終360ファイル4,421件すべて通過。
-- SwiftとiPhone・Macの画面確認、配備、実DB取込、配布の最終結果は確定後に追記する。
+- Swift全体はXCTest777件＋Swift Testing224件が通過。最初の負荷中実行では既存の音声watchdog試験が2件タイムアウトしたが、時計・判定条件を変えず単独21件と全体の直列実行で通過した。iPhoneのボット明色・ガール暗色は専用Simulatorで実描画を確認。Mac画面、配備、実DB取込、配布は独立した運用記録で示す。
 
 本番の実応答時間、声の自然さ、物理端末の更新成功は、合成試験やビルド成功から推測しない。
 
 ## 配備・取込・配布
 
-未実施。作業ブランチ：`codex/shannon/conversation-work`。本番は引き続き `4e2cb517`。
+この資料の凍結時点では未実施。作業ブランチ：`codex/shannon/conversation-work`。基底の本番版は `4e2cb517`。後続の実施結果はSyzygy正本 `status/apps/shannon/status.json` と `docs/knowledge/shannon-conversation-work.md` を参照する。
