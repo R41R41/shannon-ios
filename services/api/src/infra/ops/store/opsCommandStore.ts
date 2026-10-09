@@ -78,9 +78,19 @@ export class OpsCommandStore {
       CREATE TABLE IF NOT EXISTS ops_lifecycle_dispatches (
         command_id TEXT PRIMARY KEY, server_id TEXT NOT NULL CHECK(server_id='shannon-home'),
         action TEXT NOT NULL CHECK(action IN ('start','stop','login','logout')), lifecycle_id TEXT NOT NULL UNIQUE,
-        action_id TEXT UNIQUE, lease_generation INTEGER, lease_holder TEXT
+        action_id TEXT UNIQUE, lease_generation INTEGER, lease_holder TEXT,
+        execution_kind TEXT NOT NULL DEFAULT 'minecraft' CHECK(execution_kind IN ('minecraft','respond'))
       );
     `);
+    this.transaction(() => {
+      if (!this.database.prepare('PRAGMA table_info(ops_lifecycle_dispatches)').all().some(row => row.name === 'execution_kind')) {
+        // Preserve old pending/unknown identities; deployment cannot turn an old request into new foreground work.
+        this.database.exec("ALTER TABLE ops_lifecycle_dispatches ADD COLUMN execution_kind TEXT NOT NULL DEFAULT 'minecraft' CHECK(execution_kind IN ('minecraft','respond'))");
+      }
+      this.database.exec(`CREATE TRIGGER IF NOT EXISTS ops_lifecycle_execution_kind_immutable
+        BEFORE UPDATE OF execution_kind ON ops_lifecycle_dispatches WHEN NEW.execution_kind != OLD.execution_kind
+        BEGIN SELECT RAISE(ABORT,'OPS_EXECUTION_KIND_IMMUTABLE'); END;`);
+    });
   }
 
   /** Closes what ran out of time. Every read and write below starts here, so a late command is never seen as open. */
@@ -187,13 +197,14 @@ export class OpsCommandStore {
   private mapLifecycle(id:string, request:Pick<OpsCommandRequest,'type'|'target'>, mapping:OpsLifecycleMapping):void {
     const expected = opsLifecycleMapping(request);
     if (!expected || expected.serverId !== mapping.serverId || expected.action !== mapping.action) throw new Error('OPS_LIFECYCLE_MAPPING');
-    this.database.prepare('INSERT INTO ops_lifecycle_dispatches(command_id,server_id,action,lifecycle_id) VALUES(?,?,?,?)')
+    this.database.prepare("INSERT INTO ops_lifecycle_dispatches(command_id,server_id,action,lifecycle_id,execution_kind) VALUES(?,?,?,?,'respond')")
       .run(id,mapping.serverId,mapping.action,`ops-lifecycle:${id}`);
   }
   lifecyclePending(scopeKey:string,at:string):Array<{command:OpsCommand;mapping:OpsLifecycleMapping;actionId:string|null;lifecycleId:string}> {
     this.settle(scopeKey,at);
     const rows=this.database.prepare(`SELECT o.*,m.server_id,m.action,m.action_id,m.lifecycle_id FROM ops_commands o
-      JOIN ops_lifecycle_dispatches m ON m.command_id=o.command_id WHERE o.scope_key=? AND o.status='pending' ORDER BY o.created_at,o.rowid`).all(scopeKey) as unknown as Array<Row & {server_id:'shannon-home';action:OpsLifecycleMapping['action'];action_id:string|null;lifecycle_id:string}>;
+      JOIN ops_lifecycle_dispatches m ON m.command_id=o.command_id WHERE o.scope_key=? AND o.status='pending'
+      AND m.execution_kind='respond' ORDER BY o.created_at,o.rowid`).all(scopeKey) as unknown as Array<Row & {server_id:'shannon-home';action:OpsLifecycleMapping['action'];action_id:string|null;lifecycle_id:string}>;
     return rows.map(row=>({command:command(row),mapping:{serverId:row.server_id,action:row.action},actionId:row.action_id,lifecycleId:row.lifecycle_id}));
   }
   /** Late native ACKs are read by their original ID; no claimed/unknown row is executed again. */
@@ -206,20 +217,28 @@ export class OpsCommandStore {
   bindLifecycle(scopeKey:string,id:string,actionId:string):boolean {
     return this.transaction(()=>{
       const row=this.row(scopeKey,id);if(!row||row.status!=='pending')return false;
-      const bound=this.database.prepare('SELECT action_id FROM ops_lifecycle_dispatches WHERE command_id=?').get(id) as {action_id:string|null}|undefined;
-      if(!bound||bound.action_id&&bound.action_id!==actionId)return false;
+      const bound=this.database.prepare('SELECT action_id,execution_kind FROM ops_lifecycle_dispatches WHERE command_id=?').get(id) as {action_id:string|null;execution_kind:string}|undefined;
+      const action=this.database.prepare('SELECT kind,origin,scope_key,source_id FROM mind_actions WHERE id=?').get(actionId);
+      if(!bound||bound.execution_kind!=='respond'||bound.action_id&&bound.action_id!==actionId
+        ||!action||action.kind!=='respond'||action.origin!=='owner_request'||action.scope_key!==scopeKey||action.source_id!==`ops:${id}`)return false;
       this.database.prepare('UPDATE ops_lifecycle_dispatches SET action_id=? WHERE command_id=?').run(actionId,id);return true;
     });
   }
   claimLifecycle(scopeKey:string,id:string,lease:ActionLease,at:string):boolean {
     return this.transaction(()=>{
       this.settle(scopeKey,at);const row=this.row(scopeKey,id);if(!row||row.status!=='pending')return false;
-      const bound=this.database.prepare('SELECT action_id FROM ops_lifecycle_dispatches WHERE command_id=?').get(id) as {action_id:string|null}|undefined;
-      if(bound?.action_id!==lease.id)return false;
+      const bound=this.database.prepare('SELECT action_id,execution_kind FROM ops_lifecycle_dispatches WHERE command_id=?').get(id) as {action_id:string|null;execution_kind:string}|undefined;
+      if(bound?.execution_kind!=='respond'||bound.action_id!==lease.id)return false;
       this.database.prepare("UPDATE ops_commands SET status='claimed',claimed_at=?,report_by=? WHERE command_id=?").run(at,after(at,OPS_COMMAND_LIMITS.reportWithinSeconds),id);
       this.database.prepare('UPDATE ops_lifecycle_dispatches SET lease_generation=?,lease_holder=? WHERE command_id=?').run(lease.generation,lease.holder,id);
       return true;
     });
+  }
+  lifecycleReportBy(scopeKey:string,id:string,lease:ActionLease):string|null {
+    const row=this.database.prepare(`SELECT o.report_by FROM ops_commands o JOIN ops_lifecycle_dispatches m ON m.command_id=o.command_id
+      WHERE o.scope_key=? AND o.command_id=? AND o.status='claimed' AND m.execution_kind='respond'
+      AND m.action_id=? AND m.lease_generation=? AND m.lease_holder=?`).get(scopeKey,id,lease.id,lease.generation,lease.holder);
+    return typeof row?.report_by==='string'?row.report_by:null;
   }
 
   recent(scopeKey: string, at: string, limit: number = OPS_COMMAND_LIMITS.recent): OpsCommand[] {

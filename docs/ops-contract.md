@@ -456,6 +456,10 @@ The record is in no prompt, and no model writes a command. The snapshot store is
 
 `OpsCommandStore`（`SQLiteOpsStore` の constructor から作成）が追加テーブル `ops_lifecycle_dispatches` を `CREATE TABLE IF NOT EXISTS` で作成する。既存テーブルの再構築・削除はしない。新しい Ops 行と対応するライフサイクル ID は同じ SQLite writer transaction で記録し、その行は旧 runtime の claim/report から除外する。既存の未処理・結果不明の旧コマンドを採用・再実行することはない。起動時のスキーマ確認用 DB clone もこの constructor を通す。
 
+明示的な owner 管理操作は、新しく受け付けた mapping の `execution_kind='respond'` と元 Ops 要求を照合して、会話と同じ foreground 実行枠を使う。background の unknown が二枠を保持していても管理操作を受けられるが、background 上限・unknown・予算・資源の保持は変更しない。追加列の migration は既存行を `minecraft` のまま保存し、その旧 mapping を新枠で実行しない。`execution_kind` の変更は immutable trigger が拒否する。任意の `ops:` source や `ops-command:` 出典は一般の respond 許可に流れず、元要求・固定 mapping・実行 kind・元 lease を全部満たす専用検査を通す。
+
+foreground admission 後の body resource は canonical writer で一度だけ取得を試み、競合する unknown/live body があれば `refused/not_allowed` で終了する。待機して会話枠を占有しない。native 実行は元 Ops の claim 時刻から既存の 120 秒 report window に束縛した signal を使い、その後の既存 cancellation drain で解放を確認できない場合は元 unknown/resource を保持する。
+
 ボットがログアウト中でも、登録 operator の新鮮な観測を待って処理できる。元要求から一つの `owner_request` action を作り、全チャット・FCA・own-time と同じ `minecraft-body` resource を取得する。許可は元の paired-device 要求、固定された操作・対象・ID、source、現在の holder/generation、scope、owner-alone、Ops スイッチの組み合わせを照合する。任意の `ops:` 文字列だけでは権限を得られない。Ops snapshot 全体は引き続きプロンプト・kernel・worker に渡さず、この broker は model を呼ばない。
 
 実行は [Minecraft lifecycle](minecraft-lifecycle-contract.md) の native 判定を使う。起動は確実に停止している場合だけで、既に起動中なら `already_running`。停止は native server thread の fresh な人数検査と参加 barrier を一つの判断として行い、人がいる・人数不明なら停止しない。`changed` の停止成功は `stopGuard` がなければ受理しない。ログアウトも共通の入力解放・接続終了を待つ。状態を読んでから旧 `stop.sh` / tmux 停止を呼ぶ経路には流さない。

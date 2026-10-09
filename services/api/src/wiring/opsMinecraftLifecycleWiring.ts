@@ -2,7 +2,7 @@ import { actionResource, type ActionThreads, type RunningAction } from '../contr
 import type { MinecraftLifecycleReceipt } from '../contracts/minecraftLifecycleContract.js';
 import { opsLifecycleMapping, type OpsLifecycleMapping } from '../contracts/opsMinecraftLifecycleContract.js';
 import type { OpsCommandCode, OpsCommandOutcome, OpsCommandRequest } from '../contracts/opsCommandContract.js';
-import { actionPermit, inActionExecution } from '../infra/context/actionExecution.js';
+import { inActionExecution } from '../infra/context/actionExecution.js';
 import type { OpsCommandStore } from '../infra/ops/store/opsCommandStore.js';
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import { acquireAction } from './actionExecutionWiring.js';
@@ -35,19 +35,30 @@ export function createOpsMinecraftLifecycle(parts: {
   const execute = async (row: ReturnType<OpsCommandStore['lifecyclePending']>[number]) => {
     let active: RunningAction | null = null;
     try {
-      active = await acquireAction(parts.actions, { scopeKey: parts.scopeKey, kind: 'minecraft', origin: 'owner_request',
+      active = await acquireAction(parts.actions, { scopeKey: parts.scopeKey, kind: 'respond', origin: 'owner_request',
         sourceId: `ops:${row.command.id}`, deadline: row.command.expiresAt }, controller.signal);
       if (!active) return;
+      const claimedAt = parts.now();
       if (!parts.commands.bindLifecycle(parts.scopeKey, row.command.id, active.execution.lease.id)
-        || !parts.commands.claimLifecycle(parts.scopeKey, row.command.id, active.execution.lease, parts.now())) {
+        || !parts.commands.claimLifecycle(parts.scopeKey, row.command.id, active.execution.lease, claimedAt)) {
         await active.finish('cancelled', 'ops_request_unavailable'); return;
       }
+      // Foreground admission clears its admission deadline. This original Ops report window still bounds native work.
+      const reportBy=parts.commands.lifecycleReportBy(parts.scopeKey,row.command.id,active.execution.lease);
+      if(!reportBy)throw new Error('OPS_REQUEST_DEADLINE_UNAVAILABLE');
+      const remaining = Date.parse(reportBy) - Date.parse(parts.now());
+      if(!Number.isFinite(remaining)||remaining<=0)throw new Error('OPS_REQUEST_DEADLINE_EXPIRED');
+      const signal = AbortSignal.any([active.execution.signal, AbortSignal.timeout(remaining)]);
       await inActionExecution(active.execution, async () => {
-        await actionPermit([actionResource(parts.deviceId, 'minecraft-body')]);
-        active!.execution.signal.throwIfAborted();
+        signal.throwIfAborted();
+        // One atomic permit attempt. An unknown/live body conflict cannot occupy foreground while waiting.
+        if (!await parts.actions.dispatch(active!.execution.lease, [actionResource(parts.deviceId, 'minecraft-body')])) {
+          throw new Error('OPS_BODY_RESOURCE_UNAVAILABLE');
+        }
+        signal.throwIfAborted();
         const receipt = await parts.service.execute({ id: row.lifecycleId, ...row.mapping,
           authority: { scopeKey: parts.scopeKey, origin: 'owner_request', executionId: active!.execution.lease.id,
-            lease: active!.execution.lease, sourceIds: [`ops-command:${row.command.id}`] } }, active!.execution.signal);
+            lease: active!.execution.lease, sourceIds: [`ops-command:${row.command.id}`] } }, signal);
         const report = outcome(receipt);
         if (!report) throw new Error('MINECRAFT_LIFECYCLE_OUTCOME_UNKNOWN');
         parts.commands.reportLifecycle(parts.scopeKey, row.command.id, report.outcome, report.code, parts.now());

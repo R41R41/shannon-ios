@@ -46,7 +46,11 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
         || row.deadline && String(row.deadline) <= at) return false;
       if (authority.origin === 'own_time') return row.kind === 'ownTime' && parts.autonomy.inspectAuthorization(authority.scopeKey,
         { domain: 'minecraft_lifecycle', summary: '登録されたマイクラへの参加を継続します。' }).decision === 'allow';
-      if (row.kind === 'minecraft') return parts.ownerAlone() && !!parts.ops?.enabled() && opsLifecycleAuthorityAllowed(db, authority, command);
+      // A guessed Ops prefix never falls through to the ordinary conversation authority.
+      const opsSource = typeof row.source_id === 'string' && row.source_id.startsWith('ops:')
+        || authority.sourceIds.some(id => id.startsWith('ops-command:'));
+      if (row.kind === 'minecraft' || opsSource) return parts.ownerAlone() && !!parts.ops?.enabled()
+        && opsLifecycleAuthorityAllowed(db, authority, command);
       const taskSources = row.kind === 'agentTask' ? parts.taskSources?.(authority.executionId) : undefined;
       return parts.ownerAlone() && (row.kind === 'respond' || row.kind === 'agentTask' && parts.taskAllowed(authority.executionId)
         && (!parts.taskSources || taskSources !== null && authority.sourceIds.every(id => taskSources?.includes(id))));

@@ -3,12 +3,14 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { afterEach, describe, expect, it } from 'vitest';
+import { DatabaseSync } from 'node:sqlite';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configuredMinecraftLifecycle } from '../src/wiring/minecraftLifecycleWiring.js';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { ShannonAutonomyService } from '../src/mind/action/ownTime/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { SQLiteOpsStore } from '../src/infra/ops/store/opsStore.js';
+import { OpsCommandStore } from '../src/infra/ops/store/opsCommandStore.js';
 import { createOpsRoute } from '../src/infra/ops/serverOpsRoutes.js';
 import { validatedOpsSnapshot } from '../src/contracts/opsContract.js';
 import { actionResource, leaseOf } from '../src/contracts/actionThreadContract.js';
@@ -18,9 +20,22 @@ import type { MinecraftLifecycleCommand, MinecraftLifecycleReceipt, MinecraftLif
 const close: Array<() => void | Promise<void>> = [];
 afterEach(async () => { for (const finish of close.splice(0).reverse()) await finish(); });
 async function until(test: () => boolean) { for (let i = 0; i < 500; i++) { if (test()) return; await delay(2); } expect(test()).toBe(true); }
-async function fixture() {
+async function fixture(legacy?: { id: string; at: string }) {
   const dir = mkdtempSync(join(tmpdir(), 'ops-lifecycle-')), path = join(dir, 'db.sqlite'); close.push(() => rmSync(dir, { recursive: true, force: true }));
   let at = '2026-10-10T00:00:00.000Z', sequence = 0, enabled = true, alone = true;
+  if (legacy) {
+    // The preceding production schema, including a queued action created before this migration.
+    const previous = new DatabaseSync(path);
+    new OpsCommandStore(previous);
+    previous.exec('DROP TRIGGER ops_lifecycle_execution_kind_immutable; ALTER TABLE ops_lifecycle_dispatches DROP COLUMN execution_kind;');
+    previous.prepare(`INSERT INTO ops_commands(command_id,scope_key,idempotency_key,type,target,status,created_at,expires_at,requested_by_device_id)
+      VALUES(?,'owner','legacy-key','minecraft.start','minecraft:shannon-home','pending',?,?,'desktop-1')`).run(legacy.id, legacy.at, '2026-10-10T00:00:05.000Z');
+    previous.prepare("INSERT INTO ops_lifecycle_dispatches(command_id,server_id,action,lifecycle_id) VALUES(?,'shannon-home','start',?)").run(legacy.id,`ops-lifecycle:${legacy.id}`);
+    previous.close();
+    const originalActions=actionHarness(()=>legacy.at,path);
+    originalActions.store.enqueue({scopeKey:'owner',kind:'minecraft',origin:'owner_request',sourceId:`ops:${legacy.id}`,
+      deadline:'2026-10-10T00:00:05.000Z'},legacy.at);originalActions.close();
+  }
   const store = new SQLiteOpsStore(path); close.push(() => store.close());
   const autonomyStore = new SQLiteAutonomyStore(path); close.push(() => autonomyStore.close());
   const autonomy = new ShannonAutonomyService({ store: autonomyStore, config: configuredAutonomy({ SHANNON_AUTONOMY_ENABLED: 'true' }), now: () => at });
@@ -82,7 +97,8 @@ describe('Windows Ops requests through canonical lifecycle, original action and 
     expect(f.configured.service.authorize({ scopeKey: 'owner', deviceId: 'operator' }, c.id)).toBe(true);
     expect(f.store.commands.recent('owner', f.state().observedAt)).toHaveLength(1);
     expect(f.store.commands.lifecycleAwaiting('owner', f.state().observedAt)).toHaveLength(1);
-    expect(f.db.prepare('SELECT source_id,kind FROM mind_actions WHERE id=?').get(c.authority.executionId)).toMatchObject({ source_id: `ops:${sent.body.command.id}`, kind: 'minecraft' });
+    expect(f.db.prepare('SELECT source_id,kind FROM mind_actions WHERE id=?').get(c.authority.executionId)).toMatchObject({ source_id: `ops:${sent.body.command.id}`, kind: 'respond' });
+    expect(f.db.prepare('SELECT execution_kind FROM ops_lifecycle_dispatches WHERE command_id=?').get(sent.body.command.id)?.execution_kind).toBe('respond');
     expect(f.store.commands.recent('owner', f.state().observedAt)[0]?.status).toBe('claimed');
     expect(f.store.commands.claim('owner', f.state().observedAt)).toBeNull();
     await f.acknowledge(c);
@@ -162,25 +178,127 @@ describe('Windows Ops requests through canonical lifecycle, original action and 
     await until(() => f.recent(second.body.command.id).status === 'failed');
   });
 
-  it('does not grant generic minecraft actions authority from a guessed source prefix', async () => {
+  it.each(['minecraft','respond'] as const)('does not grant generic %s actions authority from a guessed Ops source prefix', async kind => {
     const f = await fixture();
-    const a = await f.actions.claim((await f.actions.enqueue({ scopeKey: 'owner', kind: 'minecraft', origin: 'owner_request', sourceId: 'ops:guessed-command' })).id);
+    const a = await f.actions.claim((await f.actions.enqueue({ scopeKey: 'owner', kind, origin: 'owner_request', sourceId: 'ops:guessed-command' })).id);
     await expect(f.configured.service.execute({ id: 'ops-lifecycle:guessed-command', action: 'start', serverId: 'shannon-home',
       authority: { scopeKey: 'owner', origin: 'owner_request', executionId: a!.id, lease: leaseOf(a!), sourceIds: ['ops-command:guessed-command'] } })).rejects.toThrow('MINECRAFT_LIFECYCLE_AUTHORITY_DENIED');
     expect(f.configured.service.store.pending()).toEqual([]);
   });
 
-  it('waits for the common body resource instead of racing a live conversation action', async () => {
+  it('rejects a forged Ops source on an otherwise ordinary conversation lease', async () => {
+    const f=await fixture(), a=await f.actions.admitRespond({scopeKey:'owner',kind:'respond',origin:'owner_request',sourceId:'turn-ordinary'});
+    await expect(f.configured.service.execute({id:'ops-lifecycle:guessed',action:'start',serverId:'shannon-home',
+      authority:{scopeKey:'owner',origin:'owner_request',executionId:a!.id,lease:leaseOf(a!),sourceIds:['ops-command:guessed']}})).rejects.toThrow('MINECRAFT_LIFECYCLE_AUTHORITY_DENIED');
+    expect(f.configured.service.store.pending()).toEqual([]);
+  });
+
+  it('admits a new owner Ops request with both background slots held while preserving unknown resources and every budget', async () => {
+    const f=await fixture();const ids:string[]=[];
+    for(const kind of ['agentTask','ownTime'] as const){
+      const a=await f.actions.claim((await f.actions.enqueue({scopeKey:'owner',kind,origin:kind==='ownTime'?'own_time':'maintenance',sourceId:`held-${kind}`,resources:[actionResource('owner',kind)]})).id);
+      expect(a).not.toBeNull();ids.push(a!.id);
+      if(kind==='ownTime')expect(await f.actions.reserve(leaseOf(a!),`budget-${kind}`,'2026-10-10',1,100,0)).toBe(true);
+      expect(await f.actions.dispatch(leaseOf(a!))).toBe(true);
+      await f.actions.finish(leaseOf(a!),'unknown','model_result_unknown');
+    }
+    const rows=()=>ids.map(id=>f.db.prepare('SELECT * FROM mind_actions WHERE id=?').get(id));
+    const original=rows(), budgets=f.db.prepare('SELECT * FROM mind_action_budget').all();
+    expect(budgets.map(row=>row.state)).toEqual(['held']);
+    const background=await f.actions.enqueue({scopeKey:'owner',kind:'agentTask',origin:'owner_request',sourceId:'other-background'});
+    expect(await f.actions.claim(background.id)).toBeNull();
+    const sent=await f.send('minecraft.start','shannon-home','new-owner-op'), c=await f.command();
+    expect(f.db.prepare('SELECT kind FROM mind_actions WHERE id=?').get(c.authority.executionId)?.kind).toBe('respond');
+    await f.acknowledge(c);
+    expect(f.recent(sent.body.command.id).status).toBe('done');
+    expect(rows()).toEqual(original);expect(f.db.prepare('SELECT * FROM mind_action_budget').all()).toEqual(budgets);
+    expect(f.db.prepare('SELECT state FROM mind_actions WHERE id=?').get(background.id)?.state).toBe('queued');
+    expect((await f.send('minecraft.start','shannon-home','new-owner-op')).status).toBe(200);
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM minecraft_lifecycle_operations').get()?.n).toBe(1);
+  });
+
+  it('retains old queued Ops actions and mappings through additive migration without adopting or replaying the original request', async () => {
+    const id='11111111-1111-4111-8111-111111111111', f=await fixture({id,at:'2026-10-09T23:59:59.000Z'});
+    const old=await f.actions.enqueue({scopeKey:'owner',kind:'minecraft',origin:'owner_request',sourceId:`ops:${id}`,deadline:'2026-10-10T00:00:05.000Z'});
+    const mapping=()=>f.db.prepare('SELECT * FROM ops_lifecycle_dispatches WHERE command_id=?').get(id);
+    expect(mapping()).toMatchObject({execution_kind:'minecraft',action_id:null});
+    new OpsCommandStore(f.db);expect(mapping()).toMatchObject({execution_kind:'minecraft',action_id:null});
+    for(let i=0;i<3;i++)f.configured.ops!.wake();
+    await delay(40);expect(f.recent(id).status).toBe('pending');
+    expect(f.db.prepare('SELECT state FROM mind_actions WHERE id=?').get(old.id)?.state).toBe('queued');
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM mind_actions WHERE source_id=?').get(`ops:${id}`)?.n).toBe(1);
+    expect(f.configured.service.store.pending()).toEqual([]);expect((await f.claim()).body.command).toBeNull();
+    expect(()=>f.db.prepare("UPDATE ops_lifecycle_dispatches SET execution_kind='respond' WHERE command_id=?").run(id)).toThrow('OPS_EXECUTION_KIND_IMMUTABLE');
+    f.advance(6000);f.poll();f.configured.ops!.wake();expect(f.recent(id).status).toBe('expired');
+    expect((await f.send('minecraft.start','shannon-home','legacy-key')).status).toBe(200);
+    expect(f.configured.service.store.pending()).toEqual([]);expect(mapping()).toMatchObject({execution_kind:'minecraft',action_id:null});
+    const next=await f.send('minecraft.start','shannon-home','explicit-new-key'), c=await f.command();await f.acknowledge(c);
+    expect(f.recent(next.body.command.id).status).toBe('done');expect(f.recent(id).status).toBe('expired');
+    expect(f.db.prepare('SELECT kind FROM mind_actions WHERE source_id=?').get(`ops:${id}`)?.kind).toBe('minecraft');
+  });
+
+  it('requires the immutable Ops execution kind and original request kind to match at native authorization', async () => {
+    const f=await fixture(), sent=await f.send('minecraft.start','shannon-home'), c=await f.command();
+    expect(()=>f.db.prepare("UPDATE ops_lifecycle_dispatches SET execution_kind='minecraft' WHERE command_id=?").run(sent.body.command.id)).toThrow('OPS_EXECUTION_KIND_IMMUTABLE');
+    f.db.prepare("UPDATE mind_actions SET kind='minecraft' WHERE id=?").run(c.authority.executionId);
+    expect(f.configured.service.authorize({scopeKey:'owner',deviceId:'operator'},c.id)).toBe(false);
+    f.db.prepare("UPDATE mind_actions SET kind='respond' WHERE id=?").run(c.authority.executionId);
+    f.db.prepare("UPDATE ops_commands SET type='minecraft.stop' WHERE command_id=?").run(sent.body.command.id);
+    expect(f.configured.service.authorize({scopeKey:'owner',deviceId:'operator'},c.id)).toBe(false);
+    f.poll([f.receipt(c,{outcome:'cancelled',code:'authority_revoked'})]);
+    await until(()=>f.recent(sent.body.command.id).status==='failed');
+  });
+
+  it('still blocks native work behind an unknown body resource even through foreground admission', async () => {
+    const f=await fixture(), resource=actionResource('operator','minecraft-body');
+    const a=await f.actions.admitRespond({scopeKey:'owner',kind:'respond',origin:'owner_request',sourceId:'lost-body-response'});
+    expect(await f.actions.dispatch(leaseOf(a!),[resource])).toBe(true);
+    await f.actions.finish(leaseOf(a!),'unknown','body_result_unknown');
+    const original=f.db.prepare('SELECT * FROM mind_actions WHERE id=?').get(a!.id);
+    const sent=await f.send('minecraft.start','shannon-home');
+    await until(()=>f.recent(sent.body.command.id).status==='refused');
+    expect(f.recent(sent.body.command.id).code).toBe('not_allowed');
+    expect(f.configured.service.store.pending()).toEqual([]);expect((await f.claim()).body.command).toBeNull();
+    expect(f.db.prepare('SELECT * FROM mind_actions WHERE id=?').get(a!.id)).toEqual(original);
+    const conversation=await f.actions.admitRespond({scopeKey:'owner',kind:'respond',origin:'owner_request',sourceId:'next-conversation'});
+    expect(conversation).not.toBeNull();
+  });
+
+  it('bounds foreground native waiting by the original report window and retains an unknown delivered effect after cancellation drain', async () => {
+    const f=await fixture(), timeout=new AbortController();
+    const timer=vi.spyOn(AbortSignal,'timeout').mockImplementation(milliseconds=>{
+      expect(milliseconds).toBe(120_000);return timeout.signal;
+    });
+    try {
+      const sent=await f.send('minecraft.start','shannon-home'), c=await f.command();
+      expect(f.store.commands.lifecycleReportBy('owner',sent.body.command.id,c.authority.lease)).toBe('2026-10-10T00:02:00.000Z');
+      timeout.abort();
+      await until(()=>f.configured.service.store.pending()[0]?.cancelled===true);
+      f.advance(5001);
+      await until(()=>f.db.prepare('SELECT state FROM mind_actions WHERE id=?').get(c.authority.executionId)?.state==='unknown');
+      expect(f.recent(sent.body.command.id)).toMatchObject({status:'failed',code:'no_report'});
+      expect(f.db.prepare('SELECT state,resources_json FROM mind_actions WHERE id=?').get(c.authority.executionId)).toMatchObject({
+        state:'unknown',resources_json:JSON.stringify([actionResource('operator','minecraft-body')])});
+      expect(f.configured.service.store.delivered(c.id)).toBe(true);
+      f.configured.ops!.wake();expect((await f.claim()).body.command).toBeNull();
+      expect(f.db.prepare('SELECT COUNT(*) AS n FROM minecraft_lifecycle_operations').get()?.n).toBe(1);
+      const chat=await f.actions.admitRespond({scopeKey:'owner',kind:'respond',origin:'owner_request',sourceId:'chat-after-unknown'});
+      expect(chat).not.toBeNull();
+    } finally {timer.mockRestore();}
+  });
+
+  it('serializes admission with a live foreground conversation before acquiring the shared body resource', async () => {
     const f = await fixture(), resource = actionResource('operator', 'minecraft-body');
     const foreground = await f.actions.admitRespond({ scopeKey: 'owner', kind: 'respond', origin: 'owner_request', sourceId: 'body-conversation' });
     expect(await f.actions.dispatch(leaseOf(foreground!), [resource])).toBe(true);
     const sent = await f.send('minecraft.start', 'shannon-home');
-    await until(() => f.recent(sent.body.command.id).status === 'claimed');
     await delay(40);
+    expect(f.recent(sent.body.command.id).status).toBe('pending');
     expect(f.configured.service.store.pending()).toEqual([]);
     expect((await f.claim()).body.command).toBeNull();
     expect(f.db.prepare('SELECT resources_json FROM mind_actions WHERE id=?').get(foreground!.id)?.resources_json).toBe(JSON.stringify([resource]));
     await f.actions.finish(leaseOf(foreground!), 'completed', 'original_body_acknowledged');
+    f.configured.ops!.wake();
     const c = await f.command(); await f.acknowledge(c);
     expect(f.recent(sent.body.command.id).status).toBe('done');
   });
