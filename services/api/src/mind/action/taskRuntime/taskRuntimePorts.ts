@@ -1,4 +1,6 @@
 import type { TaskConversationDeliveryRuntime } from './taskConversationDeliveryPorts.js';
+import type { TaskExternalEvent } from './taskExternalEventPorts.js';
+export type { TaskExternalEvent } from './taskExternalEventPorts.js';
 export type { TaskConversationDelivery, TaskConversationDeliveryInput, TaskConversationDeliveryStage } from './taskConversationDeliveryPorts.js';
 import type { ActionLease } from '@shannon/mind';
 import type { TaskHistoryCommit, TaskHistoryWindow } from './taskHistoryPorts.js';
@@ -64,6 +66,7 @@ export interface TaskRuntimeOptions {
   now?: () => string;
 }
 export interface TaskRuntime extends TaskConversationDeliveryRuntime {
+  observeExternal(scopeKey: string, targetTaskId: string, event: TaskExternalEvent): { accepted: true; duplicate: boolean; task: TaskView };
   ensureRoot(scopeKey: string): TaskView;
   createChild(scopeKey: string, parentId: string, spec: TaskSpec, requestId: string): TaskView;
   get(scopeKey: string, taskId: string): TaskView | null;

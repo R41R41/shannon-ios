@@ -7,7 +7,7 @@ import { TOOL_OPEN_NAME, toolFailure } from '../../tools/toolRegistryPorts.js';
 import type { TaskRecall } from '../../recall/taskRecallPorts.js';
 import type { FcaEvidence } from './fcaEvidencePorts.js';
 import { fcaRecallContext } from './fcaRecallContext.js';
-import type { FcaExternalTools, FcaModel } from './fcaPorts.js';
+import type { FcaBodyLifecycle, FcaExternalTools, FcaModel } from './fcaPorts.js';
 import { openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
@@ -29,11 +29,14 @@ export interface FcaStepPorts {
   taskVisible?(taskId: string): boolean;
   /** Persist source lineage before another task's successful projection enters this round. */
   observeTasks?(taskIds: readonly string[]): boolean;
+  /** Actual remote-body acknowledgement, independently of local promises having unwound. */
+  safeToAcknowledgeStop?(): boolean;
+  body?: FcaBodyLifecycle;
 }
 /** One bounded model decision; waiting and completed segments release their inference slot in wiring. */
 export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
-  try { return await executeFcaStep(step, ports, signal); }
-  finally { await ports.recall?.finishSegment(step.scopeKey, step.taskId); }
+  try { ports.body?.start(signal); return await executeFcaStep(step, ports, signal); }
+  finally { try { await ports.body?.close(); } finally { await ports.recall?.finishSegment(step.scopeKey, step.taskId); } }
 }
 async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
   const { runtime } = ports;
@@ -67,7 +70,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     if (children.length && ports.observeTasks && !ports.observeTasks(children.map(child => child.id))) throw new Error('FCA_SOURCE_WITHHELD');
     return { task: step.snapshot.task, messages: step.snapshot.messages, children,
       history: replay?.history ?? step.snapshot.history, tools: catalog };
-  }, () => ({ ...provenance, tools: catalog.map(tool => observedToolName(tool.name)), messages: step.snapshot.messages.length }));
+  }, () => ({ ...provenance, tools: catalog.map(tool => observedToolName(tool.name, catalog)), messages: step.snapshot.messages.length }));
   await checked();
   const selection = ports.selector ? await selectFcaTools(input, catalog, prior.fcaToolSelection, ports.selector, step.scopeKey, signal) : null;
   if (selection) {
@@ -78,13 +81,17 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   if (recall?.sourceIds.length && (!ports.observeMemory || !ports.observeMemory(recall.sourceIds))) throw new Error('FCA_SOURCE_WITHHELD');
   await checked();
   const sharedContext = ports.evidence?.prepare(step);
+  if (ports.body) await ports.body.guard(ports.body.revision());
+  const bodyRevision = ports.body?.revision() ?? 0;
   observerHandoff('context', 'native', provenance);
-  const output = await ports.model.decide({ ...input, ...(recall ? { recall } : {}), ...(sharedContext ? { sharedContext } : {}), ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) }, signal);
+  const output = await ports.model.decide({ ...input, ...(ports.body ? { body: ports.body.context() } : {}), ...(recall ? { recall } : {}), ...(sharedContext ? { sharedContext } : {}), ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) }, signal);
   await checked();
-  if (ports.evidence && !ports.evidence.beforeActions(step, output)) throw new Error('FCA_EVIDENCE_FENCED');
+  let bodyStale = ports.body ? !await ports.body.guard(bodyRevision) : false;
+  if (ports.evidence && !ports.evidence.beforeActions(step, bodyStale ? { ...output, expectations: [], appraisals: [] } : output)) throw new Error('FCA_EVIDENCE_FENCED');
   const history = [...output.history];
   let consecutiveToolFailures = Number(prior.consecutiveToolFailures ?? 0);
   if (!Number.isSafeInteger(consecutiveToolFailures) || consecutiveToolFailures < 0) consecutiveToolFailures = 0;
+  const priorToolFailures = consecutiveToolFailures;
   const decision = output.decision;
   let disposition: 'continue' | 'wait' | 'complete' = decision.kind === 'tools' ? 'continue' : decision.kind;
   if (decision.kind === 'tools') {
@@ -92,15 +99,26 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     const results: Array<{ id: string; text: string; ok: boolean }> = [...output.auxiliaryResults ?? []];
     for (const call of decision.calls) {
       await checked();
+      if (ports.body && !await ports.body.guard(bodyRevision)) bodyStale = true;
       const operationId = `${step.id}:${call.id}`;
-      const tool = call.name === TOOL_OPEN_NAME ? 'tool_open' : observedToolName(call.name);
+      const tool = call.name === TOOL_OPEN_NAME ? 'tool_open' : observedToolName(call.name, catalog);
       observerHandoff('llm', 'gate', { ...provenance, operationId, tool });
       const result = await observeAsync('tools', { ...provenance, operationId, tool }, async () => {
+        const staleResult = () => toolFailure('failed', '身体の状態が変わりました。最新の観測から判断し直してください。', { retryable: false });
+        if (bodyStale) return staleResult();
         if (call.name === TOOL_OPEN_NAME && selection) return openFcaTool(call.input, catalog, selection);
         if (selection && !input.tools.some(definition => definition.name === call.name)) return toolFailure('not_offered', '定義が必要な道具は、先に tool_open で開いてください。');
         if (ports.tools?.definitions.some(definition => definition.name === call.name)) {
           // Never turn an unknown outside outcome into a retryable tool result.
-          return ports.tools.execute({ scopeKey: step.scopeKey, taskId: step.taskId, operationId, name: call.name, input: call.input, signal });
+          ports.body?.noteCall?.(call, operationId);
+          const operationSignal = ports.body?.toolSignal(call.name, signal) ?? signal;
+          try { return await ports.tools.execute({ scopeKey: step.scopeKey, taskId: step.taskId, operationId, name: call.name, input: call.input, signal: operationSignal }); }
+          catch (error) {
+            if (operationSignal !== signal && operationSignal.aborted && !signal.aborted && ports.body && !await ports.body.guard(bodyRevision)) {
+              bodyStale = true; return staleResult();
+            }
+            throw error;
+          }
         }
         return executeTaskTool(runtime, call.name, call.input, { scopeKey: step.scopeKey, taskId: step.taskId, operationId,
           ownerAlone: ports.ownerAlone, ...(ports.taskVisible ? { visible: ports.taskVisible } : {}),
@@ -108,13 +126,15 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       },
       value => ({ ...provenance, operationId, ok: value.ok, failure: value.failure ?? null })).catch(error => { ports.evidence?.unknown(step, call); throw error; });
       ports.evidence?.observed(step, call, result);
+      ports.body?.noteResult?.(call, result);
+      if (ports.body && !await ports.body.guard(bodyRevision)) bodyStale = true;
       results.push({ id: call.id, text: result.text, ok: result.ok });
       if (selection) {
         if (!result.ok) selection.refresh = true;
         selection.recentResults = [...selection.recentResults, { name: call.name, ok: result.ok, summary: result.text.slice(0, 1_000) }].slice(-8);
       }
     }
-    consecutiveToolFailures = results.slice(output.auxiliaryResults?.length ?? 0).every(result => !result.ok) ? consecutiveToolFailures + 1 : 0;
+    if (!bodyStale) consecutiveToolFailures = results.slice(output.auxiliaryResults?.length ?? 0).every(result => !result.ok) ? consecutiveToolFailures + 1 : 0;
     history.push(ports.model.toolResults(results));
   }
   if (disposition === 'complete' && (step.snapshot.task.kind === 'root' ||
@@ -124,10 +144,14 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   await checked();
   // No detached recall may keep spending after the segment's completion receipt becomes visible.
   await ports.recall?.finishSegment(step.scopeKey, step.taskId);
+  if (ports.body && !await ports.body.guard(bodyRevision)) bodyStale = true;
+  await ports.body?.close();
+  if (ports.body && !await ports.body.guard(bodyRevision)) bodyStale = true;
+  if (bodyStale) { disposition = 'continue'; consecutiveToolFailures = priorToolFailures; }
   await checked();
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
   const saved = observeSync('store', provenance, () => runtime.commitStep(step, {
-    history, disposition, checkpoint: { ...prior, consecutiveToolFailures, ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' ? { summary: decision.summary } : {}),
+    history, disposition, checkpoint: { ...prior, consecutiveToolFailures, ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: decision.summary } : {}),
   }), value => ({ ...provenance, committed: value !== null, phase: value?.task.phase ?? null }));
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
   // These callbacks drain durable outboxes; their failure must never undo/repeat committed tools.

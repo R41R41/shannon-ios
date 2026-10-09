@@ -34,6 +34,7 @@ export interface MinecraftConversation {
 }
 
 export interface MinecraftBodyDependencies {
+  fcaIntent?(input: { scopeKey: string; request: MinecraftTurnRequest; intent: MinecraftIntent; experienceId: string | null }): Promise<MinecraftTurnResponse['intent']>;
   configuration: MinecraftBodyConfiguration;
   stateStore: CompanionStateStore;
   conversationStore: ConversationStore;
@@ -130,6 +131,7 @@ export class MinecraftBody {
     // asked (`busyWith: request`), its task line may carry the request, the owner's matter: left out for anyone else (S5).
     const bodyNow = owner || kind === 'channel' ? minecraftBodyStateBlock(owner ? request.body : withoutRequestTask(request.body)) : '';
     let ignored: string | undefined;
+    let experienceId: string | null = null;
     const result = await this.dependencies.conversation.textTurn(platformTextTurnInput({
       scopeKey, policy,
       message: owner ? request.message : `${request.speaker.name}: ${request.message}`, rawMessage: request.message,
@@ -141,7 +143,7 @@ export class MinecraftBody {
       // What she did on her own to reach the owner, by the upstream audience rules (others present: times only; owner decision 2026-10-06).
       ownOutreach: true,
       store: turn => {
-        if (owner) return this.keepOwnerTurn(request, hash, turn);
+        if (owner) { const saved = this.keepOwnerTurn(request, hash, turn); experienceId = saved?.id ?? null; return saved; }
         ignored = this.rememberPerson(request, conversationId, sourceUserId, turn.shannonReply);
         return null;
       },
@@ -150,7 +152,8 @@ export class MinecraftBody {
     }));
     const completion = result.completion;
     if (!completion) throw new Error('MINECRAFT_TURN_WITHOUT_COMPLETION');
-    const intent = owner ? this.queuedIntent(scopeKey, request, threadId, completion.minecraftIntent ?? { kind: 'none' as const, goal: '' }) : undefined;
+    const proposed = completion.minecraftIntent ?? { kind: 'none' as const, goal: '' };
+    const intent = owner ? this.dependencies.fcaIntent ? await this.dependencies.fcaIntent({ scopeKey, request, intent: proposed, experienceId }) : this.queuedIntent(scopeKey, request, threadId, proposed) : undefined;
     return {
       reply: intent?.rejected ? '選択中のモデルでマイクラの体に頼みごとを渡せなかった。体が対応してつながったあとで、もう一度頼んでほしい。' : completion.reply.trim().slice(0, MINECRAFT_BODY_LIMITS.replyCharacters),
       ...(intent ? { intent } : {}),

@@ -26,7 +26,10 @@ export function nativeFcaTools(input: FcaModelInput, history: readonly Anthropic
   }
   const selected = new Map<string, Anthropic.Tool>();
   for (const definition of input.tools) {
-    const tool = sonnetTool(definition);
+    const tool: Anthropic.Tool = definition.nativeInputSchema ? {
+      name: providerToolName(definition.name), description: definition.description, strict: false,
+      input_schema: definition.nativeInputSchema as Anthropic.Tool.InputSchema,
+    } : sonnetTool(definition);
     if (names.get(tool.name) !== definition.name || selected.has(tool.name)) throw new Error('FCA_MODEL_TOOL_CONFLICT');
     selected.set(tool.name, tool);
   }

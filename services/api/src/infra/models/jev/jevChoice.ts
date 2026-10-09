@@ -53,6 +53,9 @@ export const JEV_QUESTION_SETS = Object.freeze({
   voiceRoute: 'voice_route.v1',
   toolMenu: 'tool_menu.v2',
   fcaToolMenu: 'fca_tool_menu.v1',
+  reflexEntry: 'reflex_entry.v1',
+  reflexAction: 'reflex_action.v1',
+  fcaTouchReflex: 'fca_touch_reflex.v1',
   difficulty: 'difficulty.v1',
   retry: 'retry_or_correction.v1',
   recallBeam: 'recall_beam.v1',
@@ -79,7 +82,9 @@ export class JevChoiceClient {
    * One call: the response body as Jev sent it. Throws on a timeout, a failure, or a status that is not ok (after the body is
    * read, in that order, as the voice gateway always did).
    */
-  async ask(state: unknown, questions: Readonly<Record<string, unknown>>): Promise<unknown> {
+  async ask(state: unknown, questions: Readonly<Record<string, unknown>>, signal?: AbortSignal): Promise<unknown> {
+    signal?.throwIfAborted();
+    const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMilliseconds)]) : AbortSignal.timeout(this.timeoutMilliseconds);
     return observeAsync('llm', { provider: 'jev', questionCount: Object.keys(questions).length }, async () => {
     const response = await this.fetcher(this.endpoint, {
       method: 'POST',
@@ -92,9 +97,10 @@ export class JevChoiceClient {
         state,
         questions,
       }),
-      signal: AbortSignal.timeout(this.timeoutMilliseconds),
+      signal: requestSignal,
     });
     const body = await response.json() as unknown;
+    if (signal) requestSignal.throwIfAborted();
     if (!response.ok) throw new Error(`JEV_RESPONSE_${response.status}`);
     return body;
     }, () => ({ provider: 'jev', answered: true }), { model: this.model });
@@ -219,6 +225,8 @@ export class JevChooser {
     traceAnswers: (value: T, source: JevDecision<T>['source']) => JevChoiceTrace['answers'];
     /** Observation only; never changes the decision or the cognition trace. */
     observe?: (metadata: { cached: boolean; model: string; source: JevDecision<T>['source'] }) => void;
+    /** Optional cancellation for a short body-control session; legacy callers retain their existing request. */
+    signal?: AbortSignal;
   }): Promise<JevDecision<T>> {
     const at = (this.options.now ?? (() => new Date().toISOString()))();
     const clock = this.options.clock ?? (() => performance.now());
@@ -232,7 +240,9 @@ export class JevChooser {
     let decided: JevDecision<T>;
     let raw: Record<string, string | number> = {};
     try {
-      const body = cached ? hit.body : await withJevProbe(probe, () => this.client.ask(request.state, request.questions));
+      const body = cached ? hit.body : await withJevProbe(probe, () => request.signal
+        ? this.client.ask(request.state, request.questions, request.signal) : this.client.ask(request.state, request.questions));
+      request.signal?.throwIfAborted();
       const answers = jevAnswers(body);
       raw = rawTraceAnswers(answers, request.questions);
       decided = { value: request.parse(answers), source: 'jev' };

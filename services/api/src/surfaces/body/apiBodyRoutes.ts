@@ -48,6 +48,20 @@ export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): Api
   const scopeKey = request.body.scopeKey;
   if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
 
+  if (request.method === 'POST' && request.path.startsWith('/v1/body/touch-reflex')) {
+    if (!request.deviceId || !body.touchReflexAllowed(scopeKey, deviceId)) return { status: 403, body: { error: 'TOUCH_REFLEX_NOT_A_BODY' } };
+    if (request.path === '/v1/body/touch-reflex' && typeof request.body.touchId === 'string' && /^[A-Za-z0-9_.:-]{1,160}$/u.test(request.body.touchId)
+      && Object.keys(request.body).every(key => ['scopeKey', 'touchId'].includes(key))) {
+      return body.claimTouchReflex(scopeKey, deviceId, request.body.touchId).then(directive => ({ status: 200, body: { directive } }));
+    }
+    if (request.path === '/v1/body/touch-reflex/report' && typeof request.body.operationId === 'string' && /^touch:[a-f0-9]{64}$/u.test(request.body.operationId)
+      && ['applied', 'not_applied', 'unknown'].includes(String(request.body.outcome)) && Object.keys(request.body).every(key => ['scopeKey', 'operationId', 'outcome'].includes(key))) {
+      return body.reportTouchReflex(scopeKey, deviceId, request.body.operationId, request.body.outcome as 'applied' | 'not_applied' | 'unknown')
+        .then(accepted => ({ status: accepted ? 200 : 409, body: { accepted } }));
+    }
+    return badRequest('touch reflex receipt is invalid');
+  }
+
   if (request.method === 'POST' && request.path === '/v1/body/events') {
     const unknown = Object.keys(request.body).find(key => key !== 'scopeKey' && key !== 'events');
     if (unknown) return badRequest(`${unknown.slice(0, 40)} is not allowed`);

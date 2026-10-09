@@ -84,6 +84,8 @@ export interface MemoryToolPort {
   execute(name: string, input: unknown, context: ToolExecutionContext, signal?: AbortSignal): Promise<ToolResult>;
 }
 export class ShannonToolRunner {
+  private minecraftTasks: MemoryToolPort | null = null;
+  useMinecraftTasks(port: MemoryToolPort): void { this.minecraftTasks = port; }
   private taskMemory: MemoryToolPort | null = null;
   private taskRuntime: TaskRuntimeToolPort | null = null;
   private executors: Readonly<Record<string, ToolExecutor>>;
@@ -127,7 +129,7 @@ export class ShannonToolRunner {
       : tool.domain === 'skill_read' ? this.skills !== null
       : tool.domain === 'vm_workspace' ? this.selfRewrite !== null
       : tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
-      : tool.domain === 'minecraft_body' ? minecraftToolOffered(this.minecraft, tool, scopeKey)
+      : tool.domain === 'minecraft_body' ? this.minecraftTasks ? !!scopeKey && this.minecraftTasks.available(scopeKey) : minecraftToolOffered(this.minecraft, tool, scopeKey)
         : tool.domain === 'owner_documents_read' ? this.ownerDocumentsFor(scopeKey)
         : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true && this.aetherFor(scopeKey)
           : tool.name.startsWith('aether') ? this.aetherFor(scopeKey) : true),
@@ -181,7 +183,12 @@ export class ShannonToolRunner {
     const refused = authorizeToolCall(tool, context);
     if (refused || !tool) return tool && refused ? this.withhold(context, tool, refused, tool.surfaces.includes(context.surface) ? 'audience' : 'not_offered')
       : { tool, result: refused ?? toolFailure('not_offered', 'そういう道具はない。', { retryable: false }) };
-    const executor = this.executors[tool.name];
+    const executor: ToolExecutor | undefined = tool.domain === 'minecraft_body' && this.minecraftTasks ? (input, context) => ({
+      summary: '共通タスクのマイクラ作業を操作する。', run: async signal => {
+        const result = await this.minecraftTasks!.execute(tool.name, input, context, signal);
+        return { result, record: { summary: '共通タスクへのマイクラ操作を受け付けました。', outcome: result.ok ? 'done' as const : 'failed' as const } };
+      },
+    }) : this.executors[tool.name];
     if (tool.domain === 'memory_read' && !this.taskMemory?.available(context.scopeKey, context)) return { tool, result: toolFailure('not_offered', 'この実行では記憶の道具を使えません。', { retryable: false }) };
     if (tool.domain === 'task_runtime' && !this.taskRuntime?.available(context.scopeKey)) return { tool, result: toolFailure('not_offered', 'この実行ではタスクの道具を使えない。', { retryable: false }) };
     if ((tool.name.startsWith('aether') || tool.domain === 'aether_proposal') && !this.aetherFor(context.scopeKey)) {

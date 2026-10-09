@@ -53,6 +53,8 @@ export interface BodyReactionDependencies {
   now: () => string;
   /** Syzygy ADR-0008 stage 3: what a touch hands the mind (`bodyPerception` copies `BODY_PRESENT`); absent, nothing is perceived. */
   mind?: MindPerceiver;
+  contact?(scope: string, device: string, request: BodyReactionRequest, felt: FeltTouch): void;
+  reacted?(scope: string, device: string, id: string, result: { stance: string | null; said: boolean }): void;
 }
 
 /**
@@ -119,10 +121,13 @@ export class BodyReactions {
         : { kind: 'done', answer: begun.existing.answer ?? this.quiet(request.id, this.dependencies.stateStore.snapshot(scopeKey), at) };
     }
     this.perceive(scopeKey, deviceId, request, at);
-    const answer = this.answer(scopeKey, request, at, this.surfaceOf(scopeKey, deviceId));
+    const answer = this.answer(scopeKey, request, at, this.surfaceOf(scopeKey, deviceId), deviceId);
     this.inflight.set(key, { hash, answer });
     try {
-      return { kind: 'done', answer: await answer };
+      const result = await answer;
+      try { const outcome = store.outcome(scopeKey, request.id); this.dependencies.reacted?.(scopeKey, deviceId, request.id,
+        { stance: outcome?.stance ?? null, said: result.status === 'said' }); } catch { /* Existing answer remains authoritative. */ }
+      return { kind: 'done', answer: result };
     } finally {
       this.inflight.delete(key);
     }
@@ -153,7 +158,7 @@ export class BodyReactions {
     try { return this.dependencies.surface?.(scopeKey, deviceId); } catch { return undefined; }
   }
 
-  private async answer(scopeKey: string, request: BodyReactionRequest, at: string, surface: BodySurface | undefined): Promise<BodyReactionAnswer> {
+  private async answer(scopeKey: string, request: BodyReactionRequest, at: string, surface: BodySurface | undefined, deviceId: string): Promise<BodyReactionAnswer> {
     const { store, touches, stateStore, config } = this.dependencies;
     const startedAt = performance.now();
     let felt: FeltTouch | null = null;
@@ -172,6 +177,7 @@ export class BodyReactions {
         ...(request.touch.part !== undefined ? { part: request.touch.part } : {}), ...(request.touch.side !== undefined ? { side: request.touch.side } : {}),
         ...(request.touch.gesture !== undefined ? { gesture: request.touch.gesture } : {}), ...(request.touch.reflex !== undefined ? { reflex: request.touch.reflex } : {}),
       }, { awaitsStance: timely && this.dependencies.speaker !== null }) : null;
+      if (felt) { try { this.dependencies.contact?.(scopeKey, deviceId, request, felt); } catch { /* Local reaction is independent. */ } }
       const decision = felt && timely ? await this.decide(scopeKey, request, felt, at, startedAt, surface) : null;
       // The result table (Syzygy ADR-0005 stage 1b): how she took the touch, or nothing when she gave no judgement in time.
       if (felt) this.outcome(scopeKey, request, felt, decision);

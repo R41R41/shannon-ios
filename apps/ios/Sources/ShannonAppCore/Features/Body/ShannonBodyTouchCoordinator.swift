@@ -44,6 +44,9 @@ public final class ShannonBodyTouchCoordinator {
         public var speak: (@MainActor @Sendable (Line, _ heard: @escaping @MainActor (Bool) -> Void) async -> Void)?
         /// Stops a line that is being spoken or listened for.
         public var stopSpeaking: (@MainActor @Sendable () -> Void)?
+        public var invokeTouchGesture: @MainActor @Sendable (String) async -> Bool? = { gesture in
+            await ShannonLive2DStage.shared.invokeTouchGesture(gesture)
+        }
 
         public init(
             reportsTouch: @escaping @MainActor @Sendable () -> Bool = { ShannonBodyPreference.reportsTouch() },
@@ -86,6 +89,7 @@ public final class ShannonBodyTouchCoordinator {
     @ObservationIgnored private var isFlushing = false
     @ObservationIgnored private var isAsking = false
     @ObservationIgnored private var lineTask: Task<Void, Never>?
+    @ObservationIgnored private let touchReflex = ShannonTouchReflexExecutor()
 
     public init(scopeKey: String = "local-owner", client: (any ShannonBodyServing)? = nil, environment: Environment = Environment()) {
         self.scopeKey = scopeKey
@@ -163,6 +167,7 @@ public final class ShannonBodyTouchCoordinator {
                 try await client.sendBodyTouches(scopeKey: scopeKey, events: sent)
                 pending.removeAll { item in batch.contains { $0.id == item.event.id } }
                 delivery = .fine
+                for event in batch { Task { await self.applyTouchReflex(event.id, audience: event.audience, client: client) } }
             } catch let refusal as ShannonBodyRefusal {
                 if refusal.status == 400, sentDetail, !askedAgain {
                     askedAgain = true
@@ -201,6 +206,7 @@ public final class ShannonBodyTouchCoordinator {
                   environment.reportsTouch() else { return }
             delivery = .fine
             show(answer, audience: request.audience)
+            Task { await self.applyTouchReflex(request.id, audience: request.audience, client: client) }
         } catch let refusal as ShannonBodyRefusal {
             switch refusal.status {
             case 401: delivery = .notConnected
@@ -211,6 +217,17 @@ public final class ShannonBodyTouchCoordinator {
         } catch {
             // A timeout is her staying quiet, not a failure to report: the finished touch is still sent as an event.
         }
+    }
+
+    private func applyTouchReflex(_ touchID: String, audience: ShannonBodyAudience, client: any ShannonBodyServing) async {
+        guard sends else { return }
+        do {
+            guard let directive = try await client.claimTouchReflex(scopeKey: scopeKey, touchId: touchID), directive.touchId == touchID else { return }
+            let outcome = await touchReflex.perform(directive, now: environment.now(),
+                allowed: { self.sends && self.environment.audience() == audience },
+                gestures: environment.capabilities().gestures, invoke: environment.invokeTouchGesture)
+            try await client.reportTouchReflex(scopeKey: scopeKey, operationId: directive.operationId, outcome: outcome)
+        } catch { /* The server keeps an unknown receipt; neither the gesture nor speech is replayed. */ }
     }
 
     /// Registers as a touch-only body before the first request, and once more if the server does not know this device.

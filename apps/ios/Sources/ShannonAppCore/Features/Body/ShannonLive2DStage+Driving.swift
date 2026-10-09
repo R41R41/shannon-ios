@@ -1,4 +1,5 @@
 import Foundation
+import WebKit
 
 /// What the app tells her figure: the calls into `window.shannonBody`.
 extension ShannonLive2DStage {
@@ -56,6 +57,19 @@ extension ShannonLive2DStage {
         guard ShannonLive2DStagePolicy.playsGesture(gesture, known: gestures, body: body) else { return }
         noteActivity()
         send(.play(gesture))
+    }
+
+    /// True acknowledges one invocation in this renderer, not that the animation finished.
+    /// Mirrors are intentionally excluded: a touch belongs to this device's physical surface.
+    func invokeTouchGesture(_ gesture: String) async -> Bool? {
+        guard let webView, status == .ready, ShannonLive2DStagePolicy.playsGesture(gesture, known: gestures, body: body) else { return false }
+        noteActivity()
+        let script = "(() => { if (!window.shannonBody || typeof window.shannonBody.play !== 'function') return false; \(ShannonLive2DCommand.play(gesture).javaScript); return true; })()"
+        return await withCheckedContinuation { continuation in
+            webView.evaluateJavaScript(script) { value, error in
+                continuation.resume(returning: error == nil ? value as? Bool : nil)
+            }
+        }
     }
 
     /// Frames per second, reported every five seconds while a diagnostics view asks for it.

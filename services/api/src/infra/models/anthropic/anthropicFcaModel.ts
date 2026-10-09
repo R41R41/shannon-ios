@@ -93,7 +93,7 @@ export class AnthropicFcaModel implements FcaModel {
       const current: Anthropic.MessageParam = { role: 'user', content: JSON.stringify({ task: input.task, children: input.children ?? [], messages: input.messages,
         ...(input.catalog ? { catalog: input.catalog.map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}),
         ...(input.sharedContext ? { sharedContext: input.sharedContext, contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
-        ...(input.recall ? { recall: input.recall } : {}) }) };
+        ...(input.recall ? { recall: input.recall } : {}), ...(input.body ? { body: input.body } : {}) }) };
       return { current, menu, body: cacheHaikuRequest({
         model: this.model, max_tokens: this.maximumOutputTokens, system: input.catalog ? `${this.system}\n\n${FCA_MENU_INSTRUCTIONS}` : this.system,
         messages: [...history, ...menu.appended, current], tools: menu.tools, tool_choice: { type: 'auto' as const },

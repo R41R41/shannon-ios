@@ -193,7 +193,7 @@ public struct ShannonDesktopBodyClient: ShannonDesktopBodyServing {
             scopeKey: connection?.scopeKey ?? scopeKey,
             expressions: ShannonBodyRegistration.identifiers(expressions, limit: 64),
             gestures: ShannonBodyRegistration.identifiers(gestures, limit: 32),
-            flags: ["camera": camera], surface: "mac"))
+            flags: ["camera": camera, "fcaTouchV1": true], surface: "mac"))
         return ShannonBodyTouchVocabulary.said(inAnswer: try await send(request).0)
     }
 
@@ -261,6 +261,20 @@ public struct ShannonDesktopBodyClient: ShannonDesktopBodyServing {
         if let connection { scoped.scopeKey = connection.scopeKey }
         request.httpBody = try JSONEncoder().encode(scoped)
         return try JSONDecoder().decode(ShannonBodyReactionAnswerDTO.self, from: try await send(request).0)
+    }
+
+    public func claimTouchReflex(scopeKey: String, touchId: String) async throws -> ShannonTouchReflexDirective? {
+        let connection = api.currentConnection()
+        var request = request(path: "/v1/body/touch-reflex", method: "POST", connection: connection)
+        request.httpBody = try JSONEncoder().encode(ShannonTouchReflexClaim(scopeKey: connection?.scopeKey ?? scopeKey, touchId: touchId))
+        return try JSONDecoder().decode(ShannonTouchReflexAnswer.self, from: try await send(request).0).directive
+    }
+
+    public func reportTouchReflex(scopeKey: String, operationId: String, outcome: ShannonTouchReflexOutcome) async throws {
+        let connection = api.currentConnection()
+        var request = request(path: "/v1/body/touch-reflex/report", method: "POST", connection: connection)
+        request.httpBody = try JSONEncoder().encode(ShannonTouchReflexReport(scopeKey: connection?.scopeKey ?? scopeKey, operationId: operationId, outcome: outcome))
+        _ = try await send(request)
     }
 
     // MARK: The wire

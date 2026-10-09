@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import type { FcaTouchPort, FcaTouchResult } from '../../mind/action/reflex/fcaTouchPorts.js';
+import { observeFcaTouch } from './fcaTouchIngress.js';
 import { SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME, presentShannonFeeling, type CompanionStateStore } from '@shannon/cognition';
 import type { ShannonAutonomyService } from '../../mind/action/ownTime/autonomyService.js';
 import { BODY_LIMITS, BODY_SCHEMA_VERSION, BODY_TOUCH_EVENT_TYPES, BODY_TOUCH_VOCABULARY, isBodyGameEvent, isImpossibleTouch, type BodyAudience, type BodyCapabilities, type BodyEvent, type BodyEventType, type BodyReachOutDeliveryOutcome } from '../../contracts/bodyContract.js';
@@ -40,6 +42,7 @@ export { type BodyPresence, type BodyPresenceUnchanged, type BodyNudges, bodyDoi
  *   switch, the activity loop's latest step, and her study. Nothing is written by reading it.
  */
 export interface ShannonBodyOptions {
+  fcaTouch?: () => FcaTouchPort | null;
   store?: SQLiteBodyStore;
   /** `SHANNON_BODY_INGEST`; unset means on. */
   ingestEnabled?: boolean;
@@ -145,6 +148,8 @@ export class ShannonBody {
       // Her Minecraft body is never a body that is touched (`docs/minecraft-body-contract.md`).
       isBody: (scopeKey, deviceId) => !this.isGameBody(deviceId) && this.store.capabilities(scopeKey, deviceId) !== null,
       surface: (scopeKey, deviceId) => this.store.surface(scopeKey, deviceId),
+      contact: (scope, device, request, felt) => this.contact(scope, device, request.id, request.occurredAt, request.audience, request.touch, felt),
+      reacted: (scope, device, id, result) => this.dependencies.fcaTouch?.()?.reacted(scope, device, id, result),
       record: (scopeKey, entry) => { dependencies.autonomy.recordConversationAction(scopeKey, { ...entry, tool: BODY_REACTION_TOOL }); }, ...(dependencies.reactions?.mind ? { mind: dependencies.reactions.mind } : {}),
     });
     const bodySurface = (scopeKey: string, deviceId: string): OwnerCallSurface | undefined => {
@@ -196,7 +201,7 @@ export class ShannonBody {
         return { id: event.id, status };
       });
     });
-    this.feel(scopeKey, events, results, this.store.surface(scopeKey, deviceId));
+    this.feel(scopeKey, deviceId, events, results, this.store.surface(scopeKey, deviceId));
     if (gameAllowed) this.rememberGame(scopeKey, deviceId, events, results);
     return {
       schemaVersion: BODY_SCHEMA_VERSION, results,
@@ -225,15 +230,32 @@ export class ShannonBody {
    * reaction request already counted only brings that touch's duration up to date. After the store's own
    * transaction, so no two connections write at once; a failure loses the feeling of one touch, never the receipt.
    */
-  private feel(scopeKey: string, events: readonly BodyEvent[], results: readonly BodyEventResult[], surface: BodySurface | undefined): void {
+  private feel(scopeKey: string, deviceId: string, events: readonly BodyEvent[], results: readonly BodyEventResult[], surface: BodySurface | undefined): void {
     for (const [index, event] of events.entries()) {
       const type = BODY_TOUCH_EVENT_TYPES.find(value => value === event.type);
       if (!type || results[index]?.status !== 'stored') continue;
-      try { this.touches.observe(scopeKey, { ...event, type, ...(surface ? { surface } : {}) }); } catch (error) {
+      try { const felt = this.touches.observe(scopeKey, { ...event, type, ...(surface ? { surface } : {}) });
+        if (felt) this.contact(scopeKey, deviceId, event.id, event.occurredAt, event.audience, { ...event, type }, felt);
+      } catch (error) {
         console.error('Shannon touch failed', error instanceof Error ? error.message : 'unknown');
       }
     }
   }
+  private contact(scope: string, device: string, id: string, at: string, audience: 'owner' | 'others',
+    touch: import('../../mind/action/reflex/fcaTouchPorts.js').FcaTouchInput['touch'], felt: import('../../mind/emotion/bodyTouch.js').FeltTouch) {
+    const caps = this.store.capabilities(scope, device);
+    if (caps?.flags.fcaTouchV1 !== true || this.isGameBody(device)) return;
+    const stances = audience === 'owner' && (touch.part || touch.region) ? this.touches.stanceSources(scope, (touch.part ?? touch.region)!, felt.snapshot, at) : [];
+    observeFcaTouch(this.dependencies.fcaTouch?.(), { scopeKey: scope, deviceId: device, touchId: id, observedAt: at, audience,
+      touch: { type: touch.type, part: touch.part, region: touch.region, side: touch.side, gesture: touch.gesture, reflex: touch.reflex }, felt, gestures: caps.gestures,
+      stances: stances.map(row => row.stance), stanceSourceIds: stances.map(row => row.burstId) });
+  }
+  touchReflexAllowed(scope: string, device: string, gesture?: string): boolean {
+    const caps = this.store.capabilities(scope, device);
+    return this.ingestEnabled && this.reactions.enabled && !this.isGameBody(device) && caps?.flags.fcaTouchV1 === true && (!gesture || caps.gestures.includes(gesture));
+  }
+  claimTouchReflex(scope: string, device: string, id: string) { return this.dependencies.fcaTouch?.()?.claim(scope, device, id) ?? Promise.resolve(null); }
+  reportTouchReflex(scope: string, device: string, id: string, result: FcaTouchResult) { return this.dependencies.fcaTouch?.()?.report(scope, device, id, result) ?? Promise.resolve(false); }
 
   /**
    * A stored game event becomes an experience in the server's words (phase 1: dying). After the store's own

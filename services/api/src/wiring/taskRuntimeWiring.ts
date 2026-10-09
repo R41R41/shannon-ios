@@ -15,7 +15,7 @@ export interface TaskRuntimeWiringOptions {
   db: DatabaseSync; actions: ActionThreads; model: FcaModel; scopeKey: string;
   ownerAlone(): boolean; now?: () => string;
   canRunTask?(runtime: TaskRuntime, taskId: string): boolean;
-  stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' | 'observeMemory' | 'evidence'>>;
+  stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' | 'observeMemory' | 'evidence' | 'safeToAcknowledgeStop' | 'body'>>;
 }
 /** The existing mind worker remains the sole action writer. This connection reads its lease as a commit fence. */
 export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
@@ -98,19 +98,21 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       sourceId: `fca:${taskId}:${task.revision}`, resources: [actionResource(scopeKey, `fca:${taskId}`)] }, controller.signal);
     if (!active) return;
     let step: TaskStep | null = null;
+    let stepPorts: ReturnType<NonNullable<TaskRuntimeWiringOptions['stepPorts']>> | undefined;
     try {
       step = runtime.beginStep(scopeKey, taskId, active.execution.lease, task.revision);
       if (!step) { await active.finish('cancelled', 'fca_not_ready'); return; }
       const admitted = step;
+      stepPorts = options.stepPorts?.(runtime, admitted);
       await withObserverRun({ scopeKey, surface: 'fca', runId: randomUUID(), audience: options.ownerAlone() ? 'owner' : 'others' }, () =>
         inActionExecution(active.execution, () => runFcaStep(admitted, { runtime, model: options.model,
-          ...options.stepPorts?.(runtime, admitted), ownerAlone: options.ownerAlone, permit: () => active.execution.permit([actionResource(scopeKey, `fca:${taskId}`)]) }, active.execution.signal)));
+          ...stepPorts, ownerAlone: options.ownerAlone, permit: () => active.execution.permit([actionResource(scopeKey, `fca:${taskId}`)]) }, active.execution.signal)));
       // Task completion/wait was committed; this is only the completion of its execution segment.
       await flushReceipts();
     } catch {
       const stopped = step && runtime.get(scopeKey, taskId)?.phase === 'stopping';
-      if (stopped) {
-        // We reach here only once model/tool promises unwound. All first-slice tools have synchronous durable receipts.
+      if (stopped && stepPorts?.safeToAcknowledgeStop?.() !== false) {
+        // Model/tool promises have unwound; the body adapter also requires confirmed physical release.
         runtime.recordStoppedStep(step!);
         await flushReceipts();
       } else {

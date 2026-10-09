@@ -1,4 +1,6 @@
 import { ensureTaskRuntimeSchema } from './taskRuntimeSchema.js';
+import { observeExternalEvent } from './taskExternalEventStore.js';
+import type { TaskExternalEvent } from '../taskExternalEventPorts.js';
 import { TaskConversationDeliveryStore } from './taskConversationDeliveryStore.js';
 import type { TaskConversationDeliveryInput, TaskConversationDeliveryStage } from '../taskConversationDeliveryPorts.js';
 import { randomUUID } from 'node:crypto';
@@ -18,6 +20,10 @@ const limits = { depth: 8, children: 64, activeTasks: 256, text: 16_000, history
 
 /** Subordinate inbox/history/checkpoints. The injected authority alone owns task status and its event sequence. */
 export class SQLiteTaskRuntimeStore implements TaskRuntime {
+  observeExternal(scope: string, target: string, event: TaskExternalEvent) {
+    const result = observeExternalEvent(this.db, this.authority, scope, this.ensureRoot(scope).id, target, event, this.now());
+    return { accepted: true as const, duplicate: result.duplicate, task: this.view(result.task) };
+  }
   private readonly authority: TaskAuthority;
   private readonly now: () => string;
   private readonly sources: TaskSourceStore;

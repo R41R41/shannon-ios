@@ -1,0 +1,214 @@
+import { createHash } from 'node:crypto';
+import { actionResource } from '../../contracts/actionThreadContract.js';
+import { currentActionExecution, type ActionExecution } from '../../infra/context/actionExecution.js';
+import type { TaskRuntime, TaskStep } from '../../mind/action/taskRuntime/taskRuntimePorts.js';
+import type { FcaBodyLifecycle, FcaExternalTools, FcaToolCall } from '../../mind/action/fca/fcaPorts.js';
+import type { FcaEvidence } from '../../mind/action/fca/fcaEvidencePorts.js';
+import { authorizeToolCall } from '../../mind/inhibition/toolGatePorts.js';
+import { toolFailure, type ToolResult } from '../../mind/tools/toolRegistryPorts.js';
+import {
+  createReflexController, evaluateReflexEntry, reflexSnapshot, ReflexHandoffNotSent, returnReflexControl, type BodyStopAcknowledgement,
+  type BodyStopRequest, type BodyTaskContext, type ReflexEntrySelector, type ReflexEvent, type ReflexLimits,
+  type ReflexPorts, type ReflexSelector, type ReflexSessionReceipt, type ReflexSessionRequest,
+} from '../../mind/action/reflex/reflexPorts.js';
+import type { MinecraftControl } from './minecraftControl.js';
+
+const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+const toolOk = (text: string): ToolResult => ({ ok: true, text, retryable: false });
+const EMPTY = { type: 'object' as const, properties: {}, required: [], additionalProperties: false as const };
+const DEFAULT_LIMITS: ReflexLimits = { maxDurationMs: 20_000, maxDecisions: 6, maxActions: 4, maxActionMs: 5_000, maxStateAgeMs: 3_000, maxImageAgeMs: 3_000 };
+
+/** One task's adapter/monitor. No extra planner, executor lease, memory writer or emotional state. */
+export function createMinecraftTaskBody(parts: {
+  control: MinecraftControl; runtime: TaskRuntime; step: TaskStep; entry: ReflexEntrySelector | null; selector: ReflexSelector | null;
+  ownerAlone(): boolean; sourcesVisible(): boolean; now?: () => number; pollMilliseconds?: number;
+  limits?: Partial<ReflexLimits>; evidence?: FcaEvidence;
+}): { body: FcaBodyLifecycle; tools: FcaExternalTools; safeToAcknowledgeStop(): boolean } {
+  const { control, runtime, step } = parts, now = parts.now ?? Date.now, limits = { ...DEFAULT_LIMITS, ...parts.limits };
+  const monitorAbort = new AbortController(), toolAborts = new Set<AbortController>(), claims = new Set<string>();
+  const releasedSessions = new Set<string>();
+  const captures = new Map<string, number>(), modes = new Map<string, 'explicit' | 'danger' | 'stuck' | 'visual'>();
+  const cleanupListeners = new Set<() => void>();
+  const prior = step.snapshot.checkpoint as { fcaToolSelection?: { recentResults?: Array<{ name: string; ok: boolean; summary: string }> } } | null;
+  let recentResults = (prior?.fcaToolSelection?.recentResults ?? []).slice(-6).map(value => ({ name: value.name.slice(0, 160), ok: value.ok, summary: value.summary.slice(0, 1000) }));
+  let activeAction: NonNullable<BodyTaskContext['taskState']>['activeAction'];
+  let revision = 0, started = false, closed = false, unknown = false, attempts = 0, lastEntryAt = -Infinity;
+  let execution: ActionExecution | undefined, timer: ReturnType<typeof setInterval> | undefined;
+  let monitoring: Promise<void> | null = null, active: Promise<ReflexSessionReceipt | null> | null = null, fault: unknown;
+  let lastSignature = '', lastSequence = -1;
+  const leaseMatches = () => !!execution && execution.lease.id === step.lease.id && execution.lease.holder === step.lease.holder && execution.lease.generation === step.lease.generation;
+  const live = () => leaseMatches() && parts.ownerAlone() && parts.sourcesVisible() && !monitorAbort.signal.aborted
+    && runtime.get(step.scopeKey, step.taskId)?.phase === 'executing';
+  const bound = () => control.store.body(step.taskId);
+  const availableBody = () => bound() ?? (control.available().length === 1 ? control.available()[0]! : null);
+  const context = (bodyId: string, sessionId: string): BodyTaskContext => ({ scopeKey: step.scopeKey, taskId: step.taskId,
+    taskRevision: step.revision, bodyId, sessionId, generation: step.lease.generation,
+    goal: step.snapshot.task.goal, completionCondition: step.snapshot.task.completionCriteria,
+    taskState: { phase: runtime.get(step.scopeKey, step.taskId)?.phase ?? 'unknown', progress: step.snapshot.task.summary.slice(0, 2000),
+      ...(activeAction ? { activeAction } : {}), recentResults } });
+  const permit = async (signal?: AbortSignal) => !signal?.aborted && live()
+    && Boolean(await execution!.permit([actionResource(control.configuration.deviceId, 'minecraft-body')], signal)) && !signal?.aborted && live();
+  const ackUnknown = (request: BodyStopRequest): BodyStopAcknowledgement => ({ bodyId: request.context.bodyId, sessionId: request.context.sessionId,
+    generation: request.context.generation, requestId: request.requestId, state: 'unknown', inputsReleased: false, observedAt: new Date(now()).toISOString() });
+  const physicalStop = async (request: BodyStopRequest, kind: 'stop' | 'release', signal?: AbortSignal): Promise<BodyStopAcknowledgement> => {
+    const id = `${kind}:${hash(request.requestId)}`;
+    try {
+      const receipt = await control.command({ id, context: request.context, lease: step.lease, kind, stop: request, milliseconds: 5_000 }, signal);
+      if (kind === 'release' && receipt.stop?.state === 'stopped' && receipt.stop.inputsReleased) releasedSessions.add(request.context.sessionId);
+      return receipt.stop ?? ackUnknown(request);
+    } catch { if (kind === 'stop' && !control.store.command(id)) throw new ReflexHandoffNotSent(); unknown = true; return ackUnknown(request); }
+  };
+  const actionCall = (operationId: string, operation: string, arguments_: unknown): FcaToolCall => {
+    const eventId = operationId.replace(/:operation:(\d+)$/, ':action:$1');
+    return { id: eventId.slice(step.id.length + 1), name: 'minecraft.reflex.action', input: { operation, arguments: arguments_ } };
+  };
+  const event = (value: ReflexEvent) => {
+    // Live task-origin delivery inherits its current source lineage, including tasks without a conversation source.
+    const text = JSON.stringify({ kind: 'body.reflex', eventId: value.id, bodyId: value.context.bodyId, phase: value.kind,
+      ...(value.operationId ? { operationId: value.operationId } : {}), ...(value.evidenceId ? { evidenceId: value.evidenceId } : {}),
+      ...(value.outcome ? { outcome: value.outcome } : {}), ...(value.reason ? { reason: value.reason } : {}) });
+    runtime.send(step.scopeKey, step.taskId, step.taskId, text, value.id);
+  };
+  const ports: ReflexPorts = {
+    now, current: ctx => live() && ctx.taskId === step.taskId && ctx.taskRevision === step.revision && ctx.generation === step.lease.generation,
+    selector: { async choose(input, signal) { if (!parts.selector || !await permit(signal)) return null; signal.throwIfAborted(); return parts.selector.choose(input, signal); } }, event,
+    handoff: {
+      async inspect(ctx) { const old = control.store.session(ctx.sessionId); return old ? old.receipt ? 'duplicate' : 'unknown' : 'new'; },
+      prepare: (_ctx, signal) => permit(signal),
+      async stopNormal(request, signal) {
+        if (!await permit(signal)) throw new ReflexHandoffNotSent();
+        if (!control.store.beginSession(request.context.sessionId, request.context)) return ackUnknown(request);
+        claims.add(request.context.sessionId);
+        return physicalStop(request, 'stop', signal);
+      },
+      async acquire(ctx, _ack, signal) { return claims.has(ctx.sessionId) && await permit(signal) ? step.lease : null; },
+      async returnStopped(request, receipt) {
+        const release = await physicalStop(request, 'release');
+        return returnReflexControl(ports, step.lease, { ...receipt, latestObservation: control.observe(request.context.bodyId) }, Promise.resolve(release), request);
+      },
+      valid: async (ctx, _lease, signal) => claims.has(ctx.sessionId) && await permit(signal),
+      async finish(_lease, receipt) {
+        if (receipt.control === 'held') unknown = true;
+        control.store.endSession(receipt.context.sessionId, receipt);
+        // The enclosing FCA still owns this exact lease until its history and segment receipt commit.
+      },
+    },
+    body: {
+      async observe(ctx, signal) {
+        if (releasedSessions.has(ctx.sessionId)) return control.observe(ctx.bodyId);
+        if (!await permit(signal)) return control.observe(ctx.bodyId);
+        const count = (captures.get(ctx.sessionId) ?? 0) + 1; captures.set(ctx.sessionId, count);
+        await control.command({ id: `capture:${hash(`${ctx.sessionId}:${count}`)}`, context: ctx, lease: step.lease, kind: 'capture', milliseconds: 3_000 }, signal);
+        return control.observe(ctx.bodyId);
+      },
+      candidates: (_ctx, observation) => control.frame(observation.bodyId)?.poll.candidates ?? [],
+      validate: (ctx, candidate, observation) => live() && observation.bodyId === ctx.bodyId && (control.frame(ctx.bodyId)?.poll.candidates ?? []).some(draft =>
+        draft.kind === candidate.kind && draft.operation === candidate.operation && JSON.stringify(reflexSnapshot(draft.arguments)) === JSON.stringify(candidate.arguments)
+        && draft.preconditions.every(condition => observation.facts[condition.key] === condition.value)),
+      async execute(operation, lease, signal) {
+        if (!await permit(signal)) throw new Error('FCA_BODY_LEASE_INVALID');
+        signal.throwIfAborted();
+        const call = actionCall(operation.operationId, operation.candidate.operation!, operation.candidate.arguments);
+        if (parts.evidence && !parts.evidence.beforeActions(step, { decision: { kind: 'tools', calls: [call] }, history: [] })) throw new Error('FCA_EVIDENCE_FENCED');
+        execution!.stepOutcome = 'unknown';
+        try {
+          const receipt = await control.command({ id: `reflex:${hash(operation.operationId)}`, context: operation.context, lease, kind: 'reflex', operation,
+            milliseconds: Math.max(1, Date.parse(operation.deadlineAt) - now()) }, signal);
+          const action = receipt.action;
+          if (!action) throw new Error('FCA_BODY_ACTION_ACK_REQUIRED');
+          execution!.stepOutcome = 'acknowledged';
+          const text = JSON.stringify({ outcome: action.outcome, evidenceId: action.evidenceId, inputsReleased: action.inputsReleased, operationId: action.operationId });
+          parts.evidence?.observed(step, call, action.outcome === 'completed' ? toolOk(text) : toolFailure('failed', text, { retryable: false }));
+          return action;
+        } catch (error) { unknown = true; parts.evidence?.unknown(step, call); throw error; }
+      },
+      releaseInputs: request => physicalStop(request, 'release'),
+      termination: (ctx, observation, recent) => {
+        if (observation.facts.targetLost === true) return { reason: 'target_lost', evidenceIds: [] };
+        if (observation.facts.progressStopped === true) return { reason: 'no_progress', evidenceIds: [] };
+        if (modes.get(ctx.sessionId) === 'danger' && observation.facts.danger === false && recent.length) return { reason: 'hazard_cleared', evidenceIds: [recent.at(-1)!.evidenceId] };
+        return null;
+      },
+    },
+  };
+  const controller = createReflexController(ports);
+  const startSession = (request: ReflexSessionRequest, mode: 'explicit' | 'danger' | 'stuck' | 'visual', signal: AbortSignal) => {
+    revision += 1; modes.set(request.context.sessionId, mode); toolAborts.forEach(abort => abort.abort());
+    const job = controller.run(request, signal); active = job;
+    void job.then(receipt => { if (receipt?.control === 'held') unknown = true; }, error => { fault = error; unknown = true; })
+      .finally(() => { if (active === job) active = null; });
+    return job;
+  };
+  const tick = async () => {
+    if (!live() || closed || active || !parts.entry || !parts.selector || attempts >= 4) return;
+    const bodyId = bound(), observation = bodyId ? control.observe(bodyId) : null;
+    if (!observation || observation.sequence === lastSequence) return;
+    lastSequence = observation.sequence;
+    const facts = observation.facts, mode = facts.danger === true ? 'danger' : facts.stuck === true ? 'stuck' : facts.visualRequired === true ? 'visual' : null;
+    if (!mode) return;
+    const signature = JSON.stringify([mode, facts.target ?? null]);
+    if (signature === lastSignature && now() - lastEntryAt < 2_000) return;
+    if (!leaseMatches() || !await execution!.permit([], monitorAbort.signal) || !live()) return;
+    lastSignature = signature; lastEntryAt = now(); attempts += 1;
+    const ctx = context(bodyId!, `${step.id}:reflex:${attempts}`), request = { context: ctx, limits };
+    if (await evaluateReflexEntry(request, { context: ctx, observation, trigger: 'observation', recent: [] }, parts.entry, ports, monitorAbort.signal)
+      && !closed && live()) await startSession({ ...request, requiresImage: true }, mode, monitorAbort.signal);
+  };
+  const poll = () => {
+    if (monitoring || closed) return;
+    const job = tick(); monitoring = job;
+    void job.catch(error => { if (!monitorAbort.signal.aborted) fault = error; }).finally(() => { if (monitoring === job) monitoring = null; });
+  };
+  const safe = () => !unknown && control.store.safe(step.taskId);
+  const body: FcaBodyLifecycle = {
+    start(signal) {
+      if (started) return; started = true; execution = currentActionExecution();
+      const cancel = () => { monitorAbort.abort(); toolAborts.forEach(abort => abort.abort()); const id = bound(); if (id) controller.cancel(step.scopeKey, id); control.cancelTask(step.taskId); };
+      signal.addEventListener('abort', cancel, { once: true }); if (signal.aborted) cancel();
+      cleanupListeners.add(() => signal.removeEventListener('abort', cancel));
+      timer = setInterval(poll, parts.pollMilliseconds ?? 250); timer.unref(); poll();
+    },
+    revision: () => revision,
+    context: () => ({ revision, observation: live() && bound() ? control.observe(bound()!) : null }),
+    async guard(version) { if (active) await active; if (fault) throw fault; if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN'); return version === revision; },
+    toolSignal(name, parent) {
+      if (!name.startsWith('mc.')) return parent;
+      const id = availableBody(); if (id && live()) control.store.bind(step.taskId, id);
+      const abort = new AbortController(); toolAborts.add(abort);
+      const cancel = () => abort.abort(); parent.addEventListener('abort', cancel, { once: true });
+      cleanupListeners.add(() => parent.removeEventListener('abort', cancel));
+      if (parent.aborted || active) abort.abort(); return abort.signal;
+    },
+    noteCall(call, operationId) {
+      if (!call.name.startsWith('mc.')) return;
+      // Registered tools already bound inputs to 32K; malformed inputs are still only inert context.
+      const encoded = JSON.stringify(call.input);
+      activeAction = { name: call.name, operationId, input: encoded && encoded.length <= 32_000 ? JSON.parse(encoded) : null };
+    },
+    noteResult(call, result) {
+      if (activeAction?.name === call.name) activeAction = undefined;
+      recentResults = [...recentResults, { name: call.name, ok: result.ok, summary: result.text.slice(0, 1000) }].slice(-6);
+    },
+    async close() {
+      if (!closed) { closed = true; if (timer) clearInterval(timer); cleanupListeners.forEach(remove => remove()); cleanupListeners.clear(); monitorAbort.abort(); await controller.close(); }
+      if (monitoring) await monitoring.catch(() => {}); if (active) await active;
+      if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
+    },
+  };
+  const definition = { name: 'minecraft.reflex', description: '現在のタスクの目的で、一人称画像を更新しながら短い身体操作を選ぶ。最新状態と結果を返し、長期計画はここで立てない。',
+    input: EMPTY, domain: 'minecraft_body' as const, effect: 'write' as const, cost: 'model' as const,
+    audiences: ['owner_alone' as const], surfaces: ['text' as const] };
+  const tools: FcaExternalTools = { definitions: parts.selector && availableBody() && control.frame(availableBody()!) ? [definition] : [], async execute(call) {
+    const denied = authorizeToolCall(call.name === definition.name ? definition : null, { scopeKey: call.scopeKey, surface: 'text', audience: parts.ownerAlone() ? 'owner_alone' : 'others' });
+    if (denied) return denied;
+    if (!parts.selector || call.taskId !== step.taskId || call.scopeKey !== step.scopeKey || !live()) throw new Error('FCA_BODY_LEASE_INVALID');
+    if (!call.input || typeof call.input !== 'object' || Array.isArray(call.input) || Object.keys(call.input).length) return toolFailure('invalid_input', '引数は空のオブジェクトです。');
+    const bodyId = availableBody(); if (!bodyId || !control.frame(bodyId) || !control.store.bind(step.taskId, bodyId)) return toolFailure('unavailable', '操作できる体が接続されていません。');
+    const ctx = context(bodyId, `${step.id}:reflex:${hash(call.operationId).slice(0, 16)}`);
+    if (active) await active;
+    const receipt = await startSession({ context: ctx, limits, requiresImage: true }, 'explicit', call.signal);
+    if (!receipt || receipt.control === 'held' || !safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
+    return toolOk(JSON.stringify(receipt));
+  } };
+  return { body, tools, safeToAcknowledgeStop: safe };
+}

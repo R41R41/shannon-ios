@@ -465,7 +465,7 @@ final class ShannonDesktopBodyTests: XCTestCase {
         ])
         // The touch coordinator's registration is her full body with the camera as the owner set it, not touch-only.
         let flags = DesktopBodyURLProtocol.bodies.last?["flags"] as? [String: Bool]
-        XCTAssertEqual(flags, ["camera": true])
+        XCTAssertEqual(flags, ["camera": true, "fcaTouchV1": true])
         XCTAssertEqual(DesktopBodyURLProtocol.bodies.last?["surface"] as? String, "mac")
     }
 }

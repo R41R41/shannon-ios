@@ -180,7 +180,12 @@ export class BodyTouches {
 
   /** Stage 2: her stances on a part with the owner alone, newest first, without what the owner had her forget. */
   stances(scopeKey: string, part: string, snapshot: CompanionStateSnapshot, at: string): BodyTouchStance[] {
-    return this.dependencies.store.stanceHistory(scopeKey, part, 'owner', at).filter(row => this.remembered(snapshot, row.burstId)).map(row => row.stance);
+    return this.stanceSources(scopeKey, part, snapshot, at).map(row => row.stance);
+  }
+
+  /** Closed provenance for a caller that carries these same stances into a durable task. */
+  stanceSources(scopeKey: string, part: string, snapshot: CompanionStateSnapshot, at: string) {
+    return this.dependencies.store.stanceHistory(scopeKey, part, 'owner', at).filter(row => this.remembered(snapshot, row.burstId));
   }
 
   /** She said a line because of this burst: it becomes part of the memory. */

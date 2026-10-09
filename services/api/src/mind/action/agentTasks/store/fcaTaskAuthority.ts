@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { TaskAuthority, TaskQuery, TaskRecord, TaskStatus } from '../../taskRuntime/taskRuntimePorts.js';
+import { underWriteLock } from '../../../../infra/sqlite/lockWaits.js';
 
 /** Additive FCA projection on the existing task authority. Creates no Agent Host commands. */
 export class SQLiteFcaTaskAuthority implements TaskAuthority {
@@ -20,9 +21,7 @@ export class SQLiteFcaTaskAuthority implements TaskAuthority {
     });
   }
   transaction<T>(work: () => T): T {
-    this.db.exec('BEGIN IMMEDIATE');
-    try { const result = work(); this.db.exec('COMMIT'); return result; }
-    catch (error) { this.db.exec('ROLLBACK'); throw error; }
+    return underWriteLock(this.db, null, '', work, 'fca_task_authority');
   }
   get(scopeKey: string, id: string): TaskRecord | null {
     const row = this.db.prepare('SELECT * FROM agent_tasks WHERE scope_key=? AND task_id=? AND fca_kind IS NOT NULL').get(scopeKey, id);

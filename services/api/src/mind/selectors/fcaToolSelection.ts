@@ -47,7 +47,7 @@ export class JevFcaToolSelector implements FcaToolSelector {
     };
     let observation: { cached: boolean; model: string; source: 'jev' | 'fallback' } | undefined;
     return observeAsync('jevt', {
-      selector: 'fca', offeredCount: catalog.length, offeredTools: catalog.map(tool => observedToolName(tool.name)),
+      selector: 'fca', offeredCount: catalog.length, offeredTools: catalog.map(tool => observedToolName(tool.name, catalog)),
     }, async () => {
       if (!catalog.length) return { names: [], source: 'fallback' as const };
       const decided = await this.jev.decide<readonly string[]>({
@@ -70,6 +70,6 @@ export class JevFcaToolSelector implements FcaToolSelector {
       request.signal.throwIfAborted();
       return { names: decided.value, source: decided.source };
     }, result => ({ ...observation, source: result.source, selectedCount: result.names.length,
-      selectedTools: result.names.map(observedToolName) }));
+      selectedTools: result.names.map(name => observedToolName(name, catalog)) }));
   }
 }

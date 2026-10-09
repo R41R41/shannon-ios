@@ -233,6 +233,7 @@ export class ShannonApiKernel {
   }
   get voiceSessions() { return voiceSessionCalls(this.body.ownerCalls, this.now); } // A voice session while the owner is in a call elsewhere.
   ownerAloneForFeedback(scopeKey:string):boolean { return this.ownerPresenceForFeedback(scopeKey)==='alone'; }
+  touchReflexAllowed(scopeKey:string,device:string,gesture?:string):boolean { return this.body.touchReflexAllowed(scopeKey,device,gesture); }
   ownerPresenceForFeedback(scopeKey:string):'alone'|'others'|'unknown' {
     try {const others=this.toolServer.audience.othersKnown(scopeKey);return others===false?'alone':others===true?'others':'unknown';} catch {return 'unknown';}
   }
@@ -243,8 +244,7 @@ export class ShannonApiKernel {
   } = {}): { threadId: string; instructions: string; voice: string } {
     if (options.participantMode === 'guest') this.toolServer.audience.noteOthers(scopeKey);
     return realtimeVoiceSessionProjection(scopeKey, requestedThreadId, options, {
-      stateStore: this.stateStore,
-      conversationStore: this.conversationStore,
+      stateStore: this.stateStore, conversationStore: this.conversationStore,
       knowledgeStore: this.knowledgeStore,
       dailyMind: this.dailyMind, autonomy: this.autonomy,
       now: this.now,

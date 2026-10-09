@@ -30,6 +30,7 @@ export function createMinecraftBodyRoute(
     /** Syzygy ADR-0008 stage 3 (F5): the memory outbox (absent: switched off); F6: the people facts' readers. */
     memory?: MemoryProposals | null;
     peopleFacts?: MinecraftBodyDependencies['peopleFacts'];
+    fcaIntent?: MinecraftBodyDependencies['fcaIntent'];
   },
 ): MinecraftBodyRoute {
   const configuration = configuredMinecraftBody(environment);

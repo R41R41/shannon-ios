@@ -116,7 +116,7 @@ export class JevTurnChooser implements TurnChooser {
           multi: value.difficulty?.multiStep ?? -1, retry: value.retry ?? -1,
         } : {}),
       }),
-    }), decision => ({ ...observation, source: decision.source, selectedTools: decision.value.menu?.chosen.map(observedToolName) ?? null,
+    }), decision => ({ ...observation, source: decision.source, selectedTools: decision.value.menu?.chosen.map(name => observedToolName(name)) ?? null,
       difficulty: decision.value.difficulty ?? null, retry: decision.value.retry ?? null }));
     return decided.value;
   }

@@ -8,7 +8,7 @@ export interface ActionExecution {
   /** A bounded executor's acknowledgement, separate from a model call nested inside that step. */
   stepOutcome?:'unknown'|'acknowledged';
   /** Rechecked immediately before an outside call. Never grants a tool permission. */
-  permit(resources?:readonly string[]):Promise<boolean>;
+  permit(resources?:readonly string[], signal?:AbortSignal):Promise<boolean>;
   checkpoint?(code:string):Promise<boolean>;
 }
 const executions=new AsyncLocalStorage<ActionExecution>();

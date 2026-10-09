@@ -13,16 +13,20 @@ export async function acquireAction(actions:ActionThreads,draft:ActionDraft,sign
     void actions.renew(lease).then(next=>{if(!next)controller.abort();}).catch(()=>controller.abort()).finally(()=>{renewing=false;});
   },5_000);heartbeat.unref();
   const stop=()=>{clearInterval(heartbeat);signal?.removeEventListener('abort',externalStop);};
-  return {view,execution:{lease,signal:controller.signal,checkpoint:code=>actions.checkpoint(lease,code),permit:async(resources=[])=>{
-    if(controller.signal.aborted)return false;
-    try{
-      do {
-        if(await actions.dispatch(lease,resources))return true;
+  return {view,execution:{lease,signal:controller.signal,checkpoint:code=>actions.checkpoint(lease,code),permit:async(resources=[],localSignal)=>{
+    const waitingSignal=localSignal?AbortSignal.any([controller.signal,localSignal]):controller.signal;
+    while(!waitingSignal.aborted){
+      try{
+        const dispatched=await actions.dispatch(lease,resources);
+        // A cancelled local waiter cannot adopt a late grant. The original action still owns any grant.
+        if(waitingSignal.aborted)return false;
+        if(dispatched)return true;
         if(!await actions.renew(lease)){controller.abort();return false;}
-        await wait(25,undefined,{signal:controller.signal});
-      }while(!controller.signal.aborted);
-      return false;
-    }catch{controller.abort();return false;}
+      }catch{controller.abort();return false;}
+      try{await wait(25,undefined,{signal:waitingSignal});}
+      catch{if(!localSignal?.aborted)controller.abort();return false;}
+    }
+    return false;
   }},stop,finish:async(state,code)=>{stop();await actions.finish(lease,state,code);}};
 }
 /** Foreground serialization is scope-wide, including text/voice/platform. A queued turn has no side effects. */
