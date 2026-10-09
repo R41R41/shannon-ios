@@ -48,7 +48,7 @@ describe('real provider and tool observation', () => {
     expect(on.value.reply).toEqual(off.reply);
     expect(completed(on.events, 'llm')).toHaveLength(2);
     expect(on.events.filter(event => event.node === 'llm' && event.kind === 'span.started').map(event => event.input)).toMatchObject([
-      { round: 0, offeredTools: ['study.list'] }, { round: 1, offeredTools: ['study.list'] },
+      { round: 0, offeredTools: ['tool_open', 'study.list'] }, { round: 1, offeredTools: ['tool_open', 'study.list'] },
     ]);
     expect(completed(on.events, 'llm')[0]).toMatchObject({ model: settings.model, output: { selectedTools: ['study.list'], usage: { cacheReadTokens: 900 } } });
     expect(completed(on.events, 'decode')[0]?.output).toEqual({ reply: off.reply.reply });
