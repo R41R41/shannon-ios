@@ -25,6 +25,7 @@ import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { conversationStoreOf } from '../memory/memoryPorts.js';
 import { withRecalledMemories, type TurnCognitiveContext } from '../workspace/contextPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
+import { temporalKnowledgePrompt } from './temporalKnowledgeRecall.js';
 
 export interface TurnMemoryRecallInput {
   scopeKey: string;
@@ -62,16 +63,18 @@ export interface TurnMemoryRecall {
 const semanticGuidance = '[Semantic recall] Memories with cue "semantic" are search candidates, not confirmed facts. Use one only when its date and content fit the current message; if unsure, say so briefly or ask.';
 
 export class ShannonTurnMemoryRecall implements TurnMemoryRecall {
+  private audienceWatch: { othersKnown(scopeKey: string): boolean } | null = null;
   constructor(
     private readonly semantic: SemanticMemoryRecall,
     private readonly knowledge: ShannonKnowledgeStore | null = null,
     /** Syzygy ADR-0008 stage 2, step 8 (`SHANNON_TREE_RECALL`): absent, recall is what it was. */
     private readonly tree: TreeKnowledgeRecall | null = null,
+    private readonly options: { temporalKnowledge?: boolean } = {},
   ) {}
 
   walksTree(conversationClass: string | undefined): boolean { return this.tree?.walksTree(conversationClass) ?? false; }
 
-  watchAudience(watch: { othersKnown(scopeKey: string): boolean }): void { this.tree?.watchAudience(watch); }
+  watchAudience(watch: { othersKnown(scopeKey: string): boolean }): void { this.audienceWatch = watch; this.tree?.watchAudience(watch); }
 
   willSearch(input: Pick<TurnMemoryRecallInput, 'message' | 'memoryTurn'>): boolean {
     return this.semantic.available && (input.memoryTurn ?? needsSemanticMemoryRecall(input.message));
@@ -110,10 +113,17 @@ export class ShannonTurnMemoryRecall implements TurnMemoryRecall {
     if (!ownerOnly && knowledge.prompt) knowledge.prompt = `${UNLABELLED_DISCLOSURE_MARKER}\n${knowledge.prompt}`;
     // The inquiry frame says the owner is asking what she remembers: not for a turn someone else wrote (`openOnly`).
     const inquiry = isMemoryInquiry(input.message) && !context.openOnly ? inquiryPrompt(memories, knowledge.documents) : '';
-    const supplemental = [memories.length > context.memories.length ? semanticGuidance : '', knowledge.prompt, inquiry]
+    let temporalSourceIds: readonly string[] = [];
+    const temporal = this.options.temporalKnowledge && this.knowledge ? temporalKnowledgePrompt({
+      store: this.knowledge, scopeKey: input.scopeKey, message: input.message, present: context.present,
+      ...(context.openOnly ? { openOnly: true } : {}), documents: knowledge.documents,
+      ownerStillAlone: () => this.audienceWatch?.othersKnown(input.scopeKey) === false,
+      observeSources: ids => { temporalSourceIds = ids; },
+    }) : '';
+    const supplemental = [memories.length > context.memories.length ? semanticGuidance : '', knowledge.prompt, inquiry, temporal]
       .filter(Boolean).join('\n\n');
     const enriched = supplemental || knowledge.ids.length
-      ? withRecalledMemories(context, input.snapshot, memories, supplemental, knowledge.ids) : context;
+      ? withRecalledMemories(context, input.snapshot, memories, supplemental, [...new Set([...knowledge.ids, ...temporalSourceIds])]) : context;
     return {
       ...enriched,
       knowledgePrompt: knowledge.prompt,
@@ -156,7 +166,8 @@ export function createConfiguredTurnMemoryRecall(
   /** Syzygy ADR-0008 stage 2, step 8: tree recall (`wiring/treeRecallWiring.ts`); null with `SHANNON_TREE_RECALL` off. */
   tree: TreeKnowledgeRecall | null = null,
 ): TurnMemoryRecall {
-  return new ShannonTurnMemoryRecall(new SemanticMemoryRecall(gateway, index, configuredSemanticMemoryConfig(environment)), index, tree);
+  return new ShannonTurnMemoryRecall(new SemanticMemoryRecall(gateway, index, configuredSemanticMemoryConfig(environment)), index, tree,
+    { temporalKnowledge: environment.SHANNON_TEMPORAL_KNOWLEDGE_RECALL?.trim().toLowerCase() === 'on' });
 }
 
 export function configuredMemoryModelGateway(

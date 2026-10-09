@@ -20,7 +20,7 @@ export interface ReadToolPorts {
   web?: WebSearchOperation;
   /** The Notion projection for one search word: its text, and the pages it showed. */
   notion?: (query: string) => Promise<{ text: string; sources: readonly { title: string; url: string }[]; sourceIds?: readonly string[] }>;
-  /** The Voyager task read for one search phrase (empty: the generic word). */
+  /** The Voyager task read for one search phrase (empty: bounded open-task list). */
   voyagerTasks?: (query: string) => Promise<ReadToolText>;
   /** The owner's upcoming items as the conversation's projection gives them to him alone. */
   upcoming?: (scopeKey: string, range: 'day' | 'week') => ReadToolText;
@@ -91,7 +91,7 @@ export function readToolExecutors(ports: ReadToolPorts | null): Readonly<Record<
     'voyager.tasks': input => {
       if (!ports.voyagerTasks) return missing;
       const query = clip(stringInput(input, 'query') ?? '', 160);
-      return prepared('会話の中でVoyagerのタスクを検索しました。', () => ports.voyagerTasks!(query));
+      return prepared(query ? '会話の中でVoyagerのタスクを検索しました。' : '会話の中でVoyagerの未完了タスクを読みました。', () => ports.voyagerTasks!(query));
     },
     'schedule.upcoming': (input, context) => {
       if (!ports.upcoming) return missing;

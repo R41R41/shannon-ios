@@ -143,7 +143,7 @@ describe('the result files of a model-free run', () => {
     expect(rest.filter(line => line.scenarioId.startsWith('tier.')).every(line => line.yen > 0 && line.basis.includes('no credential'))).toBe(true);
     // Stage 3's workspace scenarios (suite v3) are model-free too.
     expect(rest.filter(line => /^(?:ws|pro)\./u.test(line.scenarioId)).every(line => line.yen === 0)).toBe(true);
-    expect(rest.every(line => /^(?:skill|recall|tier|ws|pro)\./u.test(line.scenarioId))).toBe(true);
+    expect(rest.every(line => /^(?:skill|recall|tier|ws|pro|quality)\./u.test(line.scenarioId))).toBe(true);
     expect(estimate[0]!.yen).toBeGreaterThan(0);
     expect(estimate[1]!.yen).toBe(0);
     expect(estimate[2]!.yen).toBe(300);

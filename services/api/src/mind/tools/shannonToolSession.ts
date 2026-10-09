@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+import { skillRoutingSwitches } from '@shannon/learning';
+import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
+import type { ToolExecutionEvidence } from '../../contracts/toolEvidenceContract.js';
 import type { CompanionStateStore } from '@shannon/cognition';
 import { CONVERSATION_TOOL_CALLS, type ShannonModelToolSession, type ToolCallOutcome } from '../../infra/models/chatModelTools.js';
 import type { OthersTextCheck } from '../inhibition/disclosurePorts.js';
@@ -88,6 +91,8 @@ export function conversationTools(
   if (!definitions.length) return {};
   const trace = ownerAlone === 'guests' ? undefined : server.turns?.open(scopeKey, threadId, words, offer === 'asked', voice.utteranceId);
   const memory = toolSessionMemory(createHash('sha256').update(`${scopeKey}\n${turn}`).digest('hex'));
+  // The existing verifier switch owns this additive projection; OFF keeps historical tool-result bytes.
+  const evidenceEnabled = skillRoutingSwitches(serverEnvironment()).turnVerify;
   let lifecycleCall = 0;
   let check: SecretCheck | null | undefined;
   let others: OthersTextCheck | null | undefined;
@@ -138,10 +143,11 @@ export function conversationTools(
     const subject = tool.domain === 'skill_read' && result.ok ? skillNameOf(argumentsJson) : null;
     // A call a rule stopped (ADR-0008 §14) is marked: it is never learned as a choice of hers.
     TURN_RESULTS.set(session, [...TURN_RESULTS.get(session) ?? [], { name: tool.name, effect: tool.effect === 'write' ? 'write' : 'read', ok: result.ok, ...(subject ? { subject } : {}),
+      ...(evidenceEnabled && result.evidence ? { evidence: result.evidence } : {}),
       ...(wasWithheld(result) ? { withheld: true as const } : {}) }]);
     const hint = options.sourceHints && tool.effect === 'read' && nothingFound(result) ? sourcesLine(definitions) : null;
     const shown = hint ? { ...result, text: `${result.text}\n${hint}` } : result;
-    return { output: toolResultForModel(shown), note: () => trace?.called(toolTraceCall(tool?.name ?? providerName.slice(0, 80), argumentsJson, result, secrets)) };
+    return { output: toolResultForModel(shown, evidenceEnabled), note: () => trace?.called(toolTraceCall(tool?.name ?? providerName.slice(0, 80), argumentsJson, result, secrets)) };
   };
   // Not enumerable: two turns that offer the same tools are the same request (what the model is asked), whoever runs the calls.
   Object.defineProperty(session, 'start', { enumerable: false, value: start });
@@ -171,7 +177,8 @@ const TURN_RESULTS = new WeakMap<object, ReadonlyArray<TurnToolResult>>();
 const WEB_REFUSED = new WeakSet<object>();
 /** Closed, successful write receipts preserve confirmations without leaking private result text or unshown story titles. */
 export function turnCompletedWriteReceipts(tools: ShannonModelToolSession | undefined): readonly string[] {
-  return turnToolResults(tools).filter(result => result.ok && result.effect === 'write').map(result => `実行済み: ${toolSummary(result)}`);
+  return turnToolResults(tools).filter(result => result.ok && result.effect === 'write').map(result =>
+    `${result.evidence?.outcome === 'queued' ? '受付済み（目的の完了は未確認）' : result.evidence?.outcome === 'unknown' ? '結果未確認' : '実行済み'}: ${toolSummary(result)}`);
 }
 const TURN_WEB_READS = new WeakMap<object, () => WebSearchResult | null>();
 /** Actual search receipts remain server-owned; a model's source list cannot replace them. */
@@ -180,7 +187,7 @@ export function turnWebSearchResult(tools: ShannonModelToolSession | undefined):
   const session = baseToolSession(tools), receipt = TURN_WEB_READS.get(session)?.();
   return receipt ?? (WEB_REFUSED.has(session) || turnToolResults(tools).some(result => result.name === 'web.search' && !result.ok) ? webSearchFailure('not_searched') : null);
 }
-export interface TurnToolResult { name: string; effect: 'read' | 'write'; ok: boolean; subject?: string; withheld?: true }
+export interface TurnToolResult { name: string; effect: 'read' | 'write'; ok: boolean; subject?: string; withheld?: true; evidence?: ToolExecutionEvidence }
 
 /** The name of the skill a `skill.read` call asked for, when it is a skill's closed name. */
 function skillNameOf(argumentsJson: string): string | null {

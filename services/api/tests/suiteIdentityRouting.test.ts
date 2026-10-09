@@ -21,6 +21,7 @@ async function probe(channel: 'text' | 'voice', utterance: string): Promise<Prob
     aetherContext: { promptFor: () => { result.notes += 1; return ''; } },
     voyagerCatalog: {
       searchTasks: async query => { result.taskQueries.push(query); return []; },
+      listOpenTasks: async () => { result.taskQueries.push('__open__'); return { items: [], hasMore: false }; },
       listProjects: async () => [],
     },
   });
@@ -125,11 +126,11 @@ describe('Voyager search phrase', () => {
     expect(voyagerTaskQuery('ボイジャーのタスクを確認して')).toEqual({ query: 'タスク', generic: true });
   });
 
-  it('tells the model that an empty generic search is not an empty task list', async () => {
+  it('uses the open-list read for a generic question and keeps specific keyword searches', async () => {
     const generic = await probe('text', 'やることある？');
-    expect(generic.taskQueries).toEqual(['やること']);
-    expect(generic.prompt).toContain('Keyword searched: "やること"');
-    expect(generic.prompt).toContain('Do not say there are no tasks');
+    expect(generic.taskQueries).toEqual(['__open__']);
+    expect(generic.prompt).toContain('Voyager open task read result');
+    expect(generic.prompt).toContain('There are no open tasks in this workspace');
     const specific = await probe('text', '写真整理のタスクどうなってる？');
     expect(specific.taskQueries).toEqual(['写真整理']);
     expect(specific.prompt).toContain('Nothing matched this keyword');

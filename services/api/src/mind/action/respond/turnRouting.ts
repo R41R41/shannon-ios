@@ -6,6 +6,7 @@ export type { TurnRouting } from '../../../contracts/turnRoutingContract.js';
 import type { ShannonModelToolSession, ShannonTierRequest } from '../../../infra/models/chatModelTools.js';
 import { TURN_CHECKER_MINIMUM_MILLISECONDS, verifiedReply, verifyWriteClaims, writeClaims, type TurnVerdict } from '../../selectors/selectorsPorts.js';
 import { toolDoing, turnOffersWrites, turnToolResults } from '../../tools/toolsPorts.js';
+import type { ToolExecutionEvidence } from '../../../contracts/toolEvidenceContract.js';
 
 /**
  * The routing of one conversation turn (Syzygy ADR-0008 stage 2, step 4; `docs/skill-and-routing-contract.md`). Core: response path.
@@ -55,11 +56,12 @@ export const DOING_KINDS: readonly string[] = Object.freeze(['write', 'action'])
  * deterministic pattern). Then it is `done` only with an `acts` tool result that worked; else `described_not_done`. A turn that
  * could not act and did not claim to is neither: telling him she cannot is not a failure to do.
  */
-export function turnDoing(kind: string | null, reply: string, results: ReadonlyArray<{ name: string; ok: boolean }>, offeredActs: boolean): TurnDoing | null {
-  const claimed = writeClaims(reply).length > 0;
+export function turnDoing(kind: string | null, reply: string, results: ReadonlyArray<{ name: string; ok: boolean; evidence?: ToolExecutionEvidence }>, offeredActs: boolean, nativeEvidence = true): TurnDoing | null {
+  const claimed = writeClaims(reply, nativeEvidence).length > 0;
   const asked = kind !== null && DOING_KINDS.includes(kind) && offeredActs;
   if (!asked && !claimed) return null;
-  return results.some(result => result.ok && toolDoing(result.name) === 'acts') ? 'done' : 'described_not_done';
+  if (nativeEvidence && claimed && verifyWriteClaims(reply, results.map(result => ({ ...result, effect: toolDoing(result.name) === 'acts' ? 'write' as const : 'read' as const }))) !== 'ok') return 'described_not_done';
+  return results.some(result => result.ok && toolDoing(result.name) === 'acts' && (!nativeEvidence || !result.evidence || result.evidence.outcome === 'applied')) ? 'done' : 'described_not_done';
 }
 
 /** A tier decision with Jev's task kind (`unknown` when Jev gave none). */
@@ -96,7 +98,7 @@ export async function finishTurn(routing: TurnRouting | null | undefined, turn: 
 }): Promise<{ reply: string; verdict: TurnVerdict | null; doing: TurnDoing | null; feedbackRecordId?: string }> {
   if (!routing) return { reply: turn.reply, verdict: null, doing: null };
   const results = turnToolResults(turn.tools);
-  const doing = turnDoing(turn.decision?.kind ?? null, turn.reply, results, turnOffersWrites(turn.tools));
+  const doing = turnDoing(turn.decision?.kind ?? null, turn.reply, results, turnOffersWrites(turn.tools), routing.switches.turnVerify);
   let verdict: TurnVerdict | null = null;
   if (routing.switches.turnVerify && !turn.outOfTime && turnOffersWrites(turn.tools)) {
     verdict = verifyWriteClaims(turn.reply, results);

@@ -14,6 +14,15 @@ export interface VoyagerTaskProjection {
   updatedAt: string;
 }
 
+export interface VoyagerOpenTaskProjection extends VoyagerTaskProjection {
+  dueAt: string | null;
+  priority: number;
+}
+export interface VoyagerOpenTaskList {
+  items: VoyagerOpenTaskProjection[];
+  hasMore: boolean;
+}
+
 export interface VoyagerProjectProjection {
   id: string;
   title: string;

@@ -11,6 +11,7 @@ import type {
   OrganizeUpdateField,
   VoyagerProjectProjection,
   VoyagerTaskProjection,
+  VoyagerOpenTaskList,
   VoyagerTaskReference,
 } from './organize.js';
 import {
@@ -142,6 +143,8 @@ export interface VoyagerTaskDestination {
 }
 
 export interface VoyagerCatalog {
+  /** Complete or explicitly truncated open tasks; no keyword search. Optional for older adapters. */
+  listOpenTasks?(limit: number): Promise<VoyagerOpenTaskList>;
   searchTasks(query: string, limit: number): Promise<VoyagerTaskProjection[]>;
   listProjects(limit: number): Promise<VoyagerProjectProjection[]>;
   /**
@@ -152,6 +155,7 @@ export interface VoyagerCatalog {
 }
 
 export class DisabledVoyagerCatalog implements VoyagerCatalog {
+  async listOpenTasks(): Promise<VoyagerOpenTaskList> { throw new OrganizeError('DESTINATION_NOT_CONFIGURED', 503, false); }
   async searchTasks(): Promise<VoyagerTaskProjection[]> { throw new OrganizeError('DESTINATION_UNAVAILABLE', 503, true); }
   async listProjects(): Promise<VoyagerProjectProjection[]> { throw new OrganizeError('DESTINATION_UNAVAILABLE', 503, true); }
 }
@@ -164,6 +168,7 @@ export class HttpVoyagerCatalog implements VoyagerCatalog {
     workspaceId: string;
     fetcher?: typeof fetch;
     upcomingEndpoint?: string;
+    openTasksEndpoint?: string;
   }) {
     if (options.upcomingEndpoint) this.upcomingTasks = (from, until, limit) => this.readUpcoming(options.upcomingEndpoint!, from, until, limit);
   }
@@ -181,6 +186,27 @@ export class HttpVoyagerCatalog implements VoyagerCatalog {
       return typeof row?.id === 'string' && typeof row.title === 'string' && typeof row.dueAt === 'string' && Number.isFinite(Date.parse(row.dueAt))
         ? [{ id: bounded(row.id, 160), title: bounded(row.title, 500), dueAt: row.dueAt }] : [];
     });
+  }
+
+  async listOpenTasks(limit: number): Promise<VoyagerOpenTaskList> {
+    const url = this.options.openTasksEndpoint ? new URL(this.options.openTasksEndpoint) : new URL(this.options.tasksEndpoint.replace(/\/tasks\/search(?:\?.*)?$/u, '/tasks/open'));
+    url.searchParams.set('workspaceId', this.options.workspaceId);
+    const bound = normalizedLimit(limit, 20, 50);
+    url.searchParams.set('limit', String(bound));
+    const value = await this.read(url);
+    const rows = projectionItems(value);
+    if (typeof value.hasMore !== 'boolean' || rows.length > bound) throw new OrganizeError('DESTINATION_RESPONSE_INVALID', 502);
+    const items = rows.map(item => {
+      const row = item as Record<string, unknown>;
+      const task = normalizedTaskProjection(item as VoyagerTaskProjection);
+      if (!['thinking', 'pending', 'inProgress'].includes(task.status)
+        || !(row.dueAt === null || (typeof row.dueAt === 'string' && Number.isFinite(Date.parse(row.dueAt))))
+        || !Number.isInteger(row.priority) || Number(row.priority) < 0 || Number(row.priority) > 4) {
+        throw new OrganizeError('DESTINATION_RESPONSE_INVALID', 502);
+      }
+      return { ...task, dueAt: row.dueAt as string | null, priority: row.priority as number };
+    });
+    return { items, hasMore: value.hasMore };
   }
 
   async searchTasks(query: string, limit: number): Promise<VoyagerTaskProjection[]> {
@@ -210,7 +236,10 @@ export class HttpVoyagerCatalog implements VoyagerCatalog {
         },
         signal: AbortSignal.timeout(15_000),
       });
-    } catch { throw new OrganizeError('DESTINATION_UNAVAILABLE', 503, true); }
+    } catch (error) {
+      const timeout = error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name);
+      throw new OrganizeError(timeout ? 'DESTINATION_TIMEOUT' : 'DESTINATION_UNAVAILABLE', 503, true);
+    }
     const value = await response.json().catch(() => ({})) as Record<string, unknown>;
     if (!response.ok) {
       const error = typeof value.error === 'object' && value.error ? value.error as Record<string, unknown> : {};
@@ -296,14 +325,16 @@ export function createConfiguredVoyagerCatalog(environment: Readonly<Record<stri
   if (!applyEndpoint || !token || !workspaceId) return new DisabledVoyagerCatalog();
   let tasksEndpoint: string;
   let projectsEndpoint: string;
+  let openTasksEndpoint: string;
   try {
     const base = new URL(applyEndpoint);
     const prefix = base.pathname.replace(/\/task-changes:apply$/u, '');
     tasksEndpoint = environment.SHANNON_VOYAGER_TASK_SEARCH_URL?.trim() || new URL(`${prefix}/tasks/search`, base).toString();
     projectsEndpoint = environment.SHANNON_VOYAGER_PROJECTS_URL?.trim() || new URL(`${prefix}/projects`, base).toString();
+    openTasksEndpoint = httpUrl(environment.SHANNON_VOYAGER_TASK_OPEN_URL) ?? new URL(`${prefix}/tasks/open`, base).toString();
   } catch { return new DisabledVoyagerCatalog(); }
   const upcomingEndpoint = httpUrl(environment.SHANNON_VOYAGER_TASK_UPCOMING_URL);
-  return new HttpVoyagerCatalog({ tasksEndpoint, projectsEndpoint, token, workspaceId, ...(upcomingEndpoint ? { upcomingEndpoint } : {}) });
+  return new HttpVoyagerCatalog({ tasksEndpoint, projectsEndpoint, openTasksEndpoint, token, workspaceId, ...(upcomingEndpoint ? { upcomingEndpoint } : {}) });
 }
 
 function httpUrl(value: string | undefined): string | null {

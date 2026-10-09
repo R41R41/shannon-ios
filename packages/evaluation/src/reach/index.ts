@@ -12,3 +12,5 @@ export * from './cognitionLedger.js';
 export * from './tierSet.js';
 export * from './skillRecall.js';
 export * from './mindWorkspace.js';
+export * from './qualityAffect.js';
+export * from './qualityResults.js';

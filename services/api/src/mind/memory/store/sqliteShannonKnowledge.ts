@@ -12,6 +12,8 @@ import {
 /** Shannon-internal knowledge. There is no user-facing folder, list, or summary for it. */
 export interface ShannonKnowledgeStore {
   listShannonKnowledge(scopeKey: string, options?: { includeRetired?: boolean }): readonly ShannonKnowledgeDocument[];
+  /** Read-only history for one explicit note ID; unavailable on older stores. Dates are revision recording times. */
+  readShannonKnowledgeRevisions?(scopeKey: string, id: string, beforeVersion: number): readonly ShannonKnowledgeDocument[];
   /** `draft` must already have passed `normalizeKnowledgeDraft`. */
   createShannonKnowledge(scopeKey: string, draft: KnowledgeDraft, at: string, reason: string): ShannonKnowledgeDocument;
   updateShannonKnowledge(scopeKey: string, id: string, expectedVersion: number, draft: KnowledgeDraft, at: string, reason: string): ShannonKnowledgeDocument | null;
@@ -75,6 +77,21 @@ export class SQLiteShannonKnowledgeStore implements ShannonKnowledgeStore {
       ORDER BY updated_at DESC LIMIT 500
     `).all(scopeKey, options.includeRetired ? 1 : 0) as unknown as DocumentRow[];
     return Object.freeze(rows.map(documentFromRow));
+  }
+
+  readShannonKnowledgeRevisions(scopeKey: string, id: string, beforeVersion: number): readonly ShannonKnowledgeDocument[] {
+    const current = this.row(scopeKey, id);
+    if (!current || current.status === 'retired' || current.version !== beforeVersion) return [];
+    const rows = this.database.prepare(`
+      SELECT knowledge_id, title, body_markdown, status, applicability, source_experience_ids_json,
+        aether_refs_json, recorded_at, version FROM shannon_knowledge_revisions
+      WHERE scope_key = ? AND knowledge_id = ? AND version < ? AND status != 'retired'
+      ORDER BY version DESC LIMIT 2
+    `).all(scopeKey, id, beforeVersion) as unknown as Array<Omit<DocumentRow, 'heading_tree_json' | 'retired_reason' | 'created_at' | 'updated_at'> & { recorded_at: string }>;
+    return Object.freeze(rows.reverse().map(row => documentFromRow({ ...row,
+      heading_tree_json: JSON.stringify(parseKnowledgeHeadingTree(row.body_markdown)), retired_reason: null,
+      created_at: current.created_at, updated_at: row.recorded_at,
+    })));
   }
 
   createShannonKnowledge(scopeKey: string, draft: KnowledgeDraft, at: string, reason: string): ShannonKnowledgeDocument {

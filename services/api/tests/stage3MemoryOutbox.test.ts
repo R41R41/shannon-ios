@@ -1,3 +1,14 @@
+vi.mock('../src/mind/tools/shannonTools.js', async importOriginal => {
+  const { historicalVoyagerToolPolicy } = await import('./support/historicalToolMenuPolicy.js');
+  return historicalVoyagerToolPolicy(await importOriginal<typeof import('../src/mind/tools/shannonTools.js')>());
+});
+
+// Pin the independent historical read wording; production and native Q01 tests use the current wording.
+vi.mock('@shannon/cognition', async importOriginal => {
+  const { historicalReadCapabilityPolicy } = await import('./support/historicalToolMenuPolicy.js');
+  return historicalReadCapabilityPolicy(await importOriginal<typeof import('@shannon/cognition')>());
+});
+
 import { describe, expect, it, vi } from 'vitest';
 import { capturedStage3Digests, STAGE3_SCENARIOS, type Stage3Capture } from './support/stage3Scenarios.js';
 import { stage3MemoryHook } from './support/stage3MemoryHook.js';

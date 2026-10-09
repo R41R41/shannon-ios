@@ -310,6 +310,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   withholdEmbedding(source: PendingEmbeddingSource, model: string, stateVersion: number, updatedAt: string) { this.embeddings.withholdEmbedding(source, model, stateVersion, updatedAt); }
   embeddingCandidates(scopeKey: string, model: string, limit: number) { return this.embeddings.embeddingCandidates(scopeKey, model, limit); }
   listShannonKnowledge(scopeKey: string, options?: { includeRetired?: boolean }) { return this.shannonKnowledge.listShannonKnowledge(scopeKey, options); }
+  readShannonKnowledgeRevisions(scopeKey: string, id: string, beforeVersion: number) { return this.shannonKnowledge.readShannonKnowledgeRevisions(scopeKey, id, beforeVersion); }
   createShannonKnowledge(scopeKey: string, draft: KnowledgeDraft, at: string, reason: string) { return this.shannonKnowledge.createShannonKnowledge(scopeKey, draft, at, reason); }
   updateShannonKnowledge(scopeKey: string, id: string, expectedVersion: number, draft: KnowledgeDraft, at: string, reason: string) { return this.shannonKnowledge.updateShannonKnowledge(scopeKey, id, expectedVersion, draft, at, reason); }
   retireShannonKnowledge(scopeKey: string, id: string, reason: string, at: string, evidence?: readonly string[]) { return this.shannonKnowledge.retireShannonKnowledge(scopeKey, id, reason, at, evidence); }

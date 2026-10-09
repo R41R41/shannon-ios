@@ -66,3 +66,11 @@ The API may keep running while the copy is made: `VACUUM INTO` reads a consisten
 ## Adding a scenario
 
 Define it in `packages/evaluation/src/reach/` (definition, deterministic judge, unit tests in `packages/evaluation/tests/reach.test.ts`), write its driver in `services/api/tests/reach/` with a scripted and a live model, register it in `reachSuite.ts`, and add the model-free run to `services/api/tests/reachMeasures.test.ts`. An `llm` check needs a written rubric and stays skipped unless a live run asks for it; prefer a deterministic check whenever one exists.
+
+## Bounded quality checks
+
+`quality.result.` runs actual completion-evidence verification over two fixed fixtures.
+`quality.affect.` compares six synthetic histories using the existing companion writer
+and pure affectDynamics functions, without changing production rules or calling a
+model. See [scope and limitations](../quality-bounded-slice.md). These engineering
+checks do not establish conversational quality or naturalness.

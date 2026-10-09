@@ -4,6 +4,7 @@ import type { MinecraftBodyRequests } from '../../surfaces/minecraft/minecraftBo
 import { stringInput } from './shannonToolInput.js';
 import type { ToolExecutor } from './shannonToolTypes.js';
 import { toolFailure, toolOk, type ShannonToolDefinition } from './shannonTools.js';
+import { withToolEvidence } from './toolEvidence.js';
 
 /**
  * Her Minecraft body's tools (`minecraft.*` in `shannonTools.ts`; phase 4 of `docs/minecraft-body-contract.md`).
@@ -60,7 +61,8 @@ export function minecraftExecutors(requests: MinecraftRequestPort | null | undef
           });
           if (outcome.kind === 'queued') {
             return {
-              result: toolOk(`マイクラの体に頼んだ（id: ${outcome.request.id}）。頼んだこと: 「${outcome.request.goal}」。体が受け取ったら動き出し、終わると結果が届く。いまはまだ何もしていないので、終わった・集めたとは言わない。`),
+              result: withToolEvidence(toolOk(`マイクラの体に頼んだ（id: ${outcome.request.id}）。頼んだこと: 「${outcome.request.goal}」。体が受け取ったら動き出し、終わると結果が届く。いまはまだ何もしていないので、終わった・集めたとは言わない。`),
+                { outcome: 'queued', action: 'request', target: { kind: 'minecraft_request', id: outcome.request.id }, operationId: outcome.request.id }),
               record: { summary: outcome.duplicate ? 'マイクラの体への同じ頼みごとを、もう一度は渡しませんでした。' : '会話の中で、マイクラの体に頼みごとを渡しました。', outcome: 'done' },
             };
           }
@@ -113,7 +115,8 @@ export function minecraftExecutors(requests: MinecraftRequestPort | null | undef
               record: { summary: 'マイクラの体の頼みごとをやめようとしましたが、もう終わっていました。', outcome: 'failed', reasonCode: 'finished' } };
           }
           return {
-            result: toolOk(outcome.state === 'cancelled' ? `「${outcome.goal}」は体が受け取る前だったので、取り消した。` : `「${outcome.goal}」をやめるよう体に伝えた。止まったら結果が届く。`),
+            result: withToolEvidence(toolOk(outcome.state === 'cancelled' ? `「${outcome.goal}」は体が受け取る前だったので、取り消した。` : `「${outcome.goal}」をやめるよう体に伝えた。止まったら結果が届く。`),
+              { outcome: outcome.state === 'cancelled' ? 'applied' : 'queued', action: 'cancel', target: { kind: 'minecraft_request', id: outcome.id }, operationId: outcome.id }),
             record: { summary: '会話の中で、マイクラの体に頼んだことをやめてもらいました。', outcome: 'done' },
           };
         },

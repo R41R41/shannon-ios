@@ -1,3 +1,4 @@
+import { HttpVoyagerCatalog } from '../src/integrations/voyager/organize.js';
 import { configuredMinecraftLifecycle } from '../src/wiring/minecraftLifecycleWiring.js';
 import { createFcaProgressTools, FCA_PROGRESS_TOOLS } from '../src/mind/action/fca/fcaProgressTools.js';
 import { createFcaTaskObservationMonitor } from '../src/wiring/fcaTaskObservationWiring.js';
@@ -197,7 +198,7 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
     && offeredTools('text', 'owner_alone').some(tool => tool.name === 'minecraft.request')
     && !offeredTools('autonomy', 'owner_alone').some(tool => tool.domain === 'minecraft_body') && offeredTools('text', 'others').every(tool => tool.domain !== 'minecraft_body')
     && createInMemoryAutonomyService(() => '2026-10-05T00:00:00.000Z').tools.offered('text', 'owner_alone', 'owner').every(tool => tool.domain !== 'minecraft_body'),
-  voyager_tasks: () => voiceSkill('voyager_tasks') && isOrganizeCommand('整理して') && exists(prepareConversationOrganize),
+  voyager_tasks: () => voiceSkill('voyager_tasks') && isOrganizeCommand('整理して') && exists(prepareConversationOrganize, HttpVoyagerCatalog.prototype.listOpenTasks),
   agent_tasks: () => voiceSkill('agent_status') && agentTaskInstructions().includes('TestFlight')
     && exists(distributeLatestInternalBuild),
   // Read-only: a device sends a bounded snapshot, and the one projection gives it to a turn that asks about the schedule. Nothing writes a calendar.

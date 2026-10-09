@@ -3,6 +3,7 @@ import { STUDY_SEARCH_INPUTS, SCHEDULE_SEARCH_INPUTS } from './searchToolInputs.
 import { MEMORY_TOOLS } from './memoryToolDefinitions.js';
 import { TASK_TOOLS } from './taskToolDefinitions.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
+import type { ToolExecutionEvidence } from '../../contracts/toolEvidenceContract.js';
 import { SELF_REWRITE_DOING, SELF_REWRITE_SUMMARIES } from './selfRewriteToolDefinitions.js';
 /**
  * The one list of Shannon's tools (Syzygy ADR-0003 stage 1: one tool registry and one gate).
@@ -26,7 +27,6 @@ export type ToolFailureKind =
 export const TOOL_FAILURE_KINDS: readonly ToolFailureKind[] = Object.freeze([
   'not_offered', 'refused', 'invalid_input', 'not_found', 'conflict', 'limit', 'unavailable', 'timeout', 'failed',
 ]);
-
 export interface ToolResult {
   ok: boolean;
   /** What she reads: the result, or what went wrong, in plain Japanese. */
@@ -35,8 +35,8 @@ export interface ToolResult {
   retryable: boolean;
   /** For `refused` and `not_offered`: why, and what would make the call work. */
   refusal?: { why: string; wouldWork: string };
+  evidence?: ToolExecutionEvidence;
 }
-
 /** A small JSON schema: an object of strings, integers and booleans. The validator in `shannonToolInput.ts` reads this subset only. */
 export interface ToolInputSchema {
   type: 'object';
@@ -294,8 +294,8 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
     description: `ライ氏のNotionで、共有されたページを言葉で探して読む（読むだけ）。題名の言葉で探すので、ページの題名にありそうな言葉を書く。${READ_RULE}`,
     input: schema({ query: { type: 'string', description: '探す言葉（ページの題名にありそうな言葉。1語か2語）', minLength: 1, maxLength: 80 } }, ['query']) }),
   readTool({ name: 'voyager.tasks', domain: 'voyager_read',
-    description: `ライ氏のVoyagerのタスクを言葉で探して読む（読むだけ。言葉で探すので、全部の一覧ではない）。タスクを作る・変えるのは、ここではできない（「タスクにして」「整理して」の提案で）。${READ_RULE}`,
-    input: schema({ query: { type: 'string', description: '探す言葉（タスクの題名にありそうな言葉）。書かなければ「タスク」で探す', maxLength: 160 } }) }),
+    description: `ライ氏のVoyagerのタスクを読む（読むだけ）。queryに題名の言葉を指定すると検索し、指定しなければ未完了タスクの一覧を見る。件数や文字数で省略された時は結果に示す。タスクを作る・変えるのは、ここではできない（「タスクにして」「整理して」の提案で）。${READ_RULE}`,
+    input: schema({ query: { type: 'string', description: '探す言葉（タスクの題名にありそうな言葉）。書かなければ未完了タスクの一覧', maxLength: 160 } }) }),
   readTool({ name: 'schedule.upcoming', domain: 'schedule_read',
     description: `ライ氏のこれからの予定・期日のある約束・日付のあるタスクを見る（見るだけ）。カレンダーはアプリが共有している時だけ分かる。${READ_RULE}`,
     input: schema({ ...SCHEDULE_SEARCH_INPUTS, range: { type: 'string', description: 'day（これから48時間。ふだんはこれ）か week（8日）', enum: ['day', 'week'] } }) }),
@@ -359,7 +359,7 @@ export const TOOL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
   'minecraft.status': 'マイクラの体に頼んだことの様子を見る',
   'minecraft.cancel': 'マイクラの体に頼んだことをやめてもらう',
   'notion.read': 'ライ氏のNotionの共有ページを探して読む',
-  'voyager.tasks': 'ライ氏のVoyagerのタスクを言葉で探して読む',
+  'voyager.tasks': 'ライ氏のVoyagerのタスクを検索、または未完了一覧で読む',
   'schedule.upcoming': 'ライ氏のこれからの予定と期日のある約束を見る',
   'places.search': 'お店や施設の候補を地図リンクつきで探す',
   'skill.read': 'ボクのスキル（自分の手順書）を1つ開いて読む',
@@ -483,7 +483,6 @@ export function toolForSurface(tool: ShannonToolDefinition, surface: ToolSurface
 export function toolOk(text: string): ToolResult {
   return Object.freeze({ ok: true, text, retryable: false });
 }
-
 export function toolFailure(failure: ToolFailureKind, text: string, options: { retryable?: boolean; refusal?: { why: string; wouldWork: string } } = {}): ToolResult {
   return Object.freeze({
     ok: false, text, failure, retryable: options.retryable ?? (failure === 'timeout' || failure === 'unavailable'),
@@ -492,9 +491,10 @@ export function toolFailure(failure: ToolFailureKind, text: string, options: { r
 }
 
 /** The result as the model reads it: one JSON object, the same on every surface. */
-export function toolResultForModel(result: ToolResult): string {
+export function toolResultForModel(result: ToolResult, includeEvidence = false): string {
   return JSON.stringify({
-    ok: result.ok, text: result.text, ...(result.failure ? { failure: result.failure } : {}), retryable: result.retryable,
+    ok: result.ok, text: result.text, ...(result.failure ? { failure: result.failure } : {}), retryable: includeEvidence && result.evidence?.outcome === 'unknown' ? false : result.retryable,
     ...(result.refusal ? { why: result.refusal.why, wouldWork: result.refusal.wouldWork } : {}),
+    ...(includeEvidence && result.evidence ? { executionEvidence: result.evidence } : {}),
   });
 }

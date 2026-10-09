@@ -113,7 +113,7 @@ export const SHANNON_AETHER_ACCESS_CAPABILITY = Object.freeze({
  */
 export const SHANNON_READ_TOOLS_CAPABILITY = Object.freeze({
   id: 'read_tools', audience: 'owner',
-  text: '読む道具: ライ氏と二人だけの会話で、Notionの共有ページ・Voyagerのタスク・これからの予定・お店や施設の候補を、要る時に道具で読む（読むだけ）。テキストでも、今の情報が要る時はWeb検索を自分で選ぶことがある。',
+  text: '読む道具: ライ氏と二人だけの会話で、Notionの共有ページ・Voyagerのタスク・これからの予定・お店や施設の候補を、要る時に道具で読む（読むだけ）。Voyagerは検索に加え未完了一覧も読める（省略は示す）。テキストでも、今の情報が要る時はWeb検索を自分で選ぶことがある。',
 } as const satisfies ShannonCapability);
 
 /**

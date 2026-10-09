@@ -6,7 +6,7 @@ import { estimatedOpenAICostUsd } from '../../src/infra/models/llmUsage.js';
 import { configuredResponseModel, isHaikuModel, replacementModel } from '../../src/infra/models/anthropic/haikuConfig.js';
 import { HAIKU_PROTOCOL_PREFIX } from '../../src/infra/models/anthropic/haikuCache.js';
 import {
-  COGNITION_SCENARIOS, RECALL_SCENARIOS, SKILL_SCENARIOS, TIER_SCENARIOS, WORKSPACE_SCENARIOS, PROACTIVE_SCENARIOS, autonomyDayScenario, buildReachReport, cappedEstimate, compareReachReports, conversationEstimate, estimateTotal,
+  COGNITION_SCENARIOS, RECALL_SCENARIOS, SKILL_SCENARIOS, TIER_SCENARIOS, WORKSPACE_SCENARIOS, PROACTIVE_SCENARIOS, QUALITY_AFFECT_SCENARIOS, QUALITY_RESULT_SCENARIOS, autonomyDayScenario, buildReachReport, cappedEstimate, compareReachReports, conversationEstimate, estimateTotal,
   isReachReport, pendingEstimate, reachReportMarkdown, runReachScenario, shiritoriScenario, stableFingerprint, threeToolsScenario,
   type ReachDriver, type ReachEstimateLine, type ReachMode, type ReachReport, type ReachRunRecord, type ReachScenarioDefinition,
 } from '../../../../packages/evaluation/src/reach/index.js';
@@ -19,12 +19,14 @@ import { anthropicApiKey, anthropicPrices, sonnetSettings } from '../../src/infr
 import { skillDrivers } from './reachSkills.js';
 import { recallDrivers } from './reachRecall.js';
 import { mindDrivers } from './reachMind.js';
+import { qualityAffectDrivers } from './reachQualityAffect.js';
+import { qualityResultDrivers } from './reachQualityResults.js';
 
 /**
  * The suite of reach scenarios for one mode, the live estimate, and the result files. The live mode is
  * built only from credentials in the environment, which are passed to the model adapters and never printed.
  */
-export const REACH_SCENARIOS: readonly ReachScenarioDefinition[] = [shiritoriScenario, threeToolsScenario, autonomyDayScenario, ...COGNITION_SCENARIOS, ...SKILL_SCENARIOS, ...RECALL_SCENARIOS, ...TIER_SCENARIOS, ...WORKSPACE_SCENARIOS, ...PROACTIVE_SCENARIOS];
+export const REACH_SCENARIOS: readonly ReachScenarioDefinition[] = [shiritoriScenario, threeToolsScenario, autonomyDayScenario, ...COGNITION_SCENARIOS, ...SKILL_SCENARIOS, ...RECALL_SCENARIOS, ...TIER_SCENARIOS, ...WORKSPACE_SCENARIOS, ...PROACTIVE_SCENARIOS, ...QUALITY_AFFECT_SCENARIOS, ...QUALITY_RESULT_SCENARIOS];
 type Environment = Readonly<Record<string, string | undefined>>;
 
 /** Drivers are made only for the scenarios a run includes, so nothing a skipped scenario would open is opened. */
@@ -44,6 +46,8 @@ export function scriptedDrivers(): Record<string, ReachDriverFactory> {
     ...recallDrivers(),
     // Stage 3, suite v3 (the workspace): model-free in both modes.
     ...mindDrivers(),
+    ...qualityAffectDrivers(),
+    ...qualityResultDrivers(),
     // Syzygy ADR-0008 stage 2, step 5: the tier set, the Sonnet adapter answered by a script.
     ...tierDrivers('scripted'),
   };
@@ -99,6 +103,8 @@ export function liveDrivers(environment: Environment): Record<string, ReachDrive
     ...recallDrivers(),
     // Stage 3, suite v3 (the workspace): model-free in both modes.
     ...mindDrivers(),
+    ...qualityAffectDrivers(),
+    ...qualityResultDrivers(),
     // The tier set against Anthropic (the tuning harness); pending without the key.
     ...tierDrivers('live', environment),
   };
@@ -147,7 +153,7 @@ export function liveEstimate(scripted: ReachReport, environment: Environment): R
         scenarioId: run.scenarioId, calls: run.cost.calls, promptCharacters: run.cost.promptCharacters,
         inputUsdPerMillion: prices.input, outputUsdPerMillion: prices.output, outputTokensPerCall: 2_000,
       }, REACH_YEN_PER_USD), ready.sonnet));
-    } else if ([...COGNITION_SCENARIOS, ...SKILL_SCENARIOS, ...RECALL_SCENARIOS, ...WORKSPACE_SCENARIOS, ...PROACTIVE_SCENARIOS].some(scenario => scenario.id === run.scenarioId)) {
+    } else if ([...COGNITION_SCENARIOS, ...SKILL_SCENARIOS, ...RECALL_SCENARIOS, ...WORKSPACE_SCENARIOS, ...PROACTIVE_SCENARIOS, ...QUALITY_AFFECT_SCENARIOS, ...QUALITY_RESULT_SCENARIOS].some(scenario => scenario.id === run.scenarioId)) {
       lines.push({ scenarioId: run.scenarioId, yen: 0, basis: 'model-free in both modes: no model is called' });
     }
   }

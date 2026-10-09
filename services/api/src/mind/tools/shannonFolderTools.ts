@@ -6,6 +6,7 @@ import type { HostOperation } from '../action/ownTime/ownTimePorts.js';
 import { numberInput, stringInput, type ToolInput } from './shannonToolInput.js';
 import { neutralMarkers, type ToolExecutionContext, type ToolExecutor, type ToolRun } from './shannonToolTypes.js';
 import { toolFailure, toolOk, type ShannonToolDefinition, type ToolFailureKind, type ToolResult, type ToolSurface } from './shannonTools.js';
+import { withToolEvidence } from './toolEvidence.js';
 
 /**
  * The folder tools (`folder.*` in `shannonTools.ts`): her own folder on the owner's PC or Mac, through the v2 operations
@@ -126,8 +127,13 @@ function runResult(outcome: HostRunOutcome, operation: HostOperation, target: { 
   const writes = operation !== 'list' && operation !== 'read' && operation !== 'search';
   // A conversation's operation that reached the queue is recorded when it closes (`hostFolderOperations.ts`).
   const queued = outcome.kind === 'done' || outcome.kind === 'failed' || outcome.kind === 'refused' || outcome.kind === 'timeout';
+  // HostRunOutcome already owns the acknowledgement; its port exposes no operation ID, so none is invented here.
+  const evidence = (result: ToolResult) => writes ? withToolEvidence(result, {
+    outcome: outcome.kind === 'done' ? 'applied' : outcome.kind === 'timeout' && outcome.handedOut ? 'unknown' : 'failed',
+    action: operation, target: { kind: 'folder', id: `${target.host}:${target.path}` }, labels: [target.path, ...(target.to ? [target.to] : [])],
+  }) : result;
   const failed = (result: ToolResult, reasonCode: string): ToolRun => ({
-    result, record: { summary: `${place}で「${target.path || 'いちばん上'}」を扱おうとしましたが、できませんでした。`, outcome: 'failed', reasonCode },
+    result: evidence(result), record: { summary: `${place}で「${target.path || 'いちばん上'}」を扱おうとしましたが、できませんでした。`, outcome: 'failed', reasonCode },
     ...(queued && context.surface !== 'autonomy' ? { recordedElsewhere: true as const } : {}),
   });
   switch (outcome.kind) {
@@ -161,7 +167,7 @@ function runResult(outcome: HostRunOutcome, operation: HostOperation, target: { 
       : operation === 'move' ? `「${target.path}」を「${target.to}」にした。` : `「${target.path}」をゴミ箱（${trashed}）に移した。ライ氏が戻せる。`;
   }
   return {
-    result: toolOk(text), record: { summary: `${place}で「${target.path || 'いちばん上'}」を扱いました。`, outcome: 'done' },
+    result: evidence(toolOk(text)), record: { summary: `${place}で「${target.path || 'いちばん上'}」を扱いました。`, outcome: 'done' },
     ...(!writes ? { documents: { sourceIds: [
       `shannon-folder://${encodeURIComponent(target.host)}/${createHash('sha256').update(target.path).digest('hex')}`,
     ] } } : {}),

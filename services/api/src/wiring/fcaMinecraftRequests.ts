@@ -4,6 +4,7 @@ import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js
 import type { MinecraftBodyDependencies } from '../surfaces/minecraft/minecraftBody.js';
 import type { MinecraftTaskToolPort } from '../mind/tools/shannonToolRunner.js';
 import { toolOk, toolFailure } from '../mind/tools/shannonTools.js';
+import { withToolEvidence } from '../mind/tools/toolEvidence.js';
 
 /** Existing conversation tools now refer to common tasks. No legacy queue or planner fallback in this mode. */
 export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime: TaskRuntime; conversation: FcaConversationPort;
@@ -34,7 +35,8 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
           if (!result.ok) return result;
           const task = JSON.parse(result.text) as TaskView;
           if (!parts.control.store.bind(task.id, bodies[0]!)) throw new Error('FCA_BODY_BINDING_CONFLICT');
-          return toolOk(`共通タスクとして受け付けた。まだ達成していない。${result.text}`);
+          return withToolEvidence(toolOk(`共通タスクとして受け付けた。まだ達成していない。${result.text}`),
+            { outcome: 'queued', action: 'request', target: { kind: 'minecraft_request', id: task.id }, operationId: task.id });
         });
       }
       // The foreground bridge additionally recognizes sources pending in this exact turn.
@@ -53,8 +55,11 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
       const targets = value.id ? open.filter(task => task.id === value.id)
         : open.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)).slice(0, 1);
       if (!targets.length) return toolFailure('not_found', '指定された進行中のマイクラタスクが見つからない。');
-      for (const task of targets) await parts.stop(task.id, 'owner_minecraft_stop');
-      return toolOk('停止要求を受け付けた。身体操作の停止確認後に停止済みになる。');
+      // Exactly one target is selected above. Stop admission alone cannot certify that physical inputs stopped.
+      const stopped = await parts.stop(targets[0]!.id, 'owner_minecraft_stop');
+      return withToolEvidence(toolOk('停止要求を受け付けた。身体操作の停止確認後に停止済みになる。'),
+        { outcome: stopped.some(task => task.id === targets[0]!.id && task.phase === 'stopped') ? 'applied' : 'queued', action: 'cancel',
+          target: { kind: 'minecraft_request', id: targets[0]!.id }, operationId: targets[0]!.id });
     } },
     async intent(input) {
       const { intent, scopeKey } = input;

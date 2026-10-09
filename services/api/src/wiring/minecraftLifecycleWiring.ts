@@ -10,6 +10,7 @@ import { MinecraftLifecycleStore } from '../surfaces/minecraft/store/minecraftLi
 import { actionPermit, currentActionExecution } from '../infra/context/actionExecution.js';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { toolFailure, toolOk } from '../mind/tools/shannonTools.js';
+import { withToolEvidence } from '../mind/tools/toolEvidence.js';
 import type { MinecraftLifecycleToolPort } from '../mind/tools/shannonMinecraftLifecycleTools.js';
 import type { ShannonAutonomyService } from '../mind/action/ownTime/autonomyService.js';
 
@@ -77,8 +78,10 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
       try {
         const receipt = await service.execute({ id, serverId: requested, action: operation as MinecraftLifecycleAction, authority }, signal);
         active.stepOutcome = priorUnknown ? 'unknown' : 'acknowledged';
-        const result = receipt.outcome === 'completed' ? toolOk(JSON.stringify(receipt))
-          : toolFailure('refused', JSON.stringify(receipt), { retryable: false });
+        const result = withToolEvidence(receipt.outcome === 'completed' ? toolOk(JSON.stringify(receipt))
+          : toolFailure('refused', JSON.stringify(receipt), { retryable: false }),
+          { outcome: receipt.outcome === 'completed' ? 'applied' : 'failed', action: receipt.action,
+            target: { kind: 'minecraft_server', id: receipt.serverId }, operationId: receipt.id, receiptId: receipt.id });
         return { result, acknowledged: true, record: { summary: 'マイクラ管理操作の結果を確認しました。', outcome: result.ok ? 'done' : 'failed', reasonCode: receipt.code } };
       } catch (error) {
         const code = error instanceof Error ? error.message : '';

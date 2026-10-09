@@ -63,7 +63,9 @@ describe('configured Minecraft lifecycle through real registry, autonomy gate an
       expect(command.authority).toMatchObject({ origin, executionId: a.execution.lease.id, lease: a.execution.lease });
       expect(f.configured.service.authorize(f.principal, command.id)).toBe(true);
       expect(f.poll({ receipts: [f.receipt(command)] }).acknowledged).toEqual([command.id]);
-      expect((await result).ok).toBe(true); expect(a.execution.stepOutcome).toBe('acknowledged');
+      expect(await result).toMatchObject({ ok: true, evidence: { outcome: 'applied', action: command.action,
+        target: { kind: 'minecraft_server', id: command.serverId }, operationId: command.id, receiptId: command.id } });
+      expect(a.execution.stepOutcome).toBe('acknowledged');
     }
     expect(f.configured.service.safe(a.execution.lease.id)).toBe(true);
   });

@@ -52,6 +52,7 @@ describe('Minecraft requests enter the canonical common task tree', () => {
       const result = await f.execute('minecraft.request', { goal: 'Find stone' });
       expect(result.ok).toBe(true);
       const tasks = f.runtime.list('owner').filter(task => f.bodyStore.body(task.id)); expect(tasks).toHaveLength(1); child = tasks[0]!.id;
+      expect(result.evidence).toEqual({ outcome: 'queued', action: 'request', target: { kind: 'minecraft_request', id: child }, operationId: child });
       expect(f.bodyStore.body(child)).toBe('minecraft:world'); expect(f.runtime.readyTasks('owner')).toEqual([]);
       expect((await f.execute('minecraft.status', {})).text).toContain(child);
       turn.commit(f.conversations.appendTurn('owner', f.conversations.threadId('owner'), 'Find stone', 'Accepted', at).id);
@@ -94,7 +95,8 @@ describe('Minecraft requests enter the canonical common task tree', () => {
       await f.execute('minecraft.request', { goal: 'Find stone' });
       const task = f.runtime.get('owner', String(f.db.prepare('SELECT task_id FROM fca_body_bindings').get()!.task_id))!;
       expect((await f.execute('minecraft.status', {})).text).toContain(task.id);
-      expect((await f.execute('minecraft.cancel', { id: task.id })).ok).toBe(true);
+      expect(await f.execute('minecraft.cancel', { id: task.id })).toMatchObject({ ok: true, evidence: { outcome: 'applied', action: 'cancel',
+        target: { kind: 'minecraft_request', id: task.id }, operationId: task.id } });
       expect(f.runtime.get('owner', task.id)?.phase).toBe('stopped'); turn.abort();
     });
   });
