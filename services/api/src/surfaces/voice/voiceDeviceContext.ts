@@ -27,6 +27,7 @@ export function validatedVoiceDeviceContext(value: unknown, nowIso: string): Voi
   if (utterance !== undefined && (!objectBody(utterance) || !validBoundedString(utterance.id, 120)
     || !validBoundedString(utterance.text, 8_000)
     || (utterance.source !== undefined && !['speech', 'typed', 'camera'].includes(String(utterance.source)))
+    || (utterance.historyReceipt !== undefined && utterance.historyReceipt !== 'utterance-id')
     || (utterance.rawText !== undefined && !validBoundedString(utterance.rawText, 12_000)))) return false;
   const guestCall = validatedGuestCallContext(objectBody(utterance) ? utterance.callContext : undefined);
   if (guestCall === false) return false;
@@ -34,6 +35,7 @@ export function validatedVoiceDeviceContext(value: unknown, nowIso: string): Voi
     id: utterance.id, text: utterance.text,
     ...(utterance.source !== undefined ? { source: utterance.source } : {}),
     ...(utterance.rawText !== undefined ? { rawText: utterance.rawText } : {}),
+    ...(utterance.historyReceipt === 'utterance-id' ? { historyReceipt: 'utterance-id' as const } : {}),
   } as UserUtterance;
   if (value.companionPresent !== undefined && typeof value.companionPresent !== 'boolean') return false;
   if (objectBody(utterance) && utterance.companionPresent !== undefined && typeof utterance.companionPresent !== 'boolean') return false;

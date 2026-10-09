@@ -1,3 +1,4 @@
+import { MEMORY_TOOLS } from './memoryToolDefinitions.js';
 import { TASK_TOOLS } from './taskToolDefinitions.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import { SELF_REWRITE_DOING, SELF_REWRITE_SUMMARIES } from './selfRewriteToolDefinitions.js';
@@ -61,7 +62,7 @@ export interface ShannonToolDefinition {
    * the owner's documents in her own time is `owner_documents_read` (ADR-0007, owner decision 2026-10-06). `meta` is never a
    * registry tool: it is `tool_open` of the tool menu (Syzygy ADR-0008 stage 2, `shannonToolMenu.ts`), which runs nothing.
    */
-  domain: 'task_runtime' | 'aether_study' | 'host_folder' | 'minecraft_body' | 'aether_proposal' | 'owner_documents_read' | 'meta' | ReadToolDomain | 'skill_read' | 'vm_workspace';
+  domain: 'memory_read' | 'task_runtime' | 'aether_study' | 'host_folder' | 'minecraft_body' | 'aether_proposal' | 'owner_documents_read' | 'meta' | ReadToolDomain | 'skill_read' | 'vm_workspace';
   effect: 'read' | 'write';
   /** `none`: no model or paid API is called by the tool itself. `model`: it calls one (place search asks a model with web search). */
   cost: 'none' | 'model';
@@ -315,7 +316,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
       name: { type: 'string', description: 'スキルの名前（目次の「- 」のあとの英字の名前）', minLength: 1, maxLength: 40 },
       section: { type: 'string', description: '一部だけ読む時: 手順・補助・参考のどれか。書かなければ全部', enum: ['手順', '補助', '参考'] },
     }, ['name']) }),
-  ...TASK_TOOLS,
+  ...TASK_TOOLS, ...MEMORY_TOOLS,
 ]);
 
 /**
@@ -325,6 +326,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
  * changes with it; `shannonTools.test.ts` holds that every tool has one.
  */
 export const TOOL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
+  'memory.search': '目的や人物、過去の出来事から関連する記憶を探す', 'memory.read': 'IDを指定して記憶の詳細と根拠を読む',
   'task.create': '目的と完了条件を渡して子タスクを作る', 'task.list': 'タスクと子の一覧を確認する', 'task.get': '指定タスクの状態を読む', 'task.send': '別のタスクへ連絡する',
   'web.search': 'ウェブで今の情報を調べる（ニュース・天気・営業時間など）',
   'study.list': '書斎のメモと物語の一覧を見る',
@@ -372,6 +374,7 @@ export const TOOL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
  */
 export type ToolDoing = 'acts' | 'describes';
 export const TOOL_DOING: Readonly<Record<string, ToolDoing>> = Object.freeze({
+  ...Object.fromEntries(MEMORY_TOOLS.map(tool => [tool.name, 'describes' as const])),
   ...Object.fromEntries(TASK_TOOLS.map(tool => [tool.name, tool.effect === 'write' ? 'acts' as const : 'describes' as const])),
   'study.list': 'describes', 'study.search': 'describes', 'study.read': 'describes',
   'study.create': 'acts', 'study.update': 'acts', 'study.rename': 'acts', 'study.move': 'acts', 'study.delete': 'acts', 'study.restore': 'acts',
@@ -417,7 +420,7 @@ export function isReadToolDomain(domain: string): domain is ReadToolDomain {
  * or rejects). It has no tool to ask the owner or to clarify (she asks in her reply) and no tool to speak or send (showing,
  * publishing or sending to anyone is never a tool, `AGENTS.md`), so none is invented here.
  */
-export const ALWAYS_LOADED_TOOL_NAMES: readonly string[] = Object.freeze(['minecraft.cancel', 'aether.propose']);
+export const ALWAYS_LOADED_TOOL_NAMES: readonly string[] = Object.freeze(['minecraft.cancel', 'aether.propose', 'memory.search', 'memory.read']);
 
 /**
  * Legacy provider search entry, used only when no real `web.search` read port is configured.

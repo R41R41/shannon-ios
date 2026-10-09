@@ -1,3 +1,4 @@
+import { createTaskMemory } from '../../memory/taskMemoryPorts.js';
 import { memoryIdentifier, visibleMemoryText, type CompanionStateSnapshot, type CompanionStateStore } from '@shannon/cognition';
 import { MemoryWithholding } from '../../memory/memoryVisibilityPorts.js';
 import type { ConversationStore } from '../../memory/memoryPorts.js';
@@ -35,8 +36,17 @@ export function createFcaSourceGuard(parts: {
       if (!parts.ownerAlone()) return false;
       if (task.scopeKey !== scopeKey) return false;
       if (!sources.length) return true; // Direct owner API tasks have no inherited conversation source.
-      const state = parts.state.snapshot(scopeKey), withholding = new MemoryWithholding(state, parts.conversations, scopeKey);
+      const state = parts.state.snapshot(scopeKey), withholding = new MemoryWithholding(state, parts.conversations, scopeKey, undefined, parts.readSourceVisible);
       for (const source of sources) {
+        if (source.kind === 'memory') {
+          const memory = createTaskMemory({ ...parts, now: () => source.observedAt });
+          const ids = [...new Set(source.recalledMemoryIds)];
+          for (let offset = 0; offset < ids.length; offset += 40) if (memory.read(scopeKey, ids.slice(offset, offset + 40), { kind: 'owner' }).length !== ids.slice(offset, offset + 40).length) return false;
+          if (source.readSourceIds?.some(id => !parts.readSourceVisible?.(scopeKey, id, source.observedAt))
+            || withholding.withholdsReply({ text: [task.title, task.goal, task.completionCriteria, task.summary].join('\n'),
+              observedAt: source.observedAt, recalledMemoryIds: source.recalledMemoryIds })) return false;
+          continue;
+        }
         if (!source.experienceId) { if (source.stepId !== pendingStepId) return false; continue; }
         if (source.readSourceIds?.some(id => !parts.readSourceVisible?.(scopeKey, id, source.observedAt))) return false;
         const experience = parts.conversations.experiencesById?.(scopeKey, [source.experienceId])[0];

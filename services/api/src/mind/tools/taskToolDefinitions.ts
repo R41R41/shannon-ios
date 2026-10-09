@@ -1,7 +1,7 @@
 import type { ShannonToolDefinition, ToolInputProperty } from './shannonTools.js';
 const text = (description: string, maxLength = 2000): ToolInputProperty => ({ type: 'string', description, minLength: 1, maxLength });
 const define = (name: string, description: string, effect: 'read' | 'write', properties: Record<string, ToolInputProperty>, required: string[]): ShannonToolDefinition => ({
-  name, description, effect, domain: 'task_runtime', cost: 'none', audiences: ['owner_alone'], surfaces: ['text'],
+  name, description, effect, domain: 'task_runtime', cost: 'none', audiences: ['owner_alone'], surfaces: ['text', 'voice'],
   input: { type: 'object', properties, required, additionalProperties: false },
 });
 /** Part of the common registry; offered only by a runner with a trusted task context. */

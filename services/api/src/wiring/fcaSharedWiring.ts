@@ -1,0 +1,70 @@
+import { createHash } from 'node:crypto';
+import type { DatabaseSync } from 'node:sqlite';
+import type { CompanionStateStore } from '@shannon/cognition';
+import type { FcaAffectWriter } from '../mind/emotion/emotionPorts.js';
+import type { ConversationStore, MemoryProposals } from '../mind/memory/memoryPorts.js';
+import { createTaskMemory, taskExperienceDraft } from '../mind/memory/taskMemoryPorts.js';
+import { createTaskRecall } from '../mind/recall/taskRecallPorts.js';
+import type { TurnMemoryRecall } from '../mind/recall/turnMemoryRecall.js';
+import type { TaskRuntime, TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
+import type { FcaSourceGuard } from '../mind/action/fca/fcaConversationPorts.js';
+import { SQLiteFcaEvidenceStore } from '../mind/action/fca/store/fcaEvidenceStore.js';
+
+/** No new state writer: memory is proposed to the existing outbox; emotion uses its existing atomic writer. */
+export function createFcaSharedWiring(parts: {
+  db: DatabaseSync; runtime: TaskRuntime; state: Pick<CompanionStateStore, 'snapshot'>; conversations: ConversationStore;
+  ownerScope: string; ownerAlone(): boolean; visible: FcaSourceGuard;
+  readSourceVisible(scope: string, id: string, at: string): boolean;
+  affect?: FcaAffectWriter; memory?: MemoryProposals | null; enrich?: TurnMemoryRecall | null; now?: () => string;
+}) {
+  const now = parts.now ?? (() => new Date().toISOString());
+  const memory = createTaskMemory({ ...parts, now });
+  const recall = createTaskRecall({ ...parts, memory, enrich: parts.enrich ?? null, now });
+  const evidence = parts.affect ? new SQLiteFcaEvidenceStore({ db: parts.db, state: parts.affect, now,
+    validStep: step => fcaStepIsLive(parts.db, step, now()),
+    sourcesVisible: (scope, id, sources) => { const task = parts.runtime.get(scope, id); return Boolean(task && parts.visible.sources(scope, task, sources)); },
+    observeContext: (step, ids) => {
+      if (!parts.runtime.inheritTaskSources(step, ids)) return false;
+      step.snapshot.sources = parts.runtime.taskSources(step.scopeKey, step.taskId, step.messageIds);
+      return parts.visible.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources);
+    },
+    taskVisible: (scope, id) => parts.visible(scope, id),
+    ...(parts.memory ? { onOutcome: (outcome: import('../mind/action/fca/fcaEvidencePorts.js').FcaDurableOutcome) => {
+      // Pure lookup/open operations are working history, not another independent life episode.
+      if (['tool.open', 'task.list', 'task.get', 'memory.search', 'memory.read'].includes(outcome.action.name)) return;
+      const actualStatus = outcome.actualTaskStatus;
+      // A completion request with unfinished children is a wait, not an achieved goal.
+      if (actualStatus && !['completed', 'failed', 'cancelled'].includes(actualStatus)) return;
+      const status = actualStatus === 'cancelled' ? 'cancelled' : actualStatus === 'failed' ? 'failure'
+        : actualStatus === 'completed' ? 'success' : outcome.result ? outcome.result.ok ? 'success' : 'failure' : 'unobserved';
+      const sourceIds = [...new Set(outcome.sources.flatMap(source => [...source.experienceId ? [source.experienceId] : [], ...source.recalledMemoryIds]))];
+      const readSourceIds = [...new Set(outcome.sources.flatMap(source => source.readSourceIds ?? []))];
+      parts.memory!.propose(taskExperienceDraft({ scopeKey: outcome.scopeKey, taskId: outcome.taskId, outcomeId: outcome.outcomeId,
+        observedAt: outcome.observedAt, status,
+        goal: outcome.goal.slice(0, 1000), context: `task:${outcome.taskId}`, action: JSON.stringify(outcome.action).slice(0, 1000),
+        prediction: outcome.expectation ? JSON.stringify(outcome.expectation).slice(0, 1000) : '', observedResult: outcome.result?.text.slice(0, 4000) ?? '',
+        interpretation: outcome.comparison ? JSON.stringify(outcome.comparison).slice(0, 2000) : '結果はこの操作の観測であり、目的全体の達成や原因の証明ではない。', sourceIds, readSourceIds }));
+    } } : {}),
+  }) : undefined;
+  return { memory, recall, evidence,
+    observeMemory(step: TaskStep, ids: readonly string[]) {
+      if (!parts.ownerAlone()) return false;
+      const observationId = createHash('sha256').update(JSON.stringify([...new Set(ids)].sort())).digest('hex');
+      if (!parts.runtime.observeSources(step, { observationId, recalledMemoryIds: ids })) return false;
+      step.snapshot.sources = parts.runtime.taskSources(step.scopeKey, step.taskId, step.messageIds);
+      return parts.visible.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources);
+    },
+  };
+}
+
+/** Exact native step and original action lease; caller holds the same SQLite transaction for evidence writes. */
+function fcaStepIsLive(db: DatabaseSync, step: TaskStep, at: string): boolean {
+  const row = db.prepare(`SELECT c.step_id,c.lease_json,c.stop_requested,a.scope_key,a.kind,a.origin,a.source_id,a.state,a.holder,a.generation,a.lease_until
+    FROM fca_task_checkpoints c JOIN mind_actions a ON a.id=? WHERE c.task_id=?`).get(step.lease.id, step.taskId);
+  if (!row || row.step_id !== step.id || row.stop_requested !== 0 || row.scope_key !== step.scopeKey
+    || row.kind !== 'agentTask' || row.origin !== 'owner_request' || row.state !== 'running' || row.holder !== step.lease.holder
+    || row.generation !== step.lease.generation || typeof row.lease_until !== 'string' || row.lease_until <= at
+    || typeof row.source_id !== 'string' || !row.source_id.startsWith(`fca:${step.taskId}:`)) return false;
+  try { const lease = JSON.parse(String(row.lease_json)); return lease.id === step.lease.id && lease.holder === step.lease.holder && lease.generation === step.lease.generation; }
+  catch { return false; }
+}

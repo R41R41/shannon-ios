@@ -16,6 +16,8 @@ import { companionIdentityPrompt, joinedIdentityPrompt, type LayeredIdentityProm
 import { parseSnapshot } from './sqliteStoreCodecs.js';
 import type { SQLiteStoreContext } from './sqliteStoreContext.js';
 import { hydrateMemoryBoundaries, safePersonalityAnalysis } from '../../mind/memory/memoryProjectionSafety.js';
+import { SQLiteFcaAffectReceipts } from './sqliteFcaAffect.js';
+import type { FcaAffectEvidence } from '../../mind/emotion/emotionPorts.js';
 
 interface StateRow { snapshot_json: string; }
 interface KnowledgeAnswerRow { answer_id: string; question_key: string; category: string; question: string; answer: string; confidence: number; source: KnowledgeSource; confirmed: number; updated_at: string; }
@@ -23,6 +25,10 @@ interface KnowledgeEvidenceRow { answer_id: string; quote: string; source: Knowl
 interface KnowledgeRevisionRow { revision_id: string; answer_id: string; previous_answer: string | null; next_answer: string; reason: string; observed_at: string; }
 
 export class SQLiteCompanionRepository implements CompanionStateStore, KnowledgeStore, LlmUsageStore {
+  applyFcaAffectEvidence(scope: string, evidence: FcaAffectEvidence, visible: () => boolean) {
+    return new SQLiteFcaAffectReceipts(this.context, this).apply(scope, evidence, visible);
+  }
+  fcaAffectReceipts(scope: string, eventIds?: readonly string[]) { return new SQLiteFcaAffectReceipts(this.context, this).receipts(scope, eventIds); }
   /**
    * `committed` (the mood history, `moodHistory.ts`, and the prediction shadow, `predictionShadow.ts`) is handed every state
    * as it was written, the instant it was reduced at, and the event, once the write is done: after the state's transaction committed, or, when a caller holds a transaction around this

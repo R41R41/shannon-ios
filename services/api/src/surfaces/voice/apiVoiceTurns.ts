@@ -10,6 +10,7 @@ import { dispatchVoiceCallSummary } from './apiVoiceCallSummary.js';
 import { ownerSaysCompanionPresent } from '../../mind/perception/voiceCompanionPresence.js';
 import { bindCompletedFeedback } from '../../mind/action/respond/turnFeedback.js';
 import type { FeedbackPorts } from '../../contracts/feedbackContract.js';
+import type { FcaVoicePort } from '../../mind/action/fca/fcaVoicePorts.js';
 
 export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   stateStore: CompanionStateStore; conversationStore: ConversationStore;
@@ -18,6 +19,7 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   reactions?: { claim(scopeKey: string, reactionId: unknown): { text: string; threadId: string | null; audience: 'owner' | 'others'; saidAt: string } | null };
   looks?: { turnStored(scopeKey: string, threadId: string, said: string, turnId?: string): void };
   feedback?: FeedbackPorts;
+  fcaVoice?: () => FcaVoicePort | null;
 }): ApiResponse | Promise<ApiResponse> | null {
   const summary = dispatchVoiceCallSummary(request, dependencies);
   if (summary) return summary;
@@ -65,13 +67,19 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   }
   const turn = { scopeKey, threadId, capturedState: captured, userMessage, shannonReply,
     messageEmotion, completedAt, timeZone, ...companion, ...(utteranceId ? { utteranceId } : {}) };
-  const experience = dependencies.background.recordTurn(turn);
+  const fca = dependencies.fcaVoice?.(), receipt = utteranceId && request.deviceId ? { scopeKey, threadId,
+    deviceId: request.deviceId, utteranceId, userTranscript: userMessage, companionPresent: 'audience' in companion } : null;
+  const delivery = receipt ? fca?.history(receipt) : null;
+  const stored = delivery?.status === 'duplicate' ? dependencies.conversationStore.experiencesById?.(scopeKey, [delivery.experienceId])[0] : null;
+  const experience = stored ?? dependencies.background.recordTurn(turn);
+  // This is the client's canonical visible-history write, not proof that the whole generated reply was heard.
+  if (receipt && delivery?.status === 'ready') fca?.recorded({ ...receipt, experienceId: experience.id });
   // Her message about a look opened in this turn was waiting for the turn to be in the Talk (bodyLook.ts). Only a turn
   // with the owner alone can have a look, so a turn someone else heard is not noted there.
   if (!('audience' in companion)) {
     try { dependencies.looks?.turnStored(scopeKey, threadId, userMessage, utteranceId); } catch { /* the turn is stored either way */ }
   }
-  dependencies.background.schedule(turn, experience.id);
+  if (!stored) dependencies.background.schedule(turn, experience.id);
   // The face goes back as before; its `kind` is sent only to the owner alone (it is stored either way).
   const shownEmotion = 'audience' in companion ? messageEmotionForOthers(messageEmotion) : messageEmotion;
   const feedback = 'audience' in companion ? null : bindCompletedFeedback(dependencies.feedback,scopeKey,typeof request.body.feedbackRecordId==='string'?request.body.feedbackRecordId:undefined,threadId,experience.id,shannonReply);

@@ -12,6 +12,8 @@ public struct ShannonRealtimeVoiceTurnRequestDTO: Codable, Equatable, Sendable {
     public var companionPresent: Bool? = nil
     public var reactionId: String? = nil
     public var feedbackRecordId: String? = nil
+    /// Stable cascade utterance identity; a visible-history receipt, not a playback acknowledgement.
+    public var utteranceId: String? = nil
 }
 
 public struct ShannonVoiceTurnEmotionDTO: Codable, Equatable, Sendable {
@@ -41,4 +43,9 @@ public struct ShannonRealtimeVoiceTurnResponseDTO: Codable, Equatable, Sendable 
     public let state: CompanionStateDTO
     public var turnId: String?
     public var feedback: ShannonFeedbackDTO? = nil
+}
+
+/// Scoped to one history write, including its awaited API call; concurrent voice turns cannot overwrite it.
+enum ShannonVoiceTurnCorrelation {
+    @TaskLocal static var utteranceID: String?
 }

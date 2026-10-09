@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { TaskConversationSource, TaskRecord, TaskSource } from '../taskRuntimePorts.js';
+import type { TaskConversationSource, TaskRecord, TaskSource, TaskSourceObservation, TaskStep } from '../taskRuntimePorts.js';
 
 /** Conversation lineage only; canonical memory content is never copied here. */
 export class TaskSourceStore {
@@ -13,6 +13,22 @@ export class TaskSourceStore {
     if (!db.prepare('PRAGMA table_info(fca_task_sources)').all().some(row => row.name === 'read_ids_json')) {
       db.exec("ALTER TABLE fca_task_sources ADD COLUMN read_ids_json TEXT NOT NULL DEFAULT '[]'");
     }
+    if (!db.prepare('PRAGMA table_info(fca_task_sources)').all().some(row => row.name === 'source_kind')) {
+      db.exec("ALTER TABLE fca_task_sources ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'conversation'");
+    }
+  }
+  observe(step: TaskStep, observation: TaskSourceObservation, at: string): boolean {
+    const validIds = (ids: readonly string[]) => Array.isArray(ids) && ids.length <= 5000 && ids.every(id => typeof id === 'string' && /^[^\s\p{Cc}]{1,240}$/u.test(id));
+    if (!/^[^\s\p{Cc}]{1,160}$/u.test(observation.observationId) || !validIds(observation.recalledMemoryIds)
+      || !validIds(observation.readSourceIds ?? [])) throw new Error('FCA_SOURCE');
+    const id = `memory:${step.id}:${observation.observationId}`;
+    const recalled = JSON.stringify([...new Set(observation.recalledMemoryIds)].sort()), reads = JSON.stringify([...new Set(observation.readSourceIds ?? [])].sort());
+    const prior = this.db.prepare('SELECT * FROM fca_task_sources WHERE step_id=?').get(id);
+    if (prior) return prior.scope_key === step.scopeKey && prior.recalled_ids_json === recalled && prior.read_ids_json === reads;
+    this.db.prepare("INSERT INTO fca_task_sources(step_id,scope_key,thread_id,observed_at,recalled_ids_json,read_ids_json,state,source_kind) VALUES(?,?,'',?,?,?,'bound','memory')")
+      .run(id, step.scopeKey, at, recalled, reads);
+    this.db.prepare('INSERT INTO fca_task_source_links(task_id,step_id) VALUES(?,?)').run(step.taskId, id);
+    return true;
   }
   begin(task: TaskRecord, stepId: string, threadId: string, at: string): void {
     this.db.prepare('INSERT INTO fca_task_sources(step_id,scope_key,thread_id,observed_at) VALUES(?,?,?,?)')
@@ -30,7 +46,8 @@ export class TaskSourceStore {
           AND m.message_id=l.message_id AND ((?!='conversation' AND m.consumed_by IS NOT NULL)
           OR m.message_id IN (SELECT value FROM json_each(?))))))) ORDER BY s.observed_at,s.step_id`)
       .all(task.scopeKey, task.id, task.kind, activeStepId, task.kind, messageIds === undefined ? 0 : 1, task.kind, JSON.stringify(messageIds ?? []));
-    return rows.map(row => ({ stepId: String(row.step_id), threadId: String(row.thread_id), experienceId: row.experience_id as string | null,
+    return rows.map(row => ({ ...(row.source_kind === 'memory' ? { kind: 'memory' as const, threadId: null, experienceId: null }
+      : { threadId: String(row.thread_id), experienceId: row.experience_id as string | null }), stepId: String(row.step_id),
       observedAt: String(row.observed_at), recalledMemoryIds: JSON.parse(String(row.recalled_ids_json)) as string[],
       ...(row.read_ids_json !== '[]' ? { readSourceIds: JSON.parse(String(row.read_ids_json)) as string[] } : {}) }));
   }

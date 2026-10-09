@@ -13,13 +13,13 @@ export const MEMORY_OP_KINDS = Object.freeze([
   'fact.upsert', 'promise.capture', 'intent.capture', 'turn_capture', 'impression.observe', 'impression.merge',
   'person.fact', 'person.promise', 'person.topic', 'person.summary', 'person.link',
   'knowledge.create', 'knowledge.update', 'knowledge.retire', 'replay_summary.update', 'relationship.upsert', 'interest.change',
-  'self.interest.propose', 'self.interest.night', 'self.interest.owner',
+  'self.interest.propose', 'self.interest.night', 'self.interest.owner', 'task.experience',
 ] as const);
 export type MemoryOpKind = typeof MEMORY_OP_KINDS[number];
 
 /** Who proposed it: a turn's refinement, sleep, her impressions, people memory, a platform, knowledge, the replay summary, the owner. */
 export const MEMORY_OP_ORIGINS = Object.freeze([
-  'turn', 'sleep', 'impressions', 'people', 'platform', 'knowledge', 'replay_summary', 'owner',
+  'turn', 'sleep', 'impressions', 'people', 'platform', 'knowledge', 'replay_summary', 'owner', 'task',
 ] as const);
 export type MemoryOpOrigin = typeof MEMORY_OP_ORIGINS[number];
 
@@ -203,6 +203,9 @@ const observation = record({
 const candidate = record({ kind: word(40), pattern: text(200), keyTerms: list(text(80), 8), feeling: text(200), feelingTag: text(40) });
 
 const PAYLOADS: Readonly<Record<MemoryOpKind, Codec>> = Object.freeze({
+  'task.experience': record({ record: record({ scopeKey: id, taskId: id, outcomeId: id, observedAt: time,
+    status: oneOf(['success', 'failure', 'cancelled', 'unobserved']), goal: text(1000), context: text(2000), action: text(1000),
+    prediction: text(1000), observedResult: text(4000), interpretation: text(2000), sourceIds: list(id, 5000), readSourceIds: optional(list(id, 5000)) }) }),
   'fact.upsert': record({ fact: statementItem, source: learningSource }),
   'relationship.upsert': record({ relationship: statementItem, source: learningSource }),
   'interest.change': record({ interest: text(160), source: optional(learningSource), provenance: optional(oneOf(['owner_explicit'])) }),
@@ -306,8 +309,8 @@ export const memoryOpCodec = Object.freeze({
       ownerOnly(draft.kind, draft.origin, draft.payload);
       const payload = PAYLOADS[draft.kind](draft.payload, 'encode', 'payload');
       const payloadJson = JSON.stringify(payload);
-      if (payloadJson.length > MEMORY_OP_LIMITS.payloadCharacters) fail('too_long', 'payload');
-      const episodes = list(id, MEMORY_OP_LIMITS.episodes)([...new Set(draft.episodeIds ?? [])], 'encode', 'episodeIds');
+      if (payloadJson.length > (draft.kind === 'task.experience' ? 1_500_000 : MEMORY_OP_LIMITS.payloadCharacters)) fail('too_long', 'payload');
+      const episodes = list(id, draft.kind === 'task.experience' ? 5000 : MEMORY_OP_LIMITS.episodes)([...new Set(draft.episodeIds ?? [])], 'encode', 'episodeIds');
       const label = draft.disclosure ? disclosure(draft.disclosure, 'encode', 'disclosure') : null;
       const base = draft.baseRevision ?? null;
       if (base !== null && (typeof base !== 'string' || base.length > 120)) fail('malformed', 'baseRevision');
@@ -325,7 +328,7 @@ export const memoryOpCodec = Object.freeze({
       ownerOnly(row.kind, row.origin, raw);
       reading = { ownerWords: ownerWordsOf(row.origin, raw) };
       const payload = PAYLOADS[row.kind as MemoryOpKind](raw, 'decode', 'payload') as Record<string, unknown>;
-      const episodes = list(id, MEMORY_OP_LIMITS.episodes)(parse(row.episodeIdsJson, 'episodeIds'), 'decode', 'episodeIds') as string[];
+      const episodes = list(id, row.kind === 'task.experience' ? 5000 : MEMORY_OP_LIMITS.episodes)(parse(row.episodeIdsJson, 'episodeIds'), 'decode', 'episodeIds') as string[];
       const label = row.disclosureJson === null ? null : disclosure(parse(row.disclosureJson, 'disclosure'), 'decode', 'disclosure') as MemoryDisclosure;
       return Object.freeze({ seq: row.seq, opId: row.opId, scopeKey: row.scopeKey, kind: row.kind as MemoryOpKind, origin: row.origin as MemoryOpOrigin,
         subjectKey: row.subjectKey, baseRevision: row.baseRevision, payload, episodeIds: Object.freeze(episodes), disclosure: label, attempts: row.attempts });

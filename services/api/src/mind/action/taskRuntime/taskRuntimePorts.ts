@@ -1,3 +1,5 @@
+import type { TaskConversationDeliveryRuntime } from './taskConversationDeliveryPorts.js';
+export type { TaskConversationDelivery, TaskConversationDeliveryInput, TaskConversationDeliveryStage } from './taskConversationDeliveryPorts.js';
 import type { ActionLease } from '@shannon/mind';
 import type { TaskHistoryCommit, TaskHistoryWindow } from './taskHistoryPorts.js';
 export type { TaskHistoryCommit, TaskHistoryPublicRound, TaskHistoryRound, TaskHistorySummary, TaskHistoryWindow } from './taskHistoryPorts.js';
@@ -23,9 +25,10 @@ export interface TaskConversationSource {
   experienceId: string; threadId: string; observedAt: string; recalledMemoryIds: readonly string[];
   readSourceIds?: readonly string[];
 }
-export interface TaskSource extends Omit<TaskConversationSource, 'experienceId'> {
-  stepId: string; experienceId: string | null;
-}
+export type TaskSource = (Omit<TaskConversationSource, 'experienceId'> & {
+  kind?: 'conversation'; stepId: string; experienceId: string | null;
+}) | { kind: 'memory'; stepId: string; experienceId: null; threadId: null; observedAt: string; recalledMemoryIds: readonly string[]; readSourceIds?: readonly string[] };
+export interface TaskSourceObservation { observationId: string; recalledMemoryIds: readonly string[]; readSourceIds?: readonly string[] }
 export interface TaskSnapshot {
   task: TaskView; messages: TaskMessage[]; sources: TaskSource[]; history: unknown[]; checkpoint: unknown | null; revision: number;
 }
@@ -60,7 +63,7 @@ export interface TaskRuntimeOptions {
   conversationLeaseValid?(scopeKey: string, lease: ActionLease, at: string): boolean;
   now?: () => string;
 }
-export interface TaskRuntime {
+export interface TaskRuntime extends TaskConversationDeliveryRuntime {
   ensureRoot(scopeKey: string): TaskView;
   createChild(scopeKey: string, parentId: string, spec: TaskSpec, requestId: string): TaskView;
   get(scopeKey: string, taskId: string): TaskView | null;
@@ -74,6 +77,7 @@ export interface TaskRuntime {
   taskSources(scopeKey: string, taskId: string, messageIds?: readonly string[]): TaskSource[];
   /** The running native segment observed these visible task projections; their lineage must follow its history and children. */
   inheritTaskSources(step: TaskStep, sourceTaskIds: readonly string[]): boolean;
+  observeSources(step: TaskStep, observation: TaskSourceObservation): boolean;
   send(scopeKey: string, sourceTaskId: string, targetId: string, text: string, messageId: string):
     { accepted: true; duplicate: boolean; task: TaskView };
   snapshot(scopeKey: string, taskId: string): TaskSnapshot | null;

@@ -14,6 +14,8 @@ const item = { id: 'pf-1', kind: 'fact', personId: 'p-1', text: 'ミナさんは
 const draft = { title: '確認の手順', bodyMarkdown: '## 状況\n手順', status: 'hypothesis', applicability: '作業の前', sourceExperienceIds: ['turn-1'] };
 
 const PAYLOADS: Record<MemoryOpKind, Record<string, unknown>> = {
+  'task.experience': { record: { scopeKey: 'owner', taskId: 'task-1', outcomeId: 'outcome-1', observedAt: AT, status: 'success',
+    goal: '調査する', context: '', action: '検索した', prediction: '', observedResult: '見つかった', interpretation: '', sourceIds: [] } },
   'fact.upsert': { fact, source: 'conversation' },
   'relationship.upsert': { relationship: { ...fact, id: 'relationship-1' }, source: 'sleep' },
   'interest.change': { interest: '星の話', source: 'conversation' },
@@ -50,8 +52,8 @@ const roundTrip = (draftOp: MemoryOpDraft) => {
 };
 
 describe('the memory outbox codec', () => {
-  it('has the twenty closed kinds, and round-trips each with its closed fields', () => {
-    expect(MEMORY_OP_KINDS).toHaveLength(20);
+  it('has the twenty-one closed kinds, and round-trips each with its closed fields', () => {
+    expect(MEMORY_OP_KINDS).toHaveLength(21);
     for (const kind of MEMORY_OP_KINDS) {
       const decoded = roundTrip(op(kind));
       expect(decoded.ok, kind).toBe(true);

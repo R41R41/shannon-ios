@@ -63,6 +63,8 @@ export interface ToolExecutionContext extends ToolCallContext {
   acknowledgementOwner?: 'fca';
   /** Trusted caller rechecks live source/query rights after an awaited action permit. */
   beforeExecution?(): void;
+  /** Server-only provenance sink for a background FCA memory read. */
+  observeMemory?(ids: readonly string[]): boolean;
   /**
    * In a conversation: the check against what the owner asked to keep secret or to forget (`conversationSecrets.ts`).
    * A write that repeats it is refused; `null` means his memory could not be read just now, and that write is refused

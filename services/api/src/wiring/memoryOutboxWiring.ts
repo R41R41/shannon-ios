@@ -1,3 +1,4 @@
+import { fcaReadSourceRetained } from './fcaReadSources.js';
 import { mindSwitches, type SwitchValues } from '@shannon/mind';
 import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
 import { MemoryCommands, MemoryWriter, type MemoryProposals } from '../mind/memory/memoryWriter.js';
@@ -27,6 +28,7 @@ export function memoryOutboxOn(environment: SwitchValues): boolean {
 /** The writer's targets: every memory write of an op on the one connection of `store`, so that its lock covers them. */
 export function memoryTargetsOf(store: SQLiteShannonStore, parts: {
   now: () => string;
+  taskSourceVisible?: MemoryTargets['taskSourceVisible'];
   replaySummaries?: ConversationReplaySummarizer | null;
   impressions?: ImpressionUpdater | null;
   /** F6: luna's contradiction and duplicate step (null: the rule), and tier 4's chooser (null: tiers 1 to 3 only). */
@@ -40,6 +42,7 @@ export function memoryTargetsOf(store: SQLiteShannonStore, parts: {
   return {
     personFacts: facts?.parts.temporal ? { store: facts, judge: parts.judge ?? null, callsToday: at => outbox?.callsSince('person.fact', dayStart(at)) ?? 0 } : null,
     identity: facts?.parts.identity ? { store: facts, chooser: parts.chooser ?? null } : null,
+    taskExperiences: store.taskExperiences(), taskSourceVisible: parts.taskSourceVisible ?? ((scope, id, at) => fcaReadSourceRetained(store, store, scope, id, at)),
     state: store, conversations: store, knowledge: store, impressions: store.impressionStore(), people: store.peopleMemoryOnConnection(),
     selfInterests: store.selfInterests(),
     refreshProfile: scopeKey => store.refreshProfile(scopeKey),

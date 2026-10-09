@@ -126,10 +126,16 @@ export const SHANNON_SKILLS_CAPABILITY = Object.freeze({
   text: 'スキル: よくすることの手順を、眠っている間に自分で手順書（スキル）にまとめる。目次から要る時に道具で開いて使い、うまくいかないものはやめる。写しはAetherのシャノン用フォルダにあり、ライ氏が直したらその版を使う。ライ氏に内緒と言われたことはスキルに書かない。',
 } as const satisfies ShannonCapability);
 
-/** Only the opt-in common FCA runner receives this line; ordinary conversation is not migrated yet. */
+/** Only admitted common FCA tasks and a foreground turn with task tools receive this line. */
 export const SHANNON_FCA_TASK_CAPABILITY = Object.freeze({
   id: 'fca_tasks', audience: 'owner',
   text: 'タスクの協力: この実行経路では、まとまった仕事を子タスクへ任せて並行して進め、タスクの一覧・状態・結果を確認し、IDで連絡できます。渡された道具でできる仕事だけを扱い、依頼の受付と完了を区別します。',
+} as const satisfies ShannonCapability);
+
+/** Offered only when the common FCA shared-context and memory paths are connected. */
+export const SHANNON_FCA_SHARED_CAPABILITY = Object.freeze({
+  id: 'fca_shared_context', audience: 'owner',
+  text: 'タスクの感情と記憶: 各タスクは共通の気持ちを参照し、観測した出来事の意味をそこへ反映します。目的に合う記憶を想起し、記憶の検索・詳細取得もできます。行動の予測は必要な時だけ立て、観測できた結果と比べます。操作の成功と目的の達成を分け、経験は既存の記憶へ残します。',
 } as const satisfies ShannonCapability);
 
 /** Capabilities the API may add to the description while it has them. */
@@ -152,7 +158,7 @@ export function withStage5Capabilities(prompt: string, available: ShannonStage5C
   return added ? `${prompt.slice(0, at + anchor.length)}${added}${prompt.slice(at + anchor.length)}` : prompt;
 }
 
-export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_FCA_TASK_CAPABILITY, SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_READ_TOOLS_CAPABILITY, SHANNON_SKILLS_CAPABILITY, ...SHANNON_STAGE5_CAPABILITIES] as const);
+export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_SHARED_CAPABILITY, SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_READ_TOOLS_CAPABILITY, SHANNON_SKILLS_CAPABILITY, ...SHANNON_STAGE5_CAPABILITIES] as const);
 
 /** The owner's description with the skills' line, after her study's line; any other prompt unchanged. */
 export function withSkillsCapability(prompt: string): string {

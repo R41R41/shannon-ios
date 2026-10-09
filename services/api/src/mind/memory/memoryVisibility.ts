@@ -44,14 +44,36 @@ export class MemoryWithholding {
   private knowledgeDocuments?: ReadonlyMap<string, ShannonKnowledgeDocument>;
   private readonly experiences = new Map<string, ShannonExperience | null>();
   private readonly summaryDecisions = new Map<string, boolean>();
+  private readonly recalledDecisions = new Map<string, boolean>();
+  private readonly readDecisions = new Map<string, boolean>();
+  private externalReadsPossible = true;
+  private queryDepth = 0;
+  /** Memoize overlapping provenance only within one synchronous read; the next use rechecks native availability. */
+  private query<T>(work: () => T): T {
+    if (this.queryDepth === 0) {
+      this.recalledDecisions.clear(); this.readDecisions.clear();
+      this.externalReadsPossible = this.store?.hasReadSourceProvenance?.(this.scopeKey) !== false;
+    }
+    this.queryDepth += 1;
+    try { return work(); } finally { this.queryDepth -= 1; }
+  }
+
+
+  /** Related synchronous checks share one graph walk; a subsequent read starts fresh. */
+  withReadSnapshot<T>(work: () => T, preloaded: readonly ShannonExperience[] = []): T {
+    for (const row of preloaded) this.experiences.set(row.id, row);
+    return this.query(work);
+  }
 
   constructor(
     private readonly state: CompanionStateSnapshot,
     private readonly store: ConversationStore | null,
     private readonly scopeKey: string,
     private candidates?: readonly ShannonExperience[],
+    private readonly readSourceVisible = store?.readSourceVisible?.bind(store),
   ) {
     this.rules = memoryWithholdingRules(state);
+    for (const candidate of candidates ?? []) this.experiences.set(candidate.id, candidate);
   }
 
   /** True when no forgotten, rejected or corrected item exists: nothing can be withheld. */
@@ -65,11 +87,20 @@ export class MemoryWithholding {
   }
 
   /** A recalled ID that is itself withheld: the reply was generated from the withheld content. */
-  private recalledWithheld(id: string, observedAt: string): boolean {
+  private recalledWithheld(id: string, observedAt: string, seen = new Set<string>()): boolean {
+    if (seen.has(id) || seen.size >= 5000) return true;
+    const key = JSON.stringify([id, observedAt]), known = this.recalledDecisions.get(key);
+    if (known !== undefined) return known;
+    seen.add(id);
+    try {
+      const result = this.computeRecalled(id, observedAt, seen); this.recalledDecisions.set(key, result); return result;
+    } finally { seen.delete(id); }
+  }
+  private computeRecalled(id: string, observedAt: string, seen: Set<string>): boolean {
     if (id.startsWith('thread:')) return false;
     if (id.startsWith('knowledge:')) {
       const document = this.knowledge().get(id.slice('knowledge:'.length));
-      return Boolean(document?.sourceExperienceIds.some(source => this.recalledWithheld(source, observedAt)));
+      return Boolean(document?.sourceExperienceIds.some(source => this.recalledWithheld(source, observedAt, seen)));
     }
     const blocked = (memoryId: string | undefined) => {
       const control = memoryId ? memoryControlFor(this.state, memoryId) : undefined;
@@ -77,13 +108,38 @@ export class MemoryWithholding {
       // A corrected item is the corrected text after its boundary; only earlier turns saw the original.
       return control.status !== 'active' || Boolean(control.overrideText && observedAt <= (control.contextInvalidatedAt ?? control.updatedAt));
     };
-    if (blocked(id) || this.hidden().some(item => item.id === id)) return true;
+    if (blocked(id)) return true;
+    const control = memoryControlFor(this.state, id);
+    if (control?.status === 'active' && control.overrideText && observedAt > (control.contextInvalidatedAt ?? control.updatedAt)) return false;
+    if (this.hidden().some(item => item.id === id)) return true;
+    const experience = this.experience(id);
+    if (experience?.readSourceIds?.some(source => !this.readSourceVisible?.(this.scopeKey, source, experience.observedAt))) return true;
+    if (experience?.recalledMemoryIds?.some(source => this.recalledWithheld(source, experience.observedAt, seen))) return true;
     const derived = this.state.userFacts.find(item => item.id === id) ?? this.state.relationships.find(item => item.id === id)
       ?? this.state.prospectiveMemories.find(item => item.id === id);
     return Boolean(derived && (blocked(derived.sourceExperienceId)
       || (derived.evidence && !isMemoryEvidenceVisible(this.state, derived.evidence))));
   }
 
+  /** Source availability is independent of memory-control rules and must survive derived summaries. */
+  private unavailableRead(id: string, seen = new Set<string>()): boolean {
+    if (!this.externalReadsPossible) return false;
+    if (seen.has(id) || seen.size >= 5000) return true;
+    const known = this.readDecisions.get(id); if (known !== undefined) return known;
+    seen.add(id);
+    try {
+      const experience = id.startsWith('knowledge:') ? null : this.experience(id);
+      const result = id.startsWith('knowledge:')
+        ? Boolean(this.knowledge().get(id.slice(10))?.sourceExperienceIds.some(ref => this.unavailableRead(ref, seen)))
+        : Boolean(experience && ((experience.readSourceIds ?? []).some(ref => !this.readSourceVisible?.(this.scopeKey, ref, experience.observedAt))
+          || (experience.recalledMemoryIds ?? []).some(ref => this.unavailableRead(ref, seen))));
+      this.readDecisions.set(id, result); return result;
+    } finally { seen.delete(id); }
+  }
+  private messageReadUnavailable(message: StoredConversationMessage): boolean {
+    return Boolean((message.sourceExperienceId && this.unavailableRead(message.sourceExperienceId))
+      || message.recalledMemoryIds?.some(id => this.unavailableRead(id)));
+  }
   private knowledge(): ReadonlyMap<string, ShannonKnowledgeDocument> {
     const source = this.store as (ConversationStore & { listShannonKnowledge?: (scopeKey: string, options?: { includeRetired?: boolean }) => readonly ShannonKnowledgeDocument[] }) | null;
     this.knowledgeDocuments ??= new Map((source?.listShannonKnowledge?.(this.scopeKey, { includeRetired: true }) ?? []).map(document => [document.id, document]));
@@ -95,19 +151,27 @@ export class MemoryWithholding {
     return this.experiences.get(id) ?? null;
   }
 
+  private primeMessages(messages: readonly StoredConversationMessage[]): void {
+    const missing = messageExperienceIds(messages).filter(id => !this.experiences.has(id));
+    for (const id of missing) this.experiences.set(id, null);
+    for (const row of experienceRows(this.store, this.scopeKey, missing)) this.experiences.set(row.id, row);
+  }
+
   private recalledFor(reply: WithholdableReply): readonly string[] | undefined {
     return reply.recalledMemoryIds ?? (reply.experienceId ? this.experience(reply.experienceId)?.recalledMemoryIds : undefined);
   }
 
-  withholdsReply(reply: WithholdableReply): boolean {
-    if (this.inactive) return false;
+  withholdsReply(reply: WithholdableReply): boolean { return this.query(() => this.replyWithheld(reply)); }
+  private replyWithheld(reply: WithholdableReply): boolean {
+    if (this.inactive && !this.externalReadsPossible) return false;
     if (this.rules.some(rule => ruleWithholdsText(rule, reply.text, reply.observedAt))) return true;
     return Boolean(this.recalledFor(reply)?.some(id => this.recalledWithheld(id, reply.observedAt)));
   }
 
   /** A stored message that must not be re-fed to a model. The transcript itself stays intact. */
-  withholdsMessage(message: StoredConversationMessage): boolean {
-    if (this.inactive) return false;
+  withholdsMessage(message: StoredConversationMessage): boolean { return this.query(() => this.messageWithheld(message)); }
+  private messageWithheld(message: StoredConversationMessage): boolean {
+    if (this.messageReadUnavailable(message)) return true;
     if (!isMemoryEvidenceVisible(this.state, message.content)) return true;
     if (this.hidden().some(item => message.sourceExperienceId === item.id
       || message.content === item.userMessage || message.content === item.shannonReply)) return true;
@@ -118,8 +182,10 @@ export class MemoryWithholding {
   }
 
   /** An experience summary as a recall, search or embedding candidate. Only its Shannon side is matched by term. */
-  withholdsExperience(experience: { id: string; summary: string; observedAt?: string; recalledMemoryIds?: readonly string[] }): boolean {
-    if (this.inactive) return false;
+  withholdsExperience(experience: { id: string; summary: string; observedAt?: string; recalledMemoryIds?: readonly string[] }): boolean { return this.query(() => this.experienceWithheld(experience)); }
+  private experienceWithheld(experience: { id: string; summary: string; observedAt?: string; recalledMemoryIds?: readonly string[] }): boolean {
+    const full = this.experience(experience.id);
+    if (full?.readSourceIds?.some(source => !this.readSourceVisible?.(this.scopeKey, source, full.observedAt))) return true;
     if (visibleMemoryText(this.state, experience.id, experience.summary) === null) return true;
     const reply = experience.summary.split(' / シャノン: ');
     return this.withholdsReply({
@@ -137,10 +203,14 @@ export class MemoryWithholding {
    * the thread contains a turn that item withholds. The next turn of that
    * thread writes a fresh summary from visible history only.
    */
-  withholdsThreadSummary(threadId: string, text?: string, observedAt?: string): boolean {
-    if (this.inactive) return false;
+  withholdsThreadSummary(threadId: string, text?: string, observedAt?: string): boolean { return this.query(() => this.threadSummaryWithheld(threadId, text, observedAt)); }
+  private threadSummaryWithheld(threadId: string, text?: string, observedAt?: string): boolean {
+    if (this.inactive && !this.externalReadsPossible) return false;
     const lineage = this.store?.threadSummaryLineage?.(this.scopeKey, threadId);
-    if (!lineage) return true;
+    if (!lineage) return !this.inactive;
+    this.primeMessages(lineage.messages);
+    if (lineage.messages.some(message => this.messageReadUnavailable(message))) return true;
+    if (this.inactive) return false;
     const cached = this.summaryDecisions.get(threadId);
     const summaryAt = observedAt ?? lineage.updatedAt ?? '';
     const restated = Boolean(text && this.rules.some(rule => !rule.wide && ruleWithholdsText(rule, text, summaryAt)));
@@ -149,8 +219,8 @@ export class MemoryWithholding {
     const relevant = new Set(this.rules.filter(rule => !started || rule.boundary >= started).map(rule => rule.memoryId));
     const scoped = relevant.size === this.rules.length ? this : relevant.size === 0 ? null : new MemoryWithholding(
       { ...this.state, memoryControls: this.state.memoryControls.filter(control => relevant.has(control.memoryId)) },
-      this.store, this.scopeKey, this.candidates ??= this.store?.experienceCandidates(this.scopeKey));
-    const tainted = Boolean(scoped && lineage.messages.some(message => scoped.withholdsMessage(message)));
+      this.store, this.scopeKey, this.candidates ??= this.store?.experienceCandidates(this.scopeKey), this.readSourceVisible);
+    const tainted = Boolean(scoped && scoped.withReadSnapshot(() => lineage.messages.some(message => scoped.withholdsMessage(message))));
     this.summaryDecisions.set(threadId, tainted);
     return tainted;
   }
@@ -160,17 +230,21 @@ export class MemoryWithholding {
    * turns for every item that stopped being usable after its chain started. The worker then
    * rebuilds it from visible messages only and starts a new chain.
    */
-  withholdsReplaySummary(threadId: string, summary: { summary: string; chainStartedAt: string; updatedAt: string }): boolean {
-    if (this.inactive) return false;
+  withholdsReplaySummary(threadId: string, summary: { summary: string; chainStartedAt: string; updatedAt: string }): boolean { return this.query(() => this.replaySummaryWithheld(threadId, summary)); }
+  private replaySummaryWithheld(threadId: string, summary: { summary: string; chainStartedAt: string; updatedAt: string }): boolean {
+    if (this.inactive && !this.externalReadsPossible) return false;
     const lineage = this.store?.threadSummaryLineage?.(this.scopeKey, threadId);
-    if (!lineage) return true;
+    if (!lineage) return !this.inactive;
+    this.primeMessages(lineage.messages);
+    if (lineage.messages.some(message => this.messageReadUnavailable(message))) return true;
+    if (this.inactive) return false;
     if (this.rules.some(rule => !rule.wide && ruleWithholdsText(rule, summary.summary, summary.updatedAt))) return true;
     const relevant = new Set(this.rules.filter(rule => rule.boundary >= summary.chainStartedAt).map(rule => rule.memoryId));
     if (!relevant.size) return false;
     const scoped = relevant.size === this.rules.length ? this : new MemoryWithholding(
       { ...this.state, memoryControls: this.state.memoryControls.filter(control => relevant.has(control.memoryId)) },
-      this.store, this.scopeKey, this.candidates ??= this.store?.experienceCandidates(this.scopeKey));
-    return lineage.messages.some(message => scoped.withholdsMessage(message));
+      this.store, this.scopeKey, this.candidates ??= this.store?.experienceCandidates(this.scopeKey), this.readSourceVisible);
+    return scoped.withReadSnapshot(() => lineage.messages.some(message => scoped.withholdsMessage(message)));
   }
 
   /** The stored rolling summary of a thread when it may be given to a model. */
@@ -181,8 +255,8 @@ export class MemoryWithholding {
   }
 
   /** Shannon knowledge derived from a withheld turn, or restating a withheld item, is not used. */
-  withholdsKnowledge(document: ShannonKnowledgeDocument): boolean {
-    if (this.inactive) return false;
+  withholdsKnowledge(document: ShannonKnowledgeDocument): boolean { return this.query(() => this.knowledgeWithheld(document)); }
+  private knowledgeWithheld(document: ShannonKnowledgeDocument): boolean {
     if (this.rules.some(rule => !rule.wide && ruleWithholdsText(rule, `${document.title}\n${document.bodyMarkdown}`, document.updatedAt))) return true;
     return document.sourceExperienceIds.some(id => {
       const experience = this.experience(id);
@@ -201,16 +275,33 @@ export function conversationStoreOf(value: unknown): ConversationStore | null {
 /** A stored message that may be replayed, and the form the model receives it in. */
 export interface VisibleMessage { message: StoredConversationMessage; item: ShannonConversationItem }
 
+function messageExperienceIds(messages: readonly StoredConversationMessage[]): string[] {
+  return [...new Set(messages.flatMap(message => [
+    ...(message.sourceExperienceId ? [message.sourceExperienceId] : []), ...message.recalledMemoryIds ?? [],
+  ]))];
+}
+
+function experienceRows(store: ConversationStore | null, scopeKey: string, ids: readonly string[]): ShannonExperience[] {
+  const rows: ShannonExperience[] = [];
+  for (let index = 0; index < ids.length && store?.experiencesById; index += 200) {
+    rows.push(...store.experiencesById(scopeKey, ids.slice(index, index + 200)));
+  }
+  return rows;
+}
+
 function visibleMessages(
   state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string,
-  stored: readonly StoredConversationMessage[], present: MemoryAudience, candidates: readonly ShannonExperience[] = [],
+  stored: readonly StoredConversationMessage[], present: MemoryAudience,
 ): VisibleMessage[] {
+  // Owner-only replay still needs canonical private-source provenance. Share one row batch and graph walk for the window.
   const withholding = new MemoryWithholding(state, store, scopeKey);
+  const requiresRows = !isOwnerOnly(present) || !withholding.inactive || store.hasReadSourceProvenance?.(scopeKey) !== false;
+  const candidates = requiresRows ? experienceRows(store, scopeKey, messageExperienceIds(stored)) : [];
   const gate = new DisclosureGate(present, state, store, scopeKey, candidates);
-  return stored
+  return withholding.withReadSnapshot(() => stored
     .filter(message => gate.allowsMessage(message) && !withholding.withholdsMessage(message))
     // A protected turn is replayed with its marker so she can check before repeating it aloud.
-    .map(message => ({ message, item: { role: message.role, content: message.role === 'user' ? `${gate.markerForMessage(message)}${message.content}` : message.content } }));
+    .map(message => ({ message, item: { role: message.role, content: message.role === 'user' ? `${gate.markerForMessage(message)}${message.content}` : message.content } })), candidates);
 }
 
 /**
@@ -237,13 +328,7 @@ export function visibleReplayMessages(
   present: MemoryAudience, limit: number,
 ): { messages: readonly VisibleMessage[]; reachedLimit: boolean } {
   const stored = store.recentMessages?.(scopeKey, threadID, limit) ?? store.conversationHistory(scopeKey, threadID).slice(-limit);
-  // With others present every message is judged as its turn: load the turns once, not one by one.
-  const turnIds = isOwnerOnly(present) ? [] : [...new Set(stored.flatMap(message => message.sourceExperienceId ?? []))];
-  const candidates: ShannonExperience[] = [];
-  for (let index = 0; index < turnIds.length && store.experiencesById; index += 200) {
-    candidates.push(...store.experiencesById(scopeKey, turnIds.slice(index, index + 200)));
-  }
-  return { messages: visibleMessages(state, store, scopeKey, stored, present, candidates), reachedLimit: stored.length >= limit };
+  return { messages: visibleMessages(state, store, scopeKey, stored, present), reachedLimit: stored.length >= limit };
 }
 
 /**

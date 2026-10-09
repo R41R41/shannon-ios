@@ -24,7 +24,8 @@ extension ShannonAPIClient {
             shannonTranscript: shannonTranscript,
             emotion: emotion,
             companionPresent: companionPresent ? true : nil,
-            feedbackRecordId: companionPresent ? nil : feedbackRecordID
+            feedbackRecordId: companionPresent ? nil : feedbackRecordID,
+            utteranceId: ShannonVoiceTurnCorrelation.utteranceID
         ).linkedToReaction())
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }

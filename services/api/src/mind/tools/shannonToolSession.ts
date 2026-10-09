@@ -69,7 +69,8 @@ export function conversationTools(
   const words = turn.slice(turn.indexOf('\n') + 1);
   // Words about Minecraft count only while her Minecraft body's request tool is offered here (review B2, 2026-10-06); words
   // that name Aether only while her Aether tools are.
-  const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface), offersAether(runner, scopeKey, surface)) : 'text';
+  const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface), offersAether(runner, scopeKey, surface))
+      ?? (runner.offered(surface, 'owner_alone', scopeKey).some(tool => tool.domain === 'task_runtime') ? 'common_fca' : null) : 'text';
   if (!offer) return {};
   // What the client said is not enough: what the server knows of others present vetoes the offer, and she is told so. Only
   // her Aether reading tools stay, held by the gate to 「シャノン用フォルダ」 (owner decision 2026-10-06, Syzygy ADR-0007).
@@ -83,7 +84,7 @@ export function conversationTools(
     || (voice.trust === 'unknown' && ((confirms(words) && lastReplyAsksToConfirm(server, scopeKey, threadId))
       || (answersWithPlace(words) && lastReplyAsks(server, scopeKey, threadId, asksWhichPlace))));
   const definitions = runner.offered(surface, audience, scopeKey)
-    .filter(tool => (writes || tool.effect === 'read') && !options.withoutDomains?.includes(tool.domain) && readOffered(tool, options.reads));
+    .filter(tool => (offer !== 'common_fca' || tool.domain === 'task_runtime' || tool.domain === 'memory_read') && (writes || tool.effect === 'read') && !options.withoutDomains?.includes(tool.domain) && readOffered(tool, options.reads));
   if (!definitions.length) return {};
   const trace = ownerAlone === 'guests' ? undefined : server.turns?.open(scopeKey, threadId, words, offer === 'asked', voice.utteranceId);
   const memory = toolSessionMemory(createHash('sha256').update(`${scopeKey}\n${turn}`).digest('hex'));
@@ -228,10 +229,11 @@ export function toolMenuCandidates(
     if (!runner || ownerAlone === false || !ownToolsEnabled() || !server.audience) return [];
     const threadId = turn.slice(0, Math.max(0, turn.indexOf('\n')));
     const words = turn.slice(turn.indexOf('\n') + 1);
-    const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface), offersAether(runner, scopeKey, surface)) : 'text';
+    const offer = surface === 'voice' ? voiceToolOffer(words, server, scopeKey, threadId, offersMinecraftRequest(runner, scopeKey, surface), offersAether(runner, scopeKey, surface))
+      ?? (runner.offered(surface, 'owner_alone', scopeKey).some(tool => tool.domain === 'task_runtime') ? 'common_fca' : null) : 'text';
     if (!offer) return [];
     const othersPresent = ownerAlone === 'others' || ownerAlone === 'guests' || ownerAlone === 'shared' || server.audience.othersKnown(scopeKey);
-    return runner.offered(surface, othersPresent ? 'others' : 'owner_alone', scopeKey).filter(tool => !options.withoutDomains?.includes(tool.domain) && readOffered(tool, options.reads));
+    return runner.offered(surface, othersPresent ? 'others' : 'owner_alone', scopeKey).filter(tool => (offer !== 'common_fca' || tool.domain === 'task_runtime' || tool.domain === 'memory_read') && !options.withoutDomains?.includes(tool.domain) && readOffered(tool, options.reads));
   } catch { return []; }
 }
 

@@ -99,6 +99,7 @@ import { isExplicitVoyagerUpdateRequest } from '../../integrations/voyager/organ
 import { optionalPlaceDiscoverySkill, placeSkillReply } from '../../integrations/places/placeDiscoverySkill.js';
 import type { ChatResponse } from '../../contracts/contracts.js';
 import { withWorkspace, type MindTurnPorts } from '../../mind/workspace/workspacePorts.js';
+import type { FcaVoicePort } from '../../mind/action/fca/fcaVoicePorts.js';
 import { conversationFcaProvenance, type FcaConversationPort } from '../../mind/action/fca/fcaConversationPorts.js';
 export type { TextTurnInput, TextTurnResult, TextTurnSurface } from '../../mind/action/respond/apiTextTurn.js';
 export interface ShannonApiKernelOptions {
@@ -149,6 +150,7 @@ export interface ShannonApiKernelOptions {
   mind?: MindTurnPorts;
   /** Explicit opt-in; the normal text model/stream remains the foreground conversation executor. */
   fcaConversation?: () => FcaConversationPort | null;
+  fcaVoice?: () => FcaVoicePort | null;
 }
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel; private readonly auxiliaryChatModel: ShannonChatModel;
@@ -180,7 +182,7 @@ export class ShannonApiKernel {
   private readonly minecraftRequests: { promptBlock(scopeKey: string, at: string): string } | null;
   private readonly turnChooser: TurnChooser | null; private readonly toolHints: boolean;
   private readonly readTools: boolean; private readonly turnRouting: TurnRouting | null; private readonly skills: SkillTurnPorts | null; private readonly feedback: FeedbackPorts | null; private readonly stage5Capabilities: ShannonStage5Capabilities | undefined;
-  private readonly mind: MindTurnPorts | null; private readonly fcaConversation: (() => FcaConversationPort | null) | null;
+  private readonly mind: MindTurnPorts | null; private readonly fcaConversation: (() => FcaConversationPort | null) | null; private readonly fcaVoice: (() => FcaVoicePort | null) | null;
   /** What the server knows when it offers her tools: others present, and what her writes must not repeat (`shannonToolSession.ts`). */
   private readonly toolServer: ConversationToolServer;
   constructor(
@@ -218,7 +220,7 @@ export class ShannonApiKernel {
     this.notion = options.notion ?? null;
     this.minecraftRequests = options.minecraftRequests ?? null;
     this.turnChooser = options.turnChooser ?? null; this.turnRouting = options.turnRouting ?? null; this.toolHints = options.toolHints === true; this.feedback = options.feedback ?? null; this.stage5Capabilities = options.stage5Capabilities;
-    this.mind = options.mind ?? null; this.fcaConversation = options.fcaConversation ?? null;
+    this.mind = options.mind ?? null; this.fcaConversation = options.fcaConversation ?? null; this.fcaVoice = options.fcaVoice ?? null;
     this.people = new PeopleMemory(options.peopleMemory ?? new SQLitePeopleMemoryStore(':memory:'), this.stateStore, options.memory ?? null);
     this.autonomy = options.autonomy ?? options.createAutonomy?.(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) }) ?? missingAutonomyComposition();
     this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now); this.ownOutreach = options.ownOutreach ? new OwnOutreach(options.ownOutreach, this.now) : null;
@@ -320,7 +322,7 @@ export class ShannonApiKernel {
     if (liveVoiceResponse) return await liveVoiceResponse;
 
     const turnResponse = dispatchVoiceTurn(request, { stateStore: this.stateStore, chatModel: this.auxiliaryChatModel,
-      conversationStore: this.conversationStore, background: this.background, now: this.now, reactions: this.body.reactions, looks: this.body.turnLooks, ...(this.feedback?{feedback:this.feedback}:{}) });
+      conversationStore: this.conversationStore, background: this.background, now: this.now, ...(this.fcaVoice ? { fcaVoice: this.fcaVoice } : {}), reactions: this.body.reactions, looks: this.body.turnLooks, ...(this.feedback?{feedback:this.feedback}:{}) });
     if (turnResponse) return await turnResponse;
 
     if (request.method === 'POST' && request.path === '/v1/chat') {
@@ -348,8 +350,7 @@ export class ShannonApiKernel {
     }
     return { status: 404, body: { error: 'NOT_FOUND' } };
   }
-  /**
-   * One text turn of the conversation: recall, replay, identity, mood, tools, storing and background work. `POST /v1/chat`
+  /** One text turn of the conversation: recall, replay, identity, mood, tools, storing and background work. `POST /v1/chat`
    * is its first caller; another surface (her Minecraft body, a platform reply) passes its audience policy and a
    * `surface`. Its stages up to the model call are in `apiTextTurn.ts`; the awaits, the look, the call, her reply's feeling
    * and storing are here, in the order they always had.
@@ -483,7 +484,7 @@ export class ShannonApiKernel {
 
   private liveVoiceDependencies() {
     return {
-      chatModel: this.chatModel, auxiliaryChatModel: this.auxiliaryChatModel, voiceDecision: this.voiceDecision,
+      ...(this.fcaVoice ? { fcaVoice: this.fcaVoice } : {}), chatModel: this.chatModel, auxiliaryChatModel: this.auxiliaryChatModel, voiceDecision: this.voiceDecision,
       stateStore: this.stateStore, conversationStore: this.conversationStore,
       knowledgeStore: this.knowledgeStore, dailyMind: this.dailyMind, autonomy: this.autonomy, agentTasks: this.agentTasks,
       aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion, upcoming: this.upcoming,

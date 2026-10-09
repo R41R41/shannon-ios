@@ -157,7 +157,6 @@ if (choiceLedger && !turnRouting?.routing.switches.conversationReward) autonomy.
 const rewardMood = startRewardMood(process.env, { choices: choiceLedger, shadow: persistentStore.predictionShadow(), state: persistentStore }, now);
 // Her folder's operations (docs/host-folder-contract.md): stale ones are closed and results pruned also when no device or tool calls.
 const stopFolderMaintenance = autonomy.folderOperations.startMaintenance();
-// What her tools did in conversations (shannonToolTrace.ts): retention, forgetting and secrets reach stored traces too.
 const stopToolTraceSweep = startToolTraceSweep(persistentStore, now);
 const backgroundDispatcher = new DurableBackgroundDispatcher(persistentStore, persistentStore);
 const voyagerCatalog = createConfiguredVoyagerCatalog(process.env);
@@ -191,8 +190,9 @@ const mind = configuredMind(process.env, { databasePath: configuredDatabasePath(
   notices: { ownerScopeKey: shannonNowOwnerScope(process.env), snapshot: scopeKey => persistentStore.snapshot(scopeKey), tasks: scopeKey => agentTaskStore.list(scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')) } });
 const externalActions=configuredActionRoutes(mind?.actions ?? null,agentTaskStore,minecraft.requests,shannonNowOwnerScope(process.env),now,()=>bodyStore.othersPresent(shannonNowOwnerScope(process.env),now(),BODY_LIMITS.audienceFreshMilliseconds,BODY_LIMITS.audienceEventWindowMilliseconds),async target=>{await fca?.stopActions(target);});
 const aetherContext = process.env.SHANNON_AETHER_CONTEXT_FILE?.trim() ? new FileAetherContextReader(process.env.SHANNON_AETHER_CONTEXT_FILE.trim()) : undefined;
+const memoryRecall = createConfiguredTurnMemoryRecall(persistentStore, process.env, undefined, treeRecall);
 const kernel = createLocalApiKernel(now, {
-  ownOutreach, fcaConversation: () => fca?.conversation ?? null,
+  ownOutreach, fcaConversation: () => fca?.conversation ?? null, fcaVoice: () => fca?.voice ?? null,
   ...(stage5.feedback ? {feedback:stage5.feedback.ports} : {}), ...(stage5.capabilities ? {stage5Capabilities:stage5.capabilities} : {}),
   chatModel,
   auxiliaryChatModel: haiku,
@@ -222,7 +222,7 @@ const kernel = createLocalApiKernel(now, {
   worldSubscriptions: worldStore,
   cognitiveIntents: cognitiveIntentStore,
   conversationOrchestration: conversationOrchestrationStore,
-  memoryRecall: createConfiguredTurnMemoryRecall(persistentStore, process.env, undefined, treeRecall),
+  memoryRecall,
   autonomy,
   // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
   body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), appLook: configuredAppLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: (scopeKey, deviceId) => privateListeningRoute.reachOuts.bodyPresence(scopeKey, deviceId, reachOuts.pending(scopeKey)), reachOutReports: privateListeningRoute.bodyReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env, configuredDatabasePath(), persistentStore, persistentStore.predictionShadow(), predictionLedger ? touchLedger(predictionLedger) : null),
@@ -276,7 +276,7 @@ const valuesRoute = createValuesRoute({
   values: persistentStore.valueVersions(), calibration: scopeKey => predictionLedger?.calibration(scopeKey) ?? null, now, ownerScopeKey: shannonNowOwnerScope(process.env),
   choices: scopeKey => choiceLedger?.store.counts(scopeKey) ?? {}, record: ownerValueRecorder(autonomyStore.activity, autonomyConfig),
 });
-const fca = configuredServerFca(process.env, { path: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env), ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), usage: persistentStore, state: persistentStore, conversations: persistentStore, tools: autonomy.tools, trace: persistentStore.decisionTraces()?.writer ?? null, traceSalt, readSources: { aetherContext, study: autonomyStore.study, upcoming: ownerUpcoming.upcoming, aetherAvailable: () => Boolean(aetherPorts.access), notionAvailable: () => notion.connected, voyagerAvailable: () => Boolean(voyagerCatalog.upcomingTasks), folderAvailable: (_scope, host) => autonomy.folderOperations.boundHosts().includes(host), skill: (scope, id) => { const item = skillMemory?.memory.usable(scope).find(skill => skill.skillId === id); return item ? skills?.open(scope, item.name) ?? null : null; } } });
+const fca = configuredServerFca(process.env, { path: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env), ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), usage: persistentStore, affect: persistentStore, memory: memoryPorts?.proposals, enrich: memoryRecall, state: persistentStore, conversations: persistentStore, tools: autonomy.tools, trace: persistentStore.decisionTraces()?.writer ?? null, traceSalt, readSources: { aetherContext, study: autonomyStore.study, upcoming: ownerUpcoming.upcoming, aetherAvailable: () => Boolean(aetherPorts.access), notionAvailable: () => notion.connected, voyagerAvailable: () => Boolean(voyagerCatalog.upcomingTasks), folderAvailable: (_scope, host) => autonomy.folderOperations.boundHosts().includes(host), skill: (scope, id) => { const item = skillMemory?.memory.usable(scope).find(skill => skill.skillId === id); return item ? skills?.open(scope, item.name) ?? null : null; } } });
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 const bodyUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;

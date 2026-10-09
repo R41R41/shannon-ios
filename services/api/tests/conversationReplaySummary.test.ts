@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setImmediate } from 'node:timers/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCompanionStateStore, OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE, UNLABELLED_DISCLOSURE_MARKER } from '@shannon/cognition';
@@ -115,6 +116,9 @@ describe('the replay summary is incremental, bounded, and given only when the wi
     let drops = 0;
     let previousStart = 0;
     for (let turn = 0; turn < 300; turn += 1) {
+      // The fake writer resolves in microtasks, unlike a real model request. Yield between
+      // simulated turns so this long SQLite workload does not starve Vitest's IPC replies.
+      await setImmediate();
       // The request of this turn: the window over what is stored, beside the summary written so far. Positions of the
       // newest 401 messages the replay reads; `offset` counts them from the Talk's first message.
       const offset = 2 * turn - Math.min(2 * turn, 401);

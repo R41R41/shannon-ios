@@ -27,6 +27,7 @@ import { actionPermit, currentActionExecution } from '../../infra/context/action
 import { actionResource } from '../../contracts/actionThreadContract.js';
 import type { SelfRewriteRuntimePort } from '../inhibition/selfRewritePorts.js';
 import { selfRewriteExecutors } from './shannonSelfRewriteTools.js';
+import { MEMORY_TOOLS } from './memoryToolDefinitions.js';
 import { TASK_TOOLS } from './taskToolDefinitions.js';
 import { SELF_REWRITE_TOOLS } from './selfRewriteToolDefinitions.js';
 
@@ -78,7 +79,12 @@ export interface TaskRuntimeToolPort {
   execute(name: string, input: unknown, context: ToolExecutionContext): ToolResult;
   observeRead?(scopeKey: string, receipt: { name: string; documents?: ToolDocuments; ok: boolean }): void;
 }
+export interface MemoryToolPort {
+  available(scopeKey: string, context?: ToolExecutionContext): boolean;
+  execute(name: string, input: unknown, context: ToolExecutionContext, signal?: AbortSignal): Promise<ToolResult>;
+}
 export class ShannonToolRunner {
+  private taskMemory: MemoryToolPort | null = null;
   private taskRuntime: TaskRuntimeToolPort | null = null;
   private executors: Readonly<Record<string, ToolExecutor>>;
   /**
@@ -117,7 +123,7 @@ export class ShannonToolRunner {
   offered(surface: ToolSurface, audience: ToolAudience, scopeKey?: string): readonly ShannonToolDefinition[] {
     // Her Aether tools only while the Aether client is configured (URL and token), and a proposal only while the inbox is too:
     // with the inbox alone (or the token alone) every offer is what it was before Aether access. Only to the owner's scope.
-    const tools = [...offeredTools(surface, audience, tool => tool.domain === 'task_runtime' ? !!scopeKey && (this.taskRuntime?.available(scopeKey) ?? false) : isReadToolDomain(tool.domain) ? this.readsFor(tool.domain)
+    const tools = [...offeredTools(surface, audience, tool => tool.domain === 'memory_read' ? !!scopeKey && (this.taskMemory?.available(scopeKey) ?? false) : tool.domain === 'task_runtime' ? !!scopeKey && (this.taskRuntime?.available(scopeKey) ?? false) : isReadToolDomain(tool.domain) ? this.readsFor(tool.domain)
       : tool.domain === 'skill_read' ? this.skills !== null
       : tool.domain === 'vm_workspace' ? this.selfRewrite !== null
       : tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
@@ -154,6 +160,7 @@ export class ShannonToolRunner {
       ?? (this.selfRewrite ? SELF_REWRITE_TOOLS.find(tool => tool.name === name || providerToolName(tool.name) === name) ?? null : null);
     // Her read tools do not exist without their ports: a call of one is refused as a name that never existed.
     if (tool && isReadToolDomain(tool.domain) && !this.readsFor(tool.domain)) return null;
+    if (tool?.domain === 'memory_read' && !this.taskMemory) return null;
     if (tool?.domain === 'skill_read' && !this.skills) return null;
     if (tool?.domain === 'vm_workspace' && !this.selfRewrite) return null;
     if (tool?.domain === 'owner_documents_read' && !(this.aether.ownerDocuments === true && this.aether.access)) return null;
@@ -175,6 +182,7 @@ export class ShannonToolRunner {
     if (refused || !tool) return tool && refused ? this.withhold(context, tool, refused, tool.surfaces.includes(context.surface) ? 'audience' : 'not_offered')
       : { tool, result: refused ?? toolFailure('not_offered', 'そういう道具はない。', { retryable: false }) };
     const executor = this.executors[tool.name];
+    if (tool.domain === 'memory_read' && !this.taskMemory?.available(context.scopeKey, context)) return { tool, result: toolFailure('not_offered', 'この実行では記憶の道具を使えません。', { retryable: false }) };
     if (tool.domain === 'task_runtime' && !this.taskRuntime?.available(context.scopeKey)) return { tool, result: toolFailure('not_offered', 'この実行ではタスクの道具を使えない。', { retryable: false }) };
     if ((tool.name.startsWith('aether') || tool.domain === 'aether_proposal') && !this.aetherFor(context.scopeKey)) {
       return this.withhold(context, tool, toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'Aetherの道具はライ氏のscopeだけ', wouldWork: 'ライ氏との会話か、ボクの時間で使う' } }), 'not_offered');
@@ -283,6 +291,15 @@ export class ShannonToolRunner {
       } })])) });
   }
 
+  useMemory(port: MemoryToolPort): void {
+    this.taskMemory = port;
+    this.executors = Object.freeze({ ...this.executors, ...Object.fromEntries(MEMORY_TOOLS.map(tool => [tool.name,
+      (input: ToolInput, context: ToolExecutionContext): PreparedToolCall => ({ summary: '関連する記憶を参照します。', run: async signal => {
+        const result = await port.execute(tool.name, input, context, signal);
+        return { result, record: { summary: '記憶の参照結果を記録しました。', outcome: result.ok ? 'done' : 'failed' } };
+      } })])) });
+  }
+
   useReads(ports: ReadToolPorts): void {
     this.reads = ports;
     this.executors = Object.freeze({ ...this.executors, ...readToolExecutors(ports) });
@@ -337,7 +354,7 @@ export class ShannonToolRunner {
       record(`会話の中で道具「${ready.tool.name}」を使おうとしましたが、うまくいきませんでした。`, 'failed', 'failed');
       return toolFailure('failed', 'うまくいかなかった。', { retryable: true });
     }
-    if (ready.tool.effect === 'read') this.taskRuntime?.observeRead?.(context.scopeKey,
+    if (ready.tool.effect === 'read' && ready.tool.domain !== 'memory_read') this.taskRuntime?.observeRead?.(context.scopeKey,
       { name: ready.tool.name, documents: run.documents, ok: run.result.ok });
     if (!run.apply) {
       if (!run.recordedElsewhere) record(run.record.summary, run.record.outcome, run.record.reasonCode);

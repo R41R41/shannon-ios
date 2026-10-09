@@ -1,0 +1,31 @@
+import type { FcaAffectSnapshot } from '../../emotion/emotionPorts.js';
+import type { FcaActionExpectation, FcaExpectationComparison } from '../../prediction/predictionPorts.js';
+import type { TaskSource, TaskStep } from '../taskRuntime/taskRuntimePorts.js';
+import type { FcaModelOutput, FcaToolCall } from './fcaPorts.js';
+import type { ToolResult } from '../../tools/toolRegistryPorts.js';
+export type { FcaActionExpectation } from '../../prediction/predictionPorts.js';
+
+export interface FcaAffectAppraisal { eventId: string; revision: number; value: number; cause: string; target: string }
+export interface FcaOutcomeContext {
+  eventId: string; taskId: string; operationId: string; name: string; observation: 'observed' | 'unknown';
+  result: { ok: boolean; text: string } | null;
+  expectation: FcaActionExpectation | null; comparison: FcaExpectationComparison | null; appraisalRevision: number;
+}
+export interface FcaSharedContext { affect: FcaAffectSnapshot; recentOutcomes: readonly FcaOutcomeContext[] }
+export interface FcaAuxiliaryResult { id: string; text: string; ok: boolean }
+export interface FcaDurableOutcome {
+  scopeKey: string; taskId: string; stepId: string; outcomeId: string; goal: string;
+  action: FcaToolCall; expectation: FcaActionExpectation | null; comparison: FcaExpectationComparison | null;
+  observation: 'observed' | 'unknown'; result: { ok: boolean; text: string } | null;
+  observedAt: string; sources: readonly TaskSource[];
+  /** Lifecycle outcomes use this committed status, never the requested completion or transport ok flag. */
+  actualTaskStatus?: string;
+}
+export interface FcaEvidence {
+  prepare(step: TaskStep): FcaSharedContext;
+  beforeActions(step: TaskStep, output: FcaModelOutput): boolean;
+  observed(step: TaskStep, call: FcaToolCall, result: ToolResult): void;
+  unknown(step: TaskStep, call: FcaToolCall): void;
+  committed(step: TaskStep): void;
+  flush(): void;
+}

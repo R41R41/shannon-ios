@@ -44,7 +44,10 @@ export function createFcaConversationBridge(parts: {
       const execution = currentActionExecution(), leaseKey = key();
       if (!execution || !leaseKey || execution.signal.aborted) throw new Error('FCA_CONVERSATION_LEASE_REQUIRED');
       if (active.has(leaseKey)) throw new Error('FCA_CONVERSATION_ALREADY_ACTIVE');
-      const step = parts.runtime.beginConversation(input.scopeKey, input.threadId, execution.lease);
+      const delivery = input.delivery ? parts.runtime.beginConversationDelivery(input.scopeKey, input.threadId, execution.lease, input.delivery) : null;
+      if (delivery?.status === 'duplicate' || delivery?.status === 'conflict') throw new Error(`FCA_VOICE_${delivery.status.toUpperCase()}`);
+      const step = input.delivery ? delivery?.status === 'started' ? delivery.step : null
+        : parts.runtime.beginConversation(input.scopeKey, input.threadId, execution.lease);
       if (!step) return null;
       const turn = { step, ownerAlone: input.ownerAlone, observed: new Set<string>(), memories: new Set(input.recalledMemoryIds), reads: new Set<string>() };
       active.set(leaseKey, turn);
@@ -76,6 +79,12 @@ export function createFcaConversationBridge(parts: {
           if (closed) return;
           if (!parts.runtime.completeConversation(step, { experienceId, threadId: input.threadId,
             observedAt: input.observedAt, recalledMemoryIds: [...turn.memories], readSourceIds: [...turn.reads] }, [...turn.observed])) throw new Error('FCA_CONVERSATION_COMMIT_FENCED');
+          closed = true; active.delete(leaseKey);
+        },
+        stageDelivery() {
+          if (closed) return;
+          if (!input.delivery || !parts.runtime.stageConversationDelivery(step, { source: { threadId: input.threadId, observedAt: input.observedAt,
+            recalledMemoryIds: [...turn.memories], readSourceIds: [...turn.reads] }, consumedMessageIds: [...turn.observed] })) throw new Error('FCA_VOICE_STAGE_FENCED');
           closed = true; active.delete(leaseKey);
         },
         abort() {

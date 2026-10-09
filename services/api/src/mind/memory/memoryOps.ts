@@ -1,3 +1,5 @@
+import { taskExperienceHandler } from './taskExperienceHandler.js';
+import type { TaskExperienceWriter } from './taskExperience.js';
 import { createHash } from 'node:crypto';
 import {
   disclosureFor, isMemoryEvidenceVisible, memoryControlFor, memoryIdentifier, visibleMemoryText,
@@ -32,6 +34,8 @@ import { interestChangeHandler, selfInterestHandlers } from './selfInterestHandl
  * one write path: the writer calls it under its lock, and so do the owner's commands, synchronously.
  */
 export interface MemoryTargets {
+  taskExperiences?: TaskExperienceWriter;
+  taskSourceVisible?(scope: string, id: string, at: string): boolean;
   state: CompanionStateStore;
   conversations: ConversationStore;
   knowledge?: ShannonKnowledgeStore | null;
@@ -363,6 +367,7 @@ const impressionMergeHandler: MemoryOpHandler = {
 };
 
 const HANDLERS: Readonly<Record<MemoryOpKind, MemoryOpHandler>> = Object.freeze({
+  'task.experience': taskExperienceHandler,
   'fact.upsert': factHandler('fact', 'userFacts', 'user-fact-upserted'),
   'relationship.upsert': factHandler('relationship', 'relationships', 'relationship-upserted'),
   'interest.change': interestChangeHandler,

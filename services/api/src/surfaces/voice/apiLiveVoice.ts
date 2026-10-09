@@ -69,8 +69,10 @@ import { tierRequest, type TurnRouting } from '../../mind/action/respond/turnRou
 import { OWNER_IN_CALL_ELSEWHERE_RESPONSE, type OwnerCalls } from '../../mind/perception/ownerCallElsewhere.js';
 import { withWorkspace, type MindTurnPorts } from '../../mind/workspace/workspacePorts.js';
 import { observeAsync, observeSync, observerHandoff, withObserverRun } from '../../infra/observer/observerContext.js';
+import { conversationFcaProvenance } from '../../mind/action/fca/fcaConversationPorts.js';
+import type { FcaVoicePort } from '../../mind/action/fca/fcaVoicePorts.js';
+import { confirmedFcaVoiceInput, stageFcaVoice, voiceFcaChooser, voiceFcaDuplicate } from './fcaVoiceContext.js';
 import { observedVoicePlan, perceiveVoiceTurn, visibleVoiceResponse, voiceObservationOptions, voiceWorkspace } from './voiceObservation.js';
-
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
   /** Looking through her body's camera or the app's (`voiceAppLook.ts`); absent, a voice turn never looks. */
   looks?: VoiceLooks;
@@ -97,14 +99,13 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   turnChooser?: ToolMenuChooser; toolHints?: true; turnRouting?: TurnRouting; skills?: Pick<SkillTurnPorts, 'index'>; feedback?: FeedbackPorts; stage5Capabilities?: ShannonStage5Capabilities;
   /** Syzygy ADR-0008 stage 3: what the turn hands the mind (`voicePerception` copies `present`); absent, nothing is perceived. */
   mind?: MindTurnPorts;
+  fcaVoice?: () => FcaVoicePort | null; deviceId?: string;
 }
-
 export interface LiveVoiceStreamObserver {
   readonly signal?: AbortSignal;
   onPlan(plan: Record<string, unknown>): void | Promise<void>;
   onTextDelta(delta: string): void | Promise<void>;
 }
-
 export function dispatchLiveVoiceRequest(
   request: ApiRequest,
   dependencies: LiveVoiceDependencies,
@@ -134,7 +135,7 @@ export function dispatchLiveVoiceRequest(
   const transcript=request.body.transcript.trim();
   const chatModel = dependencies.chatModel.forTurn?.(scopeKey) ?? dependencies.chatModel;
   const complete=()=>completeLiveVoiceDelegation(scopeKey, requestedThreadId, transcript, participantMode, deviceContext,
-    reaction?.text ?? null, { ...dependencies, chatModel, looks: dependencies.looks?.of(request) }, observer);
+    reaction?.text ?? null, { ...dependencies, chatModel, deviceId: request.deviceId, looks: dependencies.looks?.of(request) }, observer);
   return withObserverRun(voiceObservationOptions(scopeKey, { transcript, participantMode, deviceContext }),
   () => dependencies.mind?.foreground ? dependencies.mind.foreground(scopeKey,complete) : complete());
 }
@@ -168,6 +169,9 @@ async function completeLiveVoiceDelegation(
   const present: MemoryAudience = temporaryGuest ? guestPresence?.present ?? UNKNOWN_GUEST_PRESENCE
     : deviceContext?.companionPresent === true || ownerSaysCompanionPresent(transcript) ? UNKNOWN_GUEST_PRESENCE : OWNER_AUDIENCE;
   const alone = isOwnerOnly(present);
+  const fca = !temporaryGuest && alone ? dependencies.fcaVoice?.() : null;
+  const fcaInput = confirmedFcaVoiceInput(scopeKey, threadId, dependencies.deviceId, deviceContext?.userUtterance, transcript);
+  const duplicate = voiceFcaDuplicate(fca, fcaInput); if (duplicate) return duplicate;
   if (!alone) dependencies.toolServer?.audience.noteOthers(scopeKey);
   // A client that predates people memory tells the friend that no owner memory is used; keep that promise for it.
   const legacyGuest = temporaryGuest && guestPresence?.recorded !== true;
@@ -183,7 +187,7 @@ async function completeLiveVoiceDelegation(
   // The turn in which he says that someone is with him is said to her; from the next one on she must be addressed.
   const turnFacts = temporaryGuest ? undefined : ownerVoiceTurnFacts({ history: routingHistory, at: occurredAt, othersPresent: !alone && !ownerSaysCompanionPresent(transcript),
     newest: dependencies.conversationStore.conversationHistory(scopeKey, threadId).at(-1), source: deviceContext?.userUtterance?.source, answersHer: reactionLine });
-  const { toolAudience, choices } = startVoiceStage2(router === dependencies.voiceDecision ? dependencies.turnChooser : null, { autonomy: dependencies.autonomy, server: dependencies.toolServer ?? {}, scopeKey, threadId, transcript, guest: temporaryGuest, legacyGuest, alone });
+  const { toolAudience, choices } = startVoiceStage2(router === dependencies.voiceDecision ? voiceFcaChooser(dependencies.turnChooser, Boolean(fca && fcaInput)) : null, { autonomy: dependencies.autonomy, server: dependencies.toolServer ?? {}, scopeKey, threadId, transcript, guest: temporaryGuest, legacyGuest, alone });
   let decision = await router.decide({
     // In a remembered 「友人も一緒」 call the same capabilities may be chosen as with the owner; what is said is checked at speak time.
     scopeKey, transcript, rawTranscript, participantMode: legacyGuest ? 'guest' : 'owner',
@@ -308,7 +312,7 @@ async function completeLiveVoiceDelegation(
       aetherNotes: selectedSkills.has('aether_notes'),
       voyagerTasks: selectedSkills.has('voyager_tasks'),
       notion: notionTurn, upcoming: temporaryGuest ? false : alone ? true : 'guarded',
-    });
+    }, Boolean(fca && fcaInput && !uncertainTranscript));
   const capabilityPrompt = capability.prompt;
   observer?.signal?.throwIfAborted();
   // A client that predates people memory tells the friend that no owner memory is used; keep that promise for it.
@@ -355,14 +359,19 @@ async function completeLiveVoiceDelegation(
       } : {}), spoken: true,
     } }) : null;
   observer?.signal?.throwIfAborted();
-  const turnPrompt = [turnContext, placeSkill?.prompt ?? ''].filter(Boolean).join('\n\n');
+  const fcaTurn = fca && fcaInput && !uncertainTranscript && !notHisWordsToHer(decision) ? fca.begin({ ...fcaInput, observedAt: occurredAt,
+    recalledMemoryIds: conversationFcaProvenance(captured, dependencies.conversationStore, scopeKey, threadId, [...cognitiveContext.frame.recalledMemoryIDs, ...peopleRecall?.ids ?? []]),
+    readSourceIds: capability.readSourceIds, ownerAlone: () => dependencies.toolServer?.audience.othersKnown(scopeKey) === false }) : null;
+  try {
+  const turnPrompt = [turnContext, placeSkill?.prompt ?? '', fcaTurn?.context() ?? ''].filter(Boolean).join('\n\n');
   if(dependencies.mind?.sync)await dependencies.mind.sync();
   // Stage 3: the workspace's blocks (voice: at most two lines) follow the turn's context, which stays byte for byte as it was.
   const replayed = withWorkspace(replay?.request(turnPrompt) ?? { ...(turnPrompt ? { turnContext: turnPrompt } : {}), history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) },
     voiceWorkspace(dependencies.mind, { scopeKey, threadId, present, perceived: perceivedTurn, snapshot: captured, snapshotNow:()=>dependencies.stateStore.snapshot(scopeKey), store: dependencies.conversationStore, at: occurredAt }));
   const offered = conversationTools(dependencies.autonomy, scopeKey, 'voice', toolAudience, dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline, // 「友人も一緒」: Aether reading tools; a legacy client none.
     { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }, { ...ownerAloneReads(toolAudience), ...(dependencies.toolHints ? { sourceHints: true } : {}) });
-  const { offer: toolOffer, tier } = choices ? await voiceOfferAndTier(dependencies.turnRouting, offered, choices, { scopeKey, threadId, deadline, at: occurredAt }) : { offer: offered, tier: null };
+  const { offer: selectedOffer, tier } = choices ? await voiceOfferAndTier(dependencies.turnRouting, offered, choices, { scopeKey, threadId, deadline, at: occurredAt }) : { offer: offered, tier: null };
+  const toolOffer = fcaTurn?.selectTools && selectedOffer.tools ? { ...selectedOffer, tools: await fcaTurn.selectTools(selectedOffer.tools, { goal: transcript, state: cognitiveContext.prompt }) } : selectedOffer;
   observerHandoff('recall', 'context', { surface: 'voice', semantic: recalled !== null });
   const modelRequest = observeSync('context', { surface: 'voice' }, () => withToolCapabilityLines({ // Her Minecraft body's and Aether's lines, in her identity, exactly when their tools are offered.
     scopeKey, systemPrompt: basePrompt, ...skillProfilePrompt(identity.profile, dependencies.skills, scopeKey, toolOffer.tools, selectedSkills.has('current_web') || Boolean(placeSkill)), ...replayed,
@@ -464,6 +473,7 @@ async function completeLiveVoiceDelegation(
       ...taskProposal,
     }];
   }
+  stageFcaVoice(fcaTurn);
   dependencies.mind?.turnEnded?.(); // Stage 3: what the mind noted is written after the response.
   return visibleVoiceResponse(() => ({
     status: 200,
@@ -486,4 +496,5 @@ async function completeLiveVoiceDelegation(
       },
     },
   }));
+  } catch (error) { try { fcaTurn?.abort(); } catch { /* Pending source stays ineligible. */ } throw error; }
 }

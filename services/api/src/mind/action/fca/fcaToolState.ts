@@ -38,7 +38,7 @@ export async function selectFcaTools(input: FcaModelInput, catalog: readonly Sha
 
 export function selectedFcaTools(catalog: readonly ShannonToolDefinition[], state: FcaToolState): ShannonToolDefinition[] {
   const names = new Set([...state.names, ...state.opened]);
-  return catalog.filter(tool => names.has(tool.name));
+  return catalog.filter(tool => names.has(tool.name) || tool.domain === 'memory_read');
 }
 
 /** Opening adds visibility for the next model decision only; it never executes or authorizes a tool. */

@@ -1,6 +1,7 @@
 import type { ToolResult } from '../../tools/toolRegistryPorts.js';
 import type { TaskSource, TaskView } from '../taskRuntime/taskRuntimePorts.js';
 import type { ShannonModelToolSession } from '../../../infra/models/chatModelTools.js';
+import type { TaskConversationDeliveryInput } from '../taskRuntime/taskConversationDeliveryPorts.js';
 
 /** Only canonical identifiers emitted by trusted readers; never source text or model-supplied metadata. */
 export interface FcaReadReceipt { name: string; ok: boolean; documents?: { read?: readonly string[]; sourceIds?: readonly string[]; informs?: true } }
@@ -11,6 +12,7 @@ export interface FcaConversationPort {
   begin(input: {
     scopeKey: string; threadId: string; observedAt: string; recalledMemoryIds: readonly string[];
     readSourceIds?: readonly string[];
+    delivery?: TaskConversationDeliveryInput;
     ownerAlone(): boolean;
   }): FcaConversationTurn | null;
   taskToolsAvailable(scopeKey: string): boolean;
@@ -24,6 +26,8 @@ export interface FcaConversationTurn {
   selectTools?(tools: ShannonModelToolSession, input: { goal: string; state: string }): Promise<ShannonModelToolSession>;
   /** Called only after the ordinary conversation writer committed the source experience. */
   commit(experienceId: string): void;
+  /** Voice generation finished. Keep descendants pending until the native client's canonical history write. */
+  stageDelivery?(): void;
   /** No fallback model call; unbound descendants remain ineligible for execution. */
   abort(): void;
 }

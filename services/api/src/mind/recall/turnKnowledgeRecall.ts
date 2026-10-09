@@ -35,7 +35,7 @@ export function isExperienceSourceVisible(snapshot: CompanionStateSnapshot, expe
 export function usableKnowledgeFor(store: ShannonKnowledgeStore, scopeKey: string, snapshot: CompanionStateSnapshot): readonly ShannonKnowledgeDocument[] {
   const usable = usableShannonKnowledge(store.listShannonKnowledge(scopeKey), id => isExperienceSourceVisible(snapshot, id));
   const withholding = new MemoryWithholding(snapshot, conversationStoreOf(store), scopeKey);
-  return withholding.inactive ? usable : usable.filter(document => !withholding.withholdsKnowledge(document));
+  return usable.filter(document => !withholding.withholdsKnowledge(document));
 }
 
 /**

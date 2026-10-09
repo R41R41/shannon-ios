@@ -20,6 +20,8 @@ export interface UserUtterance {
   id: string; text: string;
   source?: 'speech' | 'typed' | 'camera';
   rawText?: string;
+  /** Native history commits preserve this exact utterance id, including a kept interrupted prefix. */
+  historyReceipt?: 'utterance-id';
 }
 export interface ConversationCommandDependencies {
   stateStore: CompanionStateStore; conversationStore: ConversationStore;

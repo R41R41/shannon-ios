@@ -16,12 +16,12 @@ const openTool = sonnetTool({ ...open, input: { ...open.input,
 type Change = BetaRequestToolAdditionBlock | BetaRequestToolRemovalBlock;
 
 /** The installed SDK's inline-tool protocol changes active schemas by append, never by editing a signed prefix. */
-export function nativeFcaTools(input: FcaModelInput, history: readonly Anthropic.MessageParam[], controls: readonly Anthropic.Tool[]) {
+export function nativeFcaTools(input: FcaModelInput, history: readonly Anthropic.MessageParam[], controls: readonly Anthropic.Tool[], auxiliary: readonly Anthropic.Tool[] = []) {
   const names = new Map<string, string>();
   const catalog = input.catalog ?? input.tools;
   for (const tool of catalog) {
     const name = providerToolName(tool.name);
-    if (names.has(name) || controls.some(control => control.name === name) || name === openTool.name) throw new Error('FCA_MODEL_TOOL_CONFLICT');
+    if (names.has(name) || [...controls, ...auxiliary].some(control => control.name === name) || name === openTool.name) throw new Error('FCA_MODEL_TOOL_CONFLICT');
     names.set(name, tool.name);
   }
   const selected = new Map<string, Anthropic.Tool>();
@@ -30,6 +30,7 @@ export function nativeFcaTools(input: FcaModelInput, history: readonly Anthropic
     if (names.get(tool.name) !== definition.name || selected.has(tool.name)) throw new Error('FCA_MODEL_TOOL_CONFLICT');
     selected.set(tool.name, tool);
   }
+  for (const tool of auxiliary) selected.set(tool.name, tool);
   if (!input.catalog) return { names, tools: [...selected.values(), ...controls], appended: [] as Anthropic.MessageParam[] };
   names.set(openTool.name, TOOL_OPEN_NAME);
   const active = new Map<string, Anthropic.Tool>();

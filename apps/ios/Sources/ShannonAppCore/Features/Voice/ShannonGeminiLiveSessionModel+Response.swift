@@ -61,7 +61,7 @@ extension ShannonGeminiLiveSessionModel {
                     source: batch.source, rawText: batch.rawText.isEmpty ? nil : batch.rawText,
                     callContext: mode == .guest ? guestCall.requestContext(
                         addressedByName: batch.addressedByName, followsShannonTurn: batch.followsShannonTurn) : nil,
-                    companionPresent: companionSuspected ? true : nil
+                    companionPresent: companionSuspected ? true : nil, historyReceipt: "utterance-id"
                 )
                 let localReply = mode == .owner ? batch.localReply : nil
                 let onSegment: ShannonVoiceSegmentHandler = {
@@ -115,8 +115,10 @@ extension ShannonGeminiLiveSessionModel {
                     let task = Task { @MainActor in
                         do {
                             let places = response.uiBlocks?.flatMap { $0.places ?? [] } ?? []
-                            try await commitTurn(batch.rawText,
-                                ShannonPlaceLinks.appending(places, to: response.reply))
+                            try await ShannonVoiceTurnCorrelation.$utteranceID.withValue(batch.id.uuidString) {
+                                try await commitTurn(batch.rawText,
+                                    ShannonPlaceLinks.appending(places, to: response.reply))
+                            }
                             return true
                         } catch {
                             ShannonVoiceDiagnostics.shared.record("gemini.response.history.failed",
@@ -233,7 +235,12 @@ extension ShannonGeminiLiveSessionModel {
             guestCall.record(participant: guestWords, shannon: reply, answersOwnerWords: answersOwnerWords)
         } else if mode.allowsTranscriptPersistence, let commitTurn {
             let task = Task { @MainActor in
-                do { try await commitTurn(batch.rawText, reply); return true } catch {
+                do {
+                    try await ShannonVoiceTurnCorrelation.$utteranceID.withValue(batch.id.uuidString) {
+                        try await commitTurn(batch.rawText, reply)
+                    }
+                    return true
+                } catch {
                     ShannonVoiceDiagnostics.shared.record("gemini.response.history.failed", sessionID: generation.uuidString)
                     return false
                 }

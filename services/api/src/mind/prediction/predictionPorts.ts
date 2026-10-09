@@ -4,3 +4,4 @@
  */
 export { TouchPredictions, stanceOutcome, touchPredictionEnabled, type TouchPrediction, type TouchPredictionRecord } from './bodyTouchPrediction.js';
 export { type PredictionShadow } from './store/predictionShadow.js';
+export { validFcaExpectation, compareFcaOutcome, type FcaActionExpectation, type FcaExpectationComparison } from './actionExpectation.js';

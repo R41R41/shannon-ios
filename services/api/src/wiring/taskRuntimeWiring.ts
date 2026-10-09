@@ -15,7 +15,7 @@ export interface TaskRuntimeWiringOptions {
   db: DatabaseSync; actions: ActionThreads; model: FcaModel; scopeKey: string;
   ownerAlone(): boolean; now?: () => string;
   canRunTask?(runtime: TaskRuntime, taskId: string): boolean;
-  stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks'>>;
+  stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' | 'observeMemory' | 'evidence'>>;
 }
 /** The existing mind worker remains the sole action writer. This connection reads its lease as a commit fence. */
 export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {

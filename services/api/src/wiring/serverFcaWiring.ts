@@ -1,3 +1,9 @@
+import { createFcaSharedWiring } from './fcaSharedWiring.js';
+import { connectFcaMemoryTools } from './fcaMemoryWiring.js';
+import { createFcaVoiceBridge } from '../mind/action/fca/fcaVoicePorts.js';
+import type { FcaAffectWriter } from '../mind/emotion/emotionPorts.js';
+import type { MemoryProposals } from '../mind/memory/memoryPorts.js';
+import type { TurnMemoryRecall } from '../mind/recall/turnMemoryRecall.js';
 import { anthropicApiKey } from '../infra/models/anthropic/anthropicConfig.js';
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { createAnthropicFcaSummarizer } from '../infra/models/anthropic/anthropicFcaSummary.js';
@@ -22,13 +28,16 @@ import { sendJson } from '../infra/http/serverHttp.js';
 import { actionThreadsClient } from './actionThreadsWiring.js';
 import { createTaskRuntimeWiring } from './taskRuntimeWiring.js';
 
-/** First slice is explicit opt-in. It admits owner requests only; ordinary conversation and own-time stay on their current path. */
+/** Explicit opt-in: owner tasks plus existing foreground text/voice binding; own-time keeps its current path. */
 export function configuredServerFca(values: Readonly<Record<string, string | undefined>>, parts: {
   path: string; ownerScope: string; ownerAlone(): boolean; usage: LlmUsageStore;
   state?: Pick<CompanionStateStore, 'snapshot'>; conversations?: ConversationStore; tools?: ShannonToolRunner;
+  affect?: FcaAffectWriter; memory?: MemoryProposals | null; enrich?: TurnMemoryRecall | null;
   trace?: DecisionTraceWriter | null; traceSalt?: string;
   readSources?: Omit<FcaReadSourcesOptions, 'ownerScope' | 'ownerAlone' | 'state' | 'conversations'>;
 }) {
+  const readSourceVisible = parts.state && parts.conversations ? createFcaReadSources({ ...parts.readSources, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, state: parts.state, conversations: parts.conversations }) : undefined;
+  if (parts.conversations) parts.conversations.readSourceVisible = readSourceVisible;
   if (values.SHANNON_FCA_RUNTIME !== 'on') return null;
   if (!stage4Enabled(values)) throw new Error('FCA_ACTION_THREADS_REQUIRED');
   const modelName = replacementModel(values.SHANNON_FCA_MODEL);
@@ -49,34 +58,37 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const actions = actionThreadsClient(client.call);
     const jev = configuredJevChooser(values, { trace: parts.trace ?? null, salt: parts.traceSalt });
     const selector: FcaToolSelector = jev ? new JevFcaToolSelector(jev) : { async select(request) { request.signal.throwIfAborted(); return { names: request.tools.map(tool => tool.name), source: 'fallback' }; } };
+    let shared: ReturnType<typeof createFcaSharedWiring> | undefined;
     let visible: ReturnType<typeof createFcaSourceGuard> | undefined;
     const runtime = createTaskRuntimeWiring({ db, actions, model,
       scopeKey: parts.ownerScope, ownerAlone: parts.ownerAlone,
-      canRunTask: (_runtime, id) => visible?.(parts.ownerScope, id) ?? _runtime.taskSources(parts.ownerScope, id).length === 0, stepPorts: (_runtime, step) => ({ selector,
+      canRunTask: (_runtime, id) => visible?.(parts.ownerScope, id) ?? _runtime.taskSources(parts.ownerScope, id).length === 0, stepPorts: (_runtime, step) => ({ selector, ...(shared ? { recall: shared.recall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
         sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources ?? []) ?? step.snapshot.sources.length === 0,
         taskVisible: id => id === step.taskId ? visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources ?? []) ?? step.snapshot.sources.length === 0 : visible?.(step.scopeKey, id) ?? _runtime.taskSources(step.scopeKey, id).length === 0,
         observeTasks: ids => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return true; },
         history: { codec: anthropicFcaHistoryCodec, summarizer },
         ...(parts.tools && parts.state && parts.conversations ? { tools: fcaResearchTools({ tools: parts.tools,
-          state: parts.state, conversations: parts.conversations, scopeKey: step.scopeKey, ownerAlone: parts.ownerAlone, sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? step.snapshot.sources.length === 0 }) } : {}),
+          state: parts.state, conversations: parts.conversations, ...(shared ? { observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}), scopeKey: step.scopeKey, ownerAlone: parts.ownerAlone, sourcesVisible: () => visible?.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources) ?? step.snapshot.sources.length === 0 }) } : {}),
       }) });
     visible = parts.state && parts.conversations ? createFcaSourceGuard({ runtime: runtime.runtime, state: parts.state,
       conversations: parts.conversations, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone,
-      readSourceVisible: createFcaReadSources({ ...parts.readSources, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone,
-        state: parts.state, conversations: parts.conversations }) }) : undefined;
+      readSourceVisible }) : undefined;
     const conversation = visible ? createFcaConversationBridge({ runtime: runtime.runtime, ownerScope: parts.ownerScope, visible, selector }) : null;
+    if (visible && parts.state && parts.conversations && readSourceVisible) shared = createFcaSharedWiring({ ...parts, db, runtime: runtime.runtime, state: parts.state, conversations: parts.conversations, visible, readSourceVisible });
+    if (conversation && shared && parts.tools) connectFcaMemoryTools({ tools: parts.tools, memory: shared.memory, conversation, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone });
+    const voice = conversation && parts.conversations ? createFcaVoiceBridge({ conversation, runtime: runtime.runtime, conversations: parts.conversations, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone }) : null;
     if (conversation && parts.tools) parts.tools.useTaskRuntime({ available: scope => conversation.taskToolsAvailable(scope),
       execute: (name, input, context) => conversation.executeTaskTool(name, input, context),
       observeRead: (scope, receipt) => conversation.observeRead(scope, receipt) });
-    const wake = () => { void runtime.tick().catch(() => {}); };
+    const wake = () => { if (!parts.ownerAlone()) void shared?.recall.cancelAll(); try { shared?.evidence?.flush(); } catch { /* Durable evidence remains for retry. */ } void runtime.tick().catch(() => {}); };
     const timer = setInterval(wake, 1000); timer.unref();
     const route = createFcaTaskRoute({ runtime: runtime.runtime, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, stop: runtime.stop, wake, visible: id => visible?.(parts.ownerScope, id) ?? runtime.runtime.taskSources(parts.ownerScope, id).length === 0 });
-    return { route, conversation, async stopActions(target: string | null) {
+    return { route, conversation, voice, async stopActions(target: string | null) {
       if (target === null) { await runtime.stop(runtime.runtime.ensureRoot(parts.ownerScope).id, 'owner_stop_all'); return; }
       const action = await actions.get(parts.ownerScope, target);
       const taskId = action?.kind === 'agentTask' ? /^fca:([^:]+):[0-9]+$/.exec(action.sourceId)?.[1] : null;
       if (taskId) await runtime.stop(taskId, 'owner_stop');
-    }, async close() { clearInterval(timer); await runtime.close(); client.close(); db.close(); } };
+    }, async close() { clearInterval(timer); await Promise.all([runtime.close(), shared?.recall.cancelAll()]); client.close(); db.close(); } };
   } catch (error) { client.close(); db.close(); throw error; }
 }
 export async function serveFcaTaskRoute(service: ReturnType<typeof configuredServerFca>, request: IncomingMessage,

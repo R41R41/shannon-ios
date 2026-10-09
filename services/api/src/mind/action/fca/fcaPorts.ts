@@ -1,4 +1,6 @@
 import type { ShannonToolDefinition, ToolResult } from '../../tools/toolRegistryPorts.js';
+import type { FcaActionExpectation, FcaAffectAppraisal, FcaAuxiliaryResult, FcaSharedContext } from './fcaEvidencePorts.js';
+import type { TaskRecallPacket } from '../../recall/taskRecallPorts.js';
 
 /** Public decisions only. Native history is opaque to the runtime and is never an Observer payload. */
 export interface FcaToolCall { id: string; name: string; input: unknown }
@@ -14,11 +16,16 @@ export interface FcaModelInput {
   tools: readonly ShannonToolDefinition[];
   /** Selection mode: every currently allowed tool's metadata; tools contains only selected/opened schemas. */
   catalog?: readonly { name: string; description: string }[];
+  sharedContext?: FcaSharedContext;
+  recall?: TaskRecallPacket;
 }
 export interface FcaModelOutput {
   decision: FcaDecision;
   /** Complete native messages appended by this call, including provider-supported schema changes. */
   history: readonly unknown[];
+  expectations?: readonly FcaActionExpectation[];
+  appraisals?: readonly FcaAffectAppraisal[];
+  auxiliaryResults?: readonly FcaAuxiliaryResult[];
 }
 export interface FcaModel {
   decide(input: FcaModelInput, signal: AbortSignal): Promise<FcaModelOutput>;

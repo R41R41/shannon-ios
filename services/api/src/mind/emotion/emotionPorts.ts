@@ -5,3 +5,4 @@
  */
 export { ownerDay, presentCompanionState, resolveReplyEmotion, sharedTimeEvent, type PresentedCompanionState } from './companionPresence.js';
 export { emotionTiming } from './emotionTiming.js';
+export { AffectCoordinator, fcaAppraisalDelta, validFcaAffectEvidence, type FcaAffectEvidence, type FcaAffectReceipt, type FcaAffectSnapshot, type FcaAffectWriter } from './affectCoordinator.js';

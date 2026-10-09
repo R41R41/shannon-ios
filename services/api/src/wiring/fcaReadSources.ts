@@ -73,3 +73,22 @@ export function createFcaReadSources(parts: FcaReadSourcesOptions): (scopeKey: s
     } catch { return false; }
   };
 }
+
+/** Storage of an already-authorized receipt checks local forgetting/correction, not a new remote read.
+ * Full source availability is still checked by createFcaReadSources whenever the experience is recalled. */
+export function fcaReadSourceRetained(state: Pick<CompanionStateStore, 'snapshot'>, conversations: ConversationStore,
+  scopeKey: string, sourceId: string, observedAt: string): boolean {
+  try {
+    if (sourceId.length > 240 || !Number.isFinite(Date.parse(observedAt))) return false;
+    const match = /^(aether-document|aether-context|notion-page|voyager-task|calendar-item|shannon-study|shannon-folder|shannon-skill):\/\/(.+)$/u.exec(sourceId);
+    if (!match || /[\u0000-\u0020\u007f?#]/u.test(match[2]!)) return false;
+    const id = decodeURIComponent(match[2]!);
+    if (!id || /[\u0000-\u001f\u007f]/u.test(id)) return false;
+    const snapshot = state.snapshot(scopeKey);
+    if ([sourceId, id].some(key => {
+      const control = memoryControlFor(snapshot, key);
+      return control && (control.status !== 'active' || Boolean(control.overrideText && observedAt <= (control.contextInvalidatedAt ?? control.updatedAt)));
+    })) return false;
+    return !new MemoryWithholding(snapshot, conversations, scopeKey).withholdsReply({ text: '', observedAt, recalledMemoryIds: [sourceId, id] });
+  } catch { return false; }
+}

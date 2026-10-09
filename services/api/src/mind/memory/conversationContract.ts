@@ -9,6 +9,7 @@ import type { FeedbackState } from '../../contracts/feedbackContract.js';
 export const isPlatformThreadId = (threadId: string): boolean => /^platform:[a-z]+:[0-9a-f]{32}$/u.test(threadId);
 
 export interface ShannonExperience extends RecallCandidate {
+  readSourceIds?: readonly string[];
   timeZone?: string;
   userMessage: string;
   shannonReply: string;
@@ -126,6 +127,10 @@ export interface PlatformTurnPersistenceResult {
 }
 
 export interface ConversationStore {
+  /** False proves this scope has no canonical experience owning private-read provenance. Omitted means unknown; never infer from FCA being off. */
+  hasReadSourceProvenance?(scopeKey: string): boolean;
+  /** Current native source visibility, injected by wiring; absent readers withhold derived private task experiences. */
+  readSourceVisible?(scopeKey: string, sourceId: string, observedAt: string): boolean;
   /** Stage5's bounded supplementary self. Read again under current forgetting/disclosure; absent/OFF yields no prompt. */
   selfInterestProjection?(scopeKey: string, audience: MemoryAudience, openOnly?: boolean): string;
   listThreads(scopeKey: string): readonly ConversationThread[];

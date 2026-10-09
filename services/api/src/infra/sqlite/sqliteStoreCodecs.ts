@@ -5,7 +5,7 @@ import { boundedRecalledMemoryIds, type ShannonSourceAttribution, type StoredCon
 import { reminderReference, type ReminderReference } from '../../mind/memory/store/turnCaptures.js';
 
 export interface MessageRow { message_id: string; thread_id: string; turn_id: string; role: string; content: string; observed_at: string; metadata_json: string | null; }
-export interface TurnPayload { userMessage: string; shannonReply: string; summary: string; timeZone?: string; capturedStateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; recalledMemoryIds?: readonly string[]; disclosure?: MemoryDisclosure; }
+export interface TurnPayload { source?: string; readSourceIds?: readonly string[]; userMessage: string; shannonReply: string; summary: string; timeZone?: string; capturedStateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; recalledMemoryIds?: readonly string[]; disclosure?: MemoryDisclosure; }
 export interface MessageMetadata { noteOwnerAlone?: boolean; stateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; artifacts?: readonly ShannonGeneratedArtifact[]; sourceAttribution?: ShannonSourceAttribution; studyPiece?: { id: string; title: string }; reminder?: ReminderReference; recalledMemoryIds?: readonly string[]; bodyLook?: { id: string; outcome: 'seen' | 'not_seen' }; }
 
 export function parseSnapshot(raw: string, expectedScopeKey: string, nowIso: string): CompanionStateSnapshot {

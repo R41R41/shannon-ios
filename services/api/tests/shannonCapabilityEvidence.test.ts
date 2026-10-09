@@ -1,3 +1,6 @@
+import { SHANNON_FCA_SHARED_CAPABILITY } from '@shannon/cognition';
+import { createFcaSharedWiring } from '../src/wiring/fcaSharedWiring.js';
+import { createFcaVoiceBridge } from '../src/mind/action/fca/fcaVoicePorts.js';
 import { createFcaConversationBridge } from '../src/mind/action/fca/fcaConversationPorts.js';
 import { SHANNON_FCA_TASK_CAPABILITY } from '@shannon/cognition';
 import { configuredServerFca } from '../src/wiring/serverFcaWiring.js';
@@ -109,6 +112,9 @@ const exists = (...values: unknown[]) => values.every(value => typeof value === 
 type ConditionalCapabilityId = typeof SHANNON_CONDITIONAL_CAPABILITIES[number]['id'];
 // The fixed description and the lines the API adds while it has them (`SHANNON_CONDITIONAL_CAPABILITIES`) need the same evidence.
 const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, () => boolean> = {
+  fca_shared_context: () => exists(createFcaSharedWiring, createFcaVoiceBridge, ShannonToolRunner.prototype.useMemory)
+    && ['memory.search', 'memory.read'].every(name => SHANNON_TOOLS.some(tool => tool.name === name))
+    && !shannonCapabilityPrompt('owner').includes(SHANNON_FCA_SHARED_CAPABILITY.text),
   fca_tasks: () => exists(runFcaStep, executeTaskTool, createFcaConversationBridge) && configuredServerFca({}, {} as never) === null
     && ['task.create', 'task.list', 'task.get', 'task.send'].every(name => TASK_TOOLS.some(tool => tool.name === name))
     && !shannonCapabilityPrompt('owner').includes(SHANNON_FCA_TASK_CAPABILITY.text)

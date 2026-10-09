@@ -185,10 +185,11 @@ public struct ShannonVoiceUserUtteranceDTO: Codable, Equatable, Sendable {
     public let callContext: ShannonVoiceCallContextDTO?
     /// Owner mode only: the owner said someone may be with him and the call was not switched.
     public let companionPresent: Bool?
+    public let historyReceipt: String?
 
     public init(
         id: String, text: String, source: ShannonVoiceUtteranceSource? = nil, rawText: String? = nil,
-        callContext: ShannonVoiceCallContextDTO? = nil, companionPresent: Bool? = nil
+        callContext: ShannonVoiceCallContextDTO? = nil, companionPresent: Bool? = nil, historyReceipt: String? = nil
     ) {
         self.id = id
         self.text = text
@@ -196,6 +197,7 @@ public struct ShannonVoiceUserUtteranceDTO: Codable, Equatable, Sendable {
         self.rawText = rawText
         self.callContext = callContext
         self.companionPresent = companionPresent
+        self.historyReceipt = historyReceipt
     }
 }
 

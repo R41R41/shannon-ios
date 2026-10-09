@@ -4,6 +4,9 @@ import { observeAsync, observerHandoff, observeSync } from '../../../infra/obser
 import { observedToolName } from '../../../infra/models/anthropic/observerProjection.js';
 import type { FcaToolSelector } from '../../selectors/selectorsPorts.js';
 import { TOOL_OPEN_NAME, toolFailure } from '../../tools/toolRegistryPorts.js';
+import type { TaskRecall } from '../../recall/taskRecallPorts.js';
+import type { FcaEvidence } from './fcaEvidencePorts.js';
+import { fcaRecallContext } from './fcaRecallContext.js';
 import type { FcaExternalTools, FcaModel } from './fcaPorts.js';
 import { openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
@@ -15,6 +18,9 @@ export interface FcaStepPorts {
   /** Existing lease/resource gate, rechecked before each model or tool operation. */
   permit(): Promise<boolean>;
   selector?: FcaToolSelector;
+  recall?: TaskRecall;
+  evidence?: FcaEvidence;
+  observeMemory?(ids: readonly string[]): boolean;
   tools?: FcaExternalTools;
   history?: { codec: FcaHistoryCodec; summarizer?: FcaHistorySummarizer; policy?: Partial<FcaHistoryPolicy> };
   /** Rechecks only the sources pinned to this admitted step, never newly pending inbox input. */
@@ -26,6 +32,10 @@ export interface FcaStepPorts {
 }
 /** One bounded model decision; waiting and completed segments release their inference slot in wiring. */
 export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
+  try { return await executeFcaStep(step, ports, signal); }
+  finally { await ports.recall?.finishSegment(step.scopeKey, step.taskId); }
+}
+async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
   const { runtime } = ports;
   const checked = async () => {
     signal.throwIfAborted();
@@ -40,6 +50,8 @@ export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Ab
   await checked();
   const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object'
     ? step.snapshot.checkpoint as Record<string, unknown> : {};
+  const recallContext = ports.recall ? fcaRecallContext(step, prior, signal) : null;
+  if (recallContext) ports.recall!.start(recallContext.input);
   const catalog = [...TASK_TOOLS, ...(ports.tools?.definitions ?? [])];
   if (new Set(catalog.map(tool => tool.name)).size !== catalog.length || catalog.some(tool => tool.name === TOOL_OPEN_NAME)) throw new Error('FCA_TOOL_CATALOG_INVALID');
   const replay = ports.history ? await prepareFcaHistory(step, {
@@ -62,9 +74,14 @@ export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Ab
     input.tools = selectedFcaTools(catalog, selection);
   }
   await checked();
-  observerHandoff('context', 'native', provenance);
-  const output = await ports.model.decide({ ...input, ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) }, signal);
+  const recall = recallContext ? await ports.recall!.packet(recallContext.input, { waitMilliseconds: recallContext.waitMilliseconds }) : undefined;
+  if (recall?.sourceIds.length && (!ports.observeMemory || !ports.observeMemory(recall.sourceIds))) throw new Error('FCA_SOURCE_WITHHELD');
   await checked();
+  const sharedContext = ports.evidence?.prepare(step);
+  observerHandoff('context', 'native', provenance);
+  const output = await ports.model.decide({ ...input, ...(recall ? { recall } : {}), ...(sharedContext ? { sharedContext } : {}), ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) }, signal);
+  await checked();
+  if (ports.evidence && !ports.evidence.beforeActions(step, output)) throw new Error('FCA_EVIDENCE_FENCED');
   const history = [...output.history];
   let consecutiveToolFailures = Number(prior.consecutiveToolFailures ?? 0);
   if (!Number.isSafeInteger(consecutiveToolFailures) || consecutiveToolFailures < 0) consecutiveToolFailures = 0;
@@ -72,7 +89,7 @@ export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Ab
   let disposition: 'continue' | 'wait' | 'complete' = decision.kind === 'tools' ? 'continue' : decision.kind;
   if (decision.kind === 'tools') {
     if (!decision.calls.length || decision.calls.length > 8 || new Set(decision.calls.map(call => call.id)).size !== decision.calls.length) throw new Error('FCA_INVALID_CALLS');
-    const results: Array<{ id: string; text: string; ok: boolean }> = [];
+    const results: Array<{ id: string; text: string; ok: boolean }> = [...output.auxiliaryResults ?? []];
     for (const call of decision.calls) {
       await checked();
       const operationId = `${step.id}:${call.id}`;
@@ -89,14 +106,15 @@ export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Ab
           ownerAlone: ports.ownerAlone, ...(ports.taskVisible ? { visible: ports.taskVisible } : {}),
           ...(ports.observeTasks ? { observed: ports.observeTasks } : {}) });
       },
-      value => ({ ...provenance, operationId, ok: value.ok, failure: value.failure ?? null }));
+      value => ({ ...provenance, operationId, ok: value.ok, failure: value.failure ?? null })).catch(error => { ports.evidence?.unknown(step, call); throw error; });
+      ports.evidence?.observed(step, call, result);
       results.push({ id: call.id, text: result.text, ok: result.ok });
       if (selection) {
         if (!result.ok) selection.refresh = true;
         selection.recentResults = [...selection.recentResults, { name: call.name, ok: result.ok, summary: result.text.slice(0, 1_000) }].slice(-8);
       }
     }
-    consecutiveToolFailures = results.every(result => !result.ok) ? consecutiveToolFailures + 1 : 0;
+    consecutiveToolFailures = results.slice(output.auxiliaryResults?.length ?? 0).every(result => !result.ok) ? consecutiveToolFailures + 1 : 0;
     history.push(ports.model.toolResults(results));
   }
   if (disposition === 'complete' && (step.snapshot.task.kind === 'root' ||
@@ -104,11 +122,17 @@ export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Ab
       const child = runtime.get(step.scopeKey, id); return child && !['completed', 'failed'].includes(child.phase);
     }))) disposition = 'wait';
   await checked();
+  // No detached recall may keep spending after the segment's completion receipt becomes visible.
+  await ports.recall?.finishSegment(step.scopeKey, step.taskId);
+  await checked();
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
   const saved = observeSync('store', provenance, () => runtime.commitStep(step, {
-    history, disposition, checkpoint: { ...prior, consecutiveToolFailures, ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' ? { summary: decision.summary } : {}),
+    history, disposition, checkpoint: { ...prior, consecutiveToolFailures, ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' ? { summary: decision.summary } : {}),
   }), value => ({ ...provenance, committed: value !== null, phase: value?.task.phase ?? null }));
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
+  // These callbacks drain durable outboxes; their failure must never undo/repeat committed tools.
+  try { ports.evidence?.committed(step); } catch { /* Retried by the existing maintenance tick. */ }
+  if (saved.task.phase === 'completed' || saved.task.phase === 'failed') ports.recall?.cancel(step.scopeKey, step.taskId);
   if (consecutiveToolFailures >= 5) {
     runtime.stop(step.scopeKey, step.taskId, 'repeated_tool_failure');
     return runtime.snapshot(step.scopeKey, step.taskId)!;

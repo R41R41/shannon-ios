@@ -56,7 +56,8 @@ export function ensureSummaryLineageSchema(database: DatabaseSync): void {
 function experienceFromRow(row: Pick<EventRow, 'event_id' | 'observed_at' | 'payload_json'>): ShannonExperience[] {
   const payload = parseTurnPayload(row.payload_json);
   if (!payload) return [];
-  const recalledMemoryIds = boundedRecalledMemoryIds(payload.recalledMemoryIds);
+  const recalledMemoryIds = payload.source === 'fca.task' && Array.isArray(payload.recalledMemoryIds)
+    ? payload.recalledMemoryIds.filter(id => typeof id === 'string' && id.length <= 240).slice(0, 5000) : boundedRecalledMemoryIds(payload.recalledMemoryIds);
   // An unreadable or absent label stays absent: owner-only and sensitive.
   const disclosure = normalizeDisclosure(payload.disclosure);
   return [Object.freeze({
@@ -65,6 +66,7 @@ function experienceFromRow(row: Pick<EventRow, 'event_id' | 'observed_at' | 'pay
     shannonReply: payload.shannonReply,
     summary: payload.summary,
     observedAt: row.observed_at,
+    ...(payload.source === 'fca.task' && Array.isArray(payload.readSourceIds) ? { readSourceIds: payload.readSourceIds.filter(id => typeof id === 'string' && id.length <= 240).slice(0, 5000) } : {}),
     ...(payload.timeZone ? { timeZone: payload.timeZone } : {}),
     ...(recalledMemoryIds ? { recalledMemoryIds } : {}),
     ...(disclosure ? { disclosure } : {}),
@@ -261,6 +263,13 @@ export class SQLiteConversationRepository implements ConversationStore {
       WHERE scope_key = ? AND event_type = 'turn.completed' AND event_id IN (${ids.map(() => '?').join(', ')})
     `).all(scopeKey, ...ids) as unknown as EventRow[];
     return Object.freeze(rows.flatMap(experienceFromRow));
+  }
+
+  hasReadSourceProvenance(scopeKey: string): boolean {
+    // Only canonical task:<uuid> experiences can own readSourceIds. Ordinary turns can inherit them by ID.
+    // This fresh existence check is independent of FCA enablement and reads no payloads.
+    return Boolean(this.context.database.prepare(`SELECT 1 FROM experience_events
+      WHERE scope_key = ? AND event_type = 'turn.completed' AND event_id GLOB 'task:*' LIMIT 1`).get(scopeKey));
   }
 
   appendTurn(

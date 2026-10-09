@@ -59,6 +59,14 @@ export function migrateMemorySearchIndex(database: DatabaseSync): void {
       ON CONFLICT (source_kind, source_id) DO UPDATE SET
         body = excluded.body, observed_at = excluded.observed_at;
     END;
+    CREATE TRIGGER IF NOT EXISTS memory_search_experience_update
+    AFTER UPDATE OF payload_json, observed_at ON experience_events
+    WHEN NEW.event_type = 'turn.completed' AND json_valid(NEW.payload_json)
+      AND json_type(NEW.payload_json, '$.summary') = 'text'
+    BEGIN
+      UPDATE memory_search_documents SET body=substr(json_extract(NEW.payload_json, '$.summary'),1,2000), observed_at=NEW.observed_at
+      WHERE source_kind='experience' AND source_id=NEW.event_id AND scope_key=NEW.scope_key;
+    END;
     INSERT INTO memory_search_documents (source_kind, source_id, scope_key, thread_id, observed_at, body)
     SELECT 'experience', event_id, scope_key, NULL, observed_at, substr(json_extract(payload_json, '$.summary'), 1, 2000)
     FROM experience_events

@@ -1,7 +1,9 @@
+import { SQLiteTaskExperiences } from '../../mind/memory/store/taskExperiences.js';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CompanionClock, CompanionStateEvent, CompanionStateSnapshot, CompanionStateStore, ShannonEmotionTiming, MemoryAudience } from '@shannon/cognition';
+import type { FcaAffectEvidence } from '../../mind/emotion/emotionPorts.js';
 import { ownerSpoke } from '@shannon/cognition';
 import type { BackgroundJobStore, ClaimedBackgroundJob, DailyUserMessage } from '../../mind/sleep/store/backgroundJobStore.js';
 import type { ShannonConversationItem } from '../models/chatModel.js';
@@ -119,6 +121,7 @@ function wiredParts(options: SQLiteShannonStoreOptions): StoreMemoryParts {
 }
 
 export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore, MemoryEmbeddingIndex, ShannonKnowledgeStore {
+  readSourceVisible?: ConversationStore['readSourceVisible'];
   private readonly context: SQLiteStoreContext;
   private readonly companion: SQLiteCompanionRepository;
   private readonly realtimeVoice: SQLiteRealtimeVoiceRepository;
@@ -242,6 +245,8 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   }
 
   snapshot(scopeKey: string) { return this.companion.snapshot(scopeKey); }
+  applyFcaAffectEvidence(scope: string, evidence: FcaAffectEvidence, visible: () => boolean) { return this.companion.applyFcaAffectEvidence(scope, evidence, visible); }
+  fcaAffectReceipts(scope: string, eventIds?: readonly string[]) { return this.companion.fcaAffectReceipts(scope, eventIds); }
   apply(scopeKey: string, event: CompanionStateEvent) {
     const result = this.companion.apply(scopeKey, event);
     // Syzygy ADR-0008 stage 3 (review H2): what the owner forgot leaves nothing in the memory outbox (only while it is on).
@@ -294,6 +299,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   conversationHistory(scopeKey: string, threadId?: string): readonly StoredConversationMessage[] { return this.conversations.conversationHistory(scopeKey, threadId); }
   assistantMessage(scopeKey: string, threadId: string, sourceOrMessageId: string) { return this.conversations.assistantMessage(scopeKey,threadId,sourceOrMessageId); }
   appendNoteOnce(scopeKey: string, threadId: string, messageId: string, content: string, observedAt: string, noteKind: string, ownerAlone?: boolean) { return this.conversations.appendNoteOnce(scopeKey,threadId,messageId,content,observedAt,noteKind,ownerAlone); }
+  taskExperiences(): SQLiteTaskExperiences { return new SQLiteTaskExperiences(this.context.database); }
   experienceCandidates(scopeKey: string): readonly ShannonExperience[] { return this.conversations.experienceCandidates(scopeKey); }
   searchMemory(scopeKey: string, text: string, limit?: number): readonly MemorySearchHit[] { return this.memorySearch.searchMemory(scopeKey, text, limit); }
   embeddingScopes() { return this.embeddings.embeddingScopes(); }
@@ -313,6 +319,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   turnCaptures(scopeKey: string, turnIds: readonly string[]) { return this.conversations.turnCaptures(scopeKey, turnIds); }
   threadSummaryLineage(scopeKey: string, threadId: string) { return this.conversations.threadSummaryLineage(scopeKey, threadId); }
   experiencesById(scopeKey: string, experienceIds: readonly string[]) { return this.conversations.experiencesById(scopeKey, experienceIds); }
+  hasReadSourceProvenance(scopeKey: string) { return this.conversations.hasReadSourceProvenance(scopeKey); }
   recentMessages(scopeKey: string, threadId: string, limit: number) { return selectRecentMessages(this.context.database, scopeKey, this.conversations.threadId(scopeKey, threadId), limit); }
   replaySummary(scopeKey: string, threadId: string) { return selectReplaySummary(this.context.database, scopeKey, threadId, this.context.options.structuredCompaction === true); }
   saveReplaySummary(scopeKey: string, threadId: string, record: ReplaySummaryRecord) {

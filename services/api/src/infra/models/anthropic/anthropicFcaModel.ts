@@ -8,6 +8,7 @@ import { DEFAULT_HAIKU_MODEL, isAppendOnlyAnthropicModel, usesOneHourAnthropicCa
 import { observeAsync, observeSync, observerHandoff } from '../../observer/observerContext.js';
 import { observedAnthropicResponse, observedToolName } from './observerProjection.js';
 import { FCA_MENU_INSTRUCTIONS, isFcaToolChangeMessage, nativeFcaTools } from './anthropicFcaTools.js';
+import { decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL } from './anthropicFcaContext.js';
 
 /** Only content-free accounting leaves this adapter; signed history belongs to the task's private replay. */
 export interface AnthropicFcaUsage {
@@ -83,13 +84,16 @@ export class AnthropicFcaModel implements FcaModel {
     if (combined.aborted) throw new Error('FCA_MODEL_ABORTED');
     const history = nativeHistory(input.history);
     if (input.catalog && !isAppendOnlyAnthropicModel(this.model)) throw new Error('FCA_MODEL_INLINE_TOOLS_UNSUPPORTED');
+    if (input.sharedContext && !input.catalog) throw new Error('FCA_CONTEXT_REQUIRES_SELECTED_MODE');
     const { current, body, menu } = observeSync('native', {
       model: this.model, historyMessageCount: history.length, deliveredMessageCount: input.messages.length,
       offeredTools: input.tools.map(tool => observedFcaToolName(tool.name)),
     }, () => {
-      const menu = nativeFcaTools(input, history, CONTROL_TOOLS);
+      const menu = nativeFcaTools(input, history, CONTROL_TOOLS, input.sharedContext ? [FCA_CONTEXT_TOOL] : []);
       const current: Anthropic.MessageParam = { role: 'user', content: JSON.stringify({ task: input.task, children: input.children ?? [], messages: input.messages,
-        ...(input.catalog ? { catalog: input.catalog.map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}) }) };
+        ...(input.catalog ? { catalog: input.catalog.map(tool => ({ name: providerToolName(tool.name), description: tool.description })) } : {}),
+        ...(input.sharedContext ? { sharedContext: input.sharedContext, contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}),
+        ...(input.recall ? { recall: input.recall } : {}) }) };
       return { current, menu, body: cacheHaikuRequest({
         model: this.model, max_tokens: this.maximumOutputTokens, system: input.catalog ? `${this.system}\n\n${FCA_MENU_INSTRUCTIONS}` : this.system,
         messages: [...history, ...menu.appended, current], tools: menu.tools, tool_choice: { type: 'auto' as const },
@@ -118,13 +122,15 @@ export class AnthropicFcaModel implements FcaModel {
     if (message.stop_reason === 'max_tokens') throw new Error('FCA_MODEL_TRUNCATED');
     if (message.stop_reason === 'refusal') throw new Error('FCA_MODEL_REFUSED');
     if (message.stop_reason !== 'tool_use') throw new Error('FCA_MODEL_DECISION_MISSING');
-    const decision = decodeDecision(message.content, menu.names, history);
+    const decision = decodeDecision(message.content, menu.names, history, input.sharedContext ? FCA_CONTEXT_NAME : undefined);
+    const context = decodeFcaContext(message.content, decision, input);
     const appended: Anthropic.MessageParam[] = [...menu.appended, current, { role: 'assistant', content: message.content }];
     if (decision.kind !== 'tools') {
-      const control = message.content.find(block => block.type === 'tool_use') as Anthropic.ToolUseBlock;
-      appended.push(this.toolResults([{ id: control.id, text: JSON.stringify({ received: true, requestedDecision: decision.kind }), ok: true }]));
+      const control = message.content.find(block => block.type === 'tool_use' && CONTROL_TOOLS.some(tool => tool.name === block.name)) as Anthropic.ToolUseBlock;
+      appended.push(this.toolResults([...(context.auxiliaryResults ?? []), { id: control.id, text: JSON.stringify({ received: true, requestedDecision: decision.kind }), ok: true }]));
+      delete context.auxiliaryResults;
     }
-    return { decision, history: appended };
+    return { decision, history: appended, ...context };
   }
 
   toolResults(results: readonly { id: string; text: string; ok: boolean }[]): Anthropic.MessageParam {
@@ -161,7 +167,7 @@ export class AnthropicFcaModel implements FcaModel {
 export function createAnthropicFcaModel(options: AnthropicFcaOptions): FcaModel { return new AnthropicFcaModel(options); }
 
 function observedFcaToolName(name: string): string {
-  return CONTROL_TOOLS.some(tool => tool.name === name) ? name : observedToolName(name);
+  return CONTROL_TOOLS.some(tool => tool.name === name) || name === FCA_CONTEXT_NAME ? name : observedToolName(name);
 }
 function observedFcaRequest(body: Anthropic.MessageCreateParamsNonStreaming) {
   return { model: body.model, messageCount: body.messages.length, maximumOutputTokens: body.max_tokens,
@@ -184,13 +190,14 @@ function nativeHistory(history: readonly unknown[]): Anthropic.MessageParam[] {
   });
 }
 
-function decodeDecision(content: Anthropic.ContentBlock[], names: Map<string, string>, history: readonly Anthropic.MessageParam[]): FcaDecision {
+function decodeDecision(content: Anthropic.ContentBlock[], names: Map<string, string>, history: readonly Anthropic.MessageParam[], auxiliary?: string): FcaDecision {
   if (!Array.isArray(content) || !content.length || content.some(block => !object(block))) throw new Error('FCA_MODEL_OUTPUT_INVALID');
-  const calls = content.filter((block): block is Anthropic.ToolUseBlock => block.type === 'tool_use');
+  const allCalls = content.filter((block): block is Anthropic.ToolUseBlock => block.type === 'tool_use');
+  const calls = allCalls.filter(call => call.name !== auxiliary);
   if (!calls.length) throw new Error('FCA_MODEL_DECISION_MISSING');
   const used = new Set(history.flatMap(message => message.role === 'assistant' && Array.isArray(message.content)
     ? message.content.filter(block => block.type === 'tool_use').map(block => block.id) : []));
-  for (const call of calls) {
+  for (const call of allCalls) {
     if (!nonempty(call.id) || used.has(call.id) || !object(call.input)) throw new Error('FCA_MODEL_CALL_INVALID');
     used.add(call.id);
   }
