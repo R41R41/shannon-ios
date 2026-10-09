@@ -39,7 +39,7 @@ export class SQLiteFcaTaskAuthority implements TaskAuthority {
     const parentClause = query.parentId === undefined ? '' : ' AND fca_parent_id IS ?';
     const args = query.parentId === undefined ? [scopeKey] : [scopeKey, query.parentId];
     return this.db.prepare(`SELECT * FROM agent_tasks WHERE scope_key=? AND fca_kind IS NOT NULL${parentClause}
-      ORDER BY created_at,task_id LIMIT ? OFFSET ?`).all(...args, query.limit ?? 100, query.offset ?? 0).map(record);
+      ORDER BY ${query.order === 'recent' ? 'updated_at DESC' : 'created_at'},task_id LIMIT ? OFFSET ?`).all(...args, query.limit ?? 100, query.offset ?? 0).map(record);
   }
   create(input: Omit<TaskRecord, 'revision' | 'updatedAt'> & { requestKey: string }): TaskRecord {
     this.db.prepare(`INSERT INTO agent_tasks(task_id,scope_key,conversation_thread_id,start_idempotency_key,title,goal,status,summary,

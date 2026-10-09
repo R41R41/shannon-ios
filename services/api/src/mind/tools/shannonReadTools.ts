@@ -26,7 +26,7 @@ export interface ReadToolPorts {
   upcoming?: (scopeKey: string, range: 'day' | 'week') => ReadToolText;
   upcomingSearch?: (scopeKey: string, input: Record<string, unknown>) => ReadToolText;
   /** The place skill for a query in an area; `spoken` for a voice turn. */
-  places?: (scopeKey: string, query: string, spoken: boolean) => Promise<string>;
+  places?: (scopeKey: string, query: string, spoken: boolean, context?: import('../../integrations/places/placeDiscovery.js').PlaceSearchContext) => Promise<string | { prompt: string; places: import('../../integrations/places/placeDiscovery.js').ShannonPlace[]; webSources: WebSearchResult['sources'] }>;
 }
 /** Optional closed receipts accompany the identical text from an existing projection. */
 export type ReadToolText = string | { text: string; sourceIds: readonly string[] };
@@ -71,7 +71,7 @@ export function readToolExecutors(ports: ReadToolPorts | null): Readonly<Record<
         const read = await ports.web!({ scopeKey: context.scopeKey, query, signal, milliseconds: context.timeMilliseconds, maxUses: 3 });
         signal?.throwIfAborted();
         WEB_READS.set(context.memory, read);
-        return { result: read.status === 'results' ? toolOk(webSearchContext(read)) : toolFailure(read.status === 'empty' ? 'not_found' : 'unavailable', read.text, { retryable: false }),
+        return { result: read.status === 'results' ? { ...toolOk(webSearchContext(read)), readReceipt: { text: read.text, sources: read.sources } } : toolFailure(read.status === 'empty' ? 'not_found' : 'unavailable', read.text, { retryable: false }),
           record: { summary: read.status === 'results' ? summary : '会話のWeb検索では情報を確認できませんでした。', outcome: read.status === 'results' ? 'done' as const : 'failed' as const, ...(read.status === 'results' ? {} : { reasonCode: read.status }) } };
       } };
     },
@@ -107,7 +107,13 @@ export function readToolExecutors(ports: ReadToolPorts | null): Readonly<Record<
       const query = clip(stringInput(input, 'query') ?? '', 120);
       const area = clip(stringInput(input, 'area') ?? '', 80);
       if (!query) return toolFailure('invalid_input', '何を探すか（query）が空だった。', { retryable: false });
-      return prepared('会話の中で場所の候補を探しました。', () => ports.places!(context.scopeKey, area ? `${area}の${query}` : query, context.surface === 'voice'));
+      return { summary: '場所の候補を探します。', run: async signal => {
+        signal?.throwIfAborted();
+        try { const read = await ports.places!(context.scopeKey, area ? `${area}の${query}` : query, context.surface === 'voice', area ? undefined : context.placeSearch);
+        signal?.throwIfAborted();
+        return { result: typeof read === 'string' ? toolOk(read) : { ...toolOk(read.prompt), readReceipt: { text: read.prompt, sources: read.webSources, places: read.places } }, record: { summary: '会話の中で場所の候補を探しました。', outcome: 'done' as const } };
+        } catch (error) { signal?.throwIfAborted(); return { result: UNAVAILABLE, record: { summary: '場所を確認できませんでした。', outcome: 'failed' as const, reasonCode: 'unavailable' } }; }
+      } };
     },
   });
 }

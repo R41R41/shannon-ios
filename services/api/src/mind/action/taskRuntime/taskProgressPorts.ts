@@ -1,0 +1,16 @@
+import type { ShannonPlace } from '../../../integrations/places/placeDiscovery.js';
+import type { ShannonWebSource } from '../../../infra/models/chatModelContract.js';
+
+/** Actual executor observations. A public model summary never changes these states. */
+export interface TaskProgress {
+  currentStep: string; status: 'running' | 'received' | 'failed' | 'unknown';
+  startedAt: string; updatedAt: string;
+  findings: Array<{ id: string; text: string; status: 'unconfirmed'; sources: ShannonWebSource[]; updatedAt: string }>;
+  places?: ShannonPlace[];
+  report?: { id: string; text: string; updatedAt: string };
+}
+export interface TaskProgressEvent {
+  operationId: string; tool: string; status: TaskProgress['status'];
+  read?: { text: string; sources: ShannonWebSource[]; places?: ShannonPlace[] };
+  report?: { text: string };
+}

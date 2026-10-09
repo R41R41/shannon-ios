@@ -1,3 +1,4 @@
+import { conversationSecrets } from '../../inhibition/disclosurePorts.js';
 import { createTaskMemory } from '../../memory/taskMemoryPorts.js';
 import { memoryIdentifier, visibleMemoryText, type CompanionStateSnapshot, type CompanionStateStore } from '@shannon/cognition';
 import { MemoryWithholding } from '../../memory/memoryVisibilityPorts.js';
@@ -61,10 +62,28 @@ export function createFcaSourceGuard(parts: {
       return true;
     } catch { return false; }
   };
+  const content: NonNullable<FcaSourceGuard['content']> = (scopeKey, taskId, text, observedAt) => {
+    try {
+      if (!parts.ownerAlone() || scopeKey !== parts.ownerScope) return false;
+      const state = parts.state.snapshot(scopeKey), sources = parts.runtime.taskSources(scopeKey, taskId);
+      const recalledMemoryIds = [...new Set(sources.flatMap(source => [...source.experienceId ? [source.experienceId] : [], ...source.recalledMemoryIds]))];
+      return !conversationSecrets(state, parts.conversations, scopeKey).carries(text) && !new MemoryWithholding(state, parts.conversations, scopeKey, undefined, parts.readSourceVisible).withholdsReply({ text, observedAt, recalledMemoryIds });
+    } catch { return false; }
+  };
+  const progress: NonNullable<FcaSourceGuard['progress']> = (scopeKey, taskId) => {
+    const task = parts.runtime.get(scopeKey, taskId), sources = parts.runtime.taskSources(scopeKey, taskId);
+    if (!task || !sourcesVisible(scopeKey, task, sources)) return null;
+    const observed = parts.runtime.progress?.(scopeKey, taskId); if (!observed) return null;
+    const hidden = (text: string, observedAt: string) => !content(scopeKey, taskId, text, observedAt);
+    const findings = observed.findings.filter(finding => !hidden([finding.text, ...finding.sources.flatMap(source => [source.title, source.url])].join('\n'), finding.updatedAt));
+    const places = observed.places?.filter(place => !hidden(JSON.stringify(place), observed.updatedAt));
+    const report = observed.report && !hidden(observed.report.text, observed.report.updatedAt) ? observed.report : undefined;
+    return { ...observed, findings, places, report };
+  };
   return Object.assign((scopeKey: string, taskId: string, pendingStepId?: string) => {
     const task = parts.runtime.get(scopeKey, taskId);
     return Boolean(task && sourcesVisible(scopeKey, task, parts.runtime.taskSources(scopeKey, taskId), pendingStepId));
-  }, { sources: sourcesVisible });
+  }, { sources: sourcesVisible, progress, content });
 }
 
 /** Trusted executor receipts only. Unknown or missing private read metadata is explicit, never treated as public. */

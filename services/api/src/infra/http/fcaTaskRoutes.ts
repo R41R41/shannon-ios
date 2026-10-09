@@ -1,10 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { TaskRuntime } from '../../mind/action/taskRuntime/taskRuntimePorts.js';
 import { readJson, sendJson } from './serverHttp.js';
+import { fcaNowProjection } from './fcaNowProjection.js';
+import type { TaskProgress } from '../../mind/action/taskRuntime/taskProgressPorts.js';
 export const FCA_TASK_PATH = '/v1/fca/tasks';
 export function createFcaTaskRoute(parts: {
   runtime: TaskRuntime; ownerScope: string; ownerAlone(): boolean;
   visible?(id: string): boolean;
+  progress?(id: string): TaskProgress | null;
   stop(id: string, reason: string): Promise<unknown>; wake(): void;
 }) {
   return async (request: IncomingMessage, response: ServerResponse, principal: { scopeKey: string } | null, url: URL) => {
@@ -15,6 +18,11 @@ export function createFcaTaskRoute(parts: {
       if (request.method === 'GET') {
         const id = url.searchParams.get('id');
         const visible = (id: string) => parts.visible?.(id) ?? true;
+        if (url.searchParams.get('projection') === 'now') {
+          const projection = fcaNowProjection(parts.runtime, scope, visible, parts.progress);
+          if (!parts.ownerAlone()) return sendJson(response, 403, { error: 'FCA_OWNER_ALONE_REQUIRED' });
+          return sendJson(response, 200, projection);
+        }
         const value = id ? visible(id) ? parts.runtime.get(scope, id) : null : parts.runtime.list(scope, { offset: Number(url.searchParams.get('offset') ?? 0), limit: 50 }).filter(task => visible(task.id));
         return sendJson(response, value ? 200 : 404, value ?? { error: 'FCA_TASK_NOT_FOUND' });
       }

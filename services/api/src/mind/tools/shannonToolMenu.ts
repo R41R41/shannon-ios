@@ -50,10 +50,10 @@ const NOT_OPENABLE = JSON.stringify({ ok: false, text: 'その名前の道具は
  * The session of a turn as the menu narrows it. `chosen` are the provider names Jev chose (an empty list: none); a name the
  * turn does not offer is ignored. Everything that is not the schema list is the base session's.
  */
-export function withToolMenu(base: ShannonModelToolSession, chosen: readonly string[]): ShannonModelToolSession {
+export function withToolMenu(base: ShannonModelToolSession, chosen: readonly string[], options?: { deferMemoryReads?: boolean }): ShannonModelToolSession {
   const offered = base.definitions;
   // What Jev chose, and always the ways to stop and to ask for approval (`ALWAYS_LOADED_TOOL_NAMES`) when the turn offers them.
-  const visible = new Set(offered.filter(tool => chosen.includes(providerToolName(tool.name)) || ALWAYS_LOADED_TOOL_NAMES.includes(tool.name)).map(tool => tool.name));
+  const visible = new Set(offered.filter(tool => chosen.includes(providerToolName(tool.name)) || (ALWAYS_LOADED_TOOL_NAMES.includes(tool.name) && !(options?.deferMemoryReads && ['memory.search', 'memory.read'].includes(tool.name)))).map(tool => tool.name));
   const open = toolOpenDefinition(offered);
   const current = () => [...offered.filter(tool => visible.has(tool.name)), open];
   const session = { maximumCalls: base.maximumCalls } as Record<string, unknown>;

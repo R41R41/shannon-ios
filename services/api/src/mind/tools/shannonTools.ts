@@ -36,6 +36,8 @@ export interface ToolResult {
   /** For `refused` and `not_offered`: why, and what would make the call work. */
   refusal?: { why: string; wouldWork: string };
   evidence?: ToolExecutionEvidence;
+  /** Actual bounded public-read receipt, populated by an executor after the read succeeded. */
+  readReceipt?: { text: string; sources: Array<{ title: string; url: string }>; places?: import('../../integrations/places/placeDiscovery.js').ShannonPlace[] };
 }
 /** A small JSON schema: an object of strings, integers and booleans. The validator in `shannonToolInput.ts` reads this subset only. */
 export interface ToolInputSchema {
@@ -479,7 +481,6 @@ export function toolForSurface(tool: ShannonToolDefinition, surface: ToolSurface
   SURFACE_TOOLS.set(tool.name, limited);
   return limited;
 }
-
 export function toolOk(text: string): ToolResult {
   return Object.freeze({ ok: true, text, retryable: false });
 }
@@ -489,7 +490,6 @@ export function toolFailure(failure: ToolFailureKind, text: string, options: { r
     ...(options.refusal ? { refusal: Object.freeze(options.refusal) } : {}),
   });
 }
-
 /** The result as the model reads it: one JSON object, the same on every surface. */
 export function toolResultForModel(result: ToolResult, includeEvidence = false): string {
   return JSON.stringify({

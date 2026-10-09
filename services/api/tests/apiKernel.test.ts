@@ -76,8 +76,9 @@ describe('Shannon local API kernel', () => {
     expect(model.requests[0]).toMatchObject({ useWebSearch: true,
       placeSearch: { latitude: 34.7038, longitude: 137.7346 } });
     expect(model.requests[0]?.history).toEqual([]);
-    expect(model.requests[1]).toMatchObject({ useWebSearch: true,
-      message: 'この近くの公園を地図で探して、今日の天気も教えて' });
+    expect(model.requests[1]?.useWebSearch).toBeUndefined();
+    expect(model.requests.filter(request => request.useWebSearch)).toHaveLength(1);
+    expect(model.requests[1]).toMatchObject({ message: 'この近くの公園を地図で探して、今日の天気も教えて' });
     expect(model.requests[1]?.placeSearch).toBeUndefined();
     expect(promptOf(model.requests[1])).toContain('浜松城公園');
     expect(promptOf(model.requests[1])).toContain('Place discovery skill result');

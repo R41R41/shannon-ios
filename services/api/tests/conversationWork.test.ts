@@ -1,0 +1,121 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import { InMemoryCompanionStateStore } from '@shannon/cognition';
+import { actionHarness } from './support/actionThreadHarness.js';
+import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
+import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
+import { createInMemoryAutonomyService } from '../src/wiring/autonomyServiceWiring.js';
+import { createFcaConversationBridge, createFcaSourceGuard } from '../src/mind/action/fca/fcaConversationPorts.js';
+import { fcaResearchTools } from '../src/wiring/fcaResearchWiring.js';
+import { fcaNowProjection } from '../src/infra/http/fcaNowProjection.js';
+import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
+import { inActionExecution } from '../src/infra/context/actionExecution.js';
+import { leaseOf } from '../src/contracts/actionThreadContract.js';
+import { readToolPorts } from '../src/wiring/skillRoutingWiring.js';
+import type { ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
+import { conversationHintMenu } from '../src/surfaces/voice/voiceConversationHint.js';
+import { TurnDeadline, TEXT_TURN_DEADLINE } from '../src/mind/action/respond/turnDeadline.js';
+import { MEMORY_TOOLS } from '../src/mind/tools/memoryToolDefinitions.js';
+
+const at = '2026-10-10T00:00:00.000Z';
+const closes: Array<() => Promise<void> | void> = [];
+afterEach(async () => { for (const close of closes.splice(0).reverse()) await close(); });
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
+async function until(condition: () => boolean) { for (let i = 0; i < 300 && !condition(); i++) await Promise.resolve(); expect(condition()).toBe(true); }
+function fixture(place = false) {
+  const h = actionHarness(() => at); closes.push(h.close);
+  const state = new InMemoryCompanionStateStore(() => at), conversations = new InMemoryConversationStore();
+  const service = createInMemoryAutonomyService(() => at);
+  const read = deferred<{ status: 'results'; text: string; sources: { title: string; url: string }[] }>();
+  let entered = false, searches = 0, alone = true, parent = '', round = 0, turns = 0;
+  const locationRequests: ShannonChatModelRequest[] = [];
+  service.tools.useReads(place ? readToolPorts({}, { notion: null, voyagerCatalog: { searchTasks: async () => [], listProjects: async () => [] }, upcoming: { promptFor: () => '' }, chatModel: { mode: 'local-stub', model: 'places', async generate(request) {
+    searches++; locationRequests.push(request); return { mode: 'local-stub', model: 'places', reply: '公園を確認。天気は未確認。',
+      places: [{ name: '公園', address: '浜松市', reason: '散歩', mapQuery: '公園 浜松市', mapUrl: 'https://evil.invalid/' }],
+      webSources: [{ title: '施設', url: 'https://example.com/park' }] };
+  } } })! : { web: async () => { entered = true; searches++; return read.promise; } });
+  let visible!: ReturnType<typeof createFcaSourceGuard>;
+  const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owner', now: () => at, ownerAlone: () => alone,
+    canRunTask: (_, id) => visible('owner', id),
+    model: { async decide() { const calls = round++ === 0 ? [{ id: 'read', name: place ? 'places.search' : 'web.search', input: { query: place ? '近くの公園' : 'public fact' } }]
+      : [{ id: 'report', name: 'task.send', input: { id: parent, message: '一つ資料が見つかった。要点はこのあと確認するね。https://example.com/source' } }];
+      return { decision: { kind: 'tools', calls }, history: [{ role: 'assistant', content: 'native' }] }; }, toolResults: results => ({ role: 'tool', results }) },
+    stepPorts: (runtime, step) => ({ sourcesVisible: () => visible('owner', step.taskId), taskVisible: id => visible('owner', id),
+      tools: fcaResearchTools({ tools: service.tools, state, conversations, scopeKey: 'owner', ownerAlone: () => alone,
+        task: { id: step.taskId, origin: step.snapshot.task.origin, leaseId: step.lease.id }, observeRead: () => true,
+        placeSearch: runtime.placeContext?.('owner', step.taskId) }) }),
+  }); closes.push(() => driver.close());
+  visible = createFcaSourceGuard({ runtime: driver.runtime, state, conversations, ownerScope: 'owner', ownerAlone: () => alone });
+  const bridge = createFcaConversationBridge({ runtime: driver.runtime, ownerScope: 'owner', visible });
+  const requests: ShannonChatModelRequest[] = [];
+  const kernel = createLocalApiKernel(() => at, { stateStore: state, conversationStore: conversations, fcaConversation: () => bridge,
+    chatModel: { mode: 'local-stub', model: 'foreground', async generate(request) { requests.push(request); return { mode: 'local-stub', model: 'foreground', reply: '調べてみるね。話しながら待ってて。' }; } } });
+  const chat = async (message: string, extra: Record<string, unknown> = {}) => {
+    const action = (await h.actions.admitRespond({ scopeKey: 'owner', kind: 'respond', origin: 'owner_request', sourceId: `turn-${++turns}` }))!;
+    const lease = leaseOf(action);
+    try { return await inActionExecution({ lease, signal: new AbortController().signal, permit: () => h.actions.dispatch(lease) },
+      () => kernel.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', message, ...extra } })); }
+    finally { await h.actions.finish(lease, 'completed', 'responded'); }
+  };
+  return { ...h, state, conversations, driver, bridge, visible, requests, read, chat, locationRequests,
+    entered: () => entered, searches: () => searches, parent(id: string) { parent = id; }, alone(value: boolean) { alone = value; },
+    now: () => fcaNowProjection(driver.runtime, 'owner', id => visible('owner', id), id => visible.progress?.('owner', id) ?? null) };
+}
+
+describe('conversation plus ongoing work', () => {
+  it('returns acceptance before web starts, admits another foreground while the real search is pending, and delivers one task-authored report', async () => {
+    const f = fixture();
+    expect((await f.chat('最新の公開資料を調べて', { webSearch: true })).status).toBe(200);
+    expect(f.searches()).toBe(0); expect(f.requests).toHaveLength(1); expect(f.requests[0].useWebSearch).toBeUndefined();
+    const child = f.driver.runtime.readyTasks('owner')[0]!; expect(child.kind).toBe('research'); f.parent(child.parentId!);
+    await f.driver.tick(); await until(f.entered);
+    expect(f.now().tasks[0]).toMatchObject({ phase: 'executing', currentStep: 'web.search', progressStatus: 'running', findings: [] });
+    expect((await f.chat('いま調べ中？')).status).toBe(200);
+    expect(f.requests.at(-1)?.turnContext).toContain('web.search'); expect(f.requests.at(-1)?.turnContext).toContain('running');
+    f.read.resolve({ status: 'results', text: 'Public fact observed', sources: [{ title: 'Source', url: 'https://example.com/source' }] });
+    await f.driver.drain(); expect(f.now().tasks[0].findings).toMatchObject([{ text: 'Public fact observed', status: 'unconfirmed' }]);
+    await f.driver.tick(); await f.driver.drain();
+    const report = f.now().tasks[0].report!; expect(report.text).toContain('一つ資料'); expect(report.text).not.toBe('Public fact observed');
+    expect(f.driver.runtime.snapshot('owner', child.parentId!)?.messages.some(message => message.id === report.id && message.text === report.text)).toBe(true);
+    expect(f.now().tasks[0].report?.id).toBe(report.id); expect(f.searches()).toBe(1);
+    f.state.apply('owner', { type: 'user-fact-upserted', fact: { id: 'late-secret', statement: 'Public fact observed', confidence: 1, observedAt: at, disclosure: { category: 'secret' } } });
+    expect(f.now().tasks[0].findings).toEqual([]); expect(f.now().tasks[0].report?.id).toBe(report.id);
+    f.state.apply('owner', { type: 'user-fact-upserted', fact: { id: 'late-report-secret', statement: report.text, confidence: 1, observedAt: at, disclosure: { category: 'secret' } } });
+    expect(f.now().tasks[0].report).toBeUndefined();
+    f.alone(false); expect(f.now().tasks).toEqual([]); f.alone(true);
+    const source = f.driver.runtime.taskSources('owner', child.id)[0]!;
+    f.state.apply('owner', { type: 'memory-control-upserted', control: { memoryId: source.experienceId!, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: at, changeReason: 'owner' } });
+    expect(f.now().tasks).toEqual([]);
+  });
+  it('carries only code-admitted one-time coordinates into the actual place search and preserves validated maps and source receipts', async () => {
+    const f = fixture(true);
+    await f.chat('近くの公園を探して', { placeLocation: { latitude: 34.7038, longitude: 137.7346, accuracyMeters: 24, observedAt: at } });
+    expect(f.searches()).toBe(0);
+    const child = f.driver.runtime.readyTasks('owner')[0]!; f.parent(child.parentId!);
+    expect(f.driver.runtime.placeContext?.('owner', child.id)).toEqual({ latitude: 34.7038, longitude: 137.7346 });
+    await f.driver.tick(); await f.driver.drain(); expect(f.searches()).toBe(1);
+    expect(f.locationRequests[0].placeSearch).toEqual({ latitude: 34.7038, longitude: 137.7346 });
+    expect(f.now().tasks[0].places?.[0].mapUrl).toMatch(/^https:\/\/maps.apple.com\//);
+    expect(f.now().tasks[0].findings?.[0].text).toContain('天気は未確認');
+  });
+  it('reuses an identical active request only at the same permitted location and retains each original location after a move', async () => {
+    const f = fixture(true);
+    const location = { latitude: 34.7038, longitude: 137.7346, accuracyMeters: 24, observedAt: at };
+    await f.chat('近くの公園を探して', { placeLocation: location });
+    const original = f.driver.runtime.readyTasks('owner')[0]!;
+    await f.chat('近くの公園を探して', { placeLocation: location });
+    expect(f.driver.runtime.readyTasks('owner').map(task => task.id)).toEqual([original.id]);
+    await f.chat('近くの公園を探して', { placeLocation: { ...location, latitude: 35.1 } });
+    const tasks = f.driver.runtime.readyTasks('owner'); expect(tasks).toHaveLength(2);
+    expect(f.driver.runtime.placeContext?.('owner', original.id)?.latitude).toBe(34.7038);
+    expect(f.driver.runtime.placeContext?.('owner', tasks.find(task => task.id !== original.id)!.id)?.latitude).toBe(35.1);
+    expect(f.searches()).toBe(0);
+  });
+  it('keeps tool_open and the full permitted catalog recoverable while avoiding initial read schemas for direct replies', () => {
+    let calls = 0;
+    const session = conversationHintMenu({ definitions: MEMORY_TOOLS, maximumCalls: 4, deadline: new TurnDeadline(TEXT_TURN_DEADLINE), async call() { calls++; return '{}'; } }, true)!;
+    expect(session.definitions.map(tool => tool.name)).toEqual(['tool.open']);
+    expect(session.menu?.offered).toEqual(MEMORY_TOOLS);
+    expect(session.meta?.('tool_open', JSON.stringify({ name: 'memory_search' }))).toContain('開いた');
+    expect(session.definitions.some(tool => tool.name === 'memory.search')).toBe(true); expect(calls).toBe(0);
+  });
+});

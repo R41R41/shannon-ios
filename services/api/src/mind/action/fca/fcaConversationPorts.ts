@@ -1,7 +1,8 @@
 import type { ToolResult } from '../../tools/toolRegistryPorts.js';
-import type { TaskSource, TaskView } from '../taskRuntime/taskRuntimePorts.js';
+import type { TaskSource, TaskSpec, TaskView } from '../taskRuntime/taskRuntimePorts.js';
 import type { ShannonModelToolSession } from '../../../infra/models/chatModelTools.js';
 import type { TaskConversationDeliveryInput } from '../taskRuntime/taskConversationDeliveryPorts.js';
+import type { TaskProgress } from '../taskRuntime/taskProgressPorts.js';
 
 /** Only canonical identifiers emitted by trusted readers; never source text or model-supplied metadata. */
 export interface FcaReadReceipt { name: string; ok: boolean; documents?: { read?: readonly string[]; sourceIds?: readonly string[]; informs?: true } }
@@ -25,6 +26,8 @@ export interface FcaConversationTurn {
   observe?<T>(work: () => Promise<T>): Promise<T>;
   /** Freshly guarded inbox data for this existing model call; only these messages are consumed at commit. */
   context(): string;
+  /** Admit work under this exact foreground source; it stays ineligible until visible history binds. */
+  delegate?(spec: TaskSpec, places?: import('../../../integrations/places/placeDiscovery.js').PlaceSearchContext): TaskView;
   selectTools?(tools: ShannonModelToolSession, input: { goal: string; state: string }): Promise<ShannonModelToolSession>;
   /** Called only after the ordinary conversation writer committed the source experience. */
   commit(experienceId: string): void;
@@ -38,6 +41,8 @@ export interface FcaConversationTurn {
 export interface FcaSourceGuard {
   (scopeKey: string, taskId: string, pendingStepId?: string): boolean;
   sources(scopeKey: string, task: TaskView, sources: readonly TaskSource[], pendingStepId?: string): boolean;
+  content?(scopeKey: string, taskId: string, text: string, observedAt: string): boolean;
+  progress?(scopeKey: string, taskId: string): TaskProgress | null;
 }
 
 export { createFcaConversationBridge } from './fcaConversation.js';

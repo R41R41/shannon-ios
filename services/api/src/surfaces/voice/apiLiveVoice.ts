@@ -73,6 +73,8 @@ import { conversationFcaProvenance, observeFcaConversation } from '../../mind/ac
 import type { FcaVoicePort } from '../../mind/action/fca/fcaVoicePorts.js';
 import { confirmedFcaVoiceInput, stageFcaVoice, voiceFcaChooser, voiceFcaDuplicate } from './fcaVoiceContext.js';
 import { observedVoicePlan, perceiveVoiceTurn, visibleVoiceResponse, voiceObservationOptions, voiceWorkspace } from './voiceObservation.js';
+import { admitConversationWork, admittedWorkContext } from '../../mind/action/fca/conversationWork.js';
+import { plainVoiceHint, conversationHintMenu, PLAIN_VOICE_HINT } from './voiceConversationHint.js';
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
   /** Looking through her body's camera or the app's (`voiceAppLook.ts`); absent, a voice turn never looks. */
   looks?: VoiceLooks;
@@ -139,7 +141,6 @@ export function dispatchLiveVoiceRequest(
   return withObserverRun(voiceObservationOptions(scopeKey, { transcript, participantMode, deviceContext }),
   () => dependencies.mind?.foreground ? dependencies.mind.foreground(scopeKey,complete) : complete());
 }
-
 async function completeLiveVoiceDelegation(
   scopeKey: string,
   requestedThreadId: string | undefined,
@@ -352,18 +353,16 @@ async function completeLiveVoiceDelegation(
   // a 「友人も一緒」 call keeps its own in-call turns and never sees the owner's thread.
   const replay = temporaryGuest ? null
     : conversationReplay('voice', captured, dependencies.conversationStore, scopeKey, threadId, present, undefined, toolTraceReader(dependencies.toolServer, scopeKey));
-  const placeSkill = selectedSkills.has('place_discovery') || wantsPlaceDiscovery(transcript)
-    ? await runPlaceDiscoverySkill(dependencies.auxiliaryChatModel ?? dependencies.chatModel, { scopeKey, message: transcript, context: {
-      ...(wantsNearbyPlaces(transcript) && deviceContext?.location ? {
-        latitude: deviceContext.location.latitude, longitude: deviceContext.location.longitude,
-      } : {}), spoken: true,
-    } }) : null;
-  observer?.signal?.throwIfAborted();
   const fcaTurn = fca && fcaInput && !uncertainTranscript && !notHisWordsToHer(decision) ? fca.begin({ ...fcaInput, observedAt: occurredAt,
     recalledMemoryIds: conversationFcaProvenance(captured, dependencies.conversationStore, scopeKey, threadId, [...cognitiveContext.frame.recalledMemoryIDs, ...peopleRecall?.ids ?? []]),
     readSourceIds: capability.readSourceIds, ownerAlone: () => dependencies.toolServer?.audience.othersKnown(scopeKey) === false }) : null;
   try {
-  const turnPrompt = [turnContext, placeSkill?.prompt ?? '', fcaTurn?.context() ?? ''].filter(Boolean).join('\n\n');
+  const placeContext = selectedSkills.has('place_discovery') || wantsPlaceDiscovery(transcript) ? { ...(wantsNearbyPlaces(transcript) && deviceContext?.location ? { latitude: deviceContext.location.latitude, longitude: deviceContext.location.longitude } : {}), spoken: true } : undefined;
+  const work = admitConversationWork(fcaTurn, { message: transcript, research: selectedSkills.has('current_web') || Boolean(placeContext), places: placeContext });
+  const placeSkill = !work && placeContext ? await runPlaceDiscoverySkill(dependencies.auxiliaryChatModel ?? dependencies.chatModel, { scopeKey, message: transcript, context: placeContext }) : null;
+  observer?.signal?.throwIfAborted();
+  const directHint = plainVoiceHint(decision, transcript, uncertainTranscript);
+  const turnPrompt = [turnContext, placeSkill?.prompt ?? '', fcaTurn?.context() ?? '', admittedWorkContext(work), directHint ? PLAIN_VOICE_HINT : ''].filter(Boolean).join('\n\n');
   if(dependencies.mind?.sync)await dependencies.mind.sync();
   // Stage 3: the workspace's blocks (voice: at most two lines) follow the turn's context, which stays byte for byte as it was.
   const replayed = withWorkspace(replay?.request(turnPrompt) ?? { ...(turnPrompt ? { turnContext: turnPrompt } : {}), history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) },
@@ -371,14 +370,15 @@ async function completeLiveVoiceDelegation(
   const offered = conversationTools(dependencies.autonomy, scopeKey, 'voice', toolAudience, dependencies.toolServer ?? {}, `${threadId}\n${transcript}`, deadline, // 「友人も一緒」: Aether reading tools; a legacy client none.
     { trust: transcriptTrust(decision, deviceContext?.userUtterance), ...(deviceContext?.userUtterance?.id ? { utteranceId: deviceContext.userUtterance.id } : {}) }, { ...ownerAloneReads(toolAudience), ...(dependencies.toolHints ? { sourceHints: true } : {}) });
   const { offer: selectedOffer, tier } = choices ? await voiceOfferAndTier(dependencies.turnRouting, offered, choices, { scopeKey, threadId, deadline, at: occurredAt }) : { offer: offered, tier: null };
-  const toolOffer = fcaTurn?.selectTools && selectedOffer.tools ? { ...selectedOffer, tools: await fcaTurn.selectTools(selectedOffer.tools, { goal: transcript, state: cognitiveContext.prompt }) } : selectedOffer;
+  const narrowedOffer = fcaTurn?.selectTools && selectedOffer.tools && !directHint && !work ? { ...selectedOffer, tools: await fcaTurn.selectTools(selectedOffer.tools, { goal: transcript, state: cognitiveContext.prompt }) } : selectedOffer;
+  const toolOffer = { ...narrowedOffer, tools: conversationHintMenu(narrowedOffer.tools, directHint || Boolean(work)) };
   observerHandoff('recall', 'context', { surface: 'voice', semantic: recalled !== null });
   const modelRequest = observeSync('context', { surface: 'voice' }, () => withToolCapabilityLines({ // Her Minecraft body's and Aether's lines, in her identity, exactly when their tools are offered.
     scopeKey, systemPrompt: basePrompt, ...skillProfilePrompt(identity.profile, dependencies.skills, scopeKey, toolOffer.tools, selectedSkills.has('current_web') || Boolean(placeSkill)), ...replayed,
     // What she said when she was touched is what he is answering: it directly precedes his words, in every mode, as context only.
     ...(reactionLine ? { precedingReply: reactionLine } : {}),
     message: transcript, ...toolOffer, ...tierRequest(tier, deadline.left()),
-    useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
+    useWebSearch: !work && !placeSkill && selectedSkills.has('current_web'),
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   }), value => ({ messageCharacterCount: value.message.length, historyCount: value.history?.length ?? 0,
     contextCharacterCount: value.turnContext?.length ?? 0, toolCount: value.tools?.definitions.length ?? 0 }));
@@ -392,7 +392,7 @@ async function completeLiveVoiceDelegation(
     && (orchestrationState.pendingAction.status === 'pending'
       || (orchestrationState.pendingAction.status === 'proposed'
         && /^(?:あと|それと|それも|ついでに|追加で|もう一つ|違う|ちがう|訂正|そうじゃなく|そうではなく)/u.test(transcript)));
-  const completion = await observeFcaConversation(fcaTurn, () => placeSkill || provisionalIntent || requiresStructuredTaskDecision || confirmedImplementationRequest
+  const completion = await observeFcaConversation(fcaTurn, () => placeSkill || (!work && provisionalIntent) || requiresStructuredTaskDecision || confirmedImplementationRequest
     ? dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false })
     : observer && dependencies.chatModel.generateVoiceStreaming
       ? dependencies.chatModel.generateVoiceStreaming(

@@ -1,3 +1,4 @@
+import { insertTaskMessage } from './taskMessageStore.js';
 import { TaskMaintenanceStore } from './taskMaintenanceStore.js';
 import { bounded, json, taskRuntimeLimits as limits } from './taskRuntimeValidation.js';
 import { ensureTaskRuntimeSchema } from './taskRuntimeSchema.js';
@@ -12,14 +13,20 @@ import type { TaskAuthority, TaskCommit, TaskConversationSource, TaskHistoryComm
   TaskSegmentReceipt, TaskSnapshot, TaskSpec, TaskStep, TaskView } from '../taskRuntimePorts.js';
 import { TaskSourceStore } from './taskSourceStore.js';
 import { TaskHistoryStore } from './taskHistoryStore.js';
+import { TaskProgressStore } from './taskProgressStore.js';
+import type { TaskProgressEvent } from '../taskProgressPorts.js';
 interface Checkpoint {
   checkpoint_json: string | null; wait_reason: string | null; stop_requested: number;
   step_id: string | null; lease_json: string | null; last_admission: number; observed_messages_json: string | null;
 }
 const terminal = (task: TaskRecord): boolean => ['completed', 'failed', 'cancelled'].includes(task.status);
-
 /** Subordinate inbox/history/checkpoints. The injected authority alone owns task status and its event sequence. */
 export class SQLiteTaskRuntimeStore implements TaskRuntime {
+  private readonly progressStore: TaskProgressStore;
+  placeContext(scope: string, id: string) { return this.authority.get(scope, id) ? this.progressStore.places(id) : undefined; }
+  admitPlaceContext(step: TaskStep, id: string, context: import('../../../../integrations/places/placeDiscovery.js').PlaceSearchContext) { return this.progressStore.admitPlaces(id, context, () => this.matches(step) && this.get(step.scopeKey, id)?.parentId === step.taskId && Boolean(this.options.conversationLeaseValid?.(step.scopeKey, step.lease, this.now()))); }
+  progress(scope: string, id: string) { return this.authority.get(scope, id) ? this.progressStore.read(id) : null; }
+  recordProgress(step: TaskStep, event: TaskProgressEvent) { return this.progressStore.record(step, event, () => this.matches(step) && this.get(step.scopeKey, step.taskId)?.phase === 'executing' && this.options.leaseValid(step.scopeKey, step.taskId, step.lease, this.now())); }
   admitSleep(scope: string, jobId: string) { return this.maintenance.admit(scope, jobId); }
   sleepTicketForTask(scope: string, taskId: string) { return this.maintenance.get(scope, taskId); }
   observeExternal(scope: string, target: string, event: TaskExternalEvent) {
@@ -34,6 +41,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
     this.authority = options.authority;
     this.now = options.now ?? (() => new Date().toISOString());
     ensureTaskRuntimeSchema(db, this.authority);
+    this.progressStore = new TaskProgressStore(db, this.authority, this.now);
     this.sources = new TaskSourceStore(db);
     this.histories = new TaskHistoryStore(db);
     this.maintenance = new TaskMaintenanceStore(db, { authority: this.authority, now: this.now, resolve: options.sleepTicket, root: scope => this.ensureRoot(scope), view: task => this.view(task) });
@@ -183,7 +191,6 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
   bindConversationDelivery(scope: string, input: TaskConversationDeliveryInput & { threadId: string; experienceId: string }): boolean { return this.deliveries.bind(scope, input); }
   private sourceBound(scope: string, stepId: string): void {
       for (const id of this.sources.dependents(scope, stepId)) {
-
         const task = this.required(scope, id), row = this.checkpoint(id);
         const wake = task.kind !== 'conversation' && !terminal(task) && task.status !== 'paused' && !row.step_id && !row.stop_requested
           && !this.sources.hasUnboundOrigin(id) && (task.status === 'queued' || this.messages(id).length > 0);
@@ -475,14 +482,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
     { accepted: true; duplicate: boolean; task: TaskView } {
     const sourceTask = this.required(scope, source), task = this.required(scope, target);
     if (task.origin === 'maintenance' || sourceTask.origin === 'maintenance') throw new Error('FCA_MAINTENANCE_INPUT');
-    const known = this.db.prepare('SELECT * FROM fca_task_messages WHERE scope_key=? AND message_id=?').get(scope, id);
-    if (known) {
-      if (known.source_task_id !== source || known.target_task_id !== target || known.text !== text) throw new Error('FCA_MESSAGE_CONFLICT');
-      return { accepted: true, duplicate: true, task: this.view(task) };
-    }
-    if (terminal(task)) throw new Error('FCA_TARGET_FINISHED');
-    this.db.prepare('INSERT INTO fca_task_messages(scope_key,message_id,source_task_id,target_task_id,text,received_at) VALUES(?,?,?,?,?,?)')
-      .run(scope, id, source, target, text, this.now());
+    if (!insertTaskMessage(this.db, { scope, source, target, text, id, at: this.now(), finished: terminal(task) })) return { accepted: true, duplicate: true, task: this.view(task) };
     this.sources.inherit(sourceTask, this.checkpoint(source).step_id, target, id, this.observedMessages(sourceTask));
     const row = this.checkpoint(target), wake = !row.step_id && !row.stop_requested && task.status !== 'paused'
       && this.sources.messageVisible(target, id) && !this.sources.hasUnboundOrigin(target);

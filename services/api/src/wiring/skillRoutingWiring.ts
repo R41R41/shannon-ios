@@ -107,6 +107,6 @@ export function readToolPorts(
       const projection = parts.upcoming.searchWithSources!(scopeKey, input);
       return { text: projection.prompt, sourceIds: projection.sourceIds.map(id => `calendar-item://${encodeURIComponent(id)}`) };
     } } : {}),
-    places: async (scopeKey, query, spoken) => (await runPlaceDiscoverySkill(parts.chatModel, { scopeKey, message: query, context: spoken ? { spoken: true } : {} })).prompt,
+    places: async (scopeKey, query, spoken, permitted) => runPlaceDiscoverySkill(parts.chatModel, { scopeKey, message: query, context: { ...permitted, ...(spoken ? { spoken: true } : {}) } }),
   };
 }

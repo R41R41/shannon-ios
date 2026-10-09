@@ -112,7 +112,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         ...(parts.tools && parts.state && parts.conversations ? { tools: createFcaProgressTools(combineFcaTools(fcaResearchTools({ tools: parts.tools,
           state: parts.state, conversations: parts.conversations, ...(shared ? { observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
           task: { id: step.taskId, origin: step.snapshot.task.origin, leaseId: step.lease.id },
-          checkpoint: step.snapshot.checkpoint,
+          checkpoint: step.snapshot.checkpoint, placeSearch: _runtime.placeContext?.(step.scopeKey, step.taskId),
           observeRead: (operationId, receipt) => {
             const ids = fcaReadReceiptSources(receipt).readSourceIds ?? [];
             if (!ids.length) return true;
@@ -131,7 +131,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       visible = Object.assign((scope: string, id: string, pending?: string) => {
         const task = runtime.runtime.get(scope, id);
         return task?.kind === 'sleep' ? scope === parts.ownerScope && parts.ownerAlone() && sleep!.visible(runtime.runtime, task) : foregroundVisible(scope, id, pending);
-      }, { sources: foregroundVisible.sources });
+      }, { sources: foregroundVisible.sources, progress: foregroundVisible.progress, content: foregroundVisible.content });
     }
     const conversation = visible ? createFcaConversationBridge({ runtime: runtime.runtime, ownerScope: parts.ownerScope, visible, selector }) : null;
     if (visible && parts.state && parts.conversations && readSourceVisible) shared = createFcaSharedWiring({ ...parts, db, runtime: runtime.runtime, state: parts.state, conversations: parts.conversations, visible, readSourceVisible });
@@ -153,7 +153,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     if (requests && parts.tools) parts.tools.useMinecraftTasks(requests.tools);
     const wake = () => { try { sleep?.jobs.reconcile(runtime.runtime); sleep?.jobs.admit(runtime.runtime); } catch { /* Atomic admission retries; unknown task outcomes remain held. */ } void touch?.tick().catch(() => {}); if (!parts.ownerAlone()) void shared?.recall.cancelAll(); try { shared?.evidence?.flush(); } catch { /* Durable evidence remains for retry. */ } void runtime.tick().catch(() => {}); };
     const timer = setInterval(wake, 1000); timer.unref();
-    const route = createFcaTaskRoute({ runtime: runtime.runtime, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, stop: runtime.stop, wake, visible: id => visible?.(parts.ownerScope, id) ?? runtime.runtime.taskSources(parts.ownerScope, id).length === 0 });
+    const route = createFcaTaskRoute({ runtime: runtime.runtime, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, stop: runtime.stop, wake, visible: id => visible?.(parts.ownerScope, id) ?? runtime.runtime.taskSources(parts.ownerScope, id).length === 0, progress: id => visible?.progress?.(parts.ownerScope, id) ?? null });
     const lifecycleTask = (executionId: string) => {
       const row = db.prepare('SELECT source_id FROM mind_actions WHERE id=? AND scope_key=? AND kind=?').get(executionId, parts.ownerScope, 'agentTask');
       const taskId = typeof row?.source_id === 'string' ? /^fca:([^:]+):[0-9]+$/.exec(row.source_id)?.[1] : undefined;

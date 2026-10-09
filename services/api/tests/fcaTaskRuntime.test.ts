@@ -53,6 +53,30 @@ function fixture(decide: Decide) {
 }
 
 describe('common FCA runner with the real action authority', () => {
+  it('observes native hyphenated body tools without preventing the existing call or commit', async () => {
+    let executed = 0;
+    const f = fixture(() => output({ kind: 'tools', calls: [{ id: 'mine', name: 'mc.mine-block', input: {} }] }));
+    const task = f.child('hyphenated-body');
+    // This fixture uses the real runner/action authority; supply the registered native adapter definition.
+    const driver = createTaskRuntimeWiring({ db: f.db, actions: f.actions, scopeKey: 'owner', now: () => '2026-10-09T00:00:00.000Z', ownerAlone: () => true,
+      model: { async decide() { return output({ kind: 'tools', calls: [{ id: 'mine', name: 'mc.mine-block', input: {} }] }); }, toolResults: results => ({ results }) },
+      stepPorts: () => ({ tools: { definitions: [{ name: 'mc.mine-block', description: 'Mine one observed block', input: { type: 'object', properties: {}, required: [], additionalProperties: false }, domain: 'minecraft_body', effect: 'write', cost: 'none', audiences: ['owner_alone'], surfaces: ['text'] }],
+        async execute() { executed++; return { ok: true, text: 'Actual block receipt', retryable: false }; } } }) });
+    cleanups.push(() => driver.close());
+    await driver.tick(); await driver.drain();
+    expect(executed).toBe(1);
+    expect(driver.runtime.progress?.('owner', task.id)).toMatchObject({ currentStep: 'mc.mine-block', status: 'received' });
+    expect(driver.runtime.snapshot('owner', task.id)?.history).toHaveLength(2);
+  });
+  it('keeps canonical model/tool decisions running when optional progress persistence is unavailable', async () => {
+    const f = fixture(() => output({ kind: 'wait', summary: 'Observed result' }));
+    const task = f.child('projection-unavailable');
+    f.driver.runtime.recordProgress = () => { throw new Error('FCA_PROGRESS_UNAVAILABLE'); };
+    await f.driver.tick(); await f.driver.drain();
+    expect(f.driver.runtime.get('owner', task.id)).toMatchObject({ phase: 'waiting', summary: 'Observed result' });
+    expect(f.driver.runtime.snapshot('owner', task.id)?.history).toHaveLength(1);
+    expect(f.driver.runtime.pendingReceipts('owner')).toEqual([]);
+  });
   it('retains repeated tool failure stops across newly leased segments', async () => {
     let count = 0;
     const f = fixture(() => output({ kind: 'tools', calls: [{ id: `call-${++count}`, name: 'unavailable.tool', input: {} }] }));

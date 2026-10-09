@@ -61,6 +61,8 @@ export function toolSessionMemory(turnKey?: string): ToolSessionMemory {
 
 export interface ToolExecutionContext extends ToolCallContext {
   memory: ToolSessionMemory;
+  /** Server-only, code-admitted one-request location inherited by the original FCA child. */
+  placeSearch?: import('../../integrations/places/placeDiscovery.js').PlaceSearchContext;
   /** Trusted FCA runner commits tool receipts with its whole native round before acknowledging the action. */
   acknowledgementOwner?: 'fca';
   /** Trusted caller rechecks live source/query rights after an awaited action permit. */

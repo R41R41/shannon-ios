@@ -101,6 +101,8 @@ import type { ChatResponse } from '../../contracts/contracts.js';
 import { withWorkspace, type MindTurnPorts } from '../../mind/workspace/workspacePorts.js';
 import type { FcaVoicePort } from '../../mind/action/fca/fcaVoicePorts.js';
 import { conversationFcaProvenance, observeFcaConversation, type FcaConversationPort } from '../../mind/action/fca/fcaConversationPorts.js';
+import { admitConversationWork, admittedWorkContext } from '../../mind/action/fca/conversationWork.js';
+import { conversationHintMenu } from '../../surfaces/voice/voiceConversationHint.js';
 export type { TextTurnInput, TextTurnResult, TextTurnSurface } from '../../mind/action/respond/apiTextTurn.js';
 export interface ShannonApiKernelOptions {
   /** The composition root supplies the default service, after this kernel's stores are ready. */
@@ -264,22 +266,18 @@ export class ShannonApiKernel {
     if (preferenceResponse) return preferenceResponse;
     if (isBodyRoute(request.path)) return dispatchBodyRequest(request, this.body);
     if (request.path === CALENDAR_UPCOMING_PATH) return dispatchCalendarRequest(request, this.upcoming, this.now);
-
     if (request.method === 'GET' && request.path === '/v1/state') {
       const scopeKey = request.query?.get('scopeKey');
       if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
       return { status: 200, body: presentCompanionState(this.stateStore.snapshot(scopeKey), this.now()) };
     }
-
     const conversationRead = dispatchConversationRead(request, { conversationStore: this.conversationStore, stateStore: this.stateStore, cognitiveIntents: this.cognitiveIntents, now: this.now, ownerAlone:scope=>this.ownerAloneForFeedback(scope), ...(this.feedback?{feedback:this.feedback}:{}) });
     if (conversationRead) return conversationRead;
-
     if (request.method === 'GET' && request.path === '/v1/agent/tasks') {
       const scopeKey = request.query?.get('scopeKey');
       if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
       return { status: 200, body: { tasks: this.agentTasks.list(scopeKey).filter(task => !task.conversationThreadID?.startsWith('fca:')) } };
     }
-
     const testFlightResponse = dispatchTestFlightRequest(request, { testFlightDelivery: this.testFlightDelivery, now: this.now });
     if (testFlightResponse) return testFlightResponse;
 
@@ -384,7 +382,6 @@ export class ShannonApiKernel {
     let { orchestrationState } = begun;
     // A summary has no label of its own: none where only open items may be given (a turn someone other than the owner wrote).
     const priorThreadSummary = surface?.openOnly ? undefined : usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId, audience.present);
-    const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.auxiliaryChatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
     const fcaTurn = fca?.begin({ scopeKey: body.scopeKey, threadId, observedAt: occurredAt,
       recalledMemoryIds: conversationFcaProvenance(captured, this.conversationStore, body.scopeKey, threadId,
         [...cognitiveContext.frame.recalledMemoryIDs, ...peopleRecall.ids]),
@@ -394,7 +391,10 @@ export class ShannonApiKernel {
     let toolOffer = conversationTools(this.autonomy, body.scopeKey, 'text', toolAudience, this.toolServer, `${threadId}\n${message}`, deadline, undefined, toolOptions);
     // Stage 2: the menu narrows the schemas sent; awaited only with a Jev call, so without one nothing changes (not even a tick).
     const settled = choices ? await settleTextTools(toolOffer, choices) : null;
-    if (settled) toolOffer = settled.offer; if (fcaTurn?.selectTools && toolOffer.tools) toolOffer = { ...toolOffer, tools: await fcaTurn.selectTools(toolOffer.tools, { goal: message, state: cognitiveContext.prompt }) };
+    const work = admitConversationWork(fcaTurn, { message, research: body.webSearch === true || Boolean(placeOptions.placeSearch) || settled?.web === true, places: placeOptions.placeSearch });
+    const placeSkill = !work && placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.auxiliaryChatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
+    if (settled) toolOffer = settled.offer; if (fcaTurn?.selectTools && toolOffer.tools && !work) toolOffer = { ...toolOffer, tools: await fcaTurn.selectTools(toolOffer.tools, { goal: message, state: cognitiveContext.prompt }) };
+    toolOffer = { ...toolOffer, tools: conversationHintMenu(toolOffer.tools, Boolean(work)) };
     if(settled)observerHandoff('jevt','context',{tools:toolOffer.tools?.definitions.map(tool=>tool.name)??[]});
     layered = turnSkillIndex(layered, this.skills, body.scopeKey, toolOffer.tools, body.webSearch === true || Boolean(placeSkill) || settled?.web === true); // Step 6: her skills' index.
     systemPrompt = layered.prompt;
@@ -407,11 +407,11 @@ export class ShannonApiKernel {
       // The history is a character budget; what fell out of it is covered by the replay summary.
       // Stage 3: the workspace's blocks follow the turn's context, which stays byte for byte as it was (none without the wiring).
       ...withWorkspace(conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present, undefined, toolTraceReader(this.toolServer, body.scopeKey), surface?.openOnly)
-        .request([layered.turnContext, placeSkill?.prompt ?? '', fcaTurn?.context() ?? ''].filter(Boolean).join('\n\n')), observeSync('workspace',{threadId},()=>textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey)),value=>({available:value!==undefined&&value!==null}))),
+        .request([layered.turnContext, placeSkill?.prompt ?? '', fcaTurn?.context() ?? '', admittedWorkContext(work)].filter(Boolean).join('\n\n')), observeSync('workspace',{threadId},()=>textTurnWorkspace(this.mind, input, perceived, begun, this.conversationStore, ()=>this.stateStore.snapshot(body.scopeKey)),value=>({available:value!==undefined&&value!==null}))),
       ...(priorThreadSummary ? { priorThreadSummary } : {}),
       message,
       ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone), ...toolOffer,
-      ...(body.webSearch === true || placeSkill || settled?.web ? { useWebSearch: true } : {}), ...(settled?.answer.menu?.chosen.includes('web_search') ? { requireWebSearch: true as const } : {}),
+      ...(!work && !placeSkill && (body.webSearch === true || settled?.web) ? { useWebSearch: true } : {}), ...(!work && !placeSkill && settled?.answer.menu?.chosen.includes('web_search') ? { requireWebSearch: true as const } : {}),
       ...(surface?.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}), ...tierRequest(tier),
       // A surface's conversation has its own fixed title.
       generateThreadTitle: surface ? false : this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),

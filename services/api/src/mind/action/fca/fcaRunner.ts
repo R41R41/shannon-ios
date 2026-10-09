@@ -1,3 +1,4 @@
+import type { TaskProgressEvent } from '../taskRuntime/taskProgressPorts.js';
 import type { TaskRuntime, TaskStep, TaskSnapshot } from '../taskRuntime/taskRuntimePorts.js';
 import { TASK_TOOLS, executeTaskTool } from '../../tools/toolRunnerPorts.js';
 import { observeAsync, observerHandoff, observeSync, withObserverTask } from '../../../infra/observer/observerContext.js';
@@ -51,6 +52,10 @@ export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Ab
 async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
   const { runtime } = ports;
   const maintenance = step.snapshot.task.origin === 'maintenance' && step.snapshot.task.kind === 'sleep';
+  const progress = (event: TaskProgressEvent) => {
+    if (maintenance) return;
+    try { runtime.recordProgress?.(step, event); } catch { /* Optional UI observations never change an operation's actual outcome. */ }
+  };
   const allowed = () => maintenance ? ports.executionAllowed?.() === true : ports.ownerAlone() && (ports.executionAllowed?.() ?? true);
   const checked = () => observeAsync('gate', { phase: 'step_permit' }, async () => {
     signal.throwIfAborted();
@@ -105,7 +110,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const skillIndex = ports.tools?.skillIndex?.();
   await checked();
   observerHandoff('context', 'native', provenance);
-  const output = await ports.model.decide({ ...input, ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}), ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}), ...(skillIndex ? { skillIndex } : {}), ...(ports.body ? { body: ports.body.context() } : {}), ...(recall ? { recall } : {}), ...(sharedContext ? { sharedContext } : {}), ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) }, signal);
+  progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'running' });
+  const output = await ports.model.decide({ ...input, ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}), ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}), ...(skillIndex ? { skillIndex } : {}), ...(ports.body ? { body: ports.body.context() } : {}), ...(recall ? { recall } : {}), ...(sharedContext ? { sharedContext } : {}), ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) }, signal).catch(error => { progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'unknown' }); throw error; });
+  progress({ operationId: `${step.id}:decision`, tool: 'fca.decide', status: 'received' });
   await checked();
   let bodyStale = (ports.body ? !await ports.body.guard(bodyRevision) : false) || !await observationFresh();
   if (ports.evidence && !observeSync('prediction', { phase: 'before_actions', expectationCount: output.expectations?.length ?? 0, appraisalCount: output.appraisals?.length ?? 0 },
@@ -128,6 +135,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       const operationId = `${step.id}:${call.id}`;
       const tool = call.name === TOOL_OPEN_NAME ? 'tool_open' : observedToolName(call.name, catalog);
       observerHandoff('llm', 'gate', { ...provenance, operationId, tool });
+      progress({ operationId, tool: call.name, status: 'running' });
       const result = await observeAsync('tools', { ...provenance, operationId, tool }, async () => {
         const staleResult = () => toolFailure('failed', '身体の状態が変わりました。最新の観測から判断し直してください。', { retryable: false });
         if (bodyStale) return staleResult();
@@ -151,7 +159,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
           ownerAlone: ports.ownerAlone, ...(ports.taskVisible ? { visible: ports.taskVisible } : {}),
           ...(ports.observeTasks ? { observed: ports.observeTasks } : {}) });
       },
-      value => ({ ...provenance, operationId, ok: value.ok, failure: value.failure ?? null })).catch(error => { ports.evidence?.unknown(step, call); throw error; });
+      value => ({ ...provenance, operationId, ok: value.ok, failure: value.failure ?? null })).catch(error => { progress({ operationId, tool: call.name, status: 'unknown' }); ports.evidence?.unknown(step, call); throw error; });
+      progress({ operationId, tool: call.name, status: result.ok ? 'received' : 'failed', ...(result.ok && result.readReceipt ? { read: result.readReceipt } : {}), ...(result.ok && call.name === 'task.send' && call.input && typeof call.input === 'object' && (call.input as Record<string, unknown>).id === step.snapshot.task.parentId && typeof (call.input as Record<string, unknown>).message === 'string' ? { report: { text: String((call.input as Record<string, unknown>).message) } } : {}) });
       if (ports.evidence) observeSync('prediction', { phase: 'observed', ok: result.ok }, () => ports.evidence!.observed(step, call, result));
       ports.body?.noteResult?.(call, result);
       ports.tools?.progress?.observed(operationId, call.name, result);

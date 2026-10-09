@@ -1,3 +1,7 @@
+import { fcaNowProjection } from '../src/infra/http/fcaNowProjection.js';
+import { createFcaConversationBridge } from '../src/mind/action/fca/fcaConversation.js';
+import { inActionExecution } from '../src/infra/context/actionExecution.js';
+import { leaseOf } from '../src/contracts/actionThreadContract.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { actionHarness } from './support/actionThreadHarness.js';
@@ -55,12 +59,43 @@ function fixture(decide: (input: FcaModelInput) => FcaModelOutput, folder?: Host
   cleanup.push(() => driver.close());
   visible = createFcaSourceGuard({ runtime: driver.runtime, state, conversations, ownerScope: 'owner', ownerAlone, readSourceVisible });
   const task = driver.runtime.createChild('owner', driver.runtime.ensureRoot('owner').id, { title: 'Requested work', goal: 'Use the requested tools', origin: 'owner_request' }, 'requested-work');
-  return { ...h, driver, task, tools, store, state, memory, skills, readSourceVisible, visible,
+  return { ...h, driver, task, tools, store, state, conversations, memory, skills, readSourceVisible, visible,
     checkpoints: () => checkpoints, setAlone: (value: boolean) => { alone = value; }, setConnected: (value: boolean) => { connected = value; } };
 }
 const call = (name: string, input: unknown = {}): FcaModelOutput => ({ decision: { kind: 'tools', calls: [{ id: 'call', name, input }] }, history: [{ role: 'assistant', content: 'requested tool' }] });
 
 describe('common FCA registry adapters under real task/action SQLite authority', () => {
+  it('pins an actual local private skill read through task.send and withholds both Now report and conversation context after revocation', async () => {
+    let round = 0, parent = '';
+    const text = '限定した手順資料の本文を確認した。次の要点を整理する。';
+    const f = fixture(() => round++ === 0 ? call('skill.read', { name: 'private-local-reference' }) : call('task.send', { id: parent, message: text }));
+    f.driver.runtime.stop('owner', f.task.id, 'fixture_replaced');
+    const added = f.memory.create('owner', { draft: { name: 'private-local-reference', description: '限定資料', steps: text, aids: '- 未確認なら保留', references: '- 元資料' }, evidence: [] }, { carries: () => false }, at);
+    if ('rejected' in added) throw new Error(added.rejected);
+    const bridge = createFcaConversationBridge({ runtime: f.driver.runtime, ownerScope: 'owner', visible: f.visible });
+    // The same canonical conversation store and action authority used by the source guard.
+    const conversations = f.conversations;
+    const thread = conversations.threadId('owner');
+    const action = (await f.actions.admitRespond({ scopeKey: 'owner', kind: 'respond', origin: 'owner_request', sourceId: 'private-admission' }))!;
+    const lease = leaseOf(action); let childId = '';
+    await inActionExecution({ lease, signal: new AbortController().signal, permit: () => f.actions.dispatch(lease) }, async () => {
+      const turn = bridge.begin({ scopeKey: 'owner', threadId: thread, observedAt: at, recalledMemoryIds: [], ownerAlone: () => true })!;
+      const child = turn.delegate!({ title: 'Read private reference', goal: 'Read private reference' }); childId = child.id; parent = child.parentId!;
+      turn.commit(conversations.appendTurn('owner', thread, '資料を確認して', '調べてみるね', at).id);
+    }); await f.actions.finish(lease, 'completed', 'responded');
+    await f.driver.tick(); await f.driver.drain(); await f.driver.tick(); await f.driver.drain();
+    const sources = f.driver.runtime.taskSources('owner', childId).flatMap(source => source.readSourceIds ?? []);
+    expect(sources.some(source => source.startsWith('shannon-skill://'))).toBe(true);
+    const now = () => fcaNowProjection(f.driver.runtime, 'owner', id => f.visible('owner', id), id => f.visible.progress?.('owner', id) ?? null);
+    expect(now().tasks.find(task => task.id === childId)?.report?.text).toBe(text);
+    const next = (await f.actions.admitRespond({ scopeKey: 'owner', kind: 'respond', origin: 'owner_request', sourceId: 'private-report' }))!; const nextLease = leaseOf(next);
+    await inActionExecution({ lease: nextLease, signal: new AbortController().signal, permit: () => f.actions.dispatch(nextLease) }, async () => {
+      const turn = bridge.begin({ scopeKey: 'owner', threadId: thread, observedAt: at, recalledMemoryIds: [], ownerAlone: () => true })!;
+      expect(turn.context()).toContain(text);
+      f.state.apply('owner', { type: 'memory-control-upserted', control: { memoryId: added.skillId, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: at, changeReason: 'owner' } });
+      expect(now().tasks.some(task => task.id === childId)).toBe(false); expect(turn.context()).not.toContain(text); turn.abort();
+    }); await f.actions.finish(nextLease, 'completed', 'responded');
+  });
   it('loads an imported trial without fabricated experience or successes and rechecks revoked import ancestry on replay', async () => {
     const pack = standardSkillPack('standard10', 'draft-2')!, name = pack.skills[0]!.name;
     let captured: FcaModelInput | undefined;

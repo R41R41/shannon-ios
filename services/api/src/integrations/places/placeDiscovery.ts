@@ -14,6 +14,13 @@ export interface PlaceSearchContext {
   spoken?: boolean;
 }
 
+/** Canonical one-request permission value; not reconstructed from model text. */
+export function normalizedPlaceContext(context: PlaceSearchContext | undefined): PlaceSearchContext | undefined {
+  if (!context) return undefined;
+  const coordinates = Number.isFinite(context.latitude) && Number.isFinite(context.longitude) && Math.abs(context.latitude!) <= 90 && Math.abs(context.longitude!) <= 180;
+  return { ...(coordinates ? { latitude: context.latitude, longitude: context.longitude } : {}), ...(context.spoken ? { spoken: true } : {}) };
+}
+
 export function placeSearchInstructions(context: PlaceSearchContext): string {
   return [
     '[場所探し]',

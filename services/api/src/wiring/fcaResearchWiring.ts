@@ -16,6 +16,7 @@ export function fcaResearchTools(parts: {
   scopeKey: string; ownerAlone(): boolean; sourcesVisible?(): boolean;
   task?: { id: string; origin: TaskOrigin; leaseId: string };
   checkpoint?: unknown;
+  placeSearch?: import('../integrations/places/placeDiscovery.js').PlaceSearchContext;
   observeMemory?(ids: readonly string[]): boolean;
   /** Pin the original executor receipt under this segment, before returning private text. */
   observeRead?(operationId: string, receipt: { name: string; documents?: ToolDocuments; ok: boolean }): boolean;
@@ -70,7 +71,7 @@ export function fcaResearchTools(parts: {
       const priorEffect = effectUncommitted;
       let readStage = 0;
       const result = await parts.tools.call(call.name, call.input, { scopeKey: parts.scopeKey,
-        surface: 'text', audience: 'owner_alone', memory: Object.assign(memory, { turnKey: call.operationId }), secrets,
+        surface: 'text', audience: 'owner_alone', placeSearch: parts.placeSearch, memory: Object.assign(memory, { turnKey: call.operationId }), secrets,
         beforeExecution() { beforeExecution(); if (definition.effect === 'write' || definition.cost === 'model') effectUncommitted = true; },
         observeRead(receipt) {
           call.signal.throwIfAborted(); live();

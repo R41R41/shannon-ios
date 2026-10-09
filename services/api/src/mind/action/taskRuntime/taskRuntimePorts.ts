@@ -6,6 +6,7 @@ export type { TaskExternalEvent } from './taskExternalEventPorts.js';
 export type { TaskConversationDelivery, TaskConversationDeliveryInput, TaskConversationDeliveryStage } from './taskConversationDeliveryPorts.js';
 import type { ActionLease } from '@shannon/mind';
 import type { TaskHistoryCommit, TaskHistoryWindow } from './taskHistoryPorts.js';
+import type { TaskProgress, TaskProgressEvent } from './taskProgressPorts.js';
 export type { TaskHistoryCommit, TaskHistoryPublicRound, TaskHistoryRound, TaskHistorySummary, TaskHistoryWindow } from './taskHistoryPorts.js';
 
 export type TaskKind = 'root' | 'conversation' | 'research' | 'generic' | 'sleep';
@@ -48,7 +49,7 @@ export interface TaskCommit {
 }
 /** Delivery outbox for an already committed segment; retry only its original execution acknowledgement. */
 export interface TaskSegmentReceipt { id: string; taskId: string; lease: ActionLease; state: 'completed' | 'cancelled' }
-export interface TaskQuery { parentId?: string | null; limit?: number; offset?: number }
+export interface TaskQuery { parentId?: string | null; limit?: number; offset?: number; order?: 'recent' }
 /** Implemented by agentTasks; all mutations participate in this authority's synchronous transaction. */
 export interface TaskAuthority {
   transaction<T>(work: () => T): T;
@@ -71,6 +72,10 @@ export interface TaskRuntimeOptions {
   now?: () => string;
 }
 export interface TaskRuntime extends TaskConversationDeliveryRuntime {
+  admitPlaceContext?(step: TaskStep, childId: string, context: import('../../../integrations/places/placeDiscovery.js').PlaceSearchContext): boolean;
+  placeContext?(scopeKey: string, taskId: string): import('../../../integrations/places/placeDiscovery.js').PlaceSearchContext | undefined;
+  progress?(scopeKey: string, taskId: string): TaskProgress | null;
+  recordProgress?(step: TaskStep, event: TaskProgressEvent): boolean;
   observeExternal(scopeKey: string, targetTaskId: string, event: TaskExternalEvent): { accepted: true; duplicate: boolean; task: TaskView };
   admitSleep(scopeKey: string, jobId: string): TaskView | null;
   sleepTicketForTask(scopeKey: string, taskId: string): TaskSleepTicket | null;
