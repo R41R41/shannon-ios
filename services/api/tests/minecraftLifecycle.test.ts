@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.js';
 import type { MinecraftLifecycleCommand, MinecraftLifecyclePoll, MinecraftLifecycleReceipt, MinecraftLifecycleRequest, MinecraftLifecycleState } from '../src/contracts/minecraftLifecycleContract.js';
 import { MinecraftLifecycle } from '../src/surfaces/minecraft/minecraftLifecycle.js';
@@ -21,11 +21,29 @@ function fixture(databasePath = ':memory:') {
   const state = (patch: Partial<MinecraftLifecycleState> = {}): MinecraftLifecycleState => ({ serverId: 'home', observedAt: new Date().toISOString(), running: 'stopped', bot: 'absent', otherPlayers: 0, ...patch });
   const poll = (patch: Partial<MinecraftLifecyclePoll> = {}): MinecraftLifecyclePoll => ({ schemaVersion: 1, connectionId: 'connection', sequence: sequence++, states: [state()], receipts: [], ...patch });
   const request: MinecraftLifecycleRequest = { id: 'operation', serverId: 'home', action: 'start', authority: { scopeKey: 'owner', origin: 'owner_request', executionId: 'execution', lease: { id: 'lease', generation: 1, holder: 'runner' }, sourceIds: ['source:owner'] } };
-  const receipt = (patch: Partial<MinecraftLifecycleReceipt> = {}): MinecraftLifecycleReceipt => ({ id: 'operation', connectionId: 'connection', serverId: 'home', action: 'start', outcome: 'completed', code: 'changed', observedAt: new Date().toISOString(), inputsReleased: true, state: state({ running: 'running' }), ...patch });
+  const receipt = (patch: Partial<MinecraftLifecycleReceipt> = {}): MinecraftLifecycleReceipt => {
+    const observedAt = new Date().toISOString();
+    return { id: 'operation', connectionId: 'connection', serverId: 'home', action: 'start', outcome: 'completed', code: 'changed',
+      observedAt, inputsReleased: true, state: state({ running: 'running', observedAt }), ...patch };
+  };
   service.poll(principal, poll());
   return { db, configuration, options, service, store, principal, state, poll, request, receipt, revoke() { allowed = false; } };
 }
 describe('Minecraft lifecycle operator authority and receipts', () => {
+  it('accepts the original fixture receipt even when each clock read crosses a millisecond boundary', async () => {
+    const f = fixture(), RealDate = Date, abort = new AbortController();
+    const result = f.service.execute(f.request, abort.signal).catch(error => error);
+    expect(f.service.poll(f.principal, f.poll()).commands[0]?.id).toBe('operation');
+    let ticking = RealDate.now();
+    vi.stubGlobal('Date', class extends RealDate {
+      constructor(value?: string | number) { super(value === undefined ? ticking++ : value); }
+    });
+    try {
+      const receipt = f.receipt();
+      expect(f.service.poll(f.principal, f.poll({ receipts: [receipt] })).acknowledged).toEqual(['operation']);
+      expect(await result).toEqual(receipt);
+    } finally { vi.unstubAllGlobals(); abort.abort(); await result; }
+  });
   it('offers an offline bot/server, delivers once and reconciles the original receipt', async () => {
     const f = fixture(), result = f.service.execute(f.request);
     expect(f.service.available('owner')).toBe(true);
