@@ -67,3 +67,7 @@ For recovery, inspect canonical task/body outcomes before reconciling unknown wo
 ## Candidate original-resource acknowledgement
 
 `action.reconcileResource` is private mind IPC, not an owner HTTP tool. Its default-deny proof runs inside the action writer transaction and can remove only a dynamic resource from an original unknown lease (generation minus one / last holder). Immutable acknowledgement IDs retain exact payloads. It never clears unknown action state, sent/result, base or other resources, or budget reservations. The configured Minecraft proof re-reads accepted original lifecycle receipts and all original physical commands. The adapter and writer both require actual input release; matching current state is insufficient. Native command insertion also rechecks lease/resource ownership under `BEGIN IMMEDIATE`, fencing both orders of the cleanup/release race.
+
+## 結果不明の通知確認（実装ブランチ）
+
+所有者が通知を読んだことを別表に記録する。unknownの実行を解決せず、状態／lease／資源／予算／owner_informedを更新しない。確認済みでも不明な行と記録への入口を保ち、新しい不明episodeは再通知する。API・画面・不確かなPOSTと同席時の契約は [action-notice-acknowledgement-contract.md](action-notice-acknowledgement-contract.md)。

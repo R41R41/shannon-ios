@@ -16,6 +16,8 @@ export interface ActionView {
   resources: readonly string[]; ownerInformed: boolean; deadline: string | null;
   progress: string | null; result: string | null; sent: boolean; failures: number; lastFailure: string | null;
   createdAt: string; updatedAt: string;
+  /** Presentation-only receipt. It grants no execution or resource rights. */
+  notification?: { id: string; acknowledgedAt: string | null };
 }
 export interface ActionLease { id: string; generation: number; holder: string }
 export const ACTION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,159}$/u;

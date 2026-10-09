@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { ACTION_CODE, ACTION_ID, ACTION_LIMITS, ACTION_TERMINAL, validActionDraft, type ActionDraft, type ActionLease, type ActionState, type ActionView } from '@shannon/mind';
 import type { ActionAcknowledgement } from '../../../../contracts/actionThreadContract.js';
@@ -22,6 +22,10 @@ export class SQLiteActionStore {
         day TEXT NOT NULL, yen REAL NOT NULL CHECK(yen >= 0), state TEXT NOT NULL, sent INTEGER NOT NULL DEFAULT 0,
         UNIQUE(action_id,generation,reservation_id)
       );
+      CREATE TABLE IF NOT EXISTS mind_action_notice_receipts (
+        request_id TEXT PRIMARY KEY, scope_key TEXT NOT NULL, action_id TEXT NOT NULL, notification_id TEXT NOT NULL, acknowledged_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS mind_action_notice_episode ON mind_action_notice_receipts(scope_key,action_id,notification_id);
       CREATE TABLE IF NOT EXISTS mind_action_controls (
         request_id TEXT PRIMARY KEY, scope_key TEXT NOT NULL, target_id TEXT, created_at TEXT NOT NULL
       );
@@ -40,14 +44,34 @@ export class SQLiteActionStore {
   }
   get(id: string): ActionView | null {
     const row = this.db.prepare('SELECT * FROM mind_actions WHERE id=?').get(id);
-    return row ? view(row) : null;
+    return row ? this.withNotification(view(row)) : null;
   }
   list(scopeKey: string): ActionView[] {
     return this.db.prepare(`SELECT * FROM mind_actions WHERE scope_key=? AND
       (state IN ('queued','running','waiting','stopping') OR (state='unknown' AND (kind!='respond' OR resources_json!='[]')))
       UNION ALL SELECT * FROM (SELECT * FROM mind_actions WHERE scope_key=? AND kind!='respond'
       AND state IN ('completed','failed','cancelled') ORDER BY updated_at DESC,id DESC LIMIT 40)
-      ORDER BY created_at,id`).all(scopeKey,scopeKey).map(view);
+      ORDER BY created_at,id`).all(scopeKey,scopeKey).map(row=>this.withNotification(view(row)));
+  }
+  private withNotification(action:ActionView):ActionView {
+    if(action.state!=='unknown'||action.kind==='respond')return action;
+    const id=createHash('sha256').update(JSON.stringify([action.id,action.generation,action.result])).digest('hex');
+    const receipt=this.db.prepare(`SELECT MIN(acknowledged_at) AS at FROM mind_action_notice_receipts
+      WHERE scope_key=? AND action_id=? AND notification_id=?`).get(action.scopeKey,action.id,id) as {at:string|null};
+    return {...action,notification:{id,acknowledgedAt:receipt.at}};
+  }
+  /** Owner read receipt only: deliberately does not sweep, reconcile, stop or update the original attempt. */
+  acknowledgeNotice(scopeKey:string,id:string,notificationId:string,requestId:string,at:string):boolean {
+    if(!ACTION_ID.test(scopeKey)||!ACTION_ID.test(id)||!ACTION_ID.test(requestId)||!/^([a-f0-9]{64})$/u.test(notificationId))return false;
+    return this.transaction(()=>{
+      const known=this.db.prepare('SELECT scope_key,action_id,notification_id FROM mind_action_notice_receipts WHERE request_id=?')
+        .get(requestId) as {scope_key:string;action_id:string;notification_id:string}|undefined;
+      if(known&&(known.scope_key!==scopeKey||known.action_id!==id||known.notification_id!==notificationId))return false;
+      const action=this.get(id);
+      if(!action||action.scopeKey!==scopeKey||action.state!=='unknown'||action.kind==='respond'||action.notification?.id!==notificationId)return false;
+      if(!known)this.db.prepare('INSERT INTO mind_action_notice_receipts VALUES(?,?,?,?,?)').run(requestId,scopeKey,id,notificationId,at);
+      return true;
+    });
   }
   enqueue(draft: ActionDraft, at: string): ActionView {
     if (!validActionDraft(draft)) throw new Error('ACTION_DRAFT');

@@ -37,6 +37,7 @@ private actor ThreadClient: ShannonActionThreadsServing {
         }
         return answer()
     }
+    func acknowledgeActionNotice(scopeKey: String, id: String, notificationID: String, requestID: String) async throws -> ShannonActionThreadsDTO { throw ShannonAPIError.rejected(status: 404) }
     func stopKnown() { state = "cancelled" }
     func release() { let pending = heldRead; heldRead = nil; pending?.resume(returning: answer()) }
     func releaseControl() {

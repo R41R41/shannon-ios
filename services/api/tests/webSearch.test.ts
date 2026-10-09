@@ -174,7 +174,7 @@ describe('search is a discoverable conversation read', () => {
     const result = await chat(kernel(h, []));
     expect(result.status).toBe(200); expect((result.body as { reply: string }).reply).toContain('https://example.com/forecast');
     const tools = h.bodies[0]!.tools as Array<{ name: string; input_schema?: { properties: { name: { enum?: string[] } } } }>;
-    expect(tools.map(tool => tool.name)).toEqual(['tool_open']);
+    expect(tools.map(tool => tool.name)).toEqual(['tool_open', 'tool_call']);
     expect(tools[0]!.input_schema!.properties.name.enum).toBeUndefined();
     const initial = h.bodies[0]!.messages as Array<{ role: string; content: string | Array<{ type: string; tool?: { definition?: { name: string } } }> }>;
     expect(JSON.stringify(initial)).toContain('- web_search: '); // Full discovery now lives after the cached prefix.

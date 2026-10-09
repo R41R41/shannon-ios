@@ -11,7 +11,7 @@ preserve:
   - "スクロール表示と向き合う表示"
   - "添付とWeb検索は送信ごとに明示して使用する"
 improve:
-  - "ADR-0008第4段階: 裏の作業の小さな入口から標準シート／ポップオーバーで由来・状態・停止を読む。同席者は一般表示だけ。古い報告・復旧中・結果不明では新しい操作を送らず、不明な作業を自動再開しない。契約は docs/action-threads-contract.md。実装ブランチ、未配布"
+  - "ADR-0008第4段階: 裏の作業の小さな入口から標準シート／ポップオーバーで由来・状態・停止を読む。同席者は一般表示だけ。古い報告・復旧中では新しい操作を送らず、不明な作業を自動再開しない。最新の本人だけの投影では通知だけを確認済みにできる。契約は docs/action-threads-contract.md。実装ブランチ、未配布"
   - "（2026-10-05、所有者の決定）姿と向き合って話す表示の名前は『向き合う』の 1 つ。表示の切り替えボタンは『向き合う表示へ切り替える』（戻りは『履歴表示へ切り替える』）、手がかりと説明は『向き合う表示』。それまでの『対話』は使わない（一覧の表示も会話なので紛らわしい）。文は design/strings.ja.json の talk.display.facing"
   - "（A7、2026-10-05）カメラの状態がいつも分かる。向き合う表示の上（右上）と音声会話の題名の下に、小さく『カメラ：切／見てよい／いま見ています』。見てよいは、会話中にシャノンがカメラで見る がオンで、カメラがあり、システムの許可が拒まれていない時だけ（友人も一緒の通話では切）。いま見ていますは、カメラが1枚を撮っている間。切の間は、シートの 設定 のタイルの下に『カメラ：切』。見た直後の『いま見ました』と小さな画像はこれまでどおり"
   - "（A6、2026-10-05）からだはトークの表示の 1 つ。Live2Dの姿を選んでいる時、向き合う表示では姿が大きく立ち、その場で指で触れる（docs/design/screens/ios/body.yaml）。表示切替のボタンは押すと表示が替わり、長押しで姿、Live2Dの姿では体（人の姿／目だけ）、人の姿では映し方、位置を戻すを選べる。ツールバーの『からだ』は無い"
@@ -175,3 +175,13 @@ conversation_activity:
     - "docs/screenshots/shannon-conversation-now-ios-bot-light-v1.png"
     - "docs/screenshots/shannon-conversation-now-ios-girl-dark-v1.png"
     - "docs/screenshots/shannon-persona-ios-settings-light-v1.png"
+
+unknown_notice_acknowledgement:
+  status: "実装ブランチ・未配布"
+  primary_action: "結果不明の各行の『この通知を確認済みにする』。結果・資源・予算の確認とは分ける"
+  preservation: "不明な行、原状態、lease、resources、budget、owner_informedを保つ。通知確認だけを別表へ保存し、警告判定から外す"
+  retained_entry: "確認後も『裏の作業の記録』から結果不明の行を読める。新しいepisodeは再び警告する"
+  states: "古い報告・復旧中・同席では無効／非表示。POST不明はGETで確認し自動再送しない。旧サーバーのnotification無しでは確認ボタンだけを出さない"
+  accessibility: "標準ボタン44pt、作業名と操作を読み上げ、文章と記号で状態を示す。標準sheet/popover、本文改行、keyboard/dismiss/focus、Reduce Motion/Transparencyと意味色を保つ"
+  contract: "docs/action-notice-acknowledgement-contract.md"
+  validation: "決定的テストと実画面の実施範囲は本タスクの検証結果に記録。実機・VoiceOver実読み上げ・文字拡大は未確認"

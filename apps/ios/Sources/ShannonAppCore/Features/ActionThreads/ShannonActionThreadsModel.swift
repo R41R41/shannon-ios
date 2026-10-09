@@ -40,10 +40,11 @@ public final class ShannonActionThreadsModel {
     public var capsuleText: String {
         if othersPresent { return ShannonGeneratedStrings.threadsGeneric }
         if phase == .recovering { return ShannonGeneratedStrings.threadsRecovering }
-        if threads.contains(where: { $0.state == "unknown" }) { return ShannonGeneratedStrings.threadsUnknown }
+        if threads.contains(where: { $0.hasUnacknowledgedNotice }) { return ShannonGeneratedStrings.threadsUnknown }
         if (reading?.count ?? 0) == 0 && threads.contains(where: { $0.canResume }) {
             return threads.contains(where: { $0.state == "failed" }) ? ShannonGeneratedStrings.threadsFailed : ShannonGeneratedStrings.threadsCancelled
         }
+        if (reading?.count ?? 0) == 0 && threads.contains(where: { $0.state == "unknown" }) { return ShannonGeneratedStrings.threadsRecords }
         return ShannonGeneratedStrings.threadsCount(count: String(reading?.count ?? 0))
     }
     /// Privacy changes invalidate both pending reads and controls before another frame is drawn.
@@ -76,6 +77,29 @@ public final class ShannonActionThreadsModel {
         let generated = (try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(answer.generatedAt))
             ?? (try? Date.ISO8601FormatStyle().parse(answer.generatedAt))
         hasRead = true; readAt = generated.map { min($0, Date()) }; phase = answer.availability == "ready" ? .loaded : .recovering
+    }
+    /// A presentation receipt only. Never calls stop/resume or changes the execution outcome.
+    public func acknowledgeNotice(id: String, notificationID: String) async {
+        guard let client, !controlPending, !othersPresent, phase == .loaded, !isStale(at: Date()),
+              threads.contains(where: { $0.id == id && $0.state == "unknown" && $0.notification?.id == notificationID && $0.notification?.acknowledgedAt == nil }) else { return }
+        controlPending = true; notice = nil; readGeneration += 1
+        let expectedContext = context, expectedRead = readGeneration, requestID = UUID().uuidString
+        defer { if expectedContext == context { controlPending = false } }
+        do {
+            let answer = try await client.acknowledgeActionNotice(scopeKey: scopeKey, id: id, notificationID: notificationID, requestID: requestID)
+            guard expectedContext == context, !Task.isCancelled else { return }
+            if expectedRead == readGeneration { readGeneration += 1; apply(answer) }
+            else { await reload() }
+        } catch {
+            guard expectedContext == context, !Task.isCancelled else { return }
+            notice = ShannonGeneratedStrings.threadsChecking
+            await reload()
+        }
+        guard expectedContext == context, !othersPresent, !Task.isCancelled else { return }
+        let confirmed = phase == .loaded && !isStale(at: Date()) && threads.contains {
+            $0.id == id && $0.notification?.id == notificationID && $0.notification?.acknowledgedAt != nil
+        }
+        notice = confirmed ? ShannonGeneratedStrings.threadsNoticeAcknowledged : ShannonGeneratedStrings.threadsNoticeUnconfirmed
     }
     /// One request, then read-back. An uncertain delivery is never automatically posted again.
     public func control(id: String?, resume: Bool = false) async {

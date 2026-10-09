@@ -96,3 +96,17 @@ describe('one mind across the process boundary',()=>{
     expect(mind.host!.perceive('owner',textPerception({threadId:'same',message:'hey',present:OWNER_AUDIENCE,alone:true,at}))).not.toBeNull();
   });
 });
+
+it('records an unknown notice receipt through the single worker IPC without changing execution rows',async()=>{
+  const {path,dir}=location(),worker=await configuredMindWorker(on,path,()=>ownerHost(path),now);cleanups.push(worker.close);
+  const client=new MindSocketClient(join(dir,'mind-runtime','mind.sock'));cleanups.push(()=>client.close());
+  const actions=actionThreadsClient(client.call,'api');
+  const draft=await actions.enqueue({scopeKey:'owner',kind:'agentTask',origin:'maintenance',sourceId:'synthetic-maintenance'});
+  const active=(await actions.claim(draft.id))!,lease={id:active.id,generation:active.generation,holder:active.holder!};
+  await actions.dispatch(lease);const original=(await actions.finish(lease,'unknown','fca_result_unknown'))!;
+  expect(await actions.acknowledgeNotice('guest',original.id,original.notification!.id,'read-guest')).toBe(false);
+  expect(await actions.acknowledgeNotice('owner',original.id,original.notification!.id,'read-owner')).toBe(true);
+  const read=(await actions.get('owner',original.id))!;
+  expect({...read,notification:undefined}).toEqual({...original,notification:undefined});
+  expect(read.notification).toEqual({id:original.notification!.id,acknowledgedAt:at});
+});

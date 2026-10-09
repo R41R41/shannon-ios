@@ -10,6 +10,7 @@ export function actionThreadsClient(call:MindCall,holder=`runner-${randomUUID()}
     finish:(lease:ActionLease,state:string,code:string)=>call('action.finish',{lease,state,code}),
     get:(scopeKey:string,id:string)=>call<ActionView|null>('action.get',{scopeKey,id}),
     list:(scopeKey:string)=>call<ActionView[]>('action.list',{scopeKey}),
+    acknowledgeNotice:(scopeKey,id,notificationId,requestId)=>call('action.acknowledgeNotice',{scopeKey,id,notificationId,requestId}),
     stop:(scopeKey:string,id:string|null,requestId:string)=>call('action.stop',{scopeKey,id,requestId}),
     resume:(scopeKey,id)=>call('action.resume',{scopeKey,id}),
     reconcile:(lease,state,code)=>call('action.reconcile',{lease,state,code}),

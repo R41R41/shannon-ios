@@ -13,6 +13,7 @@ export function publicActionThreads(views: readonly ActionView[], at: string, ot
   return { availability: 'ready', generatedAt: at, count, othersPresent:others, threads: others ? [] : relevant.slice(-40).map(view => ({
     id: view.id, kind: view.kind, title: labels[view.kind], origin: view.origin, state: view.state,
     progress: view.progress, result: view.result, updatedAt: view.updatedAt, failures: view.failures,
+    ...(view.notification ? {notification:view.notification} : {}),
     canResume: view.kind === 'ownTime' && ['failed', 'cancelled'].includes(view.state) && view.failures < 5,
   })) };
 }
@@ -34,6 +35,20 @@ export function createActionThreadRoute(actions: ActionThreads | null, ownerScop
         return sendJson(response, 200, publicActionThreads(await actions.list(ownerScope), now(), othersNow()));
       }
       if (request.method !== 'POST') return sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+      const noticeMatch=path.match(/^\/v1\/action-threads\/([A-Za-z0-9_.:@-]{1,160})\/acknowledge-notice$/u);
+      if(noticeMatch){
+        const body=await readJson(request,4096) as Record<string,unknown>;
+        if(!body||typeof body!=='object'||Array.isArray(body)||typeof body.requestId!=='string'||!ACTION_ID.test(body.requestId)
+          ||typeof body.notificationId!=='string'||!/^[a-f0-9]{64}$/u.test(body.notificationId)
+          ||Object.keys(body).some(key=>!['requestId','notificationId','scopeKey'].includes(key)))return sendJson(response,400,{error:'ACTION_REQUEST'});
+        const original=await actions.get(ownerScope,noticeMatch[1]!);
+        // Recheck after the canonical read immediately before the only mutation; detail also gates at delivery.
+        if(othersNow())return sendJson(response,403,{error:'ACTION_OWNER_ALONE'});
+        if(!original||original.kind==='respond')return sendJson(response,404,{error:'ACTION_NOT_FOUND'});
+        if(!await actions.acknowledgeNotice(ownerScope,original.id,body.notificationId,body.requestId))
+          return sendJson(response,409,{error:'ACTION_NOTICE_CHANGED'});
+        return sendJson(response,200,{requestId:body.requestId,...publicActionThreads(await actions.list(ownerScope),now(),othersNow())});
+      }
       const body = await readJson(request, 4096) as Record<string, unknown>;
       if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.requestId !== 'string' || !ACTION_ID.test(body.requestId)
         || Object.keys(body).some(key => !['requestId', 'scopeKey'].includes(key))) return sendJson(response, 400, { error: 'ACTION_REQUEST' });

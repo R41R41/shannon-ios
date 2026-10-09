@@ -182,3 +182,7 @@ The additive memory contracts are [iPhone](design/screens/ios/memory.yaml) and [
 検証結果（2026-10-10）: Swift全体の777 XCTestと224 Swift Testingが、API検証と負荷を分けた明示`--no-parallel`で通過。最初の同時負荷下の全体実行では既存音声配送の2件がtimedOutになり、同suiteの単独21件は通過した。時計・assertionは変更していない。最終ソースの未署名iOS SimulatorビルドとMac testビルドが通過。iPhoneのBot/Light、Girl/Darkの既存Human Live2D読込完了、Lightの統合モード設定を専用Simulatorの正規simctl描画で確認。Simulator用GUIアプリがないため、iPhoneの実タップと詳細シートは未確認。実機・実サーバーの調査音声・有料TTS・VoiceOver実読み上げの受入れとは分ける。
 
 Macでは隔離したDebugアプリをCUAで操作し、Lightの横パネル、すがたの既存インスペクタによる幅不足時の小さな入口、調査中の会話入力保持、方針の入力・合成fixtureへの送信を確認した。「ガール」の一回選択で表情アイコンとElevenLabs表示が同時に変わった。Macの28テストと既存インスペクタ起動smoke全7ケースが通過。証跡は `shannon-conversation-now-macos-light-v1.png` と `shannon-persona-macos-settings-light-v1.png`。Dark追加確認はソース固定後の検証記録とする。
+
+## 結果不明の通知の確認（実装ブランチ・未配布）
+
+裏の作業の不明な結果は残し、その通知を読んだことだけを各行から記録する。「この通知を確認済みにする」は停止、再実行、結果の確定、資源解放を行わない。警告文だけを未確認の通知に絞り、確認後も「裏の作業の記録」から不明な行を読める。最新の所有者のみの投影、同じ不明episodeに限って確認し、失われた応答はGETで確認する。契約とpreservation matrix: [action-notice-acknowledgement-contract.md](action-notice-acknowledgement-contract.md)。

@@ -269,7 +269,7 @@ export class AnthropicChatModel implements ShannonChatModel {
     }, value => ({ reply: value.reply.slice(0, 4_000), truncated: value.truncated === true }));
   }
 
-  /** Keep the native 5.5 opener stable, including a Jev timeout/no-menu, within the 20 strict-schema limit. */
+  /** Normalize discovery before building the body. The native adapter budgets actual schemas, including JSON output. */
   private boundedToolMenu<T extends { tools?: ShannonModelToolSession }>(request: T): T {
     if (!isAppendOnlyAnthropicModel(this.model) || !request.tools || !request.tools.definitions.length) return request;
     if (request.tools.menu && request.tools.definitions.length <= 20) return request;

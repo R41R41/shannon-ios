@@ -10,6 +10,9 @@ import { sonnetTools } from './anthropicRequest.js';
 import { isAppendOnlyAnthropicModel } from './haikuConfig.js';
 import { isAnthropicUsageEvidenceError } from './haikuCache.js';
 import type { BetaRequestToolAdditionBlock } from '@anthropic-ai/sdk/resources/beta/messages/messages';
+import { requestStrictTools, strictRequestFits, strictRequestUsage, TOOL_CALL_PROVIDER_NAME } from './anthropicToolCapacity.js';
+import { bridgedAnthropicSession } from './anthropicToolBridge.js';
+import { bridgeOnlyUnacceptedTail } from './anthropicForegroundMenu.js';
 
 /**
  * The tool rounds of a Sonnet turn (Syzygy ADR-0008 stage 2, step 5), at parity with luna's `withToolRounds`
@@ -71,18 +74,21 @@ const MAXIMUM_PAUSES = 3;
 export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStreaming, options: SonnetRoundOptions): Promise<SonnetRoundResult> {
   const messages: Anthropic.MessageParam[] = [...body.messages];
   const turns: Anthropic.Message[] = [];
-  const session = options.session;
   const appendOnly = isAppendOnlyAnthropicModel(body.model);
   // Every offered schema is strict, including deferred ones, and the API accepts at most 20 strict tools per request.
   // The request already appended the initially selected schemas after its stable opener and history. Opening another
   // tool appends only its new definition, preserving signed tools/system/history and the original execution gate.
-  const initial = sonnetTools(session);
-  const visible = new Set(initial.map(tool => tool.name));
+  const visible = new Set(requestStrictTools(body).map(tool => tool.name));
+  const session = appendOnly && options.session?.menu && visible.has(TOOL_CALL_PROVIDER_NAME)
+    ? bridgedAnthropicSession(options.session, visible) : options.session;
   const turn: ToolStepState = { used: 0, toolsOff: false };
   let round = 0;
   let pauses = 0;
   let escalated = false;
   let readRecovery = false;
+  let bridgeOnly = false;
+  let acceptedLength = 0;
+  let acceptedVisible = new Set((body.tools ?? []).flatMap(tool => 'name' in tool ? [tool.name] : []));
   const escalate = () => {
     if (escalated || !options.escalate?.allowed()) return;
     escalated = true;
@@ -93,6 +99,17 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
   const request = (extra: Partial<Anthropic.MessageCreateParamsNonStreaming> = {}): Anthropic.MessageCreateParamsNonStreaming => ({
     ...body, ...(!appendOnly && session ? { tools: sonnetTools(session) } : {}), messages: [...messages], ...extra,
   });
+  const recoverGrammar = (error: unknown): boolean => {
+    if (!appendOnly || !session?.menu || !visible.has(TOOL_CALL_PROVIDER_NAME) || bridgeOnly || !grammarCapacityRefused(error)) return false;
+    const before = request();
+    const tail = bridgeOnlyUnacceptedTail(messages, acceptedLength);
+    if (JSON.stringify(tail) === JSON.stringify(messages)) return false;
+    reportRefusedOffer(error, before, 'strict_grammar_capacity');
+    messages.splice(0, messages.length, ...tail);
+    visible.clear(); for (const name of acceptedVisible) visible.add(name);
+    bridgeOnly = true;
+    return true;
+  };
   // Native 5.5 sessions append every note; legacy lanes may join the system message the turn already ends with.
   const note = (text: string) => {
     const last = messages.at(-1);
@@ -139,7 +156,8 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
       if (callerStopped()) throw error;
       if (error instanceof PartialAnswerError) return out(error.sent);
       if (isAnthropicUsageEvidenceError(error)) { if (turn.used === 0) throw error; return out(); }
-      if (!plain && options.plainBody && refusedOffer(error)) { reportRefusedOffer(error); return answer(true); }
+      if (!plain && recoverGrammar(error)) return answer();
+      if (!plain && options.plainBody && refusedOffer(error)) { reportRefusedOffer(error, request()); return answer(true); }
       if (turn.used === 0 && !timedOut(error) && !(error instanceof SonnetRefusalError)) throw error;
       if (error instanceof SonnetRefusalError && turn.used === 0) throw error;
       return out();
@@ -153,11 +171,14 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     let message: Anthropic.Message;
     try {
       message = await options.send(request(), time(step), round++);
+      acceptedLength = messages.length;
+      acceptedVisible = new Set(visible);
     } catch (error) {
       if (callerStopped()) throw error;
       if (error instanceof PartialAnswerError) return out(error.sent);
       if (isAnthropicUsageEvidenceError(error)) { if (turn.used === 0) throw error; return out(); }
-      if (options.plainBody && refusedOffer(error)) { reportRefusedOffer(error); return answer(true); }
+      if (recoverGrammar(error)) continue;
+      if (options.plainBody && refusedOffer(error)) { reportRefusedOffer(error, request()); return answer(true); }
       if (!timedOut(error) && turn.used === 0) throw error;
       if (options.timedOutRound === 'fail' && turn.used === 0) throw error;
       note(TIMED_OUT_ROUND_NOTE);
@@ -194,9 +215,12 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
     });
     messages.push({ role: 'user', content: results });
     observerHandoff('tools', 'llm', { resultCount: results.length, selectedTools: uses.map(use => observedToolName(use.name)) });
-    if (appendOnly && session.menu) {
-      const additions: BetaRequestToolAdditionBlock[] = sonnetTools(session).flatMap(tool => {
+    if (appendOnly && session.menu && !bridgeOnly) {
+      const admitted: Anthropic.Tool[] = [];
+      const additions: BetaRequestToolAdditionBlock[] = sonnetTools(options.session).flatMap(tool => {
         if (visible.has(tool.name)) return [];
+        if (!strictRequestFits(request(), [...admitted, tool])) return [];
+        admitted.push(tool);
         visible.add(tool.name);
         return [{ type: 'tool_addition', tool: { type: 'tool_definition', definition: tool } }];
       });
@@ -218,9 +242,15 @@ function refusedOffer(error: unknown): boolean {
 }
 
 /** Provider diagnostics contain no message, body, model input, identifiers or provider-supplied category. */
-function reportRefusedOffer(error: unknown): void {
+function reportRefusedOffer(error: unknown, body?: Anthropic.MessageCreateParamsNonStreaming, category = 'offered_request_rejected'): void {
   if (!(error instanceof Anthropic.APIError)) return;
-  console.warn(JSON.stringify({ event: 'anthropic_tool_offer_refused', status: error.status, category: 'offered_request_rejected' }));
+  console.warn(JSON.stringify({ event: 'anthropic_tool_offer_refused', status: error.status, category,
+    ...(body ? { schemaUsage: strictRequestUsage(body) } : {}) }));
+}
+
+/** Closed structural classification only. Provider text is never stored or returned. An explicit 400 is known rejected. */
+function grammarCapacityRefused(error: unknown): boolean {
+  return error instanceof Anthropic.APIError && error.status === 400 && /compiled grammar is too large/iu.test(error.message);
 }
 
 /** Keep original results as quoted data while removing tool references that a plain request cannot declare. */

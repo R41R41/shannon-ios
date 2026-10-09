@@ -19,6 +19,7 @@ export interface ActionThreads {
   /** Exact canonical receipt read. Unlike the bounded presentation list, it retains original IDs through recovery. */
   get(scopeKey: string,id: string): Promise<ActionView|null>;
   list(scopeKey: string): Promise<ActionView[]>;
+  acknowledgeNotice(scopeKey: string,id: string,notificationId: string,requestId: string): Promise<boolean>;
   stop(scopeKey: string,id: string|null,requestId: string): Promise<ActionView[]>;
   resume(scopeKey: string,id: string): Promise<boolean>;
   reconcile(lease:ActionLease,state:'completed'|'failed'|'cancelled',code:string):Promise<boolean>;

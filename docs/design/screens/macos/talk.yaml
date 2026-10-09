@@ -13,7 +13,7 @@ preserve:
   - "会話から作業と設定へ移動できるアプリシェル"
   - "右の補助パネルで会話の目次、作業の現在地、すがた を切り替えられる"
 improve:
-  - "ADR-0008第4段階: 裏の作業の小さな入口から標準シート／ポップオーバーで由来・状態・停止を読む。同席者は一般表示だけ。古い報告・復旧中・結果不明では新しい操作を送らず、不明な作業を自動再開しない。契約は docs/action-threads-contract.md。実装ブランチ、未配布"
+  - "ADR-0008第4段階: 裏の作業の小さな入口から標準シート／ポップオーバーで由来・状態・停止を読む。同席者は一般表示だけ。古い報告・復旧中では新しい操作を送らず、不明な作業を自動再開しない。最新の本人だけの投影では通知だけを確認済みにできる。契約は docs/action-threads-contract.md。実装ブランチ、未配布"
   - "シャノンが書いた作品を見せるメッセージには、作品の題名と『書斎で読む』のカードを付ける。押すと、その作品を読む画面を開く。カードは会話の本文から作らず、サーバーが付けた参照だけから出す"
   - "表情の語はiPhoneと同じ共有の表を使う。Mac独自の言い換え（考えている、少し気になっている、穏やか、集中している、少し沈んでいる、少し困っている、楽しそう、親しみを感じている）は使わない"
   - "シャノンの返答の下に、その回で取り込んだことを静かな1行で示す（約束にしました／覚えました・覚え直しました・覚えています／目的にしました）。取り込みは返答の後に届くので、返答は待たせず、届いた時点で同じ返答の下に出る。再起動後や別の端末でも履歴と一緒に出る。何も取り込まなかった回には何も出さない"
@@ -86,3 +86,13 @@ conversation_activity:
   persona: "ボット＝Waterlight Eye＋Eyeアイコン＋Gemini。ガール＝既存の水色髪Human Live2D＋表情アイコン＋ElevenLabs"
   validation: "Swift全体777 XCTest＋224 Swift Testing、Mac28テスト、既存起動smoke7ケース通過。CUAでLight横パネル、インスペクタ併用の幅不足入口、調査中の会話入力保持、方針入力とfixture送信を確認。実機、有料TTS、実サーバーの調査音声、VoiceOver実読み上げは未確認"
   evidence: "docs/screenshots/shannon-conversation-now-macos-light-v1.png"
+
+unknown_notice_acknowledgement:
+  status: "実装ブランチ・未配布"
+  primary_action: "結果不明の各行の『この通知を確認済みにする』。結果・資源・予算の確認とは分ける"
+  preservation: "不明な行、原状態、lease、resources、budget、owner_informedを保つ。通知確認だけを別表へ保存し、警告判定から外す"
+  retained_entry: "確認後も『裏の作業の記録』から結果不明の行を読める。新しいepisodeは再び警告する"
+  states: "古い報告・復旧中・同席では無効／非表示。POST不明はGETで確認し自動再送しない。旧サーバーのnotification無しでは確認ボタンだけを出さない"
+  accessibility: "標準ボタン44pt、作業名と操作を読み上げ、文章と記号で状態を示す。標準sheet/popover、本文改行、keyboard/dismiss/focus、Reduce Motion/Transparencyと意味色を保つ"
+  contract: "docs/action-notice-acknowledgement-contract.md"
+  validation: "決定的テストと実画面の実施範囲は本タスクの検証結果に記録。実機・VoiceOver実読み上げ・文字拡大は未確認"

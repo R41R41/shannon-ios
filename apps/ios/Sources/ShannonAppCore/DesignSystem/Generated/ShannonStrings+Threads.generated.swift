@@ -60,4 +60,16 @@ extension ShannonGeneratedStrings {
     public static let threadsOwnTimeOrigin = "自分の時間"
     /// `threads.maintenanceOrigin`
     public static let threadsMaintenanceOrigin = "内部の記憶整理"
+    /// `threads.records`
+    public static let threadsRecords = "裏の作業の記録"
+    /// `threads.noticeAcknowledge`
+    public static let threadsNoticeAcknowledge = "この通知を確認済みにする"
+    /// `threads.noticeMeaning`
+    public static let threadsNoticeMeaning = "通知を確認済みにしても、作業の結果と保留中の資源は変わりません。"
+    /// `threads.noticeAcknowledged`
+    public static let threadsNoticeAcknowledged = "結果不明・通知は確認済み"
+    /// `threads.noticeUnconfirmed`
+    public static let threadsNoticeUnconfirmed = "通知の確認状態を確かめられません。状態を読み直してください。"
+    /// `threads.unknownState`
+    public static let threadsUnknownState = "結果不明"
 }

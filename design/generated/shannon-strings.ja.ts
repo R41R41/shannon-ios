@@ -608,6 +608,12 @@ export const shannonStrings = {
   "threads.ownerOrigin": "所有者からの依頼",
   "threads.ownTimeOrigin": "自分の時間",
   "threads.maintenanceOrigin": "内部の記憶整理",
+  "threads.records": "裏の作業の記録",
+  "threads.noticeAcknowledge": "この通知を確認済みにする",
+  "threads.noticeMeaning": "通知を確認済みにしても、作業の結果と保留中の資源は変わりません。",
+  "threads.noticeAcknowledged": "結果不明・通知は確認済み",
+  "threads.noticeUnconfirmed": "通知の確認状態を確かめられません。状態を読み直してください。",
+  "threads.unknownState": "結果不明",
 } as const;
 
 export type ShannonStringKey = keyof typeof shannonStrings;

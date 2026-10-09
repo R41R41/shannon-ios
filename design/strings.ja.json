@@ -4342,6 +4342,42 @@
       "text": "内部の記憶整理",
       "only": "apple",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.records",
+      "text": "裏の作業の記録",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsModel.swift"
+    },
+    {
+      "key": "threads.noticeAcknowledge",
+      "text": "この通知を確認済みにする",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.noticeMeaning",
+      "text": "通知を確認済みにしても、作業の結果と保留中の資源は変わりません。",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.noticeAcknowledged",
+      "text": "結果不明・通知は確認済み",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
+    },
+    {
+      "key": "threads.noticeUnconfirmed",
+      "text": "通知の確認状態を確かめられません。状態を読み直してください。",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsModel.swift"
+    },
+    {
+      "key": "threads.unknownState",
+      "text": "結果不明",
+      "only": "apple",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ActionThreads/ShannonActionThreadsView.swift"
     }
   ]
 }

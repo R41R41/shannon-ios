@@ -75,7 +75,7 @@ describe('Haiku signed thinking with a lazy tool menu', () => {
     expect(result.outOfTime).toBeUndefined();
     expect(t.calls).toEqual(['study_list']);
     expect(h.bodies).toHaveLength(3);
-    expect(h.bodies[0]!.tools).toEqual([expect.objectContaining({ name: 'tool_open', strict: true })]);
+    expect(h.bodies[0]!.tools).toEqual([expect.objectContaining({ name: 'tool_open', strict: true }), expect.objectContaining({ name: 'tool_call', strict: true })]);
     expect(h.bodies.every(body => body.cache_control && (body.cache_control as { ttl: string }).ttl === '1h')).toBe(true);
     expect(h.headers.every(header => header.get('anthropic-beta') === 'inline-tools-2026-09-15')).toBe(true);
   });

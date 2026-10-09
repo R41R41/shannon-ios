@@ -92,7 +92,23 @@ private struct ShannonActionThreadsList: View {
                     Label(stateText(thread.state), systemImage: stateSymbol(thread.state))
                     Text(originText(thread.origin))
                         .font(.caption).foregroundStyle(ShannonPalette.resolve(colorScheme).textSecondary)
-                    if thread.state == "unknown" { Text(ShannonGeneratedStrings.threadsUnknownDetail).font(.callout) }
+                    if thread.state == "unknown" {
+                        Text(ShannonGeneratedStrings.threadsUnknownDetail).font(.callout)
+                        if let notification = thread.notification {
+                            if notification.acknowledgedAt != nil {
+                                Text(ShannonGeneratedStrings.threadsNoticeAcknowledged).font(.callout)
+                            } else {
+                                Text(ShannonGeneratedStrings.threadsNoticeMeaning).font(.callout)
+                                Button(ShannonGeneratedStrings.threadsNoticeAcknowledge) {
+                                    Task { await model.acknowledgeNotice(id: thread.id, notificationID: notification.id) }
+                                }
+                                .buttonStyle(.borderless).frame(minHeight: 44)
+                                .disabled(model.controlPending || stale || model.phase != .loaded)
+                                .accessibilityLabel("\(thread.title)、\(ShannonGeneratedStrings.threadsNoticeAcknowledge)")
+                                .accessibilityIdentifier("action-notice-acknowledge-\(thread.id)")
+                            }
+                        }
+                    }
                     if thread.failures >= 5 { Text(ShannonGeneratedStrings.threadsFiveFailures).font(.callout) }
                     if ["queued", "running", "waiting"].contains(thread.state) {
                         Button(ShannonGeneratedStrings.threadsStop, role: .destructive) { Task { await model.control(id: thread.id) } }
@@ -120,6 +136,7 @@ private struct ShannonActionThreadsList: View {
 
     private func stateText(_ state: String) -> String {
         switch state {
+        case "unknown": ShannonGeneratedStrings.threadsUnknownState
         case "queued": ShannonGeneratedStrings.threadsQueued
         case "running": ShannonGeneratedStrings.threadsRunning
         case "waiting": ShannonGeneratedStrings.threadsWaiting

@@ -9,6 +9,7 @@ export function actionHarness(now:()=>string,path=':memory:',borrowedDatabase?:D
     renew:async(lease,progress)=>store.renew(lease,now(),progress),dispatch:async(lease,keys)=>store.dispatch(lease,now(),keys),
     finish:async(lease,state,code)=>store.finish(lease,state,code,now()),list:async scope=>store.list(scope),
     get:async(scope,id)=>{const action=store.get(id);return action?.scopeKey===scope?action:null;},
+    acknowledgeNotice:async(scope,id,notificationId,requestId)=>store.acknowledgeNotice(scope,id,notificationId,requestId,now()),
     stop:async(scope,id,request)=>store.stop(scope,id,request,now()),resume:async(scope,id)=>store.resume(scope,id,now()),
     reconcile:async(lease,state,code)=>store.reconcile(lease,state,code,now()),checkpoint:async(lease,code,failureCode)=>store.checkpoint(lease,code,now(),failureCode),
     reconcileResource:async(lease,resource,id)=>store.reconcileResource(lease,resource,id),
