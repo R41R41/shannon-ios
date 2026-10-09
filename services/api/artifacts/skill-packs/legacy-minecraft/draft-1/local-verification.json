@@ -1,0 +1,37 @@
+{
+  "observedAt": "2026-10-09T15:42:52.805Z",
+  "packId": "legacy-minecraft",
+  "revision": "draft-1",
+  "packSha256": "72af2e42b964395755c5cba0f71b8659544f56cfdb1691830784c90fe9ee095d",
+  "fixturePlanHash": "978aeb23750b32293a81f43edfa0139ab732edc111847d28144e662e819e0038",
+  "planHashScope": "in-memory empty owner fixture; never a production apply plan",
+  "importedTrialCount": 4,
+  "actualFcaSkillReads": [
+    {
+      "name": "mc-early-toolchain",
+      "revisionId": "skill_904f27ce5bac4c810cda8a855ed9d5fcdf1e16d0:v1",
+      "ancestryRevocationChecked": true
+    },
+    {
+      "name": "mc-night-retreat",
+      "revisionId": "skill_ea4048fd9c158a4c962ef825549c9b4e3f0d2884:v1",
+      "ancestryRevocationChecked": true
+    },
+    {
+      "name": "mc-equipment-recovery",
+      "revisionId": "skill_d0bde35b19de6698cc38ed92966237413374b8d7:v1",
+      "ancestryRevocationChecked": true
+    },
+    {
+      "name": "mc-smelting-observation",
+      "revisionId": "skill_a62a1b37ab7940dc29937e96c99becb07abadac9:v1",
+      "ancestryRevocationChecked": true
+    }
+  ],
+  "nativeParameterProjectionChecks": 7,
+  "providerCalls": 0,
+  "gameActions": 0,
+  "productionMutation": false,
+  "liveCatalogAvailability": "unmeasured",
+  "liveHttpDryRun": "parent-owned pending"
+}

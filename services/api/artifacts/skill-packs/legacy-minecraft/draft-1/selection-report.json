@@ -1,0 +1,919 @@
+{
+  "knowledgeSha256": "60bca0f42f9c4e337435efbf6be442bbdeb8dfa3febf31401615ae3a2a348d6d",
+  "total": 2243,
+  "retired": 2043,
+  "active": 200,
+  "selectedItems": [
+    {
+      "id": "k-b9908999-ed1f-40c2-b834-a4151d11afaf",
+      "entrySha256": "3b4fd91cfe30ac30b1d77466122fed489b05333b49c45817a23ffccd30d881ed",
+      "legacySource": "reflection",
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "timeBands": [
+          "day"
+        ],
+        "carryingAny": [
+          "cobblestone"
+        ],
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 38,
+        "contradicted": 1
+      },
+      "retainedRunVotes": {
+        "supported": 38,
+        "contradicted": 1
+      },
+      "contradictedRunIds": [
+        "01d3c7ed6d196fbfb9e7-f3c70eb3"
+      ],
+      "reflectionReferences": [
+        "542279b1b5a873e78322-0df3f888:stall:2026-10-04T23:46:11.487Z",
+        "5afd83932c37f6265293-78972152:stall:2026-10-05T02:29:25.386Z",
+        "49b8874b7c711769f310-f635971f:stall:2026-10-05T03:53:16.917Z"
+      ]
+    },
+    {
+      "id": "k-76a3237b-a39d-4606-9631-f6384485e7a0",
+      "entrySha256": "103794ce0531ca7275beca800890accdc916a8d7fee12698be9f2248c9fa4412",
+      "legacySource": "reflection",
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "timeBands": [
+          "night"
+        ],
+        "inWater": false,
+        "emergency": true,
+        "threatsPresent": true
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 36,
+        "contradicted": 0
+      },
+      "retainedRunVotes": {
+        "supported": 36
+      },
+      "contradictedRunIds": [],
+      "reflectionReferences": [
+        "7ba0d785741eee0d291f-76cc762b:death:2026-10-05T15:13:07.143Z",
+        "eec81da9c5f9a6bf29dc-8cdc2457:milestone:2026-10-05T16:03:47.519Z",
+        "19b95f2dc496f7508331-0b034772:milestone:2026-10-05T16:42:27.383Z"
+      ]
+    },
+    {
+      "id": "k-fdff7e7d-3601-419d-8912-f60698513322",
+      "entrySha256": "72bcd447b2166ced2e79679d150e8820f58952949f90dd40d5581a868b397561",
+      "legacySource": "reflection",
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "timeBands": [
+          "day"
+        ],
+        "depthBands": [
+          "surface",
+          "low"
+        ],
+        "carryingAny": [
+          "cobblestone"
+        ],
+        "minHealth": 16,
+        "minFood": 12,
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 38,
+        "contradicted": 2
+      },
+      "retainedRunVotes": {
+        "supported": 38,
+        "contradicted": 2
+      },
+      "contradictedRunIds": [
+        "099bf941525b4f232f14-0eb02e82",
+        "19b95f2dc496f7508331-0b034772"
+      ],
+      "reflectionReferences": [
+        "eec81da9c5f9a6bf29dc-8cdc2457:milestone:2026-10-05T15:32:28.311Z",
+        "19b95f2dc496f7508331-0b034772:milestone:2026-10-05T16:35:17.427Z",
+        "19b95f2dc496f7508331-0b034772:stall:2026-10-05T16:49:00.697Z"
+      ]
+    },
+    {
+      "id": "k-b7567c39-f334-4f34-8fc6-2359e7c59999",
+      "entrySha256": "a09a94ad8664f4cba0d031f357b0bdec5fed0ea5ae3b8b785272d82566f66575",
+      "legacySource": "reflection",
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "depthBands": [
+          "cave",
+          "low"
+        ],
+        "carryingAny": [
+          "raw_iron",
+          "coal"
+        ],
+        "minHealth": 14,
+        "minFood": 10,
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 21,
+        "contradicted": 3
+      },
+      "retainedRunVotes": {
+        "supported": 21,
+        "contradicted": 3
+      },
+      "contradictedRunIds": [
+        "ed963556f88020bc01cd-8456497c",
+        "49b8874b7c711769f310-f635971f",
+        "61f6012ee924f387de25-48348de3"
+      ],
+      "reflectionReferences": [
+        "61f6012ee924f387de25-48348de3:stall:2026-10-05T12:24:03.829Z",
+        "19b95f2dc496f7508331-0b034772:milestone:2026-10-05T17:02:50.885Z",
+        "7f44ca43e4423e0e2955-2c8649e1:milestone:2026-10-08T14:21:16.784Z"
+      ]
+    },
+    {
+      "id": "k-6703a43f-4f32-4c78-9b99-dbb29c74367b",
+      "entrySha256": "afa9a26b2628579272ca05c591591d938f36931f24efcb47c56afe3d2b2c4edf",
+      "legacySource": "reflection",
+      "conditions": {
+        "dimensions": [
+          "overworld"
+        ],
+        "timeBands": [
+          "day"
+        ],
+        "depthBands": [
+          "surface"
+        ],
+        "carryingAny": [
+          "wooden_pickaxe"
+        ],
+        "minHealth": 18,
+        "minFood": 14,
+        "threatsPresent": false
+      },
+      "cumulativeReflectionVotes": {
+        "supported": 76,
+        "contradicted": 2
+      },
+      "retainedRunVotes": {
+        "supported": 63,
+        "contradicted": 1
+      },
+      "contradictedRunIds": [
+        "19b95f2dc496f7508331-0b034772"
+      ],
+      "reflectionReferences": [
+        "eec81da9c5f9a6bf29dc-8cdc2457:milestone:2026-10-05T15:28:23.389Z",
+        "19b95f2dc496f7508331-0b034772:milestone:2026-10-05T16:30:50.786Z",
+        "b40e068036deaefc5f0b-2817a255:run_end:2026-10-08T13:57:06.507Z"
+      ]
+    }
+  ],
+  "experienceEvidence": [
+    {
+      "runId": "19b95f2dc496f7508331-0b034772",
+      "relativePath": "experience/19b95f2dc496f7508331-0b034772.jsonl",
+      "sha256": "c90a7fb695f6b7c6b7f21259773703220cf875c109ec92e20aa17b0065073288",
+      "rows": 970,
+      "eventKindCounts": {
+        "knowledge_shown": 449,
+        "action": 462,
+        "milestone": 7,
+        "reflection": 11,
+        "repeated_interruption": 1,
+        "losing_escape": 12,
+        "fend_off_outcome": 11,
+        "encounter_decision": 4,
+        "encounter_outcome": 5,
+        "damage": 6,
+        "tool_broke": 2
+      },
+      "toolOutcomeAggregates": {
+        "mine-block": {
+          "calls": 19,
+          "legacySuccessValues": {
+            "False": 4,
+            "True": 15
+          },
+          "legacyFailureTypes": {
+            "interrupted": 1,
+            "None": 11,
+            "tool_broke": 1,
+            "drops_lost": 1,
+            "tool_durability_low": 3,
+            "missing_tool": 1,
+            "target_not_found": 1
+          }
+        },
+        "craft-one": {
+          "calls": 20,
+          "legacySuccessValues": {
+            "True": 17,
+            "False": 3
+          },
+          "legacyFailureTypes": {
+            "None": 20
+          }
+        },
+        "start-smelting": {
+          "calls": 10,
+          "legacySuccessValues": {
+            "True": 9,
+            "False": 1
+          },
+          "legacyFailureTypes": {
+            "None": 9,
+            "distance_too_far": 1
+          }
+        },
+        "withdraw-from-furnace": {
+          "calls": 73,
+          "legacySuccessValues": {
+            "False": 64,
+            "True": 9
+          },
+          "legacyFailureTypes": {
+            "None": 14,
+            "waiting_external": 58,
+            "earlier_action_failed": 1
+          }
+        },
+        "dig-shelter": {
+          "calls": 5,
+          "legacySuccessValues": {
+            "False": 3,
+            "True": 2
+          },
+          "legacyFailureTypes": {
+            "invalid_location": 1,
+            "None": 2,
+            "dig_failed": 2
+          }
+        },
+        "leave-water": {
+          "calls": 7,
+          "legacySuccessValues": {
+            "True": 4,
+            "False": 3
+          },
+          "legacyFailureTypes": {
+            "None": 4,
+            "interrupted": 3
+          }
+        },
+        "flee-from": {
+          "calls": 8,
+          "legacySuccessValues": {
+            "True": 3,
+            "False": 5
+          },
+          "legacyFailureTypes": {
+            "None": 5,
+            "interrupted": 2,
+            "earlier_action_failed": 1
+          }
+        },
+        "equip-item": {
+          "calls": 3,
+          "legacySuccessValues": {
+            "True": 3
+          },
+          "legacyFailureTypes": {
+            "None": 3
+          }
+        }
+      },
+      "milestoneObservations": [
+        {
+          "line": 56,
+          "at": "2026-10-05T16:30:33.112Z",
+          "advancement": "Stone Age",
+          "health": 20,
+          "food": 20,
+          "dimension": "overworld"
+        },
+        {
+          "line": 62,
+          "at": "2026-10-05T16:30:51.466Z",
+          "advancement": "Getting an Upgrade",
+          "health": 20,
+          "food": 20,
+          "dimension": "overworld"
+        },
+        {
+          "line": 122,
+          "at": "2026-10-05T16:34:59.166Z",
+          "advancement": "Acquire Hardware",
+          "health": 20,
+          "food": 19,
+          "dimension": "overworld"
+        },
+        {
+          "line": 325,
+          "at": "2026-10-05T16:42:04.208Z",
+          "advancement": "Monster Hunter",
+          "health": 3.5333328247070312,
+          "food": 19,
+          "dimension": "overworld"
+        },
+        {
+          "line": 795,
+          "at": "2026-10-05T17:02:33.962Z",
+          "advancement": "Isn't It Iron Pick",
+          "health": 20,
+          "food": 20,
+          "dimension": "overworld"
+        },
+        {
+          "line": 868,
+          "at": "2026-10-05T17:06:02.431Z",
+          "advancement": "Hot Stuff",
+          "health": 20,
+          "food": 20,
+          "dimension": "overworld"
+        },
+        {
+          "line": 914,
+          "at": "2026-10-05T17:07:33.724Z",
+          "advancement": "Not Today, Thank You",
+          "health": 20,
+          "food": 20,
+          "dimension": "overworld"
+        }
+      ]
+    },
+    {
+      "runId": "8aef00bc795bc11b046f-d5841c27",
+      "relativePath": "experience/8aef00bc795bc11b046f-d5841c27.jsonl",
+      "sha256": "eb9bc81873e51cefb7fad319d160f2c5002cc2f398b2f2559ed2fc974001c008",
+      "rows": 727,
+      "eventKindCounts": {
+        "knowledge_shown": 349,
+        "action": 358,
+        "milestone": 5,
+        "reflection": 7,
+        "consolidation": 3,
+        "tool_broke": 2,
+        "damage": 2,
+        "death": 1
+      },
+      "toolOutcomeAggregates": {
+        "mine-block": {
+          "calls": 17,
+          "legacySuccessValues": {
+            "True": 12,
+            "False": 5
+          },
+          "legacyFailureTypes": {
+            "None": 10,
+            "interrupted": 3,
+            "tool_broke": 2,
+            "drops_lost": 2
+          }
+        },
+        "craft-one": {
+          "calls": 36,
+          "legacySuccessValues": {
+            "True": 28,
+            "False": 8
+          },
+          "legacyFailureTypes": {
+            "None": 32,
+            "crafting_table_placement_failed": 1,
+            "crafting_table_missing": 3
+          }
+        },
+        "start-smelting": {
+          "calls": 7,
+          "legacySuccessValues": {
+            "True": 5,
+            "False": 2
+          },
+          "legacyFailureTypes": {
+            "None": 5,
+            "distance_too_far": 2
+          }
+        },
+        "withdraw-from-furnace": {
+          "calls": 7,
+          "legacySuccessValues": {
+            "False": 2,
+            "True": 5
+          },
+          "legacyFailureTypes": {
+            "None": 7
+          }
+        },
+        "dig-shelter": {
+          "calls": 2,
+          "legacySuccessValues": {
+            "True": 2
+          },
+          "legacyFailureTypes": {
+            "None": 2
+          }
+        },
+        "flee-from": {
+          "calls": 4,
+          "legacySuccessValues": {
+            "False": 3,
+            "True": 1
+          },
+          "legacyFailureTypes": {
+            "None": 3,
+            "interrupted": 1
+          }
+        },
+        "equip-item": {
+          "calls": 1,
+          "legacySuccessValues": {
+            "True": 1
+          },
+          "legacyFailureTypes": {
+            "None": 1
+          }
+        }
+      },
+      "milestoneObservations": [
+        {
+          "line": 48,
+          "at": "2026-10-01T14:30:48.528Z",
+          "advancement": "Stone Age",
+          "health": 20,
+          "food": 20,
+          "dimension": "overworld"
+        },
+        {
+          "line": 54,
+          "at": "2026-10-01T14:31:12.818Z",
+          "advancement": "Getting an Upgrade",
+          "health": 20,
+          "food": 20,
+          "dimension": "overworld"
+        },
+        {
+          "line": 94,
+          "at": "2026-10-01T14:33:53.268Z",
+          "advancement": "Acquire Hardware",
+          "health": 20,
+          "food": 20,
+          "dimension": "overworld"
+        },
+        {
+          "line": 456,
+          "at": "2026-10-01T14:56:35.571Z",
+          "advancement": "Isn't It Iron Pick",
+          "health": 20,
+          "food": 20,
+          "dimension": "overworld"
+        },
+        {
+          "line": 680,
+          "at": "2026-10-01T15:07:57.368Z",
+          "advancement": "Hot Stuff",
+          "health": 20,
+          "food": 20,
+          "dimension": "overworld"
+        }
+      ]
+    },
+    {
+      "runId": "f4dba125e1126f0fe87a-33a5e49e",
+      "relativePath": "experience/f4dba125e1126f0fe87a-33a5e49e.jsonl",
+      "sha256": "90c5cc20a8616ac0af6540f4d27de5096c9414000972d4c7d221a52ea773c156",
+      "rows": 132,
+      "eventKindCounts": {
+        "knowledge_shown": 36,
+        "action": 70,
+        "milestone": 7,
+        "reflection": 8,
+        "consolidation": 3,
+        "tool_broke": 1,
+        "damage": 5,
+        "encounter_decision": 1,
+        "encounter_outcome": 1
+      },
+      "toolOutcomeAggregates": {
+        "mine-block": {
+          "calls": 10,
+          "legacySuccessValues": {
+            "True": 7,
+            "False": 3
+          },
+          "legacyFailureTypes": {
+            "None": 7,
+            "tool_broke": 1,
+            "interrupted": 2
+          }
+        },
+        "craft-one": {
+          "calls": 26,
+          "legacySuccessValues": {
+            "True": 22,
+            "False": 4
+          },
+          "legacyFailureTypes": {
+            "None": 25,
+            "crafting_table_missing": 1
+          }
+        },
+        "start-smelting": {
+          "calls": 4,
+          "legacySuccessValues": {
+            "False": 1,
+            "True": 3
+          },
+          "legacyFailureTypes": {
+            "invalid_target_type": 1,
+            "None": 3
+          }
+        },
+        "withdraw-from-furnace": {
+          "calls": 3,
+          "legacySuccessValues": {
+            "True": 3
+          },
+          "legacyFailureTypes": {
+            "None": 3
+          }
+        },
+        "dig-shelter": {
+          "calls": 2,
+          "legacySuccessValues": {
+            "True": 2
+          },
+          "legacyFailureTypes": {
+            "None": 2
+          }
+        },
+        "flee-from": {
+          "calls": 2,
+          "legacySuccessValues": {
+            "False": 2
+          },
+          "legacyFailureTypes": {
+            "None": 2
+          }
+        }
+      },
+      "milestoneObservations": [
+        {
+          "line": 12,
+          "at": "2026-10-01T14:07:52.713Z",
+          "advancement": "Stone Age",
+          "health": 20,
+          "food": 20,
+          "dimension": "overworld"
+        },
+        {
+          "line": 17,
+          "at": "2026-10-01T14:08:44.158Z",
+          "advancement": "Getting an Upgrade",
+          "health": 20,
+          "food": 20,
+          "dimension": "overworld"
+        },
+        {
+          "line": 36,
+          "at": "2026-10-01T14:09:49.614Z",
+          "advancement": "Acquire Hardware",
+          "health": 20,
+          "food": 20,
+          "dimension": "overworld"
+        },
+        {
+          "line": 42,
+          "at": "2026-10-01T14:09:57.659Z",
+          "advancement": "Isn't It Iron Pick",
+          "health": 20,
+          "food": 20,
+          "dimension": "overworld"
+        },
+        {
+          "line": 59,
+          "at": "2026-10-01T14:14:05.464Z",
+          "advancement": "Suit Up",
+          "health": 20,
+          "food": 19,
+          "dimension": "overworld"
+        },
+        {
+          "line": 92,
+          "at": "2026-10-01T14:22:59.512Z",
+          "advancement": "Diamonds!",
+          "health": 20,
+          "food": 20,
+          "dimension": "overworld"
+        },
+        {
+          "line": 111,
+          "at": "2026-10-01T14:23:40.904Z",
+          "advancement": "Monster Hunter",
+          "health": 12,
+          "food": 19,
+          "dimension": "overworld"
+        }
+      ]
+    }
+  ],
+  "nativeCatalog": {
+    "sourceRevision": "5ac00cf6722aed915474bcd5a4d13cfba10afb61",
+    "catalogSourceSha256": "946c693d246631f40d1053699457254fc42e173c9f5e857c90c98d9016e9ae19",
+    "definitions": [
+      {
+        "nativeName": "craft-one",
+        "fcaName": "mc.craft-one",
+        "sourceFile": "backend/src/services/minebot/instantSkills/craftOne.ts",
+        "sha256": "dccf3f295759df3673c7c5ebb2d3ba3de2b4db569af66200318970b1e17d7f45",
+        "parameterNames": [
+          "itemName",
+          "count"
+        ],
+        "parameterDefinitions": [
+          {
+            "name": "itemName",
+            "type": "string",
+            "required": true,
+            "hasDefault": false
+          },
+          {
+            "name": "count",
+            "type": "number",
+            "required": false,
+            "hasDefault": true
+          }
+        ]
+      },
+      {
+        "nativeName": "mine-block",
+        "fcaName": "mc.mine-block",
+        "sourceFile": "backend/src/services/minebot/instantSkills/mineBlock.ts",
+        "sha256": "d50bb13080671219dcce6e6b174d40517362d74082e0275b7abaa188c1caed64",
+        "parameterNames": [
+          "blockName",
+          "count",
+          "searchRadius",
+          "collectionPolicy"
+        ],
+        "parameterDefinitions": [
+          {
+            "name": "blockName",
+            "type": "string",
+            "required": true,
+            "hasDefault": false
+          },
+          {
+            "name": "count",
+            "type": "number",
+            "required": false,
+            "hasDefault": true
+          },
+          {
+            "name": "searchRadius",
+            "type": "number",
+            "required": false,
+            "hasDefault": true
+          },
+          {
+            "name": "collectionPolicy",
+            "type": "string",
+            "required": false,
+            "hasDefault": true
+          }
+        ]
+      },
+      {
+        "nativeName": "start-smelting",
+        "fcaName": "mc.start-smelting",
+        "sourceFile": "backend/src/services/minebot/instantSkills/startSmelting.ts",
+        "sha256": "6f2a5d021589897e950c939f81c78f39724f12d724b8bfb63636bb3c6a2b3ce9",
+        "parameterNames": [
+          "x",
+          "y",
+          "z",
+          "inputItem",
+          "fuelItem",
+          "count"
+        ],
+        "parameterDefinitions": [
+          {
+            "name": "x",
+            "type": "number",
+            "required": true,
+            "hasDefault": false
+          },
+          {
+            "name": "y",
+            "type": "number",
+            "required": true,
+            "hasDefault": false
+          },
+          {
+            "name": "z",
+            "type": "number",
+            "required": true,
+            "hasDefault": false
+          },
+          {
+            "name": "inputItem",
+            "type": "string",
+            "required": true,
+            "hasDefault": false
+          },
+          {
+            "name": "fuelItem",
+            "type": "string",
+            "required": true,
+            "hasDefault": false
+          },
+          {
+            "name": "count",
+            "type": "number",
+            "required": false,
+            "hasDefault": true
+          }
+        ]
+      },
+      {
+        "nativeName": "withdraw-from-furnace",
+        "fcaName": "mc.withdraw-from-furnace",
+        "sourceFile": "backend/src/services/minebot/instantSkills/withdrawFromFurnace.ts",
+        "sha256": "58de0d88a5b89a8c14983e5e55e98f0399abb48294f39e755c1f641f730c792e",
+        "parameterNames": [
+          "x",
+          "y",
+          "z",
+          "slot",
+          "waitForCompletion"
+        ],
+        "parameterDefinitions": [
+          {
+            "name": "x",
+            "type": "number",
+            "required": true,
+            "hasDefault": false
+          },
+          {
+            "name": "y",
+            "type": "number",
+            "required": true,
+            "hasDefault": false
+          },
+          {
+            "name": "z",
+            "type": "number",
+            "required": true,
+            "hasDefault": false
+          },
+          {
+            "name": "slot",
+            "type": "string",
+            "required": false,
+            "hasDefault": true
+          },
+          {
+            "name": "waitForCompletion",
+            "type": "boolean",
+            "required": false,
+            "hasDefault": false
+          }
+        ]
+      },
+      {
+        "nativeName": "dig-shelter",
+        "fcaName": "mc.dig-shelter",
+        "sourceFile": "backend/src/services/minebot/instantSkills/digShelter.ts",
+        "sha256": "426d0cb2bb5ca1d242738c7865a3cbf72165c95d7dd02761dc58298ccd0c0642",
+        "parameterNames": [],
+        "parameterDefinitions": []
+      },
+      {
+        "nativeName": "leave-water",
+        "fcaName": "mc.leave-water",
+        "sourceFile": "backend/src/services/minebot/instantSkills/leaveWater.ts",
+        "sha256": "e1e37eb02d60637777b72cb5189460d01a0feb2e1f7f8fecab3c6e47c84a3a94",
+        "parameterNames": [],
+        "parameterDefinitions": []
+      },
+      {
+        "nativeName": "equip-item",
+        "fcaName": "mc.equip-item",
+        "sourceFile": "backend/src/services/minebot/instantSkills/equipItem.ts",
+        "sha256": "c7eac9a58a94f2ea0363e799a47d30162f53e5a85479ad3136250332bb2c0d30",
+        "parameterNames": [
+          "itemName",
+          "destination"
+        ],
+        "parameterDefinitions": [
+          {
+            "name": "itemName",
+            "type": "string",
+            "required": true,
+            "hasDefault": false
+          },
+          {
+            "name": "destination",
+            "type": "string",
+            "required": false,
+            "hasDefault": true
+          }
+        ]
+      }
+    ]
+  },
+  "schemaVersion": 1,
+  "packId": "legacy-minecraft",
+  "packRevision": "draft-1",
+  "observedAt": "2026-10-09T15:34:43.587507+00:00",
+  "classification": "operator-curated legacy experiment procedures; no canonical Shannon learned success",
+  "selection": {
+    "criteria": [
+      "Non-retired original entry",
+      "Transferable condition-bound procedure without old world coordinates or privileges",
+      "Bounded real experience/tool and milestone observations, including failures",
+      "Current native source name and parameter correspondence; runtime catalog remains mandatory",
+      "No legacy reward, confidence, support, uses or success counters imported"
+    ],
+    "omitted": {
+      "retiredItems": 2043,
+      "activeButNotDirectlySelected": 195,
+      "categories": [
+        "Coordinate/place memory",
+        "Grant or restore instructions",
+        "Retired consolidation products",
+        "Old campaign/goal-manager and fixed tool bugs",
+        "Unverified Nether/dragon tactics",
+        "Duplicate early-game advice"
+      ]
+    },
+    "procedures": [
+      {
+        "name": "mc-early-toolchain",
+        "itemIds": [
+          "k-6703a43f-4f32-4c78-9b99-dbb29c74367b"
+        ],
+        "nativeNames": [
+          "mine-block",
+          "craft-one"
+        ]
+      },
+      {
+        "name": "mc-night-retreat",
+        "itemIds": [
+          "k-76a3237b-a39d-4606-9631-f6384485e7a0"
+        ],
+        "nativeNames": [
+          "leave-water",
+          "dig-shelter"
+        ]
+      },
+      {
+        "name": "mc-equipment-recovery",
+        "itemIds": [
+          "k-b9908999-ed1f-40c2-b834-a4151d11afaf",
+          "k-fdff7e7d-3601-419d-8912-f60698513322"
+        ],
+        "nativeNames": [
+          "craft-one",
+          "equip-item"
+        ]
+      },
+      {
+        "name": "mc-smelting-observation",
+        "itemIds": [
+          "k-b7567c39-f334-4f34-8fc6-2359e7c59999"
+        ],
+        "nativeNames": [
+          "start-smelting",
+          "withdraw-from-furnace"
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "Knowledge is a historical experiment snapshot spanning multiple runs, not an isolated immutable L100 result.",
+    "Raw knowledge, experience logs, positions, player identities, messages, grants and private world files remain on VM; only selected IDs, source hashes, condition symbols and safe outcome aggregates are retained.",
+    "Legacy support/contradict values are reflection votes, not causal success evidence; the retained evidence map keeps at most 64 run verdicts, so it need not equal cumulative counters.",
+    "waiting_external and earlier_action_failed include old asynchronous/acceptance semantics and implementation limitations. They are not current escape/collection failure rates or general tactical success rates.",
+    "Recorded milestones are historical observations; these curated procedures were not independently replayed, do not establish fresh-world facts, and cannot prove a whole campaign or dragon victory.",
+    "Contradicted run IDs retained in the report were not all reread. Three supporting/mixed run logs were inspected with a bounded projection.",
+    "Current native source name/parameter definitions and catalog filter/schema code were read without game execution. Availability in a fresh live poll remains unmeasured while the world/body is absent.",
+    "Static import validates only existing conditional minecraft.observe. Native operations are selected by current dynamic catalog and schema at use time; import grants no native tool authority.",
+    "Trial import starts uses=0 and successes=0 with operator_authored provenance; adoption through owner HTTP dry-run/apply is a separate parent-owned step."
+  ]
+}

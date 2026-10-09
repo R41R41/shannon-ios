@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "packId": "legacy-minecraft",
+  "revision": "draft-1",
+  "sourceAuthor": "Shannon operator curation / historical Claude Code Minecraft experiments; legacy reflections, not canonical learned successes",
+  "sourceReference": "legacy-minecraft://dev-isolated-lab/knowledge/sha256/60bca0f42f9c4e337435efbf6be442bbdeb8dfa3febf31401615ae3a2a348d6d?selectionReportSha256=31731bfa8e0ddc60a22a52b106aadfefac6f2b10ee72dde37b837a264554647c",
+  "referenceRevision": "60bca0f42f9c4e337435efbf6be442bbdeb8dfa3febf31401615ae3a2a348d6d",
+  "validatorRevision": "skill-import-v1",
+  "skills": [
+    {
+      "name": "mc-early-toolchain",
+      "path": "mc-early-toolchain/SKILL.md",
+      "sha256": "12fa2151ac1f28fe9d34164f15ef232962e835dae6697050478fa890bb445e0c",
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ]
+    },
+    {
+      "name": "mc-night-retreat",
+      "path": "mc-night-retreat/SKILL.md",
+      "sha256": "a19505e4ff822f5fa980350284e0c70940547d39dbf776e728d8f483bec6cf34",
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ]
+    },
+    {
+      "name": "mc-equipment-recovery",
+      "path": "mc-equipment-recovery/SKILL.md",
+      "sha256": "5cfade7da2297b2709fe54cade0fb116f7cfe4fa7230f2d869ac1e7d0ca731ed",
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ]
+    },
+    {
+      "name": "mc-smelting-observation",
+      "path": "mc-smelting-observation/SKILL.md",
+      "sha256": "0ba0c5d53883ee6f07072c1285cb1db3ed587caeac2505f11f513ac40028f03b",
+      "tools": [],
+      "conditionalTools": [
+        "minecraft.observe"
+      ]
+    }
+  ]
+}

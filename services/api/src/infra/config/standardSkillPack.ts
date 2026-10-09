@@ -6,6 +6,7 @@ export function standardSkillPack(packId: string, revision: string): SkillPack |
   const paths: Readonly<Record<string, string>> = {
     'standard10/draft-2': '../../../artifacts/skill-packs/standard10/draft-2/',
     'minecraft-lifecycle/draft-1': '../../../artifacts/skill-packs/minecraft-lifecycle/draft-1/',
+    'legacy-minecraft/draft-1': '../../../artifacts/skill-packs/legacy-minecraft/draft-1/',
   };
   const path = paths[`${packId}/${revision}`];
   if (!path) return null;
