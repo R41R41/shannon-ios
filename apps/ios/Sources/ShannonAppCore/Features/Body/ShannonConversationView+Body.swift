@@ -55,7 +55,7 @@ extension ShannonConversationView {
                   geminiLiveVoiceModel.phase == .idle || geminiLiveVoiceModel.phase == .failed,
                   // A call from her that rings is hers: starting a conversation here would dismiss it.
                   !ShannonVoiceCallHost.shared.systemCallIsActive else { return }
-            let provider = ShannonSpeechProvider(rawValue: speechProviderRawValue) ?? .gemini
+            let provider = ShannonPersonaPreset.provider(legacy: speechProviderRawValue, preset: presetRawValue)
             // The card of the last call's 「友人も一緒」 periods is put back if this call comes to nothing.
             let callMemory = voiceWorkspace.callMemory
             let starting = voiceWorkspace.beginCall(

@@ -205,7 +205,7 @@ public final class ShannonDesktopVoiceCall {
 
     /// The speech provider of 設定 › 声, read at the start of each call (「次の通話から反映」).
     static var speechProvider: ShannonSpeechProvider {
-        UserDefaults.standard.string(forKey: ShannonSpeechProvider.storageKey).flatMap(ShannonSpeechProvider.init(rawValue:)) ?? .gemini
+        ShannonSpeechProvider.current()
     }
 
     // MARK: Windows

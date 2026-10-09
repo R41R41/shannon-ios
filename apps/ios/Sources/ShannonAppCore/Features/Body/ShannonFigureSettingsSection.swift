@@ -13,6 +13,7 @@ public struct ShannonFigureSettingsSection: View {
         self.showInTalk = showInTalk
     }
 
+    @AppStorage(ShannonPersonaPreset.storageKey) private var presetRawValue = ShannonPersonaPreset.initialRawValue
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
     @AppStorage(ShannonBodyPreference.reportsTouchKey) private var reportsTouch = false
     @AppStorage(ShannonLive2DBody.storageKey) private var bodyRawValue = ShannonLive2DBody.human.rawValue
@@ -21,15 +22,16 @@ public struct ShannonFigureSettingsSection: View {
     @Environment(ShannonBodyModel.self) private var bodyModel: ShannonBodyModel?
     @Environment(\.colorScheme) private var colorScheme
 
-    private var usesLive2D: Bool { formRawValue == ShannonForm.live2d.rawValue && ShannonLive2DStage.isAvailable }
-    private var chosenBody: ShannonLive2DBody { .displayed(rawValue: bodyRawValue) }
+    private var usesLive2D: Bool { ShannonPersonaPreset.form(legacy: formRawValue, preset: presetRawValue) == .live2d && ShannonLive2DStage.isAvailable }
+    private var chosenBody: ShannonLive2DBody { .displayed(rawValue: ShannonPersonaPreset.body(legacy: bodyRawValue, preset: presetRawValue).rawValue) }
     /// 映し方 frames the character; her eyes alone are only sized and moved.
     private var offersLayoutMode: Bool { usesLive2D && chosenBody.hasCharacterRig }
 
     public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
         Section {
-            Picker(selection: $formRawValue) {
+            ShannonPersonaPresetPicker()
+            Picker(selection: ShannonPersonaPreset.formSelection($formRawValue)) {
                 ForEach(ShannonForm.allCases) { form in
                     Text(form.japaneseName).tag(form.rawValue)
                 }
@@ -40,7 +42,7 @@ public struct ShannonFigureSettingsSection: View {
             .accessibilityIdentifier("settings-body-form")
 
             // Kept in place for both forms so that switching never moves the list.
-            Picker(selection: ShannonLive2DBody.selection($bodyRawValue)) {
+            Picker(selection: ShannonLive2DBody.selection(ShannonPersonaPreset.bodySelection($bodyRawValue))) {
                 ForEach(ShannonLive2DBody.allCases) { body in
                     Text(body.japaneseName).tag(body.rawValue)
                 }

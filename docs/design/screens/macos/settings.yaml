@@ -47,3 +47,11 @@ evidence:
   current: []
   approved: []
   privacy: "設定画面の証跡には実会話や認証情報を含めない"
+
+persona_presets:
+  status: "2026-10-10 実装ブランチ・未配布"
+  choices: "ボット＝既存Waterlight Eye・Eyeの会話／作業アイコン・Gemini、ガール＝既存水色髪Human Live2D・表情アイコン・ElevenLabs"
+  apply: "一つの設定キーで姿・体・アイコン・次の通話の声を選ぶ。進行中の通話では現在の声を保ち、設定に現在／次の声を示す"
+  individual: "個別変更は統合モードの全値を個別設定へ移してから、選んだ一値だけを変える"
+  validation: "移行、一回選択、声だけの個別変更はSwift単体テストで通過。CUAでガールの一回選択が表情アイコンとElevenLabs表示を同時に変更することを確認。実機・実音声・VoiceOver実読み上げは未確認"
+  evidence: "docs/screenshots/shannon-persona-macos-settings-light-v1.png"

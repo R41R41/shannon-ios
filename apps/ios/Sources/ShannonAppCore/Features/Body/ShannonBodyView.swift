@@ -18,6 +18,7 @@ public struct ShannonBodyView: View {
     /// Live2D only: which screen shows the one figure when several are on screen.
     public let priority: ShannonLive2DHostPriority
 
+    @AppStorage(ShannonPersonaPreset.storageKey) private var presetRawValue = ShannonPersonaPreset.initialRawValue
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
     @State private var hostID = UUID()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -46,7 +47,7 @@ public struct ShannonBodyView: View {
 
     public var body: some View {
         let stage = ShannonLive2DStage.shared
-        let usesLive2D = formRawValue == ShannonForm.live2d.rawValue && ShannonLive2DStage.isAvailable
+        let usesLive2D = ShannonPersonaPreset.form(legacy: formRawValue, preset: presetRawValue) == .live2d && ShannonLive2DStage.isAvailable
         let showsLive2D = usesLive2D && stage.status == .ready && stage.activeHost == hostID
 
         ZStack {

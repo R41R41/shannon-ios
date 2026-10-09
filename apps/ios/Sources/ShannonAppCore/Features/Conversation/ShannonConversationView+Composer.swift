@@ -9,6 +9,7 @@ import AppKit
 extension ShannonConversationView {
     func composer(_ palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+            ShannonNowCompact(model: now)
             composerContext(palette)
 
             ShannonAdaptiveComposerLayout(

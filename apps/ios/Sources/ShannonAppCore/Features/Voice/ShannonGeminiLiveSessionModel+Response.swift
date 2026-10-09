@@ -256,10 +256,12 @@ extension ShannonGeminiLiveSessionModel {
         guard responseGenerationID == generation else { throw CancellationError() }
     }
 
-    private func consumeResponseSpeech(
-        _ speech: ShannonGeminiSpeechStream, text: String, generation: UUID, runID: UUID
+    func consumeResponseSpeech(
+        _ speech: ShannonGeminiSpeechStream, text: String, generation: UUID, runID: UUID,
+        permitted: @MainActor () -> Bool = { true }
     ) async throws {
         try requireCurrentResponse(generation)
+        guard permitted() else { throw CancellationError() }
         voice = speech.voice
         guard speech.sampleRate == 24_000, speech.channels == 1, speech.bitsPerSample == 16 else {
             throw ShannonAPIError.invalidResponse
@@ -271,6 +273,7 @@ extension ShannonGeminiLiveSessionModel {
         defer { if !scheduledAll { observedPlayback?.cancel() } }
         for try await chunk in speech.chunks {
             try requireCurrentResponse(generation)
+            guard permitted() else { throw CancellationError() }
             guard !chunk.isEmpty, chunk.count % 2 == 0 else { throw ShannonAPIError.invalidResponse }
             if !receivedFirstChunk {
                 receivedFirstChunk = true

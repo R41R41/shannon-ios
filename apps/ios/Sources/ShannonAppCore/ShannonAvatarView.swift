@@ -12,6 +12,7 @@ public struct ShannonAvatarView: View {
     public let size: CGFloat
 
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage(ShannonPersonaPreset.storageKey) private var presetRawValue = ShannonPersonaPreset.initialRawValue
 
     public init(face: ShannonFace, size: CGFloat = 44) {
         self.face = face
@@ -25,9 +26,17 @@ public struct ShannonAvatarView: View {
     public var expression: ShannonExpressionDTO { face.expression }
 
     public var body: some View {
+        if presetRawValue == ShannonPersonaPreset.bot.rawValue {
+            ShannonBotIcon(size: size, label: face.accessibilityDescription)
+        } else {
+            expressionAvatar
+        }
+    }
+
+    private var expressionAvatar: some View {
         let palette = ShannonPalette.resolve(colorScheme)
 
-        ZStack {
+        return ZStack {
             Circle().fill(Color.white)
             avatarImage
                 .resizable()
@@ -84,6 +93,7 @@ public struct ShannonChatAvatarView: View {
     public let size: CGFloat
 
     @AppStorage(ShannonChatAvatarStyle.storageKey) private var styleRawValue = ShannonChatAvatarStyle.expression.rawValue
+    @AppStorage(ShannonPersonaPreset.storageKey) private var presetRawValue = ShannonPersonaPreset.initialRawValue
     @Environment(\.colorScheme) private var colorScheme
 
     public init(face: ShannonFace, size: CGFloat = 44) {
@@ -96,7 +106,9 @@ public struct ShannonChatAvatarView: View {
     }
 
     public var body: some View {
-        if styleRawValue == ShannonChatAvatarStyle.secondAppIcon.rawValue {
+        if ShannonPersonaPreset(rawValue: presetRawValue) != nil {
+            ShannonAvatarView(face: face, size: size)
+        } else if styleRawValue == ShannonChatAvatarStyle.secondAppIcon.rawValue {
             let palette = ShannonPalette.resolve(colorScheme)
             iconImage
                 .resizable()
@@ -125,6 +137,24 @@ public struct ShannonChatAvatarView: View {
         }
 #endif
         return Image(systemName: "person.crop.circle.fill")
+    }
+}
+
+private struct ShannonBotIcon: View {
+    let size: CGFloat
+    let label: String
+    var body: some View {
+        icon.resizable().scaledToFill().frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+            .accessibilityElement(children: .ignore).accessibilityLabel(label)
+    }
+    private var icon: Image {
+#if canImport(UIKit)
+        if let image = ShannonAppIconAssets.uiImage(for: ShannonAppIconChoice.level06.previewAssetName) { return Image(uiImage: image) }
+#elseif canImport(AppKit)
+        if let image = ShannonAppIconAssets.nsImage(for: ShannonAppIconChoice.level06.previewAssetName) { return Image(nsImage: image) }
+#endif
+        return Image(systemName: "eyes")
     }
 }
 

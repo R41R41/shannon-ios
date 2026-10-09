@@ -33,6 +33,7 @@ public struct ShannonConversationView: View {
     @State var showsSettings = false
     @State var showsThreadList = false
     @State var actionThreads: ShannonActionThreadsModel
+    @State var now: ShannonConversationActivityModel
     @State var yousu: ShannonYousuModel
     @State var didApplyYousuPreview = false
     /// 「シャノン › ようす」 is open.
@@ -64,6 +65,7 @@ public struct ShannonConversationView: View {
     @AppStorage(ShannonAppearanceMode.storageKey) var appearanceModeRawValue = ShannonAppearanceMode.system.rawValue
     @AppStorage(ShannonChatAvatarStyle.storageKey) var chatAvatarStyleRawValue = ShannonChatAvatarStyle.expression.rawValue
     @AppStorage(ShannonSpeechProvider.storageKey) var speechProviderRawValue = ShannonSpeechProvider.gemini.rawValue
+    @AppStorage(ShannonPersonaPreset.storageKey) var presetRawValue = ShannonPersonaPreset.initialRawValue
     @AppStorage(ShannonForm.storageKey) var formRawValue = ShannonForm.waterlight.rawValue
     @AppStorage(ShannonBodyPreference.layoutModeKey) var figureLayoutRawValue = ShannonLive2DLayout.Mode.full.rawValue
     @AppStorage(ShannonLive2DBody.storageKey) var figureBodyRawValue = ShannonLive2DBody.human.rawValue
@@ -88,6 +90,7 @@ public struct ShannonConversationView: View {
         _testFlightDeliveryModel = State(initialValue: testFlightDeliveryModel)
         _worldSubscriptionModel = State(initialValue: worldSubscriptionModel)
         _actionThreads = State(initialValue: ShannonActionThreadsModel.make(for: model))
+        _now = State(initialValue: ShannonConversationActivityModel.make(for: model))
         _yousu = State(initialValue: ShannonYousuModel.make(for: model))
     }
 
@@ -97,6 +100,10 @@ public struct ShannonConversationView: View {
         .modifier(ShannonBodyAttachment(bodyModel: bodyModel, conversation: model, memory: memoryModel, voice: geminiLiveVoiceModel, listen: bodyListen))
         .modifier(ShannonFeedbackContext(conversation: model, othersPresent: bodyModel.audience == .others || geminiLiveVoiceModel.othersMayBeListening, interests: memoryModel.interests))
         .modifier(ShannonActionThreadsPolling(model: actionThreads, connected: model.isDesignPreview || connectionModel?.isConnected == true, othersPresent: bodyModel.audience == .others || geminiLiveVoiceModel.othersMayBeListening))
+        .modifier(ShannonNowPolling(model: now, connected: model.isDesignPreview || connectionModel?.isConnected == true, othersPresent: bodyModel.audience == .others || geminiLiveVoiceModel.othersMayBeListening))
+#if os(iOS)
+        .modifier(ShannonActivityVoiceReporting(activity: now, session: geminiLiveVoiceModel, threadID: voiceWorkspace.threadContext?.threadID))
+#endif
         .environment(\.colorScheme, activeColorScheme)
         .onAppear {
             syncAppIconBadge(with: model.totalBadgeCount)
@@ -226,7 +233,7 @@ public struct ShannonConversationView: View {
 #if os(iOS)
         .modifier(ShannonVoicePresentationModifier(
             isPresented: $showsGeminiLiveVoice,
-            speechProvider: ShannonSpeechProvider(rawValue: speechProviderRawValue) ?? .gemini,
+            speechProvider: ShannonPersonaPreset.provider(legacy: speechProviderRawValue, preset: presetRawValue),
             workspace: voiceWorkspace,
             conversationModel: model,
             geminiVoiceModel: geminiLiveVoiceModel,

@@ -32,6 +32,7 @@ public struct ShannonDesktopRootView: View {
     @AppStorage(ShannonDesktopWindowRestoration.lastAuxiliaryPanelKey) var lastAuxiliaryPanelRawValue = DesktopAuxiliaryPanel.task.rawValue
     /// ようす and 運用 (the mark of 設定), read through the conversation's client and scope.
     @State var actionThreads: ShannonActionThreadsModel
+    @State var now: ShannonConversationActivityModel
     @State var yousu: ShannonYousuModel
     @State var searchText = ""
     @State var selectedTaskID: UUID?
@@ -49,6 +50,7 @@ public struct ShannonDesktopRootView: View {
     /// Her figure's shared state: what she does in words, her size and place, and touches (A15).
     @State var bodyModel = ShannonBodyModel()
     @State var showsStateDetails = false
+    @AppStorage(ShannonPersonaPreset.storageKey) var presetRawValue = ShannonPersonaPreset.initialRawValue
     @AppStorage(ShannonChatAvatarStyle.storageKey) var chatAvatarStyleRawValue = ShannonChatAvatarStyle.expression.rawValue
     @State var renameThread: ChatThreadDTO?
     @State var renameText = ""
@@ -98,6 +100,7 @@ public struct ShannonDesktopRootView: View {
         _showsInspector = State(initialValue: initialChrome.showsInspector)
         _auxiliaryPanel = State(initialValue: initialChrome.auxiliaryPanel)
         _actionThreads = State(initialValue: ShannonActionThreadsModel.make(for: conversation))
+        _now = State(initialValue: ShannonConversationActivityModel.make(for: conversation))
         _yousu = State(initialValue: ShannonYousuModel.make(for: conversation))
         self.conversation = conversation
         self.connection = connection
@@ -113,6 +116,8 @@ public struct ShannonDesktopRootView: View {
         observingWindowState(windowContent)
             .modifier(ShannonFeedbackContext(conversation: conversation, othersPresent: bodyModel.audience == .others || voiceCall.session.othersMayBeListening, interests: memory.interests))
             .modifier(ShannonActionThreadsPolling(model: actionThreads, connected: connection.isConnected || conversation.isDesignPreview, othersPresent: bodyModel.audience == .others || voiceCall.session.othersMayBeListening))
+            .modifier(ShannonNowPolling(model: now, connected: connection.isConnected || conversation.isDesignPreview, othersPresent: bodyModel.audience == .others || voiceCall.session.othersMayBeListening))
+            .modifier(ShannonActivityVoiceReporting(activity: now, session: voiceCall.session, threadID: voiceCall.threadID))
             .focusedSceneValue(\.shannonDesktopCommandActions, desktopCommandActions)
             .toolbarBackground(Color(nsColor: .textBackgroundColor), for: .windowToolbar)
             .toolbarBackground(.visible, for: .windowToolbar)

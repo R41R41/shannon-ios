@@ -8,7 +8,7 @@ extension ShannonConversationView {
     /// The dialogue display is where her figure lives (decision 2026-10-03: からだ is a display of Talk).
     /// The Live2D form: her figure on top, large and touchable in place, the line of what she feels and
     /// does under her, then the last words. The Waterlight form keeps the stage as it was.
-    var dialogueShowsLive2D: Bool { formRawValue == ShannonForm.live2d.rawValue }
+    var dialogueShowsLive2D: Bool { ShannonPersonaPreset.form(legacy: formRawValue, preset: presetRawValue) == .live2d }
 
     func dialogueStage(_ palette: ShannonPalette) -> some View {
         GeometryReader { stage in

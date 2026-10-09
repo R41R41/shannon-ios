@@ -24,9 +24,10 @@ extension ShannonDesktopRootView {
             case .earphones:
                 ShannonPrivateListeningSettingsSection()
             case .voice:
+                Section { ShannonPersonaPresetPicker(activeProvider: voiceCall.session.phase.isCallActive ? voiceCall.session.speechProvider : nil) }
                 // The voice of a voice conversation, of her words through the earphones and of a touch (A16), as on the iPhone.
                 Section {
-                    Picker(ShannonGeneratedStrings.voiceMacProvider, selection: $speechProviderRawValue) {
+                    Picker(ShannonGeneratedStrings.voiceMacProvider, selection: ShannonPersonaPreset.voiceSelection($speechProviderRawValue)) {
                         ForEach(ShannonSpeechProvider.allCases) { provider in
                             Text(provider.japaneseName).tag(provider.rawValue)
                         }
@@ -74,7 +75,7 @@ extension ShannonDesktopRootView {
             Button("アプリアイコンを選ぶ") {
                 showsAppIconSettings = true
             }
-            Picker("アバター", selection: $chatAvatarStyleRawValue) {
+            Picker("アバター", selection: ShannonPersonaPreset.avatarSelection($chatAvatarStyleRawValue)) {
                 ForEach(ShannonChatAvatarStyle.allCases, id: \.rawValue) { style in
                     Text(style.japaneseName).tag(style.rawValue)
                 }

@@ -75,3 +75,14 @@ evidence:
     - "docs/screenshots/shannon-macos-talk-system-v32.png"
   approved: []
   privacy: "サンプルまたは非機密表示だけを保存し、認証情報と実会話本文を含めない"
+
+conversation_activity:
+  implementation_status: "2026-10-10 実装ブランチ・未配布"
+  sources: "GET /v1/fca/tasks?projection=now。summaryとfindingsを混同しない。parentIdで関連する作業を示す"
+  layout: "iPhoneは入力付近の活動行と標準シート。Macは会話の横、幅不足時は小さな入口と標準ポップオーバー"
+  controls: "方針を伝える／この作業を停止。最新のowner-only投影でのみ一回送信し、応答不明は再読込する"
+  privacy: "同席への切替は詳細・入力中の方針・予約済みの途中報告音声を破棄する"
+  voice: "同じ通話threadの新しいtask.send reportだけを聞く段階で一回試す。保留の本人発話を優先し、通話の声は開始時のproviderを保つ"
+  persona: "ボット＝Waterlight Eye＋Eyeアイコン＋Gemini。ガール＝既存の水色髪Human Live2D＋表情アイコン＋ElevenLabs"
+  validation: "Swift全体777 XCTest＋224 Swift Testing、Mac28テスト、既存起動smoke7ケース通過。CUAでLight横パネル、インスペクタ併用の幅不足入口、調査中の会話入力保持、方針入力とfixture送信を確認。実機、有料TTS、実サーバーの調査音声、VoiceOver実読み上げは未確認"
+  evidence: "docs/screenshots/shannon-conversation-now-macos-light-v1.png"

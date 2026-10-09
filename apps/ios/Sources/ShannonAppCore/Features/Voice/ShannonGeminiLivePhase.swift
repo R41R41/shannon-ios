@@ -2,6 +2,7 @@ import Foundation
 
 public enum ShannonGeminiLivePhase: String, Equatable, Sendable {
     case idle, requestingPermission, connecting, listening, thinking, speaking, reconnecting, failed
+    public var isCallActive: Bool { self != .idle && self != .failed }
 
     public var japaneseLabel: String {
         switch self {

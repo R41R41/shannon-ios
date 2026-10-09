@@ -1,6 +1,6 @@
 # Shannon design authority
 
-Revision: 2026-10-08
+Revision: 2026-10-10
 
 This document is the entrypoint for the currently implemented Shannon design. It records ownership and evidence; it does not propose a redesign.
 
@@ -166,3 +166,19 @@ This additional scope uses the Mac Debug app and an iPhone Simulator with in-mem
 Final4 Mac Light verified automatic dismissal after the exact adoption receipt; iPhone automatic dismissal remains unverified. Final4 iPhone Dark verified the DEBUG footer correction at accessibility-extra-large with Increase Contrast; only the footer has a type-size limit and product body text remains unrestricted. The Simulator was restored to large text and Increase Contrast disabled. Native loading was observed only for iPhone interests in Light, including completion after the spinner. Loading on Mac and on the feedback/task surfaces, VoiceOver spoken output, Reduce Motion, physical-device and production/TestFlight checks remain unperformed in this scope. The earlier adopted-purpose images retain their narrower purpose-update evidence. Accessibility labels, state words, target-size intent and standard navigation remain implementation contracts; they are not all verified by the screenshots.
 
 The additive memory contracts are [iPhone](design/screens/ios/memory.yaml) and [Mac](design/screens/macos/memory.yaml); the existing work-detail contracts are [iPhone](design/screens/ios/work.yaml) and [Mac](design/screens/macos/work.yaml). Current source/test and backend validation are recorded separately in [the Stage 5 implementation report](adr8-stage5-implementation-report.md).
+
+## 会話＋いま（2026-10-10、実装ブランチ・未配布）
+
+会話、姿、入力、通話は既存のトークに保つ。調査の段階は「聞いています／話しています」と分ける。iPhoneは入力付近の小さな活動行から標準シートを開き、Macは会話の横に「いま」を出す。Macの会話幅が足りない時は同じ小さな入口と標準ポップオーバーに戻り、既存のすがた・目次・現在地を圧迫しない。
+
+「いま」は owner-only の `/v1/fca/tasks?projection=now` の事実だけを読む。作業名、由来、段階、実際の作業に対応する説明、最終更新、親子の作業、途中の発見、出典、場所カードを表示する。発見はサーバーの確認済み／未確認／訂正の指定に従い、summaryから証拠や確認済みを作らない。旧サーバーの404/403ではこの新しい入口だけを隠し、既存の裏の作業入口は保つ。同席時は詳細と操作を破棄して中立表示にする。15秒以上古い投影と通信復旧中では操作を止める。追加の方針と停止は一回だけ送り、失われた応答を自動で送り直さない。
+
+途中の音声報告は、調査タスクが自身の親会話へ実際に送った `task.send` 本文（Nowの `report`）だけを、現在の通話で使っているTTSに渡す。初回取得の過去の報告は読まず、通話開始後の新しい報告だけを対象にする。本人だけの同じ会話、聞く段階、保留入力なし、最新かつ開示可能な出所が条件。報告ごとに一度だけ試み、割り込みや不確かな音声配送は自動再生しない。報告のために本人の発話・会話履歴・確認済みの結果・停止操作を捏造しない。出所の撤回や同席への切替では予約済みの音も破棄し、通話そのものは保つ。
+
+設定に一回の選択「ボット／ガール」を置く。ボットは既存のWaterlight Eye、Eyeの会話・作業アイコン、Gemini。ガールは既存の水色髪Human Live2D、表情アイコン、ElevenLabs。選択は単一の設定キーで姿・体・アイコン・次の声を一緒に決める。進行中の通話は開始時の声を保ち、設定に現在と次の通話の声を示す。個別の姿・体・アイコン・声を変える場合は、現在の統合設定の全値を個別設定に移してから選んだ値だけを変更する。既存の個別設定は移行時に保ち、新しい素材は増やさない。
+
+検証の合成fixtureは `-ShannonDesignPreview -ShannonPreviewNow` に限定し、実サーバー操作とモデル呼出しを行わない。既存fixture以外の内容を本番画面の証拠にしない。検証結果と未確認範囲は各screen YAMLに記録する。
+
+検証結果（2026-10-10）: Swift全体の777 XCTestと224 Swift Testingが、API検証と負荷を分けた明示`--no-parallel`で通過。最初の同時負荷下の全体実行では既存音声配送の2件がtimedOutになり、同suiteの単独21件は通過した。時計・assertionは変更していない。最終ソースの未署名iOS SimulatorビルドとMac testビルドが通過。iPhoneのBot/Light、Girl/Darkの既存Human Live2D読込完了、Lightの統合モード設定を専用Simulatorの正規simctl描画で確認。Simulator用GUIアプリがないため、iPhoneの実タップと詳細シートは未確認。実機・実サーバーの調査音声・有料TTS・VoiceOver実読み上げの受入れとは分ける。
+
+Macでは隔離したDebugアプリをCUAで操作し、Lightの横パネル、すがたの既存インスペクタによる幅不足時の小さな入口、調査中の会話入力保持、方針の入力・合成fixtureへの送信を確認した。「ガール」の一回選択で表情アイコンとElevenLabs表示が同時に変わった。Macの28テストと既存インスペクタ起動smoke全7ケースが通過。証跡は `shannon-conversation-now-macos-light-v1.png` と `shannon-persona-macos-settings-light-v1.png`。Dark追加確認はソース固定後の検証記録とする。

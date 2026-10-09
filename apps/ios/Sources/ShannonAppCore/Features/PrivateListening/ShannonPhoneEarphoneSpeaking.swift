@@ -27,8 +27,7 @@ final class ShannonPhoneAnswerListener: ShannonReachOutListening {
         // A call that failed earlier and was left on screen holds nothing; a call in any other state is a conversation.
         guard ShannonMediaPermission.currentMicrophone() == .granted,
               geminiVoiceModel.phase == .idle || geminiVoiceModel.phase == .failed else { return }
-        let provider = UserDefaults.standard.string(forKey: ShannonSpeechProvider.storageKey)
-            .flatMap(ShannonSpeechProvider.init(rawValue:)) ?? .gemini
+        let provider = ShannonSpeechProvider.current()
         // The card of the last call's 「友人も一緒」 periods is put back if this call comes to nothing.
         let callMemory = workspace.callMemory
         let starting = workspace.beginCall(

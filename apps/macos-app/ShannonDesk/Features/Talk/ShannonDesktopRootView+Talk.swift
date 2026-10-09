@@ -35,6 +35,22 @@ extension ShannonDesktopRootView {
     var hidesOwnerTalk: Bool { voiceCall.session.hidesOwnerScreens }
 
     var talkView: some View {
+        ViewThatFits(in: .horizontal) {
+            if now.showsActivity {
+                HStack(spacing: 0) {
+                    talkConversation.frame(minWidth: 420)
+                    Divider()
+                    ShannonNowPanel(model: now).frame(width: 300)
+                }
+            }
+            VStack(spacing: 0) {
+                ShannonNowCompact(model: now).padding(.horizontal, ShannonDesktopSpacing.medium)
+                talkConversation
+            }
+        }
+    }
+
+    var talkConversation: some View {
         VStack(spacing: 0) {
             talkHeader
             ShannonActionThreadsCapsule(model: actionThreads)

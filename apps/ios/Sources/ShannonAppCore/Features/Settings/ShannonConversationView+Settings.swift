@@ -17,6 +17,7 @@ extension ShannonConversationView {
             List {
                 Section {
                     settingsProfileRow(palette)
+                    ShannonPersonaPresetPicker(activeProvider: geminiLiveVoiceModel.phase.isCallActive ? geminiLiveVoiceModel.speechProvider : nil)
                 }
 
                 adminSection(palette)
@@ -34,7 +35,7 @@ extension ShannonConversationView {
                         symbol: "app.dashed",
                         palette: palette
                     ) { showsAppIconSettings = true }
-                    Picker(selection: $chatAvatarStyleRawValue) {
+                    Picker(selection: ShannonPersonaPreset.avatarSelection($chatAvatarStyleRawValue)) {
                         ForEach(ShannonChatAvatarStyle.allCases, id: \.rawValue) { style in
                             Text(style.japaneseName).tag(style.rawValue)
                         }
@@ -62,7 +63,7 @@ extension ShannonConversationView {
                     }
                     .frame(minHeight: ShannonTouchTarget.minimum)
                     .accessibilityElement(children: .combine)
-                    Picker(selection: $speechProviderRawValue) {
+                    Picker(selection: ShannonPersonaPreset.voiceSelection($speechProviderRawValue)) {
                         ForEach(ShannonSpeechProvider.allCases) { provider in
                             Text(provider.japaneseName).tag(provider.rawValue)
                         }
@@ -163,7 +164,7 @@ extension ShannonConversationView {
     }
 
     var settingsSpeechProvider: ShannonSpeechProvider {
-        ShannonSpeechProvider(rawValue: speechProviderRawValue) ?? .gemini
+        ShannonPersonaPreset.provider(legacy: speechProviderRawValue, preset: presetRawValue)
     }
 
     var settingsVoiceLabel: String {

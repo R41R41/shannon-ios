@@ -161,3 +161,17 @@ evidence:
     - "docs/screenshots/shannon-ios-gemini-voice-reconnecting-accessibility-reduce-motion-light-v1.png"
   approved: []
   privacy: "カメラを連続・自動・バックグラウンドで取得しない。ユーザーが撮影またはライブラリで選び、プレビューで承認した1枚だけを縮小・再エンコードして共有する。写真本体は会話履歴へ保存せず、表示履歴には写真共有の印だけを残す。友人の同意は本人が事前に得る（2026-10-02の決定）。「友人も一緒」は、本人の記憶・目的・作業・ノート・タスクの投影をモデルへ渡し、守るべき個人情報には印を付けて、話す前にモデル自身に確かめさせる（保証ではない）。内緒にと言われたこと・本人が手で機微にしたもの・名前を聞いていない人との通話・忘れたことは、モデルへ渡さない。音声コマンドと、本人の目標・約束・事実の抽出は行わない。通話中の会話は端末のメモリ上だけに持ち、時間が終わる時（「本人だけ」へ戻す・通話を終える）に一度だけサーバーへ送る。サーバーは名前・やり取りの文字・短い要約・その人が自分について話したこと・約束・次に話したいことを人の記憶として保存し、本人のトーク・経験・プロフィール・約束・目的には入れない。音声は保存しない。「今回は残さない」でその通話の記録と、その通話で初めて覚えた人を消す。時間の途中でアプリが終了した場合、その時間は残らない。「本人だけ」で同席者がいると本人が言った間は、「友人も一緒」と同じ確かめ方で話し、操作を行わず、その間の発言から本人について学ばない。声で人を聞き分けない。声で「本人だけ」へ戻すことはできない。Geminiの永久APIキーはAzureの0600秘密ファイルだけに置き、端末へはgemini-3.5-transcribe-liveとTEXT出力に固定した1回限りの短寿命トークンだけを渡す。録音PCMと生成音声は履歴へ保存しない。明示的に開始した通話は小型化、アプリ内画面移動、他アプリ表示中もマイクと再生を継続し、通話中表示と終了操作を提供する。明示的な終了で録音と再生を停止し、電話などの音声割り込みはiOSの許可に従って再開する"
+
+conversation_activity:
+  implementation_status: "2026-10-10 実装ブランチ・未配布"
+  sources: "GET /v1/fca/tasks?projection=now。summaryとfindingsを混同しない。parentIdで関連する作業を示す"
+  layout: "iPhoneは入力付近の活動行と標準シート。Macは会話の横、幅不足時は小さな入口と標準ポップオーバー"
+  controls: "方針を伝える／この作業を停止。最新のowner-only投影でのみ一回送信し、応答不明は再読込する"
+  privacy: "同席への切替は詳細・入力中の方針・予約済みの途中報告音声を破棄する"
+  voice: "同じ通話threadの新しいtask.send reportだけを聞く段階で一回試す。保留の本人発話を優先し、通話の声は開始時のproviderを保つ"
+  persona: "ボット＝Waterlight Eye＋Eyeアイコン＋Gemini。ガール＝既存の水色髪Human Live2D＋表情アイコン＋ElevenLabs"
+  validation: "2026-10-10: iPhone17/iOS26.5専用Simulatorの隔離合成fixtureでBot/Light活動行・入力・Waterlight Eye、Girl/Dark活動行・入力・水色髪Human Live2Dの読込完了、Light統合モード設定とGirlアイコン/ElevenLabsラベルをsimctl正規描画で確認。Simulator GUIアプリが未提供のため実タップ・詳細シート・大きい文字・VoiceOver実読み上げ・実機・有料TTS・実調査音声は未確認"
+  evidence:
+    - "docs/screenshots/shannon-conversation-now-ios-bot-light-v1.png"
+    - "docs/screenshots/shannon-conversation-now-ios-girl-dark-v1.png"
+    - "docs/screenshots/shannon-persona-ios-settings-light-v1.png"

@@ -5,6 +5,10 @@ public enum ShannonSpeechProvider: String, CaseIterable, Codable, Sendable, Iden
     case eleven
 
     public static let storageKey = "shannon.voice.speech-provider"
+    public static func current(defaults: UserDefaults = .standard) -> Self {
+        ShannonPersonaPreset.current(defaults: defaults)?.speechProvider
+            ?? defaults.string(forKey: storageKey).flatMap(Self.init(rawValue:)) ?? .gemini
+    }
     public var id: String { rawValue }
     public var japaneseName: String {
         switch self {

@@ -47,7 +47,7 @@ public final class ShannonEarphoneSpeaker: ShannonReachOutSpeaking {
         guard !isSpeaking, engine == nil, stillPrivate() else { return .notStarted }
         isSpeaking = true
         defer { isSpeaking = false }
-        let provider = defaults.string(forKey: ShannonSpeechProvider.storageKey).flatMap(ShannonSpeechProvider.init(rawValue:)) ?? .gemini
+        let provider = ShannonSpeechProvider.current(defaults: defaults)
         let style = provider == .gemini
             ? ShannonGeminiCascadeSpeech.style(for: text, plan: nil)
             : ShannonElevenCascadeSpeech.style(for: text, plan: nil)

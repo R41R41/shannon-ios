@@ -19,6 +19,7 @@ public struct ShannonGeminiLiveVoiceView: View {
     private let appLook: ShannonAppLookCoordinator?
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(ShannonConversationActivityModel.self) private var now: ShannonConversationActivityModel?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -175,6 +176,7 @@ public struct ShannonGeminiLiveVoiceView: View {
                 subtitles(palette)
             }
             if let task { taskCard(task) }
+            if let now { ShannonNowCompact(model: now) }
             if let pendingCameraImage = workspace.pendingCameraImage,
                let pendingCameraData = workspace.pendingCameraData {
                 ShannonVoicePhotoPreview(

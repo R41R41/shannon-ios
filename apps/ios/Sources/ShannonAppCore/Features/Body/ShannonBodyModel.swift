@@ -134,6 +134,7 @@ struct ShannonBodyAttachment: ViewModifier {
     /// Opens the microphone for his answer after a spoken touch line (iPhone); nil where there is none.
     var listen: ShannonBodyVoice.Listen?
 
+    @AppStorage(ShannonPersonaPreset.storageKey) private var presetRawValue = ShannonPersonaPreset.initialRawValue
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
     @AppStorage(ShannonBodyPreference.reportsTouchKey) private var reportsTouch = false
     @AppStorage(ShannonBodyReplyMode.storageKey) private var replyModeRawValue = ShannonBodyReplyMode.text.rawValue
@@ -144,7 +145,7 @@ struct ShannonBodyAttachment: ViewModifier {
     @State private var doing = ShannonBodyDoing.idle
 
     private var stage: ShannonLive2DStage { .shared }
-    private var usesLive2D: Bool { formRawValue == ShannonForm.live2d.rawValue }
+    private var usesLive2D: Bool { ShannonPersonaPreset.form(legacy: formRawValue, preset: presetRawValue) == .live2d }
 
     private var callActivity: ShannonDialogueActivity? {
         switch voice.phase {
@@ -207,6 +208,7 @@ struct ShannonBodyAttachment: ViewModifier {
     private func signals(_ content: Content) -> some View {
         content
             .onChange(of: formRawValue) { applyForm() }
+            .onChange(of: presetRawValue) { applyForm() }
             .onChange(of: stage.status) { if stage.status == .ready { pushAll() } }
             .onChange(of: conversation.state?.emotion) { pushMood() }
             .onChange(of: presence) { presenceChanged() }

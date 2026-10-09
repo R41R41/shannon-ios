@@ -7,6 +7,7 @@ import AppKit
 
 struct ShannonEmptyConversation: View {
     @State private var waterlightReaction = 0
+    @AppStorage(ShannonPersonaPreset.storageKey) private var presetRawValue = ShannonPersonaPreset.initialRawValue
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
     @Environment(ShannonBodyModel.self) private var bodyModel: ShannonBodyModel?
     @Environment(\.colorScheme) private var colorScheme
@@ -38,7 +39,7 @@ struct ShannonEmptyConversation: View {
 #if os(iOS)
         if ShannonConversationFeatureFlags.waterlightHero {
             // In the Live2D form the small figure is the way to the dialogue display, where she can be touched.
-            let opensDialogue = formRawValue == ShannonForm.live2d.rawValue && bodyModel != nil
+            let opensDialogue = ShannonPersonaPreset.form(legacy: formRawValue, preset: presetRawValue) == .live2d && bodyModel != nil
             Button {
                 if opensDialogue { bodyModel?.requestDialogue() } else { waterlightReaction &+= 1 }
             } label: {

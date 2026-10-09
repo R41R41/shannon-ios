@@ -60,8 +60,7 @@ final class ShannonCallConversation: ShannonCallConversing {
 
     func start(threadID: String) async -> Bool {
         guard canListen, !isBusy else { return false }
-        let provider = UserDefaults.standard.string(forKey: ShannonSpeechProvider.storageKey)
-            .flatMap(ShannonSpeechProvider.init(rawValue:)) ?? .gemini
+        let provider = ShannonSpeechProvider.current()
         let starting = host.workspace.beginCall(
             mode: .owner, speechProvider: provider, threadID: threadID,
             conversationModel: conversationModel, geminiVoiceModel: voice

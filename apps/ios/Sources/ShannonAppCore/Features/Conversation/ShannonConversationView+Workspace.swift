@@ -72,15 +72,15 @@ extension ShannonConversationView {
     /// Talk's display options (the long press of the display button).
     @ViewBuilder
     var figureDisplayOptions: some View {
-        Picker(ShannonBodyCopy.formTitle, selection: $formRawValue) {
+        Picker(ShannonBodyCopy.formTitle, selection: ShannonPersonaPreset.formSelection($formRawValue)) {
             ForEach(ShannonForm.allCases) { form in
                 Text(form.japaneseName).tag(form.rawValue)
             }
         }
         .pickerStyle(.menu)
-        if formRawValue == ShannonForm.live2d.rawValue, ShannonLive2DStage.isAvailable {
+        if ShannonPersonaPreset.form(legacy: formRawValue, preset: presetRawValue) == .live2d, ShannonLive2DStage.isAvailable {
             if ShannonLive2DStage.shared.offersEyes {
-                Picker(ShannonBodyCopy.bodyTitle, selection: ShannonLive2DBody.selection($figureBodyRawValue)) {
+                Picker(ShannonBodyCopy.bodyTitle, selection: ShannonLive2DBody.selection(ShannonPersonaPreset.bodySelection($figureBodyRawValue))) {
                     ForEach(ShannonLive2DBody.allCases) { body in
                         Text(body.japaneseName).tag(body.rawValue)
                     }
@@ -88,7 +88,7 @@ extension ShannonConversationView {
                 .pickerStyle(.menu)
             }
             // Her eyes alone are not framed: the page sizes and places them only.
-            if ShannonLive2DBody.displayed(rawValue: figureBodyRawValue).hasCharacterRig {
+            if ShannonLive2DBody.displayed(rawValue: ShannonPersonaPreset.body(legacy: figureBodyRawValue, preset: presetRawValue).rawValue).hasCharacterRig {
                 Picker(ShannonBodyCopy.layoutTitle, selection: $figureLayoutRawValue) {
                     Text(ShannonBodyCopy.layoutFull).tag(ShannonLive2DLayout.Mode.full.rawValue)
                     Text(ShannonBodyCopy.layoutBust).tag(ShannonLive2DLayout.Mode.bust.rawValue)

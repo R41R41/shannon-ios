@@ -20,7 +20,8 @@ public enum ShannonForm: String, CaseIterable, Identifiable, Sendable {
     }
 
     public static func current(defaults: UserDefaults = .standard) -> ShannonForm {
-        defaults.string(forKey: storageKey).flatMap(ShannonForm.init(rawValue:)) ?? .waterlight
+        if let preset = ShannonPersonaPreset.current(defaults: defaults) { return preset.form }
+        return defaults.string(forKey: storageKey).flatMap(ShannonForm.init(rawValue:)) ?? .waterlight
     }
 }
 
@@ -55,7 +56,8 @@ public enum ShannonLive2DBody: String, CaseIterable, Identifiable, Sendable {
     public var hasCharacterRig: Bool { self == .human }
 
     public static func current(defaults: UserDefaults = .standard) -> ShannonLive2DBody {
-        defaults.string(forKey: storageKey).flatMap(ShannonLive2DBody.init(rawValue:)) ?? .human
+        if let preset = ShannonPersonaPreset.current(defaults: defaults) { return preset.live2DBody }
+        return defaults.string(forKey: storageKey).flatMap(ShannonLive2DBody.init(rawValue:)) ?? .human
     }
 }
 

@@ -14,6 +14,7 @@ public struct ShannonTalkFigurePanel: View {
     private let memory: ShannonMemoryModel
     private let voice: ShannonGeminiLiveSessionModel?
 
+    @AppStorage(ShannonPersonaPreset.storageKey) private var presetRawValue = ShannonPersonaPreset.initialRawValue
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
     @AppStorage(ShannonLive2DBody.storageKey) private var bodyRawValue = ShannonLive2DBody.human.rawValue
     @AppStorage(ShannonBodyPreference.layoutModeKey) private var layoutModeRawValue = ShannonLive2DLayout.Mode.full.rawValue
@@ -46,7 +47,7 @@ public struct ShannonTalkFigurePanel: View {
         }
     }
 
-    private var usesLive2D: Bool { formRawValue == ShannonForm.live2d.rawValue && ShannonLive2DStage.isAvailable }
+    private var usesLive2D: Bool { ShannonPersonaPreset.form(legacy: formRawValue, preset: presetRawValue) == .live2d && ShannonLive2DStage.isAvailable }
     private var face: ShannonFace { bodyModel?.face ?? conversation.presentFace }
 
     public var body: some View {
@@ -137,7 +138,7 @@ public struct ShannonTalkFigurePanel: View {
     /// The same options as the iPhone's display menu.
     @ViewBuilder
     private var displayOptions: some View {
-        Picker(ShannonBodyCopy.formTitle, selection: $formRawValue) {
+        Picker(ShannonBodyCopy.formTitle, selection: ShannonPersonaPreset.formSelection($formRawValue)) {
             ForEach(ShannonForm.allCases) { form in
                 Text(form.japaneseName).tag(form.rawValue)
             }
@@ -145,14 +146,14 @@ public struct ShannonTalkFigurePanel: View {
         .pickerStyle(.inline)
         if usesLive2D {
             if ShannonLive2DStage.shared.offersEyes {
-                Picker(ShannonBodyCopy.bodyTitle, selection: ShannonLive2DBody.selection($bodyRawValue)) {
+                Picker(ShannonBodyCopy.bodyTitle, selection: ShannonLive2DBody.selection(ShannonPersonaPreset.bodySelection($bodyRawValue))) {
                     ForEach(ShannonLive2DBody.allCases) { body in
                         Text(body.japaneseName).tag(body.rawValue)
                     }
                 }
                 .pickerStyle(.inline)
             }
-            if ShannonLive2DBody.displayed(rawValue: bodyRawValue).hasCharacterRig {
+            if ShannonLive2DBody.displayed(rawValue: ShannonPersonaPreset.body(legacy: bodyRawValue, preset: presetRawValue).rawValue).hasCharacterRig {
                 Picker(ShannonBodyCopy.layoutTitle, selection: $layoutModeRawValue) {
                     Text(ShannonBodyCopy.layoutFull).tag(ShannonLive2DLayout.Mode.full.rawValue)
                     Text(ShannonBodyCopy.layoutBust).tag(ShannonLive2DLayout.Mode.bust.rawValue)
