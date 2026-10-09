@@ -1,44 +1,171 @@
-# Quality improvements: bounded implementation
+# シャノンの品質改善：実装結果
 
-Implementation candidate, 2026-10-09. Scope approved for at most two hours: Q00, a narrow Q02/Q07, Q03, Q01 and Q05. Q04 voice lifecycle and Q06 embodiment projections are excluded. This is not a claim that the entire audit blueprint is implemented. Production, main push and client distribution are separate work.
+作成日：2026年10月9日。実装・検証・候補保存にかかった時間は約30分です。
 
-## Result evidence (Q02/Q07)
+**受付と達成の区別、限定的な時系列想起、Voyagerの未完了タスク一覧、感情の比較測定を実装しました。本番反映と端末配布はまだ行っていません。**
 
-Executors project their existing outcomes into optional `ToolExecutionEvidence`: queued, applied, failed or unknown, action and target, and canonical IDs/revision only when the original port supplies them. No new receipt database or success authority is created. Host folder operations expose no operation ID; the projection does not invent one. Aether document versions/proposal IDs, Minecraft request IDs and lifecycle receipts retain their original authorities.
+今回は「2時間以内・速度優先」で実装できる範囲に絞っています。添付された改善案全体の完成ではありません。残り時間を使った追加の試験拡充は行わず、必要な確認が終わった時点で区切りました。
 
-The model receives this evidence in its tool-result round **before final generation**, through the existing `SHANNON_TURN_VERIFY`/stage-2 switch. OFF keeps old tool-result bytes. Queued Minecraft work is not goal completion; proposal admission is not document modification; a server-start receipt is not a mining/dragon result. The deterministic verifier additionally checks supported action/domain and explicitly quoted target labels/IDs. Mixed successful/negated clauses are checked separately. `turnDoing` learns an applied outcome rather than queued/unknown as completion.
+## 1. 今回の範囲
 
-This is bounded coverage, not a complete proof of arbitrary natural-language claims or all tools. Untagged legacy tools retain their previous success rule. The post-generation correction still follows streamed text/audio; this change does not retract speech already emitted, buffer voice or redesign Q04.
+| 項目 | 実装したこと | 範囲・状態 |
+| --- | --- | --- |
+| Q00：比較の基準 | 既存の評価基盤に固定条件の比較を追加 | 実行結果2ケース、感情6ケース。追加のLLM呼び出しなし |
+| Q02/Q07：実行結果と境界 | 元の実行結果を回答生成前へ渡し、受付・適用・失敗・不明を区別 | Folder・Aether・Minecraftを中心とした限定実装 |
+| Q03：時系列記憶 | 同じシャノン由来ノートの過去版と現在版を参照 | 既定OFF。一般的な人物・出来事の年表は対象外 |
+| Q01：未完了タスク一覧 | Voyagerからキーワード不要で一覧を読む | Voyager側とShannon側の候補を保存。両方の配備が必要 |
+| Q05：感情・人格の継続性 | 同じ合成履歴で現在の感情更新と比較用関数の動きを測定 | 本番の感情ルール・パラメータは変更なし |
+| Q04：音声経路 | 今回は対象外 | 所有者の指定に従って未着手 |
+| Q06：身体の共通投影 | 今回は対象外 | 所有者の指定に従って未着手 |
 
-## Temporal recall (Q03)
+実装候補：
 
-`SHANNON_TEMPORAL_KNOWLEDGE_RECALL=on` opts into a read-only projection of revisions of the **same Shannon-derived note** for explicit historical-change questions. Default OFF. The existing recall selects at most two notes; each adds at most two previous revisions and its current revision. `recordedAt` is storage time, not the underlying event time. Old text is superseded reference data, not a current user/external fact. Missing versions and the reason for change stay unknown.
+- Shannon：`codex/shannon/quality-bounded-slice`、`c0cafa7532124923b3ab64661e55b5b37fbc2cca`
+- Shannonの基準版：`037681a548136d3f7441774ac875f55a7af15bdd`
+- Voyager：`codex/voyager/quality-open-tasks`、`4968ee7afb5b2326509078adbabe34fce71fafe1`
 
-Owner-alone live presence, disclosure, forgetting/correction, source existence and current note/state versions are checked before projection. Retired/withheld material is excluded. Historical source experience IDs are pinned alongside the note ID so existing generation-time forgetting checks and reply lineage cover old sources too. No writer, guessed person/entity association, new DB or model call is added. A general person/event timeline and broader FCA recall propagation are outside this slice.
+上記は実装のコミットです。資料の日本語化は後続コミットで保存します。
 
-## Open Voyager tasks (Q01)
+## 2. 受付と達成を区別する（Q02/Q07）
 
-See [the additive open-task contract](voyager-open-tasks-contract.md). Generic task questions and empty-query `voyager.tasks` read a bounded open-task list; specific keywords keep search. Due date, priority, revision, explicit truncation and source IDs survive projection. Empty, unconfigured, denied, timed-out and unsupported reads are distinguished. Rows remain complete JSON even with long escaped text.
+元の実行担当が返した結果から、次の情報を`ToolExecutionEvidence`として取り出します。
 
-Voyager branch `codex/voyager/quality-open-tasks`, commit `4968ee7afb5b2326509078adbabe34fce71fafe1`, provides the authenticated Syzygy 1.1 endpoint. Deploy that paired endpoint before expecting the production list to work. An older server gives unsupported, never a fake empty list.
+| 状態 | 意味 | 回答で扱えること |
+| --- | --- | --- |
+| `queued` | 依頼や提案を受け付けた | 受付・送信を伝える。目的達成の証拠にはしない |
+| `applied` | 元の実行担当が適用を確認した | 確認した操作・対象について成功を伝える |
+| `failed` | 失敗を確認した | 失敗を伝える |
+| `unknown` | 適用されたか確かめられない | 完了を断定しない |
 
-## Fixed comparisons (Q00/Q05)
+操作名、対象、元のID・版も、取得できる場合に一緒に渡します。新しい成功記録DBは作っていません。Hostのフォルダ操作にはoperation IDが公開されていないため、そのIDは作りません。Aetherの文書版・提案ID、Minecraftの依頼ID・管理操作の確認記録は元の値を使います。
 
-Use the existing Reach harness, not a new quality framework:
+この情報は**最終回答を生成する前のツール結果**に入ります。既存の`SHANNON_TURN_VERIFY`と第2段階のスイッチに従い、OFF時は従来のツール結果JSONを維持します。
+
+例えば、以下を区別します。
+
+- 「エンドラ討伐を受け付けた」は「エンドラを倒した」の証拠にはならない。
+- 「Aetherに提案を送った」は「文書を書き換えた」の証拠にはならない。
+- 「Minecraftサーバーを起動した」は「素材を集めた」の証拠にはならない。
+- ファイルAへの成功は、明示されたファイルBへの成功の証拠にはならない。
+
+回答後の検査でも、操作・領域・明示された対象を照合します。「起動しましたが、停止できませんでした」のような肯定と否定の混在を、文全体の否定として見逃さないようにしました。`turnDoing`の学習でも、受付や結果不明を完了として数えません。
+
+**限界：** あらゆる自然言語の主張や全ツールを証明する仕組みではありません。新しい情報を付けていない従来ツールは、従来の成功判定を使います。また、回答後の訂正は既に話した音声を取り消せません。音声の待機・再生方式の変更はQ04のため、今回行っていません。
+
+## 3. 過去と現在を参照する（Q03）
+
+「以前と今でどう変わった？」など、明示的に変化を尋ねられた時、既存の想起で選ばれた**同じシャノン由来ノート**の改訂を読みます。最大2ノート、それぞれ過去2版と現在版までです。
+
+有効化する設定は`SHANNON_TEMPORAL_KNOWLEDGE_RECALL=on`。既定はOFFです。
+
+過去版は「以前のノート」として示し、現在の本人発言・外部事実として扱いません。`recordedAt`は版を保存した時刻で、元の出来事が起きた時刻ではありません。欠けた版や変更理由は推測しません。
+
+参照前に、所有者と二人だけか、開示可能か、忘却・訂正されていないか、出典が存在するか、ノートと状態の版が変わっていないかを確認します。退役・非開示の内容は除きます。
+
+特に、**旧版だけが参照している出典IDも返答の出典へ引き継ぎます。** 現在版の出典だけを確認すると、回答生成中に旧出典を忘れた時の検査を逃すためです。旧出典を生成待ち中に忘れた場合、既存の忘却処理が返答を止めることも確認しました。
+
+記憶の書き込み、新DB、人物の推測による結び付け、追加のLLM呼び出しはありません。人物・出来事全般の年表や、共通FCA全経路への時系列想起の拡張は残っています。
+
+## 4. Voyagerの未完了タスクを読む（Q01）
+
+「今どんなタスクがある？」などの一般的な質問と、`voyager.tasks`のqueryが空の時は、未完了タスクの一覧を読みます。具体的なキーワードがある時は従来の検索を使います。
+
+期日・優先度・版・出典IDを渡し、件数や文字数による省略も示します。空一覧、未設定、アクセス拒否、タイムアウト、旧サーバーの非対応を区別します。長い文章や引用符が含まれていても、JSONの行を途中で切りません。
+
+追加した入口は、既存の認証を使うSyzygy 1.1の`GET /api/integrations/syzygy/v1/tasks/open`です。**本番利用にはVoyager側を先に配備する必要があります。** 旧サーバーの非対応を「タスクが0件」とは伝えません。
+
+詳細：[Voyager未完了タスク一覧の接続仕様](voyager-open-tasks-contract.md)。
+
+## 5. 変更前後の比較（Q00）
+
+新しい評価基盤は作らず、既存のReachを使っています。実際の`verifyWriteClaims`を、次の同じ2ケースで比較しました。
+
+| ケース | 変更前 | 実装候補 |
+| --- | --- | --- |
+| Minecraft依頼の受付だけで討伐完了を主張 | 不適切な主張を検出できなかった | 検出できた |
+| ファイルAへの成功だけでBの作成を主張 | 不適切な主張を検出できなかった | 検出できた |
+
+正しい受付の発言、正しい対象への成功の発言は維持しています。これは処理の比較であり、LLMの能力や実ユーザーとの会話品質の点数ではありません。
+
+再実行：
 
 ```sh
 scripts/reach-measures.sh run --only quality.result.
+```
+
+元のJSON記録はアプリrepoの`artifacts/reach/`にあります。
+
+- 変更前：`2026-10-09T13-07-02-347Z-037681a54813-scripted.json`
+- 候補：`2026-10-09T13-07-02-348Z-quality-boun-scripted.json`
+
+## 6. 感情の比較結果（Q05）
+
+同じ初期感情・イベントID・時刻を使って、実際のSQLiteの感情保存経路と`AffectCoordinator`、既存の`affectDynamics`純粋関数を比較します。比較用の学習率は0.5に固定し、結果はメモリ上だけで保持します。**実運用の`PredictionShadow`全体を動かした比較ではありません。**
+
+以下の6条件で、値の範囲、同じ履歴の再現性、条件ごとの期待動作がすべて通りました。
+
+| 条件 | 確認したこと |
+| --- | --- |
+| 失敗が続いた後の成功 | 直前の失敗時より、現在の感情の快・不快が上向く |
+| 別タスクからの好意的なコメント | ゲームとコメントの出来事が、一つの感情状態へ影響する |
+| 接触への歓迎・拒否 | 合成した接触評価が、それぞれ反対方向に感情を動かす |
+| 時間経過 | 感情の時計を進めても、新しい評価イベントを作らない |
+| 再起動・同じイベントの再受信 | 保存した感情を復元し、同じイベントで二度更新しない |
+| 原因の非公開化 | 非開示になった新しい評価で更新せず、公開表情に原因を出さない |
+
+### 数値の観測
+
+快・不快（valence）は−1〜1です。値が高いほど快の方向ですが、高いこと自体が優れているという意味ではありません。「最大差」は履歴中の同じ観測点での絶対差です。
+
+| 条件 | 現在の最終値 | 比較関数の最終値 | 履歴中の最大差 |
+| --- | ---: | ---: | ---: |
+| 失敗→成功 | -0.065 | -0.392 | 0.327 |
+| 別タスクのコメント | 0.122 | 0.020 | 0.101 |
+| 歓迎・拒否の接触 | -0.180 | -0.125 | 0.055 |
+| 時間経過 | 0.287 | 0.302 | 0.015 |
+| 再起動・重複 | 0.229 | 0.229 | 0.000 |
+| 原因の非公開化 | 0.229 | 0.229 | 0.000 |
+
+覚醒度（arousal）、開放性（openness）、各観測時刻、現在の感情種別・強度、最大変化量、評価イベント件数もJSONに記録しています。LLM呼び出しは0回、追加API費用は0円です。
+
+再実行：
+
+```sh
 scripts/reach-measures.sh run --only quality.affect.
 ```
 
-These scenarios are model-free in scripted and live modes; no credentials or real user/game data are used. Reports include the existing scenario/fixture fingerprints, metrics and zero model calls.
+元の記録：`artifacts/reach/2026-10-09T13-08-41-677Z-037681a54813-scripted.json`。
 
-Two result fixtures exercise actual `verifyWriteClaims`: queued Minecraft request versus goal completion, and file A's success versus file B's claim. The original verifier from base `037681a548136d3f7441774ac875f55a7af15bdd` fails both unsupported-claim checks; the candidate passes both, while preserving correctly scoped statements. This is a deterministic engineering comparison, not an LLM capability score. Before/after reports: `artifacts/reach/2026-10-09T13-07-02-347Z-037681a54813-scripted.json` and `2026-10-09T13-07-02-348Z-quality-boun-scripted.json`.
+### この測定で判断できないこと
 
-Six synthetic emotion histories cover repeated failure then success, a positive comment from another task, welcome/refusal touch appraisal, idle time, restart/duplicate and withheld cause. The real SQLite companion writer/AffectCoordinator is compared to existing pure `affectDynamics` functions with fixed learning rate 0.5, same initial emotion, IDs and clock. The comparator is RAM-only, **not the runtime PredictionShadow fold**. Reports include each observed state/time/current expressive kind, valence/arousal/openness differences, maximum valence step and receipt counts. Restart tests the committed companion only; touch tests the reducer with synthetic outcomes; privacy tests the coordinator visibility callback/public projection, not the whole source-disclosure pipeline.
+差は観測結果であり、どちらの感情が自然かの点数ではありません。接触は合成結果を感情更新へ渡した試験で、接触入口や姿勢判断は含みません。非公開化は感情側の表示可否と公開表情の試験で、出典開示の全経路試験ではありません。再起動は保存された現在の感情の復元を確認し、比較用状態の永続化は扱いません。
 
-All six pass boundedness, deterministic replay and their scenario-specific condition. Final report: `artifacts/reach/2026-10-09T13-08-41-677Z-037681a54813-scripted.json`. Current versus comparator differences are observations, not a score proving one more natural. Human naturalness, live speech/Live2D consistency, full personality continuity and runtime shadow persistence are unmeasured. No production emotion parameter or rule is changed.
+人が感じる自然さ、実音声とLive2Dの一致、長期の人格継続性は未評価です。本番の感情パラメータ・ルールは変更していません。
 
-## Verification and disposition
+## 7. 検証結果
 
-Focused boundary tests cover genuine executor/session evidence before generation, failed/wrong-target/mixed-result claims, secret/others gates, switched-off compatibility, historical source forgetting during generation, open-task authentication/error/truncation and emotion replay. API full run: 359 files / 4,414 tests; 4,405 passed initially. The nine failures were independent historical Voyager display wording, the additive Reach scenario estimate list, and the explicitly reviewed runtime-module allowlist. After fixing those expectations/profiles, all four affected files passed (24 tests). Stored OFF golden files were not regenerated: the existing historical profile pins only the former read-capability and Voyager display/schema wording while retaining real gates/model loops/executors. Native Q01 capability/registry tests use current wording and pass. Cognition/evaluation: 303 initially passed, two compactness failures caused by a global capability edit were resolved by moving the new wording to the offered read-tool line; those two files pass (27 tests). API/cognition/evaluation type checks, layer/500-line checks and fast harness pass. Candidate commit is recorded in the owning Shannon status and shared topic knowledge. No paid models, live Minecraft experiment, production configuration, push or release is part of this task.
+| 検証 | 結果 |
+| --- | --- |
+| API全体：359ファイル・4,414テスト | 初回4,405成功・9失敗。下記修正後、該当4ファイル・24テストはすべて成功 |
+| Cognition・Evaluation：305テスト | 初回303成功・2失敗。下記修正後、該当2ファイル・27テストはすべて成功 |
+| Voyagerの接続試験 | 7テスト、型検査、ビルド、fast検査に成功 |
+| Shannonの型検査 | API・Cognition・Evaluationの3種類に成功 |
+| 構造・既存仕様の検査 | レイヤー制約、500行制約、fast検査に成功 |
+| 独立レビュー | 指摘された問題を修正し、最終確認で重大な残件なし |
+
+APIの初回失敗9件は、過去版のVoyager表示文言を再現する試験、新しく増えた評価シナリオの一覧、明示的な実行時モジュール許可一覧の整合に関するものでした。
+
+保存済みの旧OFF期待値は再生成していません。旧構成を再現する試験だけ、当時の能力説明・Voyager表示文言を固定し、実際の権限判定・モデルループ・実行担当を維持しています。新しい文言と機能は、現在の構成の専用試験で別に確認しました。
+
+Cognitionの2件は、能力説明を全体へ追加したことで文字数上限を超えたためです。新しい説明を、読取ツールを渡した時だけ付ける既存の仕組みへ移して解決しました。
+
+秘密・第三者の境界、OFF時のJSON互換、回答生成中の旧出典忘却、受付と完了、誤った対象・混在結果も確認しています。全体試験を修正後にもう一度すべて実行したわけではなく、失敗に対応する箇所と新しい機能を再検証しています。
+
+## 8. 本番反映前に残ること
+
+1. 直前候補`037681a5`も含め、実際の配備版からの差分を確認する。
+2. Voyagerの未完了一覧の入口を先に配備し、Shannon側と接続する。
+3. 時系列想起の既定OFFを維持するか、有効化するか決める。
+4. 感情の自然さや実音声・Live2Dへの表れは、今回の数値比較と分けて実際に確認する。
+
+今回、本番設定、mainへのpush、端末配布、実DBへの知見取込、Minecraftの実プレイ、有料モデルの呼び出しは行っていません。共有知見とShannonの作業状態へ、候補・検証・未配備の区別を記録しました。

@@ -67,10 +67,10 @@ The API may keep running while the copy is made: `VACUUM INTO` reads a consisten
 
 Define it in `packages/evaluation/src/reach/` (definition, deterministic judge, unit tests in `packages/evaluation/tests/reach.test.ts`), write its driver in `services/api/tests/reach/` with a scripted and a live model, register it in `reachSuite.ts`, and add the model-free run to `services/api/tests/reachMeasures.test.ts`. An `llm` check needs a written rubric and stays skipped unless a live run asks for it; prefer a deterministic check whenever one exists.
 
-## Bounded quality checks
+## 限定した品質比較
 
-`quality.result.` runs actual completion-evidence verification over two fixed fixtures.
-`quality.affect.` compares six synthetic histories using the existing companion writer
-and pure affectDynamics functions, without changing production rules or calling a
-model. See [scope and limitations](../quality-bounded-slice.md). These engineering
-checks do not establish conversational quality or naturalness.
+`quality.result.`は固定2ケースで、実際の完了主張と実行結果の照合処理を動かします。
+`quality.affect.`は合成した6つの履歴で、既存の感情保存経路とaffectDynamics純粋関数を比較します。
+本番の感情ルールを変更せず、モデルを呼び出しません。
+[実装結果と測定の限界](../quality-bounded-slice.md)を参照してください。
+この処理の比較だけでは、会話品質や感情の自然さを判断できません。
