@@ -1,3 +1,4 @@
+import type { OpsMinecraftLifecyclePort } from '../../contracts/opsMinecraftLifecycleContract.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { bearerAuthorized } from '../auth/apiAuth.js';
 import { validScopeKey } from '../http/apiValidation.js';
@@ -18,6 +19,7 @@ export interface OpsRouteDependencies {
   ingestEnabled: () => boolean;
   /** Stage 2 kill switch (`SHANNON_PLATFORM_OPS_COMMANDS`). Absent: commands are off. */
   commandsEnabled?: () => boolean;
+  minecraftLifecycle?: () => OpsMinecraftLifecyclePort | null;
   now: () => string;
   /**
    * Who a device credential is. Null: not a paired device (or not the local token).

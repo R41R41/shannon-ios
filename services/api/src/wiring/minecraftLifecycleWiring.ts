@@ -1,10 +1,13 @@
+import { createOpsMinecraftLifecycle } from './opsMinecraftLifecycleWiring.js';
+import { opsLifecycleAuthorityAllowed } from '../infra/ops/store/opsLifecycleAuthority.js';
+import type { OpsCommandStore } from '../infra/ops/store/opsCommandStore.js';
 import { createMinecraftLifecycleRecovery } from './minecraftLifecycleRecoveryWiring.js';
 import type { ActionThreads } from '../contracts/actionThreadContract.js';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { stage4Enabled } from '../infra/config/stage4.js';
 import { configuredMinecraftBody } from '../contracts/minecraftBodyContract.js';
-import type { MinecraftLifecycleAuthority, MinecraftLifecycleAction } from '../contracts/minecraftLifecycleContract.js';
+import type { MinecraftLifecycleAuthority, MinecraftLifecycleAction, MinecraftLifecycleCommand } from '../contracts/minecraftLifecycleContract.js';
 import { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import { MinecraftLifecycleStore } from '../surfaces/minecraft/store/minecraftLifecycleStore.js';
 import { actionPermit, currentActionExecution } from '../infra/context/actionExecution.js';
@@ -18,6 +21,7 @@ import type { ShannonAutonomyService } from '../mind/action/ownTime/autonomyServ
 export function configuredMinecraftLifecycle(values: Readonly<Record<string, string | undefined>>, parts: {
   path: string; autonomy: ShannonAutonomyService; actions?: Pick<ActionThreads, 'reconcileResource'> | null; ownerAlone(): boolean;
   /** For agentTask, the common runtime rechecks the original admitted task's canonical sources. */
+  ops?: { commands: OpsCommandStore; actions: ActionThreads; enabled(): boolean };
   taskAllowed(executionId: string): boolean; taskSources?(executionId: string): readonly string[] | null; now?(): string;
 }) {
   if (values.SHANNON_MINECRAFT_LIFECYCLE !== 'on') return null;
@@ -32,7 +36,7 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
   const db = new DatabaseSync(parts.path);
   db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;');
   const action = (id: string) => db.prepare('SELECT * FROM mind_actions WHERE id=?').get(id);
-  const allowed = (authority: MinecraftLifecycleAuthority) => {
+  const allowed = (authority: MinecraftLifecycleAuthority, command?: MinecraftLifecycleCommand) => {
     try {
       const row = action(authority.executionId), at = now();
       if (!row || authority.executionId !== authority.lease.id || row.scope_key !== authority.scopeKey
@@ -42,6 +46,7 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
         || row.deadline && String(row.deadline) <= at) return false;
       if (authority.origin === 'own_time') return row.kind === 'ownTime' && parts.autonomy.inspectAuthorization(authority.scopeKey,
         { domain: 'minecraft_lifecycle', summary: '登録されたマイクラへの参加を継続します。' }).decision === 'allow';
+      if (row.kind === 'minecraft') return parts.ownerAlone() && !!parts.ops?.enabled() && opsLifecycleAuthorityAllowed(db, authority, command);
       const taskSources = row.kind === 'agentTask' ? parts.taskSources?.(authority.executionId) : undefined;
       return parts.ownerAlone() && (row.kind === 'respond' || row.kind === 'agentTask' && parts.taskAllowed(authority.executionId)
         && (!parts.taskSources || taskSources !== null && authority.sourceIds.every(id => taskSources?.includes(id))));
@@ -94,5 +99,7 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
   };
   parts.autonomy.tools.useMinecraftLifecycle(port);
   const recovery = parts.actions ? createMinecraftLifecycleRecovery({ db, service, actions: parts.actions, deviceId: configuration.deviceId }) : null;
-  return { service, recover: () => recovery?.recover() ?? Promise.resolve(), async close() { await recovery?.close(); db.close(); } };
+  const ops = parts.ops && serverIds.includes('shannon-home') ? createOpsMinecraftLifecycle({ ...parts.ops, service, scopeKey: configuration.ownerScopeKey,
+    deviceId: configuration.deviceId, now, ownerAlone: parts.ownerAlone }) : null;
+  return { service, ops, recover: () => recovery?.recover() ?? Promise.resolve(), async close() { await ops?.close(); await recovery?.close(); db.close(); } };
 }

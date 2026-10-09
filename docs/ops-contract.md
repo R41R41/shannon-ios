@@ -434,7 +434,7 @@ Answer, `200`: `{ "id": "…", "status": "done", "code": "already_running", "dup
 
 `ops_commands` (`command_id` primary key, `scope_key`, `idempotency_key` unique per scope, `type`, `target`, `status`, `created_at`, `expires_at`, `claimed_at`, `report_by`, `finished_at`, `code`, `requested_by_device_id`): one row for every accepted command, with how it ended. Rows are added and their status advances; none is deleted, and the runtime can only report an outcome for a command it claimed. The table is created with `CREATE TABLE IF NOT EXISTS` on the connection of `ops_snapshots`, outside the numbered migrations.
 
-The record is in no prompt, and no model writes a command. The table is held by the ops routes alone, like the snapshot (asserted structurally in `ops.test.ts`), and the command routes accept a device token or the bridge credential only: Shannon's activity loop has neither, and starting processes is outside her bounded autonomy.
+The record is in no prompt, and no model writes a command. The snapshot store is held by the ops routes alone (asserted structurally in `ops.test.ts`). Only the command journal is also supplied to the fixed home lifecycle broker described below, and the command routes accept a device token or the bridge credential only: Shannon's activity loop has neither, and starting processes is outside her bounded autonomy.
 
 ### Open questions
 
@@ -442,3 +442,26 @@ The record is in no prompt, and no model writes a command. The table is held by 
 2. **Minecraft against lab runs.** The server does not detect a lab run. The runtime refuses `minecraft.start` with `lab_running`. Whether it should instead wait for the run to end, or whether stopping a server during a run needs a rule, is not decided.
 3. **`schedule.run` for a schedule that already posted today** is accepted. A second public post is something that reaches other people; whether the server should refuse it rather than leave it to the desktop's confirmation is not decided.
 4. **Starting Minebot** is withheld until its planner budget is under a control the owner accepts.
+
+## `shannon-home` のライフサイクル接続
+
+`SHANNON_MINECRAFT_LIFECYCLE=on`、Stage4、既存の `shannon-home` 登録、mind の実行権、Ops commands スイッチが揃う API は、新しく受け付けた次の操作だけを共通ライフサイクルに接続する。Windows 管理画面のリクエスト・操作 ID・応答 DTO・状態語彙は変更しない。
+
+| 既存 Ops 要求 | 共通操作 |
+| --- | --- |
+| `minecraft.start` / `minecraft:shannon-home` | `start` |
+| `minecraft.stop` / `minecraft:shannon-home` | `stop` |
+| `minebot.start` / `minecraft:shannon-home` | `login` |
+| `service.stop` / `minebot:bot` | `logout` |
+
+`OpsCommandStore`（`SQLiteOpsStore` の constructor から作成）が追加テーブル `ops_lifecycle_dispatches` を `CREATE TABLE IF NOT EXISTS` で作成する。既存テーブルの再構築・削除はしない。新しい Ops 行と対応するライフサイクル ID は同じ SQLite writer transaction で記録し、その行は旧 runtime の claim/report から除外する。既存の未処理・結果不明の旧コマンドを採用・再実行することはない。起動時のスキーマ確認用 DB clone もこの constructor を通す。
+
+ボットがログアウト中でも、登録 operator の新鮮な観測を待って処理できる。元要求から一つの `owner_request` action を作り、全チャット・FCA・own-time と同じ `minecraft-body` resource を取得する。許可は元の paired-device 要求、固定された操作・対象・ID、source、現在の holder/generation、scope、owner-alone、Ops スイッチの組み合わせを照合する。任意の `ops:` 文字列だけでは権限を得られない。Ops snapshot 全体は引き続きプロンプト・kernel・worker に渡さず、この broker は model を呼ばない。
+
+実行は [Minecraft lifecycle](minecraft-lifecycle-contract.md) の native 判定を使う。起動は確実に停止している場合だけで、既に起動中なら `already_running`。停止は native server thread の fresh な人数検査と参加 barrier を一つの判断として行い、人がいる・人数不明なら停止しない。`changed` の停止成功は `stopGuard` がなければ受理しない。ログアウトも共通の入力解放・接続終了を待つ。状態を読んでから旧 `stop.sh` / tmux 停止を呼ぶ経路には流さない。
+
+正式な native 応答から従来の `done` / `failed` / `refused` と既存 code に投影する。人がいる、権限失効、状態不明などの拒否は `not_allowed`。結果不明は `failed` / `no_report` とし、元 action の unknown・body resource・予算を保持する。後から同じライフサイクル ID の正式な応答が届けば Ops 履歴だけを更新し、操作の再送・新しい実行権・action 全体の成功扱いは行わない。body resource の限定解除は既存の native proof recovery が担当する。
+
+範囲外の登録サーバーは既存の native Ops 経路を保つ。`service.start/stop('minecraft')` と `service.start/stop('minebot')` は manager の状態操作であり、サーバー停止・ボット切断に置き換えない。この変更の人数 guard と共通 body lease が適用されるのは表の home/body 操作だけである。未登録・機能 OFF の経路、他サーバーの人数 guard、manager と進行中 body 操作の直列化はこの接続で保証されない。
+
+ローカル回帰は `opsMinecraftLifecycleWiring.test.ts` が実 HTTP route・設定済み lifecycle・SQLite の元 lease で検証する。実ゲームや有料 API は使用しない。本番 DB constructor 確認と管理画面からの native 応答確認はデプロイ側で行う。

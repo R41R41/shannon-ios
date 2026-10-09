@@ -7,7 +7,7 @@ import { MinecraftLifecycleStore } from './store/minecraftLifecycleStore.js';
 /** No process execution here: the configured, paired operator owns native state and commands. */
 export class MinecraftLifecycle {
   constructor(readonly store: MinecraftLifecycleStore, readonly configuration: MinecraftBodyConfiguration,
-    private readonly options: { now(): number; allowed(authority: MinecraftLifecycleAuthority): boolean;
+    private readonly options: { now(): number; allowed(authority: MinecraftLifecycleAuthority, command?: MinecraftLifecycleCommand): boolean;
       servers?: ReadonlySet<string>; pollMilliseconds?: number; waitMilliseconds?: number; cancelWaitMilliseconds?: number }) {}
   private state(serverId: string): MinecraftLifecycleState | null {
     const frame = this.store.frame();
@@ -19,7 +19,7 @@ export class MinecraftLifecycle {
   private permittedServer(serverId: string): boolean { return this.configuration.servers.has(serverId) && (!this.options.servers || this.options.servers.has(serverId)); }
   private allowed(command: MinecraftLifecycleCommand): boolean {
     return command.authority.scopeKey === this.configuration.ownerScopeKey && this.permittedServer(command.serverId)
-      && Date.parse(command.deadlineAt) > this.options.now() && this.options.allowed(command.authority);
+      && Date.parse(command.deadlineAt) > this.options.now() && this.options.allowed(command.authority, command);
   }
   poll(principal: { scopeKey: string; deviceId: string }, input: unknown): MinecraftLifecycleReply {
     if (principal.scopeKey !== this.configuration.ownerScopeKey || principal.deviceId !== this.configuration.deviceId) throw new Error('MINECRAFT_LIFECYCLE_DEVICE_DENIED');

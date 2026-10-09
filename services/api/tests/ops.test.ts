@@ -449,14 +449,17 @@ describe('SHANNON_PLATFORM_OPS_INGEST', () => {
 
 describe('the snapshot stays out of every prompt', () => {
   const cognitionRoot = resolve(import.meta.dirname, '../../../packages/cognition/src');
-  const owners = new Set(['opsContract.ts', 'opsStore.ts', 'serverOpsRoutes.ts', 'opsCommandContract.ts', 'opsCommandStore.ts', 'serverOpsCommandRoutes.ts']);
+  const owners = new Set(['opsContract.ts', 'opsStore.ts', 'serverOpsRoutes.ts', 'opsCommandContract.ts', 'opsCommandStore.ts', 'serverOpsCommandRoutes.ts', 'opsMinecraftLifecycleContract.ts', 'opsLifecycleAuthority.ts']);
   const markers = /opsStore|opsContract|serverOpsRoutes|ops_snapshots|OpsSnapshot|SQLiteOpsStore|opsReadResponse|opsCommand|OpsCommand|ops_commands|OPS_COMMAND|serverOpsCommandRoutes/u;
 
   it('is referenced by the ops files and the server entry point only', () => {
     const files = apiSourceFiles();
     expect(files.length).toBeGreaterThanOrEqual(300);
     const referencing = files.filter(path => !owners.has(basename(path)) && markers.test(readFileSync(path, 'utf8'))).map(path => basename(path));
-    expect(referencing).toEqual(['server.ts']);
+    expect(referencing.sort()).toEqual(['minecraftLifecycleWiring.ts', 'opsMinecraftLifecycleWiring.ts', 'server.ts']);
+    for (const file of ['minecraftLifecycleWiring.ts', 'opsMinecraftLifecycleWiring.ts', 'opsLifecycleAuthority.ts']) {
+      expect(readApiSource(file)).not.toMatch(/ops_snapshots|OpsSnapshot|SQLiteOpsStore|opsReadResponse/u);
+    }
     for (const name of owners) expect(apiSourceFile(name), name).toBeTruthy();
     expect(readdirSync(cognitionRoot).length).toBeGreaterThanOrEqual(30);
     expect(readdirSync(cognitionRoot).filter(name => markers.test(readFileSync(join(cognitionRoot, name), 'utf8')))).toEqual([]);
@@ -465,17 +468,20 @@ describe('the snapshot stays out of every prompt', () => {
   it('is never handed to the kernel, a worker or the platform bridge by the server', () => {
     const server = readApiSource('server.ts');
     const uses = server.split('\n').filter(line => /\bopsStore\b/u.test(line) && !line.startsWith('import ')).map(line => line.trim());
-    expect(uses).toEqual([
+    const commandBridge = uses.find(line => line.startsWith('const lifecycle = configuredMinecraftLifecycle('));
+    expect(commandBridge).toContain('ops: mind?.actions ? { commands: opsStore.commands, actions: mind.actions, enabled: () => opsCommandsEnabled(process.env) } : undefined');
+    expect(commandBridge!.replace('opsStore.commands', '')).not.toMatch(/\bopsStore\b/u);
+    expect(uses.filter(line => line !== commandBridge)).toEqual([
       'const opsStore = new SQLiteOpsStore(configuredDatabasePath());',
       'store: opsStore, bridge: platformBridge?.configuration ?? null, ingestEnabled: () => opsIngestEnabled(process.env), now,',
       'opsStore.close();',
     ]);
     expect(server.split('\n').filter(line => /\bopsRoute\b/u.test(line))).toHaveLength(2);
-    // Stage 2 adds the kill switch to the route's dependencies and nothing else.
+    // The lifecycle bridge receives only the command journal, never the operational snapshot.
     // The import is compared without its specifier, which names a folder; where it leads is checked as a resolved path.
-    expect(server.split('\n').filter(line => /opsCommand/iu.test(line)).map(line => line.trim().replace(/ from '[^']+';$/u, " from '…';"))).toEqual([
+    expect(server.split('\n').filter(line => /opsCommand/iu.test(line) && line.trim() !== commandBridge).map(line => line.trim().replace(/ from '[^']+';$/u, " from '…';"))).toEqual([
       "import { opsCommandsEnabled } from '…';",
-      'commandsEnabled: () => opsCommandsEnabled(process.env),',
+      'commandsEnabled: () => opsCommandsEnabled(process.env), minecraftLifecycle: () => lifecycle?.ops ?? null,',
     ]);
     expect(resolvedImports('server.ts')).toContain(apiSourcePath('opsCommandContract.ts'));
   });
@@ -483,7 +489,7 @@ describe('the snapshot stays out of every prompt', () => {
   it('imports nothing that builds a prompt or calls a model', () => {
     const allowed = ['node:http', 'node:sqlite', 'node:crypto', '@shannon/cognition', ...['apiAuth.ts', 'apiValidation.ts', 'opsContract.ts',
       'opsStore.ts', 'serverHttp.ts', 'sqliteStoreContext.ts', 'opsCommandContract.ts', 'opsCommandStore.ts',
-      'serverOpsCommandRoutes.ts'].map(apiSourcePath)];
+      'serverOpsCommandRoutes.ts', 'opsMinecraftLifecycleContract.ts', 'minecraftLifecycleContract.ts', 'actionThreadContract.ts'].map(apiSourcePath)];
     for (const name of owners) {
       const imports = resolvedImports(name);
       expect(imports.length, name).toBeGreaterThan(0);

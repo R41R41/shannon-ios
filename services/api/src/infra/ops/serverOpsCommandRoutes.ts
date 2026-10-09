@@ -1,3 +1,4 @@
+import type { OpsMinecraftLifecyclePort } from '../../contracts/opsMinecraftLifecycleContract.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { bearerAuthorized } from '../auth/apiAuth.js';
 import { validScopeKey } from '../http/apiValidation.js';
@@ -20,6 +21,7 @@ export interface OpsCommandRouteDependencies {
   ingestEnabled: () => boolean;
   /** `SHANNON_PLATFORM_OPS_COMMANDS`. Absent: off. */
   commandsEnabled?: () => boolean;
+  minecraftLifecycle?: () => OpsMinecraftLifecyclePort | null;
   now: () => string;
   device: (authorization: string | undefined) => { scopeKey: string | null; deviceId?: string } | null;
 }
@@ -94,6 +96,7 @@ export function createOpsCommandRoute(dependencies: OpsCommandRouteDependencies)
     const command = validatedOpsCommandRequest(read.value);
     if ('error' in command) return sendJson(response, command.status, { error: command.error, message: command.message });
 
+    if (!enabled()) return sendJson(response, 403, { error: 'OPS_COMMANDS_DISABLED', message: 'Commands are switched off on the server.' });
     const at = instant(dependencies);
     const replayed = dependencies.store.commands.replay(scopeKey, command, at);
     if (replayed && replayed !== 'IDEMPOTENCY_KEY_REUSED') return sendJson(response, 200, replayed);
@@ -106,7 +109,8 @@ export function createOpsCommandRoute(dependencies: OpsCommandRouteDependencies)
     if (!opsCommandTargetKnown(command, snapshot)) {
       return sendJson(response, 422, { error: 'TARGET_UNKNOWN', message: 'The latest snapshot does not name this target.' });
     }
-    const created = dependencies.store.commands.create(scopeKey, command, device.deviceId ?? 'local', at);
+    const lifecycle = dependencies.minecraftLifecycle?.();
+    const created = dependencies.store.commands.create(scopeKey, command, device.deviceId ?? 'local', at, lifecycle?.mapping(scopeKey, command));
     if (created === 'IDEMPOTENCY_KEY_REUSED') return sendJson(response, 409, { error: created, message: 'This idempotencyKey already made a different command.' });
     if (created === 'TOO_MANY_OPEN_COMMANDS') {
       return sendJson(response, 429, { error: created, message: `At most ${OPS_COMMAND_LIMITS.open} commands may be waiting at once.` });
@@ -115,6 +119,7 @@ export function createOpsCommandRoute(dependencies: OpsCommandRouteDependencies)
       return sendJson(response, 429, { error: created, message: `At most ${OPS_COMMAND_LIMITS.perHour} commands an hour are accepted.` });
     }
     sendJson(response, created.created ? 201 : 200, created);
+    lifecycle?.wake();
   }
 
   /** The bridge credential, or the refusal already sent. The scope is the one the credential is bound to. */

@@ -4,6 +4,8 @@ import {
   OPS_COMMAND_LIMITS, OPS_COMMAND_NO_REPORT,
   type OpsCommandCode, type OpsCommandOutcome, type OpsCommandReportCode, type OpsCommandRequest, type OpsCommandStatus, type OpsCommandType,
 } from '../../../contracts/opsCommandContract.js';
+import { opsLifecycleMapping, type OpsLifecycleMapping } from '../../../contracts/opsMinecraftLifecycleContract.js';
+import type { ActionLease } from '../../../contracts/actionThreadContract.js';
 
 /** A command as a device reads it. `expiresAt` is the time by which the runtime must have claimed it. */
 export interface OpsCommand {
@@ -73,6 +75,11 @@ export class OpsCommandStore {
         UNIQUE (scope_key, idempotency_key)
       );
       CREATE INDEX IF NOT EXISTS ops_commands_scope_created ON ops_commands (scope_key, created_at);
+      CREATE TABLE IF NOT EXISTS ops_lifecycle_dispatches (
+        command_id TEXT PRIMARY KEY, server_id TEXT NOT NULL CHECK(server_id='shannon-home'),
+        action TEXT NOT NULL CHECK(action IN ('start','stop','login','logout')), lifecycle_id TEXT NOT NULL UNIQUE,
+        action_id TEXT UNIQUE, lease_generation INTEGER, lease_holder TEXT
+      );
     `);
   }
 
@@ -113,7 +120,7 @@ export class OpsCommandStore {
     return row.type === request.type && row.target === request.target ? { command: command(row), created: false } : 'IDEMPOTENCY_KEY_REUSED';
   }
 
-  create(scopeKey: string, request: OpsCommandRequest, deviceId: string, at: string): OpsCommandCreation {
+  create(scopeKey: string, request: OpsCommandRequest, deviceId: string, at: string, lifecycle?: OpsLifecycleMapping | null): OpsCommandCreation {
     return this.transaction(() => {
       const replayed = this.replay(scopeKey, request, at);
       if (replayed) return replayed;
@@ -129,6 +136,7 @@ export class OpsCommandStore {
         INSERT INTO ops_commands (command_id, scope_key, idempotency_key, type, target, status, created_at, expires_at, requested_by_device_id)
         VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)
       `).run(id, scopeKey, request.idempotencyKey, request.type, request.target, at, after(at, OPS_COMMAND_LIMITS.claimWithinSeconds), deviceId);
+      if (lifecycle) this.mapLifecycle(id, request, lifecycle);
       return { command: command(this.row(scopeKey, id)!), created: true };
     });
   }
@@ -138,7 +146,8 @@ export class OpsCommandStore {
     return this.transaction(() => {
       this.settle(scopeKey, at);
       const row = this.database.prepare(`
-        SELECT * FROM ops_commands WHERE scope_key = ? AND status = 'pending' ORDER BY created_at, rowid LIMIT 1
+        SELECT * FROM ops_commands WHERE scope_key = ? AND status = 'pending'
+        AND NOT EXISTS (SELECT 1 FROM ops_lifecycle_dispatches m WHERE m.command_id=ops_commands.command_id) ORDER BY created_at, rowid LIMIT 1
       `).get(scopeKey) as unknown as Row | undefined;
       if (!row) return null;
       const reportBy = after(at, OPS_COMMAND_LIMITS.reportWithinSeconds);
@@ -155,6 +164,10 @@ export class OpsCommandStore {
    * the truer record, and the command was not handed out again in between.
    */
   report(scopeKey: string, id: string, outcome: OpsCommandOutcome, code: OpsCommandReportCode | undefined, at: string): OpsCommandReceipt {
+    if (this.database.prepare('SELECT 1 FROM ops_lifecycle_dispatches WHERE command_id=?').get(id)) return 'OPS_COMMAND_FINISHED';
+    return this.reportLifecycle(scopeKey,id,outcome,code,at);
+  }
+  reportLifecycle(scopeKey: string, id: string, outcome: OpsCommandOutcome, code: OpsCommandCode | undefined, at: string): OpsCommandReceipt {
     return this.transaction(() => {
       this.settle(scopeKey, at);
       const row = this.row(scopeKey, id);
@@ -168,6 +181,44 @@ export class OpsCommandStore {
       this.database.prepare('UPDATE ops_commands SET status = ?, finished_at = ?, code = ? WHERE command_id = ?')
         .run(outcome, at, code ?? null, id);
       return { ...receipt(this.row(scopeKey, id)!), duplicate: false };
+    });
+  }
+
+  private mapLifecycle(id:string, request:Pick<OpsCommandRequest,'type'|'target'>, mapping:OpsLifecycleMapping):void {
+    const expected = opsLifecycleMapping(request);
+    if (!expected || expected.serverId !== mapping.serverId || expected.action !== mapping.action) throw new Error('OPS_LIFECYCLE_MAPPING');
+    this.database.prepare('INSERT INTO ops_lifecycle_dispatches(command_id,server_id,action,lifecycle_id) VALUES(?,?,?,?)')
+      .run(id,mapping.serverId,mapping.action,`ops-lifecycle:${id}`);
+  }
+  lifecyclePending(scopeKey:string,at:string):Array<{command:OpsCommand;mapping:OpsLifecycleMapping;actionId:string|null;lifecycleId:string}> {
+    this.settle(scopeKey,at);
+    const rows=this.database.prepare(`SELECT o.*,m.server_id,m.action,m.action_id,m.lifecycle_id FROM ops_commands o
+      JOIN ops_lifecycle_dispatches m ON m.command_id=o.command_id WHERE o.scope_key=? AND o.status='pending' ORDER BY o.created_at,o.rowid`).all(scopeKey) as unknown as Array<Row & {server_id:'shannon-home';action:OpsLifecycleMapping['action'];action_id:string|null;lifecycle_id:string}>;
+    return rows.map(row=>({command:command(row),mapping:{serverId:row.server_id,action:row.action},actionId:row.action_id,lifecycleId:row.lifecycle_id}));
+  }
+  /** Late native ACKs are read by their original ID; no claimed/unknown row is executed again. */
+  lifecycleAwaiting(scopeKey:string,at:string):Array<{commandId:string;lifecycleId:string}> {
+    this.settle(scopeKey,at);
+    return (this.database.prepare(`SELECT o.command_id,m.lifecycle_id FROM ops_commands o JOIN ops_lifecycle_dispatches m
+      ON m.command_id=o.command_id WHERE o.scope_key=? AND (o.status='claimed' OR o.status='failed' AND o.code=?)`)
+      .all(scopeKey,OPS_COMMAND_NO_REPORT) as Array<{command_id:string;lifecycle_id:string}>).map(row=>({commandId:row.command_id,lifecycleId:row.lifecycle_id}));
+  }
+  bindLifecycle(scopeKey:string,id:string,actionId:string):boolean {
+    return this.transaction(()=>{
+      const row=this.row(scopeKey,id);if(!row||row.status!=='pending')return false;
+      const bound=this.database.prepare('SELECT action_id FROM ops_lifecycle_dispatches WHERE command_id=?').get(id) as {action_id:string|null}|undefined;
+      if(!bound||bound.action_id&&bound.action_id!==actionId)return false;
+      this.database.prepare('UPDATE ops_lifecycle_dispatches SET action_id=? WHERE command_id=?').run(actionId,id);return true;
+    });
+  }
+  claimLifecycle(scopeKey:string,id:string,lease:ActionLease,at:string):boolean {
+    return this.transaction(()=>{
+      this.settle(scopeKey,at);const row=this.row(scopeKey,id);if(!row||row.status!=='pending')return false;
+      const bound=this.database.prepare('SELECT action_id FROM ops_lifecycle_dispatches WHERE command_id=?').get(id) as {action_id:string|null}|undefined;
+      if(bound?.action_id!==lease.id)return false;
+      this.database.prepare("UPDATE ops_commands SET status='claimed',claimed_at=?,report_by=? WHERE command_id=?").run(at,after(at,OPS_COMMAND_LIMITS.reportWithinSeconds),id);
+      this.database.prepare('UPDATE ops_lifecycle_dispatches SET lease_generation=?,lease_holder=? WHERE command_id=?').run(lease.generation,lease.holder,id);
+      return true;
     });
   }
 
