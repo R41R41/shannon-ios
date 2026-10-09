@@ -2,6 +2,9 @@
 
 ## Current authority
 
+- 会話＋いま・並行調査・途中報告・ボット／ガール切替: [`conversation-work-contract.md`](conversation-work-contract.md)、[日本語の実装結果](conversation-work-results-ja.md)
+- 旧Minecraft知見の選別手順と出自: [`../services/api/artifacts/skill-packs/legacy-minecraft/draft-1/README.md`](../services/api/artifacts/skill-packs/legacy-minecraft/draft-1/README.md)
+
 - Private Gemini / ElevenLabs TTS comparison demo: [`tts-compare-demo.md`](tts-compare-demo.md)
 
 - Product policy and canonical index: [`../README.md`](../README.md)
