@@ -90,6 +90,8 @@ export interface TaskRuntime extends TaskConversationDeliveryRuntime {
   observeSources(step: TaskStep, observation: TaskSourceObservation): boolean;
   send(scopeKey: string, sourceTaskId: string, targetId: string, text: string, messageId: string):
     { accepted: true; duplicate: boolean; task: TaskView };
+  /** Lightweight canonical inbox observation; excludes message bodies and native history. */
+  pendingMessageIds?(scopeKey: string, taskId: string): readonly string[];
   snapshot(scopeKey: string, taskId: string): TaskSnapshot | null;
   history(scopeKey: string, taskId: string, messageIds?: readonly string[]): TaskHistoryWindow | null;
   /** Installs a derived summary only under the current segment's lease and fresh source visibility. */

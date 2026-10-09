@@ -1,3 +1,4 @@
+import { minecraftLifecycleExecutors, type MinecraftLifecycleToolPort } from './shannonMinecraftLifecycleTools.js';
 import { observeAsync, observeSync, observerHandoff } from '../../infra/observer/observerContext.js';
 import type { AetherAccess } from '../../integrations/aether/aetherAccess.js';
 import type { AetherProposalStore } from '../../integrations/aether/aetherProposal.js';
@@ -88,6 +89,8 @@ export interface MinecraftTaskToolPort extends MemoryToolPort {
   execute(name: string, input: unknown, context: ToolExecutionContext, signal?: AbortSignal): Promise<ToolResult & { documents?: ToolDocuments }>;
 }
 export class ShannonToolRunner {
+  private minecraftLifecycle: MinecraftLifecycleToolPort | null = null;
+  useMinecraftLifecycle(port: MinecraftLifecycleToolPort): void { this.minecraftLifecycle = port; this.executors = Object.freeze({ ...this.executors, ...minecraftLifecycleExecutors(port) }); }
   private minecraftTasks: MinecraftTaskToolPort | null = null;
   useMinecraftTasks(port: MinecraftTaskToolPort): void { this.minecraftTasks = port; }
   private taskMemory: MemoryToolPort | null = null;
@@ -133,6 +136,7 @@ export class ShannonToolRunner {
       : tool.domain === 'skill_read' ? this.skills !== null
       : tool.domain === 'vm_workspace' ? this.selfRewrite !== null
       : tool.domain === 'host_folder' ? this.folder.boundHosts().length > 0
+      : tool.domain === 'minecraft_lifecycle' ? !!scopeKey && (this.minecraftLifecycle?.available(scopeKey) ?? false)
       : tool.domain === 'minecraft_body' ? this.minecraftTasks ? !!scopeKey && this.minecraftTasks.available(scopeKey) : minecraftToolOffered(this.minecraft, tool, scopeKey)
         : tool.domain === 'owner_documents_read' ? this.ownerDocumentsFor(scopeKey)
         : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true && this.aetherFor(scopeKey)
@@ -166,6 +170,7 @@ export class ShannonToolRunner {
       ?? (this.selfRewrite ? SELF_REWRITE_TOOLS.find(tool => tool.name === name || providerToolName(tool.name) === name) ?? null : null);
     // Her read tools do not exist without their ports: a call of one is refused as a name that never existed.
     if (tool && isReadToolDomain(tool.domain) && !this.readsFor(tool.domain)) return null;
+    if (tool?.domain === 'minecraft_lifecycle' && !this.minecraftLifecycle) return null;
     if (tool?.domain === 'memory_read' && !this.taskMemory) return null;
     if (tool?.domain === 'skill_read' && !this.skills) return null;
     if (tool?.domain === 'vm_workspace' && !this.selfRewrite) return null;
@@ -193,6 +198,7 @@ export class ShannonToolRunner {
         return { result, ...(documents ? { documents } : {}), record: { summary: '共通タスクへのマイクラ操作を受け付けました。', outcome: result.ok ? 'done' as const : 'failed' as const } };
       },
     }) : this.executors[tool.name];
+    if (tool.domain === 'minecraft_lifecycle' && !this.minecraftLifecycle?.available(context.scopeKey)) return { tool, result: toolFailure('unavailable', 'マイクラ管理の新しい状態が届いていません。', { retryable: false }) };
     if (tool.domain === 'memory_read' && !this.taskMemory?.available(context.scopeKey, context)) return { tool, result: toolFailure('not_offered', 'この実行では記憶の道具を使えません。', { retryable: false }) };
     if (tool.domain === 'task_runtime' && !this.taskRuntime?.available(context.scopeKey)) return { tool, result: toolFailure('not_offered', 'この実行ではタスクの道具を使えない。', { retryable: false }) };
     if ((tool.name.startsWith('aether') || tool.domain === 'aether_proposal') && !this.aetherFor(context.scopeKey)) {
@@ -220,7 +226,12 @@ export class ShannonToolRunner {
       // Aether as this call may reach it: the gate narrows it with anyone else present and in her own time.
       // With anyone else present, what she wrote after reading the owner's documents is not read either (ADR-0007).
       const informed = (documentId: string) => this.store.informed.marked(context.scopeKey, documentId);
-      const prepared = executor(checked.input, this.aether.access && this.aetherFor(context.scopeKey) ? { ...context, aether: gatedAether(this.aether.access, context, informed) } : context);
+      const executionContext: ToolExecutionContext = { ...context, observeRead: receipt => {
+        context.beforeExecution?.();
+        context.observeRead?.(receipt);
+        this.taskRuntime?.observeRead?.(context.scopeKey, receipt);
+      } };
+      const prepared = executor(checked.input, this.aether.access && this.aetherFor(context.scopeKey) ? { ...executionContext, aether: gatedAether(this.aether.access, context, informed) } : executionContext);
       // With anyone else present, what she read reaches the model without the owner's private things.
       if(!('run' in prepared))return {tool,result:prepared};
       const call=this.notedCopyWrite(tool,checked.input,context.scopeKey,shownAetherCall(tool,prepared,context));
@@ -324,6 +335,9 @@ export class ShannonToolRunner {
     this.skills = ports;
     this.executors = Object.freeze({ ...this.executors, ...skillExecutors(ports) });
   }
+  /** Compact use-time index. The common runtime keeps it in dynamic context, outside the stable native prefix. */
+  skillIndex(scopeKey: string): string { try { return this.skills?.index(scopeKey) ?? ''; } catch { return ''; } }
+  skillIndexSources(scopeKey: string): readonly string[] | null { try { return this.skills?.indexSources?.(scopeKey) ?? null; } catch { return null; } }
   /** Stage 5 only: no port means no schemas, prompts or effects. */
   useSelfRewrite(port: SelfRewriteRuntimePort): void {
     this.selfRewrite = port;
@@ -361,28 +375,38 @@ export class ShannonToolRunner {
     }
     ran.tool = ready.tool.name;
     let run;
-    try { run = await ready.prepared.run(signal); } catch {
+    try { run = await ready.prepared.run(signal); } catch (error) {
       record(`会話の中で道具「${ready.tool.name}」を使おうとしましたが、うまくいきませんでした。`, 'failed', 'failed');
+      if (context.acknowledgementOwner === 'fca') throw error;
+      if (ready.tool.domain === 'minecraft_lifecycle' && currentActionExecution()?.stepOutcome === 'unknown')
+        return toolFailure('unavailable', '操作の結果をまだ確認できません。元の操作を保持しています。新しい操作として再実行せず、管理状態と元の結果を確認してください。', { retryable: false });
       return toolFailure('failed', 'うまくいかなかった。', { retryable: true });
     }
+    if (context.acknowledgementOwner === 'fca' && (run.acknowledged === false || (ready.tool.effect === 'write' && !run.result.ok
+      && run.acknowledged !== true && ['failed', 'unavailable', 'timeout'].includes(run.result.failure ?? '')))) throw new Error('FCA_TOOL_OUTCOME_UNKNOWN');
+    context.afterExecution?.({ name: ready.tool.name, documents: run.documents, ok: run.result.ok, text: run.result.text });
     if (ready.tool.effect === 'read' && ready.tool.domain !== 'memory_read') this.taskRuntime?.observeRead?.(context.scopeKey,
       { name: ready.tool.name, documents: run.documents, ok: run.result.ok });
     if (!run.apply) {
       if (!run.recordedElsewhere) record(run.record.summary, run.record.outcome, run.record.reasonCode);
-      if(context.surface!=='autonomy' && context.acknowledgementOwner !== 'fca')await currentActionExecution()?.checkpoint?.('tool_returned');
+      const execution = currentActionExecution();
+      if (context.surface !== 'autonomy' && context.acknowledgementOwner !== 'fca' && execution?.stepOutcome !== 'unknown' && execution?.modelOutcome !== 'unknown') await execution?.checkpoint?.('tool_returned');
       return run.result;
     }
     try {
       await actionPermit();
+      context.beforeExecution?.();
       const added = observeSync('tools', { name: ready.tool.name, phase: 'commit' }, () => this.transaction(() => {
         const line = run.apply!();
         this.recorder.recordConversationAction(context.scopeKey, { summary: run.record.summary, tool: ready.tool.name, outcome: 'done' });
         return line;
       }), () => ({ name: ready.tool.name, ok: true, status: 'committed' }));
-      if(context.surface!=='autonomy' && context.acknowledgementOwner !== 'fca')await currentActionExecution()?.checkpoint?.('tool_committed');
+      const execution = currentActionExecution();
+      if (context.surface !== 'autonomy' && context.acknowledgementOwner !== 'fca' && execution?.stepOutcome !== 'unknown' && execution?.modelOutcome !== 'unknown') await execution?.checkpoint?.('tool_committed');
       return added ? { ...run.result, text: `${run.result.text}\n${added}` } : run.result;
     } catch (error) {
       const code = error instanceof Error ? error.message : '';
+      if (context.acknowledgementOwner === 'fca' && !STUDY_REJECTIONS[code]) throw error;
       record(`会話の中で道具「${ready.tool.name}」を使おうとしましたが、できませんでした。`, 'failed', STUDY_REJECTIONS[code] ? code : 'failed');
       return STUDY_REJECTIONS[code] ?? toolFailure('failed', 'うまくいかなかった。', { retryable: true });
     }

@@ -10,6 +10,7 @@ import type { ShannonToolDefinition } from '../src/mind/tools/toolRegistryPorts.
 import { message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
 import { installObserverSink, withObserverRun } from '../src/infra/observer/observerContext.js';
 import type { ObserverDraft } from '../src/contracts/observerContract.js';
+import { inActionExecution, type ActionExecution } from '../src/infra/context/actionExecution.js';
 
 const tools: ShannonToolDefinition[] = ['task.create', 'task.list', 'task.get', 'task.send'].map(name => ({
   name, description: `Synthetic definition of ${name}`, domain: 'meta', effect: 'write', cost: 'none',
@@ -38,6 +39,18 @@ function harness(script: AnthropicMessage[]) {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('native one-step FCA model', () => {
+  it('puts the source-checked skill index in dynamic context while preserving the stable prefix and signed replay', async () => {
+    const fixture = harness([answer([call('fca_wait', 'wait-1', { summary: 'Wait for requested evidence' })]), answer([call('task_list', 'next-list')], nativeUsage(0, 700))]);
+    const first = await fixture.model.decide({ ...input(), skillIndex: 'First compact skill index' }, signal());
+    const signed = { role: 'assistant', content: [{ type: 'thinking', thinking: 'Opaque fixture', signature: 'stable-signature' }, { type: 'text', text: 'Public evidence' }] };
+    const replay = [...first.history, signed];
+    await fixture.model.decide({ ...input(replay), skillIndex: 'Updated compact skill index' }, signal());
+    expect(fixture.bodies[0]!.system).toEqual(fixture.bodies[1]!.system);
+    expect(JSON.stringify(fixture.bodies[0]!.system)).not.toContain('First compact skill index');
+    expect(JSON.parse(String((fixture.bodies[0]!.messages as Array<{ content: unknown }>).at(-1)!.content)).skillIndex).toBe('First compact skill index');
+    expect(JSON.parse(String((fixture.bodies[1]!.messages as Array<{ content: unknown }>).at(-1)!.content)).skillIndex).toBe('Updated compact skill index');
+    expect((fixture.bodies[1]!.messages as unknown[]).slice(0, replay.length)).toEqual(replay);
+  });
   it('makes one call, offers the existing strict schemas, maps provider names and returns only appended native history', async () => {
     const signed = { type: 'thinking', thinking: 'Synthetic private thinking', signature: 'opaque-signature' };
     const redacted = { type: 'redacted_thinking', data: 'opaque-redacted-data' };
@@ -265,5 +278,25 @@ describe('FCA native transport boundary', () => {
     await expect(model.decide(input(), controller.signal)).rejects.toThrow('FCA_MODEL_ABORTED');
     expect(calls).toBe(1);
     expect(receipts).toHaveLength(1);
+  });
+
+  it.each([true, false])('acknowledges cancellation after a response only with complete recorded usage (%s)', async complete => {
+    const controller = new AbortController();
+    const execution: ActionExecution = { lease: { id: 'original-action', holder: 'api', generation: 1 },
+      signal: controller.signal, permit: async () => { throw new Error('runner_already_checked_permit'); } };
+    const usage = nativeUsage();
+    const fixture = scriptedAnthropic([answer([call()], complete ? usage : { ...usage, output_tokens: null })]);
+    const receipts: AnthropicFcaUsage[] = [];
+    const model = createAnthropicFcaModel({ apiKey: 'synthetic', fetcher: fixture.fetcher, recordUsage(receipt) {
+      expect(execution.modelOutcome).toBe('unknown');
+      receipts.push(receipt); controller.abort();
+    } });
+    await expect(inActionExecution(execution, () => model.decide(input(), controller.signal))).rejects.toThrow(
+      complete ? 'FCA_MODEL_ABORTED' : 'HAIKU_RESPONSE_USAGE_INVALID');
+    expect(execution.modelOutcome).toBe(complete ? 'acknowledged' : 'unknown');
+    expect(receipts).toHaveLength(1);
+    expect(fixture.bodies).toHaveLength(1);
+    if (complete) expect(execution.modelUsage).toEqual({ inputTokens: 712, outputTokens: 30 });
+    else expect(execution.modelUsage).toBeUndefined();
   });
 });

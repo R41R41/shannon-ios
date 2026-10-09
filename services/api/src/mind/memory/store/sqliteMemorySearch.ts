@@ -1,3 +1,4 @@
+import { literalSearchPattern, searchTerms, type SearchOptions } from '../../../infra/search/searchQuery.js';
 import type { DatabaseSync } from 'node:sqlite';
 import {
   buildMemorySearchPlan,
@@ -17,8 +18,10 @@ export interface MemorySearchHit {
   score: number;
 }
 
+export interface MemorySearchOptions extends SearchOptions { kind?: 'experience' | 'thread' | 'knowledge' }
+
 export interface MemorySearchSource {
-  searchMemory(scopeKey: string, text: string, limit?: number): readonly MemorySearchHit[];
+  searchMemory(scopeKey: string, text: string, limit?: number, options?: MemorySearchOptions): readonly MemorySearchHit[];
 }
 
 export const MEMORY_SEARCH_DEFAULT_LIMIT = 12;
@@ -146,7 +149,8 @@ export class SQLiteMemorySearchRepository implements MemorySearchSource {
 
   constructor(private readonly database: DatabaseSync) {}
 
-  searchMemory(scopeKey: string, text: string, limit = MEMORY_SEARCH_DEFAULT_LIMIT): readonly MemorySearchHit[] {
+  searchMemory(scopeKey: string, text: string, limit = MEMORY_SEARCH_DEFAULT_LIMIT, options?: MemorySearchOptions): readonly MemorySearchHit[] {
+    if (options) return this.searchAdvanced(scopeKey, text, limit, options);
     const plan = buildMemorySearchPlan(text);
     const bounded = Math.max(1, Math.min(MAXIMUM_LIMIT, Math.floor(limit)));
     if (isEmptyMemorySearchPlan(plan)) return [];
@@ -190,6 +194,27 @@ export class SQLiteMemorySearchRepository implements MemorySearchSource {
       .filter(hit => hit.score > 0)
       .sort((left, right) => right.score - left.score || right.observedAt.localeCompare(left.observedAt))
       .slice(0, bounded));
+  }
+
+  private searchAdvanced(scopeKey: string, text: string, limit: number, options: MemorySearchOptions): readonly MemorySearchHit[] {
+    const plan = buildMemorySearchPlan(text);
+    if (isEmptyMemorySearchPlan(plan)) return [];
+    const terms = options.match ? searchTerms(text, options.match) : [...plan.longTerms, ...plan.shortTerms];
+    const args: (string | number)[] = [scopeKey], filters = ['d.scope_key = ?'];
+    if (options.kind) { filters.push('d.source_kind = ?'); args.push(options.kind); }
+    if (options.after) { filters.push('julianday(d.observed_at) >= julianday(?)'); args.push(options.after); }
+    if (options.before) { filters.push('julianday(d.observed_at) < julianday(?)'); args.push(options.before); }
+    filters.push(`(${terms.map(() => "d.body LIKE ? ESCAPE '\\'").join(options.match === 'all' ? ' AND ' : ' OR ')})`);
+    args.push(...terms.map(literalSearchPattern));
+    filters.push("NOT EXISTS (SELECT 1 FROM conversation_threads t WHERE t.scope_key = d.scope_key AND t.thread_id = d.thread_id AND t.archived_at IS NOT NULL)");
+    // Candidate collection is explicitly bounded; callers must not claim exhaustive semantic search.
+    const rows = this.database.prepare(`SELECT d.source_kind, d.source_id, d.thread_id, d.observed_at, d.body FROM memory_search_documents d WHERE ${filters.join(' AND ')} ORDER BY julianday(d.observed_at) ${options.order === 'oldest' ? 'ASC' : 'DESC'}, d.source_id LIMIT 1200`)
+      .all(...args) as unknown as DocumentRow[];
+    const hits = rows.map(row => ({ kind: row.source_kind, id: row.source_kind === 'experience' ? row.source_id : `${row.source_kind}:${row.source_id}`,
+      sourceId: row.source_id, ...(row.thread_id ? { threadId: row.thread_id } : {}), summary: row.body, observedAt: row.observed_at,
+      score: scoreMemorySearchText(plan, row.body) }));
+    hits.sort((a, b) => (options.order === 'oldest' ? (Date.parse(a.observedAt) - Date.parse(b.observedAt)) : options.order === 'newest' ? (Date.parse(b.observedAt) - Date.parse(a.observedAt)) : b.score - a.score || (Date.parse(b.observedAt) - Date.parse(a.observedAt))) || a.id.localeCompare(b.id));
+    return hits.slice(options.offset ?? 0, (options.offset ?? 0) + Math.max(1, Math.min(1200, Math.trunc(limit))));
   }
 
   private ftsAvailable(): boolean {

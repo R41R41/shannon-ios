@@ -2,10 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { ACTION_CODE, ACTION_ID, ACTION_LIMITS, ACTION_TERMINAL, validActionDraft, type ActionDraft, type ActionLease, type ActionState, type ActionView } from '@shannon/mind';
 import type { ActionAcknowledgement } from '../../../../contracts/actionThreadContract.js';
+export type ActionResourceReconciliationAllowed=(lease:ActionLease,resource:string,acknowledgementId:string)=>boolean;
 
 /** The mind worker alone owns scheduling. BEGIN IMMEDIATE also fences another worker during recovery. No words here. */
 export class SQLiteActionStore {
-  constructor(private readonly db: DatabaseSync) {
+  constructor(private readonly db: DatabaseSync,private readonly resourceReconciliationAllowed?:ActionResourceReconciliationAllowed) {
     db.exec(`
       CREATE TABLE IF NOT EXISTS mind_actions (
         id TEXT PRIMARY KEY, scope_key TEXT NOT NULL, kind TEXT NOT NULL, origin TEXT NOT NULL, source_id TEXT NOT NULL,
@@ -25,6 +26,9 @@ export class SQLiteActionStore {
         request_id TEXT PRIMARY KEY, scope_key TEXT NOT NULL, target_id TEXT, created_at TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS mind_action_acknowledgements (
+        id TEXT PRIMARY KEY,report_json TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS mind_action_resource_acknowledgements (
         id TEXT PRIMARY KEY,report_json TEXT NOT NULL
       );
     `);
@@ -214,6 +218,28 @@ export class SQLiteActionStore {
       const action=this.get(lease.id);
       if(!action || action.state!=='unknown' || action.generation!==lease.generation+1 || action.lastHolder!==lease.holder)return false;
       this.db.prepare('UPDATE mind_actions SET state=?,result=?,sent=0,updated_at=? WHERE id=?').run(state,code,at,lease.id);
+      return true;
+    });
+  }
+  /** Exact original release proof removes only a dynamic exclusion; the action itself remains unknown. */
+  reconcileResource(lease:ActionLease,resource:string,acknowledgementId:string):boolean {
+    if(!lease||typeof lease.id!=='string'||typeof lease.holder!=='string'||!ACTION_ID.test(lease.id)||!ACTION_ID.test(lease.holder)
+      ||!Number.isSafeInteger(lease.generation)||lease.generation<1||typeof acknowledgementId!=='string'||!ACTION_ID.test(acknowledgementId)
+      ||typeof resource!=='string'||!/^res:[a-f0-9]{64}$/u.test(resource))return false;
+    return this.transaction(()=>{
+      const encoded=JSON.stringify({lease:{id:lease.id,generation:lease.generation,holder:lease.holder},resource});
+      const receipt=this.db.prepare('SELECT report_json FROM mind_action_resource_acknowledgements WHERE id=?').get(acknowledgementId);
+      if(receipt)return receipt.report_json===encoded;
+      const action=this.get(lease.id);
+      if(!action||action.state!=='unknown'||action.generation!==lease.generation+1||action.lastHolder!==lease.holder||action.holder!==null)return false;
+      const row=this.db.prepare('SELECT base_resources_json FROM mind_actions WHERE id=?').get(lease.id)!;
+      const base=JSON.parse(String(row.base_resources_json)) as string[];
+      if(!action.resources.includes(resource)||base.includes(resource))return false;
+      // Re-read the domain's original immutable proof under this writer lock, fencing late native cleanup insertion.
+      if(!this.resourceReconciliationAllowed?.(lease,resource,acknowledgementId))return false;
+      // Do not settle paid calls, finish the task, clear sent, or release any other operation's exclusion.
+      this.db.prepare('UPDATE mind_actions SET resources_json=? WHERE id=?').run(JSON.stringify(action.resources.filter(key=>key!==resource)),lease.id);
+      this.db.prepare('INSERT INTO mind_action_resource_acknowledgements VALUES(?,?)').run(acknowledgementId,encoded);
       return true;
     });
   }

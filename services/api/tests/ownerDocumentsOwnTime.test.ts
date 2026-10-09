@@ -1,3 +1,7 @@
+vi.mock('../src/mind/tools/shannonTools.js', async importOriginal => {
+  const { historicalSearchTools } = await import('./support/historicalSearchTools.js');
+  return historicalSearchTools(await importOriginal<typeof import('../src/mind/tools/shannonTools.js')>());
+});
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configuredAutonomy } from '../src/mind/inhibition/autonomyBudget.js';
 import { autonomyDayLog, autonomyDayPhrases } from '../src/mind/inhibition/autonomyDayLog.js';

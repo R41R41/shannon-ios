@@ -1,3 +1,7 @@
+vi.mock('../src/mind/tools/shannonTools.js', async importOriginal => {
+  const { historicalSearchTools } = await import('./support/historicalSearchTools.js');
+  return historicalSearchTools(await importOriginal<typeof import('../src/mind/tools/shannonTools.js')>());
+});
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';

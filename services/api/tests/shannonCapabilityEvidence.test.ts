@@ -1,3 +1,9 @@
+import { configuredMinecraftLifecycle } from '../src/wiring/minecraftLifecycleWiring.js';
+import { createFcaProgressTools, FCA_PROGRESS_TOOLS } from '../src/mind/action/fca/fcaProgressTools.js';
+import { createFcaTaskObservationMonitor } from '../src/wiring/fcaTaskObservationWiring.js';
+import { configuredSkillImporter } from '../src/wiring/skillImportWiring.js';
+import { fcaResearchTools } from '../src/wiring/fcaResearchWiring.js';
+import { SkillImporter } from '../src/mind/memory/memoryPorts.js';
 import { SHANNON_FCA_SHARED_CAPABILITY } from '@shannon/cognition';
 import { createFcaSharedWiring } from '../src/wiring/fcaSharedWiring.js';
 import { createFcaVoiceBridge } from '../src/mind/action/fca/fcaVoicePorts.js';
@@ -112,7 +118,11 @@ const exists = (...values: unknown[]) => values.every(value => typeof value === 
 type ConditionalCapabilityId = typeof SHANNON_CONDITIONAL_CAPABILITIES[number]['id'];
 // The fixed description and the lines the API adds while it has them (`SHANNON_CONDITIONAL_CAPABILITIES`) need the same evidence.
 const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, () => boolean> = {
-  fca_shared_context: () => exists(createFcaSharedWiring, createFcaVoiceBridge, ShannonToolRunner.prototype.useMemory)
+  fca_progress: () => exists(createFcaProgressTools, createFcaTaskObservationMonitor) && FCA_PROGRESS_TOOLS.length === 3,
+  minecraft_lifecycle: () => exists(configuredMinecraftLifecycle, ShannonToolRunner.prototype.useMinecraftLifecycle)
+    && configuredMinecraftLifecycle({}, {} as never) === null
+    && ['start', 'stop', 'login', 'logout', 'lifecycle_status'].every(verb => SHANNON_TOOLS.some(tool => tool.name === `minecraft.${verb}`)),
+  fca_shared_context: () => exists(createFcaSharedWiring, createFcaVoiceBridge, ShannonToolRunner.prototype.useMemory, fcaResearchTools, ShannonToolRunner.prototype.skillIndex, ShannonToolRunner.prototype.skillIndexSources)
     && ['memory.search', 'memory.read'].every(name => SHANNON_TOOLS.some(tool => tool.name === name))
     && !shannonCapabilityPrompt('owner').includes(SHANNON_FCA_SHARED_CAPABILITY.text),
   fca_tasks: () => exists(runFcaStep, executeTaskTool, createFcaConversationBridge) && configuredServerFca({}, {} as never) === null
@@ -220,7 +230,7 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
     && withReadToolsCapability(shannonCapabilityPrompt('owner')).includes(SHANNON_READ_TOOLS_CAPABILITY.text),
   // Syzygy ADR-0008 stage 2, step 6: her skills, built in her sleep with every body checked, opened with skill.read; only while
   // SHANNON_SKILLS is on and only in a turn that offers skill.read (the line is conditional).
-  skills: () => exists(skillExecutors, configuredSkillMemory, skillBodyCheck, ShannonSkillConsolidator.prototype.consolidate, ShannonToolRunner.prototype.useSkills)
+  skills: () => exists(skillExecutors, configuredSkillMemory, skillBodyCheck, configuredSkillImporter, SkillImporter.prototype.dryRun, SkillImporter.prototype.apply, ShannonSkillConsolidator.prototype.consolidate, ShannonToolRunner.prototype.useSkills)
     && SHANNON_TOOLS.some(tool => tool.name === 'skill.read' && tool.domain === 'skill_read' && tool.audiences.join() === 'owner_alone' && tool.surfaces.join() === 'text,voice')
     && configuredSkillMemory({ SHANNON_SKILLS: 'off' }, { databasePath: ':memory:', createsSchema: true }) === null
     && !shannonCapabilityPrompt('owner').includes(SHANNON_SKILLS_CAPABILITY.text)

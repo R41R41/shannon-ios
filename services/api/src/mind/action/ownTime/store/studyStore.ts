@@ -1,3 +1,4 @@
+import { literalSearchPattern, searchTerms, type SearchOptions } from '../../../../infra/search/searchQuery.js';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { StudyAetherLinks } from './studyAetherLinks.js';
@@ -229,7 +230,8 @@ export class StudyStore {
    * Pieces whose current title or body contains `query` (case-insensitive), newest change first.
    * `deleted` as in `list`. The caller cuts the snippets.
    */
-  search(scopeKey: string, query: string, limit: number, deleted: 'exclude' | 'include' | 'only' = 'exclude'): readonly StudyPiece[] {
+  search(scopeKey: string, query: string, limit: number, deleted: 'exclude' | 'include' | 'only' = 'exclude', options?: SearchOptions & { field?: 'title' | 'body' | 'both'; kind?: StudyPieceKind; status?: StudyPieceStatus }): readonly StudyPiece[] {
+    if (options) return this.searchAdvanced(scopeKey, query, limit, deleted, options);
     const needle = `%${query.replace(/[\\%_]/gu, match => `\\${match}`)}%`;
     const filter = deleted === 'exclude' ? 'AND deleted_at IS NULL' : deleted === 'only' ? 'AND deleted_at IS NOT NULL' : '';
     const rows = this.database.prepare(`
@@ -237,6 +239,27 @@ export class StudyStore {
       ORDER BY updated_at DESC, piece_id LIMIT ?
     `).all(scopeKey, needle, needle, Math.max(1, Math.min(100, Math.trunc(limit)))) as unknown as PieceRow[];
     return Object.freeze(rows.map(piece));
+  }
+
+  private searchAdvanced(scopeKey: string, query: string, limit: number, deleted: 'exclude' | 'include' | 'only', options: SearchOptions & { field?: 'title' | 'body' | 'both'; kind?: StudyPieceKind; status?: StudyPieceStatus }): readonly StudyPiece[] {
+    const clauses = ['scope_key = ?'], args: (string | number)[] = [scopeKey];
+    if (deleted !== 'include') clauses.push(deleted === 'only' ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL');
+    for (const key of ['kind', 'status'] as const) if (options[key]) { clauses.push(`${key} = ?`); args.push(options[key]!); }
+    if (options.after) { clauses.push('julianday(updated_at) >= julianday(?)'); args.push(options.after); }
+    if (options.before) { clauses.push('julianday(updated_at) < julianday(?)'); args.push(options.before); }
+    const terms = searchTerms(query, options.match);
+    const fields = options.field === 'title' ? ['title'] : options.field === 'body' ? ['body'] : ['title', 'body'];
+    clauses.push('(' + terms.map(term => '(' + fields.map(field => { args.push(literalSearchPattern(term)); return `${field} LIKE ? ESCAPE '\\'`; }).join(' OR ') + ')').join(options.match === 'any' ? ' OR ' : ' AND ') + ')');
+    // Literal SQL matching has no semantic relevance score; relevance retains the documented newest-first order.
+    const direction = options.order === 'oldest' ? 'ASC' : 'DESC';
+    const rows = this.database.prepare(`SELECT * FROM study_pieces WHERE ${clauses.join(' AND ')} ORDER BY julianday(updated_at) ${direction}, piece_id`).iterate(...args);
+    const found: StudyPiece[] = []; let skipped = 0;
+    for (const row of rows) {
+      const item = piece(row as unknown as PieceRow);
+      if (skipped++ < (options.offset ?? 0)) continue;
+      found.push(item); if (found.length >= Math.max(1, Math.min(100, Math.trunc(limit)))) break;
+    }
+    return Object.freeze(found);
   }
 
   private openStoryCount(scopeKey: string): number {

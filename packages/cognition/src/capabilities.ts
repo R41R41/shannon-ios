@@ -132,10 +132,21 @@ export const SHANNON_FCA_TASK_CAPABILITY = Object.freeze({
   text: 'タスクの協力: この実行経路では、まとまった仕事を子タスクへ任せて並行して進め、タスクの一覧・状態・結果を確認し、IDで連絡できます。渡された道具でできる仕事だけを扱い、依頼の受付と完了を区別します。',
 } as const satisfies ShannonCapability);
 
-/** Offered only when the common FCA shared-context and memory paths are connected. */
+/** Offered only when common FCA shared context is connected. Admitted owner tasks also use registry-gated read/write tools and revision-pinned skill instructions; importing an operator procedure never adds authority or successful experience. */
 export const SHANNON_FCA_SHARED_CAPABILITY = Object.freeze({
   id: 'fca_shared_context', audience: 'owner',
   text: 'タスクの感情と記憶: 各タスクは共通の気持ちを参照し、観測した出来事の意味をそこへ反映します。目的に合う記憶を想起し、記憶の検索・詳細取得もできます。行動の予測は必要な時だけ立て、観測できた結果と比べます。操作の成功と目的の達成を分け、経験は既存の記憶へ残します。',
+} as const satisfies ShannonCapability);
+
+/** Common runner only; model-suggested predicates never become trusted goal evidence. */
+export const SHANNON_FCA_PROGRESS_CAPABILITY = Object.freeze({
+  id: 'fca_progress', audience: 'owner',
+  text: '達成と復帰: 新しい観測で達成条件を確かめ、確認済みの失敗をもとに進め方を変えます。自分で考えた条件の案と、元の目的に結び付いた検証を区別します。タスク間の新しい連絡や状態変化を監視し、古い判断で操作を始めません。',
+} as const satisfies ShannonCapability);
+/** Available independently of game connection, only with a fresh registered operator. */
+export const SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY = Object.freeze({
+  id: 'minecraft_lifecycle', audience: 'owner',
+  text: 'マイクラへの参加: 登録された専用サーバーを起動し、自分の体で参加・退出できます。自分の時間にも同じ停止設定と実行権を守ります。起動済みなら重ねて起動せず、他の人がいるか不明な時はサーバーを停止しません。',
 } as const satisfies ShannonCapability);
 
 /** Capabilities the API may add to the description while it has them. */
@@ -158,7 +169,7 @@ export function withStage5Capabilities(prompt: string, available: ShannonStage5C
   return added ? `${prompt.slice(0, at + anchor.length)}${added}${prompt.slice(at + anchor.length)}` : prompt;
 }
 
-export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_SHARED_CAPABILITY, SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_READ_TOOLS_CAPABILITY, SHANNON_SKILLS_CAPABILITY, ...SHANNON_STAGE5_CAPABILITIES] as const);
+export const SHANNON_CONDITIONAL_CAPABILITIES = Object.freeze([SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_SHARED_CAPABILITY, SHANNON_FCA_PROGRESS_CAPABILITY, SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY, SHANNON_MINECRAFT_BODY_CAPABILITY, SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_READ_TOOLS_CAPABILITY, SHANNON_SKILLS_CAPABILITY, ...SHANNON_STAGE5_CAPABILITIES] as const);
 
 /** The owner's description with the skills' line, after her study's line; any other prompt unchanged. */
 export function withSkillsCapability(prompt: string): string {

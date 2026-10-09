@@ -1,3 +1,5 @@
+import { MINECRAFT_LIFECYCLE_PATH } from '../contracts/minecraftLifecycleContract.js';
+import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import { MINECRAFT_CONTROL_PATH } from '../contracts/minecraftControlContract.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import type { MinecraftBodyDependencies } from '../surfaces/minecraft/minecraftBody.js';
@@ -40,10 +42,12 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
   const stopMaintenance = requests?.startMaintenance() ?? (() => {});
   const isGameBody = (principal: ShannonDevicePrincipal | null) => Boolean(configuration && principal?.deviceId === configuration.deviceId);
   let route: MinecraftBodyRoute | null = null;
+  let lifecycle: MinecraftLifecycle | null = null;
   let common: { control: MinecraftControl; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']> } | null = null;
   if (commonMode && (!configuration || environment.SHANNON_FCA_RUNTIME !== 'on')) throw new Error('FCA_MINECRAFT_CONFIG_REQUIRED');
   return {
     configuration,
+    connectLifecycle(value: MinecraftLifecycle): void { lifecycle = value; },
     connectControl(value: NonNullable<typeof common>): void { common = value; },
     requests,
     /** Her Minecraft body's token: never given a desktop-body identity (`desktopBodyIdentity.ts`). */
@@ -71,6 +75,21 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
         return true;
       }
       if (!path.startsWith(MINECRAFT_BODY_ROUTE_PREFIX)) return false;
+      if (path === MINECRAFT_LIFECYCLE_PATH || path === `${MINECRAFT_LIFECYCLE_PATH}/permit`) {
+        if (request.method !== 'POST') sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+        else if (!principal || !isGameBody(principal)) sendJson(response, 403, { error: 'MINECRAFT_LIFECYCLE_DEVICE_DENIED' });
+        else if (!lifecycle) sendJson(response, 503, { error: 'MINECRAFT_LIFECYCLE_NOT_ENABLED' });
+        else {
+          const input = await readJson(request, 64 * 1024);
+          try {
+            if (path.endsWith('/permit')) {
+              if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).join() !== 'id' || typeof (input as {id?:unknown}).id !== 'string') throw new Error('INVALID');
+              sendJson(response, 200, { allowed: lifecycle.authorize(principal, (input as {id:string}).id) });
+            } else sendJson(response, 200, lifecycle.poll(principal, input));
+          } catch { sendJson(response, 400, { error: 'MINECRAFT_LIFECYCLE_INPUT_INVALID' }); }
+        }
+        return true;
+      }
       if (path === MINECRAFT_CONTROL_PATH) {
         if (request.method !== 'POST') sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
         else if (!principal || !isGameBody(principal)) sendJson(response, 403, { error: 'FCA_BODY_DEVICE_DENIED' });

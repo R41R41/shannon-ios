@@ -51,8 +51,9 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
   } };
 }
 export function combineFcaTools(...ports: Array<FcaExternalTools | undefined>): FcaExternalTools {
-  return { definitions: ports.flatMap(port => port?.definitions ?? []), execute(call) {
+  return { definitions: ports.flatMap(port => port?.definitions ?? []), skillIndex: () => ports.map(port => port?.skillIndex?.() ?? '').filter(Boolean).join('\n\n'),
+    safeToAcknowledgeStop: () => ports.every(port => port?.safeToAcknowledgeStop?.() !== false), execute(call) {
     const port = ports.find(port => port?.definitions.some(tool => tool.name === call.name));
     if (!port) throw new Error('FCA_TOOL_NOT_OFFERED'); return port.execute(call);
-  } };
+  }, checkpoint: () => Object.assign({}, ...ports.map(port => port?.checkpoint?.() ?? {})) };
 }

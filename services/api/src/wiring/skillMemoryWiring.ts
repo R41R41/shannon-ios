@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { isOwnerOnly, ownerSpoke, visibleMemoryText, type CompanionStateSnapshot, type CompanionStateStore } from '@shannon/cognition';
 import { skillRoutingSwitches } from '@shannon/learning';
 import type { SkillTurnPorts } from '../contracts/skillMemoryContract.js';
-import { SkillMemory, type SkillBodyCheck } from '../mind/memory/memoryPorts.js';
+import { SkillMemory, checkedSkillText, skillIndex, versionRevisionId, type SkillBodyCheck } from '../mind/memory/memoryPorts.js';
 import type { ChoiceLedger } from '../mind/learning/choiceLedger.js';
 import { conversationSecrets, othersSecrets } from '../mind/inhibition/conversationSecrets.js';
 import { MemoryWithholding } from '../mind/memory/memoryVisibility.js';
@@ -38,16 +38,44 @@ export function configuredSkillMemory(
 }
 
 /** What a turn is handed: the index, one skill by name, and the notes of its use; a skill built from something forgotten is left out at once. */
-export function skillTurnPorts(memory: SkillMemory, snapshot: (scopeKey: string) => CompanionStateSnapshot): SkillTurnPorts {
+export function skillTurnPorts(memory: SkillMemory, snapshot: (scopeKey: string) => CompanionStateSnapshot,
+  sources?: ConversationStore & Pick<CompanionStateStore, 'snapshot'> & Partial<ShannonKnowledgeStore>): SkillTurnPorts {
   const visible = (scopeKey: string) => {
     const state = snapshot(scopeKey);
     return (experienceId: string) => isExperienceSourceVisible(state, experienceId);
   };
+  const usable = (scopeKey: string) => {
+    const isVisible = visible(scopeKey);
+    const skills = memory.usable(scopeKey, isVisible).filter(skill => skill.exportHold !== 'withdrawn'
+      && isVisible(skill.skillId) && isVisible(versionRevisionId(skill.skillId, skill.version)));
+    if (!sources) return skills;
+    const pass = skillSourcesPass(sources, memory, scopeKey), check = skillBodyCheck(snapshot(scopeKey), sources, scopeKey);
+    return skills.filter(skill => pass(skill.sources) && typeof checkedSkillText(skill.body, check) !== 'string');
+  };
+  const sourceId = (skill: { skillId: string; version: number }) => `shannon-skill://${encodeURIComponent(skill.skillId)}/revision/${encodeURIComponent(versionRevisionId(skill.skillId, skill.version))}`;
   return {
-    index: scopeKey => memory.index(scopeKey, visible(scopeKey)),
+    index: scopeKey => skillIndex(usable(scopeKey).map(skill => ({ name: skill.name, description: skill.description, status: skill.status === 'active' ? 'active' : 'trial', createdAt: skill.createdAt,
+      ...(skill.provenance?.origin === 'operator_authored' ? { origin: 'operator_authored' as const } : {}) }))),
+    ...(sources ? { indexSources: (scopeKey: string) => usable(scopeKey).map(sourceId) } : {}),
     open: (scopeKey, name) => {
-      const skill = memory.open(scopeKey, name, visible(scopeKey));
-      return skill ? { skillId: skill.skillId, name: skill.name, version: skill.version, status: skill.status === 'active' ? 'active' : 'draft', body: skill.body } : null;
+      const skill = usable(scopeKey).find(skill => skill.name === name);
+      return skill ? { skillId: skill.skillId, name: skill.name, version: skill.version, revisionId: versionRevisionId(skill.skillId, skill.version), provenance: skill.provenance, status: skill.status === 'active' ? 'active' : 'draft', body: skill.body } : null;
+    },
+    readSource: (scopeKey, id, revisionId) => {
+      if (!sources || !memory.ready()) return null;
+      const skill = memory.store.get(scopeKey, id);
+      const isVisible = visible(scopeKey);
+      if (!skill || skill.status === 'retired' || skill.exportHold === 'withdrawn' || !isVisible(skill.skillId)
+        || !isVisible(versionRevisionId(skill.skillId, skill.version)) || !skillSourcesPass(sources, memory, scopeKey)(skill.sources)) return null;
+      const check = skillBodyCheck(snapshot(scopeKey), sources, scopeKey);
+      if (typeof checkedSkillText(skill.body, check) === 'string') return null;
+      const revision = revisionId ? memory.store.revisions(scopeKey, id).find(item => item.revisionId === revisionId && item.kind === 'version') : null;
+      if (revisionId && !revision) return null;
+      if (revisionId && !isVisible(revisionId)) return null;
+      const body = revision?.body ?? skill.body;
+      // Current ancestry remains required after editing; the exact older body is independently checked under today's controls.
+      if (typeof checkedSkillText(body, check) === 'string') return null;
+      return { body, provenance: revision?.provenance ?? skill.provenance };
     },
     used: (scopeKey, name, use, at) => memory.used(scopeKey, name, use, at),
     nextTurn: (scopeKey, talk, serve, at) => memory.nextTurn(scopeKey, talk, serve, at),
@@ -168,7 +196,10 @@ export function skillSourcesPass(store: ConversationStore & Pick<CompanionStateS
     if (kind === 'experience') return rule.passes([id]);
     if (kind === 'knowledge') { const note = notes.get(id); return note !== undefined && !withholding.withholdsKnowledge(note) && rule.passes(note.sourceExperienceIds); }
     if (kind === 'pattern') { const page = memory.store.pattern(scopeKey, id); return page !== null && depth < 3 && check(page.sources, depth + 1); }
-    return true;
+    if (kind === 'import') return memory.store.importSourceVisible(scopeKey, id)
+      && isExperienceSourceVisible(rule.snapshot, source) && isExperienceSourceVisible(rule.snapshot, id);
+    if (kind === 'choice' || kind === 'sequence') return true;
+    return false;
   });
   return sources => check(sources, 0);
 }

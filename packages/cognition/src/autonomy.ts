@@ -28,6 +28,8 @@ export const SHANNON_AUTONOMY_DOMAINS = Object.freeze([
   { id: 'notion_read', rule: 'free', label: '共有されたNotionを読む' },
   { id: 'room_look', rule: 'free', label: '体のカメラで部屋を見る' },
   { id: 'thinking', rule: 'free', label: '考える・書く' },
+  // Owner request 2026-10-09: configured personal server only; native adapter holds start/player/stop guards.
+  { id: 'minecraft_lifecycle', rule: 'free', label: 'マイクラへの参加と専用サーバー管理' },
   { id: 'owner_message', rule: 'free', label: '持ち主に見せる' },
   { id: 'owner_call', rule: 'free', label: '持ち主に電話をかける' },
   // Owner decision 2026-10-06 (Syzygy ADR-0007, 「自分の時間に所有者の文書を読む」; a change of ADR-0002's scope he approved): in her

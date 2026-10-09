@@ -31,7 +31,7 @@ import { SQLiteCompanionRepository } from './sqliteCompanionRepository.js';
 import { ensureSummaryLineageSchema, SQLiteConversationRepository } from './sqliteConversationRepository.js';
 import { SQLiteStoreContext, secureDatabaseFiles } from './sqliteStoreContext.js';
 import { SQLiteStoreMigrator } from './sqliteMigrations.js';
-import { SQLiteMemorySearchRepository, type MemorySearchHit } from '../../mind/memory/store/sqliteMemorySearch.js';
+import { SQLiteMemorySearchRepository, type MemorySearchHit, type MemorySearchOptions } from '../../mind/memory/store/sqliteMemorySearch.js';
 import { SQLiteShannonKnowledgeStore, type ShannonKnowledgeStore } from '../../mind/memory/store/sqliteShannonKnowledge.js';
 import type { KnowledgeDraft } from '@shannon/cognition';
 import { SQLiteMemoryEmbeddingIndex, type MemoryEmbeddingIndex, type PendingEmbeddingSource } from '../../mind/memory/store/sqliteMemoryEmbeddings.js';
@@ -303,7 +303,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   appendNoteOnce(scopeKey: string, threadId: string, messageId: string, content: string, observedAt: string, noteKind: string, ownerAlone?: boolean) { return this.conversations.appendNoteOnce(scopeKey,threadId,messageId,content,observedAt,noteKind,ownerAlone); }
   taskExperiences(): SQLiteTaskExperiences { return new SQLiteTaskExperiences(this.context.database); }
   experienceCandidates(scopeKey: string): readonly ShannonExperience[] { return this.conversations.experienceCandidates(scopeKey); }
-  searchMemory(scopeKey: string, text: string, limit?: number): readonly MemorySearchHit[] { return this.memorySearch.searchMemory(scopeKey, text, limit); }
+  searchMemory(scopeKey: string, text: string, limit?: number, options?: MemorySearchOptions): readonly MemorySearchHit[] { return this.memorySearch.searchMemory(scopeKey, text, limit, options); }
   embeddingScopes() { return this.embeddings.embeddingScopes(); }
   pendingEmbeddingSources(scopeKey: string, model: string, stateVersion: number, limit: number) { return this.embeddings.pendingEmbeddingSources(scopeKey, model, stateVersion, limit); }
   storeEmbedding(source: PendingEmbeddingSource, model: string, vector: Float32Array, stateVersion: number, updatedAt: string) { this.embeddings.storeEmbedding(source, model, vector, stateVersion, updatedAt); }

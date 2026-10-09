@@ -8,26 +8,14 @@ import {
 import { SQLiteSkillCopyWrites } from './store/sqliteSkillCopyWrites.js';
 import { SQLiteSkillSleepUsage } from './store/sqliteSkillSleepUsage.js';
 import { SKILLS_TABLE, SQLiteSkills, type SkillActor, type SkillUse, type StoredPattern, type StoredSkill } from './store/sqliteSkills.js';
-import { checkedPage, checkedSkillBody, checkedSkillText, closedSources, digest, iso } from './skillMemoryParts.js';
+import { checkedPage, checkedSkillBody, checkedSkillText, closedSources, digest, iso, skillSourcesVisible } from './skillMemoryParts.js';
 import { parentBaseline, versionRevisionId, type LineageNode } from './skillLineage.js';
 
 /**
- * Her skill memory (Syzygy ADR-0008 stage 2, step 6; `docs/skill-and-routing-contract.md`, 「スキル記憶」). Core: memory.
- *
- * Three layers, after WikiSkill (coordinator, 2026-10-07): the raw experience (her turns, settled choices, tool and step outcomes)
- * lives in its own tables and is never edited here; the **pattern wiki** (failure modes and strategies, each with what to do) and
- * the **skills** are interpretations of it, and only they evolve. Nothing is deleted: a deprecated page and a retired skill stay.
- *
- * - **Read in a turn**: the index (`index`, for the profile layer) and one skill's SKILL.md (`open`, for `skill.read`). Both leave
- *   out a skill built from something the owner had her forget (`visible`), at once. Patterns are never given to a turn.
- * - **Use**: `used` notes a use of a skill's current version at the end of its turn with G; the owner's next turn in the Talk
- *   settles it (`nextTurn`, the tier-outcome rule), or 30 minutes without one settle it from G alone. Writes are deferred, under the
- *   write lock, measured; a failure is logged and swallowed, as the ledgers' are.
- * - **Night** (`mind/sleep/skillConsolidation.ts`): the maintainer edits pages (`createPattern`, `editPattern`, `mergePatterns`,
- *   `deprecatePattern`); the proposer's one change a run is `create` or `revise`, which starts a **trial** and an audit entry;
- *   `lifecycle` accepts or reverts trials and retires what keeps failing; `adoptOwnerEdit` takes the owner's edit of a copy as a
- *   new version (step 7). Every body and page passes the check it is handed before it is stored (`SkillBodyCheck`: what the owner
- *   said is 内緒 never enters a skill, ADR-0002).
+ * Skill memory (ADR-0008 stage 2, `docs/skill-and-routing-contract.md`). Raw experience stays in its original tables;
+ * pattern interpretations and versioned skills evolve here, with immutable operator-import ancestry kept separately.
+ * Index/open apply forgetting and disclosure, uses settle from real turns, and the sleep maintains patterns and trials.
+ * Owner edits and pins retain their existing protections. Every stored body passes the current SkillBodyCheck.
  */
 export const SKILL_USE_NEXT_TURN_MINUTES = 30;
 /** Uses kept on a skill: the window of the lifecycle plus room for those still waiting. */
@@ -85,17 +73,23 @@ export class SkillMemory {
   /** One write under the write lock, now (her skills' copies, `skillCopies.ts`); nothing while the tables do not exist. */
   write(at: string, operation: () => void): void { this.now(at, operation); }
 
+  /** Explicit owner import: report success only after SQLite confirms the commit. */
+  atomic<T>(at: string, operation: () => T): T {
+    if (!this.options.database.isOpen || !this.ready()) throw new Error('SKILLS_UNAVAILABLE');
+    return underWriteLock(this.options.database, this.meter, ownerDayKey(at), operation, 'shannon_skills');
+  }
+
   /** Her skills that may be used now: not retired, and nothing they were built from forgotten. */
   usable(scopeKey: string, visible: (experienceId: string) => boolean = () => true): StoredSkill[] {
     if (!this.ready()) return [];
     try {
-      return this.store.all(scopeKey).filter(skill => skill.sources.every(source => !source.startsWith('experience:') || visible(source.slice('experience:'.length))));
+      return this.store.all(scopeKey).filter(skill => skill.statusReason !== 'source_forgotten' && skill.exportHold !== 'withdrawn' && skillSourcesVisible(skill.sources, visible, id => this.store.importSourceVisible(scopeKey, id)));
     } catch { return []; }
   }
 
   /** The index for the profile layer (`skillIndex`); empty while she has none. */
   index(scopeKey: string, visible?: (experienceId: string) => boolean): string {
-    return skillIndex(this.usable(scopeKey, visible).map(skill => ({ name: skill.name, description: skill.description, status: skill.status === 'active' ? 'active' : 'trial', createdAt: skill.createdAt })));
+    return skillIndex(this.usable(scopeKey, visible).map(skill => ({ name: skill.name, description: skill.description, status: skill.status === 'active' ? 'active' : 'trial', createdAt: skill.createdAt, ...(skill.provenance ? { origin: 'operator_authored' as const } : {}) })));
   }
 
   /** One usable skill by its name. */
@@ -278,7 +272,7 @@ export class SkillMemory {
       // ADR-0008 §14: an older version of hers may be the base (never the owner's); the trial is judged against that parent.
       const node = this.store.node(versionRevisionId(skillId, current.version));
       const base = patch.baseRevisionId && patch.baseRevisionId !== node ? this.store.revisions(scopeKey, skillId)
-        .find(item => item.revisionId === patch.baseRevisionId && item.kind === 'version' && item.variantOf === null && item.madeBy === 'sleep') : undefined;
+        .find(item => item.revisionId === patch.baseRevisionId && item.kind === 'version' && item.variantOf === null && item.madeBy !== 'owner_edit') : undefined;
       if (patch.baseRevisionId && patch.baseRevisionId !== node && !base) { outcome = { rejected: 'not_found' }; return; }
       let draft: SkillDocument;
       if ('replacements' in patch) {

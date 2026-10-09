@@ -24,6 +24,7 @@ export interface ReadToolPorts {
   voyagerTasks?: (query: string) => Promise<ReadToolText>;
   /** The owner's upcoming items as the conversation's projection gives them to him alone. */
   upcoming?: (scopeKey: string, range: 'day' | 'week') => ReadToolText;
+  upcomingSearch?: (scopeKey: string, input: Record<string, unknown>) => ReadToolText;
   /** The place skill for a query in an area; `spoken` for a voice turn. */
   places?: (scopeKey: string, query: string, spoken: boolean) => Promise<string>;
 }
@@ -45,7 +46,8 @@ function prepared(summary: string, read: () => Promise<ReadToolText> | ReadToolT
         const readResult = await read(), text = typeof readResult === 'string' ? readResult : readResult.text;
         return { result: toolOk(text.trim() ? text : '（何も見つからなかった）'), record: { summary, outcome: 'done' },
           ...(typeof readResult === 'string' ? {} : { documents: { sourceIds: readResult.sourceIds } }) };
-      } catch {
+      } catch (error) {
+        if (error instanceof Error && /^(?:SEARCH|SCHEDULE)_/u.test(error.message)) return { result: toolFailure('invalid_input', '検索条件の日時・範囲・語数を確認して呼び直す。', { retryable: false }), record: { summary, outcome: 'failed' } };
         return { result: UNAVAILABLE, record: { summary: `${summary}（読めませんでした）`, outcome: 'failed', reasonCode: 'unavailable' } };
       }
     },
@@ -94,6 +96,10 @@ export function readToolExecutors(ports: ReadToolPorts | null): Readonly<Record<
     'schedule.upcoming': (input, context) => {
       if (!ports.upcoming) return missing;
       const range = stringInput(input, 'range') === 'week' ? 'week' as const : 'day' as const;
+      if (Object.keys(input).some(key => key !== 'range')) {
+        if (!ports.upcomingSearch) return { summary: '予定を検索します。', run: async () => ({ result: toolFailure('unavailable', 'この接続は詳しい予定検索に対応していない。', { retryable: false }), record: { summary: '予定検索は未対応でした。', outcome: 'failed' } }) };
+        return prepared('ライ氏の予定を条件で検索しました。', () => ports.upcomingSearch!(context.scopeKey, input));
+      }
       return prepared('会話の中でライ氏のこれからの予定を見ました。', () => ports.upcoming!(context.scopeKey, range));
     },
     'places.search': (input, context) => {

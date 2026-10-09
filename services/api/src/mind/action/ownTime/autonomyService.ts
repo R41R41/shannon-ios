@@ -128,9 +128,8 @@ export class ShannonAutonomyService {
 
   // MARK: The gate
 
-  /** Decides one autonomous step and appends the decision to the activity record. Throws if it cannot be recorded. */
-  authorize(scopeKey: string, request: AutonomousActionRequest): RecordedDecision {
-    const at = this.now();
+  /** Fresh read-only recheck for an already recorded, pending effect; grants no new execution. */
+  inspectAuthorization(scopeKey: string, request: AutonomousActionRequest, at = this.now()): AutonomyDecision {
     const dayKey = autonomyDayKey(at, this.config);
     let paused = true;
     // A stop switch that cannot be read counts as on.
@@ -161,6 +160,13 @@ export class ShannonAutonomyService {
       // A session that read the owner's documents or a shared Notion page reaches nobody else (ADR-0007, owner decisions 2026-10-06).
       ...(calls ? { calls } : {}), ...(this.store.informed.openSessionInformed(scopeKey) ? { ownerInformed: true } : {}),
     });
+    return decision;
+  }
+
+  /** Decides one autonomous step and appends its original authorization to the activity record. */
+  authorize(scopeKey: string, request: AutonomousActionRequest): RecordedDecision {
+    const at = this.now(), dayKey = autonomyDayKey(at, this.config);
+    const decision = this.inspectAuthorization(scopeKey, request, at);
     const declared = request && typeof request === 'object' ? request : {} as Partial<AutonomousActionRequest>;
     const entry = this.store.activity.append(scopeKey, dayKey, at, {
       kind: 'decision',

@@ -48,7 +48,8 @@ export function foregroundRunner(actions:ActionThreads){
     try{
       // The admission deadline must not expire an accepted long-running turn.
       const value=await inActionExecution(active.execution,work);
-      await active.finish('completed','responded').catch(()=>{});return value;
+      const unknown = active.execution.modelOutcome === 'unknown' || active.execution.stepOutcome === 'unknown';
+      await active.finish(unknown ? 'unknown' : 'completed', unknown ? 'tool_outcome_unknown' : 'responded').catch(()=>{});return value;
     }catch(error){await active.finish('unknown','response_interrupted').catch(()=>{});throw error;}
   };
   return async<T>(scopeKey:string,work:()=>Promise<T>):Promise<T>=>{

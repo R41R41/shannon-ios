@@ -2,7 +2,7 @@
 import { disclosureFor, type MemoryAudience, type MemoryDisclosure, type RecallCandidate, type ShannonMessageEmotion } from '@shannon/cognition';
 import type { ShannonConversationItem, ShannonGeneratedArtifact, ShannonTaskDecision } from '../../infra/models/chatModel.js';
 import type { ReminderReference, ReminderView, TurnCaptureRecord, TurnCaptureView } from './store/turnCaptures.js';
-import type { MemorySearchHit } from './store/sqliteMemorySearch.js';
+import type { MemorySearchHit, MemorySearchOptions } from './store/sqliteMemorySearch.js';
 import type { FeedbackState } from '../../contracts/feedbackContract.js';
 
 /** Threads of the platform bridge (`platformBridgeThreadId`): `platform:<platform>:<32 hex>`. Never the default Talk. */
@@ -148,7 +148,7 @@ export interface ConversationStore {
   appendNoteOnce?(scopeKey: string, threadId: string, messageId: string, content: string, observedAt: string, noteKind: string, ownerAlone?: boolean): StoredConversationMessage;
   experienceCandidates(scopeKey: string, threadId?: string): readonly ShannonExperience[];
   /** Deterministic full-text recall over all experiences and thread summaries. */
-  searchMemory?(scopeKey: string, text: string, limit?: number): readonly MemorySearchHit[];
+  searchMemory?(scopeKey: string, text: string, limit?: number, options?: MemorySearchOptions): readonly MemorySearchHit[];
   appendTurn(
     scopeKey: string,
     threadId: string,

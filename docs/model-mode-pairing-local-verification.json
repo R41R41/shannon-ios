@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-09T11:43:20.467411+00:00",
+  "scope": "Isolated local candidate; no production, physical device, signed archive or distribution",
+  "sourceHashes": {
+    "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonModelModeSettingsSection.swift": "7e07c85fce0a2c26dd9e839604c96a104a1268a02b5e0567d41ff8ed974920a3",
+    "apps/ios/Tests/ShannonAppCoreTests/ShannonModelModeTests.swift": "ca684916e54ba7dd05e663d177492d727695bf13ad143425b82e7b01f61e2025",
+    "apps/ios/Tests/ShannonAppCoreTests/ShannonModelModeAPIClientTests.swift": "10d0ff6f0fbd5181aad3833065e2d3f4edbf9e219cd017eab3fd029c2da458fa"
+  },
+  "tests": {
+    "targetedSwift": {
+      "tests": 49,
+      "suites": 3,
+      "result": "passed",
+      "log": "/tmp/shannon-sonnet-targeted-swift.log",
+      "command": "swift test --skip-build --filter 'ShannonVoiceResponseDeliveryTests|ShannonModelMode' --no-parallel"
+    },
+    "fullSwiftSerial": {
+      "xctest": 777,
+      "swiftTesting": 209,
+      "swiftTestingSuites": 29,
+      "result": "passed",
+      "log": "/tmp/shannon-sonnet-full-swift-serial.log",
+      "command": "swift test --skip-build --no-parallel"
+    },
+    "macApplication": {
+      "xctest": 28,
+      "swiftTesting": 5,
+      "result": "passed",
+      "log": "/tmp/shannon-sonnet-mac-build-test.log",
+      "command": "scripts/xcode.sh mac-debug"
+    },
+    "macRestoredInspector": {
+      "cases": 7,
+      "secondsEach": 12,
+      "result": "passed",
+      "log": "/tmp/shannon-sonnet-mac-launch-smoke.log",
+      "command": "scripts/smoke-macos-inspector-launch.sh"
+    }
+  },
+  "builds": {
+    "ios": {
+      "workspace": "Shannon.xcworkspace",
+      "scheme": "ShannonApp",
+      "configuration": "Debug",
+      "destination": "generic/platform=iOS",
+      "signed": false,
+      "sourceVersion": "0.1.0",
+      "sourceBuild": "55",
+      "result": "passed",
+      "log": "/tmp/shannon-sonnet-ios-build.log",
+      "command": "scripts/xcode.sh ios-debug"
+    },
+    "mac": {
+      "workspace": "Shannon.xcworkspace",
+      "scheme": "ShannonDesk",
+      "configuration": "Debug",
+      "destination": "platform=macOS",
+      "signed": false,
+      "sourceVersion": "0.1.0",
+      "sourceBuild": "14",
+      "result": "passed",
+      "log": "/tmp/shannon-sonnet-mac-build-test.log",
+      "command": "scripts/xcode.sh mac-debug"
+    }
+  },
+  "nativeRuntime": [
+    {
+      "platform": "mac",
+      "appearance": "dark",
+      "transport": "synthetic design preview",
+      "observed": "Haiku initially selected; clicked Sonnet; selected AX trait and visible checkmark switched to Sonnet; reload preserved Sonnet"
+    },
+    {
+      "platform": "mac",
+      "appearance": "light",
+      "transport": "synthetic saveerror design preview",
+      "observed": "Clicked Sonnet; uncertain save retained Haiku and disabled both choices; reload stayed enabled; clicked reload restored confirmed Haiku and both choices enabled"
+    }
+  ],
+  "limitations": [
+    "No candidate iOS Simulator runtime check",
+    "No live paired API round trip or physical-device acceptance",
+    "No signed archive or TestFlight distribution",
+    "Build 199 archive provenance unverified",
+    "Large text, increased contrast, Reduce Motion and spoken VoiceOver not rerun",
+    "Earlier default-parallel full run timed out in unchanged voice watchdog; targeted and full serial runs passed without assertion or timeout changes"
+  ],
+  "resources": {
+    "allAppClaimsWereEmpty": true,
+    "xcodeGUIObserved": "Idle Shannon iOS Archives, 0.1.0 (54), no distribution sheet",
+    "exclusiveSigningOrDeviceClaimRequired": false,
+    "previewProcessesStopped": true
+  }
+}

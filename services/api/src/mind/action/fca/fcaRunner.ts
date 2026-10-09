@@ -10,6 +10,7 @@ import { fcaRecallContext } from './fcaRecallContext.js';
 import type { FcaBodyLifecycle, FcaExternalTools, FcaModel } from './fcaPorts.js';
 import { openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
+import type { FcaObservationLifecycle } from './fcaObservation.js';
 import type { FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
 
 export interface FcaStepPorts {
@@ -37,13 +38,14 @@ export interface FcaStepPorts {
   /** Actual remote-body acknowledgement, independently of local promises having unwound. */
   safeToAcknowledgeStop?(): boolean;
   body?: FcaBodyLifecycle;
+  observations?: readonly FcaObservationLifecycle[];
 }
 /** One bounded model decision; waiting and completed segments release their inference slot in wiring. */
 export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
   return withObserverTask({ taskId: step.taskId, parentTaskId: step.snapshot.task.parentId, stepId: step.id, actionId: step.lease.id }, () =>
     observeAsync('fca', { phase: 'step', kind: step.snapshot.task.kind, revision: step.revision }, async () => {
-      try { ports.body?.start(signal); return await executeFcaStep(step, ports, signal); }
-      finally { try { await ports.body?.close(); } finally { await ports.recall?.finishSegment(step.scopeKey, step.taskId); } }
+      try { ports.body?.start(signal); for (const observation of ports.observations ?? []) observation.start(signal); return await executeFcaStep(step, ports, signal); }
+      finally { try { await closeFcaMonitors(ports); } finally { await ports.recall?.finishSegment(step.scopeKey, step.taskId); } }
     }, value => ({ phase: value.task.phase, revision: value.revision })));
 }
 async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
@@ -96,17 +98,25 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const sharedContext = ports.evidence ? observeSync('emotion', { phase: 'shared_context' }, () => ports.evidence!.prepare(step),
     value => ({ outcomeCount: value.recentOutcomes.length })) : undefined;
   if (ports.body) await ports.body.guard(ports.body.revision());
+  for (const observation of ports.observations ?? []) await observation.guard(observation.revision());
+  const observationRevisions = (ports.observations ?? []).map(observation => observation.revision());
+  const observationFresh = async () => (await Promise.all((ports.observations ?? []).map((observation, index) => observation.guard(observationRevisions[index]!)))).every(Boolean);
   const bodyRevision = ports.body?.revision() ?? 0;
-  observerHandoff('context', 'native', provenance);
-  const output = await ports.model.decide({ ...input, ...(ports.body ? { body: ports.body.context() } : {}), ...(recall ? { recall } : {}), ...(sharedContext ? { sharedContext } : {}), ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) }, signal);
+  const skillIndex = ports.tools?.skillIndex?.();
   await checked();
-  let bodyStale = ports.body ? !await ports.body.guard(bodyRevision) : false;
+  observerHandoff('context', 'native', provenance);
+  const output = await ports.model.decide({ ...input, ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}), ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}), ...(skillIndex ? { skillIndex } : {}), ...(ports.body ? { body: ports.body.context() } : {}), ...(recall ? { recall } : {}), ...(sharedContext ? { sharedContext } : {}), ...(selection ? { catalog: catalog.map(tool => ({ name: tool.name, description: tool.description })) } : {}) }, signal);
+  await checked();
+  let bodyStale = (ports.body ? !await ports.body.guard(bodyRevision) : false) || !await observationFresh();
   if (ports.evidence && !observeSync('prediction', { phase: 'before_actions', expectationCount: output.expectations?.length ?? 0, appraisalCount: output.appraisals?.length ?? 0 },
     () => ports.evidence!.beforeActions(step, bodyStale ? { ...output, expectations: [], appraisals: [] } : output), value => ({ accepted: value }))) throw new Error('FCA_EVIDENCE_FENCED');
   const history = [...output.history];
   let consecutiveToolFailures = Number(prior.consecutiveToolFailures ?? 0);
   if (!Number.isSafeInteger(consecutiveToolFailures) || consecutiveToolFailures < 0) consecutiveToolFailures = 0;
   const priorToolFailures = consecutiveToolFailures;
+  let completionVerificationFailures = Number(prior.completionVerificationFailures ?? 0);
+  if (!Number.isSafeInteger(completionVerificationFailures) || completionVerificationFailures < 0) completionVerificationFailures = 0;
+  let completionRejected = false;
   const decision = output.decision;
   let disposition: 'continue' | 'wait' | 'complete' = decision.kind === 'tools' ? 'continue' : decision.kind;
   if (decision.kind === 'tools') {
@@ -114,7 +124,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     const results: Array<{ id: string; text: string; ok: boolean }> = [...output.auxiliaryResults ?? []];
     for (const call of decision.calls) {
       await checked();
-      if (ports.body && !await ports.body.guard(bodyRevision)) bodyStale = true;
+      if ((ports.body && !await ports.body.guard(bodyRevision)) || !await observationFresh()) bodyStale = true;
       const operationId = `${step.id}:${call.id}`;
       const tool = call.name === TOOL_OPEN_NAME ? 'tool_open' : observedToolName(call.name, catalog);
       observerHandoff('llm', 'gate', { ...provenance, operationId, tool });
@@ -127,10 +137,11 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
         if (ports.tools?.definitions.some(definition => definition.name === call.name)) {
           // Never turn an unknown outside outcome into a retryable tool result.
           ports.body?.noteCall?.(call, operationId);
-          const operationSignal = ports.body?.toolSignal(call.name, signal) ?? signal;
+          let operationSignal = ports.body?.toolSignal(call.name, signal) ?? signal;
+          for (const observation of ports.observations ?? []) operationSignal = observation.toolSignal(call.name, operationSignal);
           try { return await ports.tools.execute({ scopeKey: step.scopeKey, taskId: step.taskId, operationId, name: call.name, input: call.input, signal: operationSignal }); }
           catch (error) {
-            if (operationSignal !== signal && operationSignal.aborted && !signal.aborted && ports.body && !await ports.body.guard(bodyRevision)) {
+            if (operationSignal !== signal && operationSignal.aborted && !signal.aborted && ((ports.body && !await ports.body.guard(bodyRevision)) || !await observationFresh())) {
               bodyStale = true; return staleResult();
             }
             throw error;
@@ -143,14 +154,18 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       value => ({ ...provenance, operationId, ok: value.ok, failure: value.failure ?? null })).catch(error => { ports.evidence?.unknown(step, call); throw error; });
       if (ports.evidence) observeSync('prediction', { phase: 'observed', ok: result.ok }, () => ports.evidence!.observed(step, call, result));
       ports.body?.noteResult?.(call, result);
-      if (ports.body && !await ports.body.guard(bodyRevision)) bodyStale = true;
+      ports.tools?.progress?.observed(operationId, call.name, result);
+      if ((ports.body && !await ports.body.guard(bodyRevision)) || !await observationFresh()) bodyStale = true;
       results.push({ id: call.id, text: result.text, ok: result.ok });
       if (selection) {
         if (!result.ok) selection.refresh = true;
         selection.recentResults = [...selection.recentResults, { name: call.name, ok: result.ok, summary: result.text.slice(0, 1_000) }].slice(-8);
       }
     }
-    if (!bodyStale) consecutiveToolFailures = results.slice(output.auxiliaryResults?.length ?? 0).every(result => !result.ok) ? consecutiveToolFailures + 1 : 0;
+    if (!bodyStale) {
+      const actual = decision.calls.flatMap((call, index) => ['goal.set_conditions', 'goal.verify', 'task.replan'].includes(call.name) ? [] : [results[(output.auxiliaryResults?.length ?? 0) + index]!]);
+      if (actual.length) consecutiveToolFailures = actual.every(result => !result.ok) ? consecutiveToolFailures + 1 : 0;
+    }
     history.push(ports.model.toolResults(results));
   }
   if (disposition === 'complete' && (step.snapshot.task.kind === 'root' ||
@@ -158,16 +173,27 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       const child = runtime.get(step.scopeKey, id); return child && !['completed', 'failed'].includes(child.phase);
     }))) disposition = 'wait';
   await checked();
+  if (disposition === 'complete' && !bodyStale && ports.tools?.progress) {
+    // Final native evidence must not race a new reflex using this same enclosing lease.
+    // Stop and drain the physical monitor first; keep the task inbox monitor observing.
+    await ports.body?.close();
+    if (ports.body && !await ports.body.guard(bodyRevision)) bodyStale = true;
+    if (!bodyStale) {
+      const verification = await ports.tools.progress.verifyCompletion({ scopeKey: step.scopeKey, taskId: step.taskId, operationId: `${step.id}:completion`, name: 'goal.verify', input: {}, signal }, checked);
+      if (verification.status === 'not_verified') { disposition = 'continue'; completionRejected = true; completionVerificationFailures++; }
+      else completionVerificationFailures = 0;
+    }
+  }
   // No detached recall may keep spending after the segment's completion receipt becomes visible.
   await ports.recall?.finishSegment(step.scopeKey, step.taskId);
-  if (ports.body && !await ports.body.guard(bodyRevision)) bodyStale = true;
-  await ports.body?.close();
-  if (ports.body && !await ports.body.guard(bodyRevision)) bodyStale = true;
+  if ((ports.body && !await ports.body.guard(bodyRevision)) || !await observationFresh()) bodyStale = true;
+  await closeFcaMonitors(ports);
+  if ((ports.body && !await ports.body.guard(bodyRevision)) || !await observationFresh()) bodyStale = true;
   if (bodyStale) { disposition = 'continue'; consecutiveToolFailures = priorToolFailures; }
   await checked();
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
   const saved = observeSync('store', provenance, () => runtime.commitStep(step, {
-    history, disposition, checkpoint: { ...prior, ...ports.checkpoint?.(), consecutiveToolFailures, ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: decision.summary } : {}),
+    history, disposition, checkpoint: { ...prior, ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), consecutiveToolFailures, ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}) }, ...(decision.kind !== 'tools' && !bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
   }), value => ({ ...provenance, committed: value !== null, phase: value?.task.phase ?? null }));
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
   if (saved.task.phase === 'waiting') {
@@ -177,9 +203,15 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   // These callbacks drain durable outboxes; their failure must never undo/repeat committed tools.
   try { ports.evidence?.committed(step); } catch { /* Retried by the existing maintenance tick. */ }
   if (saved.task.phase === 'completed' || saved.task.phase === 'failed') ports.recall?.cancel(step.scopeKey, step.taskId);
-  if (consecutiveToolFailures >= 5) {
+  if (consecutiveToolFailures >= 5 || completionVerificationFailures >= 5) {
     runtime.stop(step.scopeKey, step.taskId, 'repeated_tool_failure');
     return runtime.snapshot(step.scopeKey, step.taskId)!;
   }
   return saved;
+}
+
+async function closeFcaMonitors(ports: FcaStepPorts): Promise<void> {
+  const results = await Promise.allSettled([ports.body?.close(), ...(ports.observations ?? []).map(observation => observation.close())]);
+  const failure = results.find(result => result.status === 'rejected');
+  if (failure?.status === 'rejected') throw failure.reason;
 }

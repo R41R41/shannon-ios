@@ -1,8 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
-import { SQLiteActionStore } from '../../src/mind/action/threads/store/actionStore.js';
+import { SQLiteActionStore, type ActionResourceReconciliationAllowed } from '../../src/mind/action/threads/store/actionStore.js';
 import type { ActionThreads } from '../../src/contracts/actionThreadContract.js';
-export function actionHarness(now:()=>string,path=':memory:',borrowedDatabase?:DatabaseSync) {
-  const db=borrowedDatabase??new DatabaseSync(path),store=new SQLiteActionStore(db);
+export function actionHarness(now:()=>string,path=':memory:',borrowedDatabase?:DatabaseSync,resourceProof?:(db:DatabaseSync)=>ActionResourceReconciliationAllowed) {
+  const db=borrowedDatabase??new DatabaseSync(path),store=new SQLiteActionStore(db,resourceProof?.(db));
   const actions:ActionThreads={
     admitRespond:async draft=>store.admitRespond(draft,'test-runner',now()),
     enqueue:async draft=>store.enqueue(draft,now()),claim:async id=>store.claim(id,'test-runner',now()),
@@ -11,6 +11,7 @@ export function actionHarness(now:()=>string,path=':memory:',borrowedDatabase?:D
     get:async(scope,id)=>{const action=store.get(id);return action?.scopeKey===scope?action:null;},
     stop:async(scope,id,request)=>store.stop(scope,id,request,now()),resume:async(scope,id)=>store.resume(scope,id,now()),
     reconcile:async(lease,state,code)=>store.reconcile(lease,state,code,now()),checkpoint:async(lease,code,failureCode)=>store.checkpoint(lease,code,now(),failureCode),
+    reconcileResource:async(lease,resource,id)=>store.reconcileResource(lease,resource,id),
     reserve:async(lease,id,day,yen,cap,spent)=>store.reserve(lease,id,day,yen,cap,spent,now()),settle:async(lease,id,yen)=>store.settle(lease,id,yen,now()),
     acknowledge:async report=>store.acknowledge(report,now()),
   };

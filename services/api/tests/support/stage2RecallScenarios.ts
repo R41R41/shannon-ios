@@ -1,3 +1,4 @@
+import { historicalSearchRequest } from './historicalSearchRequest.js';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -67,7 +68,7 @@ export async function capturedRecallDigests(options: {
       const captured: CapturedRecall = { openai: [], jev: [] };
       const openai = (async (url: string | URL | Request, init?: RequestInit) => {
         const body = String(init?.body);
-        captured.openai.push(digest(body));
+        captured.openai.push(digest(historicalSearchRequest(body)));
         const usage = { input_tokens: 10, output_tokens: 5, total_tokens: 15 };
         if (String(url).includes('/embeddings')) {
           const inputs = (JSON.parse(body) as { input: string[] }).input;

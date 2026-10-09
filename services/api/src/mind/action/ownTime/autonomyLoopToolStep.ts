@@ -83,7 +83,7 @@ export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyL
   const results = dependencies.toolResults;
   if (!results || !step.tool) return null;
   const context = {
-    scopeKey: cycle.scopeKey, surface: 'autonomy' as const, audience: 'owner_alone' as const, memory: results.memory(cycle.id),
+    scopeKey: cycle.scopeKey, surface: 'autonomy' as const, audience: 'owner_alone' as const, memory: step.tool.startsWith('minecraft.') ? { ...results.memory(cycle.id), turnKey: `cycle:${cycle.id}:step:${cycle.stepsTaken}` } : results.memory(cycle.id),
     informedWrite: (documentIds: readonly string[]) => markEarly(dependencies, cycle, documentIds, dependencies.now?.() ?? cycle.startedAt),
     ...listing(dependencies, cycle),
   };

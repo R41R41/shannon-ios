@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "packId": "minecraft-lifecycle",
+  "revision": "draft-1",
+  "sourceAuthor": "Shannon operator / configured lifecycle implementation",
+  "sourceReference": "https://github.com/R41R41/Shannon",
+  "referenceRevision": "48b84c7bd3b661a2ba8798695c4ecbeacfa2393e",
+  "validatorRevision": "skill-import-v1",
+  "skills": [
+    {
+      "name": "minecraft-lifecycle",
+      "path": "minecraft-lifecycle/SKILL.md",
+      "sha256": "5408cd7d26fd9accbfc17ec8f995779768cbb330ff6819f9dc5461584cb5c3a6",
+      "tools": [
+        "minecraft.lifecycle_status",
+        "minecraft.start",
+        "minecraft.stop",
+        "minecraft.login",
+        "minecraft.logout"
+      ]
+    }
+  ]
+}

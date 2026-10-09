@@ -1,3 +1,5 @@
+import { MINECRAFT_LIFECYCLE_TOOLS, MINECRAFT_LIFECYCLE_SUMMARIES } from './minecraftLifecycleToolDefinitions.js';
+import { STUDY_SEARCH_INPUTS, SCHEDULE_SEARCH_INPUTS } from './searchToolInputs.js';
 import { MEMORY_TOOLS } from './memoryToolDefinitions.js';
 import { TASK_TOOLS } from './taskToolDefinitions.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
@@ -13,10 +15,7 @@ import { SELF_REWRITE_DOING, SELF_REWRITE_SUMMARIES } from './selfRewriteToolDef
  *
  * The descriptions are in her words, as she reads them. They are the only description of the tools;
  * `capabilities.ts` says in one line each that she has them.
- *
- * Results have one shape (ADR-0003, from the Minebot harness): whether it worked, the text she reads,
- * a failure kind from a closed set, whether trying again can help, and for a refusal why and what would
- * make it work, so that she does not repeat a call that cannot succeed.
+ * All results use the shared ToolResult shape below (ADR-0003).
  */
 export type ToolSurface = 'text' | 'voice' | 'autonomy';
 /** `owner_alone`: nobody but the owner can see or hear the reply (her own time counts as this). `others`: anyone else may. */
@@ -62,7 +61,7 @@ export interface ShannonToolDefinition {
    * the owner's documents in her own time is `owner_documents_read` (ADR-0007, owner decision 2026-10-06). `meta` is never a
    * registry tool: it is `tool_open` of the tool menu (Syzygy ADR-0008 stage 2, `shannonToolMenu.ts`), which runs nothing.
    */
-  domain: 'memory_read' | 'task_runtime' | 'aether_study' | 'host_folder' | 'minecraft_body' | 'aether_proposal' | 'owner_documents_read' | 'meta' | ReadToolDomain | 'skill_read' | 'vm_workspace';
+  domain: 'memory_read' | 'task_runtime' | 'aether_study' | 'host_folder' | 'minecraft_body' | 'minecraft_lifecycle' | 'aether_proposal' | 'owner_documents_read' | 'meta' | ReadToolDomain | 'skill_read' | 'vm_workspace';
   effect: 'read' | 'write';
   /** `none`: no model or paid API is called by the tool itself. `model`: it calls one (place search asks a model with web search). */
   cost: 'none' | 'model';
@@ -102,8 +101,7 @@ function conversationTool(definition: Omit<ShannonToolDefinition, 'cost' | 'audi
   return Object.freeze({ ...definition, cost: 'none' as const, audiences: OWNER_ALONE, surfaces: CONVERSATION_SURFACES });
 }
 
-/**
- * Her Aether tools (Syzygy ADR-0007 revised, `syzygy.aether-shannon-access.v1`; offered only while Aether is configured).
+/** Her Aether tools (Syzygy ADR-0007 revised, `syzygy.aether-shannon-access.v1`; offered only while Aether is configured).
  * Reading may happen with others present, but then only inside 「シャノン用フォルダ」 (owner decision 2026-10-06): the gate
  * holds that (`authorizeToolInput`, `gatedAether`), whatever the call asks. Writing is the owner's alone to hear about.
  */
@@ -156,6 +154,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
   tool({ name: 'study.search', domain: 'aether_study', effect: 'read',
     description: `${STUDY}の題名と本文から言葉を探す。見つかったところの前後を少し返す。`,
     input: schema({
+      ...STUDY_SEARCH_INPUTS,
       query: { type: 'string', description: '探す言葉', minLength: 1, maxLength: 100 },
       includeDeleted: { type: 'boolean', description: 'ゴミ箱の中も探すか' },
       limit: { type: 'integer', description: '最大の件数（1〜20）', minimum: 1, maximum: 20 },
@@ -299,7 +298,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
     input: schema({ query: { type: 'string', description: '探す言葉（タスクの題名にありそうな言葉）。書かなければ「タスク」で探す', maxLength: 160 } }) }),
   readTool({ name: 'schedule.upcoming', domain: 'schedule_read',
     description: `ライ氏のこれからの予定・期日のある約束・日付のあるタスクを見る（見るだけ）。カレンダーはアプリが共有している時だけ分かる。${READ_RULE}`,
-    input: schema({ range: { type: 'string', description: 'day（これから48時間。ふだんはこれ）か week（8日）', enum: ['day', 'week'] } }) }),
+    input: schema({ ...SCHEDULE_SEARCH_INPUTS, range: { type: 'string', description: 'day（これから48時間。ふだんはこれ）か week（8日）', enum: ['day', 'week'] } }) }),
   readTool({ name: 'places.search', domain: 'places_search', cost: 'model',
     description: `お店や施設の候補を、ウェブで調べて地図リンクつきで探す。端末の位置は使わないので、場所（駅や町の名前）を area に書く。近くの、と言われて場所が分からない時は、どこの近くかを聞く。${READ_RULE}`,
     input: schema({
@@ -316,7 +315,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
       name: { type: 'string', description: 'スキルの名前（目次の「- 」のあとの英字の名前）', minLength: 1, maxLength: 40 },
       section: { type: 'string', description: '一部だけ読む時: 手順・補助・参考のどれか。書かなければ全部', enum: ['手順', '補助', '参考'] },
     }, ['name']) }),
-  ...TASK_TOOLS, ...MEMORY_TOOLS,
+  ...TASK_TOOLS, ...MEMORY_TOOLS, ...MINECRAFT_LIFECYCLE_TOOLS,
 ]);
 
 /**
@@ -326,6 +325,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
  * changes with it; `shannonTools.test.ts` holds that every tool has one.
  */
 export const TOOL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
+  ...MINECRAFT_LIFECYCLE_SUMMARIES,
   'memory.search': '目的や人物、過去の出来事から関連する記憶を探す', 'memory.read': 'IDを指定して記憶の詳細と根拠を読む',
   'task.create': '目的と完了条件を渡して子タスクを作る', 'task.list': 'タスクと子の一覧を確認する', 'task.get': '指定タスクの状態を読む', 'task.send': '別のタスクへ連絡する',
   'web.search': 'ウェブで今の情報を調べる（ニュース・天気・営業時間など）',
@@ -374,6 +374,7 @@ export const TOOL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
  */
 export type ToolDoing = 'acts' | 'describes';
 export const TOOL_DOING: Readonly<Record<string, ToolDoing>> = Object.freeze({
+  ...Object.fromEntries(MINECRAFT_LIFECYCLE_TOOLS.map(tool => [tool.name, tool.effect === 'write' ? 'acts' as const : 'describes' as const])),
   ...Object.fromEntries(MEMORY_TOOLS.map(tool => [tool.name, 'describes' as const])),
   ...Object.fromEntries(TASK_TOOLS.map(tool => [tool.name, tool.effect === 'write' ? 'acts' as const : 'describes' as const])),
   'study.list': 'describes', 'study.search': 'describes', 'study.read': 'describes',
@@ -434,7 +435,6 @@ export function ownToolsEnabled(environment: Readonly<Record<string, string | un
 }
 
 export type ShannonToolName = typeof SHANNON_TOOLS[number]['name'];
-
 export function shannonTool(name: unknown): ShannonToolDefinition | null {
   return SHANNON_TOOLS.find(item => item.name === name) ?? null;
 }

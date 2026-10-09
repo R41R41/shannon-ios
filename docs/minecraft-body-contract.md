@@ -313,3 +313,7 @@ Decided direction. Phase 4 is built ([Requests](#requests-phase-4)) and phase 5a
 See [the common FCA contract](fca-runtime-contract.md#minecraft-and-touch-connection-stage-4) for the new execution path. `SHANNON_FCA_MINECRAFT=on` is frozen at API startup. It uses `/v1/body/minecraft/control`, a separate paired-body contract for world frames, skill catalogs, concrete candidates, commands and receipts; it does not extend the game-chat payload with images or exact coordinates. The Minebot adapter must separately opt into `MINEBOT_COMMON_FCA=on`. Both sides must agree; there is no fallback to the legacy campaign executor when the common control route is unavailable. The old request queue is not used for new work in common mode.
 
 The normal planner is the same Task Hub/FCA used by other work. Minebot executes registered physical skills and bounded primitive actions under its existing local ownership, returning actual stop/quiescence receipts. Delivered commands are never replayed after uncertain delivery or restart. See the VM adapter's own checked-in runbook for its isolated renderer preparation and verification; no live Minecraft benchmark is implied by deterministic integration tests.
+
+## Candidate lifecycle operator
+
+[The lifecycle contract](minecraft-lifecycle-contract.md) adds an independent paired operator connection so a disconnected world can still be started and joined. The common FCA and native body remain the gameplay executor. This candidate is source-tested; it is not a deployed operator or a live-game acceptance.

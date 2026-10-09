@@ -12,12 +12,17 @@ export class MinecraftControlStore {
       CREATE TABLE IF NOT EXISTS fca_body_bindings(task_id TEXT PRIMARY KEY, body_id TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS fca_body_sessions(id TEXT PRIMARY KEY, context_json TEXT NOT NULL, receipt_json TEXT);`);
   }
-  insert(command: MinecraftControlCommand, at: string): void {
+  insert(command: MinecraftControlCommand, at: string, admit?: () => boolean): void {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+    if (admit && !admit()) throw new Error('FCA_BODY_LEASE_INVALID');
     const json = JSON.stringify(command);
     const old = this.db.prepare('SELECT command_json FROM fca_body_operations WHERE id=?').get(command.id);
-    if (old) { if (old.command_json !== json) throw new Error('FCA_BODY_OPERATION_CONFLICT'); return; }
+    if (old) { if (old.command_json !== json) throw new Error('FCA_BODY_OPERATION_CONFLICT'); this.db.exec('COMMIT'); return; }
     this.db.prepare('INSERT INTO fca_body_operations(id,task_id,body_id,connection_id,command_json,phase,created_at) VALUES(?,?,?,?,?,?,?)')
       .run(command.id, command.context.taskId, command.context.bodyId, command.connectionId, json, 'queued', at);
+    this.db.exec('COMMIT');
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
   pending(bodyId: string): Array<{ command: MinecraftControlCommand; delivered: boolean; cancelled: boolean }> {
     return this.db.prepare("SELECT command_json,phase,cancelled FROM fca_body_operations WHERE body_id=? AND phase!='settled' ORDER BY created_at,id").all(bodyId)

@@ -26,7 +26,7 @@ export interface LineageNode {
   parentRevisionId: string | null;
   /** The node this version restores (a revert), or null for a new body. */
   variantOf: string | null;
-  madeBy: 'sleep' | 'owner_edit';
+  madeBy: 'sleep' | 'owner_edit' | 'operator_authored';
   uses: number;
   successes: number;
 }
@@ -60,7 +60,7 @@ export function scoredLineage(nodes: readonly LineageNode[]): ScoredNode[] {
 
 /** The nodes a patch may start from, best first (descending weight; then the higher s, then the newer version). Never the owner's. */
 export function rankedNodes(nodes: readonly LineageNode[]): ScoredNode[] {
-  return scoredLineage(nodes).filter(item => item.node.madeBy === 'sleep')
+  return scoredLineage(nodes).filter(item => item.node.madeBy !== 'owner_edit')
     .sort((left, right) => right.weight - left.weight || right.s - left.s || right.node.version - left.node.version);
 }
 

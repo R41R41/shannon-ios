@@ -1,3 +1,4 @@
+import { searchOptions, searchTerms } from '../../infra/search/searchQuery.js';
 import { randomUUID } from 'node:crypto';
 import { aetherErrorCode, type AetherWriteResult } from '../../integrations/aether/aetherAccess.js';
 import type { SQLiteAutonomyStore } from '../action/ownTime/ownTimePorts.js';
@@ -8,6 +9,7 @@ import { toolFailure, toolOk, type ShannonToolDefinition, type ToolResult } from
 import { studyWriteKey, syncedWithin, type StudyAether } from '../action/ownTime/ownTimePorts.js';
 import { type StudyPiece, type StudyPieceKind, type StudyPieceStatus, type StudyRejection } from '../action/ownTime/ownTimePorts.js';
 import { STUDY_KIND_LABEL, STUDY_LIMITS, STUDY_STATUS_LABEL } from '../action/ownTime/studyPorts.js';
+import { actionPermit } from '../../infra/context/actionExecution.js';
 
 /**
  * The study tools (`study.*` in `shannonTools.ts`): her own study, fully server-side and immediate.
@@ -115,7 +117,11 @@ function buildStudyExecutors(store: SQLiteAutonomyStore, now: () => string, aeth
     'study.search': (input, context) => {
       const query = stringInput(input, 'query')!.trim();
       const limit = numberInput(input, 'limit') ?? 10;
-      const found = store.study.search(context.scopeKey, query, limit, input.includeDeleted === true ? 'include' : 'exclude');
+      let options: ReturnType<typeof searchOptions>;
+      try { options = searchOptions(input); searchTerms(query, options.match); } catch { return toolFailure('invalid_input', '検索の期間・並び順・ページ位置を確認して呼び直す。', { retryable: false }); }
+      const found = store.study.search(context.scopeKey, query, limit, input.includeDeleted === true ? 'include' : 'exclude', { ...options,
+        ...(input.field ? { field: input.field as 'title' | 'body' | 'both' } : {}), ...(input.kind ? { kind: input.kind as 'story' | 'note' } : {}),
+        ...(input.status ? { status: input.status as 'draft' | 'ready' | 'shown' | 'put_away' } : {}) });
       return immediate('書斎の中を探します。', () => ({
         result: toolOk(found.length ? [`${found.length}件:`, ...found.map(item => `${pieceLine(item)}\n  …${snippet(`${item.title}\n${item.body}`, query)}…${item.origin === 'room_look' ? ROOM_LOOK_MARK : ''}`)].join('\n') : `「${clip(query, 40)}」は見つからなかった。`),
         record: { summary: `書斎の中を探しました（${found.length}件）。`, outcome: 'done' },
@@ -310,6 +316,7 @@ function synced(aether: StudyAether, name: string, executor: ToolExecutor): Tool
       summary: 'run' in first ? first.summary : '書斎を確かめます。', ...('run' in first && first.folder ? { folder: first.folder } : {}),
       run: async signal => {
         const reached = await syncedWithin(aether, context.scopeKey, Math.min(SYNC_MILLISECONDS, (context.timeMilliseconds ?? 2 * SYNC_MILLISECONDS) / 2), signal);
+        await actionPermit(); signal?.throwIfAborted(); context.beforeExecution?.();
         const again = executor(input, context);
         if (!('run' in again)) return { result: again, record: { summary: `書斎の道具「${name}」を使おうとしましたが、できませんでした。`, outcome: 'failed', ...(again.failure ? { reasonCode: again.failure } : {}) } };
         const run = await again.run(signal);

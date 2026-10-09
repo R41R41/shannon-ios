@@ -1,3 +1,6 @@
+import { configuredMinecraftLifecycle } from './wiring/minecraftLifecycleWiring.js';
+import { configuredSkillImporter } from './wiring/skillImportWiring.js';
+import { standardSkillPack } from './infra/config/standardSkillPack.js';
 import { configuredServerFca, serveFcaTaskRoute } from './wiring/serverFcaWiring.js';
 import { createServer } from 'node:http';
 import { configuredServerObserver } from './wiring/serverObserverWiring.js';
@@ -142,7 +145,7 @@ const autonomy = new ShannonAutonomyService({
 if (withheldActions) autonomy.tools.observeWithheld(withheldActions.withheld.sink, now);
 // Syzygy ADR-0008 stage 2, step 6 (docs/skill-and-routing-contract.md): her skill memory, its tables created here. SHANNON_SKILLS=off: none of it.
 const skillMemory = configuredSkillMemory(process.env, { databasePath: configuredDatabasePath(), createsSchema: true });
-const skills = skillMemory ? skillTurnPorts(skillMemory.memory, scopeKey => persistentStore.snapshot(scopeKey)) : null;
+const skills = skillMemory ? skillTurnPorts(skillMemory.memory, scopeKey => persistentStore.snapshot(scopeKey), persistentStore) : null;
 if (skillMemory) autonomy.tools.observeCopyWrites((scopeKey, documentId, write) => noteCopyWrite(skillMemory.memory, scopeKey, documentId, write, now())); // Her copy edits are hers (M2).
 // Step 8: tree recall over her notes, and with the owner alone her skills and her Aether folder. SHANNON_TREE_RECALL=off: recall as it was.
 const traceSalt = installSalt(configuredDatabasePath()); // The salt of Jev's input digests in the traces (never in the repository).
@@ -264,19 +267,20 @@ const shannonNowRoute = createShannonNowRoute({
   reader: shannonNowReader, snapshot: scopeKey => (shannonNowReader.hasState(scopeKey) ? persistentStore.snapshot(scopeKey) : null), now,
   enabled: () => shannonNowEnabled(process.env), ownerScopeKey: shannonNowOwnerScope(process.env),
 });
-// Her mood over time for the owner's own apps (docs/mood-history-contract.md): a read-only connection, held by this route only.
 const moodHistoryReader = new SQLiteMoodHistoryReader(configuredDatabasePath());
 const moodHistoryRoute = createMoodHistoryRoute({
   reader: moodHistoryReader, now, enabled: () => moodHistoryEnabled(process.env), ownerScopeKey: shannonNowOwnerScope(process.env),
 });
 // Her value table for the owner (docs/cognition-ledger-contract.md): view, rollback and resume, each control in the activity record.
-// The 学び tab's view and pins of her skills (owner only; SHANNON_SKILLS=off: answered as switched off).
-const skillsRoute = createSkillsRoute({ memory: skillMemory?.memory ?? null, record: ownerSkillRecorder(autonomyStore.activity, autonomyConfig), now, ownerScopeKey: shannonNowOwnerScope(process.env) });
+const skillImporter = configuredSkillImporter(skillMemory?.memory ?? null, { ownerScopeKey: shannonNowOwnerScope(process.env), state: persistentStore, conversations: persistentStore });
+const skillsRoute = createSkillsRoute({ importer: skillImporter, pack: standardSkillPack, memory: skillMemory?.memory ?? null, record: ownerSkillRecorder(autonomyStore.activity, autonomyConfig), now, ownerScopeKey: shannonNowOwnerScope(process.env) });
 const valuesRoute = createValuesRoute({
   values: persistentStore.valueVersions(), calibration: scopeKey => predictionLedger?.calibration(scopeKey) ?? null, now, ownerScopeKey: shannonNowOwnerScope(process.env),
   choices: scopeKey => choiceLedger?.store.counts(scopeKey) ?? {}, record: ownerValueRecorder(autonomyStore.activity, autonomyConfig),
 });
-const fca = configuredServerFca(process.env, { sleepStore: persistentStore, minecraftConfiguration: minecraft.configuration, touchAllowed: (scope, device, gesture) => kernel.touchReflexAllowed(scope, device, gesture), path: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env), ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), usage: persistentStore, affect: persistentStore, memory: memoryPorts?.proposals, enrich: memoryRecall, state: persistentStore, conversations: persistentStore, tools: autonomy.tools, trace: persistentStore.decisionTraces()?.writer ?? null, traceSalt, readSources: { aetherContext, study: autonomyStore.study, upcoming: ownerUpcoming.upcoming, aetherAvailable: () => Boolean(aetherPorts.access), notionAvailable: () => notion.connected, voyagerAvailable: () => Boolean(voyagerCatalog.upcomingTasks), folderAvailable: (_scope, host) => autonomy.folderOperations.boundHosts().includes(host), skill: (scope, id) => { const item = skillMemory?.memory.usable(scope).find(skill => skill.skillId === id); return item ? skills?.open(scope, item.name) ?? null : null; } } }); if (fca?.minecraft) minecraft.connectControl(fca.minecraft);
+const lifecycle = configuredMinecraftLifecycle(process.env, { path: configuredDatabasePath(), autonomy, actions: mind?.actions ?? null, now, ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), taskAllowed: executionId => fca?.lifecycleTaskAllowed(executionId) ?? false, taskSources: executionId => fca?.lifecycleTaskSources(executionId) ?? null });
+if (lifecycle) minecraft.connectLifecycle(lifecycle.service);
+const fca = configuredServerFca(process.env, { sleepStore: persistentStore, minecraftLifecycle: lifecycle?.service, minecraftConfiguration: minecraft.configuration, touchAllowed: (scope, device, gesture) => kernel.touchReflexAllowed(scope, device, gesture), path: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env), ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), usage: persistentStore, affect: persistentStore, memory: memoryPorts?.proposals, enrich: memoryRecall, state: persistentStore, conversations: persistentStore, tools: autonomy.tools, trace: persistentStore.decisionTraces()?.writer ?? null, traceSalt, readSources: { aetherContext, study: autonomyStore.study, upcoming: ownerUpcoming.upcoming, aetherAvailable: () => Boolean(aetherPorts.access), notionAvailable: () => notion.connected, voyagerAvailable: () => Boolean(voyagerCatalog.upcomingTasks), folderAvailable: (_scope, host) => autonomy.folderOperations.boundHosts().includes(host), skill: (scope, id, revision) => skills?.readSource?.(scope, id, revision) ?? null } }); if (fca?.minecraft) minecraft.connectControl(fca.minecraft);
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 const bodyUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
@@ -460,8 +464,7 @@ function shutdown(): void {
   server.close(async () => {
     await fca?.close();
     signalObserver?.close(); deviceAuth?.close();
-    pushStore.close(); worldStore.close();
-    initiativeStore.close();
+    pushStore.close(); worldStore.close(); initiativeStore.close();
     stage5.close();
     testFlightDeliveryStore.close();
     dailyMindStore.close();
@@ -475,12 +478,10 @@ function shutdown(): void {
     peopleMemoryStore.close();
     stopFolderMaintenance();
     stopToolTraceSweep();
-    rewardMood.stop();
-    autonomyAnnouncer.close();
+    rewardMood.stop(); autonomyAnnouncer.close();
     bodyStore.close();
-    minecraft.close(); platformBridge?.close?.();
-    reachOuts.close();
-    reachOutReports.close();
+    await lifecycle?.close(); minecraft.close(); platformBridge?.close?.();
+    reachOuts.close(); reachOutReports.close();
     privateListeningRoute.close();
     incomingCallRoute?.close();
     ownerTurns.close();

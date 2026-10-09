@@ -49,7 +49,9 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
         return { ...toolOk(reads.map(item => item.result.text).join('\n') || 'マイクラに結び付いたタスクはまだない。'), documents: { sourceIds } };
       }
       if (name !== 'minecraft.cancel') throw new Error('FCA_TOOL_NOT_OFFERED');
-      const targets = tasks.filter(task => value.id ? task.id === value.id : !['stopped', 'completed', 'failed'].includes(task.phase));
+      const open = tasks.filter(task => !['stopped', 'completed', 'failed'].includes(task.phase));
+      const targets = value.id ? open.filter(task => task.id === value.id)
+        : open.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)).slice(0, 1);
       if (!targets.length) return toolFailure('not_found', '指定された進行中のマイクラタスクが見つからない。');
       for (const task of targets) await parts.stop(task.id, 'owner_minecraft_stop');
       return toolOk('停止要求を受け付けた。身体操作の停止確認後に停止済みになる。');

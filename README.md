@@ -7,6 +7,7 @@ iPhoneとMacで一人のシャノンへつながる、ネイティブクライ�
 | 関心 | 正本 |
 | --- | --- |
 | Product | このREADMEの[方針](#方針) |
+| Skill import and common tool/search connection | [`docs/skill-import-and-shared-tools.md`](docs/skill-import-and-shared-tools.md) |
 | Common FCA runtime (opt-in first slice) | [`docs/fca-runtime-contract.md`](docs/fca-runtime-contract.md) |
 | Action threads | [`docs/action-threads-contract.md`](docs/action-threads-contract.md) |
 | Architecture | [`docs/architecture.md`](docs/architecture.md) |
@@ -152,3 +153,5 @@ pnpm dev:api:device
 Aether本番版と同様の一時接続情報、端末固有トークン、iOS Keychain保存を実装済み。通常は専用リンクを一度開くだけで接続し、信頼済みMacからの実機配備では起動時に自動適用する。以後のアップデートではKeychainを引き継ぐため再設定しない。
 
 実機・配布・復旧の現行手順は [`docs/self-improvement-runbook.md`](docs/self-improvement-runbook.md)、FCA・感情・記憶・worker・接続の現行境界は [`docs/architecture.md`](docs/architecture.md) を正本とする。旧ブラウザ資料は必要な場合だけ [`docs/archive/index.md`](docs/archive/index.md) から参照する。
+
+- [Minecraft lifecycle](docs/minecraft-lifecycle-contract.md): registered server start/stop and bot login/logout under the original action lease.

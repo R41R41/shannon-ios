@@ -3,7 +3,8 @@ import { SHANNON_AUTONOMY_SYSTEM_DOMAIN } from '@shannon/cognition';
 import type { AutonomyActivityRecord } from '../../mind/inhibition/store/autonomyActivity.js';
 import { autonomyDayKey, type AutonomyConfig } from '../../mind/inhibition/autonomyBudget.js';
 import { SKILL_CAPACITY, SKILL_LIFECYCLE, type SkillMemory, type StoredSkill } from '../../mind/memory/memoryPorts.js';
-import { sendJson } from './serverHttp.js';
+import type { SkillImporter, SkillPack } from '../../mind/memory/memoryPorts.js';
+import { readJson, sendJson } from './serverHttp.js';
 
 /**
  * The owner's view and controls of her skills, for the app's 学び tab (Syzygy ADR-0008 stage 2, review scope gap;
@@ -26,12 +27,15 @@ export function isSkillsPath(path: string): boolean {
   return path === SKILLS_PATH || path.startsWith(`${SKILLS_PATH}/`);
 }
 
-export type OwnerSkillRecorder = (scopeKey: string, action: 'pin' | 'unpin', skillId: string, at: string) => void;
+export type OwnerSkillRecorder = (scopeKey: string, action: 'pin' | 'unpin' | 'import', skillId: string, at: string) => void;
 
 export interface SkillsRouteDependencies {
   /** Null while her skills are switched off. */
   memory: Pick<SkillMemory, 'ready' | 'store' | 'write'> | null;
   record: OwnerSkillRecorder;
+  /** Explicitly wired owner-only import; no live startup import. Only app-owned pack revisions may be selected. */
+  importer?: SkillImporter | null;
+  pack?: (packId: string, revision: string) => SkillPack | null;
   ownerScopeKey: string;
   now: () => string;
 }
@@ -42,7 +46,7 @@ export function ownerSkillRecorder(activity: Pick<AutonomyActivityRecord, 'appen
     activity.append(scopeKey, autonomyDayKey(at, config), at, {
       kind: 'control', actor: 'owner', domain: SHANNON_AUTONOMY_SYSTEM_DOMAIN.id, outcome: 'recorded', approval: 'not_needed',
       tool: `skills.${action}`, reasonCode: `skills_${action}`, detail: skillId,
-      summary: action === 'pin' ? '所有者がスキルを固定しました。眠っている間の見直しは、このスキルを変えません。' : '所有者がスキルの固定を外しました。',
+      summary: action === 'import' ? '所有者が運用作成のスキルを採用しました。利用と成功の実績はまだありません。' : action === 'pin' ? '所有者がスキルを固定しました。眠っている間の見直しは、このスキルを変えません。' : '所有者がスキルの固定を外しました。',
     });
   };
 }
@@ -65,6 +69,7 @@ function summary(skill: StoredSkill): Record<string, unknown> {
   const withheld = hidden(skill);
   return {
     id: skill.skillId, name: withheld ? HIDDEN_TITLE : skill.name, description: withheld ? HIDDEN_TITLE : skill.description, hidden: withheld,
+    provenance: withheld ? null : skill.provenance, madeBy: skill.madeBy,
     status: skill.status, statusReason: skill.statusReason, version: skill.version,
     pinned: skill.pinned, ownerVersion: skill.madeBy === 'owner_edit', trial, uses: settled.length, successes: settled.filter(use => use.o === 1).length,
     copy: skill.aetherDocumentId ? { documentId: skill.aetherDocumentId, hold: skill.exportHold } : null, createdAt: skill.createdAt, updatedAt: skill.updatedAt,
@@ -78,6 +83,24 @@ export function createSkillsRoute(dependencies: SkillsRouteDependencies) {
     const memory = dependencies.memory;
     if (!memory || !memory.ready()) return sendJson(response, 403, { error: 'SKILLS_DISABLED', message: 'Her skills are switched off on the server.' });
     const scopeKey = principal.scopeKey;
+    if (path === `${SKILLS_PATH}/import/dry-run` || path === `${SKILLS_PATH}/import/apply`) {
+      if (request.method !== 'POST') return sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+      if (!dependencies.importer || !dependencies.pack) return sendJson(response, 403, { error: 'SKILL_IMPORT_DISABLED' });
+      let raw: unknown;
+      try { raw = await readJson(request, 2048); } catch { return sendJson(response, 400, { error: 'INVALID_SKILL_IMPORT' }); }
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return sendJson(response, 400, { error: 'INVALID_SKILL_IMPORT' });
+      const command = raw as Record<string, unknown>;
+      if (typeof command.packId !== 'string' || typeof command.revision !== 'string') return sendJson(response, 400, { error: 'INVALID_SKILL_IMPORT' });
+      const pack = dependencies.pack(command.packId, command.revision);
+      if (!pack) return sendJson(response, 404, { error: 'SKILL_PACK_NOT_FOUND' });
+      if (path.endsWith('/dry-run')) return sendJson(response, 200, dependencies.importer.dryRun(scopeKey, pack));
+      if (typeof command.planHash !== 'string' || typeof command.approvalReference !== 'string') return sendJson(response, 400, { error: 'INVALID_SKILL_IMPORT' });
+      const at = dependencies.now();
+      const result = dependencies.importer.apply(scopeKey, pack, { planHash: command.planHash, approvalReference: command.approvalReference }, at);
+      if ('rejected' in result) return sendJson(response, 409, result);
+      if (!result.idempotent) try { dependencies.record(scopeKey, 'import', result.receipt.receiptId, at); } catch (error) { console.error('Shannon skill import record failed', error instanceof Error ? error.name : 'unknown'); }
+      return sendJson(response, 200, result);
+    }
     if (path === SKILLS_PATH) {
       if (request.method !== 'GET') return sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
       const all = memory.store.all(scopeKey, { includeRetired: true });
@@ -93,7 +116,7 @@ export function createSkillsRoute(dependencies: SkillsRouteDependencies) {
       return sendJson(response, 200, {
         // Review N4: a skill built from something forgotten, or whose copy was withdrawn, is shown without its body.
         ...summary(skill), ...(hidden(skill) ? { body: HIDDEN_BODY, bodyHidden: true } : { body: skill.body, bodyHidden: false }),
-        versions: memory.store.revisions(scopeKey, skill.skillId).map(item => ({ version: item.version, kind: item.kind, actor: item.actor, reason: item.reason,
+        versions: memory.store.revisions(scopeKey, skill.skillId).map(item => ({ revisionId: item.revisionId, provenance: hidden(skill) ? null : item.provenance, version: item.version, kind: item.kind, actor: item.actor, reason: item.reason,
           parent: item.parentRevisionId, restores: item.variantOf, uses: item.uses, successes: item.successes, createdAt: item.createdAt })),
         audit: memory.store.audits(scopeKey).filter(entry => entry.skillId === skill.skillId).map(entry => ({ kind: entry.kind, status: entry.status, reason: entry.reason,
           fromVersion: entry.fromVersion, toVersion: entry.toVersion, baselineRate: entry.baselineRate, trialUses: entry.trialUses, trialSuccesses: entry.trialSuccesses,

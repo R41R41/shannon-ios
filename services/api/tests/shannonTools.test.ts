@@ -70,7 +70,7 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
     expect(SHANNON_TOOLS.map(tool => tool.name).sort()).toEqual([
       'aether.propose', 'aether.read', 'aether.search', 'aetherFolder.create', 'aetherFolder.delete', 'aetherFolder.list', 'aetherFolder.update',
       'folder.create', 'folder.delete', 'folder.list', 'folder.move', 'folder.read', 'folder.rename', 'folder.search', 'folder.update',
-      'memory.read', 'memory.search', 'minecraft.cancel', 'minecraft.request', 'minecraft.status', 'notion.read', 'ownerDocs.read', 'ownerDocs.search', 'places.search', 'schedule.upcoming',
+      'memory.read', 'memory.search', 'minecraft.cancel', 'minecraft.lifecycle_status', 'minecraft.login', 'minecraft.logout', 'minecraft.request', 'minecraft.start', 'minecraft.status', 'minecraft.stop', 'notion.read', 'ownerDocs.read', 'ownerDocs.search', 'places.search', 'schedule.upcoming',
       'skill.read', 'study.create', 'study.delete', 'study.list', 'study.move', 'study.read', 'study.rename', 'study.restore', 'study.search', 'study.update', 'task.create', 'task.get', 'task.list', 'task.send', 'voyager.tasks', 'web.search',
     ]);
     // Conversation only: her Minecraft body (phase 4) and a proposal to the owner's Aether inbox.
@@ -86,7 +86,7 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
       expect(tool.input).toMatchObject({ type: 'object', additionalProperties: false });
       for (const required of tool.input.required) expect(Object.keys(tool.input.properties), tool.name).toContain(required);
       expect(tool.domain).toBe(tool.name.startsWith('memory.') ? 'memory_read' : tool.name.startsWith('task.') ? 'task_runtime' : tool.name.startsWith('study.') || tool.name.startsWith('aetherFolder.') || tool.name === 'aether.search' || tool.name === 'aether.read' ? 'aether_study'
-        : tool.name.startsWith('minecraft.') ? 'minecraft_body' : tool.name === 'aether.propose' ? 'aether_proposal' : tool.name.startsWith('ownerDocs.') ? 'owner_documents_read'
+        : ['minecraft.lifecycle_status', 'minecraft.login', 'minecraft.logout', 'minecraft.start', 'minecraft.stop'].includes(tool.name) ? 'minecraft_lifecycle' : tool.name.startsWith('minecraft.') ? 'minecraft_body' : tool.name === 'aether.propose' ? 'aether_proposal' : tool.name.startsWith('ownerDocs.') ? 'owner_documents_read'
           : tool.name === 'skill.read' ? 'skill_read' : READ_TOOL_DOMAIN_OF[tool.name] ?? 'host_folder');
       // Place and current-web searches call bounded model helpers; every other tool calls no model itself.
       expect(tool.cost).toBe(['places.search', 'web.search'].includes(tool.name) ? 'model' : 'none');

@@ -123,14 +123,14 @@ export function skillIndexHeader(count: number): string {
   return `${SKILL_INDEX_HEADER} ${count}/${SKILL_CAPACITY}（目次。中身は skill_read で開く）]`;
 }
 
-export interface SkillIndexEntry { name: string; description: string; status: 'trial' | 'active'; createdAt: string }
+export interface SkillIndexEntry { name: string; description: string; status: 'trial' | 'active'; createdAt: string; origin?: 'operator_authored' }
 
 export function skillIndex(entries: readonly SkillIndexEntry[]): string {
   if (!entries.length) return '';
   const ordered = [...entries].sort((left, right) => (left.status === right.status ? 0 : left.status === 'active' ? -1 : 1)
     || left.createdAt.localeCompare(right.createdAt) || left.name.localeCompare(right.name));
   const fits = ordered.length <= SKILL_CAPACITY ? ordered : ordered.slice(0, SKILL_CAPACITY - 1);
-  const lines = fits.map(entry => clipWidth(`- ${entry.name}${entry.status === 'trial' ? '（試し）' : ''}: ${oneLine(entry.description)}`));
+  const lines = fits.map(entry => clipWidth(`- ${entry.name}${entry.status === 'trial' ? '（試し）' : ''}${entry.origin === 'operator_authored' ? '（運用作成）' : ''}: ${oneLine(entry.description)}`));
   if (fits.length < ordered.length) lines.push(`- （ほか${ordered.length - fits.length}件は目次に入りきらない。夜にまとめる）`);
   return [skillIndexHeader(ordered.length), ...lines].join('\n');
 }

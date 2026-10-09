@@ -17,9 +17,13 @@ export function connectFcaMemoryTools(parts: {
         return toolFailure('refused', 'いま参照できる記憶はありません。', { retryable: false });
       }
       const observe = context.observeMemory ?? (ids => parts.conversation.observeSources(context.scopeKey, { recalledMemoryIds: ids }));
-      const result = await parts.memory.execute(name, input as Record<string, unknown>, {
+      let result: Awaited<ReturnType<TaskMemory['execute']>>;
+      try { result = await parts.memory.execute(name, input as Record<string, unknown>, {
         scopeKey: context.scopeKey, present: OWNER_AUDIENCE, observe: ids => parts.ownerAlone() && observe(ids),
-      }, signal);
+      }, signal); } catch (error) {
+        if (error instanceof Error && /^(?:SEARCH|TASK_MEMORY_INPUT)/u.test(error.message)) return toolFailure('invalid_input', '記憶の検索条件を確認して呼び直す。', { retryable: false });
+        throw error;
+      }
       signal?.throwIfAborted();
       if (!parts.ownerAlone() || result.status === 'withheld' || result.status === 'cancelled') {
         return toolFailure('refused', 'この記憶は今の状況では参照できません。', { retryable: false });

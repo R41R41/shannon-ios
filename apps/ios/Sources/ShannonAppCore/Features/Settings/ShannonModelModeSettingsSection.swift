@@ -4,11 +4,13 @@ import SwiftUI
 public struct ShannonModelModeSettingsSection: View {
     private let scopeKey: String
     private let client: (any ShannonModelModeServing)?
-    private let connected: Bool
+    // Keeps a parent connection change observable to SwiftUI; authorization still comes from the current credential.
+    private let connectionStatus: Bool
     private let isDesignPreview: Bool
 
+    /// `connected` remains source-compatible; this setting reads its paired credential, not a cached connection label.
     public init(scopeKey: String, client: (any ShannonModelModeServing)?, connected: Bool, isDesignPreview: Bool = false) {
-        self.scopeKey = scopeKey; self.client = client; self.connected = connected; self.isDesignPreview = isDesignPreview
+        self.scopeKey = scopeKey; self.client = client; self.connectionStatus = connected; self.isDesignPreview = isDesignPreview
     }
 
     public init(conversation: ShannonConversationModel, connected: Bool) {
@@ -17,13 +19,30 @@ public struct ShannonModelModeSettingsSection: View {
     }
 
     public var body: some View {
-        ShannonModelModeSectionContent(scopeKey: scopeKey, client: client, connected: connected, isDesignPreview: isDesignPreview)
-            .id(Identity(scope: scopeKey, connection: client?.modelModeConnection()))
+        let context = connectionContext
+        ShannonModelModeSectionContent(context: context, client: client, isDesignPreview: isDesignPreview)
+            .id(context)
     }
 
-    private struct Identity: Hashable {
-        let scope: String
-        let connection: ShannonModelModeConnection?
+    var connectionContext: ShannonModelModeSettingsContext {
+        ShannonModelModeSettingsContext(scopeKey: scopeKey, connection: client?.modelModeConnection())
+    }
+}
+
+/// Conversation scope names also key the local display cache; only the paired scope owns this server setting.
+struct ShannonModelModeSettingsContext: Hashable {
+    let scopeKey: String
+    let connection: ShannonModelModeConnection?
+
+    init(scopeKey: String, connection: ShannonModelModeConnection?) {
+        self.scopeKey = connection?.scopeKey ?? scopeKey
+        self.connection = connection
+    }
+
+    var isPaired: Bool { connection != nil }
+
+    @MainActor func makeModel(client: (any ShannonModelModeServing)?) -> ShannonModelModeModel {
+        ShannonModelModeModel(scopeKey: scopeKey, client: client)
     }
 }
 
@@ -33,16 +52,16 @@ private struct ShannonModelModeSectionContent: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
 
-    init(scopeKey: String, client: (any ShannonModelModeServing)?, connected: Bool, isDesignPreview: Bool) {
+    init(context: ShannonModelModeSettingsContext, client: (any ShannonModelModeServing)?, isDesignPreview: Bool) {
 #if DEBUG
-        if isDesignPreview, let preview = ShannonModelModePreview.configured(scopeKey: scopeKey) {
-            _model = State(initialValue: ShannonModelModeModel(scopeKey: scopeKey, client: preview))
+        if isDesignPreview, let preview = ShannonModelModePreview.configured(scopeKey: context.scopeKey) {
+            _model = State(initialValue: context.makeModel(client: preview))
             self.connected = true
             return
         }
 #endif
-        _model = State(initialValue: ShannonModelModeModel(scopeKey: scopeKey, client: client))
-        self.connected = connected
+        _model = State(initialValue: context.makeModel(client: client))
+        self.connected = context.isPaired
     }
 
     var body: some View {

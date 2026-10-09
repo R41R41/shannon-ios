@@ -49,6 +49,8 @@ export interface PreparedToolCall {
 export interface ToolSessionMemory {
   /** The digest of each folder file she read in this session, so that `folder.update` refuses to overwrite a change made since. */
   readonly readDigests: Map<string, string>;
+  /** Common tasks retain digest-only keys across native segments; private paths are not checkpointed. */
+  readonly retainedReadDigests?: Map<string, string>;
   /** In a conversation: the owner's message this turn answers (thread and words), the same for a retry of it. */
   readonly turnKey?: string;
 }
@@ -63,6 +65,10 @@ export interface ToolExecutionContext extends ToolCallContext {
   acknowledgementOwner?: 'fca';
   /** Trusted caller rechecks live source/query rights after an awaited action permit. */
   beforeExecution?(): void;
+  /** Trusted FCA caller pins and validates read receipts before their contents or deferred writes are accepted. */
+  afterExecution?(receipt: { name: string; documents?: ToolDocuments; ok: boolean; text: string }): void;
+  /** Intermediate authorized reads must be pinned before a later mutation can depend on them. */
+  observeRead?(receipt: { name: string; documents?: ToolDocuments; ok: boolean; text?: string }): void;
   /** Server-only provenance sink for a background FCA memory read. */
   observeMemory?(ids: readonly string[]): boolean;
   /**

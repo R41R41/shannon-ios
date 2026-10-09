@@ -21,7 +21,7 @@ export function checkedPage(title: string, body: string, check: SkillBodyCheck |
 
 /** How many sources a skill or a page may name; the whole list is stored (review N1: never a silent cut). */
 export const SKILL_SOURCES_LIMIT = 2_000;
-const SOURCE = /^(?:experience|knowledge|pattern|choice|sequence):[A-Za-z0-9][A-Za-z0-9_.:>-]{0,160}$/u;
+const SOURCE = /^(?:experience|knowledge|pattern|choice|sequence|import):[A-Za-z0-9][A-Za-z0-9_.:>-]{0,160}$/u;
 
 /**
  * Sources as ids only (`experience:<id>`, `knowledge:<id>`, `pattern:<id>`, `choice:<id>`, `sequence:<symbols>`), every one kept
@@ -65,4 +65,13 @@ export function checkedSkillText(text: string, check: SkillBodyCheck | null): { 
   if ('rejected' in body) return body.rejected === 'check_unavailable' ? 'unavailable' : 'unsafe';
   try { if (check!.carries(text)) return 'unsafe'; } catch { return 'unavailable'; }
   return { ok: body.skill };
+}
+
+/** Unknown source kinds fail closed; import receipts are checked independently of experience sources. */
+export function skillSourcesVisible(sources: readonly string[], visible: (id: string) => boolean, importVisible: (id: string) => boolean): boolean {
+  return sources.every(source => {
+    if (source.startsWith('experience:')) return visible(source.slice('experience:'.length));
+    if (source.startsWith('import:')) return importVisible(source.slice('import:'.length));
+    return /^(?:knowledge|pattern|choice|sequence):/u.test(source);
+  });
 }

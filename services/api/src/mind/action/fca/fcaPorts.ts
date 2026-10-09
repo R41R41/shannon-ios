@@ -1,6 +1,8 @@
 import type { ShannonToolDefinition, ToolResult } from '../../tools/toolRegistryPorts.js';
 import type { FcaActionExpectation, FcaAffectAppraisal, FcaAuxiliaryResult, FcaSharedContext } from './fcaEvidencePorts.js';
 import type { TaskRecallPacket } from '../../recall/taskRecallPorts.js';
+import type { FcaObservation } from './fcaObservation.js';
+import type { FcaProgress, FcaProgressHooks } from './fcaProgressPorts.js';
 import type { BodyObservation } from '../../../contracts/bodyControlContract.js';
 
 /** Public decisions only. Native history is opaque to the runtime and is never an Observer payload. */
@@ -22,6 +24,10 @@ export interface FcaModelInput {
   sharedContext?: FcaSharedContext;
   recall?: TaskRecallPacket;
   body?: { revision: number; observation: BodyObservation | null };
+  /** Compact source-checked skill metadata, dynamic so the stable cache prefix and signed replay remain unchanged. */
+  skillIndex?: string;
+  progress?: FcaProgress;
+  observations?: readonly { revision: number; observation: FcaObservation | null }[];
 }
 /** Task-owned short control may interrupt body work while ordinary inference is awaiting a response. */
 export interface FcaBodyLifecycle {
@@ -50,7 +56,14 @@ export interface FcaModel {
 }
 
 export interface FcaExternalTools {
+  progress?: FcaProgressHooks;
   definitions: readonly FcaToolDefinition[];
+  /** Build and pin use-time metadata only when skill.read is offered. */
+  skillIndex?(): string;
+  /** A stop cannot acknowledge a partial outside effect whose native round has not committed. */
+  safeToAcknowledgeStop?(): boolean;
+  /** Closed executor state committed atomically with the original segment's native history. */
+  checkpoint?(): Readonly<Record<string, unknown>>;
   /** Existing source/audience/action gates still apply. Uncertain failures throw and must never become retryable results. */
   execute(request: { scopeKey: string; taskId: string; operationId: string; name: string; input: unknown; signal: AbortSignal }): Promise<ToolResult>;
 }

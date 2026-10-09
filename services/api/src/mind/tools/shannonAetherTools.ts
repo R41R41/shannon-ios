@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { withAetherAccessCapability, withReadToolsCapability, withSkillsCapability, SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_SHARED_CAPABILITY } from '@shannon/cognition';
+import { withAetherAccessCapability, withReadToolsCapability, withSkillsCapability, SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_SHARED_CAPABILITY, SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY } from '@shannon/cognition';
 import { aetherErrorCode, aetherIdempotencyKey, type AetherDocument } from '../../integrations/aether/aetherAccess.js';
 import type { AetherSectionHit } from '../../integrations/aether/aetherKnowledgeSearch.js';
 import type { AetherProposalOperation, AetherProposalStore } from '../../integrations/aether/aetherProposal.js';
@@ -8,6 +8,7 @@ import { withMinecraftToolLine } from './shannonMinecraftTools.js';
 import { numberInput, stringInput, type ToolInput } from './shannonToolInput.js';
 import { clip, neutralMarkers, type PreparedToolCall, type ToolExecutionContext, type ToolExecutor, type ToolRun } from './shannonToolTypes.js';
 import { isReadToolDomain, toolFailure, toolOk, type ToolResult } from './shannonTools.js';
+import { actionPermit } from '../../infra/context/actionExecution.js';
 
 /**
  * The executors of her Aether tools (`aether.*`, `aetherFolder.*`; Syzygy ADR-0007 revised, `syzygy.aether-shannon-access.v1`).
@@ -126,14 +127,18 @@ function propose(proposals: AetherProposalStore | null, input: ToolInput, contex
     let expectedUpdatedAt: string | undefined;
     if (documentId) {
       if (!context.aether) return failed(NOT_CONFIGURED, label, 'aether_unavailable');
+      let target: AetherDocument;
       try {
-        const target = await context.aether.read({ documentId, offset: 0, maxChars: 1 }, signal);
-        if (target.inShannonFolder) {
-          return failed(toolFailure('invalid_input', 'シャノン用フォルダの文書は提案しなくても、aetherFolder.update や study の道具で直せる。', { retryable: false }), label, 'own_folder');
-        }
-        expectedUpdatedAt = target.updatedAt;
+        target = await context.aether.read({ documentId, offset: 0, maxChars: 1 }, signal);
       } catch (error) { return failed(aetherToolFailure(error), label, `aether_${aetherErrorCode(error).toLowerCase()}`); }
+      await actionPermit(); signal?.throwIfAborted(); context.beforeExecution?.();
+      context.observeRead?.({ name: 'aether.read', ok: true, documents: { sourceIds: [`aether-document://${encodeURIComponent(target.documentId)}`] }, text: target.body });
+      if (target.inShannonFolder) {
+        return failed(toolFailure('invalid_input', 'シャノン用フォルダの文書は提案しなくても、aetherFolder.update や study の道具で直せる。', { retryable: false }), label, 'own_folder');
+      }
+      expectedUpdatedAt = target.updatedAt;
     }
+    await actionPermit(); signal?.throwIfAborted(); context.beforeExecution?.();
     try {
       const proposal = proposals.create(context.scopeKey, {
         operation, content, ...(documentId ? { targetNoteId: documentId, expectedUpdatedAt } : {}),
@@ -205,7 +210,10 @@ export function documentText(document: AetherDocument): string {
  */
 export function withToolCapabilityLines<T extends { systemPrompt: string; tools?: { definitions: readonly { name: string; domain?: string }[]; menu?: { offered: readonly { name: string; domain?: string }[] } }; useWebSearch?: boolean; placeSearch?: unknown }>(request: T): T {
   if (request.useWebSearch || request.placeSearch) return request;
-  const withBody = withMinecraftToolLine(request);
+  const body = withMinecraftToolLine(request);
+  const lifecycleOffered = body.tools?.menu?.offered ?? body.tools?.definitions;
+  const withBody = lifecycleOffered?.some(tool => tool.domain === 'minecraft_lifecycle')
+    ? { ...body, systemPrompt: `${body.systemPrompt}\n\n${SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY.text}` } : body;
   // With the tool menu (Syzygy ADR-0008 stage 2) the line follows every tool the turn offers, not only the schemas sent.
   const offered = withBody.tools?.menu?.offered ?? withBody.tools?.definitions;
   const withAether = offered?.some(tool => tool.name === 'aether.search')

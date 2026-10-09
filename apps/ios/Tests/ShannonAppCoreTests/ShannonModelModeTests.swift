@@ -221,7 +221,8 @@ struct ShannonModelModeTests {
 #if DEBUG
     @Test func previewFixturesRecoverThroughTheSameReadOnlyAndCASStateMachine() async throws {
         let failure = ShannonModelModePreview(scopeKey: "synthetic", scenario: .saveerror)
-        let model = ShannonModelModeModel(scopeKey: "synthetic", client: failure)
+        let previewContext = ShannonModelModeSettingsContext(scopeKey: "synthetic", connection: nil)
+        let model = previewContext.makeModel(client: failure)
         await model.reload()
         await model.select(.sonnet)
         #expect(model.needsConfirmation && model.snapshot?.mode == .haiku && !model.canChange)

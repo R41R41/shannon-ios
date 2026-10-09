@@ -13,6 +13,7 @@ export function actionThreadsClient(call:MindCall,holder=`runner-${randomUUID()}
     stop:(scopeKey:string,id:string|null,requestId:string)=>call('action.stop',{scopeKey,id,requestId}),
     resume:(scopeKey,id)=>call('action.resume',{scopeKey,id}),
     reconcile:(lease,state,code)=>call('action.reconcile',{lease,state,code}),
+    reconcileResource:(lease,resource,acknowledgementId)=>call('action.reconcileResource',{lease,resource,acknowledgementId}),
     checkpoint:(lease,progress,failureCode)=>call('action.checkpoint',{lease,progress,failureCode}),
     reserve:(lease,reservationId,day,yen,cap,spent)=>call('action.reserve',{lease,reservationId,day,yen,cap,spent}),
     settle:(lease,reservationId,actual)=>call('action.settle',{lease,reservationId,actual}),

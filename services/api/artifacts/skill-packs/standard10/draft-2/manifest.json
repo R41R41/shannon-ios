@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "packId": "standard10",
+  "revision": "draft-2",
+  "sourceAuthor": "Shannon coordinator / live_ui_trace_audit",
+  "sourceReference": "https://github.com/R41R41/shannon-ios",
+  "referenceRevision": "b85625ad0e282185a2ac54ad4ebf77ca03340a56",
+  "validatorRevision": "skill-import-v1",
+  "skills": [
+    {
+      "name": "coordinate-work",
+      "path": "coordinate-work/SKILL.md",
+      "sha256": "f2677c4a486b49676b971eeba6b4b5348712e67772932b9b8a0955fcae528f30",
+      "tools": [
+        "task.create",
+        "task.list",
+        "task.get",
+        "task.send"
+      ],
+      "conditionalTools": [
+        "fca_wait",
+        "fca_complete"
+      ]
+    },
+    {
+      "name": "check-current-facts",
+      "path": "check-current-facts/SKILL.md",
+      "sha256": "9dd3fe4bc3920378927d04217a200ebe8539885f0a10027df82882948dfb1327",
+      "tools": [
+        "web.search"
+      ]
+    },
+    {
+      "name": "recall-relevant-memory",
+      "path": "recall-relevant-memory/SKILL.md",
+      "sha256": "e24a0c1579ec74892093708bd8d76664f87453d557fe5c9a9dc883fc608274dc",
+      "tools": [
+        "memory.search",
+        "memory.read"
+      ]
+    },
+    {
+      "name": "consult-shared-documents",
+      "path": "consult-shared-documents/SKILL.md",
+      "sha256": "4e3797b78efc24fd2168a367e074dfe436e2daed9c4490f80a90351a065c3259",
+      "tools": [
+        "aether.search",
+        "aether.read",
+        "notion.read"
+      ]
+    },
+    {
+      "name": "review-upcoming-work",
+      "path": "review-upcoming-work/SKILL.md",
+      "sha256": "edf5fa231e7970cc79b472e4ee0a1b5a4881c56d7ede9bf3d21df2d6674b286d",
+      "tools": [
+        "schedule.upcoming",
+        "voyager.tasks",
+        "task.list",
+        "task.get"
+      ]
+    },
+    {
+      "name": "compare-local-places",
+      "path": "compare-local-places/SKILL.md",
+      "sha256": "5e8ce9f8ed54b936c4078089c3f0b309a15e4ece0beae5fe0a11b63c06c2a108",
+      "tools": [
+        "places.search",
+        "web.search"
+      ]
+    },
+    {
+      "name": "draft-and-revise-study",
+      "path": "draft-and-revise-study/SKILL.md",
+      "sha256": "2fb308df487fda843cb6f352eeef9c8dfb03b2fc7fca9b201a4cef2db1477bf9",
+      "tools": [
+        "study.list",
+        "study.search",
+        "study.read",
+        "study.create",
+        "study.update"
+      ]
+    },
+    {
+      "name": "edit-dedicated-files",
+      "path": "edit-dedicated-files/SKILL.md",
+      "sha256": "ee9b6dba38a0ded974e61791971dae16ba08d66e05b3a28bae7fb5c783361518",
+      "tools": [
+        "folder.list",
+        "folder.search",
+        "folder.read",
+        "folder.create",
+        "folder.update"
+      ]
+    },
+    {
+      "name": "propose-document-change",
+      "path": "propose-document-change/SKILL.md",
+      "sha256": "298fe4b45f500835d2f0be2dad50429a00eafbc34d463a35e6ae5309b4af22c2",
+      "tools": [
+        "aether.search",
+        "aether.read",
+        "aether.propose"
+      ]
+    },
+    {
+      "name": "carry-out-minecraft-goal",
+      "path": "carry-out-minecraft-goal/SKILL.md",
+      "sha256": "4520eed5884227aae52828d38a8c9ea4baddded58c1cf9d1a2f7aa77d531475d",
+      "tools": [
+        "minecraft.request",
+        "minecraft.status",
+        "minecraft.cancel"
+      ],
+      "conditionalTools": [
+        "minecraft.observe"
+      ]
+    }
+  ]
+}

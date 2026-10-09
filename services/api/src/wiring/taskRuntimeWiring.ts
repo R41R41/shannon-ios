@@ -128,7 +128,8 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       await flushReceipts();
     } catch {
       const stopped = step && runtime.get(scopeKey, taskId)?.phase === 'stopping';
-      if (stopped && stepPorts?.safeToAcknowledgeStop?.() !== false) {
+      if (stopped && active.execution.modelOutcome !== 'unknown'
+        && stepPorts?.safeToAcknowledgeStop?.() !== false && stepPorts?.tools?.safeToAcknowledgeStop?.() !== false) {
         // Model/tool promises have unwound; the body adapter also requires confirmed physical release.
         runtime.recordStoppedStep(step!);
         await flushReceipts();

@@ -51,6 +51,7 @@ describe('task outcomes in the existing canonical memory writer', () => {
     const id = taskExperienceId('owner', record.taskId, record.outcomeId);
     expect(f.store.experiencesById('owner', [id])[0]!.recalledMemoryIds).toEqual(ids);
     expect(f.memory.sources('owner', [id])).toEqual([id, ...ids]);
+    expect(f.memory.read('owner', [id], OWNER_AUDIENCE)[0]!.provenance).toEqual({ kind: 'experience', sourceIds: [id, ...ids], readSourceIds: [] });
     f.advance(1000); new ShannonMemoryService(f.store, f.store, f.now).mutate('owner', { memoryId: ids.at(-1)!, action: 'forget' });
     expect(f.memory.read('owner', [id], OWNER_AUDIENCE)).toEqual([]);
   });

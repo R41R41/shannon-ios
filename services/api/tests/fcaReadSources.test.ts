@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createFcaReadSources } from '../src/wiring/fcaReadSources.js';
+import { SQLiteUpcomingStore } from '../src/mind/memory/store/upcomingStore.js';
 import { InMemoryConversationStore } from '../src/mind/memory/store/conversationStore.js';
 import { SQLiteAutonomyStore } from '../src/wiring/autonomyStoreWiring.js';
 import { studyExecutors } from '../src/mind/tools/shannonStudyTools.js';
@@ -30,6 +31,27 @@ function fixture() {
 }
 
 describe('FCA private read receipts', () => {
+  it('checks schedule snapshot freshness at the current clock independently of future item windows and original read time', () => {
+    const f = fixture(), store = new SQLiteUpcomingStore(':memory:'); cleanup.push(() => store.close());
+    let currentAt = at;
+    const future = new Date(Date.parse(at) + 14 * 24 * 60 * 60_000).toISOString();
+    store.replaceCalendar('owner', 'local', { generatedAt: at, timeZone: 'Asia/Tokyo', windowStart: at, windowEnd: new Date(Date.parse(at) + 31 * 24 * 60 * 60_000).toISOString(),
+      events: [{ id: 'future-1', title: 'Future event', start: future, end: new Date(Date.parse(future) + 60 * 60_000).toISOString(), allDay: false }] }, at);
+    store.replaceTasks('owner', 'voyager', [{ id: 'task-1', title: 'Future task', dueAt: future }], at);
+    const visible = createFcaReadSources({ ownerScope: 'owner', ownerAlone: () => true, now: () => currentAt, state: f.state, conversations: f.conversations,
+      voyagerAvailable: () => true, upcoming: { calendarEnabled: true, mayShareCalendar: () => true, store } });
+    const calendar = `calendar-item://${encodeURIComponent(`calendar:future-1@${future}`)}`, task = 'calendar-item://task%3Atask-1';
+    expect(visible('owner', calendar, at)).toBe(true); expect(visible('owner', task, at)).toBe(true);
+    currentAt = new Date(Date.parse(at) + 7 * 60 * 60_000).toISOString();
+    expect(visible('owner', task, at)).toBe(false); expect(visible('owner', calendar, at)).toBe(true);
+    currentAt = new Date(Date.parse(at) + 8 * 24 * 60 * 60_000).toISOString();
+    expect(visible('owner', calendar, at)).toBe(false);
+    store.replaceTasks('owner', 'voyager', [{ id: 'task-1', title: 'Future task', dueAt: future }], currentAt);
+    expect(visible('owner', task, at)).toBe(true);
+    f.state.apply('owner', { type: 'memory-control-upserted', control: { memoryId: task, kind: 'experience', status: 'active', pinned: false,
+      overrideText: 'Corrected item', contextInvalidatedAt: currentAt, updatedAt: currentAt, changeReason: 'owner' } });
+    expect(visible('owner', task, at)).toBe(false);
+  });
   it('reuses only recognized provider receipts under the original owner scope, fresh audience and memory controls', () => {
     const f = fixture();
     const sources = ['aether-document://doc-1', 'notion-page://0123456789abcdef0123456789abcdef', 'voyager-task://task-1'];

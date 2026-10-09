@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { SkillStatus } from '../skillDocument.js';
-import { ensureColumns } from '../../../infra/sqlite/schemaColumns.js';
-import { ensureSkillSleepUsageSchema } from './sqliteSkillSleepUsage.js';
+import { ensureSkillSchema } from './sqliteSkillSchema.js';
+export { ensureSkillSchema } from './sqliteSkillSchema.js';
+import type { OperatorSkillProvenance, SkillImportReceipt } from '../skillImportContract.js';
 import { versionRevisionId } from '../skillLineage.js';
 
 /**
@@ -27,122 +28,6 @@ import { versionRevisionId } from '../skillLineage.js';
  */
 export const SKILLS_TABLE = 'shannon_skills';
 
-export function ensureSkillSchema(database: DatabaseSync): void {
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS shannon_skills (
-      skill_id TEXT PRIMARY KEY,
-      scope_key TEXT NOT NULL,
-      name TEXT NOT NULL,
-      description TEXT NOT NULL,
-      status TEXT NOT NULL CHECK (status IN ('trial', 'active', 'retired')),
-      version INTEGER NOT NULL,
-      body TEXT NOT NULL,
-      body_hash TEXT NOT NULL,
-      made_by TEXT NOT NULL CHECK (made_by IN ('sleep', 'owner_edit')),
-      sources_json TEXT NOT NULL,
-      purpose_pattern_ids_json TEXT NOT NULL DEFAULT '[]',
-      trial_base_version INTEGER,
-      trial_audit_id TEXT,
-      pinned INTEGER NOT NULL DEFAULT 0,
-      successes INTEGER NOT NULL DEFAULT 0,
-      uses_json TEXT NOT NULL DEFAULT '[]',
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      status_at TEXT NOT NULL,
-      status_reason TEXT,
-      aether_document_id TEXT,
-      aether_version INTEGER,
-      exported_hash TEXT,
-      exported_at TEXT,
-      export_hold TEXT
-    );
-    CREATE INDEX IF NOT EXISTS shannon_skills_scope ON shannon_skills (scope_key, status);
-    CREATE TABLE IF NOT EXISTS shannon_skill_revisions (
-      revision_id TEXT PRIMARY KEY,
-      skill_id TEXT NOT NULL,
-      scope_key TEXT NOT NULL,
-      version INTEGER NOT NULL,
-      kind TEXT NOT NULL CHECK (kind IN ('version', 'snapshot')),
-      body TEXT NOT NULL,
-      body_hash TEXT NOT NULL,
-      made_by TEXT NOT NULL CHECK (made_by IN ('sleep', 'owner_edit')),
-      actor TEXT NOT NULL CHECK (actor IN ('sleep', 'conversation', 'owner', 'shannon_copy')),
-      evidence_json TEXT NOT NULL,
-      before_sha256 TEXT,
-      after_sha256 TEXT NOT NULL,
-      pinned INTEGER NOT NULL,
-      reason TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      parent_revision_id TEXT,
-      variant_of TEXT,
-      uses INTEGER NOT NULL DEFAULT 0,
-      successes INTEGER NOT NULL DEFAULT 0
-    );
-    CREATE INDEX IF NOT EXISTS shannon_skill_revisions_skill ON shannon_skill_revisions (skill_id, version);
-    CREATE INDEX IF NOT EXISTS shannon_skill_revisions_scope ON shannon_skill_revisions (scope_key, created_at);
-    CREATE TABLE IF NOT EXISTS shannon_skill_patterns (
-      pattern_id TEXT PRIMARY KEY,
-      scope_key TEXT NOT NULL,
-      kind TEXT NOT NULL CHECK (kind IN ('failure', 'strategy')),
-      title TEXT NOT NULL,
-      body TEXT NOT NULL,
-      status TEXT NOT NULL CHECK (status IN ('active', 'deprecated')),
-      superseded_by TEXT,
-      version INTEGER NOT NULL,
-      sources_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS shannon_skill_patterns_scope ON shannon_skill_patterns (scope_key, status);
-    CREATE TABLE IF NOT EXISTS shannon_skill_pattern_log (
-      log_id TEXT PRIMARY KEY,
-      pattern_id TEXT NOT NULL,
-      scope_key TEXT NOT NULL,
-      version INTEGER NOT NULL,
-      operation TEXT NOT NULL CHECK (operation IN ('create', 'patch', 'append', 'merge', 'deprecate')),
-      body TEXT NOT NULL,
-      related_id TEXT,
-      at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS shannon_skill_pattern_log_scope ON shannon_skill_pattern_log (scope_key, at);
-    CREATE TABLE IF NOT EXISTS shannon_skill_audit (
-      audit_id TEXT PRIMARY KEY,
-      scope_key TEXT NOT NULL,
-      skill_id TEXT NOT NULL,
-      target TEXT NOT NULL,
-      kind TEXT NOT NULL CHECK (kind IN ('create', 'patch', 'copy_delete')),
-      from_version INTEGER,
-      to_version INTEGER NOT NULL,
-      proposal_hash TEXT NOT NULL,
-      diff TEXT NOT NULL,
-      purpose_pattern_ids_json TEXT NOT NULL,
-      baseline_rate REAL,
-      lint_json TEXT NOT NULL DEFAULT '[]',
-      trial_uses INTEGER NOT NULL DEFAULT 0,
-      trial_successes INTEGER NOT NULL DEFAULT 0,
-      status TEXT NOT NULL CHECK (status IN ('trial', 'accepted', 'reverted', 'superseded')),
-      proposed_at TEXT NOT NULL,
-      decided_at TEXT,
-      reason TEXT
-    );
-    CREATE INDEX IF NOT EXISTS shannon_skill_audit_scope ON shannon_skill_audit (scope_key, status);
-    CREATE TABLE IF NOT EXISTS shannon_skill_copy_writes (
-      write_id TEXT PRIMARY KEY,
-      scope_key TEXT NOT NULL,
-      skill_id TEXT NOT NULL,
-      document_id TEXT NOT NULL,
-      kind TEXT NOT NULL CHECK (kind IN ('update', 'delete')),
-      body_hash TEXT,
-      at TEXT NOT NULL,
-      processed_at TEXT
-    );
-    CREATE INDEX IF NOT EXISTS shannon_skill_copy_writes_skill ON shannon_skill_copy_writes (scope_key, skill_id, processed_at);
-  `);
-  ensureSkillSleepUsageSchema(database);
-  // ADR-0008 §14's lineage columns, added when the table already existed without them.
-  ensureColumns(database, 'shannon_skill_revisions', { parent_revision_id: 'TEXT', variant_of: 'TEXT', uses: 'INTEGER NOT NULL DEFAULT 0', successes: 'INTEGER NOT NULL DEFAULT 0' });
-}
-
 /** One use of a skill: when, in which Talk, of which version, G at the turn's end, and its outcome once settled (`tierOutcome`). */
 export interface SkillUse { id: string; at: string; talk: string; v: number; g: number; o: 0 | 1 | null }
 
@@ -155,7 +40,8 @@ export interface StoredSkill {
   version: number;
   body: string;
   bodyHash: string;
-  madeBy: 'sleep' | 'owner_edit';
+  madeBy: 'sleep' | 'owner_edit' | 'operator_authored';
+  provenance: OperatorSkillProvenance | null;
   /** What it was built from, by id: `experience:<id>`, `knowledge:<id>`, `pattern:<id>`, `sequence:<symbols>`. */
   sources: readonly string[];
   /** The pattern pages that motivated it (its PURPOSE). */
@@ -180,7 +66,7 @@ export interface StoredSkill {
 }
 
 /** Who made a revision (Hermes Agent's provenance, adapted): her sleep, a conversation, the owner, or her own edit of a copy (M2). */
-export type SkillActor = 'sleep' | 'conversation' | 'owner' | 'shannon_copy';
+export type SkillActor = 'sleep' | 'conversation' | 'owner' | 'shannon_copy' | 'operator_authored';
 
 
 /**
@@ -188,7 +74,8 @@ export type SkillActor = 'sleep' | 'conversation' | 'owner' | 'shannon_copy';
  * evidence ids it was made from, the sha256 of the body before and after, and whether the skill was pinned.
  */
 export interface SkillRevision {
-  revisionId: string; skillId: string; version: number; kind: 'version' | 'snapshot'; body: string; bodyHash: string; madeBy: 'sleep' | 'owner_edit';
+  revisionId: string; skillId: string; version: number; kind: 'version' | 'snapshot'; body: string; bodyHash: string; madeBy: 'sleep' | 'owner_edit' | 'operator_authored';
+  provenance: OperatorSkillProvenance | null;
   actor: SkillActor; evidence: readonly string[]; beforeSha256: string | null; afterSha256: string; pinned: boolean; reason: string; createdAt: string;
   /** ADR-0008 §14: the version it was derived from, the version it restores, and its settled uses and successes. */
   parentRevisionId: string | null; variantOf: string | null; uses: number; successes: number;
@@ -215,6 +102,18 @@ const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9_:-]{0,119}$/u;
 export class SQLiteSkills {
   constructor(private readonly database: DatabaseSync, options: { createSchema: boolean }) {
     if (options.createSchema) ensureSkillSchema(database);
+  }
+
+  importReceipt(scopeKey: string, receiptId: string): SkillImportReceipt | null {
+    const row = this.database.prepare('SELECT receipt_json FROM shannon_skill_imports WHERE scope_key = ? AND receipt_id = ?').get(scopeKey, receiptId) as { receipt_json: string } | undefined;
+    return row ? JSON.parse(row.receipt_json) as SkillImportReceipt : null;
+  }
+
+  importSourceVisible(scopeKey: string, receiptId: string): boolean { return this.importReceipt(scopeKey, receiptId) !== null; }
+
+  insertImportReceipt(receipt: SkillImportReceipt): void {
+    this.database.prepare('INSERT INTO shannon_skill_imports (receipt_id, scope_key, pack_id, pack_revision, pack_sha256, receipt_json) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(receipt.receiptId, receipt.scopeKey, receipt.packId, receipt.packRevision, receipt.packSha256, JSON.stringify(receipt));
   }
 
   all(scopeKey: string, options: { includeRetired?: boolean } = {}): StoredSkill[] {
@@ -250,19 +149,19 @@ export class SQLiteSkills {
 
   /** A new skill, on trial. */
   insert(skill: Pick<StoredSkill, 'skillId' | 'scopeKey' | 'name' | 'description' | 'body' | 'bodyHash' | 'sources' | 'purposePatternIds' | 'trialAuditId'>,
-    provenance: { actor: SkillActor; evidence: readonly string[] }, reason: string, at: string): void {
+    provenance: { actor: SkillActor; evidence: readonly string[]; operator?: OperatorSkillProvenance }, reason: string, at: string): void {
     identifier(skill.skillId);
     symbol(reason);
-    this.database.prepare(`INSERT INTO shannon_skills (skill_id, scope_key, name, description, status, version, body, body_hash, made_by, sources_json, purpose_pattern_ids_json, trial_audit_id, created_at, updated_at, status_at)
-      VALUES (?, ?, ?, ?, 'trial', 1, ?, ?, 'sleep', ?, ?, ?, ?, ?, ?)`).run(skill.skillId, skill.scopeKey, skill.name, skill.description, skill.body, skill.bodyHash,
-      JSON.stringify(skill.sources), JSON.stringify(skill.purposePatternIds), skill.trialAuditId, at, at, at);
-    this.revision({ scopeKey: skill.scopeKey, skillId: skill.skillId, version: 1, kind: 'version', body: skill.body, bodyHash: skill.bodyHash, madeBy: 'sleep',
+    this.database.prepare(`INSERT INTO shannon_skills (skill_id, scope_key, name, description, status, version, body, body_hash, made_by, sources_json, purpose_pattern_ids_json, trial_audit_id, created_at, updated_at, status_at, provenance_json)
+      VALUES (?, ?, ?, ?, 'trial', 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(skill.skillId, skill.scopeKey, skill.name, skill.description, skill.body, skill.bodyHash, provenance.operator ? 'operator_authored' : 'sleep',
+      JSON.stringify(skill.sources), JSON.stringify(skill.purposePatternIds), skill.trialAuditId, at, at, at, provenance.operator ? JSON.stringify(provenance.operator) : null);
+    this.revision({ scopeKey: skill.scopeKey, skillId: skill.skillId, version: 1, kind: 'version', body: skill.body, bodyHash: skill.bodyHash, madeBy: provenance.operator ? 'operator_authored' : 'sleep',
       actor: provenance.actor, evidence: provenance.evidence, before: null, pinned: false, reason }, at);
   }
 
   /** A new version; false when the version moved since it was read (another writer). */
   update(scopeKey: string, skillId: string, expectedVersion: number, next: {
-    name: string; description: string; body: string; bodyHash: string; madeBy: 'sleep' | 'owner_edit'; sources?: readonly string[]; purposePatternIds?: readonly string[];
+    name: string; description: string; body: string; bodyHash: string; madeBy: 'sleep' | 'owner_edit' | 'operator_authored'; sources?: readonly string[]; purposePatternIds?: readonly string[];
     /** The trial this version starts (`{ base, audit }`), or null to end any trial. */ trial: { base: number | null; audit: string } | null;
     actor: SkillActor; evidence: readonly string[];
     /** ADR-0008 §14: the version it was derived from (default: the current one), or the one it restores. */ lineage?: { parent?: string; restores?: string };
@@ -346,7 +245,7 @@ export class SQLiteSkills {
       : this.database.prepare('SELECT * FROM shannon_skill_revisions WHERE scope_key = ? ORDER BY created_at, version').all(scopeKey)) as Array<Record<string, unknown>>;
     return rows.map(row => ({
       revisionId: String(row.revision_id), skillId: String(row.skill_id), version: Number(row.version), kind: String(row.kind) as 'version' | 'snapshot', body: String(row.body),
-      bodyHash: String(row.body_hash), madeBy: String(row.made_by) as 'sleep' | 'owner_edit', actor: String(row.actor) as SkillActor, evidence: list<string[]>(row.evidence_json, []),
+      bodyHash: String(row.body_hash), provenance: list<OperatorSkillProvenance | null>(row.provenance_json, null), madeBy: String(row.made_by) as 'sleep' | 'owner_edit' | 'operator_authored', actor: String(row.actor) as SkillActor, evidence: list<string[]>(row.evidence_json, []),
       beforeSha256: text(row.before_sha256), afterSha256: String(row.after_sha256), pinned: Number(row.pinned) === 1, reason: String(row.reason), createdAt: String(row.created_at),
       parentRevisionId: text(row.parent_revision_id), variantOf: text(row.variant_of), uses: Number(row.uses ?? 0), successes: Number(row.successes ?? 0),
     }));
@@ -355,7 +254,7 @@ export class SQLiteSkills {
   /** Changes the sleep proposed since an instant, split into new skills and patches (the nightly limits). */
   proposedSince(scopeKey: string, since: string): { created: number; updated: number } {
     const row = this.database.prepare(`SELECT COALESCE(SUM(CASE WHEN kind = 'create' THEN 1 ELSE 0 END), 0) AS created, COALESCE(SUM(CASE WHEN kind = 'patch' THEN 1 ELSE 0 END), 0) AS updated
-      FROM shannon_skill_audit WHERE scope_key = ? AND proposed_at >= ?`).get(scopeKey, since) as { created: number; updated: number };
+      FROM shannon_skill_audit WHERE scope_key = ? AND proposed_at >= ? AND NOT (kind = 'create' AND EXISTS (SELECT 1 FROM shannon_skill_revisions r WHERE r.skill_id = shannon_skill_audit.skill_id AND r.version = 1 AND r.kind = 'version' AND r.actor = 'operator_authored'))`).get(scopeKey, since) as { created: number; updated: number };
     return { created: Number(row.created), updated: Number(row.updated) };
   }
 
@@ -438,16 +337,17 @@ export class SQLiteSkills {
       .run(`${patternId}:${count + 1}`, patternId, scopeKey, version, operation, body, relatedId, at);
   }
 
-  private revision(entry: { scopeKey: string; skillId: string; version: number; kind: 'version' | 'snapshot'; body: string; bodyHash: string; madeBy: 'sleep' | 'owner_edit';
+  private revision(entry: { scopeKey: string; skillId: string; version: number; kind: 'version' | 'snapshot'; body: string; bodyHash: string; madeBy: 'sleep' | 'owner_edit' | 'operator_authored';
     actor: SkillActor; evidence: readonly string[]; before: string | null; pinned: boolean; reason: string; parent?: string | null; variantOf?: string | null }, at: string): void {
+    const provenance = this.get(entry.scopeKey, entry.skillId)?.provenance;
     // Provenance of the revision (what this change cited); the skill's own `sources` hold every source for the checks (N1).
     const evidence = [...new Set(entry.evidence)].filter(id => /^[A-Za-z][A-Za-z0-9_.:>-]{0,160}$/u.test(id));
     const snapshots = entry.kind === 'snapshot'
       ? Number((this.database.prepare("SELECT COUNT(*) AS n FROM shannon_skill_revisions WHERE skill_id = ? AND kind = 'snapshot'").get(entry.skillId) as { n: number }).n) : 0;
-    this.database.prepare(`INSERT INTO shannon_skill_revisions (revision_id, skill_id, scope_key, version, kind, body, body_hash, made_by, actor, evidence_json, before_sha256, after_sha256, pinned, reason, created_at, parent_revision_id, variant_of)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(entry.kind === 'snapshot' ? `${entry.skillId}:s${snapshots + 1}` : versionRevisionId(entry.skillId, entry.version),
+    this.database.prepare(`INSERT INTO shannon_skill_revisions (revision_id, skill_id, scope_key, version, kind, body, body_hash, made_by, actor, evidence_json, before_sha256, after_sha256, pinned, reason, created_at, parent_revision_id, variant_of, provenance_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(entry.kind === 'snapshot' ? `${entry.skillId}:s${snapshots + 1}` : versionRevisionId(entry.skillId, entry.version),
       entry.skillId, entry.scopeKey, entry.version, entry.kind, entry.body, entry.bodyHash, entry.madeBy, entry.actor, JSON.stringify(evidence),
-      entry.before === null ? null : sha256(entry.before), sha256(entry.body), entry.pinned ? 1 : 0, entry.reason, at, entry.parent ?? null, entry.variantOf ?? null);
+      entry.before === null ? null : sha256(entry.before), sha256(entry.body), entry.pinned ? 1 : 0, entry.reason, at, entry.parent ?? null, entry.variantOf ?? null, provenance ? JSON.stringify(provenance) : null);
   }
 }
 
@@ -479,7 +379,7 @@ function parsed(row: Record<string, unknown>): StoredSkill {
   return {
     skillId: String(row.skill_id), scopeKey: String(row.scope_key), name: String(row.name), description: String(row.description),
     status: String(row.status) as SkillStatus, version: Number(row.version), body: String(row.body), bodyHash: String(row.body_hash),
-    madeBy: String(row.made_by) as 'sleep' | 'owner_edit', sources: list<string[]>(row.sources_json, []), purposePatternIds: list<string[]>(row.purpose_pattern_ids_json, []),
+    provenance: list<OperatorSkillProvenance | null>(row.provenance_json, null), madeBy: String(row.made_by) as 'sleep' | 'owner_edit' | 'operator_authored', sources: list<string[]>(row.sources_json, []), purposePatternIds: list<string[]>(row.purpose_pattern_ids_json, []),
     trialBaseVersion: nullableNumber(row.trial_base_version), trialAuditId: text(row.trial_audit_id), pinned: Number(row.pinned ?? 0) === 1, successes: Number(row.successes ?? 0),
     uses: list<SkillUse[]>(row.uses_json, []), createdAt: String(row.created_at), updatedAt: String(row.updated_at), statusAt: String(row.status_at),
     statusReason: text(row.status_reason), aetherDocumentId: text(row.aether_document_id), aetherVersion: nullableNumber(row.aether_version),

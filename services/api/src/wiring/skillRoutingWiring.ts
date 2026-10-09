@@ -80,7 +80,7 @@ export function configuredJevChooser(
 export function readToolPorts(
   environment: Readonly<Record<string, string | undefined>>,
   parts: { notion: NotionSource | null; voyagerCatalog: VoyagerCatalog;
-    upcoming: Pick<OwnerUpcoming, 'promptFor'> & Partial<Pick<OwnerUpcoming, 'promptWithSources'>>; chatModel: ShannonChatModel; now?: () => string },
+    upcoming: Pick<OwnerUpcoming, 'promptFor'> & Partial<Pick<OwnerUpcoming, 'promptWithSources' | 'searchWithSources'>>; chatModel: ShannonChatModel; now?: () => string },
 ): ReadToolPorts | null {
   if (!skillRoutingSwitches(environment).readTools) return null;
   return {
@@ -103,6 +103,10 @@ export function readToolPorts(
       return projection ? { text: projection.prompt, sourceIds: projection.sourceIds.map(id => `calendar-item://${encodeURIComponent(id)}`) }
         : parts.upcoming.promptFor(scopeKey, message, 'owner');
     },
+    ...(parts.upcoming.searchWithSources ? { upcomingSearch: (scopeKey: string, input: Record<string, unknown>) => {
+      const projection = parts.upcoming.searchWithSources!(scopeKey, input);
+      return { text: projection.prompt, sourceIds: projection.sourceIds.map(id => `calendar-item://${encodeURIComponent(id)}`) };
+    } } : {}),
     places: async (scopeKey, query, spoken) => (await runPlaceDiscoverySkill(parts.chatModel, { scopeKey, message: query, context: spoken ? { spoken: true } : {} })).prompt,
   };
 }

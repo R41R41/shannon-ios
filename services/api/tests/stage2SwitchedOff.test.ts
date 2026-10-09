@@ -1,3 +1,4 @@
+import { historicalSearchRequest } from './support/historicalSearchRequest.js';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -60,7 +61,7 @@ export async function capturedScenarioDigests(extra: (fetchers: { jev: typeof fe
     let round = 0;
     const openai = (async (_url: string | URL | Request, init?: RequestInit) => {
       const body = String(init?.body);
-      captured.openai.push(digest(body));
+      captured.openai.push(digest(historicalSearchRequest(body)));
       round += 1;
       // The tool-round scenario asks for one call first, then answers.
       if (scenario.toolRound && round === 1) {

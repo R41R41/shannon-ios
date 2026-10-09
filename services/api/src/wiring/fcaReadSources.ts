@@ -7,13 +7,15 @@ import type { AetherContextReader } from '../integrations/aether/aetherContext.j
 
 export interface FcaReadSourcesOptions {
   ownerScope: string; ownerAlone(): boolean; state: Pick<CompanionStateStore, 'snapshot'>; conversations: ConversationStore;
+  /** Availability uses the current clock; forgetting/correction still uses the original read receipt's observedAt. */
+  now?(): string;
   /** Original remote reads already passed their native document/root gate. Reuse keeps the same owner-only scope. */
   aetherAvailable?(): boolean; notionAvailable?(): boolean; voyagerAvailable?(): boolean;
   aetherContext?: Pick<AetherContextReader, 'sourceText'> | null;
   study?: Pick<StudyStore, 'find' | 'versions'> | null;
   upcoming?: Pick<OwnerUpcoming, 'calendarEnabled' | 'mayShareCalendar' | 'store'> | null;
   /** These native readers return only currently accessible sources; no prompt parsing or new remote executor. */
-  skill?(scopeKey: string, skillId: string): { body: string } | null;
+  skill?(scopeKey: string, skillId: string, revisionId?: string): { body: string } | null;
   folderAvailable?(scopeKey: string, host: string): boolean;
 }
 
@@ -43,13 +45,25 @@ export function createFcaReadSources(parts: FcaReadSourcesOptions): (scopeKey: s
           // Earlier versions can remain in a task's native history; a new revision cannot erase their withholding boundary.
           text = withholding.inactive ? '' : [piece.title, piece.body, ...parts.study!.versions(scopeKey, id).flatMap(version => [version.title, version.body])].join('\n'); break;
         }
-        case 'shannon-skill': { const skill = parts.skill?.(scopeKey, id); if (!skill) return false; text = skill.body; break; }
+        case 'shannon-skill': {
+          const revision = /^([^/]+)\/revision\/([^/]+)$/u.exec(match[2]!);
+          const skillId = revision ? decodeURIComponent(revision[1]!) : id;
+          const revisionId = revision ? decodeURIComponent(revision[2]!) : undefined;
+          if (!skillId || (revisionId !== undefined && (!revisionId || /[\u0000-\u001f\u007f]/u.test(revisionId)))) return false;
+          if ([skillId, `shannon-skill://${encodeURIComponent(skillId)}`, ...(revisionId ? [revisionId] : [])].some(key => {
+            const control = memoryControlFor(state, key);
+            return control && (control.status !== 'active' || Boolean(control.overrideText && observedAt <= (control.contextInvalidatedAt ?? control.updatedAt)));
+          })) return false;
+          const skill = parts.skill?.(scopeKey, skillId, revisionId); if (!skill) return false; text = skill.body; break;
+        }
         case 'shannon-folder': {
           const folder = /^([^/]+)\/([a-f0-9]{64})$/u.exec(id);
           if (!folder || !parts.folderAvailable?.(scopeKey, folder[1]!)) return false; break;
         }
         case 'calendar-item': {
           if (!parts.upcoming?.mayShareCalendar(scopeKey)) return false;
+          const currentAt = parts.now?.() ?? new Date().toISOString();
+          if (!Number.isFinite(Date.parse(currentAt))) return false;
           if (id.startsWith('promise:')) {
             const promise = state.prospectiveMemories.find(item => item.id === id.slice(8));
             if (!promise || !visibleMemoryText(state, promise.id, promise.summary)
@@ -57,13 +71,13 @@ export function createFcaReadSources(parts: FcaReadSourcesOptions): (scopeKey: s
             text = promise.summary; break;
           }
           if (id.startsWith('task:')) {
-            const item = parts.upcoming.store.tasks(scopeKey, 'voyager', '0001-01-01T00:00:00.000Z', '9999-12-31T23:59:59.999Z', 6 * 60 * 60_000).find(item => item.id === id.slice(5));
+            const item = parts.upcoming.store.tasks(scopeKey, 'voyager', '0001-01-01T00:00:00.000Z', '9999-12-31T23:59:59.999Z', 6 * 60 * 60_000, currentAt).find(item => item.id === id.slice(5));
             if (!item || !parts.voyagerAvailable?.()) return false; text = item.title; break;
           }
           const calendar = /^calendar:(.+)@(.+)$/u.exec(id);
           if (!calendar || !parts.upcoming.calendarEnabled || !Number.isFinite(Date.parse(calendar[2]!))) return false;
           const instant = Date.parse(calendar[2]!);
-          const event = parts.upcoming.store.calendarEvents(scopeKey, new Date(instant - 1).toISOString(), new Date(instant + 1).toISOString())
+          const event = parts.upcoming.store.calendarEvents(scopeKey, new Date(instant - 1).toISOString(), new Date(instant + 1).toISOString(), currentAt)
             .find(item => item.id === calendar[1] && item.start === calendar[2]);
           if (!event) return false; text = [event.title, event.location ?? ''].join('\n'); break;
         }
@@ -85,10 +99,13 @@ export function fcaReadSourceRetained(state: Pick<CompanionStateStore, 'snapshot
     const id = decodeURIComponent(match[2]!);
     if (!id || /[\u0000-\u001f\u007f]/u.test(id)) return false;
     const snapshot = state.snapshot(scopeKey);
-    if ([sourceId, id].some(key => {
+    const skillRevision = match[1] === 'shannon-skill' ? /^([^/]+)\/revision\/([^/]+)$/u.exec(match[2]!) : null;
+    const keys = [sourceId, id, ...(skillRevision ? [decodeURIComponent(skillRevision[1]!), decodeURIComponent(skillRevision[2]!),
+      `shannon-skill://${skillRevision[1]!}`] : [])];
+    if (keys.some(key => {
       const control = memoryControlFor(snapshot, key);
       return control && (control.status !== 'active' || Boolean(control.overrideText && observedAt <= (control.contextInvalidatedAt ?? control.updatedAt)));
     })) return false;
-    return !new MemoryWithholding(snapshot, conversations, scopeKey).withholdsReply({ text: '', observedAt, recalledMemoryIds: [sourceId, id] });
+    return !new MemoryWithholding(snapshot, conversations, scopeKey).withholdsReply({ text: '', observedAt, recalledMemoryIds: keys });
   } catch { return false; }
 }

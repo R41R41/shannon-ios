@@ -12,7 +12,6 @@ import type { TaskAuthority, TaskCommit, TaskConversationSource, TaskHistoryComm
   TaskSegmentReceipt, TaskSnapshot, TaskSpec, TaskStep, TaskView } from '../taskRuntimePorts.js';
 import { TaskSourceStore } from './taskSourceStore.js';
 import { TaskHistoryStore } from './taskHistoryStore.js';
-
 interface Checkpoint {
   checkpoint_json: string | null; wait_reason: string | null; stop_requested: number;
   step_id: string | null; lease_json: string | null; last_admission: number; observed_messages_json: string | null;
@@ -28,12 +27,9 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
     const result = observeExternalEvent(this.db, this.authority, scope, this.ensureRoot(scope).id, target, event, this.now());
     return { accepted: true as const, duplicate: result.duplicate, task: this.view(result.task) };
   }
-  private readonly authority: TaskAuthority;
-  private readonly now: () => string;
-  private readonly sources: TaskSourceStore;
-  private readonly deliveries: TaskConversationDeliveryStore;
-  private readonly histories: TaskHistoryStore;
-  private readonly maintenance: TaskMaintenanceStore;
+  private readonly authority: TaskAuthority; private readonly now: () => string;
+  private readonly sources: TaskSourceStore; private readonly deliveries: TaskConversationDeliveryStore;
+  private readonly histories: TaskHistoryStore; private readonly maintenance: TaskMaintenanceStore;
   constructor(private readonly db: DatabaseSync, private readonly options: TaskRuntimeOptions) {
     this.authority = options.authority;
     this.now = options.now ?? (() => new Date().toISOString());
@@ -243,6 +239,10 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
     { accepted: true; duplicate: boolean; task: TaskView } {
     bounded(text, limits.text, 'MESSAGE'); bounded(messageId, 160, 'MESSAGE_ID');
     return this.authority.transaction(() => this.sendInTransaction(scopeKey, sourceTaskId, targetId, text, messageId));
+  }
+  pendingMessageIds(scopeKey: string, taskId: string): readonly string[] {
+    if (!this.authority.get(scopeKey, taskId)) return [];
+    return this.db.prepare('SELECT message_id FROM fca_task_messages WHERE target_task_id=? AND scope_key=? AND consumed_by IS NULL ORDER BY rowid DESC LIMIT 1000').all(taskId, scopeKey).filter(row => this.sources.messageVisible(taskId, String(row.message_id)) && !this.deliveries.reserved(taskId, String(row.message_id))).map(row => String(row.message_id));
   }
   snapshot(scopeKey: string, taskId: string): TaskSnapshot | null {
     return this.authority.transaction(() => this.snapshotInTransaction(scopeKey, taskId));

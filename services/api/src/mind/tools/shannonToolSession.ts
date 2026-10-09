@@ -88,6 +88,7 @@ export function conversationTools(
   if (!definitions.length) return {};
   const trace = ownerAlone === 'guests' ? undefined : server.turns?.open(scopeKey, threadId, words, offer === 'asked', voice.utteranceId);
   const memory = toolSessionMemory(createHash('sha256').update(`${scopeKey}\n${turn}`).digest('hex'));
+  let lifecycleCall = 0;
   let check: SecretCheck | null | undefined;
   let others: OthersTextCheck | null | undefined;
   const session = { definitions, maximumCalls: CONVERSATION_TOOL_CALLS } as unknown as ShannonModelToolSession;
@@ -124,8 +125,11 @@ export function conversationTools(
     // With anyone else present: what of the owner's must not reach the model from what she reads, read the same way. It is
     // read before the call is awaited, so each of a step's parallel calls is handed its own check and filtered by it.
     if (othersPresent && !others) { try { others = server.othersText?.(scopeKey, options.openOnly === true) ?? null; } catch { others = null; } }
+    // Lifecycle actions are distinct invocations; start → stop → start must not reuse the first start receipt.
+    // Other tools retain whole-turn dedupe and their shared session read state.
+    const callMemory = tool.domain === 'minecraft_lifecycle' ? { ...memory, turnKey: `${memory.turnKey}:lifecycle:${++lifecycleCall}` } : memory;
     const result = await runner.call(tool?.name ?? providerName.slice(0, 80), argumentsJson, {
-      scopeKey, surface, audience, memory, threadId, ...(secrets !== undefined ? { secrets } : {}), ...(others !== undefined ? { othersText: others } : {}),
+      scopeKey, surface, audience, memory: callMemory, threadId, ...(secrets !== undefined ? { secrets } : {}), ...(others !== undefined ? { othersText: others } : {}),
       ...(timeMilliseconds !== undefined ? { timeMilliseconds } : {}),
     }, signal);
     if (result.ok && writesHerOwnThings(definitions.find(item => item.name === tool.name))) WROTE_HER_OWN_THINGS.add(session);
@@ -259,9 +263,9 @@ function offersAether(runner: ShannonToolRunner | undefined, scopeKey: string, s
   try { return runner?.offered(surface, 'owner_alone', scopeKey).some(tool => tool.name === 'aether.search') ?? false; } catch { return false; }
 }
 
-/** Whether the runner offers `minecraft.request` on this surface now: her Minecraft body configured for the scope and in the game. */
+/** A body request or lifecycle login enables Minecraft voice intent, including an offline body/server. */
 function offersMinecraftRequest(runner: ShannonToolRunner | undefined, scopeKey: string, surface: 'text' | 'voice'): boolean {
-  try { return runner?.offered(surface, 'owner_alone', scopeKey).some(tool => tool.name === 'minecraft.request') ?? false; } catch { return false; }
+  try { return runner?.offered(surface, 'owner_alone', scopeKey).some(tool => tool.name === 'minecraft.request' || tool.name === 'minecraft.login') ?? false; } catch { return false; }
 }
 
 /** Her reply offered something she would do with her tools and asks him to say yes (「中を見てみましょうか？」). */

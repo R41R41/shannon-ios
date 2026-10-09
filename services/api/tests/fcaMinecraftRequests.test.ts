@@ -98,4 +98,19 @@ describe('Minecraft requests enter the canonical common task tree', () => {
       expect(f.runtime.get('owner', task.id)?.phase).toBe('stopped'); turn.abort();
     });
   });
+
+  it('cancel without an ID stops only the newest open task, preserving other parallel work', async () => {
+    const f = fixture();
+    await f.foreground(async turn => {
+      await f.execute('minecraft.request', { goal: 'Find stone' });
+      const first = f.runtime.list('owner').find(task => f.bodyStore.body(task.id))!;
+      f.db.prepare('UPDATE agent_tasks SET created_at=? WHERE task_id=?').run('2026-10-08T23:59:00.000Z', first.id);
+      await f.execute('minecraft.request', { goal: 'Find wood' });
+      const second = f.runtime.list('owner').find(task => task.id !== first.id && f.bodyStore.body(task.id))!;
+      expect((await f.execute('minecraft.cancel', {})).ok).toBe(true);
+      expect(f.runtime.get('owner', second.id)?.phase).toBe('stopped');
+      expect(f.runtime.get('owner', first.id)?.phase).not.toBe('stopped');
+      turn.abort();
+    });
+  });
 });

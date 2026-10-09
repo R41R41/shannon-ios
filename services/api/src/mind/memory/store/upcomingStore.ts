@@ -83,10 +83,10 @@ export class SQLiteUpcomingStore {
    * Events that are under way at `from` or begin before `until`, from every device with a
    * fresh snapshot, earliest first. The same title, start and end from two devices is one event.
    */
-  calendarEvents(scopeKey: string, from: string, until: string): readonly (CalendarEvent & { timeZone: string })[] {
+  calendarEvents(scopeKey: string, from: string, until: string, observedAt = from): readonly (CalendarEvent & { timeZone: string })[] {
     const rows = this.database.prepare(`
-      SELECT time_zone, events_json FROM calendar_device_snapshots WHERE scope_key = ? AND received_at >= ? ${this.paired(from)} ORDER BY received_at DESC, device_id ASC
-    `).all(scopeKey, this.freshSince(from)) as unknown as Array<{ time_zone: string; events_json: string }>;
+      SELECT time_zone, events_json FROM calendar_device_snapshots WHERE scope_key = ? AND received_at >= ? ${this.paired(observedAt)} ORDER BY received_at DESC, device_id ASC
+    `).all(scopeKey, this.freshSince(observedAt)) as unknown as Array<{ time_zone: string; events_json: string }>;
     const seen = new Set<string>();
     const events: (CalendarEvent & { timeZone: string })[] = [];
     for (const row of rows) {
@@ -110,10 +110,10 @@ export class SQLiteUpcomingStore {
   }
 
   /** Tasks of one source that are due in `[from, until)`, when its snapshot is at most `maximumAgeMilliseconds` old. */
-  tasks(scopeKey: string, source: string, from: string, until: string, maximumAgeMilliseconds: number): readonly UpcomingTask[] {
+  tasks(scopeKey: string, source: string, from: string, until: string, maximumAgeMilliseconds: number, observedAt = from): readonly UpcomingTask[] {
     const row = this.database.prepare('SELECT tasks_json, fetched_at FROM upcoming_task_snapshots WHERE scope_key = ? AND source = ?')
       .get(scopeKey, source) as unknown as { tasks_json: string; fetched_at: string } | undefined;
-    if (!row || Date.parse(from) - Date.parse(row.fetched_at) > maximumAgeMilliseconds) return [];
+    if (!row || Date.parse(observedAt) - Date.parse(row.fetched_at) > maximumAgeMilliseconds) return [];
     return parsed<UpcomingTask[]>(row.tasks_json, []).filter(task => task.dueAt >= from && task.dueAt < until)
       .sort((left, right) => left.dueAt.localeCompare(right.dueAt));
   }

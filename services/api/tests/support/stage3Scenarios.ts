@@ -1,3 +1,5 @@
+import { historicalSearchRequest } from './historicalSearchRequest.js';
+import { historicalSkillImportState } from './historicalSkillImportState.js';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -110,7 +112,7 @@ function world(name: string) {
   let toolRound = false;
   const openai = (async (_url: string | URL | Request, init?: RequestInit) => {
     const body = String(init?.body);
-    capture.openai.push(digest(body));
+    capture.openai.push(digest(historicalSearchRequest(body)));
     rounds += 1;
     const parsed = JSON.parse(body) as { text?: { format?: { name?: string } }; tools?: unknown[] };
     if (toolRound && rounds === 1 && parsed.tools?.length) {
@@ -134,7 +136,7 @@ function world(name: string) {
     capture.prompts.push(digest(JSON.stringify({ status, body }, (key, value) => (TIMINGS.has(key) ? undefined : value))));
   };
   const finish = () => {
-    capture.state = databaseDigests(databasePath);
+    capture.state = databaseDigests(databasePath, { historicalSkillImports: true });
     rmSync(directory, { recursive: true, force: true });
     return capture;
   };
@@ -146,15 +148,18 @@ function world(name: string) {
 }
 
 /** Every table of the database, schema and rows, one digest each (`table:digest`), in name order. */
-export function databaseDigests(path: string): string[] {
+export function databaseDigests(path: string, options: { historicalSkillImports?: boolean } = {}): string[] {
   const database = new DatabaseSync(path, { readOnly: true });
   try {
     const tables = database.prepare(`SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`).all() as Array<{ name: string; sql: string }>;
-    return tables.map(table => {
+    return tables.flatMap(table => {
       // Rows are compared without their random ids, so they are sorted after those are taken out.
-      const rows = (database.prepare(`SELECT * FROM "${table.name}"`).all() as unknown[]).map(row => normalized(JSON.stringify(row, (_key, value) =>
+      const actualRows = database.prepare(`SELECT * FROM "${table.name}"`).all() as Record<string, unknown>[];
+      const projected = options.historicalSkillImports ? historicalSkillImportState(table.name, table.sql, actualRows) : { sql: table.sql, rows: actualRows };
+      if (!projected) return [];
+      const rows = projected.rows.map(row => normalized(JSON.stringify(row, (_key, value) =>
         (value instanceof Uint8Array ? Buffer.from(value).toString('base64') : typeof value === 'bigint' ? String(value) : value)))).sort();
-      return `${table.name}:${digest(`${table.sql}\n${rows.join('\n')}`)}`;
+      return `${table.name}:${digest(`${projected.sql}\n${rows.join('\n')}`)}`;
     });
   } finally { database.close(); }
 }
@@ -376,7 +381,7 @@ async function reachOutScenario(hooks: Stage3Hooks): Promise<Stage3Capture> {
   const record = [...harness.entries()].sort((left, right) => left.sequence - right.sequence)
     .map(entry => ({ kind: entry.kind, tool: entry.tool ?? null, outcome: entry.outcome, reasonCode: entry.reasonCode ?? null, summary: entry.summary, occurredAt: entry.occurredAt }));
   w.capture.prompts.push(digest(JSON.stringify(record)));
-  const autonomyState = databaseDigests(join(w.directory, 'autonomy.sqlite')).map(item => `autonomy/${item}`);
+  const autonomyState = databaseDigests(join(w.directory, 'autonomy.sqlite'), { historicalSkillImports: true }).map(item => `autonomy/${item}`);
   harness.store.close(); speaker.close(); initiatives.close(); persistent.close();
   const capture = w.finish();
   capture.state = [...capture.state, ...autonomyState];

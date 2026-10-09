@@ -44,3 +44,6 @@ export { conversationWithCaptures, type ConversationCaptureDependencies } from '
 export { feedbackSourceProjection, attachConversationFeedback, type FeedbackSourceProjectionDependencies } from './feedbackSourceProjection.js';
 
 export * from './gameBodyMemory.js';
+
+export { SkillImporter, skillArtifactSha256, type SkillImportDependencies } from "./skillImport.js";
+export type { OperatorSkillProvenance, SkillPack, SkillImportPlan, SkillImportReceipt } from "./skillImportContract.js";

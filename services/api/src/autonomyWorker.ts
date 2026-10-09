@@ -1,3 +1,4 @@
+import { configuredMinecraftLifecycle } from './wiring/minecraftLifecycleWiring.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { stage4Enabled,mindSocketPath } from './infra/config/stage4.js';
 import { MindSocketClient } from './infra/ipc/mindSocket.js';
@@ -134,6 +135,8 @@ const service = new ShannonAutonomyService({
   aether: { access: configuredAetherAccess(process.env), studyScopeKey: aetherStudyScope(process.env), ownerDocuments: loopConfig.ownerDocuments },
   ...(withheldActions ? { withheld: gateRefusals(withheldActions.withheld, config) } : {}),
 });
+const lifecycle = configuredMinecraftLifecycle(process.env, { path: databasePath, autonomy: service, actions: actionConnection ? actionThreadsClient(actionConnection.call) : null, now,
+  ownerAlone: () => !othersAroundBody(loopConfig.scopeKey, now()), taskAllowed: () => false });
 if (withheldActions) service.tools.observeWithheld(withheldActions.withheld.sink, now);
 const selfRewrite = selfRewriteRuntimeWiring({ environment: process.env, path: databasePath, ownerScope: loopConfig.scopeKey,
   now, config, autonomy: service, autonomyStore: store, tasks: null,
@@ -245,7 +248,7 @@ try {
   skillCopies?.close();
   ownerContext?.close();
   selfInterests?.close();
-  planningMode?.close();
+  await lifecycle?.close(); planningMode?.close();
   ownerUpcoming.close();
   ownerState.close();
   reachOuts.close();

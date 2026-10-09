@@ -22,6 +22,8 @@ export interface ActionThreads {
   stop(scopeKey: string,id: string|null,requestId: string): Promise<ActionView[]>;
   resume(scopeKey: string,id: string): Promise<boolean>;
   reconcile(lease:ActionLease,state:'completed'|'failed'|'cancelled',code:string):Promise<boolean>;
+  /** A canonical release proof for one dynamic resource of the immediately previous unknown attempt. */
+  reconcileResource(lease:ActionLease,resource:string,acknowledgementId:string):Promise<boolean>;
   checkpoint(lease:ActionLease,progress:string,failureCode?:string):Promise<boolean>;
   reserve(lease:ActionLease,reservationId:string,day:string,yen:number,cap:number,spent:number):Promise<boolean>;
   settle(lease:ActionLease,reservationId:string,actual:number|null):Promise<boolean>;

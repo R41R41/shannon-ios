@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-09T12:23:04.666055+00:00",
+  "scope": "Isolated candidate source and deterministic local validation; no production, skill DB import, paid model, live game, physical device or distribution",
+  "baseRevision": "b85625ad0e282185a2ac54ad4ebf77ca03340a56",
+  "branch": "codex/shannon/skill-import-shared-tools",
+  "nativeMinecraft": {
+    "repositoryWorktree": "/home/azureuser/Shannon-worktrees/minecraft-lifecycle-20261009",
+    "baseRevision": "5ac00cf6",
+    "headRevision": "48b84c7bd3b661a2ba8798695c4ecbeacfa2393e",
+    "tests": 49,
+    "result": "passed",
+    "pureLifecycleTypeCheck": "passed",
+    "wholeNativeTypeCheck": "Existing unrelated diagnostics; not a pass"
+  },
+  "tests": {
+    "api": {
+      "files": 354,
+      "tests": 4391,
+      "result": "passed",
+      "log": "/tmp/shannon-generic-lifecycle-final-full.log",
+      "command": "node node_modules/vitest/vitest.mjs run services/api/tests --exclude '**/mindLatencyBudget.test.ts'",
+      "note": "The exclude pattern matches no file; mindLatency.test.ts is included and passed. A separate isolated timing rerun is overlapping."
+    },
+    "packages": {
+      "files": 39,
+      "tests": 425,
+      "result": "passed",
+      "log": "/tmp/shannon-generic-final-package-tests.log"
+    },
+    "typeChecks": {
+      "api": "passed",
+      "cognition": "passed",
+      "evaluation": "passed",
+      "learning": "passed",
+      "mind": "passed"
+    },
+    "fastChecks": {
+      "result": "passed",
+      "log": "/tmp/shannon-generic-fast-final.log"
+    },
+    "apple": {
+      "receipt": "model-mode-pairing-local-verification.json",
+      "xctest": 777,
+      "swiftTesting": 209,
+      "iOSUnsignedGenericDebug": "passed",
+      "macDebugBuildTests": "passed",
+      "restoredInspectorSmokeCases": 7,
+      "physicalDevice": "unverified",
+      "distribution": "not performed"
+    }
+  },
+  "review": {
+    "genericRecovery": "GPT-6.1 Sol high: original unknown/resource/source fences and actual worker IPC",
+    "nativeGoal": "GPT-6.1 Sol high: configured runtime proof wiring and body verification race",
+    "lifecycle": "GPT-6.1 Sol high: native atomic stop proof, journal, original issuance and import format"
+  },
+  "sourceSha256": {
+    "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonModelModeSettingsSection.swift": "7e07c85fce0a2c26dd9e839604c96a104a1268a02b5e0567d41ff8ed974920a3",
+    "services/api/src/wiring/serverFcaWiring.ts": "b1b8df0131b2f88af04f006489419c179be1e1e9c6252677e155d6c65b14f052",
+    "services/api/src/wiring/minecraftLifecycleWiring.ts": "e25c33763aacdc940405b18eff4ac8edb5f8e6166660de433a67adeec75fd67d",
+    "services/api/src/wiring/configuredActionResourceProof.ts": "de893f0150dd05db086271b4aa2d92120cfe97d0f011b86bcb957dd4a0eb10f3",
+    "services/api/src/wiring/minecraftLifecycleRecoveryWiring.ts": "52b78cc729e49474a9c34e4d1c3614cebf870f62d79ab36630f523e279a80a01",
+    "services/api/src/mind/action/threads/store/actionStore.ts": "e248ba5f94d1fb892563892a79b1ef684ce5400d588c013bcae39b5ea637d4ae",
+    "services/api/src/mind/action/fca/fcaRunner.ts": "497120af079ee5025f8fa4028965d3d01c4f8700feec4386118dc27920473d08",
+    "services/api/src/mind/action/fca/fcaProgressTools.ts": "b3d9415d60b0dc58bf50247dbfeafc21943583073218b51ebb4ff34ec620fe1f",
+    "services/api/src/mind/action/fca/fcaObservation.ts": "955631be7d957cbed485712820abcad714aaa5a2ed7ef23ce7bb68b48cded308",
+    "services/api/src/wiring/fcaMinecraftGoalBinding.ts": "b0bd31d75894523db2095d3824a2206b187c9367471816cc3ddad9b34533ef2f",
+    "services/api/src/surfaces/minecraft/minecraftControl.ts": "c01b08c9addba60a80f03efb55cf1d89cdc2dde18e5865c648beca050833770f",
+    "services/api/src/surfaces/minecraft/store/minecraftControlStore.ts": "2bd0461b1bf5867df6b5549771e8fe38bd28cdc789df9f5dbdd9145a68645c57",
+    "services/api/src/contracts/minecraftLifecycleContract.ts": "c293d069ca561650014e2922e9b85ff9c960526aafe75a6f94bcbc54e97c269a",
+    "services/api/src/surfaces/minecraft/minecraftLifecycle.ts": "f77b2766214d71c3c33fb2dc82d214c96aa281eb98482d9b350bf50f52b772b5",
+    "services/api/src/surfaces/minecraft/store/minecraftLifecycleStore.ts": "8704593db5f0eaf3639081b88d476a6775324e73a6e8282b8272acf781608a05",
+    "services/api/src/mind/memory/taskMemory.ts": "507bfb8fad57e2e64e6987fbc5aad51ed43dcf3a4f097c52caad3de99748dd92",
+    "services/api/src/mind/tools/shannonToolSession.ts": "29ce3d842c24126cd50311304fc5ea684047bc61ad78e028e4dae0700a60a3a2",
+    "services/api/src/infra/config/standardSkillPack.ts": "1b6287a241a65abe3f37b07fffd83060dcd8d6a67c039d104cb1ea85a3ae1e1d"
+  },
+  "remaining": [
+    "Deploy reviewed API and same native source together, configure registered operator/RCON/journal without exposing credentials",
+    "Review exact import plans before applying trial packs",
+    "Distribute Apple source fix and verify real Build199 replacement pairing/mode switch",
+    "Live join/logout/start/empty stop/nonempty stop acceptance before 40-minute experiment",
+    "Old Minecraft JSON knowledge bulk migration, full campaign/survival/place/image parity are not established"
+  ]
+}

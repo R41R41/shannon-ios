@@ -1,3 +1,4 @@
+import { configuredActionResourceProof } from './configuredActionResourceProof.js';
 import { DatabaseSync } from 'node:sqlite';
 import { ACTION_ID, type ActionDraft, type ActionLease } from '@shannon/mind';
 import { SQLiteActionStore } from '../mind/action/threads/store/actionStore.js';
@@ -9,7 +10,7 @@ import type { ActionAcknowledgement } from '../contracts/actionThreadContract.js
 /** Worker-only database and dispatcher; the API never opens the scheduler's writer. */
 export async function configuredMindWorker(values:Readonly<Record<string,string|undefined>>,databasePath:string,hostFactory:()=>{host:MindHost;close():void},now:()=>string) {
   const db=new DatabaseSync(databasePath);db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=250;');
-  const actions=new SQLiteActionStore(db);
+  const actions=new SQLiteActionStore(db, configuredActionResourceProof(values, db));
   let host:MindHost;
   let closeHost:()=>void;
   const projection=(scopeKey:string)=>({...host.projection(scopeKey),faulted:host.faulted,faults:host.faultCount,busy:host.busyCount});
@@ -52,6 +53,7 @@ export async function configuredMindWorker(values:Readonly<Record<string,string|
         return actions.reconcile(lease(),a.state as 'completed'|'failed'|'cancelled',String(a.code),at);
       }
       case 'action.reserve':return actions.reserve(lease(),text('reservationId'),String(a.day),Number(a.yen),Number(a.cap),Number(a.spent),at);
+      case 'action.reconcileResource':return actions.reconcileResource(lease(),String(a.resource),text('acknowledgementId'));
       case 'action.settle':return actions.settle(lease(),text('reservationId'),a.actual===null?null:Number(a.actual),at);
       case 'action.acknowledge':return actions.acknowledge(a as unknown as ActionAcknowledgement,at);
       default:throw new Error('MIND_METHOD');

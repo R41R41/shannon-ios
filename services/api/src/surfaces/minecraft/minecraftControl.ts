@@ -94,7 +94,10 @@ export class MinecraftControl {
       if (receipt && receipt.outcome !== 'unknown' && receipt.inputsReleased) return receipt;
       throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
     }
-    this.store.insert(command, new Date(this.options.now()).toISOString());
+    this.store.insert(command, new Date(this.options.now()).toISOString(), () => {
+      signal?.throwIfAborted();
+      return this.allowed(command) && this.frame(command.context.bodyId)?.poll.connectionId === command.connectionId;
+    });
     let cancellingAt: number | null = null;
     for (;;) {
       const result = this.store.receipt(command.id);
