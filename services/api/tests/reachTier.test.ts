@@ -1,6 +1,12 @@
+import type Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
 import { decideTier, type DifficultyAnswers } from '@shannon/learning';
 import { TIER_CASES, TIER_SCENARIOS, validReachDefinition } from '../../../packages/evaluation/src/reach/index.js';
+import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
+import { activeAnthropicToolNames } from '../src/infra/models/anthropic/anthropicForegroundMenu.js';
+import { strictRequestFits } from '../src/infra/models/anthropic/anthropicToolCapacity.js';
+import { scriptedAnthropic } from './support/anthropicFixtures.js';
+import { stubSession, tierScript } from './reach/reachTier.js';
 import { shannonTool } from '../src/mind/tools/shannonTools.js';
 import { REACH_SCENARIOS, liveDrivers, liveEstimate, runReachSuite, scriptedDrivers } from './reach/reachSuite.js';
 
@@ -20,6 +26,33 @@ describe('the tier scenario set', () => {
       expect(decision.tier === 'sonnet' && decision.served === 'luna' ? 'luna' : decision.tier, item.id).toBe(item.expectTier);
     }
     for (const definition of TIER_SCENARIOS) expect(REACH_SCENARIOS).toContain(definition);
+  });
+
+  it.each(['schedule', 'plan-multi'])('reaches the original %s tool through the bounded-schema transport', async id => {
+    const item = TIER_CASES.find(item => item.id === id)!;
+    expect(item.expectTool).toBeTruthy();
+    const { session, calls } = stubSession(item);
+    const scripted = scriptedAnthropic((raw, index) => tierScript(item,
+      raw as unknown as Anthropic.MessageCreateParamsNonStreaming)[index]!);
+    const model = new AnthropicChatModel({ apiKey: 'synthetic', fetch: scripted.fetcher,
+      settings: { model: 'claude-sonnet-5-5', effort: 'low', textThinking: 'adaptive', voiceThinking: 'adaptive' } });
+    const result = await model.generateStreaming({ scopeKey: 'reach:tier:capacity', systemPrompt: 'Synthetic identity',
+      history: [], message: item.words, tools: session }, () => {});
+    expect(result.outOfTime).not.toBe(true);
+    expect(result.reply).toBe('はい、分かりました。');
+    expect(calls).toEqual([{ name: item.expectTool, ok: true, effect: 'read' }]);
+    expect(scripted.bodies).toHaveLength(2);
+    const initial = scripted.bodies[0]! as unknown as Anthropic.MessageCreateParamsNonStreaming;
+    expect(activeAnthropicToolNames(initial)).not.toContain(item.expectTool!.replaceAll('.', '_'));
+    expect(tierScript(item, initial)[0]!.content).toEqual([{ type: 'tool_use', id: 'toolu_script', name: 'tool_call',
+      input: { name: item.expectTool!.replaceAll('.', '_'), argumentsJson: expect.any(String) } }]);
+    for (const raw of scripted.bodies) expect(strictRequestFits(raw as unknown as Anthropic.MessageCreateParamsNonStreaming)).toBe(true);
+    // Real tool-round receipt, from the original session, reaches the following provider request.
+    const next = scripted.bodies[1]! as unknown as Anthropic.MessageCreateParamsNonStreaming;
+    const receipts = next.messages.flatMap(row => Array.isArray(row.content)
+      ? row.content.flatMap(block => block.type === 'tool_result' && typeof block.content === 'string'
+        ? [JSON.parse(block.content) as { ok: boolean }] : []) : []);
+    expect(receipts).toContainEqual(expect.objectContaining({ ok: true }));
   });
 
   it('passes model-free: the build gives Sonnet her tools, the structured reply and the voice path', async () => {

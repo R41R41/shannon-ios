@@ -39,7 +39,7 @@ describe('native stream timing evidence', () => {
       expect(rounds[1]!.finalUsageAfterMs).toBeGreaterThan(rounds[1]!.firstVisibleOutputAfterMs!);
       expect(rounds.every(round => round.usage)).toBe(true);
       const native = events.find(event => event.node === 'native' && event.kind === 'span.completed');
-      expect(native?.output).toMatchObject({ offeredTools: ['tool_open', 'study.list'] });
+      expect(native?.output).toMatchObject({ offeredTools: ['tool_open', 'tool_call', 'study.list'] });
       const safe = JSON.stringify(events);
       for (const value of ['private-identity', 'private-profile', 'private-history', 'private-current-message', 'private-thinking', 'private-signature', 'private-tool-result']) {
         expect(safe).not.toContain(value);

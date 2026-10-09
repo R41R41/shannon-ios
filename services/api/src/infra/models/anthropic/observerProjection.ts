@@ -7,7 +7,7 @@ import { activeAnthropicToolNames } from './anthropicForegroundMenu.js';
 export function observedToolName(name: string, allowed: readonly { name: string }[] = []): string {
   const bodyTool = allowed.find(tool => tool.name === name || tool.name.replaceAll('.', '_') === name)?.name;
   if (bodyTool && /^(?:mc\.[a-z][a-z0-9-]{0,59}|minecraft\.(?:observe|reflex))$/u.test(bodyTool)) return bodyTool;
-  if (name === 'web_search' || name === 'tool_open') return name;
+  if (name === 'web_search' || name === 'tool_open' || name === 'tool_call') return name;
   const tool = toolFromProviderName(name) ?? shannonTool(name);
   if (tool) return tool.name;
   return SELF_REWRITE_TOOLS.find(tool => tool.name === name || tool.name.replaceAll('.', '_') === name)?.name ?? 'unknown';

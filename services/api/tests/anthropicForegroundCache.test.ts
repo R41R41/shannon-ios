@@ -2,7 +2,8 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it, vi } from 'vitest';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
 import { activeAnthropicToolNames } from '../src/infra/models/anthropic/anthropicForegroundMenu.js';
-import { observedAnthropicRequest } from '../src/infra/models/anthropic/observerProjection.js';
+import { TOOL_CALL_SCHEMA, strictRequestFits, strictRequestUsage } from '../src/infra/models/anthropic/anthropicToolCapacity.js';
+import { observedAnthropicRequest, observedAnthropicResponse } from '../src/infra/models/anthropic/observerProjection.js';
 import { HAIKU_PROTOCOL_PREFIX } from '../src/infra/models/anthropic/haikuCache.js';
 import type { ShannonModelToolSession } from '../src/infra/models/chatModelTools.js';
 import { offerWithMenu, withToolMenu } from '../src/mind/tools/shannonToolMenu.js';
@@ -56,15 +57,15 @@ describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('stable foreground cach
       expect(initial.system).toEqual(h.bodies[0]!.system);
       expect(initial.tools).toEqual([expect.objectContaining({ name: 'tool_open', strict: true,
         input_schema: { type: 'object', properties: { name: { type: 'string', description: expect.any(String) } },
-          required: ['name'], additionalProperties: false } })]);
+          required: ['name'], additionalProperties: false } }), TOOL_CALL_SCHEMA]);
       expect((initial.system as Anthropic.TextBlockParam[])[0]).toEqual({ type: 'text', text: HAIKU_PROTOCOL_PREFIX,
         cache_control: { type: 'ephemeral', ttl: '1h' } });
       expect(initial.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
       expect(JSON.stringify(initial.system)).not.toContain('[ボクの道具・献立]');
       expect(JSON.stringify(initial.system)).not.toContain(base.turnContext);
       expect(definitions(initial).map(tool => tool.name)).toEqual([selected[turn]]);
-      expect(activeAnthropicToolNames(nativeBody(initial))).toEqual(['tool_open', selected[turn]]);
-      expect(observedAnthropicRequest(nativeBody(initial)).offeredTools).toEqual(['tool_open', offered[turn === 1 ? 1 : 0]!.name]);
+      expect(activeAnthropicToolNames(nativeBody(initial))).toEqual(['tool_open', 'tool_call', selected[turn]]);
+      expect(observedAnthropicRequest(nativeBody(initial)).offeredTools).toEqual(['tool_open', 'tool_call', offered[turn === 1 ? 1 : 0]!.name]);
       const menu = (initial.messages as Messages).at(-1)!;
       expect(menu.role).toBe('system');
       for (const tool of raw.definitions) expect(JSON.stringify(menu)).toContain(`- ${tool.name.replaceAll('.', '_')}: `);
@@ -130,19 +131,56 @@ describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('stable foreground cach
     expect(definitions(h.bodies[0]!).map(tool => tool.name)).toEqual(['study_list']);
   });
 
-  it.each([19, 20])('counts the stable opener within the strict 20-tool boundary for a raw %i-tool session', async count => {
-    const definitions = Array.from({ length: count }, (_, index) => ({ ...shannonTool('study.list')!, name: `fixture.tool${index}` }));
-    const h = native(model, () => final('text'));
-    await run(h.chat, 'text', session(definitions));
-    const body = h.bodies[0]!;
-    expect(activeAnthropicToolNames(nativeBody(body))).toHaveLength(count === 19 ? 20 : 1);
-    for (const tool of definitions) expect(JSON.stringify(body.messages)).toContain(`- ${tool.name.replaceAll('.', '_')}: `);
-    expect(body.tools).toEqual([expect.objectContaining({ name: 'tool_open', strict: true })]);
+  it.each([19, 20])('counts both stable controls within the strict 20-tool boundary for a raw %i-tool session', async count => {
+    // No optional fields: isolate the tool-count boundary from the separate schema-complexity budget.
+    const offered = Array.from({ length: count }, (_, index) => ({ ...shannonTool('minecraft.start')!, name: `fixture.tool${index}` }));
+    const target = offered.at(-1)!.name.replaceAll('.', '_');
+    const raw = session(offered);
+    const answers = [...(count === 20 ? [call('tool_open', 'open', { name: target })] : []),
+      call('tool_call', 'bridged', { name: target, argumentsJson: '{}' }), final('text')];
+    const h = native(model, (_body, index) => answers[index]!);
+    await run(h.chat, 'text', raw);
+    const initial = h.bodies[0]!;
+    expect(activeAnthropicToolNames(nativeBody(initial))).toHaveLength(count === 19 ? 20 : 2);
+    expect(definitions(initial)).toHaveLength(count === 19 ? 18 : 0);
+    if (count === 19) expect(definitions(initial).map(tool => tool.name)).not.toContain(target);
+    for (const tool of offered) expect(JSON.stringify(initial.messages)).toContain(`- ${tool.name.replaceAll('.', '_')}: `);
+    expect(initial.tools).toEqual([expect.objectContaining({ name: 'tool_open', strict: true }), TOOL_CALL_SCHEMA]);
+    expect(raw.call).toHaveBeenCalledOnce();
+    expect(raw.call.mock.calls[0]).toMatchObject([target, '{}', expect.any(AbortSignal), expect.any(Number)]);
+    for (let index = 0; index < h.bodies.length; index++) {
+      const body = h.bodies[index]!;
+      expect(strictRequestFits(nativeBody(body))).toBe(true);
+      expect(body.tools).toEqual(initial.tools);
+      expect(body.system).toEqual(initial.system);
+      if (index > 0) {
+        const previous = h.bodies[index - 1]!;
+        expect((body.messages as Messages).slice(0, (previous.messages as Messages).length)).toEqual(previous.messages);
+        expect((body.messages as Messages)[(previous.messages as Messages).length]).toEqual({ role: 'assistant', content: answers[index - 1]!.content });
+      }
+    }
+  });
+
+  it('keeps schema complexity bounded while selected overflow tools remain executable through the stable bridge', async () => {
+    const offered = Array.from({ length: 19 }, (_, index) => ({ ...shannonTool('study.list')!, name: `fixture.tool${index}` }));
+    const target = offered.at(-1)!.name.replaceAll('.', '_');
+    const raw = session(offered);
+    const h = native(model, (_body, index) => index === 0
+      ? call('tool_call', 'optional-overflow', { name: target, argumentsJson: '{}' }) : final('text'));
+    await run(h.chat, 'text', raw);
+    expect(strictRequestUsage(nativeBody(h.bodies[0]!)).optional).toBe(24);
+    expect(definitions(h.bodies[0]!)).toHaveLength(6);
+    expect(definitions(h.bodies[0]!).map(tool => tool.name)).not.toContain(target);
+    expect(raw.call).toHaveBeenCalledOnce();
+    expect(raw.call.mock.calls[0]?.[0]).toBe(target);
+    for (const body of h.bodies) expect(strictRequestFits(nativeBody(body))).toBe(true);
+    expect(h.bodies[1]!.tools).toEqual(h.bodies[0]!.tools);
+    expect(h.bodies[1]!.system).toEqual(h.bodies[0]!.system);
   });
 });
 
 it('projects only closed active names, including inline changes, without exposing context or schemas', () => {
-  const body = { model: 'claude-haiku-5-5', max_tokens: 100, tools: [{ name: 'tool_open' }, { name: 'study_read', defer_loading: true }],
+  const body = { model: 'claude-haiku-5-5', max_tokens: 100, tools: [{ name: 'tool_open' }, { name: 'tool_call' }, { name: 'study_read', defer_loading: true }],
     system: 'private system', messages: [{ role: 'user', content: 'private owner words' }, { role: 'system', content: [
       { type: 'text', text: 'private menu text' },
       { type: 'tool_addition', tool: { type: 'tool_reference', name: 'study_read' } },
@@ -150,6 +188,16 @@ it('projects only closed active names, including inline changes, without exposin
       { type: 'tool_removal', tool: { type: 'tool_reference', name: 'tool_open' } },
     ] }] };
   const projected = observedAnthropicRequest(nativeBody(body));
-  expect(projected).toEqual({ model: body.model, messageCount: 2, maximumOutputTokens: 100, offeredTools: ['study.read', 'unknown'] });
+  expect(projected).toEqual({ model: body.model, messageCount: 2, maximumOutputTokens: 100, offeredTools: ['tool_call', 'study.read', 'unknown'] });
   expect(JSON.stringify(projected)).not.toContain('private');
+});
+
+it('labels the closed bridge symbol in responses without exposing its original name or arguments', () => {
+  const response = message([{ type: 'tool_use', name: 'tool_call', id: 'bridge',
+    input: { name: 'private-unregistered-name', argumentsJson: '{"private":"owner words"}' } },
+    { type: 'tool_use', name: 'private-unregistered-name', id: 'unknown', input: {} }], 'tool_use');
+  const projected = observedAnthropicResponse(response as unknown as Anthropic.Message);
+  expect(projected.selectedTools).toEqual(['tool_call', 'unknown']);
+  expect(JSON.stringify(projected)).not.toContain('private');
+  expect(JSON.stringify(projected)).not.toContain('owner words');
 });

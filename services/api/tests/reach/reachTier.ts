@@ -1,6 +1,9 @@
+import type Anthropic from '@anthropic-ai/sdk';
 import { shannonIdentityPrompt } from '@shannon/cognition';
 import { decideTier, type DifficultyAnswers } from '@shannon/learning';
 import { AnthropicChatModel } from '../../src/infra/models/anthropic/anthropicChatModel.js';
+import { activeAnthropicToolNames } from '../../src/infra/models/anthropic/anthropicForegroundMenu.js';
+import { TOOL_CALL_PROVIDER_NAME } from '../../src/infra/models/anthropic/anthropicToolCapacity.js';
 import { sonnetSettings } from '../../src/infra/models/anthropic/anthropicConfig.js';
 import type { ShannonChatModelResult } from '../../src/infra/models/chatModel.js';
 import { CONVERSATION_TOOL_CALLS, type ShannonModelToolSession } from '../../src/infra/models/chatModelTools.js';
@@ -62,7 +65,7 @@ function scriptedInput(tool: ShannonToolDefinition): Record<string, unknown> {
 }
 
 /** The model-free answers of a case: the needed call first, then the reply (claiming a write only when one ran). */
-export function tierScript(item: TierCase): AnthropicMessage[] {
+export function tierScript(item: TierCase, body?: Anthropic.MessageCreateParamsNonStreaming): AnthropicMessage[] {
   const tool = item.expectTool ? shannonTool(item.expectTool) : null;
   const write = tool?.effect === 'write';
   const reply = write ? '書斎に保存しました。' : 'はい、分かりました。';
@@ -70,7 +73,14 @@ export function tierScript(item: TierCase): AnthropicMessage[] {
     ? message([{ type: 'text', text: JSON.stringify({ reply, feeling: null, threadSummary: null, threadTitle: null, taskDecision: { disposition: 'none', reason: '会話' },
       taskProposal: null, intentPlan: null, artifacts: null }), citations: null }], 'end_turn')
     : message([{ type: 'text', text: reply, citations: null }], 'end_turn');
-  return tool ? [message([{ type: 'tool_use', id: 'toolu_script', name: providerToolName(tool.name), input: scriptedInput(tool) }], 'tool_use'), answer] : [answer];
+  if (!tool) return [answer];
+  const name = providerToolName(tool.name), input = scriptedInput(tool);
+  const active = body ? activeAnthropicToolNames(body) : [];
+  // Follow the real request's transport. The adapter may carry a selected schema as data to fit provider limits;
+  // the bridge must still run the original registry tool. An absent bridge does not grant a new calling path.
+  const bridged = body && !active.includes(name) && active.includes(TOOL_CALL_PROVIDER_NAME);
+  return [message([{ type: 'tool_use', id: 'toolu_script', name: bridged ? TOOL_CALL_PROVIDER_NAME : name,
+    input: bridged ? { name, argumentsJson: JSON.stringify(input) } : input }], 'tool_use'), answer];
 }
 
 const SPOKEN_MARKUP = /```|\*\*|^#|https?:\/\/|^\s*[{[]/mu;
@@ -79,7 +89,7 @@ export function tierDriver(definition: ReachScenarioDefinition, item: TierCase, 
   return async ({ signal }) => {
     const settings = sonnetSettings(environment);
     const usage = new ReachUsage();
-    const scripted = mode === 'scripted' ? scriptedAnthropic(tierScript(item)) : null;
+    const scripted = mode === 'scripted' ? scriptedAnthropic((body, index) => tierScript(item, body as unknown as Anthropic.MessageCreateParamsNonStreaming)[index]!) : null;
     const apiKey = mode === 'live' ? environment.SHANNON_ANTHROPIC_API_KEY?.trim() || environment.ANTHROPIC_API_KEY?.trim() || '' : 'scripted';
     if (!apiKey) return { pending: 'credential: ANTHROPIC_API_KEY or SHANNON_ANTHROPIC_API_KEY is not set' };
     const model = new AnthropicChatModel({ apiKey, settings, usageStore: usage, ...(scripted ? { fetch: scripted.fetcher } : {}) });
