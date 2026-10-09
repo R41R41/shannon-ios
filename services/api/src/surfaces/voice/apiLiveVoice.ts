@@ -361,7 +361,7 @@ async function completeLiveVoiceDelegation(
   const work = admitConversationWork(fcaTurn, { message: transcript, research: selectedSkills.has('current_web') || Boolean(placeContext), places: placeContext });
   const placeSkill = !work && placeContext ? await runPlaceDiscoverySkill(dependencies.auxiliaryChatModel ?? dependencies.chatModel, { scopeKey, message: transcript, context: placeContext }) : null;
   observer?.signal?.throwIfAborted();
-  const directHint = plainVoiceHint(decision, transcript, uncertainTranscript);
+  const directHint = Boolean(fcaTurn) && plainVoiceHint(decision, transcript, uncertainTranscript);
   const turnPrompt = [turnContext, placeSkill?.prompt ?? '', fcaTurn?.context() ?? '', admittedWorkContext(work), directHint ? PLAIN_VOICE_HINT : ''].filter(Boolean).join('\n\n');
   if(dependencies.mind?.sync)await dependencies.mind.sync();
   // Stage 3: the workspace's blocks (voice: at most two lines) follow the turn's context, which stays byte for byte as it was.
