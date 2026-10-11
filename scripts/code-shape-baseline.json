@@ -1,0 +1,2233 @@
+{
+  "schemaVersion": 1,
+  "about": "Counts of scripts/check-code-shape.mjs per file and rule when the rules were introduced (Syzygy ADR-0009 stage 1). It may only shrink: fix a file, then run `node scripts/check-code-shape.mjs --update-baseline`.",
+  "limits": {
+    "statementsPerLine": 1,
+    "lineCharacters": 160,
+    "functionStatements": 60,
+    "functionComplexity": 15,
+    "fileStatements": 350
+  },
+  "files": {
+    "packages/cognition/src/affectDynamics.ts": {
+      "long-line": 9
+    },
+    "packages/cognition/src/autonomy.ts": {
+      "long-line": 1
+    },
+    "packages/cognition/src/capabilities.ts": {
+      "long-line": 7
+    },
+    "packages/cognition/src/disclosure.ts": {
+      "complex-function": 1
+    },
+    "packages/cognition/src/emotionContinuity.ts": {
+      "complex-function": 3,
+      "long-line": 3
+    },
+    "packages/cognition/src/emotionState.ts": {
+      "complex-function": 1,
+      "long-line": 8
+    },
+    "packages/cognition/src/index.ts": {
+      "long-line": 1
+    },
+    "packages/cognition/src/memory.ts": {
+      "complex-function": 1
+    },
+    "packages/cognition/src/persona.ts": {
+      "long-line": 1
+    },
+    "packages/cognition/src/prediction.ts": {
+      "multi-statement-line": 2,
+      "long-line": 2
+    },
+    "packages/cognition/src/predictionDomains.ts": {
+      "multi-statement-line": 2,
+      "long-line": 3
+    },
+    "packages/cognition/src/prompt.ts": {
+      "long-line": 7
+    },
+    "packages/cognition/src/selfInterests.ts": {
+      "long-line": 2
+    },
+    "packages/cognition/src/semanticRecall.ts": {
+      "long-line": 1
+    },
+    "packages/cognition/src/shannonKnowledge.ts": {
+      "long-line": 4
+    },
+    "packages/cognition/src/state.ts": {
+      "complex-function": 2,
+      "long-function": 1,
+      "long-line": 5
+    },
+    "packages/cognition/src/stateRestore.ts": {
+      "complex-function": 1
+    },
+    "packages/cognition/src/touchAppraisal.ts": {
+      "long-line": 1
+    },
+    "packages/cognition/src/types.ts": {
+      "long-line": 5
+    },
+    "packages/cognition/src/withholding.ts": {
+      "multi-statement-line": 2
+    },
+    "packages/evaluation/src/assertions.ts": {
+      "complex-function": 1
+    },
+    "packages/evaluation/src/reach/autonomyDay.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "packages/evaluation/src/reach/cognitionLedger.ts": {
+      "long-line": 21
+    },
+    "packages/evaluation/src/reach/compare.ts": {
+      "complex-function": 2,
+      "long-line": 4
+    },
+    "packages/evaluation/src/reach/cost.ts": {
+      "long-line": 1
+    },
+    "packages/evaluation/src/reach/mindWorkspace.ts": {
+      "long-line": 21
+    },
+    "packages/evaluation/src/reach/qualityAffect.ts": {
+      "long-line": 4
+    },
+    "packages/evaluation/src/reach/runner.ts": {
+      "complex-function": 2,
+      "long-line": 1
+    },
+    "packages/evaluation/src/reach/shiritori.ts": {
+      "multi-statement-line": 3,
+      "complex-function": 2,
+      "long-line": 1
+    },
+    "packages/evaluation/src/reach/skillRecall.ts": {
+      "long-line": 25
+    },
+    "packages/evaluation/src/reach/threeTools.ts": {
+      "long-line": 4
+    },
+    "packages/evaluation/src/reach/tierSet.ts": {
+      "long-line": 21
+    },
+    "packages/evaluation/src/runner.ts": {
+      "complex-function": 1
+    },
+    "packages/evaluation/src/scenario.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "packages/learning/src/calibration.ts": {
+      "long-line": 1
+    },
+    "packages/learning/src/difficultyPolicy.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "packages/learning/src/predictionLedger.ts": {
+      "long-line": 1
+    },
+    "packages/learning/src/reward.ts": {
+      "long-line": 1
+    },
+    "packages/learning/src/switches.ts": {
+      "long-line": 1
+    },
+    "packages/learning/src/valueFacts.ts": {
+      "multi-statement-line": 1
+    },
+    "packages/learning/src/valueTable.ts": {
+      "multi-statement-line": 1,
+      "long-line": 3
+    },
+    "packages/learning/src/versions.ts": {
+      "long-line": 5
+    },
+    "packages/mind/src/actions.ts": {
+      "complex-function": 1
+    },
+    "packages/mind/src/compaction.ts": {
+      "long-line": 5
+    },
+    "packages/mind/src/envelope.ts": {
+      "complex-function": 2,
+      "long-line": 11
+    },
+    "packages/mind/src/identityTiers.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 2,
+      "long-line": 2
+    },
+    "packages/mind/src/proactiveGate.ts": {
+      "long-line": 1
+    },
+    "packages/mind/src/taskTree.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 1,
+      "long-line": 5
+    },
+    "packages/mind/src/trustFold.ts": {
+      "multi-statement-line": 1,
+      "long-line": 3
+    },
+    "services/api/src/agentHost.ts": {
+      "multi-statement-line": 1
+    },
+    "services/api/src/autonomyWorker.ts": {
+      "multi-statement-line": 3,
+      "long-line": 5
+    },
+    "services/api/src/contracts/appLookContract.ts": {
+      "long-line": 4
+    },
+    "services/api/src/contracts/autonomyObservationContract.ts": {
+      "long-line": 1
+    },
+    "services/api/src/contracts/bodyContract.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/contracts/bodyLookContract.ts": {
+      "complex-function": 2,
+      "multi-statement-line": 1,
+      "long-line": 1
+    },
+    "services/api/src/contracts/bodyReactionContract.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/contracts/calendarContract.ts": {
+      "multi-statement-line": 1,
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/contracts/decisionTraceContract.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 2,
+      "long-line": 2
+    },
+    "services/api/src/contracts/incomingCallContract.ts": {
+      "long-line": 1
+    },
+    "services/api/src/contracts/minecraftBodyContract.ts": {
+      "complex-function": 2,
+      "long-line": 3
+    },
+    "services/api/src/contracts/minecraftBodyRequestContract.ts": {
+      "complex-function": 2,
+      "long-line": 2
+    },
+    "services/api/src/contracts/minecraftControlContract.ts": {
+      "long-line": 1
+    },
+    "services/api/src/contracts/minecraftLifecycleContract.ts": {
+      "long-line": 4
+    },
+    "services/api/src/contracts/modelModeContract.ts": {
+      "long-line": 1
+    },
+    "services/api/src/contracts/observerContract.ts": {
+      "long-line": 1
+    },
+    "services/api/src/contracts/opsCommandContract.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/contracts/opsContract.ts": {
+      "long-line": 1
+    },
+    "services/api/src/contracts/ownerCallContract.ts": {
+      "long-line": 1
+    },
+    "services/api/src/contracts/shannonNowContract.ts": {
+      "long-line": 1
+    },
+    "services/api/src/contracts/turnRoutingContract.ts": {
+      "long-line": 1
+    },
+    "services/api/src/contracts/voiceDecisionContract.ts": {
+      "long-line": 14
+    },
+    "services/api/src/contracts/withheldActionContract.ts": {
+      "long-line": 3
+    },
+    "services/api/src/infra/auth/store/deviceAuthStore.ts": {
+      "long-line": 1
+    },
+    "services/api/src/infra/config/standardSkillPack.ts": {
+      "long-line": 1
+    },
+    "services/api/src/infra/http/actionThreadRoutes.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/infra/http/apiAgentRoutes.ts": {
+      "long-function": 1,
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/infra/http/apiAutonomyHostStepRoutes.ts": {
+      "complex-function": 1,
+      "long-line": 5
+    },
+    "services/api/src/infra/http/apiAutonomyRoutes.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/infra/http/apiDataRoutes.ts": {
+      "long-function": 1,
+      "complex-function": 1
+    },
+    "services/api/src/infra/http/apiKernel.ts": {
+      "complex-function": 3,
+      "multi-statement-line": 11,
+      "long-function": 1,
+      "long-line": 47
+    },
+    "services/api/src/infra/http/apiOrganizeRoutes.ts": {
+      "long-function": 1,
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/infra/http/apiPeopleMemoryRoutes.ts": {
+      "multi-statement-line": 10,
+      "complex-function": 1,
+      "long-line": 4
+    },
+    "services/api/src/infra/http/apiPersonRoutes.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/infra/http/apiPreferenceRoutes.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/infra/http/apiStudyRoutes.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/infra/http/apiTestFlightRoutes.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/infra/http/apiValidation.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/infra/http/calendarRoutes.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/infra/http/fcaNowProjection.ts": {
+      "multi-statement-line": 2,
+      "long-line": 3
+    },
+    "services/api/src/infra/http/fcaTaskRoutes.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 4,
+      "long-line": 3
+    },
+    "services/api/src/infra/http/feedbackRoutes.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/infra/http/learningRoutes.ts": {
+      "complex-function": 1,
+      "long-line": 3
+    },
+    "services/api/src/infra/http/modelModeRoutes.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/infra/http/ndjsonStream.ts": {
+      "multi-statement-line": 3
+    },
+    "services/api/src/infra/http/selfInterestRoutes.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/infra/http/serverMoodHistoryRoute.ts": {
+      "long-line": 1
+    },
+    "services/api/src/infra/http/skillRoutes.ts": {
+      "complex-function": 1,
+      "long-line": 10
+    },
+    "services/api/src/infra/ipc/mindSocket.ts": {
+      "multi-statement-line": 25,
+      "long-line": 2
+    },
+    "services/api/src/infra/models/anthropic/anthropicChatModel.ts": {
+      "multi-statement-line": 14,
+      "complex-function": 4,
+      "long-line": 31
+    },
+    "services/api/src/infra/models/anthropic/anthropicConfig.ts": {
+      "long-line": 1
+    },
+    "services/api/src/infra/models/anthropic/anthropicFcaContext.ts": {
+      "long-line": 7
+    },
+    "services/api/src/infra/models/anthropic/anthropicFcaHistory.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 1
+    },
+    "services/api/src/infra/models/anthropic/anthropicFcaModel.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 3,
+      "long-line": 9
+    },
+    "services/api/src/infra/models/anthropic/anthropicFcaSummary.ts": {
+      "long-line": 3
+    },
+    "services/api/src/infra/models/anthropic/anthropicFcaTools.ts": {
+      "complex-function": 1,
+      "long-line": 3
+    },
+    "services/api/src/infra/models/anthropic/anthropicForegroundMenu.ts": {
+      "long-line": 3
+    },
+    "services/api/src/infra/models/anthropic/anthropicRequest.ts": {
+      "multi-statement-line": 1,
+      "complex-function": 1,
+      "long-line": 8
+    },
+    "services/api/src/infra/models/anthropic/anthropicRounds.ts": {
+      "long-function": 1,
+      "complex-function": 2,
+      "multi-statement-line": 8,
+      "long-line": 3
+    },
+    "services/api/src/infra/models/anthropic/anthropicSchema.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/infra/models/anthropic/anthropicSkillModel.ts": {
+      "long-line": 6
+    },
+    "services/api/src/infra/models/anthropic/anthropicToolBridge.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 2,
+      "long-line": 3
+    },
+    "services/api/src/infra/models/anthropic/anthropicToolCapacity.ts": {
+      "long-line": 1
+    },
+    "services/api/src/infra/models/anthropic/anthropicWebSearch.ts": {
+      "multi-statement-line": 1,
+      "complex-function": 1,
+      "long-line": 7
+    },
+    "services/api/src/infra/models/anthropic/haikuCache.ts": {
+      "complex-function": 2,
+      "multi-statement-line": 4,
+      "long-line": 9
+    },
+    "services/api/src/infra/models/anthropic/haikuResponses.ts": {
+      "complex-function": 4,
+      "multi-statement-line": 3,
+      "long-line": 9
+    },
+    "services/api/src/infra/models/anthropic/observerProjection.ts": {
+      "long-line": 1
+    },
+    "services/api/src/infra/models/chatModel.ts": {
+      "long-line": 2
+    },
+    "services/api/src/infra/models/chatModelContract.ts": {
+      "long-line": 2
+    },
+    "services/api/src/infra/models/chatModelStream.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/infra/models/chatModelSupport.ts": {
+      "complex-function": 2,
+      "long-line": 2
+    },
+    "services/api/src/infra/models/chatModelToolStep.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 2,
+      "long-line": 2
+    },
+    "services/api/src/infra/models/chatModelTools.ts": {
+      "complex-function": 1,
+      "long-line": 8
+    },
+    "services/api/src/infra/models/chatModelTurn.ts": {
+      "complex-function": 2,
+      "long-line": 4
+    },
+    "services/api/src/infra/models/chatModelVoiceStream.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/infra/models/chatModelVoiceTools.ts": {
+      "multi-statement-line": 1
+    },
+    "services/api/src/infra/models/chatReplyStreamDecoder.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 7
+    },
+    "services/api/src/infra/models/elevenSpeech.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 4
+    },
+    "services/api/src/infra/models/jev/jevChoice.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/infra/models/jev/jevIdentity.ts": {
+      "long-line": 4
+    },
+    "services/api/src/infra/models/jev/jevReflex.ts": {
+      "multi-statement-line": 1,
+      "long-line": 5
+    },
+    "services/api/src/infra/models/llmUsage.ts": {
+      "long-line": 1
+    },
+    "services/api/src/infra/models/openAIChatModel.ts": {
+      "multi-statement-line": 3,
+      "long-line": 7
+    },
+    "services/api/src/infra/models/openAIReflexSelector.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 1,
+      "long-line": 6
+    },
+    "services/api/src/infra/models/primaryModeChatModel.ts": {
+      "multi-statement-line": 2,
+      "long-line": 4
+    },
+    "services/api/src/infra/models/reflexContext.ts": {
+      "multi-statement-line": 3,
+      "long-line": 2
+    },
+    "services/api/src/infra/models/tieredChatModel.ts": {
+      "multi-statement-line": 3,
+      "long-line": 6
+    },
+    "services/api/src/infra/models/turnChecker.ts": {
+      "long-line": 2
+    },
+    "services/api/src/infra/observer/observerCatalog.ts": {
+      "long-line": 3
+    },
+    "services/api/src/infra/observer/observerClientEvents.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 8,
+      "long-line": 5
+    },
+    "services/api/src/infra/observer/observerContext.ts": {
+      "multi-statement-line": 18,
+      "long-line": 16
+    },
+    "services/api/src/infra/observer/observerRoutes.ts": {
+      "multi-statement-line": 19,
+      "complex-function": 1,
+      "long-line": 7
+    },
+    "services/api/src/infra/observer/observerTaskRuntime.ts": {
+      "multi-statement-line": 1,
+      "long-line": 3
+    },
+    "services/api/src/infra/observer/store/observerStore.ts": {
+      "multi-statement-line": 8,
+      "long-line": 11
+    },
+    "services/api/src/infra/ops/serverOpsCommandRoutes.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 3,
+      "long-line": 1
+    },
+    "services/api/src/infra/ops/serverSelfDiagnosis.ts": {
+      "multi-statement-line": 1,
+      "long-line": 2
+    },
+    "services/api/src/infra/ops/store/livenessStore.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/infra/ops/store/opsCommandStore.ts": {
+      "multi-statement-line": 3,
+      "long-line": 6
+    },
+    "services/api/src/infra/ops/store/opsLifecycleAuthority.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/infra/search/searchQuery.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/infra/sqlite/mindOwnership.ts": {
+      "multi-statement-line": 4
+    },
+    "services/api/src/infra/sqlite/modelModeStore.ts": {
+      "multi-statement-line": 5,
+      "long-line": 1
+    },
+    "services/api/src/infra/sqlite/sqliteBackgroundJobRepository.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 1,
+      "long-line": 3
+    },
+    "services/api/src/infra/sqlite/sqliteBusy.ts": {
+      "multi-statement-line": 2
+    },
+    "services/api/src/infra/sqlite/sqliteCompanionRepository.ts": {
+      "long-line": 5
+    },
+    "services/api/src/infra/sqlite/sqliteConversationRepository.ts": {
+      "long-line": 3
+    },
+    "services/api/src/infra/sqlite/sqliteFcaAffect.ts": {
+      "long-line": 4
+    },
+    "services/api/src/infra/sqlite/sqliteMigrations.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/infra/sqlite/sqliteStore.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 1,
+      "long-line": 38
+    },
+    "services/api/src/infra/sqlite/sqliteStoreCodecs.ts": {
+      "complex-function": 1,
+      "long-line": 4
+    },
+    "services/api/src/integrations/aether/aetherAccess.ts": {
+      "complex-function": 1,
+      "long-line": 12
+    },
+    "services/api/src/integrations/aether/aetherContext.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/integrations/aether/aetherKnowledgeSearch.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/integrations/aether/aetherProposal.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/integrations/aether/skillExport.ts": {
+      "long-function": 1,
+      "complex-function": 1,
+      "multi-statement-line": 2,
+      "long-line": 10
+    },
+    "services/api/src/integrations/agentHost/agentHostConfig.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/integrations/agentHost/agentHostState.ts": {
+      "long-line": 1
+    },
+    "services/api/src/integrations/agentHost/codexAppServerClient.ts": {
+      "multi-statement-line": 1,
+      "complex-function": 1
+    },
+    "services/api/src/integrations/agentHost/codexStartingTurnEvents.ts": {
+      "multi-statement-line": 9
+    },
+    "services/api/src/integrations/agentHost/codexTaskBridge.ts": {
+      "multi-statement-line": 12,
+      "complex-function": 3,
+      "long-line": 1
+    },
+    "services/api/src/integrations/agentHost/codexTaskCommands.ts": {
+      "multi-statement-line": 17,
+      "complex-function": 2
+    },
+    "services/api/src/integrations/agentHost/codexTaskEvents.ts": {
+      "multi-statement-line": 2,
+      "long-line": 2
+    },
+    "services/api/src/integrations/agentHost/codexTaskProjection.ts": {
+      "long-line": 3
+    },
+    "services/api/src/integrations/notion/notionClient.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 1
+    },
+    "services/api/src/integrations/notion/notionConversation.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 2,
+      "long-line": 8
+    },
+    "services/api/src/integrations/notion/notionSource.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 3,
+      "long-line": 1
+    },
+    "services/api/src/integrations/notion/notionText.ts": {
+      "complex-function": 2
+    },
+    "services/api/src/integrations/places/placeDiscovery.ts": {
+      "long-line": 3
+    },
+    "services/api/src/integrations/places/placeDiscoverySkill.ts": {
+      "long-line": 1
+    },
+    "services/api/src/integrations/voyager/organize.ts": {
+      "long-line": 3
+    },
+    "services/api/src/integrations/voyager/organizeIntegrations.ts": {
+      "complex-function": 2,
+      "long-line": 6
+    },
+    "services/api/src/integrations/voyager/organizeSupport.ts": {
+      "multi-statement-line": 1
+    },
+    "services/api/src/integrations/voyager/store/organizeMemoryStore.ts": {
+      "long-line": 3
+    },
+    "services/api/src/integrations/voyager/store/organizePersistence.ts": {
+      "multi-statement-line": 5,
+      "complex-function": 1,
+      "long-line": 10
+    },
+    "services/api/src/integrations/world/bluesky.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/integrations/world/ipSafety.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/integrations/world/store/worldStore.ts": {
+      "complex-function": 1,
+      "long-line": 7
+    },
+    "services/api/src/integrations/world/syndicationFeed.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/integrations/world/worldInterestRelevance.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/agentTasks/agentProjectNames.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/mind/action/agentTasks/agentTaskStore.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/agentTasks/agentTasksPorts.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/agentTasks/store/agentTaskHostProjection.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/mind/action/agentTasks/store/agentTaskPersistence.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 2,
+      "long-line": 1
+    },
+    "services/api/src/mind/action/agentTasks/store/agentTaskPersistenceSupport.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/mind/action/agentTasks/store/agentWorkspaceResources.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/agentTasks/store/fcaTaskAuthority.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/agentTasks/store/taskTreeCallbacks.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/agentTasks/store/taskTreeEvidence.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 1,
+      "long-line": 3
+    },
+    "services/api/src/mind/action/agentTasks/store/taskTreeStore.ts": {
+      "multi-statement-line": 15,
+      "long-line": 16
+    },
+    "services/api/src/mind/action/agentTasks/taskTreePorts.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/agentTasks/taskTreeRoutes.ts": {
+      "complex-function": 1,
+      "long-line": 4
+    },
+    "services/api/src/mind/action/fca/conversationWork.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/action/fca/fcaConversation.ts": {
+      "multi-statement-line": 7,
+      "long-line": 8
+    },
+    "services/api/src/mind/action/fca/fcaConversationSources.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 2,
+      "long-line": 4
+    },
+    "services/api/src/mind/action/fca/fcaHistory.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/fca/fcaObservation.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 8,
+      "long-line": 1
+    },
+    "services/api/src/mind/action/fca/fcaProgressTools.ts": {
+      "multi-statement-line": 9,
+      "complex-function": 3,
+      "long-line": 12
+    },
+    "services/api/src/mind/action/fca/fcaRecallContext.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/fca/fcaRunner.ts": {
+      "multi-statement-line": 9,
+      "long-function": 1,
+      "complex-function": 2,
+      "long-line": 15
+    },
+    "services/api/src/mind/action/fca/fcaToolState.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/mind/action/fca/store/fcaEvidenceStore.ts": {
+      "multi-statement-line": 3,
+      "complex-function": 1,
+      "long-line": 11
+    },
+    "services/api/src/mind/action/ownTime/anthropicAutonomyTextModel.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/mind/action/ownTime/autonomyHostFolderDesk.ts": {
+      "long-line": 4
+    },
+    "services/api/src/mind/action/ownTime/autonomyHostFolderPath.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoop.ts": {
+      "multi-statement-line": 7,
+      "long-function": 1,
+      "complex-function": 3,
+      "long-line": 15
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopCalls.ts": {
+      "multi-statement-line": 4,
+      "long-line": 5
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopConfig.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopFollowUpStep.ts": {
+      "complex-function": 1,
+      "long-line": 7
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopObserve.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 3,
+      "long-line": 3
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopObservePrompts.ts": {
+      "complex-function": 3,
+      "long-line": 5
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopOwnerContext.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopPacing.ts": {
+      "long-line": 7
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopPhoneStep.ts": {
+      "complex-function": 2,
+      "multi-statement-line": 6,
+      "long-line": 12
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopPlan.ts": {
+      "complex-function": 2,
+      "long-line": 10
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopPrompts.ts": {
+      "complex-function": 1,
+      "long-line": 18
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopProvenance.ts": {
+      "long-line": 8
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopReachOutStep.ts": {
+      "complex-function": 2,
+      "multi-statement-line": 1,
+      "long-line": 13
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopSessionPrompts.ts": {
+      "long-line": 4
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopShowStep.ts": {
+      "multi-statement-line": 2,
+      "long-line": 2
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopSteps.ts": {
+      "complex-function": 2,
+      "multi-statement-line": 1,
+      "long-line": 14
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopThinkStep.ts": {
+      "complex-function": 3,
+      "multi-statement-line": 1,
+      "long-line": 15
+    },
+    "services/api/src/mind/action/ownTime/autonomyLoopToolStep.ts": {
+      "multi-statement-line": 1,
+      "long-line": 8
+    },
+    "services/api/src/mind/action/ownTime/autonomyModels.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/mind/action/ownTime/autonomyOwnerContext.ts": {
+      "long-line": 15
+    },
+    "services/api/src/mind/action/ownTime/autonomyReader.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/mind/action/ownTime/autonomyService.ts": {
+      "complex-function": 1,
+      "long-line": 6
+    },
+    "services/api/src/mind/action/ownTime/autonomyShowing.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/ownTime/autonomyTextModel.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 2,
+      "long-line": 8
+    },
+    "services/api/src/mind/action/ownTime/hostFolderOperationResults.ts": {
+      "complex-function": 1,
+      "long-line": 8
+    },
+    "services/api/src/mind/action/ownTime/hostFolderOperations.ts": {
+      "multi-statement-line": 1,
+      "complex-function": 1,
+      "long-line": 6
+    },
+    "services/api/src/mind/action/ownTime/ownTimePorts.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/ownTime/store/autonomyAnnouncerStore.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/ownTime/store/autonomyLoopObservations.ts": {
+      "complex-function": 1,
+      "long-line": 3
+    },
+    "services/api/src/mind/action/ownTime/store/autonomyLoopState.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/action/ownTime/store/hostFolderOperationsStore.ts": {
+      "multi-statement-line": 2,
+      "long-line": 4
+    },
+    "services/api/src/mind/action/ownTime/store/pursuitLedger.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/action/ownTime/store/studyAetherLinks.ts": {
+      "long-line": 26
+    },
+    "services/api/src/mind/action/ownTime/store/studyMigration.ts": {
+      "complex-function": 2,
+      "multi-statement-line": 1,
+      "long-line": 3
+    },
+    "services/api/src/mind/action/ownTime/store/studyShowingStore.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/ownTime/store/studyStore.ts": {
+      "multi-statement-line": 6,
+      "complex-function": 1,
+      "long-line": 10
+    },
+    "services/api/src/mind/action/ownTime/studyAether.ts": {
+      "multi-statement-line": 8,
+      "complex-function": 1,
+      "long-line": 14
+    },
+    "services/api/src/mind/action/ownTime/studyDesk.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/mind/action/reflex/jevTouchSelector.ts": {
+      "multi-statement-line": 1,
+      "long-line": 1
+    },
+    "services/api/src/mind/action/reflex/reflexCandidates.ts": {
+      "multi-statement-line": 2,
+      "complex-function": 2,
+      "long-line": 1
+    },
+    "services/api/src/mind/action/reflex/reflexController.ts": {
+      "long-function": 1,
+      "complex-function": 1,
+      "multi-statement-line": 24,
+      "long-line": 6
+    },
+    "services/api/src/mind/action/reflex/reflexHandoff.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/mind/action/respond/apiPromptProjection.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/respond/apiTextTurn.ts": {
+      "multi-statement-line": 2,
+      "complex-function": 1,
+      "long-line": 14
+    },
+    "services/api/src/mind/action/respond/cognitiveIntent.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/mind/action/respond/commitmentCommands.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/action/respond/commitmentTime.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/mind/action/respond/conversationCapabilities.ts": {
+      "complex-function": 2,
+      "multi-statement-line": 1,
+      "long-line": 7
+    },
+    "services/api/src/mind/action/respond/conversationCommands.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/mind/action/respond/conversationOrchestration.ts": {
+      "complex-function": 1,
+      "long-line": 4
+    },
+    "services/api/src/mind/action/respond/conversationReference.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/respond/dailyMind.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/respond/intentRules.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/mind/action/respond/memoPlace.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/respond/promiseRules.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 1,
+      "long-line": 2
+    },
+    "services/api/src/mind/action/respond/rememberRequest.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/mind/action/respond/reminderReply.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/mind/action/respond/respondInstructions.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/action/respond/store/cognitiveIntentStore.ts": {
+      "multi-statement-line": 1,
+      "long-line": 1
+    },
+    "services/api/src/mind/action/respond/store/dailyMindStore.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/mind/action/respond/turnFeedback.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/respond/turnRouting.ts": {
+      "complex-function": 1,
+      "long-line": 7
+    },
+    "services/api/src/mind/action/taskRuntime/store/taskConversationDeliveryStore.ts": {
+      "multi-statement-line": 5,
+      "long-line": 5
+    },
+    "services/api/src/mind/action/taskRuntime/store/taskExternalEventStore.ts": {
+      "multi-statement-line": 1,
+      "long-line": 2
+    },
+    "services/api/src/mind/action/taskRuntime/store/taskHistoryStore.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/taskRuntime/store/taskMaintenanceStore.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/mind/action/taskRuntime/store/taskMessageStore.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/taskRuntime/store/taskProgressStore.ts": {
+      "multi-statement-line": 2,
+      "complex-function": 1,
+      "long-line": 5
+    },
+    "services/api/src/mind/action/taskRuntime/store/taskRuntimeRecovery.ts": {
+      "multi-statement-line": 2,
+      "long-line": 2
+    },
+    "services/api/src/mind/action/taskRuntime/store/taskRuntimeStore.ts": {
+      "multi-statement-line": 18,
+      "complex-function": 2,
+      "long-line": 25
+    },
+    "services/api/src/mind/action/taskRuntime/store/taskRuntimeValidation.ts": {
+      "multi-statement-line": 1
+    },
+    "services/api/src/mind/action/taskRuntime/store/taskSourceStore.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/action/taskRuntime/taskRuntimePorts.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/threads/store/actionStore.ts": {
+      "multi-statement-line": 9,
+      "complex-function": 4,
+      "long-line": 22
+    },
+    "services/api/src/mind/attention/attentionPorts.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/attention/incomingCallRequests.ts": {
+      "complex-function": 1,
+      "long-line": 3
+    },
+    "services/api/src/mind/attention/incomingCalls.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/mind/attention/proactiveDelivery.ts": {
+      "multi-statement-line": 2,
+      "long-line": 9
+    },
+    "services/api/src/mind/attention/store/incomingCallStore.ts": {
+      "long-line": 8
+    },
+    "services/api/src/mind/attention/store/proactiveTopicsStore.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/attention/store/reachOutClaims.ts": {
+      "long-line": 4
+    },
+    "services/api/src/mind/attention/store/reachOutReports.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/attention/voiceSilence.ts": {
+      "complex-function": 2,
+      "long-line": 14
+    },
+    "services/api/src/mind/emotion/affectCoordinator.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/mind/emotion/bodyTouch.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 1,
+      "long-line": 4
+    },
+    "services/api/src/mind/emotion/chatReplyFeeling.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/emotion/companionPresence.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/emotion/emotionPorts.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/emotion/store/autonomyAwakeClock.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/mind/emotion/store/moodHistory.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/emotion/voiceEmotionPlan.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/mind/inhibition/autonomyBudget.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/inhibition/autonomyDayLog.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/inhibition/autonomyPolicy.ts": {
+      "complex-function": 3
+    },
+    "services/api/src/mind/inhibition/conversationSecrets.ts": {
+      "long-line": 5
+    },
+    "services/api/src/mind/inhibition/fcaCorePaths.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/inhibition/memoryDisclosure.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/inhibition/selfRewriteCodeChecks.ts": {
+      "complex-function": 3,
+      "multi-statement-line": 3,
+      "long-line": 1
+    },
+    "services/api/src/mind/inhibition/selfRewriteDataChecks.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/inhibition/selfRewritePorts.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/inhibition/selfRewriteRoutes.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 2,
+      "long-line": 2
+    },
+    "services/api/src/mind/inhibition/selfRewriteService.ts": {
+      "complex-function": 3,
+      "multi-statement-line": 3,
+      "long-line": 4
+    },
+    "services/api/src/mind/inhibition/shannonToolGate.ts": {
+      "long-line": 7
+    },
+    "services/api/src/mind/inhibition/store/ownerInformedMarks.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/inhibition/store/privateListeningStore.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/inhibition/store/selfRewriteStore.ts": {
+      "multi-statement-line": 15,
+      "long-line": 12
+    },
+    "services/api/src/mind/inhibition/store/sqliteDecisionTraces.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/inhibition/store/sqliteWithheldActions.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/inhibition/tracedVoiceDecision.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/inhibition/withheldActions.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/inhibition/withheldRules.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/learning/choiceLedger.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/learning/feedbackService.ts": {
+      "multi-statement-line": 7,
+      "complex-function": 1,
+      "long-line": 15
+    },
+    "services/api/src/mind/learning/predictionLedger.ts": {
+      "multi-statement-line": 1,
+      "long-line": 5
+    },
+    "services/api/src/mind/learning/rewardSettlement.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/mind/learning/store/sqliteChoiceLedger.ts": {
+      "long-line": 22
+    },
+    "services/api/src/mind/learning/store/sqliteFeedback.ts": {
+      "long-line": 11
+    },
+    "services/api/src/mind/learning/store/sqlitePredictionLedger.ts": {
+      "long-line": 17
+    },
+    "services/api/src/mind/learning/store/sqliteValueTable.ts": {
+      "long-line": 9
+    },
+    "services/api/src/mind/learning/taskFeedbackChoices.ts": {
+      "complex-function": 1,
+      "long-line": 5
+    },
+    "services/api/src/mind/learning/valueTable.ts": {
+      "multi-statement-line": 2,
+      "long-line": 6
+    },
+    "services/api/src/mind/memory/bodyTouchExperience.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/memory/conversationContract.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/memory/conversationReplaySummary.ts": {
+      "complex-function": 1,
+      "long-line": 12
+    },
+    "services/api/src/mind/memory/feedbackSourceProjection.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 2,
+      "long-line": 4
+    },
+    "services/api/src/mind/memory/gameBodyMemory.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/memory/identityPrompt.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/memory/impressionDecay.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/memory/impressionUpdater.ts": {
+      "multi-statement-line": 2,
+      "long-line": 15
+    },
+    "services/api/src/mind/memory/impressionViews.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/memory/impressions.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 4,
+      "long-line": 3
+    },
+    "services/api/src/mind/memory/injectionGuard.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/memory/memoryEmbeddingWorker.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/memory/memoryForgetCommand.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/memory/memoryOpCodec.ts": {
+      "long-line": 11
+    },
+    "services/api/src/mind/memory/memoryOps.ts": {
+      "multi-statement-line": 2,
+      "complex-function": 1,
+      "long-line": 9
+    },
+    "services/api/src/mind/memory/memoryPersonFacts.ts": {
+      "multi-statement-line": 3,
+      "long-line": 2
+    },
+    "services/api/src/mind/memory/memoryPorts.ts": {
+      "long-line": 4
+    },
+    "services/api/src/mind/memory/memoryProjection.ts": {
+      "complex-function": 2,
+      "long-line": 1
+    },
+    "services/api/src/mind/memory/memoryProjectionSafety.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/memory/memoryProposer.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/memory/memoryService.ts": {
+      "complex-function": 2,
+      "long-line": 1
+    },
+    "services/api/src/mind/memory/memoryVisibility.ts": {
+      "multi-statement-line": 4,
+      "complex-function": 1,
+      "long-line": 7
+    },
+    "services/api/src/mind/memory/memoryWriter.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 4,
+      "long-line": 2
+    },
+    "services/api/src/mind/memory/ownerUpcoming.ts": {
+      "complex-function": 1,
+      "long-line": 17
+    },
+    "services/api/src/mind/memory/peopleMemory.ts": {
+      "complex-function": 2,
+      "multi-statement-line": 3,
+      "long-line": 6
+    },
+    "services/api/src/mind/memory/peopleMemoryContract.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/memory/peopleMemoryPrompts.ts": {
+      "long-line": 4
+    },
+    "services/api/src/mind/memory/personFacts.ts": {
+      "long-line": 8
+    },
+    "services/api/src/mind/memory/personFactsPorts.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/memory/platformBridge.ts": {
+      "complex-function": 2,
+      "long-line": 3
+    },
+    "services/api/src/mind/memory/platformBridgeBindings.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/memory/platformPeople.ts": {
+      "complex-function": 1,
+      "long-line": 7
+    },
+    "services/api/src/mind/memory/selfInterestHandlers.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/memory/skillCopies.ts": {
+      "long-line": 4
+    },
+    "services/api/src/mind/memory/skillDocument.ts": {
+      "long-line": 6
+    },
+    "services/api/src/mind/memory/skillImport.ts": {
+      "complex-function": 2,
+      "multi-statement-line": 3,
+      "long-line": 6
+    },
+    "services/api/src/mind/memory/skillMemory.ts": {
+      "multi-statement-line": 30,
+      "complex-function": 2,
+      "long-line": 27
+    },
+    "services/api/src/mind/memory/store/conversationStore.ts": {
+      "multi-statement-line": 2,
+      "complex-function": 1,
+      "long-line": 4
+    },
+    "services/api/src/mind/memory/store/memoryOutboxStore.ts": {
+      "multi-statement-line": 2,
+      "long-line": 8
+    },
+    "services/api/src/mind/memory/store/outboxScrub.ts": {
+      "multi-statement-line": 3,
+      "long-line": 2
+    },
+    "services/api/src/mind/memory/store/peopleMemoryStore.ts": {
+      "long-line": 6
+    },
+    "services/api/src/mind/memory/store/peopleMigrationReport.ts": {
+      "long-line": 7
+    },
+    "services/api/src/mind/memory/store/personFactsStore.ts": {
+      "multi-statement-line": 1,
+      "long-line": 10
+    },
+    "services/api/src/mind/memory/store/sqliteImpressions.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/memory/store/sqliteMemorySearch.ts": {
+      "multi-statement-line": 3,
+      "long-line": 3
+    },
+    "services/api/src/mind/memory/store/sqliteShannonKnowledge.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/memory/store/sqliteSkillCopyWrites.ts": {
+      "long-line": 4
+    },
+    "services/api/src/mind/memory/store/sqliteSkillImports.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/memory/store/sqliteSkillSchema.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/memory/store/sqliteSkillSleepUsage.ts": {
+      "long-line": 4
+    },
+    "services/api/src/mind/memory/store/sqliteSkills.ts": {
+      "long-line": 58
+    },
+    "services/api/src/mind/memory/store/taskExperiences.ts": {
+      "multi-statement-line": 1,
+      "long-line": 4
+    },
+    "services/api/src/mind/memory/store/trustLedgerStore.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/memory/store/upcomingStore.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/memory/taskExperienceHandler.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/memory/taskMemory.ts": {
+      "long-function": 1,
+      "complex-function": 3,
+      "multi-statement-line": 14,
+      "long-line": 10
+    },
+    "services/api/src/mind/memory/taskMemoryPorts.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/memory/turnCaptureProjection.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/mind/perception/chatAudience.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/perception/conversationLooks.ts": {
+      "multi-statement-line": 2,
+      "long-line": 1
+    },
+    "services/api/src/mind/perception/lookPorts.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/perception/noticeProducers.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/perception/ownerCallElsewhere.ts": {
+      "multi-statement-line": 1,
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/mind/perception/store/ownerCallFacts.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/perception/textPerception.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/perception/voiceCompanionPresence.ts": {
+      "long-line": 4
+    },
+    "services/api/src/mind/prediction/actionExpectation.ts": {
+      "complex-function": 2,
+      "multi-statement-line": 2,
+      "long-line": 2
+    },
+    "services/api/src/mind/prediction/bodyTouchPrediction.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/prediction/predictionShadowFold.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/prediction/predictionShadowReadings.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/prediction/store/predictionShadow.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 1,
+      "long-line": 8
+    },
+    "services/api/src/mind/prediction/store/predictionStore.ts": {
+      "long-line": 7
+    },
+    "services/api/src/mind/recall/conversationWindow.ts": {
+      "multi-statement-line": 2,
+      "long-line": 3
+    },
+    "services/api/src/mind/recall/impressionRecall.ts": {
+      "complex-function": 1,
+      "long-line": 5
+    },
+    "services/api/src/mind/recall/memoryModels.ts": {
+      "multi-statement-line": 1,
+      "long-line": 5
+    },
+    "services/api/src/mind/recall/semanticMemoryRecall.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/mind/recall/taskRecall.ts": {
+      "multi-statement-line": 13,
+      "long-line": 7
+    },
+    "services/api/src/mind/recall/temporalKnowledgeRecall.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/recall/treeBeam.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/recall/treeRecall.ts": {
+      "long-line": 12
+    },
+    "services/api/src/mind/recall/turnKnowledgeRecall.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/recall/turnMemoryRecall.ts": {
+      "multi-statement-line": 1,
+      "complex-function": 1,
+      "long-line": 3
+    },
+    "services/api/src/mind/selectors/fcaToolSelection.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/selectors/jevVoiceDecision.ts": {
+      "long-line": 4
+    },
+    "services/api/src/mind/selectors/localVoiceDecision.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/mind/selectors/openAIVoiceDecision.ts": {
+      "long-line": 4
+    },
+    "services/api/src/mind/selectors/store/sqliteTierOutcomes.ts": {
+      "long-line": 8
+    },
+    "services/api/src/mind/selectors/tierCompetence.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/selectors/toolMenu.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/selectors/turnChoices.ts": {
+      "long-line": 5
+    },
+    "services/api/src/mind/selectors/turnVerifier.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/mind/selectors/voiceDecision.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/self/autonomyPursuits.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/self/selfInterestMemory.ts": {
+      "long-function": 1,
+      "complex-function": 2,
+      "multi-statement-line": 19,
+      "long-line": 13
+    },
+    "services/api/src/mind/self/selfPorts.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/self/store/shannonNowReader.ts": {
+      "long-line": 7
+    },
+    "services/api/src/mind/self/store/sqliteSelfInterests.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/sleep/backgroundUpdates.ts": {
+      "complex-function": 1,
+      "long-line": 4
+    },
+    "services/api/src/mind/sleep/explicitMemoryProposals.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/sleep/knowledgeConsolidation.ts": {
+      "multi-statement-line": 2,
+      "long-line": 14
+    },
+    "services/api/src/mind/sleep/skillConsolidation.ts": {
+      "complex-function": 2,
+      "multi-statement-line": 13,
+      "long-line": 15
+    },
+    "services/api/src/mind/sleep/skillFcaPhase.ts": {
+      "multi-statement-line": 6,
+      "complex-function": 3,
+      "long-line": 8
+    },
+    "services/api/src/mind/sleep/skillSleepModel.ts": {
+      "long-line": 4
+    },
+    "services/api/src/mind/sleep/skillSleepProtocol.ts": {
+      "multi-statement-line": 1,
+      "long-line": 9
+    },
+    "services/api/src/mind/sleep/skillSleepRules.ts": {
+      "long-line": 10
+    },
+    "services/api/src/mind/sleep/sleepCommitmentReview.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/sleep/sleepConsolidation.ts": {
+      "complex-function": 2,
+      "long-line": 1
+    },
+    "services/api/src/mind/sleep/sleepConsolidationRules.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/mind/sleep/sleepFcaHistory.ts": {
+      "multi-statement-line": 2,
+      "long-line": 1
+    },
+    "services/api/src/mind/sleep/sleepFcaPhases.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 4,
+      "long-line": 4
+    },
+    "services/api/src/mind/sleep/sleepSelfInterests.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/mind/sleep/valueSleep.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/tools/executionPorts.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/tools/memoryToolDefinitions.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/tools/minecraftLifecycleToolDefinitions.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/tools/selfRewriteToolDefinitions.ts": {
+      "multi-statement-line": 4,
+      "long-line": 3
+    },
+    "services/api/src/mind/tools/shannonAetherTools.ts": {
+      "multi-statement-line": 2,
+      "long-line": 28
+    },
+    "services/api/src/mind/tools/shannonFolderTools.ts": {
+      "complex-function": 1,
+      "long-line": 16
+    },
+    "services/api/src/mind/tools/shannonMinecraftTools.ts": {
+      "long-line": 4
+    },
+    "services/api/src/mind/tools/shannonOwnerDocumentTools.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/tools/shannonReadTools.ts": {
+      "multi-statement-line": 1,
+      "long-line": 9
+    },
+    "services/api/src/mind/tools/shannonSelfRewriteTools.ts": {
+      "multi-statement-line": 4,
+      "long-line": 2
+    },
+    "services/api/src/mind/tools/shannonSkillTools.ts": {
+      "long-line": 8
+    },
+    "services/api/src/mind/tools/shannonStudyTools.ts": {
+      "multi-statement-line": 2,
+      "long-line": 27
+    },
+    "services/api/src/mind/tools/shannonTaskTools.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 4,
+      "long-line": 5
+    },
+    "services/api/src/mind/tools/shannonToolInput.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/mind/tools/shannonToolMenu.ts": {
+      "long-line": 2
+    },
+    "services/api/src/mind/tools/shannonToolRunner.ts": {
+      "multi-statement-line": 1,
+      "complex-function": 4,
+      "long-line": 25
+    },
+    "services/api/src/mind/tools/shannonToolSession.ts": {
+      "complex-function": 2,
+      "long-line": 17
+    },
+    "services/api/src/mind/tools/shannonToolTrace.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/mind/tools/shannonToolTraceSweep.ts": {
+      "multi-statement-line": 1,
+      "long-line": 1
+    },
+    "services/api/src/mind/tools/shannonToolTurns.ts": {
+      "multi-statement-line": 1,
+      "long-line": 1
+    },
+    "services/api/src/mind/tools/shannonTools.ts": {
+      "long-line": 23
+    },
+    "services/api/src/mind/tools/store/sqliteToolTraces.ts": {
+      "long-line": 4
+    },
+    "services/api/src/mind/tools/taskToolDefinitions.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/tools/toolRegistryPorts.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/tools/toolsPorts.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/workspace/mindHost.ts": {
+      "multi-statement-line": 3,
+      "long-line": 6
+    },
+    "services/api/src/mind/workspace/promptLayout.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/mind/workspace/store/mindInboxStore.ts": {
+      "long-line": 3
+    },
+    "services/api/src/mind/workspace/turnCognitiveContext.ts": {
+      "complex-function": 1,
+      "long-line": 4
+    },
+    "services/api/src/mind/workspace/workspacePorts.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/workspace/workspaceState.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/workspace/workspaceText.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mindWorker.ts": {
+      "multi-statement-line": 3,
+      "long-line": 1
+    },
+    "services/api/src/server.ts": {
+      "multi-statement-line": 17,
+      "long-function": 1,
+      "complex-function": 1,
+      "long-line": 31,
+      "long-file": 1
+    },
+    "services/api/src/surfaces/body/apiBodyRoutes.ts": {
+      "complex-function": 1,
+      "long-line": 4
+    },
+    "services/api/src/surfaces/body/appLook.ts": {
+      "complex-function": 1,
+      "long-line": 4
+    },
+    "services/api/src/surfaces/body/bodyLook.ts": {
+      "complex-function": 1,
+      "long-line": 6
+    },
+    "services/api/src/surfaces/body/bodyLookActivity.ts": {
+      "multi-statement-line": 3,
+      "long-line": 2
+    },
+    "services/api/src/surfaces/body/bodyLookTurnWait.ts": {
+      "multi-statement-line": 1
+    },
+    "services/api/src/surfaces/body/bodyLookVision.ts": {
+      "long-line": 2
+    },
+    "services/api/src/surfaces/body/bodyReaction.ts": {
+      "complex-function": 3,
+      "multi-statement-line": 1,
+      "long-line": 12
+    },
+    "services/api/src/surfaces/body/bodyReactionModel.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/body/bodyReactionPrompt.ts": {
+      "complex-function": 1,
+      "long-line": 6
+    },
+    "services/api/src/surfaces/body/bodyTouchWords.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/body/fcaTouchIngress.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/body/privateListeningRoutes.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/surfaces/body/shannonBody.ts": {
+      "complex-function": 1,
+      "long-line": 13
+    },
+    "services/api/src/surfaces/body/store/appLookStore.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/body/store/bodyLookDelivery.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/body/store/bodyLookStore.ts": {
+      "long-line": 2
+    },
+    "services/api/src/surfaces/body/store/bodyReactionStore.ts": {
+      "complex-function": 1,
+      "long-line": 15
+    },
+    "services/api/src/surfaces/body/store/bodyStore.ts": {
+      "long-line": 3
+    },
+    "services/api/src/surfaces/minecraft/minecraftBody.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 2,
+      "long-line": 11
+    },
+    "services/api/src/surfaces/minecraft/minecraftBodyState.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftControl.ts": {
+      "multi-statement-line": 5,
+      "complex-function": 2,
+      "long-line": 8
+    },
+    "services/api/src/surfaces/minecraft/minecraftControlValidation.ts": {
+      "complex-function": 4,
+      "long-line": 8
+    },
+    "services/api/src/surfaces/minecraft/minecraftLifecycle.ts": {
+      "multi-statement-line": 2,
+      "complex-function": 3,
+      "long-line": 11
+    },
+    "services/api/src/surfaces/minecraft/minecraftReflexAdapter.ts": {
+      "multi-statement-line": 22,
+      "complex-function": 2,
+      "long-line": 15
+    },
+    "services/api/src/surfaces/minecraft/minecraftRequestLines.ts": {
+      "complex-function": 1,
+      "long-line": 4
+    },
+    "services/api/src/surfaces/minecraft/serverMinecraftBodyRoute.ts": {
+      "multi-statement-line": 2,
+      "complex-function": 1,
+      "long-line": 4
+    },
+    "services/api/src/surfaces/minecraft/store/minecraftControlStore.ts": {
+      "multi-statement-line": 6,
+      "long-line": 7
+    },
+    "services/api/src/surfaces/minecraft/store/minecraftLifecycleStore.ts": {
+      "multi-statement-line": 6,
+      "complex-function": 1,
+      "long-line": 7
+    },
+    "services/api/src/surfaces/minecraft/store/minecraftPrimaryModels.ts": {
+      "multi-statement-line": 1,
+      "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/store/minecraftRequestsStore.ts": {
+      "complex-function": 3,
+      "multi-statement-line": 1,
+      "long-line": 24
+    },
+    "services/api/src/surfaces/outreach/initiativeIntent.ts": {
+      "long-line": 2
+    },
+    "services/api/src/surfaces/outreach/ownOutreach.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/outreach/reachOutDelivery.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/outreach/reachOutVocabulary.ts": {
+      "long-line": 2
+    },
+    "services/api/src/surfaces/outreach/store/initiativeStore.ts": {
+      "long-function": 1,
+      "complex-function": 2,
+      "multi-statement-line": 3,
+      "long-line": 4
+    },
+    "services/api/src/surfaces/outreach/store/ownOutreachStore.ts": {
+      "long-line": 4
+    },
+    "services/api/src/surfaces/outreach/store/pushNotificationStore.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/outreach/store/reachOutSpeaker.ts": {
+      "long-line": 11
+    },
+    "services/api/src/surfaces/platform/platformPeopleSummaries.ts": {
+      "long-line": 6
+    },
+    "services/api/src/surfaces/platform/platformReply.ts": {
+      "complex-function": 1,
+      "long-line": 6
+    },
+    "services/api/src/surfaces/text/apiConversationRead.ts": {
+      "long-line": 2
+    },
+    "services/api/src/surfaces/text/chatSentenceSplitter.ts": {
+      "long-function": 1,
+      "complex-function": 1,
+      "multi-statement-line": 3
+    },
+    "services/api/src/surfaces/voice/apiLiveVoice.ts": {
+      "complex-function": 2,
+      "long-function": 1,
+      "multi-statement-line": 2,
+      "long-line": 35
+    },
+    "services/api/src/surfaces/voice/apiVoiceCallSummary.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/voice/apiVoiceTurns.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/surfaces/voice/fcaVoiceContext.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/voice/realtimeVoice.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/voice/serverGeminiLiveRoute.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/surfaces/voice/serverGeminiSpeechRoute.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 3
+    },
+    "services/api/src/surfaces/voice/store/voiceIdentityStore.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/voice/voiceAppLook.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 1,
+      "long-line": 1
+    },
+    "services/api/src/surfaces/voice/voiceConversationHint.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/voice/voiceConversationInstructions.ts": {
+      "long-line": 8
+    },
+    "services/api/src/surfaces/voice/voiceDeviceContext.ts": {
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/surfaces/voice/voiceGrounding.ts": {
+      "long-line": 5
+    },
+    "services/api/src/surfaces/voice/voiceIntroductionInstructions.ts": {
+      "long-line": 13
+    },
+    "services/api/src/surfaces/voice/voiceObservation.ts": {
+      "long-line": 2
+    },
+    "services/api/src/surfaces/voice/voiceRoomLook.ts": {
+      "complex-function": 1,
+      "long-line": 3
+    },
+    "services/api/src/surfaces/voice/voiceSessionProjection.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/voice/voiceStage2.ts": {
+      "long-line": 7
+    },
+    "services/api/src/surfaces/voice/voiceTranscriptContext.ts": {
+      "long-line": 5
+    },
+    "services/api/src/surfaces/voice/voiceWaitingCue.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/wiring/actionExecutionWiring.ts": {
+      "multi-statement-line": 15,
+      "long-line": 2
+    },
+    "services/api/src/wiring/autonomyOwnerContextWiring.ts": {
+      "multi-statement-line": 1
+    },
+    "services/api/src/wiring/cognitionLedgerTaps.ts": {
+      "multi-statement-line": 1,
+      "long-line": 8
+    },
+    "services/api/src/wiring/cognitionLedgerWiring.ts": {
+      "multi-statement-line": 2,
+      "long-line": 1
+    },
+    "services/api/src/wiring/compactionWiring.ts": {
+      "long-line": 1
+    },
+    "services/api/src/wiring/configuredWorkerFeedback.ts": {
+      "multi-statement-line": 1
+    },
+    "services/api/src/wiring/externalActionWiring.ts": {
+      "complex-function": 2,
+      "multi-statement-line": 2
+    },
+    "services/api/src/wiring/fcaBodyWiring.ts": {
+      "multi-statement-line": 2,
+      "long-line": 2
+    },
+    "services/api/src/wiring/fcaMemoryWiring.ts": {
+      "long-line": 1
+    },
+    "services/api/src/wiring/fcaMinecraftRequests.ts": {
+      "multi-statement-line": 1,
+      "long-line": 4
+    },
+    "services/api/src/wiring/fcaMinecraftTools.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 1,
+      "long-line": 2
+    },
+    "services/api/src/wiring/fcaReadSources.ts": {
+      "long-function": 1,
+      "complex-function": 1,
+      "multi-statement-line": 11,
+      "long-line": 6
+    },
+    "services/api/src/wiring/fcaResearchWiring.ts": {
+      "multi-statement-line": 6,
+      "long-line": 4
+    },
+    "services/api/src/wiring/fcaSharedWiring.ts": {
+      "multi-statement-line": 2,
+      "complex-function": 1,
+      "long-line": 3
+    },
+    "services/api/src/wiring/fcaSleepJobs.ts": {
+      "complex-function": 1,
+      "long-line": 4
+    },
+    "services/api/src/wiring/fcaSleepMemory.ts": {
+      "multi-statement-line": 2,
+      "long-line": 1
+    },
+    "services/api/src/wiring/fcaSleepSources.ts": {
+      "multi-statement-line": 2,
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/wiring/fcaSleepTaskEvidence.ts": {
+      "complex-function": 1,
+      "long-line": 5
+    },
+    "services/api/src/wiring/fcaSleepTaskLineage.ts": {
+      "complex-function": 3,
+      "multi-statement-line": 5,
+      "long-line": 3
+    },
+    "services/api/src/wiring/fcaSleepWiring.ts": {
+      "multi-statement-line": 4,
+      "long-line": 2
+    },
+    "services/api/src/wiring/fcaSleepWriterBarrier.ts": {
+      "multi-statement-line": 1
+    },
+    "services/api/src/wiring/fcaTaskObservationWiring.ts": {
+      "long-line": 1
+    },
+    "services/api/src/wiring/fcaTouchWiring.ts": {
+      "multi-statement-line": 17,
+      "complex-function": 1,
+      "long-line": 15
+    },
+    "services/api/src/wiring/feedbackWiring.ts": {
+      "multi-statement-line": 2
+    },
+    "services/api/src/wiring/livenessWiring.ts": {
+      "multi-statement-line": 1
+    },
+    "services/api/src/wiring/memoryOutboxWiring.ts": {
+      "long-line": 4
+    },
+    "services/api/src/wiring/mindOpsWiring.ts": {
+      "long-line": 1
+    },
+    "services/api/src/wiring/mindWiring.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 3,
+      "long-line": 1
+    },
+    "services/api/src/wiring/mindWorkerWiring.ts": {
+      "multi-statement-line": 15,
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/wiring/minecraftActionWiring.ts": {
+      "long-line": 1
+    },
+    "services/api/src/wiring/minecraftBodyRouteWiring.ts": {
+      "long-line": 1
+    },
+    "services/api/src/wiring/minecraftLifecycleRecoveryWiring.ts": {
+      "multi-statement-line": 3,
+      "long-line": 2
+    },
+    "services/api/src/wiring/minecraftLifecycleWiring.ts": {
+      "complex-function": 2,
+      "multi-statement-line": 4,
+      "long-line": 5
+    },
+    "services/api/src/wiring/opsMinecraftLifecycleWiring.ts": {
+      "multi-statement-line": 3,
+      "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/wiring/ownerUpcomingWiring.ts": {
+      "multi-statement-line": 1,
+      "long-line": 1
+    },
+    "services/api/src/wiring/peopleFactsWiring.ts": {
+      "long-line": 3
+    },
+    "services/api/src/wiring/proactiveGateWiring.ts": {
+      "multi-statement-line": 1
+    },
+    "services/api/src/wiring/remoteMindWiring.ts": {
+      "multi-statement-line": 5,
+      "long-line": 2
+    },
+    "services/api/src/wiring/selfInterestWiring.ts": {
+      "long-line": 1
+    },
+    "services/api/src/wiring/selfRewriteRuntimeWiring.ts": {
+      "multi-statement-line": 8,
+      "complex-function": 1,
+      "long-line": 3
+    },
+    "services/api/src/wiring/selfRewriteWiring.ts": {
+      "multi-statement-line": 9,
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/wiring/serverActionThreadsWiring.ts": {
+      "long-line": 1
+    },
+    "services/api/src/wiring/serverFcaWiring.ts": {
+      "complex-function": 2,
+      "multi-statement-line": 12,
+      "long-line": 22
+    },
+    "services/api/src/wiring/serverMinecraftBodyWiring.ts": {
+      "complex-function": 1,
+      "long-line": 4
+    },
+    "services/api/src/wiring/serverObserverWiring.ts": {
+      "long-line": 2
+    },
+    "services/api/src/wiring/serverPrivateListeningRoute.ts": {
+      "multi-statement-line": 1
+    },
+    "services/api/src/wiring/serverStage5Wiring.ts": {
+      "multi-statement-line": 9,
+      "long-line": 3
+    },
+    "services/api/src/wiring/skillCopyWiring.ts": {
+      "long-line": 1
+    },
+    "services/api/src/wiring/skillImportWiring.ts": {
+      "long-line": 1
+    },
+    "services/api/src/wiring/skillMemoryWiring.ts": {
+      "complex-function": 1,
+      "multi-statement-line": 3,
+      "long-line": 15
+    },
+    "services/api/src/wiring/skillRoutingWiring.ts": {
+      "long-line": 5
+    },
+    "services/api/src/wiring/stage5MemoryWiring.ts": {
+      "long-line": 1
+    },
+    "services/api/src/wiring/studyShowingWiring.ts": {
+      "long-line": 1
+    },
+    "services/api/src/wiring/taskFeedbackWiring.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/wiring/taskRuntimeWiring.ts": {
+      "complex-function": 5,
+      "multi-statement-line": 2,
+      "long-line": 8
+    },
+    "services/api/src/wiring/treeRecallWiring.ts": {
+      "long-line": 2
+    },
+    "services/api/src/wiring/turnRoutingWiring.ts": {
+      "complex-function": 2,
+      "long-line": 4
+    },
+    "services/api/src/wiring/withheldStoreWiring.ts": {
+      "long-line": 2
+    },
+    "services/api/src/worker.ts": {
+      "long-line": 4
+    },
+    "services/api/src/worldWorker.ts": {
+      "multi-statement-line": 5,
+      "long-line": 2
+    }
+  }
+}

@@ -120,6 +120,40 @@
       "packages": ["packages/cognition/src", "packages/learning/src", "packages/mind/src"],
       "allow": ["@shannon/*"],
       "forbiddenPattern": "\\bprocess\\.env\\b|\\bfetch\\(|\\bset(?:Timeout|Interval)\\("
+    },
+    {
+      "id": "no-sql-in-wiring",
+      "kind": "count",
+      "label": "sql",
+      "description": "Wiring holds no SQL (Syzygy ADR-0009 D9): it hands stores to parts and reads through store methods. Counted per file (prepared statements and literal exec calls); a count may only fall.",
+      "from": ["wiring/**"],
+      "pattern": "\\.prepare\\(|\\.exec\\(\\s*[`'\"]"
+    },
+    {
+      "id": "mind-actions-owner",
+      "kind": "count",
+      "label": "mind_actions",
+      "description": "The table mind_actions is named only by its store (mind/action/threads/store) and the migrations (Syzygy ADR-0009 D2: one lease layer, one reader). Counted per file; a count may only fall.",
+      "pattern": "\\bmind_actions\\b",
+      "allowIn": ["mind/action/threads/store/**", "infra/sqlite/sqliteMigrations.ts", "**/*Migration.ts", "**/*Migrations.ts", "**/migrations/**"]
+    },
+    {
+      "id": "ddl-in-migrations",
+      "kind": "count",
+      "label": "ddl",
+      "reportOnly": true,
+      "description": "CREATE and ALTER live only in the migrations (Syzygy ADR-0009 stage 1 plan). Report only until the execution DDL is gathered (stage 1, S2).",
+      "pattern": "\\b(?:CREATE\\s+(?:UNIQUE\\s+)?(?:TABLE|INDEX|VIEW|TRIGGER)|ALTER\\s+TABLE)\\b",
+      "allowIn": ["infra/sqlite/sqliteMigrations.ts", "**/*Migration.ts", "**/*Migrations.ts", "**/migrations/**"]
+    },
+    {
+      "id": "pragma-in-opener",
+      "kind": "count",
+      "label": "PRAGMA",
+      "reportOnly": true,
+      "description": "PRAGMA lives only in the one function that opens the database (Syzygy ADR-0009 stage 1 plan; infra/sqlite/sqliteOpen.ts once it exists). Report only.",
+      "pattern": "\\bPRAGMA\\b",
+      "allowIn": ["infra/sqlite/sqliteOpen.ts"]
     }
   ]
 }

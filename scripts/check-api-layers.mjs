@@ -9,6 +9,9 @@
 //   --layout projected (default) | actual                where a file is taken to be: its target in moves.json, or where it is
 //   --list                                               print every violation, not only the new ones
 //
+// A `count` rule (ADR-0009 stage 1) records how often a pattern occurs per file; its baseline count may fall, never rise.
+// A rule marked `reportOnly` is listed but never fails the enforcing run.
+//
 // The default layout is the projected one: each file is checked at its target folder in scripts/layout/moves.json, so the
 // baseline names the same paths before, during and after the waves of scripts/layout/apply.mjs. A file moves.json does
 // not list is checked where it is. Imports are read with TypeScript's pre-processor (static, `import type`, re-exports,
@@ -158,6 +161,8 @@ export function violations({ root, config, moves, layout = 'projected' }) {
         const from = layoutOf(path);
         if (!matchesAny(from, rule.allowIn) && pattern.test(text)) add(rule.id, from, rule.pattern.replace(/\\b|\\/gu, ''));
       }
+    } else if (rule.kind === 'count') {
+      countViolations(rule, texts, layoutOf, add);
     } else if (rule.kind === 'package') {
       const forbidden = rule.forbiddenPattern ? new RegExp(rule.forbiddenPattern, 'u') : null;
       for (const packageSource of rule.packages) {
@@ -184,6 +189,21 @@ export function violations({ root, config, moves, layout = 'projected' }) {
   return [...unique.values()].sort((a, b) => `${a.rule}|${a.from}|${a.to}`.localeCompare(`${b.rule}|${b.from}|${b.to}`));
 }
 
+/**
+ * A counted rule (Syzygy ADR-0009 stage 1): how often a pattern occurs in each file outside `allowIn`, as one entry per file
+ * `<file> -> <label> x<count>`. Against the baseline a count may stay or fall, never rise.
+ */
+function countViolations(rule, texts, layoutOf, add) {
+  const pattern = new RegExp(rule.pattern, 'gu');
+  for (const [path, text] of texts) {
+    const from = layoutOf(path);
+    if (rule.from && !matchesAny(from, rule.from)) continue;
+    if (matchesAny(from, rule.allowIn)) continue;
+    const count = text.match(pattern)?.length ?? 0;
+    if (count) add(rule.id, from, `${rule.label} x${count}`);
+  }
+}
+
 /** The packages a package rule names that do not exist yet (they are checked once they do). */
 export function missingPackages({ root, config }) {
   return config.rules.filter(rule => rule.kind === 'package')
@@ -192,12 +212,34 @@ export function missingPackages({ root, config }) {
 
 const keyOf = item => `${item.from} -> ${item.to}`;
 
+const COUNTED = / x(\d+)$/u;
+
+/** A counted key without its count, and the count (null for an ordinary key). */
+function counted(key) {
+  const match = COUNTED.exec(key);
+  return match ? { prefix: key.slice(0, match.index), count: Number(match[1]) } : { prefix: key, count: null };
+}
+
+/** Whether a baseline holds the key: an ordinary key exactly, a counted key with the same or a higher count. */
+function knownBy(known, key) {
+  if (known.has(key)) return true;
+  const { prefix, count } = counted(key);
+  if (count === null) return false;
+  const allowed = known.get(prefix);
+  return allowed !== undefined && allowed !== null && count <= allowed;
+}
+
 export function compareWithBaseline(current, baseline) {
-  const known = new Set(Object.entries(baseline?.violations ?? {}).flatMap(([rule, items]) => items.map(item => `${rule}|${item}`)));
+  const keys = Object.entries(baseline?.violations ?? {}).flatMap(([rule, items]) => items.map(item => `${rule}|${item}`));
+  const known = new Map(keys.map(key => [key, null]));
+  for (const key of keys) {
+    const { prefix, count } = counted(key);
+    if (count !== null) known.set(prefix, count);
+  }
   const now = new Set(current.map(item => `${item.rule}|${keyOf(item)}`));
   return {
-    fresh: current.filter(item => !known.has(`${item.rule}|${keyOf(item)}`)),
-    fixed: [...known].filter(key => !now.has(key)).sort(),
+    fresh: current.filter(item => !knownBy(known, `${item.rule}|${keyOf(item)}`)),
+    fixed: keys.filter(key => !now.has(key)).sort(),
   };
 }
 
@@ -250,7 +292,9 @@ function main() {
     for (const key of fixed) console.log(`  fixed: ${key.replace('|', ': ')}`);
     console.log('  Run `node scripts/check-api-layers.mjs --update-baseline` to drop the fixed entries.');
   }
-  if (option('--enforce') && fresh.length) process.exitCode = 1;
+  // A rule marked `reportOnly` is reported and never fails (Syzygy ADR-0009 stage 1: its baseline is advisory for now).
+  const reportOnly = new Set(config.rules.filter(rule => rule.reportOnly).map(rule => rule.id));
+  if (option('--enforce') && fresh.some(item => !reportOnly.has(item.rule))) process.exitCode = 1;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) {

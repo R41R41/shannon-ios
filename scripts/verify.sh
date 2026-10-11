@@ -38,6 +38,10 @@ run_architecture() {
   # in scripts/api-layers-baseline.json fails (the baseline only shrinks). The layout script and the check have tests of their own.
   "$node_bin" --test scripts/check-api-layers.test.mjs scripts/layout/apply.test.mjs
   "$node_bin" scripts/check-api-layers.mjs --enforce
+  # The shape of the sources (Syzygy ADR-0009 stage 1, D9): one statement a line, 160 characters a line, 60 statements and a
+  # complexity of 15 a function, 350 statements a file. Counts above scripts/code-shape-baseline.json fail; it only shrinks.
+  "$node_bin" --test scripts/check-code-shape.test.mjs
+  "$node_bin" scripts/check-code-shape.mjs
 }
 
 run_product_spec() {
