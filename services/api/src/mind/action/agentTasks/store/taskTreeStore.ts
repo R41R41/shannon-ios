@@ -5,8 +5,10 @@ import type { ActionLease } from '../../../../contracts/actionThreadContract.js'
 import type { AgentTask, ClaimedAgentCommand, HostAgentEvent } from '../agentTaskStore.js';
 import type { TaskTreeOperations, TaskTreeOwnerChange, TaskTreeProposal, TaskResultProof, TaskTreeLearningCallbacks, TaskDispatchExpectation } from '../taskTreePorts.js';
 import { recordTreeHostEvent, verifyTreeEvidence, treeProofForTask } from './taskTreeEvidence.js';
-import { migrateTaskTreeCallbacks, queueTaskTreeLearning, flushTaskTreeLearning, type TaskTreeLearningEvent } from './taskTreeCallbacks.js';
+import { queueTaskTreeLearning, flushTaskTreeLearning, type TaskTreeLearningEvent } from './taskTreeCallbacks.js';
 import { withAgentTaskRequest } from './agentTaskRequestWindow.js';
+import { applySchemaSteps } from '../../../../infra/sqlite/migrations/schemaSteps.js';
+import { TASK_TREES_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
 
 export interface TreeAttempt {
   id: string; taskId: string; commandId: string; lease: ActionLease | null;
@@ -14,29 +16,11 @@ export interface TreeAttempt {
   outcome: 'running' | 'unknown' | 'completed' | 'failed' | 'cancelled';
   treeRevision: number; evidence: readonly TaskProofEvidence[];
 }
-/** Shares the task store connection and transaction. It never queues or claims execution. */
+/** Shares the task store connection and transaction (its tables: schema step 006). It never queues or claims execution. */
 export class TaskTreeStore implements TaskTreeOperations {
   constructor(readonly database: DatabaseSync, private readonly callbacks?: TaskTreeLearningCallbacks, createSchema = true) {
     if (!createSchema) return;
-    database.exec(`
-      CREATE TABLE IF NOT EXISTS agent_task_trees (
-        scope_key TEXT NOT NULL, task_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, tree_json TEXT NOT NULL,
-        updated_at TEXT NOT NULL, FOREIGN KEY(task_id) REFERENCES agent_tasks(task_id));
-      CREATE TABLE IF NOT EXISTS agent_task_tree_versions (
-        scope_key TEXT NOT NULL, task_id TEXT NOT NULL, revision INTEGER NOT NULL, tree_json TEXT NOT NULL,
-        made_by TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(task_id,revision));
-      CREATE TABLE IF NOT EXISTS agent_task_tree_attempts (
-        scope_key TEXT NOT NULL, task_id TEXT NOT NULL, attempt_id TEXT PRIMARY KEY,
-        command_id TEXT NOT NULL, attempt_json TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS agent_task_tree_proposals (
-        scope_key TEXT NOT NULL, task_id TEXT NOT NULL, proposal_id TEXT PRIMARY KEY, proposal_json TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS agent_task_tree_proposal_ops (
-        scope_key TEXT NOT NULL,task_id TEXT NOT NULL,operation_id TEXT NOT NULL,proposal_id TEXT NOT NULL,request_hash TEXT NOT NULL,
-        PRIMARY KEY(scope_key,task_id,operation_id));
-      CREATE TABLE IF NOT EXISTS agent_task_tree_receipts (
-        task_id TEXT NOT NULL, event_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL);
-    `);
-    migrateTaskTreeCallbacks(database);
+    applySchemaSteps(database, [TASK_TREES_STEP]);
   }
   ensure(task: Pick<AgentTask, 'id' | 'goal' | 'plan' | 'createdAt'>, scopeKey: string, at: string, authority?: TaskTreeAuthority): void {
     if (this.get(scopeKey, task.id)) return;

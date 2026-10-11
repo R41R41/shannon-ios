@@ -13,10 +13,6 @@ interface Options {
 /** This binding identifies a schedule, never a second task status, execution lease, or budget. */
 export class TaskMaintenanceStore {
   constructor(private readonly db: DatabaseSync, private readonly options: Options) {
-    db.exec(`CREATE TABLE IF NOT EXISTS fca_task_maintenance(
-      task_id TEXT PRIMARY KEY REFERENCES agent_tasks(task_id), scope_key TEXT NOT NULL,
-      job_id TEXT NOT NULL, day_key TEXT NOT NULL, start_at TEXT NOT NULL, end_at TEXT NOT NULL,
-      UNIQUE(scope_key,job_id));`);
   }
   get(scope: string, taskId: string): TaskSleepTicket | null {
     const task = this.options.authority.get(scope, taskId);

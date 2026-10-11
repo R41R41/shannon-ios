@@ -17,18 +17,6 @@ export interface RetainedRelease {
   at: string;
 }
 
-export function ensureRetainedResourceSchema(db: DatabaseSync): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS mind_action_retained_resources (
-      action_id TEXT NOT NULL, resource TEXT NOT NULL, retained_at TEXT NOT NULL, PRIMARY KEY (action_id, resource)
-    );
-    CREATE TABLE IF NOT EXISTS mind_action_retained_releases (
-      request_id TEXT PRIMARY KEY, scope_key TEXT NOT NULL, action_id TEXT NOT NULL, released_by TEXT NOT NULL,
-      reason TEXT NOT NULL, resources_json TEXT NOT NULL, released_at TEXT NOT NULL
-    );
-  `);
-}
-
 export function recordRetained(db: DatabaseSync, actionId: string, resources: readonly string[], at: string): void {
   const insert = db.prepare('INSERT OR IGNORE INTO mind_action_retained_resources(action_id, resource, retained_at) VALUES (?, ?, ?)');
   for (const resource of resources) insert.run(actionId, resource, at);

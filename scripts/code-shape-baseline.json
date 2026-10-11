@@ -1040,9 +1040,6 @@
       "multi-statement-line": 1,
       "long-line": 2
     },
-    "services/api/src/mind/action/taskRuntime/store/taskHistoryStore.ts": {
-      "long-line": 1
-    },
     "services/api/src/mind/action/taskRuntime/store/taskMaintenanceStore.ts": {
       "complex-function": 1,
       "long-line": 2
@@ -1053,7 +1050,7 @@
     "services/api/src/mind/action/taskRuntime/store/taskProgressStore.ts": {
       "multi-statement-line": 2,
       "complex-function": 1,
-      "long-line": 5
+      "long-line": 4
     },
     "services/api/src/mind/action/taskRuntime/store/taskRuntimeRecovery.ts": {
       "multi-statement-line": 2,
@@ -2098,7 +2095,7 @@
       "long-line": 1
     },
     "services/api/src/wiring/mindWorkerWiring.ts": {
-      "multi-statement-line": 14,
+      "multi-statement-line": 13,
       "complex-function": 1,
       "long-line": 2
     },

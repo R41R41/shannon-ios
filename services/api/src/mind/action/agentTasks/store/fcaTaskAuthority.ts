@@ -2,23 +2,13 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { TaskAuthority, TaskQuery, TaskRecord, TaskStatus } from '../../taskRuntime/taskRuntimePorts.js';
 import { underWriteLock } from '../../../../infra/sqlite/lockWaits.js';
+import { applySchemaSteps } from '../../../../infra/sqlite/migrations/schemaSteps.js';
+import { FCA_TASK_AUTHORITY_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
 
-/** Additive FCA projection on the existing task authority. Creates no Agent Host commands. */
+/** Additive FCA projection on the existing task authority (schema step 004). Creates no Agent Host commands. */
 export class SQLiteFcaTaskAuthority implements TaskAuthority {
   constructor(private readonly db: DatabaseSync) {
-    const additions = [
-      ['fca_kind', 'TEXT'], ['fca_parent_id', 'TEXT REFERENCES agent_tasks(task_id)'],
-      ['fca_origin', 'TEXT'], ['fca_completion_criteria', "TEXT NOT NULL DEFAULT ''"],
-    ];
-    this.transaction(() => {
-      const columns = db.prepare("PRAGMA table_info('agent_tasks')").all() as Array<{ name: string }>;
-      if (!columns.length) throw new Error('FCA_AGENT_TASKS_MIGRATION_REQUIRED');
-      for (const [name, definition] of additions) if (!columns.some(column => column.name === name)) {
-        db.exec(`ALTER TABLE agent_tasks ADD COLUMN ${name} ${definition}`);
-      }
-      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS agent_tasks_fca_root ON agent_tasks(scope_key) WHERE fca_kind='root';
-        CREATE INDEX IF NOT EXISTS agent_tasks_fca_parent ON agent_tasks(scope_key,fca_parent_id);`);
-    });
+    applySchemaSteps(db, [FCA_TASK_AUTHORITY_STEP]);
   }
   transaction<T>(work: () => T): T {
     return underWriteLock(this.db, null, '', work, 'fca_task_authority');

@@ -5,7 +5,7 @@ import type { OpsCommandStore } from '../infra/ops/store/opsCommandStore.js';
 import { createMinecraftLifecycleRecovery } from './minecraftLifecycleRecoveryWiring.js';
 import type { ActionThreads } from '../contracts/actionThreadContract.js';
 import { createHash } from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
+import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { stage4Enabled } from '../infra/config/stage4.js';
 import { configuredMinecraftBody } from '../contracts/minecraftBodyContract.js';
 import type { MinecraftLifecycleAuthority, MinecraftLifecycleAction, MinecraftLifecycleCommand } from '../contracts/minecraftLifecycleContract.js';
@@ -36,8 +36,7 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
   if (!Array.isArray(ids) || !ids.length || ids.length > 16 || new Set(ids).size !== ids.length
     || ids.some(id => typeof id !== 'string' || !configuration.servers.has(id))) throw new Error('MINECRAFT_LIFECYCLE_SERVERS_REQUIRED');
   const serverIds = ids as string[];
-  const db = new DatabaseSync(parts.path);
-  db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;');
+  const db = openDatabase(parts.path, 'minecraftLifecycle');
   const leases = new ActionLeaseReader(db);
   const allowed = (authority: MinecraftLifecycleAuthority, command?: MinecraftLifecycleCommand) => {
     try {

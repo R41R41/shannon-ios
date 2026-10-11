@@ -4,18 +4,6 @@ import type { TaskConversationSource, TaskRecord, TaskSource, TaskSourceObservat
 /** Conversation lineage only; canonical memory content is never copied here. */
 export class TaskSourceStore {
   constructor(private readonly db: DatabaseSync) {
-    db.exec(`CREATE TABLE IF NOT EXISTS fca_task_sources (
-      step_id TEXT PRIMARY KEY, scope_key TEXT NOT NULL, thread_id TEXT NOT NULL, experience_id TEXT,
-      observed_at TEXT NOT NULL, recalled_ids_json TEXT NOT NULL DEFAULT '[]', read_ids_json TEXT NOT NULL DEFAULT '[]', state TEXT NOT NULL DEFAULT 'pending');
-      CREATE TABLE IF NOT EXISTS fca_task_source_links (
-      task_id TEXT NOT NULL REFERENCES agent_tasks(task_id), step_id TEXT NOT NULL REFERENCES fca_task_sources(step_id),
-      message_id TEXT NOT NULL DEFAULT '', PRIMARY KEY(task_id,step_id,message_id));`);
-    if (!db.prepare('PRAGMA table_info(fca_task_sources)').all().some(row => row.name === 'read_ids_json')) {
-      db.exec("ALTER TABLE fca_task_sources ADD COLUMN read_ids_json TEXT NOT NULL DEFAULT '[]'");
-    }
-    if (!db.prepare('PRAGMA table_info(fca_task_sources)').all().some(row => row.name === 'source_kind')) {
-      db.exec("ALTER TABLE fca_task_sources ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'conversation'");
-    }
   }
   observe(step: TaskStep, observation: TaskSourceObservation, at: string): boolean {
     const validIds = (ids: readonly string[]) => Array.isArray(ids) && ids.length <= 5000 && ids.every(id => typeof id === 'string' && /^[^\s\p{Cc}]{1,240}$/u.test(id));

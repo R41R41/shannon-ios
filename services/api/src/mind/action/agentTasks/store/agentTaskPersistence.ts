@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
+import { checkpointPassive, openDatabase } from '../../../../infra/sqlite/sqliteOpen.js';
 import type {
   AgentActivityStatus,
   AgentApproval,
@@ -64,14 +65,8 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
 
   constructor(private readonly path: string, options: { taskTreeEnabled?: boolean; taskTreeCallbacks?: TaskTreeLearningCallbacks } = {}) {
     prepareDatabaseLocation(path);
-    this.database = new DatabaseSync(path);
+    this.database = openDatabase(path, 'agentTasks');
     this.queue = new AgentTaskQueue(this.database, (...event) => this.appendEvent(...event));
-    this.database.exec(`
-      PRAGMA busy_timeout = 5000;
-      PRAGMA foreign_keys = ON;
-      PRAGMA journal_mode = WAL;
-      PRAGMA synchronous = NORMAL;
-    `);
     migrateAgentTasks(this.database);
     if (options.taskTreeEnabled) {
       this.taskTrees = new TaskTreeStore(this.database, options.taskTreeCallbacks);
@@ -340,7 +335,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
   recordWorkspaceResource(hostId: string, event: AgentWorkspaceResourceEvent) { return new AgentWorkspaceResourcePersistence(this.database).record(hostId, event); }
   close(): void {
     if (!this.database.isOpen) return;
-    this.database.exec('PRAGMA wal_checkpoint(PASSIVE)');
+    checkpointPassive(this.database);
     secureDatabaseFiles(this.path);
     this.database.close();
   }

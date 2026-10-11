@@ -1,5 +1,5 @@
 import { configuredActionResourceProof, configuredRetainedResources } from './configuredActionResourceProof.js';
-import { DatabaseSync } from 'node:sqlite';
+import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { ACTION_ID, ACTION_LIMITS, type ActionDraft, type ActionLease, type ActionView } from '@shannon/mind';
 import { SQLiteActionStore } from '../mind/action/threads/store/actionStore.js';
 import { knownAgentHostIds } from '../mind/action/agentTasks/store/agentHostIds.js';
@@ -12,9 +12,6 @@ import type { ActionAcknowledgement } from '../contracts/actionThreadContract.js
 import { isSqliteBusy, throttledLog } from '../infra/sqlite/sqliteBusy.js';
 import { recordMindWorkerStart } from '../infra/ops/store/livenessStore.js';
 import { deployedRevision } from '../infra/ops/deployedRevision.js';
-
-/** Below MIND_IPC_LIMITS.timeoutMs (1 s): a caller's deadline outlasts this worker's longest wait for the write lock. */
-export const MIND_WORKER_BUSY_TIMEOUT_MS=750;
 
 /**
  * One scheduler sweep. A busy/locked database is logged (at most once a minute) and retried on the next tick instead of
@@ -29,9 +26,9 @@ export function sweepActions(actions:Pick<SQLiteActionStore,'transaction'|'sweep
 /** Worker-only database and dispatcher; the API never opens the scheduler's writer. */
 export async function configuredMindWorker(values:Readonly<Record<string,string|undefined>>,databasePath:string,hostFactory:()=>{host:MindHost;close():void},now:()=>string,
   log:(line:string)=>void=line=>console.log(line)) {
-  // DatabaseSync blocks this whole worker while it waits, so the wait stays under the API's 1 s IPC deadline (a late admission
+  // DatabaseSync blocks this whole worker while it waits, so the wait (MIND_WORKER_BUSY_TIMEOUT_MS) stays under the API's 1 s IPC deadline (a late admission
   // reply could otherwise hold the foreground slot for a whole lease). A busy write is caught and retried, never a crash.
-  const db=new DatabaseSync(databasePath);db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=${MIND_WORKER_BUSY_TIMEOUT_MS};`);
+  const db=openDatabase(databasePath,'mindWorker');
   const busyLog=throttledLog(log);
   const startedAt=now();
   const retained=configuredRetainedResources(values,()=>knownAgentHostIds(db));

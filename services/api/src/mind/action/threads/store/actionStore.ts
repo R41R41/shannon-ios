@@ -6,9 +6,11 @@ import {
 } from '@shannon/mind';
 import type { ActionAcknowledgement } from '../../../../contracts/actionThreadContract.js';
 import {
-  ensureRetainedResourceSchema, knownRelease, recordRetained, releaseRetained, retainedActionIds, retainedOf, type RetainedRelease,
+  knownRelease, recordRetained, releaseRetained, retainedActionIds, retainedOf, type RetainedRelease,
 } from './retainedResourceStore.js';
 import { actionView as view } from './actionLeaseReader.js';
+import { applySchemaSteps } from '../../../../infra/sqlite/migrations/schemaSteps.js';
+import { ACTION_THREADS_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
 export type ActionResourceReconciliationAllowed=(lease:ActionLease,resource:string,acknowledgementId:string)=>boolean;
 /**
  * A resource that only a release proof may free, even after the unknown deadline: a closing canonical report, or a domain proof
@@ -24,37 +26,7 @@ export class SQLiteActionStore {
   constructor(private readonly db: DatabaseSync,private readonly resourceReconciliationAllowed?:ActionResourceReconciliationAllowed,
     private readonly retainedAfterRelease:ActionResourceRetained=()=>false,
     private readonly retainedReleaseProof:ActionRetainedReleaseProof=()=>false) {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS mind_actions (
-        id TEXT PRIMARY KEY, scope_key TEXT NOT NULL, kind TEXT NOT NULL, origin TEXT NOT NULL, source_id TEXT NOT NULL,
-        parent_id TEXT, state TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 0, holder TEXT, last_holder TEXT, lease_until TEXT,
-        resources_json TEXT NOT NULL, base_resources_json TEXT NOT NULL, owner_informed INTEGER NOT NULL, deadline TEXT, progress TEXT, result TEXT,
-        sent INTEGER NOT NULL DEFAULT 0, failures INTEGER NOT NULL DEFAULT 0, last_failure TEXT,
-        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-        UNIQUE(scope_key, kind, source_id)
-      );
-      CREATE INDEX IF NOT EXISTS mind_actions_scope ON mind_actions(scope_key,state,created_at);
-      CREATE INDEX IF NOT EXISTS mind_actions_state_updated ON mind_actions(state,updated_at);
-      CREATE TABLE IF NOT EXISTS mind_action_budget (
-        reservation_id TEXT PRIMARY KEY, action_id TEXT NOT NULL, generation INTEGER NOT NULL, scope_key TEXT NOT NULL,
-        day TEXT NOT NULL, yen REAL NOT NULL CHECK(yen >= 0), state TEXT NOT NULL, sent INTEGER NOT NULL DEFAULT 0,
-        UNIQUE(action_id,generation,reservation_id)
-      );
-      CREATE TABLE IF NOT EXISTS mind_action_notice_receipts (
-        request_id TEXT PRIMARY KEY, scope_key TEXT NOT NULL, action_id TEXT NOT NULL, notification_id TEXT NOT NULL, acknowledged_at TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS mind_action_notice_episode ON mind_action_notice_receipts(scope_key,action_id,notification_id);
-      CREATE TABLE IF NOT EXISTS mind_action_controls (
-        request_id TEXT PRIMARY KEY, scope_key TEXT NOT NULL, target_id TEXT, created_at TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS mind_action_acknowledgements (
-        id TEXT PRIMARY KEY,report_json TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS mind_action_resource_acknowledgements (
-        id TEXT PRIMARY KEY,report_json TEXT NOT NULL
-      );
-    `);
-    ensureRetainedResourceSchema(db);
+    applySchemaSteps(db,[ACTION_THREADS_STEP]);
   }
   /** Claims refused since this process started, by closed reason (ADR-0009 stage 1: `GET /v1/ops`). */
   claimRefusals():Readonly<Record<string,number>> {

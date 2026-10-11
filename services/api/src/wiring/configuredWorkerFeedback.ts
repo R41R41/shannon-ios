@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
+import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { stage5Enabled } from '../infra/config/stage5Config.js';
 import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
 import { TaskTreeStore } from '../mind/action/agentTasks/store/taskTreeStore.js';
@@ -9,8 +9,7 @@ export function configuredWorkerFeedback(environment: Readonly<Record<string, st
   path: string; store: SQLiteShannonStore; ownerScope: string; now(): string;
 }): {close():void} | null {
   if (!stage5Enabled(environment) || !options.store.choiceLedger()) return null;
-  const database = new DatabaseSync(options.path, {readOnly:true});
-  database.exec('PRAGMA busy_timeout=5000;');
+  const database = openDatabase(options.path, 'readOnly');
   const proofs = new TaskTreeStore(database, undefined, false);
   try {
     configuredStage5Feedback(environment, {...options, tasks:{taskTrees:proofs}, ownerAlone:() => false, createSchema:false});

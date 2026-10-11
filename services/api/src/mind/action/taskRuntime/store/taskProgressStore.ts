@@ -6,10 +6,6 @@ import type { TaskProgress, TaskProgressEvent } from '../taskProgressPorts.js';
 /** Subordinate to the same task, step and action lease. No scheduler or alternate status authority. */
 export class TaskProgressStore {
   constructor(private readonly db: DatabaseSync, private readonly authority: TaskAuthority, private readonly now: () => string) {
-    db.exec(`CREATE TABLE IF NOT EXISTS fca_task_progress (
-      task_id TEXT PRIMARY KEY REFERENCES agent_tasks(task_id) ON DELETE CASCADE,
-      step_id TEXT NOT NULL, operation_id TEXT NOT NULL, payload_json TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS fca_task_place_context (task_id TEXT PRIMARY KEY REFERENCES agent_tasks(task_id) ON DELETE CASCADE, context_json TEXT NOT NULL);`);
   }
   admitPlaces(taskId: string, context: PlaceSearchContext, valid: () => boolean): boolean {
     return this.authority.transaction(() => {

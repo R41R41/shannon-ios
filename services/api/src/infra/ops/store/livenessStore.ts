@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { LIVENESS_EPISODE_TABLE } from '../../../contracts/livenessNoticeContract.js';
+import { applySchemaSteps } from '../../sqlite/migrations/schemaSteps.js';
+import { LIVENESS_EPISODES_STEP, MIND_WORKER_STARTS_STEP } from '../../sqlite/migrations/executionSteps.js';
 
 /** Closed facts the liveness check reads: timestamps and counts only, never a message, payload or error text. */
 export interface LivenessFacts {
@@ -29,13 +31,12 @@ const KEEP_STARTS_MS = 7 * 86_400_000;
 const DEPLOY_SETTLE_MS = 10 * 60_000;
 
 /**
- * Called once by the mind worker after it holds the socket. Additive tables; the last week is kept. The revision (the deployed
+ * Called once by the mind worker after it holds the socket. Additive tables (schema step 002); the last week is kept. The revision (the deployed
  * `DEPLOYED_REVISION`, or null) lets the liveness check tell a deployment's restarts from a crash loop (ADR-0009 stage 1).
  */
 export function recordMindWorkerStart(db: DatabaseSync, at: string, revision: string | null = null): void {
   const cutoff = new Date(Date.parse(at) - KEEP_STARTS_MS).toISOString();
-  db.exec(`CREATE TABLE IF NOT EXISTS mind_worker_starts (started_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS mind_worker_start_revisions (started_at TEXT NOT NULL, revision TEXT)`);
+  applySchemaSteps(db, [MIND_WORKER_STARTS_STEP]);
   db.prepare('INSERT INTO mind_worker_starts(started_at) VALUES (?)').run(at);
   db.prepare('INSERT INTO mind_worker_start_revisions(started_at, revision) VALUES (?, ?)').run(at, revision);
   db.prepare('DELETE FROM mind_worker_starts WHERE started_at < ?').run(cutoff);
@@ -121,11 +122,10 @@ export function readLivenessFacts(db: DatabaseSync, ownerScope: string, at: stri
 
 /**
  * Opens one episode when an incident begins and closes it when it ends (ADR-0009 §9): the owner's notice is one per episode,
- * also across a restart of the server, because an open episode is found again instead of opened twice. Additive table.
+ * also across a restart of the server, because an open episode is found again instead of opened twice. Additive table (step 003).
  */
 export function syncLivenessEpisodes(db: DatabaseSync, scopeKey: string, incidents: readonly string[], at: string): void {
-  db.exec(`CREATE TABLE IF NOT EXISTS ${LIVENESS_EPISODE_TABLE} (episode_id TEXT PRIMARY KEY, scope_key TEXT NOT NULL,
-    incident TEXT NOT NULL, opened_at TEXT NOT NULL, closed_at TEXT)`);
+  applySchemaSteps(db, [LIVENESS_EPISODES_STEP]);
   const open = db.prepare(`SELECT episode_id, incident FROM ${LIVENESS_EPISODE_TABLE} WHERE scope_key = ? AND closed_at IS NULL`)
     .all(scopeKey);
   const openIncidents = new Set(open.map(row => String(row.incident)));

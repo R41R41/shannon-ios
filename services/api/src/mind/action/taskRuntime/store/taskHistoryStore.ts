@@ -7,21 +7,6 @@ import type { TaskSource, TaskStatus } from '../taskRuntimePorts.js';
 /** Derived summaries never replace the append-only native history. Caller owns the task transaction and lease fence. */
 export class TaskHistoryStore {
   constructor(private readonly db: DatabaseSync) {
-    db.exec(`CREATE TABLE IF NOT EXISTS fca_task_history (
-      sequence INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL REFERENCES agent_tasks(task_id),
-      step_id TEXT NOT NULL UNIQUE, entries_json TEXT NOT NULL, committed_at TEXT NOT NULL,
-      committed_status TEXT NOT NULL DEFAULT 'unknown', sources_json TEXT NOT NULL DEFAULT '[]');
-      CREATE TABLE IF NOT EXISTS fca_task_history_summaries (
-      task_id TEXT PRIMARY KEY REFERENCES agent_tasks(task_id), revision INTEGER NOT NULL,
-      from_sequence INTEGER NOT NULL, through_sequence INTEGER NOT NULL,
-      template_json TEXT NOT NULL, sources_json TEXT NOT NULL, updated_at TEXT NOT NULL,
-      reset_through_sequence INTEGER NOT NULL DEFAULT 0, bootstrap_text TEXT NOT NULL DEFAULT '');`);
-    const columns = new Set(db.prepare('PRAGMA table_info(fca_task_history)').all().map(row => row.name));
-    if (!columns.has('committed_status')) db.exec("ALTER TABLE fca_task_history ADD COLUMN committed_status TEXT NOT NULL DEFAULT 'unknown'");
-    if (!columns.has('sources_json')) db.exec("ALTER TABLE fca_task_history ADD COLUMN sources_json TEXT NOT NULL DEFAULT '[]'");
-    const summaries = new Set(db.prepare('PRAGMA table_info(fca_task_history_summaries)').all().map(row => row.name));
-    if (!summaries.has('reset_through_sequence')) db.exec('ALTER TABLE fca_task_history_summaries ADD COLUMN reset_through_sequence INTEGER NOT NULL DEFAULT 0');
-    if (!summaries.has('bootstrap_text')) db.exec("ALTER TABLE fca_task_history_summaries ADD COLUMN bootstrap_text TEXT NOT NULL DEFAULT ''");
   }
   append(taskId: string, stepId: string, entries: string, at: string, status: TaskStatus, sources: readonly TaskSource[]): void {
     this.db.prepare(`INSERT INTO fca_task_history(task_id,step_id,entries_json,committed_at,committed_status,sources_json)

@@ -6,6 +6,8 @@ import type { TaskRuntime } from '../mind/action/taskRuntime/taskRuntimePorts.js
 import type { FcaTouchDirective, FcaTouchInput, FcaTouchPort, FcaTouchResult, FcaTouchSelector } from '../mind/action/reflex/fcaTouchPorts.js';
 import { acquireAction } from './actionExecutionWiring.js';
 import { inActionExecution } from '../infra/context/actionExecution.js';
+import { applySchemaSteps } from '../infra/sqlite/migrations/schemaSteps.js';
+import { FCA_TOUCH_STEP } from '../infra/sqlite/migrations/executionSteps.js';
 
 interface Row {
   operation_id: string; scope_key: string; device_id: string; touch_id: string; input_json: string; target_id: string;
@@ -22,11 +24,7 @@ export function createFcaTouchWiring(parts: {
   threadId(scope: string): string | null;
 }) {
   const now = parts.now ?? (() => new Date().toISOString()), db = parts.db;
-  db.exec(`CREATE TABLE IF NOT EXISTS fca_touch_receipts (
-    operation_id TEXT PRIMARY KEY,scope_key TEXT NOT NULL,device_id TEXT NOT NULL,touch_id TEXT NOT NULL,input_json TEXT NOT NULL,
-    target_id TEXT NOT NULL,state TEXT NOT NULL,gesture TEXT,lease_json TEXT,expires_at TEXT NOT NULL,issued INTEGER NOT NULL DEFAULT 0,
-    observed_delivered INTEGER NOT NULL DEFAULT 0,result_delivered INTEGER NOT NULL DEFAULT 0,
-    reaction_json TEXT,reaction_delivered INTEGER NOT NULL DEFAULT 0,UNIQUE(scope_key,touch_id));`);
+  applySchemaSteps(db, [FCA_TOUCH_STEP]);
   const jobs = new Map<string, { controller: AbortController; done: Promise<void>; action?: RunningAction }>();
   let closing = false;
   const row = (id: string) => db.prepare('SELECT * FROM fca_touch_receipts WHERE operation_id=?').get(id) as unknown as Row | undefined;

@@ -8,6 +8,9 @@ export const STAGE4_CORE_PATHS = Object.freeze([
     'services/api/src/infra/context/actionExecution.ts',
     'services/api/src/infra/ipc/mindSocket.ts',
     'services/api/src/infra/sqlite/mindOwnership.ts',
+    // ADR-0009 stage 1 (S2): the execution schema's ledger and steps, and the one opener of the shared file.
+    'services/api/src/infra/sqlite/migrations/',
+    'services/api/src/infra/sqlite/sqliteOpen.ts',
     'services/api/src/wiring/actionExecutionWiring.ts',
     'services/api/src/wiring/actionThreadsWiring.ts',
     'services/api/src/wiring/externalActionWiring.ts',

@@ -2,13 +2,14 @@ import { insertTaskMessage } from './taskMessageStore.js';
 import { TaskMaintenanceStore } from './taskMaintenanceStore.js';
 import { TaskRuntimeRecovery } from './taskRuntimeRecovery.js';
 import { bounded, json, taskRuntimeLimits as limits } from './taskRuntimeValidation.js';
-import { ensureTaskRuntimeSchema } from './taskRuntimeSchema.js';
 import { observeExternalEvent } from './taskExternalEventStore.js';
 import type { TaskExternalEvent } from '../taskExternalEventPorts.js';
 import { TaskConversationDeliveryStore } from './taskConversationDeliveryStore.js';
 import type { TaskConversationDeliveryInput, TaskConversationDeliveryStage } from '../taskConversationDeliveryPorts.js';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { applySchemaSteps } from '../../../../infra/sqlite/migrations/schemaSteps.js';
+import { FCA_TASK_RUNTIME_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
 import type { ActionLease } from '@shannon/mind';
 import type { TaskAuthority, TaskCommit, TaskConversationSource, TaskHistoryCommit, TaskHistoryWindow, TaskMessage, TaskQuery, TaskRecord, TaskRuntime, TaskRuntimeOptions, TaskSource, TaskSourceObservation,
   TaskSegmentReceipt, TaskSnapshot, TaskSpec, TaskStep, TaskView } from '../taskRuntimePorts.js';
@@ -46,7 +47,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
   constructor(private readonly db: DatabaseSync, private readonly options: TaskRuntimeOptions) {
     this.authority = options.authority;
     this.now = options.now ?? (() => new Date().toISOString());
-    ensureTaskRuntimeSchema(db, this.authority);
+    applySchemaSteps(db, [FCA_TASK_RUNTIME_STEP]);
     this.progressStore = new TaskProgressStore(db, this.authority, this.now);
     this.sources = new TaskSourceStore(db);
     this.histories = new TaskHistoryStore(db);

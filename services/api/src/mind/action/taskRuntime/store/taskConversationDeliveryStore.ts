@@ -14,12 +14,6 @@ export class TaskConversationDeliveryStore {
     staged(step: TaskStep): void;
     bound(scope: string, stepId: string, taskId: string): void;
   }) {
-    db.exec(`CREATE TABLE IF NOT EXISTS fca_conversation_deliveries (
-      scope_key TEXT NOT NULL, thread_id TEXT NOT NULL, utterance_id TEXT NOT NULL,
-      device_id TEXT NOT NULL, input_digest TEXT NOT NULL, task_id TEXT NOT NULL REFERENCES agent_tasks(task_id),
-      step_id TEXT NOT NULL UNIQUE REFERENCES fca_task_sources(step_id), state TEXT NOT NULL,
-      source_json TEXT, messages_json TEXT NOT NULL DEFAULT '[]', experience_id TEXT, created_at TEXT NOT NULL,
-      PRIMARY KEY(scope_key,thread_id,utterance_id));`);
   }
   get(scope: string, thread: string, utterance: string): TaskConversationDelivery | null {
     const row = this.db.prepare('SELECT * FROM fca_conversation_deliveries WHERE scope_key=? AND thread_id=? AND utterance_id=?').get(scope, thread, utterance);

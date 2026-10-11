@@ -7,10 +7,6 @@ export interface TaskTreeLearningEvent {
   reason?: 'failed' | 'cancelled' | 'unknown';
   expectation?: TaskDispatchExpectation;
 }
-export function migrateTaskTreeCallbacks(database: DatabaseSync): void {
-  database.exec(`CREATE TABLE IF NOT EXISTS agent_task_tree_learning (
-    id TEXT PRIMARY KEY,event_json TEXT NOT NULL,delivered INTEGER NOT NULL DEFAULT 0);`);
-}
 export function queueTaskTreeLearning(database: DatabaseSync, event: TaskTreeLearningEvent): void {
   database.prepare('INSERT OR IGNORE INTO agent_task_tree_learning(id,event_json) VALUES(?,?)').run(event.id, JSON.stringify(event));
 }

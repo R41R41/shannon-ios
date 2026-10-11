@@ -1,4 +1,5 @@
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
+import { openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { evaluateLiveness, LIVENESS_LIMITS, livenessTransitions, type LivenessIncident, type LivenessView } from '../infra/ops/liveness.js';
 import { readLivenessFacts, syncLivenessEpisodes } from '../infra/ops/store/livenessStore.js';
 import { configuredAutonomyLoop } from '../mind/action/ownTime/autonomyLoopConfig.js';
@@ -27,9 +28,8 @@ export interface LivenessMonitorOptions {
  */
 export function startLivenessMonitor(options: LivenessMonitorOptions) {
   if (!options.database && !options.databasePath) throw new Error('LIVENESS_DATABASE_REQUIRED');
-  const owned = options.database ? null : new DatabaseSync(options.databasePath!);
+  const owned = options.database ? null : openDatabase(options.databasePath!, 'liveness');
   const db = options.database ?? owned!;
-  if (owned) owned.exec('PRAGMA busy_timeout = 5000;');
   const now = options.now ?? (() => new Date().toISOString());
   const log = options.log ?? (line => console.log(line));
   const sessionsPerDay = configuredAutonomyLoop(options.environment ?? {}).sessionsPerDay;

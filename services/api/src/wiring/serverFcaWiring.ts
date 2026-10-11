@@ -32,7 +32,7 @@ import type { DecisionTraceWriter } from '../contracts/decisionTraceContract.js'
 import { configuredJevChooser } from './skillRoutingWiring.js';
 import { fcaResearchTools } from './fcaResearchWiring.js';
 import { fcaReadReceiptSources } from '../mind/action/fca/fcaConversationSources.js';
-import { DatabaseSync } from 'node:sqlite';
+import { configureDatabase, openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { switchOn } from '@shannon/switches';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
@@ -66,8 +66,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
   const sleepEnabled = switchOn(values, 'SHANNON_FCA_SLEEP');
   if (sleepEnabled && !parts.sleepStore) throw new Error('FCA_SLEEP_STORE_REQUIRED');
   const borrowed = sleepEnabled ? parts.sleepStore!.fcaDatabase() : null;
-  const db = borrowed ?? new DatabaseSync(parts.path);
-  db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;');
+  const db = borrowed ? configureDatabase(borrowed, 'taskRuntime') : openDatabase(parts.path, 'taskRuntime');
   const client = new MindSocketClient(mindSocketPath(values, parts.path));
   let sleep: ReturnType<typeof createFcaSleepWiring> | null = null;
   try {
