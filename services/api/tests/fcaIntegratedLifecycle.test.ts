@@ -274,9 +274,11 @@ describe('integrated common FCA lifecycle with the real SQLite, action, body, me
     expect(f.driver.runtime.pendingReceipts('owner')).toEqual([]);
     await f.tick(); expect(f.calls).toHaveLength(1);
     expect(f.bodyStore.safe(gameId)).toBe(true);
+    // The owner's next turn revives the stopped conversation (stabilization 2026-10-12); the stopped work stays stopped.
     await f.talk('停止後も話を続けましょう。', async () => {
-      expect(f.bridge.taskToolsAvailable('owner')).toBe(false);
+      expect(f.bridge.taskToolsAvailable('owner')).toBe(true);
     });
+    expect(f.driver.runtime.get('owner', gameId)?.phase).toBe('stopped');
     expect(f.foregroundCalls()).toBe(2);
   });
 });

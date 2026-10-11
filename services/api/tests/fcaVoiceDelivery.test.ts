@@ -172,9 +172,10 @@ describe('FCA voice uses existing sentence and visible-history delivery', () => 
     }
   });
 
-  it('keeps ordinary voice after root stop and withholds forgotten sources after a valid receipt', async () => {
-    const stopped = fixture(); stopped.runtime().stop('owner', stopped.runtime().ensureRoot('owner').id, 'owner_stop');
-    expect((await stopped.turn()).status).toBe(200); expect(stopped.calls()).toBe(1); expect(stopped.children()).toEqual([]);
+  it('keeps voice after root stop, reviving the root for the owner\'s turn, and withholds forgotten sources after a valid receipt', async () => {
+    const stopped = fixture(), root = stopped.runtime().ensureRoot('owner'); stopped.runtime().stop('owner', root.id, 'owner_stop');
+    expect((await stopped.turn()).status).toBe(200); expect(stopped.calls()).toBe(1);
+    expect(stopped.runtime().get('owner', root.id)?.phase).not.toBe('stopped'); // stabilization 2026-10-12
     const f = fixture(); await f.turn(); const receipt = await f.stored();
     const id = (receipt.body as { turnId: string }).turnId;
     f.state.apply('owner', { type: 'memory-control-upserted', control: { memoryId: id, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: at, changeReason: 'owner' } });

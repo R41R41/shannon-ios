@@ -1,5 +1,6 @@
 import { insertTaskMessage } from './taskMessageStore.js';
 import { TaskMaintenanceStore } from './taskMaintenanceStore.js';
+import { TaskRuntimeRecovery } from './taskRuntimeRecovery.js';
 import { bounded, json, taskRuntimeLimits as limits } from './taskRuntimeValidation.js';
 import { ensureTaskRuntimeSchema } from './taskRuntimeSchema.js';
 import { observeExternalEvent } from './taskExternalEventStore.js';
@@ -27,7 +28,11 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
   admitPlaceContext(step: TaskStep, id: string, context: import('../../../../integrations/places/placeDiscovery.js').PlaceSearchContext) { return this.progressStore.admitPlaces(id, context, () => this.matches(step) && this.get(step.scopeKey, id)?.parentId === step.taskId && Boolean(this.options.conversationLeaseValid?.(step.scopeKey, step.lease, this.now()))); }
   progress(scope: string, id: string) { return this.authority.get(scope, id) ? this.progressStore.read(id) : null; }
   recordProgress(step: TaskStep, event: TaskProgressEvent) { return this.progressStore.record(step, event, () => this.matches(step) && this.get(step.scopeKey, step.taskId)?.phase === 'executing' && this.options.leaseValid(step.scopeKey, step.taskId, step.lease, this.now())); }
-  admitSleep(scope: string, jobId: string) { return this.maintenance.admit(scope, jobId); }
+  admitSleep(scope: string, jobId: string) {
+    const root = this.authority.root(scope);
+    if (root && this.options.sleepTicket?.(scope, jobId)) this.authority.transaction(() => this.recovery.revive(root, 'sleep_admission'));
+    return this.maintenance.admit(scope, jobId);
+  }
   sleepTicketForTask(scope: string, taskId: string) { return this.maintenance.get(scope, taskId); }
   observeExternal(scope: string, target: string, event: TaskExternalEvent) {
     if (this.authority.get(scope, target)?.origin === 'maintenance') throw new Error('FCA_MAINTENANCE_INPUT');
@@ -37,6 +42,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
   private readonly authority: TaskAuthority; private readonly now: () => string;
   private readonly sources: TaskSourceStore; private readonly deliveries: TaskConversationDeliveryStore;
   private readonly histories: TaskHistoryStore; private readonly maintenance: TaskMaintenanceStore;
+  private readonly recovery: TaskRuntimeRecovery;
   constructor(private readonly db: DatabaseSync, private readonly options: TaskRuntimeOptions) {
     this.authority = options.authority;
     this.now = options.now ?? (() => new Date().toISOString());
@@ -45,6 +51,12 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
     this.sources = new TaskSourceStore(db);
     this.histories = new TaskHistoryStore(db);
     this.maintenance = new TaskMaintenanceStore(db, { authority: this.authority, now: this.now, resolve: options.sleepTicket, root: scope => this.ensureRoot(scope), view: task => this.view(task) });
+    this.recovery = new TaskRuntimeRecovery(db, { authority: this.authority, maintenance: this.maintenance, now: this.now,
+      checkpoint: id => this.checkpoint(id), required: (scope, id) => this.required(scope, id), all: scope => this.all(scope),
+      view: task => this.view(task), get: (scope, id) => this.get(scope, id), finishStops: task => this.finishStops(task),
+      pendingReceipts: scope => this.pendingReceipts(scope), activeSteps: scope => this.activeSteps(scope),
+      snapshot: (scope, id) => this.snapshotInTransaction(scope, id)!, failConversation: step => this.failConversationInTransaction(step),
+      send: (scope, source, target, text, id) => this.sendInTransaction(scope, source, target, text, id) });
     this.deliveries = new TaskConversationDeliveryStore(db, { authority: this.authority, sources: this.sources, now: this.now,
       begin: (scope, thread, lease, claim) => this.beginConversation(scope, thread, lease, claim), matches: step => this.matches(step) && Boolean(this.options.conversationLeaseValid?.(step.scopeKey, step.lease, this.now())),
       observed: step => this.observedMessages(this.required(step.scopeKey, step.taskId)) ?? [],
@@ -129,9 +141,13 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
     if (!this.options.conversationLeaseValid?.(scopeKey, lease, this.now())) return null;
     const root = this.ensureRoot(scopeKey);
     return this.authority.transaction(() => {
-      if (!this.options.conversationLeaseValid?.(scopeKey, lease, this.now())
-        || ['stopped', 'stopping', 'unknown'].includes(this.get(scopeKey, root.id)!.phase)) return null;
+      if (!this.options.conversationLeaseValid?.(scopeKey, lease, this.now())) return null;
       const requestKey = `fca:conversation:${threadId}`;
+      // The owner speaking again revives her internal root and this thread's conversation after a stop-all or a lost turn.
+      this.recovery.revive(this.required(scopeKey, root.id), 'owner_turn');
+      const existing = this.authority.byRequest(scopeKey, requestKey);
+      if (existing) this.recovery.revive(existing, 'owner_turn');
+      if (['stopped', 'stopping', 'unknown'].includes(this.get(scopeKey, root.id)!.phase)) return null;
       let task = this.authority.byRequest(scopeKey, requestKey);
       if (!task) {
         if (this.all(scopeKey).filter(candidate => !terminal(candidate)).length >= limits.activeTasks) return null;
@@ -397,30 +413,10 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
     });
   }
   recover(scopeKey: string, actionState: (lease: ActionLease) => 'live' | 'safe' | 'unknown'): TaskView[] {
-    return this.authority.transaction(() => {
-      const changed: TaskView[] = [];
-      const receipted = new Set(this.pendingReceipts(scopeKey).map(receipt => receipt.taskId));
-      for (const { taskId, lease } of this.activeSteps(scopeKey)) {
-        if (receipted.has(taskId)) continue; // The original durable receipt owns reconciliation, even during IPC failure.
-        const outcome = actionState(lease); if (outcome === 'live') continue;
-        const task = this.required(scopeKey, taskId), row = this.checkpoint(taskId);
-        if (outcome === 'unknown') {
-          if (task.pauseReason !== 'fca_unknown') this.authority.event(scopeKey, taskId, 'fca_recovery_unknown', this.now(),
-            { status: 'paused', pauseReason: 'fca_unknown' }, { actionId: lease.id, generation: lease.generation });
-        } else if (task.kind === 'conversation') {
-          const snapshot = this.snapshotInTransaction(scopeKey, taskId)!;
-          this.failConversationInTransaction({ id: row.step_id!, scopeKey, taskId, lease, revision: snapshot.revision, messageIds: [], snapshot });
-        } else {
-          this.db.prepare('UPDATE fca_task_checkpoints SET step_id=NULL,lease_json=NULL WHERE task_id=?').run(taskId);
-          this.authority.event(scopeKey, taskId, 'fca_recovered_safe', this.now(),
-            { status: row.stop_requested ? 'paused' : 'queued', pauseReason: row.stop_requested ? 'fca_stopped' : null }, { actionId: lease.id });
-          if (row.stop_requested) this.finishStops(this.required(scopeKey, taskId));
-        }
-        changed.push(this.get(scopeKey, taskId)!);
-      }
-      return changed;
-    });
+    return this.authority.transaction(() => this.recovery.recover(scopeKey, actionState));
   }
+  unknownSince(scopeKey: string, taskId: string): string | null { return this.recovery.unknownSince(scopeKey, taskId); }
+  retireUnknown(scopeKey: string, cutoff: string): TaskView[] { return this.authority.transaction(() => this.recovery.retireUnknown(scopeKey, cutoff)); }
   private initialize(id: string, waitReason: string | null): void {
     this.db.prepare('INSERT INTO fca_task_checkpoints(task_id,wait_reason) VALUES(?,?)').run(id, waitReason);
   }

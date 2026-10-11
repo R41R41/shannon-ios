@@ -11,6 +11,7 @@ import { runFcaStep, type FcaStepPorts } from '../mind/action/fca/fcaRunner.js';
 import { inActionExecution } from '../infra/context/actionExecution.js';
 import { observeAsync, observeSync, observerHandoff, withObserverRun } from '../infra/observer/observerContext.js';
 import { acquireAction } from './actionExecutionWiring.js';
+import { ACTION_LIMITS } from '@shannon/mind';
 
 export interface TaskRuntimeWiringOptions {
   db: DatabaseSync; actions: ActionThreads; model: FcaModel; scopeKey: string;
@@ -149,6 +150,9 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     try {
       await flushReceipts();
       runtime.recover(scopeKey, classify);
+      // An unknown step is never replayed, but after the deadline its task stops holding parents, limits and sleep.
+      const retired = runtime.retireUnknown?.(scopeKey, new Date(Date.parse(now()) - ACTION_LIMITS.unknownReleaseMs).toISOString()) ?? [];
+      if (retired.length) console.log(`Shannon FCA retired ${retired.length} task(s) left unknown for ${ACTION_LIMITS.unknownReleaseMs / 60_000} min`);
       for (const [taskId, job] of running) {
         const task = runtime.get(scopeKey, taskId);
         if (!task || task.phase === 'stopping' || !executionAllowed(task)) job.controller.abort();

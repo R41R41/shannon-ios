@@ -1,21 +1,37 @@
 import { configuredActionResourceProof } from './configuredActionResourceProof.js';
 import { DatabaseSync } from 'node:sqlite';
-import { ACTION_ID, type ActionDraft, type ActionLease } from '@shannon/mind';
+import { ACTION_ID, ACTION_LIMITS, type ActionDraft, type ActionLease } from '@shannon/mind';
 import { SQLiteActionStore } from '../mind/action/threads/store/actionStore.js';
 import type { MindHost } from '../mind/workspace/workspacePorts.js';
 import { serveMindSocket } from '../infra/ipc/mindSocket.js';
 import { mindSocketPath } from '../infra/config/stage4.js';
 import { checkedMindEvent } from '../mind/perception/perceptionPorts.js';
 import type { ActionAcknowledgement } from '../contracts/actionThreadContract.js';
+import { isSqliteBusy, throttledLog } from '../infra/sqlite/sqliteBusy.js';
+import { recordMindWorkerStart } from '../infra/ops/store/livenessStore.js';
+
+/**
+ * One scheduler sweep. A busy/locked database is logged (at most once a minute) and retried on the next tick instead of
+ * crashing the worker; any other error is rethrown to the process-level handler, which exits so systemd restarts it.
+ */
+export function sweepActions(actions:Pick<SQLiteActionStore,'transaction'|'sweep'>,at:string,log:(line:string)=>void,busyLog=log):void {
+  let released=0;
+  try { released=actions.transaction(()=>actions.sweep(at)); }
+  catch(error) { if(!isSqliteBusy(error))throw error; busyLog('Shannon mind sweep skipped: database busy'); return; }
+  if(released>0)log(`Shannon mind released ${released} unknown action(s) after ${ACTION_LIMITS.unknownReleaseMs/60_000} min`);
+}
 /** Worker-only database and dispatcher; the API never opens the scheduler's writer. */
-export async function configuredMindWorker(values:Readonly<Record<string,string|undefined>>,databasePath:string,hostFactory:()=>{host:MindHost;close():void},now:()=>string) {
-  const db=new DatabaseSync(databasePath);db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=250;');
+export async function configuredMindWorker(values:Readonly<Record<string,string|undefined>>,databasePath:string,hostFactory:()=>{host:MindHost;close():void},now:()=>string,
+  log:(line:string)=>void=line=>console.log(line)) {
+  // The API and the background worker hold the same file with 5 s busy timeouts; 250 ms here crashed the worker under load.
+  const db=new DatabaseSync(databasePath);db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;');
+  const busyLog=throttledLog(log);
   const actions=new SQLiteActionStore(db, configuredActionResourceProof(values, db));
   let host:MindHost;
   let closeHost:()=>void;
   const projection=(scopeKey:string)=>({...host.projection(scopeKey),faulted:host.faulted,faults:host.faultCount,busy:host.busyCount});
   let socket:Awaited<ReturnType<typeof serveMindSocket>>;
-  try { socket=await serveMindSocket(mindSocketPath(values,databasePath),(method,input)=>{
+  const handle=(method:string,input:unknown)=>{
     if(!input || typeof input!=='object'||Array.isArray(input))throw new Error('MIND_ARGS');
     const a=input as Record<string,unknown>,at=now();
     const text=(key:string)=>{const value=a[key];if(typeof value!=='string'||!ACTION_ID.test(value))throw new Error('MIND_ID');return value;};
@@ -59,9 +75,15 @@ export async function configuredMindWorker(values:Readonly<Record<string,string|
       case 'action.acknowledge':return actions.acknowledge(a as unknown as ActionAcknowledgement,at);
       default:throw new Error('MIND_METHOD');
     }
+  };
+  try { socket=await serveMindSocket(mindSocketPath(values,databasePath),(method,input)=>{
+    // The caller receives MIND_REQUEST_REJECTED and retries its own way; a busy database never ends this process.
+    try { return handle(method,input); }
+    catch(error) { if(isSqliteBusy(error))busyLog(`Shannon mind request deferred: database busy (${method})`);throw error; }
   });
   } catch(error) { db.close();throw error; }
   try { const owned=hostFactory();host=owned.host;closeHost=owned.close; } catch(error) { await socket.close();db.close();throw error; }
-  const sweep=setInterval(()=>actions.transaction(()=>actions.sweep(now())),1_000);sweep.unref();
+  try { recordMindWorkerStart(db,now()); } catch(error) { if(!isSqliteBusy(error))throw error; log('Shannon mind start not recorded: database busy'); }
+  const sweep=setInterval(()=>sweepActions(actions,now(),log,busyLog),1_000);sweep.unref();
   return {actions,close:async()=>{clearInterval(sweep);await socket.close();closeHost();db.close();}};
 }

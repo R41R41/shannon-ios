@@ -94,6 +94,7 @@ import { SQLiteOwnOutreach } from './surfaces/outreach/ownOutreach.js';
 import { ownerCallElsewhereEnabled } from './mind/perception/perceptionPorts.js';
 import { SQLiteOwnerCallFacts } from './mind/perception/store/ownerCallFacts.js';
 import { createServerSelfDiagnosis } from './infra/ops/serverSelfDiagnosis.js';
+import { startLivenessMonitor, withLiveness } from './wiring/livenessWiring.js';
 import { createMinecraftBodyWiring } from './wiring/serverMinecraftBodyWiring.js';
 import { configuredMind, withMindOps } from './wiring/mindWiring.js';
 import { configuredActionRoutes } from './wiring/serverActionThreadsWiring.js';
@@ -252,12 +253,13 @@ const deviceAuth = authMode === 'paired'
   : null;
 const pairingRoute = createPairingRoute(authMode, deviceAuth);
 const signalObserver = configuredServerObserver(configuredDatabasePath(),kernel,shannonNowOwnerScope(process.env),principal=>minecraft.isGameDevice(principal));
-// Operations console (docs/ops-contract.md). This store is held by the ops route only, never by the kernel.
+// Operations console (docs/ops-contract.md). This store is held by the ops route only, never by the kernel. Liveness: sleep, own time, mind restarts.
 const opsStore = new SQLiteOpsStore(configuredDatabasePath());
+const liveness = startLivenessMonitor({ databasePath: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env), ownTimeEnabled: autonomyConfig.enabled, now });
 const opsRoute = createOpsRoute({
   store: opsStore, bridge: platformBridge?.configuration ?? null, ingestEnabled: () => opsIngestEnabled(process.env), now,
   commandsEnabled: () => opsCommandsEnabled(process.env), minecraftLifecycle: () => lifecycle?.ops ?? null,
-  server: scopeKey => withMindOps(selfDiagnosis.forScope(scopeKey), { host: mind?.host ?? null, outbox: persistentStore.memoryOutbox(), now }),
+  server: scopeKey => withLiveness(withMindOps(selfDiagnosis.forScope(scopeKey), { host: mind?.host ?? null, outbox: persistentStore.memoryOutbox(), now }), liveness.view(scopeKey)),
   device: authorization => deviceAuth ? deviceAuth.authenticate(authorization)
     : bearerAuthorized(authorization, apiToken) ? { scopeKey: null } : null,
 });
@@ -466,8 +468,7 @@ function shutdown(): void {
     signalObserver?.close(); deviceAuth?.close();
     pushStore.close(); worldStore.close(); initiativeStore.close();
     stage5.close();
-    testFlightDeliveryStore.close();
-    dailyMindStore.close();
+    testFlightDeliveryStore.close(); dailyMindStore.close();
     organizeStore.close();
     turnRouting?.close();
     mind?.close();
@@ -488,8 +489,7 @@ function shutdown(): void {
     ownerUpcoming.close();
     closeBodyLookStores(); closeBodyReactionStores();
     opsStore.close();
-    shannonNowReader.close();
-    moodHistoryReader.close();
+    shannonNowReader.close(); moodHistoryReader.close(); liveness.close();
     ownOutreach.close(); ownerCallFacts.close();
     autonomyStore.close(); modelModes.close();
     persistentStore.close();

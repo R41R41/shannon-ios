@@ -96,9 +96,9 @@ function native(script: (body: Body, index: number) => AnthropicMessage | Respon
   });
   return { chat, usage, bodies: transport.bodies, headers, counts };
 }
-function rejected(status: number, text: string) {
+function rejected(status: number, text: string, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: text } }),
-    { status, headers: { 'content-type': 'application/json' } });
+    { status, headers: { 'content-type': 'application/json', ...headers } });
 }
 
 describe('Haiku full registry and strict tool admission', () => {
@@ -288,9 +288,11 @@ describe('Haiku full registry and strict tool admission', () => {
   it.each([401, 403, 408, 409, 429])('does not classify status %s as a schema refusal or issue a plain recovery', async status => {
     const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const t = await session(['minecraft_request']);
-    const h = native(() => rejected(status, 'DO_NOT_LOG_PRIVATE_PROVIDER_CONTENT'));
+    const h = native(() => rejected(status, 'DO_NOT_LOG_PRIVATE_PROVIDER_CONTENT', { 'retry-after-ms': '0' }));
     await expect(h.chat.generate({ ...base, tools: t.tools })).rejects.toThrow();
-    expect(h.bodies).toHaveLength(1);
+    // Haiku's 429 gets the one bounded transient retry of the same request (stabilization 2026-10-12), never a plain recovery.
+    expect(h.bodies).toHaveLength(status === 429 && model === 'claude-haiku-5-5' ? 2 : 1);
+    expect(h.bodies.every(body => JSON.stringify(body) === JSON.stringify(h.bodies[0]))).toBe(true);
     expect(log.mock.calls).toEqual([]);
     expect(h.usage).toEqual([]);
     expect(t.requests.recent('owner')).toEqual([]);

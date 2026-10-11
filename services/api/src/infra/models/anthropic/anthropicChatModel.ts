@@ -23,6 +23,7 @@ import { DEFAULT_VOICE_STREAM_BOUNDS, VOICE_RESPONSE_TIMEOUT_MILLISECONDS, VOICE
 import { webSearchContext, webSearchFailure, webSearchFailedTurn, type WebSearchOperation } from '../webSearch.js';
 import { nativeWebSearchBody, nativeWebSearchResult, searchNeedsInput } from './anthropicWebSearch.js';
 import { turnCompletedWriteReceipts, turnWebSearchResult } from '../../../mind/tools/shannonToolSession.js';
+import { defaultRetryWait, transientProviderFailure, transientRetryWaitMs } from './anthropicTransientRetry.js';
 
 /**
  * The Sonnet tier (Syzygy ADR-0008 stage 2, step 5; `docs/skill-and-routing-contract.md`), as a `ShannonChatModel` over the
@@ -84,6 +85,8 @@ export interface AnthropicChatModelOptions {
   voiceResponseTimeoutMilliseconds?: number;
   /** Sonnet's external read uses the configured auxiliary Haiku client/key. */
   webSearch?: WebSearchOperation;
+  /** The pause before the one transient retry (tests: no real timer). */
+  retryWait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
 }
 
 export class AnthropicChatModel implements ShannonChatModel {
@@ -98,7 +101,7 @@ export class AnthropicChatModel implements ShannonChatModel {
     if (!options.apiKey.trim()) throw new Error('ANTHROPIC_API_KEY is required');
     this.model = options.settings.model;
     this.clock = options.clock ?? (() => performance.now());
-    // No retries of its own: the turn's deadline bounds it, and a failure before any word is luna's turn.
+    // No SDK retries: the turn's deadline bounds it. The sender alone adds one bounded transient retry for Haiku.
     this.client = new Anthropic({ apiKey: options.apiKey, authToken: null, webhookKey: null, baseURL: 'https://api.anthropic.com', logLevel: 'off',
       maxRetries: 0, timeout: options.timeoutMilliseconds ?? 45_000, ...(options.fetch ? { fetch: options.fetch } : {}) });
   }
@@ -291,7 +294,9 @@ export class AnthropicChatModel implements ShannonChatModel {
    */
   private sender(scopeKey: string, listen: ((delta: string, decoder: ChatReplyStreamDecoder) => Promise<string> | null) | null, caller?: AbortSignal,
     latency: FirstTokenLatency = this.firstTokenLatency, onFirst?: () => void, voiceBounds?: VoiceStreamBounds) {
-    return async (body: Anthropic.MessageCreateParamsNonStreaming, time: RoundTime | null, round: number): Promise<Anthropic.Message> => {
+    // Failures that provably reached nothing: no usage, no word handed out. Only these may be retried.
+    const clean = new WeakSet<object>();
+    const attempt = async (body: Anthropic.MessageCreateParamsNonStreaming, time: RoundTime | null, round: number): Promise<Anthropic.Message> => {
       await actionPermit();
       const timer = time ? new RoundTimer(time) : null;
       const bounds = isHaikuModel(body.model) && voiceBounds && listen ? streamWatch(voiceBounds) : null;
@@ -320,7 +325,7 @@ export class AnthropicChatModel implements ShannonChatModel {
           if (round === 0) onFirst?.();
           this.recordUsage(scopeKey, message, prepared.max_tokens, true, body.model, searchAllowance(body));
           usageRecorded = true;
-          if (usesOneHourAnthropicCache(body.model)) validateNativeUsage(message.usage);
+          if (usesOneHourAnthropicCache(body.model)) validateNativeUsage(message.usage, unconfirmed(body.model, message.usage));
           return message;
         }
         const decoder = new ChatReplyStreamDecoder();
@@ -333,7 +338,7 @@ export class AnthropicChatModel implements ShannonChatModel {
             receivedUsage = true;
             observedUsage = event.message.usage;
             if (searchAllowance(prepared) && prepared.tools?.length === 1) searchCacheStart = serverSearchCacheStart(observedUsage);
-            if (usesOneHourAnthropicCache(body.model)) validateNativeUsage(observedUsage);
+            if (usesOneHourAnthropicCache(body.model)) validateNativeUsage(observedUsage, isHaikuModel(body.model) ? () => {} : undefined); // logged once, at the end
           } else if (event.type === 'message_delta' && observedUsage) {
             observedUsage = mergeUsage(observedUsage, event.usage);
             if (Object.hasOwn(event.usage, 'cache_creation')) explicitSearchTtl = (event.usage as HaikuCacheUsage).cache_creation;
@@ -362,7 +367,7 @@ export class AnthropicChatModel implements ShannonChatModel {
         const message = settledServerSearchUsage(completed, searchCacheStart, explicitSearchTtl, prepared.messages);
         this.recordUsage(scopeKey, message, prepared.max_tokens, true, body.model, searchAllowance(body));
         usageRecorded = true;
-        if (usesOneHourAnthropicCache(body.model)) validateNativeUsage(message.usage);
+        if (usesOneHourAnthropicCache(body.model)) validateNativeUsage(message.usage, unconfirmed(body.model, message.usage));
         if (message.stop_reason === 'refusal' && sent) throw new PartialAnswerError(sent);
         return message;
         }, message => ({ ...observedAnthropicResponse(message),
@@ -376,8 +381,22 @@ export class AnthropicChatModel implements ShannonChatModel {
         }
         if (bounds?.signal.aborted && !caller?.aborted) error = bounds.signal.reason;
         if (sent && !(error instanceof PartialAnswerError) && !caller?.aborted) throw new PartialAnswerError(sent);
+        if (!receivedUsage && !usageRecorded && error && typeof error === 'object') clean.add(error);
         throw error;
       } finally { timer?.clear(); bounds?.clear(); }
+    };
+    return async (body: Anthropic.MessageCreateParamsNonStreaming, time: RoundTime | null, round: number): Promise<Anthropic.Message> => {
+      try { return await attempt(body, time, round); } catch (error) {
+        // Haiku: one bounded retry of a transient provider refusal, only on a turn's first request (no tool has run)
+        // and only when nothing was billed or said. Anything else keeps the existing no-retry contract.
+        const transient = round === 0 && isHaikuModel(body.model) && error && typeof error === 'object' && clean.has(error) ? transientProviderFailure(error) : null;
+        const stop = [caller, currentActionExecution()?.signal].filter((value): value is AbortSignal => Boolean(value));
+        if (!transient || stop.some(signal => signal.aborted)) throw error;
+        const wait = transientRetryWaitMs(error);
+        console.log(`Shannon model transient failure: ${transient}, retrying once after ${wait} ms`);
+        await (this.options.retryWait ?? defaultRetryWait)(wait, stop.length ? AbortSignal.any(stop) : undefined);
+        return attempt(body, time, round);
+      }
     };
   }
 
@@ -412,9 +431,22 @@ function nativeUsageComplete(usage: Anthropic.Message['usage'] | null | undefine
   return [usage?.input_tokens, usage?.output_tokens, usage?.cache_creation_input_tokens, usage?.cache_read_input_tokens]
     .every(value => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0);
 }
-function validateNativeUsage(usage: Anthropic.Message['usage'] | null | undefined): void {
-  validateHaikuCacheUsage(usage);
+/**
+ * Malformed or incomplete counts still fail closed (the bill is not known). For Haiku, zero cache read and write on an
+ * otherwise complete response is different: the answer is valid and already paid, and its usage was booked at the measured
+ * uncached price before this check, so the anomaly is logged (`onUnconfirmed`) and the answer kept. Sonnet keeps failing
+ * closed: its turn falls back to Haiku before any word, and an uncached Sonnet round is the expensive case the guard limits.
+ */
+function validateNativeUsage(usage: Anthropic.Message['usage'] | null | undefined, onUnconfirmed?: () => void): void {
+  try { validateHaikuCacheUsage(usage); } catch (error) {
+    if (!onUnconfirmed || !(error instanceof AnthropicUsageEvidenceError) || error.code !== 'HAIKU_CACHE_UNCONFIRMED') throw error;
+    onUnconfirmed();
+  }
   if (!nativeUsageComplete(usage)) throw new AnthropicUsageEvidenceError('HAIKU_RESPONSE_USAGE_INVALID');
+}
+function unconfirmed(model: string, usage: Anthropic.Message['usage']): (() => void) | undefined {
+  if (!isHaikuModel(model)) return undefined;
+  return () => console.log(`Shannon model cache unconfirmed: model=${model} input=${knownCount(usage?.input_tokens)} output=${knownCount(usage?.output_tokens)}`);
 }
 
 /** The base lane keeps the existing first-output and provider-silence bounds, with no total speech limit. */

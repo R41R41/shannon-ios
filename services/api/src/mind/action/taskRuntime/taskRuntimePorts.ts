@@ -114,4 +114,8 @@ export interface TaskRuntime extends TaskConversationDeliveryRuntime {
   resume(scopeKey: string, taskId: string): TaskView | null;
   activeSteps(scopeKey: string): Array<{ taskId: string; lease: ActionLease }>;
   recover(scopeKey: string, actionState: (lease: ActionLease) => 'live' | 'safe' | 'unknown'): TaskView[];
+  /** When the task entered `fca_unknown`; null when it is not unknown. */
+  unknownSince?(scopeKey: string, taskId: string): string | null;
+  /** Tasks unknown since `cutoff` or earlier leave `fca_unknown` without replaying anything (root/conversation keep running, others fail). */
+  retireUnknown?(scopeKey: string, cutoff: string): TaskView[];
 }

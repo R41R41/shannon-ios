@@ -5,7 +5,17 @@ export type ActionOrigin = 'owner_request' | 'own_time' | 'maintenance';
 export const ACTION_STATES = ['queued', 'running', 'waiting', 'stopping', 'completed', 'failed', 'cancelled', 'unknown'] as const;
 export type ActionState = typeof ACTION_STATES[number];
 export const ACTION_TERMINAL: readonly ActionState[] = ['completed', 'failed', 'cancelled', 'unknown'];
-export const ACTION_LIMITS = Object.freeze({ foreground: 1, background: 2, leaseMs: 30_000, consecutiveFailures: 5, resources: 16 });
+export const ACTION_LIMITS = Object.freeze({
+  foreground: 1, background: 2, leaseMs: 30_000, consecutiveFailures: 5, resources: 16,
+  /**
+   * How long a sent action whose outcome is unknown keeps its slot and resource exclusions. Afterwards it stays `unknown`
+   * (never replayed, never resumable) but stops counting as live, so one lost reply cannot block the scheduler forever.
+   * The same deadline retires an FCA task left in `fca_unknown`.
+   */
+  unknownReleaseMs: 600_000,
+  /** Consecutive failed lease renewals (transport or a busy database) tolerated while the lease itself is still valid. */
+  renewFailuresTolerated: 2,
+});
 export interface ActionDraft {
   scopeKey: string; kind: ActionKind; origin: ActionOrigin; sourceId: string;
   parentId?: string | null; resources?: readonly string[]; ownerInformed?: boolean; deadline?: string | null;

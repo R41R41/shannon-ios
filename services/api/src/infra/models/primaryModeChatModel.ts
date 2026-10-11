@@ -3,6 +3,7 @@ import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelReques
 import { VOICE_SONNET_FIRST_TOKEN } from '../../mind/action/respond/turnRouting.js';
 
 type Request = ShannonChatModelRequest | ShannonVoiceModelRequest;
+const strongTier = (tier: Request['tier']) => tier === 'luna_plus' || tier === 'sonnet';
 /** A fixed view is captured at turn admission, before recall/Jev awaits; each round and fallback uses that same view. */
 export class PrimaryModeChatModel implements ShannonChatModel {
   readonly mode;
@@ -32,9 +33,10 @@ class PinnedPrimaryModel implements ShannonChatModel {
   }
   private request<T extends Request>(value: T): T {
     // Haiku's existing medium rethink tier stays available; Sonnet escalation is the owner's explicit choice now.
+    // A turn the policy judged hard enough for Sonnet is answered by Haiku at its stronger (medium) tier, never at low.
     if (this.requested === 'haiku') {
       const { firstTokenBudgetMs: _watch, ...rest } = value;
-      return { ...rest, tier: value.tier === 'luna_plus' ? 'luna_plus' : 'luna' } as T;
+      return { ...rest, tier: strongTier(value.tier) ? 'luna_plus' : 'luna' } as T;
     }
     const { escalation: _escalation, ...rest } = value;
     const voice = 'conversationClass' in value;
@@ -44,7 +46,7 @@ class PinnedPrimaryModel implements ShannonChatModel {
     return { ...rest, tier: 'sonnet', ...(firstTokenBudgetMs !== undefined ? { firstTokenBudgetMs } : {}) } as T;
   }
   private served(result: ShannonChatModelResult, request: Request): ShannonChatModelResult {
-    return this.requested === 'haiku' ? { ...result, servedTier: result.servedTier ?? (result.escalated || request.tier === 'luna_plus' ? 'luna_plus' : 'luna') } : result;
+    return this.requested === 'haiku' ? { ...result, servedTier: result.servedTier ?? (result.escalated || strongTier(request.tier) ? 'luna_plus' : 'luna') } : result;
   }
   async generate(request: ShannonChatModelRequest) { return this.served(await this.primary.generate(this.request(request)), request); }
   async generateStreaming(request: ShannonChatModelRequest, listener: (text: string) => void | Promise<void>) {

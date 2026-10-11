@@ -45,12 +45,12 @@ class RecordingModel implements ShannonChatModel {
 }
 
 describe('primary selection without changing auxiliary or safety boundaries', () => {
-  it('keeps Haiku rethink/escalation and actual served tier while denying automatic Sonnet promotion', async () => {
+  it('keeps Haiku rethink/escalation and actual served tier while denying automatic Sonnet promotion (a Sonnet-hard turn gets luna_plus)', async () => {
     const store = new SQLiteModelModeStore(path()), haiku = new RecordingModel('claude-haiku-5-5'), sonnet = new RecordingModel('claude-sonnet-5-5');
     const primary = new PrimaryModeChatModel(store, haiku, sonnet);
     haiku.result = { escalated: true };
     expect(await primary.generate({ ...request, tier: 'sonnet', escalation: true, firstTokenBudgetMs: 1 })).toMatchObject({ model: haiku.model, servedTier: 'luna_plus' });
-    expect(haiku.seen[0]).toMatchObject({ tier: 'luna', escalation: true }); expect(haiku.seen[0]).not.toHaveProperty('firstTokenBudgetMs');
+    expect(haiku.seen[0]).toMatchObject({ tier: 'luna_plus', escalation: true }); expect(haiku.seen[0]).not.toHaveProperty('firstTokenBudgetMs');
     haiku.result = { servedTier: 'luna_plus' };
     expect(await primary.generate(request)).toMatchObject({ servedTier: 'luna_plus' });
     expect(sonnet.seen).toEqual([]); store.close();
@@ -63,12 +63,23 @@ describe('primary selection without changing auxiliary or safety boundaries', ()
     const haiku = new AnthropicChatModel({ apiKey: 'synthetic-primary', fetch: fixture.fetcher,
       settings: { model: 'claude-haiku-5-5', effort: 'low', textThinking: 'adaptive', voiceThinking: 'adaptive' } });
     const primary = new PrimaryModeChatModel(store, haiku, null);
-    const result = await primary.generate({ ...request, tier: 'sonnet', escalation: true,
+    const result = await primary.generate({ ...request, escalation: true,
       tools: { definitions: [shannonTool('study.list')!], maximumCalls: 6, deadline: new TurnDeadline(TEXT_TURN_DEADLINE),
         call: async () => JSON.stringify({ ok: false, failure: 'failed', retryable: true, text: '合成失敗' }) } });
     expect(result).toMatchObject({ model: 'claude-haiku-5-5', escalated: true, servedTier: 'luna_plus' });
     expect(fixture.bodies.map(body => (body.output_config as { effort: string }).effort)).toEqual(['low', 'medium']);
     expect(fixture.bodies.every(body => body.model === 'claude-haiku-5-5')).toBe(true); store.close();
+  });
+  it('answers a turn routed to Sonnet at medium effort from its first Haiku request (stabilization 2026-10-12)', async () => {
+    const fixture = scriptedAnthropic([answer()]);
+    const store = new SQLiteModelModeStore(path());
+    const haiku = new AnthropicChatModel({ apiKey: 'synthetic-primary', fetch: fixture.fetcher,
+      settings: { model: 'claude-haiku-5-5', effort: 'low', textThinking: 'adaptive', voiceThinking: 'adaptive' } });
+    const primary = new PrimaryModeChatModel(store, haiku, null);
+    const result = await primary.generate({ ...request, tier: 'sonnet' });
+    expect(result).toMatchObject({ model: 'claude-haiku-5-5', servedTier: 'luna_plus' });
+    expect(fixture.bodies.map(body => (body.output_config as { effort: string }).effort)).toEqual(['medium']);
+    store.close();
   });
   it('pins before text recall and before voice routing, then observes the next committed preference', async () => {
     const store = new SQLiteModelModeStore(path()), haiku = new RecordingModel('claude-haiku-5-5'), sonnet = new RecordingModel('claude-sonnet-5-5');

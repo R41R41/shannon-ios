@@ -110,10 +110,12 @@ describe('native non-JSON search and receipts', () => {
     const refused = client(() => new Response(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'rejected' } }), { status: 400, headers: { 'content-type': 'application/json' } }));
     expect((await refused.chat.searchWeb({ scopeKey: 'owner', query: 'query' })).status).toBe('unknown'); expect(refused.bodies).toHaveLength(1);
     const value = search(); value.usage.cache_read_input_tokens = 0;
-    const missing = client([value]); expect((await missing.chat.searchWeb({ scopeKey: 'owner', query: 'query' })).status).toBe('unknown'); expect(missing.usage).toHaveLength(1); expect(missing.bodies).toHaveLength(1);
+    // A complete, paid Haiku answer whose cache use is unconfirmed is kept and booked as measured (stabilization 2026-10-12), not retried.
+    const missing = client([value]); expect((await missing.chat.searchWeb({ scopeKey: 'owner', query: 'query' })).status).toBe('results'); expect(missing.usage).toHaveLength(1); expect(missing.bodies).toHaveLength(1);
     const partial = search(); partial.usage.cache_read_input_tokens = 0; partial.usage.server_tool_use = { web_search_requests: 0 };
     const interrupted = client([partial]); expect((await interrupted.chat.searchWeb({ scopeKey: 'owner', query: 'query' })).status).toBe('unknown');
-    expect(interrupted.usage[0]!.estimatedCostUsd).toBeGreaterThanOrEqual(1.04);
+    // The response is complete, so its measured usage is booked (no longer cut off at message_start); no search ran.
+    expect(interrupted.usage).toHaveLength(1); expect(interrupted.usage[0]!.estimatedCostUsd).toBeGreaterThan(0); expect(interrupted.bodies).toHaveLength(1);
     const stopped = client([search()]); const controller = new AbortController(); controller.abort();
     await expect(stopped.chat.searchWeb({ scopeKey: 'owner', query: 'query', signal: controller.signal })).rejects.toThrow(); expect(stopped.bodies).toHaveLength(0);
   });

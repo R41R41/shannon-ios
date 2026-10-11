@@ -4,6 +4,7 @@ import type { BackgroundJobStore, ClaimedBackgroundJob } from './store/backgroun
 import { TurnRefinementProcessor } from './backgroundUpdates.js';
 import type { ConversationStore, MemoryProposals } from '../memory/memoryPorts.js';
 import { observeAsync, observeSync, observerHandoff, withObserverRun } from '../../infra/observer/observerContext.js';
+import { isSqliteBusy } from '../../infra/sqlite/sqliteBusy.js';
 import {
   consolidateSleepMemory,
   LocalRuleSleepMemoryAnalyzer,
@@ -76,13 +77,25 @@ export class ShannonBackgroundWorker {
   async runOnce(): Promise<'processed' | 'idle' | 'failed'> {
     const current = this.now();
     if (current.getTime() >= this.nextMaintenanceAt) {
-      this.jobStore.recoverUnqueuedTurnRefinements(current.toISOString());
-      this.enqueueDueSleep(current);
-      this.nextMaintenanceAt = current.getTime() + 30_000;
+      try {
+        this.jobStore.recoverUnqueuedTurnRefinements(current.toISOString());
+        this.enqueueDueSleep(current);
+        this.nextMaintenanceAt = current.getTime() + 30_000;
+      } catch (error) {
+        // A busy database (or any store error) is retried on the next poll; it never ends the worker loop.
+        this.reportError(`MAINTENANCE_${safeErrorCode(error)}`);
+      }
     }
     const nowIso = current.toISOString();
     const leaseUntil = new Date(current.getTime() + this.leaseMilliseconds).toISOString();
-    const job = this.jobStore.claimNextBackgroundJob(this.workerId, nowIso, leaseUntil, this.fcaSleepScope);
+    let job: ClaimedBackgroundJob | null;
+    try {
+      job = this.jobStore.claimNextBackgroundJob(this.workerId, nowIso, leaseUntil, this.fcaSleepScope);
+    } catch (error) {
+      // Nothing was claimed: report it and let the loop wait its idle interval before the next claim.
+      this.reportError(`CLAIM_${safeErrorCode(error)}`);
+      return 'idle';
+    }
     if (!job) return 'idle';
     try {
       await withObserverRun({ scopeKey: job.scopeKey, surface: 'background' }, () =>
@@ -91,7 +104,12 @@ export class ShannonBackgroundWorker {
       return 'processed';
     } catch (error) {
       const code = safeErrorCode(error);
-      this.jobStore.failClaimedBackgroundJob(job, this.workerId, nowIso, code);
+      try {
+        this.jobStore.failClaimedBackgroundJob(job, this.workerId, nowIso, code);
+      } catch (recordError) {
+        // The lease then simply expires and the job becomes claimable again, as after a crash.
+        this.reportError(`FAIL_RECORD_${safeErrorCode(recordError)}`);
+      }
       this.reportError(code);
       return 'failed';
     }
@@ -200,6 +218,7 @@ function zonedMidnightToUtc(year: number, month: number, day: number, timeZone: 
 
 function safeErrorCode(error: unknown): string {
   if (!(error instanceof Error)) return 'UNKNOWN_ERROR';
+  if (isSqliteBusy(error)) return 'SQLITE_BUSY';
   return /^[A-Z0-9_:-]{1,120}$/.test(error.message) ? error.message : error.name;
 }
 

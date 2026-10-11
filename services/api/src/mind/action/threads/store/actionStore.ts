@@ -312,13 +312,27 @@ export class SQLiteActionStore {
       return true;
     });
   }
-  sweep(at: string): void {
+  /** Returns how many long-unknown actions released their slot in this sweep. */
+  sweep(at: string): number {
     for(const row of this.db.prepare("SELECT * FROM mind_actions WHERE state IN ('running','waiting','stopping') AND (lease_until<=? OR (deadline IS NOT NULL AND deadline<=?))").all(at,at)) {
       const action=view(row);
       this.db.prepare("UPDATE mind_actions SET state=CASE WHEN sent=1 THEN 'unknown' ELSE 'cancelled' END,result='lease_expired',holder=NULL,lease_until=NULL,generation=generation+1,updated_at=? WHERE id=?").run(at,action.id);
       this.db.prepare("UPDATE mind_action_budget SET state='held' WHERE action_id=? AND state='reserved'").run(action.id);
     }
     this.db.prepare("UPDATE mind_actions SET state='cancelled',result='deadline',updated_at=? WHERE state='queued' AND deadline IS NOT NULL AND deadline<=?").run(at,at);
+    return this.releaseExpiredUnknown(at);
+  }
+  /**
+   * An unknown outcome is never replayed and never resumable; it already is a closed state. What kept the scheduler blocked
+   * was `sent=1` (a live background slot) and the dynamic resource exclusions. After `unknownReleaseMs` both are released and
+   * the result becomes `unknown_expired`, which also gives the owner one fresh notice. Held budget stays held, and a late
+   * canonical acknowledgement or reconcile can still close the original attempt.
+   */
+  private releaseExpiredUnknown(at:string):number {
+    const cutoff=new Date(Date.parse(at)-ACTION_LIMITS.unknownReleaseMs).toISOString();
+    const released=this.db.prepare(`UPDATE mind_actions SET sent=0,resources_json=base_resources_json,result='unknown_expired',updated_at=?
+      WHERE state='unknown' AND (sent=1 OR resources_json!=base_resources_json) AND updated_at<=?`).run(at,cutoff);
+    return Number(released.changes);
   }
 }
 function view(input: object): ActionView {

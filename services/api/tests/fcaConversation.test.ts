@@ -52,20 +52,22 @@ function fixture(selector?: FcaToolSelector) {
 }
 
 describe('foreground conversation task adapter', () => {
-  it('preserves ordinary chat after the root stops while leaving all task tools unavailable', async () => {
+  it('revives the stopped root on the owner\'s next turn, without starting any stopped work (stabilization 2026-10-12)', async () => {
     const f = fixture(); let calls = 0;
-    f.runtime.stop('owner', f.runtime.ensureRoot('owner').id, 'owner_stop');
+    const root = f.runtime.ensureRoot('owner');
+    f.runtime.stop('owner', root.id, 'owner_stop');
+    expect(f.runtime.get('owner', root.id)?.phase).toBe('stopped');
     const kernel = createLocalApiKernel(() => at, { stateStore: f.state, conversationStore: f.conversations, fcaConversation: () => f.bridge,
       chatModel: { mode: 'local-stub', model: 'fixture', async generate() {
-        calls++; expect(f.bridge.taskToolsAvailable('owner')).toBe(false);
+        calls++; expect(f.bridge.taskToolsAvailable('owner')).toBe(true);
         return { mode: 'local-stub', model: 'fixture', reply: 'こんばんは。' };
       } } });
     await f.foreground(async () => {
-      expect(f.begin()).toBeNull();
       const reply = await kernel.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', message: 'こんばんは' } });
       expect(reply.status).toBe(200);
     });
     expect(calls).toBe(1); expect(f.runtime.readyTasks('owner')).toEqual([]);
+    expect(f.runtime.get('owner', root.id)?.phase).toBe('waiting');
     await kernel.waitForBackground('owner');
   });
 

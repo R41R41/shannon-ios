@@ -40,10 +40,14 @@ function toolSession(maximumCalls: number) {
 }
 
 describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('terminal native cache evidence: %s', model => {
+  // For Haiku an unconfirmed cache is no longer terminal; a missing required count still is.
+  const terminal: Failure = model === 'claude-haiku-5-5' ? 'required-count' : 'unconfirmed';
+  const terminalCode = model === 'claude-haiku-5-5' ? 'HAIKU_RESPONSE_USAGE_INVALID' : 'HAIKU_CACHE_UNCONFIRMED';
   for (const stream of [false, true]) {
     // maxCalls=1 exercises the answer catch; maxCalls=6 exercises the ordinary planning-round catch.
     for (const maximumCalls of [1, 6]) {
-      it.each(failures)('does not send or run anything after %s following an original tool (stream=' + stream + ', cap=' + maximumCalls + ')', async failure => {
+      // Haiku keeps a paid answer whose cache use is unconfirmed (stabilization 2026-10-12); the other evidence failures stay terminal.
+      it.each(failures.filter(failure => model !== 'claude-haiku-5-5' || failure !== 'unconfirmed'))('does not send or run anything after %s following an original tool (stream=' + stream + ', cap=' + maximumCalls + ')', async failure => {
         const first = paid(model, message([{ type: 'thinking', thinking: '', signature: 'synthetic-original-signature' },
           { type: 'tool_use', id: 'synthetic-call', name: 'study_list', input: {} }], 'tool_use'));
         const h = native(model, [first, rejected(model, failure), paid(model, anthropicFixture('structured-answer'))]);
@@ -69,7 +73,7 @@ describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('terminal native cache 
 
   it('ends a streamed voice turn after its original tool without sending another paid answer', async () => {
     const first = paid(model, message([{ type: 'tool_use', id: 'synthetic-voice-call', name: 'study_list', input: {} }], 'tool_use'));
-    const h = native(model, [first, rejected(model, 'unconfirmed'), paid(model, message([{ type: 'text', text: 'Must not be spoken.' }], 'end_turn'))]);
+    const h = native(model, [first, rejected(model, terminal), paid(model, message([{ type: 'text', text: 'Must not be spoken.' }], 'end_turn'))]);
     const t = toolSession(6);
     const parts: string[] = [];
     const result = await h.chat.generateVoiceStreaming({ ...base, tools: t.tools, conversationClass: 'skill_simple', useWebSearch: false }, text => { parts.push(text); });
@@ -82,9 +86,9 @@ describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('terminal native cache 
   });
 
   it('still throws a pre-tool cache rejection without repairing it or running a tool', async () => {
-    const h = native(model, [rejected(model, 'unconfirmed'), paid(model, anthropicFixture('structured-answer'))]);
+    const h = native(model, [rejected(model, terminal), paid(model, anthropicFixture('structured-answer'))]);
     const t = toolSession(6);
-    await expect(h.chat.generate({ ...base, tools: t.tools })).rejects.toThrow('HAIKU_CACHE_UNCONFIRMED');
+    await expect(h.chat.generate({ ...base, tools: t.tools })).rejects.toThrow(terminalCode);
     expect(t.calls).toEqual([]);
     expect(h.bodies).toHaveLength(1);
     expect(h.usage).toHaveLength(1);

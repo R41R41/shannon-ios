@@ -2,16 +2,28 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import { actionResource, leaseOf, type ActionDraft, type ActionThreads, type RunningAction, type ActionLease, type ActionAcknowledgement } from '../contracts/actionThreadContract.js';
 import { inActionExecution } from '../infra/context/actionExecution.js';
+import { ACTION_LIMITS } from '@shannon/mind';
+const RENEW_INTERVAL_MS=5_000;
+/** Stop renewing optimistically this long before the last confirmed lease would end. */
+const RENEW_SAFETY_MS=5_000;
 export async function acquireAction(actions:ActionThreads,draft:ActionDraft,signal?:AbortSignal):Promise<RunningAction|null> {
   const view=draft.kind==='respond'?await actions.admitRespond(draft):await actions.claim((await actions.enqueue(draft)).id);
   if(!view)return null;
   const controller=new AbortController(),lease=leaseOf(view);
   const externalStop=()=>controller.abort();signal?.addEventListener('abort',externalStop,{once:true});if(signal?.aborted)controller.abort();
-  let renewing=false;
+  let renewing=false,failures=0,renewedAt=Date.now();
   const heartbeat=setInterval(()=>{
     if(renewing)return;renewing=true;
-    void actions.renew(lease).then(next=>{if(!next)controller.abort();}).catch(()=>controller.abort()).finally(()=>{renewing=false;});
-  },5_000);heartbeat.unref();
+    void actions.renew(lease).then(next=>{
+      // A definitive "not yours any more" ends the attempt at once.
+      if(!next){controller.abort();return;}
+      failures=0;renewedAt=Date.now();
+    }).catch(()=>{
+      // A missed IPC deadline or a busy database is transient: keep working while the lease is certainly still valid.
+      failures+=1;
+      if(failures>ACTION_LIMITS.renewFailuresTolerated||Date.now()-renewedAt>=ACTION_LIMITS.leaseMs-RENEW_SAFETY_MS)controller.abort();
+    }).finally(()=>{renewing=false;});
+  },RENEW_INTERVAL_MS);heartbeat.unref();
   const stop=()=>{clearInterval(heartbeat);signal?.removeEventListener('abort',externalStop);};
   return {view,execution:{lease,signal:controller.signal,checkpoint:code=>actions.checkpoint(lease,code),permit:async(resources=[],localSignal)=>{
     const waitingSignal=localSignal?AbortSignal.any([controller.signal,localSignal]):controller.signal;

@@ -58,16 +58,19 @@ describe('native Haiku conversation migration', () => {
     expect(h.usage[0]).toMatchObject({ cachedInputTokens: 900, outputTokens: 96 });
   });
 
-  it('rejects unconfirmed caching before a word or tool, recording known provider usage', async () => {
+  it('keeps a paid answer whose cache use is unconfirmed, booking its measured usage (stabilization 2026-10-12)', async () => {
     for (const stream of [false, true]) {
       const h = model([haikuMessage(anthropicFixture('structured-answer'), 0, 0)]);
       const parts: string[] = [];
-      await expect(stream ? h.chat.generateStreaming(base, text => { parts.push(text); }) : h.chat.generate(base)).rejects.toThrow('HAIKU_CACHE_UNCONFIRMED');
-      expect(parts).toEqual([]);
+      const answer = stream ? await h.chat.generateStreaming(base, text => { parts.push(text); }) : await h.chat.generate(base);
+      expect(answer.reply).toEqual(expect.any(String));
+      if (stream) expect(parts.join('')).toBe(answer.reply);
       expect(h.bodies).toHaveLength(1);
       expect(h.usage).toHaveLength(1);
-      expect(h.usage[0]!.inputTokens).toBe(420);
-      expect(h.usage[0]!.estimatedCostUsd).toBeGreaterThan(0);
+      expect(h.usage[0]).toMatchObject({ inputTokens: 420, cachedInputTokens: 0 });
+      // Measured, uncached: the full input price, with no cache discount.
+      expect(h.usage[0]!.estimatedCostUsd).toBe(estimatedAnthropicCostUsd(settings.model,
+        { input: 420, cacheWrite: 0, cacheRead: 0, output: 96, searches: 0, cacheWrite5m: 0, cacheWrite1h: 0 }));
     }
   });
 
@@ -212,12 +215,13 @@ describe('native Haiku conversation migration', () => {
     expect(h.bodies[1]).not.toHaveProperty('tools');
   });
 
+  // 429 and 5xx get the one bounded transient retry (stabilization 2026-10-12); nothing is recovered twice.
   it.each([400, 401, 403, 408, 409, 429, 500])('does not repeatedly recover a plain refusal or an excluded status %s', async status => {
     const h = model(() => new Response(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'rejected' } }), { status,
-      headers: { 'content-type': 'application/json' } }));
+      headers: { 'content-type': 'application/json' } }), { retryWait: async () => {} });
     await expect(h.chat.generate({ ...base, tools: { definitions: [shannonTool('study.list')!], maximumCalls: 6,
       deadline: new TurnDeadline(TEXT_TURN_DEADLINE), async call() { throw new Error('must not run'); } } })).rejects.toThrow();
-    expect(h.bodies).toHaveLength(status === 400 ? 2 : 1);
+    expect(h.bodies).toHaveLength([400, 429, 500].includes(status) ? 2 : 1);
     expect(h.usage).toEqual([]);
   });
 });
