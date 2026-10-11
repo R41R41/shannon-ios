@@ -255,7 +255,8 @@ const pairingRoute = createPairingRoute(authMode, deviceAuth);
 const signalObserver = configuredServerObserver(configuredDatabasePath(),kernel,shannonNowOwnerScope(process.env),principal=>minecraft.isGameDevice(principal));
 // Operations console (docs/ops-contract.md). This store is held by the ops route only, never by the kernel. Liveness: sleep, own time, mind restarts.
 const opsStore = new SQLiteOpsStore(configuredDatabasePath());
-const liveness = startLivenessMonitor({ databasePath: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env), ownTimeEnabled: autonomyConfig.enabled, now });
+const liveness = startLivenessMonitor({ databasePath: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env),
+  ownTimeEnabled: autonomyConfig.enabled, timeZone: autonomyConfig.timeZone, environment: process.env, now });
 const opsRoute = createOpsRoute({
   store: opsStore, bridge: platformBridge?.configuration ?? null, ingestEnabled: () => opsIngestEnabled(process.env), now,
   commandsEnabled: () => opsCommandsEnabled(process.env), minecraftLifecycle: () => lifecycle?.ops ?? null,
@@ -483,8 +484,7 @@ function shutdown(): void {
     bodyStore.close();
     await lifecycle?.close(); minecraft.close(); platformBridge?.close?.();
     reachOuts.close(); reachOutReports.close();
-    privateListeningRoute.close();
-    incomingCallRoute?.close();
+    privateListeningRoute.close(); incomingCallRoute?.close();
     ownerTurns.close();
     ownerUpcoming.close();
     closeBodyLookStores(); closeBodyReactionStores();

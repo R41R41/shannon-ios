@@ -117,5 +117,9 @@ export class OwnTimeActionRunner {
       if(state!=='unknown')await this.actions.reconcile(active.execution.lease,state,code);
     }
   }
+  async abandoned(scopeKey:string,cycleId:string):Promise<boolean>{
+    const own=(await this.actions.list(scopeKey)).find(action=>action.kind==='ownTime'&&action.sourceId===cycleId);
+    return own?.state==='unknown'&&!own.sent&&own.result==='unknown_expired';
+  }
   close():void{this.active?.stop();this.active=null;}
 }

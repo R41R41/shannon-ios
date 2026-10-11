@@ -98,6 +98,7 @@ const STOPPED: Readonly<Record<Exclude<SessionEndCode, 'rest'>, string>> = Objec
   budget: 'その日の予算に収まらない一歩があって、そこで止まった',
   no_plan: '次の一歩が決まらなかったので、そこで終わった',
   idle: '考えたが次の一歩が決まらず、何もしないまま終わった',
+  action_unknown: '最後の一歩の結果が確かめられないまま時間が過ぎたので、やり直さずにそこで終わった',
 });
 
 export function yen(value: number): string {
@@ -143,6 +144,7 @@ export function restSummary(input: { forced?: Exclude<SessionEndCode, 'rest'>; r
   const why: Readonly<Record<Exclude<SessionEndCode, 'rest'>, string>> = {
     session_budget: '一度に使える金額の上限に届いたので', session_time: '一度に動ける時間の上限に届いたので',
     session_steps: '一度にできる歩数の上限に届いたので', budget: '今日の予算に収まらなかったので', no_plan: '次の一歩が決まらなかったので', idle: '次の一歩が決まらなかったので',
+    action_unknown: '最後の一歩の結果が確かめられなかったので',
   };
   return `${why[input.forced]}、ここで一区切りにしました。${next}`;
 }
@@ -151,4 +153,5 @@ export function restSummary(input: { forced?: Exclude<SessionEndCode, 'rest'>; r
 export const SESSION_END_LABEL: Readonly<Record<SessionEndCode, string>> = Object.freeze({
   rest: '自分で一区切りにしました', session_budget: '一度に使える金額の上限で止まりました', session_time: '一度に動ける時間の上限で止まりました',
   session_steps: '一度にできる歩数の上限で止まりました', budget: '今日の予算に収まらず止まりました', no_plan: '次の一歩が決まらず終わりました', idle: '次の一歩が決まらず、何もせず終わりました',
+  action_unknown: '最後の一歩の結果が確かめられず、やり直さずに終わりました',
 });

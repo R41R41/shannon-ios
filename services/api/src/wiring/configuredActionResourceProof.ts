@@ -11,6 +11,12 @@ export function configuredActionResourceProof(values: Readonly<Record<string, st
     return minecraftLifecycleResourceProof(db, lease, acknowledgementId, configuration.ownerScopeKey);
   };
 }
+/** The resources only a domain proof may release (the configured Minecraft body), also after the unknown deadline. */
+export function configuredRetainedResources(values: Readonly<Record<string, string | undefined>>) {
+  const configuration = values.SHANNON_MINECRAFT_LIFECYCLE === 'on' ? configuredMinecraftBody(values) : null;
+  const body = configuration ? actionResource(configuration.deviceId, 'minecraft-body') : null;
+  return (resource: string): boolean => resource === body;
+}
 export function lifecycleResourceAcknowledgement(evidence: readonly unknown[]): string {
   return `lifecycle-release:${createHash('sha256').update(JSON.stringify(evidence)).digest('hex')}`;
 }

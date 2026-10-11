@@ -52,6 +52,33 @@ describe('unknown actions are released after the deadline, never replayed', () =
     expect(s.actions.get(lease.id)).toMatchObject({ state: 'completed', result: 'late_result' });
   });
 
+  it('keeps a provable physical resource excluded after release until its proof, freeing the slot and other locks', () => {
+    const c = clock(), db = new DatabaseSync(':memory:');
+    const body = actionResource('minebot', 'minecraft-body'), study = actionResource('owner', 'study'), base = actionResource('owner', 'fca:task');
+    const actions = new SQLiteActionStore(db, () => true, key => key === body);
+    cleanups.push(() => db.close());
+    const queued = actions.enqueue({ scopeKey: 'owner', kind: 'minecraft', origin: 'owner_request', sourceId: 'dig', resources: [base] }, c.now());
+    const lease = leaseOf(actions.claim(queued.id, 'runner', c.now())!);
+    expect(actions.dispatch(lease, c.now(), [body, study])).toBe(true);
+    c.advance(ACTION_LIMITS.leaseMs + 1 + ACTION_LIMITS.unknownReleaseMs);
+    actions.transaction(() => actions.sweep(c.now()));
+    c.advance(ACTION_LIMITS.unknownReleaseMs);
+    expect(actions.transaction(() => actions.sweep(c.now()))).toBe(1);
+    expect(actions.get(lease.id)).toMatchObject({ state: 'unknown', sent: false, result: 'unknown_expired' });
+    expect([...actions.get(lease.id)!.resources].sort()).toEqual([base, body].sort());
+    const claimable = (source: string, resources: string[]) => {
+      const next = actions.enqueue({ scopeKey: 'owner', kind: 'minecraft', origin: 'owner_request', sourceId: source, resources }, c.now());
+      const view = actions.claim(next.id, 'runner', c.now());
+      if (view) actions.finish(leaseOf(view), 'completed', 'done', c.now());
+      return view !== null;
+    };
+    expect(claimable('base-again', [base])).toBe(true);
+    expect(claimable('study-again', [study])).toBe(true);
+    expect(claimable('body-again', [body])).toBe(false);
+    expect(actions.reconcileResource({ ...lease, generation: lease.generation }, body, 'release-proof')).toBe(true);
+    expect(claimable('body-after-proof', [body])).toBe(true);
+  });
+
   it('frees both background slots that two unknown actions held', () => {
     const s = store(), c = clock();
     strand(s, c, 'ownTime', 'cycle-1'); strand(s, c, 'agentTask', 'task-1');

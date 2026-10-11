@@ -3,10 +3,13 @@ import type { DatabaseSync } from 'node:sqlite';
 import { ACTION_CODE, ACTION_ID, ACTION_LIMITS, ACTION_TERMINAL, validActionDraft, type ActionDraft, type ActionLease, type ActionState, type ActionView } from '@shannon/mind';
 import type { ActionAcknowledgement } from '../../../../contracts/actionThreadContract.js';
 export type ActionResourceReconciliationAllowed=(lease:ActionLease,resource:string,acknowledgementId:string)=>boolean;
+/** A dispatch-added resource that only a domain proof (`reconcileResource`) may release, even after the unknown deadline. */
+export type ActionResourceRetained=(resource:string)=>boolean;
 
 /** The mind worker alone owns scheduling. BEGIN IMMEDIATE also fences another worker during recovery. No words here. */
 export class SQLiteActionStore {
-  constructor(private readonly db: DatabaseSync,private readonly resourceReconciliationAllowed?:ActionResourceReconciliationAllowed) {
+  constructor(private readonly db: DatabaseSync,private readonly resourceReconciliationAllowed?:ActionResourceReconciliationAllowed,
+    private readonly retainedAfterRelease:ActionResourceRetained=()=>false) {
     db.exec(`
       CREATE TABLE IF NOT EXISTS mind_actions (
         id TEXT PRIMARY KEY, scope_key TEXT NOT NULL, kind TEXT NOT NULL, origin TEXT NOT NULL, source_id TEXT NOT NULL,
@@ -17,6 +20,7 @@ export class SQLiteActionStore {
         UNIQUE(scope_key, kind, source_id)
       );
       CREATE INDEX IF NOT EXISTS mind_actions_scope ON mind_actions(scope_key,state,created_at);
+      CREATE INDEX IF NOT EXISTS mind_actions_state_updated ON mind_actions(state,updated_at);
       CREATE TABLE IF NOT EXISTS mind_action_budget (
         reservation_id TEXT PRIMARY KEY, action_id TEXT NOT NULL, generation INTEGER NOT NULL, scope_key TEXT NOT NULL,
         day TEXT NOT NULL, yen REAL NOT NULL CHECK(yen >= 0), state TEXT NOT NULL, sent INTEGER NOT NULL DEFAULT 0,
@@ -109,7 +113,7 @@ export class SQLiteActionStore {
       || item.kind!=='respond'&&item.state==='unknown'&&item.sent);
     const foreground = action.kind === 'respond';
     if (live.filter(item => (item.kind === 'respond') === foreground).length >= (foreground ? 1 : 2)) return null;
-    if (this.list(action.scopeKey).some(item => item.id!==action.id && (['running','waiting','stopping'].includes(item.state)||(item.state==='unknown'&&item.sent)) && item.resources.some(key => action.resources.includes(key)))) return null;
+    if (this.list(action.scopeKey).some(item => item.id!==action.id && this.heldResources(item).some(key => action.resources.includes(key)))) return null;
     const until = new Date(Date.parse(at)+ACTION_LIMITS.leaseMs).toISOString();
     this.db.prepare(`UPDATE mind_actions SET state='running',generation=generation+1,holder=?,last_holder=?,lease_until=?,sent=0,deadline=CASE WHEN kind='respond' THEN NULL ELSE deadline END,updated_at=? WHERE id=?`).run(holder,holder,until,at,id);
     return this.get(id);
@@ -143,7 +147,7 @@ export class SQLiteActionStore {
       const action = this.check(lease,at); if (!action) return false;
       const keys = [...new Set([...action.resources,...resources])].sort();
       if (keys.length > ACTION_LIMITS.resources) return false;
-      if (this.list(action.scopeKey).some(other=>other.id!==action.id && (['running','waiting','stopping'].includes(other.state)||(other.state==='unknown'&&other.sent)) && other.resources.some(key=>keys.includes(key)))) return false;
+      if (this.list(action.scopeKey).some(other=>other.id!==action.id && this.heldResources(other).some(key=>keys.includes(key)))) return false;
       this.db.prepare("UPDATE mind_actions SET sent=1,state='running',resources_json=?,updated_at=? WHERE id=?").run(JSON.stringify(keys),at,lease.id);
       return true;
     });
@@ -324,15 +328,30 @@ export class SQLiteActionStore {
   }
   /**
    * An unknown outcome is never replayed and never resumable; it already is a closed state. What kept the scheduler blocked
-   * was `sent=1` (a live background slot) and the dynamic resource exclusions. After `unknownReleaseMs` both are released and
-   * the result becomes `unknown_expired`, which also gives the owner one fresh notice. Held budget stays held, and a late
-   * canonical acknowledgement or reconcile can still close the original attempt.
+   * was `sent=1`: a live background slot and every resource of the attempt. After `unknownReleaseMs` `sent` is cleared, so
+   * the slot and the base resources are free again. A dispatch-added resource with a domain release proof (the Minecraft
+   * body) stays excluded until `reconcileResource` proves its release; other added locks (study, folders) have no such
+   * proof and would otherwise block their domain forever, so they are released with the slot. The result becomes
+   * `unknown_expired`, which also gives the owner one fresh notice. Held budget stays held, and a late canonical
+   * acknowledgement or reconcile can still close the original attempt.
    */
   private releaseExpiredUnknown(at:string):number {
     const cutoff=new Date(Date.parse(at)-ACTION_LIMITS.unknownReleaseMs).toISOString();
-    const released=this.db.prepare(`UPDATE mind_actions SET sent=0,resources_json=base_resources_json,result='unknown_expired',updated_at=?
-      WHERE state='unknown' AND (sent=1 OR resources_json!=base_resources_json) AND updated_at<=?`).run(at,cutoff);
-    return Number(released.changes);
+    const rows=this.db.prepare("SELECT id,resources_json,base_resources_json FROM mind_actions WHERE state='unknown' AND sent=1 AND updated_at<=?").all(cutoff);
+    for(const row of rows){
+      const base=JSON.parse(String(row.base_resources_json)) as string[];
+      const kept=(JSON.parse(String(row.resources_json)) as string[]).filter(key=>base.includes(key)||this.retainedAfterRelease(key));
+      this.db.prepare("UPDATE mind_actions SET sent=0,resources_json=?,result='unknown_expired',updated_at=? WHERE id=?").run(JSON.stringify(kept),at,String(row.id));
+    }
+    return rows.length;
+  }
+  /** What an action excludes others from: everything while live or sent-unknown; after release, only unproven dispatch additions. */
+  private heldResources(action:ActionView):readonly string[] {
+    if(['running','waiting','stopping'].includes(action.state)||(action.state==='unknown'&&action.sent))return action.resources;
+    if(action.state!=='unknown')return [];
+    const row=this.db.prepare('SELECT base_resources_json FROM mind_actions WHERE id=?').get(action.id);
+    const base=JSON.parse(String(row?.base_resources_json??'[]')) as string[];
+    return action.resources.filter(key=>!base.includes(key));
   }
 }
 function view(input: object): ActionView {

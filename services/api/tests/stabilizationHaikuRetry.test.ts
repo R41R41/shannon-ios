@@ -14,6 +14,10 @@ const paid = (model: string, value: AnthropicMessage): AnthropicMessage => ({ ..
   cache_creation_input_tokens: 0, cache_read_input_tokens: 900, cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 } } });
 const refusal = (status: number, headers: Record<string, string> = {}) => new Response(JSON.stringify({ type: 'error',
   error: { type: status === 529 ? 'overloaded_error' : 'rate_limit_error', message: 'busy' } }), { status, headers: { 'content-type': 'application/json', ...headers } });
+const overloaded = ['error', { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }] as const;
+function stream(events: ReadonlyArray<readonly [string, unknown]>): Response {
+  return new Response(events.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join(''), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+}
 function model(name: string, script: Parameters<typeof scriptedAnthropic>[0]) {
   const transport = scriptedAnthropic(script), usage: LlmUsageEvent[] = [], waits: number[] = [];
   const chat = new AnthropicChatModel({ apiKey: 'test-only', settings: { model: name, effort: 'low', textThinking: 'adaptive', voiceThinking: 'adaptive' },
@@ -63,6 +67,35 @@ describe('one bounded transient retry in Haiku mode', () => {
     await expect(sonnet.chat.generate(base)).rejects.toThrow();
     expect(sonnet.bodies).toHaveLength(1);
     expect(sonnet.waits).toEqual([]);
+  });
+
+  it('retries an overloaded error event that arrives before the response begins', async () => {
+    const answer = paid('claude-haiku-5-5', anthropicFixture('structured-answer'));
+    const h = model('claude-haiku-5-5', (_body, index) => index === 0 ? stream([overloaded]) : answer);
+    const parts: string[] = [];
+    const result = await h.chat.generateStreaming(base, text => { parts.push(text); });
+    expect(parts.join('')).toBe(result.reply);
+    expect(h.bodies).toHaveLength(2);
+    expect(h.waits).toEqual([TRANSIENT_RETRY.defaultWaitMs]);
+  });
+
+  it('never retries once the response began (message_start received), even before any word', async () => {
+    const answer = paid('claude-haiku-5-5', anthropicFixture('structured-answer'));
+    const start = ['message_start', { type: 'message_start', message: { ...answer, content: [], stop_reason: null, usage: { ...answer.usage, output_tokens: 1 } } }] as const;
+    const h = model('claude-haiku-5-5', () => stream([start, overloaded]));
+    const parts: string[] = [];
+    await expect(h.chat.generateStreaming(base, text => { parts.push(text); })).rejects.toThrow();
+    expect(parts).toEqual([]);
+    expect(h.bodies).toHaveLength(1);
+    expect(h.waits).toEqual([]);
+    expect(h.usage).toHaveLength(1); // the started response is booked conservatively, never sent again
+  });
+
+  it('never retries a connection failure: whether it was processed is unknown', async () => {
+    const h = model('claude-haiku-5-5', () => { throw new TypeError('fetch failed'); });
+    await expect(h.chat.generate(base)).rejects.toThrow();
+    expect(h.bodies).toHaveLength(1);
+    expect(h.waits).toEqual([]);
   });
 
   it('reads retry-after-ms, seconds and dates, defaulting to one second', () => {

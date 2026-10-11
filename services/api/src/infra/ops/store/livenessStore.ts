@@ -9,6 +9,12 @@ export interface LivenessFacts {
   /** Latest own-time session start or step, for the owner's scope. */
   lastOwnTimeActivityAt: string | null;
   ownTimePaused: boolean;
+  /** When she said she would come back (latest closed session) and when the schedule allows the next start. */
+  ownTimeResumeAt: string | null;
+  ownTimeNextCycleAt: string | null;
+  /** Counted sessions (not `idle`) on the given owner-local day, and the day her budget blocked, if any. */
+  ownTimeSessionsOnDay: number;
+  ownTimeBudgetBlockedDay: string | null;
   /** Mind worker process starts recorded by the worker itself. */
   mindWorkerStarts: { lastHour: number; lastDay: number; lastAt: string | null };
 }
@@ -30,15 +36,15 @@ function text(value: unknown): string | null {
   return typeof value === 'string' && value ? value : null;
 }
 
-/** Read-only. A table that does not exist yet reads as "nothing happened". */
-export function readLivenessFacts(db: DatabaseSync, ownerScope: string, at: string): LivenessFacts {
+/** Read-only. A table that does not exist yet reads as "nothing happened". `dayKey` is the owner-local day of `at`. */
+export function readLivenessFacts(db: DatabaseSync, ownerScope: string, at: string, dayKey = at.slice(0, 10)): LivenessFacts {
   const hour = new Date(Date.parse(at) - 3_600_000).toISOString();
   const day = new Date(Date.parse(at) - 86_400_000).toISOString();
   const jobs = hasTable(db, 'background_jobs');
   const lastSleep = jobs ? db.prepare(`SELECT MAX(completed_at) AS at FROM background_jobs
-    WHERE job_kind = 'sleep-consolidation' AND status = 'completed'`).get() : undefined;
+    WHERE scope_key = ? AND job_kind = 'sleep-consolidation' AND status = 'completed'`).get(ownerScope) : undefined;
   const dueSleep = jobs ? db.prepare(`SELECT MIN(available_at) AS at FROM background_jobs
-    WHERE job_kind = 'sleep-consolidation' AND status IN ('pending', 'leased') AND available_at <= ?`).get(at) : undefined;
+    WHERE scope_key = ? AND job_kind = 'sleep-consolidation' AND status IN ('pending', 'leased') AND available_at <= ?`).get(ownerScope, at) : undefined;
   let lastOwnTime: string | null = null;
   if (hasTable(db, 'autonomy_loop_cycles')) {
     const cycle = db.prepare('SELECT MAX(started_at) AS at FROM autonomy_loop_cycles WHERE scope_key = ?').get(ownerScope);
@@ -48,6 +54,13 @@ export function readLivenessFacts(db: DatabaseSync, ownerScope: string, at: stri
     const step = text(db.prepare('SELECT MAX(created_at) AS at FROM autonomy_loop_steps WHERE scope_key = ?').get(ownerScope)?.at);
     if (step && (!lastOwnTime || step > lastOwnTime)) lastOwnTime = step;
   }
+  const sessions = hasTable(db, 'autonomy_loop_sessions');
+  const resume = sessions ? db.prepare(`SELECT resume_at FROM autonomy_loop_sessions WHERE scope_key = ? AND ended_at IS NOT NULL
+    ORDER BY ended_at DESC, rowid DESC LIMIT 1`).get(ownerScope) : undefined;
+  const today = sessions ? db.prepare(`SELECT COUNT(*) AS count FROM autonomy_loop_sessions WHERE scope_key = ? AND day_key = ?
+    AND COALESCE(end_code, '') <> 'idle'`).get(ownerScope, dayKey) : undefined;
+  const schedule = hasTable(db, 'autonomy_loop_schedule')
+    ? db.prepare('SELECT next_cycle_at, budget_blocked_day FROM autonomy_loop_schedule WHERE scope_key = ?').get(ownerScope) : undefined;
   const control = hasTable(db, 'autonomy_control')
     ? db.prepare('SELECT paused FROM autonomy_control WHERE scope_key = ?').get(ownerScope) : undefined;
   const starts = hasTable(db, 'mind_worker_starts') ? db.prepare(`SELECT
@@ -60,6 +73,8 @@ export function readLivenessFacts(db: DatabaseSync, ownerScope: string, at: stri
     oldestDueSleepAt: text(dueSleep?.at),
     lastOwnTimeActivityAt: lastOwnTime,
     ownTimePaused: Number(control?.paused ?? 0) === 1,
+    ownTimeResumeAt: text(resume?.resume_at), ownTimeNextCycleAt: text(schedule?.next_cycle_at),
+    ownTimeSessionsOnDay: Number(today?.count ?? 0), ownTimeBudgetBlockedDay: text(schedule?.budget_blocked_day),
     mindWorkerStarts: { lastHour: Number(starts?.hour ?? 0), lastDay: Number(starts?.day ?? 0), lastAt: text(starts?.last) },
   };
 }

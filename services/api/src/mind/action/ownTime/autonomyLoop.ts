@@ -97,7 +97,11 @@ export class ShannonAutonomyLoop {
     const runner=this.dependencies.actionSteps;
     if(!runner)return this.advance(cycle,at,signal);
     const active=await runner.begin(this.scopeKey,cycle.id,sessionMarked(this.dependencies,cycle),signal);
-    if(!active)return this.standingStill('thread-wait',at);
+    if(!active){
+      // The session's own action stayed unknown past the release deadline: end it unreplayed, so the next gets a fresh action.
+      if(await runner.abandoned?.(this.scopeKey,cycle.id).catch(()=>false))return this.abandonCycle(cycle,at);
+      return this.standingStill('thread-wait',at);
+    }
     const heartbeat=setInterval(()=>this.renew(),5_000);heartbeat.unref();
     let tick:AutonomyLoopTick;
     try{tick=await inActionExecution(active.execution,()=>this.advance(cycle,at,active.execution.signal));}finally{clearInterval(heartbeat);}
@@ -463,6 +467,11 @@ export class ShannonAutonomyLoop {
     const {store}=this.dependencies;
     store.transaction(()=>{store.loop.endCycle(cycle.id,reason,at);saveCycleAcknowledgement(store,cycle,currentActionExecution());});
     return 'cycle-ended';
+  }
+
+  private abandonCycle(cycle: AutonomyLoopCycle, at: string): AutonomyLoopTick {
+    const sessions = this.dependencies.loop.pacing === 'sessions' && this.session(cycle);
+    return sessions ? this.endSession(cycle, 'action_unknown', at) : this.endCycle(cycle, 'action_unknown', at);
   }
 
   private session(cycle: AutonomyLoopCycle): AutonomySession | null {

@@ -17,23 +17,40 @@ export interface LivenessView {
   checkedAt: string;
   incidents: LivenessIncident[];
   sleep: { lastCompletedAt: string | null; oldestDueAt: string | null };
-  ownTime: { enabled: boolean; paused: boolean; lastActivityAt: string | null };
+  ownTime: { enabled: boolean; paused: boolean; lastActivityAt: string | null; resumeAt: string | null };
   mindWorker: { startsLastHour: number; startsLastDay: number; lastStartAt: string | null };
 }
 
 const older = (value: string | null, at: string, milliseconds: number) => value !== null && Date.parse(at) - Date.parse(value) > milliseconds;
 
-export function evaluateLiveness(facts: LivenessFacts, at: string, ownTimeEnabled: boolean): LivenessView {
+/** What own time is configured to do: switched on, how many sessions a day, and the owner-local day of `at`. */
+export interface OwnTimeExpectation { enabled: boolean; sessionsPerDay: number; dayKey: string }
+
+const latest = (...values: Array<string | null>) => values.filter((value): value is string => value !== null).sort().at(-1) ?? null;
+
+/**
+ * Own time is stalled only when it should be running: on, not paused, not resting by its own schedule (a chosen rest of
+ * up to 12 h, the daily session cap, a budget-blocked day), and quiet for 6 h since the later of its last activity and
+ * the time it was due back. Never having run is not a stall: a fresh database has no session yet.
+ */
+function ownTimeStalled(facts: LivenessFacts, at: string, ownTime: OwnTimeExpectation): boolean {
+  if (!ownTime.enabled || facts.ownTimePaused) return false;
+  if (facts.ownTimeSessionsOnDay >= ownTime.sessionsPerDay || facts.ownTimeBudgetBlockedDay === ownTime.dayKey) return false;
+  if (facts.lastOwnTimeActivityAt === null) return false;
+  return older(latest(facts.lastOwnTimeActivityAt, facts.ownTimeResumeAt, facts.ownTimeNextCycleAt), at, LIVENESS_LIMITS.ownTimeQuietMs);
+}
+
+export function evaluateLiveness(facts: LivenessFacts, at: string, ownTime: OwnTimeExpectation): LivenessView {
   const incidents: LivenessIncident[] = [];
+  const ownTimeEnabled = ownTime.enabled;
   const sleepRecent = facts.lastSleepCompletedAt !== null && !older(facts.lastSleepCompletedAt, at, LIVENESS_LIMITS.sleepStalledMs);
   if (older(facts.oldestDueSleepAt, at, LIVENESS_LIMITS.sleepStalledMs) && !sleepRecent) incidents.push('sleep_stalled');
-  // Never having run is not a stall: a fresh database has no session yet.
-  if (ownTimeEnabled && !facts.ownTimePaused && older(facts.lastOwnTimeActivityAt, at, LIVENESS_LIMITS.ownTimeQuietMs)) incidents.push('own_time_stalled');
+  if (ownTimeStalled(facts, at, ownTime)) incidents.push('own_time_stalled');
   if (facts.mindWorkerStarts.lastHour >= LIVENESS_LIMITS.mindRestartsPerHour) incidents.push('mind_worker_restarting');
   return {
     checkedAt: at, incidents,
     sleep: { lastCompletedAt: facts.lastSleepCompletedAt, oldestDueAt: facts.oldestDueSleepAt },
-    ownTime: { enabled: ownTimeEnabled, paused: facts.ownTimePaused, lastActivityAt: facts.lastOwnTimeActivityAt },
+    ownTime: { enabled: ownTimeEnabled, paused: facts.ownTimePaused, lastActivityAt: facts.lastOwnTimeActivityAt, resumeAt: facts.ownTimeResumeAt },
     mindWorker: { startsLastHour: facts.mindWorkerStarts.lastHour, startsLastDay: facts.mindWorkerStarts.lastDay, lastStartAt: facts.mindWorkerStarts.lastAt },
   };
 }

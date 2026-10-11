@@ -1,4 +1,4 @@
-import { configuredActionResourceProof } from './configuredActionResourceProof.js';
+import { configuredActionResourceProof, configuredRetainedResources } from './configuredActionResourceProof.js';
 import { DatabaseSync } from 'node:sqlite';
 import { ACTION_ID, ACTION_LIMITS, type ActionDraft, type ActionLease } from '@shannon/mind';
 import { SQLiteActionStore } from '../mind/action/threads/store/actionStore.js';
@@ -9,6 +9,9 @@ import { checkedMindEvent } from '../mind/perception/perceptionPorts.js';
 import type { ActionAcknowledgement } from '../contracts/actionThreadContract.js';
 import { isSqliteBusy, throttledLog } from '../infra/sqlite/sqliteBusy.js';
 import { recordMindWorkerStart } from '../infra/ops/store/livenessStore.js';
+
+/** Below MIND_IPC_LIMITS.timeoutMs (1 s): a caller's deadline outlasts this worker's longest wait for the write lock. */
+export const MIND_WORKER_BUSY_TIMEOUT_MS=750;
 
 /**
  * One scheduler sweep. A busy/locked database is logged (at most once a minute) and retried on the next tick instead of
@@ -23,10 +26,11 @@ export function sweepActions(actions:Pick<SQLiteActionStore,'transaction'|'sweep
 /** Worker-only database and dispatcher; the API never opens the scheduler's writer. */
 export async function configuredMindWorker(values:Readonly<Record<string,string|undefined>>,databasePath:string,hostFactory:()=>{host:MindHost;close():void},now:()=>string,
   log:(line:string)=>void=line=>console.log(line)) {
-  // The API and the background worker hold the same file with 5 s busy timeouts; 250 ms here crashed the worker under load.
-  const db=new DatabaseSync(databasePath);db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;');
+  // DatabaseSync blocks this whole worker while it waits, so the wait stays under the API's 1 s IPC deadline (a late admission
+  // reply could otherwise hold the foreground slot for a whole lease). A busy write is caught and retried, never a crash.
+  const db=new DatabaseSync(databasePath);db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=${MIND_WORKER_BUSY_TIMEOUT_MS};`);
   const busyLog=throttledLog(log);
-  const actions=new SQLiteActionStore(db, configuredActionResourceProof(values, db));
+  const actions=new SQLiteActionStore(db, configuredActionResourceProof(values, db), configuredRetainedResources(values));
   let host:MindHost;
   let closeHost:()=>void;
   const projection=(scopeKey:string)=>({...host.projection(scopeKey),faulted:host.faulted,faults:host.faultCount,busy:host.busyCount});

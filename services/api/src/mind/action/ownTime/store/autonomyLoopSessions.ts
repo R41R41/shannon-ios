@@ -8,10 +8,11 @@ import type { DatabaseSync } from 'node:sqlite';
  * gave in her own words. What a session spent is not kept here: it is the sum of the spend rows of
  * the steps it journalled, so a restart cannot count a step twice or lose one.
  */
-export const SESSION_END_CODES = ['rest', 'session_budget', 'session_time', 'session_steps', 'budget', 'no_plan', 'idle'] as const;
+export const SESSION_END_CODES = ['rest', 'session_budget', 'session_time', 'session_steps', 'budget', 'no_plan', 'idle', 'action_unknown'] as const;
 /**
  * `rest`: she chose to. Every other code is a bound that stopped her. `idle` is a `no_plan` end of a session that did
  * nothing but think: it is not counted among the sessions of its day, and a second one in a row is followed by the long rest.
+ * `action_unknown`: the session's own action stayed unknown past the release deadline; it ends without replaying anything.
  */
 export type SessionEndCode = typeof SESSION_END_CODES[number];
 export const AUTONOMY_REST_REASON_MAXIMUM_CHARACTERS = 120;

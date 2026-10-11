@@ -58,7 +58,9 @@ describe('liveness monitor', () => {
     db.exec(`CREATE TABLE background_jobs (job_id TEXT, scope_key TEXT, job_kind TEXT, status TEXT, available_at TEXT, completed_at TEXT);
       CREATE TABLE autonomy_loop_cycles (cycle_id TEXT, scope_key TEXT, started_at TEXT);
       CREATE TABLE autonomy_loop_steps (step_id TEXT, scope_key TEXT, created_at TEXT);
-      CREATE TABLE autonomy_control (scope_key TEXT, paused INTEGER);`);
+      CREATE TABLE autonomy_control (scope_key TEXT, paused INTEGER);
+      CREATE TABLE autonomy_loop_sessions (cycle_id TEXT, scope_key TEXT, day_key TEXT, ended_at TEXT, end_code TEXT, resume_at TEXT);
+      CREATE TABLE autonomy_loop_schedule (scope_key TEXT, next_cycle_at TEXT, budget_blocked_day TEXT);`);
     return db;
   }
   it('logs one line when each incident begins and one when it ends, and shows the view to the owner only', () => {
@@ -89,6 +91,33 @@ describe('liveness monitor', () => {
     expect(monitor.view('guest')).toBeNull();
     expect(withLiveness({ revision: 'r' }, monitor.view('owner'))).toMatchObject({ revision: 'r', liveness: { incidents: [] } });
     expect(withLiveness(null, monitor.view('owner'))).toBeNull();
+  });
+
+  it('does not call her own scheduled rest, the daily cap or a budget-blocked day a stall, and measures from when she was due back', () => {
+    const db = database(), monitor = (now: string) => startLivenessMonitor({ database: db, ownerScope: 'owner', ownTimeEnabled: true,
+      timeZone: 'Asia/Tokyo', environment: { SHANNON_AUTONOMY_SESSIONS_PER_DAY: '2' }, now: () => now, log: () => {}, intervalMs: null }).check()!.incidents;
+    db.prepare("INSERT INTO autonomy_loop_steps VALUES ('step','owner','2026-10-11T12:00:00.000Z')").run();
+    // A chosen 12 h rest: quiet for 8 h, but due back only at 00:00.
+    db.prepare("INSERT INTO autonomy_loop_sessions VALUES ('c1','owner','2026-10-11','2026-10-11T12:00:00.000Z','rest','2026-10-12T00:00:00.000Z')").run();
+    expect(monitor('2026-10-11T20:00:00.000Z')).toEqual([]);
+    expect(monitor('2026-10-12T05:00:00.000Z')).toEqual([]);
+    expect(monitor('2026-10-12T07:00:00.000Z')).toEqual(['own_time_stalled']);
+    // Two sessions on that owner-local day (2026-10-12 in Tokyo) reach the cap of two: resting, not stalled.
+    db.prepare("INSERT INTO autonomy_loop_sessions VALUES ('c2','owner','2026-10-12','2026-10-11T23:00:00.000Z','rest','2026-10-11T23:30:00.000Z')").run();
+    db.prepare("INSERT INTO autonomy_loop_sessions VALUES ('c3','owner','2026-10-12','2026-10-11T23:10:00.000Z','idle','2026-10-11T23:40:00.000Z')").run();
+    expect(monitor('2026-10-12T07:00:00.000Z')).toEqual(['own_time_stalled']); // an idle session is not counted
+    db.prepare("INSERT INTO autonomy_loop_sessions VALUES ('c4','owner','2026-10-12','2026-10-11T23:20:00.000Z','budget','2026-10-11T23:50:00.000Z')").run();
+    expect(monitor('2026-10-12T07:00:00.000Z')).toEqual([]);
+    db.prepare("DELETE FROM autonomy_loop_sessions WHERE cycle_id = 'c4'").run();
+    db.prepare("INSERT INTO autonomy_loop_schedule VALUES ('owner','2026-10-11T00:00:00.000Z','2026-10-12')").run();
+    expect(monitor('2026-10-12T07:00:00.000Z')).toEqual([]);
+  });
+
+  it('reads only the owner\'s sleep jobs', () => {
+    const db = database();
+    db.prepare("INSERT INTO background_jobs VALUES ('guest-night','guest','sleep-consolidation','pending','2026-10-09T18:00:00.000Z',NULL)").run();
+    expect(startLivenessMonitor({ database: db, ownerScope: 'owner', ownTimeEnabled: false, now: () => '2026-10-12T00:00:00.000Z',
+      log: () => {}, intervalMs: null }).check()!.incidents).toEqual([]);
   });
 
   it('does not call quiet own time a stall when it is off or paused, nor a fresh database', () => {

@@ -51,6 +51,8 @@ export interface ActionStepPort {
   checkpoint(lease:ActionLease,id:string,actual:number|null,code:string,failureCode?:string):Promise<boolean>;
   recover(reports:readonly ActionAcknowledgement[]):Promise<readonly string[]>;
   end(state:'completed'|'failed'|'cancelled'|'unknown',code:string):Promise<void>;
+  /** True when this cycle's own action stayed unknown past the release deadline: it can never be claimed again. */
+  abandoned?(scopeKey:string,cycleId:string):Promise<boolean>;
 }
 
 /** Existing Minecraft claim/progress/report handshake supplies the body acknowledgement. */
