@@ -1,0 +1,83 @@
+{
+ "scenario": "skill-proposer-sonnet",
+ "requests": [
+  {
+   "method": "POST",
+   "url": "https://api.anthropic.com/v1/messages",
+   "headers": {
+    "accept": "application/json",
+    "anthropic-version": "2023-06-01",
+    "content-type": "application/json",
+    "user-agent": "Anthropic/JS 0.131.0",
+    "x-api-key": "synthetic-skill-key",
+    "x-stainless-lang": "js",
+    "x-stainless-package-version": "0.131.0",
+    "x-stainless-retry-count": "0",
+    "x-stainless-runtime": "node",
+    "x-stainless-timeout": "60"
+   },
+   "body": {
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 4000,
+    "system": [
+     {
+      "type": "text",
+      "text": "合成されたスキル提案の指示",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "messages": [
+     {
+      "role": "user",
+      "content": "{\"notes\":[\"合成された記録\"]}"
+     }
+    ],
+    "thinking": {
+     "type": "adaptive"
+    },
+    "output_config": {
+     "effort": "medium",
+     "format": {
+      "type": "json_schema",
+      "schema": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "skills"
+       ],
+       "properties": {
+        "skills": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ ],
+ "usage": [
+  {
+   "scopeKey": "owner",
+   "lane": "memory_background",
+   "model": "claude-sonnet-5-5",
+   "inputTokens": 720,
+   "cachedInputTokens": 0,
+   "outputTokens": 40,
+   "totalTokens": 760,
+   "estimatedCostUsd": 0.00304,
+   "occurredAt": "2026-10-12T03:00:00.000Z"
+  }
+ ],
+ "cacheReceipts": [],
+ "outcome": {
+  "result": {
+   "skills": []
+  }
+ }
+}
