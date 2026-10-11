@@ -4,6 +4,7 @@ import type { ShannonDevicePrincipal } from '../../../infra/auth/deviceAuth.js';
 import type { APNsEnvironment, PendingPushNotification, PushDeliveryResult } from '../pushNotifications.js';
 import { isRoomLookSource, ROOM_LOOK_NOTICE_LINE } from '../../../mind/perception/roomLookSource.js';
 import { chmodSync, existsSync } from 'node:fs';
+import { pendingLivenessNotices } from './livenessNoticeRows.js';
 
 const DEVICE_TOKEN_PATTERN = /^[a-f0-9]{64,200}$/iu;
 
@@ -236,7 +237,8 @@ export class SQLitePushNotificationStore {
       createdAt: String(row.opened_at),
       badgeCount: Math.max(1, Math.min(99, Number(row.initiative_badge_count) + 1)),
     }));
-    return Object.freeze([...initiatives, ...agentTasks, ...testFlightFailures]
+    const liveness = pendingLivenessNotices(this.database, { at, cutoff, maximumAttempts: MAXIMUM_ATTEMPTS, limit: boundedLimit });
+    return Object.freeze([...initiatives, ...agentTasks, ...testFlightFailures, ...liveness]
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
       .slice(0, boundedLimit)
       .map(notification => Object.freeze(notification)));

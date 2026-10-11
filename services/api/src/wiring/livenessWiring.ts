@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { evaluateLiveness, LIVENESS_LIMITS, livenessTransitions, type LivenessIncident, type LivenessView } from '../infra/ops/liveness.js';
-import { readLivenessFacts } from '../infra/ops/store/livenessStore.js';
+import { readLivenessFacts, syncLivenessEpisodes } from '../infra/ops/store/livenessStore.js';
 import { configuredAutonomyLoop } from '../mind/action/ownTime/autonomyLoopConfig.js';
 import { autonomyDayKey } from '../mind/inhibition/autonomyBudget.js';
 
@@ -22,7 +22,8 @@ export interface LivenessMonitorOptions {
 /**
  * The periodic "is she still alive" check: a stalled nightly sleep, own time that stopped, and a mind worker that keeps
  * restarting. It logs `Shannon liveness:` once when an incident begins and once when it ends, and the owner reads the
- * latest view in `GET /v1/ops` (`server.liveness`). It writes nothing and starts nothing.
+ * latest view in `GET /v1/ops` (`server.liveness`). Its one write is the episode of each incident, from which the existing push
+ * path sends the owner one notice per episode (ADR-0009 §9). It starts nothing.
  */
 export function startLivenessMonitor(options: LivenessMonitorOptions) {
   if (!options.database && !options.databasePath) throw new Error('LIVENESS_DATABASE_REQUIRED');
@@ -34,6 +35,14 @@ export function startLivenessMonitor(options: LivenessMonitorOptions) {
   const sessionsPerDay = configuredAutonomyLoop(options.environment ?? {}).sessionsPerDay;
   let active = new Set<LivenessIncident>();
   let latest: LivenessView | null = null;
+  // One owner notice per episode goes out through the push path (ADR-0009 §9); a failed write is retried at the next check.
+  function recordEpisodes(incidents: readonly string[], at: string): void {
+    try {
+      syncLivenessEpisodes(db, options.ownerScope, incidents, at);
+    } catch (error) {
+      log(`Shannon liveness: episode not recorded ${error instanceof Error ? error.name : 'unknown'}`);
+    }
+  }
   function check(): LivenessView | null {
     try {
       const at = now();
@@ -42,6 +51,7 @@ export function startLivenessMonitor(options: LivenessMonitorOptions) {
       for (const line of livenessTransitions(active, view)) log(line);
       active = new Set(view.incidents);
       latest = view;
+      recordEpisodes(view.incidents, at);
     } catch (error) {
       log(`Shannon liveness: check failed ${error instanceof Error ? error.name : 'unknown'}`);
     }

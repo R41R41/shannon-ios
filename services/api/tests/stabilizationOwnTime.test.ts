@@ -48,3 +48,21 @@ it.each([false, true])('ends a cycle whose own action stayed unknown past the de
   expect(fresh[0]!.state).not.toBe('unknown');
   expect(h.reader.reads).toHaveLength(1);
 });
+
+it('ends a cycle whose own action an expired lease cancelled before anything was sent, without running it again (ADR-0009 §9)', async () => {
+  const h = fixture(true); h.model.plans = [FULL_PLAN];
+  await h.loop.tick();
+  const cycle = h.store.loop.openCycle('owner')!;
+  // The runner stops renewing (a restart); the lease runs out while nothing outside was sent.
+  h.runner.close();
+  h.advance(ACTION_LIMITS.leaseMs + 1);
+  h.actionStore.transaction(() => h.actionStore.sweep(h.clock.at));
+  const own = (await h.actions.list('owner')).find(action => action.kind === 'ownTime' && action.sourceId === cycle.id)!;
+  expect(own).toMatchObject({ state: 'cancelled', result: 'lease_expired', sent: false });
+  expect(await h.runner.abandoned('owner', cycle.id)).toBe(true);
+  const reads = h.reader.reads.length;
+  expect(await h.loop.tick()).toBe('cycle-ended');
+  expect(h.store.loop.openCycle('owner')).toBeNull();
+  expect(h.reader.reads).toHaveLength(reads);
+  expect(await h.runner.abandoned('owner', 'another-cycle')).toBe(false);
+});

@@ -3,7 +3,7 @@ export { SQLitePushNotificationStore } from './store/pushNotificationStore.js';
 export type APNsEnvironment = 'sandbox' | 'production';
 
 export interface PendingPushNotification {
-  kind: 'initiative' | 'agent_task' | 'testflight_failure';
+  kind: 'initiative' | 'agent_task' | 'testflight_failure' | 'liveness_incident';
   initiativeId: string;
   deviceId: string;
   deviceToken: string;

@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { LIVENESS_EPISODE_TABLE } from '../../../contracts/livenessNoticeContract.js';
 
 /** Closed facts the liveness check reads: timestamps and counts only, never a message, payload or error text. */
 export interface LivenessFacts {
@@ -77,4 +79,19 @@ export function readLivenessFacts(db: DatabaseSync, ownerScope: string, at: stri
     ownTimeSessionsOnDay: Number(today?.count ?? 0), ownTimeBudgetBlockedDay: text(schedule?.budget_blocked_day),
     mindWorkerStarts: { lastHour: Number(starts?.hour ?? 0), lastDay: Number(starts?.day ?? 0), lastAt: text(starts?.last) },
   };
+}
+
+/**
+ * Opens one episode when an incident begins and closes it when it ends (ADR-0009 §9): the owner's notice is one per episode,
+ * also across a restart of the server, because an open episode is found again instead of opened twice. Additive table.
+ */
+export function syncLivenessEpisodes(db: DatabaseSync, scopeKey: string, incidents: readonly string[], at: string): void {
+  db.exec(`CREATE TABLE IF NOT EXISTS ${LIVENESS_EPISODE_TABLE} (episode_id TEXT PRIMARY KEY, scope_key TEXT NOT NULL,
+    incident TEXT NOT NULL, opened_at TEXT NOT NULL, closed_at TEXT)`);
+  const open = db.prepare(`SELECT episode_id, incident FROM ${LIVENESS_EPISODE_TABLE} WHERE scope_key = ? AND closed_at IS NULL`).all(scopeKey);
+  const openIncidents = new Set(open.map(row => String(row.incident)));
+  const close = db.prepare(`UPDATE ${LIVENESS_EPISODE_TABLE} SET closed_at = ? WHERE episode_id = ?`);
+  for (const row of open) if (!incidents.includes(String(row.incident))) close.run(at, String(row.episode_id));
+  const insert = db.prepare(`INSERT INTO ${LIVENESS_EPISODE_TABLE}(episode_id, scope_key, incident, opened_at) VALUES (?, ?, ?, ?)`);
+  for (const incident of incidents) if (!openIncidents.has(incident)) insert.run(randomUUID(), scopeKey, incident, at);
 }

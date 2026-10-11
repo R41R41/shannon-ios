@@ -3,8 +3,11 @@ import type { DatabaseSync } from 'node:sqlite';
 import { ACTION_CODE, ACTION_ID, ACTION_LIMITS, ACTION_TERMINAL, validActionDraft, type ActionDraft, type ActionLease, type ActionState, type ActionView } from '@shannon/mind';
 import type { ActionAcknowledgement } from '../../../../contracts/actionThreadContract.js';
 export type ActionResourceReconciliationAllowed=(lease:ActionLease,resource:string,acknowledgementId:string)=>boolean;
-/** A dispatch-added resource that only a domain proof (`reconcileResource`) may release, even after the unknown deadline. */
-export type ActionResourceRetained=(resource:string)=>boolean;
+/**
+ * A resource that only a release proof may free, even after the unknown deadline: a closing canonical report, or a domain proof
+ * through `reconcileResource`. Base or dispatch-added; `resources` is the action's whole set (`retainedResources.ts`).
+ */
+export type ActionResourceRetained=(resource:string,resources:readonly string[])=>boolean;
 
 /** The mind worker alone owns scheduling. BEGIN IMMEDIATE also fences another worker during recovery. No words here. */
 export class SQLiteActionStore {
@@ -262,7 +265,8 @@ export class SQLiteActionStore {
       if(!action||action.state!=='unknown'||action.generation!==lease.generation+1||action.lastHolder!==lease.holder||action.holder!==null)return false;
       const row=this.db.prepare('SELECT base_resources_json FROM mind_actions WHERE id=?').get(lease.id)!;
       const base=JSON.parse(String(row.base_resources_json)) as string[];
-      if(!action.resources.includes(resource)||base.includes(resource))return false;
+      if(!action.resources.includes(resource))return false;
+      if(base.includes(resource)&&!this.retainedAfterRelease(resource,action.resources))return false;
       // Re-read the domain's original immutable proof under this writer lock, fencing late native cleanup insertion.
       if(!this.resourceReconciliationAllowed?.(lease,resource,acknowledgementId))return false;
       // Do not settle paid calls, finish the task, clear sent, or release any other operation's exclusion.
@@ -329,9 +333,9 @@ export class SQLiteActionStore {
   /**
    * An unknown outcome is never replayed and never resumable; it already is a closed state. What kept the scheduler blocked
    * was `sent=1`: a live background slot and every resource of the attempt. After `unknownReleaseMs` `sent` is cleared, so
-   * the slot and the base resources are free again. A dispatch-added resource with a domain release proof (the Minecraft
-   * body) stays excluded until `reconcileResource` proves its release; other added locks (study, folders) have no such
-   * proof and would otherwise block their domain forever, so they are released with the slot. The result becomes
+   * the slot and the base resources are free again. A retained resource (`retainedResources.ts`: an Agent Host lock with its
+   * folder lock, the Minecraft body, base or added) stays excluded until a release proof; other added locks (study, folders
+   * alone) have no such proof and would otherwise block their domain forever, so they are released with the slot. The result becomes
    * `unknown_expired`, which also gives the owner one fresh notice. Held budget stays held, and a late canonical
    * acknowledgement or reconcile can still close the original attempt.
    */
@@ -340,18 +344,19 @@ export class SQLiteActionStore {
     const rows=this.db.prepare("SELECT id,resources_json,base_resources_json FROM mind_actions WHERE state='unknown' AND sent=1 AND updated_at<=?").all(cutoff);
     for(const row of rows){
       const base=JSON.parse(String(row.base_resources_json)) as string[];
-      const kept=(JSON.parse(String(row.resources_json)) as string[]).filter(key=>base.includes(key)||this.retainedAfterRelease(key));
+      const resources=JSON.parse(String(row.resources_json)) as string[];
+      const kept=resources.filter(key=>base.includes(key)||this.retainedAfterRelease(key,resources));
       this.db.prepare("UPDATE mind_actions SET sent=0,resources_json=?,result='unknown_expired',updated_at=? WHERE id=?").run(JSON.stringify(kept),at,String(row.id));
     }
     return rows.length;
   }
-  /** What an action excludes others from: everything while live or sent-unknown; after release, only unproven dispatch additions. */
+  /** What an action excludes others from: everything while live or sent-unknown; after release, unproven additions and retained keys. */
   private heldResources(action:ActionView):readonly string[] {
     if(['running','waiting','stopping'].includes(action.state)||(action.state==='unknown'&&action.sent))return action.resources;
     if(action.state!=='unknown')return [];
     const row=this.db.prepare('SELECT base_resources_json FROM mind_actions WHERE id=?').get(action.id);
     const base=JSON.parse(String(row?.base_resources_json??'[]')) as string[];
-    return action.resources.filter(key=>!base.includes(key));
+    return action.resources.filter(key=>!base.includes(key)||this.retainedAfterRelease(key,action.resources));
   }
 }
 function view(input: object): ActionView {

@@ -3,6 +3,8 @@ import type { DatabaseSync } from 'node:sqlite';
 import { switchOn } from '@shannon/switches';
 import { actionResource, type ActionLease } from '../contracts/actionThreadContract.js';
 import { configuredMinecraftBody } from '../contracts/minecraftBodyContract.js';
+import { configuredOwnerScope } from '../infra/config/ownerScope.js';
+import { retainedResource, type RetainedResourcePolicy } from '../mind/action/threads/store/retainedResources.js';
 
 /** Called synchronously inside the action writer's transaction, so cleanup cannot race physical-resource release. */
 export function configuredActionResourceProof(values: Readonly<Record<string, string | undefined>>, db: DatabaseSync) {
@@ -12,11 +14,29 @@ export function configuredActionResourceProof(values: Readonly<Record<string, st
     return minecraftLifecycleResourceProof(db, lease, acknowledgementId, configuration.ownerScopeKey);
   };
 }
-/** The resources only a domain proof may release (the configured Minecraft body), also after the unknown deadline. */
-export function configuredRetainedResources(values: Readonly<Record<string, string | undefined>>) {
+/** How long the known Agent Host ids are reused before the registry is read again. */
+const HOST_IDS_REFRESH_MS = 60_000;
+
+/**
+ * The resources only a release proof may free, also after the unknown deadline (ADR-0009 §9): every registered Agent Host's
+ * lock with the owner's folder locks it takes along, and the configured Minecraft body (with its lifecycle), base or added.
+ * The keys are built by hashing the configured names the same way the actions hashed them.
+ */
+export function configuredRetainedResources(values: Readonly<Record<string, string | undefined>>, hostIds: () => readonly string[] = () => []) {
   const configuration = switchOn(values, 'SHANNON_MINECRAFT_LIFECYCLE') ? configuredMinecraftBody(values) : null;
   const body = configuration ? actionResource(configuration.deviceId, 'minecraft-body') : null;
-  return (resource: string): boolean => resource === body;
+  const owner = configuredOwnerScope(values);
+  const companions = new Set([actionResource(owner, 'folder:mac'), actionResource(owner, 'folder:vm')]);
+  let policy: RetainedResourcePolicy | null = null;
+  let readAt = 0;
+  const current = (): RetainedResourcePolicy => {
+    if (policy && Date.now() - readAt < HOST_IDS_REFRESH_MS) return policy;
+    const hosts = hostIds().map(id => actionResource(id, 'agent-host'));
+    policy = { anchors: new Set([...hosts, ...(body ? [body] : [])]), companions };
+    readAt = Date.now();
+    return policy;
+  };
+  return (resource: string, resources: readonly string[]): boolean => retainedResource(current(), resource, resources);
 }
 export function lifecycleResourceAcknowledgement(evidence: readonly unknown[]): string {
   return `lifecycle-release:${createHash('sha256').update(JSON.stringify(evidence)).digest('hex')}`;

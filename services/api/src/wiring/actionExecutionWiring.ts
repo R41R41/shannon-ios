@@ -117,9 +117,14 @@ export class OwnTimeActionRunner {
       if(state!=='unknown')await this.actions.reconcile(active.execution.lease,state,code);
     }
   }
+  /**
+   * The session's own action can never run again, so its cycle is closed unreplayed: unknown past the release deadline, or
+   * cancelled by an expired lease before anything was sent (ADR-0009 §9: a claim of that cancelled action is refused forever).
+   */
   async abandoned(scopeKey:string,cycleId:string):Promise<boolean>{
     const own=(await this.actions.list(scopeKey)).find(action=>action.kind==='ownTime'&&action.sourceId===cycleId);
-    return own?.state==='unknown'&&!own.sent&&own.result==='unknown_expired';
+    if(!own||own.sent)return false;
+    return own.state==='unknown'&&own.result==='unknown_expired'||own.state==='cancelled'&&own.result==='lease_expired';
   }
   close():void{this.active?.stop();this.active=null;}
 }

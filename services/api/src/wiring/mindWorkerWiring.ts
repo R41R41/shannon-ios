@@ -2,6 +2,7 @@ import { configuredActionResourceProof, configuredRetainedResources } from './co
 import { DatabaseSync } from 'node:sqlite';
 import { ACTION_ID, ACTION_LIMITS, type ActionDraft, type ActionLease } from '@shannon/mind';
 import { SQLiteActionStore } from '../mind/action/threads/store/actionStore.js';
+import { knownAgentHostIds } from '../mind/action/agentTasks/store/agentHostIds.js';
 import type { MindHost } from '../mind/workspace/workspacePorts.js';
 import { serveMindSocket } from '../infra/ipc/mindSocket.js';
 import { mindSocketPath } from '../infra/config/stage4.js';
@@ -30,7 +31,8 @@ export async function configuredMindWorker(values:Readonly<Record<string,string|
   // reply could otherwise hold the foreground slot for a whole lease). A busy write is caught and retried, never a crash.
   const db=new DatabaseSync(databasePath);db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=${MIND_WORKER_BUSY_TIMEOUT_MS};`);
   const busyLog=throttledLog(log);
-  const actions=new SQLiteActionStore(db, configuredActionResourceProof(values, db), configuredRetainedResources(values));
+  const retained=configuredRetainedResources(values,()=>knownAgentHostIds(db));
+  const actions=new SQLiteActionStore(db,configuredActionResourceProof(values,db),retained);
   let host:MindHost;
   let closeHost:()=>void;
   const projection=(scopeKey:string)=>({...host.projection(scopeKey),faulted:host.faulted,faults:host.faultCount,busy:host.busyCount});
