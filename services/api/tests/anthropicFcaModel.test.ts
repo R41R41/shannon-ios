@@ -2,7 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { shannonIdentityPrompt, SHANNON_FCA_TASK_CAPABILITY } from '@shannon/cognition';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AnthropicFcaModel, createAnthropicFcaModel, type AnthropicFcaClient, type AnthropicFcaUsage } from '../src/infra/models/anthropic/anthropicFcaModel.js';
-import { estimatedAnthropicCostUsd } from '../src/infra/models/anthropic/anthropicConfig.js';
+import { estimatedAnthropicCostUsd } from '../src/infra/models/claude/claudeUsage.js';
 import { HAIKU_PROTOCOL_PREFIX } from '../src/infra/models/anthropic/haikuCache.js';
 import { sonnetTool } from '../src/infra/models/anthropic/anthropicRequest.js';
 import type { FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';

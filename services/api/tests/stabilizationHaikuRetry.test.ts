@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
 import Anthropic from '@anthropic-ai/sdk';
-import { TRANSIENT_RETRY, transientProviderFailure, transientRetryWaitMs } from '../src/infra/models/anthropic/anthropicTransientRetry.js';
+import { TRANSIENT_RETRY, transientProviderFailure, transientRetryWaitMs } from '../src/infra/models/claude/claudeTransport.js';
 import type { ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import type { LlmUsageEvent } from '../src/infra/models/llmUsage.js';
 import { TurnDeadline, TEXT_TURN_DEADLINE } from '../src/mind/action/respond/turnDeadline.js';

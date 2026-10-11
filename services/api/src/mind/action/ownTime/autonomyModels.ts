@@ -1,6 +1,6 @@
 import { estimatedOpenAICostUsd } from '../../../infra/models/llmUsage.js';
 import { serverEnvironment } from '../../../infra/config/serverEnvironment.js';
-import { estimatedAnthropicCostUsd } from '../../../infra/models/anthropic/anthropicConfig.js';
+import { estimatedAnthropicCostUsd } from '../../../infra/models/claude/claudeUsage.js';
 import { DEFAULT_HAIKU_MODEL, replacementModel } from '../../../infra/models/anthropic/haikuConfig.js';
 import { DEFAULT_SONNET_MODEL } from '../../../infra/models/anthropic/anthropicConfig.js';
 import { HAIKU_PROTOCOL_PREFIX } from '../../../infra/models/anthropic/haikuCache.js';

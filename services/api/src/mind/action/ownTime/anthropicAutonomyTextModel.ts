@@ -2,6 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { actionPermit, currentActionExecution } from '../../../infra/context/actionExecution.js';
 import { cacheHaikuRequest, validateHaikuCacheUsage } from '../../../infra/models/anthropic/haikuCache.js';
 import { usesOneHourAnthropicCache } from '../../../infra/models/anthropic/haikuConfig.js';
+import { claudeClient } from '../../../infra/models/claude/claudeClient.js';
+import { tokenCount } from '../../../infra/models/claude/claudeUsage.js';
 import { AutonomyModelError, type AutonomyTextRequest, type AutonomyTextResult } from './autonomyTextModel.js';
 
 interface AnthropicAutonomyOptions { apiKey: string; fetcher?: typeof fetch; timeoutMilliseconds?: number }
@@ -14,10 +16,7 @@ export class AnthropicAutonomyTextModel {
 
   constructor(options: AnthropicAutonomyOptions) {
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 90_000;
-    this.client = new Anthropic({
-      apiKey: options.apiKey, authToken: null, webhookKey: null, baseURL: 'https://api.anthropic.com', logLevel: 'off', maxRetries: 0, timeout: this.timeoutMilliseconds,
-      ...(options.fetcher ? { fetch: options.fetcher } : {}),
-    });
+    this.client = claudeClient({ apiKey: options.apiKey, timeoutMilliseconds: this.timeoutMilliseconds, fetch: options.fetcher });
   }
 
   async generate(request: AutonomyTextRequest): Promise<AutonomyTextResult> {
@@ -33,12 +32,15 @@ export class AnthropicAutonomyTextModel {
     catch { throw new AutonomyModelError('ACTION_STOPPED', ZERO_USAGE); }
     let message: Anthropic.Message;
     try {
-      message = await this.client.messages.create(cacheHaikuRequest({
+      const body = cacheHaikuRequest({
         model: request.model, max_tokens: request.maximumOutputTokens,
         system: [{ type: 'text', text: request.system }],
         messages: [{ role: 'user', content: request.prompt }],
         thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const },
-      }), { signal, maxRetries: 0 });
+      });
+      // Her own time has no observer span and leaves no cache receipt, so its one request is the pinned client's own: its
+      // process loads nothing of the conversation's transport (autonomyLoopPrivacy.test.ts pins that closure).
+      message = await this.client.messages.create(body, { signal, maxRetries: 0 });
     } catch (error) {
       // API refusals are closed, not sent again. Transport/server failures leave the paid outcome unknown. Never expose
       // the SDK's message, which can contain the provider's copy of the prompt or the credential.
@@ -75,5 +77,3 @@ export class AnthropicAutonomyTextModel {
     return { text, usage, ...(truncated ? { truncated: true as const } : {}) };
   }
 }
-
-function tokenCount(value: unknown): value is number { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0; }

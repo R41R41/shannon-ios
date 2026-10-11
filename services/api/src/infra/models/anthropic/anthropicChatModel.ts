@@ -1,9 +1,7 @@
 import { observeAsync, observeSync, observerHandoff } from '../../observer/observerContext.js';
-import { recordCacheReceipt, type CacheRoute } from './cacheReceipts.js';
-import { observedAnthropicRequest, observedAnthropicResponse } from './observerProjection.js';
-import { actionPermit, currentActionExecution } from '../../context/actionExecution.js';
+import { observedAnthropicRequest } from './observerProjection.js';
 import Anthropic from '@anthropic-ai/sdk';
-import { PartialAnswerError, RoundTimer, TurnDeadline, TEXT_TURN_DEADLINE, TURN_OUT_OF_TIME_LINE, type RoundTime } from '../../../mind/action/respond/turnDeadline.js';
+import { PartialAnswerError, TurnDeadline, TEXT_TURN_DEADLINE, TURN_OUT_OF_TIME_LINE } from '../../../mind/action/respond/turnDeadline.js';
 import { completeSpokenSentences } from '../../../surfaces/voice/spokenSentences.js';
 import { ChatSentenceSplitter } from '../../../surfaces/text/chatSentenceSplitter.js';
 import {
@@ -13,18 +11,19 @@ import { VOICE_TOOL_OUTPUT_TOKENS, voiceWaitingPhrase, type ShannonModelToolSess
 import { baseToolSession, withToolMenu } from '../../../mind/tools/shannonToolMenu.js';
 import { providerToolName } from '../../../mind/tools/shannonTools.js';
 import { chatTurnResult, offersTools, parsedChatTurn } from '../chatModelTurn.js';
-import { ChatReplyStreamDecoder } from '../chatReplyStreamDecoder.js';
 import type { LlmUsageStore } from '../llmUsage.js';
-import { anthropicPrices, estimatedAnthropicCostUsd, type SonnetSettings } from './anthropicConfig.js';
+import type { SonnetSettings } from './anthropicConfig.js';
 import { sonnetChatBody, sonnetVoiceBody } from './anthropicRequest.js';
 import { sonnetToolRounds, type SonnetRoundResult } from './anthropicRounds.js';
 import { isAppendOnlyAnthropicModel, isHaikuModel, usesOneHourAnthropicCache } from './haikuConfig.js';
-import { AnthropicUsageEvidenceError, cacheHaikuRequest, serverSearchCacheStart, settledServerSearchUsage, validateHaikuCacheUsage, type HaikuCacheUsage, type ServerSearchCacheStart } from './haikuCache.js';
-import { DEFAULT_VOICE_STREAM_BOUNDS, VOICE_RESPONSE_TIMEOUT_MILLISECONDS, VOICE_WEB_FIRST_OUTPUT_MILLISECONDS, type VoiceStreamBounds } from '../chatModelVoiceStream.js';
+import { DEFAULT_VOICE_STREAM_BOUNDS, VOICE_WEB_FIRST_OUTPUT_MILLISECONDS, type VoiceStreamBounds } from '../chatModelVoiceStream.js';
 import { webSearchContext, webSearchFailure, webSearchFailedTurn, type WebSearchOperation } from '../webSearch.js';
 import { nativeWebSearchBody, nativeWebSearchResult, searchNeedsInput } from './anthropicWebSearch.js';
 import { turnCompletedWriteReceipts, turnWebSearchResult } from '../../../mind/tools/shannonToolSession.js';
-import { defaultRetryWait, transientProviderFailure, transientRetryWaitMs } from './anthropicTransientRetry.js';
+import { claudeClient } from '../claude/claudeClient.js';
+import {
+  claudeConversationSender, type ClaudeConversationTransport, type ClaudeListener, type ClaudeSend, type ClaudeSendRequest,
+} from '../claude/claudeTransport.js';
 
 /**
  * The Sonnet tier (Syzygy ADR-0008 stage 2, step 5; `docs/skill-and-routing-contract.md`), as a `ShannonChatModel` over the
@@ -95,16 +94,17 @@ export class AnthropicChatModel implements ShannonChatModel {
   readonly model: string;
   readonly firstTokenLatency = new FirstTokenLatency();
   readonly textFirstTokenLatency = new FirstTokenLatency();
-  private readonly client: Anthropic;
   private readonly clock: () => number;
+  private readonly transport: ClaudeConversationTransport;
 
   constructor(private readonly options: AnthropicChatModelOptions) {
     if (!options.apiKey.trim()) throw new Error('ANTHROPIC_API_KEY is required');
     this.model = options.settings.model;
     this.clock = options.clock ?? (() => performance.now());
-    // No SDK retries: the turn's deadline bounds it. The sender alone adds one bounded transient retry for Haiku.
-    this.client = new Anthropic({ apiKey: options.apiKey, authToken: null, webhookKey: null, baseURL: 'https://api.anthropic.com', logLevel: 'off',
-      maxRetries: 0, timeout: options.timeoutMilliseconds ?? 45_000, ...(options.fetch ? { fetch: options.fetch } : {}) });
+    // No SDK retries: the turn's deadline bounds it. The transport alone adds one bounded transient retry for Haiku.
+    const client = claudeClient({ apiKey: options.apiKey, timeoutMilliseconds: options.timeoutMilliseconds ?? 45_000, fetch: options.fetch });
+    this.transport = { client, clock: this.clock, usageStore: options.usageStore, now: options.now, timeoutMilliseconds: options.timeoutMilliseconds,
+      voiceResponseTimeoutMilliseconds: options.voiceResponseTimeoutMilliseconds, retryWait: options.retryWait };
   }
 
   async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
@@ -279,181 +279,11 @@ export class AnthropicChatModel implements ShannonChatModel {
     return { ...request, tools: withToolMenu(baseToolSession(request.tools), chosen) };
   }
 
-  /**
-   * One request: streamed when there is a listener (its first word or call measured on the turn's first round, its words
-   * handed on in order), else not. A stream that fails or is refused after words went out is a `PartialAnswerError`.
-   */
-  private sender(target: { scopeKey: string; route: CacheRoute },
-    listen: ((delta: string, decoder: ChatReplyStreamDecoder) => Promise<string> | null) | null,
-    caller?: AbortSignal, latency: FirstTokenLatency = this.firstTokenLatency, onFirst?: () => void, voiceBounds?: VoiceStreamBounds) {
-    const { scopeKey, route } = target;
-    // Failures that provably reached nothing: no usage, no word handed out. Only these may be retried.
-    const clean = new WeakSet<object>();
-    const attempt = async (body: Anthropic.MessageCreateParamsNonStreaming, time: RoundTime | null, round: number): Promise<Anthropic.Message> => {
-      await actionPermit();
-      const timer = time ? new RoundTimer(time) : null;
-      const bounds = isHaikuModel(body.model) && voiceBounds && listen ? streamWatch(voiceBounds) : null;
-      const total = isHaikuModel(body.model) && !time && !bounds
-        ? AbortSignal.timeout(voiceBounds ? this.options.voiceResponseTimeoutMilliseconds ?? VOICE_RESPONSE_TIMEOUT_MILLISECONDS : this.options.timeoutMilliseconds ?? 30_000) : undefined;
-      const signals = [caller, timer?.signal, currentActionExecution()?.signal, bounds?.signal, total].filter((value): value is AbortSignal => Boolean(value));
-      const signal = signals.length ? AbortSignal.any(signals) : undefined;
-      const started = this.clock();
-      let sent = '';
-      const prepared = usesOneHourAnthropicCache(body.model) ? cacheHaikuRequest(body) : body;
-      const inlineTools = isAppendOnlyAnthropicModel(body.model) ? { headers: { 'anthropic-beta': 'inline-tools-2026-09-15' } } : {};
-      let observedUsage: Anthropic.Message['usage'] | null = null;
-      let searchCacheStart: ServerSearchCacheStart | null = null;
-      let explicitSearchTtl: HaikuCacheUsage['cache_creation'] | undefined;
-      let receivedUsage = false;
-      let usageRecorded = false;
-      let firstVisibleOutputAfterMs: number | undefined;
-      let finalUsageAfterMs: number | undefined;
-      observerHandoff('native', 'llm', { model: prepared.model, round });
-      try {
-        return await observeAsync('llm', { ...observedAnthropicRequest(prepared), round, streaming: listen !== null }, async () => {
-        if (!listen) {
-          const message = await this.client.messages.create(prepared, { ...inlineTools, ...(signal ? { signal } : {}),
-            ...(isHaikuModel(body.model) && voiceBounds ? { timeout: this.options.voiceResponseTimeoutMilliseconds ?? VOICE_RESPONSE_TIMEOUT_MILLISECONDS } : {}) });
-          // Not streamed: the first response is the first token.
-          if (round === 0) onFirst?.();
-          this.recordUsage(scopeKey, message, prepared.max_tokens, true, body.model, searchAllowance(body));
-          recordCacheReceipt(route, prepared, message.usage, round);
-          usageRecorded = true;
-          if (usesOneHourAnthropicCache(body.model)) validateNativeUsage(message.usage, unconfirmed(body.model, message.usage));
-          return message;
-        }
-        const decoder = new ChatReplyStreamDecoder();
-        let first = false;
-        const streamStarted = this.clock();
-        const stream = this.client.messages.stream(prepared, { ...inlineTools, ...(signal ? { signal } : {}) });
-        for await (const event of stream) {
-          bounds?.event();
-          if (event.type === 'message_start') {
-            receivedUsage = true;
-            observedUsage = event.message.usage;
-            if (searchAllowance(prepared) && prepared.tools?.length === 1) searchCacheStart = serverSearchCacheStart(observedUsage);
-            if (usesOneHourAnthropicCache(body.model)) validateNativeUsage(observedUsage, isHaikuModel(body.model) ? () => {} : undefined); // logged once, at the end
-          } else if (event.type === 'message_delta' && observedUsage) {
-            observedUsage = mergeUsage(observedUsage, event.usage);
-            if (Object.hasOwn(event.usage, 'cache_creation')) explicitSearchTtl = (event.usage as HaikuCacheUsage).cache_creation;
-          }
-          const text = event.type === 'content_block_delta' && event.delta.type === 'text_delta' ? event.delta.text : null;
-          if (!first && round === 0 && (text !== null || (event.type === 'content_block_start' && event.content_block.type === 'tool_use'))) {
-            first = true;
-            onFirst?.();
-            latency.record(this.clock() - started);
-          }
-          if (event.type === 'content_block_start' && event.content_block.type === 'tool_use'
-            || event.type === 'content_block_delta' && event.delta.type === 'input_json_delta') bounds?.output();
-          if (text === null) continue;
-          const handed = listen(text, decoder);
-          if (handed) {
-            timer?.answering(); bounds?.pause();
-            const visible = await handed;
-            // Only decoded text accepted by the reply callback, never JSON syntax, thinking or a tool call. This is
-            // server handoff latency, not proof of device display/playback or a provider prefill/queue breakdown.
-            if (visible && firstVisibleOutputAfterMs === undefined) firstVisibleOutputAfterMs = Math.max(0, this.clock() - streamStarted);
-            sent += visible; signal?.throwIfAborted(); bounds?.output();
-          }
-        }
-        const completed = await stream.finalMessage();
-        finalUsageAfterMs = Math.max(0, this.clock() - streamStarted);
-        const message = settledServerSearchUsage(completed, searchCacheStart, explicitSearchTtl, prepared.messages);
-        this.recordUsage(scopeKey, message, prepared.max_tokens, true, body.model, searchAllowance(body));
-        recordCacheReceipt(route, prepared, message.usage, round);
-        usageRecorded = true;
-        if (usesOneHourAnthropicCache(body.model)) validateNativeUsage(message.usage, unconfirmed(body.model, message.usage));
-        if (message.stop_reason === 'refusal' && sent) throw new PartialAnswerError(sent);
-        return message;
-        }, message => ({ ...observedAnthropicResponse(message),
-          ...(firstVisibleOutputAfterMs !== undefined ? { firstVisibleOutputAfterMs } : {}),
-          ...(finalUsageAfterMs !== undefined ? { finalUsageAfterMs } : {}) }), { model: prepared.model });
-      } catch (error) {
-        // message_start/delta counts are lower bounds until finalMessage: aborting the stream does not prove its final bill.
-        if (receivedUsage && !usageRecorded) this.recordUsage(scopeKey, { usage: observedUsage }, prepared.max_tokens, false, body.model, searchAllowance(body));
-        else if (!usageRecorded && searchAllowance(body) && !(error instanceof Anthropic.APIError && error.status !== undefined && error.status >= 400 && error.status < 500)) {
-          this.recordUsage(scopeKey, {}, prepared.max_tokens, false, body.model, searchAllowance(body));
-        }
-        if (bounds?.signal.aborted && !caller?.aborted) error = bounds.signal.reason;
-        if (sent && !(error instanceof PartialAnswerError) && !caller?.aborted) throw new PartialAnswerError(sent);
-        if (!receivedUsage && !usageRecorded && error && typeof error === 'object') clean.add(error);
-        throw error;
-      } finally { timer?.clear(); bounds?.clear(); }
-    };
-    return async (body: Anthropic.MessageCreateParamsNonStreaming, time: RoundTime | null, round: number): Promise<Anthropic.Message> => {
-      try { return await attempt(body, time, round); } catch (error) {
-        // Haiku: one bounded retry of a transient provider refusal, only on a turn's first request (no tool has run)
-        // and only when nothing was billed or said. Anything else keeps the existing no-retry contract.
-        const transient = round === 0 && isHaikuModel(body.model) && error && typeof error === 'object' && clean.has(error) ? transientProviderFailure(error) : null;
-        const stop = [caller, currentActionExecution()?.signal].filter((value): value is AbortSignal => Boolean(value));
-        if (!transient || stop.some(signal => signal.aborted)) throw error;
-        const wait = transientRetryWaitMs(error);
-        console.log(`Shannon model transient failure: ${transient}, retrying once after ${wait} ms`);
-        await (this.options.retryWait ?? defaultRetryWait)(wait, stop.length ? AbortSignal.any(stop) : undefined);
-        return attempt(body, time, round);
-      }
-    };
+  /** One request of a turn, through the one transport (`claudeTransport.ts`). */
+  private sender(target: ClaudeSendRequest['target'], listen: ClaudeListener | null,
+    caller?: AbortSignal, latency: FirstTokenLatency = this.firstTokenLatency, onFirst?: () => void, voiceBounds?: VoiceStreamBounds): ClaudeSend {
+    return claudeConversationSender(this.transport, { target, listen, caller, latency, onFirst, voiceBounds });
   }
-
-  private recordUsage(scopeKey: string, message: { usage?: Anthropic.Message['usage'] | null }, maximumOutputTokens = 16_000, finalUsage = true, model = this.model, maximumSearches = 0): void {
-    const usage = message.usage;
-    const counts = {
-      input: knownCount(usage?.input_tokens), cacheWrite: knownCount(usage?.cache_creation_input_tokens), cacheRead: knownCount(usage?.cache_read_input_tokens),
-      output: knownCount(usage?.output_tokens), searches: !finalUsage ? Math.max(maximumSearches, knownCount(usage?.server_tool_use?.web_search_requests))
-        : Number.isSafeInteger(usage?.server_tool_use?.web_search_requests) && usage!.server_tool_use!.web_search_requests >= 0 ? usage!.server_tool_use!.web_search_requests : maximumSearches,
-      cacheWrite5m: knownCount(usage?.cache_creation?.ephemeral_5m_input_tokens),
-      cacheWrite1h: knownCount(usage?.cache_creation?.ephemeral_1h_input_tokens),
-    };
-    const input = counts.input + counts.cacheWrite + counts.cacheRead;
-    const upperPrice = anthropicPrices(model, 1_000_000);
-    this.options.usageStore?.recordLlmUsage({
-      scopeKey, lane: 'chat', model, inputTokens: input, cachedInputTokens: counts.cacheRead, outputTokens: counts.output,
-      totalTokens: input + counts.output, estimatedCostUsd: Math.max(estimatedAnthropicCostUsd(model, counts),
-        usesOneHourAnthropicCache(model) && (!finalUsage || !nativeUsageComplete(usage))
-          ? upperPrice.cacheWrite1h + maximumOutputTokens * upperPrice.output / 1_000_000 + counts.searches * upperPrice.searchUsd : 0),
-      occurredAt: this.options.now?.() ?? new Date().toISOString(),
-    });
-  }
-}
-
-/** Stream deltas may omit input counts with null: retain the counts reported at message_start. */
-function mergeUsage(previous: Anthropic.Message['usage'], delta: unknown): Anthropic.Message['usage'] {
-  return { ...previous, ...Object.fromEntries(Object.entries(delta as Record<string, unknown>).filter(([, value]) => value !== null && value !== undefined)) };
-}
-
-function knownCount(value: unknown): number { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0; }
-function nativeUsageComplete(usage: Anthropic.Message['usage'] | null | undefined): boolean {
-  return [usage?.input_tokens, usage?.output_tokens, usage?.cache_creation_input_tokens, usage?.cache_read_input_tokens]
-    .every(value => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0);
-}
-/**
- * Malformed or incomplete counts still fail closed (the bill is not known). For Haiku, zero cache read and write on an
- * otherwise complete response is different: the answer is valid and already paid, and its usage was booked at the measured
- * uncached price before this check, so the anomaly is logged (`onUnconfirmed`) and the answer kept. Sonnet keeps failing
- * closed: its turn falls back to Haiku before any word, and an uncached Sonnet round is the expensive case the guard limits.
- */
-function validateNativeUsage(usage: Anthropic.Message['usage'] | null | undefined, onUnconfirmed?: () => void): void {
-  try { validateHaikuCacheUsage(usage); } catch (error) {
-    if (!onUnconfirmed || !(error instanceof AnthropicUsageEvidenceError) || error.code !== 'HAIKU_CACHE_UNCONFIRMED') throw error;
-    onUnconfirmed();
-  }
-  if (!nativeUsageComplete(usage)) throw new AnthropicUsageEvidenceError('HAIKU_RESPONSE_USAGE_INVALID');
-}
-function unconfirmed(model: string, usage: Anthropic.Message['usage']): (() => void) | undefined {
-  if (!isHaikuModel(model)) return undefined;
-  return () => console.log(`Shannon model cache unconfirmed: model=${model} input=${knownCount(usage?.input_tokens)} output=${knownCount(usage?.output_tokens)}`);
-}
-
-/** The base lane keeps the existing first-output and provider-silence bounds, with no total speech limit. */
-function streamWatch(bounds: VoiceStreamBounds) {
-  const controller = new AbortController();
-  let first = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const clear = () => clearTimeout(timer);
-  const arm = (milliseconds: number, code: string) => { clear(); timer = setTimeout(() => controller.abort(new Error(code)), milliseconds); };
-  const idle = () => arm(bounds.idleMilliseconds, 'ANTHROPIC_RESPONSE_IDLE_TIMEOUT');
-  arm(bounds.firstOutputMilliseconds, 'ANTHROPIC_RESPONSE_FIRST_OUTPUT_TIMEOUT');
-  return { signal: controller.signal, clear, pause: clear, event: () => { if (first) idle(); }, output: () => { first = true; idle(); } };
 }
 
 /** The text of a response's `text` blocks, in order (thinking blocks and tool calls are not text). */
@@ -486,9 +316,4 @@ function watchdog(budgetMs: number | undefined): { signal: AbortSignal; first():
   const timer = setTimeout(() => { fired = true; controller.abort(new SonnetFirstTokenTimeout()); }, Math.max(0, budgetMs));
   timer.unref?.();
   return { signal: controller.signal, first: () => clearTimeout(timer), clear: () => clearTimeout(timer), timedOut: () => fired };
-}
-
-/** Missing search counts reserve the full per-request allowance, never a zero search charge. */
-function searchAllowance(body: Anthropic.MessageCreateParamsNonStreaming): number {
-  return body.tools?.reduce((sum, tool) => sum + ('name' in tool && tool.name === 'web_search' && 'max_uses' in tool ? tool.max_uses ?? 3 : 0), 0) ?? 0;
 }

@@ -3,7 +3,7 @@ import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatM
 import { createConfiguredChatModel, type ShannonChatModelRequest } from '../src/infra/models/chatModel.js';
 import { TieredChatModel } from '../src/infra/models/tieredChatModel.js';
 import { HAIKU_PROTOCOL_PREFIX } from '../src/infra/models/anthropic/haikuCache.js';
-import { estimatedAnthropicCostUsd } from '../src/infra/models/anthropic/anthropicConfig.js';
+import { estimatedAnthropicCostUsd } from '../src/infra/models/claude/claudeUsage.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageEvent } from '../src/infra/models/llmUsage.js';
 import { TurnDeadline, TEXT_TURN_DEADLINE } from '../src/mind/action/respond/turnDeadline.js';
 import { shannonTool } from '../src/mind/tools/shannonTools.js';

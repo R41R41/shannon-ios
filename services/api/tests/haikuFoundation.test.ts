@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
-import { anthropicPrices, estimatedAnthropicCostUsd, sonnetRoutingAvailable } from '../src/infra/models/anthropic/anthropicConfig.js';
+import { sonnetRoutingAvailable } from '../src/infra/models/anthropic/anthropicConfig.js';
+import { anthropicPrices, estimatedAnthropicCostUsd } from '../src/infra/models/claude/claudeUsage.js';
 import { configuredResponseModel, DEFAULT_HAIKU_MODEL, isHaikuModel, replacementModel } from '../src/infra/models/anthropic/haikuConfig.js';
 import { cacheHaikuRequest, HAIKU_PROTOCOL_PREFIX, validateHaikuCacheUsage } from '../src/infra/models/anthropic/haikuCache.js';
 import { responseModelFetcher, validateResponseModelUsage } from '../src/infra/models/anthropic/haikuResponses.js';

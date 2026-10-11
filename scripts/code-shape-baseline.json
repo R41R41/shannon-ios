@@ -355,12 +355,9 @@
       "long-line": 2
     },
     "services/api/src/infra/models/anthropic/anthropicChatModel.ts": {
-      "multi-statement-line": 13,
-      "complex-function": 4,
-      "long-line": 25
-    },
-    "services/api/src/infra/models/anthropic/anthropicConfig.ts": {
-      "long-line": 1
+      "multi-statement-line": 8,
+      "complex-function": 2,
+      "long-line": 13
     },
     "services/api/src/infra/models/anthropic/anthropicFcaContext.ts": {
       "long-line": 7
@@ -371,7 +368,7 @@
     },
     "services/api/src/infra/models/anthropic/anthropicFcaModel.ts": {
       "complex-function": 1,
-      "multi-statement-line": 3,
+      "multi-statement-line": 2,
       "long-line": 9
     },
     "services/api/src/infra/models/anthropic/anthropicFcaSummary.ts": {
@@ -400,7 +397,7 @@
       "long-line": 2
     },
     "services/api/src/infra/models/anthropic/anthropicSkillModel.ts": {
-      "long-line": 6
+      "long-line": 4
     },
     "services/api/src/infra/models/anthropic/anthropicToolBridge.ts": {
       "complex-function": 1,
@@ -787,8 +784,7 @@
       "long-line": 11
     },
     "services/api/src/mind/action/ownTime/anthropicAutonomyTextModel.ts": {
-      "complex-function": 1,
-      "long-line": 1
+      "complex-function": 1
     },
     "services/api/src/mind/action/ownTime/autonomyHostFolderDesk.ts": {
       "long-line": 4
