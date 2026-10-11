@@ -283,19 +283,42 @@ describe('Haiku full registry and strict tool admission', () => {
     expect(h.bodies[1]!.tools).toBeUndefined();
     expect(h.usage).toHaveLength(1);
     expect(t.requests.recent('owner')).toEqual([]);
-    expect(log.mock.calls).toEqual([[JSON.stringify({ event: 'anthropic_tool_offer_refused', status: 400, category: 'tool_schema_invalid', schemaUsage: { tools: 7, optional: 11, unions: 9 } })]]);
+    expect(log.mock.calls).toEqual([
+      [JSON.stringify({ event: 'anthropic_request_rejected', status: 400, type: 'invalid_request_error', class: 'tool_schema_invalid', hadTools: true })],
+      [JSON.stringify({ event: 'anthropic_tool_offer_refused', status: 400, category: 'tool_schema_invalid', schemaUsage: { tools: 7, optional: 11, unions: 9 } })],
+    ]);
   });
 
-  it('treats a 400 that does not name the offered tools or schemas as an error: counted, logged by status, no recovery', async () => {
+  it('keeps the fallback for any 400 during the canary, counting it by class without provider text (ADR-0009 stage 1)', async () => {
     const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const t = await session(['minecraft_request']);
-    const h = native(() => rejected(400, 'messages.3: DO_NOT_LOG_PRIVATE_PROVIDER_CONTENT'));
-    const before = rejectionCounts()['400'] ?? 0;
-    await expect(h.chat.generate({ ...base, tools: t.tools })).rejects.toThrow();
-    expect(h.bodies).toHaveLength(1);
-    expect(rejectionCounts()['400']).toBe(before + 1);
-    expect(log.mock.calls).toEqual([[JSON.stringify({ event: 'anthropic_request_rejected', status: 400, category: 'unclassified' })]]);
-    expect(h.usage).toEqual([]);
+    const h = native((_body, index) => index === 0 ? rejected(400, 'messages.3: DO_NOT_LOG_PRIVATE_PROVIDER_CONTENT') : paid(anthropicFixture('structured-answer')));
+    const before = rejectionCounts()['400:unclassified'] ?? 0;
+    expect((await h.chat.generate({ ...base, tools: t.tools })).reply).toBeTruthy();
+    expect(h.bodies).toHaveLength(2);
+    expect(rejectionCounts()['400:unclassified']).toBe(before + 1);
+    expect(log.mock.calls[0]).toEqual([JSON.stringify({ event: 'anthropic_request_rejected', status: 400, type: 'invalid_request_error',
+      class: 'unclassified', hadTools: true })]);
+    expect(JSON.stringify(log.mock.calls)).not.toContain('DO_NOT_LOG');
+  });
+
+  it('with SHANNON_ANTHROPIC_STRICT_REJECTIONS=on, recovers only from a 400 naming the offered tools or schemas', async () => {
+    vi.stubEnv('SHANNON_ANTHROPIC_STRICT_REJECTIONS', 'on');
+    try {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const t = await session(['minecraft_request']);
+      const other = native(() => rejected(400, 'messages.3: DO_NOT_LOG_PRIVATE_PROVIDER_CONTENT'));
+      await expect(other.chat.generate({ ...base, tools: t.tools })).rejects.toThrow();
+      expect(other.bodies).toHaveLength(1);
+      for (const wording of ['All tools with strict: true must fit', 'A maximum of 20 strict tools is supported']) {
+        const strict = native((_body, index) => index === 0 ? rejected(400, wording) : paid(anthropicFixture('structured-answer')));
+        expect((await strict.chat.generate({ ...base, tools: (await session(['minecraft_request'])).tools })).reply).toBeTruthy();
+        expect(strict.bodies).toHaveLength(2);
+      }
+      expect(rejectionCounts()['400:strict_tool_capacity']).toBeGreaterThanOrEqual(2);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it.each([401, 403, 408, 409, 429])('does not classify status %s as a schema refusal or issue a plain recovery', async status => {
@@ -306,7 +329,9 @@ describe('Haiku full registry and strict tool admission', () => {
     // Haiku's 429 gets the one bounded transient retry of the same request (stabilization 2026-10-12), never a plain recovery.
     expect(h.bodies).toHaveLength(status === 429 && model === 'claude-haiku-5-5' ? 2 : 1);
     expect(h.bodies.every(body => JSON.stringify(body) === JSON.stringify(h.bodies[0]))).toBe(true);
-    expect(log.mock.calls).toEqual([]);
+    // Counted and logged by status and class (ADR-0009 stage 1), never classified as a schema refusal.
+    expect(log.mock.calls.map(call => JSON.parse(String(call[0])).event)).toEqual(log.mock.calls.map(() => 'anthropic_request_rejected'));
+    expect(JSON.stringify(log.mock.calls)).not.toContain('DO_NOT_LOG');
     expect(h.usage).toEqual([]);
     expect(t.requests.recent('owner')).toEqual([]);
   });

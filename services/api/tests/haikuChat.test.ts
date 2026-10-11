@@ -215,14 +215,14 @@ describe('native Haiku conversation migration', () => {
     expect(h.bodies[1]).not.toHaveProperty('tools');
   });
 
-  // 429 and 5xx get the one bounded transient retry (stabilization 2026-10-12); nothing is recovered twice. A 400 that does not
-  // name the offered tools or schemas is an error, not a tool-less recovery (ADR-0009 stage 1, quick fix 2).
+  // 429 and 5xx get the one bounded transient retry (stabilization 2026-10-12); nothing is recovered twice. During the canary
+  // of ADR-0009 stage 1 any 400 still earns the one tool-less answer.
   it.each([400, 401, 403, 408, 409, 429, 500])('does not repeatedly recover a plain refusal or an excluded status %s', async status => {
     const h = model(() => new Response(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'rejected' } }), { status,
       headers: { 'content-type': 'application/json' } }), { retryWait: async () => {} });
     await expect(h.chat.generate({ ...base, tools: { definitions: [shannonTool('study.list')!], maximumCalls: 6,
       deadline: new TurnDeadline(TEXT_TURN_DEADLINE), async call() { throw new Error('must not run'); } } })).rejects.toThrow();
-    expect(h.bodies).toHaveLength([429, 500].includes(status) ? 2 : 1);
+    expect(h.bodies).toHaveLength([400, 429, 500].includes(status) ? 2 : 1);
     expect(h.usage).toEqual([]);
   });
 });

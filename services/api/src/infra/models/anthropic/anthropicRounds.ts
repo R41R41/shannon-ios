@@ -13,7 +13,7 @@ import type { BetaRequestToolAdditionBlock } from '@anthropic-ai/sdk/resources/b
 import { requestStrictTools, strictRequestFits, TOOL_CALL_PROVIDER_NAME } from './anthropicToolCapacity.js';
 import { bridgedAnthropicSession } from './anthropicToolBridge.js';
 import { bridgeOnlyUnacceptedTail } from './anthropicForegroundMenu.js';
-import { offerRefusal, reportOfferRefusal, reportRejection } from './anthropicRejection.js';
+import { carriesOffer, offerRefusal, recoverableRefusal, reportOfferRefusal, reportRejection } from './anthropicRejection.js';
 
 /**
  * The tool rounds of a Sonnet turn (Syzygy ADR-0008 stage 2, step 5), at parity with luna's `withToolRounds`
@@ -53,8 +53,8 @@ export interface SonnetRoundOptions {
    */
   timedOutRound?: 'answer' | 'fail';
   /**
-   * Haiku and native Sonnet 5.5 retain one recovery from an explicit 400 refusal of the offered tools or schemas
-   * (`anthropicRejection.ts`); any other 4xx is counted and handled as any other error.
+   * Haiku and native Sonnet 5.5 retain one recovery from an explicit 4xx refusal of the offered schemas; which 4xx count is
+   * `SHANNON_ANTHROPIC_STRICT_REJECTIONS` (`anthropicRejection.ts`). Every 4xx is counted and logged.
    */
   plainBody?: Anthropic.MessageCreateParamsNonStreaming;
   /** A selected external read is unfinished until its server-owned receipt exists. One bounded recovery, never a replay. */
@@ -98,11 +98,10 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
   let acceptedLength = 0;
   let acceptedVisible = new Set((body.tools ?? []).flatMap(tool => 'name' in tool ? [tool.name] : []));
   const callerStopped = () => options.signal?.aborted === true;
-  // Only a known 400 about the offered tools or schemas earns the one tool-less answer (ADR-0009 stage 1, quick fix 2).
+  // The one tool-less answer after a refusal of the offered schemas (ADR-0009 stage 1, quick fix 2, canary form).
   const plainRecovery = (error: unknown): boolean => {
-    const category = options.plainBody ? offerRefusal(error) : null;
-    if (!category) return false;
-    reportOfferRefusal(error, request(), category);
+    if (!options.plainBody || !recoverableRefusal(error)) return false;
+    reportOfferRefusal(error, request(), offerRefusal(error) ?? 'offered_request_rejected');
     return true;
   };
   const request = (extra: Partial<Anthropic.MessageCreateParamsNonStreaming> = {}): Anthropic.MessageCreateParamsNonStreaming => ({
@@ -166,9 +165,9 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
       if (callerStopped()) throw error;
       if (error instanceof PartialAnswerError) return out(error.sent);
       if (isAnthropicUsageEvidenceError(error)) { if (turn.used === 0) throw error; return out(); }
+      reportRejection(error, !plain && carriesOffer(request()));
       if (!plain && recoverGrammar(error)) return answer();
       if (!plain && plainRecovery(error)) return answer(true);
-      reportRejection(error);
       if (turn.used === 0 && !timedOut(error) && !(error instanceof SonnetRefusalError)) throw error;
       if (error instanceof SonnetRefusalError && turn.used === 0) throw error;
       return out();
@@ -188,9 +187,9 @@ export async function sonnetToolRounds(body: Anthropic.MessageCreateParamsNonStr
       if (callerStopped()) throw error;
       if (error instanceof PartialAnswerError) return out(error.sent);
       if (isAnthropicUsageEvidenceError(error)) { if (turn.used === 0) throw error; return out(); }
+      reportRejection(error, carriesOffer(request()));
       if (recoverGrammar(error)) continue;
       if (plainRecovery(error)) return answer(true);
-      reportRejection(error);
       if (!timedOut(error) && turn.used === 0) throw error;
       if (options.timedOutRound === 'fail' && turn.used === 0) throw error;
       note(TIMED_OUT_ROUND_NOTE);

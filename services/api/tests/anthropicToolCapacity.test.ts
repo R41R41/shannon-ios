@@ -91,8 +91,10 @@ describe.each(['claude-haiku-5-5', 'claude-sonnet-5-5'])('actual strict request 
       expect(transport.bodies).toHaveLength(3);
       expect(t.calls.map(item => item.name)).toEqual(['minecraft_start']);
       expect(t.notes()).toBe(1);
-      expect(log).toHaveBeenCalledOnce();
-      expect(JSON.parse(log.mock.calls[0]![0] as string)).toMatchObject({ category: 'strict_grammar_capacity' });
+      // The rejection is counted by class (ADR-0009 stage 1), then the grammar recovery is reported once.
+      expect(log).toHaveBeenCalledTimes(2);
+      expect(JSON.parse(log.mock.calls[0]![0] as string)).toMatchObject({ event: 'anthropic_request_rejected', class: 'strict_grammar_capacity' });
+      expect(JSON.parse(log.mock.calls[1]![0] as string)).toMatchObject({ category: 'strict_grammar_capacity' });
       expect(JSON.stringify(log.mock.calls)).not.toContain('synthetic-secret');
     } finally { log.mockRestore(); }
   });

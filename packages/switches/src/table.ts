@@ -178,6 +178,10 @@ export const SWITCHES = [
     doc: 'Conversation recall reads temporal knowledge.',
   },
   {
+    name: 'SHANNON_ANTHROPIC_STRICT_REJECTIONS', default: 'off', kind: 'explicit_on', owner: 'model', requires: [],
+    doc: 'Only a 400 naming the offered tools or schemas earns the tool-less answer (off: any non-auth 4xx does, as before).',
+  },
+  {
     name: 'SHANNON_AUTONOMY_ENABLED', default: 'off', kind: 'true_only', owner: 'autonomy', requires: [],
     doc: 'Her own-time activity loop (also needs its own model credential and an unpaused owner switch).',
   },
