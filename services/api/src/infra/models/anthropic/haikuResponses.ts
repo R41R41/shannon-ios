@@ -1,9 +1,10 @@
-import { observeAsync, observeSync, observerHandoff } from '../../observer/observerContext.js';
+import { observeSync } from '../../observer/observerContext.js';
 import { observedAnthropicRequest, observedAnthropicResponse } from './observerProjection.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { structuredSchema } from './anthropicSchema.js';
-import { anthropicPrices } from './anthropicConfig.js';
-import { recordCacheReceipt } from './cacheReceipts.js';
+import { claudeClient } from '../claude/claudeClient.js';
+import { sendClaudeOnce } from '../claude/claudeOnce.js';
+import { unknownCostUpperBound } from '../claude/claudeUsage.js';
 import { cacheOneShotRequest, validateHaikuCacheUsage, type HaikuCacheUsage } from './haikuCache.js';
 import { isHaikuModel, replacementModel } from './haikuConfig.js';
 
@@ -26,8 +27,7 @@ export function responseModelFetcher(options: { model: string; apiKey: string; f
     if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)))
       || url.username || url.password || url.hostname === 'api.openai.com') throw new Error('HAIKU_ENDPOINT_INVALID');
   }
-  const client = new Anthropic({ apiKey: options.apiKey, authToken: null, webhookKey: null, baseURL: 'https://api.anthropic.com',
-    maxRetries: 0, timeout: 60_000, logLevel: 'off', fetch: (input, init) => fetcher(endpoint ?? input, init) });
+  const client = claudeClient({ apiKey: options.apiKey, timeoutMilliseconds: 60_000, fetch: (input, init) => fetcher(endpoint ?? input, init) });
   return (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
     if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
@@ -37,10 +37,12 @@ export function responseModelFetcher(options: { model: string; apiKey: string; f
     if (typeof raw !== 'string' || Buffer.byteLength(raw) > MAXIMUM_REQUEST_BYTES) throw new Error('HAIKU_RESPONSES_INVALID_BODY');
     const body = observeSync('native', { format: 'responses' }, () => requestBody(JSON.parse(raw), options.model), observedAnthropicRequest, { model: options.model });
     try {
-      observerHandoff('native', 'llm', { model: body.model });
-      const { data: message, response } = await observeAsync('llm', { ...observedAnthropicRequest(body), round: 0, streaming: false },
-        () => client.messages.create(body, signal ? { signal } : {}).withResponse(), value => observedAnthropicResponse(value.data), { model: body.model });
-      recordCacheReceipt('background', body, message.usage);
+      const { data: message, response } = await sendClaudeOnce({
+        body, receipt: 'background', message: value => value.data,
+        dispatch: () => client.messages.create(body, signal ? { signal } : {}).withResponse(),
+        span: { handoff: { model: body.model }, input: { ...observedAnthropicRequest(body), round: 0, streaming: false },
+          project: value => observedAnthropicResponse(value.data), model: body.model },
+      });
       const headers = new Headers({ 'content-type': 'application/json' });
       const requestID = response.headers.get('request-id');
       if (requestID) headers.set('request-id', requestID);
@@ -156,8 +158,7 @@ function responseEnvelope(message: Anthropic.Message, request: Anthropic.Message
   const input = knownInputCounts.length && Number.isSafeInteger(inputSum) ? inputSum : null;
   const output = count(usage.output_tokens) ? usage.output_tokens : null;
   const valid = inputCounts.every(count) && input !== null && output !== null && Number.isSafeInteger(input + output);
-  const maximumPrice = anthropicPrices(request.model, 1_000_000);
-  const unknownUpperBound = maximumPrice.cacheWrite1h + request.max_tokens * maximumPrice.output / 1_000_000;
+  const unknownUpperBound = unknownCostUpperBound(request.model, request.max_tokens);
   const mappedUsage = { input_tokens: input, output_tokens: output, total_tokens: input !== null && output !== null ? input + output : null,
     input_tokens_details: { cached_tokens: usage.cache_read_input_tokens }, uncached_input_tokens: usage.input_tokens,
     cache_creation_input_tokens: usage.cache_creation_input_tokens, cache_read_input_tokens: usage.cache_read_input_tokens,

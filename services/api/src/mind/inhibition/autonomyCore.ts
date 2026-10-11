@@ -424,13 +424,13 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/infra/models/turnChecker.ts',
     'services/api/src/contracts/turnRoutingContract.ts',
     'services/api/src/surfaces/voice/voiceStage2.ts',
-    // Syzygy ADR-0008 stage 2, step 5: the Sonnet tier (the Anthropic adapter, its rounds and settings), the tiered model, its wiring.
+    // ADR-0008 stage 2, step 5: the Sonnet tier (its adapter, rounds, settings), the tiered model, its wiring; ADR-0009 stage 1: Claude's transport.
     'services/api/src/infra/models/anthropic/',
+    'services/api/src/infra/models/claude/',
     'services/api/src/infra/models/tieredChatModel.ts',
     'services/api/src/wiring/sonnetWiring.ts',
-    // Syzygy ADR-0008 stage 3 (`docs/mind-workspace-contract.md`): perception, attention (the proactive gate among it) and the
-    // workspace, every file below each, and the pure package of the stage. The memory outbox and its one writer are the memory
-    // part's (`services/api/src/mind/memory/`, above), so they are memory's from their first file.
+    // Syzygy ADR-0008 stage 3 (`docs/mind-workspace-contract.md`): perception, attention (the proactive gate among it), the workspace, every
+    // file below each, and the stage's pure package. The memory outbox and its writer are memory's (`services/api/src/mind/memory/`, above).
     'services/api/src/mind/perception/',
     'services/api/src/mind/attention/',
     'services/api/src/mind/workspace/',

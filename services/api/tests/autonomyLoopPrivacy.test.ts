@@ -768,7 +768,12 @@ describe('her own time\'s dedicated model boundary', () => {
       }
     };
     walk('services/api/src/mind/action/ownTime/autonomyTextModel.ts');
-    expect(sdkImporters.sort()).toEqual(['services/api/src/infra/models/anthropic/haikuCache.ts', 'services/api/src/mind/action/ownTime/anthropicAutonomyTextModel.ts']);
+    // ADR-0009 stage 1 (M3): the pinned client factory and the shared usage counts; nothing of the conversation's transport.
+    expect(sdkImporters.sort()).toEqual(['services/api/src/infra/models/anthropic/haikuCache.ts', 'services/api/src/infra/models/claude/claudeClient.ts',
+      'services/api/src/infra/models/claude/claudeUsage.ts', 'services/api/src/mind/action/ownTime/anthropicAutonomyTextModel.ts']);
+    expect([...seen].filter(path => path.includes('/infra/models/claude/')).sort()).toEqual([
+      'services/api/src/infra/models/claude/claudeClient.ts', 'services/api/src/infra/models/claude/claudeUsage.ts',
+    ]);
     expect([...seen].filter(path => path.includes('/infra/models/anthropic/')).sort()).toEqual([
       'services/api/src/infra/models/anthropic/anthropicConfig.ts', 'services/api/src/infra/models/anthropic/haikuCache.ts', 'services/api/src/infra/models/anthropic/haikuConfig.ts',
     ]);

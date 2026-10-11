@@ -1,5 +1,5 @@
 import { estimatedOpenAICostUsd, type LlmUsageLane, type LlmUsageStore } from './llmUsage.js';
-import { anthropicPrices } from './anthropic/anthropicConfig.js';
+import { unknownCostUpperBound } from './claude/claudeUsage.js';
 import { usesOneHourAnthropicCache } from './anthropic/haikuConfig.js';
 
 /** Only the new FCA path rejects incomplete usage; known counts have already reached its existing ledger. */
@@ -24,9 +24,8 @@ export async function backgroundModelAttempt<T>(options: {
   catch (error) {
     const status = error && typeof error === 'object' && 'status' in error ? Number(error.status) : 0;
     if (options.signal && !recorded && !(status >= 400 && status < 500)) {
-      const prices = usesOneHourAnthropicCache(options.model) ? anthropicPrices(options.model, 1_000_000) : null;
       // A lost request has no trustworthy token count. Same full-context upper bound as the native FCA adapter.
-      const estimatedCostUsd = prices ? prices.cacheWrite1h + options.maxOutputTokens * prices.output / 1_000_000
+      const estimatedCostUsd = usesOneHourAnthropicCache(options.model) ? unknownCostUpperBound(options.model, options.maxOutputTokens)
         : estimatedOpenAICostUsd(options.model, { inputTokens: 1_000_000, cachedInputTokens: 0,
           outputTokens: options.maxOutputTokens, totalTokens: 1_000_000 + options.maxOutputTokens });
       options.usageStore?.recordLlmUsage({ scopeKey: options.scopeKey, lane: options.lane, model: options.model,

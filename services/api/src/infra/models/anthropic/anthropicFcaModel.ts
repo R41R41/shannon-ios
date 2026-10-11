@@ -1,12 +1,13 @@
-import { recordCacheReceipt } from './cacheReceipts.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { shannonIdentityPrompt, SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_PROGRESS_CAPABILITY } from '@shannon/cognition';
 import type { FcaDecision, FcaModel, FcaModelInput, FcaModelOutput } from '../../../mind/action/fca/fcaPorts.js';
 import { providerToolName } from '../../../mind/tools/toolRegistryPorts.js';
-import { anthropicPrices, estimatedAnthropicCostUsd } from './anthropicConfig.js';
+import { estimatedAnthropicCostUsd, knownCount, tokenCount, unknownCostUpperBound } from '../claude/claudeUsage.js';
+import { claudeClient } from '../claude/claudeClient.js';
+import { sendClaudeOnce } from '../claude/claudeOnce.js';
 import { AnthropicUsageEvidenceError, cacheHaikuRequest, validateHaikuCacheUsage } from './haikuCache.js';
 import { DEFAULT_HAIKU_MODEL, isAppendOnlyAnthropicModel, usesOneHourAnthropicCache } from './haikuConfig.js';
-import { observeAsync, observeSync, observerHandoff } from '../../observer/observerContext.js';
+import { observeSync } from '../../observer/observerContext.js';
 import { observedAnthropicResponse, observedToolName } from './observerProjection.js';
 import { FCA_MENU_INSTRUCTIONS, isFcaToolChangeMessage, nativeFcaTools } from './anthropicFcaTools.js';
 import { decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL } from './anthropicFcaContext.js';
@@ -75,10 +76,7 @@ export class AnthropicFcaModel implements FcaModel {
     if (!usesOneHourAnthropicCache(this.model) || !positiveInteger(this.maximumOutputTokens) || this.maximumOutputTokens > 128_000
       || !positiveInteger(this.timeoutMilliseconds) || typeof options.recordUsage !== 'function') throw new Error('FCA_MODEL_CONFIG_INVALID');
     if (!options.client && !options.apiKey?.trim()) throw new Error('ANTHROPIC_API_KEY_REQUIRED');
-    this.client = options.client ?? new Anthropic({
-      apiKey: options.apiKey!, authToken: null, webhookKey: null, baseURL: 'https://api.anthropic.com',
-      maxRetries: 0, timeout: this.timeoutMilliseconds, logLevel: 'off', ...(options.fetcher ? { fetch: options.fetcher } : {}),
-    });
+    this.client = options.client ?? claudeClient({ apiKey: options.apiKey!, timeoutMilliseconds: this.timeoutMilliseconds, fetch: options.fetcher });
     this.system = `${shannonIdentityPrompt()}\n\n${SHANNON_FCA_TASK_CAPABILITY.text}\n\n${STEP_INSTRUCTIONS}`;
   }
 
@@ -106,16 +104,20 @@ export class AnthropicFcaModel implements FcaModel {
     let message: Anthropic.Message, dispatched = false;
     const execution = currentActionExecution();
     try {
-      observerHandoff('native', 'llm', { model: this.model });
-      message = await observeAsync('llm', observedFcaRequest(body),
-        async () => {
+      message = await sendClaudeOnce({
+        body, receipt: 'fca', message: value => value,
+        span: { handoff: { model: this.model }, input: observedFcaRequest(body), project: observedFcaResponse, model: this.model },
+        dispatching: () => {
           // The runner just rechecked audience, sources and its awaited lease permit. Keep dispatch synchronous.
           combined.throwIfAborted();
           dispatched = true;
-          if (execution) { execution.modelOutcome = 'unknown'; delete execution.modelUsage; }
-          return this.client.messages.create(body, { signal: combined, maxRetries: 0,
-            ...(input.catalog ? { headers: { 'anthropic-beta': 'inline-tools-2026-09-15' } } : {}) });
-        }, observedFcaResponse, { model: this.model });
+          if (!execution) return;
+          execution.modelOutcome = 'unknown';
+          delete execution.modelUsage;
+        },
+        dispatch: () => this.client.messages.create(body, { signal: combined, maxRetries: 0,
+          ...(input.catalog ? { headers: { 'anthropic-beta': 'inline-tools-2026-09-15' } } : {}) }),
+      });
     } catch (error) {
       // No hidden resend, including after an abort. Never expose provider error text containing request material.
       if (!dispatched) throw new Error(combined.aborted ? 'FCA_MODEL_ABORTED' : 'FCA_MODEL_NOT_DISPATCHED');
@@ -127,7 +129,6 @@ export class AnthropicFcaModel implements FcaModel {
       throw new Error(combined.aborted ? 'FCA_MODEL_ABORTED' : 'FCA_MODEL_RESPONSE_UNKNOWN');
     }
     const usage = this.usage(message.usage);
-    recordCacheReceipt('fca', body, message.usage);
     await this.options.recordUsage(usage);
     if (!usage.usageComplete) throw new AnthropicUsageEvidenceError('HAIKU_RESPONSE_USAGE_INVALID');
     if (execution) { execution.modelOutcome = 'acknowledged'; execution.modelUsage = { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }; }
@@ -169,11 +170,9 @@ export class AnthropicFcaModel implements FcaModel {
     const total = input + counts.output;
     const complete = [native?.input_tokens, native?.output_tokens, native?.cache_creation_input_tokens, native?.cache_read_input_tokens].every(tokenCount)
       && Number.isSafeInteger(total);
-    const upperPrice = anthropicPrices(this.model, 1_000_000);
     return { model: this.model, usageComplete: complete, inputTokens: input, cachedInputTokens: counts.cacheRead,
       cacheCreationInputTokens: counts.cacheWrite, outputTokens: counts.output, totalTokens: total,
-      estimatedCostUsd: Math.max(estimatedAnthropicCostUsd(this.model, counts), complete ? 0
-        : upperPrice.cacheWrite1h + this.maximumOutputTokens * upperPrice.output / 1_000_000),
+      estimatedCostUsd: Math.max(estimatedAnthropicCostUsd(this.model, counts), complete ? 0 : unknownCostUpperBound(this.model, this.maximumOutputTokens)),
     };
   }
 }
@@ -231,6 +230,4 @@ function decodeDecision(content: Anthropic.ContentBlock[], names: Map<string, st
 
 function object(value: unknown): Record<string, unknown> | null { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null; }
 function nonempty(value: unknown): value is string { return typeof value === 'string' && value.trim().length > 0; }
-function tokenCount(value: unknown): value is number { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0; }
-function knownCount(value: unknown): number { return tokenCount(value) ? value : 0; }
 function positiveInteger(value: number): boolean { return Number.isSafeInteger(value) && value > 0; }

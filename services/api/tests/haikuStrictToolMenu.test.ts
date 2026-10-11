@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { rejectionCounts } from '../src/infra/models/anthropic/anthropicRejection.js';
 import { AnthropicChatModel } from '../src/infra/models/anthropic/anthropicChatModel.js';
-import { estimatedAnthropicCostUsd } from '../src/infra/models/anthropic/anthropicConfig.js';
+import { estimatedAnthropicCostUsd } from '../src/infra/models/claude/claudeUsage.js';
 import type { LlmUsageEvent } from '../src/infra/models/llmUsage.js';
 import { menuCandidatesOf, offerWithMenu, startToolMenu, withToolMenu } from '../src/mind/tools/shannonToolMenu.js';
 import { JevChoiceClient, JevChooser, type JevChoiceTrace } from '../src/infra/models/jev/jevChoice.js';

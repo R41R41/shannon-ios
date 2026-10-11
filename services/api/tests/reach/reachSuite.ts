@@ -15,7 +15,8 @@ import { REACH_YEN_PER_USD, ReachUsage, scriptedShiritoriDriver, shiritoriDriver
 import { pendingRegistryDriver, scriptedThreeToolsDriver } from './reachTools.js';
 import { cognitionDrivers } from './reachCognition.js';
 import { tierDrivers } from './reachTier.js';
-import { anthropicApiKey, anthropicPrices, sonnetSettings } from '../../src/infra/models/anthropic/anthropicConfig.js';
+import { anthropicApiKey, sonnetSettings } from '../../src/infra/models/anthropic/anthropicConfig.js';
+import { anthropicPrices } from '../../src/infra/models/claude/claudeUsage.js';
 import { skillDrivers } from './reachSkills.js';
 import { recallDrivers } from './reachRecall.js';
 import { mindDrivers } from './reachMind.js';
