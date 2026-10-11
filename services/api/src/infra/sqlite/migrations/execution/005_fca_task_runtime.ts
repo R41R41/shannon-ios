@@ -1,9 +1,11 @@
+// Never edit a step once it may have been applied anywhere: its checksum is pinned and a changed step stops every process at
+// boot (SHANNON_SCHEMA_STEP_CHANGED). Add a new step instead.
 import type { SchemaStep } from '../schemaSteps.js';
 
 /**
  * The subordinate tables of the common task runtime, moved verbatim at 88d7bfd0 in the order its constructor ran them:
  * `taskRuntimeSchema.ts`, then the progress, source, history, maintenance and conversation-delivery stores. A later column
- * is added only when it is missing, as before. Applied by `SQLiteTaskRuntimeStore` (and by each of those stores).
+ * is added only when it is missing, as before. Applied by `SQLiteTaskRuntimeStore`.
  */
 export const FCA_TASK_RUNTIME_STEP: SchemaStep = {
   id: 'execution/005_fca_task_runtime',

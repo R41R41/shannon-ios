@@ -1,3 +1,5 @@
+// Never edit a step once it may have been applied anywhere: its checksum is pinned and a changed step stops every process at
+// boot (SHANNON_SCHEMA_STEP_CHANGED). Add a new step instead.
 import type { SchemaStep } from '../schemaSteps.js';
 
 /**

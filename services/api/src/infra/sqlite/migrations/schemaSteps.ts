@@ -35,18 +35,37 @@ const LEDGER = `CREATE TABLE IF NOT EXISTS shannon_schema_steps(id TEXT PRIMARY 
 const checksums = new WeakMap<SchemaStep, string>();
 const known = new WeakMap<DatabaseSync, Set<string>>();
 
-/** The sha256 of a step's operations: any change to its text changes it. */
+/** Whitespace never counts: a run of it is one space, and the ends are trimmed. */
+function normalised(text: string): string {
+  return text.replace(/\s+/gu, ' ').trim();
+}
+
+function normalisedOperation(operation: SchemaOperation): SchemaOperation {
+  if ('sql' in operation) return { sql: normalised(operation.sql) };
+  if ('requireTable' in operation) {
+    return { requireTable: { table: normalised(operation.requireTable.table), error: normalised(operation.requireTable.error) } };
+  }
+  const { table, column, definition } = operation.addColumn;
+  return { addColumn: { table: normalised(table), column: normalised(column), definition: normalised(definition) } };
+}
+
+/**
+ * The sha256 of a step's operations with their whitespace normalised: a change of words changes it, a change of indentation
+ * or line breaks does not (`executionSchemaSteps.test.ts` pins each step's value).
+ */
 export function schemaStepChecksum(step: SchemaStep): string {
   const cached = checksums.get(step);
   if (cached) return cached;
-  const checksum = createHash('sha256').update(JSON.stringify(step.operations)).digest('hex');
+  const text = JSON.stringify(step.operations.map(normalisedOperation));
+  const checksum = createHash('sha256').update(text).digest('hex');
   checksums.set(step, checksum);
   return checksum;
 }
 
 /**
  * Applies the steps this connection has not seen yet, in order. A connection that finds every step recorded takes no write
- * lock; the check is made once per connection and step.
+ * lock; the check is made once per connection and step. A step still to apply is refused inside a transaction of the caller
+ * (`SHANNON_SCHEMA_STEP_IN_TRANSACTION:<id>`): its rollback would undo the step after this connection noted it as done.
  */
 export function applySchemaSteps(database: DatabaseSync, steps: readonly SchemaStep[], now = () => new Date().toISOString()): void {
   const seen = known.get(database) ?? new Set<string>();
@@ -55,12 +74,22 @@ export function applySchemaSteps(database: DatabaseSync, steps: readonly SchemaS
   if (!pending.length) return;
   const recorded = recordedChecksums(database);
   const missing = pending.filter(step => !alreadyApplied(step, recorded));
+  if (missing.length && database.isTransaction) throw new Error(`SHANNON_SCHEMA_STEP_IN_TRANSACTION:${missing[0]!.id}`);
   if (missing.length) {
     withBusyTimeout(database, SCHEMA_STEP_BUSY_TIMEOUT_MS, () => {
       underWriteLock(database, null, '', () => applyMissing(database, missing, now()), 'shannon_schema_steps');
     });
   }
   for (const step of pending) seen.add(step.id);
+}
+
+/**
+ * Applies the steps that are not recorded yet inside a write transaction the caller already holds (`BEGIN IMMEDIATE`) and
+ * commits itself. Nothing is remembered for the connection: a rollback leaves the steps to be applied again.
+ */
+export function applySchemaStepsUnderLock(database: DatabaseSync, steps: readonly SchemaStep[], at: string): void {
+  if (!database.isTransaction) throw new Error('SHANNON_SCHEMA_STEP_LOCK_REQUIRED');
+  applyMissing(database, steps, at);
 }
 
 /** The ledger's rows, oldest first (empty before any step was applied). */

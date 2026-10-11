@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,7 +13,9 @@ import { TaskTreeStore } from '../src/mind/action/agentTasks/store/taskTreeStore
 import { SQLiteTaskRuntimeStore } from '../src/mind/action/taskRuntime/store/taskRuntimeStore.js';
 import { SQLiteActionStore } from '../src/mind/action/threads/store/actionStore.js';
 import { recordMindWorkerStart, syncLivenessEpisodes } from '../src/infra/ops/store/livenessStore.js';
-import { applySchemaSteps, appliedSchemaSteps, schemaStepChecksum, SCHEMA_STEP_TABLE } from '../src/infra/sqlite/migrations/schemaSteps.js';
+import {
+  applySchemaSteps, applySchemaStepsUnderLock, appliedSchemaSteps, schemaStepChecksum, SCHEMA_STEP_TABLE, type SchemaStep,
+} from '../src/infra/sqlite/migrations/schemaSteps.js';
 import {
   ACTION_THREADS_STEP, EXECUTION_STEPS, FCA_TASK_AUTHORITY_STEP,
 } from '../src/infra/sqlite/migrations/executionSteps.js';
@@ -261,6 +263,85 @@ describe('the ledger', () => {
   });
 });
 
+/** The checksums of the applied steps, written out: a step that changes in words fails here before it fails a boot. */
+const PINNED: Readonly<Record<string, string>> = {
+  'execution/001_action_threads': 'efc68061f9594628eb100431d46739256af8c6389cc5f87efbc9fe6533a026b8',
+  'execution/002_mind_worker_starts': 'ce21c801fa8a2dc3189d2210d023b7bb9398c3db9a17ab6ed8906aeb0e4f4178',
+  'execution/003_liveness_episodes': 'b261b9ed2b3d03640c8a212f863a48424f0d83820e99cd3c1a0fbb3a4ece3fd4',
+  'execution/004_fca_task_authority': 'c00116c0550b5755bb8a16a673963eadb0f026851394180043ced9564efbeacc',
+  'execution/005_fca_task_runtime': 'afe6a267ad1becc288b14682bc54264e583a1f7c6d5eaf0b4dfa6b6c8912bd55',
+  'execution/006_task_trees': 'f103e9be1f1d2eb571f161ce5a51595365677e4840d5f2cbee41cc91884855eb',
+  'execution/007_fca_touch': '556835eff888206da4e83d5253e9809269aa5a572597eb505f87018dad7bc522',
+};
+
+function reindented(step: SchemaStep): SchemaStep {
+  const spaced = (text: string) => `\n   ${text.replace(/ /gu, '  \n\t')}  `;
+  return { id: step.id, operations: step.operations.map(operation => {
+    if ('sql' in operation) return { sql: spaced(operation.sql) };
+    if ('requireTable' in operation) return { requireTable: { table: operation.requireTable.table, error: ` ${operation.requireTable.error}` } };
+    return { addColumn: { ...operation.addColumn, definition: spaced(operation.addColumn.definition) } };
+  }) };
+}
+
+describe('the pinned checksums', () => {
+  it('are the checksums of the steps as written', () => {
+    expect(Object.fromEntries(EXECUTION_STEPS.map(step => [step.id, schemaStepChecksum(step)]))).toEqual(PINNED);
+  });
+
+  it('do not move with whitespace, and move with words', () => {
+    for (const step of EXECUTION_STEPS) expect(schemaStepChecksum(reindented(step))).toBe(PINNED[step.id]);
+    const first = ACTION_THREADS_STEP.operations[0] as { sql: string };
+    const reworded: SchemaStep = { id: ACTION_THREADS_STEP.id, operations: [{ sql: first.sql.replace('TEXT', 'BLOB') }, ...ACTION_THREADS_STEP.operations.slice(1)] };
+    expect(schemaStepChecksum(reworded)).not.toBe(PINNED[ACTION_THREADS_STEP.id]);
+  });
+
+  it('are what the production check script expects', () => {
+    const path = temporaryPath();
+    buildOld(path, true);
+    const before = `${path}.before.jsonl`;
+    const script = fileURLToPath(new URL('../../../scripts/verify-schema-steps.mjs', import.meta.url));
+    const dump = spawnSync(process.execPath, [script, 'dump', path, before], { encoding: 'utf8' });
+    expect(dump.status).toBe(0);
+    openNew(path).close();
+    const check = spawnSync(process.execPath, [script, 'check', path, before], { encoding: 'utf8' });
+    expect(check.stdout).toContain('SCHEMA_UNCHANGED_AND_LEDGER_PINNED');
+    expect(check.status).toBe(0);
+    const tamper = new DatabaseSync(path);
+    tamper.prepare(`UPDATE ${SCHEMA_STEP_TABLE} SET checksum = 'edited' WHERE id = ?`).run(ACTION_THREADS_STEP.id);
+    tamper.exec('CREATE TABLE unexpected (id TEXT)');
+    tamper.close();
+    const failed = spawnSync(process.execPath, [script, 'check', path, before], { encoding: 'utf8' });
+    expect(failed.status).toBe(1);
+    expect(failed.stdout).toContain(`checksum of ${ACTION_THREADS_STEP.id} is edited`);
+    expect(failed.stdout).toContain('"name":"unexpected"');
+  });
+});
+
+describe('a step inside a transaction of the caller', () => {
+  it('is refused while it still has to be applied, so a rollback cannot leave it noted as done', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec('BEGIN');
+    expect(() => new SQLiteActionStore(db)).toThrow(`SHANNON_SCHEMA_STEP_IN_TRANSACTION:${ACTION_THREADS_STEP.id}`);
+    db.exec('ROLLBACK');
+    new SQLiteActionStore(db);
+    db.exec('BEGIN');
+    expect(() => new SQLiteActionStore(db)).not.toThrow();
+    db.exec('ROLLBACK');
+    expect(appliedSchemaSteps(db).map(step => step.id)).toEqual([ACTION_THREADS_STEP.id]);
+  });
+
+  it('is applied under a lock the caller holds only when asked, and remembered nowhere', () => {
+    const db = new DatabaseSync(':memory:');
+    expect(() => applySchemaStepsUnderLock(db, [ACTION_THREADS_STEP], '2026-10-12T00:00:00.000Z')).toThrow('SHANNON_SCHEMA_STEP_LOCK_REQUIRED');
+    db.exec('BEGIN IMMEDIATE');
+    applySchemaStepsUnderLock(db, [ACTION_THREADS_STEP], '2026-10-12T00:00:00.000Z');
+    db.exec('ROLLBACK');
+    expect(appliedSchemaSteps(db)).toEqual([]);
+    new SQLiteActionStore(db);
+    expect(appliedSchemaSteps(db).map(step => step.id)).toEqual([ACTION_THREADS_STEP.id]);
+  });
+});
+
 const root = fileURLToPath(new URL('../../..', import.meta.url));
 const child = fileURLToPath(new URL('./support/schemaStepsChild.ts', import.meta.url));
 
@@ -312,7 +393,7 @@ describe('two processes opening the file at once', () => {
     const waiting = run(path, marker);
     while (!existsSync(marker)) await delay(20);
     await delay(500);
-    applySchemaSteps(holder, EXECUTION_STEPS, () => '2026-10-12T00:00:00.000Z');
+    applySchemaStepsUnderLock(holder, EXECUTION_STEPS, '2026-10-12T00:00:00.000Z');
     holder.exec('COMMIT');
     const result = await waiting;
     expect(result.error).toBeUndefined();
