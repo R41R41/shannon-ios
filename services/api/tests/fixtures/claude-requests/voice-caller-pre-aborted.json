@@ -1,0 +1,12 @@
+{
+ "scenario": "voice-caller-pre-aborted",
+ "requests": [],
+ "usage": [],
+ "cacheReceipts": [],
+ "outcome": {
+  "error": {
+   "name": "Error",
+   "message": "Request was aborted."
+  }
+ }
+}
