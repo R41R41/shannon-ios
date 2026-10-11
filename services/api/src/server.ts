@@ -94,18 +94,15 @@ import { SQLiteOwnOutreach } from './surfaces/outreach/ownOutreach.js';
 import { ownerCallElsewhereEnabled } from './mind/perception/perceptionPorts.js';
 import { SQLiteOwnerCallFacts } from './mind/perception/store/ownerCallFacts.js';
 import { createServerSelfDiagnosis } from './infra/ops/serverSelfDiagnosis.js';
-import { startLivenessMonitor, withLiveness } from './wiring/livenessWiring.js';
-import { reportSwitches, withSwitches } from './wiring/switchesWiring.js';
+import { configuredOpsServer } from './wiring/opsServerWiring.js';
 import { createMinecraftBodyWiring } from './wiring/serverMinecraftBodyWiring.js';
-import { configuredMind, withMindOps } from './wiring/mindWiring.js';
+import { configuredMind } from './wiring/mindWiring.js';
 import { configuredActionRoutes } from './wiring/serverActionThreadsWiring.js';
 import { isActionThreadPath } from './infra/http/actionThreadRoutes.js';
 import { memoryPortsOf } from './wiring/memoryOutboxWiring.js';
 import { peopleFactReaders } from './wiring/peopleFactsWiring.js';
 import { stage5MemoryStoreOptions } from './wiring/stage5MemoryWiring.js';
 const now = () => new Date().toISOString();
-// The switch table (Syzygy ADR-0009 stage 1): findings are logged once and shown in GET /v1/ops; they never stop the boot.
-const switchWarnings = reportSwitches(process.env, line => console.warn(line));
 // ADR-0008 stage 3: the outbox (F5; the worker writes it), compaction (F7), people facts and the inert trust ledger (F6), by switch.
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now, ...stage5MemoryStoreOptions(process.env) });
 const peopleFacts = peopleFactReaders(persistentStore, now);
@@ -256,15 +253,14 @@ const deviceAuth = authMode === 'paired'
   : null;
 const pairingRoute = createPairingRoute(authMode, deviceAuth);
 const signalObserver = configuredServerObserver(configuredDatabasePath(),kernel,shannonNowOwnerScope(process.env),principal=>minecraft.isGameDevice(principal));
-// Operations console (docs/ops-contract.md). This store is held by the ops route only, never by the kernel. Liveness: sleep, own time, mind restarts.
+// Operations console (docs/ops-contract.md): the store is the ops route's only; opsServer composes the owner's server view.
 const opsStore = new SQLiteOpsStore(configuredDatabasePath());
-const liveness = startLivenessMonitor({ databasePath: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env),
-  ownTimeEnabled: autonomyConfig.enabled, timeZone: autonomyConfig.timeZone, environment: process.env, now });
+const opsServer = configuredOpsServer({ environment: process.env, databasePath: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env),
+  ownTime: autonomyConfig, describe: scope => selfDiagnosis.forScope(scope), mindHost: () => mind?.host ?? null, outbox: persistentStore.memoryOutbox(), now });
 const opsRoute = createOpsRoute({
   store: opsStore, bridge: platformBridge?.configuration ?? null, ingestEnabled: () => opsIngestEnabled(process.env), now,
   commandsEnabled: () => opsCommandsEnabled(process.env), minecraftLifecycle: () => lifecycle?.ops ?? null,
-  server: scopeKey => withSwitches(withLiveness(withMindOps(selfDiagnosis.forScope(scopeKey), { host: mind?.host ?? null, outbox: persistentStore.memoryOutbox(), now }),
-    liveness.view(scopeKey)), switchWarnings),
+  server: scopeKey => opsServer.view(scopeKey),
   device: authorization => deviceAuth ? deviceAuth.authenticate(authorization)
     : bearerAuthorized(authorization, apiToken) ? { scopeKey: null } : null,
 });
@@ -493,7 +489,7 @@ function shutdown(): void {
     ownerUpcoming.close();
     closeBodyLookStores(); closeBodyReactionStores();
     opsStore.close();
-    shannonNowReader.close(); moodHistoryReader.close(); liveness.close();
+    shannonNowReader.close(); moodHistoryReader.close(); opsServer.close();
     ownOutreach.close(); ownerCallFacts.close();
     autonomyStore.close(); modelModes.close();
     persistentStore.close();

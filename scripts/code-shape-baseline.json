@@ -1766,7 +1766,7 @@
       "multi-statement-line": 17,
       "long-function": 1,
       "complex-function": 1,
-      "long-line": 31,
+      "long-line": 30,
       "long-file": 1
     },
     "services/api/src/surfaces/body/apiBodyRoutes.ts": {
