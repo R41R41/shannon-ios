@@ -48,7 +48,7 @@ Both selectable native models require one-hour stable-prefix and growing-convers
 
 Cache/usage evidence failure ends that paid round without another output-repair call. If a tool already ran, its receipt and known usage remain recorded and the existing fixed ending is returned; before any tool or visible answer, the existing safe conversation fallback remains available. Ordinary timeouts and explicit schema-offer rejection retain their original recovery paths.
 
-Exact Sonnet 5.5 future usage is estimated at $2/M input, $10/M output, $2.50/M five-minute write, $4/M one-hour write and $0.10/M read. Missing write TTL uses the conservative one-hour rate. Historical saved costs, unknown reservations and older configured model estimates are not rewritten.
+Exact Sonnet 5.5 future usage is estimated at $2/M input, $10/M output, $2.50/M five-minute write, $4/M one-hour write and $0.20/M read (10% of input; corrected from $0.10 in Syzygy ADR-0009 stage 1). Missing write TTL uses the conservative one-hour rate. Historical saved costs, unknown reservations and older configured model estimates are not rewritten.
 
 ## Verification required
 
