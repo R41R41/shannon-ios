@@ -65,6 +65,23 @@ describe('liveness notices for the owner', () => {
     expect(second[0]!.initiativeId).not.toBe(first[0]!.initiativeId);
   });
 
+  it('does not call a deployment\'s restarts a crash loop, and does count restarts of a settled revision', () => {
+    const h = harness();
+    // A deployment restarts the worker three times within its first ten minutes.
+    for (const minute of ['10', '12', '14']) recordMindWorkerStart(h.db, `2026-10-11T23:${minute}:00.000Z`, 'rev-b');
+    expect(h.monitor().check()?.incidents).toEqual([]);
+    // Later the same revision keeps restarting: that is a crash loop.
+    for (const minute of ['30', '40', '50']) recordMindWorkerStart(h.db, `2026-10-11T23:${minute}:00.000Z`, 'rev-b');
+    expect(h.monitor().check()?.incidents).toEqual(['mind_worker_restarting']);
+  });
+
+  it('shows only her unread messages on the badge, not the status notice', () => {
+    const h = harness();
+    for (let n = 0; n < 3; n++) recordMindWorkerStart(h.db, `2026-10-11T23:${10 + n * 10}:00.000Z`);
+    h.monitor().check();
+    expect(deliverAll(h.push, h.clock.at)[0]!.badgeCount).toBe(0);
+  });
+
   it('sends nothing while every check is quiet', () => {
     const h = harness();
     expect(h.monitor().check()?.incidents).toEqual([]);

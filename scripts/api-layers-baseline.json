@@ -5,7 +5,7 @@
     "ddl-in-migrations": [
       "infra/auth/store/deviceAuthStore.ts -> ddl x3",
       "infra/observer/store/observerStore.ts -> ddl x3",
-      "infra/ops/store/livenessStore.ts -> ddl x2",
+      "infra/ops/store/livenessStore.ts -> ddl x3",
       "infra/ops/store/opsCommandStore.ts -> ddl x5",
       "infra/ops/store/opsStore.ts -> ddl x1",
       "infra/sqlite/mindOwnership.ts -> ddl x1",

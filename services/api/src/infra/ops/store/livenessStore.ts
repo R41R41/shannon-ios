@@ -25,11 +25,46 @@ export interface LivenessFacts {
 
 const KEEP_STARTS_MS = 7 * 86_400_000;
 
-/** Called once by the mind worker after it holds the socket. Additive table; the last week is kept. */
-export function recordMindWorkerStart(db: DatabaseSync, at: string): void {
-  db.exec('CREATE TABLE IF NOT EXISTS mind_worker_starts (started_at TEXT NOT NULL)');
+/** Starts within this long after the first start of a newly deployed revision belong to the deployment, not to a crash loop. */
+const DEPLOY_SETTLE_MS = 10 * 60_000;
+
+/**
+ * Called once by the mind worker after it holds the socket. Additive tables; the last week is kept. The revision (the deployed
+ * `DEPLOYED_REVISION`, or null) lets the liveness check tell a deployment's restarts from a crash loop (ADR-0009 stage 1).
+ */
+export function recordMindWorkerStart(db: DatabaseSync, at: string, revision: string | null = null): void {
+  const cutoff = new Date(Date.parse(at) - KEEP_STARTS_MS).toISOString();
+  db.exec(`CREATE TABLE IF NOT EXISTS mind_worker_starts (started_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS mind_worker_start_revisions (started_at TEXT NOT NULL, revision TEXT)`);
   db.prepare('INSERT INTO mind_worker_starts(started_at) VALUES (?)').run(at);
-  db.prepare('DELETE FROM mind_worker_starts WHERE started_at < ?').run(new Date(Date.parse(at) - KEEP_STARTS_MS).toISOString());
+  db.prepare('INSERT INTO mind_worker_start_revisions(started_at, revision) VALUES (?, ?)').run(at, revision);
+  db.prepare('DELETE FROM mind_worker_starts WHERE started_at < ?').run(cutoff);
+  db.prepare('DELETE FROM mind_worker_start_revisions WHERE started_at < ?').run(cutoff);
+}
+
+type WorkerStarts = LivenessFacts['mindWorkerStarts'];
+
+/** Counts every start, as before the revisions were recorded. */
+function allStarts(db: DatabaseSync, hour: string, day: string): WorkerStarts {
+  const row = db.prepare(`SELECT
+      SUM(CASE WHEN started_at >= ? THEN 1 ELSE 0 END) AS hour,
+      SUM(CASE WHEN started_at >= ? THEN 1 ELSE 0 END) AS day,
+      MAX(started_at) AS last
+    FROM mind_worker_starts`).get(hour, day);
+  return { lastHour: Number(row?.hour ?? 0), lastDay: Number(row?.day ?? 0), lastAt: text(row?.last) };
+}
+
+/** Counts the starts that are not part of a deployment: a known revision's starts in its first 10 minutes are left out. */
+function restartsBeyondDeploys(db: DatabaseSync, hour: string, day: string): WorkerStarts {
+  const firsts = new Map(db.prepare(`SELECT revision, MIN(started_at) AS first FROM mind_worker_start_revisions
+    WHERE revision IS NOT NULL GROUP BY revision`).all().map(row => [String(row.revision), String(row.first)]));
+  const rows = db.prepare('SELECT started_at, revision FROM mind_worker_start_revisions WHERE started_at >= ?').all(day);
+  const counted = rows.filter(row => {
+    const first = row.revision === null ? undefined : firsts.get(String(row.revision));
+    return first === undefined || Date.parse(String(row.started_at)) - Date.parse(first) > DEPLOY_SETTLE_MS;
+  }).map(row => String(row.started_at));
+  const last = allStarts(db, hour, day).lastAt;
+  return { lastHour: counted.filter(at => at >= hour).length, lastDay: counted.length, lastAt: last };
 }
 
 function hasTable(db: DatabaseSync, name: string): boolean {
@@ -68,11 +103,9 @@ export function readLivenessFacts(db: DatabaseSync, ownerScope: string, at: stri
     ? db.prepare('SELECT next_cycle_at, budget_blocked_day FROM autonomy_loop_schedule WHERE scope_key = ?').get(ownerScope) : undefined;
   const control = hasTable(db, 'autonomy_control')
     ? db.prepare('SELECT paused FROM autonomy_control WHERE scope_key = ?').get(ownerScope) : undefined;
-  const starts = hasTable(db, 'mind_worker_starts') ? db.prepare(`SELECT
-      SUM(CASE WHEN started_at >= ? THEN 1 ELSE 0 END) AS hour,
-      SUM(CASE WHEN started_at >= ? THEN 1 ELSE 0 END) AS day,
-      MAX(started_at) AS last
-    FROM mind_worker_starts`).get(hour, day) : undefined;
+  const noStarts: WorkerStarts = { lastHour: 0, lastDay: 0, lastAt: null };
+  const recorded = hasTable(db, 'mind_worker_starts') ? allStarts(db, hour, day) : noStarts;
+  const starts = hasTable(db, 'mind_worker_start_revisions') ? restartsBeyondDeploys(db, hour, day) : recorded;
   return {
     lastSleepCompletedAt: text(lastSleep?.at),
     oldestDueSleepAt: text(dueSleep?.at),
@@ -81,7 +114,7 @@ export function readLivenessFacts(db: DatabaseSync, ownerScope: string, at: stri
     ownTimePaused: Number(control?.paused ?? 0) === 1,
     ownTimeResumeAt: text(resume?.resume_at), ownTimeNextCycleAt: text(schedule?.next_cycle_at),
     ownTimeSessionsOnDay: Number(today?.count ?? 0), ownTimeBudgetBlockedDay: text(schedule?.budget_blocked_day),
-    mindWorkerStarts: { lastHour: Number(starts?.hour ?? 0), lastDay: Number(starts?.day ?? 0), lastAt: text(starts?.last) },
+    mindWorkerStarts: starts,
   };
 }
 

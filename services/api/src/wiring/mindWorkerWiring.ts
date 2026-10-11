@@ -11,6 +11,7 @@ import { checkedMindEvent } from '../mind/perception/perceptionPorts.js';
 import type { ActionAcknowledgement } from '../contracts/actionThreadContract.js';
 import { isSqliteBusy, throttledLog } from '../infra/sqlite/sqliteBusy.js';
 import { recordMindWorkerStart } from '../infra/ops/store/livenessStore.js';
+import { deployedRevision } from '../infra/ops/deployedRevision.js';
 
 /** Below MIND_IPC_LIMITS.timeoutMs (1 s): a caller's deadline outlasts this worker's longest wait for the write lock. */
 export const MIND_WORKER_BUSY_TIMEOUT_MS=750;
@@ -95,7 +96,12 @@ export async function configuredMindWorker(values:Readonly<Record<string,string|
   });
   } catch(error) { db.close();throw error; }
   try { const owned=hostFactory();host=owned.host;closeHost=owned.close; } catch(error) { await socket.close();db.close();throw error; }
-  try { recordMindWorkerStart(db,now()); } catch(error) { if(!isSqliteBusy(error))throw error; log('Shannon mind start not recorded: database busy'); }
+  try {
+    recordMindWorkerStart(db,now(),deployedRevision());
+  } catch(error) {
+    if(!isSqliteBusy(error))throw error;
+    log('Shannon mind start not recorded: database busy');
+  }
   const sweep=setInterval(()=>sweepActions(actions,now(),log,busyLog),1_000);sweep.unref();
   return {actions,close:async()=>{clearInterval(sweep);await socket.close();closeHost();db.close();}};
 }

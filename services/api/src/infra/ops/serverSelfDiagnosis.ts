@@ -11,8 +11,6 @@
  * (`SHANNON_JEV_MODEL`), so this check is the one that holds for every name here.
  */
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { SHANNON_ONE_LINE_VOICE, looksSecret, shannonCapabilityPrompt, shannonPersonaPrompt, shannonSuitePrompt } from '@shannon/cognition';
 import { configuredAutonomy } from '../../mind/inhibition/autonomyBudget.js';
 import { ownerDocumentsEnabled } from '../../mind/action/ownTime/autonomyLoopConfig.js';
@@ -32,9 +30,9 @@ type Environment = Readonly<Record<string, string | undefined>>;
 
 export const SELF_DIAGNOSIS_SCHEMA_VERSION = 1 as const;
 /** The file the deployment writes next to the deployed source (the service's working directory). */
-export const DEPLOYED_REVISION_FILE = 'DEPLOYED_REVISION';
+export { DEPLOYED_REVISION_FILE, deployedRevision } from './deployedRevision.js';
+import { deployedRevision } from './deployedRevision.js';
 const PERSONA_HASH_LENGTH = 12;
-const REVISION = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$/u;
 /** The rule the chat model's name is held to (`validModel` in `chatModelSupport.ts`). */
 const MODEL_NAME = /^[A-Za-z0-9._:-]{1,100}$/u;
 const LONG_RUN = /[A-Za-z0-9_]{32,}/gu;
@@ -115,15 +113,6 @@ export function personaHash(source = personaHashSource()): string {
   return createHash('sha256').update(source, 'utf8').digest('hex').slice(0, PERSONA_HASH_LENGTH);
 }
 
-/** The first word of the file the deployment writes, when it looks like a revision; otherwise null. */
-export function deployedRevision(path = resolve(process.cwd(), DEPLOYED_REVISION_FILE)): string | null {
-  try {
-    const word = readFileSync(path, 'utf8').trim().split(/\s+/u)[0] ?? '';
-    return REVISION.test(word) ? word : null;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * A model name as it may be shown: it matches the chat model's name rule and is not credential-shaped (the

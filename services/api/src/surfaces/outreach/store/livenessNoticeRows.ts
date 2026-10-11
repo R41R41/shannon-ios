@@ -16,7 +16,7 @@ export interface LivenessNoticeQuery {
  */
 export function pendingLivenessNotices(db: DatabaseSync, query: LivenessNoticeQuery): PendingPushNotification[] {
   if (!tableExists(db, LIVENESS_EPISODE_TABLE)) return [];
-  // The badge counts her unread messages as the other notices do, plus this one.
+  // The badge shows her unread messages only: a status notice is not a message of hers.
   const unread = tableExists(db, 'initiative_messages')
     ? '(SELECT COUNT(*) FROM initiative_messages unread WHERE unread.scope_key = pr.scope_key AND unread.read_at IS NULL)' : '0';
   const rows = db.prepare(`
@@ -45,7 +45,7 @@ export function pendingLivenessNotices(db: DatabaseSync, query: LivenessNoticeQu
       content,
       expression: 'neutral',
       createdAt: String(row.opened_at),
-      badgeCount: Math.max(1, Math.min(99, Number(row.unread) + 1)),
+      badgeCount: Math.max(0, Math.min(99, Number(row.unread))),
     }];
   });
 }
