@@ -1,3 +1,4 @@
+import { switchOn } from '@shannon/switches';
 import { createOpsMinecraftLifecycle } from './opsMinecraftLifecycleWiring.js';
 import { opsLifecycleAuthorityAllowed } from '../infra/ops/store/opsLifecycleAuthority.js';
 import type { OpsCommandStore } from '../infra/ops/store/opsCommandStore.js';
@@ -24,7 +25,7 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
   ops?: { commands: OpsCommandStore; actions: ActionThreads; enabled(): boolean };
   taskAllowed(executionId: string): boolean; taskSources?(executionId: string): readonly string[] | null; now?(): string;
 }) {
-  if (values.SHANNON_MINECRAFT_LIFECYCLE !== 'on') return null;
+  if (!switchOn(values, 'SHANNON_MINECRAFT_LIFECYCLE')) return null;
   const configuration = configuredMinecraftBody(values);
   if (!configuration || !stage4Enabled(values)) throw new Error('MINECRAFT_LIFECYCLE_CONFIG_REQUIRED');
   const now = parts.now ?? (() => new Date().toISOString());
