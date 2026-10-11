@@ -87,7 +87,7 @@ export function tierRequest(decision: TierDecision | null, voiceRemainingMs?: nu
  * The luna checker runs only on text, when the policy asked for verification and enough of the turn is left.
  */
 export async function finishTurn(routing: TurnRouting | null | undefined, turn: {
-  scopeKey: string; surface: 'text' | 'voice'; threadId: string; presence: 'alone' | 'others'; reply: string; outOfTime: boolean; escalated: boolean;
+  scopeKey: string; surface: 'text' | 'voice'; threadId: string; presence: 'alone' | 'others'; reply: string; outOfTime: boolean;
   decision: RoutedTier | null; tools: ShannonModelToolSession | undefined; remainingMs: number; at: string;
   /** The answering model's mode (`anthropic` for Sonnet): a `sonnet` turn that luna answered is learned as luna's (review M5). */
   answeredBy?: string;
@@ -107,9 +107,9 @@ export async function finishTurn(routing: TurnRouting | null | undefined, turn: 
       if (checked === 'claims_unsupported') verdict = 'checker_flagged';
     }
   }
-  // The tier that actually answered (review M5): a Sonnet turn that fell back to luna is luna's; an escalated luna turn is luna_plus.
-  const served = turn.decision ? (turn.servedTier ?? (turn.decision.served === 'sonnet' && turn.answeredBy !== undefined && turn.answeredBy !== 'anthropic' ? 'luna'
-    : turn.escalated && turn.decision.served === 'luna' ? 'luna_plus' : turn.decision.served)) : null;
+  // The tier that answered (review M5): a Sonnet turn that fell back to luna is luna's. Mid-turn escalation is gone (ADR-0009 stage 1).
+  const fellBack = turn.decision?.served === 'sonnet' && turn.answeredBy !== undefined && turn.answeredBy !== 'anthropic';
+  const served = turn.decision ? (turn.servedTier ?? (fellBack ? 'luna' : turn.decision.served)) : null;
   const reply = verdict && turn.surface === 'text' ? verifiedReply(turn.reply, verdict) : turn.reply;
   const feedbackReply = `${reply.trim()}${turn.surface === 'voice' ? turn.feedbackReplySuffix ?? '' : ''}`;
   const recordId = routing.feedbackEnabled && turn.presence === 'alone' ? randomUUID() : undefined;

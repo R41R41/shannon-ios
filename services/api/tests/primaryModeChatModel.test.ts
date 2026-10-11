@@ -45,14 +45,15 @@ class RecordingModel implements ShannonChatModel {
 }
 
 describe('primary selection without changing auxiliary or safety boundaries', () => {
-  it('serves every Haiku turn at luna_plus without escalation, and never promotes to Sonnet (owner answer 3, ADR-0009 stage 1)', async () => {
+  it('serves every Haiku turn at luna_plus without escalation, learns it by its decision tier, and never promotes to Sonnet (ADR-0009 stage 1)', async () => {
     const store = new SQLiteModelModeStore(path()), haiku = new RecordingModel('claude-haiku-5-5'), sonnet = new RecordingModel('claude-sonnet-5-5');
     const primary = new PrimaryModeChatModel(store, haiku, sonnet);
     expect(await primary.generate({ ...request, tier: 'sonnet', escalation: true, firstTokenBudgetMs: 1 })).toMatchObject({ model: haiku.model, servedTier: 'luna_plus' });
     expect(haiku.seen[0]).toMatchObject({ tier: 'luna_plus' });
     expect(haiku.seen[0]).not.toHaveProperty('escalation');
     expect(haiku.seen[0]).not.toHaveProperty('firstTokenBudgetMs');
-    expect(await primary.generate({ ...request, tier: undefined })).toMatchObject({ servedTier: 'luna_plus' });
+    // The learning key stays the decision tier, so luna and luna_plus cells are not mixed (review of ADR-0009 stage 1).
+    expect(await primary.generate({ ...request, tier: undefined })).toMatchObject({ servedTier: 'luna' });
     expect(haiku.seen[1]).toMatchObject({ tier: 'luna_plus' });
     haiku.result = { servedTier: 'luna_plus' };
     expect(await primary.generate(request)).toMatchObject({ servedTier: 'luna_plus' });
@@ -69,7 +70,7 @@ describe('primary selection without changing auxiliary or safety boundaries', ()
     const result = await primary.generate({ ...request, escalation: true,
       tools: { definitions: [shannonTool('study.list')!], maximumCalls: 6, deadline: new TurnDeadline(TEXT_TURN_DEADLINE),
         call: async () => JSON.stringify({ ok: false, failure: 'failed', retryable: true, text: '合成失敗' }) } });
-    expect(result).toMatchObject({ model: 'claude-haiku-5-5', servedTier: 'luna_plus' });
+    expect(result).toMatchObject({ model: 'claude-haiku-5-5', servedTier: 'luna' });
     expect(result).not.toHaveProperty('escalated');
     expect(fixture.bodies.map(body => (body.output_config as { effort: string }).effort)).toEqual(['medium', 'medium']);
     expect(fixture.bodies.every(body => body.model === 'claude-haiku-5-5')).toBe(true); store.close();
@@ -182,7 +183,7 @@ describe('primary selection without changing auxiliary or safety boundaries', ()
     const routing = { switches: { turnVerify: false }, record: (_scope: string, event: unknown) => records.push(event) } as unknown as TurnRouting;
     const decision = { tier: 'luna', served: 'luna', reason: 'plain', mappedDown: 'none', rethinks: 0, verify: true, escalateOnTrouble: true, kind: 'analysis' } as const;
     for (const servedTier of ['sonnet', 'luna_plus', 'luna'] as const) await finishTurn(routing, { scopeKey: 'owner', surface: 'text', threadId: 'synthetic', presence: 'alone', reply: '返事',
-      outOfTime: false, escalated: servedTier === 'luna_plus', decision, tools: undefined, remainingMs: 30000, at: '2026-10-09T00:00:00Z', servedTier });
+      outOfTime: false, decision, tools: undefined, remainingMs: 30000, at: '2026-10-09T00:00:00Z', servedTier });
     expect(records.map(event => event.tier.served)).toEqual(['sonnet', 'luna_plus', 'luna']);
   });
 });

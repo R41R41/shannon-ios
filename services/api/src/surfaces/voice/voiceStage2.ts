@@ -35,7 +35,7 @@ export async function voiceFinished(routing: TurnRouting, turn: {
   onFeedbackRecord?: (recordId: string) => void;
 }): Promise<string> {
   const finished = await finishTurn(routing, { scopeKey: turn.scopeKey, surface: 'voice', threadId: turn.threadId, presence: turn.alone ? 'alone' : 'others', reply: turn.reply,
-    outOfTime: turn.completion.outOfTime === true, escalated: turn.completion.escalated === true, decision: turn.tier, tools: turn.tools,
+    outOfTime: turn.completion.outOfTime === true, decision: turn.tier, tools: turn.tools,
     remainingMs: turn.deadline.left(), at: turn.at, answeredBy: turn.completion.mode, servedTier: turn.completion.servedTier, feedbackReplySuffix: turn.feedbackReplySuffix });
   if (finished.feedbackRecordId) turn.onFeedbackRecord?.(finished.feedbackRecordId);
   return finished.reply;

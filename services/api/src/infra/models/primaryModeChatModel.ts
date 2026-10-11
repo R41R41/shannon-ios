@@ -2,6 +2,10 @@ import type { ModelModeStore, PrimaryModelMode } from '../../contracts/modelMode
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest, ShannonChatModelResult } from './chatModel.js';
 import { VOICE_SONNET_FIRST_TOKEN } from '../../mind/action/respond/turnRouting.js';
 
+type Tier = 'luna' | 'luna_plus' | 'sonnet';
+/** The routing decision as the learning key: a Sonnet-hard turn is learned as luna_plus, the rest as luna. */
+const decisionTier = (tier: Tier | undefined): Tier => tier === 'luna_plus' || tier === 'sonnet' ? 'luna_plus' : 'luna';
+
 type Request = ShannonChatModelRequest | ShannonVoiceModelRequest;
 /** A fixed view is captured at turn admission, before recall/Jev awaits; each round and fallback uses that same view. */
 export class PrimaryModeChatModel implements ShannonChatModel {
@@ -45,7 +49,9 @@ class PinnedPrimaryModel implements ShannonChatModel {
     return { ...rest, tier: 'sonnet', ...(firstTokenBudgetMs !== undefined ? { firstTokenBudgetMs } : {}) } as T;
   }
   private served(result: ShannonChatModelResult, request: Request): ShannonChatModelResult {
-    return this.requested === 'haiku' ? { ...result, servedTier: result.servedTier ?? 'luna_plus' } : result;
+    // Haiku always answers at medium now, so its served tier would say nothing: the decision tier stays the learning key,
+    // keeping the luna and luna_plus competence and value cells apart (review of ADR-0009 stage 1).
+    return this.requested === 'haiku' ? { ...result, servedTier: result.servedTier ?? decisionTier(request.tier) } : result;
   }
   async generate(request: ShannonChatModelRequest) { return this.served(await this.primary.generate(this.request(request)), request); }
   async generateStreaming(request: ShannonChatModelRequest, listener: (text: string) => void | Promise<void>) {

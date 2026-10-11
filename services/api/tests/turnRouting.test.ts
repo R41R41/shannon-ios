@@ -216,7 +216,7 @@ describe('a routed conversation turn', () => {
     const w = world();
     const decision = { tier: 'sonnet', served: 'sonnet', reason: 'strong', mappedDown: 'none', rethinks: 0, verify: false, escalateOnTrouble: false, kind: 'analysis' } as const;
     const finish = (answeredBy: string, threadId: string, servedTier?: 'luna' | 'sonnet') => finishTurn(w.routing, { scopeKey: 'owner', surface: 'text', threadId, presence: 'alone', reply: 'はい。', outOfTime: false,
-      escalated: false, decision, tools: undefined, remainingMs: 30_000, at: at(0), answeredBy, servedTier });
+      decision, tools: undefined, remainingMs: 30_000, at: at(0), answeredBy, servedTier });
     await finish('openai', 'fell-back');
     await finish('anthropic', 'sonnet');
     await finish('anthropic', 'haiku-fell-back', 'luna');
