@@ -1,10 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { ACTION_CODE, ACTION_ID, ACTION_LIMITS, ACTION_TERMINAL, validActionDraft, type ActionDraft, type ActionLease, type ActionState, type ActionView } from '@shannon/mind';
+import {
+  ACTION_CODE, ACTION_ID, ACTION_LIMITS, ACTION_TERMINAL, LEASE_RULES, leaseLive, validActionDraft,
+  type ActionDraft, type ActionLease, type ActionView,
+} from '@shannon/mind';
 import type { ActionAcknowledgement } from '../../../../contracts/actionThreadContract.js';
 import {
   ensureRetainedResourceSchema, knownRelease, recordRetained, releaseRetained, retainedActionIds, retainedOf, type RetainedRelease,
 } from './retainedResourceStore.js';
+import { actionView as view } from './actionLeaseReader.js';
 export type ActionResourceReconciliationAllowed=(lease:ActionLease,resource:string,acknowledgementId:string)=>boolean;
 /**
  * A resource that only a release proof may free, even after the unknown deadline: a closing canonical report, or a domain proof
@@ -183,9 +187,7 @@ export class SQLiteActionStore {
   }
   check(lease: ActionLease, at: string): ActionView | null {
     const action = this.get(lease.id);
-    return action && action.generation === lease.generation && action.holder === lease.holder
-      && action.leaseUntil !== null && Date.parse(action.leaseUntil) > Date.parse(at)
-      && ['running','waiting'].includes(action.state) && (!action.deadline || Date.parse(action.deadline)>Date.parse(at)) ? action : null;
+    return action && leaseLive(action,lease,at,LEASE_RULES.store) ? action : null;
   }
   renew(lease: ActionLease, at: string, progress?: string): ActionView | null {
     if (progress && !ACTION_CODE.test(progress)) throw new Error('ACTION_PROGRESS');
@@ -281,8 +283,7 @@ export class SQLiteActionStore {
       this.sweep(at);
       const action=this.get(lease.id);
       if(!action)return false;
-      const live=action.generation===lease.generation && action.holder===lease.holder && action.leaseUntil!==null
-        && action.leaseUntil>at && ['running','waiting','stopping'].includes(action.state);
+      const live=leaseLive(action,lease,at,LEASE_RULES.live);
       // A late canonical report can settle only this immediately previous attempt, never a newer holder's charge.
       const acknowledged=actual!==null && action.generation===lease.generation+1 && action.lastHolder===lease.holder
         && (action.state==='unknown' || action.state==='cancelled' && !action.sent && actual===0);
@@ -420,10 +421,4 @@ export class SQLiteActionStore {
     const recorded=retainedOf(this.db,action.id);
     return action.resources.filter(key=>!base.includes(key)||recorded.has(key));
   }
-}
-function view(input: object): ActionView {
-  const r=input as Record<string,unknown>;
-  return {id:String(r.id),scopeKey:String(r.scope_key),kind:r.kind as ActionView['kind'],origin:r.origin as ActionView['origin'],sourceId:String(r.source_id),parentId:r.parent_id as string|null,
-    state:r.state as ActionState,generation:Number(r.generation),holder:r.holder as string|null,lastHolder:r.last_holder as string|null,leaseUntil:r.lease_until as string|null,resources:JSON.parse(String(r.resources_json)),ownerInformed:r.owner_informed===1,
-    deadline:r.deadline as string|null,progress:r.progress as string|null,result:r.result as string|null,sent:r.sent===1,failures:Number(r.failures),lastFailure:r.last_failure as string|null,createdAt:String(r.created_at),updatedAt:String(r.updated_at)};
 }

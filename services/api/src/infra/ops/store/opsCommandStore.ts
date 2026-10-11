@@ -6,6 +6,7 @@ import {
 } from '../../../contracts/opsCommandContract.js';
 import { opsLifecycleMapping, type OpsLifecycleMapping } from '../../../contracts/opsMinecraftLifecycleContract.js';
 import type { ActionLease } from '../../../contracts/actionThreadContract.js';
+import { ActionLeaseReader } from '../../../mind/action/threads/store/actionLeaseReader.js';
 
 /** A command as a device reads it. `expiresAt` is the time by which the runtime must have claimed it. */
 export interface OpsCommand {
@@ -218,9 +219,9 @@ export class OpsCommandStore {
     return this.transaction(()=>{
       const row=this.row(scopeKey,id);if(!row||row.status!=='pending')return false;
       const bound=this.database.prepare('SELECT action_id,execution_kind FROM ops_lifecycle_dispatches WHERE command_id=?').get(id) as {action_id:string|null;execution_kind:string}|undefined;
-      const action=this.database.prepare('SELECT kind,origin,scope_key,source_id FROM mind_actions WHERE id=?').get(actionId);
+      const action=new ActionLeaseReader(this.database).get(actionId);
       if(!bound||bound.execution_kind!=='respond'||bound.action_id&&bound.action_id!==actionId
-        ||!action||action.kind!=='respond'||action.origin!=='owner_request'||action.scope_key!==scopeKey||action.source_id!==`ops:${id}`)return false;
+        ||!action||action.kind!=='respond'||action.origin!=='owner_request'||action.scopeKey!==scopeKey||action.sourceId!==`ops:${id}`)return false;
       this.database.prepare('UPDATE ops_lifecycle_dispatches SET action_id=? WHERE command_id=?').run(actionId,id);return true;
     });
   }

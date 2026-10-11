@@ -489,7 +489,9 @@ describe('the snapshot stays out of every prompt', () => {
   it('imports nothing that builds a prompt or calls a model', () => {
     const allowed = ['node:http', 'node:sqlite', 'node:crypto', '@shannon/cognition', ...['apiAuth.ts', 'apiValidation.ts', 'opsContract.ts',
       'opsStore.ts', 'serverHttp.ts', 'sqliteStoreContext.ts', 'opsCommandContract.ts', 'opsCommandStore.ts',
-      'serverOpsCommandRoutes.ts', 'opsMinecraftLifecycleContract.ts', 'minecraftLifecycleContract.ts', 'actionThreadContract.ts'].map(apiSourcePath)];
+      'serverOpsCommandRoutes.ts', 'opsMinecraftLifecycleContract.ts', 'minecraftLifecycleContract.ts', 'actionThreadContract.ts',
+      // The one read path of action leases (Syzygy ADR-0009 stage 1, S1): synchronous reads, no prompt, no model.
+      'actionLeaseReader.ts'].map(apiSourcePath)];
     for (const name of owners) {
       const imports = resolvedImports(name);
       expect(imports.length, name).toBeGreaterThan(0);

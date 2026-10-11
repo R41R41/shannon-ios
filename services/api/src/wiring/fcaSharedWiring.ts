@@ -10,6 +10,8 @@ import type { TurnMemoryRecall } from '../mind/recall/turnMemoryRecall.js';
 import type { TaskRuntime, TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { FcaSourceGuard } from '../mind/action/fca/fcaConversationPorts.js';
 import { SQLiteFcaEvidenceStore } from '../mind/action/fca/store/fcaEvidenceStore.js';
+import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReader.js';
+import { fcaStepLeaseLive } from './actionLeaseRules.js';
 
 /** No new state writer: memory is proposed to the existing outbox; emotion uses its existing atomic writer. */
 export function createFcaSharedWiring(parts: {
@@ -19,10 +21,11 @@ export function createFcaSharedWiring(parts: {
   affect?: FcaAffectWriter; memory?: MemoryProposals | null; enrich?: TurnMemoryRecall | null; now?: () => string;
 }) {
   const now = parts.now ?? (() => new Date().toISOString());
+  const leases = new ActionLeaseReader(parts.db);
   const memory = createTaskMemory({ ...parts, now });
   const recall = createTaskRecall({ ...parts, memory, enrich: parts.enrich ?? null, now });
   const evidence = parts.affect ? new SQLiteFcaEvidenceStore({ db: parts.db, state: parts.affect, now,
-    validStep: step => fcaStepIsLive(parts.db, step, now()),
+    validStep: step => fcaStepIsLive(leases, step, now()),
     sourcesVisible: (scope, id, sources) => { const task = parts.runtime.get(scope, id); return Boolean(task && parts.visible.sources(scope, task, sources)); },
     observeContext: (step, ids) => {
       if (!parts.runtime.inheritTaskSources(step, ids)) return false;
@@ -62,13 +65,6 @@ export function createFcaSharedWiring(parts: {
 }
 
 /** Exact native step and original action lease; caller holds the same SQLite transaction for evidence writes. */
-function fcaStepIsLive(db: DatabaseSync, step: TaskStep, at: string): boolean {
-  const row = db.prepare(`SELECT c.step_id,c.lease_json,c.stop_requested,a.scope_key,a.kind,a.origin,a.source_id,a.state,a.holder,a.generation,a.lease_until
-    FROM fca_task_checkpoints c JOIN mind_actions a ON a.id=? WHERE c.task_id=?`).get(step.lease.id, step.taskId);
-  if (!row || row.step_id !== step.id || row.stop_requested !== 0 || row.scope_key !== step.scopeKey
-    || row.kind !== 'agentTask' || row.origin !== 'owner_request' || row.state !== 'running' || row.holder !== step.lease.holder
-    || row.generation !== step.lease.generation || typeof row.lease_until !== 'string' || row.lease_until <= at
-    || typeof row.source_id !== 'string' || !row.source_id.startsWith(`fca:${step.taskId}:`)) return false;
-  try { const lease = JSON.parse(String(row.lease_json)); return lease.id === step.lease.id && lease.holder === step.lease.holder && lease.generation === step.lease.generation; }
-  catch { return false; }
+function fcaStepIsLive(leases: ActionLeaseReader, step: TaskStep, at: string): boolean {
+  return fcaStepLeaseLive(leases.checkpointed(step.lease.id, step.taskId), step, at);
 }

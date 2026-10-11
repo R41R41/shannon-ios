@@ -95,22 +95,9 @@
       "surfaces/voice/store/voiceIdentityStore.ts -> ddl x2",
       "wiring/fcaTouchWiring.ts -> ddl x1"
     ],
-    "mind-actions-owner": [
-      "infra/ops/store/opsCommandStore.ts -> mind_actions x1",
-      "infra/ops/store/opsLifecycleAuthority.ts -> mind_actions x1",
-      "wiring/configuredActionResourceProof.ts -> mind_actions x1",
-      "wiring/fcaBodyWiring.ts -> mind_actions x1",
-      "wiring/fcaSharedWiring.ts -> mind_actions x1",
-      "wiring/minecraftLifecycleRecoveryWiring.ts -> mind_actions x1",
-      "wiring/minecraftLifecycleWiring.ts -> mind_actions x1",
-      "wiring/serverFcaWiring.ts -> mind_actions x1",
-      "wiring/taskRuntimeWiring.ts -> mind_actions x5"
-    ],
     "no-sql-in-wiring": [
-      "wiring/configuredActionResourceProof.ts -> sql x6",
+      "wiring/configuredActionResourceProof.ts -> sql x5",
       "wiring/configuredWorkerFeedback.ts -> sql x1",
-      "wiring/fcaBodyWiring.ts -> sql x1",
-      "wiring/fcaSharedWiring.ts -> sql x1",
       "wiring/fcaSleepJobs.ts -> sql x13",
       "wiring/fcaSleepTaskEvidence.ts -> sql x2",
       "wiring/fcaSleepTaskLineage.ts -> sql x5",
@@ -119,15 +106,14 @@
       "wiring/livenessWiring.ts -> sql x1",
       "wiring/mindWiring.ts -> sql x3",
       "wiring/mindWorkerWiring.ts -> sql x1",
-      "wiring/minecraftLifecycleRecoveryWiring.ts -> sql x2",
-      "wiring/minecraftLifecycleWiring.ts -> sql x2",
+      "wiring/minecraftLifecycleRecoveryWiring.ts -> sql x1",
+      "wiring/minecraftLifecycleWiring.ts -> sql x1",
       "wiring/ownerUpcomingWiring.ts -> sql x3",
       "wiring/selfInterestContextWiring.ts -> sql x4",
       "wiring/selfRewriteWiring.ts -> sql x1",
-      "wiring/serverFcaWiring.ts -> sql x2",
+      "wiring/serverFcaWiring.ts -> sql x1",
       "wiring/skillCopyWiring.ts -> sql x1",
-      "wiring/studyShowingWiring.ts -> sql x3",
-      "wiring/taskRuntimeWiring.ts -> sql x5"
+      "wiring/studyShowingWiring.ts -> sql x3"
     ],
     "pragma-in-opener": [
       "infra/auth/store/deviceAuthStore.ts -> PRAGMA x3",

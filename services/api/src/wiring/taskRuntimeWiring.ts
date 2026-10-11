@@ -11,7 +11,9 @@ import { runFcaStep, type FcaStepPorts } from '../mind/action/fca/fcaRunner.js';
 import { inActionExecution } from '../infra/context/actionExecution.js';
 import { observeAsync, observeSync, observerHandoff, withObserverRun } from '../infra/observer/observerContext.js';
 import { acquireAction } from './actionExecutionWiring.js';
-import { ACTION_LIMITS } from '@shannon/mind';
+import { ACTION_LIMITS, classifyLease, leaseOutcome, leaseUnsent } from '@shannon/mind';
+import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReader.js';
+import { conversationLeaseValid, fcaTaskLeaseValid, lostAdmissionExpired } from './actionLeaseRules.js';
 
 export interface TaskRuntimeWiringOptions {
   db: DatabaseSync; actions: ActionThreads; model: FcaModel; scopeKey: string;
@@ -27,22 +29,16 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
   const now = options.now ?? (() => new Date().toISOString());
   migrateAgentTasks(db);
   const authority = new SQLiteFcaTaskAuthority(db);
-  const runtime: TaskRuntime = observedTaskRuntime(new SQLiteTaskRuntimeStore(db, { authority, now, sleepTicket: options.sleepTicket, leaseValid: (scope, taskId, lease, at) => {
-    const row = db.prepare('SELECT * FROM mind_actions WHERE id=?').get(lease.id);
+  const leases = new ActionLeaseReader(db);
+  const leaseValid = (scope: string, taskId: string, lease: ActionLease, at: string) => {
+    const action = leases.get(lease.id);
     const task = authority.get(scope, taskId);
-    const originMatches = !!task && row?.origin === task.origin && (task.origin === 'owner_request'
-      || (task.origin === 'maintenance' && task.kind === 'sleep' && !!runtime.sleepTicketForTask(scope, taskId)));
-    return !!row && originMatches && row.scope_key === scope && row.kind === 'agentTask'
-      && row.holder === lease.holder && row.generation === lease.generation && row.state === 'running'
-      && typeof row.source_id === 'string' && row.source_id.startsWith(`fca:${taskId}:`)
-      && typeof row.lease_until === 'string' && row.lease_until > at
-      && JSON.parse(String(row.base_resources_json)).includes(actionResource(scope, `fca:${taskId}`));
-  }, conversationLeaseValid: (scope, lease, at) => {
-    const row = db.prepare('SELECT * FROM mind_actions WHERE id=?').get(lease.id);
-    return !!row && row.scope_key === scope && row.origin === 'owner_request' && row.kind === 'respond'
-      && row.holder === lease.holder && row.generation === lease.generation && row.state === 'running'
-      && typeof row.lease_until === 'string' && row.lease_until > at;
-  } }), options.ownerAlone);
+    const sleepTicketed = () => task?.origin === 'maintenance' && task.kind === 'sleep' && !!runtime.sleepTicketForTask(scope, taskId);
+    const originMatches = !!task && action?.origin === task.origin && (task.origin === 'owner_request' || sleepTicketed());
+    return originMatches && fcaTaskLeaseValid(action, scope, taskId, lease, at);
+  };
+  const runtime: TaskRuntime = observedTaskRuntime(new SQLiteTaskRuntimeStore(db, { authority, now, sleepTicket: options.sleepTicket, leaseValid,
+    conversationLeaseValid: (scope, lease, at) => conversationLeaseValid(leases.get(lease.id), scope, lease, at) }), options.ownerAlone);
   function executionAllowed(task: TaskView): boolean {
     if (task.origin === 'owner_request') return options.ownerAlone();
     if (task.origin !== 'maintenance' || task.kind !== 'sleep' || !options.maintenanceAllowed?.(runtime, task)) return false;
@@ -52,19 +48,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
   }
   const running = new Map<string, { controller: AbortController; done: Promise<void> }>();
   let closing = false, ticking = false;
-  const classify = (lease: ActionLease): 'live' | 'safe' | 'unknown' => {
-    const row = db.prepare('SELECT * FROM mind_actions WHERE id=?').get(lease.id);
-    if (!row || row.scope_key !== scopeKey) return 'unknown';
-    if (row.generation === lease.generation + 1 && row.last_holder === lease.holder && row.sent === 0
-      && row.state === 'cancelled' && row.result === 'lease_expired') return 'safe';
-    if (row.generation === lease.generation && row.last_holder === lease.holder
-      && row.state === 'cancelled' && row.result === 'fca_stop_acknowledged') return 'safe';
-    if (row.generation !== lease.generation) return 'unknown';
-    if (['running', 'waiting', 'stopping'].includes(String(row.state)) && row.holder === lease.holder
-      && typeof row.lease_until === 'string' && row.lease_until > now()) return 'live';
-    // A model response lost after dispatch remains unknown even if the process only held local tools.
-    return row.sent === 0 && ['cancelled', 'failed', 'completed'].includes(String(row.state)) ? 'safe' : 'unknown';
-  };
+  const classify = (lease: ActionLease) => leaseOutcome(classifyLease(leases.inScope(lease.id, scopeKey), lease, now()));
   async function flushReceipts(): Promise<void> {
     for (const receipt of runtime.pendingReceipts(scopeKey)) {
       try {
@@ -89,15 +73,10 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     return authority.transaction(() => {
       const task = runtime.get(scopeKey, taskId);
       if (!task || task.phase !== 'ready') return task;
-      const action = db.prepare("SELECT * FROM mind_actions WHERE scope_key=? AND kind='agentTask' AND source_id=?")
-        .get(scopeKey, `fca:${taskId}:${task.revision}`);
+      const action = leases.bySource(scopeKey, 'agentTask', `fca:${taskId}:${task.revision}`);
       // A claim reply can be lost before beginStep records its lease. Only the scheduler's exact unsent
       // expiry proves another admission is safe; advancing the canonical revision makes that retry durable.
-      if (action && action.origin === task.origin && ['owner_request', 'maintenance'].includes(String(action.origin)) && action.state === 'cancelled'
-        && action.sent === 0 && action.result === 'lease_expired' && Number(action.generation) >= 2
-        && typeof action.last_holder === 'string' && action.last_holder.length > 0
-        && action.holder === null && action.lease_until === null && action.parent_id === null
-        && action.base_resources_json === JSON.stringify([actionResource(scopeKey, `fca:${taskId}`)])) {
+      if (action && lostAdmissionExpired(action, task.origin, scopeKey, taskId)) {
         authority.event(scopeKey, taskId, 'fca_admission_recovered', now(), {},
           { actionId: action.id, generation: action.generation });
         return runtime.get(scopeKey, taskId);
@@ -136,8 +115,8 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
         await flushReceipts();
       } else {
         const lease = active.execution.lease;
-        const row = db.prepare('SELECT * FROM mind_actions WHERE id=?').get(lease.id);
-        const unsent = row?.scope_key === scopeKey && row.holder === lease.holder && row.generation === lease.generation && row.sent === 0;
+        const action = leases.inScope(lease.id, scopeKey);
+        const unsent = !!action && leaseUnsent(action, lease);
         await actions.finish(lease, unsent ? 'cancelled' : 'unknown', unsent ? 'fca_not_dispatched' : 'fca_result_unknown').catch(() => null);
         runtime.recover(scopeKey, classify);
       }

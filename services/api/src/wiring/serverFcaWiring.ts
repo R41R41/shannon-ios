@@ -44,6 +44,7 @@ import { createFcaTaskRoute, FCA_TASK_PATH } from '../infra/http/fcaTaskRoutes.j
 import { sendJson } from '../infra/http/serverHttp.js';
 import { actionThreadsClient } from './actionThreadsWiring.js';
 import { createTaskRuntimeWiring } from './taskRuntimeWiring.js';
+import { ActionLeaseReader, fcaTaskIdOf } from '../mind/action/threads/store/actionLeaseReader.js';
 
 /** Explicit opt-in: owner tasks plus existing foreground text/voice binding; own-time keeps its current path. */
 export function configuredServerFca(values: Readonly<Record<string, string | undefined>>, parts: {
@@ -156,8 +157,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const timer = setInterval(wake, 1000); timer.unref();
     const route = createFcaTaskRoute({ runtime: runtime.runtime, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, stop: runtime.stop, wake, visible: id => visible?.(parts.ownerScope, id) ?? runtime.runtime.taskSources(parts.ownerScope, id).length === 0, progress: id => visible?.progress?.(parts.ownerScope, id) ?? null });
     const lifecycleTask = (executionId: string) => {
-      const row = db.prepare('SELECT source_id FROM mind_actions WHERE id=? AND scope_key=? AND kind=?').get(executionId, parts.ownerScope, 'agentTask');
-      const taskId = typeof row?.source_id === 'string' ? /^fca:([^:]+):[0-9]+$/.exec(row.source_id)?.[1] : undefined;
+      const taskId = new ActionLeaseReader(db).fcaTaskOf(executionId, parts.ownerScope);
       return taskId && visible?.(parts.ownerScope, taskId) ? runtime.runtime.taskSources(parts.ownerScope, taskId) : null;
     };
     const lifecycleSources = (executionId: string) => lifecycleTask(executionId)?.flatMap(source => [
@@ -168,7 +168,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       lifecycleTaskSources: (executionId: string) => { const ids = lifecycleSources(executionId); return ids ? [...new Set(ids)].sort() : null; }, minecraft: minecraft && requests ? { control: minecraft.control, intent: requests.intent } : null, async stopActions(target: string | null) {
       if (target === null) { await runtime.stop(runtime.runtime.ensureRoot(parts.ownerScope).id, 'owner_stop_all'); return; }
       const action = await actions.get(parts.ownerScope, target);
-      const taskId = action?.kind === 'agentTask' ? /^fca:([^:]+):[0-9]+$/.exec(action.sourceId)?.[1] : null;
+      const taskId = action?.kind === 'agentTask' ? fcaTaskIdOf(action.sourceId) : null;
       if (taskId) await runtime.stop(taskId, 'owner_stop');
     }, async close() { clearInterval(timer); await Promise.all([runtime.close(), shared?.recall.cancelAll(), touch?.close()]); sleep?.close(); client.close(); if (!borrowed) db.close(); } };
   } catch (error) { sleep?.close(); client.close(); if (!borrowed) db.close(); throw error; }

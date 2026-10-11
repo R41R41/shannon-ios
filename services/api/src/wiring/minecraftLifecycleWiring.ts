@@ -13,6 +13,8 @@ import { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js'
 import { MinecraftLifecycleStore } from '../surfaces/minecraft/store/minecraftLifecycleStore.js';
 import { actionPermit, currentActionExecution } from '../infra/context/actionExecution.js';
 import { actionResource } from '../contracts/actionThreadContract.js';
+import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReader.js';
+import { lifecycleLeaseHeld } from './actionLeaseRules.js';
 import { toolFailure, toolOk } from '../mind/tools/shannonTools.js';
 import { withToolEvidence } from '../mind/tools/toolEvidence.js';
 import type { MinecraftLifecycleToolPort } from '../mind/tools/shannonMinecraftLifecycleTools.js';
@@ -36,20 +38,16 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
   const serverIds = ids as string[];
   const db = new DatabaseSync(parts.path);
   db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;');
-  const action = (id: string) => db.prepare('SELECT * FROM mind_actions WHERE id=?').get(id);
+  const leases = new ActionLeaseReader(db);
   const allowed = (authority: MinecraftLifecycleAuthority, command?: MinecraftLifecycleCommand) => {
     try {
-      const row = action(authority.executionId), at = now();
-      if (!row || authority.executionId !== authority.lease.id || row.scope_key !== authority.scopeKey
-        || authority.scopeKey !== configuration.ownerScopeKey || row.origin !== authority.origin || row.state !== 'running'
-        || row.holder !== authority.lease.holder || row.generation !== authority.lease.generation
-        || typeof row.lease_until !== 'string' || row.lease_until <= at
-        || row.deadline && String(row.deadline) <= at) return false;
+      const row = leases.get(authority.executionId);
+      const at = now();
+      if (!row || !lifecycleLeaseHeld(row, authority, configuration.ownerScopeKey, at)) return false;
       if (authority.origin === 'own_time') return row.kind === 'ownTime' && parts.autonomy.inspectAuthorization(authority.scopeKey,
         { domain: 'minecraft_lifecycle', summary: '登録されたマイクラへの参加を継続します。' }).decision === 'allow';
       // A guessed Ops prefix never falls through to the ordinary conversation authority.
-      const opsSource = typeof row.source_id === 'string' && row.source_id.startsWith('ops:')
-        || authority.sourceIds.some(id => id.startsWith('ops-command:'));
+      const opsSource = row.sourceId.startsWith('ops:') || authority.sourceIds.some(id => id.startsWith('ops-command:'));
       if (row.kind === 'minecraft' || opsSource) return parts.ownerAlone() && !!parts.ops?.enabled()
         && opsLifecycleAuthorityAllowed(db, authority, command);
       const taskSources = row.kind === 'agentTask' ? parts.taskSources?.(authority.executionId) : undefined;
@@ -73,7 +71,7 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
       if (!active) return failure('refused', '元の実行権がないため操作しません。');
       await actionPermit([actionResource(configuration.deviceId, 'minecraft-body')]);
       signal?.throwIfAborted(); active.signal.throwIfAborted(); context.beforeExecution?.();
-      const row = action(active.lease.id);
+      const row = leases.get(active.lease.id);
       const origin = context.surface === 'autonomy' ? 'own_time' : 'owner_request';
       const authority: MinecraftLifecycleAuthority = { scopeKey: context.scopeKey, origin, executionId: active.lease.id, lease: active.lease, sourceIds: row?.kind === 'agentTask' ? [...(parts.taskSources?.(active.lease.id) ?? [])] : row?.kind === 'respond' && context.threadId
         ? [`conversation:${context.threadId}`, `turn:${createHash('sha256').update(context.memory.turnKey ?? '').digest('hex')}`] : [] };

@@ -5,6 +5,7 @@ import { actionResource, type ActionLease } from '../contracts/actionThreadContr
 import { configuredMinecraftBody } from '../contracts/minecraftBodyContract.js';
 import { configuredOwnerScope } from '../infra/config/ownerScope.js';
 import { retainedResource, type RetainedResourcePolicy } from '../mind/action/threads/store/retainedResources.js';
+import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReader.js';
 
 /** Called synchronously inside the action writer's transaction, so cleanup cannot race physical-resource release. */
 export function configuredActionResourceProof(values: Readonly<Record<string, string | undefined>>, db: DatabaseSync) {
@@ -45,8 +46,7 @@ export function lifecycleResourceAcknowledgement(evidence: readonly unknown[]): 
 /** Only an accepted original native terminal receipt proves release, never a current matching snapshot. */
 export function minecraftLifecycleResourceProof(db: DatabaseSync, lease: ActionLease, acknowledgementId: string, scopeKey: string): boolean {
   if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='minecraft_lifecycle_operations'").get()) return false;
-  const action = db.prepare('SELECT scope_key FROM mind_actions WHERE id=?').get(lease.id);
-  if (action?.scope_key !== scopeKey) return false;
+  if (new ActionLeaseReader(db).get(lease.id)?.scopeKey !== scopeKey) return false;
   const evidence = db.prepare(`SELECT id,receipt_json FROM minecraft_lifecycle_operations WHERE execution_id=?
     AND json_extract(command_json,'$.authority.scopeKey')=? AND json_extract(command_json,'$.authority.lease.id')=?
     AND json_extract(command_json,'$.authority.lease.generation')=? AND json_extract(command_json,'$.authority.lease.holder')=? ORDER BY id`)

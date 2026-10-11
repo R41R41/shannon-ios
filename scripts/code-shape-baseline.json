@@ -547,8 +547,7 @@
       "long-line": 6
     },
     "services/api/src/infra/ops/store/opsLifecycleAuthority.ts": {
-      "complex-function": 1,
-      "long-line": 1
+      "complex-function": 1
     },
     "services/api/src/infra/search/searchQuery.ts": {
       "complex-function": 1,
@@ -1080,8 +1079,8 @@
     },
     "services/api/src/mind/action/threads/store/actionStore.ts": {
       "multi-statement-line": 9,
-      "complex-function": 4,
-      "long-line": 22
+      "complex-function": 3,
+      "long-line": 18
     },
     "services/api/src/mind/attention/attentionPorts.ts": {
       "long-line": 2
@@ -2025,10 +2024,6 @@
       "complex-function": 2,
       "multi-statement-line": 2
     },
-    "services/api/src/wiring/fcaBodyWiring.ts": {
-      "multi-statement-line": 2,
-      "long-line": 2
-    },
     "services/api/src/wiring/fcaMemoryWiring.ts": {
       "long-line": 1
     },
@@ -2052,9 +2047,8 @@
       "long-line": 4
     },
     "services/api/src/wiring/fcaSharedWiring.ts": {
-      "multi-statement-line": 2,
-      "complex-function": 1,
-      "long-line": 3
+      "multi-statement-line": 1,
+      "long-line": 2
     },
     "services/api/src/wiring/fcaSleepJobs.ts": {
       "complex-function": 1,
@@ -2205,9 +2199,9 @@
       "complex-function": 1
     },
     "services/api/src/wiring/taskRuntimeWiring.ts": {
-      "complex-function": 5,
+      "complex-function": 1,
       "multi-statement-line": 2,
-      "long-line": 8
+      "long-line": 7
     },
     "services/api/src/wiring/treeRecallWiring.ts": {
       "long-line": 2
