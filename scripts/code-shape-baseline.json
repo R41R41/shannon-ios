@@ -2096,9 +2096,6 @@
     "services/api/src/wiring/feedbackWiring.ts": {
       "multi-statement-line": 2
     },
-    "services/api/src/wiring/livenessWiring.ts": {
-      "multi-statement-line": 1
-    },
     "services/api/src/wiring/memoryOutboxWiring.ts": {
       "long-line": 4
     },
