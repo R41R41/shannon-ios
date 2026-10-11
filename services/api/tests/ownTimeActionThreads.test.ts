@@ -139,7 +139,8 @@ it.each(['paused','not-leader'] as const)('durably settles a known unused reserv
   h.advance(31_000);h.actionStore.transaction(()=>h.actionStore.sweep(h.clock.at));
   expect(h.db.prepare('SELECT state FROM mind_action_budget').all()).toEqual([{state:'held'}]);
   h.actions.acknowledge=acknowledge;h.runner.close();
-  expect(await h.loop.tick()).toBe(reason==='paused'?'paused':'thread-wait');
+  // ADR-0009 §9: a cycle whose own action an expired lease cancelled unsent is closed, never left waiting or run again.
+  expect(await h.loop.tick()).toBe(reason==='paused'?'paused':'cycle-ended');
   expect(h.db.prepare('SELECT state FROM mind_action_budget').all()).toEqual([{state:'settled'}]);
   expect(h.store.pendingActionAcknowledgements('owner')).toHaveLength(0);expect(h.model.calls).toHaveLength(0);
   expect(h.actionStore.list('owner').find(a=>a.kind==='ownTime')?.state).toBe('cancelled');

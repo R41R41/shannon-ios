@@ -149,8 +149,8 @@ export function autonomyModelCostUsd(
     if (configured) {
       const tier = model.id === DEFAULT_HAIKU_MODEL && totalInput > 100_000 ? 5 : 1;
       const written = knownTtl ? 1.25 * five + 2 * hour : 2 * cacheWrite;
-      const readRatio = model.id === DEFAULT_SONNET_MODEL ? 0.05 : 0.1;
-      return ((ordinaryInput + written + readRatio * cacheRead) * configured.input + outputTokens * configured.output) * tier / 1_000_000;
+      // Cache reads are 10% of input for Haiku and Sonnet 5.5 alike (ADR-0009 stage 1, quick fix 3).
+      return ((ordinaryInput + written + 0.1 * cacheRead) * configured.input + outputTokens * configured.output) * tier / 1_000_000;
     }
     return estimatedAnthropicCostUsd(model.id, { input: ordinaryInput, cacheWrite, cacheRead, output: outputTokens, searches: 0,
       ...(knownTtl ? { cacheWrite5m: five, cacheWrite1h: hour } : {}),

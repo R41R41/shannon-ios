@@ -358,7 +358,9 @@ describe('server.ts', () => {
     expect(server.match(/selfDiagnosis\.startupLine\(\)/gu)).toHaveLength(1);
     // Stage 3 review: the mind's state is added for the owner (`withMindOps`, nothing with stage 3 off), to the same owner-only reader.
     // Stabilization 2026-10-12: the owner's liveness view is added the same way (`withLiveness`).
-    expect(server).toContain('server: scopeKey => withLiveness(withMindOps(selfDiagnosis.forScope(scopeKey), { host: mind?.host ?? null, outbox: persistentStore.memoryOutbox(), now }), liveness.view(scopeKey)),');
+    // ADR-0009 stage 1: the composition (mind, liveness, switches, execution, model cache) lives in `wiring/opsServerWiring.ts`.
+    expect(server).toContain('server: scopeKey => opsServer.view(scopeKey),');
+    expect(server).toContain('describe: scope => selfDiagnosis.forScope(scope)');
     expect(server).not.toMatch(/selfDiagnosis\.read\(\)/u);
   });
 });

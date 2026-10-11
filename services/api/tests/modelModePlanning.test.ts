@@ -73,8 +73,8 @@ describe('owner planning selection in the independent worker', () => {
     const result = await model.generate({ model: 'claude-sonnet-5-5', system: '合成計画の決定', prompt: '合成材料', maximumOutputTokens: 1500 });
     expect(fixture.bodies).toHaveLength(1); expect(fixture.bodies[0]).toMatchObject({ model: 'claude-sonnet-5-5', cache_control: { ttl: '1h' } });
     expect(result.usage).toEqual({ inputTokens: 1510, outputTokens: 20, cacheCreationInputTokens: 500, cachedInputTokens: 1000, cacheCreation5mInputTokens: 0, cacheCreation1hInputTokens: 500 });
-    expect(autonomyModelCostUsd('claude-sonnet-5-5', result.usage)).toBeCloseTo(0.00232, 8);
-    expect(autonomyModelCostUsd('claude-sonnet-5-5', result.usage, { 'claude-sonnet-5-5': { input: 2, output: 10 } })).toBeCloseTo(0.00232, 8);
+    expect(autonomyModelCostUsd('claude-sonnet-5-5', result.usage)).toBeCloseTo(0.00242, 8);
+    expect(autonomyModelCostUsd('claude-sonnet-5-5', result.usage, { 'claude-sonnet-5-5': { input: 2, output: 10 } })).toBeCloseTo(0.00242, 8);
     expect(autonomyModelCostUsd('claude-haiku-5-5', result.usage, { 'claude-haiku-5-5': { input: 0.1, output: 0.5 } })).toBeCloseTo(0.000121, 8);
     const controller = new AbortController(); controller.abort();
     await expect(model.generate({ model: 'claude-sonnet-5-5', system: '', prompt: '', maximumOutputTokens: 1500, signal: controller.signal })).rejects.toMatchObject({ code: 'ACTION_STOPPED' });
