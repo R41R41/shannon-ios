@@ -29,6 +29,13 @@ export interface ActionThreads {
   reserve(lease:ActionLease,reservationId:string,day:string,yen:number,cap:number,spent:number):Promise<boolean>;
   settle(lease:ActionLease,reservationId:string,actual:number|null):Promise<boolean>;
   acknowledge(report:ActionAcknowledgement):Promise<boolean>;
+  /** The scheduler's own counts since its process started (ADR-0009 stage 1, `GET /v1/ops`); closed reasons and numbers only. */
+  metrics?():Promise<ActionSchedulerMetrics>;
+}
+
+export interface ActionSchedulerMetrics {
+  claimRefusals: Readonly<Record<string, number>>;
+  since: string;
 }
 /** Keys identify an authority plus a normalized target; paths and names never enter the scheduler journal. */
 export function actionResource(host: string,target: string): string {

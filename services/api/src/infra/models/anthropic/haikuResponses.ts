@@ -3,6 +3,7 @@ import { observedAnthropicRequest, observedAnthropicResponse } from './observerP
 import Anthropic from '@anthropic-ai/sdk';
 import { structuredSchema } from './anthropicSchema.js';
 import { anthropicPrices } from './anthropicConfig.js';
+import { recordCacheReceipt } from './cacheReceipts.js';
 import { cacheOneShotRequest, validateHaikuCacheUsage, type HaikuCacheUsage } from './haikuCache.js';
 import { isHaikuModel, replacementModel } from './haikuConfig.js';
 
@@ -39,6 +40,7 @@ export function responseModelFetcher(options: { model: string; apiKey: string; f
       observerHandoff('native', 'llm', { model: body.model });
       const { data: message, response } = await observeAsync('llm', { ...observedAnthropicRequest(body), round: 0, streaming: false },
         () => client.messages.create(body, signal ? { signal } : {}).withResponse(), value => observedAnthropicResponse(value.data), { model: body.model });
+      recordCacheReceipt('background', body, message.usage);
       const headers = new Headers({ 'content-type': 'application/json' });
       const requestID = response.headers.get('request-id');
       if (requestID) headers.set('request-id', requestID);

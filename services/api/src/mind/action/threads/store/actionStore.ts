@@ -11,6 +11,7 @@ export type ActionResourceRetained=(resource:string,resources:readonly string[])
 
 /** The mind worker alone owns scheduling. BEGIN IMMEDIATE also fences another worker during recovery. No words here. */
 export class SQLiteActionStore {
+  private readonly refusals=new Map<string,number>();
   constructor(private readonly db: DatabaseSync,private readonly resourceReconciliationAllowed?:ActionResourceReconciliationAllowed,
     private readonly retainedAfterRelease:ActionResourceRetained=()=>false) {
     db.exec(`
@@ -43,6 +44,14 @@ export class SQLiteActionStore {
         id TEXT PRIMARY KEY,report_json TEXT NOT NULL
       );
     `);
+  }
+  /** Claims refused since this process started, by closed reason (ADR-0009 stage 1: `GET /v1/ops`). */
+  claimRefusals():Readonly<Record<string,number>> {
+    return Object.freeze(Object.fromEntries(this.refusals));
+  }
+  private refused(reason:string):null {
+    this.refusals.set(reason,(this.refusals.get(reason)??0)+1);
+    return null;
   }
   transaction<T>(work: () => T): T {
     this.db.exec('BEGIN IMMEDIATE');
@@ -111,12 +120,16 @@ export class SQLiteActionStore {
   private claimInTransaction(id:string,holder:string,at:string):ActionView|null {
     this.sweep(at);
     const action = this.get(id);
-    if (!action || action.state !== 'queued' || action.failures >= ACTION_LIMITS.consecutiveFailures) return null;
+    if (!action || action.state !== 'queued') return this.refused('not_queued');
+    if (action.failures >= ACTION_LIMITS.consecutiveFailures) return this.refused('failures');
     const live = this.list(action.scopeKey).filter(item => ['running','waiting','stopping'].includes(item.state)
       || item.kind!=='respond'&&item.state==='unknown'&&item.sent);
     const foreground = action.kind === 'respond';
-    if (live.filter(item => (item.kind === 'respond') === foreground).length >= (foreground ? 1 : 2)) return null;
-    if (this.list(action.scopeKey).some(item => item.id!==action.id && this.heldResources(item).some(key => action.resources.includes(key)))) return null;
+    const slots = live.filter(item => (item.kind === 'respond') === foreground).length;
+    if (slots >= (foreground ? 1 : 2)) return this.refused(foreground ? 'foreground_slot' : 'background_slot');
+    if (this.list(action.scopeKey).some(item => item.id!==action.id && this.heldResources(item).some(key => action.resources.includes(key)))) {
+      return this.refused('resource_held');
+    }
     const until = new Date(Date.parse(at)+ACTION_LIMITS.leaseMs).toISOString();
     this.db.prepare(`UPDATE mind_actions SET state='running',generation=generation+1,holder=?,last_holder=?,lease_until=?,sent=0,deadline=CASE WHEN kind='respond' THEN NULL ELSE deadline END,updated_at=? WHERE id=?`).run(holder,holder,until,at,id);
     return this.get(id);

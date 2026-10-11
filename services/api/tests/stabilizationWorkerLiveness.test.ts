@@ -59,7 +59,7 @@ describe('liveness monitor', () => {
       CREATE TABLE autonomy_loop_cycles (cycle_id TEXT, scope_key TEXT, started_at TEXT);
       CREATE TABLE autonomy_loop_steps (step_id TEXT, scope_key TEXT, created_at TEXT);
       CREATE TABLE autonomy_control (scope_key TEXT, paused INTEGER);
-      CREATE TABLE autonomy_loop_sessions (cycle_id TEXT, scope_key TEXT, day_key TEXT, ended_at TEXT, end_code TEXT, resume_at TEXT);
+      CREATE TABLE autonomy_loop_sessions (cycle_id TEXT, scope_key TEXT, day_key TEXT, started_at TEXT, ended_at TEXT, end_code TEXT, resume_at TEXT);
       CREATE TABLE autonomy_loop_schedule (scope_key TEXT, next_cycle_at TEXT, budget_blocked_day TEXT);`);
     return db;
   }
@@ -98,15 +98,15 @@ describe('liveness monitor', () => {
       timeZone: 'Asia/Tokyo', environment: { SHANNON_AUTONOMY_SESSIONS_PER_DAY: '2' }, now: () => now, log: () => {}, intervalMs: null }).check()!.incidents;
     db.prepare("INSERT INTO autonomy_loop_steps VALUES ('step','owner','2026-10-11T12:00:00.000Z')").run();
     // A chosen 12 h rest: quiet for 8 h, but due back only at 00:00.
-    db.prepare("INSERT INTO autonomy_loop_sessions VALUES ('c1','owner','2026-10-11','2026-10-11T12:00:00.000Z','rest','2026-10-12T00:00:00.000Z')").run();
+    db.prepare("INSERT INTO autonomy_loop_sessions(cycle_id,scope_key,day_key,ended_at,end_code,resume_at) VALUES ('c1','owner','2026-10-11','2026-10-11T12:00:00.000Z','rest','2026-10-12T00:00:00.000Z')").run();
     expect(monitor('2026-10-11T20:00:00.000Z')).toEqual([]);
     expect(monitor('2026-10-12T05:00:00.000Z')).toEqual([]);
     expect(monitor('2026-10-12T07:00:00.000Z')).toEqual(['own_time_stalled']);
     // Two sessions on that owner-local day (2026-10-12 in Tokyo) reach the cap of two: resting, not stalled.
-    db.prepare("INSERT INTO autonomy_loop_sessions VALUES ('c2','owner','2026-10-12','2026-10-11T23:00:00.000Z','rest','2026-10-11T23:30:00.000Z')").run();
-    db.prepare("INSERT INTO autonomy_loop_sessions VALUES ('c3','owner','2026-10-12','2026-10-11T23:10:00.000Z','idle','2026-10-11T23:40:00.000Z')").run();
+    db.prepare("INSERT INTO autonomy_loop_sessions(cycle_id,scope_key,day_key,ended_at,end_code,resume_at) VALUES ('c2','owner','2026-10-12','2026-10-11T23:00:00.000Z','rest','2026-10-11T23:30:00.000Z')").run();
+    db.prepare("INSERT INTO autonomy_loop_sessions(cycle_id,scope_key,day_key,ended_at,end_code,resume_at) VALUES ('c3','owner','2026-10-12','2026-10-11T23:10:00.000Z','idle','2026-10-11T23:40:00.000Z')").run();
     expect(monitor('2026-10-12T07:00:00.000Z')).toEqual(['own_time_stalled']); // an idle session is not counted
-    db.prepare("INSERT INTO autonomy_loop_sessions VALUES ('c4','owner','2026-10-12','2026-10-11T23:20:00.000Z','budget','2026-10-11T23:50:00.000Z')").run();
+    db.prepare("INSERT INTO autonomy_loop_sessions(cycle_id,scope_key,day_key,ended_at,end_code,resume_at) VALUES ('c4','owner','2026-10-12','2026-10-11T23:20:00.000Z','budget','2026-10-11T23:50:00.000Z')").run();
     expect(monitor('2026-10-12T07:00:00.000Z')).toEqual([]);
     db.prepare("DELETE FROM autonomy_loop_sessions WHERE cycle_id = 'c4'").run();
     db.prepare("INSERT INTO autonomy_loop_schedule VALUES ('owner','2026-10-11T00:00:00.000Z','2026-10-12')").run();

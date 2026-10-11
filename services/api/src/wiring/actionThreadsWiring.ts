@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { MindCall } from '../infra/ipc/mindSocket.js';
-import type { ActionThreads, ActionDraft, ActionLease, ActionView } from '../contracts/actionThreadContract.js';
+import type { ActionThreads, ActionDraft, ActionLease, ActionSchedulerMetrics, ActionView } from '../contracts/actionThreadContract.js';
 export function actionThreadsClient(call:MindCall,holder=`runner-${randomUUID()}`):ActionThreads {
   return {
     admitRespond:(draft:ActionDraft)=>call('action.admitRespond',{draft,holder}),
@@ -19,5 +19,6 @@ export function actionThreadsClient(call:MindCall,holder=`runner-${randomUUID()}
     reserve:(lease,reservationId,day,yen,cap,spent)=>call('action.reserve',{lease,reservationId,day,yen,cap,spent}),
     settle:(lease,reservationId,actual)=>call('action.settle',{lease,reservationId,actual}),
     acknowledge:report=>call('action.acknowledge',report),
+    metrics:()=>call<ActionSchedulerMetrics>('action.metrics',{}),
   };
 }

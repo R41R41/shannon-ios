@@ -10,6 +10,8 @@ export interface LivenessFacts {
   oldestDueSleepAt: string | null;
   /** Latest own-time session start or step, for the owner's scope. */
   lastOwnTimeActivityAt: string | null;
+  /** Latest own-time session start (ADR-0009 stage 1 execution metrics). */
+  lastOwnTimeSessionAt: string | null;
   ownTimePaused: boolean;
   /** When she said she would come back (latest closed session) and when the schedule allows the next start. */
   ownTimeResumeAt: string | null;
@@ -57,6 +59,7 @@ export function readLivenessFacts(db: DatabaseSync, ownerScope: string, at: stri
     if (step && (!lastOwnTime || step > lastOwnTime)) lastOwnTime = step;
   }
   const sessions = hasTable(db, 'autonomy_loop_sessions');
+  const lastSession = sessions ? db.prepare('SELECT MAX(started_at) AS at FROM autonomy_loop_sessions WHERE scope_key = ?').get(ownerScope) : undefined;
   const resume = sessions ? db.prepare(`SELECT resume_at FROM autonomy_loop_sessions WHERE scope_key = ? AND ended_at IS NOT NULL
     ORDER BY ended_at DESC, rowid DESC LIMIT 1`).get(ownerScope) : undefined;
   const today = sessions ? db.prepare(`SELECT COUNT(*) AS count FROM autonomy_loop_sessions WHERE scope_key = ? AND day_key = ?
@@ -74,6 +77,7 @@ export function readLivenessFacts(db: DatabaseSync, ownerScope: string, at: stri
     lastSleepCompletedAt: text(lastSleep?.at),
     oldestDueSleepAt: text(dueSleep?.at),
     lastOwnTimeActivityAt: lastOwnTime,
+    lastOwnTimeSessionAt: text(lastSession?.at),
     ownTimePaused: Number(control?.paused ?? 0) === 1,
     ownTimeResumeAt: text(resume?.resume_at), ownTimeNextCycleAt: text(schedule?.next_cycle_at),
     ownTimeSessionsOnDay: Number(today?.count ?? 0), ownTimeBudgetBlockedDay: text(schedule?.budget_blocked_day),

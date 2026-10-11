@@ -35,6 +35,7 @@ export function startLivenessMonitor(options: LivenessMonitorOptions) {
   const sessionsPerDay = configuredAutonomyLoop(options.environment ?? {}).sessionsPerDay;
   let active = new Set<LivenessIncident>();
   let latest: LivenessView | null = null;
+  let closed = false;
   // One owner notice per episode goes out through the push path (ADR-0009 §9); a failed write is retried at the next check.
   function recordEpisodes(incidents: readonly string[], at: string): void {
     try {
@@ -44,6 +45,7 @@ export function startLivenessMonitor(options: LivenessMonitorOptions) {
     }
   }
   function check(): LivenessView | null {
+    if (closed) return latest;
     try {
       const at = now();
       const dayKey = autonomyDayKey(at, { timeZone: options.timeZone ?? 'Asia/Tokyo' });
@@ -63,13 +65,19 @@ export function startLivenessMonitor(options: LivenessMonitorOptions) {
   if (timer) setImmediate(check).unref();
   return {
     check,
+    /** Its read connection, lent to the execution metrics of the same ops view (ADR-0009 stage 1). */
+    database: db,
     /** The owner's view; refreshed when the last check is older than a minute. */
     view(scopeKey: string): LivenessView | null {
       if (scopeKey !== options.ownerScope) return null;
       if (!latest || Date.parse(now()) - Date.parse(latest.checkedAt) > 60_000) return check();
       return latest;
     },
-    close() { if (timer) clearInterval(timer); owned?.close(); },
+    close() {
+      closed = true;
+      if (timer) clearInterval(timer);
+      owned?.close();
+    },
   };
 }
 

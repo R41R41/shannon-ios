@@ -17,7 +17,7 @@ export interface LivenessView {
   checkedAt: string;
   incidents: LivenessIncident[];
   sleep: { lastCompletedAt: string | null; oldestDueAt: string | null };
-  ownTime: { enabled: boolean; paused: boolean; lastActivityAt: string | null; resumeAt: string | null };
+  ownTime: { enabled: boolean; paused: boolean; lastActivityAt: string | null; lastSessionAt: string | null; resumeAt: string | null };
   mindWorker: { startsLastHour: number; startsLastDay: number; lastStartAt: string | null };
 }
 
@@ -50,7 +50,10 @@ export function evaluateLiveness(facts: LivenessFacts, at: string, ownTime: OwnT
   return {
     checkedAt: at, incidents,
     sleep: { lastCompletedAt: facts.lastSleepCompletedAt, oldestDueAt: facts.oldestDueSleepAt },
-    ownTime: { enabled: ownTimeEnabled, paused: facts.ownTimePaused, lastActivityAt: facts.lastOwnTimeActivityAt, resumeAt: facts.ownTimeResumeAt },
+    ownTime: {
+      enabled: ownTimeEnabled, paused: facts.ownTimePaused, lastActivityAt: facts.lastOwnTimeActivityAt,
+      lastSessionAt: facts.lastOwnTimeSessionAt, resumeAt: facts.ownTimeResumeAt,
+    },
     mindWorker: { startsLastHour: facts.mindWorkerStarts.lastHour, startsLastDay: facts.mindWorkerStarts.lastDay, lastStartAt: facts.mindWorkerStarts.lastAt },
   };
 }

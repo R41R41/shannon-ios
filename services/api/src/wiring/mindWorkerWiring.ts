@@ -31,6 +31,7 @@ export async function configuredMindWorker(values:Readonly<Record<string,string|
   // reply could otherwise hold the foreground slot for a whole lease). A busy write is caught and retried, never a crash.
   const db=new DatabaseSync(databasePath);db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=${MIND_WORKER_BUSY_TIMEOUT_MS};`);
   const busyLog=throttledLog(log);
+  const startedAt=now();
   const retained=configuredRetainedResources(values,()=>knownAgentHostIds(db));
   const actions=new SQLiteActionStore(db,configuredActionResourceProof(values,db),retained);
   let host:MindHost;
@@ -79,6 +80,7 @@ export async function configuredMindWorker(values:Readonly<Record<string,string|
       case 'action.reconcileResource':return actions.reconcileResource(lease(),String(a.resource),text('acknowledgementId'));
       case 'action.settle':return actions.settle(lease(),text('reservationId'),a.actual===null?null:Number(a.actual),at);
       case 'action.acknowledge':return actions.acknowledge(a as unknown as ActionAcknowledgement,at);
+      case 'action.metrics':return {claimRefusals:actions.claimRefusals(),since:startedAt};
       default:throw new Error('MIND_METHOD');
     }
   };

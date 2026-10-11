@@ -1,4 +1,5 @@
 import { observeAsync, observeSync, observerHandoff } from '../../observer/observerContext.js';
+import { recordCacheReceipt, type CacheRoute } from './cacheReceipts.js';
 import { observedAnthropicRequest, observedAnthropicResponse } from './observerProjection.js';
 import { actionPermit, currentActionExecution } from '../../context/actionExecution.js';
 import Anthropic from '@anthropic-ai/sdk';
@@ -131,7 +132,7 @@ export class AnthropicChatModel implements ShannonChatModel {
     const maximumUses = Number.isSafeInteger(input.maxUses) ? Math.min(3, Math.max(1, input.maxUses!)) : 3;
     const body = nativeWebSearchBody(input.query.slice(0, 2_000), maximumUses);
     const turns: Anthropic.Message[] = [];
-    const send = this.sender(input.scopeKey, () => null, signal);
+    const send = this.sender({ scopeKey: input.scopeKey, route: 'web_search' }, () => null, signal);
     try {
       // At most the existing three pause continuations: <= 4 requests * maxUses searches, never a retry of unknown work.
       for (let round = 0; round < 4; round++) {
@@ -168,7 +169,7 @@ export class AnthropicChatModel implements ShannonChatModel {
     let written = '';
     let searchRequested = request.requireWebSearch === true;
     const watch = watchdog(request.firstTokenBudgetMs);
-    const send = this.sender(request.scopeKey, onReplyText ? (delta, decoder) => {
+    const send = this.sender({ scopeKey: request.scopeKey, route: 'text' }, onReplyText ? (delta, decoder) => {
       const text = decoder.push(delta);
       if (!text) return null;
       const read = turnWebSearchResult(request.tools);
@@ -232,8 +233,8 @@ export class AnthropicChatModel implements ShannonChatModel {
     const stop = watch ? (signal ? AbortSignal.any([signal, watch.signal]) : watch.signal) : signal;
     const bounds = { ...DEFAULT_VOICE_STREAM_BOUNDS, ...this.options.voiceStreamBounds };
     if (request.useWebSearch) bounds.firstOutputMilliseconds = Math.max(bounds.firstOutputMilliseconds, VOICE_WEB_FIRST_OUTPUT_MILLISECONDS);
-    const send = this.sender(request.scopeKey, onTextDelta ? delta => speak(delta).then(() => request.useWebSearch ? '' : delta) : null,
-      stop, this.firstTokenLatency, watch?.first, bounds);
+    const listen = onTextDelta ? (delta: string) => speak(delta).then(() => request.useWebSearch ? '' : delta) : null;
+    const send = this.sender({ scopeKey: request.scopeKey, route: 'voice' }, listen, stop, this.firstTokenLatency, watch?.first, bounds);
     let result: SonnetRoundResult;
     try {
       result = await sonnetToolRounds(body, {
@@ -282,8 +283,9 @@ export class AnthropicChatModel implements ShannonChatModel {
    * One request: streamed when there is a listener (its first word or call measured on the turn's first round, its words
    * handed on in order), else not. A stream that fails or is refused after words went out is a `PartialAnswerError`.
    */
-  private sender(scopeKey: string, listen: ((delta: string, decoder: ChatReplyStreamDecoder) => Promise<string> | null) | null, caller?: AbortSignal,
-    latency: FirstTokenLatency = this.firstTokenLatency, onFirst?: () => void, voiceBounds?: VoiceStreamBounds) {
+  private sender(target: { scopeKey: string; route: CacheRoute }, listen: ((delta: string, decoder: ChatReplyStreamDecoder) => Promise<string> | null) | null,
+    caller?: AbortSignal, latency: FirstTokenLatency = this.firstTokenLatency, onFirst?: () => void, voiceBounds?: VoiceStreamBounds) {
+    const { scopeKey, route } = target;
     // Failures that provably reached nothing: no usage, no word handed out. Only these may be retried.
     const clean = new WeakSet<object>();
     const attempt = async (body: Anthropic.MessageCreateParamsNonStreaming, time: RoundTime | null, round: number): Promise<Anthropic.Message> => {
@@ -314,6 +316,7 @@ export class AnthropicChatModel implements ShannonChatModel {
           // Not streamed: the first response is the first token.
           if (round === 0) onFirst?.();
           this.recordUsage(scopeKey, message, prepared.max_tokens, true, body.model, searchAllowance(body));
+          recordCacheReceipt(route, prepared, message.usage, round);
           usageRecorded = true;
           if (usesOneHourAnthropicCache(body.model)) validateNativeUsage(message.usage, unconfirmed(body.model, message.usage));
           return message;
@@ -356,6 +359,7 @@ export class AnthropicChatModel implements ShannonChatModel {
         finalUsageAfterMs = Math.max(0, this.clock() - streamStarted);
         const message = settledServerSearchUsage(completed, searchCacheStart, explicitSearchTtl, prepared.messages);
         this.recordUsage(scopeKey, message, prepared.max_tokens, true, body.model, searchAllowance(body));
+        recordCacheReceipt(route, prepared, message.usage, round);
         usageRecorded = true;
         if (usesOneHourAnthropicCache(body.model)) validateNativeUsage(message.usage, unconfirmed(body.model, message.usage));
         if (message.stop_reason === 'refusal' && sent) throw new PartialAnswerError(sent);

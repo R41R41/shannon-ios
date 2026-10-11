@@ -1,3 +1,4 @@
+import { recordCacheReceipt } from './cacheReceipts.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { shannonIdentityPrompt, SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_PROGRESS_CAPABILITY } from '@shannon/cognition';
 import type { FcaDecision, FcaModel, FcaModelInput, FcaModelOutput } from '../../../mind/action/fca/fcaPorts.js';
@@ -126,6 +127,7 @@ export class AnthropicFcaModel implements FcaModel {
       throw new Error(combined.aborted ? 'FCA_MODEL_ABORTED' : 'FCA_MODEL_RESPONSE_UNKNOWN');
     }
     const usage = this.usage(message.usage);
+    recordCacheReceipt('fca', body, message.usage);
     await this.options.recordUsage(usage);
     if (!usage.usageComplete) throw new AnthropicUsageEvidenceError('HAIKU_RESPONSE_USAGE_INVALID');
     if (execution) { execution.modelOutcome = 'acknowledged'; execution.modelUsage = { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }; }

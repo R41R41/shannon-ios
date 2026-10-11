@@ -256,7 +256,7 @@ const signalObserver = configuredServerObserver(configuredDatabasePath(),kernel,
 // Operations console (docs/ops-contract.md): the store is the ops route's only; opsServer composes the owner's server view.
 const opsStore = new SQLiteOpsStore(configuredDatabasePath());
 const opsServer = configuredOpsServer({ environment: process.env, databasePath: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env),
-  ownTime: autonomyConfig, describe: scope => selfDiagnosis.forScope(scope), mindHost: () => mind?.host ?? null, outbox: persistentStore.memoryOutbox(), now });
+  ownTime: autonomyConfig, describe: scope => selfDiagnosis.forScope(scope), mind: () => mind, outbox: persistentStore.memoryOutbox(), now });
 const opsRoute = createOpsRoute({
   store: opsStore, bridge: platformBridge?.configuration ?? null, ingestEnabled: () => opsIngestEnabled(process.env), now,
   commandsEnabled: () => opsCommandsEnabled(process.env), minecraftLifecycle: () => lifecycle?.ops ?? null,
