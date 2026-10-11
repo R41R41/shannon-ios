@@ -121,7 +121,10 @@ export function sonnetChatBody(settings: SonnetSettings, request: ShannonChatMod
     messages: sonnetMessages(luna.input as unknown[]),
     ...(tools.length ? { tools, tool_choice: { type: 'auto' as const } } : {}),
     thinking: { type: settings.textThinking } as Anthropic.ThinkingConfigParam,
-    output_config: { effort: conversationEffort(settings), format: { type: 'json_schema', schema: structuredSchema(schema) as Record<string, unknown> } },
+    output_config: {
+      effort: conversationEffort(settings),
+      format: { type: 'json_schema', schema: structuredSchema(schema) as Record<string, unknown> },
+    },
   };
   return inline ? appendForegroundMenu(body, toolInstructions(request.tools!, false)) : body;
 }

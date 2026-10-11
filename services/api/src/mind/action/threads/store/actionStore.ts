@@ -168,9 +168,8 @@ export class SQLiteActionStore {
     const foreground = action.kind === 'respond';
     const slots = live.filter(item => (item.kind === 'respond') === foreground).length;
     if (slots >= (foreground ? 1 : 2)) return this.refused(foreground ? 'foreground_slot' : 'background_slot');
-    if (this.list(action.scopeKey).some(item => item.id!==action.id && this.heldResources(item).some(key => action.resources.includes(key)))) {
-      return this.refused('resource_held');
-    }
+    const others = this.list(action.scopeKey).filter(item => item.id!==action.id);
+    if (others.some(item => this.heldResources(item).some(key => action.resources.includes(key)))) return this.refused('resource_held');
     const until = new Date(Date.parse(at)+ACTION_LIMITS.leaseMs).toISOString();
     this.db.prepare(`UPDATE mind_actions SET state='running',generation=generation+1,holder=?,last_holder=?,lease_until=?,sent=0,deadline=CASE WHEN kind='respond' THEN NULL ELSE deadline END,updated_at=? WHERE id=?`).run(holder,holder,until,at,id);
     return this.get(id);

@@ -38,7 +38,8 @@ export const SWITCHES = [
     doc: 'ADR-0006 stage 1 prediction shadow; the prediction ledger needs it.',
   },
   {
-    name: 'SHANNON_PREDICTION_LEDGER', default: 'on', kind: 'default_on', owner: 'learning', requires: [STAGE1, 'SHANNON_PREDICTION_SHADOW'],
+    name: 'SHANNON_PREDICTION_LEDGER', default: 'on', kind: 'default_on', owner: 'learning',
+    requires: [STAGE1, 'SHANNON_PREDICTION_SHADOW'],
     doc: 'Predictions opened before an outcome and settled against it.',
   },
   {

@@ -1035,7 +1035,7 @@
     },
     "services/api/src/mind/action/respond/turnRouting.ts": {
       "complex-function": 1,
-      "long-line": 7
+      "long-line": 6
     },
     "services/api/src/mind/action/taskRuntime/store/taskConversationDeliveryStore.ts": {
       "multi-statement-line": 5,
@@ -2108,7 +2108,7 @@
       "long-line": 1
     },
     "services/api/src/wiring/mindWorkerWiring.ts": {
-      "multi-statement-line": 15,
+      "multi-statement-line": 14,
       "complex-function": 1,
       "long-line": 2
     },

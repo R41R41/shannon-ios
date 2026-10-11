@@ -94,7 +94,8 @@ export function readLivenessFacts(db: DatabaseSync, ownerScope: string, at: stri
     if (step && (!lastOwnTime || step > lastOwnTime)) lastOwnTime = step;
   }
   const sessions = hasTable(db, 'autonomy_loop_sessions');
-  const lastSession = sessions ? db.prepare('SELECT MAX(started_at) AS at FROM autonomy_loop_sessions WHERE scope_key = ?').get(ownerScope) : undefined;
+  const lastSession = sessions
+    ? db.prepare('SELECT MAX(started_at) AS at FROM autonomy_loop_sessions WHERE scope_key = ?').get(ownerScope) : undefined;
   const resume = sessions ? db.prepare(`SELECT resume_at FROM autonomy_loop_sessions WHERE scope_key = ? AND ended_at IS NOT NULL
     ORDER BY ended_at DESC, rowid DESC LIMIT 1`).get(ownerScope) : undefined;
   const today = sessions ? db.prepare(`SELECT COUNT(*) AS count FROM autonomy_loop_sessions WHERE scope_key = ? AND day_key = ?
@@ -125,7 +126,8 @@ export function readLivenessFacts(db: DatabaseSync, ownerScope: string, at: stri
 export function syncLivenessEpisodes(db: DatabaseSync, scopeKey: string, incidents: readonly string[], at: string): void {
   db.exec(`CREATE TABLE IF NOT EXISTS ${LIVENESS_EPISODE_TABLE} (episode_id TEXT PRIMARY KEY, scope_key TEXT NOT NULL,
     incident TEXT NOT NULL, opened_at TEXT NOT NULL, closed_at TEXT)`);
-  const open = db.prepare(`SELECT episode_id, incident FROM ${LIVENESS_EPISODE_TABLE} WHERE scope_key = ? AND closed_at IS NULL`).all(scopeKey);
+  const open = db.prepare(`SELECT episode_id, incident FROM ${LIVENESS_EPISODE_TABLE} WHERE scope_key = ? AND closed_at IS NULL`)
+    .all(scopeKey);
   const openIncidents = new Set(open.map(row => String(row.incident)));
   const close = db.prepare(`UPDATE ${LIVENESS_EPISODE_TABLE} SET closed_at = ? WHERE episode_id = ?`);
   for (const row of open) if (!incidents.includes(String(row.incident))) close.run(at, String(row.episode_id));

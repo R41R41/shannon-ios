@@ -94,7 +94,8 @@ function measureFunction(fn) {
 function declaredName(fn) {
   if (fn.name && ts.isIdentifier(fn.name)) return fn.name.text;
   const parent = fn.parent;
-  if (parent && (ts.isVariableDeclaration(parent) || ts.isPropertyAssignment(parent)) && ts.isIdentifier(parent.name)) return parent.name.text;
+  const named = parent && (ts.isVariableDeclaration(parent) || ts.isPropertyAssignment(parent));
+  if (named && ts.isIdentifier(parent.name)) return parent.name.text;
   return null;
 }
 

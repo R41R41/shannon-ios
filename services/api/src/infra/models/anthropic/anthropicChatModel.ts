@@ -283,7 +283,8 @@ export class AnthropicChatModel implements ShannonChatModel {
    * One request: streamed when there is a listener (its first word or call measured on the turn's first round, its words
    * handed on in order), else not. A stream that fails or is refused after words went out is a `PartialAnswerError`.
    */
-  private sender(target: { scopeKey: string; route: CacheRoute }, listen: ((delta: string, decoder: ChatReplyStreamDecoder) => Promise<string> | null) | null,
+  private sender(target: { scopeKey: string; route: CacheRoute },
+    listen: ((delta: string, decoder: ChatReplyStreamDecoder) => Promise<string> | null) | null,
     caller?: AbortSignal, latency: FirstTokenLatency = this.firstTokenLatency, onFirst?: () => void, voiceBounds?: VoiceStreamBounds) {
     const { scopeKey, route } = target;
     // Failures that provably reached nothing: no usage, no word handed out. Only these may be retried.

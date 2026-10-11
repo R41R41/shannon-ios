@@ -60,7 +60,8 @@ export function releaseRetained(db: DatabaseSync, release: RetainedRelease, only
 
 /** The audit row of an owner's release request, for an idempotent retry. */
 export function knownRelease(db: DatabaseSync, requestId: string): { scopeKey: string; actionId: string; count: number } | null {
-  const row = db.prepare('SELECT scope_key, action_id, resources_json FROM mind_action_retained_releases WHERE request_id = ?').get(requestId);
+  const row = db.prepare('SELECT scope_key, action_id, resources_json FROM mind_action_retained_releases WHERE request_id = ?')
+    .get(requestId);
   if (!row) return null;
   const keys = JSON.parse(String(row.resources_json)) as string[];
   return { scopeKey: String(row.scope_key), actionId: String(row.action_id), count: keys.length };

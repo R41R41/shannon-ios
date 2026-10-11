@@ -148,7 +148,8 @@ check('a counted rule records one entry per file whose count may fall but never 
     'src/wiring/b.ts': "db.exec('PRAGMA foreign_keys=ON');\n",
     'src/mind/action/threads/store/actionStore.ts': "db.prepare('SELECT * FROM mind_actions');\n",
   });
-  const rules = { sourceRoot: 'src', rules: [{ id: 'no-sql-in-wiring', kind: 'count', label: 'sql', from: ['wiring/**'], pattern: "\\.prepare\\(|\\.exec\\(\\s*[`'\"]" }] };
+  const rule = { id: 'no-sql-in-wiring', kind: 'count', label: 'sql', from: ['wiring/**'], pattern: "\\.prepare\\(|\\.exec\\(\\s*[`'\"]" };
+  const rules = { sourceRoot: 'src', rules: [rule] };
   const found = violations({ root, config: rules, moves: { entries: [], moves: {} } });
   assert.deepEqual(found.map(item => `${item.from} -> ${item.to}`), ['wiring/a.ts -> sql x2', 'wiring/b.ts -> sql x1']);
   const baseline = baselineFrom([{ rule: 'no-sql-in-wiring', from: 'wiring/a.ts', to: 'sql x3' }], 'test');

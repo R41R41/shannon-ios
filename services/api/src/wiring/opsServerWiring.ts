@@ -33,7 +33,10 @@ export function configuredOpsServer(parts: OpsServerParts) {
     timeZone: parts.ownTime.timeZone, environment: parts.environment, now: parts.now,
   });
   const execution = startExecutionMonitor({
-    database: liveness.database, scheduler: () => parts.mind()?.actions ?? null, liveness: () => liveness.view(parts.ownerScope), now: parts.now,
+    database: liveness.database,
+    scheduler: () => parts.mind()?.actions ?? null,
+    liveness: () => liveness.view(parts.ownerScope),
+    now: parts.now,
   });
   const view = (scopeKey: string): object | null => {
     const described = parts.describe(scopeKey);

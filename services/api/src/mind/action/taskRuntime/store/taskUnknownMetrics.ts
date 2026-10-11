@@ -5,7 +5,8 @@ import type { DatabaseSync } from 'node:sqlite';
  * moment a task became unknown is its latest `fca_recovery_unknown` event, else its last update. Read-only.
  */
 export function countTasksUnknownSince(db: DatabaseSync, cutoff: string): number {
-  const tables = db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name IN ('agent_tasks', 'agent_task_events')").get();
+  const tables = db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master
+    WHERE type = 'table' AND name IN ('agent_tasks', 'agent_task_events')`).get();
   if (Number(tables?.count ?? 0) < 2) return 0;
   const row = db.prepare(`SELECT COUNT(*) AS count FROM agent_tasks t
     WHERE t.status = 'paused' AND t.pause_reason = 'fca_unknown'

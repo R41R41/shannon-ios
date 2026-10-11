@@ -22,7 +22,8 @@ const HOST_IDS_REFRESH_MS = 60_000;
  * lock with the owner's folder locks it takes along, and the configured Minecraft body (with its lifecycle), base or added.
  * The keys are built by hashing the configured names the same way the actions hashed them.
  */
-export function configuredRetainedResources(values: Readonly<Record<string, string | undefined>>, hostIds: () => readonly string[] = () => []) {
+export function configuredRetainedResources(values: Readonly<Record<string, string | undefined>>,
+  hostIds: () => readonly string[] = () => []) {
   const configuration = switchOn(values, 'SHANNON_MINECRAFT_LIFECYCLE') ? configuredMinecraftBody(values) : null;
   const body = configuration ? actionResource(configuration.deviceId, 'minecraft-body') : null;
   const owner = configuredOwnerScope(values);
